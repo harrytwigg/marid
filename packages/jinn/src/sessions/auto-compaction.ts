@@ -1,0 +1,210 @@
+import { TRANSCRIPT_SYNC_META_KEY } from "../gateway/external-turns.js";
+import { resolveAutoCompactPolicy, type AutoCompactPolicy } from "../shared/auto-compact-config.js";
+import { isRawEngineCommand } from "../shared/skill-commands.js";
+import type { CompactionStats, JinnConfig, Session } from "../shared/types.js";
+import { formatTokens } from "./compact-command.js";
+import { getEngineSessionRef } from "./registry.js";
+import { compactionUnsupported, type CompactionUnsupported } from "./self-compaction.js";
+
+/**
+ * Auto-compaction of a cold session: before a turn runs on a long
+ * session whose prompt cache has expired, compact it first.
+ *
+ * Resuming a session after its engine's prompt cache has gone cold re-bills the
+ * whole context at the full input price, and every turn after that re-reads it.
+ * Compacting first costs one summarizing call over that same context — the
+ * price the waiting turn was about to pay anyway — and the waiting turn and
+ * every one after it then run on the summary instead.
+ *
+ * Off unless `engines.<engine>.autoCompact.enabled` is true. Only claude and
+ * opencode (server mode) can compact; everywhere else this is a no-op that
+ * sends nothing to a model.
+ *
+ * This module is the pure decision and the words; `turn/auto-compact.ts` runs
+ * it, inside the turn it precedes.
+ */
+
+function isoMs(value: unknown): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+/**
+ * When this session's engine conversation last touched the provider, which is
+ * when its prompt cache was last refreshed: the latest turn Jinn settled on it
+ * (`lastSyncedAt`, written with every receipt that files the engine session)
+ * or, for Claude, the latest turn typed straight into its terminal that Jinn
+ * has synced. Undefined when nothing says — never guessed as cold.
+ *
+ * `lastActivity` cannot answer this: the turn being decided has already
+ * stamped it with "now", and it moves on engine-less events too.
+ */
+export function lastEngineActivityMs(session: Session, engine: string): number | undefined {
+  const synced = isoMs(getEngineSessionRef(session, engine).lastSyncedAt);
+  const meta = (session.transportMeta ?? {}) as Record<string, unknown>;
+  const typed = engine === "claude" ? isoMs(meta[TRANSCRIPT_SYNC_META_KEY]) : undefined;
+  if (synced === undefined) return typed;
+  if (typed === undefined) return synced;
+  return Math.max(synced, typed);
+}
+
+export type AutoCompactSkip =
+  | "disabled"
+  | CompactionUnsupported
+  | "compaction-turn"
+  | "raw-command"
+  | "engine-switch"
+  | "no-engine-session"
+  | "context-unknown"
+  | "context-small"
+  | "activity-unknown"
+  | "cache-warm";
+
+export type AutoCompactDecision =
+  | { compact: false; skip: AutoCompactSkip }
+  | { compact: true; contextTokens: number; idleMs: number; policy: AutoCompactPolicy };
+
+export interface AutoCompactInput {
+  config: Pick<JinnConfig, "engines">;
+  /** The live session row, not the turn's snapshot: an earlier turn's receipt
+   *  may have moved its meter and engine ref since the snapshot was taken. */
+  session: Session;
+  engine: string;
+  opencodeMode: string | undefined;
+  /** The operator's prompt for the turn, as sent. */
+  prompt: string;
+  /** The turn is itself a compaction (`/compact`, a self-compaction). */
+  compactionTurn: boolean;
+  /** The turn carries an engine-switch transcript, so the engine's own
+   *  conversation is behind the chat and the meter describes another engine. */
+  syncRequested: boolean;
+  now: number;
+}
+
+/** Why this turn is not one to compact in front of, whatever the session's
+ *  size and age; undefined when it is. */
+function turnSkip(input: AutoCompactInput): AutoCompactSkip | undefined {
+  const unsupported = compactionUnsupported(input.engine, input.opencodeMode);
+  if (unsupported) return unsupported;
+  // Compacting in front of a compaction is the same work twice; in front of
+  // another native command (/clear, /model) it is work thrown away.
+  if (input.compactionTurn) return "compaction-turn";
+  if (isRawEngineCommand(input.engine, input.prompt)) return "raw-command";
+  if (input.syncRequested) return "engine-switch";
+  if (!getEngineSessionRef(input.session, input.engine).id) return "no-engine-session";
+  return undefined;
+}
+
+/**
+ * Whether to compact before this turn. Every "no" is a reason, so a log line can
+ * say why a session that looked cold was left alone. Nothing here reads more
+ * than the session row.
+ */
+export function decideAutoCompaction(input: AutoCompactInput): AutoCompactDecision {
+  const policy = resolveAutoCompactPolicy(input.config, input.engine);
+  if (!policy?.enabled) return { compact: false, skip: "disabled" };
+  const skip = turnSkip(input);
+  if (skip) return { compact: false, skip };
+
+  const contextTokens = input.session.lastContextTokens;
+  if (typeof contextTokens !== "number" || !Number.isFinite(contextTokens) || contextTokens <= 0) {
+    return { compact: false, skip: "context-unknown" };
+  }
+  if (contextTokens < policy.minContextTokens) return { compact: false, skip: "context-small" };
+
+  const lastActivity = lastEngineActivityMs(input.session, input.engine);
+  if (lastActivity === undefined) return { compact: false, skip: "activity-unknown" };
+  const idleMs = input.now - lastActivity;
+  if (idleMs < policy.cacheWindowSeconds * 1000) return { compact: false, skip: "cache-warm" };
+
+  return { compact: true, contextTokens, idleMs, policy };
+}
+
+/**
+ * Sessions whose turn is compacting in front of its message right now. A new
+ * operator message waits for that rather than cutting it off, as it waits for an
+ * operator's `/compact`: interrupting would throw the compaction away and the
+ * next turn, still cold, would only start it again. A stop still stops it.
+ * In-memory on purpose — a gateway restart ends every turn anyway.
+ */
+const autoCompacting = new Set<string>();
+
+export function markAutoCompacting(sessionId: string, active: boolean): void {
+  if (active) autoCompacting.add(sessionId);
+  else autoCompacting.delete(sessionId);
+}
+
+export function isAutoCompacting(sessionId: string): boolean {
+  return autoCompacting.has(sessionId);
+}
+
+const CHILDREN_LISTED = 8;
+
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * The compaction turn's prompt. One line, because Claude Code takes it in its
+ * composer as a slash command, where a newline would submit early. opencode's
+ * summarize ignores the focus; it is harmless there.
+ *
+ * Child sessions still running are named, because a parent's side of a
+ * delegation — which child owes what — is exactly what a summary tends to
+ * drop, and their callbacks are about to arrive into the compacted context.
+ */
+export function buildAutoCompactCommand(childrenInFlight: Pick<Session, "id" | "employee">[]): string {
+  let command = "/compact Automatic compaction: this session sat idle past its prompt-cache window and a new message is "
+    + "waiting, so the context is being summarized before it runs. Keep the task and its goal, decisions made and why, "
+    + "exact identifiers (Todo and session ids, branches, file paths, PRs), work delegated and still awaited, "
+    + "and open problems. Drop raw tool output and superseded attempts.";
+  if (childrenInFlight.length > 0) {
+    const listed = childrenInFlight.slice(0, CHILDREN_LISTED)
+      .map((child) => child.employee ? `${child.id} (${child.employee})` : child.id);
+    const more = childrenInFlight.length - listed.length;
+    command += ` Child sessions still in flight, whose results will arrive after this: ${listed.join(", ")}`
+      + (more > 0 ? ` and ${more} more.` : ".");
+  }
+  return oneLine(command);
+}
+
+function formatIdle(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return `${Math.max(1, Math.round(ms / 1000))}s`;
+  if (minutes < 120) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h${minutes % 60 ? ` ${minutes % 60}m` : ""}`;
+}
+
+function describeWindow(policy: AutoCompactPolicy): string {
+  return formatIdle(policy.cacheWindowSeconds * 1000);
+}
+
+/** The live status line while the compaction runs. */
+export function autoCompactStatus(decision: Extract<AutoCompactDecision, { compact: true }>): string {
+  return `🗜️ Session idle ${formatIdle(decision.idleMs)} with ${formatTokens(decision.contextTokens)} of context `
+    + `(past its ${describeWindow(decision.policy)} cache window) — compacting it before the next message…`;
+}
+
+const positive = (n: number | undefined): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
+
+/** What the chat is told once the compaction confirmed. */
+export function autoCompactDoneNotice(
+  decision: Extract<AutoCompactDecision, { compact: true }>,
+  stats: CompactionStats | undefined,
+): string {
+  const pre = positive(stats?.preTokens) ? stats!.preTokens : decision.contextTokens;
+  const size = positive(stats?.postTokens)
+    ? `${formatTokens(pre)} → ${formatTokens(stats!.postTokens)}`
+    : `it was ${formatTokens(pre)}`;
+  return `🗜️ Auto-compacted this cold session before the next message (${size}; idle ${formatIdle(decision.idleMs)}, `
+    + `past the ${describeWindow(decision.policy)} cache window).`;
+}
+
+/** What the chat is told when the compaction did not happen. The message runs
+ *  anyway: a compaction is an optimization, never a gate on the work. */
+export function autoCompactFailedNotice(reason: string): string {
+  const flat = oneLine(reason);
+  const clipped = flat.length > 200 ? `${flat.slice(0, 199).trimEnd()}…` : flat;
+  return `⚠️ Auto-compaction of this cold session didn't complete (${clipped}), so the next message runs on the full context.`;
+}

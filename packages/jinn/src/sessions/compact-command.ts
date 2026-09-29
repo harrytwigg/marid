@@ -45,7 +45,7 @@ export function compactCommandRefusal(
 }
 
 /** "12.3k tokens" — a context size as the meter shows it. */
-function formatTokens(tokens: number): string {
+export function formatTokens(tokens: number): string {
   if (tokens < 1000) return `${tokens} tokens`;
   const thousands = tokens / 1000;
   return `${thousands >= 100 ? Math.round(thousands) : thousands.toFixed(1)}k tokens`;

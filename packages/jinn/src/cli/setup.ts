@@ -314,6 +314,11 @@ portal:
 #     enabled: true
 #     tokenThreshold: 300000
 #     staleAfterMinutes: 60
+# Compact a long session before its next turn once its prompt cache has gone cold (off by default).
+# Claude's cache lives 5 min, or 1 h on the extended tier (cacheWindowSeconds: 3600). opencode: server mode only.
+# engines:
+#   claude:
+#     autoCompact: { enabled: true, cacheWindowSeconds: 300, minContextTokens: 100000 }
 # Alerts. Failed cron jobs go to cron.alert*. LLM-free operator alerts (usage limits, a dead
 # Claude login) go to notifications.*, else cron.alert*, else a single-user Telegram allowlist.
 # cron: { alertConnector: slack, alertChannel: "#alerts" }

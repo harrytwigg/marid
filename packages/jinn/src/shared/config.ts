@@ -3,6 +3,7 @@ import yaml from "js-yaml";
 import { CONFIG_PATH } from "./paths.js";
 import { applyLegacyFallbackMigration, validateEngineFallbackChains, validateEngineFallbackModelMaps } from "./engine-fallback.js";
 import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
+import { autoCompactProblems } from "./auto-compact-config.js";
 import type { JinnConfig } from "./types.js";
 import { todoRecoveryProblems } from "./todo-recovery-config.js";
 import { todoDepartmentsProblems } from "./todo-departments-config.js";
@@ -88,7 +89,7 @@ export function validateConfigShape(config: unknown): string[] {
     }
     problems.push(...validateEngineFallbackChains(c.engines));
     problems.push(...validateEngineFallbackModelMaps(c.engines));
-    problems.push(...opencodeUsageLimitsProblems(c.engines));
+    problems.push(...opencodeUsageLimitsProblems(c.engines), ...autoCompactProblems(c.engines));
   }
 
   problems.push(...validateRealtime(c.realtime));

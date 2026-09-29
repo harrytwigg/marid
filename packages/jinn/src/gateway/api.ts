@@ -315,6 +315,7 @@ import { handleWorkflowApi } from "./workflow-api.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
 import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
+import { isAutoCompacting } from "../sessions/auto-compaction.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
 import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
 import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
@@ -4203,6 +4204,7 @@ export async function handleApiRequest(
         prompt: String(prompt),
         interruptOnNewMessage: config.sessions?.interruptOnNewMessage,
         turnRunning,
+        autoCompacting: isAutoCompacting(session.id),
       });
       if (shouldInterruptRunningTurn) supersedeRunningTurn(session);
 

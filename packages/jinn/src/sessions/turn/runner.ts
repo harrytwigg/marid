@@ -14,6 +14,7 @@ import {
 import { createPartialStreamWriter } from "../partial-stream.js";
 import { isDurableWorkflowUserMessageInterruption } from "../workflow-interruptions.js";
 import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./engine-run.js";
+import { compactColdSessionFirst, settlePreemptedBeforeEngine } from "./auto-compact.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
 import { preflightTurn, warnIfNearUsageLimit } from "./preflight.js";
 import { ensureRemoteHostReady } from "./remote-ready.js";
@@ -74,6 +75,7 @@ export async function runTurn(input: TurnInput, surface: TurnSurface): Promise<v
   };
 
   try {
+    if (!await compactFirstIfCold(run)) return;
     const { attempt, model } = await runEngineWithModelFallback(run);
     run.heartbeat.stop();
     await concludeTurn(run, attempt, model);
@@ -84,6 +86,22 @@ export async function runTurn(input: TurnInput, surface: TurnSurface): Promise<v
   } finally {
     run.heartbeat.stop();
   }
+}
+
+/**
+ * Auto-compaction: a long session whose prompt cache has gone cold is compacted first,
+ * inside this turn and its queue slot (a no-op unless configured). False when
+ * the turn was preempted meanwhile and has been settled as such.
+ */
+async function compactFirstIfCold(run: TurnRun): Promise<boolean> {
+  const precompaction = await compactColdSessionFirst(run);
+  if (precompaction.kind === "run") {
+    run.plan = precompaction.plan;
+    return true;
+  }
+  run.heartbeat.stop();
+  if (claimSettleableSession(run, "result")) await settlePreemptedBeforeEngine(run);
+  return false;
 }
 
 /** Run the engine, retrying once on a model Claude has since withdrawn. */
