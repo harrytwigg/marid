@@ -69,7 +69,7 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
 }))
 
 import { MemoryRouter } from 'react-router-dom'
-import { ChatSidebar, PINNED_VISIBLE } from '../chat-sidebar'
+import { ChatSidebar, PINNED_VISIBLE, hiddenTreeSignal, isDispatchedRoot } from '../chat-sidebar'
 import { CHAT_SESSION_DND_MIME } from '@/routes/chat/chat-session-dnd'
 
 const NOW = new Date().toISOString()
@@ -501,5 +501,280 @@ describe('multi-select', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
     await vi.waitFor(() => expect(sidebarData.removedSpy).toHaveBeenCalledWith(['sel-a', 'sel-b']))
+  })
+})
+
+describe('Tree view', () => {
+  const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
+  // COO chat → developer it delegated to → QA the developer consulted.
+  const COO = webSession('coo', 'Plan the release', { lastActivity: minutesAgo(3) })
+  const DEV = webSession('dev', 'Build the release', { employee: 'builder', parentSessionId: 'coo', lastActivity: minutesAgo(2) })
+  const QA = webSession('qa', 'Review the release', { employee: 'reviewer', parentSessionId: 'dev', lastActivity: minutesAgo(1) })
+  const SOLO = webSession('solo', 'Unrelated chat', { lastActivity: minutesAgo(10) })
+
+  function treeRow(id: string): HTMLElement {
+    const button = document.querySelector(`[data-chat-session-row="${id}"]`)
+    if (!button) throw new Error(`no row for ${id}`)
+    return button.closest('[data-tree-depth]') as HTMLElement
+  }
+
+  it('offers Tree beside Focused and All, and remembers it across a reload', () => {
+    sidebarData.sessions = [COO, DEV]
+    const { unmount } = renderSidebar()
+    const tree = screen.getByRole('button', { name: 'Tree' })
+    expect(screen.getByRole('button', { name: 'Focused' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'All' })).toBeTruthy()
+    fireEvent.click(tree)
+    expect(localStorage.getItem('jinn-sidebar-focus-mode')).toBe('tree')
+    unmount()
+
+    renderSidebar()
+    expect(screen.getByRole('button', { name: 'Tree' }).getAttribute('aria-pressed')).toBe('true')
+    expect(treeRow('dev').dataset.treeDepth).toBe('1')
+  })
+
+  it('nests children under the session that spawned them, as deep as the data goes', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [QA, SOLO, DEV, COO]
+    renderSidebar()
+
+    expect(treeRow('coo').dataset.treeDepth).toBe('0')
+    expect(treeRow('dev').dataset.treeDepth).toBe('1')
+    expect(treeRow('qa').dataset.treeDepth).toBe('2')
+    expect(treeRow('solo').dataset.treeDepth).toBe('0')
+    // Depth-first: each child sits directly under its parent.
+    const order = [...document.querySelectorAll('[data-tree-depth] [data-chat-session-row]')].map((el) => el.getAttribute('data-chat-session-row'))
+    expect(order).toEqual(['coo', 'dev', 'qa', 'solo'])
+    // The bucket count covers the whole tree, not just its roots.
+    expect(screen.getByText('Today').nextElementSibling?.textContent).toBe('4')
+  })
+
+  it('collapses a parent to its nested count and expands it again, persisting the fold', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [COO, DEV, QA]
+    const { unmount } = renderSidebar()
+
+    const toggle = screen.getByRole('button', { name: /^Collapse Plan the release/ })
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(toggle)
+    expect(document.querySelector('[data-chat-session-row="dev"]')).toBeNull()
+    expect(document.querySelector('[data-chat-session-row="qa"]')).toBeNull()
+    expect(treeRow('coo').querySelector('[data-tree-count]')?.textContent).toBe('2')
+    expect(JSON.parse(localStorage.getItem('jinn-sidebar-tree-collapsed') ?? '[]')).toEqual(['coo'])
+    unmount()
+
+    renderSidebar()
+    expect(document.querySelector('[data-chat-session-row="dev"]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Expand Plan the release/ }))
+    expect(treeRow('qa').dataset.treeDepth).toBe('2')
+    expect(treeRow('coo').querySelector('[data-tree-count]')).toBeNull()
+  })
+
+  it('tints a folded parent whose hidden child is still running', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('jinn-sidebar-tree-collapsed', JSON.stringify(['coo']))
+    sidebarData.sessions = [COO, { ...DEV, status: 'running' }]
+    renderSidebar()
+    expect(treeRow('coo').querySelector('[data-tree-count]')?.getAttribute('title')).toBe('1 nested session hidden, one still working')
+  })
+
+  it('shows a child whose parent is not loaded as an orphaned root', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [DEV, QA]
+    renderSidebar()
+    expect(treeRow('dev').dataset.treeDepth).toBe('0')
+    expect(treeRow('dev').querySelector('[data-tree-marker="orphan"]')).toBeTruthy()
+    expect(treeRow('qa').dataset.treeDepth).toBe('1')
+    expect(treeRow('qa').querySelector('[data-tree-marker]')).toBeNull()
+  })
+
+  it('does not call a child of a Scheduled run an orphan', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [
+      { id: 'cron-1', title: 'Nightly', source: 'cron', sourceRef: 'cron:nightly', lastActivity: minutesAgo(5) },
+      webSession('from-cron', 'Spawned by cron', { employee: 'assistant', parentSessionId: 'cron-1', lastActivity: minutesAgo(4) }),
+    ]
+    renderSidebar()
+    expect(treeRow('from-cron').querySelector('[data-tree-marker="orphan"]')).toBeNull()
+  })
+
+  it('renders a parent cycle once, broken into a marked root', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [
+      webSession('loop-a', 'Loop A', { parentSessionId: 'loop-b', lastActivity: minutesAgo(2) }),
+      webSession('loop-b', 'Loop B', { parentSessionId: 'loop-a', lastActivity: minutesAgo(1) }),
+    ]
+    renderSidebar()
+    expect(screen.getAllByText('Loop A')).toHaveLength(1)
+    expect(screen.getAllByText('Loop B')).toHaveLength(1)
+    expect(treeRow('loop-b').querySelector('[data-tree-marker="cycle"]')).toBeTruthy()
+    expect(treeRow('loop-a').dataset.treeDepth).toBe('1')
+  })
+
+  it('caps the indent of a very deep chain and labels the true depth', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = Array.from({ length: 10 }, (_, i) =>
+      webSession(`deep-${i}`, `Deep ${i}`, { parentSessionId: i === 0 ? null : `deep-${i - 1}`, lastActivity: minutesAgo(10 - i) }),
+    )
+    renderSidebar()
+    const deepest = treeRow('deep-9')
+    expect(deepest.dataset.treeDepth).toBe('9')
+    expect(deepest.style.paddingLeft).toBe(treeRow('deep-6').style.paddingLeft)
+    expect(deepest.querySelector('[data-tree-deep]')?.textContent).toBe('L9')
+    expect(treeRow('deep-6').querySelector('[data-tree-deep]')).toBeNull()
+  })
+
+  it('marks a top-level session nobody typed into as started automatically', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [
+      COO,
+      { id: 'plugin-1', title: 'Plugin run', source: 'plugin', employee: 'assistant', lastActivity: minutesAgo(1) },
+    ]
+    renderSidebar()
+    expect(treeRow('plugin-1').querySelector('[data-tree-marker="dispatched"]')).toBeTruthy()
+    expect(treeRow('coo').querySelector('[data-tree-marker]')).toBeNull()
+  })
+
+  it('keeps a pinned parent in the tree (its children stay nested) but not a pinned leaf', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.pins = new Set(['coo', 'solo'])
+    sidebarData.sessions = [COO, DEV, SOLO]
+    renderSidebar()
+    expect(screen.getByText('Pinned')).toBeTruthy()
+    expect(screen.getAllByText('Plan the release')).toHaveLength(2)
+    expect(treeRow('dev').dataset.treeDepth).toBe('1')
+    expect(screen.getAllByText('Unrelated chat')).toHaveLength(1)
+  })
+
+  it('selects nested rows in selection mode, ranging over the visible tree order', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [COO, DEV, QA, SOLO]
+    renderSidebar()
+    fireEvent.click(screen.getByRole('button', { name: 'Select chats' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Plan the release' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Review the release' }), { shiftKey: true })
+    expect(screen.getByText('3 selected')).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Select Unrelated chat' }).getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('keeps the Team directory (and its load-more) in Tree view', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [COO, DEV]
+    sidebarData.counts = { 'builder': 5 }
+    renderSidebar()
+    expect(screen.getByText('Team')).toBeTruthy()
+    expect(screen.getByText('Builder')).toBeTruthy()
+  })
+
+  it('renders the same tree on mobile with a fold toggle per parent', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [COO, DEV, QA]
+    renderSidebar('mobile')
+    const rows = document.querySelectorAll('[data-row="mobile"]')
+    expect(rows).toHaveLength(3)
+    expect(screen.getAllByRole('button', { name: /^Collapse / })).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: /^Collapse Build the release/ }))
+    expect(document.querySelectorAll('[data-row="mobile"]')).toHaveLength(2)
+  })
+})
+
+describe('Tree view: selection over a twice-rendered pinned parent', () => {
+  const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
+  const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString()
+
+  it('ranges from the copy that was clicked, not the Pinned copy above it', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    localStorage.setItem('jinn-sidebar-older-expanded', 'true')
+    sidebarData.pins = new Set(['coo'])
+    sidebarData.sessions = [
+      webSession('coo', 'Plan the release', { lastActivity: daysAgo(4) }),
+      webSession('dev', 'Build the release', { employee: 'builder', parentSessionId: 'coo', lastActivity: daysAgo(4) }),
+      webSession('alpha', 'Alpha chat', { lastActivity: minutesAgo(1) }),
+      webSession('beta', 'Beta chat', { lastActivity: minutesAgo(2) }),
+    ]
+    renderSidebar()
+    fireEvent.click(screen.getByRole('button', { name: 'Select chats' }))
+
+    // Pinned renders the parent first; the tree copy (in Older) is the second.
+    const parentCopies = screen.getAllByRole('checkbox', { name: 'Select Plan the release' })
+    expect(parentCopies).toHaveLength(2)
+    fireEvent.click(parentCopies[1])
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Build the release' }), { shiftKey: true })
+
+    expect(screen.getByText('2 selected')).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Select Alpha chat' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: 'Select Beta chat' }).getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('still ranges from the Pinned copy when that is the one clicked', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.pins = new Set(['coo'])
+    sidebarData.sessions = [
+      webSession('coo', 'Plan the release', { lastActivity: minutesAgo(5) }),
+      webSession('dev', 'Build the release', { employee: 'builder', parentSessionId: 'coo', lastActivity: minutesAgo(4) }),
+      webSession('alpha', 'Alpha chat', { lastActivity: minutesAgo(1) }),
+    ]
+    renderSidebar()
+    fireEvent.click(screen.getByRole('button', { name: 'Select chats' }))
+    // Rendered order: Pinned coo, then Today: alpha, coo (tree), dev.
+    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Select Plan the release' })[0])
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Alpha chat' }), { shiftKey: true })
+    expect(screen.getByText('2 selected')).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Select Build the release' }).getAttribute('aria-checked')).toBe('false')
+  })
+})
+
+describe('Tree view: which roots were started automatically', () => {
+  const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
+
+  it('marks a gateway-dispatched root, which the gateway records with source "web"', () => {
+    localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
+    sidebarData.sessions = [
+      // The payload a Todo dispatch really produces.
+      { id: 'dispatch-1', title: 'Dispatch ABC-1', source: 'web', employee: 'todo-dispatcher', sourceRef: 'todo-dispatcher:ABC-1:7b0c6f7e-1d2a-4c55-9d1e-0f4b2a9c8e11', connector: 'web', lastActivity: minutesAgo(2) },
+      // A chat the operator typed into.
+      webSession('own', 'My own chat', { sourceRef: 'web:1700000000000', lastActivity: minutesAgo(1) }),
+    ]
+    renderSidebar()
+    const marker = (id: string) =>
+      document.querySelector(`[data-chat-session-row="${id}"]`)?.closest('[data-tree-depth]')?.querySelector('[data-tree-marker="dispatched"]')
+    expect(marker('dispatch-1')).toBeTruthy()
+    expect(marker('own')).toBeNull()
+  })
+
+  it('recognises system employees, dispatch session keys and automated sources, and leaves workflow runs to their chip', () => {
+    const org = new Map([['todo-shaper', { name: 'todo-shaper', system: true } as never]])
+    expect(isDispatchedRoot({ source: 'web', employee: 'todo-shaper', sourceRef: 'web:1' }, org)).toBe(true)
+    expect(isDispatchedRoot({ source: 'web', sourceRef: 'todo-shaper:7b0c6f7e' }, new Map())).toBe(true)
+    expect(isDispatchedRoot({ source: 'web', sourceRef: 'delegation:ABC-2:7b0c6f7e' }, new Map())).toBe(true)
+    expect(isDispatchedRoot({ source: 'plugin', sourceRef: 'plugin:x' }, new Map())).toBe(true)
+    expect(isDispatchedRoot({ source: 'workflow', sourceRef: 'workflow:x' }, new Map())).toBe(false)
+    expect(isDispatchedRoot({ source: 'web', employee: 'builder', sourceRef: 'web:1700000000001' }, new Map())).toBe(false)
+    expect(isDispatchedRoot({ source: 'talk', sourceRef: undefined }, new Map())).toBe(false)
+  })
+})
+
+describe('hiddenTreeSignal', () => {
+  const read = new Set(['a', 'b', 'c'])
+  const recent = new Date().toISOString()
+
+  it('ranks a fresh error above live work, and live work above unread', () => {
+    expect(hiddenTreeSignal([
+      { id: 'u', lastActivity: recent },
+      { id: 'a', status: 'running', lastActivity: recent },
+      { id: 'b', status: 'error', lastActivity: recent },
+    ], read)).toBe('error')
+    expect(hiddenTreeSignal([{ id: 'u', lastActivity: recent }, { id: 'a', status: 'running', lastActivity: recent }], read)).toBe('running')
+    expect(hiddenTreeSignal([{ id: 'u', lastActivity: recent }], read)).toBe('unread')
+  })
+
+  it('counts background work on an idle child as live work', () => {
+    const bg = { activeStreams: 1, lastActivityAt: recent }
+    expect(hiddenTreeSignal([{ id: 'a', status: 'idle', backgroundActivity: bg, lastActivity: recent }], read)).toBe('running')
+  })
+
+  it('stays quiet when every hidden session is read and idle, or an old error', () => {
+    const old = new Date(Date.now() - 3 * 86_400_000).toISOString()
+    expect(hiddenTreeSignal([{ id: 'a', status: 'idle', lastActivity: recent }, { id: 'c', status: 'error', lastActivity: old }], read)).toBeNull()
   })
 })
