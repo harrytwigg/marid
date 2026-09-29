@@ -53,7 +53,7 @@ Everything in upstream Jinn still applies. On top of it, Marid adds:
 | opencode | opencode engine, server mode with a live terminal, usage metering | not supported |
 | Remote hosts | Claude, Pi and opencode employees run over SSH on another machine | not supported |
 | Remote MCP connector | use your instance as a custom connector in claude.ai, Claude Desktop and Claude Code (opt-in) | not supported |
-| Sessions | self-compaction (`compact_session`), engine-aware `/compact`, fuller restart resume, Claude auth outage handling | Claude-only `/compact`, basic restart resume |
+| Sessions | self-compaction (`compact_session`), engine-aware `/compact`, opt-in auto-compaction of long cache-cold sessions, fuller restart resume, Claude auth outage handling | Claude-only `/compact`, basic restart resume |
 | Todos and dispatch | closed departments, idle-capacity auto-start with an Auto-Dispatch page (opt-in), per-Todo auto-start opt-out, session tree per Todo | open departments, no idle-capacity auto-start |
 
 The full feature-by-feature table, with what upstream already has, is in [`docs/marid-vs-jinn.md`](docs/marid-vs-jinn.md).
@@ -314,6 +314,7 @@ logging:
 - **Engines** select CLI binaries and defaults; `engines.default` controls new sessions.
 - **Fallback chains** — `engines.<name>.fallback` names the engines to try, in order of preference, when that one cannot serve a turn. Two engines may name each other; an engine may not name itself.
 - **`sessions.rateLimitStrategy` and `sessions.fallbackEngine` are deprecated** in favour of `engines.claude.fallback`. They still work: the loader maps them forward and warns once.
+- **Auto-compaction** — `engines.claude.autoCompact` and `engines.opencode.autoCompact` (`enabled`, default `false`; `cacheWindowSeconds`, default `300`; `minContextTokens`, default `100000`) compact a long, cache-cold session before its next turn. See [`docs/auto-compaction.md`](docs/auto-compaction.md).
 - **Models** form an extensible per-engine capability registry. CLI discovery can replace fallback entries at runtime.
 - **MCP servers** are optional; enable `mcp.gateway` for the built-in company tools.
 - **Cron, employees, and skills** live in `~/.jinn/cron/jobs.json`, `~/.jinn/org/`, and `~/.jinn/skills/`.

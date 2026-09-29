@@ -8,6 +8,7 @@ import type { TerminalConfig } from "./terminal-config.js";
 import type { IdleCapacityConfig } from "./idle-capacity-config.js";
 import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
+import type { AutoCompactConfig } from "./auto-compact-config.js";
 import type { EngineName } from "./models.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
 import type {
@@ -103,6 +104,8 @@ export interface JinnConfig {
        *  substitute runs on its own default — this is only for keeping the tier a
        *  turn was sized for, e.g. a cheap model swapping to a cheap one. */
       fallbackModelMap?: Record<string, string>;
+      /** Compact a long, cache-cold session first. See auto-compact-config.ts. */
+      autoCompact?: AutoCompactConfig;
     };
     codex: { bin: string; model: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };
     /** Antigravity (`agy`) engine. `bin` is optional — resolved dynamically
@@ -135,6 +138,7 @@ export interface JinnConfig {
        *  windowed allowance, since opencode publishes none to read. Absent =
        *  unmetered, exactly as before. See docs/engines-opencode.md. */
       usageLimits?: OpencodeUsageLimitsConfig;
+      autoCompact?: AutoCompactConfig; // server mode only
     };
   };
   /** Optional model + capability registry. When absent, synthesized from engines.<name>.model. */

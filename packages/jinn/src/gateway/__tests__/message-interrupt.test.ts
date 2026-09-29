@@ -19,4 +19,9 @@ describe("shouldInterruptRunningTurn", () => {
     expect(shouldInterruptRunningTurn({ ...base, prompt: "  /compact keep the ids" })).toBe(false);
     expect(shouldInterruptRunningTurn({ ...base, prompt: "/compaction is next" })).toBe(true);
   });
+
+  it("lets a running auto-compaction finish instead of throwing it away", () => {
+    expect(shouldInterruptRunningTurn({ ...base, autoCompacting: true })).toBe(false);
+    expect(shouldInterruptRunningTurn({ ...base, autoCompacting: false })).toBe(true);
+  });
 });
