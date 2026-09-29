@@ -1,11 +1,14 @@
 import { ChevronLeft, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { usePaneTabsStrip } from '@/components/chat/pane-tabs-context'
 import { ChatPaneSessionMenu } from '@/components/chat/chat-pane-session-menu'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { splitTitleId } from '@/components/chat/chat-tabs'
 import { getStatusDot, StatusDot, type Session, useStallClock } from '@/components/chat/session-signals'
 import type { BackgroundActivity, DelegatedActivity, EnginesResponse } from '@/lib/api'
 import { emojiForName } from '@/lib/emoji-pool'
+import { isTerminalSession } from '@/lib/terminal-session'
+import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import type { ViewMode } from '@/lib/view-mode'
 
 const UUID_PATTERN = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i
@@ -62,6 +65,7 @@ export function paneTitleBarState(input: {
 
 export function paneViewControls(session: Session, engineRegistry?: EnginesResponse) {
   const engine = typeof session.engine === 'string' ? session.engine : undefined
+  if (isTerminalSession(session)) return { cliModeAvailable: false, viewSwitchLocked: false, cliTitle: 'A terminal has no chat view' }
   const cliModeAvailable = !engine || engineRegistry?.engines?.[engine]?.supportsPty === true
   const viewSwitchLocked = engine === 'codex' && session.status === 'running'
   return {
@@ -128,6 +132,7 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
   useEffect(() => setRenamedTitle(undefined), [session.id, title])
   const visibleTitle = renamedTitle ?? title
   const { id, rest } = splitTitleId(visibleTitle)
+  const tabs = usePaneTabsStrip(session.id)
 
   return (
     <div
@@ -147,21 +152,25 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
           <span className="max-w-[90px] truncate">{backTo.label}</span>
         </button>
       ) : null}
-      <span
-        aria-hidden
-        data-chat-pane-emoji
-        className={`shrink-0 leading-none transition-opacity duration-[var(--duration-fast)] ${active ? 'opacity-100' : 'opacity-50'}`}
-      >
-        {emojiForName(employee)}
-      </span>
-      <span
-        title={visibleTitle}
-        data-chat-pane-title
-        className={`min-w-0 flex-1 truncate text-[length:var(--text-subheadline)] transition-colors duration-[var(--duration-fast)] ${active ? 'font-[var(--weight-medium)] text-[var(--text-primary)]' : 'font-[var(--weight-regular)] text-[var(--text-tertiary)]'}`}
-      >
-        {id ? <span className={`transition-colors duration-[var(--duration-fast)] ${active ? 'text-[var(--text-secondary)]' : 'text-[var(--text-quaternary)]'}`}>{id} </span> : null}
-        <span>{rest}</span>
-      </span>
+      {tabs ?? (
+        <>
+          <span
+            aria-hidden
+            data-chat-pane-emoji
+            className={`shrink-0 leading-none transition-opacity duration-[var(--duration-fast)] ${active ? 'opacity-100' : 'opacity-50'}`}
+          >
+            {employee === TERMINAL_AVATAR ? '\u{1F5A5}\uFE0F' : emojiForName(employee)}
+          </span>
+          <span
+            title={visibleTitle}
+            data-chat-pane-title
+            className={`min-w-0 flex-1 truncate text-[length:var(--text-subheadline)] transition-colors duration-[var(--duration-fast)] ${active ? 'font-[var(--weight-medium)] text-[var(--text-primary)]' : 'font-[var(--weight-regular)] text-[var(--text-tertiary)]'}`}
+          >
+            {id ? <span className={`transition-colors duration-[var(--duration-fast)] ${active ? 'text-[var(--text-secondary)]' : 'text-[var(--text-quaternary)]'}`}>{id} </span> : null}
+            <span>{rest}</span>
+          </span>
+        </>
+      )}
       <PaneTitleActions title={visibleTitle} session={session} onClose={onClose} sessionActions={sessionActions} onRenamed={setRenamedTitle} viewMode={viewMode} cliModeAvailable={cliModeAvailable} viewSwitchLocked={viewSwitchLocked} cliTitle={cliTitle} />
     </div>
   )

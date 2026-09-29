@@ -84,15 +84,6 @@ describe("deriveWorkItemStatus — pure truth table (GRS-021a elevated vocabular
     expect(D()("in_review", ["waiting", "idle"], "delegation")).toBe("in_review");
   });
 
-  it("derives IN_REVIEW when the NEWEST attempt settled idle (the vision's settle ≠ done)", () => {
-    // Arrays are newest-first: idle is the latest attempt, the older error is superseded.
-    expect(D()("backlog", ["idle"])).toBe("in_review");
-    expect(D()("blocked", ["idle", "error"])).toBe("in_review");
-    expect(D()("executing", ["idle", "interrupted"])).toBe("in_review");
-    // Never done from derivation alone — the TRUST hook / a reviewer decides.
-    expect(D()("executing", ["idle", "idle"])).toBe("in_review");
-  });
-
   it("does not treat conversational idle without a successful terminal receipt as completed work", () => {
     expect(reconcile.deriveWorkItemStatus("executing", [evidence("idle", null)])).toBe("executing");
     expect(reconcile.deriveWorkItemStatus("assigned", [evidence("idle", null)])).toBe("assigned");
@@ -113,9 +104,9 @@ describe("deriveWorkItemStatus — pure truth table (GRS-021a elevated vocabular
   it("gives historical Workflow provenance no special lifecycle semantics", () => {
     expect(D()("executing", ["running"], "workflow")).toBe("executing");
     expect(D()("backlog", ["running"], "workflow")).toBe("executing");
-    expect(D()("executing", ["idle"], "workflow")).toBe("in_review");
+    expect(D()("executing", ["idle"], "workflow")).toBe("executing");
     expect(D()("executing", ["interrupted"], "workflow")).toBe("blocked");
-    expect(D()("backlog", ["idle"], "workflow")).toBe("in_review");
+    expect(D()("backlog", ["idle"], "workflow")).toBe("backlog");
   });
 });
 
@@ -163,14 +154,13 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: false, item: { status: "executing" } });
 
     db.prepare("UPDATE sessions SET status = 'idle', attempt_outcome = 'succeeded' WHERE id = ?").run("s-manual-start");
-    expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: true, item: { status: "in_review" } });
+    expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: false, item: { status: "executing" } });
     expect(store.listWorkItemEvents(wi.id).filter((event) => event.kind === "status_change").map((event) => ({
       from: event.fromStatus,
       to: event.toStatus,
       actor: event.actor,
     }))).toEqual([
       { from: "backlog", to: "executing", actor: "operator" },
-      { from: "executing", to: "in_review", actor: "reconciler" },
     ]);
   });
 
@@ -186,16 +176,15 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(last).toMatchObject({ kind: "status_change", fromStatus: "executing", toStatus: "blocked", actor: "reconciler" });
   });
 
-  it("VERIFY-tier settle lands in in_review and STAYS (a reviewer closes it, not the reconciler)", () => {
+  it("VERIFY-tier settle STAYS executing: a producer's run ending is not the work finishing", () => {
     const wi = store.createWorkItem({ title: "delegation settled", status: "executing", source: "delegation", sourceRef: "delegate:j2:1" });
     linkedSession("s-ok-2", wi.id, "idle", "2026-07-01T01:00:00.000Z");
 
-    const r = reconcile.reconcileWorkItem(wi.id);
-    expect(r?.changed).toBe(true);
-    expect(r?.item.status).toBe("in_review");
-    // A second pass is a no-op: verify-tier items wait for their reviewer.
+    expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: false, item: { status: "executing" } });
+    // Repeated passes (the sweep runs every 20s) never promote it either.
     expect(reconcile.reconcileWorkItem(wi.id)?.changed).toBe(false);
-    expect(store.getWorkItem(wi.id)?.status).toBe("in_review");
+    expect(store.getWorkItem(wi.id)?.status).toBe("executing");
+    expect(store.listWorkItemEvents(wi.id).filter((event) => event.kind === "status_change")).toEqual([]);
   });
 
   it("keeps a delegated in_review Todo in review while its linked callback session is running", () => {
@@ -274,7 +263,8 @@ describe("reconcileWorkItem — integration against real store + registry", () =
       verifyPolicy: { mode: "verify" },
     });
     linkedSession("s-ok-3b", wi.id, "idle", "2026-07-01T01:00:00.000Z");
-    expect(reconcile.reconcileWorkItem(wi.id)?.item.status).toBe("in_review");
+    // Reviewed like any other: no auto-close, and no auto-review either.
+    expect(reconcile.reconcileWorkItem(wi.id)?.item.status).toBe("executing");
   });
 
   it("a pre-existing in_review TRUST item closes on the next sweep pass (hook fires on sitting items too)", () => {

@@ -86,7 +86,7 @@ function tool(name: string): JinnMcpTool {
 }
 
 describe("session tools — registry + schemas", () => {
-  it("exposes the 5 session tools with flat object schemas and required args", () => {
+  it("exposes the 6 session tools with flat object schemas and required args", () => {
     const tools = buildSessionTools();
     expect(tools.map((t) => t.name)).toEqual([
       "spawn_session",
@@ -94,12 +94,14 @@ describe("session tools — registry + schemas", () => {
       "read_session",
       "list_sessions",
       "stop_session",
+      "compact_session",
     ]);
     expect(tool("spawn_session").inputSchema.required).toEqual(["prompt"]);
     expect(tool("send_to_session").inputSchema.required).toEqual(["sessionId", "message"]);
     expect(tool("read_session").inputSchema.required).toEqual(["sessionId"]);
     expect(tool("list_sessions").inputSchema.required).toBeUndefined();
     expect(tool("stop_session").inputSchema.required).toEqual(["sessionId"]);
+    expect(tool("compact_session").inputSchema.required).toEqual(["goal", "done", "next"]);
   });
 
   it("the full belt registers the sessions group and still has NO delete tool (human-only authority)", () => {
@@ -123,6 +125,36 @@ describe("session tools — registry + schemas", () => {
     expect(props.employee.description).toBe(
       "Employee slug; choose by role/persona fit from list_employees/find_employees. Omit for a plain session or if no employee fits.",
     );
+  });
+});
+
+describe("compact_session — unit (stub gateway)", () => {
+  it("POSTs the handoff to the self-compaction route, never a target session, and tells the agent to end its turn", async () => {
+    const { calls, ctx } = stub(() => ({ status: 202, body: { status: "scheduled", sessionId: "me", engine: "claude", resume: "accepted" } }), "me");
+    const out = (await tool("compact_session").handler(
+      { goal: "ship TASK-1", done: "tests pass", next: "open PR", waitingOn: "child-7: review" },
+      ctx,
+    )) as Record<string, unknown>;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      url: "http://127.0.0.1:7777/api/compactions",
+      method: "POST",
+      body: { goal: "ship TASK-1", done: "tests pass", next: "open PR", waitingOn: "child-7: review" },
+    });
+    expect(calls[0].body).not.toHaveProperty("context");
+    expect(calls[0].body).not.toHaveProperty("sessionId");
+    expect(calls[0].headers["x-jinn-caller-session"]).toBe("me");
+    expect(out.status).toBe("scheduled");
+    expect(String(out.hint)).toMatch(/END YOUR TURN/);
+  });
+
+  it("passes the gateway's refusal through readable (cooldown, unsupported engine)", async () => {
+    const cooldown = stub(() => ({ status: 429, body: { error: "this session already requested a compaction" } }), "me");
+    await expect(tool("compact_session").handler({ goal: "g", done: "d", next: "n" }, cooldown.ctx))
+      .rejects.toThrow(/429.*already requested a compaction/);
+    const unsupported = stub(() => ({ status: 409, body: { error: "the codex engine has no native compaction" } }), "me");
+    await expect(tool("compact_session").handler({ goal: "g", done: "d", next: "n" }, unsupported.ctx))
+      .rejects.toThrow(/409.*codex engine has no native compaction/);
   });
 });
 
@@ -151,6 +183,7 @@ describe("session tools — unit (stub gateway)", () => {
       ["spawn_session", { prompt: "p" }],
       ["send_to_session", { sessionId: "b", message: "hi" }],
       ["stop_session", { sessionId: "b" }],
+      ["compact_session", { goal: "g", done: "d", next: "n" }],
     ];
     for (const [name, args] of cases) {
       await expect(tool(name).handler(args, ctx)).rejects.toThrow(/caller identity unavailable.*JINN_SESSION_ID/is);

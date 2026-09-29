@@ -151,7 +151,11 @@ describe("InteractiveClaudeEngine — submit confirmation wiring", () => {
     // A tool in flight is real work, so the gateway must not read this as quiet.
     hookCb!({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: {} });
     expect(engine.turnProgress("s-progress")?.activeTools).toBe(1);
-    // ...and any in-turn hook proves the prompt is running.
+    // ...but on a warm PTY it does not prove OUR prompt is running: a turn typed
+    // into the terminal fires the same hooks while ours sits queued.
+    expect(engine.turnProgress("s-progress")?.awaitingSubmit).toBe(true);
+    // Only our own UserPromptSubmit does.
+    hookCb!({ hook_event_name: "UserPromptSubmit", prompt: "second" });
     expect(engine.turnProgress("s-progress")?.awaitingSubmit).toBe(false);
 
     hookCb!({ hook_event_name: "PostToolUse", tool_name: "Bash" });
@@ -231,6 +235,7 @@ describe("InteractiveClaudeEngine — submit confirmation wiring", () => {
     const stopTurn = engine.run({ sessionId: "s-monitor", prompt: "stop", cwd: "/tmp" } as any);
     await vi.advanceTimersByTimeAsync(20);
     expect(events.at(-1)).toBeNull(); // foreground turn suppresses the StateLine
+    hookCb!({ hook_event_name: "UserPromptSubmit", prompt: "stop" });
     hookCb!({
       hook_event_name: "PostToolUse",
       tool_name: "TaskStop",

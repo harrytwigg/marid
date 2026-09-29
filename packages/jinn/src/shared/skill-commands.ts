@@ -35,3 +35,44 @@ export function neutralizeForPaste(text: string): string {
   }
   return text;
 }
+
+/** Claude Code built-in slash commands that run locally and never produce a new
+ *  assistant API turn. Two behaviours, both handled by the native-command path:
+ *   - Context mutators (/compact, /clear, /model) end without firing a Stop hook;
+ *     the native-command quiet-window timer settles them with an empty result.
+ *   - Info/overlay commands (/usage, /limits, /cost, …) DO fire a Stop hook on
+ *     dismiss, but its `last_assistant_message` still carries the PREVIOUS turn's
+ *     text. Without native classification that stale text was persisted as a new
+ *     assistant message — the duplicate-chat-echo bug. native-aware maybeComplete
+ *     settles these empty instead.
+ *  Only commands that genuinely yield no persistable assistant output belong here:
+ *  misclassifying a real-turn command (/init, /review, skill commands) would drop
+ *  its answer. */
+const NATIVE_CLAUDE_COMMANDS = new Set([
+  "/compact", "/clear", "/model",
+  "/usage", "/limits", "/cost", "/status", "/config", "/help", "/doctor",
+  "/release-notes", "/vim", "/terminal-setup", "/mcp", "/agents", "/permissions",
+  "/hooks", "/memory", "/export", "/login", "/logout", "/bug", "/resume",
+]);
+
+export function isNativeClaudeCommand(prompt: string): boolean {
+  const first = prompt.trim().split(/\s+/, 1)[0]?.toLowerCase();
+  return first !== undefined && NATIVE_CLAUDE_COMMANDS.has(first);
+}
+
+/** A turn asking for the engine's own compaction (Claude Code's `/compact`,
+ *  opencode's summarize). The rest of the line is Claude Code's summary
+ *  instructions; opencode takes none. */
+export function isCompactCommand(prompt: string): boolean {
+  return /^\/compact(?:\s|$)/.test(prompt.trimStart());
+}
+
+/**
+ * Whether this turn's prompt is an engine-native command that has to reach the
+ * engine exactly as written. Anything put in front of it — a platform-context
+ * refresh, the system prompt — turns the command into text for the model, and
+ * the command never runs.
+ */
+export function isRawEngineCommand(engine: string, prompt: string): boolean {
+  return isCompactCommand(prompt) || (engine === "claude" && isNativeClaudeCommand(prompt));
+}

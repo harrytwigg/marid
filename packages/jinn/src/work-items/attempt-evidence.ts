@@ -1,6 +1,7 @@
-import { latestHumanStatusMoveAt } from './event-log.js';
+import { latestEvidenceFloorAt } from './event-log.js';
 import { closeWorkItemRun, findOpenWorkItemRunBySession, runOutcomeForReceipt } from './runs.js';
 import { listSessionsByWorkItem } from '../sessions/registry.js';
+import { isExecutionAttempt } from './link-role.js';
 import { logger } from '../shared/logger.js';
 import type { Session, SessionAttemptOutcome } from '../shared/types.js';
 
@@ -24,10 +25,11 @@ export interface WorkItemAttemptEvidence {
 export interface WorkItemAttemptReading {
   /** The receipts still entitled to speak, newest-first. */
   attempts: WorkItemAttemptEvidence[];
-  /** When the operator last moved this Todo himself, if he ever has. Attempts at
-   *  or before it were dropped; an empty `attempts` alongside it means nothing
-   *  has happened since he decided. */
-  humanDecisionAt?: string;
+  /** When the operator last moved this Todo himself, or an expired park last put
+   *  it back in the queue — whichever is newer, if either ever happened. Attempts
+   *  at or before it were dropped; an empty `attempts` alongside it means nothing
+   *  has happened since that decision. */
+  decisionFloorAt?: string;
 }
 
 /**
@@ -70,10 +72,13 @@ function closeRunsForSettledAttempts(sessions: readonly Session[]): void {
  * `last_activity`, so work happening right now still derives `executing` — that
  * is honest evidence in a way a settled corpse is not.
  *
- * Only actor `operator` raises a floor. An agent-declared move keeps today's
- * behaviour: the declared-block and review-bounce guards already cover those.
+ * Actor `operator` raises a floor, and so does an expired park: the
+ * sweep that ends a park re-queues the Todo on a date somebody chose, and the
+ * attempt that ran before the park says nothing about the work after it. An
+ * agent-declared move keeps today's behaviour: the declared-block and
+ * review-bounce guards already cover those.
  */
-function attemptsAfterHumanDecision(floor: string | undefined, sessions: readonly Session[]): readonly Session[] {
+function attemptsAfterDecision(floor: string | undefined, sessions: readonly Session[]): readonly Session[] {
   if (!floor) return sessions;
   return sessions.filter((session) => session.lastActivity > floor);
 }
@@ -93,12 +98,12 @@ export function collectAttemptEvidence(workItemId: string): WorkItemAttemptReadi
   // `in_review` (and TRUST-closed to `done`) with four phases still to run, and
   // `in_review` is not re-derivable, so it would stay wrong for the rest of the
   // run. Same rule the `source === 'workflow'` guard states for items.
-  const sessions = listSessionsByWorkItem(workItemId).filter((s) => s.workflowProvenance?.kind !== 'phase');
+  const sessions = listSessionsByWorkItem(workItemId).filter(isExecutionAttempt);
   closeRunsForSettledAttempts(sessions);
-  const humanDecisionAt = latestHumanStatusMoveAt(workItemId);
+  const decisionFloorAt = latestEvidenceFloorAt(workItemId);
   return {
-    humanDecisionAt,
-    attempts: attemptsAfterHumanDecision(humanDecisionAt, sessions).map((s) => ({
+    decisionFloorAt,
+    attempts: attemptsAfterDecision(decisionFloorAt, sessions).map((s) => ({
       status: s.status as SessionStatus,
       outcome: s.attemptOutcome ?? null,
     })),

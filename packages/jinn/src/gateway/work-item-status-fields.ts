@@ -1,8 +1,8 @@
 import { BLOCK_KIND_ERROR, parseBlockKind, type BlockKind } from "../work-items/blocks.js";
 import {
-  PARKED_UNTIL_ERROR,
   UNBLOCK_HINT_ERROR,
   UNBLOCK_HINT_REQUIRED,
+  parkRefusal,
   parseParkedUntil,
   parseUnblockHint,
   type TodoStopCause,
@@ -67,6 +67,16 @@ function parseAuthorityFlags(
   return { asOperator: body.asOperator === true, cascade, acknowledgeEscalated };
 }
 
+/** The park, if the move can hold one. A park only survives a move that stops
+ *  the Todo: everywhere else transition() deletes it with the write,
+ *  so it is refused rather than reported as a park that is gone before the
+ *  response is sent. `dependency` routes a block back to the queue, so it
+ *  cannot carry one either. */
+function parsePark(body: Record<string, unknown>, target: string, blockKind: BlockKind | undefined): string | undefined | Refusal {
+  const refused = parkRefusal(body.parkedUntil, target, blockKind);
+  return refused ? refuse(400, refused) : parseParkedUntil(body.parkedUntil) ?? undefined;
+}
+
 /** The stop's cause (PLA-157). An escalation without a hint is the failure this
  *  exists to stop: "Blocked again for the same reason" tells the operator a Todo
  *  stopped and nothing about whose move it is. Required on the agent lane only,
@@ -75,12 +85,13 @@ function parseAuthorityFlags(
 function parseStopCause(
   body: Record<string, unknown>,
   target: string,
+  blockKind: BlockKind | undefined,
   isOperatorPut: boolean,
 ): { stopCause: TodoStopCause | undefined } | Refusal {
   const unblockHint = parseUnblockHint(body.unblockHint);
   if (unblockHint === null) return refuse(400, UNBLOCK_HINT_ERROR);
-  const parkedUntil = parseParkedUntil(body.parkedUntil);
-  if (parkedUntil === null) return refuse(400, PARKED_UNTIL_ERROR);
+  const parkedUntil = parsePark(body, target, blockKind);
+  if (typeof parkedUntil === "object") return parkedUntil;
   if (target === "escalated" && !unblockHint && !isOperatorPut) return refuse(400, UNBLOCK_HINT_REQUIRED);
   if (!unblockHint && !parkedUntil) return { stopCause: undefined };
   return { stopCause: { ...(parkedUntil ? { parkedUntil } : {}), ...(unblockHint ? { unblockHint } : {}) } };
@@ -99,7 +110,7 @@ export function parseStatusUpdateFields(
   // The kind decides where a block lands, so an unknown one refuses rather than falling back to a default nobody meant.
   const blockKind = parseBlockKind(body.blockKind);
   if (blockKind === null) return refuse(400, BLOCK_KIND_ERROR);
-  const cause = parseStopCause(body, target, isOperatorPut);
+  const cause = parseStopCause(body, target, blockKind, isOperatorPut);
   if ("ok" in cause) return cause;
   const flags = parseAuthorityFlags(body, target, isOperatorPut);
   if ("ok" in flags) return flags;

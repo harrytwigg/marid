@@ -6,6 +6,7 @@ import { expectPosixMode } from "../../shared/test-support/posix-mode.js";
 import {
   authCookieHeaders,
   authCookieName,
+  requestArrivedOverHttps,
   authDeviceCookieName,
   authenticateGatewayRequest,
   authRequiredForRequest,
@@ -283,5 +284,43 @@ describe("gateway auth", () => {
     expect(listed.map((device) => device.id)).toEqual([human.device.id]);
     expect(verifyAuthSession(home, automated.device.id, automated.secret)).toBe(false);
     expect(verifyAuthSession(home, human.device.id, human.secret)).toBe(true);
+  });
+});
+
+// Regression: Exposing the gateway on a public hostname turned the
+// year-long session cookie into an internet-reachable credential; without
+// `Secure` a browser paired through the tunnel would attach it to any plaintext
+// port-80 request to that host, before the redirect to HTTPS arrives.
+describe("Secure attribute on auth cookies", () => {
+  const req = (headers: Record<string, string>, encrypted = false) =>
+    ({ headers, socket: { encrypted } }) as never;
+
+  it("detects HTTPS from a terminating proxy and from a direct TLS socket", () => {
+    expect(requestArrivedOverHttps(req({ "x-forwarded-proto": "https" }))).toBe(true);
+    expect(requestArrivedOverHttps(req({ "x-forwarded-proto": "HTTPS" }))).toBe(true);
+    expect(requestArrivedOverHttps(req({ "x-forwarded-proto": "https, http" }))).toBe(true);
+    expect(requestArrivedOverHttps(req({}, true))).toBe(true);
+  });
+
+  it("does not claim HTTPS for plaintext requests", () => {
+    expect(requestArrivedOverHttps(req({}))).toBe(false);
+    expect(requestArrivedOverHttps(req({ "x-forwarded-proto": "http" }))).toBe(false);
+    expect(requestArrivedOverHttps(req({ "x-forwarded-proto": "httpsx" }))).toBe(false);
+  });
+
+  it("marks the cookies Secure only for an HTTPS session", () => {
+    for (const header of authCookieHeaders("tok", "dev", undefined, true)) {
+      expect(header).toMatch(/; Secure$/);
+      expect(header).toContain("HttpOnly");
+    }
+  });
+
+  it("leaves them unmarked over plain HTTP, so LAN pairing keeps working", () => {
+    // http://<lan-ip>:7777 is not a secure context: a Secure cookie there would
+    // be silently dropped and the operator could never sign in on the LAN.
+    for (const header of authCookieHeaders("tok", "dev")) {
+      expect(header).not.toContain("Secure");
+      expect(header).toContain("HttpOnly");
+    }
   });
 });

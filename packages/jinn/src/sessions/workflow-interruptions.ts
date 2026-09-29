@@ -1,6 +1,8 @@
 import type { Session, WorkflowAttemptInterruptionCause } from "../shared/types.js";
 
 export const USER_MESSAGE_INTERRUPTION_REASON = "Interrupted: new message received";
+/** The operator's stop button (POST /api/sessions/:id/stop). */
+export const USER_STOP_INTERRUPTION_REASON = "Interrupted by user";
 
 /** Prefer the turn-fenced boundary marker; retain error matching for legacy rows. */
 export function workflowAttemptInterruptionCause(

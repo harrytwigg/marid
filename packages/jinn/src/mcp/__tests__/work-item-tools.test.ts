@@ -2,10 +2,9 @@ import { describe, it, expect, beforeAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
-import type { ServerResponse } from "node:http";
 import { CALLER_SESSION_CAPABILITY_HEADER, CALLER_SESSION_HEADER, TOOL_CALL_HEADER, TOOL_CALL_HEADER_VALUE, ensureSessionCapability } from "../identity.js";
 import type { JinnMcpContext, JinnMcpTool } from "../toolkit.js";
+import { inProcessGatewayFetch, seedPlatformOrg } from "./helpers/in-process-gateway.js";
 
 process.env.JINN_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-mcp-work-items-home-"));
 
@@ -21,6 +20,11 @@ interface SeenCall {
   headers: Record<string, string>;
 }
 
+/** A multipart body as plain data: text fields verbatim, files as `<name:bytes>`. */
+function formFields(form: FormData): Record<string, string> {
+  return Object.fromEntries([...form.entries()].map(([k, v]) => [k, typeof v === "string" ? v : `<${v.name}:${v.size}>`]));
+}
+
 function stub(
   responder: (call: SeenCall) => { status: number; body: unknown },
   callerSessionId: string | null = "session-test",
@@ -31,7 +35,7 @@ function stub(
     const call: SeenCall = {
       url: typeof input === "string" ? input : input.toString(),
       method: init?.method ?? "GET",
-      body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+      body: typeof init?.body === "string" ? JSON.parse(init.body) : init?.body instanceof FormData ? formFields(init.body) : undefined,
       headers: (init?.headers as Record<string, string>) ?? {},
     };
     calls.push(call);
@@ -88,7 +92,7 @@ describe("work-item tools — registry + schemas", () => {
     expect(names).toContain("fire_workflow_event");
     expect(names).toContain("cancel_workflow_run");
     expect(names.some((n) => /cancel/i.test(n) && /work_item/.test(n))).toBe(false);
-    expect(names).toHaveLength(75);
+    expect(names).toHaveLength(76);
   });
 
   it("positions list as recent/filter summaries and search as text/filter hits", () => {
@@ -108,7 +112,7 @@ describe("work-item tools — registry + schemas", () => {
   it("create schema has no approval fields and update schema allows manual start but excludes cancelled", () => {
     const createProps = tool("create_work_item").inputSchema.properties;
     expect(Object.keys(createProps).sort()).toEqual(
-      ["acceptance", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title", "verifyPolicy"].sort(),
+      ["acceptance", "autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title", "verifyPolicy"].sort(),
     );
     expect(JSON.stringify(createProps)).not.toMatch(/approval/i);
     const status = tool("update_work_item").inputSchema.properties.status as { enum: string[] };
@@ -409,83 +413,11 @@ let registry: Registry;
 let store: Store;
 let approvals: Approvals;
 
-function makeRes() {
-  let status = 200;
-  const chunks: Buffer[] = [];
-  const res = {
-    writeHead(s: number) {
-      status = s;
-      return this;
-    },
-    setHeader() {
-      return this;
-    },
-    end(buf?: Buffer | string) {
-      if (buf) chunks.push(Buffer.isBuffer(buf) ? buf : Buffer.from(buf));
-    },
-  } as unknown as ServerResponse;
-  return {
-    res,
-    get status() {
-      return status;
-    },
-    get text() {
-      return Buffer.concat(chunks).toString("utf-8");
-    },
-  };
-}
-
-const queueStub = {
-  enqueue: async () => {},
-  clearCancelled: () => {},
-  clearQueue: () => {},
-  pauseQueue: () => {},
-  resumeQueue: () => {},
-  getPendingCount: () => 0,
-  getTransportState: (_key: string, status: string) => status,
-};
-const engineStub = {
-  name: "stub",
-  run: async () => ({ result: "ok" }),
-  isAlive: () => false,
-  kill: () => {},
-  killAll: () => {},
-};
-const apiCtx = {
-  getConfig: () => ({ gateway: {}, engines: { default: "codex" }, sessions: {} }),
-  connectors: new Map(),
-  startTime: Date.now(),
-  emit: () => {},
-  sessionManager: {
-    getEngines: () => new Map([["codex", engineStub]]),
-    getEngine: () => engineStub,
-    getQueue: () => queueStub,
-  },
-} as unknown as import("../../gateway/api.js").ApiContext;
-
-function apiFetch(): typeof fetch {
-  return (async (input: string | URL, init?: RequestInit) => {
-    const url = new URL(typeof input === "string" ? input : input.toString());
-    const body = typeof init?.body === "string" ? [Buffer.from(init.body)] : [];
-    const headers: Record<string, string> = { host: url.host };
-    for (const [k, v] of Object.entries((init?.headers as Record<string, string>) ?? {})) {
-      headers[k.toLowerCase()] = v;
-    }
-    const req = Object.assign(Readable.from(body), {
-      method: init?.method ?? "GET",
-      url: url.pathname + url.search,
-      headers,
-    });
-    const cap = makeRes();
-    await api.handleApiRequest(req as unknown as Parameters<Api["handleApiRequest"]>[0], cap.res, apiCtx);
-    return { status: cap.status, text: async () => cap.text } as unknown as Response;
-  }) as unknown as typeof fetch;
-}
 
 function ctxFor(callerSessionId?: string, capability: "valid" | "none" | string = "valid"): JinnMcpContext {
   return {
     gatewayUrl: "http://gateway.test",
-    fetchFn: apiFetch(),
+    fetchFn: inProcessGatewayFetch(api),
     callerSessionId,
     sessionCapability: callerSessionId && capability !== "none"
       ? capability === "valid" ? ensureSessionCapability(callerSessionId) : capability
@@ -493,33 +425,9 @@ function ctxFor(callerSessionId?: string, capability: "valid" | "none" | string 
   };
 }
 
-function seedOrg() {
-  const dir = path.join(process.env.JINN_HOME!, "org", "platform");
-  const otherDir = path.join(process.env.JINN_HOME!, "org", "other");
-  fs.mkdirSync(dir, { recursive: true });
-  fs.mkdirSync(otherDir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "department.yaml"), "name: platform\n");
-  fs.writeFileSync(path.join(otherDir, "department.yaml"), "name: other\n");
-  fs.writeFileSync(
-    path.join(dir, "coo.yaml"),
-    "name: coo\ndisplayName: COO\ndepartment: platform\nrank: executive\nengine: codex\nmodel: gpt-5.5\npersona: Runs operations.\n",
-  );
-  fs.writeFileSync(
-    path.join(dir, "platform-manager.yaml"),
-    "name: platform-manager\ndisplayName: Platform Manager\ndepartment: platform\nrank: manager\nengine: codex\nmodel: gpt-5.5\npersona: Manages platform.\nreportsTo: coo\n",
-  );
-  fs.writeFileSync(
-    path.join(dir, "platform-dev.yaml"),
-    "name: platform-dev\ndisplayName: Platform Dev\ndepartment: platform\nrank: senior\nengine: codex\nmodel: gpt-5.5\npersona: Builds the platform.\nreportsTo: platform-manager\n",
-  );
-  fs.writeFileSync(
-    path.join(otherDir, "outsider.yaml"),
-    "name: outsider\ndisplayName: Outsider\ndepartment: other\nrank: employee\nengine: codex\nmodel: gpt-5.5\npersona: Works elsewhere.\nreportsTo: coo\n",
-  );
-}
 
 beforeAll(async () => {
-  seedOrg();
+  seedPlatformOrg(process.env.JINN_HOME!);
   ({ buildTools } = await import("../server.js"));
   ({ buildWorkItemTools, WORK_ITEM_SEARCH_LIMIT_MAX, WORK_ITEM_QUERY_CHAR_CAP } = await import("../work-item-tools.js"));
   api = await import("../../gateway/api.js");
@@ -828,7 +736,7 @@ describe("work-item tools — integration against the real API + store", () => {
 
     const assignTarget = store.createWorkItem({ title: "Assign approval reject", status: "backlog", source: "session" });
     const { status, body } = await (async () => {
-      const res = await apiFetch()("http://gateway.test/api/work-items/" + encodeURIComponent(assignTarget.id) + "/assign", {
+      const res = await inProcessGatewayFetch(api)("http://gateway.test/api/work-items/" + encodeURIComponent(assignTarget.id) + "/assign", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -1125,25 +1033,31 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
 });
 
 describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
-  it("attach_to_work_item posts the local path to the attachments route after local validation", async () => {
+  it("attach_to_work_item uploads the session-host file as multipart after local validation", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "attach-unit-"));
+    fs.writeFileSync(path.join(dir, "shot.png"), "png!");
+    fs.writeFileSync(path.join(dir, "a.bin"), "abc");
     const { calls, ctx } = stub(() => ({ status: 201, body: { attachment: { id: "wia_0a1b2c3d4e5f", filename: "shot.png" } } }));
-    const out = (await tool("attach_to_work_item").handler({ id: "JIN-7", path: "/somewhere/shot.png" }, ctx)) as Record<string, unknown>;
+    const out = (await tool("attach_to_work_item").handler({ id: "JIN-7", path: path.join(dir, "shot.png") }, ctx)) as Record<string, unknown>;
     expect(calls[0].method).toBe("POST");
     expect(new URL(calls[0].url).pathname).toBe("/api/work-items/JIN-7/attachments");
-    expect(calls[0].body).toEqual({ path: "/somewhere/shot.png" });
+    expect(calls[0].body).toEqual({ filename: "shot.png", file: "<shot.png:4>" });
     expect((out.attachment as Record<string, unknown>).id).toBe("wia_0a1b2c3d4e5f");
 
     const withMeta = stub(() => ({ status: 201, body: { attachment: { id: "wia_ffffffffffff" } } }));
     await tool("attach_to_work_item").handler(
-      { id: "JIN-7", path: "/tmp-x/a.bin", commentId: "wic_0a1b2c3d4e5f", filename: "renamed.bin" },
+      { id: "JIN-7", path: path.join(dir, "a.bin"), commentId: "wic_0a1b2c3d4e5f", filename: "renamed.bin" },
       withMeta.ctx,
     );
-    expect(withMeta.calls[0].body).toEqual({ path: "/tmp-x/a.bin", commentId: "wic_0a1b2c3d4e5f", filename: "renamed.bin" });
+    expect(withMeta.calls[0].body).toEqual({ commentId: "wic_0a1b2c3d4e5f", filename: "renamed.bin", file: "<renamed.bin:3>" });
 
     const silent = stub(() => ({ status: 500, body: { error: "must not run" } }));
     await expect(tool("attach_to_work_item").handler({ id: "JIN-7", path: "  " }, silent.ctx)).rejects.toThrow(/path/);
     await expect(tool("attach_to_work_item").handler({ id: "JIN-7", path: "/x", commentId: "bogus" }, silent.ctx)).rejects.toThrow(/commentId/);
     await expect(tool("attach_to_work_item").handler({ id: "nope", path: "/x" }, silent.ctx)).rejects.toThrow(/canonical Todo ID/);
+    await expect(tool("attach_to_work_item").handler({ id: "JIN-7", path: path.join(dir, "absent.png") }, silent.ctx)).rejects.toThrow(
+      /file not found.*read on the host this session runs on/,
+    );
     expect(silent.calls).toEqual([]);
   });
 
@@ -1163,14 +1077,16 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     expect(out.departments[0].slug).toBe("platform");
   });
 
-  it("comment_work_item with attachments posts the comment, then attaches each path to it (max 10, validated locally)", async () => {
+  it("comment_work_item with attachments posts the comment, then uploads each file to it (max 10, validated locally)", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comment-unit-"));
+    for (const name of ["a.png", "b.png"]) fs.writeFileSync(path.join(dir, name), name);
     const { calls, ctx } = stub((call) =>
       call.url.includes("/comments")
         ? { status: 201, body: { comment: { id: "wic_0a1b2c3d4e5f", body: "with files" } } }
         : { status: 201, body: { attachment: { id: "wia_0a1b2c3d4e5f" } } },
     );
     const out = (await tool("comment_work_item").handler(
-      { id: "JIN-7", body: "with files", attachments: ["/shots/a.png", "/shots/b.png"] },
+      { id: "JIN-7", body: "with files", attachments: [path.join(dir, "a.png"), path.join(dir, "b.png")] },
       ctx,
     )) as { comment: Record<string, unknown>; attachments: Array<Record<string, unknown>> };
     expect(calls.map((c) => new URL(c.url).pathname)).toEqual([
@@ -1178,8 +1094,8 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
       "/api/work-items/JIN-7/attachments",
       "/api/work-items/JIN-7/attachments",
     ]);
-    expect(calls[1].body).toEqual({ path: "/shots/a.png", commentId: "wic_0a1b2c3d4e5f" });
-    expect(calls[2].body).toEqual({ path: "/shots/b.png", commentId: "wic_0a1b2c3d4e5f" });
+    expect(calls[1].body).toEqual({ commentId: "wic_0a1b2c3d4e5f", filename: "a.png", file: "<a.png:5>" });
+    expect(calls[2].body).toEqual({ commentId: "wic_0a1b2c3d4e5f", filename: "b.png", file: "<b.png:5>" });
     expect(out.attachments).toHaveLength(2);
 
     const silent = stub(() => ({ status: 500, body: { error: "must not run" } }));
@@ -1189,7 +1105,31 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     await expect(
       tool("comment_work_item").handler({ id: "JIN-7", body: "x", attachments: ["  "] }, silent.ctx),
     ).rejects.toThrow(/attachments/);
+    // Review B1: an unattachable file is refused BEFORE the comment is posted,
+    // so a retry can never double-post it.
+    const envFile = path.join(dir, ".env.local");
+    fs.writeFileSync(envFile, "SECRET=1");
+    await expect(
+      tool("comment_work_item").handler({ id: "JIN-7", body: "x", attachments: [path.join(dir, "a.png"), envFile] }, silent.ctx),
+    ).rejects.toThrow(/Refusing to read environment secret files/);
     expect(silent.calls).toEqual([]);
+  });
+
+  it("comment_work_item names the created comment when an upload fails after it was posted (review B1)", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "comment-after-"));
+    const file = path.join(dir, "gone.txt");
+    fs.writeFileSync(file, "here at vet time");
+    const { calls, ctx } = stub((call) => {
+      if (call.url.includes("/comments")) {
+        fs.rmSync(file); // disappears between the vet and the upload
+        return { status: 201, body: { comment: { id: "wic_0a1b2c3d4e5f" } } };
+      }
+      return { status: 500, body: { error: "must not run" } };
+    });
+    await expect(tool("comment_work_item").handler({ id: "JIN-7", body: "x", attachments: [file] }, ctx)).rejects.toThrow(
+      /comment wic_0a1b2c3d4e5f was created, but attaching .* \(0\/1 uploaded\) failed: .*file not found.*do not re-post the comment/,
+    );
+    expect(calls).toHaveLength(1);
   });
 
   it("edit_work_item accepts explicit null to CLEAR acceptance and dueAt (slice-4 review F3)", async () => {
@@ -1251,3 +1191,4 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     expect(platform!.todoCount).toBeGreaterThanOrEqual(1);
   });
 });
+

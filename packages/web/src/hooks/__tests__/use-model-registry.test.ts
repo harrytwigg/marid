@@ -5,6 +5,9 @@ import {
   effortLevelsFor,
   defaultEffort,
   clampEffort,
+  providerOf,
+  providerLabel,
+  modelMatchesQuery,
 } from '../use-model-registry'
 import type { EnginesResponse } from '@/lib/api'
 
@@ -67,4 +70,34 @@ describe('clampEffort', () => {
   it('keeps a still-valid current level', () => expect(clampEffort(['low', 'medium', 'high'], 'high')).toBe('high'))
   it('replaces an invalid level with the default', () => expect(clampEffort(['low', 'medium', 'high'], 'xhigh')).toBe('medium'))
   it('undefined when the new model has no effort', () => expect(clampEffort([], 'high')).toBeUndefined())
+})
+
+describe('providerOf', () => {
+  it('reads the first segment of a provider/model id', () => {
+    expect(providerOf('opencode-go/deepseek-v4.1-flash')).toBe('opencode-go')
+    expect(providerOf('openai/gpt-5.5')).toBe('openai')
+  })
+  it('keeps the model half intact when it contains further slashes', () => {
+    expect(providerOf('openrouter/meta-llama/llama-4')).toBe('openrouter')
+  })
+  it('is empty for a bare id (every non-opencode engine)', () => {
+    expect(providerOf('opus')).toBe('')
+    expect(providerOf('gpt-5.5')).toBe('')
+  })
+})
+
+describe('providerLabel', () => {
+  it('spells opencode-go as "opencode go"', () => expect(providerLabel('opencode-go')).toBe('opencode go'))
+  it('passes any other provider through unchanged', () => expect(providerLabel('openrouter')).toBe('openrouter'))
+})
+
+describe('modelMatchesQuery', () => {
+  const glm = { id: 'opencode-go/glm-5.3', label: 'glm-5.3' }
+  const llama = { id: 'openrouter/meta-llama/llama-4', label: 'meta-llama/llama-4' }
+  it('matches everything on an empty query', () => expect(modelMatchesQuery(glm, '   ')).toBe(true))
+  it('matches the label, case-insensitively', () => expect(modelMatchesQuery(glm, 'GLM')).toBe(true))
+  it('matches the provider segment', () => expect(modelMatchesQuery(glm, 'opencode-go')).toBe(true))
+  it('matches the provider display form ("opencode go")', () => expect(modelMatchesQuery(glm, 'opencode go')).toBe(true))
+  it('matches a model id inside a multi-slash id', () => expect(modelMatchesQuery(llama, 'llama-4')).toBe(true))
+  it('rejects a non-match', () => expect(modelMatchesQuery(glm, 'kimi')).toBe(false))
 })

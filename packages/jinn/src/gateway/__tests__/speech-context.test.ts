@@ -53,6 +53,10 @@ describe("speechContextApplies", () => {
     expect(speechContextApplies({ speech: true, isNotification: false, promptRendered: false })).toBe(true);
   });
 
+  it("never puts the note in front of an engine-native command", () => {
+    expect(speechContextApplies({ speech: true, isNotification: false, promptRendered: false, rawEngineCommand: true })).toBe(false);
+  });
+
   it("never attaches the note for typed-only or notification messages", () => {
     expect(speechContextApplies({ speech: false, isNotification: false, promptRendered: false })).toBe(false);
     expect(speechContextApplies({ speech: true, isNotification: true, promptRendered: false })).toBe(false);

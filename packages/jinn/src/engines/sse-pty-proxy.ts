@@ -57,6 +57,35 @@ export interface SsePtyProxyOpts {
    *  tasks alike (independent of the tee/sentinel decision) — so the gateway can
    *  tell "CLI still working" apart from "truly idle" after the Stop hook. */
   onUpstreamActivity?: (info: UpstreamActivityInfo) => void;
+  /** Fired with the task ids of every finished background task the CLI is telling
+   *  the model about in this request. The CLI reports a background task's end only
+   *  by a `<task-notification>` in the next model request, so this is the one place
+   *  the gateway can learn it. */
+  onTaskNotifications?: (taskIds: string[]) => void;
+}
+
+/** The newest message, if it is the user's, flattened to searchable text (block
+ *  arrays are serialised whole, so text nested in a tool_result is covered). */
+function newestUserText(messages: unknown): string {
+  const last = Array.isArray(messages) ? messages.at(-1) as { role?: unknown; content?: unknown } | null | undefined : undefined;
+  if (!last || last.role !== "user") return "";
+  return typeof last.content === "string" ? last.content : JSON.stringify(last.content ?? "");
+}
+
+/**
+ * Task ids of the finished background tasks announced in a request's newest
+ * message. Only the last message is read: each notification is new input exactly
+ * once, and every later request carries it again as history. A notification
+ * without a `<status>` (a Monitor's per-event notice) is not an ending.
+ */
+export function finishedBackgroundTaskIds(messages: unknown): string[] {
+  const text = newestUserText(messages);
+  const ids: string[] = [];
+  for (const [, body] of text.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)) {
+    const id = /<task-id>([^<\s]+)<\/task-id>/.exec(body)?.[1];
+    if (id && /<status>[^<]+<\/status>/.test(body)) ids.push(id);
+  }
+  return ids;
 }
 
 /**
@@ -99,6 +128,7 @@ export class SsePtyProxy {
   /** True when `primaryAgent` is the pool we created, so stop() must free it. */
   private readonly ownsPool: boolean;
   private readonly onUpstreamActivity?: (info: UpstreamActivityInfo) => void;
+  private readonly onTaskNotifications?: (taskIds: string[]) => void;
 
   /** Upstream requests currently in flight (incremented at request start,
    *  decremented exactly once per request on end/error/client-abort). */
@@ -120,6 +150,7 @@ export class SsePtyProxy {
     this.ownsPool = opts.primaryAgent === undefined;
     this.primaryAgent = opts.primaryAgent ?? createUpstreamPool(opts.upstream?.protocol);
     this.onUpstreamActivity = opts.onUpstreamActivity;
+    this.onTaskNotifications = opts.onTaskNotifications;
     this.server = http.createServer((req, res) => this.handle(req, res));
     // node http servers throw on unhandled 'clientError'; swallow so a flaky
     // client socket can never crash the daemon.
@@ -330,13 +361,26 @@ export class SsePtyProxy {
     if ((url ?? "").split("?")[0] !== "/v1/messages") {
       return { isAgent: false, teeToUi: false };
     }
-    let json: { tools?: unknown; system?: unknown } | null = null;
-    try { json = JSON.parse(body.toString("utf-8")) as { tools?: unknown; system?: unknown }; }
+    let json: { tools?: unknown; system?: unknown; messages?: unknown } | null = null;
+    try { json = JSON.parse(body.toString("utf-8")) as { tools?: unknown; system?: unknown; messages?: unknown }; }
     catch { return { isAgent: false, teeToUi: false }; }
     if (!Array.isArray(json?.tools) || json.tools.length === 0) {
       return { isAgent: false, teeToUi: false };
     }
+    // Cheap gate before walking the newest message: most requests carry no notification at all.
+    if (body.includes("<task-notification>")) this.reportTaskNotifications(json.messages);
     return { isAgent: true, teeToUi: systemHasSentinel(json?.system) };
+  }
+
+  /** Never lets the observer break forwarding: the request goes upstream regardless. */
+  private reportTaskNotifications(messages: unknown): void {
+    if (!this.onTaskNotifications) return;
+    try {
+      const ids = finishedBackgroundTaskIds(messages);
+      if (ids.length > 0) this.onTaskNotifications(ids);
+    } catch (err) {
+      logger.warn(`SsePtyProxy[${this.label}] onTaskNotifications threw: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /** Consume complete SSE frames (separated by a blank line) from `buf`, JSON.parse

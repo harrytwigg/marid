@@ -30,6 +30,7 @@ export const APP_ROUTES = [
   { id: "kanban-redirect", path: "/kanban", availability: "always", surface: "todos" },
   { id: "logs", path: "/logs", availability: "always", surface: "logs" },
   { id: "limits", path: "/limits", availability: "always", surface: "limits" },
+  { id: "auto-dispatch", path: "/auto-dispatch", availability: "always", surface: "auto-dispatch" },
   { id: "org", path: "/org", availability: "always", surface: "org" },
   { id: "settings-plugins", path: "/settings/plugins", availability: "always", surface: "settings-plugins" },
   { id: "settings", path: "/settings", availability: "always", surface: "settings" },

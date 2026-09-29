@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from "react"
 import { ChevronDown, KeyRound, Settings, ShieldCheck, Terminal, Wifi } from "lucide-react"
 import type { AuthState } from "@/lib/auth"
 import { AuthStateIcon, AuthStateLabel } from "./auth-motion"
+import { PRODUCT_NAME } from "@/lib/brand"
 
 type PairingMode = "code" | "token"
 type PairingFlow = "cli" | "web" | null
@@ -76,14 +77,14 @@ export function PairingScreen({ authState, pairing, error, onPair }: PairingScre
             <FlowButton
               active={flow === "cli"}
               icon={<Terminal size={16} />}
-              title="Pair with Jinn CLI"
+              title={`Pair with ${PRODUCT_NAME} CLI`}
               controls="jinn-pair-cli-flow"
               onClick={() => toggleFlow("cli")}
             />
             {flow === "cli" && (
               <div id="jinn-pair-cli-flow" className="animate-auth-reveal rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-[var(--space-3)] py-[var(--space-3)] shadow-[inset_0_0_0_1px_var(--separator)] text-[length:var(--text-footnote)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">
                 <ol className="flex flex-col gap-1.5 text-pretty">
-                  <li>1. Run this on the computer where Jinn is running.</li>
+                  <li>1. Run this on the computer where {PRODUCT_NAME} is running.</li>
                   <li>
                     2. <span className="font-[var(--font-code)] text-[var(--text-primary)]">{pairCommand}</span>
                   </li>
@@ -102,7 +103,7 @@ export function PairingScreen({ authState, pairing, error, onPair }: PairingScre
             {flow === "web" && (
               <div id="jinn-pair-web-flow" className="animate-auth-reveal rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-[var(--space-3)] py-[var(--space-3)] shadow-[inset_0_0_0_1px_var(--separator)] text-[length:var(--text-footnote)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">
                 <ol className="flex flex-col gap-1.5 text-pretty">
-                  <li>1. Open the already-paired local dashboard on the computer running Jinn.</li>
+                  <li>1. Open the already-paired local dashboard on the computer running {PRODUCT_NAME}.</li>
                   <li>2. Go to Settings &gt; Pairing and press Create pairing code.</li>
                   <li>3. Bring the code back here. Enter the code below.</li>
                 </ol>

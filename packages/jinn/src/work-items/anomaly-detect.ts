@@ -1,8 +1,10 @@
 import { currentApproval } from "./approval-rows.js";
 import { listWorkItemEvents } from "./event-log.js";
-import { classifyWorkItem, sessionInFlight } from "./recovery-controller.js";
+import { attemptActivity, classifyWorkItem, sessionInFlight } from "./recovery-controller.js";
 import { getWorkItemRecovery } from "./recovery-rows.js";
-import { EXECUTION_TIMEOUT_MS, runIsFresh, TODO_RECOVERY_ACTOR, type AttentionLane } from "./recovery.js";
+import {
+  EXECUTING_UNHANDED_REASON, EXECUTION_TIMEOUT_MS, executingUnhanded, runIsFresh, TODO_RECOVERY_ACTOR, type AttentionLane,
+} from "./recovery.js";
 import { listWorkItemRuns } from "./runs.js";
 import { appendWorkItemEvent, getWorkItem, listWorkItems, type WorkItem } from "./store.js";
 import { owningWorkflowId } from "./workflow-ownership.js";
@@ -10,6 +12,7 @@ import { owningWorkflowId } from "./workflow-ownership.js";
 export const ANOMALY_KINDS = [
   "assigned-without-run",
   "execution-timeout",
+  "executing-unhanded",
   "approved-landed-open",
   "review-without-reviewer",
   "blocked-without-recovery",
@@ -44,7 +47,13 @@ function assignedWithoutRun(item: WorkItem, now: Date): TodoAnomaly | undefined 
 function executionTimeout(item: WorkItem, now: Date): TodoAnomaly | undefined {
   if (item.status !== "executing") return undefined;
   const open = listWorkItemRuns(item.id).find((run) => run.endedAt === null);
-  if (!open || sessionInFlight(open.sessionId)) return undefined;
+  if (!open) {
+    // A pending approval is a question already on somebody's queue, not a stall.
+    if (currentApproval(item.id)?.state === "pending") return undefined;
+    if (!executingUnhanded(item.status, attemptActivity(item.id), now.getTime())) return undefined;
+    return { workItemId: item.id, kind: "executing-unhanded", lane: "manager", reason: EXECUTING_UNHANDED_REASON };
+  }
+  if (sessionInFlight(open.sessionId)) return undefined;
   if (!(now.getTime() - Date.parse(open.startedAt) > EXECUTION_TIMEOUT_MS)) return undefined;
   return { workItemId: item.id, kind: "execution-timeout", lane: "manager", reason: "execution has outlived the 4h timeout without an in-flight session to speak for it" };
 }

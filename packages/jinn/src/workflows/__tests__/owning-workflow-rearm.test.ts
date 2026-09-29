@@ -20,6 +20,10 @@ let labels: Labels;
 let triggers: Triggers;
 
 const started: Array<{ workflowId: string; todoId?: string }> = [];
+/** Every run these stubs start stays in flight. The Todo-wide claim now
+ *  outlives a run only while one is still going, and what is under
+ *  test here is that claim deciding a burst, not runs settling. */
+const live: Array<{ id: string; idempotencyKey: string; status: "running" }> = [];
 
 function definition(id: string, config: { label?: string; actor?: string } = {}): WorkflowDefinition {
   const trigger: WorkflowNode = {
@@ -36,11 +40,13 @@ const byId = new Map([[intake.id, intake], [category.id, category]]);
 const repository = {
   listDefinitions: () => ({ items: [...byId.keys()].map((id) => ({ id })), nextCursor: null }),
   getDefinition: (id: string) => byId.get(id) ?? null,
-  createRun: ({ workflowId, trigger }: { workflowId: string; trigger: { todoId?: string } }) => {
+  createRun: ({ workflowId, idempotencyKey, trigger }: { workflowId: string; idempotencyKey: string; trigger: { todoId?: string } }) => {
     started.push({ workflowId, todoId: trigger.todoId });
+    live.push({ id: `run-${started.length}`, idempotencyKey, status: "running" });
     return { id: `run-${started.length}` };
   },
   getRun: (_workflowId: string, runId: string) => ({ id: runId, status: "completed" }),
+  listRecoverableRuns: () => [...live],
 } as unknown as WorkflowRepository;
 
 const runner = { start: async (runId: string) => ({ id: runId, status: "completed" }) } as unknown as WorkflowRunner;
@@ -58,11 +64,11 @@ let pending: WorkflowTodoStatusEvent[] = [];
 function event(id: string, workItemId: string, actor = "operator", extra: Partial<WorkflowTodoStatusEvent> = {}): WorkflowTodoStatusEvent {
   const item = store.getWorkItem(workItemId);
   return {
-    id, workItemId, fromStatus: "blocked", toStatus: "assigned", actor, armedAsDelegate: null,
+    id, workItemId, fromStatus: "blocked", toStatus: "assigned", actor, actorEmployee: null, armedAsDelegate: null,
     quotaWindowDecided: false,
     item: {
       source: "session", department: "platform", assignee: item?.assignee ?? "platform-worker",
-      labels: labels.getWorkItemLabels(workItemId).map(({ id: labelId, name }) => ({ id: labelId, name })),
+      labels: labels.getWorkItemLabels(workItemId).map(({ id: labelId, name }) => ({ id: labelId, name })), autoStart: true,
       live: item ? { assignee: item.assignee, parentId: item.parentId, status: item.status } : null,
     },
     ...extra,
@@ -76,7 +82,7 @@ beforeAll(async () => {
   labels.createLabel({ name: "category" });
 });
 
-beforeEach(() => { started.length = 0; pending = []; });
+beforeEach(() => { started.length = 0; live.length = 0; pending = []; });
 
 describe("re-arming a Todo that already belongs to a pipeline", () => {
   it("starts only the owning workflow, not a sibling that also matches the status", async () => {

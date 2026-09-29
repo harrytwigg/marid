@@ -13,7 +13,7 @@ vi.mock("../../sessions/registry.js", () => ({
   getEngineSessionRef: vi.fn(() => ({ id: "native-1" })),
 }));
 
-import { attachPtyWebSocket } from "../pty-ws.js";
+import { attachPtyWebSocket, PTY_INPUT_MAX_CHARS } from "../pty-ws.js";
 
 class FakeWebSocket extends EventEmitter {
   OPEN = 1;
@@ -83,8 +83,10 @@ class FakeEngine implements PtyViewEngine {
     };
   }
   setViewing(_sessionId: string, viewing: boolean): void { this.viewingCalls.push(viewing); }
-  writeStdin(): void {}
-  writeRaw(): void {}
+  stdinWrites: string[] = [];
+  rawWrites: string[] = [];
+  writeStdin(_sessionId: string, text: string): void { this.stdinWrites.push(text); }
+  writeRaw(_sessionId: string, data: string): void { this.rawWrites.push(data); }
   resizePty(): void {}
 }
 
@@ -184,6 +186,22 @@ describe("attachPtyWebSocket snapshot framing", () => {
     expect(ws.closed).toBe(false);
   });
 
+  it("closes the socket after a not-recoverable error (the terminal was deleted)", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    attachPtyWebSocket(ws as any, "session-1", engine);
+    await settle();
+
+    engine.onControl?.({ type: "error", message: "This terminal was deleted.", recoverable: false });
+
+    expect(controls(ws).at(-1)).toEqual({
+      type: "error",
+      message: "This terminal was deleted.",
+      recoverable: false,
+    });
+    expect(ws.closed).toBe(true);
+  });
+
   it("unsubscribes and clears timers when the socket disconnects", async () => {
     const ws = new FakeWebSocket();
     const engine = new FakeEngine();
@@ -204,5 +222,67 @@ describe("attachPtyWebSocket snapshot framing", () => {
 
     ws.receive({ type: "restart" });
     expect(engine.viewingCalls).toEqual([true, true]);
+  });
+});
+
+describe("attachPtyWebSocket input frames", () => {
+  it("writes an input frame to the PTY byte-for-byte: keys, mouse reports, pastes", () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    attachPtyWebSocket(ws as any, "session-1", engine);
+
+    ws.receive({ type: "input", data: "h" });
+    ws.receive({ type: "input", data: "\x1b[<64;52;14M" });
+    ws.receive({ type: "input", data: "\x1b[200~multi\nline é\x1b[201~" });
+
+    expect(engine.rawWrites).toEqual(["h", "\x1b[<64;52;14M", "\x1b[200~multi\nline é\x1b[201~"]);
+    // Raw input never goes through the paste-and-submit path.
+    expect(engine.stdinWrites).toEqual([]);
+  });
+
+  it("drops empty, oversized and non-string input frames", () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    attachPtyWebSocket(ws as any, "session-1", engine);
+
+    ws.receive({ type: "input", data: "" });
+    ws.receive({ type: "input", data: "x".repeat(PTY_INPUT_MAX_CHARS + 1) });
+    ws.receive({ type: "input", data: 42 });
+    ws.receive({ type: "input" });
+    ws.receive({ type: "input", data: "x".repeat(PTY_INPUT_MAX_CHARS) });
+
+    expect(engine.rawWrites).toEqual(["x".repeat(PTY_INPUT_MAX_CHARS)]);
+  });
+
+  it("keeps the keybar allow-list and the stdin paste path unchanged", () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    attachPtyWebSocket(ws as any, "session-1", engine);
+
+    ws.receive({ type: "key", data: "\r" });
+    ws.receive({ type: "key", data: "rm -rf /\r" });
+    ws.receive({ type: "stdin", data: "hello" });
+
+    expect(engine.rawWrites).toEqual(["\r"]);
+    expect(engine.stdinWrites).toEqual(["hello"]);
+  });
+});
+
+describe("attachPtyWebSocket with an exited operator shell", () => {
+  it("shows the exit on resize instead of respawning, and restarts only when asked", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    engine.initial = { snapshot: { data: "$ exit", cols: 80, rows: 24, visible: true }, ready: false };
+    let exited: PtyControlEvent | undefined = { type: "exited", exitCode: 0, signal: 0 };
+    Object.assign(engine, { exitNotice: () => exited });
+    attachPtyWebSocket(ws as any, "session-1", engine);
+    await settle();
+    ws.receive({ type: "resize", cols: 101, rows: 30 });
+    expect(engine.spawnCalls).toEqual([]);
+    expect(controls(ws).at(-1)).toEqual({ type: "exited", exitCode: 0, signal: 0 });
+    ws.receive({ type: "restart" });
+    exited = undefined;
+    expect(engine.restartCalls).toHaveLength(1);
+    expect(engine.restartCalls[0]).toMatchObject({ cols: 101, rows: 30 });
   });
 });

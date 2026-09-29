@@ -86,6 +86,10 @@ export interface TurnInput {
 export interface TurnAbort {
   ok: false;
   error: string;
+  /** Answered without running the engine, and not a failure: the turn settles
+   *  as succeeded with `error` shown as a notice (an operator `/compact` the
+   *  session's engine cannot run). */
+  declined?: boolean;
 }
 
 /** Everything preflight resolved, ready for `engine.run`. */
@@ -109,6 +113,8 @@ export interface TurnPlan {
   syncRequested: boolean;
   /** True when the prompt carries messages an interrupt kept from the engine. */
   carriedInterruptedPrompts: boolean;
+  /** This turn is `/compact`: the engine's own compaction, not a prompt. */
+  compaction: boolean;
   /** Built per model attempt, because a model fallback re-fingerprints context. */
   prepareContext: (model: string | undefined) => {
     fingerprint: string;

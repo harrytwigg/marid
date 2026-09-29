@@ -1,14 +1,30 @@
 import type { WebSocket } from "ws";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtyViewEngine } from "../engines/pty-view-engine.js";
 import { getEngineSessionRef, getSession } from "../sessions/registry.js";
+import { orgRegistry } from "./org-registry.js";
+import { employeeRemoteTarget } from "../shared/remote-target.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { logger } from "../shared/logger.js";
+import type { JinnConfig } from "../shared/types.js";
 
 const RAW_KEY_INPUTS = new Set(["\r", "\x1b", "\t", "\x03", "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"]);
+/** Largest `input` frame accepted. The web client chunks a bigger paste below
+ *  this, so a frame over it is a misbehaving client, not a long paste. */
+export const PTY_INPUT_MAX_CHARS = 64 * 1024;
 export const PTY_RESUME_DEADLINE_MS = 15_000;
 
 interface AttachPtyWebSocketOptions {
   resumeDeadlineMs?: number;
+  /** The live instance config, read through a getter so a hot reload is seen.
+   *
+   *  Load-bearing for remote employees, not a convenience: `scanOrg` refuses to
+   *  load an employee whose `remoteHost` has no `remote` config block behind it,
+   *  so asking the registry WITHOUT the config silently drops every remote
+   *  employee. The idle spawn would then see a local target and start `claude`
+   *  on the gateway — and adopt it as the warm PTY, so the next real turn pastes
+   *  its prompt into that local process. Exactly the failure the remote branch
+   *  below exists to prevent, arriving through the roster instead. */
+  getConfig?: () => JinnConfig;
 }
 
 /** Attach a snapshot-first, per-session PTY WebSocket. */
@@ -67,6 +83,13 @@ export function attachPtyWebSocket(
       clearResumeDeadline();
     }
     sendControl(event);
+    // A not-recoverable error means the terminal itself is gone (e.g. its
+    // session was deleted) — nothing this socket sends from here
+    // can do anything, so close it rather than leave a dead-end connection
+    // for the client to keep retrying against.
+    if (event.type === "error" && !event.recoverable) {
+      try { ws.close(); } catch { /* already closed */ }
+    }
   };
 
   // The manager synchronously registers a paused subscriber and captures an
@@ -101,11 +124,20 @@ export function attachPtyWebSocket(
 
   const idleSpawnOpts = (cols: number, rows: number): PtyIdleSpawnOpts => {
     const session = getSession(sessionId);
+    // The employee's remote target has to reach the idle spawn too. Without it
+    // this path spawns claude on the GATEWAY and the engine adopts it as the
+    // session's warm PTY, so the next real turn pastes into a local process —
+    // a remote employee silently running here, looking entirely normal in the UI.
+    const employee = session?.employee
+      ? orgRegistry(options.getConfig?.()).get(session.employee)
+      : undefined;
+    const remote = employeeRemoteTarget(employee);
     return {
       engineSessionId: session ? getEngineSessionRef(session).id : undefined,
       model: session?.model ?? undefined,
       effortLevel: session?.effortLevel ?? undefined,
       cwd: JINN_HOME,
+      ...remote,
       cols,
       rows,
     };
@@ -161,10 +193,26 @@ export function attachPtyWebSocket(
       engine.writeStdin(sessionId, message.data);
     } else if (message?.type === "key" && typeof message.data === "string") {
       if (RAW_KEY_INPUTS.has(message.data)) engine.writeRaw(sessionId, message.data);
+    } else if (message?.type === "input" && typeof message.data === "string") {
+      // The interactive terminal: keystrokes, mouse reports and pastes exactly
+      // as xterm encoded them, written to the PTY unchanged. No wider trust than
+      // `stdin` above — the upgrade already admitted only the operator. The web
+      // client strips xterm's own replies to terminal queries before sending,
+      // so what arrives here is what the operator did.
+      const data = message.data;
+      if (data && data.length <= PTY_INPUT_MAX_CHARS) engine.writeRaw(sessionId, data);
     } else if (message?.type === "resize" && validGeometry(message.cols, message.rows)) {
       const cols = Math.floor(message.cols);
       const rows = Math.floor(message.rows);
       lastGeometry = { cols, rows };
+      // An exited shell stays exited: a resize (a reload, a grid re-layout, a
+      // second tab) must not quietly respawn it and re-run its login.
+      const exitNotice = engine.exitNotice?.(sessionId);
+      if (exitNotice) {
+        clearResumeDeadline();
+        sendControl(exitNotice);
+        return;
+      }
       const hadWarmPty = engine.hasWarmPty(sessionId);
       if (!spawnIfNeeded(cols, rows)) return;
       try {

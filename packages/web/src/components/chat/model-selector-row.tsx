@@ -12,8 +12,13 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
-import { useModelRegistry, engineList, effortLevelsFor, findModel, defaultEffort, clampEffort, contextWindowFor } from '@/hooks/use-model-registry'
+import { useModelRegistry, engineList, effortLevelsFor, findModel, defaultEffort, clampEffort, contextWindowFor, providerOf, providerLabel, modelMatchesQuery } from '@/hooks/use-model-registry'
 import { loadExpandedByEngine, setEngineExpanded } from '@/lib/model-picker-prefs'
+
+/** Rows the model list shows before the operator asks for more. opencode's
+ *  catalog can be hundreds of models, so the picker is a short list plus a
+ *  search box, never the whole registry in one scroll of the composer. */
+const MAX_VISIBLE_MODELS = 5
 
 /** Round a token count to a compact `k` string (e.g. 23148 → "23k", 980 → "980"). */
 export function fmtK(n: number): string {
@@ -154,11 +159,22 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
   // Per-engine "show all models" preference — the picker shows an engine's
   // featured models by default; expanding to the full list is remembered.
   const [expandedByEngine, setExpandedByEngine] = useState<Record<string, boolean>>(() => loadExpandedByEngine())
+  // Free-text filter over the engine's whole catalog (not just the collapsed
+  // set), so a model the short list hides is still reachable by name. `query` and
+  // `searchExpanded` are transient — reset on engine change and on every
+  // open/close, so a search never leaks into a later look at the picker.
+  const [query, setQuery] = useState('')
+  const [searchExpanded, setSearchExpanded] = useState(false)
 
   // Focus-parking target: a tabindex=-1 wrapper INSIDE the menu layer. Parking
   // focus here before a panel swap keeps focus within the layer so Radix's
   // focus-outside dismissal never fires when the active item unmounts.
   const panelWrapRef = useRef<HTMLDivElement>(null)
+  // The model-list scroller, so ArrowDown/Up from the search field can hand focus
+  // to the first/last result. Radix's own arrow handling ignores a nested input
+  // (the event target is not the menu content), so without this the field is a
+  // keyboard dead end and the results are only reachable by Tab.
+  const listRef = useRef<HTMLDivElement>(null)
   // Animated height of the surface as panels of different sizes swap in.
   const [surfaceH, setSurfaceH] = useState<number>()
   // Skip the focus-confirm on the first open (Radix focuses the content itself).
@@ -229,16 +245,49 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
   const usage = formatContextUsage(contextTokens, contextWindowFor(registry, engine, modelId))
 
   // Featured/expand: when the engine has a featured set, show only those by
-  // default (plus the current model if it isn't featured — include-current-always),
-  // with a "More models…" affordance to reveal the full registry. Engines with no
-  // featured marking keep the full list (unchanged behaviour).
+  // default. Engines with no featured marking (opencode, whose catalog is the
+  // whole provider surface) show the first few instead. Both include the CURRENT
+  // model first, so the selected row is never hidden by the short list — the
+  // include-current-always rule the featured set has always had. `expanded` is the
+  // deliberate "show everything" opt-in, remembered per engine; the list stays a
+  // fixed-height scroller even then, so the menu cannot grow unbounded.
+  //
+  // A non-empty search is a strict filter over the whole catalog and gets its own
+  // transient reveal flag: "Show N more" while searching must not flip the
+  // persisted per-engine expand pref, or clearing the search afterwards would dump
+  // the full catalog instead of restoring the short list. Featured sets are NOT
+  // capped by MAX_VISIBLE_MODELS — only the no-featured "first few" is.
+  const trimmedQuery = query.trim()
+  const searching = trimmedQuery.length > 0
+  const matchingModels = searching ? models.filter((m) => modelMatchesQuery(m, trimmedQuery)) : null
   const hasFeatured = models.some((m) => m.featured)
-  const collapsedModels = hasFeatured ? models.filter((m) => m.featured || m.id === modelId) : models
+  const collapsedModels = hasFeatured
+    ? models.filter((m) => m.featured || m.id === modelId)
+    : [
+        ...models.filter((m) => m.id === modelId),
+        ...models.filter((m) => m.id !== modelId).slice(0, MAX_VISIBLE_MODELS - 1),
+      ]
   const expanded = expandedByEngine[engine] ?? false
-  const shownModels = hasFeatured && !expanded ? collapsedModels : models
-  const hiddenCount = models.length - collapsedModels.length
-  const showExpandToggle = hasFeatured && hiddenCount > 0
+  const baseFull = matchingModels ?? models
+  // While searching, the collapsed form is just the first few matches; otherwise
+  // it is `collapsedModels`, which already carries current-first and the
+  // featured/no-featured split.
+  const baseCollapsed = matchingModels ? matchingModels.slice(0, MAX_VISIBLE_MODELS) : collapsedModels
+  const revealAll = matchingModels ? searchExpanded : expanded
+  const visibleModels = revealAll ? baseFull : baseCollapsed
+  const hiddenCount = revealAll ? 0 : Math.max(0, baseFull.length - baseCollapsed.length)
+  const showExpandToggle = hiddenCount > 0 || (revealAll && baseFull.length > baseCollapsed.length)
+  const expandLabel = revealAll
+    ? 'Show fewer'
+    : searching
+      ? `Show ${hiddenCount} more`
+      : `More models (${hiddenCount})`
   const toggleExpanded = () => {
+    // While searching, reveal without touching the persisted pref (see above).
+    if (matchingModels) {
+      setSearchExpanded((v) => !v)
+      return
+    }
     const next = !expanded
     setEngineExpanded(engine, next)
     setExpandedByEngine((prev) => ({ ...prev, [engine]: next }))
@@ -261,6 +310,10 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
   const pickEngine = (nextEngine: string) => {
     const ne = registry.engines[nextEngine]
     const nextModel = ne?.defaultModel ?? ne?.models[0]?.id
+    // The old engine's filter means nothing for the new one — drop it, or the
+    // new engine's models render as an empty "no match" list.
+    setQuery('')
+    setSearchExpanded(false)
     onChange({
       engine: nextEngine,
       model: nextModel,
@@ -290,6 +343,8 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
   // no-op selection (matches the old radio behaviour) — just slide back.
   const chooseEngine = (nextEngine: string) => {
     panelWrapRef.current?.focus()
+    setQuery('')
+    setSearchExpanded(false)
     if (nextEngine !== engine) pickEngine(nextEngine)
     setDir(-1)
     setPanel('main')
@@ -302,31 +357,77 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
         Engine · {engineLabelOf(engine)}
       </div>
 
-      {/* Model radio list — label left, accent ✓ on the selected (right). */}
+      {/* Model search + short radio list — query left, provider badge + accent ✓
+          on the selected. The list scrolls rather than growing the menu, so even
+          the expanded opencode catalog stays inside the composer. */}
       {models.length === 0 ? (
         <div className="px-2 py-1.5 text-[length:var(--text-caption1)] leading-snug text-[var(--text-secondary)]">
           No models discovered yet.
         </div>
       ) : (
         <>
-          <DropdownMenuRadioGroup value={modelId} onValueChange={pickModel}>
-            {shownModels.map((m) => (
-              <DropdownMenuRadioItem
-                key={m.id}
-                value={m.id}
-                className="justify-between rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[state=checked]:font-[var(--weight-semibold)] data-[state=checked]:text-[var(--text-primary)] [&>span:first-child]:hidden"
-              >
-                <span className="truncate">{m.label}</span>
-                {m.id === modelId && <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
+          <div className="px-1 pb-1">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setSearchExpanded(false) }}
+              // Radix reads printable keys as menu typeahead and ignores arrows
+              // from a nested input. Keep printable keys in the field, let Escape
+              // and Tab through, and hand ArrowDown/Up to the results ourselves.
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const items = listRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+                  if (items && items.length) {
+                    items[e.key === 'ArrowDown' ? 0 : items.length - 1].focus()
+                  }
+                  return
+                }
+                if (e.key === 'Escape' || e.key === 'Tab') return
+                e.stopPropagation()
+              }}
+              placeholder="Search models…"
+              aria-label="Search models"
+              className="w-full rounded-[8px] bg-[var(--fill-tertiary)] px-2 py-1.5 text-[length:var(--text-footnote)] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] outline-none focus:bg-[var(--fill-secondary)]"
+            />
+          </div>
+          {visibleModels.length === 0 ? (
+            <div className="px-2 py-1.5 text-[length:var(--text-caption1)] text-[var(--text-secondary)]">
+              No models match “{trimmedQuery}”.
+            </div>
+          ) : (
+            <div ref={listRef} className="max-h-[min(50vh,270px)] overflow-y-auto">
+              <DropdownMenuRadioGroup value={modelId} onValueChange={pickModel}>
+                {visibleModels.map((m) => {
+                  const provider = providerOf(m.id)
+                  return (
+                    <DropdownMenuRadioItem
+                      key={m.id}
+                      value={m.id}
+                      className="justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[state=checked]:font-[var(--weight-semibold)] data-[state=checked]:text-[var(--text-primary)] [&>span:first-child]:hidden"
+                    >
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span className="truncate">{m.label}</span>
+                        {provider && (
+                          <span className="shrink-0 rounded-[5px] bg-[var(--fill-tertiary)] px-1 py-px text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
+                            {providerLabel(provider)}
+                          </span>
+                        )}
+                      </span>
+                      {m.id === modelId && <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />}
+                    </DropdownMenuRadioItem>
+                  )
+                })}
+              </DropdownMenuRadioGroup>
+            </div>
+          )}
           {showExpandToggle && (
             <DropdownMenuItem
               onSelect={(e) => { e.preventDefault(); toggleExpanded() }}
               className="rounded-[9px] py-1.5 px-2 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]"
             >
-              {expanded ? 'Show fewer' : `More models (${hiddenCount})`}
+              {expandLabel}
             </DropdownMenuItem>
           )}
         </>
@@ -475,6 +576,10 @@ export function ModelSelectorRow({ mode, value, onChange, pendingNote, errorNote
       open={open}
       onOpenChange={(v) => {
         setOpen(v)
+        // A filter is a one-look action: clear it on open and close alike so a
+        // stale query never greets the next visit (or hides the selected model).
+        setQuery('')
+        setSearchExpanded(false)
         if (v) {
           // Always land on the model/effort panel when (re)opening.
           setPanel('main')

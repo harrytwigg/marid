@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { loadConfig } from "../shared/config.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
-import { refreshGrokModels, refreshPiModels, refreshHermesModels } from "../shared/models.js";
+import { refreshGrokModels, refreshPiModels, refreshHermesModels, refreshOpencodeModels } from "../shared/models.js";
 import type { EngineLimitEngineSnapshot, EngineLimitWindow } from "../shared/types.js";
 
 export interface LimitsOptions {
@@ -40,11 +40,12 @@ function printEngine(engine: EngineLimitEngineSnapshot): void {
     for (const window of engine.windows) console.log(`    - ${formatWindow(window)}`);
   }
 
-  if (engine.buckets && engine.buckets.length > 1) {
+  // A lone bucket is worth printing when the top-level windows are not its own.
+  if (engine.buckets?.length && (engine.buckets.length > 1 || !engine.windows?.length)) {
     console.log("  Buckets:");
     for (const bucket of engine.buckets) {
-      const label = bucket.name ? `${bucket.id} (${bucket.name})` : bucket.id;
-      const parts = [bucket.primary, bucket.secondary].filter(Boolean).map((w) => formatWindow(w!));
+      const label = bucket.name && bucket.name !== bucket.id ? `${bucket.id} (${bucket.name})` : bucket.id;
+      const parts = (bucket.windows ?? [bucket.primary, bucket.secondary]).filter(Boolean).map((w) => formatWindow(w!));
       console.log(`    - ${label}${bucket.planType ? `, plan ${bucket.planType}` : ""}`);
       for (const part of parts) console.log(`      ${part}`);
     }
@@ -83,6 +84,7 @@ export async function runLimits(opts: LimitsOptions = {}): Promise<void> {
 
   const config = loadConfig();
   await refreshPiModels(config);
+  await refreshOpencodeModels(config);
   await refreshGrokModels(config);
   await refreshHermesModels(config);
   const snapshot = await collectEngineLimits(config, { engine: opts.engine });

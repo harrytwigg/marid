@@ -72,26 +72,47 @@ export function claimTodoForDelegation(
   return undefined;
 }
 
+/** The outcome of asking for a Dispatcher claim, before any HTTP shape is put
+ *  on it. `reused` is the idempotency receipt — a Dispatcher already holds the
+ *  Todo — and `refused` is anything else in the way. Both carry the body the
+ *  route answers with, so a non-HTTP caller (the idle-capacity auto-start) sees
+ *  exactly the reason the route would have sent. */
+export type DispatchClaimOutcome =
+  | { state: "acquired"; claim: RouteTodoClaim }
+  | { state: "reused"; body: { workItemId: string; sessionId: string; status: string; reused: true } }
+  | { state: "refused"; status: 409; body: { error: string; workItemId: string; sessionId?: string } };
+
 /**
  * Claim a Todo for the built-in Dispatcher. A Dispatcher already working this
  * Todo IS the idempotency receipt — repeat clicks get it back rather than a
  * second one — but anything else holding the Todo is somebody else's work, and
  * a second Dispatcher on top of it is exactly what this gate exists to refuse.
  */
-export function claimTodoForDispatch(res: ServerResponse, workItemId: string): RouteTodoClaim | undefined {
+export function takeDispatchClaim(workItemId: string): DispatchClaimOutcome {
   const owner = `dispatch:${randomUUID()}`;
   const claim = claimWorkItem({ workItemId, owner });
-  if (claim.state === "acquired") return acquired(workItemId, owner);
-  if (claim.state === "rejected") return refuse(res, workItemId, claim.reason);
+  if (claim.state === "acquired") return { state: "acquired", claim: acquired(workItemId, owner) };
+  if (claim.state === "rejected") return { state: "refused", status: 409, body: { error: claim.reason, workItemId } };
   const holder = claim.claim.sessionId ? getSession(claim.claim.sessionId) : undefined;
   if (holder?.employee === TODO_DISPATCHER_NAME) {
-    json(res, { workItemId, sessionId: holder.id, status: holder.status, reused: true });
-    return undefined;
+    return { state: "reused", body: { workItemId, sessionId: holder.id, status: holder.status, reused: true } };
   }
-  json(res, {
-    error: `Todo ${workItemId} is already being worked by ${claim.claim.sessionId ?? claim.claim.owner}`,
-    workItemId,
-    sessionId: claim.claim.sessionId,
-  }, 409);
+  return {
+    state: "refused",
+    status: 409,
+    body: {
+      error: `Todo ${workItemId} is already being worked by ${claim.claim.sessionId ?? claim.claim.owner}`,
+      workItemId,
+      ...(claim.claim.sessionId ? { sessionId: claim.claim.sessionId } : {}),
+    },
+  };
+}
+
+/** The HTTP face of `takeDispatchClaim`: answers the caller on anything but an
+ *  acquired claim, in the same `if (!claim) return;` shape as the other guards. */
+export function claimTodoForDispatch(res: ServerResponse, workItemId: string): RouteTodoClaim | undefined {
+  const outcome = takeDispatchClaim(workItemId);
+  if (outcome.state === "acquired") return outcome.claim;
+  json(res, outcome.body, outcome.state === "refused" ? outcome.status : 200);
   return undefined;
 }

@@ -19,6 +19,6 @@ export function syncShippedSkills(): void {
       + (result.backupDir ? ` (previous copies in ${result.backupDir})` : ""),
     );
   } catch (error) {
-    logger.error(`Could not sync the skills Jinn ships: ${error instanceof Error ? error.message : String(error)}`);
+    logger.error(`Could not sync the skills Marid ships: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

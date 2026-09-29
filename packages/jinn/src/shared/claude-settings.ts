@@ -30,8 +30,13 @@ interface HookMatcher { hooks: HookCommand[]; }
 // permissionDecision:"allow" was tested and does NOT dismiss these — hooks
 // cannot pre-approve a circuit breaker — so detecting it here and answering the
 // TUI is the only route. See engines/claude-permission-prompt.ts.
+// PostCompact is the only signal that a `/compact` has finished: it fires no
+// Stop. Verified on 2.1.283 — PreCompact, SessionStart{source:"compact"}, then
+// PostCompact{trigger:"manual"|"auto"}. The engine settles a `/compact` turn
+// on it (self-compaction queues its resume turn right behind) and treats it as
+// ordinary proof of life otherwise.
 export interface ClaudeSettings {
-  hooks: Record<"SessionStart" | "UserPromptSubmit" | "Stop" | "StopFailure" | "PreToolUse" | "PostToolUse" | "Notification", HookMatcher[]>;
+  hooks: Record<"SessionStart" | "UserPromptSubmit" | "Stop" | "StopFailure" | "PreToolUse" | "PostToolUse" | "Notification" | "PostCompact", HookMatcher[]>;
   statusLine?: HookCommand;
   appendSystemPrompt?: string;
 }
@@ -77,6 +82,7 @@ export function buildSessionSettings(opts: SessionSettingsOpts): ClaudeSettings 
       PreToolUse: [cmd()],
       PostToolUse: [cmd()],
       Notification: [cmd()],
+      PostCompact: [cmd()],
     },
     ...(opts.statusLineDir ? { statusLine: { type: "command", command: buildStatusLineRecorderCommand(opts.sessionId, opts.statusLineDir) } } : {}),
     ...(opts.appendSystemPrompt ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
@@ -103,6 +109,39 @@ export function cleanupSessionSettings(dir: string, sessionId: string): void {
 }
 
 /**
+ * The pure half of {@link seedTrust}: given parsed `.claude.json` contents and an
+ * ALREADY-REALPATHED project directory, apply the onboarding + per-project trust keys.
+ *
+ * `changed: false` means the caller must not write — every key is already set, and a
+ * rewrite would take a backup and touch the file for nothing.
+ *
+ * Separated from the I/O because the same key set has to be applied on a remote SSH
+ * host, where none of the gateway's filesystem is reachable. `assets/remote-trust-seed.mjs`
+ * is the standalone mirror that runs there; `src/shared/__tests__/remote-trust-seed.test.ts`
+ * deep-compares the two outputs so they cannot drift apart silently.
+ */
+export function applyTrustSeed(data: any, realProjectDir: string): { data: any; changed: boolean } {
+  data.projects ??= {};
+  const proj = (data.projects[realProjectDir] ??= {});
+  const alreadySeeded =
+    data.hasCompletedOnboarding === true &&
+    data.hasCompletedClaudeInChromeOnboarding === true &&
+    proj.hasTrustDialogAccepted === true &&
+    proj.hasCompletedProjectOnboarding === true;
+  if (alreadySeeded) return { data, changed: false };
+  // Global onboarding: dismisses the first-run intro (hasCompletedOnboarding) and
+  // the Claude in Chrome (beta) intro (hasCompletedClaudeInChromeOnboarding) that
+  // otherwise block the interactive PTY.
+  data.hasCompletedOnboarding = true;
+  data.hasCompletedClaudeInChromeOnboarding = true;
+  // Per-project trust: dismisses the folder-trust dialog.
+  proj.hasTrustDialogAccepted = true;
+  proj.hasCompletedProjectOnboarding = true;
+  proj.allowedTools ??= [];
+  return { data, changed: true };
+}
+
+/**
  * Idempotently mark a project directory trusted and complete non-destructive global
  * onboarding in the real ~/.claude.json.
  *
@@ -116,35 +155,20 @@ export function seedTrust(claudeJsonFile: string, projectDir: string): void {
   const realDir = fs.realpathSync(projectDir);
   let data: any = {};
   try { data = JSON.parse(fs.readFileSync(claudeJsonFile, "utf-8")); } catch { /* new file */ }
-  data.projects ??= {};
-  const proj = (data.projects[realDir] ??= {});
-  const alreadySeeded =
-    data.hasCompletedOnboarding === true &&
-    data.hasCompletedClaudeInChromeOnboarding === true &&
-    proj.hasTrustDialogAccepted === true &&
-    proj.hasCompletedProjectOnboarding === true;
-  if (alreadySeeded) return;
+  const seeded = applyTrustSeed(data, realDir);
+  if (!seeded.changed) return;
   // About to modify the user's real ~/.claude.json — keep a one-time backup of the
   // pre-Jinn original (no timestamped proliferation; first write wins).
   const backupPath = `${claudeJsonFile}.jinn-backup`;
   if (fs.existsSync(claudeJsonFile) && !fs.existsSync(backupPath)) {
     try { fs.copyFileSync(claudeJsonFile, backupPath, fs.constants.COPYFILE_EXCL); } catch { /* best effort */ }
   }
-  // Global onboarding: dismisses the first-run intro (hasCompletedOnboarding) and
-  // the Claude in Chrome (beta) intro (hasCompletedClaudeInChromeOnboarding) that
-  // otherwise block the interactive PTY.
-  data.hasCompletedOnboarding = true;
-  data.hasCompletedClaudeInChromeOnboarding = true;
-  // Per-project trust: dismisses the folder-trust dialog.
-  proj.hasTrustDialogAccepted = true;
-  proj.hasCompletedProjectOnboarding = true;
-  proj.allowedTools ??= [];
   // Under CLAUDE_CONFIG_DIR the target directory may not exist yet, unlike the old
   // os.homedir(); the caller swallows the ENOENT and every turn then hangs on the dialog
   // this function exists to answer. 0700 because credentials and transcripts land there.
   fs.mkdirSync(path.dirname(claudeJsonFile), { recursive: true, mode: 0o700 });
   const tmp = `${claudeJsonFile}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
+  fs.writeFileSync(tmp, JSON.stringify(seeded.data, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, claudeJsonFile);
   // Defensive: ensure the final file has 0o600 even if the target pre-existed
   // with a more permissive mode (rename preserves the destination inode's perms

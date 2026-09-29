@@ -8,6 +8,7 @@ import { getTodoDispatchConfig } from "../work-items/dispatch-config.js";
 import { readStopCause, type TodoStopCause } from "../work-items/stop-cause.js";
 import { isWorkItemKept, keptSet } from "../work-items/kept.js";
 import { getWorkItemRecovery, recoveryByItem } from "../work-items/recovery-rows.js";
+import { isRecoverySweptStatus } from "../work-items/recovery.js";
 import { initDb } from "../shared/db.js";
 
 /** The wire projections of a Todo the API routes return: one compact shape for
@@ -21,7 +22,10 @@ function attentionLaneOf(
   item: WorkItem,
   recovery = getWorkItemRecovery(item.id),
 ): string | null {
-  if (recovery) return recovery.lane;
+  // the recovery sweep only visits RECOVERY_SWEPT_STATUSES, so a row
+  // left behind by a move to backlog (or a terminal) is stale — reading it here
+  // kept a lane the Todo no longer had a reason for.
+  if (recovery && isRecoverySweptStatus(item.status)) return recovery.lane;
   if (item.approvalOperatorOnly && item.approvalState === "pending") return "operator";
   if (item.status === "blocked" || item.status === "escalated") {
     const cause = readStopCause(initDb(), item.id);

@@ -7,8 +7,10 @@ import type {
   EngineModelsConfig,
 } from "./types.js";
 import { logger } from "./logger.js";
+import { keepClaudeCatalogAfter, logClaudeCatalogShortfall, readClaudeCredentialStatus } from "./claude-auth.js";
 import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
+import { discoverOpencodeModels } from "./opencode-models.js";
 import {
   CLAUDE_ALIAS_IDS,
   discoverClaudeEffortLevels,
@@ -52,10 +54,67 @@ import {
  */
 
 /** Engines registered in this build (mirrors server.ts engine map). */
-export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "hermes"] as const;
+export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode"] as const;
 export type EngineName = (typeof ENGINE_NAMES)[number];
-export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes"] as const; // engines with a /ws/pty view
+export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode"] as const; // engines with a /ws/pty view
 export type PtyViewEngineName = (typeof PTY_VIEW_ENGINE_NAMES)[number];
+
+/**
+ * Whether the dashboard should offer `name`'s terminal view under `config`.
+ *
+ * opencode's view is an `opencode attach` client on the session's server, and
+ * there is only a server in `engines.opencode.mode: server` — in the default
+ * `run` mode every turn is its own short-lived process with nothing to attach
+ * to, so the view is not offered at all rather than offered and then refused.
+ */
+export function engineOffersPty(name: string, config: Pick<JinnConfig, "engines"> | undefined): boolean {
+  if (!(PTY_VIEW_ENGINE_NAMES as readonly string[]).includes(name)) return false;
+  if (name === "opencode") return config?.engines?.opencode?.mode === "server";
+  return true;
+}
+
+/**
+ * Engines that know how to relocate a turn onto another machine over SSH.
+ *
+ * Membership is a property of the ENGINE ADAPTER, not of the CLI it drives:
+ * each of these branches on `remoteHost` and spawns `ssh` instead of its own
+ * binary (`claude-interactive.ts` `spawnRemote`, `pi.ts` and `opencode.ts`
+ * `runRemote`). Every other adapter ignores the field entirely and would run
+ * the turn on the gateway — with `--dangerously-skip-permissions`, against a
+ * checkout that is not there — while the UI showed a remote employee working
+ * normally.
+ *
+ * Read by the turn gate (`sessions/turn/remote-ready.ts`), by the rate-limit
+ * substitution walker, and by the new-session engine preference, so that a
+ * remote employee is never handed to an engine that would silently bring the
+ * work back here.
+ */
+export const REMOTE_ENGINE_NAMES = ["claude", "pi", "opencode"] as const;
+export type RemoteEngineName = (typeof REMOTE_ENGINE_NAMES)[number];
+
+/** Type guard: can `name`'s adapter run a turn on another host? */
+export function engineSupportsRemote(name: string): name is RemoteEngineName {
+  return (REMOTE_ENGINE_NAMES as readonly string[]).includes(name);
+}
+
+/**
+ * Engines whose model catalog exists ONLY once discovery has run.
+ *
+ * Every engine here discovers its models from its CLI, but the others also ship
+ * a known offline catalog, so an id outside it really is a typo. These two have
+ * nothing to fall back on: the catalog is whatever providers the operator
+ * configured on this machine, and it is empty for the first moments after a
+ * restart and whenever discovery fails. Refusing an unrecognised id there would
+ * reject an employee's own configured model for reasons that have nothing to do
+ * with the model — so the id is allowed through with a warning, and the engine
+ * reports the real error if it turns out to be wrong.
+ */
+const DYNAMIC_CATALOG_ENGINES: ReadonlySet<string> = new Set(["pi", "opencode"]);
+
+/** Whether an unrecognised model id for `engine` should be allowed through. */
+export function hasDynamicModelCatalog(engine: string): boolean {
+  return DYNAMIC_CATALOG_ENGINES.has(engine);
+}
 
 /** Binary name probed for each engine's availability (override via engines.<name>.bin). */
 const ENGINE_BIN: Record<EngineName, string> = {
@@ -65,6 +124,7 @@ const ENGINE_BIN: Record<EngineName, string> = {
   grok: "grok",
   pi: "pi",
   hermes: "hermes",
+  opencode: "opencode",
 };
 
 const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
@@ -74,6 +134,9 @@ const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
   grok: "grok-flag",
   pi: "pi-flag",
   hermes: "none",
+  // `--variant` exists, but nothing opencode reports says which models accept
+  // which variants, so no model here claims effort support. See opencode-models.ts.
+  opencode: "none",
 };
 
 export const CODEX_DEFAULT_MODEL = "gpt-5.5";
@@ -88,6 +151,9 @@ const SYNTH_DEFAULTS: Record<EngineName, { supportsEffort: boolean; effortLevels
   // provider/id form keeps it well-typed for the engine's split.
   pi: { supportsEffort: false, effortLevels: [], fallbackModel: "ollama/gemma4:12b" },
   hermes: { supportsEffort: false, effortLevels: HERMES_EFFORT_LEVELS, fallbackModel: "openai-codex:gpt-5.5" },
+  // Placeholder shown only in the brief window before opencode discovery
+  // completes; the provider/id form is what the engine hands back to `-m`.
+  opencode: { supportsEffort: false, effortLevels: [], fallbackModel: "anthropic/claude-sonnet-5" },
 };
 
 /** Optional per-engine `bin` override from config. */
@@ -116,6 +182,7 @@ const ENGINE_INSTALL_HINT: Record<EngineName, string> = {
   grok: "npm install -g @xai-official/grok, then run grok once to authenticate",
   pi: "install the Pi CLI",
   hermes: "install the Hermes CLI: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash",
+  opencode: "install the opencode CLI: curl -fsSL https://opencode.ai/install | bash, then run `opencode auth login`",
 };
 
 /** Actionable error message for a session blocked by a missing engine binary. */
@@ -138,42 +205,42 @@ let discoveredAntigravityModels: AntigravityModelDiscovery | null = null;
 let discoveredGrokModels: GrokModelDiscovery | null = null;
 /** Snapshot of dynamically-discovered Hermes models (null until first discovery). */
 let discoveredHermesModels: HermesModelDiscovery | null = null;
+/** Snapshot of dynamically-discovered opencode models (null until first discovery). */
+let discoveredOpencodeModels: ModelInfo[] | null = null;
 
 /**
  * Discover Claude's catalog through Claude Code OAuth. This is best-effort and
  * read-only; it never validates a model by starting a Claude turn.
  */
-export async function refreshClaudeModels(config: JinnConfig): Promise<void> {
+export async function refreshClaudeModels(config: JinnConfig): Promise<boolean> {
   if (!engineAvailable(config, "claude")) {
     discoveredClaudeModels = null;
     discoveredClaudeEffortLevels = null;
     invalidateModelRegistry();
-    return;
+    return false;
   }
   try {
     const bin = resolveBin("claude", engineBinOverride(config, "claude"));
     discoveredClaudeEffortLevels = await discoverClaudeEffortLevels(bin);
-    discoveredClaudeModels = await discoverClaudeModels({
+    const discovered = await discoverClaudeModels({
       effortLevels: discoveredClaudeEffortLevels.length > 0 ? discoveredClaudeEffortLevels : undefined,
     });
-    // Zero models means no usable OAuth token (or an empty catalog), and the
-    // registry then silently falls back to the hardcoded "<Name> (Latest)"
-    // labels. Warn so that degradation is diagnosable instead of looking like a
-    // real catalog — this failure went unnoticed precisely because it was INFO.
-    if (discoveredClaudeModels.models.length === 0) {
-      logger.warn(
-        "Claude model discovery returned 0 models — no usable OAuth token; " +
-          "falling back to the offline alias catalog. Run `claude login` to restore real model names.",
-      );
-    } else {
-      logger.info(`Claude model discovery: ${discoveredClaudeModels.models.length} model(s)`);
+    // `true` = the catalog GET authenticated with the token on disk; the caller
+    // tells the auth watch, which this module must not import. On zero models
+    // the last good catalog is kept — the models did not stop existing because
+    // the token lapsed — and the credential reader says whether a login is the fix.
+    if (discovered.models.length > 0) {
+      discoveredClaudeModels = discovered;
+      logger.info(`Claude model discovery: ${discovered.models.length} model(s)`);
+      return true;
     }
+    logClaudeCatalogShortfall(readClaudeCredentialStatus(), discoveredClaudeModels !== null);
   } catch (err) {
-    logger.warn(`Claude model discovery failed: ${err instanceof Error ? err.message : err}`);
-    discoveredClaudeModels = null;
+    discoveredClaudeModels = keepClaudeCatalogAfter(err, discoveredClaudeModels, readClaudeCredentialStatus());
   } finally {
     invalidateModelRegistry();
   }
+  return false;
 }
 
 export function setDiscoveredClaudeModelsForTest(models: ClaudeModelDiscovery | null): void {
@@ -238,6 +305,30 @@ export async function refreshPiModels(config: JinnConfig): Promise<void> {
   } catch (err) {
     logger.warn(`Pi model discovery failed: ${err instanceof Error ? err.message : err}`);
     discoveredPiModels = null;
+  } finally {
+    invalidateModelRegistry();
+  }
+}
+
+/**
+ * Discover the models the installed opencode CLI can reach (`opencode models`)
+ * and refresh the registry. Async — populates a snapshot the synchronous
+ * registry reads. Never throws; degrades to the config/synthesized fallback
+ * when opencode is absent or discovery fails.
+ */
+export async function refreshOpencodeModels(config: JinnConfig): Promise<void> {
+  if (!engineAvailable(config, "opencode")) {
+    discoveredOpencodeModels = null;
+    invalidateModelRegistry();
+    return;
+  }
+  try {
+    const bin = resolveBin("opencode", engineBinOverride(config, "opencode"));
+    discoveredOpencodeModels = await discoverOpencodeModels(bin);
+    logger.info(`opencode model discovery: ${discoveredOpencodeModels.length} model(s)`);
+  } catch (err) {
+    logger.warn(`opencode model discovery failed: ${err instanceof Error ? err.message : err}`);
+    discoveredOpencodeModels = null;
   } finally {
     invalidateModelRegistry();
   }
@@ -352,12 +443,16 @@ export function buildRegistry(config: JinnConfig): ModelRegistry {
       registry[name] = buildHermesEntry(config, block?.hermes, synthesized[name], available);
       continue;
     }
+    if (name === "opencode") {
+      registry[name] = buildOpencodeEntry(config, block?.opencode, synthesized[name], available);
+      continue;
+    }
     const engineBlock = block?.[name];
     registry[name] = engineBlock
       ? fromEngineModelsConfig(name, engineBlock, available)
       : synthesized[name]; // engine omitted from the block → keep the synthesized entry
   }
-  return Object.fromEntries(ENGINE_NAMES.map((n) => [n, { ...registry[n], supportsPty: (PTY_VIEW_ENGINE_NAMES as readonly string[]).includes(n) }])) as ModelRegistry;
+  return Object.fromEntries(ENGINE_NAMES.map((n) => [n, { ...registry[n], supportsPty: engineOffersPty(n, config) }])) as ModelRegistry;
 }
 
 /**
@@ -514,6 +609,27 @@ function buildHermesEntry(
   if (hermesBlock) return fromEngineModelsConfig("hermes", hermesBlock, available, pinned);
   const known = knownHermesModels(pinned);
   return { name: "hermes", available, defaultModel: known.defaultModel || synthEntry.defaultModel, effortMechanism: "none", models: known.models };
+}
+
+/** opencode registry entry: discovered models > config `models.opencode` block > synthesized. */
+function buildOpencodeEntry(
+  config: JinnConfig,
+  opencodeBlock: EngineModelsConfig | undefined,
+  synthEntry: EngineRegistryEntry,
+  available: boolean,
+): EngineRegistryEntry {
+  const pinned = config.engines.opencode?.model;
+  if (discoveredOpencodeModels && discoveredOpencodeModels.length > 0) {
+    let models = discoveredOpencodeModels;
+    // A pinned model discovery has not caught up with still has to be
+    // selectable — otherwise an employee configured for it cannot start at all.
+    if (pinned && !models.some((m) => m.id === pinned)) {
+      models = [{ id: pinned, label: pinned, supportsEffort: false, effortLevels: [] }, ...models];
+    }
+    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: "none", models };
+  }
+  if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);
+  return { ...synthEntry, available };
 }
 
 /** Pi registry entry: discovered models > config `models.pi` block > synthesized. */

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, vi } from "vitest";
 import { fork, type ChildProcess } from "node:child_process";
 import os from "node:os";
 import fs from "node:fs";
@@ -332,5 +332,91 @@ describe("preflight distinguishes a corrupt DB from prerelease Todo data", () =>
     const p = dbPath();
     fs.writeFileSync(p, ""); // zero-length
     expect(preflightWorkItemsDatabase(p)).toBe("absent");
+  });
+
+  // a current-schema registry.db whose main file is intact, with a
+  // stale -wal left over from days earlier. SQLite accepts the old frames and
+  // overlays an old page 1 (and its smaller page count) on the newer file, so
+  // the schema reads back fine but the Todo tables are "malformed". The schema
+  // verifier's catch swallowed that and the gateway refused to start with the
+  // prerelease-data message, sending the operator after the wrong problem.
+  it("reports a stale WAL over a current database as corruption, naming the SQLite error", () => {
+    const file = currentDb();
+    const stale = `${file}.stale-wal`;
+
+    // One small write transaction touching page 1, captured before any checkpoint.
+    const early = new Database(file);
+    early.pragma("journal_mode = WAL");
+    early.pragma("wal_autocheckpoint = 0");
+    early.exec("CREATE TABLE early_marker (id INTEGER)");
+    fs.copyFileSync(`${file}-wal`, stale);
+    early.close(); // checkpoints and removes the WAL
+
+    // The database then grows well past the page count that stale page 1 records.
+    const later = new Database(file);
+    later.pragma("journal_mode = WAL");
+    migrateWorkItemsSchema(later, "current"); // a no-op that registers the identity functions
+    const insert = later.prepare(`INSERT INTO work_items (id, title, body, created_by, root_id, depth, created_at, updated_at)
+      VALUES (?, ?, ?, 'system', ?, 0, '2026-09-19T00:00:00.000Z', '2026-09-19T00:00:00.000Z')`);
+    for (let i = 0; i < 400; i += 1) {
+      const claim = allocateWorkItemId(later, "2026-09-19T00:00:00.000Z");
+      useWorkItemAllocationClaim(later, claim, () => insert.run(claim.id, `todo ${i}`, "x".repeat(2000), claim.id));
+    }
+    later.close();
+
+    // The stale WAL reappears beside the grown file, as it did on the gateway host.
+    fs.copyFileSync(stale, `${file}-wal`);
+    fs.rmSync(`${file}-shm`, { force: true });
+
+    // Precondition: the verifier itself hits the corruption, as it did in the incident.
+    const probe = new Database(file, { readonly: true, fileMustExist: true });
+    expect(() => verifyCurrentWorkItemSchema(probe)).toThrow(/malformed/);
+    probe.close();
+
+    let message = "";
+    try {
+      preflightWorkItemsDatabase(file);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain(CORRUPT_SESSIONS_DATABASE);
+    expect(message).toMatch(/\(underlying: .*malformed/);
+    expect(message).not.toContain(UNSUPPORTED_PRERELEASE_TODO_DATA);
+  });
+
+  /** Fail the verifier's full read of work_items with the given SQLite error. */
+  function failTodoScanWith(code: string, message: string) {
+    const prepare = Database.prototype.prepare;
+    return vi.spyOn(Database.prototype, "prepare").mockImplementation(function (this: Database.Database, sql: string) {
+      if (sql.includes("SELECT id, parent_id, root_id, depth FROM work_items")) {
+        throw new Database.SqliteError(message, code);
+      }
+      return prepare.call(this, sql);
+    } as typeof prepare);
+  }
+
+  it("lets a disk I/O error through as itself, not as prerelease data or corruption", () => {
+    const file = currentDb();
+    const spy = failTodoScanWith("SQLITE_IOERR_READ", "disk I/O error");
+    let error: unknown;
+    try {
+      preflightWorkItemsDatabase(file);
+    } catch (err) {
+      error = err;
+    } finally {
+      spy.mockRestore();
+    }
+    expect((error as { code?: string }).code).toBe("SQLITE_IOERR_READ");
+    expect((error as Error).message).toBe("disk I/O error");
+  });
+
+  it("still reads a busy database as the refusal shared/db.ts retries while a peer migrates", () => {
+    const file = currentDb();
+    const spy = failTodoScanWith("SQLITE_BUSY", "database is locked");
+    try {
+      expect(() => preflightWorkItemsDatabase(file)).toThrow(UNSUPPORTED_PRERELEASE_TODO_DATA);
+    } finally {
+      spy.mockRestore();
+    }
   });
 })

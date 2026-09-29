@@ -1,7 +1,8 @@
 import type { ReactNode } from "react"
-import { Archive, ArchiveRestore, Copy, ExternalLink, Pencil, Pin, PinOff, Square, Trash2 } from "lucide-react"
+import { Archive, ArchiveRestore, Check, Copy, ExternalLink, Pencil, Pin, PinOff, Square, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { copyText } from "@/platform"
+import { cn } from "@/lib/utils"
 import {
   ContextMenuItem,
   ContextMenuSeparator,
@@ -44,6 +45,26 @@ export function sessionMenuCapabilities(session: SessionMenuSession): {
     workflowRunPath: session.source === "workflow" ? workflowRunPath(session.sourceRef) : null,
     canStop: session.status === "running",
   }
+}
+
+/** The visual half of a multi-select row. The row's own clickable surface owns
+ *  the checkbox semantics (role/aria-checked); this is decoration, so it stays
+ *  out of the accessibility tree rather than announcing a second control. */
+export function SessionSelectCheckbox({ checked }: { checked: boolean }) {
+  return (
+    <span
+      aria-hidden
+      data-session-select-checkbox={checked ? "checked" : "unchecked"}
+      className={cn(
+        "flex size-[17px] shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+        checked
+          ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-contrast)]"
+          : "border-[var(--text-quaternary)] bg-transparent"
+      )}
+    >
+      {checked ? <Check className="size-3" strokeWidth={3} /> : null}
+    </span>
+  )
 }
 
 function CopySessionIdItem({ variant, sessionId, onCopyId }: {

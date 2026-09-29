@@ -9,6 +9,18 @@ describe("InteractiveClaudeEngine — background monitors", () => {
   let engine: InteractiveClaudeEngine;
   let events: Array<UpstreamActivityInfo | null>;
 
+  const notified = (taskIds: string[]) =>
+    (engine as unknown as {
+      dropBackgroundMonitors(sessionId: string, taskIds: string[]): void;
+    }).dropBackgroundMonitors("s1", taskIds);
+
+  const launch = (taskId: string) => hook({
+    hook_event_name: "PostToolUse",
+    tool_name: "Bash",
+    tool_input: { command: "sleep 600", run_in_background: true },
+    tool_response: { backgroundTaskId: taskId },
+  });
+
   const hook = (payload: HookPayload) =>
     (engine as unknown as {
       handleBackgroundMonitorHook(sessionId: string, hook: HookPayload): void;
@@ -69,5 +81,32 @@ describe("InteractiveClaudeEngine — background monitors", () => {
     });
 
     expect(events).toEqual([]);
+  });
+
+  // a background task that ends on its own sends no hook. Its only
+  // signal is the task-notification the CLI hands the model, and a monitor
+  // that never clears would make every later restart nudge the session.
+  it("forgets a background task the CLI announced as finished", () => {
+    launch("task-1");
+    launch("task-2");
+    expect(events.at(-1)).toMatchObject({ activeMonitors: 2 });
+
+    notified(["task-1"]);
+    expect(events.at(-1)).toMatchObject({ activeMonitors: 1 });
+
+    notified(["task-2"]);
+    vi.advanceTimersByTime(1_000);
+    expect(events.at(-1)).toBeNull();
+  });
+
+  it("ignores notifications for tasks it never counted", () => {
+    launch("task-1");
+    const before = events.length;
+
+    notified(["agent-7", "monitor-3"]);
+
+    expect(events).toHaveLength(before);
+    vi.advanceTimersByTime(5_000);
+    expect(events.at(-1)).toMatchObject({ activeMonitors: 1 });
   });
 });

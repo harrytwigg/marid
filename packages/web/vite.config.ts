@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'node:path'
@@ -40,6 +40,20 @@ function preloadUiFont(): Plugin {
       },
     },
   }
+}
+
+/**
+ * changeOrigin rewrites Host to the gateway, which leaves the gateway nothing to
+ * match a socket's Origin against, so it refused every one.
+ * Pass on the host the browser dialled, as a reverse proxy does. The browser
+ * sets Host, so a page on another origin cannot choose it.
+ */
+const forwardDialledHostOnUpgrade: NonNullable<ProxyOptions['configure']> = (proxy) => {
+  proxy.on('proxyReqWs', (proxyReq, req) => {
+    if (!proxyReq.getHeader('x-forwarded-host') && req.headers.host) {
+      proxyReq.setHeader('x-forwarded-host', req.headers.host)
+    }
+  })
 }
 
 export default defineConfig(() => {
@@ -175,11 +189,17 @@ export default defineConfig(() => {
         '/api': {
           target: `http://127.0.0.1:${gatewayPort}`,
           changeOrigin: true,
+          // A plugin's event socket lives under /api. Only its
+          // upgrade takes the forwarded host: a plain /api request carrying one
+          // would lose the gateway's loopback same-origin trust.
+          ws: true,
+          configure: forwardDialledHostOnUpgrade,
         },
         '/ws': {
           target: `ws://127.0.0.1:${gatewayPort}`,
           ws: true,
           changeOrigin: true,
+          configure: forwardDialledHostOnUpgrade,
         },
       },
     },

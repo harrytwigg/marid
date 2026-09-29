@@ -3,6 +3,7 @@
 // menu. Cap is small so a long session doesn't hog memory.
 
 import { copyText, getPlatform, share } from "@/platform";
+import { PRODUCT_NAME } from "@/lib/brand"
 
 const MAX = 500;
 
@@ -39,7 +40,7 @@ export async function shareDebugLog(): Promise<void> {
   const text = getDebugLog();
   const ua = `\n\n--- UA: ${getPlatform().runtime.userAgent}\nViewport: ${window.innerWidth}x${window.innerHeight} dpr=${window.devicePixelRatio}`;
   const payload = text + ua;
-  const shared = await share({ title: "Jinn debug log", text: payload });
+  const shared = await share({ title: `${PRODUCT_NAME} debug log`, text: payload });
   if (shared.status === "performed" || shared.status === "cancelled") return;
 
   const copied = await copyText(payload);

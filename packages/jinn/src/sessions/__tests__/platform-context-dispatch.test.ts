@@ -54,6 +54,17 @@ function makeConfig(port = 7799): JinnConfig {
   } as JinnConfig;
 }
 
+/** An instance whose default engine is opencode in server mode, which can
+ *  compact (`/compact` runs its summarize). */
+function opencodeServerConfig(port = 7799): JinnConfig {
+  const config = makeConfig(port);
+  return {
+    ...config,
+    engines: { ...config.engines, default: "opencode", opencode: { bin: process.execPath, model: "model-gamma", mode: "server" } },
+    models: { ...config.models, opencode: { default: "model-gamma", models: [{ id: "model-gamma", label: "Gamma" }] } },
+  } as JinnConfig;
+}
+
 function capturingEngine(
   name: string,
   runs: EngineRunOpts[],
@@ -234,6 +245,48 @@ describe("SessionManager platform context dispatch", () => {
     await manager.route(incoming("stable after success"), connector);
     expect(headingCount(runs[3])).toBe(0);
     expect(registry.getEngineSessionRef(registry.getSession(session.id)!, "codex").platformContextFingerprint).toBe(acceptedFingerprint);
+  });
+
+  it("sends an engine-native command bare and keeps the refresh it could not carry owed to the next turn", async () => {
+    const runs: EngineRunOpts[] = [];
+    const engine = capturingEngine("opencode", runs);
+    const manager = new managerModule.SessionManager(opencodeServerConfig(), new Map([["opencode", engine]]), "boot-a" as any);
+    const connector = connectorStub();
+
+    await manager.route(incoming("initial success"), connector);
+    const session = registry.getSessionBySessionKey("test:platform-context")!;
+    const initialFingerprint = registry.getEngineSessionRef(session, "opencode").platformContextFingerprint;
+
+    // The platform context changes, then the next turn is a /compact (a
+    // self-compaction's first queued turn). A refresh in front of it would turn
+    // the command into text for the model, so it goes bare…
+    manager.setConfig(opencodeServerConfig(7800));
+    await manager.route(incoming("/compact keep the ids"), connector);
+    expect(runs[1].prompt).toBe("/compact keep the ids");
+    expect(headingCount(runs[1])).toBe(0);
+    expect(registry.getEngineSessionRef(registry.getSession(session.id)!, "opencode").platformContextFingerprint).toBe(initialFingerprint);
+
+    // …and the refresh it skipped arrives with the next ordinary turn, once.
+    await manager.route(incoming("resume from the handoff"), connector);
+    expect(headingCount(runs[2])).toBe(1);
+    await manager.route(incoming("stable"), connector);
+    expect(headingCount(runs[3])).toBe(0);
+  });
+
+  it("answers a connector's /compact on an engine that cannot compact, without running it", async () => {
+    const runs: EngineRunOpts[] = [];
+    const manager = new managerModule.SessionManager(makeConfig(), new Map([["codex", capturingEngine("codex", runs)]]), "boot-a" as any);
+    const replies: string[] = [];
+    const connector = { ...connectorStub(), replyMessage: async (_t: Target, text: string) => { replies.push(text); return undefined; } };
+
+    await manager.route(incoming("initial success"), connector);
+    replies.length = 0;
+    await manager.route(incoming("/compact"), connector);
+
+    expect(runs).toHaveLength(1);
+    expect(replies).toEqual([expect.stringMatching(/isn't supported on the codex engine.*Nothing was sent to the model/)]);
+    const session = registry.getSessionBySessionKey("test:platform-context")!;
+    expect(session.status).toBe("idle");
   });
 
   it("refreshes exactly once per relevant mismatch and preserves per-engine fingerprints", async () => {

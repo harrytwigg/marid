@@ -15,6 +15,7 @@ import { recordExhaustedWindows } from "./engine-health.js";
 import { getModelRegistry } from "./models.js";
 import { resolveBin } from "./resolve-bin.js";
 import { collectClaudeLimits } from "./engine-limits-claude.js";
+import { collectOpencodeLimits, OPENCODE_UNMETERED_REASON } from "./engine-limits-opencode.js";
 import {
   baseSnapshot,
   isoFromSeconds,
@@ -295,6 +296,18 @@ async function collectCodexLimits(config: JinnConfig): Promise<EngineLimitEngine
   };
 }
 
+/** Engines with an installed CLI and no quota endpoint to read. OpenCode's
+ *  entry is the point here: usage is per provider, and the only local
+ *  signal (the opencode-rate-limit plugin) is a 429 seen after the fact. It is
+ *  the answer only until `engines.opencode.usageLimits` configures the meter
+ *  over jinn's own ledger. */
+const UNSUPPORTED_REASONS: Record<string, string> = {
+  pi: "Pi exposes model capabilities and per-session usage, but no aggregate account quota endpoint.",
+  grok: "Grok currently exposes model/session behavior through its CLI, but no stable local quota endpoint is registered.",
+  hermes: "Hermes currently exposes model/session behavior through its CLI, but no stable local quota endpoint is registered.",
+  opencode: OPENCODE_UNMETERED_REASON,
+};
+
 function collectUnsupported(config: JinnConfig, engine: string, reason: string): EngineLimitEngineSnapshot {
   const snap = baseSnapshot(config, engine);
   // An installed CLI with no quota endpoint is durably unsupported; a missing
@@ -334,6 +347,9 @@ export async function collectEngineLimits(
       engines[name] = await collectClaudeLimits(config);
     } else if (name === "codex") {
       engines[name] = await collectCodexLimits(config);
+    } else if (name === "opencode" && config.engines.opencode?.usageLimits) {
+      engines[name] = collectOpencodeLimits(config)
+        ?? collectUnsupported(config, name, UNSUPPORTED_REASONS.opencode);
     } else if (name === "antigravity") {
       const snap = baseSnapshot(config, name);
       engines[name] = {
@@ -343,24 +359,8 @@ export async function collectEngineLimits(
         windows: [planWindow("5h", 300), planWindow("7d", 10_080)],
         unsupportedReason: "Antigravity exposes plan windows and G1 credit controls through the interactive `/credits` and `/settings` UI, but no stable non-interactive JSON quota endpoint was found.",
       };
-    } else if (name === "pi") {
-      engines[name] = collectUnsupported(
-        config,
-        name,
-        "Pi exposes model capabilities and per-session usage, but no aggregate account quota endpoint.",
-      );
-    } else if (name === "grok") {
-      engines[name] = collectUnsupported(
-        config,
-        name,
-        "Grok currently exposes model/session behavior through its CLI, but no stable local quota endpoint is registered.",
-      );
-    } else if (name === "hermes") {
-      engines[name] = collectUnsupported(
-        config,
-        name,
-        "Hermes currently exposes model/session behavior through its CLI, but no stable local quota endpoint is registered.",
-      );
+    } else if (UNSUPPORTED_REASONS[name]) {
+      engines[name] = collectUnsupported(config, name, UNSUPPORTED_REASONS[name]);
     } else {
       engines[name] = collectUnsupported(config, name, "No limit collector is registered for this engine.");
     }

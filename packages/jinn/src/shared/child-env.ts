@@ -3,6 +3,13 @@ import path from "node:path";
 export interface EngineChildEnvOptions {
   scrubClaudeCode?: boolean;
   scrubCodex?: boolean;
+  /** Drop opencode's own session plumbing inherited from a parent process. A
+   *  gateway started from inside an opencode session — or restarted as that
+   *  session's child — carries the parent's `OPENCODE_CONFIG`, which names that
+   *  OTHER session's staged config, plus its server password and pid; the
+   *  opencode engine then hands a cross-session config to any turn that stages
+   *  none of its own. */
+  scrubOpencode?: boolean;
   denyExact?: Iterable<string>;
 }
 
@@ -10,6 +17,26 @@ const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set([
   "JINN_HOME_IDENTITY",
   "JINN_TAKE_PORT",
 ]);
+
+/** Per-engine scrub rules. `exact` names and `prefix` families are stripped
+ *  only when the caller turns that engine's option on. */
+const ENGINE_SCRUB_RULES: ReadonlyArray<{
+  option: "scrubClaudeCode" | "scrubCodex" | "scrubOpencode";
+  exact: ReadonlyArray<string>;
+  prefix: ReadonlyArray<string>;
+}> = [
+  { option: "scrubClaudeCode", exact: ["CLAUDECODE"], prefix: ["CLAUDE_CODE_"] },
+  { option: "scrubCodex", exact: ["CODEX"], prefix: ["CODEX_"] },
+  // Exact names, NOT the OPENCODE_* prefix: OPENCODE_CONFIG_DIR and
+  // OPENCODE_DISABLE_* are operator settings that have to survive. The staged
+  // config and the per-server password are set on the child after this scrub,
+  // so they still win.
+  {
+    option: "scrubOpencode",
+    exact: ["OPENCODE", "OPENCODE_PID", "OPENCODE_SERVER_PASSWORD", "OPENCODE_CONFIG"],
+    prefix: [],
+  },
+];
 
 export function buildEngineChildEnv(
   baseEnv: NodeJS.ProcessEnv = process.env,
@@ -35,7 +62,8 @@ function shouldScrubEngineChildEnv(
   denyExact: ReadonlySet<string>,
 ): boolean {
   if (ENGINE_CHILD_ENV_DENY_EXACT.has(key) || denyExact.has(key)) return true;
-  if (options.scrubClaudeCode && (key === "CLAUDECODE" || key.startsWith("CLAUDE_CODE_"))) return true;
-  if (options.scrubCodex && (key === "CODEX" || key.startsWith("CODEX_"))) return true;
-  return false;
+  return ENGINE_SCRUB_RULES.some(
+    (rule) => Boolean(options[rule.option])
+      && (rule.exact.includes(key) || rule.prefix.some((prefix) => key.startsWith(prefix))),
+  );
 }

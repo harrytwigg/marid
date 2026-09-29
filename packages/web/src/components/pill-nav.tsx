@@ -6,6 +6,7 @@ import { useNavigation } from "@/lib/use-navigation"
 import { cn } from "@/lib/utils"
 import { useFeatures } from "@/hooks/use-features"
 import { prefetchRoute } from "@/lib/route-prefetch"
+import { PRODUCT_EMOJI, PRODUCT_NAME } from "@/lib/brand"
 
 // ---------------------------------------------------------------------------
 // Frosted pill primitives (mockup _shared.css `.pill` recipe)
@@ -166,11 +167,11 @@ export function NavRibbon({
   const navItems = useNavigation(features?.notesEnabled === true).items
   const pathname = useLocation().pathname
   const { settings } = useSettings()
-  const portalName = settings.portalName ?? "Jinn"
+  const portalName = settings.portalName ?? PRODUCT_NAME
   // Default brand mark carries U+FE0F so the genie always renders as a COLOR
   // emoji (never a text-presentation glyph that would inherit the slot's text
   // color and look faded — see the brand-mark color note below).
-  const emoji = settings.portalEmoji ?? "\u{1F9DE}\u{FE0F}"
+  const emoji = settings.portalEmoji ?? `${PRODUCT_EMOJI}\u{FE0F}`
   // The Chat icon is OPEN-ONLY. While already on the chat route ("/") with the
   // list collapsed, a plain click reveals the list instead of firing a dead
   // same-route navigation. Not on "/" → the Link navigates as before; list

@@ -3,12 +3,14 @@ import fs from 'node:fs';
 import { initDb } from '../shared/db.js';
 import { loadConfig } from '../shared/config.js';
 import { CONFIG_PATH } from '../shared/paths.js';
+import { assertTodoDepartmentAllowed, resolveTodoDepartmentPolicy, type TodoDepartmentPolicy } from '../shared/todo-departments-config.js';
 import { parseTodoId, resolveTodoIdPrefix } from './id.js';
 import { resolveDepartmentPrefix } from './departments.js';
 import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { currentApproval, currentApprovalsByItem, type WorkItemApproval } from './approval-rows.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
+import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { VerifyMode, VerifyPolicy } from './verify-policy.js';
 import type { WorkItemEventKind } from './event-log.js';
@@ -417,7 +419,13 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
     }
   }
   const companyPrefix = resolveCompanyPrefix();
-  const department = input.department !== undefined ? input.department : parent?.department ?? null;
+  const departmentPolicy = resolveTodoDepartments();
+  // Only a department the caller names is checked: a sub-task inheriting a
+  // parent classified before the policy existed stays with its parent. Under a
+  // policy with a default, nothing lands unclassified in the company namespace.
+  if (input.department !== undefined) assertTodoDepartmentAllowed(departmentPolicy, input.department);
+  const named = input.department !== undefined ? input.department : parent?.department ?? null;
+  const department = named ?? departmentPolicy?.defaultDepartment ?? null;
   const prefix = department ? resolveDepartmentPrefix(db, department, companyPrefix) : companyPrefix;
   const claim = allocateWorkItemId(db, now, prefix);
   const id = claim.id;
@@ -504,6 +512,13 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
 export function resolveCompanyPrefix(): string {
   const portal = fs.existsSync(CONFIG_PATH) ? loadConfig().portal : undefined;
   return resolveTodoIdPrefix(portal?.companyName ?? 'Jinn', portal?.companyPrefix);
+}
+
+/** The closed-department policy (`gateway.todoDepartments`, JIN-1), or null
+ *  when departments are open — including in a configless home, or a config
+ *  with no `gateway:` block, which validateConfigShape allows. */
+export function resolveTodoDepartments(): TodoDepartmentPolicy | null {
+  return fs.existsSync(CONFIG_PATH) ? resolveTodoDepartmentPolicy(loadConfig().gateway?.todoDepartments) : null;
 }
 
 /** Register a department in the registry if it is not there yet (review F2):
@@ -597,8 +612,10 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
   if (filter.needsAttentionFor) {
     // Approvals live in work_item_approvals (their sole owner since PLA-48). An unexpired park is a
     // clock-wait (PLA-157) and leaves this set outright, gate included; an unreadable one is not a park.
+    // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
+    // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(
-      "((EXISTS (SELECT 1 FROM work_item_approvals wap WHERE wap.work_item_id = work_items.id AND wap.state = 'pending' AND wap.target = ?) OR (assignee = ? AND status IN ('blocked', 'escalated')) OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status NOT IN ('done', 'cancelled'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
+      "((EXISTS (SELECT 1 FROM work_item_approvals wap WHERE wap.work_item_id = work_items.id AND wap.state = 'pending' AND wap.target = ?) OR (assignee = ? AND status IN ('blocked', 'escalated')) OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('assigned', 'executing', 'in_review', 'blocked', 'escalated'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
     );
     values.push(filter.needsAttentionFor, filter.needsAttentionFor, new Date().toISOString());
   }
@@ -868,6 +885,10 @@ export function updateWorkItemConditional(
     if (current.version !== opts.expectedVersion) {
       throw new WorkItemVersionConflictError(current.version);
     }
+    // Leaving a pre-policy department in place is not a reclassification.
+    if (typeof input.department === 'string' && input.department !== current.department) {
+      assertTodoDepartmentAllowed(resolveTodoDepartments(), input.department);
+    }
 
     let item = current;
     if (updateChangesItem(current, input)) {
@@ -969,22 +990,24 @@ export function getWorkItemSpend(id: string): number {
  * redundant re-link (e.g. a cron re-fire re-linking the same item to the same session)
  * does not churn `work_items.updated_at` or the event log.
  */
-export function linkSession(workItemId: string, sessionId: string, actor?: string | null): void {
+export function linkSession(workItemId: string, sessionId: string, actor?: string | null, role: WorkItemLinkRole = 'execute'): void {
   const db = initDb();
   const todoId = parseTodoId(workItemId);
   const now = new Date().toISOString();
   const txn = db.transaction(() => {
     const session = db
-      .prepare('SELECT work_item_id FROM sessions WHERE id = ?')
-      .get(sessionId) as { work_item_id: string | null } | undefined;
+      .prepare('SELECT work_item_id, work_item_role FROM sessions WHERE id = ?')
+      .get(sessionId) as { work_item_id: string | null; work_item_role: string | null } | undefined;
     if (!session) throw new Error(`linkSession: session ${sessionId} not found`);
     const workItemExists = db.prepare('SELECT 1 FROM work_items WHERE id = ?').get(todoId);
     if (!workItemExists) throw new Error(`linkSession: work item ${todoId} not found`);
-    // Already linked to this exact item → no write, no `updated_at` bump.
-    if (session.work_item_id === todoId) return;
-    db.prepare('UPDATE sessions SET work_item_id = ? WHERE id = ?').run(todoId, sessionId);
+    // Already linked to this exact item, for the same reason → no write, no
+    // `updated_at` bump. A re-link that CHANGES the role still writes: the role
+    // is what the self-review ban reads, and a stale one is not a detail.
+    if (session.work_item_id === todoId && toWorkItemLinkRole(session.work_item_role) === role) return;
+    db.prepare('UPDATE sessions SET work_item_id = ?, work_item_role = ? WHERE id = ?').run(todoId, role, sessionId);
     db.prepare('UPDATE work_items SET updated_at = ?, version = version + 1 WHERE id = ?').run(now, todoId);
-    appendWorkItemEvent({ workItemId: todoId, kind: 'session_linked', actor, detail: { sessionId } });
+    appendWorkItemEvent({ workItemId: todoId, kind: 'session_linked', actor, detail: { sessionId, role } });
   });
   txn();
 }

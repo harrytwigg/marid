@@ -11,7 +11,7 @@ import {
 } from "@/lib/api"
 import { effectiveMaxRounds, effectiveVerifyMode, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
-import { RailPriorityBars, VerifyPill } from "../task-page/props-rail"
+import { RailPriorityBars, VerifyPill } from "../task-page/rail-rows"
 import { PickerNote, PickerRow } from "./picker-shell"
 
 /* Todos v2 slice 6 — the picker CONTENTS (design-doc §7.3): one component per

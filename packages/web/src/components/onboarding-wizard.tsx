@@ -19,6 +19,7 @@ import { api, type ModelInfo } from "@/lib/api"
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { buildNewSessionParams } from "@/components/chat/new-chat-helpers"
 import { resolveTodoIdPrefix } from "@/lib/todo-id"
+import { PRODUCT_EMOJI, PRODUCT_NAME } from "@/lib/brand"
 
 // ---------------------------------------------------------------------------
 // Accent color presets
@@ -309,10 +310,10 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
         }}
       >
         <div className="w-[72px] h-[72px] rounded-full bg-[var(--accent-fill)] flex items-center justify-center animate-pulse">
-          <span className="text-[44px] leading-none">{"🧞"}</span>
+          <span className="text-[44px] leading-none">{PRODUCT_EMOJI}</span>
         </div>
         <p className="text-[length:var(--text-title3)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
-          Summoning {localName || "Jinn"}…
+          Summoning {localName || PRODUCT_NAME}…
         </p>
       </div>
     )
@@ -362,10 +363,10 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
               className="animate-fade-in text-center"
             >
               <div className="mx-auto mb-[var(--space-4)] w-[72px] h-[72px] rounded-full bg-[var(--accent-fill)] flex items-center justify-center">
-                <span className="text-[44px] leading-none">{"🧞"}</span>
+                <span className="text-[44px] leading-none">{PRODUCT_EMOJI}</span>
               </div>
               <h2 className="text-[length:var(--text-title1)] font-[var(--weight-bold)] tracking-[var(--tracking-tight)] text-[var(--text-primary)] mb-[var(--space-2)]">
-                Welcome to {localName || "Jinn"}
+                Welcome to {localName || PRODUCT_NAME}
               </h2>
               <p className="text-[length:var(--text-subheadline)] text-[var(--text-secondary)] leading-[var(--leading-relaxed)] max-w-[380px] mx-auto mb-[var(--space-5)]">
                 Your AI team management portal. Let&apos;s get you set up.
@@ -393,7 +394,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                     type="text"
                     maxLength={3}
                     className="apple-input w-full bg-[var(--fill-tertiary)] rounded-[var(--radius-md)] px-3 py-2 text-[length:var(--text-subheadline)] text-[var(--text-primary)] uppercase outline-none border border-transparent focus:border-[var(--accent)] transition-colors placeholder:text-[var(--text-quaternary)]"
-                    placeholder="Optional, e.g. JNN"
+                    placeholder="Optional, e.g. MRD"
                     value={localCompanyPrefix}
                     onChange={(e) => setLocalCompanyPrefix(e.target.value.toUpperCase())}
                   />
@@ -416,7 +417,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                   <input
                     type="text"
                     className="apple-input w-full bg-[var(--fill-tertiary)] rounded-[var(--radius-md)] px-3 py-2 text-[length:var(--text-subheadline)] text-[var(--text-primary)] outline-none border border-transparent focus:border-[var(--accent)] transition-colors placeholder:text-[var(--text-quaternary)]"
-                    placeholder="Jinn"
+                    placeholder={PRODUCT_NAME}
                     value={localName}
                     onChange={(e) => setLocalName(e.target.value)}
                   />

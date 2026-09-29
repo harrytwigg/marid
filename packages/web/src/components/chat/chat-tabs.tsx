@@ -27,7 +27,7 @@ export interface ChatHeaderPillsProps {
   onNew: () => void
   /** Existing "more" (…) menu element, rendered as the last pill control. */
   moreMenu?: ReactNode
-  /** Mobile Variant C: four fixed working-set chips replace the title/compose track. */
+  /** Mobile: the labelled session tabs, in a row directly under the nav bar. */
   mobileWorkingSet?: ReactNode
   /** Hide the desktop-only title and actions when every grid pane owns chrome. */
   hideDesktop?: boolean
@@ -96,6 +96,12 @@ function DesktopThreadChrome({ title, backTo, onNew, moreMenu }: Pick<ChatHeader
   )
 }
 
+// The mobile nav bar's frosted material, shared by its two rows. Frosted on
+// pointer:fine; coarse pointers get the same material composited to alpha 1
+// (--material-thick-opaque) instead, so the backdrop filter stops re-rasterising
+// over the scrolling thread.
+const MOBILE_BAR_MATERIAL = 'bg-[var(--material-thick-opaque)] [@media(pointer:fine)]:bg-[var(--material-thick)] [@media(pointer:fine)]:[backdrop-filter:blur(20px)_saturate(1.3)] [@media(pointer:fine)]:[-webkit-backdrop-filter:blur(20px)_saturate(1.3)]'
+
 // The chat thread chrome. The old left toggle pill is gone — the sidebar toggle
 // now lives at the top of the nav ribbon, and the conversation title relocates to
 // a slim inline title (desktop) / a centered nav-bar title (mobile thread). The
@@ -112,10 +118,9 @@ export function ChatHeaderPills({
 }: ChatHeaderPillsProps) {
   // Only the centred nav-bar title animates its change: it swaps whole
   // conversations under a fixed-height bar. The desktop title is left as it was,
-  // and neither animates while the chips or the chat list stand in its place.
+  // and neither animates while the chat list stands in its place.
   const navTitle = title || 'Untitled'
-  const showingNavTitle = !hideOnMobile && !mobileWorkingSet
-  const titleEntering = useTitleArrival(navTitle, showingNavTitle)
+  const titleEntering = useTitleArrival(navTitle, !hideOnMobile)
   // Mobile nav bar: both side tracks are locked to the wider cluster, which is
   // what puts the middle track on the header's centre line. Callback refs keep
   // the observer attached across the back control's two shapes.
@@ -152,13 +157,12 @@ export function ChatHeaderPills({
           className="absolute inset-x-0 top-0 z-10 lg:hidden"
           style={{ paddingTop: 'max(var(--safe-top), 0px)' }}
         >
-          {/* Both side tracks lock to the WIDER cluster, so whatever occupies the
-              middle track — the plain title or the working-set chips — sits on
+          {/* Both side tracks lock to the WIDER cluster, so the title sits on
               the header's centre line instead of centred between two asymmetric
               controls. A labelled back control mirrors its width onto the right,
-              and the chips truncate into what is left rather than overlap. */}
+              and the title truncates into what is left rather than overlap. */}
           <div
-            className="relative grid h-12 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 bg-[var(--material-thick-opaque)] px-1.5 [@media(pointer:fine)]:bg-[var(--material-thick)] [@media(pointer:fine)]:[backdrop-filter:blur(20px)_saturate(1.3)] [@media(pointer:fine)]:[-webkit-backdrop-filter:blur(20px)_saturate(1.3)]"
+            className={cn('relative grid h-12 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-1.5', MOBILE_BAR_MATERIAL)}
             style={{ gridTemplateColumns: `${sideTrack}px minmax(0,1fr) ${sideTrack}px` }}
           >
             {/* Back control. A drill-in reads `‹ Parent` and returns to the
@@ -171,14 +175,7 @@ export function ChatHeaderPills({
                 onClick={backTo.onClick}
                 aria-label={`Back to ${backTo.label}`}
                 title={`Back to ${backTo.label}`}
-                className={cn(
-                  'inline-flex h-11 shrink-0 items-center justify-self-start gap-0.5 rounded-full pl-1 pr-2.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] active:bg-[var(--fill-secondary)]',
-                  // Mirroring this control onto the right track spends its width
-                  // twice, so the label yields when the chips hold the middle:
-                  // four 36px chips plus their gaps need 156px, which 27vw a side
-                  // leaves intact at 390px. Without the working set it keeps 34vw.
-                  mobileWorkingSet ? 'max-w-[27vw]' : 'max-w-[34vw]',
-                )}
+                className="inline-flex h-11 max-w-[34vw] shrink-0 items-center justify-self-start gap-0.5 rounded-full pl-1 pr-2.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] active:bg-[var(--fill-secondary)]"
               >
                 <ChevronLeft size={22} className="shrink-0" />
                 <span className="truncate text-[length:var(--text-subheadline)] font-medium">{backTo.label}</span>
@@ -194,14 +191,12 @@ export function ChatHeaderPills({
                 <ChevronLeft size={24} className="shrink-0" />
               </button>
             )}
-            {mobileWorkingSet ?? (
-              <span
-                data-title-enter={titleEntering || undefined}
-                className="pointer-events-none min-w-0 truncate text-center text-body font-[var(--weight-semibold)] text-[var(--text-primary)]"
-              >
-                {navTitle}
-              </span>
-            )}
+            <span
+              data-title-enter={titleEntering || undefined}
+              className="pointer-events-none min-w-0 truncate text-center text-body font-[var(--weight-semibold)] text-[var(--text-primary)]"
+            >
+              {navTitle}
+            </span>
             <div ref={setActions} className="flex shrink-0 items-center justify-self-end">
               <PillButton onClick={onNew} title="New chat (N)" ariaLabel="New chat">
                 <SquarePen size={18} />
@@ -209,6 +204,11 @@ export function ChatHeaderPills({
               {moreMenu}
             </div>
           </div>
+          {mobileWorkingSet ? (
+            <div data-mobile-session-tabs-row className={cn('flex h-[var(--mobile-session-tabs-height)] items-stretch px-1.5', MOBILE_BAR_MATERIAL)}>
+              {mobileWorkingSet}
+            </div>
+          ) : null}
         </div>
       )}
     </>

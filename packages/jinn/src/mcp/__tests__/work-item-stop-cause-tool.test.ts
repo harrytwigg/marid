@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { UNBLOCK_HINT_ERROR } from "../../work-items/stop-cause.js";
+import { PARKED_UNTIL_NEEDS_STOP, UNBLOCK_HINT_ERROR } from "../../work-items/stop-cause.js";
 import { parseStatusUpdateFields } from "../../gateway/work-item-status-fields.js";
 import type { JinnMcpContext, JinnMcpTool } from "../toolkit.js";
 
@@ -75,6 +75,21 @@ describe("update_work_item — stop cause", () => {
 
     await expect(tool("update_work_item").handler({ id: "JIN-1", status: "blocked", parkedUntil: "when the quota resets" }, ctx))
       .rejects.toThrow(/parkedUntil must be an ISO-8601 timestamp/);
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ["a backlog move", { status: "backlog" }],
+    ["a dependency block", { status: "blocked", blockKind: "dependency" }],
+  ])("refuses a park on %s locally, in the route's own words", async (_label, move) => {
+    const { calls, ctx } = stub();
+    const args = { id: "JIN-1", note: "date-gated", parkedUntil: "2026-10-01T00:00:00.000Z", ...move };
+
+    const route = parseStatusUpdateFields(args, move.status, false);
+    const mcp = await tool("update_work_item").handler(args, ctx).catch((err: Error) => err);
+
+    expect(route).toMatchObject({ ok: false, status: 400, error: PARKED_UNTIL_NEEDS_STOP });
+    expect((mcp as Error).message).toBe(PARKED_UNTIL_NEEDS_STOP);
     expect(calls).toEqual([]);
   });
 

@@ -19,10 +19,12 @@ import {
   refreshGrokModels,
   refreshHermesModels,
   refreshPiModels,
+  refreshOpencodeModels,
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
+import { readTodoSessionTree } from "../sessions/session-tree.js";
 import { maybeRevertEngineOverride, type SessionManager } from "../sessions/manager.js";
 import { stripControlChars, hasControlBytes } from "../shared/sanitize.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
@@ -76,7 +78,7 @@ import {
 } from "../sessions/registry.js";
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
-import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/workflow-interruptions.js";
+import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/workflow-interruptions.js";
 export {
   foldPartialText,
   normalizeBlockDeltaForTurn,
@@ -121,7 +123,6 @@ export {
   formatEngineErrorAssistantMessage,
   shouldPersistFinalAssistantMessage,
 } from "../sessions/turn/text.js";
-import { preflightSystemEmployee } from "./system-employee-spawn.js";
 import { getPackageVersion } from "../shared/version.js";
 import { badRequest, json, matchRoute, notFound, serverError, type ResWithEncoding } from "./route-helpers.js";
 import { handleSessionQueueRoute } from "./queue-routes.js";
@@ -131,7 +132,8 @@ import { handleOrgApi } from "./org-api.js";
 import { handleTodoCaptureApi } from "./todo-capture-api.js";
 import { handleSkillsApi } from "./skills-api.js";
 import { handleSearchApi } from "./search-api.js";
-import { pluginAdminAction } from "./plugins-admin-api.js";
+import { operatorOnlyControlPlaneRoute } from "./control-plane-routes.js";
+import { refuseRemoteMcpRoute, remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { handlePluginsApi } from "./plugins-api.js";
 import { handleExperimentsApi } from "./experiments-api.js";
 import QRCode from "qrcode";
@@ -147,6 +149,7 @@ import { forwardWorkflowTodoComment } from "./workflow-todo-surface.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { clipSessionMessage, sessionCommGuards, prepareLateralSend, isDescendantOf, resolveCallerIdentity, type CallerIdentity } from "./session-comm-guards.js";
+import { originMatchesAuthority, parseRequestAuthority, requestHeaderValues, singleRequestHeader, type RequestAuthority } from "./request-authority.js";
 import {
   ACTIVITY_OPERATION_HEADER,
   ACTIVITY_TOOL_HEADER,
@@ -169,9 +172,11 @@ import {
   getWorkItems,
   getWorkItemTree,
   getWorkItemTrees,
+  ensureDepartmentRegistered,
   linkSession,
   listWorkItemEventsForItems,
   queryWorkItems,
+  resolveTodoDepartments,
   STICKY_STATUSES,
   updateWorkItemConditional,
   WorkItemIdempotencyConflictError,
@@ -182,6 +187,7 @@ import {
   type WorkItemSource,
   type WorkItemStatus,
 } from "../work-items/store.js";
+import { resolveDelegationLinkRole, WORK_ITEM_LINK_ROLES, type WorkItemLinkRole } from "../work-items/link-role.js";
 import { validateVerifyPolicy } from "../work-items/verify-policy.js";
 import { resolveTodoEditAuthority, todoEditRefusal } from "./todo-edit-authority.js";
 import { isTodoId, resolveTodoIdPrefix } from "../work-items/id.js";
@@ -219,12 +225,13 @@ import {
   type AttachmentActor,
 } from "../work-items/attachments.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
-import { authorizeActingAsOperator, resolveArmingDelegate, workItemActor, type WorkItemCaller } from "./work-item-arming.js";
+import { authorizeActingAsOperator, resolveArmingDelegate, workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
 import { authorizeAgentWorkItemStatus, authorizeWorkItemOwnerManagerOrRoot, ownsWorkItem } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { listDepartmentsWithCounts } from "../work-items/departments.js";
+import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
-import { assignWorkItem, transition, TransitionError } from "../work-items/transitions.js";
+import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { openWorkItemRun } from "../work-items/runs.js";
 import {
@@ -238,8 +245,11 @@ import {
 import { resolveApprovalDecisionAuthority, resolveRootApprovalTarget, type ApprovalDecisionAuthorityOptions } from "./approval-authority.js";
 import { approvalGateClass } from "./workflow-todo-binding.js";
 import { orgRegistry } from "./org-registry.js";
+import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
+import { cachedRemoteFacts } from "../engines/remote-stage.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
-import { claimTodoForDelegation, claimTodoForDispatch } from "./todo-claim.js";
+import { claimTodoForDelegation } from "./todo-claim.js";
+import { startTodoDispatcher } from "./todo-dispatch.js";
 import {
   hasSupportedTodoEditContentEncoding,
   readTodoEditPrecondition,
@@ -248,6 +258,7 @@ import {
 } from "./todo-edit-precondition.js";
 import { createWorkItemIdempotent, WorkItemCreateIdempotencyConflictError } from "../work-items/create-idempotency.js";
 import { resolveTodoDispatch, setTodoDispatchConfig } from "../work-items/dispatch-config.js";
+import { writeAutoStartRow } from "../work-items/auto-start.js";
 import {
   ISO_DATE_OR_INSTANT,
   readCleanSearchParam,
@@ -268,6 +279,7 @@ import { isLoopback, validateHookPost } from "./hook-endpoint.js";
 import {
   authenticateGatewayRequest,
   authCookieHeaders,
+  requestArrivedOverHttps,
   clearAuthCookieHeaders,
   consumeLocalBootstrapGrant,
   consumePairingCode,
@@ -301,7 +313,13 @@ import {
 import type { WorkflowService } from "../workflows/service.js";
 import { handleWorkflowApi } from "./workflow-api.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
+import { handleSelfCompactionApi } from "./self-compaction-api.js";
+import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
+import { isRawEngineCommand } from "../shared/skill-commands.js";
+import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
+import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
+import { handleIdleCapacityApi } from "./idle-capacity-api.js";
 
 /** Max bytes accepted on /api/internal/hook (loopback-only relay payloads are tiny). */
 const HOOK_BODY_MAX_BYTES = 64 * 1024;
@@ -344,6 +362,8 @@ export interface ApiContext {
   interactiveClaudeEngine?: import("../engines/claude-interactive.js").InteractiveClaudeEngine;
   /** PTY-capable engines keyed by engine name. Used by CLI-mode web sends. */
   ptyViewEngines?: Record<string, Engine & import("../engines/pty-view-engine.js").PtyViewEngine>;
+  /** Operator shells behind terminal sessions. */
+  terminalEngine?: import("../terminals/shell-engine.js").ShellTerminalEngine;
   /** Synchronously re-scan org/ into the gateway's in-memory employee registry
    *  (and drop warm PTYs). Called after an employee YAML write so the next session
    *  spawn sees the new persona/model immediately, rather than waiting ~800ms for
@@ -366,6 +386,9 @@ export interface ApiContext {
   restartGateway?: (options: RestartDetachedOptions) => void;
   /** Immutable port actually bound by this gateway process, unaffected by config hot reload. */
   runtimePort?: number;
+  /** The idle-capacity auto-start loop, once server.ts has started it;
+   *  the read-only preview route reports through it. */
+  idleCapacity?: import("./idle-capacity.js").IdleCapacityAutoStart;
   /** Test seams for the host-level workspace directory and creation service. */
   loadWorkspaceInstances?: () => Instance[];
   saveWorkspaceInstances?: (instances: InstanceInput[]) => void;
@@ -389,6 +412,8 @@ function killSessionEngines(context: ApiContext, session: Session, reason: strin
   for (const engine of engines) {
     if (isInterruptibleEngine(engine)) engine.kill(session.id, reason);
   }
+  // Reached for a terminal only on delete: /stop and /reset refuse terminals.
+  context.terminalEngine?.forget(session.id);
 }
 
 /** Preserve a linked execution attempt as durable evidence when deletion is
@@ -563,6 +588,16 @@ function scopedCallerHeaders(
     : requestOrHeaders as HttpRequest["headers"];
 }
 
+function terminalApiOptions(req: HttpRequest, context: ApiContext): TerminalApiOptions {
+  return {
+    getConfig: context.getConfig,
+    employees: () => orgRegistry(context.getConfig()).values(),
+    isOperator: () => scopedOperatorAuthenticated(req, context),
+    serialize: (session) => serializeSessionResponse(session, context),
+    onCreated: (session) => context.emit("session:created", { sessionId: session.id }),
+  };
+}
+
 function resolveScopedWriteCallerIdentity(requestOrHeaders: HttpRequest | HttpRequest["headers"], context: ApiContext) {
   const request = scopedCallerRequest(requestOrHeaders);
   const headers = scopedCallerHeaders(requestOrHeaders);
@@ -690,7 +725,7 @@ function persistTodoMutationActivity(
  * always rewrite the Todo row itself, but the web surfaces still need a change
  * signal to refetch live. One valueless event per affected item; the client
  * responds by invalidating that item's cached projections. */
-function emitTodoProjectionEvent(context: ApiContext, id: string, action: string): void {
+export function emitTodoProjectionEvent(context: ApiContext, id: string, action: string): void {
   const item = getWorkItem(id);
   if (!item) return;
   persistAndEmitActivityBlock({
@@ -718,59 +753,6 @@ export const PROXIED_OPERATOR_AUTH_ERROR =
   "(forwarded headers present) but the gateway has no auth configured, so it cannot be trusted as the operator. " +
   "Enable gateway auth (gateway.authRequired: true) and pair your device; same-origin operator trust does not apply to proxied requests.";
 
-type RequestAuthority = { hostname: string; port: number };
-
-function requestHeaderValues(req: Pick<HttpRequest, "headers" | "rawHeaders">, name: string): string[] {
-  const lowerName = name.toLowerCase();
-  if (Array.isArray(req.rawHeaders) && req.rawHeaders.length > 0) {
-    const values: string[] = [];
-    for (let index = 0; index < req.rawHeaders.length; index += 2) {
-      if (req.rawHeaders[index]?.toLowerCase() === lowerName) values.push(req.rawHeaders[index + 1] ?? "");
-    }
-    return values;
-  }
-  const raw = req.headers[lowerName];
-  if (Array.isArray(raw)) return raw;
-  return typeof raw === "string" ? [raw] : [];
-}
-
-function singleRequestHeader(req: Pick<HttpRequest, "headers" | "rawHeaders">, name: string): string | undefined {
-  const values = requestHeaderValues(req, name);
-  if (values.length !== 1) return undefined;
-  const value = values[0];
-  return value === value.trim() && value.length > 0 ? value : undefined;
-}
-
-function parseRequestAuthority(req: Pick<HttpRequest, "headers" | "rawHeaders">): RequestAuthority | undefined {
-  const raw = singleRequestHeader(req, "host");
-  if (!raw || raw.length > 255 || !/^[\x21-\x7e]+$/.test(raw) || /[%/@\\?#,]/.test(raw)) return undefined;
-
-  let hostname: string;
-  let rawPort: string | undefined;
-  if (raw.startsWith("[")) {
-    const match = /^\[([0-9a-f:.]+)\](?::([0-9]+))?$/i.exec(raw);
-    if (!match) return undefined;
-    hostname = match[1].toLowerCase();
-    rawPort = match[2];
-  } else {
-    const match = /^([a-z0-9._-]+)(?::([0-9]+))?$/i.exec(raw);
-    if (!match) return undefined;
-    hostname = match[1].toLowerCase();
-    rawPort = match[2];
-  }
-  if (!hostname || hostname.startsWith(".") || hostname.endsWith(".") || hostname.includes("..")) return undefined;
-
-  const port = rawPort === undefined ? 80 : Number(rawPort);
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) return undefined;
-  try {
-    const parsed = new URL(`http://${raw}`);
-    if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return undefined;
-  } catch {
-    return undefined;
-  }
-  return { hostname, port };
-}
-
 function isLoopbackAuthorityHost(hostname: string): boolean {
   return isLoopback(hostname)
     || hostname === "::1"
@@ -783,22 +765,6 @@ function authorityMatchesListener(authority: RequestAuthority, localAddress: str
   if (authority.hostname === "localhost" || authority.hostname.endsWith(".localhost")) return true;
   const normalizedLocalAddress = localAddress.toLowerCase().replace(/^::ffff:/, "");
   return authority.hostname === normalizedLocalAddress;
-}
-
-function originMatchesAuthority(origin: string, authority: RequestAuthority): boolean {
-  try {
-    const parsed = new URL(origin);
-    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    const port = parsed.port ? Number(parsed.port) : 80;
-    return parsed.protocol === "http:"
-      && !parsed.username
-      && !parsed.password
-      && parsed.origin !== "null"
-      && hostname === authority.hostname
-      && port === authority.port;
-  } catch {
-    return false;
-  }
 }
 
 function originMatchesLoopbackViteProxy(
@@ -895,43 +861,6 @@ function rejectUnverifiedIdentifiedApiCaller(req: HttpRequest, res: ServerRespon
 function approvalReservation(item: WorkItem, service: WorkflowService | undefined): Pick<ApprovalDecisionAuthorityOptions, "operatorOnly" | "cooDecidable"> {
   const gate = approvalGateClass(item, service);
   return { operatorOnly: currentApproval(item.id)?.operatorOnly === true || gate === "operator", cooDecidable: gate === "coo" };
-}
-
-function operatorOnlyControlPlaneRoute(method: string, pathname: string): string | null {
-  if ((method === "PUT" || method === "PATCH") && pathname === "/api/config") return "config update";
-  if (method === "POST" && pathname === "/api/onboarding") return "onboarding config update";
-  if (method === "POST" && pathname === "/api/instances") return "workspace creation";
-  if (method === "POST" && matchRoute("/api/instances/:id/start", pathname)) return "workspace start";
-  if (method === "DELETE" && pathname.startsWith("/api/auth/devices/")) return "auth device revoke";
-  if (method === "POST" && pathname === "/api/engines/refresh") return "engine registry refresh";
-  if (method === "POST" && pathname === "/api/engine-limits/refresh") return "engine limits refresh";
-  if (method === "POST" && pathname === "/api/connectors/reload") return "connector reload";
-  if (method === "POST" && pathname === "/api/stt/download") return "STT model download/config enable";
-  if (method === "PUT" && pathname === "/api/stt/config") return "STT config update";
-  if (method === "DELETE" && matchRoute("/api/sessions/:id", pathname)) return "session delete";
-  if ((method === "PUT" || method === "PATCH") && matchRoute("/api/sessions/:id", pathname)) return "session metadata/model update";
-  if (method === "POST" && matchRoute("/api/sessions/:id/duplicate", pathname)) return "session duplicate";
-  if (method === "POST" && matchRoute("/api/sessions/:id/archive", pathname)) return "session archive";
-  if (method === "POST" && matchRoute("/api/sessions/:id/unarchive", pathname)) return "session unarchive";
-  if (method === "POST" && matchRoute("/api/sessions/:id/reset", pathname)) return "session reset";
-  if (method === "POST" && pathname === "/api/sessions/bulk-delete") return "session bulk delete";
-  if (method === "POST" && pathname === "/api/todo-captures") return "quick capture";
-  if (method === "POST" && pathname === "/api/pins") return "chat pin update";
-  if (method === "DELETE" && matchRoute("/api/pins/:key", pathname)) return "chat pin update";
-  if (method === "DELETE" && matchRoute("/api/sessions/:id/queue/:itemId", pathname)) return "session queue item cancel";
-  if (method === "PATCH" && matchRoute("/api/sessions/:id/queue/:itemId", pathname)) return "session queue item edit";
-  if (method === "POST" && matchRoute("/api/sessions/:id/queue/:itemId/send-now", pathname)) return "session queue item send now";
-  if (method === "DELETE" && matchRoute("/api/sessions/:id/queue", pathname)) return "session queue clear";
-  if (method === "POST" && matchRoute("/api/sessions/:id/queue/pause", pathname)) return "session queue pause";
-  if (method === "POST" && matchRoute("/api/sessions/:id/queue/resume", pathname)) return "session queue resume";
-  if (method === "POST" && pathname === "/api/cron") return "cron create";
-  if (method === "PUT" && matchRoute("/api/cron/:id", pathname)) return "cron update";
-  if (method === "DELETE" && matchRoute("/api/cron/:id", pathname)) return "cron delete";
-  if (method === "POST" && matchRoute("/api/cron/:id/trigger", pathname)) return "cron manual trigger";
-  if (method === "PATCH" && matchRoute("/api/org/employees/:name", pathname)) return "org employee update";
-  if (method === "DELETE" && matchRoute("/api/skills/:name", pathname)) return "skill removal";
-  if (method === "PUT" && matchRoute("/api/skills/:name", pathname)) return "skill update";
-  return pluginAdminAction(method, pathname);
 }
 
 function requireOperatorControlPlaneAuthority(req: HttpRequest, res: ServerResponse, action: string, context: ApiContext): boolean {
@@ -1116,6 +1045,11 @@ function computeLiveTurnProgress(session: Session, context: ApiContext): Session
   if (!engine || !reportsTurnProgress(engine)) return null;
   const progress = engine.turnProgress(session.id);
   if (!progress) return null;
+  // Waiting behind a turn typed in the terminal is a state the UI shows, not a
+  // silence to time.
+  if (progress.waitingForTerminalTurn) {
+    return { lastProgressAt: progress.lastProgressAt, awaitingSubmit: false, waitingForTerminalTurn: true };
+  }
   if (progress.activeTools > 0 || progress.activeUpstream) return null;
   return { lastProgressAt: progress.lastProgressAt, awaitingSubmit: progress.awaitingSubmit };
 }
@@ -1281,6 +1215,8 @@ export async function handleApiRequest(
     if (identifiedCaller && rejectUnverifiedIdentifiedApiCaller(req, res, method, pathname, context)) {
       return;
     }
+    // D4: ahead of every handler, the Workflow API included, a connector anchor reaches only its tool profile's routes.
+    if (identifiedCaller && refuseRemoteMcpRoute(res, method, pathname, resolveScopedWriteCallerIdentity(req, context))) return;
     if (context.workflowService && await handleWorkflowApi(req, res, { method, pathname, url }, { service: context.workflowService,
       authenticated: authenticateGatewayRequest(req, context.gatewayAuthToken, jinnHome).ok })) return;
     if (await handleTalkApi(req, res, { method, pathname, url }, {
@@ -1293,6 +1229,11 @@ export async function handleApiRequest(
     })) return;
     if (!identifiedCaller && rejectUnverifiedIdentifiedApiCaller(req, res, method, pathname, context)) return;
     if (await handleHeartbeatApi(req, res, { method, pathname, url }, { resolveCaller: () => resolveScopedWriteCallerIdentity(req, context) })) return;
+    if (await handleSelfCompactionApi(req, res, { method, pathname, url }, {
+      resolveCaller: () => resolveScopedWriteCallerIdentity(req, context),
+      opencodeMode: () => context.getConfig().engines.opencode?.mode,
+    })) return;
+    if (pathname.startsWith("/api/terminals") && await handleTerminalApi(req, res, { method, pathname, url }, terminalApiOptions(req, context))) return;
 
     if (method === "GET" && pathname === "/api/features") {
       const config = context.getConfig();
@@ -1355,7 +1296,7 @@ export async function handleApiRequest(
         return json(res, { error: "Missing, invalid, or expired local bootstrap grant" }, 401);
       }
       const session = createAuthSession(jinnHome, req, { kind: "local" });
-      res.setHeader("Set-Cookie", authCookieHeaders(session.secret, session.device.id, jinnHome));
+      res.setHeader("Set-Cookie", authCookieHeaders(session.secret, session.device.id, jinnHome, requestArrivedOverHttps(req)));
       return json(res, { status: "ok", authRequired: true, device: { ...session.device, current: true } });
     }
 
@@ -1430,7 +1371,7 @@ export async function handleApiRequest(
       const ok = consumePairingCode(createFilePairingCodeStore(jinnHome), code);
       if (!ok || !context.gatewayAuthToken) return json(res, { error: "Invalid or expired pairing code" }, 401);
       const session = createAuthSession(jinnHome, req, { kind: "remote" });
-      res.setHeader("Set-Cookie", authCookieHeaders(session.secret, session.device.id, jinnHome));
+      res.setHeader("Set-Cookie", authCookieHeaders(session.secret, session.device.id, jinnHome, requestArrivedOverHttps(req)));
       return json(res, { status: "ok", authRequired: true, device: { ...session.device, current: true } });
     }
 
@@ -1910,7 +1851,9 @@ export async function handleApiRequest(
         // Stop was missed entirely: fire-and-forget a transcript tail sync.
         // Cheap (one stat() in the common case) and never delays this GET —
         // the frontend refetches on `session:external-turn`.
-        scheduleOnLoadTailSync(params.id, context.emit);
+        scheduleOnLoadTailSync(params.id, context.emit, {
+          resolveEmployee: (slug) => orgRegistry(context.getConfig()).get(slug),
+        });
       }
 
       return json(res, {
@@ -2055,6 +1998,7 @@ export async function handleApiRequest(
     if (method === "POST" && params) {
       const session = getSession(params.id);
       if (!session) return notFound(res);
+      if (isTerminalSession(session)) return json(res, { error: TERMINAL_HAS_NO_TURN }, 409);
       // GRS-017a — an agent-initiated stop (declared caller identity) is scoped
       // to the caller's OWN DESCENDANTS: cross-tree stops are a lateral
       // authority grab, so peers and ancestors are refused. Operator/UI calls
@@ -2077,7 +2021,7 @@ export async function handleApiRequest(
         }));
         return;
       }
-      killSessionEngines(context, session, "Interrupted by user");
+      killSessionEngines(context, session, USER_STOP_INTERRUPTION_REASON);
       context.sessionManager.getQueue().clearQueue(session.sessionKey || session.sourceRef || session.id);
       updateSession(params.id, { status: "interrupted", attemptOutcome: "interrupted", lastActivity: new Date().toISOString(), lastError: "Interrupted by user" });
       context.emit("session:stopped", { sessionId: params.id });
@@ -2089,6 +2033,7 @@ export async function handleApiRequest(
     if (method === "POST" && params) {
       const session = getSession(params.id);
       if (!session) return notFound(res);
+      if (isTerminalSession(session)) return json(res, { error: TERMINAL_HAS_NO_TURN }, 409);
       killSessionEngines(context, session, "Interrupted: session reset");
       context.sessionManager.getQueue().clearQueue(session.sessionKey || session.sourceRef || session.id);
       const meta = { ...(session.transportMeta || {}) } as Record<string, unknown>;
@@ -2287,7 +2232,7 @@ export async function handleApiRequest(
       if (body.provenance !== undefined) {
         return badRequest(res, "provenance cannot be supplied on public Todo creation — the server assigns source provenance: public creation uses source=human or source=session, while cron and delegation create their own records; source=workflow is historical audit provenance and is not currently minted");
       }
-      if (body.assignee !== undefined) return badRequest(res, "assignee cannot be supplied at Todo creation — create first, then grant ownership through the assign flow (assign_work_item / POST /api/work-items/:id/assign), which is its own action: it validates the roster, derives the department, moves backlog→assigned, and notifies the assignee");
+      if (body.assignee !== undefined) return badRequest(res, "assignee cannot be supplied at Todo creation — create first, then grant ownership through the assign flow (assign_work_item / POST /api/work-items/:id/assign), which is its own action: it validates the roster, derives the department (unless gateway.todoDepartments keeps it), moves backlog→assigned, and notifies the assignee");
       const title = typeof body.title === "string" ? stripControlChars(body.title).trim() : "";
       if (!title) return badRequest(res, "title is required");
       const verifyPolicy = validateVerifyPolicy(body.verifyPolicy);
@@ -2318,6 +2263,14 @@ export async function handleApiRequest(
         }
       }
       const labelRefs = body.labels === undefined ? undefined : (body.labels as string[]).map((entry) => entry.trim());
+      // the auto-start opt-out at creation, so a Todo an employee mints
+      // from a session that is already working it never has a window between
+      // create and assign in which a `todo-status` trigger could spawn a second
+      // session. Only `false` is worth storing; `true` is what absence means.
+      if (body.autoStart !== undefined && typeof body.autoStart !== "boolean") {
+        return badRequest(res, "autoStart must be a boolean");
+      }
+      const autoStartOptOut = body.autoStart === false;
       // ICI-733: a caller-supplied create key, same shape rules as the edit key.
       // Cron and connector retries create duplicate Todos without one.
       let idempotencyKey: string | undefined;
@@ -2363,15 +2316,18 @@ export async function handleApiRequest(
         // the whole request rather than leave an untagged Todo behind.
         let labels: Label[] | undefined;
         const create = () => idempotencyKey
-          ? createWorkItemIdempotent(input, idempotencyKey, labelRefs)
+          ? createWorkItemIdempotent(input, idempotencyKey, { labels: labelRefs, ...(autoStartOptOut ? { autoStart: false } : {}) })
           : { item: createWorkItem(input), replayed: false };
-        const created = labelRefs === undefined
+        const created = labelRefs === undefined && !autoStartOptOut
           ? create()
           : initDb().transaction(() => {
             const result = create();
             // A replay's labels were written by the create it replays. Setting
             // them again would rewrite a set the Todo may have had edited since.
-            if (!result.replayed) labels = setWorkItemLabels(result.item.id, labelRefs, workItemActor(caller), caller.origin);
+            if (!result.replayed && labelRefs !== undefined) {
+              labels = setWorkItemLabels(result.item.id, labelRefs, workItemActor(caller), caller.origin);
+            }
+            if (!result.replayed && autoStartOptOut) writeAutoStartRow(initDb(), result.item.id, false, result.item.createdAt);
             return result;
           })();
         if (created.replayed) return json(res, { workItem: created.item, replayed: true }, 200);
@@ -2575,6 +2531,9 @@ export async function handleApiRequest(
             currentVersion: err.currentVersion,
           }, 409);
         }
+        if (err instanceof TodoDepartmentNotAllowedError) {
+          return todoEditValidationError(res, err.message, "todo_invalid_department");
+        }
         throw err;
       }
     }
@@ -2637,16 +2596,18 @@ export async function handleApiRequest(
       // Read the list per request, so adding or removing a delegate takes effect
       // on the next move rather than at the next restart.
       const armedAsDelegate = resolveArmingDelegate(caller, target, context.getConfig());
+      const actorEmployee = fields.asOperator ? undefined : workItemActorEmployee(caller);
       const detail = writeDetail({
         ...(note ? { note } : {}),
         ...(actingAsOperator ? { asOperator: actingAsOperator } : {}),
         ...(armedAsDelegate ? { armedAsDelegate } : {}),
+        ...(actorEmployee ? { actorEmployee } : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
       // operator PUT with a note annotates the CURRENT exception state instead
       // of vanishing in transition()'s same-status no-op. The note event
       // carries toStatus so the reason surfaces read it like a transition note.
-      if (isOperatorPut && note && target === item.status && (target === "blocked" || target === "escalated")) {
+      if (isOperatorPut && note && target === item.status && (target === "blocked" || target === "escalated") && !(stopCause && changedStopCause(initDb(), item.id, stopCause))) {
         appendWorkItemEvent({
           workItemId: params.id,
           kind: "note",
@@ -2749,7 +2710,8 @@ export async function handleApiRequest(
         if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
       }
       try {
-        const item = assignWorkItem(params.id, assignee, employee.department ?? null, workItemActor(caller), caller.origin);
+        const item = assignWorkItem(params.id, assignee, employee.department ?? null, workItemActor(caller),
+          { origin: caller.origin, actorEmployee: workItemActorEmployee(caller) });
         if (!item) return notFound(res);
         const activityReceiptId = persistTodoMutationActivity(req, context, item, "assigned", item.version !== current.version);
         return json(res, withActivityReceipt({ workItem: item }, activityReceiptId));
@@ -2809,6 +2771,8 @@ export async function handleApiRequest(
     params = matchRoute("/api/work-items/:id/sessions", pathname);
     if (method === "GET" && params) {
       if (!requireTodoRouteId(res, params.id)) return;
+      // Opt-in: the flat shape stays the default so its existing callers keep parsing.
+      if (url.searchParams.get("tree") === "1") return json(res, readTodoSessionTree(params.id));
       const linked = listSessionsByWorkItem(params.id);
       return json(res, serializeSessionList(linked, context));
     }
@@ -2831,87 +2795,10 @@ export async function handleApiRequest(
         if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
       }
 
-      // The Todo's own dispatch preferences are resolved BEFORE the claim, so a
-      // Todo whose skills have all been uninstalled fails without holding one.
-      const dispatchPrefs = resolveTodoDispatch(item.id);
-      if (!dispatchPrefs.ok) return json(res, { error: dispatchPrefs.error }, 409);
-
-      const claim = claimTodoForDispatch(res, item.id);
-      if (!claim) return;
-
-      const config = context.getConfig();
-      const dispatcher = orgRegistry(config).get(TODO_DISPATCHER_NAME);
-      if (!dispatcher?.system) {
-        claim.release();
-        return serverError(res, "the built-in Todo Dispatcher is unavailable");
-      }
-      // The Todo's override beats the Dispatcher employee's own engine/model:
-      // it exists to move a stuck Todo onto another engine, so it has to win.
-      const dispatchEngineName = dispatchPrefs.preamble.engine ?? dispatcher.engine;
-      const dispatchModel = dispatchPrefs.preamble.engine ? dispatchPrefs.preamble.model ?? undefined : dispatcher.model;
-      const preflight = preflightSystemEmployee({
-        employee: dispatcher, label: "Todo Dispatcher", settingLabel: "Dispatcher",
-        engineName: dispatchEngineName, globalMcp: config.mcp,
-        getEngine: (name) => context.sessionManager.getEngine(name),
+      const started = startTodoDispatcher(item, context, {
+        emitProjectionEvent: (id, action) => emitTodoProjectionEvent(context, id, action),
       });
-      if (!preflight.ok) {
-        claim.release();
-        return json(res, { error: preflight.error }, preflight.status);
-      }
-      const engine = preflight.engine;
-
-      const prompt = dispatchPrefs.preamble.prefix + [
-        `Dispatch Todo ${item.id}.`,
-        `Title: ${item.title}`,
-        item.body ? `Body:\n${item.body}` : "Body: (none)",
-        item.acceptance ? `Acceptance criteria:\n${item.acceptance}` : "Acceptance criteria: (none)",
-      ].join("\n\n");
-      const sessionKey = `todo-dispatcher:${item.id}:${crypto.randomUUID()}`;
-      const session = createSession({
-        engine: dispatchEngineName,
-        source: "web",
-        sourceRef: sessionKey,
-        connector: "web",
-        sessionKey,
-        replyContext: { source: "web" },
-        employee: dispatcher.name,
-        model: dispatchModel,
-        effortLevel: dispatcher.effortLevel,
-        prompt,
-        title: `Dispatch ${item.id}`,
-        portalName: config.portal?.portalName,
-      });
-      insertMessage(session.id, "user", prompt);
-      try {
-        linkSession(item.id, session.id);
-        claim.bind(session.id);
-      } catch (error) {
-        claim.release();
-        return serverError(
-          res,
-          `Todo Dispatcher was not started because its session could not be linked: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-
-      updateSession(session.id, { status: "running", lastActivity: new Date().toISOString() });
-      session.status = "running";
-      try {
-        reconcileWorkItem(item.id);
-      } catch (error) {
-        logger.warn(`Todo Dispatcher ${session.id} reconcile failed: ${error instanceof Error ? error.message : error}`);
-      }
-      const queueKey = session.sessionKey || session.sourceRef || session.id;
-      const queueItemId = enqueueQueueItem(session.id, queueKey, prompt);
-      context.emit("queue:updated", { sessionId: session.id, sessionKey: queueKey });
-      dispatchWebSessionRun(session, prompt, engine, context, { queueItemId });
-      emitTodoProjectionEvent(context, item.id, "dispatched");
-
-      return json(res, {
-        workItemId: item.id,
-        sessionId: session.id,
-        status: session.status,
-        reused: false,
-      }, 201);
+      return json(res, started.body, started.status);
     }
 
     // GET /api/work-items/:id/tree — subtree with status totals + derived spend.
@@ -3048,9 +2935,9 @@ export async function handleApiRequest(
     // POST /api/work-items/:id/attachments — upload a file onto a Todo or one
     // of its live comments (any identified caller; comment targets are
     // author-or-operator). Accepts multipart form-data (field `file`, optional
-    // `commentId`) — the shared upload machinery — OR JSON `{ path, commentId?,
-    // filename? }` where the GATEWAY reads the local file (the MCP surface:
-    // gateway and agents share a filesystem by architecture, decision 4).
+    // `commentId`/`filename`) — what the MCP tool sends from the session's host,
+    // which may be a remote build host — OR JSON `{ path, commentId?,
+    // filename? }` where the GATEWAY reads a file on its own filesystem.
     params = matchRoute("/api/work-items/:id/attachments", pathname);
     if (method === "POST" && params) {
       const caller = resolveWorkItemCaller(req, res, context);
@@ -3077,7 +2964,7 @@ export async function handleApiRequest(
         if (!uploadedFile.filename || uploadedFile.buffer.length === 0) {
           return badRequest(res, "no file provided — send a multipart 'file' field with content");
         }
-        filename = sanitizeUploadFilename(uploadedFile.filename);
+        filename = sanitizeUploadFilename(uploadedFile.fields.filename?.trim() || uploadedFile.filename);
         commentIdRaw = uploadedFile.fields.commentId || undefined;
         stagedPath = stageAttachmentBuffer(uploadedFile.buffer);
       } else {
@@ -3135,9 +3022,9 @@ export async function handleApiRequest(
       }
     }
 
-    // GET /api/work-items/:id/attachments — list rows (item-level and
-    // per-comment) with ABSOLUTE storagePath: agents read the file directly
-    // from disk; no content flows over this surface.
+    // GET /api/work-items/:id/attachments — list rows (item-level and per-comment)
+    // with the gateway's ABSOLUTE storagePath; the MCP tool maps each row to the
+    // caller host's path and the byte route below.
     params = matchRoute("/api/work-items/:id/attachments", pathname);
     if (method === "GET" && params) {
       if (!requireTodoRouteId(res, params.id)) return;
@@ -3261,7 +3148,7 @@ export async function handleApiRequest(
       try {
         const removed = removeRelation(params.id, dstId, kind as RelationKind, {
           actor: workItemActor(caller),
-          operator: caller.kind === "operator",
+          operator: caller.kind === "operator" || remoteMcpHasOperatorStanding(caller),
         });
         if (!removed) return notFound(res);
         emitTodoProjectionEvent(context, params.id, "relation-removed");
@@ -3313,10 +3200,14 @@ export async function handleApiRequest(
           return badRequest(res, `${key} must be a non-empty string or null`);
         }
       }
+      if (body.autoStart !== undefined && typeof body.autoStart !== "boolean") {
+        return badRequest(res, "autoStart must be a boolean");
+      }
       const result = setTodoDispatchConfig(params.id, {
         ...(body.skills !== undefined ? { skills: body.skills } : {}),
         ...(body.engine !== undefined ? { engine: body.engine === null ? null : (body.engine as string).trim() } : {}),
         ...(body.model !== undefined ? { model: body.model === null ? null : (body.model as string).trim() } : {}),
+        ...(body.autoStart !== undefined ? { autoStart: body.autoStart as boolean } : {}),
       }, context.getConfig());
       if (!result.ok) return badRequest(res, result.error);
       emitTodoProjectionEvent(context, params.id, "dispatch-config-updated");
@@ -3336,6 +3227,7 @@ export async function handleApiRequest(
       const employee = caller.kind === "session" ? caller.session.employee ?? null : null;
       const allowed =
         caller.kind === "operator" ||
+        remoteMcpHasOperatorStanding(caller) ||
         item.createdBy === workItemActor(caller) ||
         (employee !== null && (item.assignee === employee || item.createdBy === employee));
       if (!allowed) {
@@ -3363,8 +3255,13 @@ export async function handleApiRequest(
     // GET /api/departments — the department registry (any caller): slug,
     // immutable ID prefix, and a live Todo count per department. Prefixes mint
     // lazily on first departmental create; there are no create/rename routes.
+    // Under `gateway.todoDepartments` every configured slug is listed (minted
+    // here if no Todo has used it yet, so pickers can offer it) and the rest are
+    // marked unselectable — kept, because their prefixes still name Todos.
     if (method === "GET" && pathname === "/api/departments") {
-      return json(res, { departments: listDepartmentsWithCounts(initDb()) });
+      const policy = resolveTodoDepartments();
+      for (const slug of policy?.allowed ?? []) ensureDepartmentRegistered(slug);
+      return json(res, { departments: listDepartmentsWithCounts(initDb(), policy?.allowed) });
     }
 
     // POST /api/labels — create a label (operator or a manager: an employee
@@ -3673,6 +3570,17 @@ export async function handleApiRequest(
       // work-item table with garbage intent records.
       const task = typeof body.task === "string" && body.task.trim() ? (body.task as string) : undefined;
       if (!task) return badRequest(res, "task is required — the full brief for the delegate");
+      // WHY this session is being linked, when the caller says so. Left unsaid,
+      // the Todo's own status decides (see resolveDelegationLinkRole): a Todo
+      // already in `in_review` is being handed to a reviewer, and a reviewer
+      // linked as its producer is refused the close.
+      let intent: WorkItemLinkRole | undefined;
+      if (body.intent !== undefined && body.intent !== null) {
+        if (typeof body.intent !== "string" || !WORK_ITEM_LINK_ROLES.includes(body.intent.trim() as WorkItemLinkRole)) {
+          return badRequest(res, `intent must be one of ${WORK_ITEM_LINK_ROLES.join(", ")} when provided`);
+        }
+        intent = body.intent.trim() as WorkItemLinkRole;
+      }
       const employeeName = typeof body.employee === "string" && body.employee.trim() ? (body.employee as string).trim() : undefined;
       const engineParam = typeof body.engine === "string" && body.engine.trim() ? (body.engine as string).trim() : undefined;
       if (!employeeName && !engineParam) {
@@ -3790,7 +3698,9 @@ export async function handleApiRequest(
               ? `delegate:${callerRef}:idempotency:${idempotencyDigest}`
               : `delegate:${callerRef}:${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
             assignee: employeeName ?? null,
-            department: delegateEmployee?.department ?? null,
+            // A closed department policy classifies by work, not by who does it:
+            // leave it to the store's default.
+            department: resolveTodoDepartments() ? undefined : delegateEmployee?.department ?? null,
             // Slice-5 decision 7: the DELEGATING caller is the creator — the
             // operator, or the delegating session's resolved employee slug
             // (`session:<uuid>` only when that session carries no employee).
@@ -3818,18 +3728,26 @@ export async function handleApiRequest(
         }, 502);
       }
       // The assignment no-ops when the Todo already carries this assignee, so the link is the only record that a caller delegated at all.
-      const delegationActor = workItemActor(delegationCaller.kind === "session"
+      const delegationWorkItemCaller: WorkItemCaller = delegationCaller.kind === "session"
         ? { kind: "session", callerId: delegationCaller.callerId, session: getSession(delegationCaller.callerId)! }
-        : { kind: "operator" });
+        : { kind: "operator" };
+      const delegationActor = workItemActor(delegationWorkItemCaller);
       if (requestedWorkItemId && employeeName) {
         try {
-          workItem = assignWorkItem(workItem.id, employeeName, delegateEmployee?.department ?? null, delegationActor) ?? workItem;
+          workItem = assignWorkItem(workItem.id, employeeName, delegateEmployee?.department ?? null, delegationActor,
+            { actorEmployee: workItemActorEmployee(delegationWorkItemCaller) }) ?? workItem;
         } catch (assignmentErr) {
           claim.release();
           return json(res, { error: assignmentErr instanceof Error ? assignmentErr.message : String(assignmentErr) }, 409);
         }
       }
-      const sessionKey = idempotencySessionKey ?? `delegation:${workItem.id}`;
+      // The key is the session's turn lane: SessionQueue serializes turns per
+      // key, so it must be unique per session. Keyed on the Todo alone, every
+      // delegation of the same item — a re-delegation to another employee, a
+      // still-idle earlier delegate being messaged — shared one lane, and a
+      // fresh delegate's brief sat parked behind the previous delegate's whole
+      // turn until the reconciler reported it interrupted.
+      const sessionKey = idempotencySessionKey ?? `delegation:${workItem.id}:${crypto.randomUUID()}`;
       let session: Session;
       try {
         session = createSession({
@@ -3884,7 +3802,7 @@ export async function handleApiRequest(
       //    preserved ids (backlog item + idle, undispatched, re-linkable session)
       //    instead of dispatching an untracked turn.
       try {
-        linkSession(workItem.id, session.id, delegationActor);
+        linkSession(workItem.id, session.id, delegationActor, resolveDelegationLinkRole(intent, workItem.status));
         claim.bind(session.id);
       } catch (linkErr) {
         claim.release();
@@ -4057,6 +3975,7 @@ export async function handleApiRequest(
     if (method === "POST" && params) {
       let session = getSession(params.id);
       if (!session) return notFound(res);
+      if (isTerminalSession(session)) return json(res, { error: TERMINAL_REFUSES_MESSAGES }, 409);
       session = maybeRevertEngineOverride(session);
       const _parsed = await readJsonBody(req, res);
       if (!_parsed.ok) return;
@@ -4279,10 +4198,12 @@ export async function handleApiRequest(
       // Headless engines lack isTurnRunning; their isAlive ≈ "turn running".
       const turnRunning = session.status === "running" && isInterruptibleEngine(engine)
         && ("isTurnRunning" in engine ? (engine as any).isTurnRunning(session.id) : engine.isAlive(session.id));
-      const shouldInterruptRunningTurn =
-        !isNotification &&
-        (config.sessions?.interruptOnNewMessage ?? true) &&
-        turnRunning;
+      const shouldInterruptRunningTurn = interruptsRunningTurn({
+        isNotification,
+        prompt: String(prompt),
+        interruptOnNewMessage: config.sessions?.interruptOnNewMessage,
+        turnRunning,
+      });
       if (shouldInterruptRunningTurn) supersedeRunningTurn(session);
 
       // Persist the message immediately. For notifications, store the clean
@@ -4422,7 +4343,7 @@ export async function handleApiRequest(
       // If a turn is already running, check whether we should interrupt or queue.
       // Notifications (child completion callbacks) should never interrupt — just queue.
       if (session.status === "running") {
-        if (shouldInterruptRunningTurn) {
+        if (shouldInterruptRunningTurn && isInterruptibleEngine(engine)) {
           logger.info(`Interrupting running session ${session.id} for new message`);
           engine.kill(session.id, USER_MESSAGE_INTERRUPTION_REASON);
           // SessionQueue serializes per-session; the new turn enqueued below will
@@ -4452,7 +4373,12 @@ export async function handleApiRequest(
       // (ptyEngine truthy) suppresses the note so the visible PTY paste stays the
       // operator's exact text. Recomputed per request → exactly one note, never
       // persisted, never rendered, never duplicated on retry/reload/reconnect.
-      const speechDerived = speechContextApplies({ speech: body.speech === true, isNotification, promptRendered: !!ptyEngine });
+      const speechDerived = speechContextApplies({
+        speech: body.speech === true,
+        isNotification,
+        promptRendered: !!ptyEngine,
+        rawEngineCommand: isRawEngineCommand(session.engine, String(prompt)),
+      });
       const { engine: enginePrompt } = resolveMessageAudiences(prompt, speechDerived);
 
       // Internal notification-role messages are already durably queued above;
@@ -4512,6 +4438,7 @@ export async function handleApiRequest(
         refreshCodexModels(config),
         refreshAntigravityModels(config),
         refreshPiModels(config),
+        refreshOpencodeModels(config),
         refreshGrokModels(config),
         refreshHermesModels(config),
       ]);
@@ -4526,6 +4453,8 @@ export async function handleApiRequest(
       const engine = url.searchParams.get("engine") || undefined;
       return json(res, await collectEngineLimits(context.getConfig(), { engine }));
     }
+
+    if (await handleIdleCapacityApi(req, res, { method, pathname, url }, context)) return;
 
     // POST /api/engine-limits/refresh — currently identical to GET for live
     // sources. Kept as a command-shaped endpoint so the UI/CLI can request a
@@ -4884,6 +4813,18 @@ export async function handleApiRequest(
       if (!isLoopback(remote)) {
         return json(res, { message: "forbidden" }, 403);
       }
+      // A loopback socket is not a local caller. Any reverse proxy that
+      // terminates on this host — cloudflared, `tailscale serve`, nginx —
+      // connects to the origin from 127.0.0.1, so everything it forwards
+      // arrives looking loopback, and this endpoint's only other guard is a
+      // shared secret. The relay always posts to a loopback authority, so pin
+      // Host too. This runs before the Content-Length branch below so that the
+      // 413-vs-403 difference cannot be used as an oracle for whether the
+      // loopback check passed.
+      const hookHost = Array.isArray(req.headers.host) ? req.headers.host[0] : req.headers.host;
+      if (!isLoopbackHost(hookHost)) {
+        return json(res, { message: "forbidden" }, 403);
+      }
       // Reject oversized bodies up front via Content-Length, then enforce
       // the cap mid-stream too in case the header was missing or lies.
       const contentLength = Number(req.headers["content-length"] ?? NaN);
@@ -4893,8 +4834,38 @@ export async function handleApiRequest(
       const _parsed = await readJsonBody(req, res, { maxBytes: HOOK_BODY_MAX_BYTES });
       if (!_parsed.ok) return;
       const hookBody = _parsed.body as { jinnSessionId?: string; hook?: import("./hook-registry.js").HookPayload };
+      // Remote containment: a session running over SSH reaches the org's real
+      // knowledge/docs/org through one sshfs mount. If that mount drops, writes
+      // to a JINN_HOME-shaped path succeed into an empty local directory on the
+      // remote box and the org diverges with no error anywhere — so the mount
+      // root travels with the hook and the policy refuses anything outside it.
+      // Left undefined for a local employee, which keeps this path unchanged,
+      // and resolved only for PreToolUse — the sole event the policy inspects —
+      // so the Stop/SessionStart path costs no session or org lookup.
+      const hookConfig = context.getConfig();
+      const hookSession = hookBody.hook?.hook_event_name === "PreToolUse" && hookBody.jinnSessionId
+        ? getSession(hookBody.jinnSessionId)
+        : undefined;
+      const hookEmployee = hookSession?.employee
+        ? orgRegistry(hookConfig).get(hookSession.employee)
+        : undefined;
+      const remoteMountRoot = isRemoteTarget(hookEmployee) ? hookConfig.remote?.mount : undefined;
+      // The remote user's $HOME, so the policy can judge a `$HOME/.jinn/...`
+      // token instead of skipping it. Read from the spawn-time cache only —
+      // never probed here, because this runs on every PreToolUse.
+      const remoteHome = isRemoteTarget(hookEmployee)
+        ? cachedRemoteFacts(sshDestination(hookEmployee))?.home
+        : undefined;
       const rejected = validateHookPost(
-        { reg: context.hookRegistry, secret: context.hookSecret, remoteAddress: remote },
+        {
+          reg: context.hookRegistry,
+          secret: context.hookSecret,
+          remoteAddress: remote,
+          ...(hookHost ? { hostHeader: hookHost } : {}),
+          ...(remoteMountRoot
+            ? { remoteMountRoot, gatewayHome: context.jinnHome ?? JINN_HOME, ...(remoteHome ? { remoteHome } : {}) }
+            : {}),
+        },
         req.headers["x-jinn-hook-secret"] as string | undefined,
         hookBody,
       );

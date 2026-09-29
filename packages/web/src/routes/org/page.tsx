@@ -5,6 +5,7 @@ import type { Employee, OrgData, OrgHierarchy } from "@/lib/api";
 import { EmployeeDetail } from "@/components/org/employee-detail";
 import { PageLayout } from "@/components/page-layout";
 import { useSettings } from "@/routes/settings-provider";
+import { PRODUCT_NAME } from "@/lib/brand"
 
 const OrgMap = lazy(() =>
   import("@/components/org/org-map").then((m) => ({ default: m.OrgMap })),
@@ -55,8 +56,8 @@ export default function OrgPage() {
       .getOrg()
       .then((data: OrgData) => {
         const coo: Employee = {
-          name: (settings.portalName ?? "Jinn").toLowerCase(),
-          displayName: settings.portalName ?? "Jinn",
+          name: (settings.portalName ?? "Jinn").toLowerCase(), // internal COO slug, not a display string
+          displayName: settings.portalName ?? PRODUCT_NAME,
           department: "",
           rank: "executive",
           engine: "claude",

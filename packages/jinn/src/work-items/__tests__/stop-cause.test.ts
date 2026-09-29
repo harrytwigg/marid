@@ -116,7 +116,9 @@ describe("the cause belongs to the stop", () => {
     expect(sc.readStopCause(db, item.id)).toEqual({ parkedUntil, unblockHint: hint });
   });
 
-  it.each(["executing", "in_review", "done"] as const)("is gone once the Todo moves to %s", (to) => {
+  // `backlog` matters as much as the rest: it is what keeps a parked Todo out of
+  // the idle-capacity backlog scan, which lists only `backlog`.
+  it.each(["executing", "in_review", "done", "backlog"] as const)("is gone once the Todo moves to %s", (to) => {
     const item = mk("executing");
     tr.transition(item.id, "blocked", AGENT, { agent: true, stopCause: { unblockHint: hint } });
     expect(sc.readStopCause(db, item.id)).toEqual({ unblockHint: hint });

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as pty from "node-pty";
-import type { InterruptibleEngine, EngineRunOpts, EngineResult, EngineRateLimitInfo, StreamDelta, TurnProgress } from "../shared/types.js";
+import type { CompactionStats, InterruptibleEngine, EngineRunOpts, EngineResult, EngineRateLimitInfo, StreamDelta, TurnProgress } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { JINN_HOME, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT, CLAUDE_LIMITS_DIR } from "../shared/paths.js";
 import { cleanupSessionSettings, writeSessionSettings } from "../shared/claude-settings.js";
@@ -12,7 +12,7 @@ import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
 import type { HookRegistry, HookPayload } from "../gateway/hook-registry.js";
 import { SsePtyProxy, MAIN_AGENT_SENTINEL, type SseDataEvent, type UpstreamActivityInfo } from "./sse-pty-proxy.js";
-import { neutralizeForPaste } from "../shared/skill-commands.js";
+import { isCompactCommand, isNativeClaudeCommand, neutralizeForPaste } from "../shared/skill-commands.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
 import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import { costOfUsage } from "../shared/model-pricing.js";
@@ -20,6 +20,20 @@ import { claudeResetsAtSeconds } from "../shared/engine-reset-times.js";
 import { writeMcpConfigFile } from "../mcp/resolver.js";
 import { parsePermissionPrompt, chooseApproval, keystrokesToSelect } from "./claude-permission-prompt.js";
 import { resolveClaudeConfigDir } from "../shared/home.js";
+import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/workflow-interruptions.js";
+import { assertRemoteTarget, isRemoteTarget, resolveRemoteClaudeConfigDir } from "../shared/remote-target.js";
+import type { RemoteTarget, ResolvedMcpConfig } from "../shared/types.js";
+import type { RemoteExecutionConfig } from "../shared/config-types.js";
+import {
+  buildSshSpawnArgs,
+  remoteSessionBinDir,
+  ensureRemoteReady,
+  remoteNodeDir,
+  prepareRemoteSession,
+  requireRemoteEngineBin,
+  type RemoteFacts,
+  type RemoteClaudeStaging,
+} from "./remote-stage.js";
 
 export type { PtyControlEvent } from "./pty-view-engine.js";
 
@@ -117,6 +131,63 @@ function lastTurnContextTokens(transcriptPath: string): number | undefined {
   return last && last > 0 ? last : undefined;
 }
 
+/**
+ * The context size either side of a `/compact`, from the `compact_boundary`
+ * entry Claude Code writes when one finishes: `{type:"system",
+ * subtype:"compact_boundary", compactMetadata:{trigger, preTokens, postTokens}}`
+ * (seen from 2.1.261 on). The newest manual one at or after `afterMs` — an
+ * earlier boundary, or an auto-compaction, is not the one asked for. Empty when
+ * the transcript has none (or is on another host): the compaction still happened,
+ * PostCompact said so, there are just no numbers to show. Exported for tests.
+ */
+export function compactionStatsFromTranscript(transcriptPath: string, afterMs: number): CompactionStats {
+  let content: string;
+  try { content = fs.readFileSync(transcriptPath, "utf-8"); } catch { return {}; }
+  let stats: CompactionStats = {};
+  for (const line of content.split("\n")) {
+    if (!line.includes("compact_boundary")) continue;
+    let msg: any;
+    try { msg = JSON.parse(line); } catch { continue; }
+    if (msg?.type !== "system" || msg.subtype !== "compact_boundary") continue;
+    const meta = msg.compactMetadata;
+    if (!meta || meta.trigger === "auto") continue;
+    const at = transcriptLineTimestampMs(msg);
+    if (at !== undefined && at < afterMs) continue;
+    const count = (n: unknown) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? n : undefined);
+    stats = {};
+    const pre = count(meta.preTokens);
+    const post = count(meta.postTokens);
+    if (pre !== undefined) stats.preTokens = pre;
+    if (post !== undefined) stats.postTokens = post;
+  }
+  return stats;
+}
+
+/** How long to wait for the `compact_boundary` after PostCompact has fired. */
+const COMPACT_BOUNDARY_WAIT_MS = 2_000;
+const COMPACT_BOUNDARY_POLL_MS = 100;
+
+/**
+ * The sizes of a compaction PostCompact has just confirmed. Claude Code fires
+ * the hook BEFORE it appends the `compact_boundary` to the transcript (25 ms
+ * apart on 2.1.284, live through the gateway), so a single read at settle time
+ * finds nothing. Poll briefly; a transcript that cannot be read at all (on
+ * another host) is not waited on. Exported for tests.
+ */
+export async function awaitCompactionStats(
+  transcriptPath: string,
+  afterMs: number,
+  waitMs = COMPACT_BOUNDARY_WAIT_MS,
+): Promise<CompactionStats> {
+  if (!fs.existsSync(transcriptPath)) return {};
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const stats = compactionStatsFromTranscript(transcriptPath, afterMs);
+    if (stats.preTokens !== undefined || stats.postTokens !== undefined || Date.now() >= deadline) return stats;
+    await new Promise((resolve) => setTimeout(resolve, COMPACT_BOUNDARY_POLL_MS));
+  }
+}
+
 /** Claude Code stores per-project transcripts at
  *  ~/.claude/projects/<cwd-slug>/<claudeSessionId>.jsonl, where the slug is the
  *  cwd with every "/" and "." replaced by "-". Derive that path; fall back to a
@@ -173,6 +244,40 @@ export function lastAssistantTextFromTranscript(transcriptPath: string, afterMs?
     if (text.trim()) last = text;
   }
   return last;
+}
+
+/** Whitespace-collapsed, backtick-free: what survives both the paste's image-path
+ *  quoting (neutralizeImagePathsForPaste) and the TUI's line handling. */
+function promptFingerprint(text: string): string {
+  return text.replace(/`/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Whether `prompt` reached the transcript as a user prompt at or after
+ *  `sinceMs`. Other user entries — a background re-run's `<task-notification>`,
+ *  an interrupt marker — do not count. Scans from the end, where anything this
+ *  recent is, and stops at the first entry older than `sinceMs`. Unreadable
+ *  counts as no. */
+export function transcriptHasPromptSince(transcriptPath: string, sinceMs: number, prompt: string): boolean {
+  const needle = promptFingerprint(prompt).slice(0, 200);
+  if (!needle) return false;
+  let raw: string;
+  try { raw = fs.readFileSync(transcriptPath, "utf-8"); } catch { return false; }
+  const lines = raw.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const t = lines[i].trim();
+    if (!t) continue;
+    let msg: any;
+    try { msg = JSON.parse(t); } catch { continue; }
+    const ts = transcriptLineTimestampMs(msg);
+    if (ts !== undefined && ts < sinceMs) return false;
+    if (msg.type !== "user" || ts === undefined) continue;
+    const content = msg?.message?.content;
+    const text = typeof content === "string"
+      ? content
+      : Array.isArray(content) ? content.filter((b: any) => b?.type === "text").map((b: any) => String(b.text ?? "")).join("\n") : "";
+    if (promptFingerprint(text).includes(needle)) return true;
+  }
+  return false;
 }
 
 export function stripReasoningBlocks(text: string): string {
@@ -473,6 +578,56 @@ export interface TurnResolverOpts {
    *  last_assistant_message is the PREVIOUS turn's stale text — maybeComplete must
    *  settle empty rather than re-persist it as a duplicate. */
   native?: boolean;
+  /** Warm-PTY turns only. The operator can type turns straight into
+   *  the TUI. run() waits for such a turn to finish before pasting; what this
+   *  gate adds is that a Stop/StopFailure counts only after this turn's own
+   *  UserPromptSubmit has arrived live. It does NOT protect a turn pasted behind
+   *  one still running: Claude Code fires a queued prompt's UPS at once, so the
+   *  running turn's Stop would follow ours. Only the wait prevents that.
+   *  Safe to require: the hook relay awaits delivery and Claude Code blocks on a
+   *  UserPromptSubmit hook, so a turn's UPS always lands before its Stop. */
+  requireLivePromptSubmit?: boolean;
+  /** Warm-PTY turns: a background re-invocation (see
+   *  isBackgroundReinvocation) was already running when this turn registered,
+   *  so the next Stop is its, not ours. */
+  backgroundRerunInProgress?: boolean;
+  /** Warm-PTY turns: the prompt is pasted after registration, so a prompt
+   *  submitted before promptWritten() was typed into the terminal — never ours
+   *  (the paste can be held behind a background re-run for
+   *  as long as it runs, and the operator may type meanwhile). */
+  ownPromptAfterPaste?: boolean;
+  /** Receives a Stop that belongs to a turn this resolver does not own, so that
+   *  turn still reaches chat. */
+  onForeignStop?: (h: HookPayload) => void;
+}
+
+/** Hook delivery context. `replayed` marks events the registry buffered before
+ *  this turn registered: they happened before our prompt was even written. */
+export interface HookDelivery {
+  replayed?: boolean;
+}
+
+/** Whose turn a hook belongs to, as far as the resolver can tell: "foreign"
+ *  hooks come from a turn this resolver does not own, and must not stream into,
+ *  acknowledge or settle it. */
+export type HookOwner = "own" | "foreign";
+
+/** Claude Code re-invokes the model when a background task finishes, through
+ *  a UserPromptSubmit whose prompt is a `<task-notification>` (verified on
+ *  2.1.283). Nobody on the gateway asked for that turn, and no run() owns it. */
+export function isBackgroundReinvocation(h: HookPayload): boolean {
+  return h.hook_event_name === "UserPromptSubmit"
+    && typeof h.prompt === "string"
+    && h.prompt.trimStart().startsWith("<task-notification>");
+}
+
+/** Whether a hook ends the turn it belongs to. A StopFailure the CLI survives
+ *  (anything outside IMMEDIATE_STOP_FAILURE_ERRORS) is usually retried, and the
+ *  retry's Stop is still that turn's — so it does not end a background
+ *  re-invocation either. */
+function endsTurn(h: HookPayload): boolean {
+  return h.hook_event_name === "Stop"
+    || (h.hook_event_name === "StopFailure" && IMMEDIATE_STOP_FAILURE_ERRORS.has(String(h.error ?? "unknown")));
 }
 
 /** State machine for one interactive turn: resolves after BOTH SessionStart + Stop, or on StopFailure/interrupt. */
@@ -485,6 +640,16 @@ export class TurnResolver {
   private stopPayload: HookPayload | undefined;
   private stopFailurePayload: HookPayload | undefined;
   private graceTimer: NodeJS.Timeout | undefined;
+  /** A background re-invocation is running ahead of this turn's prompt. */
+  private rerunAhead: boolean;
+  private rerunEndedAt: number | undefined;
+  /** When this turn's own UserPromptSubmit arrived live, if it has. */
+  private ownPromptAt: number | undefined;
+  /** This turn's prompt is known to be the one Claude Code is running (as
+   *  opposed to queued behind a background re-invocation). */
+  private ownTurnRunning = false;
+  /** Whether a live UserPromptSubmit can be this turn's own yet (see ownPromptAfterPaste). */
+  private ownPromptArmed: boolean;
 
   constructor(private opts: TurnResolverOpts) {
     this.promise = new Promise((res) => { this.resolve = res; });
@@ -492,11 +657,99 @@ export class TurnResolver {
       this.gotSessionStart = true;
       this.claudeSessionId = opts.fallbackSessionId;
     }
+    this.rerunAhead = opts.backgroundRerunInProgress === true;
+    this.ownPromptArmed = opts.ownPromptAfterPaste !== true;
   }
 
-  onHook(h: HookPayload): void {
-    if (this.settled) return;
-    if (h.hook_event_name === "SessionStart") {
+  /** Our prompt is being written to the PTY now: the next live non-background
+   *  UserPromptSubmit is ours. */
+  promptWritten(): void { this.ownPromptArmed = true; }
+
+  /**
+   * Feed one hook to the turn. Returns "foreign" for a hook that belongs to a
+   * turn this resolver does not own.
+   *
+   * Claude Code re-runs the model on its own when a background task finishes.
+   * Verified on 2.1.283:
+   *  - The re-run opens with a `<task-notification>` UserPromptSubmit, fired
+   *    when it starts, and closes with one Stop. Notifications that finish
+   *    together are batched into the same re-run.
+   *  - A notification that lands while a turn runs waits for its Stop, or, at
+   *    a tool boundary, is folded into it (no Stop of its own).
+   *  - A prompt pasted while a re-run is in progress is queued, and its
+   *    UserPromptSubmit fires at once: `UPS(bg) UPS(ours) Stop(bg) Stop(ours)`.
+   *    If the re-run reaches a tool boundary first, the prompt is folded into
+   *    it and there is only one Stop, carrying the re-run's answer.
+   * So while a re-run is ahead of our prompt its Stop is not ours, and a Stop
+   * replayed from the registry buffer finished before this turn registered.
+   * Folding cannot be told apart from queueing until a tool boundary passes; a
+   * PostToolUse after our prompt while the re-run is ahead means it was folded,
+   * and the one Stop that follows is the only one this turn will get. run()
+   * avoids that case by not pasting until a known re-run has finished.
+   */
+  onHook(h: HookPayload, delivery: HookDelivery = {}): HookOwner {
+    if (this.settled) return "own";
+    const event = h.hook_event_name;
+    if (delivery.replayed && (event === "Stop" || event === "StopFailure" || event === "UserPromptSubmit")) {
+      // Happened before our prompt was written. A foreign StopFailure is
+      // dropped (its turn is not ours to fail); a foreign Stop goes to the
+      // external-turn sync, since registering cancelled the registry's own
+      // unclaimed-Stop handoff.
+      if (event === "Stop") this.opts.onForeignStop?.(h);
+      return "foreign";
+    }
+    if (event === "UserPromptSubmit") {
+      if (isBackgroundReinvocation(h)) {
+        // Folded into our running turn: its Stop is still ours.
+        if (this.ownTurnRunning) return "own";
+        // Otherwise it starts ahead of our prompt, before it was even read or
+        // while it waits in Claude Code's queue.
+        this.rerunAhead = true;
+        return "foreign";
+      }
+      // Submitted before our paste: typed into the terminal, not ours.
+      if (!this.ownPromptArmed) return "foreign";
+      if (this.ownPromptAt === undefined) {
+        this.ownPromptAt = Date.now();
+        if (!this.rerunAhead) this.ownTurnRunning = true;
+      }
+      return "own";
+    }
+    // A background Task subagent's tool hooks (they carry agent_id) say nothing
+    // about which top-level turn is running: they fire whenever it works.
+    const subagentHook = typeof h.agent_id === "string";
+    if (this.rerunAhead) {
+      if (event === "Stop" || event === "StopFailure") {
+        // A retryable StopFailure leaves the re-run running: its retry's Stop
+        // is still the re-run's, so it stays ahead of our prompt.
+        if (endsTurn(h)) {
+          this.rerunAhead = false;
+          this.rerunEndedAt = Date.now();
+        }
+        if (event === "Stop") this.opts.onForeignStop?.(h);
+        return "foreign";
+      }
+      if (event === "PostToolUse" && this.ownPromptAt !== undefined && !subagentHook) {
+        // The re-run reached a tool boundary with our prompt queued: Claude
+        // Code folds it into the re-run, whose Stop is now the only one we get.
+        this.rerunAhead = false;
+        this.ownTurnRunning = true;
+      }
+      if (event === "PreToolUse" || event === "PostToolUse") return "foreign";
+    } else if (this.ownPromptAt !== undefined && !subagentHook && (event === "PreToolUse" || event === "PostToolUse")) {
+      // Our queued prompt is the one running now.
+      this.ownTurnRunning = true;
+    }
+    if (this.opts.requireLivePromptSubmit && this.ownPromptAt === undefined
+      && (event === "Stop" || event === "StopFailure")) {
+      // Not ours: a turn typed into the TUI that finished before our queued
+      // prompt ran. Settling on it would record the operator's answer as this
+      // turn's reply. A foreign StopFailure is dropped (its turn is not ours to
+      // fail); a foreign Stop goes to the external-turn sync.
+      if (event === "Stop") this.opts.onForeignStop?.(h);
+      return "foreign";
+    }
+    if (event === "SessionStart") {
       this.gotSessionStart = true;
       if (typeof h.session_id === "string") this.claudeSessionId = h.session_id;
       this.maybeComplete();
@@ -525,8 +778,23 @@ export class TurnResolver {
       // PreToolUse/PostToolUse/etc — proof of life while a failure is pending.
       this.noteActivity();
     }
+    return "own";
   }
 
+  /** A background re-invocation is running ahead of this turn's prompt. */
+  get awaitingBackgroundRerun(): boolean { return this.rerunAhead; }
+  /** When the last background re-invocation ahead of this turn ended. */
+  get backgroundRerunEndedAt(): number | undefined { return this.rerunEndedAt; }
+  /** The re-run ahead is taken to be over without its Stop (run()'s quiet
+   *  backstop): the Stop was lost, and the next one is ours. */
+  abandonBackgroundRerun(): void {
+    if (!this.rerunAhead) return;
+    this.rerunAhead = false;
+    this.rerunEndedAt = Date.now();
+  }
+
+  /** When this turn's own UserPromptSubmit arrived live, if it has. */
+  get promptSubmittedAt(): number | undefined { return this.ownPromptAt; }
   /** Claude session id learned so far (for engineSessionId persistence on warm-PTY turns). */
   get sessionId(): string | undefined { return this.claudeSessionId; }
   get isSettled(): boolean { return this.settled; }
@@ -625,6 +893,33 @@ const BACKGROUND_CLEAR_QUIET_MS = 10_000;
 const NATIVE_COMMAND_QUIET_MS = 1800;
 const NATIVE_COMMAND_MIN_MS = 3000;
 const NATIVE_COMMAND_MAX_MS = 90_000;
+/** `/compact` summarizes the whole transcript in one API call, which on a long
+ *  session outlasts NATIVE_COMMAND_MAX_MS. It settles on PostCompact instead
+ *  (see nativeCommandSettles); this is only the bound if that hook is lost. */
+const COMPACT_COMMAND_MAX_MS = 15 * 60_000;
+
+/**
+ * Whether a native command's turn is over, by the quiet-window rule every
+ * native command uses: a short minimum, then PTY output quiet for a beat.
+ *
+ * `/compact` adds two things. It is over at once when Claude Code reports
+ * PostCompact (verified on 2.1.283: `/compact <instructions>` fires PreCompact,
+ * SessionStart{source:"compact"}, PostCompact{trigger:"manual"}, and no Stop) —
+ * handled by the hook listener, not here. And a quiet PTY is not enough while
+ * the summarizing request is still in flight through the proxy: a turn settled
+ * then would let the next queued prompt (a self-compaction's resume) be pasted
+ * into a TUI that is still compacting.
+ */
+export function nativeCommandSettles(o: {
+  compact: boolean;
+  elapsedMs: number;
+  quietForMs: number;
+  upstreamActive: boolean;
+}): boolean {
+  if (o.elapsedMs >= (o.compact ? COMPACT_COMMAND_MAX_MS : NATIVE_COMMAND_MAX_MS)) return true;
+  if (o.elapsedMs < NATIVE_COMMAND_MIN_MS || o.quietForMs < NATIVE_COMMAND_QUIET_MS) return false;
+  return !(o.compact && o.upstreamActive);
+}
 const LOST_STOP_RECOVERY_QUIET_MS = 60_000;
 const LOST_STOP_RECOVERY_MIN_MS = 5 * 60_000;
 const LATE_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
@@ -640,6 +935,10 @@ const LATE_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
  */
 const TURN_STALL_TIMEOUT_MS = 15 * 60_000;
 const TURN_STALL_QUIET_MS = 5 * 60_000;
+/** background re-invocation wait (see waitForBackgroundRerun). */
+const BACKGROUND_RERUN_POLL_MS = 250;
+const BACKGROUND_RERUN_SETTLE_MS = 750;
+const BACKGROUND_RERUN_QUIET_MS = 15_000;
 
 /** Stall predicate, split out so it is testable without a live PTY. Both bounds
  *  must hold: a long turn that is still streaming is healthy, and a brief quiet
@@ -647,6 +946,178 @@ const TURN_STALL_QUIET_MS = 5 * 60_000;
 export function shouldSettleStalledTurn(elapsedMs: number, quietMs: number): boolean {
   return elapsedMs >= TURN_STALL_TIMEOUT_MS && quietMs >= TURN_STALL_QUIET_MS;
 }
+
+/**
+ * Earliest transcript time lost-Stop recovery may take assistant text from.
+ * Under the warm-PTY prompt gate that is our own UserPromptSubmit: before it,
+ * transcript text belongs to a turn typed into the terminal, and with
+ * no live UPS at all nothing in the transcript is ours. Exported for tests.
+ */
+export function recoveryFloorMs(
+  gateOnPromptSubmit: boolean,
+  turnStartedAt: number,
+  promptSubmittedAt: number | undefined,
+): number | undefined {
+  return gateOnPromptSubmit ? promptSubmittedAt : turnStartedAt;
+}
+
+/** A turn typed into the terminal is over once the TUI has been silent this
+ *  long with no upstream request in flight, unless a safety prompt is sitting
+ *  at the bottom of the screen. Claude Code redraws its spinner and elapsed
+ *  counter continuously while it works, tools included, so silence already
+ *  means "not working"; the one silent-but-unfinished state is a dialog waiting
+ *  on the operator. This is the backstop for the cases with no closing hook: a
+ *  prompt Claude Code folded into the running turn (one Stop for two prompts),
+ *  and a turn the operator interrupted with Esc (no Stop). Exported for tests. */
+export const TERMINAL_TURN_QUIET_MS = 4_000;
+const TERMINAL_TURN_POLL_MS = 250;
+const TERMINAL_TURN_LOG_EVERY_MS = 5 * 60_000;
+/**
+ * There is deliberately no time limit on the wait (COO decision): a
+ * gateway turn settled with the operator's typed answer is the bug this exists
+ * to prevent. That is safe because the wait is reachable only after the
+ * operator types a turn in the terminal (see isBackgroundReinvocation), it is
+ * shown in the UI (`session:terminal-wait`, `turnProgress.waitingForTerminalTurn`),
+ * and the operator's stop, a new message or "send now" end it at any time.
+ */
+
+/** Claude Code's input box line ("❯ " + draft) — not a "❯ 1. Yes" option. */
+const CLAUDE_INPUT_LINE = /^\s*❯(?!\s*\d+\.)(\s|$)/;
+const PROMPT_QUESTION = /^\s*Do you want to proceed\?\s*$/;
+const PROMPT_OPTION = /^\s*(❯)?\s*\d+\.\s+\S/;
+
+/** Claude Code's Esc Esc Rewind flow (JIN-3 / ). Two screens own the
+ *  composer in turn, and both must be recognised before the gateway sends a CR:
+ *
+ *  1. the rewind list (a point picked with arrows), whose header and footer are
+ *     the menu's own words and whose rewind points are free text; and
+ *  2. the restore-confirm dialog shown after Enter, whose default highlight is
+ *     the destructive "Restore conversation" / "Restore code and conversation".
+ *
+ *  Matching is prefix-anchored because the CLI wraps these labels at narrow
+ *  widths: at 50 columns the description becomes "Restore the code and/or
+ *  conversation to the" / "point before…", and at 30 the stage-2 label wraps to
+ *  "Confirm you want to" / "restore to the point…". Detection is captured and
+ *  verified down to 30 columns, the narrowest width the QA probes cover for both
+ *  stages; below that the labels keep wrapping and the floor is untested.
+ *  Captured on claude 2.1.284; the JIN-3 2.1.283 stage-1 shape is unchanged —
+ *  see jin3-evidence/probes/out-escesc.txt and the QA frames (f30.json/f50.json/f140.json). */
+const REWIND_TITLE = /^\s*Rewind\s*$/;
+const REWIND_DESCRIPTION = /^\s*Restore the code\b/;
+const REWIND_CONFIRM = /^\s*Confirm you want to\b/;
+const REWIND_FOOTER = /^\s*Enter to continue\b/;
+
+/** Index of the last row matching `test` at or after `from`, or -1. */
+function lastMatchingRow(viewport: readonly string[], test: RegExp, from = 0): number {
+  for (let row = viewport.length - 1; row >= from; row -= 1) {
+    if (test.test(viewport[row])) return row;
+  }
+  return -1;
+}
+
+/**
+ * Whether the viewport shows one of Claude Code's safety dialogs LIVE, as
+ * opposed to conversation text that quotes one. A live dialog replaces the
+ * input box, so no input line follows its options; a quoted dialog has the
+ * idle input box below it. Deliberately fails CLOSED: the dialog's footer is
+ * not required, because its wording is only verified on 2.1.220, and a missed
+ * dialog is the dangerous direction — the gateway's paste would end in a CR,
+ * which confirms the highlighted option ("1. Yes") of a prompt the operator
+ * never saw answered. Exported for tests.
+ */
+export function viewportShowsLiveSafetyPrompt(viewport: readonly string[]): boolean {
+  if (parsePermissionPrompt(viewport) === null) return false;
+  let questionRow = -1;
+  for (let row = viewport.length - 1; row >= 0; row -= 1) {
+    if (PROMPT_QUESTION.test(viewport[row])) { questionRow = row; break; }
+  }
+  if (questionRow === -1) return false;
+  let lastOptionRow = questionRow;
+  for (let row = questionRow + 1; row < viewport.length; row += 1) {
+    if (PROMPT_OPTION.test(viewport[row])) lastOptionRow = row;
+    else if (viewport[row].trim() !== "" && lastOptionRow > questionRow) break;
+  }
+  return !viewport.slice(lastOptionRow + 1).some((line) => CLAUDE_INPUT_LINE.test(line));
+}
+
+/**
+ * Stage 1: the rewind list. Its rewind points are free text, so it has no hard
+ * edge of its own — the menu's footer closes the block. Live when no composer
+ * line has come back below that footer (a transcript quoting the menu leaves
+ * the idle composer visible below it).
+ */
+function rewindListIsLive(viewport: readonly string[], titleRow: number): boolean {
+  const descriptionRow = viewport.findIndex((line, row) => row > titleRow && line.trim() !== "");
+  if (descriptionRow === -1 || !REWIND_DESCRIPTION.test(viewport[descriptionRow])) return false;
+  const footerRow = lastMatchingRow(viewport, REWIND_FOOTER, titleRow + 1);
+  if (footerRow === -1) return false;
+  return !viewport.slice(footerRow + 1).some((line) => CLAUDE_INPUT_LINE.test(line));
+}
+
+/**
+ * Stage 2: the restore-confirm dialog. This one is the safety-prompt shape — a
+ * question, then numbered ❯ options — so it uses the same last-option-plus-no-
+ * composer edge, and its default highlight is the destructive option.
+ */
+function rewindConfirmIsLive(viewport: readonly string[], titleRow: number): boolean {
+  let confirmRow = -1;
+  for (let row = viewport.length - 1; row > titleRow; row -= 1) {
+    if (REWIND_CONFIRM.test(viewport[row])) { confirmRow = row; break; }
+  }
+  if (confirmRow === -1) return false;
+  let lastOptionRow = confirmRow;
+  for (let row = confirmRow + 1; row < viewport.length; row += 1) {
+    if (PROMPT_OPTION.test(viewport[row])) lastOptionRow = row;
+    else if (viewport[row].trim() !== "" && lastOptionRow > confirmRow) break;
+  }
+  if (lastOptionRow === confirmRow) return false;
+  return !viewport.slice(lastOptionRow + 1).some((line) => CLAUDE_INPUT_LINE.test(line));
+}
+
+/**
+ * Whether Claude Code's Rewind flow is open on the viewport.
+ *
+ * With either screen up the composer is not accepting input: Claude Code drops
+ * a bracketed paste whole and takes a submit CR as "Enter to continue" (stage 1)
+ * or as the highlighted destructive default (stage 2), confirming the rewind —
+ * and any restore that follows — while the gateway's message is lost (JIN-3,
+ * ). Captured stage-1 shape (2.1.283/2.1.284):
+ *
+ *     Rewind
+ *     Restore the code and/or conversation to the point before…
+ *       <a rewind point>
+ *       No code changes
+ *     ❯ (current)
+ *     Enter to continue · Esc to cancel
+ *
+ * and the stage-2 dialog that Enter opens:
+ *
+ *     Rewind
+ *     Confirm you want to restore to the point before you sent this message:
+ *     │ <the message>
+ *     The conversation will be forked.
+ *     The code will be unchanged.
+ *     ❯ 1. Restore conversation
+ *       2. Summarize from here
+ *       3. Summarize up to here
+ *       4. Never mind
+ *
+ * "Live", as opposed to transcript text that merely quotes a screen, is the
+ * safety-prompt test: no composer line appears below the block. Exported for
+ * tests.
+ */
+export function viewportShowsRewindMenu(viewport: readonly string[]): boolean {
+  const titleRow = lastMatchingRow(viewport, REWIND_TITLE);
+  if (titleRow === -1) return false;
+  return rewindListIsLive(viewport, titleRow) || rewindConfirmIsLive(viewport, titleRow);
+}
+/** Interrupts that come from the operator acting on this message: the stop
+ *  button, a new message, "send now". Landing on a gateway turn still waiting
+ *  behind a turn typed in the terminal, they end the wait and leave the PTY —
+ *  and the operator's turn in it — alone. Every other kill reason (reset,
+ *  delete, fork, engine switch, restart, shutdown, workflow stop) tears the PTY
+ *  down as it always did. */
+const WAIT_ONLY_INTERRUPTS = new Set([USER_STOP_INTERRUPTION_REASON, USER_MESSAGE_INTERRUPTION_REASON]);
 
 /**
  * Whether real work is in flight, and so missing-Stop recovery must hold off.
@@ -706,29 +1177,8 @@ export function isPermissionPromptNotification(h: HookPayload | Record<string, u
     && payload.notification_type === "permission_prompt";
 }
 
-/** Claude Code built-in slash commands that run locally and never produce a new
- *  assistant API turn. Two behaviours, both handled by the native-command path:
- *   - Context mutators (/compact, /clear, /model) end without firing a Stop hook;
- *     the native-command quiet-window timer settles them with an empty result.
- *   - Info/overlay commands (/usage, /limits, /cost, …) DO fire a Stop hook on
- *     dismiss, but its `last_assistant_message` still carries the PREVIOUS turn's
- *     text. Without native classification that stale text was persisted as a new
- *     assistant message — the duplicate-chat-echo bug. native-aware maybeComplete
- *     settles these empty instead.
- *  Only commands that genuinely yield no persistable assistant output belong here:
- *  misclassifying a real-turn command (/init, /review, skill commands) would drop
- *  its answer. */
-const NATIVE_CLAUDE_COMMANDS = new Set([
-  "/compact", "/clear", "/model",
-  "/usage", "/limits", "/cost", "/status", "/config", "/help", "/doctor",
-  "/release-notes", "/vim", "/terminal-setup", "/mcp", "/agents", "/permissions",
-  "/hooks", "/memory", "/export", "/login", "/logout", "/bug", "/resume",
-]);
-
-export function isNativeClaudeCommand(prompt: string): boolean {
-  const first = prompt.trim().split(/\s+/, 1)[0]?.toLowerCase();
-  return first !== undefined && NATIVE_CLAUDE_COMMANDS.has(first);
-}
+/** Moved to shared/skill-commands.ts so the turn preflight can ask it too; re-exported for callers here. */
+export { isNativeClaudeCommand };
 
 /** Per-session bookkeeping for the turn currently in flight. Everything here is
  *  in-memory and lives exactly as long as run() is pending, which is also exactly
@@ -757,6 +1207,20 @@ interface ActiveTurn {
   lastHookAt: number;
   /** Set once the CLI acknowledges the prompt. False forever = swallowed submit. */
   promptSubmitted: boolean;
+  /** Warm-PTY turn under the UserPromptSubmit gate (see TurnResolverOpts). */
+  gated?: boolean;
+  /** Claude-native command: fires no UserPromptSubmit of its own. */
+  native?: boolean;
+  /** UserPromptSubmit hooks seen live while this turn ran. The first one of a
+   *  non-native turn is its own (argv and pasted prompts both fire one —
+   *  verified on 2.1.283); any other is somebody typing in the terminal. */
+  promptSubmitsSeen?: number;
+  /** Someone typed a prompt into the terminal while this turn ran. Claude Code
+   *  queues it behind this turn (or folds it in), so after this turn settles a
+   *  terminal turn may be starting. */
+  terminalPromptQueued?: boolean;
+  /** The paste is held behind a background re-invocation. */
+  holdingPaste?: boolean;
   /** Stops the submit-confirmation retry loop; called when the turn settles. */
   cancelSubmitConfirm?: () => void;
 }
@@ -772,14 +1236,24 @@ export interface SubmitConfirmation {
    *
    *  Both the retry and the give-up must pause on this. Claude Code QUEUES a
    *  pasted prompt behind a turn already running (a human typing in the CLI/xterm
-   *  view, say) and fires no UserPromptSubmit until it dequeues. Without this
-   *  gate, a queued-but-perfectly-alive prompt looks identical to a swallowed CR:
-   *  we would spray CRs at a busy TUI and then report a healthy turn as lost. */
+   *  view, say). On 2.1.283 a queued prompt's UserPromptSubmit fires at once, but
+   *  a busy TUI can also drop the CR, and while work is in flight the two are
+   *  hard to tell apart: without this gate we would spray CRs at a busy TUI and
+   *  then report a healthy turn as lost. */
   busy?: () => boolean;
+  /** Consulted immediately before the first CR and before every re-sent one.
+   *  Return true to write that CR nowhere and hand off to `onUnconfirmed`: the
+   *  screen is in a state where a CR confirms something other than the prompt —
+   *  Claude Code's Esc Esc Rewind menu, which takes Enter as "confirm rewind"
+   *. Async because the reader takes the PTY snapshot's write queue,
+   *  and it may open in the 150ms after the paste or between retries, so it has
+   *  to be re-read each time. Omitted where no screen can claim the composer. */
+  abortSubmit?: () => Promise<boolean>;
   /** Called before each re-sent CR. */
   onRetry?: (attempt: number) => void;
   /** Called when the retries are exhausted and the prompt is still unacknowledged.
-   *  Reporting only — settling the turn is shouldSettleStalledTurn's job. */
+   *  Never settles the turn (that verdict is shouldSettleStalledTurn's): run()
+   *  uses it to redeliver the prompt by respawning (JIN-3). */
   onUnconfirmed?: (attempts: number) => void;
   /** Test overrides. */
   intervalMs?: number;
@@ -842,41 +1316,93 @@ export function pasteAndSubmit(
   const payload = neutralizeForPaste(text);
   proc.write(`\x1b[200~${payload}\x1b[201~`);
   let retryTimer: NodeJS.Timeout | undefined;
-  const submitTimer = setTimeout(() => {
-    proc.write("\r");
-    if (!confirm) return;
+  let cancelled = false;
+  const stopRetries = () => {
+    if (retryTimer) clearInterval(retryTimer);
+    retryTimer = undefined;
+  };
+  const startRetries = () => {
+    if (!confirm || cancelled) return;
     const maxAttempts = confirm.attempts ?? SUBMIT_CONFIRM_ATTEMPTS;
+    const intervalMs = confirm.intervalMs ?? SUBMIT_CONFIRM_INTERVAL_MS;
     let attempt = 0;
-    retryTimer = setInterval(() => {
-      if (confirm.submitted()) {
-        if (retryTimer) clearInterval(retryTimer);
-        retryTimer = undefined;
-        return;
-      }
+    const sendCr = () => {
+      if (cancelled) return;
+      attempt += 1;
+      confirm.onRetry?.(attempt);
+      proc.write("\r");
+    };
+    const tick = () => {
+      if (cancelled) return;
+      if (confirm.submitted()) { stopRetries(); return; }
       // Real work in flight: the prompt is queued, not lost. Hold the loop open
       // without spending an attempt — neither retrying nor reporting is correct
       // while the CLI is demonstrably busy.
       if (confirm.busy?.()) return;
-      if (attempt >= maxAttempts) {
-        if (retryTimer) clearInterval(retryTimer);
-        retryTimer = undefined;
-        confirm.onUnconfirmed?.(attempt);
-        return;
-      }
-      attempt += 1;
-      confirm.onRetry?.(attempt);
-      proc.write("\r");
-    }, confirm.intervalMs ?? SUBMIT_CONFIRM_INTERVAL_MS);
+      if (attempt >= maxAttempts) { stopRetries(); confirm.onUnconfirmed?.(attempt); return; }
+      if (!confirm.abortSubmit) { sendCr(); return; }
+      // Reading the screen is async, and the interval must not fire a CR while
+      // the read is in flight (that CR is the thing being guarded against). Stop
+      // the fixed cadence, check, then resume it. A skipped tick is harmless:
+      // the loop is already inside its generous retry window.
+      stopRetries();
+      const resume = () => {
+        if (cancelled) return;
+        retryTimer = setInterval(tick, intervalMs);
+        retryTimer.unref?.();
+      };
+      void confirm.abortSubmit().then((blocked) => {
+        if (cancelled) return;
+        if (blocked) { stopRetries(); confirm.onUnconfirmed?.(attempt); return; }
+        // State can move during the read: a UserPromptSubmit that lands now
+        // means the prompt is already in, and `busy` means real work is in
+        // flight. Sending the CR either way types into a composer that may hold
+        // the operator's own text, so re-check before writing.
+        if (confirm.submitted()) { stopRetries(); return; }
+        if (confirm.busy?.()) { resume(); return; }
+        sendCr();
+        resume();
+      }).catch(() => {
+        // The probe fails open itself (screenMatches swallows a read error), so
+        // this is a contract backstop, not a second policy. Fall back to the
+        // normal path rather than respawning on a screen we did not misread.
+        if (cancelled) return;
+        sendCr();
+        resume();
+      });
+    };
+    retryTimer = setInterval(tick, intervalMs);
     retryTimer.unref?.();
+  };
+  const submitTimer = setTimeout(() => {
+    if (cancelled) return;
+    // Re-check between the paste and the first CR: the menu can open in this
+    // 150ms beat, and a CR at it confirms the rewind instead of the message.
+    if (!confirm?.abortSubmit) {
+      proc.write("\r");
+      startRetries();
+      return;
+    }
+    void confirm.abortSubmit().then((blocked) => {
+      if (cancelled) return;
+      if (blocked) { confirm.onUnconfirmed?.(0); return; }
+      proc.write("\r");
+      startRetries();
+    }).catch(() => {
+      // Same contract backstop as the retry tick: fail open, normal path.
+      if (cancelled) return;
+      proc.write("\r");
+      startRetries();
+    });
   }, 150);
   // Cancellation is not optional: a turn that settles for any other reason (user
   // interrupt, PTY death, engine switch) must stop this loop, or it would keep
   // writing CRs into a PTY that now belongs to a DIFFERENT turn — submitting
   // whatever that turn's composer happens to hold.
   return () => {
+    cancelled = true;
     clearTimeout(submitTimer);
-    if (retryTimer) clearInterval(retryTimer);
-    retryTimer = undefined;
+    stopRetries();
   };
 }
 
@@ -902,6 +1428,19 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  release (its job is to size the NEXT spawn); growth is bounded by setCapped. */
   private lastGeom = new Map<string, { cols: number; rows: number }>();
   private lastOutputAt = new Map<string, number>();
+  /** sessions where Claude Code is running a background re-invocation
+   *  that started while no gateway turn owned the session. Opened by its
+   *  `<task-notification>` UserPromptSubmit, closed by the next Stop/StopFailure.
+   *  While a turn runs, its resolver tracks this instead. */
+  private backgroundReruns = new Set<string>();
+  /** sessions with a turn typed into the terminal in progress, keyed to
+   *  when it was seen starting. Opened by a UserPromptSubmit no gateway turn
+   *  owns, closed by its Stop/StopFailure or by TERMINAL_TURN_QUIET_MS silence. */
+  private terminalTurns = new Map<string, number>();
+  /** Gateway turns waiting for a terminal turn to finish; calling it aborts. */
+  private terminalWaits = new Map<string, (reason: string) => void>();
+  private terminalWaitStartedAt = new Map<string, number>();
+  private terminalWaitCb?: (sessionId: string, waiting: boolean) => void;
   /** Model/effort the live PTY was spawned with, per session. `--model`/`--effort`
    *  apply only at spawn, so a mid-chat switch must cold-respawn rather than reuse
    *  the warm PTY (which would keep running the old model). */
@@ -926,19 +1465,37 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  rather than hanging, which is the other half of this fix. */
   private autoApproveSafetyPrompts: boolean;
 
+  /** Live readers rather than captured values: config.yaml hot-reloads, and a
+   *  remote block edited while the daemon runs must take effect on the next
+   *  spawn rather than at the next restart. */
+  private readRemoteConfig: () => RemoteExecutionConfig | undefined;
+  private readGatewayPort: () => number;
+
   constructor(
     private lifecycle: PtyLifecycleManager,
     private hookRegistry: HookRegistry,
-    opts: { autoApproveSafetyPrompts?: boolean } = {},
+    opts: {
+      autoApproveSafetyPrompts?: boolean;
+      remote?: () => RemoteExecutionConfig | undefined;
+      gatewayPort?: () => number;
+    } = {},
   ) {
     this.autoApproveSafetyPrompts = opts.autoApproveSafetyPrompts ?? true;
+    this.readRemoteConfig = opts.remote ?? (() => undefined);
+    this.readGatewayPort = opts.gatewayPort ?? (() => 0);
     this.streams = new PtyStreamManager("PTY", (id) => this.lifecycle.getWarm(id) !== undefined);
     // Purge per-PTY bookkeeping whenever the session's PTY is released (kill,
     // LRU eviction, sweep reap, cold respawn) so these maps don't grow forever
     // in a long-running daemon. Both are meaningful only while a PTY is live and
     // are repopulated on the next spawn. lastGeom is NOT purged here — see above.
+    // Every hook, claimed or not: notices turns typed into the terminal and
+    // background re-invocations.
+    this.hookRegistry.tap?.((id, h) => this.observeHook(id, h));
+    this.hookRegistry.tap?.((id, h) => this.observeBackgroundRerun(id, h));
     this.lifecycle.onRelease((id) => {
       this.lastOutputAt.delete(id);
+      this.terminalTurns.delete(id);
+      this.backgroundReruns.delete(id);
       this.spawnParams.delete(id);
       // The PTY (and its SSE proxy) died — any in-flight counts are moot.
       this.clearBackground(id);
@@ -1078,18 +1635,33 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     }
     if (!taskId) return;
 
-    let monitors = this.backgroundMonitors.get(jinnSessionId);
-    if (add) {
-      monitors ??= new Set<string>();
-      const previousSize = monitors.size;
-      monitors.add(taskId);
-      if (monitors.size === previousSize) return;
-      this.backgroundMonitors.set(jinnSessionId, monitors);
-    } else {
-      if (!monitors?.delete(taskId)) return;
-      if (monitors.size === 0) this.backgroundMonitors.delete(jinnSessionId);
+    if (!add) {
+      this.dropBackgroundMonitors(jinnSessionId, [taskId]);
+      return;
     }
+    const monitors = this.backgroundMonitors.get(jinnSessionId) ?? new Set<string>();
+    const previousSize = monitors.size;
+    monitors.add(taskId);
+    if (monitors.size === previousSize) return;
+    this.backgroundMonitors.set(jinnSessionId, monitors);
+    this.publishMonitorCount(jinnSessionId);
+  }
 
+  /** Forget background tasks that ended — stopped with TaskStop, or finished on
+   *  their own and announced by a task-notification. Unknown ids are ignored:
+   *  the notification also covers agents and Monitors, which are not counted here. */
+  private dropBackgroundMonitors(jinnSessionId: string, taskIds: string[]): void {
+    const monitors = this.backgroundMonitors.get(jinnSessionId);
+    if (!monitors) return;
+    let dropped = false;
+    for (const taskId of taskIds) dropped = monitors.delete(taskId) || dropped;
+    if (!dropped) return;
+    if (monitors.size === 0) this.backgroundMonitors.delete(jinnSessionId);
+    this.publishMonitorCount(jinnSessionId);
+  }
+
+  private publishMonitorCount(jinnSessionId: string): void {
+    const monitors = this.backgroundMonitors.get(jinnSessionId);
     let state = this.bgActivity.get(jinnSessionId);
     const info: UpstreamActivityInfo = {
       activeStreams: state?.info.activeStreams ?? 0,
@@ -1167,14 +1739,337 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     return (this.bgActivity.get(jinnSessionId)?.info.activeStreams ?? 0) > 0;
   }
 
+  /** Track background re-invocations while no gateway turn owns the session
+   *. A running turn's resolver does this for itself. */
+  private observeBackgroundRerun(jinnSessionId: string, h: HookPayload): void {
+    if (this.active.has(jinnSessionId)) return;
+    // A notification folded into a typed turn is taken for a re-run too: a
+    // typed prompt that is only queued also counts as "open" (its
+    // UserPromptSubmit fires at once), so being open does not show it is the
+    // one running. The cost is that turn's Stop being read as the re-run's,
+    // and the next gateway turn waiting out the quiet backstop (F6).
+    if (isBackgroundReinvocation(h)) this.backgroundReruns.add(jinnSessionId);
+    else if (endsTurn(h)) this.backgroundReruns.delete(jinnSessionId);
+  }
+
+  /**
+   * Hold a warm-PTY turn's paste behind a background re-invocation, then
+   * behind any turn the operator typed into the terminal meanwhile (observeHook
+   * tracks those while the paste is held); either can start while the other is
+   * waited out. Stop, a new message or "send now" during
+   * the typed-turn wait end only that wait (see kill()).
+   */
+  private async holdPaste(jinnSessionId: string, handle: PtyHandle, entry: ActiveTurn): Promise<void> {
+    const { resolver } = entry;
+    entry.holdingPaste = true;
+    try {
+      while (!resolver.isSettled) {
+        if (resolver.awaitingBackgroundRerun) {
+          await this.waitForBackgroundRerun(jinnSessionId, handle, entry);
+          continue;
+        }
+        if (!this.terminalTurns.has(jinnSessionId)) return;
+        const waitAbort = await this.waitForTerminalTurn(jinnSessionId, resolver);
+        if (waitAbort !== undefined && !resolver.isSettled) {
+          resolver.interrupt(waitAbort.startsWith("Interrupted") ? waitAbort : `Interrupted: ${waitAbort}`);
+        }
+      }
+    } finally {
+      entry.holdingPaste = false;
+    }
+  }
+
+  /**
+   * Hold a warm-PTY turn's paste until the background re-invocation running
+   * ahead of it has finished. A prompt pasted into a re-run is queued
+   * behind it, or folded into it at the next tool boundary; folded, it gets no
+   * reply of its own, only the re-run's. The resolver attributes the re-run's
+   * Stop either way; waiting is what keeps the prompt a turn of its own.
+   *
+   * Ends when the re-run's Stop has arrived and BACKGROUND_RERUN_SETTLE_MS have
+   * passed without another starting (Claude Code dequeues a further
+   * notification tens of ms after a Stop), when the turn settles (an
+   * interrupt), when the PTY is gone, or, if the Stop was lost, once Claude
+   * Code has been quiet for BACKGROUND_RERUN_QUIET_MS with nothing in flight.
+   * A re-run that goes silent mid-work (a tool left running, a dialog) meets
+   * the same stall verdict a running turn would.
+   */
+  private waitForBackgroundRerun(jinnSessionId: string, handle: PtyHandle, entry: ActiveTurn): Promise<void> {
+    const { resolver } = entry;
+    logger.info(`InteractiveClaudeEngine: ${jinnSessionId} is running a background re-invocation — holding the gateway turn's prompt until it finishes`);
+    const startedAt = Date.now();
+    return new Promise((resolve) => {
+      const timer = setInterval(() => {
+        const now = Date.now();
+        if (resolver.isSettled || this.lifecycle.getWarm(jinnSessionId) !== handle) return done();
+        if (!resolver.awaitingBackgroundRerun) {
+          if (now - (resolver.backgroundRerunEndedAt ?? 0) >= BACKGROUND_RERUN_SETTLE_MS) done();
+          return;
+        }
+        const quietFor = now - Math.max(startedAt, entry.lastHookAt, this.lastOutputAt.get(jinnSessionId) ?? 0);
+        if (quietFor >= BACKGROUND_RERUN_QUIET_MS && entry.activeTools === 0 && !this.hasActiveUpstream(jinnSessionId)) {
+          logger.warn(`InteractiveClaudeEngine: background re-invocation for ${jinnSessionId} went quiet without a Stop — taking it as finished`);
+          resolver.abandonBackgroundRerun();
+          return done();
+        }
+        if (shouldSettleStalledTurn(now - startedAt, quietFor)) {
+          resolver.interrupt("Turn stalled: a background re-invocation the prompt was waiting behind never finished");
+          return done();
+        }
+      }, BACKGROUND_RERUN_POLL_MS);
+      timer.unref?.();
+      // An interrupt ends the wait at once, not on the next poll.
+      void resolver.promise.then(done);
+      function done() {
+        clearInterval(timer);
+        resolve();
+      }
+    });
+  }
+
+  /**
+   * Deliver a pasted prompt that the warm PTY never took, by respawning the
+   * session with it in argv (JIN-3).
+   *
+   * This is the cold path run() already takes when a warm PTY cannot serve a
+   * turn (a model switch, a PTY born without the persona): `--resume` keeps the
+   * conversation, and a prompt in argv is submitted by construction, whatever
+   * state the old TUI was left in. It is also what an operator's resend did —
+   * interrupting the stuck turn got the message through.
+   *
+   * Only for a prompt that provably never arrived: no UserPromptSubmit of ours,
+   * and, where the transcript is on this machine, no copy of the prompt in it
+   * since the paste. A prompt that did arrive with its hook lost would otherwise
+   * run twice. A turn stopped while this runs spawns and stages nothing.
+   */
+  private async redeliverByRespawn(
+    jinnSessionId: string,
+    entry: ActiveTurn,
+    opts: EngineRunOpts,
+    pastedAt: number,
+    registerTurnHooks: () => void,
+  ): Promise<void> {
+    const { resolver } = entry;
+    if (resolver.isSettled || resolver.promptSubmittedAt !== undefined) return;
+    if (!isRemoteTarget(opts)) {
+      const sid = resolver.sessionId ?? opts.resumeSessionId;
+      const transcript = sid ? findTranscriptForSession(sid) : undefined;
+      if (transcript && transcriptHasPromptSince(transcript, pastedAt, opts.prompt)) {
+        logger.warn(`InteractiveClaudeEngine: ${jinnSessionId}'s transcript has the prompt though no hook said so — not respawning, which would run it twice. Leaving the turn to the stall backstop.`);
+        return;
+      }
+    }
+    // A remote transcript is on the other host, so there the hook is the only
+    // evidence: a remote prompt whose UserPromptSubmit hook was lost in transit
+    // would run twice. Accepted — a lost hook already breaks that turn's Stop.
+
+    // Unbind first: the old PTY's exit must not interrupt the turn the new one
+    // is about to serve (wireProcToStream's identity guard, and the watchdog).
+    entry.boundProc = undefined;
+    // Its cleanup deletes the settings and MCP files and drops the turn's hook
+    // registration; all three are restored below before anything can fire.
+    this.lifecycle.releaseSession(jinnSessionId);
+    registerTurnHooks();
+
+    let handle: PtyHandle | undefined;
+    try {
+      const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
+        sessionId: jinnSessionId,
+        relayScript: HOOK_RELAY_SCRIPT,
+        statusLineDir: CLAUDE_LIMITS_DIR,
+      });
+      if (opts.resolvedMcp && !isRemoteTarget(opts)) {
+        opts.mcpConfigPath = writeMcpConfigFile(opts.resolvedMcp, jinnSessionId);
+      }
+      // Stopped while this ran: spawn nothing — above all, stage nothing on a
+      // remote host, where staging repoints the session's hook relay at a
+      // tunnel only this spawn would open (see prepareRemote). The lifecycle
+      // may already hold the next turn's PTY.
+      handle = await this.spawn(jinnSessionId, opts, settingsPath, () => resolver.isSettled);
+    } catch (err) {
+      // Not "Interrupted:" — that reads as a quiet stop downstream, and an
+      // undelivered message has to surface.
+      resolver.interrupt(`Prompt not delivered: Claude Code did not take it, and respawning failed (${err instanceof Error ? err.message : String(err)})`);
+      return;
+    }
+    if (!handle) return;
+    if (resolver.isSettled) {
+      // Settled between the spawn and here. Kill only our own PTY.
+      handle.kill("SIGTERM");
+      return;
+    }
+    this.lifecycle.adopt(jinnSessionId, handle, { turnRunning: true });
+    this.lifecycle.turnStarted(jinnSessionId);
+    entry.boundProc = (handle as any)._proc as pty.IPty | undefined;
+    entry.promptSubmitted = true;
+  }
+
+  /** Track turns typed into the terminal from the hook stream. */
+  private observeHook(jinnSessionId: string, h: HookPayload): void {
+    if (isBackgroundReinvocation(h)) return;
+    const event = h.hook_event_name;
+    const entry = this.active.get(jinnSessionId);
+    // No gateway turn, or one whose paste is still held: a prompt
+    // submitted now was typed into the terminal.
+    if (!entry || entry.holdingPaste) {
+      if (event === "UserPromptSubmit") this.terminalTurns.set(jinnSessionId, Date.now());
+      else if (event === "Stop" || event === "StopFailure") {
+        // A background re-run's Stop ends the re-run, not a typed turn queued
+        // behind it. Taps run before the turn's listener, so both checks still
+        // see the re-run as open when its own Stop arrives.
+        const rerunOpen = entry ? entry.resolver.awaitingBackgroundRerun : this.backgroundReruns.has(jinnSessionId);
+        if (!rerunOpen) this.terminalTurns.delete(jinnSessionId);
+      }
+      return;
+    }
+    // A gateway turn owns the session: every UserPromptSubmit beyond its own is
+    // somebody typing in the terminal — cold spawn, warm paste or native
+    // command alike.
+    if (event === "UserPromptSubmit") {
+      entry.promptSubmitsSeen = (entry.promptSubmitsSeen ?? 0) + 1;
+      if (entry.promptSubmitsSeen > (entry.native ? 0 : 1)) entry.terminalPromptQueued = true;
+    }
+  }
+
+  /** True while one of Claude Code's safety prompts sits at the bottom of the
+   *  screen waiting on the operator: silent, but the turn is not over — and it
+   *  is not the gateway's to answer or paste into. Conversation text that
+   *  merely quotes a dialog does not count (viewportShowsLiveSafetyPrompt). */
+  private async screenShowsSafetyPrompt(jinnSessionId: string): Promise<boolean> {
+    return this.screenMatches(jinnSessionId, viewportShowsLiveSafetyPrompt);
+  }
+
+  /** True while Claude Code's Esc Esc Rewind flow owns the screen — either the
+   *  rewind list or the restore-confirm dialog Enter opens. The gateway must not
+   *  paste into it, or a CR would confirm the rewind (*  viewportShowsRewindMenu). */
+  private async screenShowsRewindMenu(jinnSessionId: string): Promise<boolean> {
+    return this.screenMatches(jinnSessionId, viewportShowsRewindMenu);
+  }
+
+  /** Read the session's visible rows and run a dialog detector over them. Fails
+   *  OPEN: false when there is no snapshot or the read throws, so the caller's
+   *  normal path runs. That is deliberate for the Rewind guard too — a warm turn
+   *  with no snapshot must still send its prompt; the cost of a missed menu is
+   *  carried by the pre-paste and per-CR re-checks, not by respawning every
+   *  snapshotless turn. */
+  private async screenMatches(
+    jinnSessionId: string,
+    detect: (viewport: readonly string[]) => boolean,
+  ): Promise<boolean> {
+    try {
+      const viewport = await this.streams.viewport(jinnSessionId);
+      return viewport ? detect(viewport) : false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Hold a gateway turn until a turn typed into the terminal has finished.
+   *
+   * Claude Code queues a prompt pasted while a turn runs, and fires that
+   * prompt's UserPromptSubmit at once rather than when it runs (verified on
+   * 2.1.283). So once pasted, nothing in the hook stream says which Stop is
+   * whose: the gateway turn would record the operator's answer as its reply. At
+   * a tool boundary Claude Code instead folds the queued prompt into the running
+   * turn, merging two turns into one. Waiting until the terminal turn is over
+   * avoids both, and keeps the operator's turn separate so the external-turn
+   * sync records it. Returns an abort reason if the turn was interrupted.
+   */
+  private waitForTerminalTurn(jinnSessionId: string, resolver?: TurnResolver): Promise<string | undefined> {
+    if (!this.terminalTurns.has(jinnSessionId)) return Promise.resolve(undefined);
+    logger.info(`InteractiveClaudeEngine: ${jinnSessionId} has a turn typed in the terminal in progress — holding the gateway turn until it finishes`);
+    const startedAt = Date.now();
+    let nextLogAt = startedAt + TERMINAL_TURN_LOG_EVERY_MS;
+    let checking = false;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (reason?: string) => {
+        if (done) return;
+        done = true;
+        clearInterval(timer);
+        this.terminalWaits.delete(jinnSessionId);
+        this.terminalWaitStartedAt.delete(jinnSessionId);
+        this.terminalWaitCb?.(jinnSessionId, false);
+        resolve(reason);
+      };
+      const timer = setInterval(() => {
+        if (done || checking) return;
+        const openedAt = this.terminalTurns.get(jinnSessionId);
+        if (openedAt === undefined) return finish();
+        if (!this.lifecycle.getWarm(jinnSessionId)) {
+          this.terminalTurns.delete(jinnSessionId);
+          return finish();
+        }
+        const now = Date.now();
+        if (now >= nextLogAt) {
+          nextLogAt = now + TERMINAL_TURN_LOG_EVERY_MS;
+          logger.info(`InteractiveClaudeEngine: ${jinnSessionId} still waiting for the terminal turn (${Math.round((now - startedAt) / 60_000)}m)`);
+        }
+        const lastSign = Math.max(openedAt, this.lastOutputAt.get(jinnSessionId) ?? 0);
+        if (now - lastSign < TERMINAL_TURN_QUIET_MS) return;
+        if (this.hasActiveUpstream(jinnSessionId)) return;
+        // Silent and no request in flight: confirm on screen before calling it over.
+        checking = true;
+        void this.screenShowsSafetyPrompt(jinnSessionId).then((working) => {
+          checking = false;
+          if (done || working) return;
+          if (this.terminalTurns.get(jinnSessionId) !== openedAt) return; // a new turn started meanwhile
+          this.terminalTurns.delete(jinnSessionId);
+          finish();
+        });
+      }, TERMINAL_TURN_POLL_MS);
+      timer.unref?.();
+      this.terminalWaits.set(jinnSessionId, (reason) => finish(reason));
+      this.terminalWaitStartedAt.set(jinnSessionId, startedAt);
+      this.terminalWaitCb?.(jinnSessionId, true);
+      // A registered turn held behind the terminal turn can also be
+      // settled from elsewhere (a teardown, the PTY dying).
+      void resolver?.promise.then(() => finish());
+    });
+  }
+
   async run(opts: EngineRunOpts): Promise<EngineResult> {
     const jinnSessionId = opts.sessionId;
     if (!jinnSessionId) throw new Error("InteractiveClaudeEngine.run requires opts.sessionId");
+
+    // Guard: refuse a second concurrent turn for the same session (one still
+    // waiting behind a terminal turn counts).
+    if (this.active.has(jinnSessionId) || this.terminalWaits.has(jinnSessionId)) {
+      return { sessionId: opts.resumeSessionId ?? "", result: "", error: "Interactive engine: a turn is already running for this session" };
+    }
+
+    // Before anything that could touch the PTY — including the cold respawn
+    // below, which would kill the operator's turn outright. Awaited only when
+    // there is something to wait for, so a session nobody typed into runs
+    // exactly as before, without even a microtask of delay.
+    if (this.terminalTurns.has(jinnSessionId)) {
+      const waitAbort = await this.waitForTerminalTurn(jinnSessionId);
+      if (waitAbort !== undefined) {
+        // An interrupt keeps its "Interrupted…" reason; the wait's own timeout
+        // is a real, visible error.
+        const error = waitAbort.startsWith("Interrupted") ? waitAbort : `Interrupted: ${waitAbort}`;
+        return { sessionId: opts.resumeSessionId ?? "", result: "", error };
+      }
+    }
     const turnStartedAt = Date.now();
 
-    // Guard: refuse a second concurrent turn for the same session.
     if (this.active.has(jinnSessionId)) {
       return { sessionId: opts.resumeSessionId ?? "", result: "", error: "Interactive engine: a turn is already running for this session" };
+    }
+
+    // Attachments are gateway-local file paths (buildAttachmentSuffix), so they
+    // name nothing on another host. Refused HERE rather than in spawnRemote,
+    // because only the COLD path goes through spawn(): a remote session with a
+    // warm ssh PTY takes injectPrompt instead, which appends the same suffix
+    // unconditionally and would paste gateway paths into a session running
+    // elsewhere — the exact thing the guard exists to stop.
+    if (isRemoteTarget(opts) && opts.attachments?.length) {
+      return {
+        sessionId: opts.resumeSessionId ?? "",
+        result: "",
+        error: "Attachments are not supported for remote employees — the file paths are local to the gateway",
+      };
     }
 
     // A previous turn may have left a late-recovery listener armed; this new
@@ -1221,15 +2116,36 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     });
     // A cold-respawn release cleans the per-session MCP file. Materialize the
     // already-resolved config again at the boundary where Claude will read it.
-    if (!warm && opts.resolvedMcp) {
+    // A remote session gets its MCP config staged on the other host instead
+    // (remapped for that install's node and entrypoints), so materializing the
+    // gateway-local file here would only write a config naming paths the remote
+    // claude cannot open — and it would carry any MCP server API keys with it.
+    if (!warm && opts.resolvedMcp && !isRemoteTarget(opts)) {
       opts.mcpConfigPath = writeMcpConfigFile(opts.resolvedMcp, jinnSessionId);
     }
     const nativeCommand = isNativeClaudeCommand(opts.prompt);
+    const compactCommand = nativeCommand && isCompactCommand(opts.prompt);
+    // A warm PTY is one the operator may be typing into: our pasted
+    // prompt can queue behind a turn of theirs. Native commands fire no
+    // UserPromptSubmit, and a cold spawn carries the prompt in argv into a
+    // process nobody has touched, so neither needs the gate.
+    const gateOnPromptSubmit = !!warm && !nativeCommand;
+    // A background re-invocation Claude Code started on its own is running in
+    // this PTY: its Stop is not ours. The resolver tracks it from here.
+    const backgroundRerunInProgress = !!warm && this.backgroundReruns.has(jinnSessionId);
+    this.backgroundReruns.delete(jinnSessionId);
     const resolver = new TurnResolver({
       fallbackSessionId: opts.resumeSessionId,
       assumeStarted: !!warm, // warm PTY = SessionStart already fired (turn 1 or idle spawn)
       native: nativeCommand,
       shouldDeferStopFailure: () => this.hasActiveUpstream(jinnSessionId),
+      requireLivePromptSubmit: gateOnPromptSubmit,
+      backgroundRerunInProgress,
+      ownPromptAfterPaste: !!warm,
+      onForeignStop: (h) => {
+        logger.info(`InteractiveClaudeEngine: Stop for ${jinnSessionId} belongs to a turn the gateway turn does not own (typed in the terminal, or a background re-invocation) — syncing it as an external turn`);
+        this.hookRegistry.consumeAsUnclaimed?.(jinnSessionId, h);
+      },
     });
     const entry: ActiveTurn = {
       resolver,
@@ -1237,6 +2153,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       activeTools: 0,
       startedAt: turnStartedAt,
       lastHookAt: turnStartedAt,
+      gated: gateOnPromptSubmit,
+      native: nativeCommand,
       // Only the warm-PTY paste has to earn this flag. The cold-spawn path carries
       // the prompt in argv, so it is submitted by construction; native commands are
       // exempt because no acknowledgement is expected for them (see injectPrompt
@@ -1244,23 +2162,48 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       promptSubmitted: !warm || nativeCommand,
     };
     let turnMarkedStarted = false;
+    // Transcript text before this is not this turn's: it moves past a wait for
+    // a background re-invocation.
+    let promptWrittenAt = turnStartedAt;
     let watchdog: NodeJS.Timeout | undefined;
     let nativeCommandTimer: NodeJS.Timeout | undefined;
+    /** The PostCompact that ended a `/compact` turn: proof it compacted. */
+    let compactedBy: HookPayload | undefined;
     let lostStopRecoveryTimer: NodeJS.Timeout | undefined;
 
     let result!: EngineResult;
     this.active.set(jinnSessionId, entry);
     try {
       // Register BEFORE spawning so a fast SessionStart is buffered+drained, not lost.
-      this.hookRegistry.register(jinnSessionId, (h) => {
-        resolver.onHook(h);
+      // register() drains the buffer synchronously, so everything delivered
+      // while `replaying` is true predates this turn.
+      let replaying = true;
+      const onTurnHook = (h: HookPayload) => {
+        // A foreign hook belongs to a background re-invocation: it
+        // must not acknowledge, stream into or settle this turn.
+        const foreign = resolver.onHook(h, { replayed: replaying }) === "foreign";
+        // `/compact` is done when Claude Code says so. A replayed PostCompact
+        // predates this turn, and an auto-compaction is not the one asked for.
+        if (compactCommand && !replaying && h.hook_event_name === "PostCompact" && h.trigger !== "auto") {
+          compactedBy = h;
+          resolver.completeNativeCommand();
+        }
         this.handleBackgroundMonitorHook(jinnSessionId, h);
         entry.lastHookAt = Date.now();
         // Submit acknowledgement. UserPromptSubmit is the direct signal; the in-turn
         // hooks are accepted too because none of them can fire before a prompt is
         // running. SessionStart is deliberately NOT accepted — it can arrive from the
         // idle spawn that preceded this turn and would falsely confirm the submit.
-        if (SUBMIT_ACK_HOOKS.has(h.hook_event_name)) {
+        // Under the warm-PTY gate only our own live UserPromptSubmit counts: a
+        // turn typed in the terminal fires the in-turn hooks too, and taking
+        // those as our acknowledgement would stop the CR retries for a prompt
+        // that is still sitting in the composer.
+        // While the paste is held nothing is ours yet: whatever runs is a
+        // background re-run or a turn typed into the terminal.
+        const held = entry.holdingPaste === true;
+        if (!foreign && !held && (gateOnPromptSubmit
+          ? h.hook_event_name === "UserPromptSubmit" && !replaying
+          : SUBMIT_ACK_HOOKS.has(h.hook_event_name))) {
           entry.promptSubmitted = true;
         }
         // tool_use markers + intermediate text stream from the per-PTY SSE proxy
@@ -1274,13 +2217,31 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // The tool ran, so whatever prompt was gating it is gone — whether we
           // answered it or a human did in the CLI/xterm view.
           entry.blockedOnPermissionAt = undefined;
-          for (const delta of claudeHookToDeltas(h as Record<string, unknown>)) opts.onStream?.(delta);
+          if (!foreign && !held) for (const delta of claudeHookToDeltas(h as Record<string, unknown>)) opts.onStream?.(delta);
         }
-        if (isPermissionPromptNotification(h)) {
+        // Only a prompt of this turn's own. A replayed one predates the turn,
+        // and before our UserPromptSubmit a gated turn's prompts belong to
+        // whoever typed in the terminal — the operator answers those.
+        // A background re-invocation's prompts have nobody at the terminal to
+        // answer them: while one runs ahead of this turn, answer them.
+        // While the paste is held, only a background re-run's: a typed turn's
+        // prompts are the operator's to answer. With a typed turn open, a
+        // notification folded into it looks exactly like a re-run ahead, so
+        // leave the dialog to the operator — they are at the terminal.
+        if (isPermissionPromptNotification(h) && !replaying
+          && (held
+            ? resolver.awaitingBackgroundRerun && !this.terminalTurns.has(jinnSessionId)
+            : !gateOnPromptSubmit || resolver.promptSubmittedAt !== undefined || resolver.awaitingBackgroundRerun)) {
           entry.blockedOnPermissionAt = Date.now();
           void this.answerPermissionPrompt(jinnSessionId, entry);
         }
-      });
+      };
+      const registerTurnHooks = () => {
+        replaying = true;
+        this.hookRegistry.register(jinnSessionId, onTurnHook);
+        replaying = false;
+      };
+      registerTurnHooks();
 
       if (warm) {
         // Mark the turn started BEFORE injecting so the sweep timer can't
@@ -1288,34 +2249,72 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         // between getWarm() above and the proc.write() inside injectPrompt.
         this.lifecycle.turnStarted(jinnSessionId);
         turnMarkedStarted = true;
-        // Native commands (/compact, /clear, /model) run locally and settle via
-        // nativeCommandTimer; they need not emit UserPromptSubmit at all, so
-        // confirming them would re-send CRs at a prompt that already did its work.
-        // Same exclusion the lost-Stop recovery makes below, for the same reason.
-        entry.cancelSubmitConfirm = this.injectPrompt(warm, opts, nativeCommand ? undefined : {
-          // A settled turn is no longer ours to submit — stop either way. Without
-          // this the loop would outlive an early interrupt until run()'s finally.
-          submitted: () => entry.promptSubmitted || resolver.isSettled,
-          // Claude Code queues a pasted prompt behind a turn already running and
-          // fires no UserPromptSubmit until it dequeues, so a queued prompt is
-          // indistinguishable from a swallowed CR by acknowledgement alone. Pause
-          // on any evidence of real work rather than acting on that ambiguity.
-          busy: () => this.hasActiveUpstream(jinnSessionId) || entry.activeTools > 0,
-          onRetry: (attempt) => logger.warn(
-            `InteractiveClaudeEngine: prompt submit unacknowledged for ${jinnSessionId} — re-sending CR (attempt ${attempt})`,
-          ),
-          // Report only. Settling here would mean ruling a turn dead from the
-          // absence of a signal, and the signal is genuinely absent in cases where
-          // the turn is alive; shouldSettleStalledTurn already owns that verdict
-          // with far more evidence. Losing the CR costs the backstop's window
-          // rather than seconds, but the retries above are what usually recover it
-          // — a CR re-sent a second later lands where the 150ms one did not.
-          onUnconfirmed: (attempts) => logger.warn(
-            `InteractiveClaudeEngine: prompt still unacknowledged for ${jinnSessionId} after ${attempts} re-sent CRs; `
-            + `text may be stranded in the CLI composer. Leaving the turn to the stall backstop.`,
-          ),
-        });
         entry.boundProc = (warm as any)._proc as pty.IPty | undefined;
+        if (resolver.awaitingBackgroundRerun) {
+          await this.holdPaste(jinnSessionId, warm, entry);
+          promptWrittenAt = Date.now();
+        }
+        if (!resolver.isSettled) {
+          resolver.promptWritten();
+          // Tools and dialogs counted while the paste was held were other
+          // turns' (the hold kept them to gate its quiet backstop); a tool the
+          // operator interrupted never fires PostToolUse, and would otherwise
+          // pin this turn "busy" for good.
+          entry.activeTools = 0;
+          entry.blockedOnPermissionAt = undefined;
+        }
+        // a live Esc Esc Rewind menu owns the composer. Claude Code
+        // drops the paste whole and takes the submit CR as "Enter to continue",
+        // confirming the highlighted rewind — and any restore dialog after it —
+        // while our message is lost. Deliver by respawn (JIN-3's path) instead,
+        // which puts the prompt in argv and never emits a CR at the menu.
+        // Checked after promptWritten() so the respawned turn's own
+        // UserPromptSubmit is still recognised as ours.
+        if (!resolver.isSettled && (await this.screenShowsRewindMenu(jinnSessionId))) {
+          logger.warn(
+            `InteractiveClaudeEngine: Rewind menu is open for ${jinnSessionId}; `
+            + `skipping the warm-PTY paste and respawning to deliver the prompt.`,
+          );
+          await this.redeliverByRespawn(jinnSessionId, entry, opts, promptWrittenAt, registerTurnHooks);
+        } else {
+          // Native commands (/compact, /clear, /model) run locally and settle via
+          // nativeCommandTimer; they need not emit UserPromptSubmit at all. Their
+          // one submit CR is still a CR, though, so it is screen-gated like any
+          // other. `submitted` is already true for them, which stops
+          // the confirmation loop on its first tick rather than re-sending CRs
+          // at a prompt that already did its work — the exclusion the lost-Stop
+          // recovery below makes, for the same reason.
+          entry.cancelSubmitConfirm = resolver.isSettled ? undefined : this.injectPrompt(warm, opts, {
+            // A settled turn is no longer ours to submit — stop either way. Without
+            // this the loop would outlive an early interrupt until run()'s finally.
+            submitted: () => nativeCommand || entry.promptSubmitted || resolver.isSettled,
+            // Claude Code queues a pasted prompt behind a turn already running
+            // (its UserPromptSubmit fires at once on 2.1.283), and a busy TUI can
+            // drop the CR. Pause on any evidence of real work rather than
+            // re-sending into that ambiguity.
+            busy: () => this.hasActiveUpstream(jinnSessionId) || entry.activeTools > 0,
+            // The Rewind menu can open after the pre-paste check above — in the
+            // 150ms before the first CR, or between retries. Every CR is gated on
+            // the screen, so one is never written at the menu.
+            abortSubmit: () => this.screenShowsRewindMenu(jinnSessionId),
+            onRetry: (attempt) => logger.warn(
+              `InteractiveClaudeEngine: prompt submit unacknowledged for ${jinnSessionId} — re-sending CR (attempt ${attempt})`,
+            ),
+            // Never settle here: the turn is not dead, its prompt just never got
+            // in. Claude Code's TUI can swallow a paste whole — the Esc Esc rewind
+            // menu takes the CR as "continue" and the text vanishes, and the ctrl+o
+            // transcript view and a ctrl+z suspend eat both (JIN-3). The operator
+            // saw the message sent and nothing happen. Deliver it the way a cold
+            // turn does instead: respawn with the prompt in argv.
+            onUnconfirmed: (attempts) => {
+              logger.warn(
+                `InteractiveClaudeEngine: prompt still unacknowledged for ${jinnSessionId} after ${attempts} re-sent CRs; `
+                + `Claude Code never took the paste. Respawning the session to deliver it.`,
+              );
+              void this.redeliverByRespawn(jinnSessionId, entry, opts, promptWrittenAt, registerTurnHooks);
+            },
+          });
+        }
       } else {
         const handle = await this.spawn(jinnSessionId, opts, settingsPath);
         this.lifecycle.adopt(jinnSessionId, handle, { turnRunning: true });
@@ -1343,9 +2342,12 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         const startedAt = Date.now();
         nativeCommandTimer = setInterval(() => {
           const now = Date.now();
-          const quietFor = now - (this.lastOutputAt.get(jinnSessionId) ?? startedAt);
-          const elapsed = now - startedAt;
-          if ((elapsed >= NATIVE_COMMAND_MIN_MS && quietFor >= NATIVE_COMMAND_QUIET_MS) || elapsed >= NATIVE_COMMAND_MAX_MS) {
+          if (nativeCommandSettles({
+            compact: compactCommand,
+            elapsedMs: now - startedAt,
+            quietForMs: now - (this.lastOutputAt.get(jinnSessionId) ?? startedAt),
+            upstreamActive: this.hasActiveUpstream(jinnSessionId),
+          })) {
             resolver.completeNativeCommand();
           }
         }, 500);
@@ -1360,6 +2362,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // grace timer's call (Stop supersedes / expiry fails). Recovering
           // intermediate transcript text here would fabricate a wrong success.
           if (resolver.stopFailure) return;
+          // A background re-invocation is still ahead of our prompt: the
+          // transcript's newest text is its, so there is nothing of ours to
+          // recover yet. The stall verdict below still applies.
+          const recoverable = !resolver.awaitingBackgroundRerun;
           // Missing-Stop recovery is only safe when the model stream and local
           // tool hooks are quiet; otherwise a long-running turn can be mistaken
           // for a completed one just because transcript text exists. A pending
@@ -1375,6 +2381,11 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           const elapsed = now - startedAt;
           const quietFor = now - (this.lastOutputAt.get(jinnSessionId) ?? startedAt);
           if (elapsed < LOST_STOP_RECOVERY_MIN_MS || quietFor < LOST_STOP_RECOVERY_QUIET_MS) return;
+          // Under the warm-PTY gate, transcript text only counts from our own
+          // UserPromptSubmit on: before it, the assistant text in the transcript
+          // is a turn typed in the terminal. No live UPS = nothing of ours to
+          // recover, so fall through to the stall verdict.
+          const recoverFrom = recoveryFloorMs(gateOnPromptSubmit, startedAt, resolver.promptSubmittedAt);
           const sid = resolver.sessionId ?? opts.resumeSessionId;
           // Only attempt recovery when we can identify THIS turn's transcript.
           // Transcripts share one project dir keyed by Claude session id, so
@@ -1384,8 +2395,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           if (transcript) {
             try { transcriptIsFresh = fs.statSync(transcript).mtimeMs >= startedAt - 1000; } catch { /* unreadable */ }
           }
-          if (transcript && transcriptIsFresh) {
-            const recovered = lastAssistantTextFromTranscript(transcript, startedAt);
+          if (transcript && transcriptIsFresh && recoverFrom !== undefined && recoverable) {
+            const recovered = lastAssistantTextFromTranscript(transcript, Math.max(recoverFrom, resolver.backgroundRerunEndedAt ?? 0));
             if (recovered?.trim()) {
               logger.warn(`InteractiveClaudeEngine: recovered completed turn for ${jinnSessionId} after missing Stop hook`);
               resolver.completeRecovered(recovered, sid);
@@ -1417,6 +2428,12 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       entry.cancelSubmitConfirm?.();
       this.hookRegistry.unregister(jinnSessionId);
       this.active.delete(jinnSessionId);
+      // A prompt typed in the terminal during this turn runs next: the next
+      // gateway turn must wait for it rather than paste behind it.
+      if (entry.terminalPromptQueued) this.terminalTurns.set(jinnSessionId, Date.now());
+      // Interrupted with a background re-invocation still running ahead of it:
+      // the next turn must not take that re-run's Stop either.
+      if (resolver.awaitingBackgroundRerun && this.lifecycle.getWarm(jinnSessionId)) this.backgroundReruns.add(jinnSessionId);
       if (turnMarkedStarted) this.lifecycle.turnEnded(jinnSessionId); // manager decides kill vs keep-warm
       else cleanupSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId);
       // Turn settled — if the CLI still has upstream requests in flight
@@ -1427,15 +2444,28 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
     // Reconstruct cost from the transcript (the Stop hook carries no cost).
     const transcriptPath = resolver.transcriptPath;
+    // Transcript entries before this belong to a background re-invocation the
+    // prompt waited behind or was queued behind, not to this turn.
+    const turnTranscriptFrom = Math.max(promptWrittenAt, resolver.backgroundRerunEndedAt ?? 0);
     if (transcriptPath && !result.error) {
       // Scope to THIS turn: the transcript is cumulative and the caller adds
       // result.cost to the session total, so an unscoped sum over-counts.
-      const cost = computeInteractiveCost(transcriptPath, opts.model, turnStartedAt);
+      const cost = computeInteractiveCost(transcriptPath, opts.model, turnTranscriptFrom);
       if (cost) { result.cost = cost.cost; result.numTurns = cost.turns; }
       // Context-meter: most recent turn's input context (input + cache), mirroring
       // headless claude.ts so interactive/CLI-view turns also populate the meter.
       const ctx = lastTurnContextTokens(transcriptPath);
       if (ctx) result.contextTokens = ctx;
+    }
+    // A `/compact` that Claude Code confirmed. The context meter takes the size
+    // after it; the pre-compaction reading streamed during the summary is stale.
+    if (compactedBy && !result.error) {
+      const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
+      const hookPath = typeof compactedBy.transcript_path === "string" ? compactedBy.transcript_path : undefined;
+      const statsPath = hookPath ?? (sid ? findTranscriptForSession(sid) : undefined);
+      result.compaction = statsPath ? await awaitCompactionStats(statsPath, turnTranscriptFrom) : {};
+      if (result.compaction.postTokens) result.contextTokens = result.compaction.postTokens;
+      else delete result.contextTokens;
     }
     // Recover lost result text: if the turn settled with no text and no API-level
     // failure, the Stop hook (which carries last_assistant_message) was dropped —
@@ -1447,7 +2477,13 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (!nativeCommand && !result.error && !result.result?.trim() && !resolver.stopFailure) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
       const recoveryPath = sid ? findTranscriptForSession(sid) : undefined;
-      const recovered = recoveryPath ? lastAssistantTextFromTranscript(recoveryPath, turnStartedAt) : undefined;
+      // Same floor as lost-Stop recovery: under the warm-PTY gate, transcript
+      // text before our own UserPromptSubmit is a turn typed in the terminal,
+      // and text before a background re-invocation's Stop is that re-run's.
+      const floor = recoveryFloorMs(gateOnPromptSubmit, turnTranscriptFrom, resolver.promptSubmittedAt);
+      const recovered = recoveryPath && floor !== undefined
+        ? lastAssistantTextFromTranscript(recoveryPath, Math.max(floor, resolver.backgroundRerunEndedAt ?? 0))
+        : undefined;
       if (recovered) {
         logger.info(`Recovered ${recovered.length} chars of lost turn text for session ${jinnSessionId} from transcript (Stop hook missing)`);
         result.result = sanitizeAssistantText(recovered);
@@ -1526,6 +2562,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (!entry) return; // idle PTY / no turn in flight — nothing to stream
     entry.resolver.noteActivity();
     if (!entry.onStream) return;
+    // A background re-invocation running ahead of this turn's prompt is not
+    // this turn's reply.
+    if (entry.resolver.awaitingBackgroundRerun || entry.holdingPaste) return;
     // Only the main agent's events reach here (the proxy suppresses sub-agent and
     // auxiliary streams) — but compaction shares those credentials, so deltas pass
     // through the gate before reaching the transcript.
@@ -1544,6 +2583,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       // ALL requests (main + subagent + background tasks) count here — this is
       // how the gateway knows the CLI is still working after the turn settled.
       onUpstreamActivity: (info) => this.handleUpstreamActivity(jinnSessionId, info),
+      // A background task's only end-of-life signal: the notification the CLI
+      // sends the model. Without it a finished task would count as live until
+      // the PTY dies, and a restart would nudge the session over it.
+      onTaskNotifications: (taskIds) => this.dropBackgroundMonitors(jinnSessionId, taskIds),
     });
     try {
       const port = await proxy.start();
@@ -1592,9 +2635,202 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     return handle;
   }
 
+  /** Variables the remote login environment must NOT carry into `claude`.
+   *  Mirrors `buildPtyEnv`'s `denyExact` plus the CLAUDECODE markers that
+   *  `scrubClaudeCode` strips locally — an inherited API key would silently
+   *  move the session off Max-subscription billing onto metered API billing,
+   *  which is the one thing the PTY architecture exists to prevent. */
+  private static readonly REMOTE_ENV_DENY = [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+  ];
+
+  /** The deny list for one spawn. When no profile is configured,
+   *  `CLAUDE_CONFIG_DIR` joins it: an inherited value would otherwise pick a
+   *  profile — and so a set of credentials and a trust state — that nothing in
+   *  the config asked for, silently. Which profile a session runs as is always
+   *  either explicit or the remote user's default, never accidental. */
+  private static remoteEnvDeny(claudeConfigDir: string | undefined): string[] {
+    return claudeConfigDir
+      ? InteractiveClaudeEngine.REMOTE_ENV_DENY
+      : [...InteractiveClaudeEngine.REMOTE_ENV_DENY, "CLAUDE_CONFIG_DIR"];
+  }
+
+  /** Environment for the REMOTE claude process.
+   *
+   *  `env` handed to `pty.spawn` reaches only the local ssh client — it never
+   *  crosses to the other host — so everything the engine needs there is
+   *  inlined into the remote command instead. This is the same set
+   *  {@link buildPtyEnv} builds, minus the SSE proxy pair (no proxy runs for a
+   *  remote session) and minus the inherited process env (the remote user's
+   *  login environment plays that role). */
+  private buildRemoteEnv(
+    jinnSessionId: string,
+    staging: RemoteClaudeStaging,
+    claudeConfigDir: string | undefined,
+  ): Record<string, string> {
+    return {
+      // Which Claude Code profile the session runs as. Set here rather than by
+      // calling a profile-manager wrapper: those unset every CLAUDE_* variable
+      // before exec, which would strip the three below — and losing
+      // RESUME_TOKEN_THRESHOLD lets the "resume from summary?" picker appear in
+      // front of a PTY with nobody at the keyboard. The folder-trust seed is run
+      // with this same value; the two disagreeing is a guaranteed first-turn hang.
+      ...(claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeConfigDir } : {}),
+      // Points hook-relay.mjs and the built-in MCP server at THIS SESSION's
+      // staged home — its own symlink farm and its own gateway.json — rather
+      // than at a `~/.jinn` that may not exist there, or at a home shared with
+      // another session whose tunnel port is not this one's.
+      JINN_HOME: staging.sessionHome,
+      JINN_SESSION_ID: jinnSessionId,
+      CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN: "1",
+      CLAUDE_CODE_RESUME_TOKEN_THRESHOLD: "999999999",
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW || "1000000",
+    };
+  }
+
+  /**
+   * Everything that has to be true, and true again, before a remote session is
+   * spawned: the host is up, its jinn-cli matches, and the gateway's JINN_HOME
+   * is genuinely mounted there.
+   *
+   * `allowWake` is false on both spawn paths. The turn runner has already woken
+   * the host and waited for it by the time it gets here, and the dashboard's
+   * idle PTY must never boot someone's desktop just because a tab was opened.
+   * What this call is really for is the mount sentinel, which is deliberately
+   * re-checked at every spawn rather than cached — it is the one fact that can
+   * go stale while the gateway keeps running.
+   */
+  private async prepareRemote(
+    jinnSessionId: string,
+    target: RemoteTarget,
+    resolvedMcp: ResolvedMcpConfig | undefined,
+    beforeStage?: () => boolean,
+  ): Promise<{ facts: RemoteFacts; staging: RemoteClaudeStaging; remote: RemoteExecutionConfig } | undefined> {
+    const remote = this.readRemoteConfig();
+    assertRemoteTarget(target, remote);
+    // Without a real gateway port the reverse forward would be built as
+    // `-R <n>:127.0.0.1:0`, and the session would run with hooks and MCP calls
+    // going nowhere — the silent-hang failure this design works hardest to
+    // avoid. Refuse instead of spawning something that cannot report back.
+    if (!this.readGatewayPort()) {
+      throw new Error("remote spawn needs the gateway's port for the reverse tunnel, and none was provided");
+    }
+    const readiness = await ensureRemoteReady(target, remote, { engine: "claude", allowWake: false });
+    if (!readiness.ready) throw new Error(`remote host not ready: ${readiness.reason}`);
+    // Last chance to stand down without having written anything. Staging
+    // rewrites this session's gateway.json with a freshly probed tunnel port,
+    // and the hook relay reads that file on every hook — so a caller that
+    // stages and THEN discovers a turn owns the session has already repointed
+    // that turn's relay at a port it will never open a tunnel on. The relay
+    // swallows a failed POST by design, so that turn would run to completion
+    // with no Stop, no PreToolUse policy, and nothing reported anywhere.
+    if (beforeStage?.()) return undefined;
+    const staging = await prepareRemoteSession({
+      target,
+      remote: remote!,
+      facts: readiness.facts,
+      engine: "claude",
+      jinnSessionId,
+      gatewayPort: this.readGatewayPort(),
+      ...(resolvedMcp ? { resolvedMcp } : {}),
+    });
+    return { facts: readiness.facts, staging, remote: remote! };
+  }
+
+  /** The remote counterpart of {@link spawn}. Same PTY contract — the object
+   *  node-pty owns here is the LOCAL ssh client, whose stream carries the
+   *  remote TUI, so scrollback, resize, kill and the safety-prompt parser all
+   *  work against it unchanged. */
+  private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts): Promise<PtyHandle>;
+  private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts, standDown: () => boolean): Promise<PtyHandle | undefined>;
+  private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts, standDown?: () => boolean): Promise<PtyHandle | undefined> {
+    if (opts.attachments?.length) {
+      // buildAttachmentSuffix appends GATEWAY filesystem paths into the prompt.
+      // On another host they name nothing, and a turn that silently references
+      // files the model cannot open is worse than one that refuses.
+      throw new Error("attachments are not supported for remote employees — the file paths are local to the gateway");
+    }
+    // A turn's own spawn passes no `standDown`: it owns the session by the time
+    // it reaches here and never stands down, so staging always happens. A
+    // redelivery respawn (JIN-3) can outlive its turn — stopped during the
+    // seconds staging takes — and must then write nothing: staging repoints
+    // this session's gateway.json at a tunnel only this spawn would open.
+    const prepared = await this.prepareRemote(jinnSessionId, opts, opts.resolvedMcp, standDown);
+    if (!prepared) return undefined;
+    // Staged, but a stopped turn still must not attach to the session's stream
+    // or record its model as the live PTY's.
+    if (standDown?.()) return undefined;
+    const { facts, staging, remote } = prepared;
+    const claudeConfigDir = resolveRemoteClaudeConfigDir(opts, remote);
+
+    const args = buildInteractiveArgs({
+      prompt: buildPromptWithPlatformContext(opts),
+      // The REMOTE staged paths, not the gateway's.
+      settingsPath: staging.settingsPath,
+      ...(staging.mcpConfigPath ? { mcpConfigPath: staging.mcpConfigPath } : {}),
+      resumeSessionId: opts.resumeSessionId,
+      model: opts.model,
+      effortLevel: opts.effortLevel,
+      cliFlags: opts.cliFlags,
+      appendSystemPrompt: opts.systemPrompt
+        ? `${opts.systemPrompt}\n\n${MAIN_AGENT_SENTINEL}`
+        : MAIN_AGENT_SENTINEL,
+    });
+
+    const sshArgs = buildSshSpawnArgs({
+      destination: staging.destination,
+      tunnelPort: staging.tunnelPort,
+      gatewayPort: this.readGatewayPort(),
+      remoteCwd: opts.remoteCwd!,
+      remoteEnv: this.buildRemoteEnv(jinnSessionId, staging, claudeConfigDir),
+      envFile: staging.envFilePath,
+      unsetRemoteEnv: InteractiveClaudeEngine.remoteEnvDeny(claudeConfigDir),
+      // Claude Code runs every hook as bare `node`; without the resolved node
+      // directory on PATH the relay cannot start, no Stop ever arrives, and the
+      // turn hangs forever with nothing reported anywhere.
+      // The node directory first (hooks run as bare `node`), then the
+      // instance's own bin/ so `mem` and its neighbours resolve by name.
+      pathPrepend: [remoteNodeDir(facts), remoteSessionBinDir(staging.sessionHome)],
+      bin: requireRemoteEngineBin(staging.destination, facts, "claude"),
+      args,
+    });
+
+    const geom = this.lastGeom.get(jinnSessionId);
+    logger.info(
+      `InteractiveClaudeEngine spawning REMOTE session on ${staging.destination}:${opts.remoteCwd} `
+      + `(resume: ${opts.resumeSessionId || "none"}, tunnel: ${staging.tunnelPort}→${this.readGatewayPort()}, `
+      + `mcp: ${staging.mcpConfigPath ? "on" : "off"}, sseProxy: off)`,
+    );
+    const proc = pty.spawn(resolveBin("ssh"), sshArgs, {
+      name: "xterm-256color",
+      cols: geom?.cols ?? 120,
+      rows: geom?.rows ?? 40,
+      // The LOCAL cwd of the ssh client — irrelevant to the session, whose
+      // working directory is set by the `cd` inside the remote command.
+      cwd: JINN_HOME,
+      env: this.buildPtyEnv(undefined, jinnSessionId),
+    });
+    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, appendApplied: true });
+    // No proxy argument: a remote session runs without the SSE forward proxy, so
+    // there is nothing to tear down when the PTY exits.
+    return this.wireProcToStream(jinnSessionId, proc);
+  }
+
   /** node-pty spawn of the genuine claude binary (no -p → cc_entrypoint=cli).
    *  Allocates a per-PTY SSE forward proxy first and points the child at it. */
-  private async spawn(jinnSessionId: string, opts: EngineRunOpts, settingsPath: string): Promise<PtyHandle> {
+  private async spawn(jinnSessionId: string, opts: EngineRunOpts, settingsPath: string): Promise<PtyHandle>;
+  /** With `standDown`: resolves undefined, having spawned nothing, if it turns
+   *  true before the process starts (see redeliverByRespawn). */
+  private async spawn(jinnSessionId: string, opts: EngineRunOpts, settingsPath: string, standDown: () => boolean): Promise<PtyHandle | undefined>;
+  private async spawn(jinnSessionId: string, opts: EngineRunOpts, settingsPath: string, standDown?: () => boolean): Promise<PtyHandle | undefined> {
+    // A remote employee never spawns claude on the gateway — not even as a
+    // fallback. Every path that could quietly relocate the session back here is
+    // closed on purpose; this is the last of them.
+    if (isRemoteTarget(opts)) return standDown ? await this.spawnRemote(jinnSessionId, opts, standDown) : await this.spawnRemote(jinnSessionId, opts);
     const args = buildInteractiveArgs({
       prompt: buildPromptWithPlatformContext(opts),
       settingsPath,
@@ -1612,6 +2848,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         : MAIN_AGENT_SENTINEL,
     });
     const { proxy, port } = await this.startProxy(jinnSessionId);
+    if (standDown?.()) {
+      proxy.stop();
+      return undefined;
+    }
     const env = this.buildPtyEnv(port || undefined, jinnSessionId);
     const bin = resolveBin("claude", opts.bin);
     const geom = this.lastGeom.get(jinnSessionId);
@@ -1639,19 +2879,28 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (this.idleSpawning.has(jinnSessionId)) return; // an idle spawn is already in flight
     this.idleSpawning.add(jinnSessionId);
 
+    const remoteTarget = isRemoteTarget(opts) ? opts : undefined;
+    // A local settings file is written even for a remote session: the cold-spawn
+    // cleanup path (`cleanupSessionSettings`) is keyed on it, and leaving a
+    // dangling entry there would be a second, subtler divergence. The REMOTE
+    // path is what actually reaches `--settings`.
     const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
       sessionId: jinnSessionId,
       relayScript: HOOK_RELAY_SCRIPT,
       statusLineDir: CLAUDE_LIMITS_DIR,
     });
-    const args: string[] = [
-      "--chrome",
-      "--dangerously-skip-permissions",
-      "--disallowedTools", "AskUserQuestion", "ExitPlanMode",
-      "--settings", settingsPath,
-    ];
-    if (opts.engineSessionId) args.unshift("--resume", opts.engineSessionId);
-    if (opts.model) args.push("--model", opts.model);
+    const baseArgs = (settings: string): string[] => {
+      const args: string[] = [
+        "--chrome",
+        "--dangerously-skip-permissions",
+        "--disallowedTools", "AskUserQuestion", "ExitPlanMode",
+        "--settings", settings,
+      ];
+      if (opts.engineSessionId) args.unshift("--resume", opts.engineSessionId);
+      if (opts.model) args.push("--model", opts.model);
+      return args;
+    };
+    const args = baseArgs(settingsPath);
     const bin = resolveBin("claude", opts.bin);
     // Caller (pty-ws) passes the client's current cols/rows. Cache them so a
     // future cold spawn through run() picks up the right geometry too.
@@ -1661,6 +2910,49 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
     void (async () => {
       try {
+        if (remoteTarget) {
+          // Full parity: the dashboard's idle PTY goes over SSH too. Spawning
+          // claude locally here — which is what happens if this branch is
+          // missing — would `--resume` an engine session id the gateway's own
+          // ~/.claude has never seen, AND get adopted as the warm PTY, so the
+          // next real turn would paste its prompt into a local process and the
+          // employee would quietly be running on the gateway after all.
+          // The claim is re-checked INSIDE prepareRemote, after the host is
+          // known good but before anything is written — see `beforeStage`. The
+          // guards at the top of this method are synchronous and cannot cover
+          // the multi-second staging window, during which a real turn may claim
+          // the session; discovering that only afterwards is too late, because
+          // this session's gateway.json would already name a tunnel port that
+          // only this (now abandoned) spawn was ever going to open.
+          const claimed = () => Boolean(this.lifecycle.getWarm(jinnSessionId)) || this.active.has(jinnSessionId);
+          const prepared = await this.prepareRemote(jinnSessionId, remoteTarget, undefined, claimed);
+          if (!prepared || claimed()) return;
+          const { facts, staging, remote } = prepared;
+          const claudeConfigDir = resolveRemoteClaudeConfigDir(remoteTarget, remote);
+          const sshArgs = buildSshSpawnArgs({
+            destination: staging.destination,
+            tunnelPort: staging.tunnelPort,
+            gatewayPort: this.readGatewayPort(),
+            remoteCwd: remoteTarget.remoteCwd!,
+            remoteEnv: this.buildRemoteEnv(jinnSessionId, staging, claudeConfigDir),
+            envFile: staging.envFilePath,
+            unsetRemoteEnv: InteractiveClaudeEngine.remoteEnvDeny(claudeConfigDir),
+            pathPrepend: [remoteNodeDir(facts), remoteSessionBinDir(staging.sessionHome)],
+            bin: requireRemoteEngineBin(staging.destination, facts, "claude"),
+            args: baseArgs(staging.settingsPath),
+          });
+          logger.info(
+            `InteractiveClaudeEngine ensureIdleSpawn REMOTE for session ${jinnSessionId} on `
+            + `${staging.destination} (resume ${opts.engineSessionId || "none — fresh"}, geom ${cols}×${rows})`,
+          );
+          const proc = pty.spawn(resolveBin("ssh"), sshArgs, {
+            name: "xterm-256color", cols, rows, cwd: JINN_HOME, env: this.buildPtyEnv(undefined, jinnSessionId),
+          });
+          const handle = this.wireProcToStream(jinnSessionId, proc);
+          this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false });
+          this.lifecycle.adopt(jinnSessionId, handle);
+          return;
+        }
         const { proxy, port } = await this.startProxy(jinnSessionId);
         // Re-check after the async gap: a real turn (run) or another idle spawn may
         // have claimed the session while we awaited the proxy bind. If so, don't
@@ -1744,6 +3036,17 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   }
 
   kill(sessionId: string, reason = "Interrupted"): void {
+    // A gateway turn still waiting behind a turn typed in the terminal has not
+    // touched the PTY: interrupting it ends the wait and nothing else. Killing
+    // the PTY here would cut off the operator's own turn.
+    const abortWait = this.terminalWaits.get(sessionId);
+    const held = this.active.get(sessionId)?.holdingPaste === true;
+    if (abortWait && (!this.active.has(sessionId) || held)) {
+      // A registered turn still holding its paste has not touched
+      // the PTY either: run() settles it with this reason.
+      abortWait(reason);
+      if (WAIT_ONLY_INTERRUPTS.has(reason)) return;
+    }
     this.cancelLateRecovery(sessionId);
     const e = this.active.get(sessionId);
     e?.resolver.interrupt(reason.startsWith("Interrupted") ? reason : `Interrupted: ${reason}`);
@@ -1751,6 +3054,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   }
 
   killAll(): void {
+    for (const abort of [...this.terminalWaits.values()]) abort("Interrupted: gateway shutting down");
     for (const id of [...this.active.keys()]) this.kill(id, "Interrupted: gateway shutting down");
     this.lifecycle.killAll();
   }
@@ -1760,12 +3064,16 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  file runs to completion on its current persona and the next turn picks up
    *  the new one via cold respawn. */
   killIdle(): void {
-    this.lifecycle.releaseIdle((id) => this.active.has(id));
+    // Nor a PTY with a turn typed in the terminal running, or a gateway turn
+    // waiting on one: recycling it would cut off the operator's turn.
+    this.lifecycle.releaseIdle((id) => this.active.has(id) || this.terminalWaits.has(id) || this.terminalTurns.has(id));
   }
 
   /** True only while a turn is in flight (distinct from "PTY is warm"). */
   isTurnRunning(sessionId: string): boolean {
-    return this.active.has(sessionId);
+    // A turn waiting behind one typed in the terminal is still a turn: "send
+    // now" and /stop must be able to interrupt it.
+    return this.active.has(sessionId) || this.terminalWaits.has(sessionId);
   }
 
   /** Observable progress for the in-flight turn, or undefined if none is running.
@@ -1780,12 +3088,25 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  PTY output alone is a weak signal — the TUI redraws its footer while idle at
    *  the prompt — so hooks and tool state are reported alongside it and callers
    *  weigh them together. */
+  /** Single registration: a gateway turn started/stopped waiting behind a turn
+   *  typed in the terminal. The gateway relays it as `session:terminal-wait`. */
+  onTerminalWait(cb: (sessionId: string, waiting: boolean) => void): void {
+    this.terminalWaitCb = cb;
+  }
+
   turnProgress(sessionId: string): TurnProgress | undefined {
     const entry = this.active.get(sessionId);
+    const waitStartedAt = this.terminalWaitStartedAt.get(sessionId);
+    if (!entry && waitStartedAt !== undefined) {
+      return { lastProgressAt: waitStartedAt, awaitingSubmit: false, activeTools: 0, activeUpstream: false, waitingForTerminalTurn: true };
+    }
     if (!entry) return undefined;
     return {
       lastProgressAt: Math.max(entry.startedAt, entry.lastHookAt, this.lastOutputAt.get(sessionId) ?? 0),
-      awaitingSubmit: !entry.promptSubmitted,
+      // Held behind a background re-invocation, the prompt has not been sent
+      // yet: "not accepted by the engine" would be wrong, and resending it
+      // from the CLI view would duplicate it.
+      awaitingSubmit: !entry.promptSubmitted && !entry.holdingPaste,
       activeTools: entry.activeTools,
       activeUpstream: this.hasActiveUpstream(sessionId),
     };
@@ -1819,6 +3140,14 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     timer.unref?.();
     this.lateRecovery.set(jinnSessionId, { timer });
     this.hookRegistry.register(jinnSessionId, (h) => {
+      // A new prompt means the failed turn is over and someone typed in the
+      // terminal: its Stop is theirs, not a late recovery. Step aside
+      // so it reaches the external-turn sync.
+      if (h.hook_event_name === "UserPromptSubmit") {
+        logger.info(`InteractiveClaudeEngine: late recovery for ${jinnSessionId} abandoned — a new prompt started in the terminal`);
+        this.cancelLateRecovery(jinnSessionId);
+        return;
+      }
       if (h.hook_event_name !== "Stop") return;
       const text = String(h.last_assistant_message ?? "");
       const sid = typeof h.session_id === "string" ? h.session_id : "";

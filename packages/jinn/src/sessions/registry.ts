@@ -9,9 +9,11 @@ import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../shared/logger.js';
 import { initDb } from '../shared/db.js';
+import { recordEngineSpend } from './engine-spend.js';
 import { stripControlChars } from '../shared/sanitize.js';
 import { getMeta, setMeta, canonicalCallbackIdentityText, canonicalSessionDeliveryIdentity, sessionDeliveryFromRow, validateSessionDeliveryIdentity, type SessionDeliveryRow } from './migrate.js';
 import { parseTodoId } from '../work-items/id.js';
+import { toWorkItemLinkRole } from '../work-items/link-role.js';
 import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs, JsonObject, ReplyContext, Session, SessionAttemptOutcome, SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload, WorkflowAttemptInterruptionCause, WorkflowSessionProvenance } from '../shared/types.js';
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
@@ -19,6 +21,23 @@ import { ptySnapshotStore } from '../engines/pty-snapshot.js';
 export const RESTART_ACK_META_KEY = "restartAcknowledgedAt";
 /** Stamped on a session the gateway itself interrupted, so the next boot can tell it apart from one that was already idle. Consumed in sessions/restart-resume.ts. */
 export const RESTART_RESUME_META_KEY = "restartInterruptedAt";
+/** Why a session carrying RESTART_RESUME_META_KEY is owed a nudge, when it is not the default
+ *  (a turn the restart cut short). Consumed with the mark. */
+export const RESTART_RESUME_REASON_META_KEY = "restartResumeReason";
+/** When a restart-requesting session was nudged back after its own restarts, newest last, pruned to
+ *  the loop-guard window. Kept, not consumed: it is what the restart-loop guard reads the next time
+ *  the same session asks for a restart. */
+export const RESTART_REQUESTER_NUDGES_META_KEY = "restartRequesterNudges";
+/** The restart-loop guard: a session already nudged back RESTART_REQUESTER_LOOP_GUARD_NUDGES times
+ *  within RESTART_REQUESTER_LOOP_GUARD_MS gets the passive notice only for its next request. One
+ *  strike would orphan the ordinary deploy → verify fails → fix → redeploy, which is the very
+ * session is about; this bounds a session answering every nudge with a restart to three
+ *  restarts in half an hour instead. */
+export const RESTART_REQUESTER_LOOP_GUARD_NUDGES = 2;
+export const RESTART_REQUESTER_LOOP_GUARD_MS = 30 * 60_000;
+/** An acknowledgement older than this at boot belongs to a restart that never happened (the helper
+ *  failed and some later restart found the marker), so it gets the notice but not a nudge. */
+export const RESTART_REQUESTER_MAX_AGE_MS = 30 * 60_000;
 export const GATEWAY_RESTARTED_MESSAGE = "Gateway restarted successfully.";
 
 function parseJsonObject(value: unknown, label?: string): JsonObject | null {
@@ -132,6 +151,7 @@ function rowToSession(row: Record<string, unknown>): Session {
     connector,
     sessionKey,
     workItemId: (row.work_item_id as string) ?? null,
+    workItemRole: (row.work_item_role as string) ? toWorkItemLinkRole(row.work_item_role) : null,
     replyContext: replyContext as ReplyContext | null,
     messageId: (row.message_id as string) ?? null,
     transportMeta,
@@ -826,10 +846,11 @@ export function clearDelegationCompletionGuard(id: string, expectedWorkItemId: s
 
 /**
  * Record that a child explicitly reported UP to its parent via send_to_session
- * during its current attempt. The automatic parent-completion callback for that
- * same attempt is a duplicate of the explicit relay, so notifyParentSession
- * suppresses it when this marker matches the child's live attempt token. The
- * marker is per-attempt: a new turn mints a new token, so it self-expires.
+ * during its current attempt. The automatic parent callback for the model turn
+ * that made that relay is a duplicate of it, so notifyParentSession suppresses
+ * the next callback whose attempt token matches and consumes the marker
+ * (consumeChildReportedToParent). The marker is per-attempt: a new turn mints a
+ * new token, so it self-expires even if nothing consumes it.
  */
 export function recordChildReportedToParent(id: string, attemptToken: string): void {
   const db = initDb();
@@ -838,6 +859,61 @@ export function recordChildReportedToParent(id: string, attemptToken: string): v
     SET transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.reportedToParentAttempt', ?)
     WHERE id = ?
   `).run(attemptToken, id);
+}
+
+/**
+ * Claim a session's self-compaction slot: at most one per `cooldownMs`. The
+ * check and the write are one statement, so two concurrent requests from the
+ * same session cannot both win. Returns the claim instant on success, or the
+ * instant the previous claim was made when the cooldown refuses this one.
+ */
+export function claimSelfCompaction(
+  id: string,
+  now: number,
+  cooldownMs: number,
+): { claimed: true; at: number } | { claimed: false; previousAt: number } {
+  const db = initDb();
+  const result = db.prepare(`
+    UPDATE sessions
+    SET transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.selfCompactionAt', ?)
+    WHERE id = ?
+      AND COALESCE(json_extract(transport_meta, '$.selfCompactionAt'), 0) <= ?
+  `).run(now, id, now - cooldownMs);
+  if (result.changes === 1) return { claimed: true, at: now };
+  const row = db.prepare(`SELECT json_extract(transport_meta, '$.selfCompactionAt') AS at FROM sessions WHERE id = ?`)
+    .get(id) as { at?: number | null } | undefined;
+  return { claimed: false, previousAt: Number(row?.at ?? now) };
+}
+
+/** Give back a claim whose compaction was never queued, so the session can try
+ *  again at once. Only the claim made at `at` is released. */
+export function releaseSelfCompaction(id: string, at: number): void {
+  const db = initDb();
+  db.prepare(`
+    UPDATE sessions
+    SET transport_meta = json_remove(transport_meta, '$.selfCompactionAt')
+    WHERE id = ?
+      AND json_extract(transport_meta, '$.selfCompactionAt') = ?
+  `).run(id, at);
+}
+
+/**
+ * Atomically clear the relay marker if it still names `attemptToken`. Returns
+ * true when this caller consumed it — i.e. the callback it is about to skip is
+ * the relay's duplicate. One relay suppresses one callback: an attempt whose
+ * PTY keeps producing turns after settle (Claude Code re-invoking the model when
+ * a background subagent finishes) must not lose every later reply to a marker
+ * written for an earlier one.
+ */
+export function consumeChildReportedToParent(id: string, attemptToken: string): boolean {
+  const db = initDb();
+  const result = db.prepare(`
+    UPDATE sessions
+    SET transport_meta = json_remove(transport_meta, '$.reportedToParentAttempt')
+    WHERE id = ?
+      AND json_extract(transport_meta, '$.reportedToParentAttempt') = ?
+  `).run(id, attemptToken);
+  return result.changes === 1;
 }
 
 /** Persisted nudge claims whose queue post may have been lost to a restart. */
@@ -1197,7 +1273,11 @@ export function countSessions(): number {
 // sync with isCronSession/isDirectSession in the web chat-sidebar.
 export const CRON_GROUP = '__cron__';
 export const DIRECT_GROUP = '__direct__';
+/** Operator terminals, source literal from terminals/session.ts. */
+export const TERMINAL_GROUP = '__terminal__';
 const IS_CRON_SQL = `(source = 'cron' OR source_ref LIKE 'cron:%')`;
+// Same test as isTerminalSession (terminals/session.ts): either field marks it.
+const IS_TERMINAL_SQL = `(source = 'terminal' OR engine = 'terminal')`;
 
 /**
  * A session whose `employee` equals the portal name (case-insensitively) is a
@@ -1226,11 +1306,12 @@ export function coercePortalEmployee(
  * a PARENTLESS one — every spawn and delegation route records a session caller
  * as the child's parent, whatever the request body asks for — and a workflow
  * attempt always carries its run in `workflowProvenance`. So the shape below is
- * reachable only from a surface the operator drives: the web console, a
- * connector conversation, an operator-authored cron, or the gateway itself.
+ * reachable only from a surface the operator drives — web console, connector
+ * chat, operator cron, the gateway — except a remote MCP anchor (FR-012).
  */
 export function isPortalAgentSession(session: Session): boolean {
-  return !session.employee && !session.parentSessionId && !session.workflowProvenance;
+  return !session.employee && !session.parentSessionId && !session.workflowProvenance
+    && session.source !== "remote-mcp" && session.source !== "terminal" && session.engine !== "terminal";
 }
 
 // Build the CASE that maps a row to its sidebar group. When a portalSlug is
@@ -1242,6 +1323,7 @@ function groupKeySql(portalSlug?: string | null): { sql: string; params: unknown
   const directExtra = slug ? ` OR LOWER(employee) = ?` : '';
   const sql = `CASE
   WHEN ${IS_CRON_SQL} THEN '${CRON_GROUP}'
+  WHEN ${IS_TERMINAL_SQL} THEN '${TERMINAL_GROUP}'
   WHEN employee IS NULL OR employee = ''${directExtra} THEN '${DIRECT_GROUP}'
   ELSE employee
 END`;
@@ -1251,10 +1333,11 @@ END`;
 function groupFilter(group: string, portalSlug?: string | null): { clause: string; params: unknown[] } {
   const slug = portalSlug?.trim().toLowerCase();
   if (group === CRON_GROUP) return { clause: IS_CRON_SQL, params: [] };
+  if (group === TERMINAL_GROUP) return { clause: `NOT ${IS_CRON_SQL} AND ${IS_TERMINAL_SQL}`, params: [] };
   if (group === DIRECT_GROUP) {
     const directExtra = slug ? ` OR LOWER(employee) = ?` : '';
     return {
-      clause: `NOT ${IS_CRON_SQL} AND (employee IS NULL OR employee = ''${directExtra})`,
+      clause: `NOT ${IS_CRON_SQL} AND NOT ${IS_TERMINAL_SQL} AND (employee IS NULL OR employee = ''${directExtra})`,
       params: slug ? [slug] : [],
     };
   }
@@ -1438,6 +1521,27 @@ export function getSessionGroupCounts(portalSlug?: string | null): Record<string
   return out;
 }
 
+/**
+ * Every session row `running` — archived and workflow-phase rows included, which
+ * `listSessions` hides. Read by the gateway on its way out and on its way in:
+ * the restart record must name every kind, and at boot nothing can legitimately
+ * be running because the process that ran it is gone.
+ */
+export function listAllRunningSessions(): RunningSessionRow[] {
+  const rows = initDb()
+    .prepare("SELECT * FROM sessions WHERE status = 'running' ORDER BY last_activity DESC")
+    .all() as Record<string, unknown>[];
+  return rows.map((row) => ({ session: rowToSession(row), workflowAttempt: row.workflow_kind === 'phase' }));
+}
+
+/** `workflowAttempt` reads the raw `workflow_kind` column, the same predicate the
+ *  recovery sweeps and the resume candidate query use — not the parsed provenance,
+ *  which is null for a row whose other workflow columns are incomplete. */
+export interface RunningSessionRow {
+  session: Session;
+  workflowAttempt: boolean;
+}
+
 /** Mark any sessions stuck in "running" status as "interrupted". Called on gateway startup — if the
  * gateway is starting, no sessions can actually be running. Sessions with an engine_session_id can be
  * resumed via the Claude --resume flag, so each one is stamped for the restart resume nudge as well.
@@ -1488,34 +1592,108 @@ export function recoverStaleWorkflowAttemptSessions(): number {
   }).immediate();
 }
 
+export type RestartAcknowledgementResume =
+  /** Stamped for the restart resume nudge (sessions/restart-resume.ts). */
+  | "nudge"
+  /** It was already nudged back RESTART_REQUESTER_LOOP_GUARD_NUDGES times within RESTART_REQUESTER_LOOP_GUARD_MS. */
+  | "loop-guard"
+  /** Older than RESTART_REQUESTER_MAX_AGE_MS: the restart it asked for is not the one that just happened. */
+  | "stale";
+
+export interface RestartAcknowledgement {
+  sessionId: string;
+  acknowledgedAt: string;
+  resume: RestartAcknowledgementResume;
+}
+
 /**
  * Turn restart requests recorded by the old gateway into durable chat notices
- * after the replacement gateway is listening. Message insertion and marker
- * removal share one transaction, so a crash can neither lose nor duplicate the
- * acknowledgement on the next boot.
+ * after the replacement gateway is listening, and stamp each requester for the
+ * restart resume nudge. The notice alone is passive: a session that asked for
+ * the restart and then ended its turn to wait for the result (a background poll,
+ * a detached deploy script) has nothing left running to read it, and would sit
+ * idle until someone opened it. Message insertion, the resume stamp and
+ * marker removal share one transaction, so a crash can neither lose nor
+ * duplicate the acknowledgement on the next boot.
  */
-export function consumeRestartAcknowledgements(): number {
+export function consumeRestartAcknowledgements(now = Date.now()): RestartAcknowledgement[] {
   const database = initDb();
   const jsonPath = `$.${RESTART_ACK_META_KEY}`;
-  const rows = database
-    .prepare("SELECT id FROM sessions WHERE json_type(transport_meta, ?) = 'text' AND workflow_kind IS NULL")
-    .all(jsonPath) as Array<{ id: string }>;
-  if (rows.length === 0) return 0;
-
+  const select = database.prepare(
+    "SELECT id, transport_meta FROM sessions WHERE json_type(transport_meta, ?) = 'text' AND workflow_kind IS NULL",
+  );
   const insert = database.prepare(
     "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, 'notification', ?, ?)",
   );
   const clear = database.prepare(
     "UPDATE sessions SET transport_meta = NULLIF(json_remove(transport_meta, ?), '{}') WHERE id = ?",
   );
+  const stamp = database.prepare(
+    `UPDATE sessions SET transport_meta = json_set(json_remove(transport_meta, ?), '$.${RESTART_RESUME_META_KEY}', ?, '$.${RESTART_RESUME_REASON_META_KEY}', 'requested') WHERE id = ?`,
+  );
   const commit = database.transaction(() => {
-    for (const row of rows) {
-      insert.run(uuidv4(), row.id, GATEWAY_RESTARTED_MESSAGE, Date.now());
-      clear.run(jsonPath, row.id);
+    const acknowledged: RestartAcknowledgement[] = [];
+    for (const row of select.all(jsonPath) as Array<{ id: string; transport_meta: string }>) {
+      const meta = parseJsonObject(row.transport_meta) ?? {};
+      const acknowledgedAt = String(meta[RESTART_ACK_META_KEY]);
+      const resume = requesterResume(acknowledgedAt, meta[RESTART_REQUESTER_NUDGES_META_KEY], now);
+      insert.run(uuidv4(), row.id, GATEWAY_RESTARTED_MESSAGE, now);
+      if (resume === "nudge") stamp.run(jsonPath, acknowledgedAt, row.id);
+      else clear.run(jsonPath, row.id);
+      acknowledged.push({ sessionId: row.id, acknowledgedAt, resume });
     }
+    return acknowledged;
   });
-  commit();
-  return rows.length;
+  return commit.immediate();
+}
+
+function requesterResume(acknowledgedAt: string, nudges: unknown, now: number): RestartAcknowledgementResume {
+  const asked = Date.parse(acknowledgedAt);
+  if (isStaleRestartAcknowledgement(acknowledgedAt, now)) return "stale";
+  const recent = recentRequesterNudges(nudges, asked).filter((at) => at <= asked);
+  return recent.length >= RESTART_REQUESTER_LOOP_GUARD_NUDGES ? "loop-guard" : "nudge";
+}
+
+/** True when an acknowledgement is too old to belong to the restart now happening, so it is
+ *  treated as absent: its restart helper never ran, and some later restart merely found it. */
+export function isStaleRestartAcknowledgement(acknowledgedAt: unknown, now = Date.now()): boolean {
+  const asked = typeof acknowledgedAt === "string" ? Date.parse(acknowledgedAt) : Number.NaN;
+  return Number.isNaN(asked) || now - asked > RESTART_REQUESTER_MAX_AGE_MS;
+}
+
+/** Requester nudge times (epoch ms) inside the loop-guard window ending at `now`. */
+function recentRequesterNudges(value: unknown, now: number): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((at) => (typeof at === "string" ? Date.parse(at) : Number.NaN))
+    .filter((at) => !Number.isNaN(at) && now - at < RESTART_REQUESTER_LOOP_GUARD_MS);
+}
+
+/** Record that a restart-requesting session was nudged back, for the restart-loop guard. */
+export function stampRestartRequesterNudged(id: string, at: string): void {
+  const database = initDb();
+  const read = database.prepare("SELECT transport_meta FROM sessions WHERE id = ?");
+  const write = database.prepare(
+    `UPDATE sessions SET transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.${RESTART_REQUESTER_NUDGES_META_KEY}', json(?)) WHERE id = ?`,
+  );
+  database.transaction(() => {
+    const row = read.get(id) as { transport_meta: string | null } | undefined;
+    if (!row) return;
+    const now = Date.parse(at);
+    const kept = recentRequesterNudges(parseJsonObject(row.transport_meta)?.[RESTART_REQUESTER_NUDGES_META_KEY], now)
+      .map((ms) => new Date(ms).toISOString());
+    write.run(JSON.stringify([...kept, at]), id);
+  }).immediate();
+}
+
+/** Conversational sessions that asked for the restart now under way but are not `running`:
+ *  the shutdown sweep of running rows never sees them, so it records them from here. A stale
+ *  acknowledgement is not a request for this restart, so its session is left out. */
+export function listIdleRestartRequesters(now = Date.now()): Session[] {
+  const rows = initDb().prepare(
+    `SELECT * FROM sessions WHERE json_type(transport_meta, '$.${RESTART_ACK_META_KEY}') = 'text' AND status != 'running' AND workflow_kind IS NULL`,
+  ).all() as Record<string, unknown>[];
+  return rows.map(rowToSession).filter((session) => !isStaleRestartAcknowledgement(session.transportMeta?.[RESTART_ACK_META_KEY], now));
 }
 
 /**
@@ -1546,9 +1724,15 @@ export function getInterruptedSessions(): Session[] {
  */
 export function recordTurnAccounting(
   sessionId: string,
-  result: { cost?: number; numTurns?: number },
+  result: { cost?: number; numTurns?: number; model?: string },
 ): void {
-  accumulateSessionCost(sessionId, result.cost ?? 0, result.numTurns ?? 1);
+  const db = initDb();
+  // One transaction, so the session's running total and the timestamped ledger
+  // the windowed meters read can never disagree about a turn.
+  db.transaction(() => {
+    accumulateSessionCost(sessionId, result.cost ?? 0, result.numTurns ?? 1);
+    recordEngineSpend(db, sessionId, result.cost ?? 0, Date.now(), result.model);
+  })();
 }
 
 /**
@@ -2511,7 +2695,7 @@ export function acceptSessionDelivery(
 export {
   enqueueQueueItem, markQueueItemRunning, markQueueItemCompleted, markRunningQueueItemsCompletedForSession,
   getQueueItem, cancelQueueItem, getQueueItems, cancelAllPendingQueueItems, recoverStaleQueueItems,
-  listAllPendingQueueItems, claimWorkflowAttemptDispatch, cancelWorkflowAttemptDispatch,
+  listAllPendingQueueItems, listPendingQueueItemIdsForSession, claimWorkflowAttemptDispatch, cancelWorkflowAttemptDispatch,
   listPendingWorkflowAttemptDispatches, editPendingQueueItem, reassignPendingQueuePayloads, type QueueItem,
 } from './queue-item-registry.js';
 // ── File management ──────────────────────────────────────────────────

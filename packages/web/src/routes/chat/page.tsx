@@ -28,14 +28,11 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { ChatGridDropOverlay } from './chat-grid-drop'
-import { useChatGridAdd } from './use-chat-grid-add'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
-import { removeWorkingSetSession } from './working-set'
 import { formatMessage } from '@/components/chat/chat-messages'
-import { useChatGridWorkspace } from './use-chat-grid-workspace'
 import { chatHeaderTitle } from './header-title'
-import { useMobileWorkingSet } from './use-mobile-working-set'
+import { useMobileSessionTabs } from './use-mobile-session-tabs'
 import { adjacentSessionId } from './session-navigation'
 import { usePaneSessionActions } from './use-pane-session-actions'
 import { useCopyFeedback } from './use-copy-feedback'
@@ -62,6 +59,7 @@ import type { GatewayEvent } from '@jinn/gateway-events'
 import { shareDebugLog, clearDebugLog } from '@/lib/debug-log'
 import { buildNewSessionParams } from '@/components/chat/new-chat-helpers'
 import { buildContinuationPrompt } from '@/lib/stale-chat'
+import { PRODUCT_NAME } from "@/lib/brand"
 
 export default function ChatPageWrapper() {
   return (
@@ -81,7 +79,7 @@ export default function ChatPageWrapper() {
 
 function ChatPage() {
   const { settings } = useSettings()
-  const portalName = settings.portalName ?? 'Jinn'
+  const portalName = settings.portalName ?? PRODUCT_NAME
   // The URL is the single source of truth for the selected session
   // (`/?session=<id>`) — selecting is a navigation, so browser back/forward
   // walk the session trail, refresh restores the thread, and links carry it.
@@ -119,9 +117,15 @@ function ChatPage() {
   const sessionsQuery = useSessions()
   // Which pane the route shows, when it may show it, and the optimistic bubble handed to the session the pane creates.
   const { paneKey, committedId, awaitingOpen, pendingMessage, paneSlotRef, revealSelection, adoptSession, startComposer } = usePaneIdentity(selectedId, pendingEmployee, { newChatIntent: newChatIntentRef.current, sessionsPending: sessionsQuery.isPending, sessionCount: sessionsQuery.data?.length ?? 0 })
-  const { workingSet, gridPicker, gridState, releaseMobilePicker } = useChatGridWorkspace(committedId, sessionsQuery.data, systemPrimedId)
+  const { workingSet, gridPicker, gridState, releaseMobilePicker } = useSplitGridWorkspace(committedId, sessionsQuery.data, systemPrimedId)
   const removeWorkingSetPane = workingSet.remove
-  const { viewport, focusedSessionId, mountedSessionIds, mobileSessionIds } = gridState
+  // Bulk archive/delete removes many sessions at once. Per-id navigation is not
+  // wanted (the operator is culling a list, not switching chats), but a pane
+  // still holding a removed session would go stale, so drop each one.
+  const handleSessionsRemoved = useCallback((ids: string[]) => {
+    for (const id of ids) removeWorkingSetPane(id)
+  }, [removeWorkingSetPane])
+  const { viewport, focusedSessionId, mountedSessionIds } = gridState
   const paneState = useChatPaneState(committedId, focusedSessionId)
   const sessionMeta = paneState.meta
   // Show-both: the slim nav ribbon is always mounted (desktop); only the 280px
@@ -314,9 +318,9 @@ function ChatPage() {
     handleSelect(sessionId, { navigateMobile: false })
   }, [handleSelect])
 
-  const gridAdd = useChatGridAdd(workingSet.add, workingSet.insert, selectedId, handleSelect, { workingSet: workingSet.state, primaryPaneKey: paneKey, committedSessionId: committedId, pickerPaneKey: gridPicker.paneKey, viewport })
+  const gridAdd = useSplitGridAdd(workingSet, selectedId, handleSelect, { primaryPaneKey: paneKey, committedSessionId: committedId, pickerPaneKey: gridPicker.paneKey, viewport })
   const handleRemovePane = useCallback((sessionId: string) => {
-    const next = removeWorkingSetSession(workingSet.state, sessionId)
+    const next = workingSet.afterRemove(sessionId)
     workingSet.remove(sessionId)
     if (workingSet.state.focusedId === sessionId && next.focusedId) {
       handleSelect(next.focusedId, { replace: true, navigateMobile: false })
@@ -676,18 +680,37 @@ function ChatPage() {
 
   // Tab activation = session selection (pushes a history entry) for session
   // tabs; file tabs stay a pure tab-model switch (they live outside the URL).
+  // Beside a visible strip the tab shortcuts act on that strip's chats, not on the separate
+  // open-chats list (use-chat-tabs), which holds one preview and the chats made here.
+  const groupTabs = useMemo(() => focusedGroupTabs(workingSet.split.layout), [workingSet.split.layout])
+  // The strip's shown tab as the operator last chose it: the switch in flight, then the route. The
+  // layout follows the URL a commit or more later, so a quick second key would otherwise act on the
+  // tab the first one left.
+  const groupShownTab = useCallback((tabs: string[], active: string) => (
+    [pendingNavRef.current, selectedIdRef.current].find((id): id is string => typeof id === 'string' && tabs.includes(id)) ?? active
+  ), [])
   const activateTab = useCallback((index: number) => {
+    if (groupTabs) {
+      const sessionId = groupTabs.tabs[index]
+      if (sessionId) handleSelect(sessionId)
+      return
+    }
     const target = chatTabs.tabs[index]
     if (!target) return
     if (target.kind === 'session') handleSelect(target.sessionId)
     else chatTabs.switchTab(index)
-  }, [chatTabs, handleSelect])
+  }, [chatTabs, groupTabs, handleSelect])
 
   const cycleTab = useCallback((direction: 1 | -1) => {
+    if (groupTabs) {
+      const at = groupTabs.tabs.indexOf(groupShownTab(groupTabs.tabs, groupTabs.active))
+      handleSelect(groupTabs.tabs[(at + direction + groupTabs.tabs.length) % groupTabs.tabs.length])
+      return
+    }
     const count = chatTabs.tabs.length
     if (count === 0) return
     activateTab((chatTabs.activeIndex + direction + count) % count)
-  }, [chatTabs, activateTab])
+  }, [chatTabs, groupTabs, groupShownTab, handleSelect, activateTab])
 
   // Centralized keyboard shortcut registry. SHORTCUT_CATALOG describes the keys
   // (and is what Settings lists); this map is the behaviour behind each one.
@@ -704,7 +727,10 @@ function ChatPage() {
       'close-overlay': { action: () => { if (showShortcutOverlay) setShowShortcutOverlay(false); else if (showMoreMenu) setShowMoreMenu(false) } },
       'focus-chat': { action: () => document.querySelector<HTMLElement>('[data-chat-pane-active="true"] [data-chat-textarea]')?.focus() },
       'keyboard-shortcuts': { action: () => setShowShortcutOverlay(v => !v) },
-      'close-tab': { action: () => { if (chatTabs.activeIndex >= 0) chatTabs.closeTab(chatTabs.activeIndex) } },
+      'close-tab': { action: () => {
+        if (groupTabs) handleRemovePane(groupShownTab(groupTabs.tabs, groupTabs.active))
+        else if (chatTabs.activeIndex >= 0) chatTabs.closeTab(chatTabs.activeIndex)
+      } },
       'prev-tab': { action: () => cycleTab(-1) },
       'next-tab': { action: () => cycleTab(1) },
       'toggle-chat-list': { action: toggleList },
@@ -719,7 +745,7 @@ function ChatPage() {
       'tab-8': { action: () => activateTab(7) },
       'tab-9': { action: () => activateTab(8) },
     })
-  }, [handleNewChat, navigateSession, cycleEmployee, copyChat, focusedSessionId, handleDeleteSession, showShortcutOverlay, showMoreMenu, chatTabs, toggleList, activateTab, cycleTab])
+  }, [handleNewChat, navigateSession, cycleEmployee, copyChat, focusedSessionId, handleDeleteSession, showShortcutOverlay, showMoreMenu, chatTabs, toggleList, activateTab, cycleTab, groupTabs, groupShownTab, handleRemovePane])
 
   useKeyboardShortcuts(shortcuts)
 
@@ -797,13 +823,13 @@ function ChatPage() {
   )
   // The conversation title — slim inline (desktop) / centered nav bar (mobile).
   const headerTitle = chatHeaderTitle({ focusedSessionId, meta: sessionMeta, sessions: sessionsQuery.data })
-  const mobileWorkingSet = useMobileWorkingSet({
-    sessionIds: mobileSessionIds, activeId: focusedSessionId, sessions: sessionsQuery.data ?? [],
+  const mobileWorkingSet = useMobileSessionTabs({
+    committedId, systemPrimedId, activeId: focusedSessionId, sessions: sessionsQuery.data,
     subscribe, connectionSeq, onSelect: handleMobileWorkingSetSelect,
   })
   const onMobileList = mobileView === 'sidebar'
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
-  const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && deriveChatGridIds({ sessionIds: mountedSessionIds, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1
+  const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: mountedSessionIds, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
     <FileOpenContext.Provider value={openFile}>
     <PeekProvider>
@@ -838,17 +864,24 @@ function ChatPage() {
                 onEmployeeSessionsAvailable={handleEmployeeSessionsAvailable}
                 onOrderComputed={handleOrderComputed}
                 onContactEmployee={contactEmployee}
+                onSessionsRemoved={handleSessionsRemoved}
+                onOpenBeside={gridAdd.addPane}
               />
             </div>
           </div>
         </div>}
 
-        <div className="chat-pills-layout relative min-w-0 flex-1 flex-col overflow-hidden bg-background flex">
+        <div
+          className="chat-pills-layout relative min-w-0 flex-1 flex-col overflow-hidden bg-background flex"
+          // Set exactly where the pills + scrim are drawn, so a CLI or terminal
+          // view clears them there and nowhere else (JIN-2; rule at the foot).
+          data-floating-header={desktopMultiPane ? undefined : ''}
+        >
           {/* Single-pane content scrolls beneath the theme-aware header cloud. */}
           {!desktopMultiPane && <div
             aria-hidden data-chat-top-scrim
             className={cn(
-              "pointer-events-none absolute inset-x-0 top-0 z-[5] h-[88px]",
+              "pointer-events-none absolute inset-x-0 top-0 z-[5] h-[var(--chat-top-scrim)]",
               onMobileList && "hidden lg:block",
             )}
             style={{ background: 'linear-gradient(to bottom, var(--bg) 0, var(--bg) 52px, color-mix(in srgb, var(--bg) 68%, transparent) 68px, transparent 100%)' }}
@@ -883,6 +916,7 @@ function ChatPage() {
               onEmployeeSessionsAvailable={handleEmployeeSessionsAvailable}
               onOrderComputed={handleOrderComputed}
               onContactEmployee={contactEmployee}
+              onSessionsRemoved={handleSessionsRemoved}
             />
           </div>}
 
@@ -905,7 +939,9 @@ function ChatPage() {
                 <FileView path={chatTabs.activeTab.path} embedded onBack={handleFileBack} />
               </Suspense>
             ) : awaitingOpen ? <div className="flex-1" /> : (
+              <SplitGridContext.Provider value={{ split: workingSet.split, sessionForKey: gridAdd.sessionForKey }}>
               <MultiChatGrid
+                grid={SplitChatGrid}
                 sessionIds={mountedSessionIds}
                 focusedId={focusedSessionId}
                 primary={{
@@ -945,8 +981,9 @@ function ChatPage() {
                 onStartFreshChat={handleStartFreshChat}
                 pickerPane={pickerPane}
               />
+              </SplitGridContext.Provider>
             )}
-            <ChatGridDropOverlay placement={gridAdd.drop.placement} />
+            <SplitDropOverlay placement={gridAdd.drop.placement} />
           </div>
 
           {/* Stable above the session-keyed ChatPane: it survives route remount
@@ -982,11 +1019,17 @@ function ChatPage() {
           and aligning scroll anchoring to the same offset. Driven by the shared
           token (pill height + gap + safe-area) so it auto-tracks notched devices —
           no fragile `:first-child` coupling or magic number. Content still scrolls
-          beneath the translucent scrim. */}
+          beneath the translucent scrim. A CLI or terminal view cannot scroll
+          under it, so it starts below both (JIN-2): where the transcript's first
+          message sits — this clearance plus its --chat-header-band — or the
+          scrim's foot, whichever is lower (below lg the scrim outruns the band). */}
       <style>{`
         .chat-pills-layout .chat-messages-scroll {
           padding-top: var(--chat-top-clearance);
           scroll-padding-top: var(--chat-top-clearance);
+        }
+        .chat-pills-layout[data-floating-header] {
+          --cli-terminal-top-inset: max(calc(var(--chat-top-clearance) + var(--chat-header-band)), var(--chat-top-scrim));
         }
       `}</style>
     </PageLayout>

@@ -10,8 +10,10 @@ export const UNSUPPORTED_PRERELEASE_TODO_DATA =
 
 export const CORRUPT_SESSIONS_DATABASE =
   "The session database appears to be corrupt or is not a valid SQLite file — this is NOT a Todo-data\n" +
-  "problem. Restore it from a backup (check the 'backups/' folder next to registry.db, or your most\n" +
-  "recent copy) and restart.";
+  "problem. If a registry.db-wal sits beside it, copy all three files (registry.db, -wal, -shm) aside\n" +
+  "and try moving just the -wal away first: a stale WAL can make an intact file read as corrupt, and a\n" +
+  "restore would lose everything since the backup. Otherwise restore it from a backup (check the\n" +
+  "'backups/' folder next to registry.db, or your most recent copy) and restart.";
 
 /** SQLite surfaces file corruption via these substrings. */
 export function isSqliteCorruption(message: string): boolean {

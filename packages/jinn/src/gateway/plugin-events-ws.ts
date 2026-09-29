@@ -16,8 +16,9 @@ import { trackHeartbeat } from "./ws-heartbeat.js";
  * There is no authentication in this file, and there must never be. The path is
  * under `/api/`, so `authRequiredForRequest` (auth.ts) returns true for it and
  * the gateway's one upgrade gate (server.ts) has already authenticated the
- * caller before anything here runs — exactly as it does for `/ws`. A second,
- * bespoke check here would be a second policy to keep in step with the first.
+ * caller, and refused a browser on any origin but the gateway's own, before
+ * anything here runs — exactly as it does for `/ws`. A second, bespoke check
+ * here would be a second policy to keep in step with the first.
  */
 
 const EVENTS_PATH = /^\/api\/plugins\/([^/]+)\/events$/;

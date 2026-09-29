@@ -1,10 +1,11 @@
 
 import { useEffect } from "react"
 import { useSettings } from "@/routes/settings-provider"
+import { PRODUCT_EMOJI } from "@/lib/brand"
 
 export function EmojiFavicon() {
   const { settings } = useSettings()
-  const emoji = settings.portalEmoji ?? "\u{1F9DE}"
+  const emoji = settings.portalEmoji ?? PRODUCT_EMOJI
 
   useEffect(() => {
     const canvas = document.createElement("canvas")

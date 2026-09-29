@@ -5,16 +5,20 @@ import { ChatMessages } from '@/components/chat/chat-messages'
 import type { CommsPeekData } from '@/components/chat/thread-peek'
 import { ChatInput } from '@/components/chat/chat-input'
 import { CliKeybar } from '@/components/chat/cli-keybar'
+import { TerminalPaneBody } from '@/components/chat/terminal-pane-body'
+import { isTerminalSession } from '@/lib/terminal-session'
 import { ChatEmployeePicker } from '@/components/chat/chat-employee-picker'
 import { ChatHydrationOverlay, useHydrationSpinner } from '@/components/chat/chat-hydration'
 import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-session-queue'
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
+import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
 import { useLiveSession } from '@/hooks/use-live-session'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
 import { useFileDrop } from '@/hooks/use-file-drop'
 import { FileDropOverlay } from '@/components/ui/file-drop-overlay'
 import { ChatPaneTitleBar, paneTitleBarState, paneViewControls } from '@/components/chat/chat-pane-title-bar'
+import { usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
 import { ChatCopyToast } from '@/components/chat/chat-copy-toast'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
@@ -28,6 +32,7 @@ import { AREAS } from '@/contrib/types'
 import type { EnginesResponse } from '@/lib/api'
 import type { Message, MediaAttachment } from '@/lib/conversations'
 import type { GatewayEvent, GatewayEventListener } from '@jinn/gateway-events'
+import { PRODUCT_NAME } from "@/lib/brand"
 
 // The live read pipeline (load/WS/reconnect/watchdog) now lives in
 // useLiveSession; shouldRecoverStuckTurn moved there too. Re-export it so the
@@ -79,6 +84,8 @@ interface ChatPaneProps {
   newChatEmptyState?: ReactNode
   /** Pane-owned identity chrome appears only when the desktop grid has siblings. */
   multiPane?: boolean
+  /** Known from list meta to be a terminal session, before its detail loads. */
+  terminal?: boolean
   /** Warm list/meta fallback while the pane's authoritative session detail loads. */
   paneTitle?: string
   paneEmployee?: string
@@ -90,7 +97,7 @@ export function ChatPane({
   onSessionCreated,
   onSessionMetaChange,
   onRefresh,
-  portalName = 'Jinn',
+  portalName = PRODUCT_NAME,
   subscribe,
   engineRegistry,
   connectionSeq,
@@ -107,10 +114,13 @@ export function ChatPane({
   onStartFreshChat,
   newChatEmptyState,
   multiPane = false,
+  terminal = false,
   paneTitle, paneEmployee,
   onClose, sessionActions, paneBackTo, copyNotice,
 }: ChatPaneProps) {
   const seedFromOnboarding = useOnboardingSeed(sessionId, pendingUserMessage)
+  // Sending from a pane is the operator working in that chat: a preview tab for it becomes a kept one.
+  const keepPaneTab = usePaneTabsKeep()
 
   // useLiveSession owns reads; this pane layers the composer and optimistic writes.
   const live = useLiveSession(sessionId, {
@@ -348,6 +358,7 @@ export function ChatPane({
           sessionQueue.adopt(userMsg.id, await api.sendMessage(sid, { message, interrupt: interrupt || undefined, attachments: attachmentIds, mode, speech: speech || undefined }))
           onRefresh?.()
         }
+        keepPaneTab(sid)
         return true
       } catch (err) {
         failSend(err instanceof Error ? err.message : 'Failed to send message')
@@ -355,7 +366,7 @@ export function ChatPane({
       }
     },
     // Keep viewMode and stale-notice handling fresh across chat↔CLI sends.
-    [sessionId, selectedEmployee, onSessionCreated, onRefresh, viewMode, selector, currentSession?.engine, engineRegistry, beginSend, failSend, answerStaleChatBySending, sessionQueue]
+    [sessionId, selectedEmployee, onSessionCreated, onRefresh, viewMode, selector, currentSession?.engine, engineRegistry, beginSend, failSend, answerStaleChatBySending, sessionQueue, keepPaneTab]
   )
 
   const handleStatusRequest = useCallback(async () => {
@@ -419,6 +430,8 @@ export function ChatPane({
   const titleBarState = paneTitleBarState({ sessionId, currentSession, loading, turnPending,
     backgroundActivity, delegatedActivity, paneTitle, paneEmployee, portalName })
   const titleBarViewControls = paneViewControls(titleBarState.session, engineRegistry)
+  // A terminal session is its shell and nothing else: no transcript, no composer.
+  const terminalPane = sessionId && (terminal || isTerminalSession(currentSession)) ? sessionId : null
 
   return (
     <div
@@ -447,7 +460,7 @@ export function ChatPane({
           picker as its empty state (any view mode — the CLI terminal mounts once
           the first message has created the session). Mounting it up front is what
           lets the first message land in a node that was already on screen. */}
-      {viewMode === 'cli' && sessionId ? (
+      {terminalPane ? <TerminalPaneBody sessionId={terminalPane} /> : viewMode === 'cli' && sessionId ? (
         // Reserve flex space during lazy-chunk load so the ChatInput below stays
         // pinned to the bottom instead of flashing to the top for a frame.
         <Suspense fallback={<div style={{ flex: 1, minHeight: 0, background: 'var(--bg)' }} />}>
@@ -485,6 +498,7 @@ export function ChatPane({
         </SessionQueueContext.Provider>
       )}
 
+      {terminalPane ? null : (<>
       {/* Contributed chat surface. Composer-adjacent rather than in the message
           list, because this is mounted for every view including CLI — a
           contribution's visibility does not depend on host state it cannot see. */}
@@ -509,6 +523,11 @@ export function ChatPane({
         onDroppedFilesConsumed={fileDrop.clearDroppedFiles}
         focusTrigger={focusTrigger}
         statusSlot={
+          // A message held behind a turn typed in the claude terminal is
+          // waiting, not hung: say so, in both views, with the way out.
+          (currentSession?.turnProgress as { waitingForTerminalTurn?: boolean } | null | undefined)?.waitingForTerminalTurn ? (
+            <TerminalWaitStatus onStop={() => { void handleInterrupt() }} />
+          ) :
           // Background-work StateLine — the session is officially idle but
           // subagents / background tasks are still running. Informational only
           // (input stays live); hidden while a foreground turn is streaming
@@ -542,6 +561,7 @@ export function ChatPane({
           ) : undefined
         }
       />
+      </>)}
     </div>
   )
 }

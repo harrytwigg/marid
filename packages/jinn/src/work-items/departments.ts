@@ -70,10 +70,14 @@ export interface DepartmentSummary extends DepartmentRecord {
   /** Live count of Todos currently IN the department (items keep their birth
    *  prefix when moved, so this counts membership, not the ID namespace). */
   todoCount: number;
+  /** False for a registered department outside `gateway.todoDepartments`:
+   *  its Todos still carry its prefix, but nothing new may be put in it. */
+  selectable: boolean;
 }
 
-/** The `GET /api/departments` surface: registry rows + one GROUP BY count. */
-export function listDepartmentsWithCounts(db: DatabaseType): DepartmentSummary[] {
+/** The `GET /api/departments` surface: registry rows + one GROUP BY count.
+ *  `allowed` is the closed department policy, when one is configured. */
+export function listDepartmentsWithCounts(db: DatabaseType, allowed?: readonly string[] | null): DepartmentSummary[] {
   return (
     db
       .prepare(
@@ -89,5 +93,6 @@ export function listDepartmentsWithCounts(db: DatabaseType): DepartmentSummary[]
     prefix: row.prefix as string,
     createdAt: row.created_at as string,
     todoCount: Number(row.todo_count),
+    selectable: !allowed || allowed.includes(row.slug as string),
   }));
 }

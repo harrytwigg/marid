@@ -5,13 +5,18 @@ import {
   classifyRecovery,
   mayReplaceRecoveryLane,
   MAX_RECOVERY_ATTEMPTS,
+  RECOVERY_SWEPT_STATUSES,
   TODO_RECOVERY_ACTOR,
+  type AttemptActivity,
   type RecoveryClassification,
 } from "./recovery.js";
+import { isExecutionAttempt } from "./link-role.js";
 import { listWorkItemRuns } from "./runs.js";
+import { listWorkItemEvents } from "./event-log.js";
 import { appendWorkItemEvent, listWorkItems, type WorkItem } from "./store.js";
 import { owningWorkflowId } from "./workflow-ownership.js";
 import { initDb } from "../shared/db.js";
+import { listSessionsByWorkItem } from "../sessions/registry.js";
 import type { AvailabilityRearmResult } from "./availability-resume.js";
 
 export type TodoRecoveryMode = "off" | "classify-only" | "auto";
@@ -29,7 +34,10 @@ export interface RecoverySweepResult {
   applied: number;
 }
 
-const SWEEP_STATUSES = ["assigned", "executing", "in_review", "blocked", "escalated"] as const;
+/** The one definition lives beside the classification (`recovery.ts`), because
+ *  the payload reader also has to know which statuses a recovery row is current
+ *  for — two lists would drift. */
+const SWEEP_STATUSES = RECOVERY_SWEPT_STATUSES;
 
 export function todoRecoveryMode(raw: string | undefined): TodoRecoveryMode {
   return raw === "off" || raw === "auto" || raw === "classify-only" ? raw : "classify-only";
@@ -38,6 +46,17 @@ export function todoRecoveryMode(raw: string | undefined): TodoRecoveryMode {
 export function sessionInFlight(sessionId: string): boolean {
   const row = initDb().prepare("SELECT status FROM sessions WHERE id = ?").get(sessionId) as { status: string } | undefined;
   return row?.status === "running" || row?.status === "waiting";
+}
+
+/** Newest-first, as the registry lists them; review and phase links never count. */
+export function attemptActivity(workItemId: string): AttemptActivity {
+  const attempts = listSessionsByWorkItem(workItemId).filter(isExecutionAttempt);
+  return {
+    inFlight: attempts.some((session) => session.status === "running" || session.status === "waiting"),
+    lastActivityAt: attempts[0]?.lastActivity ?? null,
+    executingSince: listWorkItemEvents(workItemId)
+      .filter((event) => event.kind === "status_change" && event.toStatus === "executing").at(-1)?.createdAt ?? null,
+  };
 }
 
 export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClassification {
@@ -51,6 +70,7 @@ export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClas
       ? { id: last.id, outcome: last.outcome ?? "crashed", error: last.error, endedAt: last.endedAt }
       : undefined,
     openRun: open ? { startedAt: open.startedAt, sessionInFlight: sessionInFlight(open.sessionId) } : undefined,
+    attempts: item.status === "executing" ? attemptActivity(item.id) : undefined,
     approval: approval
       ? { state: approval.state, operatorOnly: approval.operatorOnly }
       : undefined,

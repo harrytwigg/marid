@@ -10,11 +10,14 @@ const DEFAULT_INTERVAL_MS = 15_000;
  *  cron, workflow and web alike. A "running" session whose heartbeat is older
  *  than this has no live turn driving it: the completion event was lost.
  *
- *  Queued-but-not-started turns are safe: the POST handler sets
- *  status:"running" + lastActivity synchronously at enqueue, and the turn
- *  re-sets both when it actually starts (and the 5s heartbeat takes over).
- *  Worst case a long-delayed queue item gets its spinner cleared here and
- *  re-armed by session:started when the turn begins. */
+ *  Queued-but-not-started turns are NOT safe on this test alone: the POST
+ *  handler sets status:"running" + lastActivity synchronously at enqueue, and
+ *  nothing refreshes either while the row waits its turn in the lane. A turn
+ *  parked behind a long one looks exactly like a lost completion from here,
+ *  and settling it is not a cleared spinner — it wakes the parent with an
+ *  interruption error for a turn that was going to run. So a session
+ *  whose next turn the in-process queue still holds is skipped via
+ *  `hasQueuedTurn`, however stale its heartbeat. */
 const DEFAULT_STALE_MS = 45_000;
 
 export interface StatusReconcilerDeps {
@@ -23,6 +26,10 @@ export interface StatusReconcilerDeps {
   surfaceFor: (sessionId: string) => TurnSurface;
   intervalMs?: number;
   staleMs?: number;
+  /** Does this process hold a not-yet-started turn for the session? A parked
+   *  turn will start when its lane frees, so the session is waiting, not stuck.
+   *  Optional so a caller with no queue (tests) keeps the bare heartbeat test. */
+  hasQueuedTurn?: (sessionId: string) => boolean;
   /** Test override. */
   now?: () => number;
   /** Carry-over between sweeps: sessions seen stuck once. A session is only
@@ -60,6 +67,10 @@ export async function sweepOnce(deps: StatusReconcilerDeps): Promise<number> {
     );
     if (turnRunning) {
       deps.pendingStuck?.delete(session.id); // live turn — clear any mark
+      continue;
+    }
+    if (deps.hasQueuedTurn?.(session.id)) {
+      deps.pendingStuck?.delete(session.id); // parked behind its lane — it will start, not stuck
       continue;
     }
     // Session qualifies as stuck: stale heartbeat + no live turn.

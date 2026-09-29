@@ -12,6 +12,9 @@ const sidebarData = vi.hoisted(() => ({
   sessions: [] as Record<string, unknown>[],
   counts: {} as Record<string, number>,
   pins: new Set<string>(),
+  archiveSpy: vi.fn(async (_id: string) => ({})),
+  bulkDeleteSpy: vi.fn(async (_ids: string[]) => ({ status: 'deleted', count: 0 })),
+  removedSpy: vi.fn(),
 }))
 
 function withQueryClient(ui: React.ReactNode) {
@@ -27,9 +30,9 @@ vi.mock('@/hooks/use-sessions', () => ({
   useUpdateSession: () => ({ mutate: vi.fn() }),
   useDeleteSession: () => ({ mutateAsync: vi.fn() }),
   useStopSession: () => ({ mutate: vi.fn() }),
-  useArchiveSession: () => ({ mutateAsync: vi.fn() }),
+  useArchiveSession: () => ({ mutateAsync: sidebarData.archiveSpy }),
   useUnarchiveSession: () => ({ mutateAsync: vi.fn() }),
-  useBulkDeleteSessions: () => ({ mutateAsync: vi.fn() }),
+  useBulkDeleteSessions: () => ({ mutateAsync: sidebarData.bulkDeleteSpy }),
   useDuplicateSession: () => ({ mutate: vi.fn() }),
 }))
 
@@ -78,7 +81,7 @@ function webSession(id: string, title: string, extra: Record<string, unknown> = 
 function renderSidebar(variant: 'desktop' | 'mobile' = 'desktop') {
   return render(withQueryClient(
     <MemoryRouter>
-      <ChatSidebar selectedId={null} onSelect={vi.fn()} onNewChat={vi.fn()} variant={variant} />
+      <ChatSidebar selectedId={null} onSelect={vi.fn()} onNewChat={vi.fn()} onSessionsRemoved={sidebarData.removedSpy} variant={variant} />
     </MemoryRouter>,
   ))
 }
@@ -88,6 +91,11 @@ beforeEach(() => {
   sidebarData.sessions = []
   sidebarData.counts = {}
   sidebarData.pins = new Set()
+  sidebarData.archiveSpy.mockClear()
+  sidebarData.bulkDeleteSpy.mockClear()
+  sidebarData.removedSpy.mockClear()
+  sidebarData.archiveSpy.mockImplementation(async (_id: string) => ({}))
+  sidebarData.bulkDeleteSpy.mockImplementation(async (_ids: string[]) => ({ status: 'deleted', count: 0 }))
 })
 
 describe('pinned section cap', () => {
@@ -220,5 +228,278 @@ describe('automated sessions and the Team directory', () => {
     // group makes it a second match.
     expect(screen.getAllByText('IMPLEMENT PHASE — round 1').length).toBeGreaterThan(0)
     expect(screen.getAllByText('PLAN PHASE — planning only').length).toBeGreaterThan(0)
+  })
+})
+
+describe('multi-select', () => {
+  const A = webSession('sel-a', 'Alpha chat')
+  const B = webSession('sel-b', 'Beta chat')
+  const C = webSession('sel-c', 'Gamma chat')
+
+  /** Enter selection mode from the control band's "Select chats" affordance. */
+  function enterSelection() {
+    fireEvent.click(screen.getByRole('button', { name: 'Select chats' }))
+  }
+
+  function checkbox(label: string) {
+    return screen.getByRole('checkbox', { name: `Select ${label}` })
+  }
+
+  // The recency buckets are relative to the run's wall clock: only Today and
+  // Yesterday render flat rows, anything older collapses into the "Older"
+  // section and their checkboxes are not in the DOM. A hardcoded date put these
+  // three rows in that collapsed section the moment the calendar moved on, so
+  // pin them inside today — newest first — and the ordered range is the same on
+  // every run date.
+  function recencyRows() {
+    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
+    return [
+      webSession('sel-a', 'Alpha chat', { lastActivity: minutesAgo(1) }),
+      webSession('sel-b', 'Beta chat', { lastActivity: minutesAgo(2) }),
+      webSession('sel-c', 'Gamma chat', { lastActivity: minutesAgo(3) }),
+    ]
+  }
+
+  it('toggles rows in and out of the selection and counts them', () => {
+    sidebarData.sessions = [A, B, C]
+    renderSidebar()
+    enterSelection()
+
+    expect(screen.getByText('Select chats')).toBeTruthy()
+    // A session row's click opens the chat; in selection mode it selects it.
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Beta chat'))
+    expect(screen.getByText('2 selected')).toBeTruthy()
+    expect(checkbox('Alpha chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Gamma chat').getAttribute('aria-checked')).toBe('false')
+
+    fireEvent.click(checkbox('Beta chat'))
+    expect(screen.getByText('1 selected')).toBeTruthy()
+  })
+
+  it('shift-click extends the selection from the anchor to the clicked row', () => {
+    sidebarData.sessions = recencyRows()
+    renderSidebar()
+    enterSelection()
+
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Gamma chat'), { shiftKey: true })
+
+    expect(screen.getByText('3 selected')).toBeTruthy()
+    expect(checkbox('Alpha chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Beta chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Gamma chat').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('recomputes the range from the same anchor on a later shift-click', () => {
+    sidebarData.sessions = recencyRows()
+    renderSidebar()
+    enterSelection()
+
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Gamma chat'), { shiftKey: true })
+    // The anchor stays on Alpha, so the second range replaces the first
+    // rather than unioning Alpha–Gamma with Alpha–Beta.
+    fireEvent.click(checkbox('Beta chat'), { shiftKey: true })
+
+    expect(screen.getByText('2 selected')).toBeTruthy()
+    expect(checkbox('Alpha chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Beta chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Gamma chat').getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('moves the anchor on a plain click so a later shift-click ranges from it', () => {
+    sidebarData.sessions = recencyRows()
+    renderSidebar()
+    enterSelection()
+
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Beta chat'))
+    fireEvent.click(checkbox('Gamma chat'), { shiftKey: true })
+
+    expect(screen.getByText('2 selected')).toBeTruthy()
+    expect(checkbox('Alpha chat').getAttribute('aria-checked')).toBe('false')
+    expect(checkbox('Beta chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Gamma chat').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('ranges across a section header without selecting it', () => {
+    // Alpha and Beta are today, Gamma is yesterday, so a "Yesterday" header sits
+    // between Beta and Gamma in render order. A range must span it without the
+    // header counting as a selectable row.
+    const today = new Date()
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 12, 0, 0)
+    sidebarData.sessions = [
+      webSession('sel-a', 'Alpha chat', { lastActivity: new Date(today.getTime() - 60_000).toISOString() }),
+      webSession('sel-b', 'Beta chat', { lastActivity: new Date(today.getTime() - 120_000).toISOString() }),
+      webSession('sel-c', 'Gamma chat', { lastActivity: yesterday.toISOString() }),
+    ]
+    renderSidebar()
+    enterSelection()
+
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Gamma chat'), { shiftKey: true })
+
+    expect(screen.getByText('3 selected')).toBeTruthy()
+    expect(checkbox('Alpha chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Beta chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Gamma chat').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('ranges upward when the anchor sits below the shift-clicked row', () => {
+    const today = new Date()
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 12, 0, 0)
+    sidebarData.sessions = [
+      webSession('sel-a', 'Alpha chat', { lastActivity: new Date(today.getTime() - 60_000).toISOString() }),
+      webSession('sel-b', 'Beta chat', { lastActivity: new Date(today.getTime() - 120_000).toISOString() }),
+      webSession('sel-c', 'Gamma chat', { lastActivity: yesterday.toISOString() }),
+    ]
+    renderSidebar()
+    enterSelection()
+
+    // Anchor on Gamma (yesterday), then shift-click Alpha (today, above it).
+    fireEvent.click(checkbox('Gamma chat'))
+    fireEvent.click(checkbox('Alpha chat'), { shiftKey: true })
+
+    expect(screen.getByText('3 selected')).toBeTruthy()
+    expect(checkbox('Alpha chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Beta chat').getAttribute('aria-checked')).toBe('true')
+    expect(checkbox('Gamma chat').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('treats a shift-click with no anchor as an ordinary toggle', () => {
+    sidebarData.sessions = [A, B]
+    renderSidebar()
+    enterSelection()
+
+    fireEvent.click(checkbox('Beta chat'), { shiftKey: true })
+
+    expect(screen.getByText('1 selected')).toBeTruthy()
+    expect(checkbox('Beta chat').getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('disables both batch actions until something is selected', () => {
+    sidebarData.sessions = [A, B]
+    renderSidebar()
+    enterSelection()
+
+    expect(screen.getByRole('button', { name: 'Archive selected chats' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Delete selected chats' }).hasAttribute('disabled')).toBe(true)
+
+    fireEvent.click(checkbox('Alpha chat'))
+    expect(screen.getByRole('button', { name: 'Archive selected chats' }).hasAttribute('disabled')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Delete selected chats' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('archives every selected session and leaves selection mode', async () => {
+    sidebarData.sessions = [A, B, C]
+    renderSidebar()
+    enterSelection()
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Gamma chat'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive selected chats' }))
+
+    await vi.waitFor(() => expect(sidebarData.archiveSpy).toHaveBeenCalledTimes(2))
+    expect(sidebarData.archiveSpy.mock.calls.map((c) => c[0]).sort()).toEqual(['sel-a', 'sel-c'])
+    // Back to the resting band: the batch is cleared, not left armed.
+    await vi.waitFor(() => expect(screen.queryByText('2 selected')).toBeNull())
+    expect(screen.getByRole('button', { name: 'Search chats' })).toBeTruthy()
+  })
+
+  it('confirms before a bulk delete, naming the count, and deletes on confirm', async () => {
+    sidebarData.sessions = [A, B, C]
+    renderSidebar()
+    enterSelection()
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Beta chat'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected chats' }))
+    // The irreversible step is gated: nothing has been deleted yet.
+    expect(screen.getByText('Delete 2 selected chats?')).toBeTruthy()
+    expect(sidebarData.bulkDeleteSpy).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await vi.waitFor(() => expect(sidebarData.bulkDeleteSpy).toHaveBeenCalledTimes(1))
+    expect(sidebarData.bulkDeleteSpy.mock.calls[0]![0].sort()).toEqual(['sel-a', 'sel-b'])
+  })
+
+  it('cancelling the bulk delete confirmation deletes nothing', () => {
+    sidebarData.sessions = [A, B]
+    renderSidebar()
+    enterSelection()
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected chats' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText('Delete 1 selected chats?')).toBeNull()
+    expect(sidebarData.bulkDeleteSpy).not.toHaveBeenCalled()
+  })
+
+  it('cancel clears the batch and restores the normal list', () => {
+    sidebarData.sessions = [A, B]
+    renderSidebar()
+    enterSelection()
+    fireEvent.click(checkbox('Alpha chat'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel selection' }))
+    expect(screen.queryByText('1 selected')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Search chats' })).toBeTruthy()
+  })
+
+  it('keeps archiving after one session is refused (a running chat must not sink the batch)', async () => {
+    sidebarData.sessions = [A, B, C]
+    // The gateway answers 409 for a running/waiting chat; the first refusal must
+    // not abort the ids after it.
+    sidebarData.archiveSpy.mockImplementation(async (id: string) => {
+      if (id === 'sel-a') throw new Error('Cannot archive a chat while it is running or waiting')
+      return {}
+    })
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderSidebar()
+    enterSelection()
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Beta chat'))
+    fireEvent.click(checkbox('Gamma chat'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive selected chats' }))
+
+    await vi.waitFor(() => expect(sidebarData.archiveSpy).toHaveBeenCalledTimes(3))
+    expect(sidebarData.archiveSpy.mock.calls.map((c) => c[0]).sort()).toEqual(['sel-a', 'sel-b', 'sel-c'])
+    // Only the sessions that actually left are handed to the page.
+    expect(sidebarData.removedSpy).toHaveBeenCalledWith(['sel-b', 'sel-c'])
+    // A partial batch is surfaced, not silently indistinguishable from a full one.
+    await vi.waitFor(() => expect(alertSpy).toHaveBeenCalledTimes(1))
+    expect(alertSpy.mock.calls[0]![0]).toContain('1 of 3')
+    alertSpy.mockRestore()
+  })
+
+  it('does not report removed ids when every archive is refused', async () => {
+    sidebarData.sessions = [A, B]
+    sidebarData.archiveSpy.mockImplementation(async () => { throw new Error('refused') })
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    renderSidebar()
+    enterSelection()
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Beta chat'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive selected chats' }))
+
+    await vi.waitFor(() => expect(alertSpy).toHaveBeenCalledTimes(1))
+    expect(sidebarData.removedSpy).not.toHaveBeenCalled()
+    alertSpy.mockRestore()
+  })
+
+  it('hands the deleted ids to the page so stale working-set panes are dropped', async () => {
+    sidebarData.sessions = [A, B]
+    renderSidebar()
+    enterSelection()
+    fireEvent.click(checkbox('Alpha chat'))
+    fireEvent.click(checkbox('Beta chat'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete selected chats' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await vi.waitFor(() => expect(sidebarData.removedSpy).toHaveBeenCalledWith(['sel-a', 'sel-b']))
   })
 })

@@ -11,6 +11,9 @@ export interface GatewayEventMap {
   "session:deleted": { sessionId: string }
   "session:stopped": { sessionId: string }
   "session:external-turn": { sessionId: string }
+  /** A gateway turn started (true) or stopped (false) waiting for a turn the
+   *  operator typed into the claude terminal to finish. */
+  "session:terminal-wait": { sessionId: string; waiting: boolean }
   "session:interrupted": { sessionId: string; reason: string }
   "session:completed": {
     sessionId: string
@@ -90,6 +93,7 @@ export const GATEWAY_EVENTS = {
   sessionDeleted: "session:deleted",
   sessionStopped: "session:stopped",
   sessionExternalTurn: "session:external-turn",
+  sessionTerminalWait: "session:terminal-wait",
   sessionInterrupted: "session:interrupted",
   sessionCompleted: "session:completed",
   sessionDelta: "session:delta",

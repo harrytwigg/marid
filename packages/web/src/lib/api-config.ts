@@ -7,7 +7,7 @@ import { authFetch } from "@/lib/auth"
  * nothing runtime crosses from that package into the bundle. `X-Jinn-Origin` is
  * duplicated the same way, for the same reason.
  */
-const CONFIG_REVISION_HEADER = "X-Jinn-Config-Revision"
+export const CONFIG_REVISION_HEADER = "X-Jinn-Config-Revision"
 
 /** config.yaml, and which config.yaml it was. */
 export interface ConfigDocument {

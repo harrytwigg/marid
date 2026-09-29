@@ -105,7 +105,7 @@ describe("the reconciler settles the run ledger from attempt receipts (ICI-728)"
     const item = store.createWorkItem({ title: "no ledger row", status: "executing", source: "delegation" });
     settledSession("s-no-run", item.id, "succeeded");
 
-    expect(reconcile.reconcileWorkItem(item.id)?.item.status).toBe("in_review");
+    expect(reconcile.reconcileWorkItem(item.id)?.item.status).toBe("executing");
     expect(runs.listWorkItemRuns(item.id)).toEqual([]);
   });
 });

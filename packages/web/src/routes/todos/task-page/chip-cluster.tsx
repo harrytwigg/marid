@@ -3,7 +3,8 @@ import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { displayNameOf } from "../util"
-import { RailPriorityBars, type RailPickers } from "./props-rail"
+import { type RailPickers } from "./props-rail"
+import { RailPriorityBars } from "./rail-rows"
 import { RemoveButton } from "./label-chip"
 
 /* Variant A — the task's working identity lives directly under its title.

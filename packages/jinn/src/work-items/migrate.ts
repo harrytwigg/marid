@@ -18,8 +18,11 @@ import { currentTableSql, sqlShape } from "./sql-shape.js";
 import {
   WORK_ITEM_CREATE_RECEIPTS_DDL,
   WORK_ITEM_CREATE_RECEIPTS_TABLE_DDL,
+  WORK_ITEM_AUTO_START_DDL,
+  WORK_ITEM_AUTO_START_TABLE_DDL,
   WORK_ITEM_DISPATCH_DDL,
   WORK_ITEM_DISPATCH_TABLE_DDL,
+  workItemAutoStartRowsAreSound,
   workItemCreateReceiptRowsAreSound,
   workItemDispatchRowsAreSound,
 } from "./dispatch-schema.js";
@@ -500,6 +503,7 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ["work_item_id_burns", WORK_ITEM_ID_BURNS_TABLE_DDL],
   ["work_item_id_issuances", WORK_ITEM_ID_ISSUANCES_TABLE_DDL],
   ["work_item_kept", WORK_ITEM_KEPT_DDL],
+  ["work_item_auto_start", WORK_ITEM_AUTO_START_TABLE_DDL],
   ...WORK_ITEM_RECOVERY_TABLES.map((table) => [table.name, table.ddl] as [string, string]),
   ["departments", DEPARTMENTS_TABLE_DDL],
 ]);
@@ -523,6 +527,7 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "work_item_create_receipts", ddl: WORK_ITEM_CREATE_RECEIPTS_DDL },
   { name: "work_item_stop_cause", ddl: WORK_ITEM_STOP_CAUSE_DDL },
   { name: "work_item_kept", ddl: WORK_ITEM_KEPT_DDL },
+  { name: "work_item_auto_start", ddl: WORK_ITEM_AUTO_START_DDL },
 ].concat(WORK_ITEM_RECOVERY_TABLES);
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,
@@ -789,6 +794,16 @@ export function verifyCurrentWorkItemSchema(db: DatabaseType): void {
   if (!workItemRunRowsAreSound(db, (id) => byId.has(id))) refusal();
   if (!workItemDispatchRowsAreSound(db, (id) => byId.has(id))) refusal();
   if (!workItemCreateReceiptRowsAreSound(db, (id) => byId.has(id))) refusal();
+  if (!workItemAutoStartRowsAreSound(db, (id) => byId.has(id))) refusal();
+}
+
+/** Corruption or an I/O failure — never a schema shape. Other SQLite errors
+ *  stay with the shape fallbacks, and SQLITE_BUSY in particular must still end
+ *  in the refusal that shared/db.ts retries while a peer's migration commits. */
+function isDamagedFileError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && /^SQLITE_(CORRUPT|NOTADB|IOERR)/.test(code)) return true;
+  return isSqliteCorruption(err instanceof Error ? err.message : String(err));
 }
 
 function classifyOpenWorkItemsDatabase(db: DatabaseType): WorkItemSchemaPreflight {
@@ -806,7 +821,12 @@ function classifyOpenWorkItemsDatabase(db: DatabaseType): WorkItemSchemaPrefligh
   try {
     verifyCurrentWorkItemSchema(db);
     return "current";
-  } catch {
+  } catch (err) {
+    // A damaged file or a failing disk is not a schema shape (a stale
+    // WAL made the Todo tables "malformed" while the schema still read back as
+    // current). Let it escape so preflight names it instead of refusing with the
+    // prerelease message.
+    if (isDamagedFileError(err)) throw err;
     // A v2 database missing additive tables (created before a later slice
     // shipped them) is "current": the migration creates them at boot.
     if (recognizedHealableV2(db)) return "current";

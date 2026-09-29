@@ -18,6 +18,7 @@ import { useGlobalSearch } from "./global-search/use-global-search"
 import { useSearchKeyboard } from "./global-search/use-search-keyboard"
 import { useTodoWorkbench } from "./global-search/use-todo-workbench"
 import { activatePrimary, commandFor, parseCommand, type Verb } from "./global-search/verbs"
+import { PRODUCT_NAME } from "@/lib/brand"
 
 // The palette stays a module rather than becoming `global-search/index.tsx`, so
 // `import("./global-search")` and every `@/components/global-search` specifier
@@ -51,7 +52,7 @@ export interface GlobalSearchProps {
 
 export function GlobalSearch({ initialOpen = false, initialScope, initialQuery }: GlobalSearchProps) {
   const { settings } = useSettings()
-  const portalName = settings.portalName ?? "Jinn"
+  const portalName = settings.portalName ?? PRODUCT_NAME
   const [open, setOpen] = useState(initialOpen)
   const [query, setQuery] = useState(initialQuery ?? "")
   const [literal, setLiteral] = useState(false)

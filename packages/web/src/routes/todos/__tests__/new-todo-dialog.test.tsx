@@ -32,7 +32,7 @@ const departments = [
   { slug: "operations", prefix: "OPS", createdAt: "2026-07-01T00:00:00.000Z", todoCount: 3 },
 ]
 
-function renderDialog(overrides: { onCreated?: () => void } = {}) {
+function renderDialog(overrides: { onCreated?: () => void; departments?: typeof departments } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const onCreated = vi.fn(overrides.onCreated)
   render(
@@ -40,7 +40,7 @@ function renderDialog(overrides: { onCreated?: () => void } = {}) {
       <NewTodoDialog
         onClose={vi.fn()}
         onCreated={onCreated}
-        defaults={{ employees, departments, department: "platform" }}
+        defaults={{ employees, departments: overrides.departments ?? departments, department: "platform" }}
       />
     </QueryClientProvider>,
   )
@@ -119,6 +119,17 @@ describe("NewTodoDialog", () => {
     expect((title as HTMLInputElement).value).toBe("")
     await waitFor(() => expect(document.activeElement).toBe(title))
     expect(screen.getByRole("dialog", { name: "New todo" })).not.toBeNull()
+  })
+
+  it("does not pre-select a legacy board's department the gateway no longer accepts (JIN-1)", async () => {
+    const user = userEvent.setup()
+    const { onCreated } = renderDialog({ departments: departments.map((d) => ({ ...d, selectable: d.slug !== "platform" })) })
+    expect(screen.getByTestId("todo-new-department-chip").textContent).toContain("Department")
+    await user.type(screen.getByTestId("todo-new-title"), "From a legacy board")
+    await user.click(screen.getByTestId("todo-new-create"))
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1))
+    expect(createWorkItem.mock.calls[0][0]).not.toHaveProperty("department")
   })
 
   it("uses command-enter to create and close", async () => {

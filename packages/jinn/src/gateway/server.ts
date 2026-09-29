@@ -15,9 +15,10 @@ import {
 } from "../shared/models.js";
 import { configureLogger, logger } from "../shared/logger.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
-import { scheduleFtsBackfill, recoverStaleSessions, recoverStaleWorkflowAttemptSessions, recoverStaleQueueItems, clearAllPartialMessages, consumeRestartAcknowledgements, getInterruptedSessions, listSessions, getSession, getMessages, getSessionSpend, listAllSessionIds } from "../sessions/registry.js";
+import { scheduleFtsBackfill, recoverStaleSessions, recoverStaleWorkflowAttemptSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, getMessages, getSessionSpend, listAllSessionIds, listPendingQueueItemIdsForSession } from "../sessions/registry.js";
 import { getPackageVersion } from "../shared/version.js";
-import { interruptRunningSessionsForShutdown, resumeRestartInterruptedSessions } from "../sessions/restart-resume.js";
+import { PRODUCT_NAME, productBanner } from "../shared/brand.js";
+import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunningSessionsForShutdown, recordSessionsRunningAtBoot, resumeRestartInterruptedSessions } from "../sessions/restart-resume.js";
 import { initDb } from "../shared/db.js";
 import { SessionManager, type RouteOptions } from "../sessions/manager.js";
 import { recoverSessionDeliveryStateOnStartup } from "../sessions/callbacks.js";
@@ -27,12 +28,17 @@ import { CodexEngine, startCodexSessionHomeSweeps } from "../engines/codex.js";
 import { CodexInteractiveEngine } from "../engines/codex-interactive.js";
 import { createAntigravityEnginePair } from "../engines/antigravity-runtime.js";
 import { PiEngine } from "../engines/pi.js";
+import { OpencodeEngine } from "../engines/opencode.js";
+import { OpencodeServerPool, opencodeMode } from "../engines/opencode-server.js";
+import { OpencodeInteractiveEngine } from "../engines/opencode-interactive.js";
+import { resolveSessionEngineMcp } from "../sessions/engine-run-mcp.js";
 import { GrokEngine } from "../engines/grok.js";
 import { GrokInteractiveEngine } from "../engines/grok-interactive.js";
 import { HermesAcpEngine } from "../engines/hermes-acp.js";
 import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
+import { startIdleCapacityAutoStart } from "./idle-capacity.js";
 import { HookRegistry } from "./hook-registry.js";
 import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, startupGatewayPids, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
@@ -48,22 +54,24 @@ import { workflowTodoDispatch, workflowTodoSessions } from "./workflow-todo-runs
 import { workflowTodoApprovals, workflowTodoLifecycle } from "./workflow-todo-surface.js";
 import { seedTrust, cleanupSessionSettings } from "../shared/claude-settings.js";
 import { claudeJsonPath } from "../shared/home.js";
-import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, CLAUDE_SETTINGS_DIR } from "../shared/paths.js";
+import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
 import { isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
 import { createGatewayRequestHandler } from "./request-handler.js";
 import { sessionCommGuards, LATERAL_MAX_HOPS } from "./session-comm-guards.js";
-import { rejectNonOperatorPtyUpgradeCaller, rejectUnverifiedIdentifiedUpgradeCaller } from "./upgrade-guards.js";
+import { rejectCrossOriginUpgrade, rejectPtyUpgrade, rejectUnverifiedIdentifiedUpgradeCaller } from "./upgrade-guards.js";
 import { cleanupMcpConfigFile, sweepOrphanMcpConfigFiles } from "../mcp/resolver.js";
 import { startStatusReconciler } from "./status-reconciler.js";
 import { webTurnSurface } from "./web-session-dispatch.js";
 import { startSessionSchedulers } from "./session-schedulers.js";
 import { armJinnAttachGate } from "../mcp/attachment.js";
-import { syncExternalTurn } from "./external-turns.js";
+import { createUnclaimedStopSync } from "./external-turns.js";
 import { pickEncoding, isCompressibleExt, compressBuffer, compressStream, type Encoding } from "./compress.js";
 import { MIME_TYPES } from "./static-mime.js";
 import { attachPtyWebSocket } from "./pty-ws.js";
+import { createShellTerminalEngine } from "../terminals/shell-engine.js";
+import { isTerminalSession } from "../terminals/session.js";
 import { openWorkflowDatabase } from "../workflows/repository-migrations.js";
 import { importLegacyWorkflowDefinitions } from "../workflows/import-v1.js";
 import { WorkflowRepository } from "../workflows/repository.js";
@@ -395,7 +403,8 @@ export async function startGateway(
     file: config.logging.file,
   });
 
-  const gatewayName = config.portal?.portalName || "Jinn";
+  const gatewayName = config.portal?.portalName || PRODUCT_NAME;
+  logger.info(productBanner(getPackageVersion()));
   logger.info(`Starting ${gatewayName} gateway (boot ${bootId}, pid ${process.pid})...`);
 
   // Initialize database and recover any sessions stuck from a previous run
@@ -419,6 +428,16 @@ export async function startGateway(
     const swept = sweepOrphanMcpConfigFiles(listSessions().map((s) => s.id));
     if (swept > 0) logger.info(`Swept ${swept} orphaned MCP config file(s)`);
   } catch { /* best-effort */ }
+  // Write the restart record for anything the previous process did not record
+  // itself, before the sweeps below settle those rows and lose the evidence.
+  const restartRecordGateway = { bootId, gatewayVersion: getPackageVersion() };
+  const staleAtBoot = recordSessionsRunningAtBoot(restartRecordGateway);
+  if (staleAtBoot.cleanShutdownBootId) {
+    logger.info(`Previous gateway (boot ${staleAtBoot.cleanShutdownBootId}) shut down cleanly and recorded its interrupted sessions in ${RESTART_RECORD_FILE}`);
+  }
+  if (staleAtBoot.recorded.length > 0) {
+    logger.warn(`${staleAtBoot.recorded.length} session(s) were still running from the previous gateway${staleAtBoot.cleanShutdownBootId ? "" : ", which did not shut down cleanly"}; recorded in ${RESTART_RECORD_FILE}`);
+  }
   const recovered = recoverStaleSessions();
   if (recovered > 0) {
     logger.info(`Recovered ${recovered} stale session(s) — marked as "interrupted" for resume`);
@@ -564,6 +583,8 @@ export async function startGateway(
   let antigravityLifecycle: PtyLifecycleManager | undefined;
   let grokLifecycle: PtyLifecycleManager | undefined;
   let hermesLifecycle: PtyLifecycleManager | undefined;
+  let opencodeServerLifecycle: PtyLifecycleManager | undefined;
+  let opencodeViewPids: () => number[] = () => [];
   const ptyLifecycles: PtyLifecycleManager[] = [];
   let enforcingGlobalIdleCap = false;
   function refreshPtyPids(): void {
@@ -574,6 +595,8 @@ export async function startGateway(
         ...(antigravityLifecycle ? antigravityLifecycle.livePids() : []),
         ...(grokLifecycle ? grokLifecycle.livePids() : []),
         ...(hermesLifecycle ? hermesLifecycle.livePids() : []),
+        ...(opencodeServerLifecycle ? opencodeServerLifecycle.livePids() : []),
+        ...opencodeViewPids(),
       ];
       updateGatewayPtyPids(GATEWAY_INFO_FILE, pids);
     } catch { /* best effort */ }
@@ -611,6 +634,12 @@ export async function startGateway(
   });
   const interactiveClaudeEngine = new InteractiveClaudeEngine(claudeLifecycle, hookRegistry, {
     autoApproveSafetyPrompts: claudeCfg.autoApproveSafetyPrompts,
+    // Read live, not captured: config.yaml hot-reloads, so an edited `remote`
+    // block takes effect on the next spawn rather than the next restart.
+    remote: () => currentConfig.remote,
+    // The reverse tunnel's forward-to end. Loopback on the gateway, so this is
+    // the port the remote hook relay and MCP servers ultimately reach.
+    gatewayPort: () => port,
   });
 
   // Codex has two modes: headless `codex exec --json` for chat/default work
@@ -638,8 +667,50 @@ export async function startGateway(
     onCleanup: () => refreshPtyPids(),
   });
   const hermesInteractiveEngine = new HermesInteractiveEngine(hermesLifecycle);
-  const piEngine = new PiEngine();
-  logger.info("Engines initialized: claude (interactive PTY), codex (headless + interactive PTY), antigravity (headless + interactive PTY), grok (headless + interactive PTY), hermes (headless + interactive PTY), pi");
+  const piEngine = new PiEngine({
+    // Same two live readers the interactive engine takes, and for the same
+    // reason: pi is the second engine that can relocate a turn over SSH, so a
+    // remote employee running on pi needs the `remote` block and the port the
+    // reverse tunnel forwards to.
+    remote: () => currentConfig.remote,
+    gatewayPort: () => port,
+  });
+  // opencode server mode (engines.opencode.mode: server): one `opencode serve`
+  // per session, registered like a warm PTY so it shares the gateway-wide idle
+  // cap, with its own per-host count and idle age on top. Nothing starts until
+  // the mode is flipped; in the default `run` mode the pool stays empty.
+  opencodeServerLifecycle = createPtyLifecycle({
+    onAdopt: () => refreshPtyPids(),
+    onCleanup: () => refreshPtyPids(),
+  });
+  const opencodeServers = new OpencodeServerPool(opencodeServerLifecycle, {
+    remote: () => currentConfig.remote,
+    gatewayPort: () => port,
+    limits: () => currentConfig.engines.opencode?.server,
+    bin: () => currentConfig.engines.opencode?.bin,
+  });
+  const opencodeEngine = new OpencodeEngine({
+    // The same two live readers, for the same reason: opencode is the third
+    // engine that can relocate a turn over SSH.
+    remote: () => currentConfig.remote,
+    gatewayPort: () => port,
+    mode: () => opencodeMode(currentConfig.engines.opencode),
+    servers: opencodeServers,
+  });
+  const opencodeInteractiveEngine = new OpencodeInteractiveEngine(opencodeEngine, opencodeServers, {
+    mode: () => opencodeMode(currentConfig.engines.opencode),
+    bin: () => currentConfig.engines.opencode?.bin,
+    // The MCP set a turn of this session would get, so a server the terminal
+    // starts is the one the next turn reuses rather than replaces.
+    resolveMcp: (sessionId) => {
+      const session = getSession(sessionId);
+      if (!session) return undefined;
+      const employee = session.employee ? orgRegistry(currentConfig).get(session.employee) : undefined;
+      return resolveSessionEngineMcp({ config: currentConfig, session, employee, engine: "opencode" }).resolvedMcp;
+    },
+  });
+  opencodeViewPids = () => opencodeInteractiveEngine.livePids();
+  logger.info(`Engines initialized: claude (interactive PTY), codex (headless + interactive PTY), antigravity (headless + interactive PTY), grok (headless + interactive PTY), hermes (headless + interactive PTY), pi, opencode (${opencodeMode(config.engines.opencode)} mode)`);
 
   const codexEngine = new CodexEngine();
   const grokEngine = new GrokEngine();
@@ -649,12 +720,15 @@ export async function startGateway(
   // interactive PTY engine → cc_entrypoint=cli, covered by the Max subscription
   // (per-content-block streaming via transcript tail).
   engines.set("claude", interactiveClaudeEngine);
+  // A turn waiting behind one typed in the terminal must be visibly waiting.
+  interactiveClaudeEngine.onTerminalWait((sessionId, waiting) => emit("session:terminal-wait", { sessionId, waiting }));
   logger.info("Claude work turns: INTERACTIVE PTY (cc_entrypoint=cli, Max-subsidized)");
   engines.set("codex", codexEngine);
   engines.set("antigravity", antigravityEngine);
   engines.set("grok", grokEngine);
   engines.set("hermes", hermesEngine);
   engines.set("pi", piEngine);
+  engines.set("opencode", opencodeEngine);
 
   // PTY-capable engines, keyed by engine name — the /ws/pty handler routes by
   // session.engine so the xterm view attaches to the right engine.
@@ -664,7 +738,10 @@ export async function startGateway(
     antigravity: antigravityInteractiveEngine,
     grok: grokInteractiveEngine,
     hermes: hermesInteractiveEngine,
+    opencode: opencodeInteractiveEngine,
   };
+
+  const terminalEngine = createShellTerminalEngine({ getConfig: () => currentConfig, getSession, employees: (c) => orgRegistry(c).values() });
 
   // Build employee registry
   let employeeRegistry = orgRegistry(config);
@@ -813,15 +890,12 @@ export async function startGateway(
 
   // Unsolicited-Stop consumer: a Stop hook nobody claims within the registry's
   // grace delay means a PTY-native turn (typed straight into the CLI/xterm
-  // view — no run() in flight) or a Stop past the late-recovery window. Persist
-  // that turn into the messages DB from the transcript tail so chat mode sees it.
-  hookRegistry.setUnclaimedHookHandler((jinnSessionId, payload) => {
-    try {
-      syncExternalTurn(jinnSessionId, emit, payload);
-    } catch (err) {
-      logger.warn(`Unclaimed-Stop sync failed for session ${jinnSessionId}: ${err instanceof Error ? err.message : err}`);
-    }
-  });
+  // view — no run() in flight), a Stop past the late-recovery window, or Claude
+  // Code re-invoking the model after a background subagent finished. Persist
+  // that turn into the messages DB from the transcript tail so chat mode sees
+  // it, and wake the parent if the session has one — for a delegated child the
+  // continuation is usually the reply the parent is waiting for.
+  hookRegistry.setUnclaimedHookHandler(createUnclaimedStopSync(emit, { resolveEmployee: (slug) => employeeRegistry.get(slug) }));
 
   // API context
   const apiContext: ApiContext = {
@@ -838,12 +912,17 @@ export async function startGateway(
     hookSecret: gatewayInfo.secret,
     interactiveClaudeEngine,
     ptyViewEngines,
+    terminalEngine,
     reloadOrg,
     backgroundActivity,
     gatewayAuthToken,
     workflowService,
   };
   await workflowService.recover(new Date().toISOString()); // never above apiContext: a recovered fan-out reads its ceiling through it
+  // Idle-capacity auto-start: below apiContext because a start goes
+  // through the same Dispatcher spawn the dispatch route uses, which reads it.
+  const idleCapacity = startIdleCapacityAutoStart({ getConfig: () => currentConfig, context: apiContext });
+  apiContext.idleCapacity = idleCapacity;
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)
   // and by API handlers that write config.yaml and need getConfig() to reflect
@@ -885,7 +964,12 @@ export async function startGateway(
   apiContext.reloadConfig = reloadConfig;
 
   // Unstick sessions whose completion event was lost (status:"running", no live turn): a 15s sweep, settling through the one completion path.
-  const stopStatusReconciler = startStatusReconciler({ engines, surfaceFor: (id) => webTurnSurface(id, apiContext) });
+  // A turn the in-process queue still holds for the session is parked, not lost: skip it however stale the heartbeat.
+  const stopStatusReconciler = startStatusReconciler({
+    engines,
+    surfaceFor: (id) => webTurnSurface(id, apiContext),
+    hasQueuedTurn: (id) => listPendingQueueItemIdsForSession(id).some((itemId) => sessionManager.getQueue().hasInFlightItem(itemId)),
+  });
   const stopSessionSchedulers = startSessionSchedulers();
 
   // Todos ledger truth-keeping: derive status from linked-session evidence so a mid-process settle lands without a boot (GRS-021a), and resume a Todo parked on a provider window that has since reopened (PLA-153).
@@ -1005,17 +1089,20 @@ export async function startGateway(
         return;
       }
     }
+    // The broadcast carries session activity: a browser must be on our own origin.
     if (reqUrl === "/ws") {
+      if (rejectCrossOriginUpgrade(req, socket)) return;
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit("connection", ws, req);
       });
       return;
     }
     // A plugin's own event stream. It reaches here having passed the same gate
-    // `/ws` did above; plugin-events-ws.ts adds the enable gate and no auth of
-    // its own.
+    // `/ws` did above, and takes the same origin check; plugin-events-ws.ts adds
+    // the enable gate and no auth of its own.
     const pluginEventsId = matchPluginEventsPath(pathname);
     if (pluginEventsId) {
+      if (rejectCrossOriginUpgrade(req, socket)) return;
       pluginEvents.handleUpgrade(req, socket, head, pluginEventsId);
       return;
     }
@@ -1027,8 +1114,9 @@ export async function startGateway(
       // operator's own CLI view (empty terminal). Trust a same-origin browser
       // upgrade as operator when gateway auth isn't required — mirroring the
       // same-origin fetch trust for HTTP writes — while auth-required gateways
-      // and header-bearing tool callers stay gated exactly as before.
-      if (rejectNonOperatorPtyUpgradeCaller(req, socket, {
+      // and header-bearing tool callers stay gated exactly as before. A browser must
+      // be on the gateway's own origin for every session, agent or terminal.
+      if (rejectPtyUpgrade(req, socket, {
         operatorAuthenticated:
           verifyGatewayAuth(req.headers, gatewayAuthToken, JINN_HOME)
           || (!authRequiredNow() && isSameOriginBrowserRequest(req, currentConfig)),
@@ -1045,12 +1133,14 @@ export async function startGateway(
       // PTY view, and attaching the claude TUI to a codex session showed the wrong
       // engine. No view engine for this engine → refuse the upgrade (FE hides the
       // CLI toggle for codex so this only catches stragglers).
-      const ptyEngine = ptySession ? ptyViewEngines[ptySession.engine as PtyViewEngineName] : undefined;
+      const ptyEngine = !ptySession ? undefined
+        : isTerminalSession(ptySession) ? terminalEngine
+        : ptyViewEngines[ptySession.engine as PtyViewEngineName];
       if (!ptyEngine) { socket.destroy(); return; }
       ptyWss.handleUpgrade(req, socket, head, (ws) => {
         trackHeartbeat(ws);
         try {
-          attachPtyWebSocket(ws, sessionId, ptyEngine);
+          attachPtyWebSocket(ws, sessionId, ptyEngine, { getConfig: () => currentConfig });
         } catch (err) {
           logger.warn(`PTY websocket attach failed for ${sessionId}: ${err instanceof Error ? err.message : err}`);
           ws.close();
@@ -1153,7 +1243,7 @@ export async function startGateway(
   // before this line runs.
   await armJinnAttachGate(currentConfig.mcp, { gatewayUrl: process.env.JINN_GATEWAY_URL!, log: logger, employees: employeeRegistry.values() });
 
-  const restartNotices = consumeRestartAcknowledgements();
+  const restartNotices = acknowledgeRestartRequesters(restartRecordGateway);
   if (restartNotices > 0) logger.info(`Persisted gateway restart notice in ${restartNotices} requesting session(s)`);
 
   // Replay any pending web queue items (e.g. gateway restart mid-run) only after
@@ -1179,7 +1269,7 @@ export async function startGateway(
   // on purpose: after the queue replay so a session already re-dispatched there
   // is not resumed twice, and after the delivery sweep above so the fresh claims
   // keep the stagger they were planned with instead of being flushed at once.
-  resumeRestartInterruptedSessions(getPackageVersion());
+  resumeRestartInterruptedSessions(restartRecordGateway);
 
   // Prevent macOS from sleeping while the gateway is running
   let caffeinate: ChildProcess | null = null;
@@ -1202,7 +1292,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop();
+    backgroundRefreshes.stop(); idleCapacity.stop();
     workflowService.dispose(); workflowDatabase.close();
 
     // Stop caffeinate
@@ -1213,7 +1303,9 @@ export async function startGateway(
 
     // Mark all running sessions as "interrupted" before killing engine processes.
     // This preserves their engine_session_id so they can be resumed on next startup.
-    interruptRunningSessionsForShutdown();
+    interruptRunningSessionsForShutdown(restartRecordGateway, {
+      backgroundWork: () => backgroundWorkAtShutdown(backgroundActivity),
+    });
 
     // Terminate live engine subprocesses after marking sessions.
     interactiveClaudeEngine.killAll();
@@ -1226,6 +1318,19 @@ export async function startGateway(
     hermesEngine.killAll();
     hermesInteractiveEngine.killAll();
     piEngine.killAll();
+    opencodeEngine.killAll();
+    opencodeInteractiveEngine.killAll();
+    void opencodeServers.stopAll();
+
+    // A pi or opencode turn on a remote host is killed over a control
+    // connection, not by the local signal. Give those a moment to land before
+    // the rest of shutdown — bounded well inside the 5s force-exit, and the
+    // connections are spawned to outlive this process, so running out of time
+    // here only stops the wait, not the kill.
+    await Promise.race([
+      Promise.all([piEngine.pendingRemoteKills(), opencodeEngine.pendingRemoteKills(), opencodeServers.pendingRemoteKills()]),
+      new Promise((resolve) => setTimeout(resolve, 2500).unref()),
+    ]);
 
     // Dispose the PTY lifecycle manager.
     try {
@@ -1284,6 +1389,7 @@ export async function startGateway(
     for (const client of ptyWss.clients) {
       client.terminate();
     }
+    terminalEngine.killAll();
     for (const client of pluginEvents.wss.clients) {
       client.terminate();
     }

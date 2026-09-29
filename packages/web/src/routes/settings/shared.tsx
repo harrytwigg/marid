@@ -119,16 +119,20 @@ export function ToggleSwitch({
   checked,
   onChange,
   ariaLabel,
+  disabled = false,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
   ariaLabel?: string
+  /** A switch mid-write: not clickable and not keyboard-toggleable either. */
+  disabled?: boolean
 }) {
   return (
     <button
       role="switch"
       aria-checked={checked}
       aria-label={ariaLabel}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
       className="relative h-[40px] md:h-[34px] w-[44px] shrink-0 cursor-pointer rounded-[17px] border-none bg-transparent"
     >

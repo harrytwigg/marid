@@ -1,4 +1,5 @@
 import { getQueueItem, markQueueItemRunning, markQueueItemCompleted } from "./registry.js";
+import { logger } from "../shared/logger.js";
 
 export class SessionQueue {
   private queues = new Map<string, Promise<void>>();
@@ -122,7 +123,15 @@ export class SessionQueue {
    */
   async enqueue(sessionKey: string, fn: () => Promise<void>, queueItemId?: string, claimed = false): Promise<void> {
     if (queueItemId) this.inFlightItems.add(queueItemId);
-    this.pending.set(sessionKey, (this.pending.get(sessionKey) || 0) + 1);
+    const ahead = this.pending.get(sessionKey) || 0;
+    this.pending.set(sessionKey, ahead + 1);
+    // Say so when the turn will not start now. Without this the log goes quiet
+    // between a route's "dispatching" and the engine's own spawn line, and a
+    // lane busy for minutes reads as a dispatch that silently never happened.
+    if (ahead > 0 && queueItemId) {
+      const owner = getQueueItem(queueItemId)?.sessionId ?? "?";
+      logger.info(`Session ${owner} turn ${queueItemId} queued behind ${ahead} turn(s) on lane ${sessionKey}`);
+    }
     const prev = this.queues.get(sessionKey) || Promise.resolve();
     const runTask = async () => {
       this.running.add(sessionKey);
@@ -131,9 +140,7 @@ export class SessionQueue {
         // Wait while paused — blocks until resumeQueue() wakes us (no polling)
         await this.waitUntilRunnable(sessionKey, queueItemId);
         if (queueItemId) {
-          const item = getQueueItem(queueItemId);
-          if (!item || (claimed ? item.status !== "running"
-            : item.status !== "pending" || !markQueueItemRunning(queueItemId))) return;
+          if (!this.takeQueueRow(sessionKey, queueItemId, claimed)) return;
           queueItemStarted = true;
         }
         if (!this.cancelled.has(sessionKey)) {
@@ -159,6 +166,20 @@ export class SessionQueue {
       }
     });
     return next;
+  }
+
+  /**
+   * Flip the row to running as the turn starts, or say why it will not start.
+   * A row that is no longer runnable is usually a cancel or an edit that
+   * rotated it away, but this is also the last point at which a dispatch can
+   * end without a spawn — so it is never silent.
+   */
+  private takeQueueRow(sessionKey: string, queueItemId: string, claimed: boolean): boolean {
+    const item = getQueueItem(queueItemId);
+    const runnable = !!item && (claimed ? item.status === "running"
+      : item.status === "pending" && markQueueItemRunning(queueItemId));
+    if (!runnable) logger.warn(`Turn ${queueItemId} on lane ${sessionKey} skipped: queue row is ${item ? item.status : "gone"}`);
+    return runnable;
   }
 
   private decrementPending(sessionKey: string): void {

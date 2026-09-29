@@ -155,6 +155,15 @@ const GATEWAY_CHILD_ENV_SCRUB_EXACT: ReadonlySet<string> = new Set([
   "GROK_CURSOR_MCPS_ENABLED",
   "HERMES_YOLO_MODE",
   "HERMES_ACCEPT_HOOKS",
+  // `jinn restart` from an opencode session re-launches the daemon as that
+  // session's child, so without this the new daemon inherits the parent
+  // session's staged OPENCODE_CONFIG — which cleanEnv then passes to every
+  // opencode turn that stages none of its own. Exact names only: the operator's
+  // OPENCODE_CONFIG_DIR / OPENCODE_DISABLE_* settings must survive.
+  "OPENCODE",
+  "OPENCODE_PID",
+  "OPENCODE_SERVER_PASSWORD",
+  "OPENCODE_CONFIG",
 ]);
 
 function shouldScrubGatewayChildEnv(key: string): boolean {

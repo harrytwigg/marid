@@ -124,3 +124,10 @@ describe("authoritative semantic screen context", () => {
     expect(context.visualGaps).toEqual(["workflow-graph-spatial-layout"])
   })
 })
+
+describe("the Auto-Dispatch destination", () => {
+  it("is a page Talk can name, not an unknown path — as its coverage entry claims", () => {
+    expect(describeLocation("/auto-dispatch", "")).toMatchObject({ kind: "auto-dispatch", path: "/auto-dispatch" })
+    expect(describeLocation("/auto-dispatch/extra", "").kind).toBe("other")
+  })
+})

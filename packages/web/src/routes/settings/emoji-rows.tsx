@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { PRODUCT_EMOJI } from "@/lib/brand"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { EmojiPicker } from "@/components/ui/emoji-picker"
@@ -13,7 +14,7 @@ const LABEL_CLASS = "block text-[length:var(--text-caption1)] text-[var(--text-t
 const SWATCH_CLASS =
   "flex size-[44px] cursor-pointer items-center justify-center rounded-[13px] border-none bg-[var(--fill-quaternary)] text-[26px] leading-none transition-colors hover:bg-[var(--fill-tertiary)]"
 
-const PORTAL_DEFAULT_EMOJI = "\u{1F9DE}"
+const PORTAL_DEFAULT_EMOJI = PRODUCT_EMOJI
 const ERROR_CLASS =
   "mt-[var(--space-2)] rounded-[var(--radius-lg)] p-[8px_10px] text-[length:var(--text-caption1)] text-[var(--system-red)]"
 const ERROR_WASH = { background: "color-mix(in srgb, var(--system-red) 8%, transparent)" }
@@ -100,7 +101,7 @@ export function PortalEmojiRow() {
         <input
           type="text"
           className={cn(CONTROL_CLASS, "w-[96px] text-center")}
-          placeholder={"\u{1F9DE}\u{FE0F}"}
+          placeholder={`${PRODUCT_EMOJI}\u{FE0F}`}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={() => setPortalEmoji(draft || null)}

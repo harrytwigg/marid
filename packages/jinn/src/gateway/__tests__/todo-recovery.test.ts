@@ -1,13 +1,23 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { openWorkflowDatabase } from "../../workflows/repository-migrations.js";
-import { WorkflowRepository } from "../../workflows/repository.js";
+import Database from "better-sqlite3";
 import type { WorkflowDefinition, WorkflowNode } from "../../workflows/model.js";
 
+// The home vitest.setup allocated for this file, before the override below.
+const inheritedHome = process.env.JINN_HOME!;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-gw-todo-recovery-"));
 process.env.JINN_HOME = tmp;
+
+// Loaded AFTER the override, never as a static import: both modules reach
+// shared/paths.ts, which freezes the registry path at import time, and a static
+// import is hoisted above the assignment — it would resolve against the home
+// vitest.setup allocated instead of this file's temp home. (Per-file homes have
+// since stopped two files sharing a registry at all — so this is now
+// about keeping this file's own override, not a cross-file collision.)
+const { openWorkflowDatabase } = await import("../../workflows/repository-migrations.js");
+const { WorkflowRepository } = await import("../../workflows/repository.js");
 
 type Store = typeof import("../../work-items/store.js");
 type Runs = typeof import("../../work-items/runs.js");
@@ -28,7 +38,7 @@ let detect: Detect;
 let rows: Rows;
 let db: import("better-sqlite3").Database;
 let workflowDb: import("better-sqlite3").Database;
-let workflowRepository: WorkflowRepository;
+let workflowRepository: InstanceType<typeof WorkflowRepository>;
 
 beforeAll(async () => {
   store = await import("../../work-items/store.js");
@@ -42,6 +52,12 @@ beforeAll(async () => {
   db = (await import("../../shared/db.js")).initDb();
   workflowDb = openWorkflowDatabase(path.join(tmp, "workflows.db"));
   workflowRepository = new WorkflowRepository(workflowDb);
+});
+
+afterAll(async () => {
+  workflowDb?.close();
+  (await import("../../shared/db.js")).__closeDbForTest();
+  fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 function edge(id: string, from: string, port: string, to: string) {
@@ -94,6 +110,34 @@ function tick(mode: "classify-only" | "auto" = "classify-only"): void {
     approvedLandingComplete: (todoId) => recovery.approvedLandingComplete(todoId, workflowRepository),
     closeApprovedLanded: (todoId) => recovery.closeApprovedLanded(todoId, workflowRepository) });
 }
+
+describe("recovery fixture isolation", () => {
+  it("opens the registry in its own home", () => {
+    expect(db.name).toBe(path.join(tmp, "sessions", "registry.db"));
+  });
+
+  it("keeps approval writes independent of another fixture's commit", () => {
+    const item = store.createWorkItem({ title: "isolated approval" });
+    const peerPath = path.join(inheritedHome, "sessions", "registry.db");
+    fs.mkdirSync(path.dirname(peerPath), { recursive: true });
+    const peer = new Database(peerPath);
+    peer.pragma("journal_mode = WAL");
+    peer.exec("CREATE TABLE IF NOT EXISTS isolation_probe (value TEXT)");
+    try {
+      db.transaction(() => {
+        db.prepare("SELECT id FROM work_items WHERE id = ?").get(item.id);
+        // Reproduce a competing fixture committing after the reader's snapshot.
+        peer.prepare("INSERT INTO isolation_probe VALUES (?)").run("peer commit");
+        approvals.requestApproval(item.id, { request: "Approve isolated work?" });
+      })();
+      expect(store.getWorkItem(item.id)!.approvalState).toBe("pending");
+      expect(peer.prepare("SELECT name FROM sqlite_master WHERE name = 'work_items'").get())
+        .toBeUndefined();
+    } finally {
+      peer.close();
+    }
+  });
+});
 
 describe("closeApprovedLanded", () => {
   it("closes only when the exact approved Workflow run completed its success End", () => {

@@ -17,6 +17,7 @@ import { APP_ROUTES, type AppRouteId } from './lib/app-routes'
 import type { NativeGatewayProfiles, NativeGatewayProfilesSnapshot } from './lib/native-gateway-profiles'
 import { nativeBridge } from './platform/native-bridge'
 import './routes/globals.css'
+import './routes/theme-overrides.css'
 
 let profiles: NativeGatewayProfiles | undefined
 let initialNativeOrigin: string | undefined
@@ -32,6 +33,7 @@ const ExperimentsPage = lazyRoute(() => import('./routes/experiments/page'), 'ex
 const ExperimentDetailPage = lazyRoute(() => import('./routes/experiments/detail'), 'experiment-detail')
 const LogsPage = lazyRoute(() => import('./routes/logs/page'), 'logs')
 const LimitsPage = lazyRoute(() => import('./routes/limits/page'), 'limits')
+const AutoDispatchPage = lazyRoute(() => import('./routes/auto-dispatch/page'), 'auto-dispatch')
 const OrgPage = lazyRoute(() => import('./routes/org/page'), 'org')
 const SettingsPage = lazyRoute(() => import('./routes/settings/page'), 'settings')
 const PluginsSettingsPage = lazyRoute(() => import('./routes/settings/plugins/page'), 'settings-plugins')
@@ -52,6 +54,7 @@ registerRoutePrefetch('/notes', NotesPage.prefetch)
 registerRoutePrefetch('/experiments', ExperimentsPage.prefetch)
 registerRoutePrefetch('/logs', LogsPage.prefetch)
 registerRoutePrefetch('/limits', LimitsPage.prefetch)
+registerRoutePrefetch('/auto-dispatch', AutoDispatchPage.prefetch)
 registerRoutePrefetch('/org', OrgPage.prefetch)
 registerRoutePrefetch('/settings', SettingsPage.prefetch)
 registerRoutePrefetch('/skills', SkillsPage.prefetch)
@@ -121,6 +124,7 @@ const routeElements: Partial<Record<AppRouteId, ReactNode>> = {
   "kanban-redirect": <Navigate to="/todos" replace />,
   logs: <LogsPage />,
   limits: <LimitsPage />,
+  "auto-dispatch": <AutoDispatchPage />,
   org: <OrgPage />,
   settings: <SettingsPage />,
   "settings-plugins": <PluginsSettingsPage />,

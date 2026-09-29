@@ -2,16 +2,16 @@ import * as pty from "node-pty";
 import { logger } from "../shared/logger.js";
 import {
   PtySnapshot,
-  PtySnapshotStore,
   ptySnapshotStore,
   type SerializedPtySnapshot,
 } from "./pty-snapshot.js";
 import type {
   PtyControlEvent,
   PtyInitialSnapshot,
+  PtySnapshotPersistence,
   PtySnapshotSubscription,
 } from "./pty-view-engine.js";
-import type { PtyHandle } from "./pty-lifecycle.js";
+export { createPtyHandle } from "./pty-lifecycle.js";
 
 /** Cap for small per-session bookkeeping maps that must survive PTY respawns. */
 export const SESSION_MAP_CAP = 512;
@@ -64,7 +64,7 @@ interface StreamEntry {
 }
 
 interface PtyStreamManagerOptions {
-  snapshotStore?: PtySnapshotStore;
+  snapshotStore?: PtySnapshotPersistence;
 }
 
 /**
@@ -74,7 +74,7 @@ interface PtyStreamManagerOptions {
  */
 export class PtyStreamManager {
   private readonly streams = new Map<string, StreamEntry>();
-  private readonly snapshotStore: PtySnapshotStore;
+  private readonly snapshotStore: PtySnapshotPersistence;
 
   constructor(
     private readonly label: string,
@@ -214,6 +214,19 @@ export class PtyStreamManager {
     stream.pendingGenerationBytes = 0;
     stream.pendingGenerationDroppedThrough = 0;
     this.emitControl(stream, { type: "exited", exitCode: event.exitCode, signal: event.signal ?? 0 });
+  }
+
+  /** Forget a session entirely (a deleted operator terminal): no capture kept.
+   *  `finalEvent`, given, reaches every live subscriber first — e.g. the
+   *  not-recoverable notice a second tab/device needs before its stream
+   *  disappears, so its next resize doesn't fail with a generic "no such
+   *  session" error instead. */
+  discard(sessionId: string, finalEvent?: PtyControlEvent): void {
+    const stream = this.streams.get(sessionId);
+    if (finalEvent && stream) this.emitControl(stream, finalEvent);
+    if (stream?.captureTimer) clearTimeout(stream.captureTimer);
+    stream?.snapshot?.dispose();
+    this.streams.delete(sessionId);
   }
 
   reportError(sessionId: string, message: string): void {
@@ -366,14 +379,4 @@ export class PtyStreamManager {
 
 function positiveInt(value: number | undefined, fallback: number): number {
   return Number.isFinite(value) && value! > 0 ? Math.floor(value!) : fallback;
-}
-
-export function createPtyHandle(proc: pty.IPty): PtyHandle {
-  const handle = {
-    pid: proc.pid,
-    get killed() { return (proc as any)._exitCode != null; },
-    kill: (signal?: string) => { try { proc.kill(signal); } catch { /* already gone */ } },
-  } as PtyHandle;
-  (handle as any)._proc = proc;
-  return handle;
 }

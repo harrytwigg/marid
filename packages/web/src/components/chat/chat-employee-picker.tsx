@@ -4,6 +4,7 @@ import { Search, X } from 'lucide-react'
 import { EmployeeAvatar } from '@/components/ui/employee-avatar'
 import { cn } from '@/lib/utils'
 import type { Employee } from '@/lib/api'
+import { PRODUCT_EMOJI } from "@/lib/brand"
 
 type PickerEmployee = Pick<Employee, 'name' | 'displayName' | 'department' | 'rank'>
 
@@ -244,7 +245,7 @@ export function ChatEmployeePicker({
               : ''
           )}
         >
-          <span className="text-title3 shrink-0">🧞</span>
+          <span className="text-title3 shrink-0">{PRODUCT_EMOJI}</span>
           <div className="flex-1 min-w-0">
             <span className="text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
               {portalName}

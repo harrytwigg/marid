@@ -3,7 +3,9 @@ import { isOrgAncestor, resolveOrgHierarchy } from "./org-hierarchy.js";
 import { orgRegistry } from "./org-registry.js";
 import type { WorkItemCaller } from "./work-item-arming.js";
 import { isPortalAgentSession, listSessionsByWorkItem } from "../sessions/registry.js";
+import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import type { Employee, Session } from "../shared/types.js";
+import { isExecutionAttempt } from "../work-items/link-role.js";
 import type { WorkItem, WorkItemStatus } from "../work-items/store.js";
 
 /**
@@ -44,6 +46,9 @@ export function authorizeWorkItemOwnerManagerOrRoot(
   // the portal is deliberately not an org employee — so the identity check
   // below would refuse it for the very shape that makes it authoritative.
   if (isPortalAgentSession(caller.session)) return { ok: true };
+  // the remote MCP connector is the operator's own door too; its
+  // route list, not this check, bounds which of these actions it can reach.
+  if (remoteMcpHasOperatorStanding(caller)) return { ok: true };
   const employeeName = caller.session.employee;
   if (!employeeName) {
     return { ok: false, status: 403, error: `session ${caller.callerId} has no employee identity and cannot ${action} Todo ${item.id}` };
@@ -68,7 +73,7 @@ function canReviewWorkItemDone(session: Session, item: WorkItem, linked: Session
   if (item.status !== 'in_review') {
     return { ok: false, error: `Todo ${item.id} is ${item.status}, and done is not an agent shortcut: ${instead}` };
   }
-  if (linked.some((s) => s.id === session.id && s.workflowProvenance?.kind !== 'phase')) {
+  if (linked.some((s) => s.id === session.id && isExecutionAttempt(s))) {
     return { ok: false, error: `session ${session.id} executed Todo ${item.id} and cannot close it (self-review ban): ${instead}, or close it from the human review surface` };
   }
   return { ok: true };

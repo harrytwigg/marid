@@ -42,12 +42,15 @@ export function resolveMessageAudiences(prompt: string, speechDerived: boolean):
  * prompt (`promptRendered`) must stay byte-for-byte the operator's text — the
  * note is dropped there rather than leaked. Headless dispatch sends the prompt
  * straight to the model, so the note rides it (exactly once, non-rendered).
- * Notifications (callbacks, relays) never qualify.
+ * Notifications (callbacks, relays) never qualify, and nor does an
+ * engine-native command (`/compact`, Claude's `/model`, …): anything in front
+ * of it turns the command into text for the model.
  */
 export function speechContextApplies(opts: {
   speech: boolean;
   isNotification: boolean;
   promptRendered: boolean;
+  rawEngineCommand?: boolean;
 }): boolean {
-  return opts.speech && !opts.isNotification && !opts.promptRendered;
+  return opts.speech && !opts.isNotification && !opts.promptRendered && !opts.rawEngineCommand;
 }

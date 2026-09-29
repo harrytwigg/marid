@@ -500,6 +500,12 @@ describe("buildGatewayChildEnv", () => {
       GROK_CURSOR_MCPS_ENABLED: "false",
       HERMES_YOLO_MODE: "1",
       HERMES_ACCEPT_HOOKS: "1",
+      OPENCODE: "1",
+      OPENCODE_CONFIG: "/parent/session/tmp/opencode.json",
+      OPENCODE_PID: "4242",
+      OPENCODE_SERVER_PASSWORD: "from-parent",
+      // Operator setting, not session plumbing — must survive the restart.
+      OPENCODE_CONFIG_DIR: "/home/me/.config/opencode",
     });
 
     expect(env.PATH).toBe("/usr/bin");
@@ -517,6 +523,11 @@ describe("buildGatewayChildEnv", () => {
     expect(env.GROK_CURSOR_MCPS_ENABLED).toBeUndefined();
     expect(env.HERMES_YOLO_MODE).toBeUndefined();
     expect(env.HERMES_ACCEPT_HOOKS).toBeUndefined();
+    expect(env.OPENCODE).toBeUndefined();
+    expect(env.OPENCODE_CONFIG).toBeUndefined();
+    expect(env.OPENCODE_PID).toBeUndefined();
+    expect(env.OPENCODE_SERVER_PASSWORD).toBeUndefined();
+    expect(env.OPENCODE_CONFIG_DIR).toBe("/home/me/.config/opencode");
     expect(env.JINN_HOME).toBe(tmpHome);
     expect(env.JINN_HOME_IDENTITY).toBe(tmpHomeIdentity);
     expect(env.JINN_GATEWAY_URL).toBe("http://127.0.0.1:7789");

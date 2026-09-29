@@ -313,16 +313,55 @@ export function authDeviceCookieName(jinnHome?: string): string {
   return ns ? `${AUTH_DEVICE_COOKIE}_${ns}` : AUTH_DEVICE_COOKIE;
 }
 
-export function authCookieHeader(token: string, jinnHome?: string): string {
-  return `${authCookieName(jinnHome)}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000`;
+/**
+ * True when the request reached us over HTTPS — either directly, or through a
+ * reverse proxy that terminated TLS and said so.
+ *
+ * `x-forwarded-proto` is attacker-controllable in general, which is why the
+ * rest of this file treats forwarded headers as a reason to distrust a request.
+ * It is safe *here* because the only thing it decides is whether to add the
+ * `Secure` attribute to a cookie we are already issuing: lying yields a cookie
+ * the liar's own browser will then refuse to send over plaintext. It cannot
+ * grant access, and it cannot strip `Secure` from an honest HTTPS session.
+ */
+export function requestArrivedOverHttps(
+  req: Pick<IncomingMessage, "headers" | "socket">,
+): boolean {
+  if ((req.socket as { encrypted?: boolean }).encrypted === true) return true;
+  const raw = req.headers["x-forwarded-proto"];
+  const proto = Array.isArray(raw) ? raw[0] : raw;
+  return typeof proto === "string" && proto.split(",")[0]!.trim().toLowerCase() === "https";
 }
 
-export function authDeviceCookieHeader(deviceId: string, jinnHome?: string): string {
-  return `${authDeviceCookieName(jinnHome)}=${encodeURIComponent(deviceId)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000`;
+/**
+ * `Secure` is conditional, not unconditional, and the condition matters.
+ *
+ * Marking the cookie `Secure` always would break every plain-HTTP listener the
+ * gateway still legitimately serves — `http://<lan-ip>:7777` is not a secure
+ * context, so the browser would silently drop the cookie and the operator could
+ * never log in there. Marking it only when the session was established over
+ * HTTPS gives a browser paired through a tunnel a cookie it will never send in
+ * cleartext, while a browser paired over the LAN keeps working exactly as before.
+ *
+ * This matters because the cookie's `Max-Age` is a year: once a browser has
+ * paired through a public hostname, any later plaintext request to that host —
+ * a typed URL, a stale bookmark, an `http://` link — would otherwise put a
+ * long-lived credential on the wire before the redirect to HTTPS arrives.
+ */
+function cookieAttributes(secure: boolean): string {
+  return `Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure ? "; Secure" : ""}`;
 }
 
-export function authCookieHeaders(secret: string, deviceId: string, jinnHome?: string): string[] {
-  return [authCookieHeader(secret, jinnHome), authDeviceCookieHeader(deviceId, jinnHome)];
+export function authCookieHeader(token: string, jinnHome?: string, secure = false): string {
+  return `${authCookieName(jinnHome)}=${encodeURIComponent(token)}; ${cookieAttributes(secure)}`;
+}
+
+export function authDeviceCookieHeader(deviceId: string, jinnHome?: string, secure = false): string {
+  return `${authDeviceCookieName(jinnHome)}=${encodeURIComponent(deviceId)}; ${cookieAttributes(secure)}`;
+}
+
+export function authCookieHeaders(secret: string, deviceId: string, jinnHome?: string, secure = false): string[] {
+  return [authCookieHeader(secret, jinnHome, secure), authDeviceCookieHeader(deviceId, jinnHome, secure)];
 }
 
 export function clearAuthCookieHeader(jinnHome?: string): string {

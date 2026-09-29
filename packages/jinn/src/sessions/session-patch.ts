@@ -1,5 +1,5 @@
 import type { JinnConfig } from "../shared/types.js";
-import { getModelRegistry, effortLevelsForModel, isKnownEngine } from "../shared/models.js";
+import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
 import { preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
 import { logger } from "../shared/logger.js";
 
@@ -59,6 +59,12 @@ export function validateNewSessionSelection(
   let defaultModel = defaults.model;
   let defaultEffortLevel = defaults.effortLevel;
   if (body.engine === undefined && body.model === undefined && isKnownEngine(engine)) {
+    // NOT scoped by host, unlike the other two engine-choosing paths: `defaults`
+    // carries the employee's NAME, not its record, so this cannot tell whether
+    // the session runs here or on another machine. Until the Employee is
+    // threaded through this path's four callers it also cannot apply the
+    // remote-capability filter `newSessionEngineSelection` has — the same
+    // missing argument, and the same fix.
     const healthy = preferHealthySessionEngine(
       config,
       engine,
@@ -89,10 +95,10 @@ export function validateNewSessionSelection(
     }
     model = requestedModel.trim();
     if (!entry.models.some((m) => m.id === model)) {
-      if (engine === "pi") {
-        // Pi models are discovered dynamically; tolerate an id the snapshot hasn't
-        // caught yet (e.g. just after a restart, before discovery completes).
-        logger.warn(`pi model "${model}" not in discovered set yet — allowing`);
+      if (hasDynamicModelCatalog(engine)) {
+        // Discovered-only catalog; tolerate an id the snapshot hasn't caught yet
+        // (e.g. just after a restart, before discovery completes).
+        logger.warn(`${engine} model "${model}" not in discovered set yet — allowing`);
       } else {
         const known = entry.models.map((m) => m.id).join(", ");
         // GRS-017f: when the unknown model is an EMPLOYEE'S CONFIGURED DEFAULT
@@ -174,10 +180,10 @@ export function validateSessionPatch(
     }
     const modelId = body.model.trim();
     if (entry && !entry.models.some((m) => m.id === modelId)) {
-      if (engine === "pi") {
-        // Pi models are discovered dynamically; tolerate an id the snapshot hasn't
-        // caught yet (e.g. just after a restart, before discovery completes).
-        logger.warn(`pi model "${modelId}" not in discovered set yet — allowing`);
+      if (hasDynamicModelCatalog(engine)) {
+        // Discovered-only catalog; tolerate an id the snapshot hasn't caught yet
+        // (e.g. just after a restart, before discovery completes).
+        logger.warn(`${engine} model "${modelId}" not in discovered set yet — allowing`);
       } else {
         const known = entry.models.map((m) => m.id).join(", ");
         return { ok: false, error: `unknown model "${modelId}" for engine "${engine}" (known: ${known || "none"})` };

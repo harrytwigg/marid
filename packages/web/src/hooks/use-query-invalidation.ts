@@ -176,6 +176,7 @@ export function useQueryInvalidation() {
         case 'company:changed':
           if (p) handleCompanyChanged(qc, p, pendingRef.current)
           break
+        case 'session:terminal-wait':
         case 'session:updated':
           pendingRef.current.add('sessions')
           pendingRef.current.add('work-item-sessions')

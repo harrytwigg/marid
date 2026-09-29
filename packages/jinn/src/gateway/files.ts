@@ -3,14 +3,20 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import os from "node:os";
 import Busboy from "busboy";
 import { FILES_DIR, UPLOADS_DIR, JINN_HOME } from "../shared/paths.js";
-import { resolveClaudeConfigDir } from "../shared/home.js";
 import { logger } from "../shared/logger.js";
 import { redactText } from "../shared/redact.js";
 import { insertFile, getFile, getSession, listFiles, deleteFile, setFilePath, insertMessage, type FileMeta } from "../sessions/registry.js";
 import { hasControlBytes } from "../shared/sanitize.js";
+import {
+  assessFileRead as assessFileReadPolicy,
+  expandPath,
+  readLocalFileForIngestion as readLocalFileForIngestionPolicy,
+  sameInode,
+  type FileReadAssessment,
+  type LocalFileIngestion,
+} from "../shared/file-read-policy.js";
 import type { ApiContext } from "./api.js";
 import { CALLER_SESSION_HEADER, TOOL_CALL_HEADER, UNIDENTIFIED_TOOL_CALL_ERROR, verifySessionCapability } from "../mcp/identity.js";
 import { resolveCallerIdentity } from "./session-comm-guards.js";
@@ -20,6 +26,8 @@ import { streamFile } from "./byte-range.js";
 import { ensureLowVariant, ensurePoster } from "./video-variants.js";
 import { readImageDimensions } from "./image-dimensions.js";
 import { buildMessageMedia } from "./message-media.js";
+
+export { expandPath, type FileReadAssessment, type LocalFileIngestion };
 
 // Ensure managed files directory exists
 export function ensureFilesDir(): void {
@@ -270,12 +278,6 @@ export function mimeFromFilename(filename: string): string {
   return MIME_MAP[ext] || "application/octet-stream";
 }
 
-export function expandPath(p: string): string {
-  if (p.startsWith("~/") || p === "~") {
-    return path.join(os.homedir(), p.slice(2));
-  }
-  return p;
-}
 
 // ── Managed file read (web UI + MCP belt) ────────────────────────
 // GRS-020e: this route used to resolve arbitrary filesystem paths. It is now
@@ -417,61 +419,11 @@ export function resolveReadPath(requestedPath: string): { resolvedPath: string |
   return { resolvedPath: null, candidates };
 }
 
-export interface FileReadAssessment { allowed: boolean; reason?: string }
-
-function pathSegments(absPath: string): string[] {
-  return path.resolve(absPath).split(path.sep).filter(Boolean).map((s) => s.toLowerCase());
-}
-
-function realpathOrResolved(absPath: string): string {
-  const resolved = path.resolve(absPath);
-  try {
-    return fs.realpathSync.native(resolved);
-  } catch {
-    return resolved;
-  }
-}
-
-function isInsidePath(child: string, parent: string): boolean {
-  const c = path.resolve(child);
-  const p = path.resolve(parent);
-  return c === p || c.startsWith(p + path.sep);
-}
-
-function assessSingleResolvedPath(resolved: string): FileReadAssessment {
-  const base = path.basename(resolved).toLowerCase();
-  const segments = pathSegments(resolved);
-  const home = realpathOrResolved(os.homedir());
-  const jinnHome = realpathOrResolved(JINN_HOME);
-  if (base.startsWith(".env")) return { allowed: false, reason: "Refusing to read environment secret files" };
-  // The leading dot is optional: Claude Code's OAuth token lives in `.credentials.json`,
-  // which an anchored `credentials(\.json)?` never matched.
-  if (/^\.?(?:id_rsa|id_dsa|id_ecdsa|id_ed25519|.*\.pem|.*\.key|auth\.json|credentials(?:\.json)?|token(?:\.json|\.txt)?)$/i.test(base)) {
-    return { allowed: false, reason: "Refusing to read private keys or token files" };
-  }
-  if (isInsidePath(resolved, path.join(home, ".ssh"))) return { allowed: false, reason: "Refusing to read SSH secrets" };
-  if (isInsidePath(resolved, path.join(jinnHome, "secrets"))) return { allowed: false, reason: "Refusing to read Jinn secrets" };
-  // A literal ".claude" segment covers project-local dirs; the resolved config dir
-  // covers the real one, which CLAUDE_CONFIG_DIR can move anywhere (the container
-  // does exactly that).
-  const claudeConfigDir = realpathOrResolved(resolveClaudeConfigDir());
-  if ((segments.includes(".claude") || isInsidePath(resolved, claudeConfigDir)) && base.startsWith("auth")) {
-    return { allowed: false, reason: "Refusing to read Claude auth files" };
-  }
-  if (segments.includes(".codex") && base === "auth.json") return { allowed: false, reason: "Refusing to read Codex auth files" };
-  return { allowed: true };
-}
-
-export function assessFileRead(absPath: string, _opts: { authenticated?: boolean } = {}): FileReadAssessment {
-  const requested = path.resolve(expandPath(absPath));
-  const candidates = [requested];
-  const real = realpathOrResolved(requested);
-  if (real !== requested) candidates.push(real);
-  for (const candidate of candidates) {
-    const assessment = assessSingleResolvedPath(candidate);
-    if (!assessment.allowed) return assessment;
-  }
-  return { allowed: true };
+/** The standing file-read policy, bound to this gateway's instance home. The
+ *  policy itself lives in shared/file-read-policy.ts so the MCP server can apply
+ *  the identical check to a file it reads on a remote host. */
+export function assessFileRead(absPath: string, opts: { authenticated?: boolean } = {}): FileReadAssessment {
+  return assessFileReadPolicy(absPath, { ...opts, jinnHome: JINN_HOME });
 }
 
 export interface FileClassification {
@@ -495,9 +447,6 @@ interface ManagedFileReadError {
   error: string;
 }
 
-function sameInode(a: fs.Stats, b: fs.Stats): boolean {
-  return a.dev === b.dev && a.ino === b.ino;
-}
 
 function classifyOpenedFile(fd: number, filename: string, stat = fs.fstatSync(fd)): FileClassification {
   const size = stat.size;
@@ -681,60 +630,10 @@ async function saveFile(result: UploadResult, context: ApiContext): Promise<File
   return meta;
 }
 
-export type LocalFileIngestion =
-  | { ok: true; buffer: Buffer; realPath: string }
-  | { ok: false; status: 400 | 403 | 404 | 413; error: string };
-
-/**
- * Read a caller-named local file for ingestion (e.g. JSON-path attachment
- * uploads) under the standing file-read policy. Symlink-swap-proof: the source
- * is canonicalized and opened ONCE (O_NOFOLLOW on the canonical path), the
- * assessment runs against that opened real path, the size cap uses fstat on
- * the SAME descriptor, and the bytes are read from that descriptor — a path
- * swapped between checks is detected by inode comparison and refused.
- */
+/** Policy-gated, symlink-swap-proof local read, bound to this gateway's home
+ *  (see shared/file-read-policy.ts). */
 export function readLocalFileForIngestion(requestedPath: string, maxBytes: number): LocalFileIngestion {
-  const requested = path.resolve(expandPath(requestedPath));
-  let fd: number | null = null;
-  try {
-    const realPath = fs.realpathSync.native(requested);
-    fd = fs.openSync(realPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
-    const openedStat = fs.fstatSync(fd);
-    if (!openedStat.isFile()) return { ok: false, status: 400, error: `not a file: ${requestedPath}` };
-    // The opened descriptor must still be what the canonical path names — a
-    // swap between realpath and open surfaces as an inode mismatch.
-    const currentStat = fs.statSync(realPath);
-    if (!sameInode(openedStat, currentStat)) {
-      return { ok: false, status: 403, error: `${requestedPath} changed during open and was refused` };
-    }
-    const assessment = assessFileRead(realPath, { authenticated: true });
-    if (!assessment.allowed) {
-      return { ok: false, status: 403, error: assessment.reason || "File read blocked by security policy" };
-    }
-    if (openedStat.size > maxBytes) {
-      return { ok: false, status: 413, error: `attachment exceeds the ${Math.floor(maxBytes / 1024 / 1024)} MB per-file limit` };
-    }
-    const buffer = Buffer.alloc(openedStat.size);
-    let offset = 0;
-    while (offset < buffer.length) {
-      const read = fs.readSync(fd, buffer, offset, buffer.length - offset, offset);
-      if (read <= 0) break;
-      offset += read;
-    }
-    if (offset !== buffer.length) {
-      return { ok: false, status: 403, error: `${requestedPath} changed during read and was refused` };
-    }
-    return { ok: true, buffer, realPath };
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" || code === "ENOTDIR") return { ok: false, status: 404, error: `file not found: ${requestedPath}` };
-    if (code === "ELOOP") return { ok: false, status: 403, error: `${requestedPath} changed during open and was refused` };
-    return { ok: false, status: 400, error: err instanceof Error ? err.message : "read failed" };
-  } finally {
-    if (fd !== null) {
-      try { fs.closeSync(fd); } catch { /* ignore */ }
-    }
-  }
+  return readLocalFileForIngestionPolicy(requestedPath, maxBytes, { jinnHome: JINN_HOME });
 }
 
 export interface MultipartFileUpload {

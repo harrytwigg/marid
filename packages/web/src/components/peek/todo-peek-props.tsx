@@ -5,7 +5,7 @@ import { STATUS_LABEL, priorityLabel } from '@/lib/todos'
 import { EmployeeAvatar } from '@/components/ui/employee-avatar'
 import { TodoMention } from '@/components/todo-mention'
 import { StatusCircle } from '@/routes/todos/state-glyph'
-import { RailPriorityBars } from '@/routes/todos/task-page/props-rail'
+import { RailPriorityBars } from '@/routes/todos/task-page/rail-rows'
 import { displayNameOf } from '@/routes/todos/util'
 import type { TodoQuickPickerKey, TodoQuickPickerRow } from '@/routes/todos/pickers/use-todo-quick-pickers'
 

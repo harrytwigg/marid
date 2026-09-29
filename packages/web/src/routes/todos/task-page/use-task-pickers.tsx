@@ -27,6 +27,7 @@ import {
   VerifyPickerContent,
 } from "../pickers/picker-contents"
 import { StatusPickerContent } from "../pickers/status-picker-content"
+import { offeredDepartments } from "../pickers/department-filters"
 
 /* Todos v2 slice 6 — the task page's picker wiring: ONE picker open at a time,
  * one content component per property rendered in the popover shell (desktop —
@@ -181,7 +182,7 @@ export function useTaskPickers({
         case "due":
           return <DuePickerContent {...shared} commit={(dueAt) => patchField({ dueAt })} />
         case "department":
-          return <DepartmentPickerContent {...shared} departments={departments} commit={(department) => patchField({ department })} />
+          return <DepartmentPickerContent {...shared} departments={offeredDepartments(departments, detail.workItem.department)} commit={(department) => patchField({ department })} />
         case "verify":
           return <VerifyPickerContent {...shared} commit={commitVerify} />
       }
@@ -197,8 +198,9 @@ export function useTaskPickers({
       const item = detail.workItem
       if (key === "priority") return Math.max(0, PRIORITY_ORDER.indexOf(item.priority))
       if (key === "department") {
-        const index = departments.findIndex((d) => d.slug === item.department)
-        return index >= 0 ? index : departments.length // the "No department" row
+        const offered = offeredDepartments(departments, item.department)
+        const index = offered.findIndex((d) => d.slug === item.department)
+        return index >= 0 ? index : offered.length // the "No department" row
       }
       return 0
     },

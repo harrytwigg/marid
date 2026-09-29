@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { initDb } from '../shared/db.js';
 import { fsyncBestEffort, hashAndSize } from './attachment-bytes.js';
+import { ATTACHMENT_ITEM_MAX_BYTES, ATTACHMENT_MAX_BYTES, attachmentRelativePath } from './attachment-layout.js';
 import { announceAttachment } from './comment-attachments.js';
 import { ATTACHMENTS_DIR } from '../shared/paths.js';
 import { parseTodoId } from './id.js';
@@ -12,9 +13,9 @@ import { appendWorkItemEvent } from './store.js';
  * Work-item attachments — content-addressed files on Todos and comments
  * (Todos v2 slice 5). Bytes live at `<instance>/attachments/<sha[0:2]>/<sha>`;
  * the DB row carries the original filename, mime, and the RELATIVE storage
- * path. Agents CONSUME attachments by reading the absolute `storagePath` the
- * read surface returns — the gateway and its agents share a filesystem by
- * architecture (local-first), so nothing streams over MCP.
+ * path. The read surface returns the gateway's absolute `storagePath`; agents on
+ * another host read the MCP-mapped `localPath` or the download URL instead
+ * (mcp/work-item-attachments.ts).
  *
  * Semantics (design decisions, locked):
  * - Content-addressed: identical content dedupes to ONE file. Removing a row
@@ -32,8 +33,7 @@ import { appendWorkItemEvent } from './store.js';
  *   `attachment_removed` is audit-only.
  */
 
-export const ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
-export const ATTACHMENT_ITEM_MAX_BYTES = 200 * 1024 * 1024;
+export { ATTACHMENT_ITEM_MAX_BYTES, ATTACHMENT_MAX_BYTES } from './attachment-layout.js';
 
 export interface WorkItemAttachment {
   id: string; // wia_<12hex>
@@ -43,8 +43,8 @@ export interface WorkItemAttachment {
   mime: string;
   bytes: number;
   sha256: string;
-  /** Absolute on-disk path — agents Read this directly. The DB stores the
-   *  relative form (spec §3.2). */
+  /** Absolute on-disk path ON THE GATEWAY. The DB stores the relative form
+   *  (spec §3.2); remote agents use the MCP-mapped `localPath`. */
   storagePath: string;
   uploadedBy: string;
   createdAt: string;
@@ -94,7 +94,7 @@ export class WorkItemAttachmentError extends Error {
 
 /** Absolute content-addressed path for a stored hash. */
 export function attachmentPath(sha256: string): string {
-  return path.join(ATTACHMENTS_DIR, sha256.slice(0, 2), sha256);
+  return path.join(ATTACHMENTS_DIR, attachmentRelativePath(sha256));
 }
 
 /** Write a buffer to the staging area (same filesystem as the store, so the
@@ -295,7 +295,7 @@ export function addAttachment(input: AddAttachmentInput): WorkItemAttachment {
       attachment.mime,
       attachment.bytes,
       attachment.sha256,
-      `${sha256.slice(0, 2)}/${sha256}`,
+      attachmentRelativePath(sha256),
       attachment.uploadedBy,
       attachment.createdAt,
     );

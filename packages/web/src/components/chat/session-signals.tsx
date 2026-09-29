@@ -26,7 +26,7 @@ export interface Session {
   delegatedActivity?: DelegatedActivity | null
   /** The in-flight turn has produced nothing for a while; derived by the gateway.
    *  A running session and a wedged one are otherwise indistinguishable. */
-  turnProgress?: { lastProgressAt: number; awaitingSubmit: boolean } | null
+  turnProgress?: { lastProgressAt: number; awaitingSubmit: boolean; waitingForTerminalTurn?: boolean } | null
   [key: string]: unknown
 }
 
@@ -130,6 +130,8 @@ export function getTurnStall(
   const progress = session.turnProgress
   const at = progress?.lastProgressAt
   if (!progress || typeof at !== "number" || !Number.isFinite(at) || at <= 0) return null
+  // Waiting behind a turn typed in the terminal is a known state, not silence.
+  if (progress.waitingForTerminalTurn) return null
   const stalledForMs = now - at
   if (stalledForMs < TURN_STALL_VISIBLE_MS) return null
   return { stalledForMs, awaitingSubmit: !!progress.awaitingSubmit }
@@ -188,6 +190,25 @@ export function formatStallAge(ms: number): string {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
 }
 
+/** The dot for a running session: waiting on the terminal, stalled, or working.
+ *  A stalled turn must not look like a working one. Same blue-dot spinner for
+ *  both is exactly why a 51-minute hang can sit unnoticed: amber + an elapsed
+ *  count is the difference between "thinking" and "go look at this". */
+function runningStatusDot(session: Session, now: number): StatusDotState {
+  if (session.turnProgress?.waitingForTerminalTurn) {
+    return { color: "var(--system-blue)", label: "waiting for the turn typed in the terminal", pulse: false }
+  }
+  const stall = getTurnStall(session, now)
+  if (!stall) return { color: "var(--system-blue)", label: "running", pulse: true }
+  return {
+    color: "var(--system-orange)",
+    label: stall.awaitingSubmit
+      ? `prompt not accepted by the engine (stuck ${formatStallAge(stall.stalledForMs)})`
+      : `no output for ${formatStallAge(stall.stalledForMs)}`,
+    pulse: false, // a still dot reads as stuck; pulsing reads as working
+  }
+}
+
 // Resolve the attention-state dot for a session. Returns null for the resting
 // "read" state so no dot is painted (quiet at rest). Optionally treat the row
 // as unread even when this session is read (e.g. a grouped employee row whose
@@ -198,22 +219,7 @@ export function getStatusDot(
   forceUnread = false,
   now: number = Date.now(),
 ): StatusDotState | null {
-  if (session.status === "running") {
-    // A stalled turn must not look like a working one. Same blue-dot spinner for
-    // both is exactly why a 51-minute hang can sit unnoticed: amber + an elapsed
-    // count is the difference between "thinking" and "go look at this".
-    const stall = getTurnStall(session, now)
-    if (stall) {
-      return {
-        color: "var(--system-orange)",
-        label: stall.awaitingSubmit
-          ? `prompt not accepted by the engine (stuck ${formatStallAge(stall.stalledForMs)})`
-          : `no output for ${formatStallAge(stall.stalledForMs)}`,
-        pulse: false, // a still dot reads as stuck; pulsing reads as working
-      }
-    }
-    return { color: "var(--system-blue)", label: "running", pulse: true }
-  }
+  if (session.status === "running") return runningStatusDot(session, now)
   if (isRecentError(session.status, getSessionActivity(session), Date.now())) {
     return { color: "var(--system-red)", label: "error", pulse: false }
   }
@@ -224,38 +230,67 @@ export function getStatusDot(
   return null
 }
 
+const NEUTRAL_CHIP = "shrink-0 rounded-sm bg-[var(--fill-secondary)] px-1 text-caption2 font-medium tabular-nums text-[var(--text-secondary)]"
+
+function StallChip({ stall }: { stall: { stalledForMs: number; awaitingSubmit: boolean } }) {
+  return (
+    <span
+      title={
+        stall.awaitingSubmit
+          ? "The engine never accepted this prompt. Open the CLI view to resend it, or interrupt the session."
+          : `The turn is still in flight but has produced no output for ${formatStallAge(stall.stalledForMs)}.`
+      }
+      style={{ background: "color-mix(in srgb, var(--system-orange) 14%, transparent)" }}
+      className="shrink-0 rounded-sm px-1 text-caption2 font-medium tabular-nums text-[var(--system-orange)]"
+    >
+      {stall.awaitingSubmit ? "not accepted" : `stalled ${formatStallAge(stall.stalledForMs)}`}
+    </span>
+  )
+}
+
+function QueuedChip({ queued }: { queued: number }) {
+  return (
+    <span title={`${queued} queued message${queued === 1 ? "" : "s"} waiting on this session`} className={NEUTRAL_CHIP}>
+      {queued} queued
+    </span>
+  )
+}
+
 /** Row-level "this needs a look" chips.
  *
  *  Both facts here were previously unobservable: a wedged session rendered exactly
  *  like a working one indefinitely, and the queue piling up behind it was not shown
- *  at all — so the only way to find a stuck employee was to go looking for one. */
+ *  at all — so the only way to find a stuck employee was to go looking for one.
+ *  A message waiting behind a turn typed in the claude terminal gets its own chip:
+ *  it is waiting, not stalled. */
+function TerminalWaitChip() {
+  return (
+    <span
+      title="A message is waiting for the turn typed in the terminal to finish. Stop cancels it; the terminal turn keeps running."
+      className={NEUTRAL_CHIP}
+    >
+      waiting on terminal
+    </span>
+  )
+}
+
+function attentionOf(session: Session) {
+  const running = session.status === "running"
+  return {
+    waiting: running && !!session.turnProgress?.waitingForTerminalTurn,
+    stall: running ? getTurnStall(session) : null,
+    queued: typeof session.queueDepth === "number" ? session.queueDepth : 0,
+  }
+}
+
 export function SessionAttentionChips({ session }: { session: Session }) {
-  const stall = session.status === "running" ? getTurnStall(session) : null
-  const queued = typeof session.queueDepth === "number" ? session.queueDepth : 0
-  if (!stall && queued <= 0) return null
+  const { waiting, stall, queued } = attentionOf(session)
+  if (!stall && !waiting && queued <= 0) return null
   return (
     <span className="flex shrink-0 items-center gap-1.5">
-      {stall ? (
-        <span
-          title={
-            stall.awaitingSubmit
-              ? "The engine never accepted this prompt. Open the CLI view to resend it, or interrupt the session."
-              : `The turn is still in flight but has produced no output for ${formatStallAge(stall.stalledForMs)}.`
-          }
-          style={{ background: "color-mix(in srgb, var(--system-orange) 14%, transparent)" }}
-          className="shrink-0 rounded-sm px-1 text-caption2 font-medium tabular-nums text-[var(--system-orange)]"
-        >
-          {stall.awaitingSubmit ? "not accepted" : `stalled ${formatStallAge(stall.stalledForMs)}`}
-        </span>
-      ) : null}
-      {queued > 0 ? (
-        <span
-          title={`${queued} queued message${queued === 1 ? "" : "s"} waiting on this session`}
-          className="shrink-0 rounded-sm bg-[var(--fill-secondary)] px-1 text-caption2 font-medium tabular-nums text-[var(--text-secondary)]"
-        >
-          {queued} queued
-        </span>
-      ) : null}
+      {waiting ? <TerminalWaitChip /> : null}
+      {stall ? <StallChip stall={stall} /> : null}
+      {queued > 0 ? <QueuedChip queued={queued} /> : null}
     </span>
   )
 }

@@ -21,10 +21,10 @@ export async function runMigrate(): Promise<void> {
   for (const name of result.updated) console.log(`  updated  ${name}`)
   for (const name of result.removed) console.log(`  removed  ${name}`)
   if (result.added.length + result.updated.length + result.removed.length === 0) {
-    console.log(`Already on ${packageVersion} — the skills Jinn ships are up to date.`)
+    console.log(`Already on ${packageVersion} — the skills Marid ships are up to date.`)
     return
   }
-  console.log(`\nSynced the skills Jinn ships to ${packageVersion}.`)
+  console.log(`\nSynced the skills Marid ships to ${packageVersion}.`)
   if (result.backupDir) console.log(`Previous copies: ${result.backupDir}`)
 }
 

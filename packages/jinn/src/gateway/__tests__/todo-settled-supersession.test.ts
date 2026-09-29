@@ -40,15 +40,21 @@ let triggers: Triggers;
 
 const definitions: WorkflowDefinition[] = [];
 const started: Array<{ workflowId: string; todoId: string | undefined }> = [];
+/** Every run these stubs start stays in flight. The Todo-wide claim now
+ *  outlives a run only while one is still going, and what is under
+ *  test here is that claim deciding a burst, not runs settling. */
+const live: Array<{ id: string; idempotencyKey: string; status: "running" }> = [];
 
 const repository = {
   listDefinitions: () => ({ items: definitions.map((item) => ({ id: item.id })), nextCursor: null }),
   getDefinition: (id: string) => definitions.find((item) => item.id === id),
-  createRun: ({ workflowId, trigger }: { workflowId: string; trigger: { todoId?: string } }) => {
+  createRun: ({ workflowId, idempotencyKey, trigger }: { workflowId: string; idempotencyKey: string; trigger: { todoId?: string } }) => {
     started.push({ workflowId, todoId: trigger.todoId });
+    live.push({ id: `run-${started.length}`, idempotencyKey, status: "running" });
     return { id: `run-${started.length}` };
   },
   getRun: (_workflowId: string, runId: string) => ({ id: runId, status: "completed" }),
+  listRecoverableRuns: () => [...live],
 } as unknown as WorkflowRepository;
 
 const runner = { start: async (runId: string) => ({ id: runId, status: "completed" }) } as unknown as WorkflowRunner;
@@ -139,7 +145,7 @@ beforeAll(async () => {
   dbModule.initDb();
 });
 
-beforeEach(() => { definitions.length = 0; started.length = 0; });
+beforeEach(() => { definitions.length = 0; started.length = 0; live.length = 0; });
 
 describe("a released deferral loses to a newer event that has already run", () => {
   it("stands down when the winner settled in a drain that never saw this event", async () => {

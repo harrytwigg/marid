@@ -144,6 +144,9 @@ export interface TurnProgress {
   activeTools: number;
   /** Upstream API requests in flight (background subagents/tasks). */
   activeUpstream: boolean;
+  /** The turn has not started: it is waiting for a turn the operator typed
+   *  into the terminal to finish. Waiting, not stalled. */
+  waitingForTerminalTurn?: boolean;
 }
 
 export interface TurnProgressEngine extends Engine {
@@ -154,7 +157,38 @@ export function reportsTurnProgress(engine: Engine): engine is TurnProgressEngin
   return typeof (engine as Partial<TurnProgressEngine>).turnProgress === "function";
 }
 
-export interface EngineRunOpts {
+/**
+ * Where an engine session actually executes. Absent on every field = the gateway
+ * host, which is every employee today. When `remoteHost` is set the session is
+ * spawned through `ssh` instead, and `remoteCwd` — not {@link EngineRunOpts.cwd}
+ * — is the working directory the engine sees.
+ *
+ * `remoteCwd` is validated against `config.remote.root` at org-load time and
+ * again immediately before the spawn command is built. Both checks matter: the
+ * first fails a bad config loudly at boot, the second is what actually stands
+ * between a mutated in-memory Employee and an unattended
+ * `--dangerously-skip-permissions` session outside the sandbox.
+ */
+export interface RemoteTarget {
+  /** Hostname or ssh alias of the machine that runs the engine. */
+  remoteHost?: string;
+  /** SSH user on {@link remoteHost}. Defaults to ssh's own resolution when unset. */
+  remoteUser?: string;
+  /** Working directory ON the remote host. Must resolve under `config.remote.root`. */
+  remoteCwd?: string;
+  /**
+   * `CLAUDE_CONFIG_DIR` for this employee's sessions on the remote host —
+   * which Claude Code profile they run as. Overrides `remote.claudeConfigDir`;
+   * unset on both means the remote user's default profile.
+   *
+   * Per-employee rather than per-host because one machine commonly holds
+   * several profiles (a personal one and a work one), and which an employee
+   * should use is a property of the employee, not the box.
+   */
+  remoteClaudeConfigDir?: string;
+}
+
+export interface EngineRunOpts extends RemoteTarget {
   prompt: string;
   resumeSessionId?: string;
   systemPrompt?: string;
@@ -203,11 +237,21 @@ export interface EngineResult {
    *  engine doesn't surface usage. */
   contextTokens?: number;
   error?: string;
+  /** Set by a `/compact` turn that compacted: the context size either side of
+   *  it, as far as the engine reports them. */
+  compaction?: CompactionStats;
   /**
    * Optional rate limit metadata returned by an engine.
    * `resetsAt` is a Unix timestamp in seconds.
    */
   rateLimit?: EngineRateLimitInfo;
+}
+
+export interface CompactionStats {
+  /** Context tokens before the compaction. */
+  preTokens?: number;
+  /** Context tokens after it: what the next turn starts from. */
+  postTokens?: number;
 }
 
 export interface EngineRateLimitInfo {
@@ -314,6 +358,10 @@ export interface WorkflowSessionExecutor {
 }
 
 /** Durable attribution for a workflow-owned employee attempt session. */
+/** Why a session is linked to a Todo: it executed it, or it was delegated its
+ *  review. The predicates that read it live in work-items/link-role.ts. */
+export type WorkItemLinkRole = "execute" | "review";
+
 export interface WorkflowSessionProvenance {
   kind: "phase";
   workflowId: string;
@@ -356,6 +404,10 @@ export interface Session {
    * transcript remain durable and searchable until explicitly unarchived. */
   archivedAt?: string | null;
   parentSessionId: string | null;
+  /** Why this session is linked to `workItemId`: `execute` (it is an execution
+   *  attempt) or `review` (it was delegated the review of one). Null/undefined
+   *  reads as `execute`. See work-items/link-role.ts. */
+  workItemRole?: WorkItemLinkRole | null;
   /** Explicit workflow/run/phase attribution for grouping and filtered reads. */
   workflowProvenance?: WorkflowSessionProvenance | null;
   /** Forwarded SSO identity captured from an auth proxy (opt-in via
@@ -408,6 +460,8 @@ export interface Session {
     /** Epoch ms of the last observable progress — an INSTANT, not a duration. */
     lastProgressAt: number;
     awaitingSubmit: boolean;
+    /** Waiting for a turn typed in the terminal to finish; not a stall. */
+    waitingForTerminalTurn?: boolean;
   } | null;
   /** Serialize-time only (derived, never persisted): active employee sessions
    *  anywhere below this session in the parent/child tree. */
@@ -490,7 +544,7 @@ export interface CronDelivery {
   channel: string;
 }
 
-export interface Employee {
+export interface Employee extends RemoteTarget {
   name: string;
   /** Gateway-stamped built-in identity. Never sourced from employee YAML. */
   system?: boolean;
@@ -784,6 +838,7 @@ export interface EngineLimitBucket {
   primary?: EngineLimitWindow;
   secondary?: EngineLimitWindow;
   credits?: EngineLimitCredits;
+  windows?: EngineLimitWindow[]; // every window, for a bucket metering more than two
 }
 
 export interface EngineLimitEngineSnapshot {
@@ -835,4 +890,4 @@ export interface EngineModelsConfig {
 /** `models:` block keyed by engine name (claude | codex | antigravity | grok | pi). */
 export type ModelsConfig = Record<string, EngineModelsConfig>;
 
-export type { JinnConfig, PortalConfig } from "./config-types.js";
+export type { JinnConfig, PortalConfig, RemoteExecutionConfig, OpencodeMode, OpencodeServerConfig } from "./config-types.js";

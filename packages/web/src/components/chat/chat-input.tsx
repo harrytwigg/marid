@@ -30,10 +30,13 @@ interface SlashCommand {
   needsEmployee?: boolean
 }
 
-/** Built-in commands handled client-side (not sent to engine) */
-const BUILTIN_COMMANDS: SlashCommand[] = [
+/** Built-in commands offered in the slash menu. `/new` and `/status` are handled
+ *  client-side (see resolveClientCommand); `/compact` is sent like a message and
+ *  the gateway routes it to the session engine's own compaction. */
+export const BUILTIN_COMMANDS: SlashCommand[] = [
   { name: 'new', description: 'Start a new chat session' },
   { name: 'status', description: 'Show current session info' },
+  { name: 'compact', description: "Compact this chat's context (Claude Code, opencode). On Claude, add focus: /compact keep the Todo ids" },
 ]
 
 export type ClientCommand = 'new' | 'status'

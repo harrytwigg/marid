@@ -77,6 +77,14 @@ Keep the Todo ledger current. One operator outcome normally maps to one root Tod
 
 Use Workflows for repeatable, scheduled, event-driven, or multi-step procedures. Use cron for simple scheduled prompts. Analytical or decision-informing cron output should route through the COO for review; direct delivery is for simple no-review results. The Workflow and cron skills own their schemas and tool calls.
 
+## Long sessions: self-compaction
+
+A session running out of context compacts itself and keeps going; it does not stop and wait for someone to start a new one. Call `compact_session` with a handoff — `goal` (the task, its Todo, the outcome), `done` (what is finished and where the evidence is), `next` (the exact next steps), and optionally `context` (ids, branches, paths, decisions to keep verbatim) and `waitingOn` (delegations still in flight and what each owes back) — then **end your turn** with no further tool calls. Once the turn has ended, the gateway runs the engine's own compaction (Claude Code `/compact`; opencode `summarize`, server mode only) and resumes you with the handoff verbatim. Write the handoff for a reader with no memory of this session: the summary is lossy, the handoff is not. One compaction per session every ten minutes; any session can call it for itself — a child or Todo-dispatched session included — but never from a sub-agent running inside a session (a Claude Code Task, an opencode task), which would compact that session's main thread from its own narrow view.
+
+When to use it: at a natural boundary in long work — after a phase lands, before starting the next — rather than mid-edit, and before the context is so full that writing a good handoff is itself hard. When not to: to escape a hard problem (the problem survives), on a short session, or to "reset" instead of finishing.
+
+Delegation in flight is the open question. Children run in their own sessions and are not compacted with you. A callback that lands after you call the tool queues behind your resume turn; one already queued when you call it makes the call refuse, so you handle it first and the handoff stays current. What can be lost is your side of the coordination — which child owes what, what you told each one, what you meant to do with the answers. So prefer to compact when nothing is outstanding. If you must compact while waiting, list every outstanding child session in `waitingOn` with what it will send back. Whether compacting mid-delegation is merely riskier or actually unsafe has not been settled; if you see it go wrong, report it rather than working around it.
+
 ## Durable knowledge
 
 Use Notes for facts, decisions, preferences, and project context that future sessions should retain. Use Experiments when a hypothesis needs a baseline, metrics, a horizon, readings, and a verdict. `docs/` is reference material, not editable Notes.

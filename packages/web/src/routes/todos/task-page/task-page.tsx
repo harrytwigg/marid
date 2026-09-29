@@ -21,6 +21,8 @@ import { departmentTitle } from "../board/board-switcher"
 import { CrumbBar, type CrumbAncestor } from "./crumb-bar"
 import { TaskBanner } from "./banner"
 import { PropsRail } from "./props-rail"
+import { SessionDirectoryProvider } from "./session-ref"
+import { useTodoSessions } from "./use-todo-sessions"
 import { ChipCluster } from "./chip-cluster"
 import { useTaskPickers } from "./use-task-pickers"
 import { BodyEditor } from "./body-editor"
@@ -86,8 +88,6 @@ interface TaskRouteState {
   bannerExpected?: boolean
 }
 
-const LIVE_SESSION_STATES = new Set(["running", "waiting"])
-
 function workingElapsed(detail: WorkItemDetailWire): string | null {
   if (detail.workItem.status !== "executing") return null
   let startedAt: string | undefined
@@ -138,16 +138,8 @@ export default function TaskPage() {
   const byName = useEmployeesByName(org.data?.employees)
   const departments = useDepartments()
 
-  const { data: sessions } = useQuery({
-    queryKey: ["work-item-sessions", id ?? ""],
-    queryFn: () => api.listWorkItemSessions(id!),
-    enabled: !!id,
-    staleTime: 10_000,
-  })
-  const hasLiveSession = (sessions ?? []).some((s) => LIVE_SESSION_STATES.has(s.status ?? ""))
-  const dispatcherSession = (sessions ?? []).find(
-    (session) => session.employee === "todo-dispatcher" && LIVE_SESSION_STATES.has(session.status ?? ""),
-  )
+  // `treeQuery` above is the Todo relations tree; this one is the sessions working it.
+  const { tree: sessionTree, hasLiveSession, railSession } = useTodoSessions(id)
 
   // ── Transient refusal callout — always the gateway's words; renders above the picker sheet, which is where the refusals it reports come from ──
   const [callout, setCallout] = useState<string | null>(null)
@@ -325,6 +317,9 @@ export default function TaskPage() {
   return (
     // Mobile is a full-screen push (§8): the tab bar yields the bottom edge to
     // the fixed comment bar; back is the condensed crumb's chevron.
+    // The directory rides a context because the surfaces that resolve a session
+    // id — rail, audit whisper, comment author — sit at unrelated depths.
+    <SessionDirectoryProvider directory={sessionTree?.directory}>
     <PageLayout hideMobileTabBar={mobile}>
       <AttachmentDropSurface className="flex h-full min-h-0 flex-col" onUpload={(files) => attachments.upload.mutate(files)}>
         <div className="min-h-0 flex-1 overflow-y-auto" data-scrollable data-testid="task-page-scroll">
@@ -471,10 +466,11 @@ export default function TaskPage() {
                     byName={byName}
                     departments={departments.data}
                     rowFor={pickers.rowFor}
-                    dispatcherSession={dispatcherSession}
+                    railSession={railSession}
+                    sessionTree={sessionTree}
                     dispatchPending={dispatchTodo.isPending}
                     onDispatch={() => dispatchTodo.mutate()}
-                    onOpenDispatcherSession={(sessionId) => navigate(`/?session=${encodeURIComponent(sessionId)}`)}
+                    onOpenRailSession={(sessionId) => navigate(`/?session=${encodeURIComponent(sessionId)}`)}
                   />
                 </div>
               )}
@@ -497,10 +493,11 @@ export default function TaskPage() {
                   byName={byName}
                   departments={departments.data}
                   rowFor={pickers.rowFor}
-                  dispatcherSession={dispatcherSession}
+                  railSession={railSession}
+                  sessionTree={sessionTree}
                   dispatchPending={dispatchTodo.isPending}
                   onDispatch={() => dispatchTodo.mutate()}
-                  onOpenDispatcherSession={(sessionId) => navigate(`/?session=${encodeURIComponent(sessionId)}`)}
+                  onOpenRailSession={(sessionId) => navigate(`/?session=${encodeURIComponent(sessionId)}`)}
                 />
               </aside>
             )}
@@ -520,6 +517,7 @@ export default function TaskPage() {
         </div>
       )}
     </PageLayout>
+    </SessionDirectoryProvider>
   )
 }
 

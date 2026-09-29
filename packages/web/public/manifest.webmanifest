@@ -1,13 +1,13 @@
 {
   "id": "/",
-  "name": "Jinn",
-  "short_name": "Jinn",
+  "name": "Marid",
+  "short_name": "Marid",
   "description": "AI Gateway Dashboard",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#14130F",
-  "theme_color": "#14130F",
+  "background_color": "#0F1719",
+  "theme_color": "#0F1719",
   "icons": [
     {
       "src": "/icons/icon-192.png",

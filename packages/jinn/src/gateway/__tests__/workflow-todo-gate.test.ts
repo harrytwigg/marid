@@ -4,15 +4,21 @@ import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Employee, ModelRegistry } from "../../shared/types.js";
 import type { WorkflowDefinition, WorkflowNode } from "../../workflows/model.js";
-import { openWorkflowDatabase } from "../../workflows/repository-migrations.js";
-import { WorkflowRepository } from "../../workflows/repository.js";
-import { WorkflowService } from "../../workflows/service.js";
 import type { WorkflowSessionExecutor } from "../../workflows/session-executor.js";
 
 // Throwaway registry DB (SESSIONS_DB resolves from JINN_HOME at module load) —
 // set BEFORE importing anything that touches the store.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-wf-todo-gate-"));
 process.env.JINN_HOME = tmp;
+
+// Loaded AFTER the override, never as a static import: these reach
+// shared/paths.ts, which freezes SESSIONS_DB at import time. A hoisted static
+// import would resolve the path before this file set JINN_HOME, leaving both
+// this file and todo-recovery.test.ts on the suite's one registry.db and racing
+// into "database is locked".
+const { openWorkflowDatabase } = await import("../../workflows/repository-migrations.js");
+const { WorkflowRepository } = await import("../../workflows/repository.js");
+const { WorkflowService } = await import("../../workflows/service.js");
 
 type Store = typeof import("../../work-items/store.js");
 type Approvals = typeof import("../../work-items/approvals.js");

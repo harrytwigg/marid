@@ -327,12 +327,25 @@
      fades it. The previous +52px reserved space for the removed solid header
      and left a dead gap above the first message. */
   --chat-top-clearance: max(var(--safe-top), 12px);
+  /* The band the floating pills + top scrim occupy, below that clearance. The
+     transcript's first message starts under it, and so does a CLI or terminal
+     view's first row (JIN-2) — one token, so the two cannot drift. It is
+     72px below lg, where the mobile nav bar is shorter, and 88px from lg. */
+  --chat-header-band: 72px;
+  /* The top scrim's height, at every width. A CLI or terminal view cannot
+     scroll out from under it, so it never starts above this line. */
+  --chat-top-scrim: 88px;
   /* Multiplier on every type step, from the Text size setting. The blocking
      bootstrap in index.html sets it on <html> before first paint and the
      settings provider rewrites it on change; this is the unscaled fallback for
      a device that has never picked one. Declared outside @theme because an
      inline style on <html> only wins the cascade against a :root declaration. */
   --text-scale: 1;
+}
+
+/* Tailwind's lg breakpoint (64rem), the transcript's old lg:pt-[88px] step. */
+@media (min-width: 64rem) {
+  :root { --chat-header-band: 88px; }
 }
 
 /* LEDGER DARK — warm charcoal + amber (default) */
@@ -1447,11 +1460,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* xterm uses .xterm-helper-textarea as a hidden input proxy for keyboard
-   events. A click anywhere in the terminal focuses this textarea, stealing
-   focus from our sibling ChatInput. With pointer-events: none it can't
-   intercept clicks/taps — selection still works because xterm's selection
-   layer is on a different element. */
-.xterm-helper-textarea {
+   events. In the display-only terminal (touch devices) a tap anywhere would
+   focus this textarea, stealing focus from our sibling ChatInput. With
+   pointer-events: none it can't intercept clicks/taps — selection still works
+   because xterm's selection layer is on a different element. The interactive
+   desktop terminal wants exactly that focus: clicking it is how the operator
+   starts typing into the TUI. */
+[data-cli-terminal="display"] .xterm-helper-textarea {
   pointer-events: none !important;
 }
 

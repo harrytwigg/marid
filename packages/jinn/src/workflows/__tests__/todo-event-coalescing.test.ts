@@ -30,6 +30,10 @@ let pending: WorkflowTodoStatusEvent[] = [];
 const started: Array<{ workflowId: string; idempotencyKey: string; payload: unknown }> = [];
 const completed: Array<{ eventId: string; outcomes: WorkflowTodoEventClaimOutcome[] }> = [];
 const deferred = new Map<string, { definitionIds: string[]; outcomes: WorkflowTodoEventClaimOutcome[] }>();
+/** Every run these stubs start stays in flight. The Todo-wide claim now
+ *  outlives a run only while one is still going, and what is under
+ *  test here is that claim deciding a burst, not runs settling. */
+const live: Array<{ id: string; idempotencyKey: string; status: "running" }> = [];
 
 const repository = {
   listDefinitions: () => ({ items: definitions.map((item) => ({ id: item.id })), nextCursor: null }),
@@ -38,9 +42,11 @@ const repository = {
     workflowId: string; idempotencyKey: string; trigger: { payload: unknown };
   }) => {
     started.push({ workflowId, idempotencyKey, payload: trigger.payload });
+    live.push({ id: `run-${started.length}`, idempotencyKey, status: "running" });
     return { id: `run-${started.length}` };
   },
   getRun: (_workflowId: string, runId: string) => ({ id: runId, status: "completed" }),
+  listRecoverableRuns: () => [...live],
 } as unknown as WorkflowRepository;
 
 const runner = { start: async (runId: string) => ({ id: runId, status: "completed" }) } as unknown as WorkflowRunner;
@@ -65,11 +71,11 @@ const feed: WorkflowTodoEventFeed = {
 
 function event(id: string, workItemId: string, labels: string[] = []): WorkflowTodoStatusEvent {
   return {
-    id, workItemId, fromStatus: "executing", toStatus: "in_review", actor: "operator", armedAsDelegate: null,
+    id, workItemId, fromStatus: "executing", toStatus: "in_review", actor: "operator", actorEmployee: null, armedAsDelegate: null,
     quotaWindowDecided: false,
     item: {
       source: "human", department: null, assignee: null,
-      labels: labels.map((name) => ({ id: `lbl_${name}`, name })),
+      labels: labels.map((name) => ({ id: `lbl_${name}`, name })), autoStart: true,
       live: { assignee: null, parentId: null, status: "in_review" },
     },
   };
@@ -91,6 +97,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  live.length = 0;
   started.length = 0;
   completed.length = 0;
   deferred.clear();
@@ -203,8 +210,8 @@ describe("coalescing a backlog of pending Todo events", () => {
       workflowId: "build-only",
       idempotencyKey: "todo:event-2",
       payload: {
-        todoId: item.id, fromStatus: "executing", toStatus: "in_review", actor: "operator",
-        source: "human", department: null, assignee: null, labels: ["build"], labelList: "build",
+        todoId: item.id, fromStatus: "executing", toStatus: "in_review", actor: "operator", actorEmployee: null,
+        source: "human", department: null, assignee: null, autoStart: true, labels: ["build"], labelList: "build",
       },
     }]);
   });

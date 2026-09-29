@@ -196,7 +196,7 @@ describe("pair CLI helpers", () => {
     }, 7777);
 
     expect(text).toContain("ABCD-EFGH-JKLM");
-    expect(text).toContain("Open Jinn on the other device");
+    expect(text).toContain("Open Marid on the other device");
     expect(text).toContain("5 minutes");
     expect(text).not.toContain("gateway-token");
   });

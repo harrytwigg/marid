@@ -1,41 +1,61 @@
-<h1 align="center">🧞 Jinn</h1>
+<h1 align="center">Marid</h1>
 
 <p align="center"><b>Run your AI agents as a company.</b></p>
 
 <p align="center">
-  Jinn turns the agent CLIs you already use - Claude Code, Codex, Grok, Hermes - into a persistent AI company:
+  Marid turns the agent CLIs you already use - Claude Code, Codex, Grok, Hermes, opencode - into a persistent AI company:
   named employees, a durable Todo ledger, and reusable Workflows,
   all operated from a chat and web dashboard.<br/>
   It doesn't replace your agents. <b>It gives them an org to work in.</b>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/jinn-cli"><img src="https://img.shields.io/npm/v/jinn-cli?color=7c3aed&label=npm" alt="npm version" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/npm/l/jinn-cli?color=7c3aed" alt="license" /></a>
-  <img src="https://img.shields.io/node/v/jinn-cli?color=7c3aed" alt="node version" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1E7A8C" alt="license: MIT" /></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A522-1E7A8C" alt="node 22 or newer" />
   <img src="https://img.shields.io/badge/Docker-supported-2496ED?logo=docker&logoColor=white" alt="Docker supported" />
-  <img src="https://img.shields.io/badge/status-beta-7c3aed" alt="status: beta" />
+  <img src="https://img.shields.io/badge/status-beta-1E7A8C" alt="status: beta" />
 </p>
 
-<p align="center">
-  <img src="assets/jinn-showcase.gif" alt="Jinn web dashboard" width="820" />
-</p>
+> **You bring the engines. Marid runs the company.**
 
-> **You bring the engines. Jinn runs the company.**
+## Built on Jinn
+
+Marid is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors (MIT). Most of the code here is theirs: the gateway, the org, Todos, Workflows, the web dashboard and the engine adapters. Marid keeps tracking upstream and adds features on top of it - see [What Marid adds](#what-marid-adds). The original copyright is preserved in [LICENSE](LICENSE) and the credit is repeated in [NOTICE](NOTICE).
+
+Internally the codename stays "Jinn": the `jinn` command, the `jinn-cli` package name, `~/.jinn` and the `JINN_*` variables are unchanged, so an existing Jinn install keeps working and upstream fixes merge cleanly.
+
+> The `npm install -g jinn-cli` and Homebrew installs below ship the **upstream** Jinn package, not Marid. To run Marid's features, [build from this repository](#development).
 
 ---
 
-## Why Jinn?
+## Why Marid?
 
-Agent CLIs are powerful alone. Jinn gives them shared structure, ownership, and history.
+Agent CLIs are powerful alone. Marid gives them shared structure, ownership, and history.
 
-- **🎼 Bus, not brain.** Jinn conducts the agent CLIs on your `PATH` and adds no AI logic. Better engines make Jinn better automatically.
+- **🎼 Bus, not brain.** Marid conducts the agent CLIs on your `PATH` and adds no AI logic. Better engines make Marid better automatically.
 - **🏢 A real org.** Define named employees, ranks, departments, and reporting lines in YAML. Your COO delegates through the hierarchy.
 - **📋 Durable work.** Todos preserve ownership and review beyond a session; the built-in MCP gives employees typed company tools.
 - **🔁 Reusable automation.** Workflows combine sequential, conditional, parallel, and switch paths with per-phase models, approvals, triggers, and run history.
 - **⏰ Work with receipts.** Cron, delegation, callbacks, and Workflows keep running and leave structured activity in Chat.
 
-> Jinn is **beta**. It works today and moves fast; read the upgrade notes when you bump versions.
+> Marid is **beta**. It works today and moves fast; read the upgrade notes when you bump versions.
+
+---
+
+## What Marid adds
+
+Everything in upstream Jinn still applies. On top of it, Marid adds:
+
+- **Session self-compaction.** On claude, and on opencode in server mode, an agent can call the `compact_session` MCP tool to compact its own context and pick the work back up from a handoff (goal, what's done, what's next). No operator needed to `/compact` a long-running session.
+- **`/compact` from the chat.** Typed in the web chat, the CLI view's composer or a connector, `/compact` runs the session engine's own compaction: Claude Code's `/compact`, with any focus instructions after it, or opencode's summarize in server mode. The chat shows a status while it runs and a confirmation with the context size once it's done. On an engine with no compaction to drive, the operator gets a clear "not supported" reply and nothing is sent to the model. It waits for a running turn rather than interrupting it.
+- **Remote hosts over SSH.** An employee with a `remoteHost` runs its turns on another machine, so repository checkouts, builds and tests happen there while the gateway stays on a small always-on box. Works for `claude`, `pi` and `opencode`, with a per-engine staged home, a wake command for sleeping hosts, and a fallback engine when a remote turn is rate-limited. Todo attachments (`attach_to_work_item`) work from remote sessions too. See [`docs/remote-execution.md`](docs/remote-execution.md).
+- **opencode engine.** Run turns on the [opencode](https://opencode.ai) CLI, locally or on a remote host, with a searchable model picker, OpenCode Go spend metering, and an opt-in server mode with a live terminal view. See [`docs/engines-opencode.md`](docs/engines-opencode.md).
+- **Interactive CLI tabs.** The CLI view is a real terminal on desktop: click in and type, paste, scroll, select and copy straight into the engine's TUI. Touch devices keep the display-only view with a key bar. See [`docs/cli-terminal.md`](docs/cli-terminal.md).
+- **Terminal mode.** Open a raw login shell on the gateway or any configured machine from the chat sidebar, and tile it in the chat grid next to your chats. See [`docs/terminals.md`](docs/terminals.md).
+- **Remote MCP connector (opt-in).** Serve a subset of the gateway's tools at `/mcp` (behind Cloudflare Access) so claude.ai, Claude Desktop and Claude Code can use your instance as a custom connector, including session control. See [`docs/remote-mcp.md`](docs/remote-mcp.md).
+- **Idle-capacity auto-start and Auto-Dispatch (opt-in).** A gateway loop watches your real Claude usage windows and starts backlog Todos when a window is about to reset with capacity to spare, with a dashboard for policy, history and usage projection, and a per-Todo switch. See [`docs/idle-capacity.md`](docs/idle-capacity.md).
+- **Todo and session quality of life.** Closed Todo departments, a per-Todo auto-start opt-out, a navigable session tree per Todo, and bulk select, archive and delete (with shift-click range select) in the chat list.
+- **Restart and reliability hardening.** Interrupted sessions are recorded and nudged back after a gateway restart, each delegation gets its own turn lane, engine health is tracked per host, Claude auth outages are alerted once, and the `/ws` event stream checks the browser's origin.
 
 ---
 
@@ -43,10 +63,10 @@ Agent CLIs are powerful alone. Jinn gives them shared structure, ownership, and 
 
 ### Native install
 
-> **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Jinn orchestrates your engines and can't run a session without one.
+> **Prerequisites:** Node.js **22 or newer** (the repository pins **24.13.0** in `.nvmrc`), and at least one agent CLI installed **and signed in**. Marid orchestrates your engines and can't run a session without one.
 
 ```bash
-# 1. Install Jinn
+# 1. Install (upstream Jinn package - see "Built on Jinn" above)
 npm install -g jinn-cli
 
 # 2. Install + sign in to at least one engine (example: Claude Code)
@@ -70,14 +90,14 @@ brew install jinn
 jinn setup && jinn start
 ```
 
-> **`--version` ≠ signed in.** Jinn drives the official engine CLIs, so authenticate each one *before* `jinn start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
+> **`--version` ≠ signed in.** Marid drives the official engine CLIs, so authenticate each one *before* `jinn start` (run `claude` → `/login`, run `codex` to sign in, and so on). Without this, sessions can't reach the models - the most common fresh-install gotcha.
 
 ### Docker
 
 Docker needs Docker Engine or Docker Desktop with Compose v2, but it does **not** need Node.js or an agent CLI installed on the host. The image includes Claude Code. Containerising bounds the engine's permission-free access to the directories you explicitly mount instead of your whole home directory:
 
 ```bash
-git clone https://github.com/hristo2612/jinn.git
+git clone https://github.com/harrytwigg/marid.git
 cd jinn
 
 # Edit docker-compose.yml and uncomment at least one "Project mounts" entry.
@@ -89,7 +109,7 @@ docker compose exec jinn jinn pair  # prints a code for the browser
 
 Then open **[http://localhost:7777](http://localhost:7777)** and enter the code at the pairing prompt. The gateway binds `0.0.0.0` inside the container, so it requires auth, and your browser reaches it through Docker's NAT rather than loopback — which is why pairing replaces the automatic sign-in a host install gets.
 
-The compose image runs one Jinn instance. Additional instances need separate containers, dedicated Jinn/Claude volumes and separately published ports. The writable blast radius includes those state volumes (OAuth, sessions and plugins), every writable project mount, and unrestricted network egress; see the Docker guide before mounting sensitive data.
+The compose image runs one instance. Additional instances need separate containers, dedicated Marid/Claude volumes and separately published ports. The writable blast radius includes those state volumes (OAuth, sessions and plugins), every writable project mount, and unrestricted network egress; see the Docker guide before mounting sensitive data.
 
 The image ships the `claude` engine only. `codex`, `grok` and `hermes` are not included, and neither are `ffmpeg`/`whisper-cli` for speech-to-text — the same as a Homebrew or npm install, which leave those to you. See **[docs/docker.md](docs/docker.md)** for the mount model, what persists across upgrades, how to add speech-to-text, and what the isolation does and does not cover.
 
@@ -117,7 +137,7 @@ After upgrading an older install, run **`jinn migrate`**. Your COO applies the l
 
 ## The company model
 
-Jinn exposes a small set of building blocks and handles the machinery underneath.
+Marid exposes a small set of building blocks and handles the machinery underneath. The screenshots below are from upstream Jinn's dashboard.
 
 **Employees** are editable YAML roles with a name, department, rank, and engine. One employee can run several sessions; different roles can use different engines.
 
@@ -136,7 +156,7 @@ Jinn exposes a small set of building blocks and handles the machinery underneath
 **Chat** operates the company. Delegations, callbacks, Todo changes, and Workflow operations appear beside the conversation as durable activity receipts.
 
 <div align="center">
-  <img src="assets/chat.png" alt="Jinn chat - an engineering employee diagnosing and fixing a flaky test, with company activity receipts" width="880" />
+  <img src="assets/chat.png" alt="Chat (upstream Jinn UI) - an engineering employee diagnosing and fixing a flaky test, with company activity receipts" width="880" />
 </div>
 <div align="center"><sub>An Engineering employee triages a flaky test, ships the fix, and opens a PR, with each delegation and callback rendered as an activity receipt.</sub></div>
 
@@ -148,13 +168,13 @@ Jinn exposes a small set of building blocks and handles the machinery underneath
 
 **Plugins** extend the app itself: an enabled directory under `~/.jinn/plugins/` adds dashboard pages, sidebar rows, and status chips, and may also mount gateway HTTP routes and a supervised background task, with no build step. See [`docs/plugins.md`](docs/plugins.md) for the manifest, the SDK surface, and the security posture.
 
-**Skills and Cron** provide reusable playbooks and scheduled work. A built-in **Jinn MCP** gives engines typed tools for company operations; shell access remains available for local implementation.
+**Skills and Cron** provide reusable playbooks and scheduled work. A built-in **MCP server** (`jinn`) gives engines typed tools for company operations; shell access remains available for local implementation.
 
 ---
 
 ## How it works
 
-Jinn is a local gateway daemon plus a web dashboard. It dispatches work to installed engines, persists company state, runs automation, and serves the UI at `localhost:7777`.
+Marid is a local gateway daemon plus a web dashboard. It dispatches work to installed engines, persists company state, runs automation, and serves the UI at `localhost:7777`.
 
 ```
                           +----------------+
@@ -175,12 +195,12 @@ Jinn is a local gateway daemon plus a web dashboard. It dispatches work to insta
       +-------+---------+ +-----+------+  +-------+-------+
               |                                   |
       +-------v-------+   +-----------+   +--------v-------+
-      |  Todos ·      |   |   Cron    |   |  Jinn MCP      |
+      |  Todos ·      |   |   Cron    |   |  MCP server    |
       |  Workflows    |   | Scheduler |   |  company hands |
       +---------------+   +-----------+   +----------------+
 ```
 
-Claude runs in a real interactive terminal, so eligible turns bill against a Max/Pro subscription. Other engines use spawn-per-turn or streaming models. Jinn discovers supported models from each CLI when available.
+Claude runs in a real interactive terminal, so eligible turns bill against a Max/Pro subscription. Other engines use spawn-per-turn or streaming models. Marid discovers supported models from each CLI when available.
 
 ---
 
@@ -213,7 +233,7 @@ Reviewers choose TRUST, VERIFY, or THOROUGH oversight. Money, irreversible or pu
 
 ## Engines - bring your own
 
-Jinn detects installed agent CLIs and lets each employee or session choose an engine. It discovers model catalogs when supported and otherwise uses labels from `config.yaml`.
+Marid detects installed agent CLIs and lets each employee or session choose an engine. It discovers model catalogs when supported and otherwise uses labels from `config.yaml`.
 
 | Engine | What it is | Install | Modes | Effort |
 |--------|-----------|---------|-------|--------|
@@ -231,7 +251,7 @@ Fallback labels include **Opus (Latest)**, **Sonnet (Latest)**, **Fable (Latest)
 <details>
 <summary><b>How the Claude engine runs on your subscription</b> (the PTY details)</summary>
 
-Jinn drives the interactive `claude` binary through [node-pty](https://github.com/microsoft/node-pty), so eligible turns use Max/Pro subscription billing. Hooks mark turn boundaries, a loopback proxy streams model output, and transcript JSONL provides token usage.
+Marid drives the interactive `claude` binary through [node-pty](https://github.com/microsoft/node-pty), so eligible turns use Max/Pro subscription billing. Hooks mark turn boundaries, a loopback proxy streams model output, and transcript JSONL provides token usage.
 
 The Chat and CLI views share one PTY. Terminal snapshots survive reconnects and gateway restarts. Codex, Grok, and Pi spawn per turn; Hermes streams over ACP.
 
@@ -251,7 +271,7 @@ The Chat and CLI views share one PTY. Terminal snapshots survive reconnects and 
 
 ## Configuration
 
-Jinn reads `~/.jinn/config.yaml`. A fresh setup includes this core shape:
+Marid reads `~/.jinn/config.yaml`. A fresh setup includes this core shape:
 
 ```yaml
 gateway:
@@ -298,6 +318,7 @@ logging:
 - **Cron, employees, and skills** live in `~/.jinn/cron/jobs.json`, `~/.jinn/org/`, and `~/.jinn/skills/`.
 - **Workflow evidence** defaults to `<JINN_HOME>/workflow-evidence`; `JINN_WORKFLOW_EVIDENCE_ROOT` relocates it.
 - **Plugins** live in `~/.jinn/plugins/` and only run when `plugins.enabled` names them; see [`docs/plugins.md`](docs/plugins.md) for the anatomy, lifecycle, and security posture.
+- **Behind a reverse proxy or tunnel**, the proxy must preserve `Host`, or pass the host the browser dialled in `X-Forwarded-Host`. The gateway's WebSockets (the live event stream `/ws`, plugin event sockets and terminals) refuse a browser whose `Origin` is not the gateway's own host, so a proxy that rewrites `Host` and forwards neither leaves the dashboard without live updates. A Cloudflare tunnel's default ingress preserves `Host`; don't set `httpHostHeader` on it.
 
 Everything is human-readable and yours to edit. After upgrading, run **`jinn migrate`** to merge current operating doctrine into your customized instance.
 
@@ -305,7 +326,7 @@ Everything is human-readable and yours to edit. After upgrading, run **`jinn mig
 
 ## Roadmap
 
-Jinn is in active beta. Shipped recently:
+Marid is in active beta. Shipped recently in upstream Jinn:
 
 - **Workflow completion contracts** with validated output, bounded extensions, reminders, and an observable run canvas.
 - **Collaborative Todo hierarchy** with sub-tasks, roll-up gates, labels, comments, links, attachments, provenance, and approval history.
@@ -318,16 +339,16 @@ On deck:
 - **Connectors:** iMessage and email.
 - **Platform:** plugins and multi-user roles.
 
-See [CHANGELOG.md](CHANGELOG.md) for release history, or [open an issue](https://github.com/hristo2612/jinn/issues).
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
 ## Development
 
-Jinn is a pnpm + turbo monorepo.
+Marid is a pnpm + turbo monorepo.
 
 ```bash
-git clone https://github.com/hristo2612/jinn.git
+git clone https://github.com/harrytwigg/marid.git
 cd jinn
 pnpm install
 pnpm setup   # one-time: builds all packages and creates ~/.jinn
@@ -350,7 +371,7 @@ pnpm test:e2e    # Playwright end-to-end tests
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Copyright (c) 2026 Jinn Contributors, and (c) 2026 Marid contributors for the changes made in this fork. See [NOTICE](NOTICE) for attribution.
 
 ## Contributing
 

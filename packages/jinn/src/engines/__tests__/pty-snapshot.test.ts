@@ -173,3 +173,68 @@ describe("PtySnapshotStore", () => {
     expect(pending.size).toBe(0);
   });
 });
+
+describe("PtySnapshot mouse encoding", () => {
+  /** xterm has no public getter for the encoding; this is the value its mouse
+   *  service uses to format every report. */
+  const encodingOf = (term: Terminal) => (term as any)._core.coreMouseService.activeEncoding as string;
+
+  async function replay(data: string): Promise<Terminal> {
+    const term = new Terminal({ cols: 40, rows: 6, allowProposedApi: true });
+    await write(term, data);
+    return term;
+  }
+
+  it("re-asserts SGR mouse encoding, which SerializeAddon alone drops", async () => {
+    const source = new PtySnapshot({ cols: 40, rows: 6 });
+    // What opencode sends at startup: alt screen, any-motion tracking, SGR.
+    await source.write("\u001b[?1049h\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1006hopencode tui");
+    const { data } = await source.capture();
+    expect(data.endsWith("\u001b[?1006h")).toBe(true);
+    const browser = await replay(data);
+    expect(browser.modes.mouseTrackingMode).toBe("any");
+    expect(encodingOf(browser)).toBe("SGR");
+    // Control: the addon's own output leaves the replaying terminal on X10.
+    const bare = await replay(data.slice(0, -"\u001b[?1006h".length));
+    expect(bare.modes.mouseTrackingMode).toBe("any");
+    expect(encodingOf(bare)).toBe("DEFAULT");
+    source.dispose();
+  });
+
+  it("stops re-asserting once the program turns SGR off, or resets the terminal", async () => {
+    const off = new PtySnapshot({ cols: 40, rows: 6 });
+    await off.write("\u001b[?1000;1006hx\u001b[?1006l");
+    expect((await off.capture()).data).not.toContain("?1006h");
+    off.dispose();
+
+    const ris = new PtySnapshot({ cols: 40, rows: 6 });
+    await ris.write("\u001b[?1000;1006hx\u001bcy");
+    expect((await ris.capture()).data).not.toContain("?1006h");
+    ris.dispose();
+  });
+
+  it("carries SGR-pixels (?1016) the same way", async () => {
+    const source = new PtySnapshot({ cols: 40, rows: 6 });
+    await source.write("\u001b[?1003h\u001b[?1016hpixels");
+    expect((await source.capture()).data.endsWith("\u001b[?1016h")).toBe(true);
+    source.dispose();
+  });
+
+  it("keeps the encoding across a restore from a persisted snapshot", async () => {
+    const first = new PtySnapshot({ cols: 40, rows: 6 });
+    await first.write("\u001b[?1049h\u001b[?1003;1006hscreen");
+    const persisted = await first.capture();
+    first.dispose();
+    const restored = new PtySnapshot({ cols: 40, rows: 6, initial: persisted });
+    await restored.write("more");
+    expect((await restored.capture()).data.endsWith("\u001b[?1006h")).toBe(true);
+    restored.dispose();
+  });
+
+  it("adds nothing for a program that never asked for mouse reports", async () => {
+    const source = new PtySnapshot({ cols: 40, rows: 6 });
+    await source.write("plain claude output");
+    expect((await source.capture()).data).not.toContain("?100");
+    source.dispose();
+  });
+});

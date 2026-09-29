@@ -4,6 +4,7 @@ import type { AuthState, PairedDevice, PairingCode } from "@/lib/auth"
 import { gatewayTransport } from "@/lib/gateway-transport"
 import { copyText } from "@/platform"
 import { AuthStateIcon, AuthStateLabel } from "./auth-motion"
+import { PRODUCT_NAME } from "@/lib/brand"
 
 interface RemoteAccessPanelProps {
   authState: Partial<AuthState> | null
@@ -128,7 +129,7 @@ export function RemoteAccessPanel({ authState, devices = [], onCreatePairingCode
             </button>
           </div>
           <div className="mt-2 text-pretty text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
-            On the other device, open Jinn and enter this code. It is single-use and expires at {new Date(pairingCode.expiresAt).toLocaleTimeString()}.
+            On the other device, open {PRODUCT_NAME} and enter this code. It is single-use and expires at {new Date(pairingCode.expiresAt).toLocaleTimeString()}.
           </div>
         </div>
       )}

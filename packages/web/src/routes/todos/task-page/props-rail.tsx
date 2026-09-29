@@ -1,10 +1,14 @@
-import { forwardRef } from "react"
-import { ArrowUpRight, Calendar, ChevronDown, LoaderCircle, Send, UserRound } from "lucide-react"
+import { ArrowUpRight, Calendar, LoaderCircle, Send, UserRound } from "lucide-react"
 import type { DepartmentSummaryWire, Employee, LinkedSessionWire, WorkItemDetailWire } from "@/lib/api"
 import { STATUS_LABEL, effectiveMaxRounds, effectiveVerifyMode, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
+import { sessionIdFromActor, type SessionTreeWire } from "@/lib/session-tree-api"
+import { SessionRef } from "./session-ref"
+import { SessionTreePanel } from "./session-tree"
 import { LabelChip, RemoveButton } from "./label-chip"
+import { RailKicker, RailRow, RailPriorityBars, VerifyPill, formatDueLong } from "./rail-rows"
+import { AutoStartRow } from "./auto-start-row"
 import { displayNameOf, formatRelativeTime } from "../util"
 
 /* Todos v2 slice 6 — the chrome-free properties rail (design-doc §7.2/§7.3,
@@ -14,87 +18,6 @@ import { displayNameOf, formatRelativeTime } from "../util"
  * target, and while its popover is open the row keeps the wash (anchored
  * state, polish law 1). Rail rhythm: top pad 8, group gap 32 (law 10). */
 
-export function RailKicker({ children, later }: { children: React.ReactNode; later?: boolean }) {
-  return <div className={`mb-1 text-[13px] font-semibold text-[var(--text-tertiary)] ${later ? "mt-8" : ""}`}>{children}</div>
-}
-
-/** One rail row. Interactive rows are buttons (tabbable, Enter/Space opens);
- *  read-only rows render without the hover affordance (§7.3). The open state
- *  keeps the wash + chevron while a picker superimposes the row. */
-export const RailRow = forwardRef<HTMLButtonElement, {
-  children: React.ReactNode
-  quiet?: boolean
-  onOpen?: () => void
-  open?: boolean
-  testId?: string
-  label?: string
-}>(function RailRow({ children, quiet, onOpen, open, testId, label }, ref) {
-  const base = "relative -mx-2.5 flex min-h-[34px] items-center gap-[9px] rounded-[9px] px-2.5 text-[13.5px] font-medium"
-  const ink = quiet ? "text-[var(--text-secondary)]" : "text-[var(--text-primary)]"
-  if (!onOpen) {
-    return (
-      <div data-testid={testId} className={`${base} ${ink} cursor-default`}>
-        {children}
-      </div>
-    )
-  }
-  return (
-    <button
-      ref={ref}
-      type="button"
-      data-testid={testId}
-      aria-label={label}
-      aria-haspopup="menu"
-      aria-expanded={open || false}
-      onClick={onOpen}
-      className={`${base} ${ink} focus-ring group/rail w-[calc(100%+20px)] text-left outline-none hover:bg-[var(--fill-quaternary)] ${
-        open ? "bg-[var(--fill-quaternary)]" : ""
-      }`}
-    >
-      {children}
-      <ChevronDown
-        size={11}
-        strokeWidth={2.2}
-        aria-hidden
-        className={`ml-auto flex-none text-[var(--text-quaternary)] transition-opacity duration-120 ${
-          open ? "opacity-100" : "opacity-0 group-hover/rail:opacity-100"
-        }`}
-      />
-    </button>
-  )
-})
-
-/** Rail priority bars: always rendered (unlike cards), emphasis by level. */
-export function RailPriorityBars({ priority }: { priority: number }) {
-  const strong = priority >= 3
-  const low = priority <= 1
-  const color = strong ? "var(--text-secondary)" : "var(--text-tertiary)"
-  return (
-    <span aria-hidden className="relative top-[-0.5px] flex w-4 flex-none items-end gap-[1.5px]" style={{ height: 10 }}>
-      {[4, 7, 10].map((h, i) => (
-        <i key={h} className="block w-[2.5px] rounded-[1px]" style={{ height: h, background: color, opacity: low && i > 0 ? 0.35 : 1 }} />
-      ))}
-    </span>
-  )
-}
-
-export function VerifyPill({ mode }: { mode: string }) {
-  const tint = mode === "thorough" ? "var(--system-red)" : "var(--system-purple)"
-  return (
-    <span
-      className="flex h-5 items-center rounded-[10px] px-2 text-[10.5px] font-semibold tracking-[.06em]"
-      style={{ background: `color-mix(in srgb, ${tint} 18%, transparent)`, color: tint }}
-    >
-      {mode.toUpperCase()}
-    </span>
-  )
-}
-
-export function formatDueLong(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ""
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-}
 
 export interface RailPickers {
   /** Task 6 mounts the picker surfaces here, keyed by row. Absent = read row. */
@@ -108,32 +31,41 @@ export interface RailPickers {
   } | undefined
 }
 
+/** The states that mean a session is still doing something. Dispatch stays
+ *  offered unless one of these holds — a Todo whose only attempt has finished
+ *  still needs the action, which keying it to "any linked session" removed. */
+const LIVE_RAIL_STATES = new Set(["running", "waiting"])
+
 export function PropsRail({
   detail,
   byName,
   departments,
   rowFor,
-  dispatcherSession,
+  railSession,
   dispatchPending,
   onDispatch,
-  onOpenDispatcherSession,
+  onOpenRailSession,
+  sessionTree,
 }: {
   detail: WorkItemDetailWire
   byName: Map<string, Employee>
   departments: DepartmentSummaryWire[] | undefined
   rowFor?: RailPickers["rowFor"]
-  dispatcherSession?: LinkedSessionWire
+  railSession?: LinkedSessionWire
   dispatchPending?: boolean
   onDispatch?: () => void
-  onOpenDispatcherSession?: (sessionId: string) => void
+  onOpenRailSession?: (sessionId: string) => void
+  sessionTree?: SessionTreeWire
 }) {
   const item = detail.workItem
   const labels = detail.labels ?? []
   const mode = effectiveVerifyMode(item)
   const dept = item.department ? departments?.find((d) => d.slug === item.department) : undefined
   const deptTitle = item.department ? item.department.charAt(0).toUpperCase() + item.department.slice(1) : "No department"
+  const createdBySession = sessionIdFromActor(item.createdBy)
   const createdByLabel = !item.createdBy || item.createdBy === "operator" ? "You" : displayNameOf(item.createdBy, byName)
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
+  const railSessionLive = LIVE_RAIL_STATES.has(railSession?.status ?? "")
 
   const pick = (row: Parameters<NonNullable<RailPickers["rowFor"]>>[0]) => rowFor?.(row)
 
@@ -190,19 +122,29 @@ export function PropsRail({
         )}
         {assigneePick?.picker}
       </div>
-      {dispatcherSession ? (
+      {railSession && (
         <button
           type="button"
           data-testid="rail-dispatch-session"
-          data-session-id={dispatcherSession.id}
-          onClick={() => onOpenDispatcherSession?.(dispatcherSession.id)}
+          data-session-id={railSession.id}
+          onClick={() => onOpenRailSession?.(railSession.id)}
           className="focus-ring group/dispatch relative -mx-2.5 flex min-h-[34px] w-[calc(100%+20px)] items-center gap-[9px] rounded-[9px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-primary)] outline-none hover:bg-[var(--fill-quaternary)]"
         >
-          <span className="size-1.5 flex-none rounded-full bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]" aria-hidden />
-          Dispatcher working
+          {/* The pulse says "working", so it is spent only on a session that is:
+              the rail now offers a finished attempt too, and a finished attempt
+              that pretends to be live is worse than no chip at all. */}
+          <span
+            className={`size-1.5 flex-none rounded-full ${railSessionLive ? "bg-[var(--system-blue)] motion-safe:animate-[jinn-pulse_1.4s_ease-in-out_infinite]" : "bg-[var(--fill-primary)]"}`}
+            aria-hidden
+          />
+          <span className="min-w-0 truncate">
+            {railSession.employee ? displayNameOf(railSession.employee, byName) : "A session"}{" "}
+            <span className="font-normal text-[var(--text-tertiary)]">{railSessionLive ? "working" : "worked this"}</span>
+          </span>
           <ArrowUpRight size={12} aria-hidden className="ml-auto text-[var(--text-quaternary)] opacity-0 transition-opacity group-hover/dispatch:opacity-100" />
         </button>
-      ) : (
+      )}
+      {!railSessionLive && (
         <button
           type="button"
           data-testid="rail-dispatch"
@@ -213,6 +155,14 @@ export function PropsRail({
           {dispatchPending ? <LoaderCircle size={14} aria-hidden className="animate-spin text-[var(--text-tertiary)]" /> : <Send size={14} aria-hidden className="text-[var(--text-tertiary)]" />}
           {dispatchPending ? "Starting Dispatcher…" : "Dispatch"}
         </button>
+      )}
+
+      <AutoStartRow detail={detail} />
+
+      {sessionTree && sessionTree.roots.length > 0 && (
+        <div className="mt-2">
+          <SessionTreePanel tree={sessionTree} byName={byName} todoId={item.id} />
+        </div>
       )}
 
       <RailKicker later>Labels</RailKicker>
@@ -262,7 +212,7 @@ export function PropsRail({
       </div>
       <RailRow quiet testId="rail-created-by">
         <UserRound size={14} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
-        {createdByLabel}
+        {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} /> : createdByLabel}
         <span className="text-[12px] font-normal text-[var(--text-quaternary)]">· created {formatRelativeTime(item.createdAt)}</span>
       </RailRow>
       <div className="relative">

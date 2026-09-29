@@ -65,3 +65,35 @@ export function clampEffort(levels: string[], current: string | undefined): stri
   if (current && levels.includes(current)) return current
   return defaultEffort(levels)
 }
+
+/**
+ * The provider segment of a namespaced `provider/model` id. opencode and pi both
+ * build ids this way (`packages/jinn/src/shared/opencode-models.ts`,
+ * `pi-models.ts`); every other engine's catalog is bare ids (`opus`, `gpt-5.5`)
+ * and returns '' so callers render no badge.
+ */
+export function providerOf(id: string): string {
+  const slash = id.indexOf('/')
+  return slash > 0 ? id.slice(0, slash) : ''
+}
+
+/** Display form for a provider segment: `opencode-go` reads as "opencode go". */
+export function providerLabel(provider: string): string {
+  return provider === 'opencode-go' ? 'opencode go' : provider
+}
+
+/**
+ * Case-insensitive match of a model against a picker search query, across the
+ * label, the raw id, and its provider (both `opencode-go` and "opencode go").
+ * An empty query matches everything.
+ */
+export function modelMatchesQuery(
+  model: Pick<ModelInfo, 'id' | 'label'>,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  const provider = providerOf(model.id)
+  const haystack = `${model.label} ${model.id} ${provider} ${providerLabel(provider)}`.toLowerCase()
+  return haystack.includes(q)
+}

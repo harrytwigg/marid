@@ -168,6 +168,22 @@ describe("POST /api/delegations onto a claimed Todo", () => {
     expect(String(second.body?.error)).toContain(String(minted.body?.sessionId));
   });
 
+  it("files a delegation-minted Todo under the configured default, not the delegate's org department (JIN-1)", async () => {
+    const config = path.join(home, "config.yaml");
+    fs.writeFileSync(
+      config,
+      "engines:\n  default: claude\n  claude: {}\ngateway:\n  port: 7777\n  host: 127.0.0.1\n  todoDepartments:\n    allowed: [labs, jinn, general]\n    default: general\n",
+      "utf8",
+    );
+    try {
+      const minted = await call("POST", "/api/delegations", { employee: "claim-worker", task: "Classified work" });
+      expect(minted.status).toBe(201);
+      expect(workItems.getWorkItem(String(minted.body?.workItemId))?.department).toBe("general");
+    } finally {
+      fs.rmSync(config, { force: true });
+    }
+  });
+
   it("hands the Todo back when the spawn cannot happen", async () => {
     const item = workItems.createWorkItem({ title: "engine is gone", source: "human" });
     engineAvailable = false;

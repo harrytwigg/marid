@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Employee, JinnConfig, OrgHierarchy, OrgNode } from "../shared/types.js";
 import { JINN_HOME, ORG_DIR, CRON_JOBS, DOCS_DIR } from "../shared/paths.js";
+import { engineAvailable, isKnownEngine } from "../shared/models.js";
 import { gatewayBaseUrl } from "../gateway/gateway-info.js";
 import {
   buildRosterUnavailableSection,
@@ -121,6 +122,13 @@ export function buildPlatformContextSnapshot(opts: BuildContextOptions): Platfor
   if (opts.config) {
     for (const [engine, raw] of Object.entries(opts.config.engines)) {
       if (engine === "default" || !raw || typeof raw !== "object") continue;
+      // A config entry is not an enabled engine: `codex:` sits in config.yaml on
+      // every host, but a missing CLI is refused by preflightTurn (preflight.ts:52).
+      // Advertise only engines that can actually run here, so the prompt stops
+      // carrying a model line for every engine the config merely mentions. Unknown
+      // engines (e.g. a custom binary) stay listed — preflight cannot disprove
+      // them, so neither can we.
+      if (isKnownEngine(engine) && !engineAvailable(opts.config, engine)) continue;
       const model = (raw as { model?: unknown }).model;
       const resolved = typeof model === "string" && model.trim() ? model : implicitEngineModel(engine);
       if (resolved) configuredModels[engine] = resolved;
@@ -482,7 +490,7 @@ function buildCompanyIdentityBlock(
     "## Company Identity",
     mcpLine,
     "Pick colleagues by role/persona fit. One employee may run multiple child sessions in parallel; reuse the fit instead of spreading to unrelated employees. If none fits, propose a hire.",
-    "Todos are your live work ledger - find and update your Todo; create one only for durable work you own.",
+    "Todos are your live work ledger - find and update your Todo; when it is finished, move it to in_review yourself (a run ending does not); create one only for durable work you own.",
     "Workflows are reusable automations (the HOW) - use or propose one when a job is repeatable/scheduled/multi-step; Todos and Workflows are SEPARATE.",
     "You have autonomy in your lane; end your turn when waiting on another employee.",
     "Do NOT bombard the operator. Questions and approvals route to your manager/COO by default; the aCEO/operator is the exception (money, irreversible, public, legal/security, or explicit COO escalation).",

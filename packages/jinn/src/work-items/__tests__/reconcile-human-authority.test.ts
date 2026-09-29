@@ -84,12 +84,20 @@ describe("reconcileWorkItem — attempts that predate the operator's own move ar
     expect(store.getWorkItem(id)?.status).toBe("executing");
   });
 
-  it("derives IN_REVIEW again once an attempt has SETTLED after the move (new receipt, new evidence)", () => {
-    const id = parkedAfterStaleAttempt("retried and finished", "s-stale-retry");
+  it("derives BLOCKED again once an attempt has FAILED after the move (new receipt, new evidence)", () => {
+    const id = parkedAfterStaleAttempt("retried and broke", "s-stale-retry");
+    linkedSession("s-failed-retry", id, "error", afterTheMove(), "failed");
+
+    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "blocked" } });
+    expect(store.getWorkItem(id)?.status).toBe("blocked");
+  });
+
+  it("a clean settle after the move leaves the backlog alone — only the producer declares review", () => {
+    const id = parkedAfterStaleAttempt("retried and settled", "s-stale-settle");
     linkedSession("s-settled-retry", id, "idle", afterTheMove(), "succeeded");
 
-    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "in_review" } });
-    expect(store.getWorkItem(id)?.status).toBe("in_review");
+    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: false, item: { status: "backlog" } });
+    expect(statusMoves(id)).toEqual(["executing→blocked:operator", "blocked→backlog:operator"]);
   });
 
   it("does not TRUST-close a review the operator opened himself with nothing settled since", () => {
@@ -112,16 +120,21 @@ describe("reconcileWorkItem — attempts that predate the operator's own move ar
     expect(store.getWorkItem(item.id)?.status).toBe("done");
   });
 
+  // The stale receipt in these two is a clean settle, which no longer derives
+  // anything for a reviewed tier; a failed one still does, so it is the
+  // receipt that proves the floor is absent.
   it("applies no floor to an agent-declared move — a session actor derives exactly as before", () => {
     const id = parkedAfterStaleAttempt("agent parked", "s-agent-move", "session:8f2c1d64-0a15-4c7e-9f3b-2d6e5a0b1c74");
+    db.prepare("UPDATE sessions SET status = 'error', attempt_outcome = 'failed' WHERE id = ?").run("s-agent-move");
 
-    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "in_review" } });
+    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "blocked" } });
   });
 
   it("applies no floor to the reconciler's own move — derivation is not authority over itself", () => {
     const id = parkedAfterStaleAttempt("reconciler parked", "s-reconciler-move", store.RECONCILER_ACTOR);
+    db.prepare("UPDATE sessions SET status = 'error', attempt_outcome = 'failed' WHERE id = ?").run("s-reconciler-move");
 
-    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "in_review" } });
+    expect(reconcile.reconcileWorkItem(id)).toMatchObject({ changed: true, item: { status: "blocked" } });
   });
 });
 

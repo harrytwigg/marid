@@ -491,6 +491,81 @@ describe("pasteAndSubmit", () => {
     expect(writes.filter((w) => w === "\r")).toHaveLength(0);
   });
 
+  it("abortSubmit blocks the first CR entirely, handing off instead", async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const gaveUp: number[] = [];
+    pasteAndSubmit({ write: (d: string) => writes.push(d) } as any, "queued work", {
+      submitted: () => false,
+      abortSubmit: async () => true,
+      onUnconfirmed: (n) => gaveUp.push(n),
+      intervalMs: 1000,
+      attempts: 3,
+    });
+    await vi.advanceTimersByTimeAsync(150 + 60_000);
+    expect(writes.filter((w) => w === "\r")).toHaveLength(0);
+    expect(gaveUp).toEqual([0]);
+  });
+
+  it("abortSubmit blocks a retry after the first CR went through", async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    const gaveUp: number[] = [];
+    let blocked = false;
+    pasteAndSubmit({ write: (d: string) => writes.push(d) } as any, "queued work", {
+      submitted: () => false,
+      abortSubmit: async () => blocked,
+      onUnconfirmed: (n) => gaveUp.push(n),
+      intervalMs: 1000,
+      attempts: 5,
+    });
+    await vi.advanceTimersByTimeAsync(150);
+    expect(writes.filter((w) => w === "\r")).toHaveLength(1);
+    blocked = true;
+    await vi.advanceTimersByTimeAsync(1000 + 60_000);
+    expect(writes.filter((w) => w === "\r")).toHaveLength(1); // the retry was never written
+    expect(gaveUp).toEqual([0]);
+  });
+
+  it("an abortSubmit that rejects falls back to the normal path (fail open)", async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    pasteAndSubmit({ write: (d: string) => writes.push(d) } as any, "queued work", {
+      submitted: () => false,
+      abortSubmit: async () => { throw new Error("screen gone"); },
+      onUnconfirmed: () => { throw new Error("a rejected probe must not report"); },
+      intervalMs: 1000,
+      attempts: 3,
+    });
+    await vi.advanceTimersByTimeAsync(150);
+    expect(writes.filter((w) => w === "\r")).toHaveLength(1);
+  });
+
+  it("re-checks the acknowledgement after the screen read, so a late ack stops the retry CR", async () => {
+    vi.useFakeTimers();
+    const writes: string[] = [];
+    let submitted = false;
+    let release!: () => void;
+    let first = true;
+    pasteAndSubmit({ write: (d: string) => writes.push(d) } as any, "queued work", {
+      submitted: () => submitted,
+      abortSubmit: () => {
+        if (first) { first = false; return Promise.resolve(false); }
+        return new Promise<boolean>((resolve) => { release = () => resolve(false); });
+      },
+      onUnconfirmed: () => { throw new Error("must not report: the prompt was acknowledged"); },
+      intervalMs: 1000,
+      attempts: 5,
+    });
+    await vi.advanceTimersByTimeAsync(150); // the first CR; its probe resolves false
+    expect(writes.filter((w) => w === "\r")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1000); // the retry tick's screen read is now pending
+    submitted = true; // UserPromptSubmit lands during the read
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(writes.filter((w) => w === "\r")).toHaveLength(1);
+  });
+
   it("accepts only hooks that prove THIS prompt is running", () => {
     // What run() feeds the confirmation: any of these arriving means the pasted
     // prompt reached the CLI. SessionStart must NOT count — the idle spawn that

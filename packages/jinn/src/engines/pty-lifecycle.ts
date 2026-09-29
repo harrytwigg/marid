@@ -1,3 +1,4 @@
+import type { IPty } from "node-pty";
 /**
  * PTY lifecycle for interactive CLI/xterm engines.
  *
@@ -231,4 +232,14 @@ export class PtyLifecycleManager {
   dispose(): void {
     this.killAll();
   }
+}
+
+export function createPtyHandle(proc: IPty): PtyHandle {
+  const handle = {
+    pid: proc.pid,
+    get killed() { return (proc as any)._exitCode != null; },
+    kill: (signal?: string) => { try { proc.kill(signal); } catch { /* already gone */ } },
+  } as PtyHandle;
+  (handle as any)._proc = proc;
+  return handle;
 }

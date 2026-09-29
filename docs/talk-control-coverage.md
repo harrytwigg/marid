@@ -18,6 +18,7 @@
 | kanban-redirect | `/kanban` | semantic | redirect destination; controls: navigate |
 | logs | `/logs` | semantic | bounded redacted activity summary; controls: refresh |
 | limits | `/limits` | semantic | engine limit windows and freshness; controls: refresh |
+| auto-dispatch | `/auto-dispatch` | semantic | idle-capacity policy, next-tick preview, auto-start history, and usage projection; controls: update, refresh |
 | org | `/org` | semantic | employee, reporting line, and activity; controls: open, delegate |
 | settings-plugins | `/settings/plugins` | semantic | plugin inventory and state; controls: enable, disable, rescan |
 | settings | `/settings` | semantic | active settings and safe configuration summary; controls: update |

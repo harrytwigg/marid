@@ -23,6 +23,11 @@ describe("claude-settings", () => {
     expect(s.hooks.UserPromptSubmit[0].hooks[0].command).toBe("node '/h/relay.mjs' 'jinn-abc'");
   });
 
+  it("registers PostCompact — a /compact turn fires no Stop and settles on it", () => {
+    const s = buildSessionSettings({ sessionId: "jinn-abc", relayScript: "/h/relay.mjs" });
+    expect(s.hooks.PostCompact[0].hooks[0].command).toBe("node '/h/relay.mjs' 'jinn-abc'");
+  });
+
   it("shell-quotes hook relay paths and session ids", () => {
     const s = buildSessionSettings({ sessionId: "jinn ' tricky", relayScript: "/tmp/path with spaces/relay's.mjs" });
     const stop = s.hooks.Stop[0].hooks[0];

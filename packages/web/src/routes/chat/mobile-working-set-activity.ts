@@ -164,7 +164,8 @@ function reduceTextDelta(
 }
 
 function completeContent(event: string, payload: Record<string, unknown>): string {
-  if (event === 'session:notification') return textContent(payload.content)
+  // The gateway sends a notification's text as `message` (gateway-events).
+  if (event === 'session:notification') return textContent(payload.message ?? payload.content)
   if (event === 'session:attachment') return textContent(payload.content ?? payload.name)
   if (event === 'session:completed') return textContent(payload.result)
   return ''

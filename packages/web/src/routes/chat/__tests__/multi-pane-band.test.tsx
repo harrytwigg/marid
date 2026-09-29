@@ -56,4 +56,25 @@ describe('the routed chat band', () => {
     expect(thread.querySelector('[data-chat-top-scrim]')).toBeNull()
     expect(thread.querySelector('[data-chat-mobile-header]')).toBe(mobileNav)
   })
+
+  it('asks a CLI or terminal view to clear the floating header only while that header is drawn (JIN-2)', async () => {
+    renderRoute()
+    await waitFor(() => expect(pane('a').textContent).toContain('transcript-a'))
+    const thread = document.querySelector<HTMLElement>('.chat-pills-layout')!
+    const rule = [...document.querySelectorAll('style')].map((el) => el.textContent ?? '').join('\n')
+    // The inset is built from the transcript's clearance + band and the scrim's
+    // own height — the tokens that draw them, not a second set of numbers.
+    expect(rule.replace(/\s+/g, ' ')).toContain(
+      '.chat-pills-layout[data-floating-header] { --cli-terminal-top-inset: max(calc(var(--chat-top-clearance) + var(--chat-header-band)), var(--chat-top-scrim)); }',
+    )
+    expect(thread.querySelector('[data-chat-top-scrim]')!.className).toContain('h-[var(--chat-top-scrim)]')
+    expect(thread.hasAttribute('data-floating-header')).toBe(true)
+
+    openChatBeside()
+
+    // Two panes: no pills, no scrim, and each pane's own title bar is in flow.
+    await waitFor(() => expect(document.querySelectorAll('[data-chat-grid-pane]')).toHaveLength(2))
+    expect(thread.querySelector('[data-chat-top-scrim]')).toBeNull()
+    expect(thread.hasAttribute('data-floating-header')).toBe(false)
+  })
 })

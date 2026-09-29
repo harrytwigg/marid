@@ -116,4 +116,102 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
     expect([cap.status, cap.body.workItem?.status]).toEqual([200, "executing"]);
     expect(cause(wi.id)).toBeUndefined();
   });
+
+  /*replaying three attempts to park a date-gated Todo, of which
+   * the first two answered success and parked nothing. Now they say why. */
+  describe("a park only lands on a move that stops the Todo", () => {
+    const until = () => new Date(Date.now() + 9 * 86_400_000).toISOString();
+    const backlogItem = (title: string) => store.createWorkItem({ title, status: "backlog" });
+
+    it("refuses parkedUntil on a backlog move instead of dropping it (attempt 1)", async () => {
+      const wi = backlogItem("park via backlog");
+      const cap = await post(wi.id, { status: "backlog", note: "date-gated", parkedUntil: until() });
+
+      expect(cap.status).toBe(400);
+      expect(cap.body.error).toMatch(/parkedUntil parks a Todo in blocked/);
+      expect(store.getWorkItem(wi.id)?.status).toBe("backlog");
+      expect(cause(wi.id)).toBeUndefined();
+    });
+
+    it.each(["assigned", "executing", "in_review"])("refuses parkedUntil on a move to %s", async (status) => {
+      const wi = item(`park via ${status}`);
+      const cap = await post(wi.id, { status, note: "date-gated", parkedUntil: until() });
+      expect(cap.status).toBe(400);
+      expect(cap.body.error).toMatch(/parkedUntil parks a Todo in blocked/);
+    });
+
+    it("refuses parkedUntil with blockKind dependency, which re-queues rather than parks (attempt 2)", async () => {
+      const wi = backlogItem("park via dependency");
+      const cap = await post(wi.id, { status: "blocked", blockKind: "dependency", note: "date-gated", parkedUntil: until() });
+
+      expect(cap.status).toBe(400);
+      expect(cap.body.error).toMatch(/without blockKind dependency/);
+      expect(store.getWorkItem(wi.id)?.status).toBe("backlog");
+    });
+
+    it("parks on a plain block, the one that works (attempt 3)", async () => {
+      const wi = backlogItem("park via block");
+      const parkedUntil = until();
+      const cap = await post(wi.id, { status: "blocked", note: "date-gated", parkedUntil });
+
+      expect([cap.status, cap.body.workItem?.status]).toEqual([200, "blocked"]);
+      expect(cause(wi.id)).toEqual({ parkedUntil });
+    });
+
+    it("refuses the same from the operator surface — the operator's park is deleted by the same write", async () => {
+      const wi = backlogItem("operator park via backlog");
+      const cap = await put(wi.id, { status: "assigned", parkedUntil: until() });
+      expect(cap.status).toBe(400);
+    });
+
+    it("moves the date when an agent re-parks a Todo that is already parked", async () => {
+      const wi = backlogItem("re-park agent");
+      await post(wi.id, { status: "blocked", note: "date-gated", parkedUntil: until() });
+      const later = new Date(Date.now() + 20 * 86_400_000).toISOString();
+
+      const cap = await post(wi.id, { status: "blocked", note: "pushed out", parkedUntil: later });
+      expect([cap.status, cap.body.workItem?.status]).toEqual([200, "blocked"]);
+      expect(cause(wi.id)).toEqual({ parkedUntil: later });
+    });
+
+    it("moves the date when the operator re-parks with a note, rather than only recording the note", async () => {
+      const wi = backlogItem("re-park operator");
+      await post(wi.id, { status: "blocked", note: "date-gated", parkedUntil: until() });
+      const later = new Date(Date.now() + 20 * 86_400_000).toISOString();
+
+      const cap = await put(wi.id, { status: "blocked", note: "not before the 20th", parkedUntil: later });
+      expect([cap.status, cap.body.workItem?.status]).toEqual([200, "blocked"]);
+      expect(cause(wi.id)).toEqual({ parkedUntil: later });
+      const note = store.listWorkItemEvents(wi.id).at(-1);
+      expect(note).toMatchObject({ kind: "note", toStatus: "blocked", actor: "operator" });
+      expect(note?.detail).toMatchObject({ note: "not before the 20th", parkedUntil: later });
+    });
+
+    it("still records the operator's note when the park they re-send is the one already stored", async () => {
+      const wi = backlogItem("re-park operator same date");
+      const parkedUntil = until();
+      await post(wi.id, { status: "blocked", note: "date-gated", parkedUntil });
+
+      const cap = await put(wi.id, { status: "blocked", note: "checked, still the 1st", parkedUntil });
+      expect(cap.status).toBe(200);
+      expect(cause(wi.id)).toEqual({ parkedUntil });
+      const note = store.listWorkItemEvents(wi.id).at(-1);
+      expect(note).toMatchObject({ kind: "note", toStatus: "blocked", actor: "operator" });
+      expect(note?.detail).toMatchObject({ note: "checked, still the 1st" });
+    });
+
+    it("refuses an agent moving the date on an escalated Todo (403), and keeps the operator's date", async () => {
+      const wi = item("escalated park");
+      const parkedUntil = until();
+      await post(wi.id, { status: "escalated", note: "operator call", unblockHint: hint, parkedUntil });
+
+      const cap = await post(wi.id, { status: "escalated", note: "pushing it out", unblockHint: hint, parkedUntil: new Date(Date.now() + 30 * 86_400_000).toISOString() });
+      expect(cap.status).toBe(403);
+      expect(cap.body.error).toMatch(/changing why it is stopped is a human decision/);
+      expect(cause(wi.id)).toEqual({ parkedUntil, unblockHint: hint });
+
+      const retry = await post(wi.id, { status: "escalated", note: "operator call", unblockHint: hint });
+      expect(retry.status).toBe(200);
+    });
+  });
 });

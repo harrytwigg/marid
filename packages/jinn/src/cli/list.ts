@@ -1,6 +1,7 @@
 import { loadInstances, ensureDefaultInstance } from "./instances.js";
 import fs from "node:fs";
 import path from "node:path";
+import { PRODUCT_NAME } from "../shared/brand.js";
 
 const GREEN = "\x1b[32m";
 const RED = "\x1b[31m";
@@ -16,7 +17,7 @@ export async function runList(): Promise<void> {
     return;
   }
 
-  console.log("\nJinn Instances\n");
+  console.log(`\n${PRODUCT_NAME} Instances\n`);
   console.log(`  ${"Name".padEnd(16)} ${"Port".padEnd(8)} ${"Status".padEnd(12)} Home`);
   console.log(`  ${"─".repeat(16)} ${"─".repeat(8)} ${"─".repeat(12)} ${"─".repeat(30)}`);
 

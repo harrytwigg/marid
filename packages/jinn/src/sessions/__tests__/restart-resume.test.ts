@@ -29,10 +29,10 @@ describe("planRestartResumes", () => {
       { sessionId: "middle", dueAt: NOW + RESTART_RESUME_STAGGER_MS },
       { sessionId: "older", dueAt: NOW + 2 * RESTART_RESUME_STAGGER_MS },
     ]);
-    expect(plan.deferred).toBe(0);
+    expect(plan.deferred).toEqual([]);
   });
 
-  it("caps the stampede and reports the overflow instead of dropping it", () => {
+  it("caps the stampede and names the overflow instead of dropping it", () => {
     const candidates = Array.from({ length: MAX_RESTART_RESUMES + 3 }, (_, index) =>
       candidate(`s${index}`, new Date(NOW - index * 1_000).toISOString()),
     );
@@ -40,7 +40,8 @@ describe("planRestartResumes", () => {
     const plan = planRestartResumes({ candidates, now: NOW });
 
     expect(plan.resumes).toHaveLength(MAX_RESTART_RESUMES);
-    expect(plan.deferred).toBe(3);
+    // The oldest conversations are the ones held back, and each is named so the restart record can list it.
+    expect(plan.deferred).toEqual([`s${MAX_RESTART_RESUMES}`, `s${MAX_RESTART_RESUMES + 1}`, `s${MAX_RESTART_RESUMES + 2}`]);
     expect(plan.resumes.at(-1)?.dueAt).toBe(NOW + (MAX_RESTART_RESUMES - 1) * RESTART_RESUME_STAGGER_MS);
   });
 
@@ -54,7 +55,7 @@ describe("planRestartResumes", () => {
   });
 
   it("plans nothing for no candidates", () => {
-    expect(planRestartResumes({ candidates: [], now: NOW })).toEqual({ resumes: [], deferred: 0 });
+    expect(planRestartResumes({ candidates: [], now: NOW })).toEqual({ resumes: [], deferred: [] });
   });
 });
 

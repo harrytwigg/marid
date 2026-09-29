@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo, startTransiti
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
-import { CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, Pin, Plus, Search, SquarePen, Trash2, Workflow as WorkflowIcon, X } from "lucide-react"
+import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, Pin, Plus, Search, SquarePen, Trash2, Workflow as WorkflowIcon, X } from "lucide-react"
 import { api, type Employee, type SessionsResponse } from "@/lib/api"
 import { useOrg } from "@/hooks/use-employees"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
@@ -46,6 +46,9 @@ import {
 import { Slot } from "@/contrib/slot"
 import { AREAS } from "@/contrib/types"
 import { mergeSidebarEmployees, bucketByDay, isFocusedSession } from "@/components/chat/chat-route-helpers"
+import { TerminalSectionHeader, useTerminalHosts } from "@/components/chat/sidebar-terminals"
+import { isTerminalSession } from "@/lib/terminal-session"
+import { TERMINAL_AVATAR } from "@/components/ui/employee-avatar"
 import { MobileSessionRow } from "@/components/chat/mobile-session-row"
 import {
   formatTime,
@@ -62,10 +65,12 @@ import {
   SESSION_MENU_ITEM_CLASS,
   SESSION_MENU_SEPARATOR_CLASS,
   SessionRowMenu,
+  SessionSelectCheckbox,
   workflowRunPath,
 } from "@/components/chat/session-row-menu"
 import { chatSessionDragProps } from "@/routes/chat/chat-session-dnd"
 import type { ChatSidebarProps } from "@/components/chat/chat-sidebar-types"
+import { PRODUCT_NAME } from "@/lib/brand"
 
 export type { SidebarOrder } from "@/components/chat/chat-sidebar-types"
 
@@ -95,6 +100,7 @@ interface FlatRow {
 // backend registry (sessions are bounded per group; "load more" fetches the rest).
 const DIRECT_GROUP = "__direct__"
 const CRON_GROUP = "__cron__"
+const TERMINAL_GROUP = "__terminal__"
 
 const OLDER_EXPANDED_STORAGE_KEY = "jinn-sidebar-older-expanded"
 const PINNED_EXPANDED_STORAGE_KEY = "jinn-sidebar-pinned-expanded"
@@ -118,10 +124,11 @@ function titleCase(slug: string | null | undefined): string {
  *  the grouped view renders separately) must not `.split()` a null employee.
  *  The rest use their employee's org profile. */
 export function resolveRowIdentity(
-  s: Pick<Session, "source" | "sourceRef" | "employee">,
+  s: Pick<Session, "source" | "sourceRef" | "employee"> & { engine?: unknown },
   opts: { portalSlug: string; portalName: string; employeeData: Map<string, Employee> },
 ): { avatarName: string; displayName: string } {
   const { portalSlug, portalName, employeeData } = opts
+  if (isTerminalSession(s)) return { avatarName: TERMINAL_AVATAR, displayName: "Terminal" }
   if (isDirectSession(s, portalSlug) || !s.employee) {
     return { avatarName: portalSlug, displayName: portalName }
   }
@@ -159,7 +166,7 @@ export function isDirectSession(
 
 // Sources the sidebar renders (others, e.g. slack/telegram, are shown elsewhere).
 export function isVisibleSource(s: Pick<Session, "source">): boolean {
-  return s.source === "web" || s.source === "talk" || s.source === "cron" || s.source === "workflow" || s.source === "plugin" || s.source === "whatsapp" || s.source === "discord" || !s.source
+  return s.source === "web" || s.source === "terminal" || s.source === "talk" || s.source === "cron" || s.source === "workflow" || s.source === "plugin" || s.source === "whatsapp" || s.source === "discord" || !s.source
 }
 
 export function WorkflowSessionChip({
@@ -239,9 +246,14 @@ interface SessionRowProps {
   handleDuplicate: (sessionId: string) => void
   handleStop: (sessionId: string) => void
   handleArchive: (session: Session) => void
-  setDeleteTarget: (target: { type: "session" | "employee"; id: string; label: string; sessions?: Session[] } | null) => void
+  setDeleteTarget: (target: { type: "session" | "employee" | "bulk"; id: string; label: string; sessions?: Session[] } | null) => void
   setRenamingSessionId: (id: string | null) => void
   updateSessionTitle: (id: string, title: string) => void
+  /** Multi-select: rows become checkboxes toggling membership in the batch.
+   *  `shiftKey` (desktop) turns the click into a range select from the anchor. */
+  selectionMode?: boolean
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string, shiftKey?: boolean) => void
 }
 
 const SessionRow = React.memo(function SessionRow({
@@ -262,8 +274,12 @@ const SessionRow = React.memo(function SessionRow({
   setDeleteTarget,
   setRenamingSessionId,
   updateSessionTitle,
+  selectionMode,
+  selectedIds,
+  onToggleSelect,
 }: SessionRowProps) {
   const sessionIsActive = session.id === selectedId
+  const isSelected = !!selectionMode && !!selectedIds?.has(session.id)
   const stallNow = useStallClock(session.status === "running")
   const sessionDot = getStatusDot(session, readSessions, false, stallNow)
   const sessionTitle = fixTitle(session.title, session.employee)
@@ -278,10 +294,19 @@ const SessionRow = React.memo(function SessionRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <RowTag
-          draggable={!isRenaming}
+          draggable={!isRenaming && !selectionMode}
           data-chat-session-row={session.id}
-          {...chatSessionDragProps(session.id)}
-          {...(!isRenaming && { onClick: () => {
+          {...(!selectionMode && chatSessionDragProps(session.id))}
+          {...(selectionMode && !isRenaming && {
+            role: "checkbox",
+            "aria-checked": isSelected,
+            "aria-label": `Select ${displayTitle}`,
+          })}
+          {...(!isRenaming && { onClick: (e: React.MouseEvent) => {
+            if (selectionMode) {
+              onToggleSelect?.(session.id, e.shiftKey)
+              return
+            }
             onSelect(session.id)
             onEmployeeSessionsAvailable?.(parentSessions ?? [session])
           }})}
@@ -295,6 +320,7 @@ const SessionRow = React.memo(function SessionRow({
               : "border-l-transparent hover:bg-[var(--fill-tertiary)]"
           )}
         >
+          {selectionMode ? <SessionSelectCheckbox checked={isSelected} /> : null}
           {sessionDot ? (
             <StatusDot
               color={sessionDot.color}
@@ -416,9 +442,12 @@ interface FlatSessionRowProps {
   handleDuplicate: (sessionId: string) => void
   handleStop: (sessionId: string) => void
   handleArchive: (session: Session) => void
-  setDeleteTarget: (target: { type: "session" | "employee"; id: string; label: string; sessions?: Session[] } | null) => void
+  setDeleteTarget: (target: { type: "session" | "employee" | "bulk"; id: string; label: string; sessions?: Session[] } | null) => void
   setRenamingSessionId: (id: string | null) => void
   updateSessionTitle: (id: string, title: string) => void
+  selectionMode?: boolean
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string, shiftKey?: boolean) => void
 }
 
 // One CHAT per row (Pinned / Today / Yesterday / search): a single line led by
@@ -446,8 +475,12 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
   setDeleteTarget,
   setRenamingSessionId,
   updateSessionTitle,
+  selectionMode,
+  selectedIds,
+  onToggleSelect,
 }: FlatSessionRowProps) {
   const isActive = session.id === selectedId
+  const isSelected = !!selectionMode && !!selectedIds?.has(session.id)
   const stallNow = useStallClock(session.status === "running")
   const dot = getStatusDot(session, readSessions, false, stallNow)
   const rawTitle = fixTitle(session.title, session.employee)
@@ -472,15 +505,25 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
           )}
         >
           <button
-            draggable
+            draggable={!selectionMode}
             data-chat-session-row={session.id}
-            {...chatSessionDragProps(session.id)}
-            onClick={() => {
+            {...(!selectionMode && chatSessionDragProps(session.id))}
+            {...(selectionMode && {
+              role: "checkbox",
+              "aria-checked": isSelected,
+              "aria-label": `Select ${displayTitle}`,
+            })}
+            onClick={(e: React.MouseEvent) => {
+              if (selectionMode) {
+                onToggleSelect?.(session.id, e.shiftKey)
+                return
+              }
               onSelect(session.id)
               onEmployeeSessionsAvailable?.([session])
             }}
             className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
           >
+            {selectionMode ? <SessionSelectCheckbox checked={isSelected} /> : null}
             <span className="relative flex size-[22px] shrink-0 items-center justify-center">
               <EmployeeAvatar name={avatarName} size={22} />
               {dot ? (
@@ -594,7 +637,7 @@ interface EmployeeRowProps {
   togglePin: (pinKey: string) => void
   handleMarkAllRead: (sessions: Session[]) => void
   handleEmployeeClick: (item: FlatItem) => void
-  setDeleteTarget: (target: { type: "session" | "employee"; id: string; label: string; sessions?: Session[] } | null) => void
+  setDeleteTarget: (target: { type: "session" | "employee" | "bulk"; id: string; label: string; sessions?: Session[] } | null) => void
   onLoadMore: (groupKey: string, offset: number) => void
   loadingMore: Set<string>
   setRenamingSessionId: (id: string | null) => void
@@ -667,6 +710,9 @@ const EmployeeRow = React.memo(function EmployeeRow({
     setDeleteTarget,
     setRenamingSessionId,
     updateSessionTitle,
+    selectionMode: false,
+    selectedIds: undefined,
+    onToggleSelect: undefined,
   }
 
   return (
@@ -795,11 +841,14 @@ export function ChatSidebar({
   onEmployeeSessionsAvailable,
   onOrderComputed,
   onContactEmployee,
+  onSessionsRemoved,
+  onOpenBeside,
   variant = "desktop",
 }: ChatSidebarProps) {
   const { settings } = useSettings()
-  const portalName = settings.portalName ?? "Jinn"
-  const portalSlug = portalName.toLowerCase()
+  const portalName = settings.portalName ?? PRODUCT_NAME
+  // The slug matches session.employee, so it keeps the internal codename.
+  const portalSlug = (settings.portalName ?? "Jinn").toLowerCase()
 
   const qc = useQueryClient()
   const { data: rawSessions, isLoading: loading } = useSessions()
@@ -814,6 +863,7 @@ export function ChatSidebar({
   const bulkDeleteMutation = useBulkDeleteSessions()
   const duplicateSessionMutation = useDuplicateSession()
   const { data: pinnedSessions = EMPTY_PINNED_SESSIONS } = usePins()
+  const { data: terminalHosts } = useTerminalHosts()
   const { mutate: mutatePin } = useTogglePin()
 
   const sessions = useMemo(() => {
@@ -855,11 +905,21 @@ export function ChatSidebar({
   const [focusMode, setFocusMode] = useState<FocusMode>("all")
   const [loadingMore, setLoadingMore] = useState<Set<string>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<{
-    type: "session" | "employee"
+    type: "session" | "employee" | "bulk"
     id: string
     label: string
     sessions?: Session[]
   } | null>(null)
+  // Multi-select: entering selection mode turns every session row into a
+  // checkbox toggling membership here, so Archive/Delete act on the batch.
+  // Leaving the mode always clears the batch — a stale id surviving into the
+  // next session would let a bulk action touch a row the operator never saw.
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  // Shift-click selects a run between two rows, so it needs a fixed origin: the
+  // last row clicked WITHOUT shift. It stays put while a later shift-click
+  // recomputes the run from it, rather than growing the old one (Finder/Gmail).
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null)
   const deleteButtonRef = useRef<HTMLButtonElement>(null)
   const { data: orgData } = useOrg()
   const employeeData = useMemo(() => {
@@ -1027,6 +1087,52 @@ export function ChatSidebar({
     } catch {}
   }
 
+  const exitSelection = useCallback(() => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+    setSelectionAnchorId(null)
+  }, [])
+
+  async function handleBulkArchive() {
+    const ids = [...selectedIds]
+    if (ids.length === 0) return
+    // Sequential, and each id handled on its own: the archive route is
+    // per-session and answers 409 for a running/waiting chat, so a single
+    // refusal must not abort the rest of the batch (the loop body is the whole
+    // point of not using one bulk endpoint here).
+    const archived: string[] = []
+    const failed: string[] = []
+    for (const id of ids) {
+      try {
+        await archiveSessionMutation.mutateAsync(id)
+        archived.push(id)
+        if (selectedId === id) onNewChat()
+      } catch {
+        failed.push(id)
+      }
+    }
+    if (archived.length > 0) onSessionsRemoved?.(archived)
+    exitSelection()
+    // A partial batch must not look like a full one: the selection clearing is
+    // otherwise indistinguishable from "everything archived".
+    if (failed.length > 0) {
+      window.alert(`${failed.length} of ${ids.length} chats could not be archived. Stop a running or waiting chat first, then try again.`)
+    }
+  }
+
+  async function handleBulkDelete(targets: Session[]) {
+    const ids = targets.map((s) => s.id)
+    if (ids.length === 0) return
+    try {
+      await bulkDeleteMutation.mutateAsync(ids)
+      onSessionsRemoved?.(ids)
+      if (selectedId && ids.includes(selectedId)) onNewChat()
+    } catch {
+      window.alert("Bulk delete failed. Nothing was deleted.")
+    }
+    exitSelection()
+  }
+
   const {
     searching,
     searchRows,
@@ -1038,6 +1144,7 @@ export function ChatSidebar({
     pinnedFlat,
     unpinnedFlat,
     cronTotal,
+    terminalRows,
   } = useMemo(() => {
     // When searching, use server results (spans all sessions); "load more" is
     // disabled in this mode since totals reflect the search, not each group.
@@ -1066,6 +1173,7 @@ export function ChatSidebar({
         pinnedFlat: [] as FlatItem[],
         unpinnedFlat: [] as FlatItem[],
         cronTotal: 0,
+        terminalRows: [] as FlatRow[],
       }
     }
 
@@ -1088,6 +1196,8 @@ export function ChatSidebar({
     // sessions; the deep tail beyond the per-group window is reachable via
     // search, and per-employee history via the Team directory).
     const olderRows: FlatRow[] = []
+    // Terminals get their own section and never count as chats.
+    const terminalRows: FlatRow[] = []
     let hiddenAutomated = 0
 
     for (const s of displayed) {
@@ -1095,6 +1205,11 @@ export function ChatSidebar({
         cronLoaded += 1
         // A pinned cron session still floats — pins are explicit intent.
         if (shouldFloatPinned(s, pinnedSessions)) pinnedRows.push(toRow(s))
+        continue
+      }
+      if (isTerminalSession(s)) {
+        if (shouldFloatPinned(s, pinnedSessions)) pinnedRows.push(toRow(s))
+        else terminalRows.push(toRow(s))
         continue
       }
       const isDirect = isDirectSession(s, portalSlug)
@@ -1189,6 +1304,7 @@ export function ChatSidebar({
       pinnedFlat,
       unpinnedFlat,
       cronTotal,
+      terminalRows,
     }
   }, [sessions, search, searchResults, employeeData, portalSlug, portalName, pinnedSessions, counts, focusMode])
 
@@ -1233,6 +1349,7 @@ export function ChatSidebar({
     if (olderExpanded) {
       for (const r of olderRows) push(r.session.id)
     }
+    for (const r of terminalRows) push(r.session.id)
     if (focusMode === "all") {
       for (const item of [...pinnedFlat, ...unpinnedFlat]) {
         const sessionIds = item.sessions!.map((s) => s.id)
@@ -1251,7 +1368,7 @@ export function ChatSidebar({
       empMap[name] = item.sessions!.map((s) => s.id)
     }
     return { sessionIds: ids, employeeNames: empNames, employeeSessionMap: empMap }
-  }, [searching, searchRows, pinnedRows, pinnedExpanded, todayRows, yesterdayRows, olderExpanded, focusMode, olderRows, expanded, pinnedFlat, unpinnedFlat])
+  }, [searching, searchRows, pinnedRows, pinnedExpanded, todayRows, yesterdayRows, olderExpanded, focusMode, olderRows, terminalRows, expanded, pinnedFlat, unpinnedFlat])
 
   useEffect(() => {
     const key = allFlatIds.sessionIds.join(',')
@@ -1308,25 +1425,6 @@ export function ChatSidebar({
     stopSessionMutation.mutate(sessionId)
   }, [stopSessionMutation])
 
-  // Shared props passed to all SessionRow and EmployeeRow instances
-  const sharedRowProps = useMemo(() => ({
-    selectedId,
-    readSessions,
-    pinnedSessions,
-    renamingSessionId,
-    renameCancelledRef,
-    fixTitle: fixTitleCb,
-    onSelect,
-    onEmployeeSessionsAvailable,
-    togglePin,
-    handleDuplicate: handleDuplicateCb,
-    handleStop: handleStopCb,
-    handleArchive,
-    setDeleteTarget,
-    setRenamingSessionId,
-    updateSessionTitle,
-  }), [selectedId, readSessions, pinnedSessions, renamingSessionId, fixTitleCb, onSelect, onEmployeeSessionsAvailable, togglePin, handleDuplicateCb, handleStopCb, updateSessionTitle])
-
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Apple nav-bar pattern: the control band carries NO line at rest, and a
   // single --separator hairline appears under it only once rows scroll beneath.
@@ -1347,6 +1445,7 @@ export function ChatSidebar({
     | { kind: "older-header" }
     | { kind: "employee"; item: FlatItem }
     | { kind: "cron-link" }
+    | { kind: "terminals" }
 
   const virtualItems = useMemo<VirtualItem[]>(() => {
     const list: VirtualItem[] = []
@@ -1380,6 +1479,13 @@ export function ChatSidebar({
         for (const row of olderRows) list.push({ kind: "flat", row })
       }
     }
+    // Terminals sit just above the Team directory: the header's host menu opens
+    // one, and the rows below it are the terminal sessions.
+    const hosts = terminalHosts?.enabled ? terminalHosts.hosts : []
+    if (hosts.length > 0 || terminalRows.length > 0) {
+      list.push({ kind: "terminals" })
+      for (const row of terminalRows) list.push({ kind: "flat", row })
+    }
     // All mode: the Team directory — every employee with sessions as an
     // expandable group (full history, authoritative counts, load-more). The
     // contactable roster tail continues this section below the virtual list.
@@ -1397,7 +1503,71 @@ export function ChatSidebar({
     }
     if (cronTotal > 0) list.push({ kind: "cron-link" })
     return list
-  }, [searching, searchRows, pinnedRows, pinnedExpanded, todayRows, yesterdayRows, olderRows, olderExpanded, focusMode, pinnedFlat, unpinnedFlat, contactableEmployees.length, onContactEmployee, cronTotal])
+  }, [searching, searchRows, pinnedRows, pinnedExpanded, todayRows, yesterdayRows, olderRows, olderExpanded, focusMode, pinnedFlat, unpinnedFlat, contactableEmployees.length, onContactEmployee, cronTotal, terminalHosts, terminalRows])
+
+  // The selectable sessions in the order they are rendered — the only ordering
+  // a shift-range can trust. Only `flat` rows are selectable in selection mode:
+  // an employee group header is not a checkbox and EmployeeRow renders its child
+  // rows with selectionMode false, so a range is computed over the flat rows
+  // alone, skipping section labels, dividers, the "show more" rows and the cron
+  // link. Flat rows are disjoint (a pinned chat never also lands in Today), so
+  // every id here is unique.
+  const sessionIdOrder = useMemo(() => {
+    const ids: string[] = []
+    for (const vi of virtualItems) {
+      if (vi.kind === "flat") ids.push(vi.row.session.id)
+    }
+    return ids
+  }, [virtualItems])
+
+  const toggleSelect = useCallback((sessionId: string, shiftKey = false) => {
+    if (shiftKey) {
+      setSelectedIds((prev) => {
+        const from = selectionAnchorId ? sessionIdOrder.indexOf(selectionAnchorId) : -1
+        const to = sessionIdOrder.indexOf(sessionId)
+        // No anchor, or a row no longer in the rendered order: there is no run
+        // to compute, so fall back to toggling the one row.
+        if (from === -1 || to === -1) {
+          const next = new Set(prev)
+          if (next.has(sessionId)) next.delete(sessionId)
+          else next.add(sessionId)
+          return next
+        }
+        const [lo, hi] = from <= to ? [from, to] : [to, from]
+        return new Set(sessionIdOrder.slice(lo, hi + 1))
+      })
+      return
+    }
+    setSelectionAnchorId(sessionId)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(sessionId)) next.delete(sessionId)
+      else next.add(sessionId)
+      return next
+    })
+  }, [selectionAnchorId, sessionIdOrder])
+
+  // Shared props passed to all SessionRow and EmployeeRow instances
+  const sharedRowProps = useMemo(() => ({
+    selectedId,
+    readSessions,
+    pinnedSessions,
+    renamingSessionId,
+    renameCancelledRef,
+    fixTitle: fixTitleCb,
+    onSelect,
+    onEmployeeSessionsAvailable,
+    togglePin,
+    handleDuplicate: handleDuplicateCb,
+    handleStop: handleStopCb,
+    handleArchive,
+    setDeleteTarget,
+    setRenamingSessionId,
+    updateSessionTitle,
+    selectionMode,
+    selectedIds,
+    onToggleSelect: toggleSelect,
+  }), [selectedId, readSessions, pinnedSessions, renamingSessionId, fixTitleCb, onSelect, onEmployeeSessionsAvailable, togglePin, handleDuplicateCb, handleStopCb, updateSessionTitle, selectionMode, selectedIds, toggleSelect])
 
   const VIRTUALIZE_THRESHOLD = 50
   const shouldVirtualize = virtualItems.length >= VIRTUALIZE_THRESHOLD
@@ -1410,6 +1580,7 @@ export function ChatSidebar({
       const vi = virtualItems[index]
       switch (vi.kind) {
         case "section": return 32
+        case "terminals": return 36
         case "older-header": return 36
         case "older-line": return 40
         case "pinned-more": return 30
@@ -1431,6 +1602,15 @@ export function ChatSidebar({
   // virtualized and plain render paths so they can never drift apart.
   const renderItem = (vi: VirtualItem): React.ReactNode => {
     switch (vi.kind) {
+      case "terminals":
+        return (
+          <TerminalSectionHeader
+            count={Math.max(counts[TERMINAL_GROUP] ?? 0, terminalRows.length)}
+            hosts={terminalHosts?.enabled ? terminalHosts.hosts : []}
+            onOpen={(id) => onSelect(id)}
+            onOpenBeside={onOpenBeside}
+          />
+        )
       case "section":
         return (
           <div className="flex items-center gap-2 px-4 pb-1 pt-3">
@@ -1532,7 +1712,47 @@ export function ChatSidebar({
           listScrolled && "shadow-[0_1px_0_0_var(--separator)]",
         )}
       >
-        <div className="relative flex h-9 items-center">
+        {/* Selection bar — replaces the resting/search band while a batch is
+            being assembled. Archive and Delete are disabled at zero selected
+            rather than hidden, so the actions never move under the finger. */}
+        {selectionMode ? (
+          <div className="flex h-9 items-center gap-1">
+            <button
+              onClick={exitSelection}
+              aria-label="Cancel selection"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
+            >
+              <X className="size-[18px]" />
+            </button>
+            <span className="min-w-0 flex-1 truncate text-subheadline text-[var(--text-secondary)]">
+              {selectedIds.size === 0 ? "Select chats" : `${selectedIds.size} selected`}
+            </span>
+            <button
+              onClick={handleBulkArchive}
+              disabled={selectedIds.size === 0}
+              title="Archive selected chats"
+              aria-label="Archive selected chats"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+            >
+              <Archive className="size-[17px]" aria-hidden />
+            </button>
+            <button
+              onClick={() => setDeleteTarget({
+                type: "bulk",
+                id: "bulk",
+                label: `${selectedIds.size} selected`,
+                sessions: sessions.filter((s) => selectedIds.has(s.id)),
+              })}
+              disabled={selectedIds.size === 0}
+              title="Delete selected chats"
+              aria-label="Delete selected chats"
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-[var(--system-red)] transition-colors hover:bg-[color-mix(in_srgb,var(--system-red)_12%,transparent)] disabled:pointer-events-none disabled:opacity-40"
+            >
+              <Trash2 className="size-[17px]" aria-hidden />
+            </button>
+          </div>
+        ) : null}
+        <div className={cn("relative flex h-9 items-center", selectionMode && "hidden")}>
           {/* Resting controls — fade/disable while the search field is open. */}
           <div
             className={cn(
@@ -1590,6 +1810,17 @@ export function ChatSidebar({
               className="inline-flex size-11 lg:size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
             >
               <Search className="size-[18px]" />
+            </button>
+
+            {/* Enter multi-select. The batch actions themselves live in the
+                bar below, so this row stays one affordance wide. */}
+            <button
+              onClick={() => { setSearchOpen(false); setSearch(""); setSelectionMode(true) }}
+              title="Select chats"
+              aria-label="Select chats"
+              className="inline-flex size-11 lg:size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
+            >
+              <ListChecks className="size-[18px]" />
             </button>
           </div>
 
@@ -1734,12 +1965,16 @@ export function ChatSidebar({
             <DialogTitle>
               {deleteTarget?.type === "employee"
                 ? `Delete all chats with "${deleteTarget.label}"?`
-                : `Delete "${deleteTarget?.label}"?`}
+                : deleteTarget?.type === "bulk"
+                  ? `Delete ${deleteTarget.sessions?.length ?? 0} selected chats?`
+                  : `Delete "${deleteTarget?.label}"?`}
             </DialogTitle>
             <DialogDescription>
               {deleteTarget?.type === "employee"
                 ? `This will permanently delete ${deleteTarget.sessions?.length ?? 0} session(s) and all their messages. This cannot be undone.`
-                : "This will permanently delete the session and all its messages. This cannot be undone."}
+                : deleteTarget?.type === "bulk"
+                  ? `This will permanently delete ${deleteTarget.sessions?.length ?? 0} session(s) and all their messages. This cannot be undone.`
+                  : "This will permanently delete the session and all its messages. This cannot be undone."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1751,6 +1986,8 @@ export function ChatSidebar({
                 if (!deleteTarget) return
                 if (deleteTarget.type === "employee" && deleteTarget.sessions) {
                   handleDeleteEmployee(deleteTarget.id, deleteTarget.sessions)
+                } else if (deleteTarget.type === "bulk") {
+                  handleBulkDelete(deleteTarget.sessions ?? [])
                 } else {
                   handleDelete(deleteTarget.id)
                 }

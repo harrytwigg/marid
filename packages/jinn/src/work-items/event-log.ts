@@ -52,6 +52,10 @@ export const RECONCILER_ACTOR = 'reconciler';
 /** The actor a human's own writes carry. An employee is not a human here: the
  *  point of both readers below is that somebody outside the loop decided this. */
 export const HUMAN_ACTOR = 'operator';
+/** Actor recorded when a park's `parkedUntil` passes and the sweep puts the Todo
+ *  back in the queue. A clock decided the move, on a date somebody
+ *  chose when they parked it, so it is neither derived nor an agent's word. */
+export const PARK_EXPIRY_ACTOR = 'park-expiry';
 /** Actor recorded when a Workflow run reflects its own lifecycle onto its bound
  *  Todo. Derived, not declared: a status a phase set on purpose outranks it. */
 export const WORKFLOW_RUN_ACTOR = 'workflow:run';
@@ -114,24 +118,31 @@ export function isReviewBounceDeclared(workItemId: string): boolean {
   return latestStatusTransition(workItemId, 'executing')?.fromStatus === 'in_review';
 }
 
+/** Actors whose status moves raise the reconciler's evidence floor. */
+const EVIDENCE_FLOOR_ACTORS: readonly string[] = [HUMAN_ACTOR, PARK_EXPIRY_ACTOR];
+
 /**
- * When the operator last moved this Todo himself, or undefined if he never has.
- * Any event carrying a `to_status` counts — a status change and an escalation
- * are both him deciding where the item belongs.
+ * When this Todo was last put somewhere by a decision the attempt receipts must
+ * not overrule, or undefined if it never was. Two kinds count: the operator
+ * moving it himself (PLA-98), and an expired park putting it back in the queue
+ *. Any event carrying a `to_status` counts — a status change and an
+ * escalation are both a decision about where the item belongs.
  *
  * The reconciler reads this as an evidence floor: attempt receipts older than
- * the decision cannot describe what happened after it.
+ * the decision cannot describe what happened after it. Without the park half, a
+ * Todo parked mid-work would come back from its park and be pulled straight into
+ * `in_review` (or re-blocked) by the attempt it finished before it was parked.
  */
-export function latestHumanStatusMoveAt(workItemId: string): string | undefined {
+export function latestEvidenceFloorAt(workItemId: string): string | undefined {
   const db = initDb();
   const id = parseTodoId(workItemId);
   const row = db
     .prepare(
       `SELECT created_at FROM work_item_events
-       WHERE work_item_id = ? AND actor = ? AND to_status IS NOT NULL
+       WHERE work_item_id = ? AND actor IN (${EVIDENCE_FLOOR_ACTORS.map(() => '?').join(', ')}) AND to_status IS NOT NULL
        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     )
-    .get(id, HUMAN_ACTOR) as { created_at: string } | undefined;
+    .get(id, ...EVIDENCE_FLOOR_ACTORS) as { created_at: string } | undefined;
   return row?.created_at;
 }
 

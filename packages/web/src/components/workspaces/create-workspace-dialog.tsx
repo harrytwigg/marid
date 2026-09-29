@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { PRODUCT_NAME } from "@/lib/brand"
 
 export interface CreateWorkspaceDialogProps {
   open: boolean
@@ -63,7 +64,7 @@ export function CreateWorkspaceDialog({
                 New workspace
               </DialogTitle>
               <DialogDescription className="text-pretty text-[length:var(--text-subheadline)] leading-relaxed text-[var(--text-secondary)]">
-                Creates a separate Jinn company with its own people, chats, skills, and setup.
+                Creates a separate {PRODUCT_NAME} company with its own people, chats, skills, and setup.
               </DialogDescription>
             </DialogHeader>
             <label htmlFor="workspace-name" className="mt-5 block text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--text-secondary)]">
@@ -80,7 +81,7 @@ export function CreateWorkspaceDialog({
               className="mt-2 h-11 w-full rounded-[var(--radius-md)] border-0 bg-[var(--fill-secondary)] px-3 text-[16px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)] focus-visible:ring-2 focus-visible:ring-[var(--system-blue)]"
             />
             <p className="mt-2 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
-              Jinn creates a private home such as <span style={{ fontFamily: "var(--font-code)" }}>~/.jinn-acme</span>, starts it, and opens onboarding.
+              {PRODUCT_NAME} creates a private home such as <span style={{ fontFamily: "var(--font-code)" }}>~/.jinn-acme</span>, starts it, and opens onboarding.
             </p>
             {error && <p role="alert" className="mt-3 text-[length:var(--text-footnote)] text-[var(--system-red)]">{error}</p>}
           </div>

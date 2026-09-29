@@ -2,6 +2,7 @@ import { Bell, ChevronRight, CornerDownRight, Link2, Paperclip, Pencil, Plus, Ro
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
 import { displayNameOf, formatRelativeTime } from "../util"
+import { SessionActor } from "./session-ref"
 
 /* One audit event read back as a sentence: who did it, and what it was. The
  * feed that orders these lines lives in activity.tsx. */
@@ -84,9 +85,10 @@ export function whisperOf(event: WorkItemEventWire): Whisper {
 function actorLabel(actor: string | null, byName: Map<string, Employee>): string {
   if (!actor || actor === "system") return "The gateway"
   if (actor === "operator") return "You"
-  if (actor.startsWith("session:")) return "A session"
   return displayNameOf(actor, byName)
 }
+
+
 
 export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byName: Map<string, Employee> }) {
   const whisper = whisperOf(event)
@@ -97,7 +99,7 @@ export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byNam
       </span>
       <span className="min-w-0 truncate">
         <span className={`font-semibold ${whisper.tinted ? "text-[var(--system-red)]" : "text-[var(--text-secondary)]"}`}>
-          {actorLabel(event.actor, byName)}
+          <SessionActor actor={event.actor} byName={byName}>{actorLabel(event.actor, byName)}</SessionActor>
         </span>{" "}
         {whisper.text}
       </span>

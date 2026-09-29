@@ -4,6 +4,10 @@
  * size budget; `types.ts` re-exports `JinnConfig` so every existing importer is
  * unaffected.
  */
+import type { TerminalConfig } from "./terminal-config.js";
+import type { IdleCapacityConfig } from "./idle-capacity-config.js";
+import type { RemoteMcpConfig } from "./remote-mcp-config.js";
+import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { EngineName } from "./models.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
 import type {
@@ -53,6 +57,15 @@ export interface JinnConfig {
     /** Bounded Todo recovery (PLA-240). Unset = classify-only: lanes and
      *  metrics, no automatic re-arm. `auto` is a reviewed production gate. */
     todoRecovery?: { mode?: "off" | "classify-only" | "auto" };
+    /** Closed Todo departments (JIN-1): unset = open; see shared/todo-departments-config.ts. */
+    todoDepartments?: TodoDepartmentsConfig;
+    /** Idle-capacity auto-start: when the account's real Claude
+     *  five-hour / weekly windows are about to reset with capacity unused,
+     *  start eligible backlog Todos to use it. Off unless `enabled: true`;
+     *  the remaining keys tune the ceilings, see shared/idle-capacity.ts. */
+    idleCapacity?: IdleCapacityConfig;
+    /** Remote MCP connector at `/mcp`: off unless enabled; see shared/remote-mcp-config.ts. */
+    remoteMcp?: RemoteMcpConfig;
     /** Opt-in: when set, POST /api/sessions reads the forwarded SSO identity
      *  from this request header (set by an auth proxy such as oauth2-proxy,
      *  Traefik forward-auth, or IAP) and persists it on the session. Accepts a
@@ -100,6 +113,29 @@ export interface JinnConfig {
     pi?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };
     /** Hermes (`hermes` CLI) engine. `bin` optional — PATH-resolved. No effort. */
     hermes?: { bin?: string; model?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };
+    /** opencode (`opencode` CLI) engine. `bin` optional — PATH-resolved. `model`
+     *  is opencode's own `provider/model` form. No effort: `--variant` is
+     *  provider-specific and opencode reports no list to validate against. */
+    opencode?: {
+      bin?: string;
+      model?: string;
+      fallback?: EngineName[];
+      fallbackModelMap?: Record<string, string>;
+      /**
+       * How a turn reaches opencode. `run` (the default) spawns one headless
+       * `opencode run` per turn, exactly as before this option existed. `server`
+       * keeps an `opencode serve` per session, sends each turn to it over its
+       * HTTP API, and offers the dashboard terminal view, which is an
+       * `opencode attach` client on that same server. See docs/engines-opencode.md.
+       */
+      mode?: OpencodeMode;
+      /** Server-mode tuning; ignored in `run` mode. */
+      server?: OpencodeServerConfig;
+      /** meter jinn's own opencode spend against the provider's
+       *  windowed allowance, since opencode publishes none to read. Absent =
+       *  unmetered, exactly as before. See docs/engines-opencode.md. */
+      usageLimits?: OpencodeUsageLimitsConfig;
+    };
   };
   /** Optional model + capability registry. When absent, synthesized from engines.<name>.model. */
   models?: ModelsConfig;
@@ -183,4 +219,112 @@ export interface JinnConfig {
    * slated for removal.
    */
   realtime?: RealtimeConfig;
+  /**
+   * Remote (SSH) execution for employees that declare `remoteHost`. Absent means
+   * remote employees refuse to load at all — the fail-closed default, because
+   * this ships to strangers and a remote session runs
+   * `--dangerously-skip-permissions` on someone's real machine.
+   */
+  remote?: RemoteExecutionConfig;
+  /** Operator terminals on the gateway and other machines. */
+  terminal?: TerminalConfig;
+}
+
+export type OpencodeMode = "run" | "server";
+
+/**
+ * Limits for opencode server mode.
+ *
+ * A warm server holds a full opencode process (~650 MB on build-host) plus its
+ * MCP servers, so idle ones are bounded two ways: by COUNT per host, and by
+ * AGE. Servers serving a turn or watched in the terminal are never counted or
+ * reaped. Warm servers also count toward `engines.claude.maxLivePtys`, the
+ * gateway-wide idle cap every interactive engine shares.
+ */
+export interface OpencodeServerConfig {
+  /** Idle warm servers kept per host. Default 2. */
+  maxIdle?: number;
+  /** Per-host override of {@link maxIdle}. Keys are an employee's `remoteHost`
+   *  exactly as written on the employee, or `local` for the gateway itself. */
+  maxIdleByHost?: Record<string, number>;
+  /** An idle server is stopped after this long. Default 900000 (15 minutes). */
+  idleTtlMs?: number;
+  /** How long a starting server may take to answer its health check. Default 30000. */
+  startTimeoutMs?: number;
+  /** How long a healthy server may then take to bootstrap its instance — load
+   *  its config and plugins, installing plugin dependencies on first use —
+   *  before it is given up on and the turn runs as a plain `opencode run`.
+   *  Default 120000. */
+  bootstrapTimeoutMs?: number;
+}
+
+/**
+ * Remote (SSH) execution settings. One block for the whole instance: every
+ * remote employee shares the sandbox root, the JINN_HOME mount point, and the
+ * wake policy. Per-employee variation lives on the Employee record (host, user,
+ * cwd) and nowhere else.
+ */
+export interface RemoteExecutionConfig {
+  /** The one absolute prefix on the remote host that every `remoteCwd` must
+   *  resolve under. The single most proportionate guardrail for running
+   *  unattended with `--dangerously-skip-permissions` on a daily-driver box: it
+   *  does not stop a determined prompt from `cd ..`-ing out, but it bounds the
+   *  realistic accidental blast radius. */
+  root: string;
+  /** Where the gateway's own JINN_HOME is sshfs-mounted on the remote host. The
+   *  remote session's `$JINN_HOME` is a symlink farm over this, so knowledge,
+   *  docs, org and skills are the gateway's real files rather than copies. */
+  mount: string;
+  /**
+   * Default `CLAUDE_CONFIG_DIR` for remote sessions on these hosts — i.e. which
+   * Claude Code profile they run as. An employee's own
+   * `remoteClaudeConfigDir` overrides it; unset on both means the remote
+   * user's default profile.
+   *
+   * Set this rather than pointing `claude` at a profile-manager wrapper. Those
+   * wrappers typically unset every `CLAUDE_*` variable before exec, which would
+   * strip the three the session depends on — including
+   * `CLAUDE_CODE_RESUME_TOKEN_THRESHOLD`, whose absence lets the "resume from
+   * summary?" picker appear in front of a PTY with nobody at the keyboard.
+   */
+  claudeConfigDir?: string;
+  /** Run ON THE GATEWAY to wake a sleeping host (smart plug, jump box, …).
+   *  Takes precedence over {@link wakeMac}. */
+  wakeCommand?: string;
+  /** MAC address for the built-in Wake-on-LAN magic packet, used when
+   *  {@link wakeCommand} is unset. */
+  wakeMac?: string;
+  /** Run ON THE REMOTE once it is reachable, to re-establish the JINN_HOME
+   *  mount. A reboot does not bring sshfs back, so a successful wake normally
+   *  lands on a dead mount without this. */
+  remountCommand?: string;
+  /**
+   * How long {@link wakeCommand} may run before it is killed, in ms.
+   * Default 300000 (5 minutes).
+   *
+   * Generous on purpose. A real startup path is not a fire-and-forget packet:
+   * it may probe reachability, read a power state over the network, press a
+   * physical ATX button and then wait for POST. Killing that partway through
+   * can land between the state read and the press — no press, no wake, and a
+   * turn that simply times out with nothing to show for it.
+   */
+  wakeTimeoutMs?: number;
+  /** Total bound on waiting for an unreachable host, in ms. Default 240000.
+   *  Bounded on purpose: a box that is off for the weekend must fail the turn,
+   *  not pin it at "waiting" forever. */
+  waitMs?: number;
+  /** Interval between reachability probes while waiting, in ms. Default 10000. */
+  probeIntervalMs?: number;
+}
+
+/**
+ * `engines.opencode.usageLimits`. OpenCode Go gives each model its own
+ * monthly allowance in dollars of usage, and meters it over three windows: five
+ * hours at 20% of it, seven days at 50%, thirty days at 100%.
+ */
+export interface OpencodeUsageLimitsConfig {
+  /** Monthly allowance in USD, keyed by opencode `provider/model` id. A
+   *  `provider/*` key covers every model of that provider an exact key does not
+   *  name. A model matching no key is not metered. */
+  monthlyUsd?: Record<string, number>;
 }

@@ -191,6 +191,20 @@ export function recoverStaleQueueItems(): number {
   return result.changes;
 }
 
+/**
+ * The pending rows a session is waiting on, oldest first. A row here is a turn
+ * that has been accepted for this session but has not started: paired with the
+ * in-process queue's `hasInFlightItem`, it is how a sweep tells "parked behind
+ * a long lane" from "running with nothing driving it".
+ */
+export function listPendingQueueItemIdsForSession(sessionId: string): string[] {
+  const db = initDb();
+  const rows = db.prepare(
+    "SELECT id FROM queue_items WHERE session_id = ? AND status = 'pending' ORDER BY created_at ASC, position ASC"
+  ).all(sessionId) as Array<{ id: string }>;
+  return rows.map((row) => row.id);
+}
+
 export function listAllPendingQueueItems(): QueueItem[] {
   const db = initDb();
   const rows = db.prepare(

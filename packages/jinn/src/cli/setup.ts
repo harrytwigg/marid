@@ -29,6 +29,7 @@ import {
   materializeTemplateContent,
   type TemplateMaterializationInputs,
 } from "../shared/template-materialization.js";
+import { PRODUCT_NAME } from "../shared/brand.js";
 
 const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
@@ -313,10 +314,10 @@ portal:
 #     enabled: true
 #     tokenThreshold: 300000
 #     staleAfterMinutes: 60
-# Cron alerting — route failed scheduled jobs to a connector channel.
-# cron:
-#   alertConnector: slack
-#   alertChannel: "#alerts"
+# Alerts. Failed cron jobs go to cron.alert*. LLM-free operator alerts (usage limits, a dead
+# Claude login) go to notifications.*, else cron.alert*, else a single-user Telegram allowlist.
+# cron: { alertConnector: slack, alertChannel: "#alerts" }
+# notifications: { connector: telegram, channel: "123456789" }   # chat id / channel id / #channel
 
 logging:
   file: true
@@ -340,7 +341,7 @@ Agents are configured via employees in the org/ directory.
 }
 
 export async function runSetup(opts?: { force?: boolean }): Promise<void> {
-  console.log("\nJinn Setup\n");
+  console.log(`\n${PRODUCT_NAME} Setup\n`);
 
   if (opts?.force && fs.existsSync(JINN_HOME)) {
     console.log(`  ${YELLOW}[force]${RESET} Removing ${JINN_HOME}...`);

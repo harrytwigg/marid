@@ -82,6 +82,32 @@ const FEATURED_REG: EnginesResponse = {
   },
 }
 
+// opencode's catalog is the whole provider surface: hundreds of models whose ids
+// are `provider/model`. The picker must not render them all — this stands in for
+// that shape with one row per provider.
+const OPENCODE_REG: EnginesResponse = {
+  default: 'opencode',
+  engines: {
+    opencode: {
+      name: 'opencode', available: true, defaultModel: 'opencode-go/deepseek-v4.1-flash', effortMechanism: 'none',
+      models: [
+        'opencode-go/deepseek-v4.1-flash',
+        'opencode-go/glm-5.3',
+        'opencode-go/kimi-k3',
+        'opencode-go/qwen3.8-max',
+        'opencode-go/minimax-m3',
+        'opencode-go/grok-4.7',
+        'openai/gpt-5.5',
+        'openai/gpt-6-astra',
+        'openrouter/meta-llama/llama-4',
+        'openrouter/deepseek/deepseek-r1',
+        'opencode/big-pickle',
+        'opencode/space-bunny-free',
+      ].map((id) => ({ id, label: id.slice(id.indexOf('/') + 1), supportsEffort: false, effortLevels: [] })),
+    },
+  },
+}
+
 // Mutable holder so a test can swap the registry the mocked hook returns.
 const regHolder: { current: EnginesResponse } = { current: REG }
 
@@ -324,5 +350,155 @@ describe('ModelSelectorRow featured / expand', () => {
     expect(screen.getAllByRole('menuitemradio')).toHaveLength(2)
     expect(screen.queryByRole('menuitem', { name: /more models/i })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: /show fewer/i })).toBeNull()
+  })
+})
+
+describe('ModelSelectorRow opencode catalog (search + provider labels)', () => {
+  beforeEach(() => {
+    regHolder.current = OPENCODE_REG
+    if (typeof localStorage !== 'undefined') localStorage.clear()
+  })
+  afterEach(() => {
+    regHolder.current = REG
+    if (typeof localStorage !== 'undefined') localStorage.clear()
+  })
+
+  function openOpencode() {
+    renderRow(<Harness initial={{ engine: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }} />)
+    openMenu()
+  }
+
+  it('caps the rendered list at five rows instead of the whole catalog', async () => {
+    openOpencode()
+    await screen.findAllByRole('menuitemradio')
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(5)
+    // The remaining seven are reachable, not silently dropped.
+    expect(screen.getByRole('menuitem', { name: /more models \(7\)/i })).toBeTruthy()
+  })
+
+  it('labels each row with its provider', async () => {
+    openOpencode()
+    await screen.findAllByRole('menuitemradio')
+    // The five visible rows are the opencode-go block; the badge spells it out.
+    expect(screen.getAllByText('opencode go')).toHaveLength(5)
+  })
+
+  it('always includes the selected model, even when it sits outside the short list', async () => {
+    // deepseek-r1 is the 10th id, well past the first five — it must still show,
+    // selected, rather than the picker hiding the model it is currently on.
+    renderRow(<Harness initial={{ engine: 'opencode', model: 'openrouter/deepseek/deepseek-r1' }} />)
+    openMenu()
+    await screen.findAllByRole('menuitemradio')
+    const radios = screen.getAllByRole('menuitemradio')
+    expect(radios).toHaveLength(5)
+    expect(radios[0].textContent).toContain('deepseek-r1')
+    expect(radios[0].getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('search filters the catalog to the matching short list', async () => {
+    openOpencode()
+    await screen.findAllByRole('menuitemradio')
+    fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'gpt' } })
+    const radios = screen.getAllByRole('menuitemradio')
+    expect(radios.map((r) => r.textContent)).toEqual(['gpt-5.5openai', 'gpt-6-astraopenai'])
+  })
+
+  it('search matches on the provider name', async () => {
+    openOpencode()
+    await screen.findAllByRole('menuitemradio')
+    fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'openrouter' } })
+    const radios = screen.getAllByRole('menuitemradio')
+    expect(radios).toHaveLength(2)
+    expect(radios.every((r) => r.textContent?.includes('openrouter'))).toBe(true)
+  })
+
+  it('shows a no-match message when nothing matches', async () => {
+    openOpencode()
+    await screen.findAllByRole('menuitemradio')
+    fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'zzz-nope' } })
+    expect(screen.queryByRole('menuitemradio')).toBeNull()
+    expect(screen.getByText(/no models match/i)).toBeTruthy()
+  })
+
+  it('clears the filter when the engine changes, so the new engine is not empty', async () => {
+    // QA F1: an opencode search left the claude list rendered as empty
+    // ("no models match") after a switch, because the query survived the change.
+    regHolder.current = { default: 'opencode', engines: { ...OPENCODE_REG.engines, ...REG.engines } }
+    renderRow(<Harness initial={{ engine: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }} />)
+    openMenu()
+    await screen.findAllByRole('menuitemradio')
+    fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'gpt' } })
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /switch engine/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /claude/i }))
+
+    // Claude's models are listed, not an empty no-match list, and the box is clear.
+    expect(await screen.findByRole('menuitemradio', { name: /opus 4\.8/i })).toBeTruthy()
+    expect(screen.queryByText(/no models match/i)).toBeNull()
+    expect((screen.getByLabelText('Search models') as HTMLInputElement).value).toBe('')
+  })
+
+  it('clears a stale filter on reopen', async () => {
+    openOpencode()
+    await screen.findAllByRole('menuitemradio')
+    const box = screen.getByLabelText('Search models')
+    fireEvent.change(box, { target: { value: 'kimi' } })
+    // Escape bubbles out of the field and closes the menu.
+    fireEvent.keyDown(box, { key: 'Escape' })
+
+    openMenu()
+    await screen.findAllByRole('menuitemradio')
+    expect((screen.getByLabelText('Search models') as HTMLInputElement).value).toBe('')
+  })
+
+  it('"Show N more" during a search does not persist the engine-wide expand pref', async () => {
+    openOpencode()
+    await screen.findAllByRole('menuitemradio')
+    fireEvent.change(screen.getByLabelText('Search models'), { target: { value: 'opencode-go' } })
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(5)
+    fireEvent.click(screen.getByRole('menuitem', { name: /show 1 more/i }))
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(6)
+
+    // Clearing the search restores the short list — not the full 12-model catalog
+    // a persisted expand would have shown.
+    fireEvent.change(screen.getByLabelText('Search models'), { target: { value: '' } })
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(5)
+    const stored = localStorage.getItem('jinn-model-picker-expanded')
+    expect(stored === null || !JSON.parse(stored).opencode).toBe(true)
+  })
+})
+
+describe('ModelSelectorRow featured set larger than the short-list cap', () => {
+  const SIX_FEATURED: EnginesResponse = {
+    default: 'claude',
+    engines: {
+      claude: {
+        name: 'claude', available: true, defaultModel: 'f0', effortMechanism: 'claude-flag',
+        models: [
+          ...Array.from({ length: 6 }, (_, i) => ({
+            id: `f${i}`, label: `Featured ${i}`, supportsEffort: false, effortLevels: [], featured: true,
+          })),
+          { id: 'extra', label: 'Not featured', supportsEffort: false, effortLevels: [] },
+        ],
+      },
+    },
+  }
+
+  beforeEach(() => {
+    regHolder.current = SIX_FEATURED
+    if (typeof localStorage !== 'undefined') localStorage.clear()
+  })
+  afterEach(() => {
+    regHolder.current = REG
+    if (typeof localStorage !== 'undefined') localStorage.clear()
+  })
+
+  it('shows every featured model when collapsed — the cap applies only to no-featured engines', async () => {
+    renderRow(<Harness initial={{ engine: 'claude', model: 'f0' }} />)
+    openMenu()
+    await screen.findAllByRole('menuitemradio')
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(6)
+    // Only the genuinely non-featured model hides.
+    expect(screen.getByRole('menuitem', { name: /more models \(1\)/i })).toBeTruthy()
   })
 })

@@ -1,0 +1,178 @@
+/*
+ * MARID PALETTE — deep sea-blue/teal, layered over the upstream tokens.
+ *
+ * Imported straight after globals.css (see main.tsx), so these declarations win
+ * on source order at equal specificity. globals.css itself is deliberately left
+ * untouched: it is upstream-owned, and an override file keeps every upstream
+ * merge clean. Only the tokens that change are re-declared, in the same four
+ * selectors globals.css uses (dark, light, system-light, system-dark).
+ *
+ * A user-picked accent is written inline on <html> by use-root-css-variables,
+ * which beats everything here, so a saved choice still wins over this default.
+ */
+
+/* MARID DARK — deep sea + teal (default) */
+:root, [data-theme="dark"] {
+  --bg: #0F1719;
+  --bg-secondary: #162124;
+  --bg-tertiary: #1F2C30;
+  --material-regular: rgba(22,33,36,0.92);
+  --material-thick: rgba(15,23,25,0.96);
+  --material-thick-opaque: #0F1719;
+  --separator-opaque: #2B3B40;
+  --text-primary: #E2ECEB;
+  --text-secondary: rgba(226,236,235,0.62);
+  --text-tertiary: rgba(226,236,235,0.38);
+  --text-quaternary: rgba(226,236,235,0.22);
+  --accent: #3DBFB2;
+  --accent-fill: rgba(61,191,178,0.14);
+  --accent-contrast: #0F1719;
+  --talk-focus-ring: rgba(61,191,178,0.55);
+  --pill-bg: rgba(24,36,40,0.64);
+  --pill-bg-opaque: #151F23;
+  --code-text: #E2ECEB;
+  --ribbon-bg: #1A272B;
+  --sidebar-bg: #131E21;
+  --orb-core: rgba(150,240,225,0.78);
+  --orb-base: rgba(10,40,58,0.90);
+  --orb-bloom: rgba(30,140,170,0.64);
+  --orb-lobe-a: rgba(90,220,200,0.84);
+  --orb-lobe-b: rgba(60,150,210,0.62);
+  --orb-lobe-c: rgba(90,120,230,0.54);
+  --orb-shadow: rgba(3,12,20,0.95);
+  --orb-specular: rgba(236,255,252,0.88);
+  --orb-rim: rgba(160,225,255,0.64);
+}
+
+/* MARID LIGHT — sea-glass + deep teal */
+[data-theme="light"] {
+  --bg: #EEF3F3;
+  --bg-secondary: #F7FAFA;
+  --bg-tertiary: #E1EAEA;
+  --material-regular: rgba(247,250,250,0.94);
+  --material-thick: rgba(238,243,243,0.97);
+  --material-thick-opaque: #EEF3F3;
+  --separator-opaque: #CDDADA;
+  --text-primary: #14211F;
+  --text-secondary: rgba(20,33,31,0.66);
+  --text-tertiary: rgba(20,33,31,0.56);
+  --text-quaternary: rgba(20,33,31,0.30);
+  --accent: #0A6763;
+  --accent-fill: rgba(10,103,99,0.14);
+  --accent-contrast: #F7FAFA;
+  --talk-focus-ring: rgba(10,103,99,0.55);
+  --pill-bg: rgba(247,250,250,0.72);
+  --pill-bg-opaque: #F4F8F8;
+  --code-text: #24403D;
+  --ribbon-bg: #DCE6E6;
+  --sidebar-bg: #E4ECEC;
+  --material-thin: rgba(20,33,31,0.04);
+  --material-ultra-thin: rgba(20,33,31,0.02);
+  --fill-primary: rgba(20,33,31,0.08);
+  --fill-secondary: rgba(20,33,31,0.06);
+  --fill-tertiary: rgba(20,33,31,0.045);
+  --fill-quaternary: rgba(20,33,31,0.028);
+  --separator: rgba(20,33,31,0.14);
+  --scrim: rgba(16,40,38,0.18);
+  --shadow-subtle: 0 1px 2px rgba(16,40,38,0.06);
+  --shadow-ambient: 0 0 0 0.5px rgba(16,40,38,0.10);
+  --shadow-key: 0 2px 8px rgba(16,40,38,0.10), 0 8px 24px rgba(16,40,38,0.08);
+  --shadow-card: 0 0 0 0.5px rgba(16,40,38,0.08), 0 1px 3px rgba(16,40,38,0.07), 0 4px 12px rgba(16,40,38,0.06), inset 0 1px 0 rgba(255,255,255,0.70);
+  --shadow-overlay: 0 0 0 0.5px rgba(16,40,38,0.10), 0 4px 16px rgba(16,40,38,0.10), 0 16px 48px rgba(16,40,38,0.14), inset 0 1px 0 rgba(255,255,255,0.80);
+  --pill-border: rgba(20,33,31,0.10);
+  --code-bg: rgba(20,33,31,0.05);
+  --code-border: rgba(20,33,31,0.10);
+  --orb-core: rgba(228,255,250,0.94);
+  --orb-base: rgba(40,140,150,0.85);
+  --orb-bloom: rgba(70,175,180,0.88);
+  --orb-lobe-a: rgba(180,250,238,0.78);
+  --orb-lobe-b: rgba(150,205,225,0.62);
+  --orb-lobe-c: rgba(160,175,225,0.55);
+  --orb-shadow: rgba(10,60,66,0.55);
+  --orb-specular: rgba(244,255,254,0.70);
+  --orb-rim: rgba(40,110,150,0.52);
+}
+
+/* SYSTEM: media-query fallback before JS hydration */
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    --bg: #EEF3F3;
+    --bg-secondary: #F7FAFA;
+    --bg-tertiary: #E1EAEA;
+    --material-regular: rgba(247,250,250,0.94);
+    --material-thick: rgba(238,243,243,0.97);
+    --material-thick-opaque: #EEF3F3;
+    --separator-opaque: #CDDADA;
+    --text-primary: #14211F;
+    --text-secondary: rgba(20,33,31,0.66);
+    --text-tertiary: rgba(20,33,31,0.56);
+    --text-quaternary: rgba(20,33,31,0.30);
+    --accent: #0A6763;
+    --accent-fill: rgba(10,103,99,0.14);
+    --accent-contrast: #F7FAFA;
+    --talk-focus-ring: rgba(10,103,99,0.55);
+    --pill-bg: rgba(247,250,250,0.72);
+    --pill-bg-opaque: #F4F8F8;
+    --code-text: #24403D;
+    --ribbon-bg: #DCE6E6;
+    --sidebar-bg: #E4ECEC;
+    --material-thin: rgba(20,33,31,0.04);
+    --material-ultra-thin: rgba(20,33,31,0.02);
+    --fill-primary: rgba(20,33,31,0.08);
+    --fill-secondary: rgba(20,33,31,0.06);
+    --fill-tertiary: rgba(20,33,31,0.045);
+    --fill-quaternary: rgba(20,33,31,0.028);
+    --separator: rgba(20,33,31,0.14);
+    --scrim: rgba(16,40,38,0.18);
+    --shadow-subtle: 0 1px 2px rgba(16,40,38,0.06);
+    --shadow-ambient: 0 0 0 0.5px rgba(16,40,38,0.10);
+    --shadow-key: 0 2px 8px rgba(16,40,38,0.10), 0 8px 24px rgba(16,40,38,0.08);
+    --shadow-card: 0 0 0 0.5px rgba(16,40,38,0.08), 0 1px 3px rgba(16,40,38,0.07), 0 4px 12px rgba(16,40,38,0.06), inset 0 1px 0 rgba(255,255,255,0.70);
+    --shadow-overlay: 0 0 0 0.5px rgba(16,40,38,0.10), 0 4px 16px rgba(16,40,38,0.10), 0 16px 48px rgba(16,40,38,0.14), inset 0 1px 0 rgba(255,255,255,0.80);
+    --pill-border: rgba(20,33,31,0.10);
+    --code-bg: rgba(20,33,31,0.05);
+    --code-border: rgba(20,33,31,0.10);
+    --orb-core: rgba(228,255,250,0.94);
+    --orb-base: rgba(40,140,150,0.85);
+    --orb-bloom: rgba(70,175,180,0.88);
+    --orb-lobe-a: rgba(180,250,238,0.78);
+    --orb-lobe-b: rgba(150,205,225,0.62);
+    --orb-lobe-c: rgba(160,175,225,0.55);
+    --orb-shadow: rgba(10,60,66,0.55);
+    --orb-specular: rgba(244,255,254,0.70);
+    --orb-rim: rgba(40,110,150,0.52);
+  }
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --bg: #0F1719;
+    --bg-secondary: #162124;
+    --bg-tertiary: #1F2C30;
+    --material-regular: rgba(22,33,36,0.92);
+    --material-thick: rgba(15,23,25,0.96);
+    --material-thick-opaque: #0F1719;
+    --separator-opaque: #2B3B40;
+    --text-primary: #E2ECEB;
+    --text-secondary: rgba(226,236,235,0.62);
+    --text-tertiary: rgba(226,236,235,0.38);
+    --text-quaternary: rgba(226,236,235,0.22);
+    --accent: #3DBFB2;
+    --accent-fill: rgba(61,191,178,0.14);
+    --accent-contrast: #0F1719;
+    --talk-focus-ring: rgba(61,191,178,0.55);
+    --pill-bg: rgba(24,36,40,0.64);
+    --pill-bg-opaque: #151F23;
+    --code-text: #E2ECEB;
+    --ribbon-bg: #1A272B;
+    --sidebar-bg: #131E21;
+    --orb-core: rgba(150,240,225,0.78);
+    --orb-base: rgba(10,40,58,0.90);
+    --orb-bloom: rgba(30,140,170,0.64);
+    --orb-lobe-a: rgba(90,220,200,0.84);
+    --orb-lobe-b: rgba(60,150,210,0.62);
+    --orb-lobe-c: rgba(90,120,230,0.54);
+    --orb-shadow: rgba(3,12,20,0.95);
+    --orb-specular: rgba(236,255,252,0.88);
+    --orb-rim: rgba(160,225,255,0.64);
+  }
+}

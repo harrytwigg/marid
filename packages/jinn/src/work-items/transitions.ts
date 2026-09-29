@@ -1,9 +1,12 @@
 import { listSessionsByWorkItem } from '../sessions/registry.js';
+import { isExecutionAttempt } from './link-role.js';
 import { initDb } from '../shared/db.js';
 import { clearBlockRecord, DEFAULT_BLOCK_KIND, recordBlock, resolveBlock, type BlockKind } from './blocks.js';
 import { cascadeCloseDescendants } from './cascade.js';
 import { holdLiveSignalsUntilCommit, notifyTodoChanged, notifyTodoStatusChange } from './live-events.js';
 import { clearStopCause, writeStopCause, type TodoStopCause } from './stop-cause.js';
+import { changedStopCause, restateStopCause } from './stop-cause-restate.js';
+export { changedStopCause } from './stop-cause-restate.js';
 import { EDGES } from './transition-edges.js';
 import {
   appendWorkItemEvent,
@@ -164,7 +167,13 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     // move back to the queue and the count that ends the loop. Every other kind
     // does land where it already is, so their no-op stands.
     const blockKind: BlockKind | null = to === 'blocked' ? (opts.blockKind ?? DEFAULT_BLOCK_KIND) : null;
-    if (from === to && blockKind !== 'dependency') return { item, escalated: false }; // no-op: no write, no event
+    if (from === to && blockKind !== 'dependency') {
+      // A new cause on the same stop (a re-park) is not a no-op, and on a sticky stop it is the human's.
+      const changed = opts.stopCause && (to === 'blocked' || to === 'escalated') ? changedStopCause(db, id, opts.stopCause) : undefined;
+      if (!changed) return { item, escalated: false }; // no-op: no write, no event
+      if (STICKY_STATUSES.has(from) && !opts.human) throw new TransitionError('human-required', `work item ${id} is ${from} — changing why it is stopped is a human decision (operator surface only)`);
+      return restateStopCause(db, item, { merged: changed, stated: opts.stopCause!, actor, detail: opts.detail });
+    }
 
     if (STICKY_STATUSES.has(from) && !opts.human) {
       throw new TransitionError(
@@ -182,7 +191,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     }
     if (to === 'done' && opts.callerSessionId) {
       const linked = listSessionsByWorkItem(id);
-      if (linked.some((s) => s.id === opts.callerSessionId && s.workflowProvenance?.kind !== 'phase')) {
+      if (linked.some((s) => s.id === opts.callerSessionId && isExecutionAttempt(s))) {
         throw new TransitionError(
           'self-review-banned',
           `session ${opts.callerSessionId} executed work item ${id} and cannot mark it done — a reviewer does (self-review ban)`,

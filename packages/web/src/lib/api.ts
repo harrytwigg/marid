@@ -209,7 +209,7 @@ function writeHeaders(origin?: WriteOriginWire): Record<string, string> {
     : { "Content-Type": "application/json" };
 }
 
-async function post<T>(path: string, body?: unknown, origin?: WriteOriginWire): Promise<T> {
+export async function post<T>(path: string, body?: unknown, origin?: WriteOriginWire): Promise<T> {
   const res = await authFetch(path, {
     method: "POST",
     headers: writeHeaders(origin),
@@ -634,12 +634,14 @@ export interface WorkItemAttachmentWire {
   createdAt: string
 }
 
-/** One department row from GET /api/departments (Todos v2 slice 5). */
+/** One department row from GET /api/departments (Todos v2 slice 5). `selectable`
+ *  is false outside a configured `gateway.todoDepartments` (JIN-1). */
 export interface DepartmentSummaryWire {
   slug: string
   prefix: string
   createdAt: string
   todoCount: number
+  selectable?: boolean
 }
 
 /** The GET /api/work-items/:id payload: full row + live-derived spend + audit. */

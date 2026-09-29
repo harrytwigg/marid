@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "@/lib/api"
 import type { EngineLimitEngineSnapshot, EngineLimitsResponse } from "@/lib/api"
-import { useGateway } from "@/hooks/use-gateway"
-import { usePageVisibility } from "@/hooks/use-page-visibility"
+import { usePolledRead, type PolledReadState } from "@/hooks/use-polled-read"
 
 /** Re-fetch cadence while the tab is visible. Bounded (one timer) and paused
  *  when hidden so a backgrounded dashboard never storms the gateway. */
@@ -112,108 +110,23 @@ export function mergeAuthoritative(
   return { ...next, engines }
 }
 
-export interface EngineLimitsState {
-  data: EngineLimitsResponse | null
-  phase: "loading" | "ready"
-  refreshing: boolean
-  error: string | null
-  /** Bounded display clock — pass to deriveFreshness/label helpers so freshness
-   *  advances while the page stays open, independent of fetch completion. */
-  now: number
-  refresh: () => void
-}
+export type EngineLimitsState = PolledReadState<EngineLimitsResponse>
 
 /**
- * Owns the Limits page's refresh policy: initial load, expiry-while-visible,
- * visibility-return, and reconnect — all funnelled through one in-flight guard
- * so coincident triggers coalesce into a single request. Each request is
- * abort-bounded so a hung fetch can never wedge the guard; a failed or
- * degraded refresh keeps the last-known data (restart/offline recovery) and
- * surfaces the error beside it; and a display clock keeps freshness honest
- * even when no fetch ever completes.
+ * Owns the Limits page's refresh policy — the shared polled read (initial load,
+ * expiry-while-visible, visibility-return, reconnect, one in-flight guard, an
+ * abort-bounded request, last-known data kept on failure, a display clock) —
+ * plus the one rule that is this page's own: a degraded refresh merges over the
+ * last-known authoritative windows rather than replacing them.
  */
 export function useEngineLimits(): EngineLimitsState {
-  const { connectionSeq } = useGateway()
-  const visible = usePageVisibility()
-  const [data, setData] = useState<EngineLimitsResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-  const [now, setNow] = useState<number>(() => Date.now())
-  const inFlight = useRef(false)
-
-  const refresh = useCallback(() => {
-    if (inFlight.current) return
-    inFlight.current = true
-    setRefreshing(true)
-
-    const controller = new AbortController()
-    let settled = false
-    const settle = () => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      inFlight.current = false
-      setRefreshing(false)
-      setLoaded(true)
-    }
-    const timer = setTimeout(() => {
-      if (settled) return
-      controller.abort()
-      setError("Timed out refreshing engine limits.")
-      settle()
-    }, LIMITS_REQUEST_TIMEOUT_MS)
-
-    api
-      .getEngineLimits(undefined, { signal: controller.signal })
-      .then((res) => {
-        if (settled) return
-        setData((prev) => mergeAuthoritative(prev, res))
-        setError(null)
-      })
-      .catch((err) => {
-        if (settled || controller.signal.aborted) return // timeout path already handled
-        setError(err instanceof Error ? err.message : "Failed to load engine limits")
-      })
-      .finally(settle)
-  }, [])
-
-  // Initial load.
-  useEffect(() => {
-    refresh()
-  }, [refresh])
-
-  // Expiry: one bounded timer, live only while the tab is visible.
-  useEffect(() => {
-    if (!visible) return
-    const id = setInterval(refresh, LIMITS_REFRESH_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [visible, refresh])
-
-  // Visibility return: refresh when the tab comes back to the foreground.
-  const prevVisible = useRef(visible)
-  useEffect(() => {
-    if (visible && !prevVisible.current) refresh()
-    prevVisible.current = visible
-  }, [visible, refresh])
-
-  // Reconnect: refresh when the gateway socket re-opens (connectionSeq bumps).
-  const prevSeq = useRef(connectionSeq)
-  useEffect(() => {
-    if (connectionSeq !== prevSeq.current) {
-      prevSeq.current = connectionSeq
-      refresh()
-    }
-  }, [connectionSeq, refresh])
-
-  // Display clock: advance `now` while visible so freshness labels/states move
-  // forward on their own, even if a fetch hangs or the snapshot never changes.
-  useEffect(() => {
-    if (!visible) return
-    setNow(Date.now())
-    const id = setInterval(() => setNow(Date.now()), LIMITS_TICK_MS)
-    return () => clearInterval(id)
-  }, [visible])
-
-  return { data, phase: loaded ? "ready" : "loading", refreshing, error, now, refresh }
+  return usePolledRead<EngineLimitsResponse>({
+    fetch: (signal) => api.getEngineLimits(undefined, { signal }),
+    merge: mergeAuthoritative,
+    intervalMs: LIMITS_REFRESH_INTERVAL_MS,
+    timeoutMs: LIMITS_REQUEST_TIMEOUT_MS,
+    tickMs: LIMITS_TICK_MS,
+    timeoutMessage: "Timed out refreshing engine limits.",
+    failureMessage: "Failed to load engine limits",
+  })
 }

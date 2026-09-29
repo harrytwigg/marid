@@ -12,7 +12,7 @@ export interface HookPayload {
 }
 
 type HookListener = (h: HookPayload) => void;
-type UnclaimedHookHandler = (jinnSessionId: string, h: HookPayload) => void;
+type UnclaimedHookHandler = (jinnSessionId: string, h: HookPayload, context?: { foreignToRunningTurn?: boolean }) => void;
 interface Buffered { payload: HookPayload; at: number; }
 
 export class HookRegistry {
@@ -23,6 +23,8 @@ export class HookRegistry {
    *  typed straight into the xterm view, or a Stop arriving past the late-
    *  recovery window). Set once by the gateway. */
   private unclaimedHandler: UnclaimedHookHandler | undefined;
+  /** Observers of every delivery, claimed or not (see tap()). */
+  private taps = new Set<(jinnSessionId: string, h: HookPayload) => void>();
   /** Per-session debounce timers for the unclaimed-Stop fallback. */
   private unclaimedTimers = new Map<string, ReturnType<typeof setTimeout>>();
   constructor(private ttlMs = 30_000, sweepIntervalMs = 5_000, private unclaimedDelayMs = 2_000) {
@@ -68,7 +70,21 @@ export class HookRegistry {
     this.buffer.delete(jinnSessionId);
   }
 
+  /** See every hook as it arrives, before it is routed to a listener or the
+   *  buffer. The claude engine uses it to notice a turn typed into the terminal
+   * or a background re-invocation while no gateway turn
+   *  owns the session. Returns an unsubscribe. */
+  tap(observer: (jinnSessionId: string, h: HookPayload) => void): () => void {
+    this.taps.add(observer);
+    return () => { this.taps.delete(observer); };
+  }
+
   deliver(jinnSessionId: string, payload: HookPayload): void {
+    for (const observer of this.taps) {
+      try { observer(jinnSessionId, payload); } catch (err) {
+        console.warn(`[HookRegistry] hook tap threw for ${jinnSessionId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     const listener = this.listeners.get(jinnSessionId);
     if (listener) { listener(payload); return; }
     const arr = this.buffer.get(jinnSessionId) ?? [];
@@ -87,6 +103,24 @@ export class HookRegistry {
       String(payload.last_assistant_message ?? "").trim()
     ) {
       this.armUnclaimedTimer(jinnSessionId);
+    }
+  }
+
+  /** Hand a Stop straight to the unclaimed-Stop consumer even though a listener
+   *  is registered. Used when the registered turn has recognised the Stop as
+   *  not its own — a turn typed into the terminal or a background
+   *  re-invocation that finished while the gateway's prompt sat
+   *  queued behind it, or one replayed from the buffer that finished before the
+   *  turn registered. Synchronous on purpose: Claude Code is still blocked on
+   *  this Stop hook, so the transcript tail cannot yet contain the queued
+   *  prompt that runs next. */
+  consumeAsUnclaimed(jinnSessionId: string, payload: HookPayload): void {
+    if (!this.unclaimedHandler) return;
+    if (payload.hook_event_name !== "Stop" || !String(payload.last_assistant_message ?? "").trim()) return;
+    try {
+      this.unclaimedHandler(jinnSessionId, payload, { foreignToRunningTurn: true });
+    } catch (err) {
+      console.warn(`[HookRegistry] unclaimed hook handler threw for ${jinnSessionId}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

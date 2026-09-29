@@ -13,6 +13,7 @@ import type {
   EngineLimitWindow,
   JinnConfig,
 } from "./types.js";
+import { recordClaudeUsageSample } from "./claude-usage-history.js";
 import { CLAUDE_LIMITS_DIR } from "./paths.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
@@ -246,7 +247,7 @@ export async function collectClaudeLimits(config: JinnConfig): Promise<EngineLim
   // Live path: the OAuth usage API carries every bucket (including per-model
   // ones like the Fable weekly bucket) that the statusline payload never sees.
   if (liveWindows.length > 0 && !usageApiIsBlind(liveWindows, statusline)) {
-    return {
+    const live: EngineLimitEngineSnapshot = {
       ...snap,
       status: "live",
       source: "claude oauth usage api",
@@ -257,6 +258,11 @@ export async function collectClaudeLimits(config: JinnConfig): Promise<EngineLim
       context: statusline?.context,
       costUsd: statusline?.costUsd,
     };
+    // Every caller's reading — the loop's tick, the health refresh, the Limits
+    // page, the CLI — passes through here, so this is where the usage history
+    // the dashboard graphs is kept.
+    recordClaudeUsageSample(live);
+    return live;
   }
 
   return claudeFromStatusline(snap, accountPlan, !!latest, statusline);

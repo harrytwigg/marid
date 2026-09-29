@@ -958,6 +958,15 @@ export function useLiveSession(
         setBackgroundActivity((p.backgroundActivity as BackgroundActivity | null) ?? null)
       }
 
+      if (event === 'session:terminal-wait') {
+        // A turn started or stopped waiting behind one typed in the claude
+        // terminal. Refresh the record so turnProgress.waitingForTerminalTurn
+        // (what the composer shows) is authoritative.
+        api.getSession(sid, { messages: false })
+          .then((s) => { if (sessionIdRef.current === sid) setCurrentSession(s as Record<string, unknown>) })
+          .catch(() => { /* best-effort; the next load picks it up */ })
+      }
+
       if (event === 'session:external-turn') {
         // The gateway persisted messages that did NOT come from a normal web
         // turn (e.g. the user typed in the CLI view). Reconcile from the

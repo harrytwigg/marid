@@ -40,6 +40,7 @@ import {
   SettingsSelect,
   ToggleSwitch,
 } from "./shared"
+import { PRODUCT_NAME } from "@/lib/brand"
 
 
 
@@ -376,7 +377,7 @@ export default function SettingsPage() {
                   type="text"
                   maxLength={3}
                   className={`${CONTROL_CLASS} uppercase disabled:opacity-60`}
-                  placeholder="Optional, e.g. JNN"
+                  placeholder="Optional, e.g. MRD"
                   value={companyPrefixFrozen ? onboarding?.todoPrefix ?? "" : companyPrefixValue}
                   disabled={companyPrefixFrozen}
                   onChange={(e) => setCompanyPrefixValue(e.target.value.toUpperCase())}
@@ -408,7 +409,7 @@ export default function SettingsPage() {
                 <input
                   type="text"
                   className={CONTROL_CLASS}
-                  placeholder="Jinn"
+                  placeholder={PRODUCT_NAME}
                   value={nameValue}
                   onChange={(e) => setNameValue(e.target.value)}
                   onBlur={() => {

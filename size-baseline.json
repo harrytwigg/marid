@@ -316,7 +316,7 @@
       "lines": 631
     },
     "packages/jinn/src/gateway/api.ts": {
-      "lines": 5114,
+      "lines": 5058,
       "exempt": [
         "complexity",
         "max-depth",
@@ -833,7 +833,7 @@
       "lines": 336
     },
     "packages/jinn/src/work-items/__tests__/reconcile.test.ts": {
-      "lines": 433
+      "lines": 423
     },
     "packages/jinn/src/work-items/__tests__/relations.test.ts": {
       "lines": 334

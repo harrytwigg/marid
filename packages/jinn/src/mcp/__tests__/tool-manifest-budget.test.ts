@@ -7,7 +7,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // Fixed provider budget. Rebased for the experiment Todo link with the same
 // ~zero headroom discipline as before: new tool prose must stay concise rather
 // than growing into this ceiling.
-const MAX_MANIFEST_TOKENS = 6072;
+const MAX_MANIFEST_TOKENS = 6226;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -184,9 +184,52 @@ const ATTESTED = {
   // the last of the restated enums and duplicated field lists. So the ceiling
   // moves by the remaining 64 and Pi sits ON it again. As before: the next
   // addition to this surface has to buy its room before it spends any.
-  rpc: { tokens: 5551, sha256: "38c8d571742952c0f18538a248ba382890ce27013c6f6ccb6e23c87ce89e920e" },
-  pi: { tokens: 6072, sha256: "6550e55e90a92778fd96031126f3b485b1f8b1f939911445e6d4a8d084ba1b25" },
-  openai: { tokens: 5762, sha256: "08338610f923005449889331f6159417661f2e6054b80448007db9a07d78eb47" },
+  // Rebased for `intent` on delegate_task. A delegation links
+  // the delegate's session to the Todo, and the self-review ban reads that link
+  // as "you produced this" — so a reviewer delegated to close a Todo was
+  // refused the close. The link now records WHY, and the Todo's own status
+  // supplies the answer for the ordinary handoff (an `in_review` Todo is being
+  // handed to a reviewer), which is why this property is an override rather
+  // than a required field. It is the cheapest shape that still tells an agent
+  // when to reach for it: two enum values and one clause naming the default,
+  // no prose restating the enum. That is 31 tokens, and — as the paragraphs
+  // above record — there is no dead prose left on this surface to buy them back
+  // with, so the ceiling moves by exactly that and Pi sits ON it again. The next
+  // addition to this surface has to buy its room before it spends any.
+  // Rebased for `autoStart` on create_work_item and set_work_item_dispatch
+  //. An instance's auto-start Workflow spawns the assignee's session
+  // on backlog→assigned, so an employee that created a Todo and claimed it from
+  // the session already working it got a second session on the same Todo. The
+  // self-assign case is handled without any manifest cost (the assignment event
+  // records the actor's employee); this property is the explicit opt-out for a
+  // Todo that must wait for a hand-over. It is the cheapest shape that still
+  // says what `false` does without overstating it: one boolean on each tool,
+  // and a single clause on the create tool only — naming the todo-status
+  // trigger filter that honours it, since a Workflow without that filter does
+  // not — while the dispatch tool's boolean rides on it. That is 30 tokens,
+  // and — as every paragraph above records — there is no dead prose left on
+  // this surface to buy them back with, so the ceiling moves by exactly that
+  // and Pi sits ON it again. The next addition to this surface has to buy its
+  // room before it spends any.
+  // Rebased for `compact_session`: a session compacting its own
+  // context mid-task and resuming from a handoff, instead of dead-ending until a
+  // human starts a new one. Like the heartbeats group this is a new public
+  // capability, not prose growth on an existing tool. It is the cheapest shape
+  // that still works: a twelve-word description, five bare string properties and
+  // no property prose — the field names are the handoff's headings, and the
+  // operating manual teaches what goes in each. Two property descriptions were
+  // drafted and cut first (22 tokens). The remaining 84 are the tool's honest
+  // cost, and there is still no dead prose on this surface to buy them back
+  // with, so the ceiling moves by exactly that and Pi sits ON it again. Review
+  // added "Main agent only:" (4 more): Claude Code Task sub-agents inherit the
+  // jinn MCP with the parent's identity, so without it a sub-agent could compact
+  // the main thread from a handoff written in its own narrow context. That
+  // wording was then made precise (5 more): "main agent only" read as barring
+  // Jinn child sessions — a Todo-dispatched session among them — which can and
+  // should compact themselves. The bar is on a Task sub-agent, so it says that.
+  rpc: { tokens: 5699, sha256: "8e3683a4c72ea682b8d2c19f1ff75531813b3ffdf22fe4b943aa011495bd01a4" },
+  pi: { tokens: 6226, sha256: "03fb59934fdd4f3523df27bab7d2e6b1b40e78c4fe271c5564b1576c20470b3e" },
+  openai: { tokens: 5913, sha256: "47a0f2a3b2dd11493be5d2def9056d4e307433451d926a15db5fc960325438b9" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
@@ -253,7 +296,7 @@ describe("tool manifest budget", () => {
   it("keeps tool names, required arrays, and enum arrays stable", () => {
     const tools = buildTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
-    expect(tools).toHaveLength(75);
+    expect(tools).toHaveLength(76);
 
     const required = Object.fromEntries(tools.map((t) => [t.name, t.inputSchema.required ?? []]));
     expect(required).toEqual(EXPECTED_REQUIRED);

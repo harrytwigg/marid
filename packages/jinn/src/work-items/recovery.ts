@@ -23,12 +23,27 @@ export type AttentionLane = (typeof ATTENTION_LANES)[number];
 export const TODO_RECOVERY_ACTOR = "todo-recovery";
 export const MAX_RECOVERY_ATTEMPTS = 2;
 export const EXECUTION_TIMEOUT_MS = 4 * 60 * 60_000;
+
+/** The statuses the recovery sweep visits. A `work_item_recovery` row
+ *  describes an incident only while the Todo is in one of these: leaving them —
+ *  to `backlog`, or out to a terminal — ends the incident, and the sweep will
+ *  never look at the Todo again, so no reader may treat the row as current
+ *  outside this set. Without this guard a lane classified while `blocked`
+ *  (e.g. a generic operator fallback) outlives the re-queue to backlog. */
+export const RECOVERY_SWEPT_STATUSES = ["assigned", "executing", "in_review", "blocked", "escalated"] as const;
+
+export function isRecoverySweptStatus(status: string): boolean {
+  return (RECOVERY_SWEPT_STATUSES as readonly string[]).includes(status);
+}
+
 const FRESH_RUN_MS = 15 * 60_000;
 
 /** A pipeline between runs, not a stalled one. */
 export function runIsFresh(endedAt: string | null | undefined, now: number): boolean {
   return endedAt ? now - Date.parse(endedAt) < FRESH_RUN_MS : false;
 }
+
+export const EXECUTING_UNHANDED_REASON = "executing with nothing running for over 4h, and not handed in for review since";
 
 /** Generic fallback: classifyRecovery found no specific incident. */
 export const GENERIC_OPERATOR_REASON = "no safe automatic recovery is known";
@@ -63,10 +78,35 @@ export interface RecoveryClassification {
   owningWorkflowId?: string;
 }
 
+/** Whether any execution attempt is live, when the newest one last moved, and
+ *  when the Todo last moved into `executing`. */
+export interface AttemptActivity {
+  inFlight: boolean;
+  lastActivityAt: string | null;
+  executingSince: string | null;
+}
+
+/**
+ * A Todo left in `executing` after its producer stopped. A clean run
+ * end no longer hands a reviewed Todo in, and the settle closes its run, so the
+ * open-run timeout above never sees it. Past the same 4h budget with nothing
+ * live, it goes to Manager attention rather than sitting in the column unseen.
+ * The clock starts at whichever is later, the last attempt or the move into
+ * `executing`: a review bounce or a re-open gets its own 4h, however long ago
+ * the producer last spoke.
+ */
+export function executingUnhanded(status: string, attempts: AttemptActivity | undefined, now: number): boolean {
+  if (status !== "executing" || !attempts || attempts.inFlight || !attempts.lastActivityAt) return false;
+  const quietSince = Math.max(Date.parse(attempts.lastActivityAt), Date.parse(attempts.executingSince ?? "") || 0);
+  return now - quietSince > EXECUTION_TIMEOUT_MS;
+}
+
 export interface RecoveryIncidentInput {
   todo: { id: string; status: string; assignee: string | null; source: string };
   lastRun?: { id: string; outcome: string; error: string | null; endedAt: string | null };
   openRun?: { startedAt: string; sessionInFlight: boolean };
+  /** The Todo's linked execution attempts (review and phase links excluded). */
+  attempts?: AttemptActivity;
   approval?: { state: string; operatorOnly: boolean };
   verifyMode?: "trust" | "verify" | "thorough";
   owningWorkflowId?: string;
@@ -106,11 +146,20 @@ function classifyFromFailure(input: RecoveryIncidentInput): RecoveryClassificati
   return undefined;
 }
 
-function classifyStalled(input: RecoveryIncidentInput, status: string, now: number): RecoveryClassification | undefined {
+function classifyStalledExecution(input: RecoveryIncidentInput, now: number): RecoveryClassification | undefined {
   const open = input.openRun;
-  if (status === "executing" && open && !open.sessionInFlight && now - Date.parse(open.startedAt) > EXECUTION_TIMEOUT_MS) {
+  if (open && !open.sessionInFlight && now - Date.parse(open.startedAt) > EXECUTION_TIMEOUT_MS) {
     return { class: "code", lane: "manager", reason: "execution has outlived the 4h timeout without an in-flight session to speak for it" };
   }
+  if (!open && executingUnhanded("executing", input.attempts, now)) {
+    return { class: "operator", lane: "manager", reason: EXECUTING_UNHANDED_REASON };
+  }
+  return undefined;
+}
+
+function classifyStalled(input: RecoveryIncidentInput, status: string, now: number): RecoveryClassification | undefined {
+  const open = input.openRun;
+  if (status === "executing") return classifyStalledExecution(input, now);
   if (status === "assigned" && input.owningWorkflowId && !open && !runIsFresh(input.lastRun?.endedAt, now)) {
     return { class: "transient", lane: "recovering", reason: "assigned to a pipeline with no active run" };
   }

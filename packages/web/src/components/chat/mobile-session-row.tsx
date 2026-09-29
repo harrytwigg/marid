@@ -4,6 +4,7 @@ import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { cleanPreview } from "@/lib/clean-preview"
 import { cn } from "@/lib/utils"
 import { ACTION_WIDTH, MobileRowMenu, SwipeActionRails, type RowActions } from "@/components/chat/mobile-row-actions"
+import { SessionSelectCheckbox } from "@/components/chat/session-row-menu"
 import {
   formatTime,
   getSessionActivity,
@@ -36,9 +37,13 @@ export interface MobileSessionRowProps {
   handleDuplicate: (sessionId: string) => void
   handleStop: (sessionId: string) => void
   handleArchive: (session: Session) => void
-  setDeleteTarget: (target: { type: "session" | "employee"; id: string; label: string; sessions?: Session[] } | null) => void
+  setDeleteTarget: (target: { type: "session" | "employee" | "bulk"; id: string; label: string; sessions?: Session[] } | null) => void
   setRenamingSessionId: (id: string | null) => void
   updateSessionTitle: (id: string, title: string) => void
+  /** Multi-select: the row becomes a checkbox toggling membership in the batch. */
+  selectionMode?: boolean
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
 }
 
 interface SummaryProps {
@@ -148,19 +153,25 @@ function RowRenameInput({
 function RowSurface({
   swipe,
   isActive,
+  swipeEnabled = true,
   children,
 }: {
   swipe: ReturnType<typeof useSwipeActions>
   isActive: boolean
+  /** Selection mode turns the whole row into a checkbox, so the swipe gesture
+   *  (and its rails) is off — one tap target, one meaning. */
+  swipeEnabled?: boolean
   children: React.ReactNode
 }) {
   return (
     <div
-      data-pressed={swipe.pressing || undefined}
-      onPointerDown={swipe.onPointerDown}
-      onClickCapture={swipe.onClickCapture}
+      data-pressed={(swipeEnabled && swipe.pressing) || undefined}
+      onPointerDown={swipeEnabled ? swipe.onPointerDown : undefined}
+      onClickCapture={swipeEnabled ? swipe.onClickCapture : undefined}
       style={{
-        transform: `translate3d(${swipe.offset}px, 0, 0)`,
+        // A rail left open when selection mode turns on must not keep the row
+        // shifted: the transform follows the same switch as the gesture.
+        transform: `translate3d(${swipeEnabled ? swipe.offset : 0}px, 0, 0)`,
         transitionProperty: "transform",
         transitionDuration: swipe.dragging ? "var(--duration-instant)" : "var(--duration-base)",
         transitionTimingFunction: "var(--ease-snappy)",
@@ -190,6 +201,44 @@ function rowActions(props: MobileSessionRowProps, swipe: ReturnType<typeof useSw
   }
 }
 
+/** The tappable body: opens the chat, or — in selection mode — toggles the row's
+ *  membership in the batch. Extracted so MobileSessionRow stays under the
+ *  function-length cap as selection mode grows. */
+function MobileRowButton({ props, title, isSelected, onClick }: {
+  props: MobileSessionRowProps
+  title: string
+  isSelected: boolean
+  onClick: () => void
+}) {
+  const { session } = props
+  const isActive = session.id === props.selectedId
+  const isUnread =
+    !props.readSessions.has(session.id) && session.status !== "running" && session.status !== "error"
+  return (
+    <button
+      onClick={onClick}
+      {...(props.selectionMode && {
+        role: "checkbox",
+        "aria-checked": isSelected,
+        "aria-label": `Select ${title}`,
+      })}
+      className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left"
+    >
+      {props.selectionMode ? <SessionSelectCheckbox checked={isSelected} /> : null}
+      <RowSummary
+        session={session}
+        avatarName={props.avatarName}
+        displayName={props.displayName}
+        title={title}
+        strong={isUnread || isActive}
+        showPin={props.pinnedSessions.has(session.id) && !props.hidePin}
+        isArchived={isArchivedSession(session)}
+        readSessions={props.readSessions}
+      />
+    </button>
+  )
+}
+
 /** The phone chat row: one comfortable list cell, avatar leading, name and time
  *  on the strong line, chat title on the quiet one. Swipe reveals the actions the
  *  desktop row already offers — Pin leading, Archive + Delete trailing — and the
@@ -200,36 +249,34 @@ export const MobileSessionRow = React.memo(function MobileSessionRow(props: Mobi
   const isActive = session.id === props.selectedId
   const isPinned = props.pinnedSessions.has(session.id)
   const isArchived = isArchivedSession(session)
-  const isUnread =
-    !props.readSessions.has(session.id) && session.status !== "running" && session.status !== "error"
+  const isSelected = !!props.selectionMode && !!props.selectedIds?.has(session.id)
   const swipe = useSwipeActions({ leading: ACTION_WIDTH, trailing: ACTION_WIDTH * 2 })
   const actions = rowActions(props, swipe, title)
 
-  const openChat = () => {
+  const handleRowClick = () => {
+    if (props.selectionMode) {
+      props.onToggleSelect?.(session.id)
+      return
+    }
+    // An open row spends its next tap dismissing itself, the way a native list
+    // cell does — otherwise the only way back is a second swipe.
+    if (swipe.openSide) {
+      swipe.close()
+      return
+    }
     props.onSelect(session.id)
     props.onEmployeeSessionsAvailable?.([session])
   }
 
   return (
     <div data-row="mobile" className="relative overflow-hidden">
-      {swipe.offset !== 0 ? (
+      {/* Selection mode owns the row's tap: a swipe rail would expose a second,
+          contradictory action (per-row archive/delete) behind a gesture. */}
+      {swipe.offset !== 0 && !props.selectionMode ? (
         <SwipeActionRails side={swipe.offset < 0 ? "trailing" : "leading"} isPinned={isPinned} isArchived={isArchived} {...actions} />
       ) : null}
-      <RowSurface swipe={swipe} isActive={isActive}>
-        {/* An open row spends its next tap dismissing itself, the way a native
-            list cell does — otherwise the only way back is a second swipe. */}
-        <button onClick={swipe.openSide ? swipe.close : openChat} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left">
-          <RowSummary
-            session={session}
-            avatarName={props.avatarName}
-            displayName={props.displayName}
-            title={title}
-            strong={isUnread || isActive}
-            showPin={isPinned && !props.hidePin}
-            isArchived={isArchived}
-            readSessions={props.readSessions}
-          />
-        </button>
+      <RowSurface swipe={swipe} isActive={isActive} swipeEnabled={!props.selectionMode}>
+        <MobileRowButton props={props} title={title} isSelected={isSelected} onClick={handleRowClick} />
         {props.renamingSessionId === session.id ? (
           <RowRenameInput
             title={title}
@@ -238,7 +285,9 @@ export const MobileSessionRow = React.memo(function MobileSessionRow(props: Mobi
             onDone={() => props.setRenamingSessionId(null)}
           />
         ) : null}
-        <MobileRowMenu session={session} isPinned={isPinned} isArchived={isArchived} {...actions} />
+        {props.selectionMode ? null : (
+          <MobileRowMenu session={session} isPinned={isPinned} isArchived={isArchived} {...actions} />
+        )}
       </RowSurface>
     </div>
   )

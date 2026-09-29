@@ -194,6 +194,7 @@ describe("InteractiveClaudeEngine — settings file survives model-switch cold r
     expect(ptys).toHaveLength(1);
     expect(ptys[0]._writes.at(-1)).toContain("turn two");
     expect(ptys[0]._writes.at(-1)).not.toContain("## Jinn platform context refresh");
+    hookCb!({ hook_event_name: "UserPromptSubmit" });
     hookCb!({ hook_event_name: "Stop", last_assistant_message: "done2" });
     await unchanged;
 
@@ -210,6 +211,7 @@ describe("InteractiveClaudeEngine — settings file survives model-switch cold r
     expect(ptys).toHaveLength(1);
     expect(ptys[0]._writes.at(-1)).toContain(refresh);
     expect(ptys[0]._writes.at(-1)).toContain("turn three");
+    hookCb!({ hook_event_name: "UserPromptSubmit" });
     hookCb!({ hook_event_name: "Stop", last_assistant_message: "done3" });
     await dirty;
   });

@@ -8,6 +8,7 @@ import {
 } from '@/lib/settings'
 import { useOnboarding } from '@/hooks/use-onboarding'
 import { useRootCssVariables } from '@/hooks/use-root-css-variables'
+import { PRODUCT_NAME } from "@/lib/brand"
 
 interface EmployeeDisplay {
   emoji: string
@@ -285,8 +286,8 @@ export function DocumentTitle() {
   const { settings } = useSettings()
 
   useEffect(() => {
-    const name = settings.portalName || 'Jinn'
-    const desired = `${name} - AI Gateway`
+    const name = settings.portalName || PRODUCT_NAME
+    const desired = name
     if (document.title !== desired) {
       document.title = desired
     }

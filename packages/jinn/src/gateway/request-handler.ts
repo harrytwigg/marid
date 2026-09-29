@@ -2,6 +2,7 @@ import type http from "node:http";
 import { handleApiRequest, type ApiContext } from "./api.js";
 import { authenticateGatewayRequest, authRequiredForRequest } from "./auth.js";
 import { isAllowedCorsOrigin, serveStatic } from "./server.js";
+import { createRemoteMcpHandler, type RemoteMcpHandler } from "./remote-mcp/http.js";
 
 /** What the handler needs from the running gateway. `authRequired` is a call and
  *  not a value because `config.yaml` reloads while the server is up. */
@@ -13,6 +14,8 @@ export interface GatewayRequestHandlerDependencies {
   apiContext: ApiContext;
   /** Where the built web UI lives. */
   webDir: string;
+  /** The `/mcp` connector endpoint; built from the fields above unless a test injects one. */
+  remoteMcp?: RemoteMcpHandler;
 }
 
 /**
@@ -71,8 +74,9 @@ function serveWebUi(req: http.IncomingMessage, res: http.ServerResponse, webDir:
 }
 
 /**
- * The gateway's HTTP request handler: CORS, then the `OPTIONS` short-circuit,
- * then the auth gate, then the `/api/` dispatch, then static files.
+ * The gateway's HTTP request handler: the remote MCP connector paths (their own
+ * auth), then CORS, then the `OPTIONS` short-circuit, then the auth
+ * gate, then the connector status read, then the `/api/` dispatch, then static files.
  *
  * That order is itself a security property — `/api/plugins/<id>/*` answers 404
  * versus 200 only to a caller the auth gate has already let through, so an
@@ -84,8 +88,13 @@ function serveWebUi(req: http.IncomingMessage, res: http.ServerResponse, webDir:
  * ignores a handler's return value, so this is invisible in production.
  */
 export function createGatewayRequestHandler(deps: GatewayRequestHandlerDependencies) {
+  const remoteMcp = deps.remoteMcp ?? createRemoteMcpHandler({ getConfig: deps.apiContext.getConfig, gatewayAuthToken: deps.gatewayAuthToken });
   return (req: http.IncomingMessage, res: http.ServerResponse): void | Promise<void> => {
     const url = req.url || "/";
+    // `/mcp` and its metadata answer before CORS and the gateway-token gate: no
+    // browser may reach it (FR-007) and its credential is the Access assertion, never the token.
+    const remote = remoteMcp.handle(req, res);
+    if (remote !== false) return remote;
     const corsAllowed = setCorsHeaders(req, res);
 
     if (url.startsWith("/api/") && !corsAllowed) {
@@ -101,6 +110,8 @@ export function createGatewayRequestHandler(deps: GatewayRequestHandlerDependenc
     }
 
     if (rejectedUnauthenticated(req, res, deps)) return;
+
+    if (remoteMcp.serveStatus(req, res)) return;
 
     if (url.startsWith("/api/")) return handleApiRequest(req, res, deps.apiContext);
 

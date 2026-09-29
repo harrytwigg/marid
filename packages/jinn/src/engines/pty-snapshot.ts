@@ -40,6 +40,14 @@ export class PtySnapshot {
   private readonly terminal: HeadlessTerminal;
   private readonly serializeAddon: SerializeAddon;
   private pending: Promise<void> = Promise.resolve();
+  /** The mouse report encoding the program selected (?1006 SGR, ?1016 SGR
+   *  pixels), or undefined for xterm's default X10 encoding. SerializeAddon
+   *  restores the mouse TRACKING mode but not the encoding (xterm exposes no
+   *  public getter for it), so without re-asserting it a reconnecting browser
+   *  reports clicks and wheel in X10 to a program that asked for SGR — which
+   *  cannot express a column past 95 in ASCII, and which a program may reject
+   *  outright. Tracked from the stream, appended to every capture. */
+  private mouseEncoding: 1006 | 1016 | undefined;
 
   constructor(options: PtySnapshotOptions) {
     this.terminal = new Terminal({
@@ -55,6 +63,7 @@ export class PtySnapshot {
     // The browser and headless Terminal addon contracts are structurally
     // identical, but addon-serialize's declarations name @xterm/xterm.
     this.terminal.loadAddon(this.serializeAddon as never);
+    this.trackMouseEncoding();
     if (options.initial?.data) {
       this.pending = this.writeQueued(options.initial.data);
     }
@@ -106,6 +115,7 @@ export class PtySnapshot {
     }
     const bounded = Buffer.byteLength(data, "utf8") <= PTY_SNAPSHOT_MAX_BYTES;
     if (!bounded) data = "";
+    if (data && this.mouseEncoding) data += `\u001b[?${this.mouseEncoding}h`;
 
     return {
       data,
@@ -133,6 +143,24 @@ export class PtySnapshot {
   dispose(): void {
     this.serializeAddon.dispose();
     this.terminal.dispose();
+  }
+
+  private trackMouseEncoding(): void {
+    const flags = (params: (number | number[])[]) => params.flatMap((p) => (Array.isArray(p) ? p : [p]));
+    // Handlers return false: xterm still applies every mode itself.
+    this.terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
+      for (const flag of flags(params)) if (flag === 1006 || flag === 1016) this.mouseEncoding = flag;
+      return false;
+    });
+    this.terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
+      for (const flag of flags(params)) if (flag === this.mouseEncoding) this.mouseEncoding = undefined;
+      return false;
+    });
+    // RIS (ESC c) resets the encoding along with everything else.
+    this.terminal.parser.registerEscHandler({ final: "c" }, () => {
+      this.mouseEncoding = undefined;
+      return false;
+    });
   }
 
   private writeQueued(data: string): Promise<void> {

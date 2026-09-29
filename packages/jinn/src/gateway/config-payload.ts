@@ -92,8 +92,9 @@ function mergeArrayItems(source: unknown[], target: unknown): unknown[] {
  * the PUT carries the map the operator wants, the merge adds the dropped key
  * back off disk, and the row reappears on the next reload. Arrays already behave
  * this way, which is why editing the `fallback` chain never had the bug.
+ * `engines.opencode.usageLimits.monthlyUsd` is the same kind of table.
  */
-const REPLACED_NOT_MERGED_KEYS = new Set(["fallbackModelMap"]);
+const REPLACED_NOT_MERGED_KEYS = new Set(["fallbackModelMap", "monthlyUsd"]);
 
 export function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
   const result = { ...target };

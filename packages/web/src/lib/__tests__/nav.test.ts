@@ -37,6 +37,7 @@ describe('OVERFLOW_ITEMS (the More screen)', () => {
       '/org',
       '/cron',
       '/limits',
+      '/auto-dispatch',
       '/logs',
       '/skills',
       '/settings',

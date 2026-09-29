@@ -39,23 +39,29 @@ fs.writeFileSync(
 
 let server: http.Server;
 let port: number;
+let cookie: string;
 let emit: (id: string, event: unknown) => void;
 let channel: import("../plugin-events-ws.js").PluginEventsChannel;
 
 beforeAll(async () => {
   const { loadConfig } = await import("../../shared/config.js");
   const config = loadConfig();
-  const { authenticateGatewayRequest, authRequiredForRequest, shouldRequireGatewayAuth } = await import("../auth.js");
+  const { authenticateGatewayRequest, authRequiredForRequest, shouldRequireGatewayAuth, createAuthSession, authCookieName, authDeviceCookieName } = await import("../auth.js");
   const { createPluginEventsChannel, matchPluginEventsPath } = await import("../plugin-events-ws.js");
+  const { rejectCrossOriginUpgrade } = await import("../upgrade-guards.js");
+  const browser = createAuthSession(tmpHome, { headers: { "user-agent": "plugin-events-ws test" }, socket: { remoteAddress: "127.0.0.1" } } as never, { kind: "local", name: "plugin-events-ws test" });
+  cookie = `${authCookieName(tmpHome)}=${browser.secret}; ${authDeviceCookieName(tmpHome)}=${browser.device.id}`;
   ({ appendPluginEvent: emit } = await import("../../plugins/event-log.js"));
 
   channel = createPluginEventsChannel(() => config);
   server = http.createServer();
 
   // The gateway's upgrade gate, in the order server.ts runs it: authenticate
-  // first, match the path second. Nothing is re-implemented here — both calls
-  // are the real ones from auth.ts, and the events channel is handed a caller
-  // that has already passed them.
+  // first, match the path second, then refuse a browser on a foreign origin.
+  // Every check is the real one from auth.ts and upgrade-guards.ts, but their
+  // order here is a copy: server.ts's handler is a closure inside startGateway.
+  // The source tests in pty-upgrade-origin.test.ts pin that the gateway itself
+  // wires them this way.
   server.on("upgrade", (req, socket, head) => {
     const pathname = (req.url || "").split("?")[0];
     if (shouldRequireGatewayAuth(config) && authRequiredForRequest("GET", pathname)) {
@@ -66,7 +72,10 @@ beforeAll(async () => {
       }
     }
     const id = matchPluginEventsPath(pathname);
-    if (id) return channel.handleUpgrade(req, socket, head, id);
+    if (id) {
+      if (rejectCrossOriginUpgrade(req, socket)) return;
+      return channel.handleUpgrade(req, socket, head, id);
+    }
     socket.destroy();
   });
 
@@ -110,6 +119,40 @@ describe("the upgrade gate", () => {
 
     const withToken = await settle(authed(`/api/plugins/${PLUGIN_ID}/events`));
     expect(withToken.opened).toBe(true);
+  });
+
+  // the cookie flows from a same-site sibling subdomain, so a browser
+  // there could read every plugin's event stream on the operator's session.
+  it("refuses the operator's cookie from a sibling subdomain with a 403", async () => {
+    const sibling = await settle(connect(`/api/plugins/${PLUGIN_ID}/events`, {
+      cookie, host: "jinn.example.test", origin: "https://blog.example.test",
+    }));
+    expect(sibling).toEqual({ opened: false, status: 403 });
+
+    const behindProxy = await settle(connect(`/api/plugins/${PLUGIN_ID}/events`, {
+      cookie, "x-forwarded-host": "jinn.example.test", origin: "https://blog.example.test",
+    }));
+    expect(behindProxy).toEqual({ opened: false, status: 403 });
+  });
+
+  it("admits the cookie from the gateway's own origin, direct, proxied or through Vite dev", async () => {
+    const ownOrigins: Record<string, string>[] = [
+      { origin: `http://127.0.0.1:${port}` },
+      { host: "jinn.example.test", origin: "https://jinn.example.test" },
+      { "x-forwarded-host": "jinn.example.test", origin: "https://jinn.example.test" },
+      { "x-forwarded-host": "localhost:5173", origin: "http://localhost:5173" },
+    ];
+    for (const headers of ownOrigins) {
+      const ws = connect(`/api/plugins/${PLUGIN_ID}/events`, { cookie, ...headers });
+      expect(await settle(ws), JSON.stringify(headers)).toEqual({ opened: true });
+      ws.close();
+    }
+  });
+
+  it("leaves a caller with no Origin to the auth gate: the native shell's cookie socket, an API client", async () => {
+    const native = connect(`/api/plugins/${PLUGIN_ID}/events`, { cookie });
+    expect(await settle(native)).toEqual({ opened: true });
+    native.close();
   });
 
   it("has no authentication of its own to keep in step with that gate", () => {

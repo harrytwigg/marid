@@ -187,6 +187,7 @@ export const payloadGuards: Record<GatewayEventName, PayloadGuard> = {
   "session:deleted": isSessionIdPayload,
   "session:stopped": isSessionIdPayload,
   "session:external-turn": isSessionIdPayload,
+  "session:terminal-wait": (value) => isRecord(value) && isString(value.sessionId) && typeof value.waiting === "boolean",
   "session:interrupted": (value) => isRecord(value) && isString(value.sessionId) && isString(value.reason),
   "session:completed": isSessionCompleted,
   "session:delta": isSessionDelta,

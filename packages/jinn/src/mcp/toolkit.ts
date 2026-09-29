@@ -42,6 +42,9 @@ export interface JinnMcpContext {
   fetchFn?: typeof fetch;
   /** Per-request budget in ms (default {@link GATEWAY_TIMEOUT_MS}); tests shrink it. */
   timeoutMs?: number;
+  /** False when the caller has no host of its own to read files on (the remote
+   *  connector): results then omit this-host paths and URLs. */
+  hostLocations?: boolean;
 }
 
 /**
@@ -91,8 +94,10 @@ export function assertBoundCaller(ctx: JinnMcpContext): asserts ctx is JinnMcpCo
  *     (Promise.race + AbortController — the race bounds even a fetch stub/impl
  *     that ignores the signal; the abort lets real implementations clean up);
  *   - a fetch rejection (ECONNREFUSED, socket reset mid-upload, DNS) is rethrown
- *     as a structured JinnMcpToolError carrying method/route/gateway context —
- *     a bare "fetch failed" never reaches the agent.
+ *     as a structured JinnMcpToolError carrying method/route/gateway context and
+ *     the socket's code from `cause` — a bare "fetch failed" never reaches the
+ *     agent, and a refused connect stays distinguishable from a reset after the
+ *     request went out (which a non-idempotent caller must not blindly retry).
  */
 export async function gatewayRequest(
   ctx: JinnMcpContext,
@@ -117,7 +122,10 @@ export async function gatewayRequest(
   }
   const ac = new AbortController();
   const init: RequestInit = { method, headers, signal: ac.signal };
-  if (body !== undefined) {
+  if (body instanceof FormData) {
+    // Multipart upload: fetch writes the content-type WITH its boundary.
+    init.body = body;
+  } else if (body !== undefined) {
     headers["content-type"] = "application/json";
     init.body = JSON.stringify(body);
   }
@@ -149,9 +157,12 @@ export async function gatewayRequest(
     result = await Promise.race([attempt, timeout]);
   } catch (e) {
     if (e instanceof JinnMcpToolError) throw e; // the timeout above
-    const cause = e instanceof Error ? e.message : String(e);
+    // fetch reports "fetch failed" and keeps the socket's code on `cause`; the
+    // code is what tells a refused connect from a reset mid-upload.
+    const code = e instanceof Error ? (e.cause as { code?: unknown } | undefined)?.code : undefined;
+    const cause = e instanceof Error ? `${e.message}${typeof code === "string" ? ` (${code})` : ""}` : String(e);
     throw new JinnMcpToolError(
-      `gateway ${method} ${pathAndQuery} failed before a response: ${cause} — could not reach the gateway at ${base}; check that it is running (and JINN_GATEWAY_URL points at it), then retry.`,
+      `gateway ${method} ${pathAndQuery} failed before a response: ${cause} — the connection to the gateway at ${base} was refused or dropped; check that it is running (and JINN_GATEWAY_URL points at it), then retry.`,
     );
   } finally {
     if (timer !== undefined) clearTimeout(timer);

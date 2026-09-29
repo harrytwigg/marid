@@ -58,6 +58,19 @@ Workflows are reusable automations - the HOW. Use or propose one when the same j
 
 Workflow runs are durable records, not Sessions. Human approvals and cancellation belong to the Workflow run and never change a Todo.
 
+### Todo departments
+
+By default a Todo's department is open: any slug a writer names becomes one (and mints its ID prefix), and assigning a Todo moves it into the assignee's org department. To classify Todos by the work instead, close the set in `config.yaml`:
+
+```yaml
+gateway:
+  todoDepartments:
+    allowed: [client, platform, general]
+    default: general
+```
+
+Then create and the operator's edit pen accept only those slugs, a Todo created without one lands in `default`, and assignment or delegation never changes a Todo's department. Todos already in another department keep it (and their ID) until the operator moves them.
+
 ## Ranks
 
 | Rank | Privileges |

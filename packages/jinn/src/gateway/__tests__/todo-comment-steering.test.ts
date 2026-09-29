@@ -189,6 +189,18 @@ describe("Todo comments steered into a delegated session", () => {
     expect(registry.listPendingSessionDeliveries()).toHaveLength(1);
   });
 
+  it("steers with a remote MCP connector's comment, as with the operator's (FR-013a(3) lifted)", async () => {
+    const item = todo("Steered from claude.ai");
+    delegatedSession(item.id);
+    const connector = registry.createSession({ engine: "codex", source: "remote-mcp", sourceRef: "remote-mcp:op@example.com" });
+
+    const posted = await postComment(item.id, "Also check the mobile layout.", sessionHeaders(connector.id));
+    expect(posted.author).toBe(`session:${connector.id}`);
+    const deliveries = registry.listPendingSessionDeliveries();
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]!.payload.message).toContain("check the mobile layout");
+  });
+
   it("never echoes a session's own comment back to it, but still delivers another author's", async () => {
     const item = todo("Break the echo");
     const session = delegatedSession(item.id);

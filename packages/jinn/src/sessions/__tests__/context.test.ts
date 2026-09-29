@@ -135,14 +135,15 @@ describe("buildContext — config awareness", () => {
   });
 
   it("preserves implicit configured model defaults and normalizes an empty log level", () => {
+    const executable = process.execPath;
     const config = {
       gateway: { host: "127.0.0.1", port: 7799 },
       engines: {
         default: "antigravity",
-        claude: { model: "opus" },
-        codex: { model: "gpt-5.5" },
-        antigravity: {},
-        grok: {},
+        claude: { model: "opus", bin: executable },
+        codex: { model: "gpt-5.5", bin: executable },
+        antigravity: { bin: executable },
+        grok: { bin: executable },
       },
       logging: { level: "" },
     } as unknown as JinnConfig;
@@ -157,6 +158,55 @@ describe("buildContext — config awareness", () => {
   it("omits the configuration section when no config is passed", () => {
     const out = buildContext({ ...baseOpts });
     expect(out).not.toContain("## Current configuration");
+  });
+});
+
+describe("buildContext — configuration advertises only engines that can run", () => {
+  // `bin` overrides make availability deterministic across hosts: an absolute
+  // path that exists (the running node binary) vs. one that cannot.
+  const installed = process.execPath;
+  const missing = path.join(os.tmpdir(), "jinn-missing-engine-cli");
+
+  it("omits a configured engine whose CLI is not installed", () => {
+    const config = {
+      gateway: { host: "127.0.0.1", port: 7799 },
+      engines: {
+        default: "claude",
+        claude: { model: "opus", bin: installed },
+        codex: { model: "gpt-5.5", bin: missing },
+      },
+      logging: { level: "info" },
+    } as unknown as JinnConfig;
+
+    const out = buildContext({ ...baseOpts, config });
+
+    expect(out).toContain("## Current configuration");
+    expect(out).toContain("- Claude model: opus");
+    expect(out).not.toContain("Codex model");
+    // Default/active lines are independent of per-engine availability.
+    expect(out).toContain("- Default engine: claude");
+  });
+
+  it("keeps a configured engine whose name the availability probe does not know", () => {
+    const config = {
+      gateway: { host: "127.0.0.1", port: 7799 },
+      engines: {
+        default: "claude",
+        claude: { model: "opus", bin: installed },
+        "local-llm": { model: "llama-4" },
+      },
+    } as unknown as JinnConfig;
+
+    const out = buildContext({
+      ...baseOpts,
+      config,
+      engine: "local-llm",
+      model: "resolved-local",
+    } as Parameters<typeof buildContext>[0] & { model: string });
+
+    expect(out).toContain("- Local-llm model: llama-4");
+    expect(out).toContain("- Active engine: local-llm");
+    expect(out).toContain("- Active model: resolved-local");
   });
 });
 
@@ -267,7 +317,7 @@ describe("buildContext — Jinn MCP usage directive", () => {
     expect(companyBlock).not.toContain("You are QA Engineer");
     expect(companyBlock).not.toContain("You report to Ops Director");
     expect(out).toContain("Your hands are the attached Jinn MCP");
-    expect(out).toContain("Todos are your live work ledger");
+    expect(out).toContain("Todos are your live work ledger - find and update your Todo; when it is finished, move it to in_review yourself");
     expect(out).toContain("Workflows are reusable automations (the HOW)");
     expect(out).toContain("Todos and Workflows are SEPARATE");
     expect(out).toContain("One employee may run multiple child sessions");

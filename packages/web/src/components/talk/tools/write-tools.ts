@@ -178,8 +178,8 @@ const assignTodo: TalkTool = {
         performed: `Assigned ${id} to ${assignee}.`,
         data: { from: wasAssignee, assignee },
         reverse: async () => {
-          // One assign writes three fields: the name, the department it takes
-          // from the named employee's record, and — out of the backlog — the
+          // One assign writes three fields: the name, the department (the named
+          // employee's, unless gateway.todoDepartments keeps it), and — out of the backlog — the
           // status. The assign route can only ever put back a department that
           // employee still has, so all of the ownership goes back through the
           // version-fenced edit lane, which can name both.

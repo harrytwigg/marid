@@ -23,6 +23,9 @@ export interface FireWorkflowEventInput {
 }
 
 interface ScheduleIndex extends IndexedTrigger { task: ScheduledTask }
+/** A run in one of these holds nothing any more — the same three
+ *  `listRecoverableRuns` leaves out. */
+const SETTLED_RUN_STATUSES: ReadonlySet<WorkflowRunDetail["status"]> = new Set(["completed", "failed", "cancelled"]);
 function bad(message: string): never { throw new WorkflowRepositoryError("bad-input", message); }
 function payload(value: unknown): Record<string, JsonValue> {
   const parsed = jsonValueSchema.safeParse(value);
@@ -45,7 +48,7 @@ function refused(reason: string): TodoMismatch { return { filter: "other", reaso
  *  run always says which filter refused it. */
 function todoMismatch(node: TriggerNode, event: WorkflowTodoStatusEvent): TodoMismatch | undefined {
   if (node.config.kind !== "todo-status") return refused("trigger is not a todo-status trigger");
-  const { actor, label, department, assignee, delegates, unlabeled, unassigned, rootOnly } = node.config;
+  const { actor, label, department, assignee, delegates, unlabeled, unassigned, rootOnly, selfAssigned, autoStart } = node.config;
   // An arming delegate moved the Todo as itself, so the event names its session
   // rather than the operator; the stamp the status route wrote at that moment is
   // what says the operator's authority stands behind it. Only an `operator`
@@ -57,6 +60,13 @@ function todoMismatch(node: TriggerNode, event: WorkflowTodoStatusEvent): TodoMi
   }
   if (department !== undefined && department !== event.item.department) return refused(`department filter ${department} does not match`);
   if (assignee !== undefined && assignee !== event.item.assignee) return refused(`assignee filter ${assignee} does not match`);
+  // Both compare against the assignee the move itself recorded: the session
+  // that self-assigned is the one already working the Todo, and a later
+  // reassignment does not change who performed this event.
+  if (selfAssigned === false && event.actorEmployee !== null && event.actorEmployee === event.item.assignee) {
+    return refused(`selfAssigned filter does not match: ${event.actorEmployee} assigned the Todo to themself`);
+  }
+  if (autoStart && !event.item.autoStart) return refused("autoStart filter does not match: the Todo opted out of auto-start");
   const live = event.item.live;
   if (unlabeled !== undefined || unassigned !== undefined || rootOnly !== undefined) {
     // These three assert what the Todo IS right now, so a row that has since been
@@ -79,6 +89,11 @@ export class WorkflowTriggerService {
   private readonly schedules = new Map<string, ScheduleIndex>();
   private readonly todos = new Map<string, IndexedTrigger[]>();
   private readonly feed: WorkflowTodoEventFeed;
+  /** Events whose runs `fireTodo` is still creating. A run that settles inside
+   *  its own `start` — one that routes straight to a skip End — must not hand the
+   *  Todo back while a sibling definition's run on the same event is still to be
+   *  started on that claim; `fireTodo` decides for the whole event once it is done. */
+  private readonly firing = new Set<string>();
 
   constructor(private readonly repository: WorkflowRepository, private readonly runner: WorkflowRunner,
     private readonly now: () => string = () => new Date().toISOString(), feed?: WorkflowTodoEventFeed) {
@@ -207,18 +222,53 @@ export class WorkflowTriggerService {
     const owner = `workflow:${event.id}`;
     const refusal = this.refusalBeforeStart(event, claim.deferred === true, runnable, owner);
     if (refusal !== undefined) return suppressAll(this.feed, event, runnable, outcomes, refusal);
+    this.firing.add(event.id);
     try {
       for (const item of runnable) {
         const run = await this.start(item.definition, item.trigger, event.id, {
           todoId: event.workItemId, fromStatus: event.fromStatus, toStatus: event.toStatus,
-          actor: event.actor, source: event.item.source, department: event.item.department,
-          assignee: event.item.assignee, labels, labelList: labels.join(", "),
+          actor: event.actor, actorEmployee: event.actorEmployee, source: event.item.source, department: event.item.department,
+          assignee: event.item.assignee, autoStart: event.item.autoStart, labels, labelList: labels.join(", "),
         }, `todo:${event.id}`, event.workItemId);
         outcomes.push({ workflowId: item.definition.id, outcome: "started", runId: run.id, detail: `Todo event ${event.id} started.` });
       }
       settle(this.feed, event, deciding, outcomes);
-      return outcomes.filter((outcome) => outcome.outcome === "started").length;
     } catch (error) { releaseWorkItemClaim(event.workItemId, owner); this.feed.releaseEvent(event.id); throw error; }
+    finally { this.firing.delete(event.id); }
+    // Every run this event will ever start now exists. One that already settled
+    // inside `start` — a skip End, or a replay of a run that finished before the
+    // gateway died — released nothing on the way, so the Todo is handed back
+    // here if none of them is still going.
+    if (runnable.length > 0) this.releaseWhenNothingRuns(event.id, event.workItemId);
+    return outcomes.filter((outcome) => outcome.outcome === "started").length;
+  }
+
+  /**
+   * A Todo-bound run reached a terminal status: give the Todo back if the
+   * workflow now holds nothing on it. The claim `refusalBeforeStart` takes is
+   * owned by the EVENT, not the run — one event starts one run per matching
+   * definition — so the last of them settling is what frees the Todo, and any
+   * earlier one is still somebody's work. Until this existed the claim outlived
+   * every run that did not throw at start, and a run that only routed to a skip
+   * End left its Todo refusing manual Dispatch for the rest of the lease.
+   */
+  runSettled(run: Pick<WorkflowRunDetail, "status" | "trigger">): void {
+    const { kind, fireId, todoId } = run.trigger;
+    if (kind !== "todo-status" || !fireId || !todoId || !SETTLED_RUN_STATUSES.has(run.status)) return;
+    if (this.firing.has(fireId)) return;
+    this.releaseWhenNothingRuns(fireId, todoId);
+  }
+
+  /** The runs an event started all share its idempotency key, and the ones
+   *  still recoverable are exactly the ones still holding the Todo. That list
+   *  is a scan of every non-terminal run, paid once per terminal run change —
+   *  the same read `runner.start` pays per run, and small for the same reason.
+   *  A gateway that dies between a run settling and this release leaves the
+   *  claim to the lease, as any claim with no holder left to speak for it. */
+  private releaseWhenNothingRuns(eventId: string, todoId: string): void {
+    const key = `todo:${eventId}`;
+    if (this.repository.listRecoverableRuns().some((run) => run.idempotencyKey === key)) return;
+    releaseWorkItemClaim(todoId, `workflow:${eventId}`);
   }
 
   /** Which definitions a newer event has already taken this Todo's lane for.

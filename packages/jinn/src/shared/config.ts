@@ -2,8 +2,12 @@ import fs from "node:fs";
 import yaml from "js-yaml";
 import { CONFIG_PATH } from "./paths.js";
 import { applyLegacyFallbackMigration, validateEngineFallbackChains, validateEngineFallbackModelMaps } from "./engine-fallback.js";
+import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
 import type { JinnConfig } from "./types.js";
 import { todoRecoveryProblems } from "./todo-recovery-config.js";
+import { todoDepartmentsProblems } from "./todo-departments-config.js";
+import { idleCapacityProblems } from "./idle-capacity-config.js";
+import { remoteMcpProblems } from "./remote-mcp-config.js";
 
 type ClaudeEngineConfig = JinnConfig["engines"]["claude"];
 
@@ -67,6 +71,9 @@ export function validateConfigShape(config: unknown): string[] {
         problems.push(`gateway.resumeInterruptedSessions must be a boolean (got ${typeof c.gateway.resumeInterruptedSessions})`);
       }
       problems.push(...todoRecoveryProblems(c.gateway.todoRecovery));
+      problems.push(...todoDepartmentsProblems(c.gateway.todoDepartments));
+      problems.push(...idleCapacityProblems(c.gateway.idleCapacity));
+      problems.push(...remoteMcpProblems(c.gateway.remoteMcp));
     }
   }
 
@@ -81,6 +88,7 @@ export function validateConfigShape(config: unknown): string[] {
     }
     problems.push(...validateEngineFallbackChains(c.engines));
     problems.push(...validateEngineFallbackModelMaps(c.engines));
+    problems.push(...opencodeUsageLimitsProblems(c.engines));
   }
 
   problems.push(...validateRealtime(c.realtime));
@@ -268,7 +276,7 @@ const CONFIG_TOP_LEVEL_KEY_SET: Record<keyof JinnConfig, true> = {
   jinn: true, gateway: true, engines: true, models: true, connectors: true,
   logging: true, mcp: true, plugins: true, budgets: true, sessions: true,
   cron: true, notifications: true, workflows: true, portal: true, context: true,
-  stt: true, talk: true, realtime: true,
+  stt: true, talk: true, realtime: true, remote: true, terminal: true,
 };
 export const CONFIG_TOP_LEVEL_KEYS = Object.keys(CONFIG_TOP_LEVEL_KEY_SET);
 

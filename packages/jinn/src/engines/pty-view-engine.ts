@@ -4,8 +4,13 @@
  * Antigravity engine implement this, so the WebSocket handler can route by
  * `session.engine` instead of being hardwired to one engine.
  */
+import type { RemoteTarget } from "../shared/types.js";
 
-import type { SerializedPtySnapshot } from "./pty-snapshot.js";
+import type { PtySnapshotStore, SerializedPtySnapshot } from "./pty-snapshot.js";
+
+/** What a PtyStreamManager needs of a snapshot store. The disk store serves the
+ *  agent engines; operator terminals pass an in-memory one. */
+export type PtySnapshotPersistence = Pick<PtySnapshotStore, "load" | "schedule" | "flush">;
 
 /** Structured lifecycle events carried separately from binary PTY deltas. */
 export type PtyControlEvent =
@@ -30,7 +35,7 @@ export interface PtySnapshotSubscription {
   unsubscribe(): void;
 }
 
-export interface PtyIdleSpawnOpts {
+export interface PtyIdleSpawnOpts extends RemoteTarget {
   /** Engine-side conversation/session id to resume into the idle PTY, if any. */
   engineSessionId?: string;
   cwd?: string;
@@ -54,4 +59,7 @@ export interface PtyViewEngine {
   writeStdin(sessionId: string, text: string): void;
   writeRaw(sessionId: string, data: string): void;
   resizePty(sessionId: string, cols: number, rows: number): void;
+  /** The exit a viewer should be shown instead of a respawn, for an engine
+   *  whose PTY stays down once it exits until `restartPty` (operator shells). */
+  exitNotice?(sessionId: string): PtyControlEvent | undefined;
 }

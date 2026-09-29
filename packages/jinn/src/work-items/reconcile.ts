@@ -6,6 +6,7 @@ import {
   listWorkItems,
   RECONCILER_ACTOR,
   STICKY_STATUSES,
+  type VerifyMode,
   type WorkItem,
   type WorkItemSource,
   type WorkItemStatus,
@@ -15,6 +16,7 @@ import { currentApproval } from './approval-rows.js';
 import { expireWorkItemClaims } from './claims.js';
 import { collectAttemptEvidence, type SessionStatus, type WorkItemAttemptEvidence } from './attempt-evidence.js';
 import { closeOrphanedWorkItemRuns, closeRunsForSettledSessions } from './runs.js';
+import { releaseExpiredParks } from './park-expiry.js';
 import { logger } from '../shared/logger.js';
 
 export type { WorkItemAttemptEvidence } from './attempt-evidence.js';
@@ -37,11 +39,12 @@ export type { WorkItemAttemptEvidence } from './attempt-evidence.js';
  *     does speak, ending a review HE opened still needs the newest surviving
  *     attempt to have settled `succeeded`, not merely to exist.
  *   - Any session in flight (`running`/`waiting`) → `executing`.
- *   - Newest attempt with an explicit `succeeded` receipt → `in_review` (the vision's "session completes →
- *     in_review, NOT done" made structural) — then the TRUST policy hook runs in
- *     the same pass: an item whose effective verify mode is `trust` auto-closes
- *     to `done` (actor `policy:trust`, event-audited), so cron/fire-and-forget
- *     items never pile into a fake review queue.
+ *   - Newest attempt with an explicit `succeeded` receipt → `in_review` only on
+ *     the `trust` tier, where the TRUST hook below closes it to `done` in the
+ *     same pass: nobody is there to declare a cron fire finished. A reviewed
+ *     Todo never gets there from a settle — a producer's run also ends
+ *     while it waits on QA or the operator — only by its producer's explicit
+ *     move. The settle just clears a transient `blocked` back to `executing`.
  *   - Newest attempt with an explicit `failed`/`interrupted` receipt → `blocked`.
  *
  * All writes go through the guarded `transitions.ts` (event-audited, optimistic,
@@ -65,8 +68,8 @@ const IN_FLIGHT: ReadonlySet<SessionStatus> = new Set<SessionStatus>(['running',
  * With no floor the reconciler is not authority over itself and the close is
  * unconditional, exactly as before.
  */
-function trustCloseIsLicensed(attempts: readonly WorkItemAttemptEvidence[], humanDecisionAt?: string): boolean {
-  if (!humanDecisionAt) return true;
+function trustCloseIsLicensed(attempts: readonly WorkItemAttemptEvidence[], decisionFloorAt?: string): boolean {
+  if (!decisionFloorAt) return true;
   if (attempts.some((attempt) => IN_FLIGHT.has(attempt.status))) return false;
   return attempts[0]?.outcome === 'succeeded';
 }
@@ -75,6 +78,8 @@ function trustCloseIsLicensed(attempts: readonly WorkItemAttemptEvidence[], huma
 export interface DeriveWorkItemOptions {
   blockDeclared?: boolean;
   reviewBounceDeclared?: boolean;
+  /** Only `trust` lets a clean settle derive `in_review`; absent means reviewed. */
+  verifyMode?: VerifyMode;
 }
 
 /**
@@ -106,7 +111,10 @@ export function deriveWorkItemStatus(
   // authority (an old clean settle must not mask a newer failure, and a newer
   // clean retry must clear an older failure).
   const newest = attempts[0].outcome;
-  if (newest === 'succeeded') return 'in_review';
+  // A clean settle is not a completion declaration: a backlog/assigned
+  // Todo stays where somebody put it after that attempt ran.
+  if (newest === 'succeeded' && opts?.verifyMode === 'trust') return 'in_review';
+  if (newest === 'succeeded') return current === 'blocked' ? 'executing' : current;
   if (newest === 'failed' || newest === 'interrupted') return 'blocked';
   return current;
 }
@@ -130,23 +138,27 @@ export function reconcileWorkItem(id: string): ReconcileResult | undefined {
   // TRUST-close, or otherwise rewrite them. Explicit guarded Todo actions remain
   // available through the normal operator surfaces.
   if (item.source === 'workflow') return { item, changed: false };
-  const { attempts, humanDecisionAt } = collectAttemptEvidence(id);
-  // Every attempt predates the operator's own move, so nothing has happened
-  // since he decided where this Todo belongs and the reconciler has nothing to
-  // say — neither a derived status nor the TRUST close, which would otherwise
-  // end a review he opened himself on the strength of an older receipt.
-  if (humanDecisionAt && attempts.length === 0) return { item, changed: false };
-  let derived = deriveWorkItemStatus(item.status, attempts, item.source);
+  const { attempts, decisionFloorAt } = collectAttemptEvidence(id);
+  // Every attempt predates the operator's own move (or the park expiry that
+  // re-queued it), so nothing has happened since that decision about where this
+  // Todo belongs and the reconciler has nothing to say — neither a derived
+  // status nor the TRUST close, which would otherwise end a review he opened
+  // himself on the strength of an older receipt.
+  if (decisionFloorAt && attempts.length === 0) return { item, changed: false };
+  const verifyMode = effectiveVerifyMode(item);
+  let derived = deriveWorkItemStatus(item.status, attempts, item.source, { verifyMode });
   // Provenance is only needed when receipt derivation would overwrite the
   // current state. Since a Todo cannot be blocked and executing simultaneously,
   // this performs at most one indexed event-row lookup per reconcile.
   if (derived !== item.status) {
     if (item.status === 'blocked') {
       derived = deriveWorkItemStatus(item.status, attempts, item.source, {
+        verifyMode,
         blockDeclared: isBlockDeclared(id),
       });
     } else if (item.status === 'executing') {
       derived = deriveWorkItemStatus(item.status, attempts, item.source, {
+        verifyMode,
         reviewBounceDeclared: isReviewBounceDeclared(id),
       });
     }
@@ -179,7 +191,7 @@ export function reconcileWorkItem(id: string): ReconcileResult | undefined {
   // Todo-bound Workflow run, which parks its gates here — a trust-tier item would
   // otherwise reach `done` inside one sweep with the merge still unapproved.
   if (current.status === 'in_review' && effectiveVerifyMode(current) === 'trust'
-    && trustCloseIsLicensed(attempts, humanDecisionAt)
+    && trustCloseIsLicensed(attempts, decisionFloorAt)
     && currentApproval(current.id)?.state !== 'pending') {
     const closed = transitionDerived(id, 'done', 'policy:trust', { policy: 'trust', auto: true });
     if (closed) {
@@ -205,7 +217,7 @@ const SWEEP_STATUSES: readonly WorkItemStatus[] = ['backlog', 'assigned', 'execu
  * Reconcile every non-sticky item. Invoked at gateway startup right after
  * `recoverStaleSessions()` (the exact moment `running` sessions became
  * `interrupted`, so their items must move to `blocked`) and periodically by
- * `startWorkItemReconciler` (so settles reach `in_review`/`done` while the
+ * `startWorkItemReconciler` (so trust-tier settles reach `done` while the
  * gateway runs, not just at the next boot). One indexed session query per
  * candidate — negligible at this table's scale (see GRS-003a's note).
  */
@@ -237,6 +249,12 @@ export function reconcileWorkItemsOnStartup(): number {
     if (released > 0) {
       logger.info(`Released ${released} Todo claim(s) whose lease ran out with nobody reporting against it`);
     }
+    // Before the reconcile, so a park that ran out while the gateway was down is
+    // back in the queue — and its evidence floor laid — before anything derives.
+    const unparked = releaseExpiredParks();
+    if (unparked > 0) {
+      logger.info(`Re-queued ${unparked} Todo(s) whose park had run out`);
+    }
     const { checked, changed } = reconcileActiveWorkItems();
     if (changed > 0) {
       logger.info(`Reconciled ${changed} work item(s) from linked session state (of ${checked} non-sticky)`);
@@ -252,7 +270,7 @@ const DEFAULT_RECONCILE_INTERVAL_MS = 20_000;
 
 /**
  * Periodic work-item reconcile (GRS-021a): without it, a session that settles
- * mid-process would only reach `in_review`/`done` at the NEXT boot or the next
+ * mid-process would only reach its derived status at the NEXT boot or the next
  * mint-time reconcile — a stale ledger, the exact failure Todos exist to kill.
  * Same primitive as the gateway's status reconciler (unref'd interval, one
  * guarded sweep per tick, ticks never overlap because the sweep is synchronous).
@@ -261,6 +279,10 @@ const DEFAULT_RECONCILE_INTERVAL_MS = 20_000;
 export function startWorkItemReconciler(intervalMs: number = DEFAULT_RECONCILE_INTERVAL_MS): () => void {
   const timer = setInterval(() => {
     try {
+      // A park whose date has passed goes back to the queue; nothing
+      // else ends one, so without this it sits in `blocked` until a human looks.
+      const unparked = releaseExpiredParks();
+      if (unparked > 0) logger.info(`Re-queued ${unparked} Todo(s) whose park had run out`);
       reconcileActiveWorkItems();
       // Sticky Todos are outside the sweep above, so their rows are closed here
       // or never — a cancel mid-delegation must not strand an open attempt.

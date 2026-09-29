@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import { logger } from "../shared/logger.js";
 import { getSession, getMessages, insertMessage, updateMessageContent, updateSession, type SessionMessage } from "../sessions/registry.js";
+import { notifyParentOfExternalTurn } from "../sessions/callbacks.js";
 import { initDb } from "../shared/db.js";
 import { findTranscriptForSession } from "../engines/claude-interactive.js";
 import type { HookPayload } from "./hook-registry.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
+import type { Employee, Session } from "../shared/types.js";
 
 /**
  * External-turn sync: persist turns that happened OUTSIDE a gateway run() —
@@ -284,26 +286,80 @@ function upgradeTruncatedRows(persisted: SessionMessage[], entries: TranscriptTa
 }
 
 /**
+ * A Stop handed over by a running gateway turn (foreignToRunningTurn) is synced
+ * the moment its hook arrives, and Claude Code writes the transcript lazily: the
+ * turn's final assistant entry is often not on disk yet (seen live on 2.1.283,
+ * the entry was timestamped ~120 ms before the Stop and landed after
+ * it). The unclaimed-Stop timer hides that lag; this path cannot wait, because
+ * the running turn's settle moves the anchor past the entry once it lands. So
+ * when the tail lacks the Stop's text, take it from the hook payload. Anchoring
+ * at "now" is safe: Claude Code is blocked on this Stop hook, so anything not
+ * yet flushed belongs to the turn being synced.
+ */
+function withUnflushedStopText(entries: TranscriptTailEntry[], payload?: HookPayload): TranscriptTailEntry[] {
+  const hookText = String(payload?.last_assistant_message ?? "").trim();
+  if (!hookText) return entries;
+  if (entries.some((e) => e.role === "assistant" && contentCompatible(e.content, hookText))) return entries;
+  const now = new Date();
+  return [...entries, { role: "assistant", content: hookText, timestampMs: now.getTime(), timestampIso: now.toISOString() }];
+}
+
+export interface SyncExternalTurnOptions {
+  /** Employee lookup for the parent wake's `alwaysNotify` (the same switch the
+   *  settle callback honours). Absent, or returning undefined, means notify. */
+  resolveEmployee?: (slug: string) => Employee | undefined;
+  /** The running gateway turn has already disowned this Stop: it belongs to a
+   *  turn typed into the terminal or a background re-invocation
+   *. The run's completion path will NOT persist it, and it moves
+   *  the anchor past it, so it must be synced now despite the run. */
+  foreignToRunningTurn?: boolean;
+}
+
+/**
+ * A child session's reply that run() never saw is still a reply its parent is
+ * waiting for. Wake the parent the way settleTurn would have, keyed on the sync
+ * anchor so a redelivered Stop cannot wake it twice. Fire-and-forget: the sync
+ * has already persisted the turn, and the callback module owns retry.
+ */
+function wakeParentForExternalReply(
+  session: Session,
+  newest: { role: "user" | "assistant"; content: string } | undefined,
+  turnKey: string,
+  options?: SyncExternalTurnOptions,
+): void {
+  if (!session.parentSessionId || newest?.role !== "assistant") return;
+  const employee = session.employee ? options?.resolveEmployee?.(session.employee) : undefined;
+  void notifyParentOfExternalTurn(session, newest.content, turnKey, { alwaysNotify: employee?.alwaysNotify });
+}
+
+/**
  * Persist any un-synced transcript tail for a session into the messages DB.
  * Primary trigger: an unclaimed Stop hook (PTY-native turn — no run() in
  * flight). Also callable without a payload as the on-load safety net.
  *
  * Returns the number of messages inserted. Emits `session:external-turn`
  * `{ sessionId }` when anything was persisted (the frontend refetches messages
- * on it).
+ * on it). When the newest persisted message is an assistant reply and the
+ * session has a parent, the parent is woken exactly as it would have been had
+ * the reply settled a gateway turn — Claude Code re-invokes the model after a
+ * background subagent finishes, and that continuation's Stop lands here, not in
+ * settleTurn; before this the child's final report was persisted to its own
+ * chat and the parent slept through it.
  */
 export function syncExternalTurn(
   sessionId: string,
   emit: GatewayEmit,
   payload?: HookPayload,
+  options?: SyncExternalTurnOptions,
 ): number {
   const session = getSession(sessionId);
   if (!session) {
     logger.info(`External-turn sync skipped: session ${sessionId} not found`);
     return 0;
   }
-  // A run() owns the session — its completion path persists the turn.
-  if (session.status === "running") return 0;
+  // A run() owns the session — its completion path persists the turn. Unless
+  // the run itself said this turn is not its own (see foreignToRunningTurn).
+  if (session.status === "running" && !options?.foreignToRunningTurn) return 0;
   // This sync is Claude-transcript-specific. Once the logical session has moved
   // to another engine, an unclaimed old Claude Stop must not append stale rows.
   if (session.engine !== "claude") return 0;
@@ -332,21 +388,24 @@ export function syncExternalTurn(
     const newest = existing[existing.length - 1];
     if (newest && newest.role === "assistant" && newest.content === hookText) return 0;
     insertMessage(sessionId, "assistant", hookText);
-    setAnchor(sessionId, new Date().toISOString());
+    const anchorIso = new Date().toISOString();
+    setAnchor(sessionId, anchorIso);
     emit("session:external-turn", { sessionId });
     logger.info(
       `External turn persisted for session ${sessionId} from hook payload (transcript unreadable: ${transcriptPath ?? "not found"})`,
     );
+    wakeParentForExternalReply(session, { role: "assistant", content: hookText }, anchorIso, options);
     return 1;
   }
-  if (entries.length === 0) return 0; // tail already synced — dedup no-op
+  const synced = options?.foreignToRunningTurn ? withUnflushedStopText(entries, payload) : entries;
+  if (synced.length === 0) return 0; // tail already synced — dedup no-op
 
   // The newest transcript entry is the anchor target regardless of the collapse
   // below: advancing the anchor to a dropped duplicate's (earlier) timestamp
   // would let the next sync re-read the very copies we just discarded.
-  const tailAnchorIso = entries[entries.length - 1].timestampIso;
+  const tailAnchorIso = synced[synced.length - 1].timestampIso;
   // Collapse usage-limit retry storms — N byte-identical adjacent turns — to one.
-  const tail = collapseAdjacentDuplicates(entries);
+  const tail = collapseAdjacentDuplicates(synced);
 
   // Reconcile against the trailing DB rows before inserting. The chat run()
   // completion path (manager.ts user prompt + settled assistant) may have
@@ -399,7 +458,26 @@ export function syncExternalTurn(
     `Synced ${fresh.length} external (CLI-native) message(s) for session ${sessionId} (anchor → ${tailAnchorIso}` +
       `${alreadyPersisted.length > 0 ? `, ${alreadyPersisted.length} already-persisted message(s) reconciled in place` : ""})`,
   );
+  wakeParentForExternalReply(session, fresh[fresh.length - 1], tailAnchorIso, options);
   return fresh.length;
+}
+
+/**
+ * The HookRegistry's unclaimed-Stop consumer. `context.foreignToRunningTurn`
+ * comes from HookRegistry.consumeAsUnclaimed: the running gateway turn has
+ * disowned the Stop, so the sync must not skip it as "running".
+ */
+export function createUnclaimedStopSync(
+  emit: GatewayEmit,
+  options: Omit<SyncExternalTurnOptions, "foreignToRunningTurn"> = {},
+): (jinnSessionId: string, payload: HookPayload, context?: { foreignToRunningTurn?: boolean }) => void {
+  return (jinnSessionId, payload, context) => {
+    try {
+      syncExternalTurn(jinnSessionId, emit, payload, { ...options, foreignToRunningTurn: context?.foreignToRunningTurn === true });
+    } catch (err) {
+      logger.warn(`Unclaimed-Stop sync failed for session ${jinnSessionId}: ${err instanceof Error ? err.message : err}`);
+    }
+  };
 }
 
 /** Sessions with an in-flight on-load tail sync (mirrors backfillInProgress). */
@@ -415,6 +493,7 @@ const onLoadSyncInProgress = new Set<string>();
 export function scheduleOnLoadTailSync(
   sessionId: string,
   emit: GatewayEmit,
+  options?: SyncExternalTurnOptions,
 ): void {
   if (onLoadSyncInProgress.has(sessionId)) return;
   onLoadSyncInProgress.add(sessionId);
@@ -431,7 +510,7 @@ export function scheduleOnLoadTailSync(
       } catch {
         return;
       }
-      syncExternalTurn(sessionId, emit);
+      syncExternalTurn(sessionId, emit, undefined, options);
     } catch (err) {
       logger.warn(`On-load transcript tail sync failed for session ${sessionId}: ${err instanceof Error ? err.message : err}`);
     } finally {

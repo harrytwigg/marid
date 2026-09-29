@@ -12,7 +12,30 @@ import {
  * with route/method/gateway context — never as a bare "fetch failed".
  */
 
+describe("gatewayRequest — multipart bodies", () => {
+  it("sends a FormData body as-is and leaves the multipart content-type (with boundary) to fetch", async () => {
+    let seen: RequestInit | undefined;
+    const fetchFn = (async (_input: string | URL, init?: RequestInit) => {
+      seen = init;
+      return { status: 201, text: async () => '{"attachment":{"id":"wia_0a1b2c3d4e5f"}}' } as unknown as Response;
+    }) as unknown as typeof fetch;
+    const form = new FormData();
+    form.append("file", new Blob([Buffer.from("bytes")]), "a.txt");
+    const out = await gatewayRequest({ gatewayUrl: "http://x", fetchFn }, "POST", "/api/work-items/JIN-1/attachments", form);
+    expect(out).toEqual({ status: 201, body: { attachment: { id: "wia_0a1b2c3d4e5f" } } });
+    expect(seen?.body).toBe(form);
+    expect((seen?.headers as Record<string, string>)["content-type"]).toBeUndefined();
+  });
+});
+
 describe("gatewayRequest — transport failure modes", () => {
+  it("keeps the socket's code from fetch's cause, so a refused connect reads differently from a reset", async () => {
+    const fetchFn = (async () => {
+      throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
+    }) as unknown as typeof fetch;
+    await expect(gatewayRequest({ gatewayUrl: "http://x", fetchFn }, "GET", "/api/status")).rejects.toThrow(/failed before a response: fetch failed \(ECONNREFUSED\)/);
+  });
+
   it("forwards activity correlation only for a bound Session MCP operation", async () => {
     let headers: Record<string, string> = {};
     const fetchFn = (async (_input: string | URL, init?: RequestInit) => {

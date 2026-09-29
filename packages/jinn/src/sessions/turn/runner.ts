@@ -1,5 +1,6 @@
 import { logger } from "../../shared/logger.js";
-import { detectRateLimit, isDeadSessionError } from "../../shared/rateLimit.js";
+import { detectRateLimit, isDeadSessionError, type RateLimitDetection } from "../../shared/rateLimit.js";
+import { observeClaudeTurnOutcome } from "../claude-auth-watch.js";
 import type { EngineResult, Session } from "../../shared/types.js";
 import { completedStreamedBlockIds } from "../../gateway/streamed-blocks.js";
 import {
@@ -15,8 +16,17 @@ import { isDurableWorkflowUserMessageInterruption } from "../workflow-interrupti
 import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./engine-run.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
 import { preflightTurn, warnIfNearUsageLimit } from "./preflight.js";
+import { ensureRemoteHostReady } from "./remote-ready.js";
 import { runRateLimitTurn } from "./rate-limit-turn.js";
-import { clearDeadEngineSession, settleAnsweredTurn, settleRefusedTurn, settleThrownTurn } from "./settle.js";
+import {
+  clearDeadEngineSession,
+  settleAnsweredTurn,
+  settleDeclinedTurn,
+  settleRateLimitedCompaction,
+  settleRefusedTurn,
+  settleThrownTurn,
+} from "./settle.js";
+import { COMPACT_STARTED_STATUS } from "../compact-command.js";
 import { clearSupersededTurnMeta, isTurnSuperseded } from "./superseded.js";
 import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
 
@@ -33,12 +43,24 @@ export async function runTurn(input: TurnInput, surface: TurnSurface): Promise<v
 
   const plan = preflightTurn(input);
   if (!plan.ok) {
-    await settleRefusedTurn(input, surface, plan.error, terminalFields);
+    if (plan.declined) await settleDeclinedTurn(input, surface, plan.error, terminalFields);
+    else await settleRefusedTurn(input, surface, plan.error, terminalFields);
+    return;
+  }
+
+  // A remote employee's host may be asleep. Wake it and wait for it BEFORE the
+  // turn is announced as started, so the session reads as `waiting` rather than
+  // `running` against a machine that is still booting. No-op for local employees.
+  const remoteReady = await ensureRemoteHostReady(input, plan.engineName);
+  if (!remoteReady.ok) {
+    await settleRefusedTurn(input, surface, remoteReady.error, terminalFields);
     return;
   }
 
   logger.info(`Session ${sessionId} running engine "${plan.engineName}" (model: ${plan.model || "default"})`);
   await surface.started();
+  // A compaction streams nothing the chat shows, so say what is happening.
+  if (plan.compaction) surface.delta({ type: "status", content: COMPACT_STARTED_STATUS });
   await warnIfNearUsageLimit(input, plan, surface);
 
   const run: TurnRun = {
@@ -114,6 +136,44 @@ function wasQuietlyPreempted(run: TurnRun, live: Session, result: EngineResult, 
   return superseded;
 }
 
+/**
+ * What this turn said about the login it ran under, so the second auth failure
+ * of an outage is counted and the first is alerted. A preempted, dead-session
+ * or rate-limited turn says nothing either way.
+ */
+function noteClaudeLogin(run: TurnRun, result: EngineResult, silent: boolean): void {
+  if (run.plan.engineName !== "claude" || silent) return;
+  // A clean turn that produced nothing and cost nothing (a native `/command`)
+  // never reached the API, so it is no evidence the login works.
+  if (!result.error && !result.result?.trim() && !result.cost) return;
+  observeClaudeTurnOutcome(run.input.employee, result.error);
+}
+
+/**
+ * A turn its engine refused with a usage limit: wait and retry, or switch to a
+ * fallback engine. Not a compaction, though — a substitute would get "/compact"
+ * as text to answer, or compact a different conversation — which is settled
+ * where it is, for the operator to send again once the limit lifts.
+ */
+async function settleLimitedTurn(
+  run: TurnRun,
+  attempt: EngineAttempt,
+  rateLimit: RateLimitDetection,
+): Promise<void> {
+  if (run.plan.compaction) return await settleRateLimitedCompaction(run, rateLimit.resetsAt);
+  await runRateLimitTurn({
+    input: run.input,
+    plan: run.plan,
+    surface: run.surface,
+    systemPrompt: attempt.systemPrompt,
+    platformContextRefresh: attempt.contextRefresh,
+    platformContextFingerprint: attempt.fingerprint,
+    rateLimit,
+    originalResult: attempt.result,
+    terminalFields: run.terminalFields,
+  });
+}
+
 /** Settle whichever terminal class this turn landed in. */
 async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string | undefined): Promise<void> {
   const sessionId = run.input.session.id;
@@ -129,6 +189,7 @@ async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string 
   const dead = !quietPreempted && isDeadSessionError(result);
   if (dead) clearDeadEngineSession(sessionId, run.plan.engineName);
   const rateLimit = !quietPreempted && !dead ? detectRateLimit(result) : { limited: false as const };
+  noteClaudeLogin(run, result, quietPreempted || dead || rateLimit.limited);
 
   // Keep the same completed evidence the live view kept — interim prose, tools,
   // media, delegation blocks — and drop exact streamed copies of the result,
@@ -143,17 +204,7 @@ async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string 
   }));
 
   if (rateLimit.limited) {
-    await runRateLimitTurn({
-      input: run.input,
-      plan: run.plan,
-      surface: run.surface,
-      systemPrompt: attempt.systemPrompt,
-      platformContextRefresh: attempt.contextRefresh,
-      platformContextFingerprint: attempt.fingerprint,
-      rateLimit,
-      originalResult: result,
-      terminalFields: run.terminalFields,
-    });
+    await settleLimitedTurn(run, attempt, rateLimit);
     return;
   }
 

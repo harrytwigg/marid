@@ -159,4 +159,60 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     expect(groups.recovering).toContain(item.id);
     expect(groups.needsYou).not.toContain(item.id);
   });
+
+  async function compactRows() {
+    const coo = reg.createSession({ engine: "codex", source: "web", sourceRef: `coo-rows-${Date.now()}`, title: "coo", employee: "coo" });
+    const res = makeRes();
+    await api.handleApiRequest(
+      makeReq("GET", "/api/work-items?limit=100", undefined, toolHeaders(coo.id)),
+      res.res,
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    return res.body.workItems as Array<Record<string, unknown>>;
+  }
+
+  /** `work_item_recovery` only describes a Todo while it sits in a
+   *  status the recovery sweep visits (`SWEEP_STATUSES`). A blocked→backlog
+   *  re-queue leaves that row behind, and `attentionLaneOf` read it before
+   *  anything else — so the Todo kept a lane it no longer had a reason for. */
+  it("an operator lane classified while blocked is gone once the Todo is re-queued to backlog", async () => {
+    const controller = await import("../../work-items/recovery-controller.js");
+    const transitions = await import("../../work-items/transitions.js");
+    const rows = await import("../../work-items/recovery-rows.js");
+
+    const item = store.createWorkItem({ title: "re-check re-queued to backlog", status: "blocked" });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    expect(rows.getWorkItemRecovery(item.id)).toMatchObject({ class: "operator", lane: "operator" });
+
+    const before = (await compactRows()).find((entry) => entry.id === item.id);
+    expect(before).toMatchObject({ status: "blocked", attentionLane: "operator" });
+
+    transitions.transition(item.id, "backlog", "operator");
+    expect(store.getWorkItem(item.id)!.status).toBe("backlog");
+
+    const after = (await compactRows()).find((entry) => entry.id === item.id);
+    expect(after).toMatchObject({ status: "backlog", attentionLane: null });
+  });
+
+  it("a manager-lane row does not keep a backlog Todo in the needs-attention feed", async () => {
+    const transitions = await import("../../work-items/transitions.js");
+    const rows = await import("../../work-items/recovery-rows.js");
+
+    const item = store.createWorkItem({ title: "failed build", status: "blocked", assignee: "platform-worker" });
+    rows.upsertWorkItemRecovery({
+      workItemId: item.id, incidentId: `run_${item.id}`, class: "code", lane: "manager",
+      reason: "the attempt failed in the work itself",
+    });
+
+    const before = await attentionFeed();
+    expect(before.find((entry) => entry.id === item.id)).toMatchObject({ status: "blocked", attentionLane: "manager" });
+
+    transitions.transition(item.id, "backlog", "operator");
+    expect(store.getWorkItem(item.id)!.status).toBe("backlog");
+
+    const after = await attentionFeed();
+    expect(after.find((entry) => entry.id === item.id)).toBeUndefined();
+    expect((await compactRows()).find((entry) => entry.id === item.id)).toMatchObject({ status: "backlog", attentionLane: null });
+  });
 });

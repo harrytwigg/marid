@@ -1,11 +1,14 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ComponentProps, ComponentType, ReactNode } from 'react'
 import { ChatPane } from '@/components/chat/chat-pane'
 import { resolvePaneTitle, safePaneTitle } from '@/components/chat/chat-pane-title-bar'
+import { usePaneTabsShown } from '@/components/chat/pane-tabs-context'
 import { FileOpenContext } from '@/components/chat/file-open-context'
 import type { CommsPeekData } from '@/components/chat/thread-peek'
 import type { DelegatedActivity } from '@/lib/api'
 import type { ViewMode } from '@/lib/view-mode'
 import { ChatGrid } from './chat-grid'
+import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
+import { isTerminalSession } from '@/lib/terminal-session'
 import { deriveChatGridIds } from './grid-placement'
 import { SessionPicker } from './session-picker'
 import type { SessionMeta } from './use-chat-pane-state'
@@ -58,6 +61,8 @@ interface MultiChatGridProps {
     onSessionCreated: NonNullable<PaneProps['onSessionCreated']>
     onClose: () => void
   }
+  /** Lays the panes out in place of ChatGrid, with the same props (layout/split-chat-grid.tsx). */
+  grid?: ComponentType<ComponentProps<typeof ChatGrid>>
 }
 
 function sessionForGridId(props: MultiChatGridProps, gridId: string): string | null {
@@ -99,6 +104,15 @@ function paneCliAvailable(owner: MultiChatGridProps, sessionId: string | null): 
   return !engine || owner.runtime.engineRegistry?.engines?.[engine]?.supportsPty === true
 }
 
+/** Who the pane's chrome says it is. A terminal session is known
+ *  from list meta, so it renders as a terminal before its detail loads. */
+function paneIdentity(owner: MultiChatGridProps, sessionId: string | null): Pick<PaneProps, 'terminal' | 'paneEmployee'> {
+  if (!sessionId) return { terminal: false, paneEmployee: undefined }
+  const meta = owner.metaById[sessionId]
+  if (isTerminalSession(meta)) return { terminal: true, paneEmployee: TERMINAL_AVATAR }
+  return { terminal: false, paneEmployee: safePaneTitle(meta?.employee) }
+}
+
 function titleForGridId(owner: MultiChatGridProps, gridId: string): string {
   const sessionId = sessionForGridId(owner, gridId)
   if (!sessionId) return gridId === owner.pickerPane?.paneKey ? 'Open chat' : 'New chat'
@@ -137,6 +151,7 @@ function GridChatPane({
   multiPane: boolean
 }) {
   const sessionId = sessionForGridId(owner, gridId)
+  const tabbed = usePaneTabsShown()
   const primary = gridId === owner.primary.paneKey
   const pickerPane = gridId === owner.pickerPane?.paneKey ? owner.pickerPane : undefined
   const cliAvailable = paneCliAvailable(owner, sessionId)
@@ -148,9 +163,9 @@ function GridChatPane({
       initialScrollTop={paneScrollTop(owner, sessionId)}
       initialEmployee={primary ? owner.primary.initialEmployee : undefined}
       isActive={active}
-      multiPane={multiPane}
+      multiPane={multiPane || (tabbed && !owner.viewport.mobile)}
+      {...paneIdentity(owner, sessionId)}
       paneTitle={titleForGridId(owner, gridId)}
-      paneEmployee={sessionId ? safePaneTitle(owner.metaById[sessionId]?.employee) : undefined}
       onClose={() => removeGridPane(owner, gridId)}
       onFocus={() => { if (sessionId) owner.onFocus(sessionId) }}
       onSessionCreated={primary ? owner.primary.onSessionCreated : pickerPane?.onSessionCreated}
@@ -206,8 +221,9 @@ export function MultiChatGrid(props: MultiChatGridProps) {
   })
   const focusedGridIdValue = mobilePickerKey ?? focusedGridId(primaryKey, props.primary.sessionId, props.focusedId)
 
+  const Grid = props.grid ?? ChatGrid
   const grid = (
-    <ChatGrid
+    <Grid
       sessionIds={gridIds}
       focusedId={focusedGridIdValue}
       width={props.viewport.width}

@@ -17,6 +17,7 @@ import { commentHeadRequest, mergeCommentPages } from "./comment-window"
 import { displayNameOf, formatRelativeTime } from "../util"
 import { AttachmentTile, useAttachmentPreview } from "./attachment-preview"
 import { formatBytes } from "./attachments"
+import { SessionActor } from "./session-ref"
 import { WhisperLine } from "./whisper"
 import { buildFeed, stripCommentMarkers } from "./activity-feed"
 import { RunEndLine, RunStartLine } from "./runs"
@@ -34,12 +35,10 @@ function avatarFor(comment: WorkItemCommentWire): string {
 }
 
 
-function commentAuthor(comment: WorkItemCommentWire, byName: Map<string, Employee>): string {
+function commentAuthor(comment: WorkItemCommentWire, byName: Map<string, Employee>): React.ReactNode {
   if (comment.authorKind === "operator") return "You"
-  if (comment.authorKind === "employee" && !comment.author.startsWith("session:")) {
-    return displayNameOf(comment.author, byName)
-  }
-  return commentAuthorLabel(comment.author, comment.authorKind)
+  const label = comment.authorKind === "employee" ? displayNameOf(comment.author, byName) : commentAuthorLabel(comment.author, comment.authorKind)
+  return <SessionActor actor={comment.author} byName={byName}>{label}</SessionActor>
 }
 
 function commentPreview(body: string): string {

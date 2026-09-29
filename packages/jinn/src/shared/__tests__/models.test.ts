@@ -320,10 +320,20 @@ describe("featured models (registry marking)", () => {
   });
 });
 
-it("drift guard: registers 6 engines and stamps supportsPty on the 5 PTY-capable ones", () => {
+it("drift guard: registers 7 engines and stamps supportsPty on the 5 PTY-capable ones", () => {
   const reg = getModelRegistry(cfg({}));
-  expect(Object.keys(reg)).toEqual(["claude", "codex", "antigravity", "grok", "pi", "hermes"]);
+  expect(Object.keys(reg)).toEqual(["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode"]);
   expect(Object.keys(reg).filter((n) => reg[n].supportsPty)).toEqual(["claude", "codex", "antigravity", "grok", "hermes"]);
+});
+
+it("offers opencode's terminal only in server mode, where there is a server to attach to", () => {
+  const off = getModelRegistry(cfg({ opencode: { mode: "run" } }));
+  expect(off.opencode.supportsPty).toBe(false);
+  invalidateModelRegistry();
+  const on = getModelRegistry(cfg({ opencode: { mode: "server" } }));
+  expect(on.opencode.supportsPty).toBe(true);
+  // Nothing else moves with it.
+  expect(Object.keys(on).filter((n) => on[n].supportsPty)).toEqual(["claude", "codex", "antigravity", "grok", "hermes", "opencode"]);
 });
 
 describe("cache + invalidate", () => {

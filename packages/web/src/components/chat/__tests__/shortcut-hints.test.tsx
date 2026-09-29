@@ -147,9 +147,9 @@ describe('ChatHeaderPills shortcut hints', () => {
     expect(newBtns.every((b) => b.getAttribute('aria-label') === 'New chat')).toBe(true)
   })
 
-  it('keeps New chat one tap away beside an active four-chip mobile working set', () => {
+  it('keeps New chat one tap away in the nav bar above an active four-tab session strip', () => {
     const onNew = vi.fn()
-    render(
+    const { container } = render(
       <ChatHeaderPills
         {...defaultProps}
         onNew={onNew}
@@ -161,10 +161,10 @@ describe('ChatHeaderPills shortcut hints', () => {
       />,
     )
 
-    const workingSet = screen.getByRole('navigation', { name: 'Open chats' })
+    const bar = container.querySelector<HTMLElement>('[data-chat-mobile-header]')!
+    const workingSet = within(bar).getByRole('navigation', { name: 'Open chats' })
     expect(within(workingSet).getAllByRole('button')).toHaveLength(4)
-    const mobileActions = workingSet.nextElementSibling as HTMLElement
-    fireEvent.click(within(mobileActions).getByRole('button', { name: 'New chat' }))
+    fireEvent.click(within(bar).getByRole('button', { name: 'New chat' }))
     expect(onNew).toHaveBeenCalledTimes(1)
   })
 })

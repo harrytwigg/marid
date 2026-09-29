@@ -13,6 +13,20 @@ export interface WebTurnSurfaceOptions {
 }
 
 /**
+ * Keep a notice in the transcript and show it live, not only on the next
+ * reload: a notice can be all a turn shows (a `/compact` confirmation, or the
+ * reason one was declined).
+ */
+function recordNotice(sessionId: string, emit: GatewayEmit, text: string): void {
+  insertMessage(sessionId, "notification", text);
+  try {
+    emit("session:notification", { sessionId, message: text });
+  } catch (err) {
+    logger.warn(`Failed to emit notice for session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/**
  * Carry a turn over the dashboard: stream deltas to the live view, keep
  * lifecycle prose in the transcript, and relay the answer onward to a chat
  * channel when the session originally came from one.
@@ -42,7 +56,7 @@ export function createWebTurnSurface(options: WebTurnSurfaceOptions): TurnSurfac
       }
     },
     async notice(text: string) {
-      insertMessage(sessionId, "notification", text);
+      recordNotice(sessionId, emit, text);
     },
     async reply(text: string) {
       const session = getSession(sessionId);

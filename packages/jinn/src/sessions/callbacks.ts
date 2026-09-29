@@ -4,17 +4,18 @@ import {
   getSessionDelivery,
   claimSessionDelivery,
   claimSessionDeliveryAttempt,
+  consumeChildReportedToParent,
   recordSessionDeliveryFailure,
   ensureCallbackAttemptToken,
   listDelegationCompletionNudgedSessions,
   listPendingSessionDeliveries,
   markDelegationCompletionSurfaced,
 } from "./registry.js";
-import { loadConfig } from "../shared/config.js";
 import { logger } from "../shared/logger.js";
 import { STRUCTURED_MESSAGE_BODY_MAX_CHARS, type Session } from "../shared/types.js";
 import type { ChatBlockEnvelope, JsonObject } from "../shared/types.js";
 import { enforceDelegationCompletionContract } from "./delegation-completion-contract.js";
+import { isRemoteMcpSession } from "./remote-mcp-session.js";
 import type { SessionDeliveryPayload } from "../shared/types.js";
 
 export const CALLBACK_DELIVERY_RETRY_DELAYS_MS = [1_000, 5_000, 30_000] as const;
@@ -104,27 +105,73 @@ export async function notifyParentSessionAndWait(
   result: { result?: string | null; error?: string | null; cost?: number; durationMs?: number },
   options?: { alwaysNotify?: boolean },
 ): Promise<void> {
-  if (!result.error && !hasMeaningfulReply(result.result)) return;
-
   if (!childSession.parentSessionId) return;
 
-  // Cross-channel de-duplication: if the child already reported UP to this parent
-  // via send_to_session during its current attempt, that explicit relay and this
-  // automatic parent-completion callback are two injections of the SAME turn — the
-  // operator sees the second as a spurious "duplicate callback" wake. Suppress it.
-  // Errors always surface (the explicit report may predate the failure); a re-read
-  // sees the marker written mid-turn; and a NEW attempt mints a token that no
-  // longer matches, so the callback re-enables for genuinely new work.
-  if (!result.error) {
-    const fresh = getSession(childSession.id) ?? childSession;
-    if (fresh.attemptToken && fresh.transportMeta?.reportedToParentAttempt === fresh.attemptToken) {
-      return;
-    }
-  }
+  // The marker is consumed by the settle that matches it whether or not a
+  // callback goes out: a relay followed by an empty or failed settle (engine
+  // error, settleThrownTurn) must not leave it standing to swallow the next
+  // external reply — that would re-create the loss on a side path.
+  const relayed = consumeExplicitRelay(childSession);
+  if (!result.error && (!hasMeaningfulReply(result.result) || relayed)) return;
 
   await _sendNotification(childSession, result, options).catch((err) => {
     logger.warn(`[callbacks] Failed to notify parent session ${childSession.parentSessionId}: ${err instanceof Error ? err.message : String(err)}`);
   });
+}
+
+/**
+ * Wake the parent for a child reply that arrived OUTSIDE a gateway turn: a Stop
+ * hook nobody claimed, which the external-turn sync has just persisted. Claude
+ * Code produces these whenever a background subagent finishes after the child's
+ * turn settled — it re-invokes the model with a task notification, and the
+ * resulting reply (often the child's actual final report) ends in a Stop with no
+ * run() in flight. The settle callback fired for the FIRST reply of the attempt
+ * only; without this, every later reply is persisted to the child's chat and
+ * the parent never hears about it.
+ *
+ * `turnKey` must be unique per persisted reply within the attempt (the sync's
+ * transcript anchor) — it keys the durable delivery so a redelivered Stop is a
+ * no-op while distinct replies each get their own wake. The delegation
+ * completion contract is not applied: the child is already idle and its Todo
+ * state was judged at settle; this is a follow-up reply, not a second settle.
+ */
+export async function notifyParentOfExternalTurn(
+  childSession: Session,
+  text: string,
+  turnKey: string,
+  options?: { alwaysNotify?: boolean },
+): Promise<void> {
+  if (!childSession.parentSessionId) return;
+  const relayed = consumeExplicitRelay(childSession);
+  if (!hasMeaningfulReply(text) || relayed) return;
+
+  await _sendNotification(childSession, { result: text }, {
+    alwaysNotify: options?.alwaysNotify,
+    skipCompletionContract: true,
+    callbackKind: "parent-external-turn",
+    attemptQualifier: `external:${turnKey}`,
+  }).catch((err) => {
+    logger.warn(`[callbacks] Failed to notify parent session ${childSession.parentSessionId} of external turn: ${err instanceof Error ? err.message : String(err)}`);
+  });
+}
+
+/**
+ * Cross-channel de-duplication: if the child already reported UP to this parent
+ * via send_to_session during the model turn that is now settling, that explicit
+ * relay and this automatic callback are two injections of the SAME turn — the
+ * operator sees the second as a spurious "duplicate callback" wake. Returns true
+ * when the marker matched, and consumes it either way so it suppresses at most
+ * one callback: a later reply in the same attempt (an external turn after a
+ * background subagent) is new information, not a duplicate. A re-read sees the
+ * marker written mid-turn; a NEW attempt mints a token that no longer matches,
+ * so a stale marker never outlives its turn. Errors always surface (the explicit
+ * report may predate the failure) — callers consume but do not suppress on them.
+ */
+function consumeExplicitRelay(childSession: Session): boolean {
+  const fresh = getSession(childSession.id) ?? childSession;
+  if (!fresh.attemptToken || fresh.transportMeta?.reportedToParentAttempt !== fresh.attemptToken) return false;
+  consumeChildReportedToParent(fresh.id, fresh.attemptToken);
+  return true;
 }
 
 /**
@@ -267,11 +314,15 @@ async function _sendNotification(
     callbackKind?: string;
     terminalOutcome?: string;
     terminalVersion?: number;
+    /** Distinguishes several callbacks within ONE attempt (external turns). The
+     *  attempt token alone is the settle callback's identity; a second delivery
+     *  keyed on it would collapse into that receipt and never be sent. */
+    attemptQualifier?: string;
   },
 ): Promise<void> {
   const parent = getSession(childSession.parentSessionId!);
   if (!parent) return; // Parent gone or expired
-  if (parent.status === "error") return; // Parent already in error — skip
+  if (parent.status === "error" && !isRemoteMcpSession(parent)) return; // Parent already in error — skip; an anchor's inbox never is
   const isTerminal = options?.semantics !== "nonterminal-lifecycle";
 
   // Delegation completion contract: a narrowly-qualified progress-only idle
@@ -367,7 +418,7 @@ async function _sendNotification(
     targetSessionId: childSession.parentSessionId!,
     sourceKind: "session",
     sourceId: childSession.id,
-    sourceAttempt: attemptToken,
+    sourceAttempt: options?.attemptQualifier ? `${attemptToken}:${options.attemptQualifier}` : attemptToken,
     sourceOutcome: terminalOutcome,
     sourceVersion: terminalVersion,
     deliveryKind: options?.callbackKind ?? "parent-completion",
@@ -439,44 +490,7 @@ function _clean(text: string, max: number): string {
   return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
 }
 
-/**
- * Send a fixed notification to the operator's configured channel
- * (`notifications.connector` + `notifications.channel`; Discord by default).
- * Used for alerts that must reach a human without depending on an LLM — rate
- * limits, and a workflow parked on a decision with no employee session to wake.
- * Fire-and-forget — errors are logged but never rethrown.
- */
-export function notifyOperatorChannel(message: string): void {
-  _sendOperatorNotification(message).catch((err) => {
-    logger.warn(`[callbacks] Failed to send operator notification: ${err instanceof Error ? err.message : String(err)}`);
-  });
-}
-
-async function _sendOperatorNotification(message: string): Promise<void> {
-  let connector = "discord";
-  let channel: string | undefined;
-  const gateway = internalGatewayConnection();
-
-  try {
-    const config = loadConfig();
-    connector = config.notifications?.connector || "discord";
-    channel = config.notifications?.channel;
-  } catch {
-    // Use defaults if config is unavailable
-  }
-
-  if (!channel) {
-    logger.debug("[callbacks] No notifications.channel configured — skipping operator notification");
-    return;
-  }
-
-  const response = await fetch(`${gateway.baseUrl}/api/connectors/${connector}/send`, {
-    method: "POST",
-    headers: internalGatewayHeaders(gateway),
-    body: JSON.stringify({ channel, text: message }),
-  });
-  if (!response.ok) throw new Error(`connector notification failed (${response.status})`);
-}
+export { notifyOperatorChannel } from "./operator-notification.js";
 
 async function _sendRaw(
   parentSessionId: string,

@@ -25,6 +25,7 @@ import {
   PriorityPickerContent,
 } from "./pickers/picker-contents"
 import { PickerPopover, PickerSheet } from "./pickers/picker-shell"
+import { creatableDepartment, offeredDepartments } from "./pickers/department-filters"
 
 type CreatePicker = "assignee" | "department" | "priority" | "due" | "labels"
 
@@ -103,7 +104,8 @@ export function NewTodoDialog({
   const [body, setBody] = useState("")
   const [acceptance, setAcceptance] = useState("")
   const [parentId, setParentId] = useState("")
-  const [department, setDepartment] = useState<string | null>(defaults?.department ?? null)
+  const seededDepartment = creatableDepartment(defaults?.departments ?? [], defaults?.department)
+  const [department, setDepartment] = useState<string | null>(seededDepartment)
   const [assignee, setAssignee] = useState<string | null>(null)
   const [priority, setPriority] = useState(0)
   const [dueAt, setDueAt] = useState<string | null>(null)
@@ -132,7 +134,7 @@ export function NewTodoDialog({
   }), [title, department, assignee, priority, dueAt, selectedLabels])
   const dirty = Boolean(
     title.trim() || body.trim() || acceptance.trim() || parentId.trim() || assignee
-    || priority || dueAt || labelIds.length || department !== (defaults?.department ?? null),
+    || priority || dueAt || labelIds.length || department !== seededDepartment,
   )
 
   const reset = useCallback(() => {
@@ -140,7 +142,7 @@ export function NewTodoDialog({
     setBody("")
     setAcceptance("")
     setParentId("")
-    setDepartment(defaults?.department ?? null)
+    setDepartment(seededDepartment)
     setAssignee(null)
     setPriority(0)
     setDueAt(null)
@@ -149,7 +151,7 @@ export function NewTodoDialog({
     setShowAcceptance(false)
     setShowParent(false)
     setError(null)
-  }, [defaults?.department])
+  }, [seededDepartment])
 
   const create = useCallback(async (keepOpen: boolean) => {
     const nextTitle = title.trim()
@@ -201,7 +203,7 @@ export function NewTodoDialog({
       case "assignee":
         return <AssigneePickerContent {...common} employees={defaults?.employees ?? []} commit={setAssignee} />
       case "department":
-        return <DepartmentPickerContent {...common} departments={defaults?.departments ?? []} commit={setDepartment} />
+        return <DepartmentPickerContent {...common} departments={offeredDepartments(defaults?.departments ?? [], department)} commit={setDepartment} />
       case "priority":
         return <PriorityPickerContent {...common} commit={setPriority} />
       case "due":
@@ -287,7 +289,7 @@ export function NewTodoDialog({
             active={picker === "department"}
             onClick={() => togglePicker("department")}
           >
-            {desktopPicker("department", Math.max(0, (defaults?.departments ?? []).findIndex((item) => item.slug === department)))}
+            {desktopPicker("department", Math.max(0, offeredDepartments(defaults?.departments ?? [], department).findIndex((item) => item.slug === department)))}
           </PropertyChip>
           <PropertyChip
             icon={<Flag size={13} aria-hidden />}

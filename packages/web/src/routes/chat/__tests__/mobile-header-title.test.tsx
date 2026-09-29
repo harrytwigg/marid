@@ -30,6 +30,7 @@ vi.mock('@/components/chat/chat-tabs', async (importOriginal) => {
 import { __clearLiveSessionSnapshotCacheForTests } from '@/hooks/use-live-session'
 import { apiMocks, gateway, renderRoute, sessionIds } from './multi-pane-page-harness'
 import { WORKING_SET_STORAGE_KEY } from '../working-set'
+import { MOBILE_TABS_STORAGE_KEY } from '../mobile-session-tabs-model'
 
 const ALL_TITLES = ['Title a', 'Title b', 'Title c']
 const listSessions = apiMocks.getSessions.getMockImplementation()
@@ -52,6 +53,7 @@ beforeEach(() => {
   gateway.listeners.clear()
   __clearLiveSessionSnapshotCacheForTests()
   seedWorkingSet('a')
+  localStorage.setItem(MOBILE_TABS_STORAGE_KEY, JSON.stringify({ version: 1, sessionIds: ['a', 'b', 'c'] }))
 })
 
 /** No frame names a chat other than the one it has on screen. A chat still
@@ -75,7 +77,7 @@ describe('mobile chat header title', () => {
 
     for (const id of ['b', 'a', 'c']) {
       frames.length = 0
-      fireEvent.click(await screen.findByRole('button', { name: new RegExp(`Title ${id}`) }))
+      fireEvent.click(await screen.findByRole('tab', { name: `Title ${id}` }))
       await settledOn(`Title ${id}`)
       noFrameMisnamesTheChatOnScreen()
       expect(frames.at(-1)).toMatchObject({ title: `Title ${id}`, focusedId: id })

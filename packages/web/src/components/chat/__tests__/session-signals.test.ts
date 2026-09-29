@@ -244,3 +244,24 @@ describe('getStatusDot: a stalled turn must not look like a working one', () => 
     expect(dot).toBeNull()
   })
 })
+
+describe('a message waiting behind a turn typed in the terminal', () => {
+  const NOW = Date.parse('2026-09-26T12:00:00Z')
+  const waiting = {
+    id: 's',
+    status: 'running',
+    turnProgress: { lastProgressAt: NOW - 3 * 60 * 60_000, awaitingSubmit: false, waitingForTerminalTurn: true },
+  }
+
+  it('is never reported as stalled, however long it waits', () => {
+    expect(getTurnStall(waiting, NOW)).toBeNull()
+  })
+
+  it('gets its own sidebar dot label, not "running" or "no output"', () => {
+    expect(getStatusDot(waiting, new Set(['s']), false, NOW)).toEqual({
+      color: 'var(--system-blue)',
+      label: 'waiting for the turn typed in the terminal',
+      pulse: false,
+    })
+  })
+})

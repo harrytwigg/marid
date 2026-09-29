@@ -13,6 +13,7 @@ export type PageKind =
   | "notes"
   | "logs"
   | "limits"
+  | "auto-dispatch"
   | "settings"
   | "settings-plugins"
   | "skills"

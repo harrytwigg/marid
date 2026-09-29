@@ -139,6 +139,7 @@ export class WorkflowService {
       if (run) {
         options.onChange?.({ workflowId, runId });
         this.wakeCaller(run);
+        this.triggers.runSettled(run);
       }
       this.armWakeTimer();
     } });
@@ -155,6 +156,7 @@ export class WorkflowService {
   private runChanged(run: WorkflowRunDetail): void {
     this.options.onChange?.({ workflowId: run.workflowId, runId: run.id });
     this.wakeCaller(run);
+    this.triggers.runSettled(run);
     this.armWakeTimer();
   }
   private wakeCaller(run: WorkflowRunDetail): void {

@@ -1,4 +1,5 @@
 import type { EnginesConfig } from "./engines/chain-model"
+import type { IdleCapacityPolicy } from "@/lib/api-idle-capacity"
 
 /**
  * config.yaml as this page edits it.
@@ -9,7 +10,8 @@ import type { EnginesConfig } from "./engines/chain-model"
  * merely hoped for.
  */
 export interface Config {
-  gateway?: { port?: number; host?: string }
+  /** `idleCapacity` is written by the Auto-Dispatch page, as a whole block. */
+  gateway?: { port?: number; host?: string; idleCapacity?: IdleCapacityPolicy }
   engines?: EnginesConfig
   sessions?: {
     interruptOnNewMessage?: boolean

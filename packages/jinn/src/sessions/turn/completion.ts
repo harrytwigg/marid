@@ -23,9 +23,11 @@ export interface SettleTurnInput {
   /**
    * This turn's cost/turn delta. Present whenever an engine actually ran —
    * including a rate-limit fallback or retry, because a recovered turn is still
-   * a turn. Absent only for aborts that never reached an engine.
+   * a turn. Absent only for aborts that never reached an engine. `model` is
+   * the model the engine actually ran on, so the spend ledger names it even
+   * when the session row carries no pin.
    */
-  accounting?: { cost?: number; numTurns?: number };
+  accounting?: { cost?: number; numTurns?: number; model?: string };
   /** Native engine-session id, filed inside the receipt's own fenced write so a
    * resume finds it and a losing turn never overwrites a newer turn's. */
   engineSession?: { engine: string; nativeId: string; meta?: Omit<EngineSessionRef, "id"> };

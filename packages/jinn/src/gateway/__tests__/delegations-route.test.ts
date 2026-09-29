@@ -715,6 +715,67 @@ describe("POST /api/delegations — the transaction (happy paths)", () => {
     });
   });
 
+  // Handing an `in_review` Todo to someone is handing it to a
+  // reviewer: the link records that, and the self-review ban — which reads the
+  // link, not the assignee — lets them record the close they were delegated to
+  // make. Producers on the same Todo stay banned.
+  it("links a delegate onto an in_review Todo as its REVIEWER, who can then close it", async () => {
+    const parentId = await createOperatorSession("producer handing off");
+    const item = store.createWorkItem({
+      title: "Ready for review",
+      status: "in_review",
+      source: "session",
+      sourceRef: `session:${parentId}:handoff`,
+    });
+    store.linkSession(item.id, parentId);
+
+    const resp = await call(
+      "POST",
+      "/api/delegations",
+      { workItemId: item.id, employee: "qa-emp", task: "Review the branch and close if it holds" },
+      { [CALLER_SESSION_HEADER]: parentId, [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(parentId) },
+    );
+
+    expect(resp.status).toBe(201);
+    expect(reg.getSession(resp.body.sessionId)).toMatchObject({ workItemId: item.id, workItemRole: "review" });
+    expect(store.getWorkItem(item.id)?.status).toBe("in_review");
+
+    const reviewerClose = await call(
+      "POST",
+      `/api/work-items/${item.id}/status`,
+      { status: "done" },
+      {
+        [CALLER_SESSION_HEADER]: resp.body.sessionId,
+        [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(resp.body.sessionId),
+        [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
+      },
+    );
+    expect([reviewerClose.status, store.getWorkItem(item.id)?.status]).toEqual([200, "done"]);
+  });
+
+  it("takes an explicit review intent on a Todo that is not yet in review, and refuses an unknown one", async () => {
+    const parentId = await createOperatorSession("early reviewer");
+    const item = store.createWorkItem({
+      title: "Reviewer brought in early",
+      status: "executing",
+      source: "session",
+      sourceRef: `session:${parentId}:early`,
+    });
+
+    const resp = await call(
+      "POST",
+      "/api/delegations",
+      { workItemId: item.id, employee: "qa-emp", task: "Watch this one", intent: "review" },
+      { [CALLER_SESSION_HEADER]: parentId, [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(parentId) },
+    );
+    expect(resp.status).toBe(201);
+    expect(reg.getSession(resp.body.sessionId)?.workItemRole).toBe("review");
+
+    const bad = await call("POST", "/api/delegations", { engine: "codex", task: "nonsense intent", intent: "audit" });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/intent must be one of/i);
+  });
+
   it("replays the original Todo/session for the same caller idempotency key", async () => {
     const beforeItems = workItemCount();
     const beforeSessions = reg.listSessions().length;
@@ -732,6 +793,39 @@ describe("POST /api/delegations — the transaction (happy paths)", () => {
     });
     expect(workItemCount()).toBe(beforeItems + 1);
     expect(reg.listSessions().length).toBe(beforeSessions + 1);
+  });
+
+  // The session key is the turn lane SessionQueue serializes on. Keyed
+  // on the Todo alone, a second delegation of the same item parked its brief
+  // behind the first delegate's whole turn, and the reconciler reported the
+  // never-started session interrupted. Each delegation gets its own lane.
+  it("two delegations of the same Todo run on separate turn lanes, not one keyed on the Todo", async () => {
+    const parentId = await createOperatorSession("re-delegating COO");
+    const item = store.createWorkItem({
+      title: "Handed on",
+      body: "First to one delegate, then to another",
+      source: "session",
+      sourceRef: `session:${parentId}:handed-on`,
+    });
+    const headers = { [CALLER_SESSION_HEADER]: parentId, [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(parentId) };
+
+    const first = await call("POST", "/api/delegations", { workItemId: item.id, engine: "codex", task: "Take the first pass" }, headers);
+    const second = await call("POST", "/api/delegations", { workItemId: item.id, employee: "qa-emp", task: "Take it over" }, headers);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.sessionId).not.toBe(first.body.sessionId);
+
+    const firstSession = reg.getSession(first.body.sessionId)!;
+    const secondSession = reg.getSession(second.body.sessionId)!;
+    expect(firstSession.sessionKey).toMatch(new RegExp(`^delegation:${item.id}:`));
+    expect(secondSession.sessionKey).toMatch(new RegExp(`^delegation:${item.id}:`));
+    expect(secondSession.sessionKey).not.toBe(firstSession.sessionKey);
+    // The queue rows each brief was dispatched under carry the same distinct lanes.
+    const rows = dbModule.initDb().prepare("SELECT session_id AS sessionId, session_key AS sessionKey FROM queue_items WHERE session_id IN (?, ?)")
+      .all(firstSession.id, secondSession.id) as Array<{ sessionId: string; sessionKey: string }>;
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.sessionKey)).size).toBe(2);
+    for (const row of rows) expect(row.sessionKey).toBe(reg.getSession(row.sessionId)?.sessionKey);
   });
 
   it("passes managed attachments through to the delegated child engine turn", async () => {

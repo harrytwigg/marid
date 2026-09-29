@@ -92,7 +92,8 @@ export function config(): JinnConfig {
   } as unknown as JinnConfig;
 }
 
-const context = {
+/** The API context `call` drives; a test may hang a gateway-owned service on it. */
+export const context = {
   getConfig: config,
   connectors: new Map(),
   startTime: Date.now(),
@@ -109,9 +110,10 @@ const context = {
 function makeResponse() {
   let status = 200;
   const chunks: Buffer[] = [];
+  const headers: Record<string, string> = {};
   const res = {
     writeHead(nextStatus: number) { status = nextStatus; return this; },
-    setHeader() { return this; },
+    setHeader(name: string, value: string) { headers[name.toLowerCase()] = value; return this; },
     end(chunk?: Buffer | string) {
       if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     },
@@ -119,6 +121,8 @@ function makeResponse() {
   return {
     res,
     get status() { return status; },
+    /** Response headers, lowercase-keyed as Node exposes request headers. */
+    get headers() { return headers; },
     get body(): any {
       const raw = Buffer.concat(chunks).toString("utf-8");
       return raw ? JSON.parse(raw) : undefined;
@@ -131,7 +135,7 @@ export async function call(
   url: string,
   body?: unknown,
   headers: Record<string, string> = {},
-): Promise<{ status: number; body: any }> {
+): Promise<{ status: number; body: any; headers: Record<string, string> }> {
   const request = Object.assign(
     Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]),
     {
@@ -146,7 +150,7 @@ export async function call(
     captured.res,
     context,
   );
-  return { status: captured.status, body: captured.body };
+  return { status: captured.status, body: captured.body, headers: captured.headers };
 }
 
 export async function startRouteHarness(): Promise<{ registry: Registry; workItems: WorkItems }> {

@@ -10,8 +10,8 @@ function snapshot(overrides: Record<string, unknown> = {}) {
     gateway: { host: "127.0.0.1", port: 7799 },
     engines: {
       default: "claude",
-      claude: { model: "opus", effortLevel: "high" },
-      codex: { model: "gpt-5.5" },
+      claude: { model: "opus", effortLevel: "high", bin: process.execPath },
+      codex: { model: "gpt-5.5", bin: process.execPath },
     },
     logging: { level: "info" },
   } as unknown as JinnConfig;

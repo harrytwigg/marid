@@ -36,6 +36,7 @@ async function settleRecoveredTurn(
   args: RateLimitTurnArgs,
   recovered: EngineResult,
   engineSession: EngineSession | undefined,
+  ranOn: string | undefined,
 ): Promise<Session | undefined> {
   const sessionId = args.input.session.id;
   const text = turnDisplayText(recovered.result, recovered.error);
@@ -49,7 +50,7 @@ async function settleRecoveredTurn(
     error: recovered.error ?? null,
     cost: recovered.cost,
     durationMs: recovered.durationMs,
-    accounting: recovered,
+    accounting: { cost: recovered.cost, numTurns: recovered.numTurns, ...(ranOn ? { model: ranOn } : {}) },
     ...(engineSession ? { engineSession } : {}),
     fields: {
       ...args.terminalFields(),
@@ -118,7 +119,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
   return {
     onFallbackStart: ({ resumeAt, substitute }) => announceFallback(args, resumeAt, substitute),
     onFallbackStream: (delta) => surface.delta(delta),
-    onFallbackComplete: async (fallbackResult) => {
+    onFallbackComplete: async (fallbackResult, ran) => {
       // The fallback answered on a DIFFERENT engine, so its native id is filed
       // under whichever engine the switch landed on — and without a platform
       // context fingerprint, which belongs to the engine that was limited.
@@ -127,7 +128,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
         engine: fallbackEngine,
         nativeId: fallbackResult.sessionId,
         meta: { model: plan.model, effortLevel: plan.effortLevel },
-      } : undefined);
+      } : undefined, ran.model);
     },
     onWaitingStart: ({ resumeAt }) => announceWaiting(args, resumeAt),
     onRetryAttempt: () => surface.waiting(false),
@@ -138,7 +139,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
         engine: plan.engineName,
         nativeId: retryResult.sessionId,
         meta: { model: plan.model, effortLevel: plan.effortLevel, platformContextFingerprint: args.platformContextFingerprint },
-      } : undefined);
+      } : undefined, plan.model);
       if (!settled) return;
       notifyRateLimitResumed(settled);
       notifyOperatorChannel(`✅ ${rateLimitEngineLabel(args.input.session.engine)} usage limit cleared. ${describe(args.input.session)} resumed.`);
@@ -162,6 +163,9 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<void> {
     engineConfig: plan.engineConfig,
     effortLevel: plan.effortLevel,
     cliFlags: input.employee?.cliFlags,
+    remoteHost: input.employee?.remoteHost,
+    remoteUser: input.employee?.remoteUser,
+    remoteCwd: input.employee?.remoteCwd,
     mcpConfigPath: plan.mcpConfigPath,
     resolvedMcp: plan.resolvedMcp,
     attachments: input.attachments.length ? input.attachments : undefined,

@@ -1,10 +1,17 @@
 import { gatewayRequest, JinnMcpToolError, type JinnMcpTool } from "./toolkit.js";
 import { labelTools } from "./label-tools.js";
+import {
+  uploadCommentAttachments,
+  uploadWorkItemAttachment,
+  vetCommentAttachments,
+  withReadableLocations,
+  type AttachmentUploadTarget,
+} from "./work-item-attachments.js";
 import { workItemDispatchTools } from "./work-item-dispatch-tools.js";
 import { assertIdentity, gatewayFailure, mutationResult } from "./work-item-result.js";
 import type { JinnMcpContext } from "./toolkit.js";
 import { BLOCK_KIND_ERROR, BLOCK_KINDS, parseBlockKind } from "../work-items/blocks.js";
-import { PARKED_UNTIL_ERROR, UNBLOCK_HINT_ERROR, parseParkedUntil, parseUnblockHint } from "../work-items/stop-cause.js";
+import { UNBLOCK_HINT_ERROR, parkRefusal, parseUnblockHint } from "../work-items/stop-cause.js";
 import { parseTodoId } from "../work-items/id.js";
 import {
   clampInt,
@@ -228,6 +235,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         dueAt: { type: "string" },
         labels: { type: "array", items: { type: "string" } },
         idempotencyKey: { type: "string" },
+        autoStart: { type: "boolean", description: "false: todo-status triggers filtering on autoStart skip it." },
       },
       required: ["title"],
     },
@@ -255,6 +263,10 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       const dueAt = optionalString(args, "dueAt", 64);
       if (dueAt !== undefined) body.dueAt = dueAt;
       if (args.labels !== undefined) body.labels = requireLabelRefs(args);
+      if (args.autoStart !== undefined) {
+        if (typeof args.autoStart !== "boolean") throw new JinnMcpToolError("autoStart must be a boolean");
+        body.autoStart = args.autoStart;
+      }
       // ICI-733: repeating the same key returns the Todo the first call made,
       // so a retried cron or connector fire cannot mint a duplicate.
       const idempotencyKey = optionalString(args, "idempotencyKey");
@@ -312,7 +324,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       if (blockKind === null) throw new JinnMcpToolError(`${BLOCK_KIND_ERROR}.`);
       // The route's validator AND its words verbatim: a trailing full stop is enough to make them unequal.
       if (parseUnblockHint(args.unblockHint) === null) throw new JinnMcpToolError(UNBLOCK_HINT_ERROR);
-      if (parseParkedUntil(args.parkedUntil) === null) throw new JinnMcpToolError(`${PARKED_UNTIL_ERROR}.`);
+      const refusedPark = parkRefusal(args.parkedUntil, rawStatus, blockKind); if (refusedPark) throw new JinnMcpToolError(refusedPark);
       const note = optionalString(args, "note", WORK_ITEM_NOTE_CHAR_CAP);
       // Where a Todo's product lands is metadata, not a lifecycle edge: it rides the same
       // pen the web surface writes it through, and rides it first, so a refused declaration
@@ -469,6 +481,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
           throw new JinnMcpToolError(`attachments must be an array of up to ${COMMENT_ATTACHMENTS_MAX} local file paths (non-empty strings)`);
         }
         attachmentPaths = (args.attachments as string[]).map((entry) => entry.trim());
+        vetCommentAttachments(ctx, attachmentPaths); // refuse before the comment exists
       }
       const { status, body: resp } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/comments`, payload);
       if (status >= 400) throw gatewayFailure(`commenting on work item "${id}"`, status, resp);
@@ -478,21 +491,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       if (typeof commentId !== "string") {
         throw new JinnMcpToolError(`the comment was created but the gateway response carried no comment id — attachments were NOT uploaded`);
       }
-      const uploaded: unknown[] = [];
-      for (const filePath of attachmentPaths) {
-        const attach = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/attachments`, {
-          path: filePath,
-          commentId,
-        });
-        if (attach.status >= 400) {
-          throw gatewayFailure(
-            `comment ${commentId} was created, but attaching "${filePath}" (${uploaded.length}/${attachmentPaths.length} uploaded)`,
-            attach.status,
-            attach.body,
-          );
-        }
-        uploaded.push((attach.body as { attachment?: unknown } | null)?.attachment ?? attach.body);
-      }
+      const uploaded = await uploadCommentAttachments(ctx, id, commentId, attachmentPaths);
       return { ...created, attachments: uploaded, hint: "Next: get_work_item { id }." };
     },
   };
@@ -539,16 +538,16 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       assertIdentity(ctx);
       const id = requireTodoId(args);
       const filePath = requireString(args, "path", ATTACHMENT_PATH_CHAR_CAP);
-      const payload: Record<string, unknown> = { path: filePath };
+      const target: AttachmentUploadTarget = {};
       if (args.commentId !== undefined) {
         if (typeof args.commentId !== "string" || !COMMENT_ID_PATTERN.test(args.commentId)) {
           throw new JinnMcpToolError("commentId must be a comment ID such as wic_0a1b2c3d4e5f");
         }
-        payload.commentId = args.commentId;
+        target.commentId = args.commentId;
       }
       const filename = optionalString(args, "filename");
-      if (filename !== undefined) payload.filename = filename;
-      const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/attachments`, payload);
+      if (filename !== undefined) target.filename = filename;
+      const { status, body } = await uploadWorkItemAttachment(ctx, id, filePath, target);
       if (status >= 400) throw gatewayFailure(`attaching to work item "${id}"`, status, body);
       return { ...(body as Record<string, unknown>), hint: "Next: list_work_item_attachments { id }." };
     },
@@ -567,7 +566,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       const id = requireTodoId(args);
       const { status, body } = await gatewayRequest(ctx, "GET", `/api/work-items/${encodeURIComponent(id)}/attachments`);
       if (status >= 400) throw gatewayFailure(`listing attachments on work item "${id}"`, status, body);
-      return body;
+      return withReadableLocations(ctx, id, body);
     },
   };
 

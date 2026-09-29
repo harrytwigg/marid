@@ -1,4 +1,5 @@
 import type { Database as DatabaseType } from "better-sqlite3";
+import type { BlockKind } from "./blocks.js";
 
 /** PLA-157: why a stopped Todo stopped, and what ends the wait.
  *
@@ -43,6 +44,29 @@ export const UNBLOCK_HINT_ERROR =
   "unblockHint must be an object with non-empty what and who strings, and no other keys";
 
 export const PARKED_UNTIL_ERROR = "parkedUntil must be an ISO-8601 timestamp";
+
+/** a park lives on a stop, so any move that does not land in `blocked`
+ *  or `escalated` deletes it on the same write. Accepting one there reported
+ *  success for a park that never existed — the Todo stayed in the queue, and
+ *  idle-capacity could start it the next minute. */
+export const PARKED_UNTIL_NEEDS_STOP =
+  "parkedUntil parks a Todo in blocked (or escalated) and is deleted by any other move — send status: blocked without blockKind dependency, which re-queues instead of parking";
+
+/** Whether a move to `target` keeps a park: it has to stop the Todo, and a
+ *  `dependency` block does not — it re-queues. */
+export function moveCanHoldPark(target: string, blockKind: BlockKind | undefined): boolean {
+  if (target === "escalated") return true;
+  return target === "blocked" && blockKind !== "dependency";
+}
+
+/** Why a `parkedUntil` on this move is refused, or undefined when it is fine
+ *  (or absent). One rule, so the route and the MCP tool cannot disagree about
+ *  which parks are real. */
+export function parkRefusal(value: unknown, target: string, blockKind: BlockKind | undefined): string | undefined {
+  const parkedUntil = parseParkedUntil(value);
+  if (parkedUntil === null) return PARKED_UNTIL_ERROR;
+  return parkedUntil && !moveCanHoldPark(target, blockKind) ? PARKED_UNTIL_NEEDS_STOP : undefined;
+}
 
 export const UNBLOCK_HINT_REQUIRED =
   "unblockHint {what, who} is required when escalating a Todo — an escalation nobody can act on is not an escalation";

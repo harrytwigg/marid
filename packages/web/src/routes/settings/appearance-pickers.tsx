@@ -1,5 +1,6 @@
 /** The accent swatches the picker offers, beside the picker that renders them. */
 export const ACCENT_PRESETS = [
+  { label: "Marid teal", value: "#3DBFB2" },
   { label: "Red", value: "#EF4444" },
   { label: "Orange", value: "#F97316" },
   { label: "Amber", value: "#F59E0B" },

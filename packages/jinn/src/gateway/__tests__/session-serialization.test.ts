@@ -57,6 +57,7 @@ function makeProgressEngine(progress: {
   awaitingSubmit: boolean;
   activeTools: number;
   activeUpstream: boolean;
+  waitingForTerminalTurn?: boolean;
 } | null) {
   return { turnProgress: () => progress };
 }
@@ -253,6 +254,18 @@ describe("serializeSession: turnProgress", () => {
     const context = makeContext(undefined, {}, makeProgressEngine(progress));
 
     expect(serializeSession(session, context).turnProgress).toBeNull();
+  });
+
+  it("reports a turn waiting behind one typed in the terminal as waiting, not as quiet", () => {
+    const session = makeSession({ status: "running" });
+    const context = makeContext(undefined, {}, makeProgressEngine({
+      lastProgressAt: NOW - 60 * 60_000, awaitingSubmit: false, activeTools: 0, activeUpstream: false, waitingForTerminalTurn: true,
+    }));
+    expect(serializeSession(session, context).turnProgress).toEqual({
+      lastProgressAt: NOW - 60 * 60_000,
+      awaitingSubmit: false,
+      waitingForTerminalTurn: true,
+    });
   });
 
   it("stays silent when no turn is in flight, or the session is not running", () => {

@@ -1,0 +1,17 @@
+/* The session-tab row under the mobile nav bar (chat-tabs.tsx) is sized by one
+   custom property, named here; the tabs and close buttons inside it keep their
+   own fixed 44px touch size. The transcript's first message starts that much
+   lower while the row is up. The band's base is globals.css's --chat-header-band
+   below lg; a custom property cannot read its own parent value, so it is repeated
+   here and mobile-session-tabs-css.test.ts fails if the two ever differ. The rule
+   wins over the :root value because it is declared on .chat-pills-layout itself,
+   which the transcript inherits from, so load order and specificity do not matter. */
+:root {
+  --mobile-session-tabs-height: 44px;
+}
+
+@media (max-width: 63.999rem) {
+  .chat-pills-layout:has([data-mobile-session-tabs-row]) {
+    --chat-header-band: calc(72px + var(--mobile-session-tabs-height));
+  }
+}

@@ -41,15 +41,21 @@ const definition = {
 
 const started: string[] = [];
 let reported: WorkflowTodoEventClaimOutcome[] = [];
+/** Every run these stubs start stays in flight. The Todo-wide claim now
+ *  outlives a run only while one is still going, and what is under
+ *  test here is that claim deciding a burst, not runs settling. */
+const live: Array<{ id: string; idempotencyKey: string; status: "running" }> = [];
 
 const repository = {
   listDefinitions: () => ({ items: [{ id: definition.id }], nextCursor: null }),
   getDefinition: () => definition,
   createRun: ({ idempotencyKey }: { idempotencyKey: string }) => {
     started.push(idempotencyKey);
+    live.push({ id: `run-${started.length}`, idempotencyKey, status: "running" });
     return { id: `run-${started.length}` };
   },
   getRun: (_workflowId: string, runId: string) => ({ id: runId, status: "completed" }),
+  listRecoverableRuns: () => [...live],
 } as unknown as WorkflowRepository;
 
 const runner = { start: async (runId: string) => ({ id: runId, status: "completed" }) } as unknown as WorkflowRunner;
@@ -66,9 +72,9 @@ let pending: WorkflowTodoStatusEvent[] = [];
 
 function event(id: string, workItemId: string, quotaWindowDecided = false): WorkflowTodoStatusEvent {
   return {
-    id, workItemId, fromStatus: "executing", toStatus: "in_review", actor: "operator", armedAsDelegate: null,
+    id, workItemId, fromStatus: "executing", toStatus: "in_review", actor: "operator", actorEmployee: null, armedAsDelegate: null,
     quotaWindowDecided,
-    item: { source: "human", department: null, assignee: null, labels: [],
+    item: { source: "human", department: null, assignee: null, labels: [], autoStart: true,
       live: { assignee: null, parentId: null, status: "in_review" } },
   };
 }
@@ -103,7 +109,7 @@ beforeAll(async () => {
   triggers = await import("../trigger-service.js");
 });
 
-beforeEach(() => { started.length = 0; reported = []; pending = []; });
+beforeEach(() => { started.length = 0; live.length = 0; reported = []; pending = []; });
 
 describe("an automated Todo-status fire meets the respawn guards", () => {
   it("starts no run, takes no claim, and reports the hold as suppressed", async () => {

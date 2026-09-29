@@ -377,7 +377,7 @@ describe("the task page", () => {
 
     await waitFor(() => expect(dispatchTodo).toHaveBeenCalledWith("PLA-12"))
     const linked = await screen.findByTestId("rail-dispatch-session")
-    expect(linked.textContent).toContain("Dispatcher working")
+    expect(linked.textContent).toContain("todo-dispatcher working")
     expect(linked.getAttribute("data-session-id")).toBe("dispatcher-session")
     expect(screen.queryByTestId("rail-dispatch")).toBeNull()
   })

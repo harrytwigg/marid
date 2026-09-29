@@ -1,0 +1,18 @@
+Marid
+Copyright (c) 2026 Marid contributors
+
+Marid is a fork of Jinn (https://github.com/hristo2612/jinn), created by
+hristo2612 and Jinn Contributors and released under the MIT License.
+
+Most of the code in this repository originates from Jinn and remains
+Copyright (c) 2026 Jinn Contributors. The Marid fork adds features and
+changes the user-visible branding on top of that work; those modifications
+are released under the same MIT License. See LICENSE for the full text.
+
+The internal codename "Jinn" (the `jinn` command, the `jinn-cli` package
+name, `~/.jinn` and `JINN_*` environment variables) is retained so that the
+fork stays compatible with, and mergeable from, upstream.
+
+Third-party components keep their own licenses; see the NOTICE.md files in
+the directories that vendor them (for example
+packages/web/src/routes/workflow/editor/NOTICE.md).

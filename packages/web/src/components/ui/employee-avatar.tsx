@@ -8,6 +8,9 @@ import type { JinnSettings } from "@/lib/settings"
  *  name-hashed emoji employees get. */
 export const OPERATOR_DEFAULT_EMOJI = "\u{1F308}"
 
+/** Avatar name for a terminal session row: no employee, a screen. */
+export const TERMINAL_AVATAR = "__terminal__"
+
 interface EmployeeAvatarProps {
   name: string
   /** Shown when this name has no chosen emoji. Defaults to the name's pool entry. */
@@ -23,7 +26,7 @@ function emojiFor(name: string, fallback: string | undefined, settings: JinnSett
   // "operator" is the reserved actor kind on the wire, not an employee name, so
   // it resolves from the operator's own setting instead of the employee overrides.
   const chosen = name === "operator" ? settings.operatorEmoji : settings.employeeOverrides[name]?.emoji
-  return chosen || fallback || emojiForName(name)
+  return chosen || fallback || (name === TERMINAL_AVATAR ? "\u{1F5A5}\uFE0F" : emojiForName(name))
 }
 
 export function EmployeeAvatar({

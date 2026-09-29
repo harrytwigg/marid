@@ -4,6 +4,7 @@ import { createSession, insertMessage, updateSession, enqueueQueueItem } from ".
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
 import { fileIdsToMedia, rehomeAttachmentsToSession } from "./files.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
+import { isRawEngineCommand } from "../shared/skill-commands.js";
 import { dispatchWebSessionRun, resolveAttachmentPaths } from "./web-session-dispatch.js";
 import type { ApiContext } from "./api.js";
 
@@ -143,7 +144,12 @@ function startFirstTurn(
   // suppressed there (ptyEngine truthy) and only rides headless dispatch.
   const { engine: enginePrompt } = resolveMessageAudiences(
     input.prompt,
-    speechContextApplies({ speech: input.speech === true, isNotification: false, promptRendered: !!ptyEngine }),
+    speechContextApplies({
+      speech: input.speech === true,
+      isNotification: false,
+      promptRendered: !!ptyEngine,
+      rawEngineCommand: isRawEngineCommand(session.engine, input.prompt),
+    }),
   );
 
   dispatchWebSessionRun(session, enginePrompt, engine, context, {

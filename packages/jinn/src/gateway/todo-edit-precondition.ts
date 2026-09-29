@@ -57,7 +57,7 @@ export function readTodoEditPrecondition(req: HttpRequest, body: Record<string, 
   return { ok: true, expectedVersion: bodyVersion ?? headerVersion! };
 }
 
-type TodoEditValidationCode = 'todo_invalid_patch' | 'todo_invalid_assignee';
+type TodoEditValidationCode = 'todo_invalid_patch' | 'todo_invalid_assignee' | 'todo_invalid_department';
 
 export function todoEditValidationError(
   res: ServerResponse,

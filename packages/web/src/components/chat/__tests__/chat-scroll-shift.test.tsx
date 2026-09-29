@@ -20,7 +20,7 @@ import { installVirtualLayout } from './virtual-layout'
 const ROW_H = 140
 const VIEWPORT_H = 700
 const COUNT = 120
-/** The transcript's own `pt-[88px]` — the gap the virtual block starts below. */
+/** The transcript's own `--chat-header-band` at lg (88px) — the gap the virtual block starts below. */
 const HEADER_PAD = 88
 /** Each of the older-page states is one `h-8` row above the block. */
 const OLDER_ROW_H = 32

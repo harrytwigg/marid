@@ -85,3 +85,29 @@ export function ensureIsolatedTestHome(
   assertIsolatedTestHome(env.JINN_HOME);
   return { home, created: true };
 }
+
+/**
+ * Give one test FILE its own home, before its static imports freeze paths.ts.
+ *
+ * The run-level home above is safe but shared: `pool: 'forks'` gives each file a
+ * fresh process, not a fresh home, so two files that don't override JINN_HOME
+ * resolve the same `sessions/registry.db` and write it from parallel forks —
+ * the intermittent "database is locked" that chased per file. setupFiles
+ * run inside each worker before its test module is evaluated, so calling this
+ * there allocates the home once per file and no file has to remember to.
+ *
+ * The home is created beneath the run's temp root, so global teardown removes
+ * it with the rest of the run; TMPDIR/TMP/TEMP are repointed inside it so
+ * fixture scratch dirs stay in the same cleanup-owned subtree.
+ */
+export function createIsolatedTestFileHome(env: NodeJS.ProcessEnv = process.env): string {
+  assertIsolatedTestHome(env.JINN_HOME);
+  const root = env.TMPDIR ?? env.TEMP ?? env.TMP ?? os.tmpdir();
+  assertIsolatedTestHome(root);
+  const home = fs.mkdtempSync(path.join(root, 'jinn-vitest-file-'));
+  const temp = path.join(home, 'tmp');
+  fs.mkdirSync(temp);
+  env.JINN_HOME = home;
+  for (const key of ['TMPDIR', 'TMP', 'TEMP']) env[key] = temp;
+  return home;
+}

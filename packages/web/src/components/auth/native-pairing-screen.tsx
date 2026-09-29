@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { PRODUCT_NAME } from "@/lib/brand"
 
 const INPUT_SHELL =
   "flex h-11 w-full items-center gap-2 rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] px-3 shadow-[inset_0_0_0_1px_var(--separator)] transition-[box-shadow] duration-150 [transition-timing-function:var(--ease-smooth)] focus-within:shadow-[inset_0_0_0_1px_var(--accent),0_0_0_4px_var(--accent-fill)]"
@@ -100,7 +101,7 @@ export function NativePairingDialog({ open, onOpenChange }: { open: boolean; onO
           <div className="p-5">
             <DialogHeader className="gap-2 text-left">
               <DialogTitle>Add gateway</DialogTitle>
-              <DialogDescription>Pair another Jinn gateway. It stays inactive until you choose it.</DialogDescription>
+              <DialogDescription>Pair another {PRODUCT_NAME} gateway. It stays inactive until you choose it.</DialogDescription>
             </DialogHeader>
             <div className="mt-[var(--space-5)] flex flex-col gap-[var(--space-3)]">
               <PairingFields origin={origin} code={code} onOrigin={setOrigin} onCode={setCode} />
@@ -183,7 +184,7 @@ function ScreenHeader({ unreachableName }: { unreachableName?: string }) {
       </div>
       <div className="min-w-0">
         <h1 className="text-balance text-[length:var(--text-title3)] font-[var(--weight-semibold)] tracking-[var(--tracking-normal)]">
-          {unreachableName ? `Cannot reach ${unreachableName}` : "Connect Jinn"}
+          {unreachableName ? `Cannot reach ${unreachableName}` : `Connect ${PRODUCT_NAME}`}
         </h1>
         <p className="mt-1 text-pretty text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
           {unreachableName

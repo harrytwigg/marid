@@ -131,4 +131,13 @@ describe('mobile working-set activity', () => {
     expect(notified.b).toMatchObject({ preview: 'Background finished', revision: 1, moved: true, receivingText: false })
     expect(clearMobileWorkingSetMoved(notified, 'b').b.moved).toBe(false)
   })
+
+  it('previews a notification from the field the gateway actually sends', () => {
+    const initial: Record<string, MobileWorkingSetActivity> = {}
+    const notified = reduceMobileWorkingSetActivity(initial, ['a', 'b'], 'a', {
+      event: 'session:notification',
+      payload: { sessionId: 'b', message: '🗜️ Context compacted.' },
+    })
+    expect(notified.b?.preview).toContain('Context compacted')
+  })
 })

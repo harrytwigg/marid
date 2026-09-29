@@ -93,6 +93,36 @@ describe("status reconciler sweepOnce", () => {
     expect(reg.getSession("working-1")?.status).toBe("running");
   });
 
+  // a delegated session is set running at enqueue and nothing refreshes
+  // its heartbeat while its brief waits in the lane. That is a parked turn, not
+  // a lost completion — settling it would wake the parent with an interruption
+  // for a turn that was about to run.
+  it("leaves a stale running session alone while this process still holds its queued turn", async () => {
+    insert("parked-1", "running", iso(120_000));
+    insert("parked-2", "running", iso(120_000));
+    const pendingStuck = new Set<string>();
+    const deps = {
+      engines: new Map([["claude", fakeEngine(false)]]),
+      surfaceFor,
+      now: () => NOW,
+      pendingStuck,
+      hasQueuedTurn: ((id: string) => id === "parked-1") as (id: string) => boolean,
+    };
+    expect(await rec.sweepOnce(deps)).toBe(0); // parked-2 marked as a candidate, parked-1 skipped outright
+    expect(pendingStuck.has("parked-1")).toBe(false);
+    expect(pendingStuck.has("parked-2")).toBe(true);
+    expect(await rec.sweepOnce(deps)).toBe(1);
+    expect(reg.getSession("parked-1")?.status).toBe("running");
+    expect(reg.getSession("parked-2")).toMatchObject({ status: "interrupted", attemptOutcome: "interrupted" });
+    expect(notifyParentSession).not.toHaveBeenCalledWith(expect.objectContaining({ id: "parked-1" }), expect.anything());
+
+    // Once the lane lets the turn go, the queue no longer holds it: the bare heartbeat test applies again.
+    deps.hasQueuedTurn = () => false;
+    expect(await rec.sweepOnce(deps)).toBe(0); // first observation — candidate only
+    expect(await rec.sweepOnce(deps)).toBe(1);
+    expect(reg.getSession("parked-1")).toMatchObject({ status: "interrupted", attemptOutcome: "interrupted" });
+  });
+
   it("ignores idle sessions and unknown engines", async () => {
     insert("idle-1", "idle", iso(999_000));
     insert("ghost-1", "running", iso(120_000), "no-such-engine");

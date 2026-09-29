@@ -1,13 +1,19 @@
 import { buildPlatformContextRefresh, fingerprintPlatformContext } from "../../engines/platform-context.js";
 import { isBudgetExhausted } from "../../gateway/budgets.js";
+import { refuseClaudeLaunch } from "../claude-auth-watch.js";
 import { resolveEffort } from "../../shared/effort.js";
+import { isCompactCommand, isRawEngineCommand } from "../../shared/skill-commands.js";
+import { opencodeMode } from "../../engines/opencode-server.js";
+import { compactCommandRefusal } from "../compact-command.js";
 import { logger } from "../../shared/logger.js";
 import { effortLevelsForModel, engineAvailable, engineUnavailableMessage, isKnownEngine } from "../../shared/models.js";
 import { getClaudeExpectedResetAt, isLikelyNearClaudeUsageLimit } from "../../shared/usageAwareness.js";
-import type { ResolvedMcpConfig, Session } from "../../shared/types.js";
+import type { EngineSessionRef, ResolvedMcpConfig, Session } from "../../shared/types.js";
 import { buildContext, buildPlatformContextSnapshot, runtimeSessionSource, type BuildContextOptions } from "../context.js";
 import { resolveEngineRunMcp } from "../engine-run-mcp.js";
 import { getEngineSessionRef, getMessages } from "../registry.js";
+import { isRemoteMcpSession } from "../remote-mcp-session.js";
+import { isTerminalSession, TERMINAL_REFUSES_MESSAGES } from "../../terminals/session.js";
 import { readUnseenInterruptedPrompts } from "./superseded.js";
 import { formatResumeTime } from "./text.js";
 import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight, TurnSurface } from "./types.js";
@@ -45,6 +51,9 @@ export async function resolveTurnHierarchy(
  */
 function refuseTurn(input: TurnInput): string | undefined {
   const session = input.session;
+  // D3: a connector anchor is an identity, never an agent. Running one would be an employee-less engine turn — COO-shaped.
+  if (isRemoteMcpSession(session)) return "A remote MCP connector session never runs an engine; its results are read back through the connector.";
+  if (isTerminalSession(session)) return TERMINAL_REFUSES_MESSAGES;
   if (!input.engineOverride && !input.engines.has(session.engine)) {
     return `Engine "${session.engine}" not available`;
   }
@@ -54,7 +63,18 @@ function refuseTurn(input: TurnInput): string | undefined {
   if (session.employee && isBudgetExhausted(session.employee, input.config.budgets?.employees)) {
     return `Budget limit exceeded for employee "${session.employee}". Session blocked.`;
   }
-  return undefined;
+  return refuseDeadClaudeLogin(input);
+}
+
+/**
+ * Last, because it reads a file: a Claude launch on credentials a launch has
+ * already proved dead (or that the disk says cannot work) costs a spawn and a
+ * guaranteed `authentication_failed`, and says nothing new. The PTY view's
+ * engine override is a human at a terminal who can read the error themselves.
+ */
+function refuseDeadClaudeLogin(input: TurnInput): string | undefined {
+  if (input.session.engine !== "claude" || input.engineOverride) return undefined;
+  return refuseClaudeLaunch(input.employee);
 }
 
 /**
@@ -108,6 +128,13 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
   const session = input.session;
   const engineName = session.engine;
   const resumeRef = getEngineSessionRef(session, engineName);
+  const compaction = isCompactCommand(input.prompt);
+  // `/compact` never reaches an engine that cannot compact: sent as text it is
+  // just a message the model answers. Declined, not failed — nothing went wrong.
+  const compactRefusal = compaction
+    ? compactCommandRefusal(engineName, opencodeMode(input.config.engines.opencode), Boolean(resumeRef.id))
+    : undefined;
+  if (compactRefusal) return { ok: false, error: compactRefusal, declined: true };
   const { mcpConfigPath, resolvedMcp } = resolveEngineRunMcp({
     config: input.config,
     employee: input.employee,
@@ -123,6 +150,8 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
   const runtimeSource = runtimeSessionSource(session.source);
 
   const baseContextOptions = contextOptionsFor(input, effortLevel, resolvedMcp, runtimeSource);
+  const rawCommand = isRawEngineCommand(engineName, input.prompt);
+  const turnPrompt = rawCommand ? verbatimTurnPrompt(input.prompt) : resolveTurnPrompt(session, engineName, input.prompt);
 
   return {
     ok: true,
@@ -136,16 +165,45 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
     mcpConfigPath,
     resolvedMcp,
     runtimeSource,
-    ...resolveTurnPrompt(session, engineName, input.prompt),
-    prepareContext: (modelForAttempt) => {
-      const contextOptions: BuildContextOptions = { ...baseContextOptions, model: modelForAttempt };
-      const snapshot = buildPlatformContextSnapshot(contextOptions);
-      const fingerprint = fingerprintPlatformContext(snapshot);
-      const refresh = resumeRef.id && resumeRef.platformContextFingerprint !== fingerprint
-        ? buildPlatformContextRefresh(snapshot)
-        : undefined;
-      return { fingerprint, refresh, systemPrompt: buildContext(contextOptions) };
-    },
+    ...turnPrompt,
+    compaction,
+    prepareContext: contextPreparer(baseContextOptions, resumeRef, rawCommand),
+  };
+}
+
+/**
+ * An engine-native command (/compact, /clear, …) goes to the engine exactly as
+ * written. Anything folded in front of it — an engine-switch transcript, a
+ * message an interrupt kept from the engine — turns it into text for the model
+ * and the command never runs. Both stay owed: neither is marked delivered, so
+ * the next ordinary turn carries them.
+ */
+function verbatimTurnPrompt(prompt: string): Pick<TurnPlan, "promptToRun" | "syncRequested" | "carriedInterruptedPrompts"> {
+  return { promptToRun: prompt, syncRequested: false, carriedInterruptedPrompts: false };
+}
+
+/** The per-attempt context builder: system prompt, fingerprint, and the
+ *  platform-context refresh a resumed thread is owed when its fingerprint moved. */
+function contextPreparer(
+  baseContextOptions: BuildContextOptions,
+  resumeRef: EngineSessionRef,
+  rawCommand: boolean,
+): TurnPlan["prepareContext"] {
+  return (modelForAttempt) => {
+    const contextOptions: BuildContextOptions = { ...baseContextOptions, model: modelForAttempt };
+    const snapshot = buildPlatformContextSnapshot(contextOptions);
+    const fingerprint = fingerprintPlatformContext(snapshot);
+    // An engine-native command (/compact, /clear, …) must reach the engine
+    // exactly as written, so it cannot carry a refresh. Record the fingerprint
+    // the thread already had rather than this one, so the refresh it did not
+    // carry is still owed — and sent — on the next ordinary turn.
+    if (rawCommand && resumeRef.id) {
+      return { fingerprint: resumeRef.platformContextFingerprint ?? "", refresh: undefined, systemPrompt: buildContext(contextOptions) };
+    }
+    const refresh = resumeRef.id && resumeRef.platformContextFingerprint !== fingerprint
+      ? buildPlatformContextRefresh(snapshot)
+      : undefined;
+    return { fingerprint, refresh, systemPrompt: buildContext(contextOptions) };
   };
 }
 
