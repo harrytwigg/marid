@@ -5,6 +5,7 @@ import { ChatHeaderPills } from '@/components/chat/chat-tabs'
 export function ChatPageHeader({
   hideOnMobile,
   title,
+  chatId,
   backTo,
   onBack,
   onNew,
@@ -15,6 +16,7 @@ export function ChatPageHeader({
 }: {
   hideOnMobile: boolean
   title: string
+  chatId: string | null
   backTo?: { label: string; onClick: () => void }
   onBack: () => void
   onNew: () => void
@@ -25,7 +27,7 @@ export function ChatPageHeader({
 }) {
   return (
     <>
-      <ChatHeaderPills {...{ hideOnMobile, hideDesktop, title, backTo, onBack, onNew, moreMenu, mobileWorkingSet }} />
+      <ChatHeaderPills {...{ hideOnMobile, hideDesktop, title, chatId, backTo, onBack, onNew, moreMenu, mobileWorkingSet }} />
       {copiedField && <ChatCopyToast placement="page" />}
     </>
   )

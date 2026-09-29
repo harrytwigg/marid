@@ -3,6 +3,7 @@ import type { GatewayEventListener } from '@jinn/gateway-events'
 import { splitTitleId } from '@/components/chat/chat-tabs'
 import { useMobileWorkingSetActivity } from './mobile-working-set-activity'
 import { MobileSessionTabs } from './mobile-session-tabs'
+import { useTabSwitchSelect } from '@/components/chat/tab-switch-mark'
 import { useOffListTabSessions, type TabSession } from './use-off-list-tab-sessions'
 import {
   closeMobileTab,
@@ -95,11 +96,13 @@ export function useMobileSessionTabs({
   )
   const activity = useMobileWorkingSetActivity({ sessionIds: shownIds, activeId, subscribe, connectionSeq })
 
+  // Pressing a tab and closing the one in front both switch chats: neither replays an open's entrance.
+  const selectTab = useTabSwitchSelect(activeId, onSelect)
   const close = useCallback((sessionId: string) => {
     const nextId = sessionId === activeId ? neighbourAfterClose(shownIds, sessionId) : null
     dropTab(sessionId)
-    if (nextId) onSelect(nextId)
-  }, [activeId, dropTab, onSelect, shownIds])
+    if (nextId) selectTab(nextId)
+  }, [activeId, dropTab, selectTab, shownIds])
 
   // Titles come from the session list, so until it arrives every tab would read "Chat".
   if (!sessions || shownIds.length < 2) return undefined
@@ -107,7 +110,7 @@ export function useMobileSessionTabs({
   return (
     <MobileSessionTabs
       activeId={activeId}
-      onSelect={onSelect}
+      onSelect={selectTab}
       onClose={close}
       tabs={shownIds.map((id) => ({
         id,

@@ -6,7 +6,7 @@ const artifacts = process.env.JINN_VERIFY_ARTIFACTS ?? path.join('/tmp', 'jinn-c
 
 export default defineConfig({
   testDir: './e2e/chat-grid-drop',
-  testMatch: ['chat-grid-drop.spec.ts', 'split-layout.spec.ts', 'pane-tabs.spec.ts'],
+  testMatch: ['chat-grid-drop.spec.ts', 'split-layout.spec.ts', 'pane-tabs.spec.ts', 'tab-switch-motion.spec.ts'],
   fullyParallel: false,
   workers: 1,
   retries: 0,

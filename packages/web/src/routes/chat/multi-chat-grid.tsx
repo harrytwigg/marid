@@ -1,4 +1,4 @@
-import type { ComponentProps, ComponentType, ReactNode } from 'react'
+import { useState, type ComponentProps, type ComponentType, type ReactNode } from 'react'
 import { ChatPane } from '@/components/chat/chat-pane'
 import { resolvePaneTitle, safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { usePaneTabsShown } from '@/components/chat/pane-tabs-context'
@@ -10,6 +10,7 @@ import { ChatGrid } from './chat-grid'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { isTerminalSession } from '@/lib/terminal-session'
 import { deriveChatGridIds } from './grid-placement'
+import { arrivesByTabSwitch } from '@/components/chat/tab-switch-mark'
 import { SessionPicker } from './session-picker'
 import type { SessionMeta } from './use-chat-pane-state'
 
@@ -190,11 +191,19 @@ function GridChatPane({
 }
 
 function MobileThreadCrossfade({ paneId, children }: { paneId: string; children: ReactNode }) {
+  return <MobileThreadFrame key={paneId} paneId={paneId}>{children}</MobileThreadFrame>
+}
+
+/** One per chat shown: the key above remounts it, and with it the grid, on every switch. The crossfade
+ *  it carries plays when a chat opens; a tab press does not replay it (globals.css still describes it
+ *  as replaying once per switch). */
+function MobileThreadFrame({ paneId, children }: { paneId: string; children: ReactNode }) {
+  // Latched for the frame's life: a class added to a live element would start the animation then.
+  const [byTabSwitch] = useState(() => arrivesByTabSwitch(paneId))
   return (
     <div
-      key={paneId}
       data-mobile-thread-pane={paneId}
-      className="flex min-h-0 flex-1 overflow-hidden animate-[jinn-mobile-chat-crossfade_var(--duration-base)_var(--ease-smooth)] motion-reduce:animate-none"
+      className={`flex min-h-0 flex-1 overflow-hidden ${byTabSwitch ? '' : 'animate-[jinn-mobile-chat-crossfade_var(--duration-base)_var(--ease-smooth)] motion-reduce:animate-none'}`}
     >
       {children}
     </div>

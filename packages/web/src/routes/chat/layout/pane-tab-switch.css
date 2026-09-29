@@ -1,0 +1,8 @@
+/* A pane brought forward by a tab switch (pane-tab-switch.ts) does not play the open animation
+   that globals.css puts on [data-chat-pane-session]: it fades the whole chat in from nothing and
+   lifts it 4px, which on a switch between chats already open reads as a flicker. The frame carries
+   the mark for its whole life, so the animation is never re-enabled on a pane that is showing.
+   Two attribute selectors outrank globals.css's one, so load order does not matter. */
+[data-pane-arrival='tab-switch'] [data-chat-pane-session] {
+  animation: none;
+}
