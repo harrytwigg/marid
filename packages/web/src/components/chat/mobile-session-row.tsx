@@ -16,6 +16,7 @@ import {
   type Session,
 } from "@/components/chat/session-signals"
 import { useSwipeActions } from "@/components/chat/use-swipe-actions"
+import { TreeCollapsedCount, TreeLead, TreeMarker, treeRowPadding, type TreeRowMeta } from "@/components/chat/session-tree-row"
 
 export interface MobileSessionRowProps {
   session: Session
@@ -25,6 +26,8 @@ export interface MobileSessionRowProps {
   displayName: string
   /** Rows inside the Pinned section drop the per-row pin glyph. */
   hidePin?: boolean
+  /** Tree view only: indent, fold toggle and root marker. */
+  tree?: TreeRowMeta
   selectedId: string | null
   readSessions: Set<string>
   pinnedSessions: Set<string>
@@ -55,12 +58,13 @@ interface SummaryProps {
   showPin: boolean
   isArchived: boolean
   readSessions: Set<string>
+  tree?: TreeRowMeta
 }
 
 /** Avatar, then the two lines a phone list cell reads by — the chat TITLE is
  *  the strong line (it's what the operator scans to switch), the employee name
  *  the quiet one. Identity is already ambient in the emoji avatar. */
-function RowSummary({ session, avatarName, displayName, title, strong, showPin, isArchived, readSessions }: SummaryProps) {
+function RowSummary({ session, avatarName, displayName, title, strong, showPin, isArchived, readSessions, tree }: SummaryProps) {
   const stallNow = useStallClock(session.status === "running")
   const dot = getStatusDot(session, readSessions, false, stallNow)
   return (
@@ -86,6 +90,8 @@ function RowSummary({ session, avatarName, displayName, title, strong, showPin, 
           >
             {title}
           </span>
+          {tree ? <TreeMarker meta={tree} variant="mobile" /> : null}
+          {tree ? <TreeCollapsedCount meta={tree} /> : null}
           {isArchived ? (
             <span className="shrink-0 text-caption2 font-[var(--weight-medium)] text-[var(--text-tertiary)]">
               Archived
@@ -154,10 +160,13 @@ function RowSurface({
   swipe,
   isActive,
   swipeEnabled = true,
+  paddingLeft,
   children,
 }: {
   swipe: ReturnType<typeof useSwipeActions>
   isActive: boolean
+  /** Tree view: the row's inset for its depth. */
+  paddingLeft?: number
   /** Selection mode turns the whole row into a checkbox, so the swipe gesture
    *  (and its rails) is off — one tap target, one meaning. */
   swipeEnabled?: boolean
@@ -176,6 +185,7 @@ function RowSurface({
         transitionDuration: swipe.dragging ? "var(--duration-instant)" : "var(--duration-base)",
         transitionTimingFunction: "var(--ease-snappy)",
         touchAction: "pan-y pinch-zoom",
+        paddingLeft,
       }}
       className={cn(
         "relative flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left data-[pressed]:bg-[var(--fill-primary)]",
@@ -234,9 +244,15 @@ function MobileRowButton({ props, title, isSelected, onClick }: {
         showPin={props.pinnedSessions.has(session.id) && !props.hidePin}
         isArchived={isArchivedSession(session)}
         readSessions={props.readSessions}
+        tree={props.tree}
       />
     </button>
   )
+}
+
+// Tree rows set their own left padding; undefined leaves the class padding alone.
+function treeInset(tree: TreeRowMeta | undefined): number | undefined {
+  return tree ? treeRowPadding(tree.depth, "mobile") : undefined
 }
 
 /** The phone chat row: one comfortable list cell, avatar leading, name and time
@@ -275,7 +291,8 @@ export const MobileSessionRow = React.memo(function MobileSessionRow(props: Mobi
       {swipe.offset !== 0 && !props.selectionMode ? (
         <SwipeActionRails side={swipe.offset < 0 ? "trailing" : "leading"} isPinned={isPinned} isArchived={isArchived} {...actions} />
       ) : null}
-      <RowSurface swipe={swipe} isActive={isActive} swipeEnabled={!props.selectionMode}>
+      <RowSurface swipe={swipe} isActive={isActive} swipeEnabled={!props.selectionMode} paddingLeft={treeInset(props.tree)}>
+        {props.tree ? <TreeLead sessionId={session.id} title={title} meta={props.tree} variant="mobile" /> : null}
         <MobileRowButton props={props} title={title} isSelected={isSelected} onClick={handleRowClick} />
         {props.renamingSessionId === session.id ? (
           <RowRenameInput

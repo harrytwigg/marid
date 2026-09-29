@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo, startTransiti
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
-import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, Pin, Plus, Search, SquarePen, Trash2, Workflow as WorkflowIcon, X } from "lucide-react"
+import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, ListTree, Pin, Plus, Search, SquarePen, Trash2, Workflow as WorkflowIcon, X } from "lucide-react"
 import { api, type Employee, type SessionsResponse } from "@/lib/api"
 import { useOrg } from "@/hooks/use-employees"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
@@ -39,10 +39,13 @@ import { cn } from "@/lib/utils"
 import {
   getReadSessions,
   loadExpandedState,
+  loadTreeCollapsed,
   markAllReadForEmployee,
   markSessionRead,
   saveExpandedState,
+  saveTreeCollapsed,
 } from "@/components/chat/chat-sidebar-prefs"
+import { buildSessionForest, flattenSessionForest, subtreeSessions, type SessionTreeNode, type SessionTreeRow } from "@/components/chat/session-tree"
 import { Slot } from "@/contrib/slot"
 import { AREAS } from "@/contrib/types"
 import { mergeSidebarEmployees, bucketByDay, isFocusedSession } from "@/components/chat/chat-route-helpers"
@@ -69,6 +72,7 @@ import {
   workflowRunPath,
 } from "@/components/chat/session-row-menu"
 import { chatSessionDragProps } from "@/routes/chat/chat-session-dnd"
+import { TreeCollapsedCount, TreeLead, TreeMarker, treeRowPadding, type HiddenTreeSignal, type TreeRowMeta } from "@/components/chat/session-tree-row"
 import type { ChatSidebarProps } from "@/components/chat/chat-sidebar-types"
 import { PRODUCT_NAME } from "@/lib/brand"
 
@@ -111,7 +115,56 @@ const EMPTY_PINNED_SESSIONS = new Set<string>()
  *  pin list must never push Today off the first screen. */
 export const PINNED_VISIBLE = 5
 
-type FocusMode = "focused" | "all"
+// Tree shows what All shows, with each spawned session nested under the one
+// that started it instead of as its own flat row.
+type FocusMode = "focused" | "all" | "tree"
+
+// One visible Tree view row: the flat row's resolved identity plus where it
+// sits in the forest.
+interface TreeVisibleRow {
+  row: FlatRow
+  tree: SessionTreeRow
+  hiddenSignal: HiddenTreeSignal
+}
+
+/** The loudest signal among the sessions a folded parent hides, in the order
+ *  the row dot itself ranks them: a fresh error, then live work (running,
+ *  stalled or background), then unread. */
+export function hiddenTreeSignal(hidden: readonly Session[], readSessions: Set<string>, now = Date.now()): HiddenTreeSignal {
+  let signal: HiddenTreeSignal = null
+  for (const session of hidden) {
+    const dot = getStatusDot(session, readSessions, false, now)
+    if (!dot) continue
+    if (dot.label === "error") return "error"
+    if (dot.label !== "unread") signal = "running"
+    else if (!signal) signal = "unread"
+  }
+  return signal
+}
+
+// Selection order is of rendered rows, not ids (see selectableRowOrder).
+type SelectableRowKind = "flat" | "tree"
+const rowKey = (kind: SelectableRowKind, id: string) => `${kind}:${id}`
+const rowKeyId = (key: string) => key.slice(key.indexOf(":") + 1)
+
+// Session keys the gateway gives sessions it starts on its own: a Todo
+// dispatch, a capture being shaped, a delegation. These are recorded with
+// source "web" like a typed chat, so the source alone cannot tell them apart.
+const DISPATCHED_SOURCE_REF = /^(todo-dispatcher|todo-shaper|delegation):/
+
+/** A top-level session the operator did not start by typing into it: a system
+ *  employee's run, a gateway-dispatched session, or any source the Focused
+ *  filter already treats as automated. Workflow runs are left out because
+ *  their own chip already says so. Tree view only; Focused is unchanged. */
+export function isDispatchedRoot(
+  s: Pick<Session, "source" | "sourceRef" | "employee" | "parentSessionId">,
+  employeeData: Map<string, Employee>,
+): boolean {
+  if (s.source === "workflow") return false
+  if (!isFocusedSession(s)) return true
+  if (s.employee && employeeData.get(s.employee)?.system) return true
+  return DISPATCHED_SOURCE_REF.test(String(s.sourceRef ?? ""))
+}
 
 function titleCase(slug: string | null | undefined): string {
   if (!slug) return ""
@@ -430,6 +483,8 @@ interface FlatSessionRowProps {
   /** Rows inside the Pinned section drop the per-row pin glyph — the section
    *  header already carries that signal. */
   hidePin?: boolean
+  /** Tree view only: indent, fold toggle and root marker. */
+  tree?: TreeRowMeta
   selectedId: string | null
   readSessions: Set<string>
   pinnedSessions: Set<string>
@@ -460,6 +515,7 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
   avatarName,
   displayName,
   hidePin,
+  tree,
   selectedId,
   readSessions,
   pinnedSessions,
@@ -497,13 +553,17 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
       <ContextMenuTrigger asChild>
         <div
           title={`${displayName} · ${displayTitle}`}
+          data-tree-depth={tree?.depth}
           className={cn(
             "group/flat relative flex w-full items-center gap-2.5 border-l-2 py-[7px] pl-3.5 pr-3 text-left transition-colors",
+            tree && "gap-1.5",
             isActive
               ? "border-l-[var(--text-tertiary)] bg-[var(--fill-secondary)]"
               : "border-l-transparent hover:bg-[var(--fill-tertiary)]"
           )}
+          style={tree ? { paddingLeft: treeRowPadding(tree.depth, "desktop") } : undefined}
         >
+          {tree ? <TreeLead sessionId={session.id} title={displayTitle} meta={tree} variant="desktop" /> : null}
           <button
             draggable={!selectionMode}
             data-chat-session-row={session.id}
@@ -566,9 +626,11 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
                 {displayTitle}
               </span>
             )}
+            {tree ? <TreeMarker meta={tree} variant="desktop" /> : null}
             <SessionAttentionChips session={session} />
           </button>
 
+          {tree ? <TreeCollapsedCount meta={tree} /> : null}
           {isArchived ? (
             <span className="shrink-0 text-caption2 font-medium text-[var(--text-tertiary)]">Archived</span>
           ) : null}
@@ -903,6 +965,7 @@ export function ChatSidebar({
   const [olderExpanded, setOlderExpanded] = useState(false)
   const [pinnedExpanded, setPinnedExpanded] = useState(false)
   const [focusMode, setFocusMode] = useState<FocusMode>("all")
+  const [treeCollapsed, setTreeCollapsed] = useState<Set<string>>(new Set())
   const [loadingMore, setLoadingMore] = useState<Set<string>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<{
     type: "session" | "employee" | "bulk"
@@ -919,7 +982,9 @@ export function ChatSidebar({
   // Shift-click selects a run between two rows, so it needs a fixed origin: the
   // last row clicked WITHOUT shift. It stays put while a later shift-click
   // recomputes the run from it, rather than growing the old one (Finder/Gmail).
-  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null)
+  // Held as a row key (see rowKey below), not a bare id: in Tree view a pinned
+  // parent renders twice, and a range must start at the copy that was clicked.
+  const [selectionAnchorKey, setSelectionAnchorKey] = useState<string | null>(null)
   const deleteButtonRef = useRef<HTMLButtonElement>(null)
   const { data: orgData } = useOrg()
   const employeeData = useMemo(() => {
@@ -950,8 +1015,9 @@ export function ChatSidebar({
       setOlderExpanded(localStorage.getItem(OLDER_EXPANDED_STORAGE_KEY) === "true")
       setPinnedExpanded(localStorage.getItem(PINNED_EXPANDED_STORAGE_KEY) === "true")
       const stored = localStorage.getItem(FOCUS_MODE_STORAGE_KEY)
-      if (stored === "focused" || stored === "all") setFocusMode(stored)
+      if (stored === "focused" || stored === "all" || stored === "tree") setFocusMode(stored)
     } catch {}
+    setTreeCollapsed(loadTreeCollapsed())
   }, [])
 
   useEffect(() => {
@@ -974,6 +1040,16 @@ export function ChatSidebar({
   const selectFocusMode = useCallback((mode: FocusMode) => {
     setFocusMode(mode)
     try { localStorage.setItem(FOCUS_MODE_STORAGE_KEY, mode) } catch {}
+  }, [])
+
+  const toggleTreeCollapsed = useCallback((sessionId: string) => {
+    setTreeCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(sessionId)) next.delete(sessionId)
+      else next.add(sessionId)
+      saveTreeCollapsed(next)
+      return next
+    })
   }, [])
 
   const toggleOlderExpanded = useCallback(() => {
@@ -1090,7 +1166,7 @@ export function ChatSidebar({
   const exitSelection = useCallback(() => {
     setSelectionMode(false)
     setSelectedIds(new Set())
-    setSelectionAnchorId(null)
+    setSelectionAnchorKey(null)
   }, [])
 
   async function handleBulkArchive() {
@@ -1145,6 +1221,9 @@ export function ChatSidebar({
     unpinnedFlat,
     cronTotal,
     terminalRows,
+    treeToday,
+    treeYesterday,
+    treeOlder,
   } = useMemo(() => {
     // When searching, use server results (spans all sessions); "load more" is
     // disabled in this mode since totals reflect the search, not each group.
@@ -1174,6 +1253,9 @@ export function ChatSidebar({
         unpinnedFlat: [] as FlatItem[],
         cronTotal: 0,
         terminalRows: [] as FlatRow[],
+        treeToday: [] as SessionTreeNode[],
+        treeYesterday: [] as SessionTreeNode[],
+        treeOlder: [] as SessionTreeNode[],
       }
     }
 
@@ -1199,6 +1281,9 @@ export function ChatSidebar({
     // Terminals get their own section and never count as chats.
     const terminalRows: FlatRow[] = []
     let hiddenAutomated = 0
+    // Tree: every session All would show as a flat row, pinned ones included —
+    // a pinned parent must not strand its children as orphans.
+    const treeSessions: Session[] = []
 
     for (const s of displayed) {
       if (isCronSession(s)) {
@@ -1219,6 +1304,7 @@ export function ChatSidebar({
         if (!employeeSessionMap.has(groupKey)) employeeSessionMap.set(groupKey, [])
         employeeSessionMap.get(groupKey)!.push(s)
       }
+      if (focusMode === "tree") treeSessions.push(s)
       // Pinned chats float to the Pinned section at the top, regardless of
       // bucket or focus mode. They still feed the employee groups above (the
       // Team directory keeps full history; overlap is de-duped in allFlatIds).
@@ -1226,6 +1312,7 @@ export function ChatSidebar({
         pinnedRows.push(toRow(s))
         continue
       }
+      if (focusMode === "tree") continue
       // All means all: every visible non-cron session is a flat recency row —
       // delegated children, workflow runs (badged by the indigo
       // WorkflowSessionChip), the lot. Focused stays strictly the operator's
@@ -1293,6 +1380,23 @@ export function ChatSidebar({
 
     const cronTotal = counts[CRON_GROUP] ?? cronLoaded
 
+    // Tree roots go into the recency buckets by the newest activity anywhere
+    // below them, so a busy child keeps its root in Today. A pinned session
+    // with no family already sits in Pinned and is left out; one with
+    // children keeps its place so the children stay nested.
+    const treeToday: SessionTreeNode[] = []
+    const treeYesterday: SessionTreeNode[] = []
+    const treeOlder: SessionTreeNode[] = []
+    if (focusMode === "tree") {
+      for (const root of buildSessionForest(treeSessions)) {
+        if (root.children.length === 0 && pinnedSessions.has(root.session.id)) continue
+        const bucket = bucketByDay(root.activity, now)
+        if (bucket === "today") treeToday.push(root)
+        else if (bucket === "yesterday") treeYesterday.push(root)
+        else treeOlder.push(root)
+      }
+    }
+
     return {
       searching,
       searchRows: [] as FlatRow[],
@@ -1305,8 +1409,41 @@ export function ChatSidebar({
       unpinnedFlat,
       cronTotal,
       terminalRows,
+      treeToday,
+      treeYesterday,
+      treeOlder,
     }
   }, [sessions, search, searchResults, employeeData, portalSlug, portalName, pinnedSessions, counts, focusMode])
+
+  // The Tree view's visible rows per bucket, honouring folded parents. Split
+  // from the memo above so folding a parent does not rebuild the forest.
+  const treeRows = useMemo(() => {
+    // Sessions the tree leaves out on purpose (Scheduled runs, terminals) are
+    // still loaded; a child of one is started automatically, not orphaned.
+    const loadedElsewhere = new Set<string>()
+    for (const s of sessions) if (isCronSession(s) || isTerminalSession(s)) loadedElsewhere.add(s.id)
+    const rowsFor = (roots: SessionTreeNode[]): TreeVisibleRow[] =>
+      flattenSessionForest(roots, treeCollapsed).map((tree) => {
+        const hiddenSignal = tree.collapsed ? hiddenTreeSignal(subtreeSessions(tree.node).slice(1), readSessions) : null
+        if (tree.node.rootKind === "orphan" && loadedElsewhere.has(String(tree.node.session.parentSessionId).trim())) {
+          tree = { ...tree, node: { ...tree.node, rootKind: "root" } }
+        }
+        return {
+          row: { session: tree.node.session, ...resolveRowIdentity(tree.node.session, { portalSlug, portalName, employeeData }) },
+          tree,
+          hiddenSignal,
+        }
+      })
+    const total = (roots: SessionTreeNode[]) => roots.reduce((n, root) => n + 1 + root.descendantCount, 0)
+    return {
+      today: rowsFor(treeToday),
+      yesterday: rowsFor(treeYesterday),
+      older: rowsFor(treeOlder),
+      todayCount: total(treeToday),
+      yesterdayCount: total(treeYesterday),
+      olderCount: total(treeOlder),
+    }
+  }, [sessions, treeToday, treeYesterday, treeOlder, treeCollapsed, readSessions, portalSlug, portalName, employeeData])
 
   // Contactable employees: the full org roster MERGED with the employees that
   // already have sessions, then sliced down to the roster-only tail (employees
@@ -1349,8 +1486,13 @@ export function ChatSidebar({
     if (olderExpanded) {
       for (const r of olderRows) push(r.session.id)
     }
+    for (const r of treeRows.today) push(r.row.session.id)
+    for (const r of treeRows.yesterday) push(r.row.session.id)
+    if (olderExpanded) {
+      for (const r of treeRows.older) push(r.row.session.id)
+    }
     for (const r of terminalRows) push(r.session.id)
-    if (focusMode === "all") {
+    if (focusMode !== "focused") {
       for (const item of [...pinnedFlat, ...unpinnedFlat]) {
         const sessionIds = item.sessions!.map((s) => s.id)
         // Collapsed employee row reaches only its latest session; expanded reaches all.
@@ -1368,7 +1510,7 @@ export function ChatSidebar({
       empMap[name] = item.sessions!.map((s) => s.id)
     }
     return { sessionIds: ids, employeeNames: empNames, employeeSessionMap: empMap }
-  }, [searching, searchRows, pinnedRows, pinnedExpanded, todayRows, yesterdayRows, olderExpanded, focusMode, olderRows, terminalRows, expanded, pinnedFlat, unpinnedFlat])
+  }, [searching, searchRows, pinnedRows, pinnedExpanded, todayRows, yesterdayRows, olderExpanded, focusMode, olderRows, treeRows, terminalRows, expanded, pinnedFlat, unpinnedFlat])
 
   useEffect(() => {
     const key = allFlatIds.sessionIds.join(',')
@@ -1440,6 +1582,7 @@ export function ChatSidebar({
   type VirtualItem =
     | { kind: "section"; id: string; label: string; count?: number }
     | { kind: "flat"; row: FlatRow; hidePin?: boolean }
+    | { kind: "tree"; visible: TreeVisibleRow }
     | { kind: "pinned-more" }
     | { kind: "older-line" }
     | { kind: "older-header" }
@@ -1479,6 +1622,24 @@ export function ChatSidebar({
         for (const row of olderRows) list.push({ kind: "flat", row })
       }
     }
+    // Tree view fills the same buckets with nested rows; the counts are every
+    // session in the bucket, folded or not.
+    if (treeRows.today.length > 0) {
+      list.push({ kind: "section", id: "today", label: "Today", count: treeRows.todayCount })
+      for (const visible of treeRows.today) list.push({ kind: "tree", visible })
+    }
+    if (treeRows.yesterday.length > 0) {
+      list.push({ kind: "section", id: "yesterday", label: "Yesterday", count: treeRows.yesterdayCount })
+      for (const visible of treeRows.yesterday) list.push({ kind: "tree", visible })
+    }
+    if (treeRows.older.length > 0) {
+      if (!olderExpanded) {
+        list.push({ kind: "older-line" })
+      } else {
+        list.push({ kind: "older-header" })
+        for (const visible of treeRows.older) list.push({ kind: "tree", visible })
+      }
+    }
     // Terminals sit just above the Team directory: the header's host menu opens
     // one, and the rows below it are the terminal sessions.
     const hosts = terminalHosts?.enabled ? terminalHosts.hosts : []
@@ -1486,10 +1647,11 @@ export function ChatSidebar({
       list.push({ kind: "terminals" })
       for (const row of terminalRows) list.push({ kind: "flat", row })
     }
-    // All mode: the Team directory — every employee with sessions as an
-    // expandable group (full history, authoritative counts, load-more). The
-    // contactable roster tail continues this section below the virtual list.
-    if (focusMode === "all") {
+    // All and Tree: the Team directory — every employee with sessions as an
+    // expandable group (full history, authoritative counts, load-more; a page
+    // loaded here re-nests into the tree above). The contactable roster tail
+    // continues this section below the virtual list.
+    if (focusMode !== "focused") {
       const groups = [...pinnedFlat, ...unpinnedFlat]
       if (groups.length > 0) {
         list.push({
@@ -1503,28 +1665,32 @@ export function ChatSidebar({
     }
     if (cronTotal > 0) list.push({ kind: "cron-link" })
     return list
-  }, [searching, searchRows, pinnedRows, pinnedExpanded, todayRows, yesterdayRows, olderRows, olderExpanded, focusMode, pinnedFlat, unpinnedFlat, contactableEmployees.length, onContactEmployee, cronTotal, terminalHosts, terminalRows])
+  }, [searching, searchRows, pinnedRows, pinnedExpanded, todayRows, yesterdayRows, olderRows, olderExpanded, treeRows, focusMode, pinnedFlat, unpinnedFlat, contactableEmployees.length, onContactEmployee, cronTotal, terminalHosts, terminalRows])
 
   // The selectable sessions in the order they are rendered — the only ordering
   // a shift-range can trust. Only `flat` rows are selectable in selection mode:
   // an employee group header is not a checkbox and EmployeeRow renders its child
   // rows with selectionMode false, so a range is computed over the flat rows
   // alone, skipping section labels, dividers, the "show more" rows and the cron
-  // link. Flat rows are disjoint (a pinned chat never also lands in Today), so
-  // every id here is unique.
-  const sessionIdOrder = useMemo(() => {
-    const ids: string[] = []
+  // link. Tree rows are selectable too. Flat rows are disjoint (a pinned chat
+  // never also lands in Today), but a pinned Tree parent shows in Pinned AND in
+  // the tree, so the order is of rows, keyed by kind and id: each copy is its
+  // own position, and a range maps back to the ids between two of them.
+  const selectableRowOrder = useMemo(() => {
+    const keys: string[] = []
     for (const vi of virtualItems) {
-      if (vi.kind === "flat") ids.push(vi.row.session.id)
+      if (vi.kind === "flat") keys.push(rowKey("flat", vi.row.session.id))
+      else if (vi.kind === "tree") keys.push(rowKey("tree", vi.visible.row.session.id))
     }
-    return ids
+    return keys
   }, [virtualItems])
 
-  const toggleSelect = useCallback((sessionId: string, shiftKey = false) => {
+  const toggleSelect = useCallback((sessionId: string, shiftKey = false, kind: SelectableRowKind = "flat") => {
+    const clicked = rowKey(kind, sessionId)
     if (shiftKey) {
       setSelectedIds((prev) => {
-        const from = selectionAnchorId ? sessionIdOrder.indexOf(selectionAnchorId) : -1
-        const to = sessionIdOrder.indexOf(sessionId)
+        const from = selectionAnchorKey ? selectableRowOrder.indexOf(selectionAnchorKey) : -1
+        const to = selectableRowOrder.indexOf(clicked)
         // No anchor, or a row no longer in the rendered order: there is no run
         // to compute, so fall back to toggling the one row.
         if (from === -1 || to === -1) {
@@ -1534,18 +1700,22 @@ export function ChatSidebar({
           return next
         }
         const [lo, hi] = from <= to ? [from, to] : [to, from]
-        return new Set(sessionIdOrder.slice(lo, hi + 1))
+        return new Set(selectableRowOrder.slice(lo, hi + 1).map(rowKeyId))
       })
       return
     }
-    setSelectionAnchorId(sessionId)
+    setSelectionAnchorKey(clicked)
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(sessionId)) next.delete(sessionId)
       else next.add(sessionId)
       return next
     })
-  }, [selectionAnchorId, sessionIdOrder])
+  }, [selectionAnchorKey, selectableRowOrder])
+  const toggleSelectTreeRow = useCallback(
+    (sessionId: string, shiftKey?: boolean) => toggleSelect(sessionId, shiftKey, "tree"),
+    [toggleSelect],
+  )
 
   // Shared props passed to all SessionRow and EmployeeRow instances
   const sharedRowProps = useMemo(() => ({
@@ -1585,7 +1755,8 @@ export function ChatSidebar({
         case "older-line": return 40
         case "pinned-more": return 30
         case "cron-link": return 40
-        case "flat": return variant === "mobile" ? 56 : 36
+        case "flat":
+        case "tree": return variant === "mobile" ? 56 : 36
         default: return variant === "mobile" ? 60 : 48 // employee row (dynamic — measured)
       }
     },
@@ -1593,10 +1764,11 @@ export function ChatSidebar({
     enabled: shouldVirtualize,
   })
 
+  const olderCount = focusMode === "tree" ? treeRows.olderCount : olderRows.length
   const olderLineLabel = useMemo(() => {
-    const chats = olderRows.length
+    const chats = olderCount
     return `Older · ${chats} ${chats === 1 ? "chat" : "chats"}`
-  }, [olderRows.length])
+  }, [olderCount])
 
   // Single source of truth for rendering a VirtualItem — shared by the
   // virtualized and plain render paths so they can never drift apart.
@@ -1632,6 +1804,30 @@ export function ChatSidebar({
           />
         )
       }
+      case "tree": {
+        const Row = variant === "mobile" ? MobileSessionRow : FlatSessionRow
+        const { row, tree, hiddenSignal } = vi.visible
+        const { node, depth, collapsed } = tree
+        return (
+          <Row
+            session={row.session}
+            avatarName={row.avatarName}
+            displayName={row.displayName}
+            tree={{
+              depth,
+              collapsed,
+              hasChildren: node.children.length > 0,
+              descendantCount: node.descendantCount,
+              rootKind: depth === 0 ? node.rootKind : undefined,
+              dispatchedRoot: depth === 0 && node.rootKind === "root" && isDispatchedRoot(row.session, employeeData),
+              hiddenSignal,
+              onToggle: toggleTreeCollapsed,
+            }}
+            {...sharedRowProps}
+            onToggleSelect={toggleSelectTreeRow}
+          />
+        )
+      }
       case "older-line":
         return (
           <button
@@ -1659,7 +1855,7 @@ export function ChatSidebar({
             className="mt-1 flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-[var(--fill-tertiary)]"
           >
             <span className={SECTION_LABEL_CLASS}>Older</span>
-            <span className={cn("ml-auto", SECTION_COUNT_CLASS)}>{olderRows.length}</span>
+            <span className={cn("ml-auto", SECTION_COUNT_CLASS)}>{olderCount}</span>
             <ChevronDown className="size-3.5 shrink-0 text-[var(--text-quaternary)]" />
           </button>
         )
@@ -1768,6 +1964,7 @@ export function ChatSidebar({
               {([
                 { mode: "focused", Icon: Focus, aria: "Focused", tip: "Only chats you started" },
                 { mode: "all", Icon: Layers, aria: "All", tip: "Include automated & delegated sessions" },
+                { mode: "tree", Icon: ListTree, aria: "Tree", tip: "Nest each session under the one that started it" },
               ] as const).map(({ mode, Icon, aria, tip }) => (
                 <button
                   key={mode}
@@ -1919,6 +2116,7 @@ export function ChatSidebar({
             {virtualItems.map((vi, i) => (
               <React.Fragment key={
                 vi.kind === "flat" ? vi.row.session.id
+                : vi.kind === "tree" ? `tree:${vi.visible.row.session.id}`
                 : vi.kind === "employee" ? vi.item.pinKey
                 : vi.kind === "section" ? `section:${vi.id}`
                 : `${vi.kind}:${i}`
@@ -1935,7 +2133,7 @@ export function ChatSidebar({
             single quiet line, a + affordance. */}
         {!loading && onContactEmployee && contactableEmployees.length > 0 ? (
           <div className="mt-3 pt-1">
-            {focusMode === "all" ? null : (
+            {focusMode !== "focused" ? null : (
               <SectionLabel label="Team" count={contactableEmployees.length} />
             )}
             {contactableEmployees.map((emp) => (
