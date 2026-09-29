@@ -88,7 +88,7 @@ const SAFETY_PROMPT_FRAME = [
   " Esc to cancel · Tab to amend · ctrl+e to explain",
 ].join("\r\n");
 
-describe("InteractiveClaudeEngine — turns typed into the terminal (G1)", => {
+describe("InteractiveClaudeEngine — turns typed into the terminal (G1)", () => {
   let registry: HookRegistry;
   let engine: InteractiveClaudeEngine;
   let unclaimed: Array<{ id: string; text: string }>;
@@ -448,7 +448,7 @@ describe("InteractiveClaudeEngine — turns typed into the terminal (G1)", => {
     engine.kill("s-bg2");
   });
 
-  describe("typing in the terminal while a gateway turn is held behind a background re-run ", => {
+  describe("typing in the terminal while a gateway turn is held behind a background re-run", () => {
     const notification = "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>";
 
     it("the typed prompt is not taken as the gateway turn's own: the turn waits for it, then pastes and settles on its own answer", async () => {

@@ -185,7 +185,7 @@ describe("cancelledRequests (what the model is told the user cancelled)", () => 
     parts: [],
   });
 
-  it("names the operator's request whose reply was aborted, as the real history had it", => {
+  it("names the operator's request whose reply was aborted, as the real history had it", () => {
     expect(cancelledRequests([
       jinn("msg_01", "Reply with exactly: SMOKE_ONE_OK"), reply("msg_02", "msg_01", "done"),
       operator("msg_03", "Use your read tool to read /etc/hostname and reply with its contents."), reply("msg_04", "msg_03", "aborted"),
