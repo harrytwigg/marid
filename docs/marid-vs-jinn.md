@@ -2,7 +2,7 @@
 
 Marid is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors, released under the MIT License. Most of the code here is theirs: the gateway, the org model, Todos, Workflows, the web dashboard and most of the engine adapters. Marid keeps the internal codename ("Jinn": the `jinn` command, `jinn-cli`, `~/.jinn`, `JINN_*`) so upstream fixes can still be merged. See [`NOTICE`](../NOTICE) and the [README](../README.md#built-on-jinn).
 
-This page lists what Marid has that upstream does not, feature by feature, and is just as plain about where upstream already has the feature.
+This page lists the headline features Marid has that upstream does not, and is just as plain about where upstream already has the feature. It is not an exhaustive changelog; smaller fixes and hardening are in [`CHANGELOG.md`](../CHANGELOG.md).
 
 **Compared:** Marid `main` (built on upstream v0.33.3) against upstream Jinn `main` at v0.33.4. Upstream's v0.33.4 fixes are not in Marid yet. Every row was checked against the code on both sides.
 
@@ -18,7 +18,7 @@ This page lists what Marid has that upstream does not, feature by feature, and i
 | Resizable splitters | ✅ | ❌ | Drag, arrow keys (Shift for bigger steps, Home/End for the limits) and double-click to reset to equal shares (`split-handle.tsx`). Layout is stored in the browser (`jinn-chat-split-layout`). |
 | Per-pane tab strip | ✅ | partial | Marid gives every pane its own tab strip, and tabs drag between panes and reorder (`pane-tab-strip.tsx`, `pane-tab-dnd.ts`). Upstream keeps one tab list (`hooks/use-chat-tabs.ts`) that drives keyboard tab switching, and shows header pills rather than a tab strip. |
 | Preview and pinned tabs | ✅ | partial | Marid: a tab opened by ordinary navigation is an italic preview tab that the next open replaces; double-click pins it. Upstream's tab model has the same pinned/preview rule but no visible strip to show it. |
-| Mobile session tabs | ✅ | partial | Marid replaces the phone's chat strip with tabs that have close buttons (`mobile-session-tabs.tsx`). Upstream has a strip of working-set chips with previews (`mobile-working-set-nav.tsx`). |
+| Mobile session tabs | ✅ | partial | Marid replaces the phone's chat strip with tabs that have close buttons (`mobile-session-tabs.tsx`). Upstream has a strip of working-set chips whose preview text is screen-reader only (`mobile-working-set-nav.tsx`). |
 | Shift-click range select in the chat list | ✅ | ❌ | Upstream already has multi-select and bulk delete. Marid adds range select. |
 | Teal Marid theme and name | ✅ | ❌ | A token-override file (`routes/theme-overrides.css`) and a single product-name constant (`lib/brand.ts`). A colour the user picks still wins over the default. |
 
@@ -28,9 +28,9 @@ This page lists what Marid has that upstream does not, feature by feature, and i
 |---|---|---|---|
 | CLI view of the engine's TUI | ✅ | ✅ | Both stream the engine's terminal into the chat pane, with a composer and a key bar. |
 | Warm PTY sessions | ✅ | ✅ | Upstream feature (`hasWarmPty` in the PTY socket and the Claude engine). Marid did not add it. |
-| Type straight into the engine's TUI (stdin) | ✅ | ❌ | On desktop, keystrokes, paste, mouse and wheel go to the PTY as `input` frames, up to 64 KiB (`pty-ws.ts`, `lib/terminal-input.ts`). Upstream's terminal is display-only (`disableStdin: true`); only the composer and a short list of keys reach the engine. Touch devices keep the display-only view in both. |
+| Type straight into the engine's TUI (stdin) | ✅ | ❌ | On desktop, keystrokes, paste, mouse and wheel go to the PTY as `input` frames, up to 64 KiB (`pty-ws.ts`, `lib/terminal-input.ts`). Upstream's browser terminal is display-only (`disableStdin: true`) and never sends raw keystrokes; only the composer and a short list of keys reach the engine. Touch devices keep the display-only view in both. |
 | Faster scrollback, clickable URLs, opencode scrolling | ✅ | ❌ | Wheel scrolls Claude's scrollback about twice as fast, Shift+PageUp/PageDown work, links are clickable. On touch, a swipe over opencode becomes wheel reports. |
-| Wait for a turn typed in the terminal | ✅ | ❌ | A gateway turn that arrives while a turn you typed is running waits, shown as "Waiting for the turn typed in the terminal" with a Stop button. Otherwise the typed turn's answer could be recorded as the gateway turn's reply. |
+| Wait for a turn typed in the terminal | ✅ | ❌ | A gateway turn that arrives while a turn you typed is running waits, shown as a "waiting for the turn typed in the terminal" status with a Stop button. Otherwise the typed turn's answer could be recorded as the gateway turn's reply. |
 | Standalone terminals in the sidebar | ✅ | ❌ | A shell on the gateway or on any configured host (`terminal.hosts`, plus each employee's `remoteHost`). Terminals sit in the chat grid beside chats, reattach with their last screen, and are operator-only. On by default; `terminal.enabled: false` turns them off. See [`terminals.md`](terminals.md). |
 
 ## Engines
@@ -61,7 +61,7 @@ This page lists what Marid has that upstream does not, feature by feature, and i
 | `/compact` from the chat | ✅ | partial | Upstream recognises Claude Code's own `/compact` typed to a Claude session. Marid routes `/compact` per engine (Claude's native command, opencode's summarize) from the web chat, the CLI composer or a connector, and says so when an engine cannot. |
 | Restart resume | ✅ | partial | Upstream nudges sessions that were mid-turn (`sessions/restart-resume.ts`). Marid also nudges the session that asked for the restart and sessions idle on background work, and writes a record of every interrupted session and what the next boot did (`sessions/restart-interrupted.jsonl`). |
 | Claude auth outage handling | ✅ | partial | Marid tracks an outage per host, alerts once, refuses launches that cannot work, prefers a fallback engine and warns 48 hours before the refresh token expires. See [`claude-auth.md`](claude-auth.md). Upstream classifies the auth failure but has none of that. |
-| Browser-origin check on the live event socket | ✅ | partial | Upstream checks `/ws/pty`. Marid also checks `/ws` and plugin event sockets. Behind a reverse proxy, preserve `Host` or send `X-Forwarded-Host`. |
+| Browser-origin check on the live event socket | ✅ | partial | Upstream has no origin rejection on any socket; on `/ws/pty` it only trusts a same-origin browser as the operator when gateway auth is off. Marid rejects a cross-origin browser on `/ws`, plugin event sockets and `/ws/pty`. Behind a reverse proxy, preserve `Host` or send `X-Forwarded-Host`. |
 | File-read policy for uploads | ✅ | ❌ | One policy shared by the gateway and the MCP server keeps `secrets/` and other protected files out of ingestion, including for sessions on a remote host (`shared/file-read-policy.ts`). |
 
 ## Todos and dispatch
@@ -74,4 +74,4 @@ This page lists what Marid has that upstream does not, feature by feature, and i
 | Per-Todo auto-start opt-out | ✅ | ❌ | `autoStart` in a Todo's dispatch config, and the `no-auto-start` label. `todo-status` triggers gain `selfAssigned` and `autoStart` filters. |
 | Session tree on a Todo | ✅ | ❌ | The Details rail lists the sessions working the Todo, with their delegations underneath, and every session links to its chat. |
 | Parked Todos come back on their own | ✅ | partial | Upstream can park a Todo until a date but nothing releases it. Marid's reconciler moves an expired park back to `assigned` (or `backlog` with no owner). |
-| Flag Todos left in `executing` with no one on them | ✅ | ❌ | A Todo in `executing` with nothing running for over four hours is flagged for the manager (`work-items/anomaly-detect.ts`, `recovery.ts`), so it does not sit in the column unseen. |
+| Flag Todos left in `executing` with no one on them | ✅ | partial | Upstream flags an executing Todo whose open run has outlived four hours with nothing in flight (`execution-timeout`). Marid also flags one with no open run at all and nothing running for over four hours (`executing-unhanded`, `work-items/anomaly-detect.ts`, `recovery.ts`), so it does not sit in the column unseen. |
