@@ -46,16 +46,17 @@ Agent CLIs are powerful alone. Marid gives them shared structure, ownership, and
 
 Everything in upstream Jinn still applies. On top of it, Marid adds:
 
-- **Session self-compaction.** On claude, and on opencode in server mode, an agent can call the `compact_session` MCP tool to compact its own context and pick the work back up from a handoff (goal, what's done, what's next). No operator needed to `/compact` a long-running session.
-- **`/compact` from the chat.** Typed in the web chat, the CLI view's composer or a connector, `/compact` runs the session engine's own compaction: Claude Code's `/compact`, with any focus instructions after it, or opencode's summarize in server mode. The chat shows a status while it runs and a confirmation with the context size once it's done. On an engine with no compaction to drive, the operator gets a clear "not supported" reply and nothing is sent to the model. It waits for a running turn rather than interrupting it.
-- **Remote hosts over SSH.** An employee with a `remoteHost` runs its turns on another machine, so repository checkouts, builds and tests happen there while the gateway stays on a small always-on box. Works for `claude`, `pi` and `opencode`, with a per-engine staged home, a wake command for sleeping hosts, and a fallback engine when a remote turn is rate-limited. Todo attachments (`attach_to_work_item`) work from remote sessions too. See [`docs/remote-execution.md`](docs/remote-execution.md).
-- **opencode engine.** Run turns on the [opencode](https://opencode.ai) CLI, locally or on a remote host, with a searchable model picker, OpenCode Go spend metering, and an opt-in server mode with a live terminal view. See [`docs/engines-opencode.md`](docs/engines-opencode.md).
-- **Interactive CLI tabs.** The CLI view is a real terminal on desktop: click in and type, paste, scroll, select and copy straight into the engine's TUI. Touch devices keep the display-only view with a key bar. See [`docs/cli-terminal.md`](docs/cli-terminal.md).
-- **Terminal mode.** Open a raw login shell on the gateway or any configured machine from the chat sidebar, and tile it in the chat grid next to your chats. See [`docs/terminals.md`](docs/terminals.md).
-- **Remote MCP connector (opt-in).** Serve a subset of the gateway's tools at `/mcp` (behind Cloudflare Access) so claude.ai, Claude Desktop and Claude Code can use your instance as a custom connector, including session control. See [`docs/remote-mcp.md`](docs/remote-mcp.md).
-- **Idle-capacity auto-start and Auto-Dispatch (opt-in).** A gateway loop watches your real Claude usage windows and starts backlog Todos when a window is about to reset with capacity to spare, with a dashboard for policy, history and usage projection, and a per-Todo switch. See [`docs/idle-capacity.md`](docs/idle-capacity.md).
-- **Todo and session quality of life.** Closed Todo departments, a per-Todo auto-start opt-out, a navigable session tree per Todo, and bulk select, archive and delete (with shift-click range select) in the chat list.
-- **Restart and reliability hardening.** Interrupted sessions are recorded and nudged back after a gateway restart, each delegation gets its own turn lane, engine health is tracked per host, Claude auth outages are alerted once, and the `/ws` event stream checks the browser's origin.
+| Area | Marid | Jinn upstream |
+|---|---|---|
+| Workspace | VS Code-style split panes you can resize, per-pane tabs with preview and pinned tabs, drag a chat from the sidebar to split, mobile session tabs, teal theme | auto-arranged chat grid, single tab list, no resizing |
+| Terminal / CLI mode | type straight into the engine's TUI (stdin, paste, mouse, scroll); standalone shells on the gateway or a remote host in the sidebar | display-only CLI view with a composer and key bar |
+| opencode | opencode engine, server mode with a live terminal, usage metering | not supported |
+| Remote hosts | Claude, Pi and opencode employees run over SSH on another machine | not supported |
+| Remote MCP connector | use your instance as a custom connector in claude.ai, Claude Desktop and Claude Code (opt-in) | not supported |
+| Sessions | self-compaction (`compact_session`), engine-aware `/compact`, fuller restart resume, Claude auth outage handling | Claude-only `/compact`, basic restart resume |
+| Todos and dispatch | closed departments, idle-capacity auto-start with an Auto-Dispatch page (opt-in), per-Todo auto-start opt-out, session tree per Todo | open departments, no auto-start loop |
+
+The full feature-by-feature table, with what upstream already has, is in [`docs/marid-vs-jinn.md`](docs/marid-vs-jinn.md).
 
 ---
 
