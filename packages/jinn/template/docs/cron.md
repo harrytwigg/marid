@@ -11,8 +11,9 @@ interface CronJob {
   enabled: boolean;
   schedule: string;
   timezone?: string;
-  engine: string;
+  engine?: string;
   model?: string;
+  effortLevel?: string;
   employee?: string;
   prompt: string;
   delivery?: { connector: string; channel: string };
@@ -21,7 +22,7 @@ interface CronJob {
 
 `delivery.connector` is a connector instance id, for example `slack` or `slack-support`.
 
-`schedule` uses standard five-field cron syntax. `timezone` is an IANA timezone; when omitted, the system timezone applies. Engine values are claude, codex, antigravity, grok, pi, hermes. A model override must be supported by its engine.
+`schedule` uses standard five-field cron syntax. `timezone` is an IANA timezone; when omitted, the system timezone applies. Engine values are claude, codex, antigravity, grok, pi, hermes, opencode. A model override must be supported by its engine.
 
 ## Delivery ownership
 

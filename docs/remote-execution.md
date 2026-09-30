@@ -6,7 +6,7 @@ employee that declares a `remoteHost` is spawned through `ssh` on another machin
 instead, and everything it does — repository checkouts, builds, tests — happens
 there.
 
-Two engines can do this: **`claude`** and **`pi`**. Every other engine ignores
+Three engines can do this: **`claude`**, **`pi`** and **`opencode`**. Every other engine ignores
 `remoteHost`, and a remote employee configured with one has its turns refused
 rather than silently run on the gateway.
 
@@ -534,8 +534,8 @@ because making that depend on somebody remembering to run a command would put
   towards over-blocking — it refuses when a write-shaped command mentions an
   offending path anywhere, not only as its target — which is the safe direction
   for a rule of this kind.
-- **Only the `claude` and `pi` engines can go remote.** Every other engine
-  ignores `remoteHost`, so a remote employee configured with one has its turns
+- **Only the `claude`, `pi` and `opencode` engines can go remote.** Every other
+  engine ignores `remoteHost`, so a remote employee configured with one has its turns
   refused rather than silently run on the gateway. `jinn remote status` says so
   per employee.
 - **A remote Pi turn has no dashboard terminal view**, because a Pi turn has none

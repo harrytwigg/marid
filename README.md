@@ -99,7 +99,7 @@ Docker needs Docker Engine or Docker Desktop with Compose v2, but it does **not*
 
 ```bash
 git clone https://github.com/harrytwigg/marid.git
-cd jinn
+cd marid
 
 # Edit docker-compose.yml and uncomment at least one "Project mounts" entry.
 # Without one, /work is empty and the agents have nothing to work on.
@@ -132,7 +132,7 @@ docker compose restart jinn       # restart safely
 docker compose down               # stop; named volumes remain intact
 ```
 
-After upgrading an older install, run **`jinn migrate`**. Your COO applies the latest operating doctrine without overwriting your customizations.
+After upgrading, the gateway re-syncs the skills Marid ships on every boot; `jinn migrate` does the same on demand and prints what changed. An edit to a shipped skill is replaced then (the previous copy is kept in a backup), so customize by writing a skill of your own. An upgrade does not touch skills you wrote, your `CLAUDE.md`, `docs/`, `knowledge/` or `org/`, so to pick up new stock content, compare them with `packages/jinn/template/`.
 
 ---
 
@@ -243,6 +243,7 @@ Marid detects installed agent CLIs and lets each employee or session choose an e
 | **grok** | xAI Grok CLI | `npm install -g @xai-official/grok` (run `grok` once to auth) | Chat · CLI (xterm) | low / medium / high / xhigh / max |
 | **antigravity** | Antigravity CLI (`agy`) | see Antigravity docs | CLI (xterm) | - |
 | **pi** | Pi coding agent CLI | see Pi CLI docs | Chat | - |
+| **opencode** | [opencode](https://opencode.ai) - open-source terminal coding agent, bring your own provider | `curl -fsSL https://opencode.ai/install \| bash` (then `opencode auth login`) | Chat (batch, or server mode with a live terminal) | - |
 | **hermes** | NousResearch Hermes - open-source, model-agnostic agent | `curl -fsSL https://hermes-agent.nousresearch.com/install.sh \| bash` | Chat (ACP streaming) · CLI (xterm view) | - |
 
 Fallback labels include **Opus (Latest)**, **Sonnet (Latest)**, **Fable (Latest)**, **GPT-5.5 Codex**, **Grok Build**, and **Gemini 3.5 Flash Medium / High / Low**. Pi and Hermes report their models at session start.
@@ -322,7 +323,7 @@ logging:
 - **Plugins** live in `~/.jinn/plugins/` and only run when `plugins.enabled` names them; see [`docs/plugins.md`](docs/plugins.md) for the anatomy, lifecycle, and security posture.
 - **Behind a reverse proxy or tunnel**, the proxy must preserve `Host`, or pass the host the browser dialled in `X-Forwarded-Host`. The gateway's WebSockets (the live event stream `/ws`, plugin event sockets and terminals) refuse a browser whose `Origin` is not the gateway's own host, so a proxy that rewrites `Host` and forwards neither leaves the dashboard without live updates. A Cloudflare tunnel's default ingress preserves `Host`; don't set `httpHostHeader` on it.
 
-Everything is human-readable and yours to edit. After upgrading, run **`jinn migrate`** to merge current operating doctrine into your customized instance.
+Everything is human-readable and yours to edit. After upgrading, the gateway re-syncs the skills Marid ships on boot (see the upgrade note under Quickstart). An edit to a shipped skill is replaced then, with the previous copy kept in a backup, so customize by writing a skill of your own. Skills you wrote, `CLAUDE.md`, `docs/`, `knowledge/` and `org/` are left as they are.
 
 ---
 
@@ -337,9 +338,9 @@ Marid is in active beta. Shipped recently in upstream Jinn:
 
 On deck:
 
-- **Engines:** local models and fallback chains.
+- **Engines:** local models.
 - **Connectors:** iMessage and email.
-- **Platform:** plugins and multi-user roles.
+- **Platform:** multi-user roles.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
@@ -351,7 +352,7 @@ Marid is a pnpm + turbo monorepo.
 
 ```bash
 git clone https://github.com/harrytwigg/marid.git
-cd jinn
+cd marid
 pnpm install
 pnpm setup   # one-time: builds all packages and creates ~/.jinn
 pnpm dev     # gateway (:7777) + Vite dev server (:5173) with hot reload

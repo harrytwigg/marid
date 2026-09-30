@@ -17,7 +17,7 @@ Required employee fields:
 - `displayName`: human-readable name.
 - `department`: parent directory name.
 - `rank`: executive, manager, senior, or employee.
-- `engine`: one of claude, codex, antigravity, grok, pi, hermes.
+- `engine`: one of claude, codex, antigravity, grok, pi, hermes, opencode.
 - `model`: optional engine-compatible model override.
 - `persona`: focused role, expertise, boundaries, and reporting behavior.
 - `reportsTo`: optional employee id for the explicit manager.
