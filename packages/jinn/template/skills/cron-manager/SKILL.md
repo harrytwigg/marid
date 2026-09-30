@@ -28,7 +28,7 @@ Use `list_cron_jobs` for current definitions and `get_cron_run_history` for exec
 
 - `id` and `name` must be unique; use a stable id.
 - `schedule` is a five-field cron expression; `timezone` is an IANA timezone.
-- `engine` is one of claude, codex, antigravity, grok, pi, hermes.
+- `engine` is one of claude, codex, antigravity, grok, pi, hermes, opencode.
 - `model` is optional and must be supported by the selected engine.
 - `employee` and `delivery` are optional; `prompt` is required.
 

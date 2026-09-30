@@ -24,12 +24,26 @@ persona: |
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | Unique identifier (lowercase, no spaces) |
-| `displayName` | string | yes | Human-readable name |
-| `department` | string | yes | Department directory name |
-| `rank` | string | yes | One of: executive, manager, senior, employee |
-| `engine` | string | yes | One of: claude, codex, antigravity, grok, pi, hermes |
-| `model` | string | no | Engine-compatible model override (default from config) |
-| `persona` | string | yes | System prompt defining personality and behavior |
+| `displayName` | string | no | Human-readable name (default: `name`) |
+| `department` | string | no | Department directory name (default: the directory the file sits in) |
+| `rank` | string | no | One of: executive, manager, senior, employee (default: `employee`) |
+| `engine` | string | no | One of: claude, codex, antigravity, grok, pi, hermes, opencode (default: `claude`) |
+| `model` | string | no | Engine-compatible model override (default: `sonnet`) |
+| `persona` | string | yes | System prompt defining personality and behavior (required for a new employee; a file that only tunes a built-in system employee may omit it) |
+| `reportsTo` | string or list | no | Who this employee reports to; unset means the root |
+| `effortLevel` | string | no | Default effort level for sessions assigned to this employee |
+| `alwaysNotify` | boolean | no | Notify the parent session when this employee's child session completes (default `true`) |
+| `emoji` | string | no | Icon shown in the sidebar and org chart |
+| `cliFlags` | string list | no | Extra CLI flags passed to the engine |
+| `mcp` | boolean or string list | no | MCP servers this employee uses: `true` all, `false` none, or a list of server ids |
+| `jinnMcp` | boolean | no | Force the built-in `jinn` company toolset on or off for this employee (see `mcp.md`) |
+| `provides` | list | no | Services (`name`, `description`) this employee offers to others |
+| `remoteHost` | string | no | Run this employee's sessions over SSH on this host (engines `claude`, `pi`, `opencode` only) |
+| `remoteUser` | string | no | SSH user on `remoteHost` (default: ssh's own resolution) |
+| `remoteCwd` | string | no | Absolute working directory on the remote host, required when `remoteHost` is set; must sit under `remote.root` in `config.yaml` |
+| `remoteClaudeConfigDir` | string | no | Absolute path used as `CLAUDE_CONFIG_DIR` for this employee's sessions on the remote host |
+
+The `remote*` fields need a `remote` block in `config.yaml`. A bad remote target is refused at load: that one employee is skipped and the rest of the org still loads.
 
 ## Departments
 

@@ -39,7 +39,7 @@ Pushes live events (session updates, engine output, cron results) to connected c
 Central router. Receives messages from connectors, resolves the target employee and engine, creates or reuses sessions, and delivers responses back through the originating connector.
 
 ### Engine Abstraction
-Uniform adapters support the canonical engines: claude, codex, antigravity, grok, pi, hermes. Each adapter owns its engine-specific session and tool integration while the gateway keeps routing uniform.
+Uniform adapters support the canonical engines: claude, codex, antigravity, grok, pi, hermes, opencode. Each adapter owns its engine-specific session and tool integration while the gateway keeps routing uniform.
 
 ### Connector System
 Modular adapters that implement a standard interface. Each connector translates between its platform's message format and {{portalName}}'s internal message format. See `connectors.md`.
@@ -48,10 +48,12 @@ Modular adapters that implement a standard interface. Each connector translates 
 Uses `node-cron` to run scheduled AI jobs. Watches `cron/jobs.json` for hot-reload. See `cron.md`.
 
 ### File Watcher
-Uses `chokidar` to watch `~/.jinn/` for changes and trigger appropriate reloads:
-- `config.yaml` changes → reload gateway configuration
+Uses `chokidar` to watch parts of `~/.jinn/` and trigger appropriate reloads:
+- `config.yaml` changes → re-read the configuration in memory (see `self-modification.md` for what a reload does not apply)
 - `cron/jobs.json` changes → reschedule cron jobs
 - `org/` changes → rebuild employee registry
+- `skills/` (top level only) → a skill folder added or removed re-syncs the `.claude/skills/` and `.agents/skills/` links and notifies clients
+- `plugins/` → rescan installed plugins
 
 ### SQLite Session Registry
 Stores session metadata (id, engine, employee, connector source, timestamps) in `sessions/registry.db`.

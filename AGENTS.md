@@ -88,7 +88,7 @@ none. This is the right answer far more often than it feels like it is.
 **Rung 2 — a CLI command, or a skill.** Both cost zero context.
 A command goes in `packages/jinn/bin/jinn.ts`; every handler is lazily `import()`ed inside its
 action (`:79`), so adding one loads nothing until it runs.
-A skill is a Markdown file at `packages/jinn/template/skills/<name>/SKILL.md` — 15 ship today.
+A skill is a Markdown file at `packages/jinn/template/skills/<name>/SKILL.md` — 14 ship today.
 `packages/jinn/src/cli/setup.ts:622` copies them into the instance home and
 `packages/jinn/src/gateway/watcher.ts:28` symlinks them where engines look. There is no
 runtime and no loader: the engine reads the file when it needs it, so an unused skill costs
@@ -114,10 +114,13 @@ company until personas scope it out. Documented in
 `packages/jinn/template/docs/mcp.md:27`. Either way it costs this repo nothing: the server
 lives outside it entirely.
 
-*There is no in-repo plugin system **yet**.* Skills are Markdown with no plugin API, and plugins
-are a roadmap line (`README.md:307`) with an accepted design (`.plans/plugins.md`) and nothing
-built against it today. Until that design lands, `mcp.custom` is the extension point that
-exists, and a plugin is not something you can pick off this ladder.
+*Plugins now exist, but this ladder has no rung for them.* An enabled directory under
+`~/.jinn/plugins/` adds dashboard pages, sidebar rows and status chips, and may mount gateway
+routes and a supervised background task (`packages/jinn/src/plugins/`,
+[`docs/plugins.md`](docs/plugins.md)); the design is `.plans/plugins.md`. Skills are still
+Markdown with no plugin API. Whether a plugin belongs on this ladder is rubric policy, not
+something to decide in a change: until it is written here, `mcp.custom` is the extension point
+the ladder names.
 
 **Rung 5 — a new core MCP tool.** The last resort, and the only rung that taxes every session
 in the company. To take it, show the token arithmetic against the budget above, and show why

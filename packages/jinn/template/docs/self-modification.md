@@ -6,21 +6,25 @@
 
 | File/Directory | Effect of Modification |
 |---|---|
-| `config.yaml` | File watcher triggers full config reload |
+| `config.yaml` | File watcher triggers a config reload (not every key; see below) |
 | `cron/jobs.json` | File watcher triggers cron reschedule |
 | `org/**/*.yaml` | File watcher triggers employee registry rebuild |
-| `skills/*/SKILL.md` | Read on demand by engines; no watcher needed |
+| `skills/<name>/` added or removed | File watcher re-syncs the `.claude/skills/` and `.agents/skills/` links and notifies clients |
+| `skills/*/SKILL.md` | Read on demand by engines; edits need no watcher |
 | `skills/**/*` | Supporting skill data; read on demand |
+| `plugins/**` | File watcher rescans installed plugins |
 
 ## File Watcher Reactions
 
 The gateway uses chokidar to watch for changes:
 
-- **config.yaml** → Parse YAML, validate schema, reload gateway configuration (port, engines, connectors, logging)
+- **config.yaml** → Re-read the configuration in memory: sessions, the model and capability registry and the built-in `jinn` MCP gate pick up the new values, as does the plugin enable/disable state. The listening `port` and `host` and the `logging` settings are applied once at startup, and running connectors are not restarted by a config edit (`POST /api/connectors/reload` does that)
 - **cron/jobs.json** → Parse JSON, validate each job, reschedule the valid ones (an invalid job is skipped with a warning, not allowed to block the rest)
 - **org/\*\*/\*.yaml** → Rebuild the employee registry from all persona and department YAML files
+- **skills/** (top level only) → Re-sync the skill links and tell connected clients
+- **plugins/** → Rescan installed plugins
 
-Changes take effect immediately. No restart required.
+These reloads take effect without a restart. A changed `port`, `host` or `logging` setting needs `jinn restart`: they are applied once at startup.
 
 ## Safety Guidelines
 

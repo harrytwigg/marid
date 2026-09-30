@@ -139,10 +139,9 @@ Connector ids are what the rest of the gateway addresses:
 - `POST /api/connectors/reload`, which stops every running connector and restarts it
   from the current `config.yaml` — regardless of which form declared it
 
-## Future Connectors
+## Other Platforms
 
-The connector interface is designed for additional platforms:
-- **Discord**: Bot integration via discord.js
-- **iMessage**: macOS-only via AppleScript bridge
+Slack, Discord, Telegram and WhatsApp are implemented (`type: slack | discord | telegram | whatsapp`). The connector interface is designed for additional platforms:
+- **iMessage**: not implemented; would be macOS-only via an AppleScript bridge
 - **Web UI**: Built-in, served by the HTTP server
-- **CLI**: Direct terminal input/output
+- **CLI**: not implemented as a chat connector

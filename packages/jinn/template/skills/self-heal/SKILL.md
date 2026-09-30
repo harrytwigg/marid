@@ -30,7 +30,7 @@ Read `~/.jinn/config.yaml` and verify:
 - The file is valid YAML (no syntax errors)
 - The `gateway.port` field is a valid number (default `7777`)
 - Required sections are present: `gateway` (with `port`) and `engines` (with a `default` and a config block for that engine)
-- `engines.default` is one of: claude, codex, antigravity, grok, pi, hermes
+- `engines.default` is one of: claude, codex, antigravity, grok, pi, hermes, opencode
 - The default engine has a model set under `engines.<name>.model` (e.g. `engines.claude.model`)
 - No duplicate keys or malformed values
 
