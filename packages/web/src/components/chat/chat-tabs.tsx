@@ -6,6 +6,7 @@ import { type ChatTab } from '@/hooks/use-chat-tabs'
 import { PILL_CLASS, PillButton } from '@/components/pill-nav'
 import { cn } from '@/lib/utils'
 import { useTitleArrival } from './title-arrival'
+import { useEndTabSwitchWhile } from './tab-switch-mark'
 
 export interface ChatHeaderPillsProps {
   /** Conversation title — slim inline title on desktop, centered on the mobile
@@ -125,6 +126,8 @@ export function ChatHeaderPills({
   // left as it was, and neither animates while the chat list stands in its place.
   const navTitle = title || 'Untitled'
   const titleEntering = useTitleArrival(navTitle, !hideOnMobile, chatId)
+  // The chat list in the thread's place ends a tab switch, so reopening that chat from it is an open.
+  useEndTabSwitchWhile(Boolean(hideOnMobile))
   // Mobile nav bar: both side tracks are locked to the wider cluster, which is
   // what puts the middle track on the header's centre line. Callback refs keep
   // the observer attached across the back control's two shapes.

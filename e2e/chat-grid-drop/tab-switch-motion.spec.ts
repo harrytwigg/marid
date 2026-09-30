@@ -156,9 +156,14 @@ test('phone: tapping a session tab switches instantly, while opening from the ch
     await expect(page.locator(`[data-mobile-thread-pane="${id}"]`)).toBeVisible()
   }
 
-  // Control, after the taps so a stale mark would show: a chat opened from the list still fades.
-  await page.getByRole('button', { name: 'Back to chats' }).tap()
-  const opened = await motionDuring(page, () => page.getByText('Release notes', { exact: true }).filter({ visible: true }).first().tap())
-  expect(opened.animations).toContain('jinn-mobile-chat-crossfade')
+  // Controls, after the taps so a stale mark would show. The list only hides the thread, so the chat
+  // the last tap brought forward is still mounted behind it: reopening it from the list is an open,
+  // every time, and so is opening a chat that was never switched to.
+  const fromList = (name: string) => page.getByText(name, { exact: true }).filter({ visible: true }).first()
+  for (const name of ['Chat layout QA', 'Chat layout QA', 'Release notes']) {
+    await page.getByRole('button', { name: 'Back to chats' }).tap()
+    const opened = await motionDuring(page, () => fromList(name).tap())
+    expect(opened.animations, name).toContain('jinn-mobile-chat-crossfade')
+  }
   await context.close()
 })

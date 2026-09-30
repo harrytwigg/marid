@@ -39,6 +39,9 @@ function Phone({ ignoreSelect = false, lateTitleFor }: PhoneProps) {
   const [openedId, setOpenedId] = useState('a')
   const [titleLoaded, setTitleLoaded] = useState(false)
   const [renamed, setRenamed] = useState(false)
+  // The list only hides the thread, as the page does: the chat in front stays mounted behind it.
+  const [onList, setOnList] = useState(false)
+  const openFromList = (id: string) => { setOpenedId(id); setOnList(false) }
   const title = openedId === lateTitleFor && !titleLoaded ? '' : `${titles[openedId]}${renamed ? ' (renamed)' : ''}`
   const tabs = useMobileSessionTabs({
     committedId: openedId,
@@ -52,7 +55,8 @@ function Phone({ ignoreSelect = false, lateTitleFor }: PhoneProps) {
   const primary = { paneKey: openedId, sessionId: openedId, pendingUserMessage: undefined, initialEmployee: undefined, onSessionCreated: noop, viewMode: 'chat' as const, focusTrigger: 0, delegatedActivity: undefined }
   return (
     <>
-      <ChatHeaderPills title={title} chatId={openedId} onNew={noop} onBack={noop} mobileWorkingSet={tabs} />
+      <ChatHeaderPills title={title} chatId={openedId} hideOnMobile={onList} onNew={noop} onBack={() => setOnList(true)} mobileWorkingSet={tabs} />
+      <div hidden={onList}>
       <MultiChatGrid
         sessionIds={[openedId]}
         focusedId={openedId}
@@ -76,6 +80,8 @@ function Phone({ ignoreSelect = false, lateTitleFor }: PhoneProps) {
         onContentReady={noop}
         onStartFreshChat={async () => {}}
       />
+      </div>
+      <button type="button" onClick={() => openFromList(openedId)}>Reopen from list</button>
       <button type="button" onClick={() => setOpenedId(openedId === 'a' ? 'b' : 'a')}>Open from list</button>
       <button type="button" onClick={() => setOpenedId('c')}>Open Nightly build from list</button>
       <button type="button" onClick={() => setTitleLoaded(true)}>Title loads</button>
@@ -165,6 +171,22 @@ describe('switching phone tabs', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Nightly build from list' }))
     expect(fades(thread())).toBe(true)
+  })
+
+  it('replays the entrance when the chat a tab press brought forward is reopened from the list, every time', () => {
+    render(<Phone />)
+    press('Weekly digest')
+    const switched = thread()
+    expect(fades(switched)).toBe(false)
+
+    for (let visit = 0; visit < 2; visit++) {
+      fireEvent.click(screen.getByRole('button', { name: 'Back to chats' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Reopen from list' }))
+      // Same frame, never remounted: the class went back on while the list hid it.
+      expect(thread()).toBe(switched)
+      expect(thread().dataset.mobileThreadPane).toBe('b')
+      expect(fades(thread())).toBe(true)
+    }
   })
 
   it('treats a press on the tab already in front as nothing to carry', () => {

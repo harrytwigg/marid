@@ -1,4 +1,4 @@
-import { useState, type ComponentProps, type ComponentType, type ReactNode } from 'react'
+import type { ComponentProps, ComponentType, ReactNode } from 'react'
 import { ChatPane } from '@/components/chat/chat-pane'
 import { resolvePaneTitle, safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { usePaneTabsShown } from '@/components/chat/pane-tabs-context'
@@ -10,7 +10,7 @@ import { ChatGrid } from './chat-grid'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { isTerminalSession } from '@/lib/terminal-session'
 import { deriveChatGridIds } from './grid-placement'
-import { arrivesByTabSwitch } from '@/components/chat/tab-switch-mark'
+import { useArrivedByTabSwitch } from '@/components/chat/tab-switch-mark'
 import { SessionPicker } from './session-picker'
 import type { SessionMeta } from './use-chat-pane-state'
 
@@ -198,8 +198,8 @@ function MobileThreadCrossfade({ paneId, children }: { paneId: string; children:
  *  it carries plays when a chat opens; a tab press does not replay it (globals.css still describes it
  *  as replaying once per switch). */
 function MobileThreadFrame({ paneId, children }: { paneId: string; children: ReactNode }) {
-  // Latched for the frame's life: a class added to a live element would start the animation then.
-  const [byTabSwitch] = useState(() => arrivesByTabSwitch(paneId))
+  // Latched at mount until the chat list is next shown, which hides the thread (see the hook).
+  const byTabSwitch = useArrivedByTabSwitch(paneId)
   return (
     <div
       data-mobile-thread-pane={paneId}
