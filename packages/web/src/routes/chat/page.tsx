@@ -30,6 +30,7 @@ import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
 import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
+import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
 import { chatHeaderTitle } from './header-title'
 import { useMobileSessionTabs } from './use-mobile-session-tabs'
@@ -128,8 +129,8 @@ function ChatPage() {
   const { viewport, focusedSessionId, mountedSessionIds } = gridState
   const paneState = useChatPaneState(committedId, focusedSessionId)
   const sessionMeta = paneState.meta
-  // Show-both: the slim nav ribbon is always mounted (desktop); only the 280px
-  // chat list folds. The ribbon's top toggle drives listOpen (persisted), so nav
+  // Show-both: the slim nav ribbon is always mounted (desktop); only the chat
+  // list folds. The ribbon's top toggle drives listOpen (persisted), so nav
   // never leaves the rail. There is no list⇄nav swap any more.
   const [listOpen, setListOpen] = useState<boolean>(() => {
     try { return localStorage.getItem('jinn-chat-list-open') !== 'false' } catch { return true }
@@ -835,40 +836,30 @@ function ChatPage() {
     <PeekProvider>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">
-        {/* Desktop keeps the slim nav ribbon while its 280px chat list folds.
+        {/* Desktop keeps the slim nav ribbon while its chat list folds.
             The ribbon remains outside the clipping column so its labels can
             escape over the thread, while the list itself reflows at a fixed
             width and never changes its internal measure during the fold.
             The sibling thread therefore owns the remaining width throughout. */}
         {!viewport.mobile && <div className="group/sidebar hidden h-full shrink-0 lg:flex">
           <NavRibbon listOpen={listOpen} onToggleList={toggleList} />
-          {/* Fold the list by animating its width; the inner column keeps a fixed
-              280px so its contents don't reflow mid-fold. */}
-          <div
-            className={cn(
-              "h-full overflow-hidden transition-[width] duration-200 [transition-timing-function:var(--ease-smooth)] motion-reduce:transition-none",
-              listOpen ? "w-[280px]" : "w-0",
-            )}
-            aria-hidden={!listOpen}
-          >
-            <div className="h-full w-[280px]">
-              <ChatSidebar
-                selectedId={selectedId}
-                onSelect={handleSelect}
-                onNewChat={handleNewChat}
-                onDelete={handleDeleteSession}
-                onArchive={handleArchiveSession}
-                onUnarchive={handleUnarchiveSession}
-                onDuplicate={handleDuplicateFromSidebar}
-                onSessionsLoaded={handleSessionsLoaded}
-                onEmployeeSessionsAvailable={handleEmployeeSessionsAvailable}
-                onOrderComputed={handleOrderComputed}
-                onContactEmployee={contactEmployee}
-                onSessionsRemoved={handleSessionsRemoved}
-                onOpenBeside={gridAdd.addPane}
-              />
-            </div>
-          </div>
+          <SidebarColumn open={listOpen} viewport={viewport}>
+            <ChatSidebar
+              selectedId={selectedId}
+              onSelect={handleSelect}
+              onNewChat={handleNewChat}
+              onDelete={handleDeleteSession}
+              onArchive={handleArchiveSession}
+              onUnarchive={handleUnarchiveSession}
+              onDuplicate={handleDuplicateFromSidebar}
+              onSessionsLoaded={handleSessionsLoaded}
+              onEmployeeSessionsAvailable={handleEmployeeSessionsAvailable}
+              onOrderComputed={handleOrderComputed}
+              onContactEmployee={contactEmployee}
+              onSessionsRemoved={handleSessionsRemoved}
+              onOpenBeside={gridAdd.addPane}
+            />
+          </SidebarColumn>
         </div>}
 
         <div
