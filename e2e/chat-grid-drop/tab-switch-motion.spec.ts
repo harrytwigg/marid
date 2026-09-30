@@ -22,9 +22,11 @@ interface Motion {
 async function motionDuring(page: Page, action: () => Promise<unknown>): Promise<Motion> {
   // An open just before this one may still be finishing its entrance, and frames sampled through its
   // tail would read as this action's motion. Only the app's own entrances are waited for: a spinner
-  // elsewhere on the page runs forever.
+  // elsewhere on the page, or a running chat's jinn-pulse, loops forever and never settles.
   await page.waitForFunction(() => !document.getAnimations().some((animation) => (
-    (animation as CSSAnimation).animationName?.startsWith('jinn-') && animation.playState === 'running'
+    (animation as CSSAnimation).animationName?.startsWith('jinn-')
+    && animation.playState === 'running'
+    && animation.effect?.getTiming().iterations !== Infinity
   )))
   await page.evaluate(() => {
     const w = window as unknown as { __started?: string[] }
