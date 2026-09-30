@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
-import { clampSidebarWidth, DEFAULT_SIDEBAR_WIDTH, loadSidebarWidth, saveSidebarWidth } from './sidebar-width'
+import { clampSidebarWidth } from './sidebar-width'
+import { storeSidebarWidth, useSavedSidebarWidth } from './sidebar-width-store'
 
 /**
  * The desktop chat list's width. `drag` previews a width while the pointer moves; nothing is
@@ -7,20 +8,18 @@ import { clampSidebarWidth, DEFAULT_SIDEBAR_WIDTH, loadSidebarWidth, saveSidebar
  * window narrowed for a while does not forget the width chosen in a wide one.
  */
 export function useSidebarWidth(viewportWidth: number) {
-  const [stored, setStored] = useState<number>(() => loadSidebarWidth() ?? DEFAULT_SIDEBAR_WIDTH)
+  const stored = useSavedSidebarWidth()
   const [live, setLive] = useState<number | null>(null)
 
   const commit = useCallback((width: number) => {
     const next = clampSidebarWidth(width, viewportWidth)
     setLive(null)
-    setStored(next)
-    saveSidebarWidth(next)
+    storeSidebarWidth(next)
   }, [viewportWidth])
   const cancel = useCallback(() => setLive(null), [])
   const reset = useCallback(() => {
     setLive(null)
-    setStored(DEFAULT_SIDEBAR_WIDTH)
-    saveSidebarWidth(null)
+    storeSidebarWidth(null)
   }, [])
   const drag = useCallback((width: number) => setLive(clampSidebarWidth(width, viewportWidth)), [viewportWidth])
 
