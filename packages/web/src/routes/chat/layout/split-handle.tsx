@@ -7,6 +7,8 @@ export const KEYBOARD_STEP = 16
 
 interface SplitHandleBarProps {
   handle: SplitHandle
+  /** Accessible name; defaults to the pane wording. The chat list's edge reuses this bar. */
+  label?: string
   /** Live sizes while the pointer moves; nothing is persisted until onCommit. */
   onDrag: (sizes: number[]) => void
   onCommit: (sizes: number[]) => void
@@ -84,7 +86,7 @@ function handleStyle(handle: SplitHandle) {
  * A splitter in the gutter between two panes, following the WAI-ARIA window-splitter pattern: a
  * focusable separator whose value is the share of the pair held by the pane before it.
  */
-export function SplitHandleBar({ handle, onDrag, onCommit, onCancel, onReset }: SplitHandleBarProps) {
+export function SplitHandleBar({ handle, label, onDrag, onCommit, onCancel, onReset }: SplitHandleBarProps) {
   const pointer = useHandleDrag(handle, { onDrag, onCommit, onCancel })
   const row = handle.direction === 'row'
   const pair = handle.sizes[handle.index] + handle.sizes[handle.index + 1]
@@ -100,7 +102,7 @@ export function SplitHandleBar({ handle, onDrag, onCommit, onCancel, onReset }: 
     <div
       role="separator"
       tabIndex={0}
-      aria-label={row ? 'Resize panes left and right' : 'Resize panes up and down'}
+      aria-label={label ?? (row ? 'Resize panes left and right' : 'Resize panes up and down')}
       aria-orientation={row ? 'vertical' : 'horizontal'}
       aria-valuemin={0}
       aria-valuemax={100}

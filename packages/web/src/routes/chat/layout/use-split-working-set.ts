@@ -26,12 +26,13 @@ import {
   type SplitLayout,
 } from './split-layout'
 import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
+import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
 import { applySplitDrop, type SplitDropContext } from './split-drop'
 import type { SplitDropHit } from './split-geometry'
 
 function viewportCap(): number {
   if (typeof window === 'undefined') return 4
-  return capForViewport(window.innerWidth, window.innerHeight)
+  return capForViewport(capWindowWidth(window.innerWidth, savedSidebarWidth()), window.innerHeight)
 }
 
 function sameOrder(a: readonly string[], b: readonly string[]): boolean {

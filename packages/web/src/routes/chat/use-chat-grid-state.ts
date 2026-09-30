@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { overflowForViewport } from './grid-layout'
 import { mobileWorkingSetIds } from './mobile-working-set-activity'
 import { useChatTouchOrder, type ChatTouchOrder } from './use-chat-touch-order'
+import { capWindowWidth, useSavedSidebarWidth } from './sidebar-width-store'
 import { useChatViewport } from './use-chat-viewport'
 import type { ChatWorkingSet } from './working-set'
 
@@ -38,6 +39,7 @@ export function useChatGridState({
   systemPrimedId?: string | null
 }) {
   const viewport = useChatViewport()
+  const sidebarWidth = useSavedSidebarWidth()
   const touchOrder = useChatTouchOrder(committedId, sessions, systemPrimedId)
   // A URL selection can commit one render before working-set reconciliation.
   // Replace the primary member synchronously so both identities never mount.
@@ -58,7 +60,7 @@ export function useChatGridState({
     ...workingSet,
     sessionIds: gridSessionIds,
     focusedId: focusedSessionId,
-  }, viewport.width, viewport.height, reservedPaneSlots).visible, [focusedSessionId, gridSessionIds, reservedPaneSlots, viewport.height, viewport.width, workingSet])
+  }, capWindowWidth(viewport.width, sidebarWidth), viewport.height, reservedPaneSlots).visible, [focusedSessionId, gridSessionIds, reservedPaneSlots, sidebarWidth, viewport.height, viewport.width, workingSet])
   const mountedSessionIds = viewport.mobile
     ? (focusedSessionId ? [focusedSessionId] : [])
     : visibleWorkingSet.sessionIds
