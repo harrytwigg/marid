@@ -6,6 +6,7 @@ import { type ChatTab } from '@/hooks/use-chat-tabs'
 import { PILL_CLASS, PillButton } from '@/components/pill-nav'
 import { cn } from '@/lib/utils'
 import { useTitleArrival } from './title-arrival'
+import { useEndTabSwitchWhile } from './tab-switch-mark'
 
 export interface ChatHeaderPillsProps {
   /** Conversation title — slim inline title on desktop, centered on the mobile
@@ -23,6 +24,8 @@ export interface ChatHeaderPillsProps {
    *  nav-bar back control into `‹ Parent` (iOS previous-screen idiom). Absent
    *  for sidebar-opened sessions — the sidebar IS the navigation. */
   backTo?: { label: string; onClick: () => void }
+  /** The chat in front, so the title can tell how it got there (a tab press swaps it silently). */
+  chatId?: string | null
   /** Start a new chat (compose). */
   onNew: () => void
   /** Existing "more" (…) menu element, rendered as the last pill control. */
@@ -108,6 +111,7 @@ const MOBILE_BAR_MATERIAL = 'bg-[var(--material-thick-opaque)] [@media(pointer:f
 // right actions pill (compose · more) stays.
 export function ChatHeaderPills({
   title,
+  chatId,
   hideOnMobile,
   onBack,
   backTo,
@@ -117,10 +121,13 @@ export function ChatHeaderPills({
   hideDesktop,
 }: ChatHeaderPillsProps) {
   // Only the centred nav-bar title animates its change: it swaps whole
-  // conversations under a fixed-height bar. The desktop title is left as it was,
-  // and neither animates while the chat list stands in its place.
+  // conversations under a fixed-height bar — except a tab press, which moves
+  // between chats already open and swaps them silently. The desktop title is
+  // left as it was, and neither animates while the chat list stands in its place.
   const navTitle = title || 'Untitled'
-  const titleEntering = useTitleArrival(navTitle, !hideOnMobile)
+  const titleEntering = useTitleArrival(navTitle, !hideOnMobile, chatId)
+  // The chat list in the thread's place ends a tab switch, so reopening that chat from it is an open.
+  useEndTabSwitchWhile(Boolean(hideOnMobile))
   // Mobile nav bar: both side tracks are locked to the wider cluster, which is
   // what puts the middle track on the header's centre line. Callback refs keep
   // the observer attached across the back control's two shapes.

@@ -881,7 +881,7 @@ function ChatPage() {
           {/* Mobile keeps its nav chrome; multi-pane desktop moves identity into panes. */}
           <ChatPageHeader
             hideOnMobile={onMobileList}
-            title={headerTitle}
+            title={headerTitle} chatId={focusedSessionId}
             backTo={backTo}
             onBack={backToList}
             onNew={handleNewChat}

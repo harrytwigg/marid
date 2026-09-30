@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { arrivesByTabSwitch } from './tab-switch-mark'
 
 /** The entrance (--duration-base) plus a paint. The mark belongs to the commit
  *  that swaps the title, not to the title, so it is dropped again afterwards. */
@@ -18,9 +19,10 @@ function prefersReducedMotion(): boolean {
  * already there. Neither is one that changed while `showing` was false: the
  * working-set chips were standing in its place, so putting the span back is a
  * mount too. A remount, an unrelated rerender, and a change nobody could see
- * all animate nothing.
+ * all animate nothing — and neither does any title of a chat a tab press brought
+ * forward, which moves between chats that are already open and is not an arrival.
  */
-export function useTitleArrival(title: string, showing: boolean): boolean {
+export function useTitleArrival(title: string, showing: boolean, chatId?: string | null): boolean {
   const seenRef = useRef<string | null>(null)
   const enteringRef = useRef(false)
   const expiryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -43,7 +45,7 @@ export function useTitleArrival(title: string, showing: boolean): boolean {
     // Recorded even while hidden, so a swap behind the chips is already old news
     // by the time the span comes back rather than reading as a fresh arrival.
     seenRef.current = title
-    if (!showing || seen === title || prefersReducedMotion()) return
+    if (!showing || seen === title || prefersReducedMotion() || arrivesByTabSwitch(chatId)) return
     enteringRef.current = true
     expiryRef.current = setTimeout(dropMark, ENTER_MARK_TTL_MS)
   }, [title, showing])

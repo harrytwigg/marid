@@ -4,6 +4,8 @@ import { useChatGridMotion } from '../use-chat-grid-motion'
 import { setVisibleSplitSizes } from './split-layout'
 import { splitGeometry, type Rect, type SplitHandle } from './split-geometry'
 import { PaneTabsProvider } from './pane-tabs-provider'
+import { useTabSwitchedIn } from './pane-tab-switch'
+import './pane-tab-switch.css'
 import { SplitHandleBar } from './split-handle'
 import type { SplitLayoutControls } from './use-split-working-set'
 
@@ -24,16 +26,21 @@ interface PaneFrameProps {
   singlePane: boolean
   rect: Rect
   folded: boolean
+  /** The pane mounts because its group switched to a tab it already held. */
+  byTabSwitch: boolean
   onFocus: (paneKey: string) => void
   paneRef: RefCallback<HTMLElement>
   children: ReactNode
 }
 
 /** chat-grid.tsx's PaneFrame, placed by geometry instead of by CSS grid flow. */
-function PaneFrame({ paneKey, active, singlePane, rect, folded, onFocus, paneRef, children }: PaneFrameProps) {
+function PaneFrame({ paneKey, active, singlePane, rect, folded, byTabSwitch, onFocus, paneRef, children }: PaneFrameProps) {
+  // Latched at mount: how the pane arrived does not change while it is showing.
+  const [arrival] = useState(byTabSwitch ? 'tab-switch' : undefined)
   return (
     <section
       ref={paneRef}
+      data-pane-arrival={arrival}
       data-testid={`pane-${paneKey}`}
       data-chat-grid-pane={paneKey}
       data-grid-active={String(active)}
@@ -162,6 +169,7 @@ function SplitLayoutGrid(props: ChatGridProps & SplitGridBinding) {
   const dragAlive = !drag || base.handles.some((handle) => handle.splitId === drag.splitId)
   useEffect(() => { if (!dragAlive) setDrag(null) }, [dragAlive])
   const singlePane = sessionIds.length <= 1
+  const switchedIn = useTabSwitchedIn(split.layout)
   const paneFor = new Map(geometry.panes.map((pane) => [pane.key, pane]))
 
   return (
@@ -186,6 +194,7 @@ function SplitLayoutGrid(props: ChatGridProps & SplitGridBinding) {
           singlePane={singlePane}
           rect={paneFor.get(paneKey)?.rect ?? grid.box}
           folded={paneFor.get(paneKey)?.folded ?? false}
+          byTabSwitch={switchedIn.has(paneKey)}
           onFocus={onFocus}
           paneRef={motion.paneRef(paneKey)}
         >
