@@ -100,43 +100,41 @@ beforeEach(() => {
 })
 
 describe("the status picker", () => {
-  it("offers ONLY the legal manual targets from executing — illegal edges are absent, with the omission footnote", async () => {
-    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+  it("offers ONLY the legal manual targets from in review — illegal edges are absent, with the omission footnote", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { status: "in_review" })))
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-status"))
 
     const picker = await screen.findByTestId("picker-status")
     // Current first (checked), then the design's presentation order (F2):
-    // In review · Done · Blocked · Escalated · Cancelled.
+    // Done · Blocked · Cancelled.
     const rows = [...picker.querySelectorAll<HTMLElement>('[data-testid^="status-option-"]')]
     expect(rows.map((row) => row.dataset.testid)).toEqual([
-      "status-option-executing",
       "status-option-in_review",
       "status-option-done",
       "status-option-blocked",
-      "status-option-escalated",
       "status-option-cancelled",
     ])
     expect(screen.queryByTestId("status-option-backlog")).toBeNull()
-    expect(screen.queryByTestId("status-option-assigned")).toBeNull()
+    expect(screen.queryByTestId("status-option-executing")).toBeNull()
     expect(picker.textContent).toContain("Only legal moves are listed")
-    expect(picker.textContent).toContain("Backlog and Assigned aren't reachable from Executing")
+    expect(picker.textContent).toContain("Backlog and In progress aren't reachable from In review")
   })
 
-  it("renders a gated Done disabled with the inline reason when a sub-task is escalated, and refuses the click", async () => {
+  it("renders a gated Cancelled disabled with the inline reason while a sub-task is open, and refuses the click", async () => {
     const item = full("PLA-12")
     getWorkItem.mockResolvedValue(detailOf(item))
     getWorkItemTree.mockResolvedValue({ tree: { root: treeNode(item, [
-      treeNode(full("PLA-13", { status: "escalated", parentId: "PLA-12", depth: 1 })),
+      treeNode(full("PLA-13", { status: "blocked", parentId: "PLA-12", depth: 1 })),
       treeNode(full("PLA-14", { status: "done", parentId: "PLA-12", depth: 1 })),
     ]), totals: {}, spendUsd: 0 } })
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-status"))
 
-    const done = await screen.findByTestId("status-option-done")
-    expect(done.getAttribute("aria-disabled")).toBe("true")
-    expect(done.textContent).toContain("1 escalated sub-task needs an answer first")
-    fireEvent.click(done)
+    const cancelled = await screen.findByTestId("status-option-cancelled")
+    expect(cancelled.getAttribute("aria-disabled")).toBe("true")
+    expect(cancelled.textContent).toContain("1 sub-task still open")
+    fireEvent.click(cancelled)
     expect(setWorkItemStatus).not.toHaveBeenCalled()
   })
 
@@ -212,7 +210,7 @@ describe("the other pickers", () => {
     expect(screen.queryByTestId("assignee-option-mason")).toBeNull()
     expect(screen.getByTestId("assignee-option-scout")).toBeTruthy()
 
-    // Granting ownership is the assign lane's: roster check, backlog→assigned, notify.
+    // Granting ownership is the assign lane's: roster check, status unchanged, notify.
     fireEvent.click(screen.getByTestId("assignee-option-scout"))
     await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-12", "scout"))
     expect(updateWorkItem).not.toHaveBeenCalled()

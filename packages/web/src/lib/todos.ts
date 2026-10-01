@@ -16,12 +16,10 @@ export { isPositiveTodoVersion } from "./api"
 /** Human label for a raw status (sheet, people queue, sub-lines). */
 export const STATUS_LABEL: Record<WorkItemStatusWire, string> = {
   backlog: "Backlog",
-  assigned: "Assigned",
-  executing: "Executing",
+  executing: "In progress",
   in_review: "In review",
   done: "Done",
   blocked: "Blocked",
-  escalated: "Escalated",
   cancelled: "Cancelled",
 }
 
@@ -29,12 +27,10 @@ export const STATUS_LABEL: Record<WorkItemStatusWire, string> = {
  *  a blocked card sits in Executing but keeps its blocked glyph + colour. */
 export type StateKey =
   | "backlog"
-  | "assigned"
   | "executing"
   | "review"
   | "done"
   | "blocked"
-  | "escalated"
   | "cancelled"
 export function stateKeyOf(status: WorkItemStatusWire): StateKey {
   return status === "in_review" ? "review" : status
@@ -118,7 +114,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export type NeedsYouSet = WorkItemCompactWire[]
 
 export function needsAttention(item: WorkItemCompactWire, now = Date.now()): boolean {
-  return item.attentionLane === "recovering" || item.attentionLane === "manager" || (!isParked(item.parkedUntil, now) && (item.approvalState === "pending" || item.status === "escalated" || item.status === "blocked"))
+  return item.attentionLane === "recovering" || item.attentionLane === "manager" || (!isParked(item.parkedUntil, now) && (item.approvalState === "pending" || item.status === "blocked"))
 }
 
 export function deriveNeedsYou(items: WorkItemCompactWire[], now = Date.now()): NeedsYouSet {
@@ -292,7 +288,7 @@ export function filtersToSearchParams(f: TodoFilters): URLSearchParams {
 }
 
 const STATUS_FILTER_VALUES: ReadonlySet<string> = new Set([
-  "all", "backlog", "assigned", "executing", "blocked", "in_review", "escalated", "done", "cancelled",
+  "all", "backlog", "executing", "blocked", "in_review", "done", "cancelled",
 ])
 const SOURCE_VALUES: ReadonlySet<string> = new Set(["human", "delegation", "cron", "workflow", "session", "connector", "goal"])
 const DATE_VALUES: ReadonlySet<string> = new Set(["today", "week", "month"])

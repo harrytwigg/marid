@@ -42,7 +42,7 @@ const BOARD = str(
   'Which board: "home" for what the operator asked for or kept, "attention" for what needs them, "everything", or a department slug.',
 )
 const STATUS = str("Restrict the board to one status.", [
-  "all", "backlog", "assigned", "executing", "blocked", "in_review", "escalated", "done", "cancelled",
+  "all", "backlog", "executing", "blocked", "in_review", "done", "cancelled",
 ])
 
 const openTodos: TalkTool = {

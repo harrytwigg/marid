@@ -17,6 +17,7 @@ vi.mock("@/routes/providers", () => ({ useTheme: () => ({ theme: "dark" }) }))
 const getWorkItem = vi.fn()
 const getWorkItemTree = vi.fn()
 const updateWorkItem = vi.fn()
+const assignWorkItem = vi.fn().mockResolvedValue({ workItem: {} })
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>()
@@ -26,6 +27,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getWorkItem: (...args: unknown[]) => getWorkItem(...args),
       getWorkItemTree: (...args: unknown[]) => getWorkItemTree(...args),
       updateWorkItem: (...args: unknown[]) => updateWorkItem(...args),
+      assignWorkItem: (...args: unknown[]) => assignWorkItem(...args),
       setWorkItemStatus: vi.fn(),
       setWorkItemLabels: vi.fn(),
       listLabels: vi.fn().mockResolvedValue({ labels: [] }),
@@ -96,6 +98,7 @@ describe("the assignee picker's Unassign row", () => {
     const rows = [...picker.querySelectorAll<HTMLElement>('[data-testid^="assignee-option-"]')]
     expect(rows.map((row) => row.dataset.testid)).toEqual([
       "assignee-option-unassign",
+      "assignee-option-operator",
       "assignee-option-mason",
       "assignee-option-scout",
     ])
@@ -163,5 +166,23 @@ describe("clearing the assignee without opening a picker", () => {
     await screen.findByTestId("rail-assignee")
     expect(screen.queryByTestId("rail-assignee-clear")).toBeNull()
     expect(screen.queryByTestId("chip-assignee-clear")).toBeNull()
+  })
+})
+
+describe("the operator as an assignee", () => {
+  it("offers 'You (operator)' and posts the reserved value", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    renderTask()
+    fireEvent.click(await screen.findByTestId("rail-assignee"))
+    const option = await screen.findByTestId("assignee-option-operator")
+    expect(option.textContent).toContain("You (operator)")
+    fireEvent.click(option)
+    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-12", "@operator"))
+  })
+
+  it("shows the reserved value as You", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { assignee: "@operator" })))
+    renderTask()
+    expect((await screen.findByTestId("rail-assignee")).textContent).toContain("You")
   })
 })

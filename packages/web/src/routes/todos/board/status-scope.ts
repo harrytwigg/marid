@@ -6,8 +6,8 @@ import type { StatusFilter } from "@/lib/todos"
  * Columns ARE the status dimension, so `?status=…` narrows which columns exist
  * rather than filtering within one. */
 
-export const PIPELINE_STATUSES: readonly WorkItemStatusWire[] = ["backlog", "assigned", "executing", "in_review"]
-export const EXCEPTION_STATUSES: readonly WorkItemStatusWire[] = ["blocked", "escalated"]
+export const PIPELINE_STATUSES: readonly WorkItemStatusWire[] = ["backlog", "executing", "in_review"]
+export const EXCEPTION_STATUSES: readonly WorkItemStatusWire[] = ["blocked"]
 export const CLOSED_STATUSES: readonly WorkItemStatusWire[] = ["done", "cancelled"]
 export const BOARD_STATUS_ORDER: readonly WorkItemStatusWire[] = [
   ...PIPELINE_STATUSES, ...EXCEPTION_STATUSES, ...CLOSED_STATUSES,

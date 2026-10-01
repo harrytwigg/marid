@@ -42,15 +42,12 @@ export interface LegalTargetsContext {
   /** Open items at every depth below this one — what a cascade close actually
    *  closes. A surface that knows only its direct children leaves it out. */
   openDescendants?: number
-  /** Descendants sitting in escalated. A cascade cannot close through one. */
-  escalatedDescendants?: number
 }
 
-/** The three counts read off a loaded tree node, for the surfaces that hold one. */
+/** The counts read off a loaded tree node, for the surfaces that hold one. */
 export interface CloseGateCounts {
   openChildren: number
   openDescendants: number
-  escalatedDescendants: number
 }
 
 const isOpen = (node: WorkItemTreeNodeWire) => node.status !== "done" && node.status !== "cancelled"
@@ -61,15 +58,12 @@ const isOpen = (node: WorkItemTreeNodeWire) => node.status !== "done" && node.st
 export function closeGateCounts(node: WorkItemTreeNodeWire | undefined): CloseGateCounts {
   const children = node?.children ?? []
   let openDescendants = 0
-  let escalatedDescendants = 0
   for (const child of children) {
     const below = closeGateCounts(child)
     if (isOpen(child)) openDescendants += 1
-    if (child.status === "escalated") escalatedDescendants += 1
     openDescendants += below.openDescendants
-    escalatedDescendants += below.escalatedDescendants
   }
-  return { openChildren: children.filter(isOpen).length, openDescendants, escalatedDescendants }
+  return { openChildren: children.filter(isOpen).length, openDescendants }
 }
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`
@@ -77,19 +71,10 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 /** The close targets when children are still open. Done is one cascade close
  *  (PLA-96): the gateway takes the open subtree deepest-first in the same
  *  transaction, so the row stays live and says what else it closes. Cancel has
- *  no such lane, and neither has a subtree holding an escalation — that question
- *  is owed an answer before anything closes over it. */
+ *  no such lane. */
 function closeTarget(to: WorkItemStatusWire, ctx: LegalTargetsContext): LegalTargetOption {
   const openChildren = ctx.openChildren ?? 0
-  const escalated = ctx.escalatedDescendants ?? 0
   if (to !== "done") return { status: to, gated: true, reason: `${plural(openChildren, "sub-task")} still open` }
-  if (escalated > 0) {
-    return {
-      status: to,
-      gated: true,
-      reason: `${plural(escalated, "escalated sub-task")} ${escalated === 1 ? "needs" : "need"} an answer first`,
-    }
-  }
   return {
     status: to,
     gated: false,
@@ -110,8 +95,8 @@ export function legalTargets(
   const out: LegalTargetOption[] = []
   for (const to of FIXTURE.edges[from] ?? []) {
     // Manual-start rule: a human move INTO executing is legal only from
-    // backlog/assigned. From in_review, send back is a review verdict on the
-    // item (bounce, rounds++), never a drag; from blocked/escalated, work
+    // backlog. From in_review, send back is a review verdict on the
+    // item (bounce, rounds++), never a drag; from blocked, work
     // resumes through reassignment. Illegal ≠ gated: the edge is absent.
     if (to === "executing" && !MANUAL_EXECUTING_FROM.has(from)) continue
     out.push(CLOSE_GATED.has(to) && openChildren > 0 ? closeTarget(to, ctx) : { status: to, gated: false })

@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
-import type { WorkItemCompactWire, WorkItemStatusWire, ApprovalStateWire } from "@/lib/api"
+import type { WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire, ApprovalStateWire } from "@/lib/api"
 import { createBrowserGatewayTransport, installGatewayTransport } from "@/lib/gateway-transport"
-import { NeedsYouView } from "../needs-you-view"
+import { NeedsYouView, attentionIdLine } from "../needs-you-view"
 
 /* Todos v2 slice 6 stage C — the Attention inbox restyled to states.html §1:
- * fixed kicker order (Approvals · Escalated · Blocked), oldest-first within a
+ * fixed kicker order (Approvals · Blocked), oldest-first within a
  * group, mono ID line, the voice's rail quote (reason notes from detail
- * enrichment), and per-kind actions — approvals decide in place, escalated/
+ * enrichment), and per-kind actions — approvals decide in place, blocked/
  * blocked route through legalTargets() menus. */
 
 vi.mock("@/routes/settings-provider", () => ({
@@ -104,15 +104,14 @@ describe("NeedsYouView", () => {
     expect(screen.getByText("All quiet.")).toBeTruthy()
   })
 
-  it("groups by kind in fixed kicker order — Approvals, Escalated, Blocked — oldest first within a group", () => {
+  it("groups by kind in fixed kicker order — Approvals, Blocked — oldest first within a group", () => {
     renderView([
       item("wi_private_blocked", "blocked", null, { title: "Blocked item" }),
       item("wi_private_ap_new", "in_review", "pending", { title: "Newer approval", updatedAt: "2026-07-05T11:00:00.000Z" }),
       item("wi_private_ap_old", "in_review", "pending", { title: "Older approval", updatedAt: "2026-07-01T09:00:00.000Z" }),
-      item("wi_private_escalated", "escalated", null, { title: "Escalated item" }),
     ])
     const groups = screen.getAllByTestId(/needs-group-/).map((el) => el.getAttribute("data-testid"))
-    expect(groups).toEqual(["needs-group-approval", "needs-group-escalated", "needs-group-blocked"])
+    expect(groups).toEqual(["needs-group-approval", "needs-group-blocked"])
     // Oldest-first inside Approvals: the longest-waiting ask wins.
     const titles = screen.getAllByTestId("needs-item").map((el) => el.textContent ?? "")
     expect(titles[0]).toContain("Older approval")
@@ -205,24 +204,22 @@ describe("NeedsYouView", () => {
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
     fireEvent.click(trigger)
     // The legality module's edges from blocked (manual-start rule: never
-    // executing) — backlog and assigned lead the manual exits.
+    // executing) — backlog leads the manual exits.
     const backlog = await screen.findByTestId("needs-unblock-backlog")
-    expect(screen.getByTestId("needs-unblock-assigned")).toBeTruthy()
+    expect(screen.getByTestId("needs-unblock-in_review")).toBeTruthy()
     expect(screen.queryByTestId("needs-unblock-executing")).toBeNull()
     fireEvent.click(backlog)
     await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("wi_private_blocked", "backlog", undefined))
   })
 
-  it("Route… on an escalated item offers the human exits and commits through the same lane", async () => {
-    setWorkItemStatus.mockResolvedValue({ workItem: {}, escalated: false })
-    renderView([item("wi_private_escalated", "escalated", null)])
-    const trigger = screen.getByTestId("needs-route")
-    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
-    fireEvent.click(trigger)
-    const review = await screen.findByTestId("needs-route-in_review")
-    expect(screen.queryByTestId("needs-route-executing")).toBeNull()
-    fireEvent.click(review)
-    await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("wi_private_escalated", "in_review", undefined))
+  it("a blocked item whose stop was an escalation event reads as escalated, with its rounds", () => {
+    const detail = {
+      workItem: { id: "wi_private_blocked", rounds: 2, maxRounds: 2 },
+      events: [{ id: "e1", workItemId: "wi_private_blocked", kind: "escalated", fromStatus: "in_review", toStatus: "blocked", createdAt: "2026-07-05T11:00:00.000Z", detail: { reason: "max-rounds-exhausted" } }],
+    } as unknown as WorkItemOpenDetailWire
+    const line = attentionIdLine(item("wi_private_blocked", "blocked", null), "blocked", detail)
+    expect(line).toContain("escalated")
+    expect(line).toContain("round 2 of")
   })
 
   it("the voice quotes the blocked reason note from detail enrichment", async () => {

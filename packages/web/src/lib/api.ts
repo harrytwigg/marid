@@ -334,7 +334,7 @@ export interface EngineLimitsResponse {
 }
 
 export type WorkItemStatusWire =
-  | "backlog" | "assigned" | "executing" | "in_review" | "done" | "blocked" | "escalated" | "cancelled"
+  | "backlog" | "executing" | "in_review" | "done" | "blocked" | "cancelled"
 export type WorkItemSourceWire =
   | "human" | "delegation" | "cron" | "workflow" | "session" | "connector" | "goal"
 export type VerifyModeWire = "trust" | "verify" | "thorough"
@@ -801,7 +801,7 @@ export const api = {
     labels?: string[]
   }, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>("/api/work-items", input, origin),
-  /** Todos v2 slice 6: roster-validated assignment (backlog → assigned). */
+  /** Todos v2 slice 6: roster-validated assignment; status is unchanged. `@operator` assigns to the operator. */
   assignWorkItem: (id: string, assignee: string, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>(`/api/work-items/${encodeURIComponent(id)}/assign`, { assignee }, origin),
   /** Non-deleting archive: the row and its audit survive as `cancelled`. */

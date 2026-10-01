@@ -7,7 +7,7 @@ import TaskPage, { ancestorsOf, nodeOf } from "../task-page/task-page"
 
 /* Todos v2 slice 6 stage B — the task page (design-doc §7, task-detail.html).
  * Anatomy: breadcrumb trail from the root tree, banner precedence
- * (escalated > approval > blocked, ONE at a time), the banner's asked-for-after
+ * (approval > blocked, ONE at a time), the banner's asked-for-after
  * reason field (review F6), and the chrome-free rail's read rows. Stage C adds
  * the §8 full-screen push: on mobile the tab bar yields the bottom edge to the
  * fixed comment bar. */
@@ -352,7 +352,7 @@ describe("the task page", () => {
     renderTask()
 
     const chips = await screen.findByTestId("task-chip-cluster")
-    expect(chips.textContent).toContain("Executing")
+    expect(chips.textContent).toContain("In progress")
     expect(chips.textContent).toContain("High")
     expect(chips.textContent).toContain("mason")
     expect(chips.textContent).toContain("build")
@@ -382,23 +382,22 @@ describe("the task page", () => {
     expect(screen.queryByTestId("rail-dispatch")).toBeNull()
   })
 
-  it("banner precedence: escalated wins over a pending approval", async () => {
+  it("banner precedence: a pending approval wins over blocked", async () => {
     const item = full("PLA-12", {
-      status: "escalated",
+      status: "blocked",
       approvalState: "pending",
       approvalRequest: "OK to go live?",
     })
     getWorkItem.mockResolvedValue(detailOf(item, {
       events: [{
         id: "e1", workItemId: "PLA-12", kind: "status_change", fromStatus: "in_review",
-        toStatus: "escalated", actor: "reviewer", detail: { note: "Rounds exhausted, your call" },
+        toStatus: "blocked", actor: "reviewer", detail: { note: "Rounds exhausted, your call" },
         createdAt: "2026-07-23T07:00:00.000Z",
       }],
     }))
     renderTask()
 
-    expect((await screen.findByTestId("task-banner-escalated")).textContent).toContain("Rounds exhausted, your call")
-    expect(screen.queryByTestId("task-banner-approval")).toBeNull()
+    expect((await screen.findByTestId("task-banner-approval")).textContent).toContain("OK to go live?")
     expect(screen.queryByTestId("task-banner-blocked")).toBeNull()
   })
 

@@ -38,9 +38,9 @@ describe("groupTodoListItems", () => {
     const empty = { items: [], total: 0 }
     const groups = groupTodoListItems(
       {
-        backlog: empty, assigned: empty, executing: empty, in_review: empty,
+        backlog: empty, executing: empty, in_review: empty,
         blocked: { items: [recovering, manager, operator], total: 3 },
-        escalated: empty, done: empty, cancelled: empty,
+        done: empty, cancelled: empty,
       },
       [recovering, manager, operator],
     )
@@ -61,9 +61,9 @@ describe("groupTodoListItems", () => {
     const feed = deriveNeedsYou([leftover, operatorGate])
     const groups = groupTodoListItems(
       {
-        backlog: empty, assigned: empty, executing: empty,
+        backlog: empty, executing: empty,
         in_review: { items: [leftover, operatorGate], total: 2 },
-        blocked: empty, escalated: empty, done: empty, cancelled: empty,
+        blocked: empty, done: empty, cancelled: empty,
       },
       feed,
     )
@@ -79,10 +79,10 @@ describe("groupTodoListItems", () => {
     const feed = deriveNeedsYou([recovering, operatorGate])
     const groups = groupTodoListItems(
       {
-        backlog: empty, assigned: empty, executing: empty,
+        backlog: empty, executing: empty,
         in_review: { items: [operatorGate], total: 1 },
         blocked: { items: [recovering], total: 1 },
-        escalated: empty, done: empty, cancelled: empty,
+        done: empty, cancelled: empty,
       },
       feed,
     )
@@ -95,11 +95,9 @@ describe("groupTodoListItems", () => {
     const groups = groupTodoListItems(
       {
         backlog: { items: [], total: 0 },
-        assigned: { items: [], total: 0 },
         executing: { items: [], total: 0 },
         in_review: { items: [], total: 21 },
         blocked: { items: [], total: 0 },
-        escalated: { items: [], total: 0 },
         done: { items: [], total: 0 },
         cancelled: { items: [], total: 0 },
       },
@@ -119,11 +117,9 @@ describe("groupTodoListItems", () => {
     const groups = groupTodoListItems(
       {
         backlog: { items: [], total: 0 },
-        assigned: { items: [], total: 0 },
         executing: { items: [], total: 0 },
         in_review: { items: [needsReview], total: 1 },
         blocked: { items: [needsBlocked, ordinaryBlocked], total: 2 },
-        escalated: { items: [], total: 0 },
         done: { items: [], total: 0 },
         cancelled: { items: [], total: 0 },
       },
@@ -134,7 +130,6 @@ describe("groupTodoListItems", () => {
       "needs-you",
       "executing",
       "in-review",
-      "assigned",
       "backlog",
       "blocked",
       "closed",
@@ -154,8 +149,8 @@ describe("groupTodoListItems", () => {
     const empty = { items: [], total: 0 }
     const groups = groupTodoListItems(
       {
-        backlog: empty, assigned: empty, executing: { items: [executing], total: 1 },
-        in_review: empty, blocked: empty, escalated: empty, done: empty, cancelled: empty,
+        backlog: empty, executing: { items: [executing], total: 1 },
+        in_review: empty, blocked: empty, done: empty, cancelled: empty,
       },
       [],
       (status) => status === "executing",

@@ -5,11 +5,9 @@ export const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "open", label: "Open" },
   { value: "backlog", label: "Backlog" },
-  { value: "assigned", label: "Assigned" },
-  { value: "executing", label: "Executing" },
+  { value: "executing", label: "In progress" },
   { value: "blocked", label: "Blocked" },
   { value: "in_review", label: "In review" },
-  { value: "escalated", label: "Escalated" },
   { value: "done", label: "Done" },
   { value: "cancelled", label: "Cancelled" },
 ]

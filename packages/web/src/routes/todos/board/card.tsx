@@ -40,10 +40,10 @@ export function rollupOf(tree: WorkItemTreeWire | undefined, rootStatus: string)
   return { closed, total }
 }
 
-/** The one-line why on blocked/escalated cards: the latest transition note. The
+/** The one-line why on blocked cards: the latest transition note. The
  *  card face has no row for it since Variant A; the Needs-you view still does. */
 export function reasonOf(item: WorkItemCompactWire, detail: WorkItemOpenDetailWire | undefined): string | null {
-  if (item.status !== "blocked" && item.status !== "escalated") return null
+  if (item.status !== "blocked") return null
   const events = detail?.events ?? []
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]

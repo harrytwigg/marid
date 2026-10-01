@@ -3,15 +3,14 @@ import { isParked } from "@/lib/parked"
 import { formatCountdown } from "./util"
 import type { StateGlyphKey } from "./state-glyph"
 
-/** Which of the inbox's three kickers an entry belongs to. A pending gate wins
+/** Which of the inbox's kickers an entry belongs to. A pending gate wins
  *  over the status, because a Todo can be blocked AND holding a decision. */
-export type AttentionKind = "approval" | "escalated" | "blocked" | "recovering" | "manager"
+export type AttentionKind = "approval" | "blocked" | "recovering" | "manager"
 
 export const ATTENTION_GROUPS: { kind: AttentionKind; label: string }[] = [
   { kind: "recovering", label: "Recovering automatically" },
   { kind: "manager", label: "Manager attention" },
   { kind: "approval", label: "Approvals" },
-  { kind: "escalated", label: "Escalated" },
   { kind: "blocked", label: "Blocked" },
 ]
 
@@ -19,7 +18,7 @@ export function attentionKind(item: WorkItemCompactWire): AttentionKind {
   if (item.attentionLane === "recovering") return "recovering"
   if (item.attentionLane === "manager") return "manager"
   if (item.approvalState === "pending") return "approval"
-  return item.status === "blocked" ? "blocked" : "escalated"
+  return "blocked"
 }
 
 export function stateKey(kind: AttentionKind): StateGlyphKey {

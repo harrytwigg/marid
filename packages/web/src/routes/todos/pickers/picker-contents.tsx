@@ -12,6 +12,7 @@ import {
 import { effectiveMaxRounds, effectiveVerifyMode, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { RailPriorityBars, VerifyPill } from "../task-page/rail-rows"
+import { OPERATOR_ASSIGNEE } from "../util"
 import { PickerNote, PickerRow } from "./picker-shell"
 
 /* Todos v2 slice 6 — the picker CONTENTS (design-doc §7.3): one component per
@@ -71,6 +72,10 @@ export function AssigneePickerContent({
       (e) => e.name.toLowerCase().includes(q) || e.displayName.toLowerCase().includes(q),
     )
   }, [employees, query])
+  const showOperator = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return !q || "you (operator)".includes(q)
+  }, [query])
   return (
     <>
       <div className="px-1 pb-1.5 pt-0.5">
@@ -96,6 +101,19 @@ export function AssigneePickerContent({
         />
       )}
       <div className={sheet ? "" : "max-h-[288px] overflow-y-auto"}>
+        {showOperator && (
+          <PickerRow
+            sheet={sheet}
+            glyph={<EmployeeAvatar name={OPERATOR_ASSIGNEE} fallback="🙂" size={22} fontSize={12} className="bg-[var(--fill-secondary)]" />}
+            label="You (operator)"
+            checked={current === OPERATOR_ASSIGNEE}
+            onSelect={() => {
+              if (current !== OPERATOR_ASSIGNEE) commit(OPERATOR_ASSIGNEE)
+              onDone()
+            }}
+            testId="assignee-option-operator"
+          />
+        )}
         {filtered.map((employee) => (
           <PickerRow
             key={employee.name}
@@ -111,7 +129,7 @@ export function AssigneePickerContent({
             testId={`assignee-option-${employee.name}`}
           />
         ))}
-        {filtered.length === 0 && <PickerNote>Nobody matches "{query.trim()}".</PickerNote>}
+        {filtered.length === 0 && !showOperator && <PickerNote>Nobody matches "{query.trim()}".</PickerNote>}
       </div>
     </>
   )

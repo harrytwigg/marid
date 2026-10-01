@@ -135,7 +135,7 @@ describe("isColumnInStatusFilter", () => {
 
   it("keeps only the named column when the URL names one status", () => {
     expect(isColumnInStatusFilter("executing", "executing")).toBe(true)
-    for (const status of ["backlog", "assigned", "in_review", "blocked", "escalated", "done", "cancelled"] as const) {
+    for (const status of ["backlog", "in_review", "blocked", "done", "cancelled"] as const) {
       expect(isColumnInStatusFilter("executing", status)).toBe(false)
     }
   })

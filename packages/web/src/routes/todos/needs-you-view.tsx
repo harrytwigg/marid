@@ -71,31 +71,20 @@ export function attentionIdLine(
   const parts: string[] = []
   const publicId = publicWorkItemReference(item.id)
   if (publicId) parts.push(publicId)
-  if (kind === "escalated") {
-    const events = detail?.events ?? []
-    let from: WorkItemStatusWire | null = null
-    let at: string | null = null
-    for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].toStatus === "escalated") {
-        from = events[i].fromStatus ?? null
-        at = events[i].createdAt
-        break
-      }
-    }
-    parts.push(from ? `was ${STATUS_LABEL[from].toLowerCase()}` : STATUS_LABEL[item.status].toLowerCase())
-    const full = detail?.workItem
-    if (full) parts.push(`round ${full.rounds} of ${effectiveMaxRounds(full)}`)
-    else if (at) parts.push(formatRelativeTime(at).toLowerCase())
-  } else if (kind === "blocked") {
+  if (kind === "blocked") {
     const events = detail?.events ?? []
     let at: string | null = null
+    let escalated = false
     for (let i = events.length - 1; i >= 0; i--) {
       if (events[i].toStatus === "blocked") {
         at = events[i].createdAt
+        escalated = events[i].kind === "escalated"
         break
       }
     }
-    parts.push(`blocked ${formatRelativeTime(at ?? item.updatedAt).toLowerCase()}`)
+    parts.push(`${escalated ? "escalated" : "blocked"} ${formatRelativeTime(at ?? item.updatedAt).toLowerCase()}`)
+    const full = detail?.workItem
+    if (escalated && full) parts.push(`round ${full.rounds} of ${effectiveMaxRounds(full)}`)
   } else {
     parts.push(STATUS_LABEL[item.status])
   }
@@ -188,15 +177,13 @@ function NeedsYouCard({
   const [note, setNote] = useState("")
   const kind = attentionKind(item)
   const pending = kind === "approval"
-  const tone = kind === "escalated" ? "var(--system-red)" : kind === "blocked" ? "var(--system-orange)" : "var(--accent)"
-  const verb = pending ? "asks" : kind === "escalated" ? "escalated" : "is blocked"
+  const tone = kind === "blocked" ? "var(--system-orange)" : "var(--accent)"
+  const verb = pending ? "asks" : "is blocked"
   const reason = reasonOf(item, detail)
   const quote = pending
     ? item.approvalRequest ?? "Awaiting your decision."
     : stopCauseQuote(item) ?? reason
-      ?? (kind === "escalated"
-        ? "Escalated to you. Review the Todo and decide the next move."
-        : "Blocked and waiting on a decision or missing input.")
+      ?? "Blocked and waiting on a decision or missing input."
   const railColor = pending ? "var(--fill-primary)" : `color-mix(in srgb, ${tone} 38%, transparent)`
   const idLine = attentionIdLine(item, kind, detail)
 
@@ -335,20 +322,6 @@ function NeedsYouCard({
               >
                 Reject…
               </button>
-            </>
-          ) : kind === "escalated" ? (
-            <>
-              <button type="button" data-testid="needs-open" onClick={() => onOpen(item.id)} className={BTN_FILLED}>
-                Open
-              </button>
-              <RouteMenu
-                label="Route…"
-                item={item}
-                openChildren={openChildren}
-                busy={resolving}
-                onTransition={onTransition}
-                testId="needs-route"
-              />
             </>
           ) : (
             <>
