@@ -5,6 +5,7 @@ import type { IdleCapacityPolicy } from "../shared/idle-capacity-config.js";
 import type { IdleCapacityWindowReading } from "../shared/idle-capacity.js";
 import type { Session } from "../shared/types.js";
 import { isSystemEmployeeName } from "./system-employees.js";
+import { isLegacyWorkflowPhaseSession } from "../sessions/legacy-workflow-phase.js";
 
 /**
  * Is the operator live? The idle-capacity auto-start backs off
@@ -61,7 +62,7 @@ export interface OperatorActivityDeps {
  *  gateway on the operator's behalf, not driven by them). */
 export function operatorDrivenSession(session: Session): boolean {
   if (session.parentSessionId) return false;
-  if (session.source === "cron" || session.source === "workflow") return false;
+  if (session.source === "cron" || isLegacyWorkflowPhaseSession(session)) return false;
   return !session.employee || !isSystemEmployeeName(session.employee);
 }
 

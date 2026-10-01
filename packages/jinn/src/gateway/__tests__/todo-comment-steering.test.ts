@@ -155,6 +155,21 @@ describe("Todo comments steered into a delegated session", () => {
     expect(deliveries[0]!.payload.message).toContain(comment.id);
   });
 
+  it("skips a newer session the removed Workflow runtime left on the Todo", async () => {
+    const item = todo("Steer past a legacy phase");
+    const worker = delegatedSession(item.id);
+    const phase = registry.createSession({ engine: "codex", source: "workflow", sourceRef: "wf:legacy:run:plan", employee: "a-worker" });
+    database.prepare("UPDATE sessions SET status = 'idle', workflow_kind = 'phase', last_activity = ? WHERE id = ?")
+      .run(new Date(Date.now() + 60_000).toISOString(), phase.id);
+    store.linkSession(item.id, phase.id);
+
+    await postComment(item.id, "Carry on with the worker's plan.");
+
+    const deliveries = registry.listPendingSessionDeliveries();
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]!.targetSessionId).toBe(worker.id);
+  });
+
   it("forwards one comment exactly once however often it is replayed", async () => {
     const item = todo("Replay one comment");
     delegatedSession(item.id);

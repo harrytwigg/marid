@@ -17,6 +17,7 @@ import { toWorkItemLinkRole } from '../work-items/link-role.js';
 import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs, JsonObject, ReplyContext, Session, SessionAttemptOutcome, SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload, SessionAttemptInterruptionCause } from '../shared/types.js';
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
+import { isLegacyWorkflowPhaseRow, isLegacyWorkflowPhaseSession, LEGACY_WORKFLOW_PHASE_SQL } from './legacy-workflow-phase.js';
 
 export const RESTART_ACK_META_KEY = "restartAcknowledgedAt";
 /** Stamped on a session the gateway itself interrupted, so the next boot can tell it apart from one that was already idle. Consumed in sessions/restart-resume.ts. */
@@ -1223,7 +1224,7 @@ export function coercePortalEmployee(
  */
 export function isPortalAgentSession(session: Session): boolean {
   return !session.employee && !session.parentSessionId
-    && session.source !== "remote-mcp" && session.source !== "workflow"
+    && session.source !== "remote-mcp" && !isLegacyWorkflowPhaseSession(session)
     && session.source !== "terminal" && session.engine !== "terminal";
 }
 
@@ -1429,12 +1430,11 @@ export function listAllRunningSessions(): RunningSessionRow[] {
   const rows = initDb()
     .prepare("SELECT * FROM sessions WHERE status = 'running' ORDER BY last_activity DESC")
     .all() as Record<string, unknown>[];
-  return rows.map((row) => ({ session: rowToSession(row), workflowAttempt: row.workflow_kind === 'phase' }));
+  return rows.map((row) => ({ session: rowToSession(row), workflowAttempt: isLegacyWorkflowPhaseRow(row) }));
 }
 
-/** `workflowAttempt` marks a phase row left by the removed Workflow runtime,
- *  read off the raw `workflow_kind` column, the same predicate the boot settle
- *  and the resume candidate query use. */
+/** `workflowAttempt` marks a phase row left by the removed Workflow runtime
+ *  (sessions/legacy-workflow-phase.ts). */
 export interface RunningSessionRow {
   session: Session;
   workflowAttempt: boolean;
@@ -1471,9 +1471,18 @@ export function settleLegacyWorkflowPhaseSessions(): number {
           SELECT 1
           FROM sessions
           WHERE sessions.id = queue_items.session_id
-            AND sessions.workflow_kind = 'phase'
+            AND sessions.${LEGACY_WORKFLOW_PHASE_SQL}
         )
     `).run();
+    // Their runs on a Todo were closed by the runtime that ran them; nothing else
+    // would, and an open run reads as an attempt still going forever.
+    database.prepare(`
+      UPDATE work_item_runs
+      SET ended_at = ?, outcome = 'abandoned',
+        error = COALESCE(error, 'Workflows were removed while this phase was running')
+      WHERE ended_at IS NULL
+        AND session_id IN (SELECT id FROM sessions WHERE ${LEGACY_WORKFLOW_PHASE_SQL})
+    `).run(now);
     return database.prepare(`
       UPDATE sessions
       SET status = 'interrupted',
@@ -1481,7 +1490,7 @@ export function settleLegacyWorkflowPhaseSessions(): number {
         last_activity = ?,
         last_error = 'Interrupted: Workflows were removed while this phase was running'
       WHERE status IN ('running', 'waiting')
-        AND workflow_kind = 'phase'
+        AND ${LEGACY_WORKFLOW_PHASE_SQL}
     `).run(now).changes;
   }).immediate();
 }

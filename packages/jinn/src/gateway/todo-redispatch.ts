@@ -1,11 +1,7 @@
-import type { AvailabilityRearmResult } from "../work-items/availability-resume.js";
-import { getWorkItem, type WorkItemStatus } from "../work-items/store.js";
+import { isClockRestartable, type AvailabilityRearmResult } from "../work-items/availability-resume.js";
+import { getWorkItem } from "../work-items/store.js";
 import { emitTodoProjectionEvent, type ApiContext } from "./api.js";
 import { startTodoDispatcher } from "./todo-dispatch.js";
-
-/** Only work that was mid-flight is restarted by a clock. `in_review` is the
- *  operator's desk and `blocked` waits on a person, so neither is re-dispatched. */
-const REDISPATCHABLE: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(["assigned", "executing"]);
 
 /**
  * Restart a stalled Todo through the Todo Dispatcher, the same start the board's
@@ -16,8 +12,9 @@ const REDISPATCHABLE: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(["as
 export function redispatchTodo(todoId: string, context: ApiContext, reason: string): AvailabilityRearmResult {
   const item = getWorkItem(todoId);
   if (!item) return { unavailable: "the Todo no longer exists" };
-  if (!REDISPATCHABLE.has(item.status)) {
-    return { unavailable: `it is \`${item.status}\`, which a sweep does not restart` };
+  if (!isClockRestartable(item)) {
+    const why = item.status === "blocked" ? "a declared block" : `\`${item.status}\``;
+    return { unavailable: `it is ${why}, which a sweep does not restart` };
   }
   const started = startTodoDispatcher(item, context, {
     promptSuffix: reason,

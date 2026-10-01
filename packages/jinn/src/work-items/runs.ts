@@ -253,8 +253,6 @@ export function runOutcomeForReceipt(receipt: SessionAttemptOutcome, error: stri
  * covers `done` and `escalated` on the same terms, instead of re-deriving every
  * closed Todo in history on each tick.
  *
- * Workflow PHASE sessions are excluded — the workflow run settles those rows
- * itself, and closing one here would settle an attempt it is still retrying.
  * Returns how many runs were settled.
  */
 export function closeRunsForSettledSessions(endedAt: string = new Date().toISOString()): number {
@@ -262,8 +260,7 @@ export function closeRunsForSettledSessions(endedAt: string = new Date().toISOSt
     .prepare(
       `SELECT runs.id AS id, sessions.attempt_outcome AS outcome, sessions.last_error AS error
          FROM work_item_runs AS runs JOIN sessions ON sessions.id = runs.session_id
-        WHERE runs.ended_at IS NULL AND sessions.attempt_outcome IS NOT NULL
-          AND (sessions.workflow_kind IS NULL OR sessions.workflow_kind <> 'phase')`,
+        WHERE runs.ended_at IS NULL AND sessions.attempt_outcome IS NOT NULL`,
     )
     .all() as { id: string; outcome: SessionAttemptOutcome; error: string | null }[];
   for (const run of settled) {

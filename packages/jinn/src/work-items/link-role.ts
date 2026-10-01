@@ -1,4 +1,5 @@
 import type { Session, WorkItemLinkRole } from '../shared/types.js';
+import { isLegacyWorkflowPhaseSession } from '../sessions/legacy-workflow-phase.js';
 
 /**
  * Why a session is linked to a Todo.
@@ -35,7 +36,7 @@ export function toWorkItemLinkRole(value: unknown): WorkItemLinkRole {
  * attempt receipts.
  */
 export function isExecutionAttempt(session: Session): boolean {
-  return session.source !== 'workflow'
+  return !isLegacyWorkflowPhaseSession(session)
     && toWorkItemLinkRole(session.workItemRole) !== 'review';
 }
 

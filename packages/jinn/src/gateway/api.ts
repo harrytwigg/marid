@@ -853,8 +853,8 @@ function rejectUnverifiedIdentifiedApiCaller(req: HttpRequest, res: ServerRespon
 /** Who this Todo's pending gate is reserved for: the human operator when the Todo asked for it.
  *  Both decision surfaces read this one answer, so escalating cannot open a path that deciding
  *  refuses. */
-function approvalReservation(item: WorkItem): Pick<ApprovalDecisionAuthorityOptions, "operatorOnly" | "cooDecidable"> {
-  return { operatorOnly: currentApproval(item.id)?.operatorOnly === true, cooDecidable: false };
+function approvalReservation(item: WorkItem): Pick<ApprovalDecisionAuthorityOptions, "operatorOnly"> {
+  return { operatorOnly: currentApproval(item.id)?.operatorOnly === true };
 }
 
 function requireOperatorControlPlaneAuthority(req: HttpRequest, res: ServerResponse, action: string, context: ApiContext): boolean {

@@ -91,13 +91,9 @@ function attemptsAfterDecision(floor: string | undefined, sessions: readonly Ses
  * attempt still counts as evidence.
  */
 export function collectAttemptEvidence(workItemId: string): WorkItemAttemptReading {
-  // A Workflow phase session is linked to the run's bound Todo so the run's
-  // spend rolls up there, but the RUN owns its own lifecycle: it retries,
-  // parks on gates, and decides when the pipeline is finished. Deriving the
-  // Todo from phase receipts would settle it on the first phase that finished —
-  // `in_review` (and TRUST-closed to `done`) with four phases still to run, and
-  // `in_review` is not re-derivable, so it would stay wrong for the rest of the
-  // run. Same rule the `source === 'workflow'` guard states for items.
+  // A legacy Workflow phase session is linked to its Todo only so its spend
+  // rolled up there; it never produced the Todo's work, so its receipt is not
+  // evidence about the Todo's status (isExecutionAttempt).
   const sessions = listSessionsByWorkItem(workItemId).filter(isExecutionAttempt);
   closeRunsForSettledAttempts(sessions);
   const decisionFloorAt = latestEvidenceFloorAt(workItemId);

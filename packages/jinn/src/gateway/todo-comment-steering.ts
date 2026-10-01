@@ -5,6 +5,7 @@ import {
   listSessionsByWorkItem,
 } from "../sessions/registry.js";
 import { addComment, type WorkItemComment } from "../work-items/comments.js";
+import { isLegacyWorkflowPhaseSession } from "../sessions/legacy-workflow-phase.js";
 
 /**
  * A comment on a Todo reaches whoever is doing the work, while they are still
@@ -34,7 +35,7 @@ export const MAX_STEERING_COMMENTS_PER_TODO = 5;
  */
 function latestDelegatedSession(todoId: string) {
   return listSessionsByWorkItem(todoId).find((session) =>
-    session.status === "running" || session.status === "idle");
+    (session.status === "running" || session.status === "idle") && !isLegacyWorkflowPhaseSession(session));
 }
 
 function steeringPrompt(comment: WorkItemComment): string {
@@ -45,7 +46,7 @@ function steeringPrompt(comment: WorkItemComment): string {
 }
 
 /** Steer the newest live delegated session with the Todo's conversation. */
-function forwardToDelegatedSession(comment: WorkItemComment): void {
+export function forwardTodoComment(comment: WorkItemComment): void {
   const session = latestDelegatedSession(comment.workItemId);
   if (!session) return;
   // Never hand a comment back to the identity that wrote it: the prompt asks the
@@ -85,9 +86,4 @@ function forwardToDelegatedSession(comment: WorkItemComment): void {
     logger.warn(`Todo ${comment.workItemId} could not deliver comment ${comment.id} `
       + `to session ${session.id}: ${error instanceof Error ? error.message : String(error)}`);
   });
-}
-
-/** Steer the Todo's newest live delegated session with a new comment. */
-export function forwardTodoComment(comment: WorkItemComment): void {
-  forwardToDelegatedSession(comment);
 }

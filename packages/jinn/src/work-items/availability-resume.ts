@@ -2,7 +2,7 @@ import { initDb } from '../shared/db.js';
 import { classifyEngineFailureText, hasEngineFailureClass } from '../shared/engine-failure.js';
 import { readEngineHealth } from '../shared/engine-health.js';
 import { logger } from '../shared/logger.js';
-import { listWorkItemEvents } from './event-log.js';
+import { isBlockDeclared, listWorkItemEvents } from './event-log.js';
 import {
   appendRespawnGuardHold,
   checkRespawnGuard,
@@ -12,7 +12,7 @@ import {
   type SettledRun,
 } from './respawn-guards.js';
 import { listWorkItemRuns } from './runs.js';
-import { appendWorkItemEvent, listWorkItems, type WorkItemStatus } from './store.js';
+import { appendWorkItemEvent, listWorkItems, type WorkItem, type WorkItemStatus } from './store.js';
 
 /**
  * The clock-driven counterpart to the respawn guards (PLA-153).
@@ -36,11 +36,21 @@ export const AVAILABILITY_RESUME_ACTOR = 'availability-resume';
  *  `availabilityReason` names, and the only ones a wait can fix. */
 const AVAILABILITY_CLASSES = ['quota', 'rate-limit', 'provider-outage', 'network'] as const;
 
-/** Statuses a parked attempt leaves mid-flight work in. `backlog` is absent
- *  because nothing has attempted it yet; `in_review` is the operator's desk and
- *  `blocked` waits on a person, so a clock revisits neither; the sticky
- *  terminals are decisions. */
-const RESUMABLE_STATUSES: readonly WorkItemStatus[] = ['assigned', 'executing'];
+/** Statuses a parked attempt can leave mid-flight work in. `backlog` is absent
+ *  because nothing has attempted it yet; `in_review` is the operator's desk;
+ *  the sticky terminals are decisions. */
+const CANDIDATE_STATUSES: readonly WorkItemStatus[] = ['assigned', 'executing', 'blocked'];
+
+/**
+ * Whether a clock may restart this Todo. A failed or interrupted attempt is
+ * exactly what the reconciler turns into `blocked`, so a block it derived is
+ * still mid-flight work; a block someone declared waits on a person, and only
+ * that person moves it.
+ */
+export function isClockRestartable(item: Pick<WorkItem, 'id' | 'status'>): boolean {
+  if (item.status === 'assigned' || item.status === 'executing') return true;
+  return item.status === 'blocked' && !isBlockDeclared(item.id);
+}
 
 /** Past this, a stalled Todo stopped being a clock problem: re-arming a day-old
  *  failure is resurrecting history rather than resuming it. Measured from
@@ -92,7 +102,8 @@ interface DueResume {
 export function sweepAvailabilityResumes(deps: AvailabilityResumeDeps): number {
   const now = deps.now?.() ?? new Date();
   let resumed = 0;
-  for (const item of RESUMABLE_STATUSES.flatMap((status) => listWorkItems({ status }))) {
+  for (const item of CANDIDATE_STATUSES.flatMap((status) => listWorkItems({ status }))) {
+    if (!isClockRestartable(item)) continue;
     const due = dueForResume(item.id, now);
     if (due === undefined) continue;
     // The sweep has already answered the question `rate_limit_cooldown` asks, and
@@ -125,12 +136,20 @@ function dueForResume(workItemId: string, now: Date): DueResume | undefined {
   return reset.at > now.getTime() ? undefined : { run, reset };
 }
 
+/** Runs whose restart was declined and already reported, so the warning is not
+ *  repeated on every pass. Process-local: a gateway restart reports it once more. */
+const declinedRuns = new Set<string>();
+
 /** Hand the Todo to the port and, if it landed, write the resume down. */
 function resumeOne(workItemId: string, due: DueResume, deps: AvailabilityResumeDeps): boolean {
   const engine = engineOf(due.run);
   const landed = deps.rearm(workItemId);
   if ('unavailable' in landed) {
-    logger.warn(`Todo ${workItemId} waited out its ${describe(due.run)} but could not be restarted: ${landed.unavailable}`);
+    // The sweep asks again every interval for up to a day; say so once per run.
+    if (!declinedRuns.has(due.run.id)) {
+      declinedRuns.add(due.run.id);
+      logger.warn(`Todo ${workItemId} waited out its ${describe(due.run)} but could not be restarted: ${landed.unavailable}`);
+    }
     return false;
   }
   appendWorkItemEvent({

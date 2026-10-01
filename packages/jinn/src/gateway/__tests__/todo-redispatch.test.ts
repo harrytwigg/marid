@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 
 describe("redispatchTodo", () => {
-  it.each(["in_review", "blocked", "done"] as const)("refuses a %s Todo without calling the Dispatcher", (status) => {
+  it.each(["in_review", "done"] as const)("refuses a %s Todo without calling the Dispatcher", (status) => {
     const item = store.createWorkItem({ title: `${status} work`, status });
 
     const result = redispatchTodo(item.id, context, REASON);
@@ -97,5 +97,68 @@ describe("redispatchTodo", () => {
     startTodoDispatcher.mockReturnValue({ ok: false, status: 409, body: { error: "no engine is available" } });
 
     expect(redispatchTodo(item.id, context, REASON)).toEqual({ unavailable: "no engine is available" });
+  });
+});
+
+/**
+ * The real path: an attempt dies on a quota, the reconciler derives the Todo's
+ * status from that receipt, and the availability sweep restarts it once the
+ * window has passed. Only the Dispatcher's session spawn is stubbed.
+ */
+describe("a quota-failed attempt, end to end", () => {
+  type Registry = typeof import("../../sessions/registry.js");
+  type Runs = typeof import("../../work-items/runs.js");
+  type Reconcile = typeof import("../../work-items/reconcile.js");
+  type Resume = typeof import("../../work-items/availability-resume.js");
+  type Transitions = typeof import("../../work-items/transitions.js");
+  let registry: Registry;
+  let runs: Runs;
+  let reconcile: Reconcile;
+  let resume: Resume;
+  let transitions: Transitions;
+
+  beforeAll(async () => {
+    registry = await import("../../sessions/registry.js");
+    runs = await import("../../work-items/runs.js");
+    reconcile = await import("../../work-items/reconcile.js");
+    resume = await import("../../work-items/availability-resume.js");
+    transitions = await import("../../work-items/transitions.js");
+  });
+
+  function quotaFailedTodo(title: string, { parkedBy }: { parkedBy?: string } = {}) {
+    const item = store.createWorkItem({ title, source: "delegation", status: "executing", assignee: "platform-worker" });
+    if (parkedBy) transitions.transition(item.id, "blocked", parkedBy);
+    const session = registry.createSession({ engine: "claude", source: "delegation", sourceRef: `d:${title}`, employee: "platform-worker" });
+    store.linkSession(item.id, session.id);
+    runs.openWorkItemRun({ workItemId: item.id, sessionId: session.id });
+    registry.updateSession(session.id, { status: "error", attemptOutcome: "failed", lastError: "You've hit your usage limit." });
+    reconcile.reconcileWorkItem(item.id);
+    return item.id;
+  }
+
+  const afterTheWindow = () => new Date(Date.now() + 31 * 60_000);
+  const sweep = () => resume.sweepAvailabilityResumes({
+    rearm: (id) => redispatchTodo(id, context, REASON),
+    now: afterTheWindow,
+  });
+
+  it("restarts the Todo the reconciler blocked, through the Dispatcher", () => {
+    const id = quotaFailedTodo("quota-killed");
+    expect(store.getWorkItem(id)?.status).toBe("blocked");
+    startTodoDispatcher.mockReturnValue({
+      ok: true, status: 201, body: { workItemId: id, sessionId: "sess-e2e", status: "running", reused: false },
+    });
+
+    expect(sweep()).toBe(1);
+    expect(startTodoDispatcher).toHaveBeenCalledTimes(1);
+    expect(startTodoDispatcher.mock.calls[0]![0]).toMatchObject({ id, status: "blocked" });
+  });
+
+  it("leaves a block someone declared alone", () => {
+    const id = quotaFailedTodo("parked, then quota-killed", { parkedBy: "operator" });
+    expect(store.getWorkItem(id)?.status).toBe("blocked");
+
+    expect(sweep()).toBe(0);
+    expect(startTodoDispatcher).not.toHaveBeenCalled();
   });
 });

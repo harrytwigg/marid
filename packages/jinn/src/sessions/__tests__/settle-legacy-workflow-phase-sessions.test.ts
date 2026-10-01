@@ -56,6 +56,23 @@ describe('settleLegacyWorkflowPhaseSessions', () => {
     expect(queueStatus(ordinary.queued)).toBe('pending');
   });
 
+  it('closes the open Todo run of a phase row, whatever its session status, and leaves other runs open', async () => {
+    const runs = await import('../../work-items/runs.js');
+    const store = await import('../../work-items/store.js');
+    const item = store.createWorkItem({ title: 'phase-bound', status: 'executing', source: 'human' });
+    const idlePhase = registry.createSession({ engine: 'codex', source: 'workflow', sourceRef: 'wf-phase:idle' });
+    db.prepare("UPDATE sessions SET status = 'idle', workflow_kind = 'phase' WHERE id = ?").run(idlePhase.id);
+    const worker = registry.createSession({ engine: 'codex', source: 'delegation', sourceRef: 'delegation:worker' });
+    const phaseRun = runs.openWorkItemRun({ workItemId: item.id, sessionId: idlePhase.id });
+    const workerRun = runs.openWorkItemRun({ workItemId: item.id, sessionId: worker.id });
+
+    registry.settleLegacyWorkflowPhaseSessions();
+
+    const byId = new Map(runs.listWorkItemRuns(item.id).map((run) => [run.id, run]));
+    expect(byId.get(phaseRun.id)).toMatchObject({ outcome: 'abandoned', endedAt: expect.any(String) });
+    expect(byId.get(workerRun.id)).toMatchObject({ outcome: null, endedAt: null });
+  });
+
   it('is idempotent: a second boot finds nothing to settle', () => {
     expect(registry.settleLegacyWorkflowPhaseSessions()).toBe(0);
   });
