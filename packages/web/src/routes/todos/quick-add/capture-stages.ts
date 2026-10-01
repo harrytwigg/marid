@@ -44,7 +44,6 @@ export function stepLabel(step: CaptureStep, state: TodoCaptureWire | null): str
 function routedLabel(state: TodoCaptureWire | null): string {
   const routed = state?.routedTo
   if (!routed) return "Routed"
-  if (routed.kind === "workflow") return `Running workflow ${routed.workflowName || routed.workflowId}`
   return `Delegated to ${routed.employee}`
 }
 

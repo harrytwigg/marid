@@ -5,7 +5,7 @@ import { api } from "@/lib/api"
 import { parseAttachmentRef, splitAttachmentRefs, type AttachmentRef } from "@/lib/attachment-ref"
 import { isImageMime } from "@/routes/todos/task-page/attachment-preview"
 
-/* PLA-135 — a workflow run carries attachments as refs, not bytes, so the
+/* Approval text carries attachments as refs, not bytes, so the
  * surfaces an operator decides at have only `attachment:<todo>:<id>:<mime>` to
  * work with. That is enough for the byte route, and the mime is enough to pick
  * a renderer: an image becomes a thumbnail into the shared lightbox, anything

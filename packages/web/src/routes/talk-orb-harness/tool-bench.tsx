@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils"
 const CALLS: Array<{ label: string; tool: string; args: string }> = [
   { label: "show me executing todos I started", tool: "open_todos", args: '{"board":"my","status":"executing"}' },
   { label: "open Todo 59", tool: "open_todo", args: '{"id":"59"}' },
-  { label: "open the runs of the build workflow", tool: "open_workflows", args: '{"id":"jinn-build","lens":"runs"}' },
   { label: "show the disabled jobs", tool: "open_cron", args: '{"filter":"disabled"}' },
   { label: "highlight the second row", tool: "focus_element", args: '{"target":"bench-row-2"}' },
   { label: "something we cannot do yet", tool: "jinn_action", args: '{"intent":"reorganise the board"}' },

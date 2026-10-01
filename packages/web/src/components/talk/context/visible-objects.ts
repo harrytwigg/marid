@@ -80,14 +80,6 @@ function boardObjects(snapshot: PageSnapshot): VisibleObject[] {
   return objects
 }
 
-/** Both workflow surfaces show the run list: the editor beside it, the run page
- *  as the list the open run came from. */
-function workflowRuns(snapshot: PageSnapshot): VisibleObject[] {
-  const workflow = snapshot.params.workflow ?? snapshot.selection?.id
-  if (!workflow) return []
-  return rowsOf(cachedList(queryKeys.workflows.runs(workflow), "items"), "id", "workflowTitle")
-}
-
 /** The objects the operator can see on the surface this snapshot describes. */
 export function visibleObjects(snapshot: PageSnapshot): VisibleObject[] {
   switch (snapshot.kind) {
@@ -101,9 +93,6 @@ export function visibleObjects(snapshot: PageSnapshot): VisibleObject[] {
       return rowsOf(queryClient.getQueryData(queryKeys.cron.jobs), "id", "name")
     case "notes":
       return rowsOf(cachedList(queryKeys.notes.list(), "notes"), "path", "title")
-    case "workflow":
-    case "workflow-run":
-      return workflowRuns(snapshot)
     default:
       // Every other surface either shows one object, which the selection already
       // names, or keeps no list this module has been taught to read.

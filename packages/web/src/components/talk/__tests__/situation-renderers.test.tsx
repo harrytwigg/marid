@@ -9,7 +9,6 @@ vi.mock("@/lib/api", () => ({
   api: {
     getWorkItem: vi.fn(async () => ({ workItem: { id: "AAA-1", title: "A Todo", status: "assigned", assignee: "a-lead" } })),
     getSession: vi.fn(async () => ({ title: "A session" })),
-    getWorkflowRunV2: vi.fn(async () => ({ workflowTitle: "A workflow", status: "running" })),
   },
 }))
 

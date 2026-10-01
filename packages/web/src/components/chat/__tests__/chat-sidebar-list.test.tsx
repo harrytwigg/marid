@@ -742,13 +742,13 @@ describe('Tree view: which roots were started automatically', () => {
     expect(marker('own')).toBeNull()
   })
 
-  it('recognises system employees, dispatch session keys and automated sources, and leaves workflow runs to their chip', () => {
+  it('recognises system employees, dispatch session keys and automated sources, a historical workflow run included', () => {
     const org = new Map([['todo-shaper', { name: 'todo-shaper', system: true } as never]])
     expect(isDispatchedRoot({ source: 'web', employee: 'todo-shaper', sourceRef: 'web:1' }, org)).toBe(true)
     expect(isDispatchedRoot({ source: 'web', sourceRef: 'todo-shaper:7b0c6f7e' }, new Map())).toBe(true)
     expect(isDispatchedRoot({ source: 'web', sourceRef: 'delegation:ABC-2:7b0c6f7e' }, new Map())).toBe(true)
     expect(isDispatchedRoot({ source: 'plugin', sourceRef: 'plugin:x' }, new Map())).toBe(true)
-    expect(isDispatchedRoot({ source: 'workflow', sourceRef: 'workflow:x' }, new Map())).toBe(false)
+    expect(isDispatchedRoot({ source: 'workflow', sourceRef: 'workflow:x' }, new Map())).toBe(true)
     expect(isDispatchedRoot({ source: 'web', employee: 'builder', sourceRef: 'web:1700000000001' }, new Map())).toBe(false)
     expect(isDispatchedRoot({ source: 'talk', sourceRef: undefined }, new Map())).toBe(false)
   })

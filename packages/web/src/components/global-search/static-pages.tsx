@@ -1,6 +1,6 @@
 import {
   MessageSquare, Users, ListChecks, Clock,
-  Activity, Zap, Settings, Workflow, Gauge, NotebookPen, Rocket,
+  Activity, Zap, Settings, Gauge, NotebookPen, Rocket,
 } from "lucide-react"
 
 // Every top-level destination, so the command palette can reach anything the
@@ -10,7 +10,6 @@ import {
 const BASE_STATIC_PAGES = [
   { id: "page-chat", label: "Chat", icon: MessageSquare, href: "/" },
   { id: "page-todos", label: "Todos", icon: ListChecks, href: "/todos" },
-  { id: "page-workflow", label: "Workflows", icon: Workflow, href: "/workflow" },
   { id: "page-org", label: "Organization", icon: Users, href: "/org" },
   { id: "page-cron", label: "Cron", icon: Clock, href: "/cron" },
   { id: "page-limits", label: "Limits", icon: Gauge, href: "/limits" },

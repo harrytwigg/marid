@@ -20,8 +20,7 @@ import type { WorkItemSourceWire, WorkItemStatusWire } from "@/lib/api"
 import { stateKeyOf, type StateKey } from "@/lib/todos"
 
 /* GRS-021d — the state-circle primitive. A tinted disc + a glyph from the same
- * lucide family the shipped Workflows surface uses (node-card `stateGlyph`), so
- * a Todo's status reads in the same visual language as a workflow step. The disc
+ * lucide family the rest of the app uses. The disc
  * treatment (soft tinted fill, no border) is the new primitive; the glyph inside
  * is the shared family. `approval` is a synthetic key for the Needs-you bell. */
 

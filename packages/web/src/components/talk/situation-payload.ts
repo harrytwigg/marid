@@ -31,8 +31,6 @@ export interface SituationClip {
 export type JinnObjectRef =
   | { type: "todo"; id: string }
   | { type: "session"; id: string }
-  /** `id` is the run id; the workflow it belongs to is needed to address it. */
-  | { type: "workflowRun"; id: string; workflowId: string }
 
 export type SituationPayload =
   | { kind: "prose"; text: string }

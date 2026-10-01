@@ -88,16 +88,7 @@ export function todoPath(id: string): string {
   return `/todos/${encodeURIComponent(id)}`
 }
 
-// ── Workflows, Chats, Org, Cron ────────────────────────────────
-
-export function workflowPath(args: ToolArgs): string {
-  const id = segment(args.id)
-  if (!id) return "/workflow"
-  // `editor` is the page's default lens and it writes an empty search string for
-  // it (routes/workflow/page.tsx), so naming it here would add a param the page
-  // immediately drops.
-  return `/workflow/${id}${text(args.lens) === "runs" ? "?lens=runs" : ""}`
-}
+// ── Chats, Org, Cron ────────────────────────────────
 
 export function chatPath(args: ToolArgs): string {
   const sessionId = text(args.sessionId)

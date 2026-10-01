@@ -2,7 +2,7 @@ import type { QueryKey } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { queryClient } from "@/lib/query-client"
 import { queryKeys } from "@/lib/query-keys"
-import { trimSession, trimTodo, trimWorkflowRuns } from "./read-shapes"
+import { trimSession, trimTodo } from "./read-shapes"
 import { params, str, type TalkTool, type ToolArgs, type ToolResult } from "./tool-spec"
 
 /**
@@ -82,23 +82,4 @@ const readSession: TalkTool = {
   },
 }
 
-const readWorkflowRuns: TalkTool = {
-  name: "read_workflow_runs",
-  description: "Read a workflow's recent runs: status, what triggered each, and where a live or failed one stopped.",
-  parameters: params(
-    { id: str("The workflow id."), limit: { type: "integer", description: "How many runs, newest first. Defaults to 5." } },
-    ["id"],
-  ),
-  execute: async (args: ToolArgs): Promise<ToolResult> => {
-    const id = String(args.id)
-    const limit = typeof args.limit === "number" ? Math.min(Math.max(args.limit, 1), 20) : 5
-    try {
-      const page = await cached(queryKeys.workflows.runs(id), () => api.listWorkflowRunsV2(id))
-      return { ok: true, data: { workflowId: id, runs: trimWorkflowRuns(page.items, limit) } }
-    } catch (error) {
-      return failed(`runs of workflow ${id}`, error)
-    }
-  },
-}
-
-export const READ_TOOLS: readonly TalkTool[] = [readTodo, readSession, readWorkflowRuns]
+export const READ_TOOLS: readonly TalkTool[] = [readTodo, readSession]

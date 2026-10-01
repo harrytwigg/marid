@@ -7,7 +7,6 @@ import type { JinnObjectRef } from "../situation-payload"
 const gateway = vi.hoisted(() => ({
   getWorkItem: vi.fn(),
   getSession: vi.fn(),
-  getWorkflowRunV2: vi.fn(),
 }))
 
 vi.mock("@/lib/api", () => ({ api: gateway }))
@@ -24,7 +23,6 @@ function renderObject(object: JinnObjectRef) {
 beforeEach(() => {
   gateway.getWorkItem.mockReset()
   gateway.getSession.mockReset()
-  gateway.getWorkflowRunV2.mockReset()
 })
 
 describe("the live embed", () => {
@@ -47,16 +45,6 @@ describe("the live embed", () => {
 
     expect(await screen.findByText("Morning triage")).toBeTruthy()
     expect(screen.getByText(/a-lead/)).toBeTruthy()
-  })
-
-  it("renders a workflow run from the query layer", async () => {
-    gateway.getWorkflowRunV2.mockResolvedValue({ workflowTitle: "Nightly sweep", status: "running" })
-
-    renderObject({ type: "workflowRun", id: "run-9", workflowId: "sweep" })
-
-    expect(await screen.findByText("Nightly sweep")).toBeTruthy()
-    expect(screen.getByText(/running/)).toBeTruthy()
-    expect(gateway.getWorkflowRunV2).toHaveBeenCalledWith("sweep", "run-9")
   })
 
   it("says it is loading rather than showing an empty card", () => {

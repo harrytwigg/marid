@@ -18,8 +18,6 @@ const KNOWN_SHEETS = new Set([
   "src/routes/todos/pickers/picker-shell.tsx",
   "src/routes/todos/quick-add/capture-bar.tsx",
   "src/routes/todos/todo-filter-sheet.tsx",
-  "src/routes/workflow/editor/inspector.tsx",
-  "src/routes/workflow/editor/palette.tsx",
 ])
 
 function sourceFiles(directory: string): string[] {
@@ -287,12 +285,10 @@ describe("jinn shell contract", () => {
     expect(hits).toEqual([])
   })
 
-  it("workflow list and todos board both render PrimaryAction with the same data-slot", () => {
-    const workflow = readFileSync(join(routesRoot, "workflow/list.tsx"), "utf8")
+  it("the todos board renders PrimaryAction, whose data-slot is the shared marker", () => {
     const board = readFileSync(join(routesRoot, "todos/board/board-page.tsx"), "utf8")
-    expect(workflow).toMatch(/<PrimaryAction\b/)
     expect(board).toMatch(/<PrimaryAction\b/)
-    expect(workflow).not.toMatch(/bg-\[var\(--accent\)\].*text-\[var\(--accent-contrast\)\]/)
+    expect(board).not.toMatch(/bg-\[var\(--accent\)\].*text-\[var\(--accent-contrast\)\]/)
     expect(readFileSync(join(shellRoot, "primary-action.tsx"), "utf8")).toMatch(/PRIMARY_ACTION_SLOT/)
     expect(readFileSync(join(shellRoot, "primary-action.tsx"), "utf8")).toMatch(/data-slot=\{PRIMARY_ACTION_SLOT\}/)
   })

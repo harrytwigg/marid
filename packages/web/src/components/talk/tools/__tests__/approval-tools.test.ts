@@ -13,8 +13,6 @@ vi.mock("@/lib/api", async (importOriginal) => ({
     getWorkItemTree: vi.fn(),
     decideWorkItemApproval: vi.fn(),
     setWorkItemStatus: vi.fn(),
-    getWorkflowRunV2: vi.fn(),
-    decideWorkflowApprovalV2: vi.fn(),
   },
 }))
 
@@ -34,12 +32,6 @@ function todo(workItem: Record<string, unknown>) {
   return { workItem: { ...GATE.workItem, ...workItem } } as never
 }
 
-/** The run shape the workflow decision reads: which node is waiting, and the
- *  revision the decision has to be fenced on. */
-function run(approvals: Array<Record<string, unknown>>, revision = 7) {
-  return { id: "run_1", workflowId: "a-flow", revision, approvals } as never
-}
-
 /** The sheet is raised behind a read, so a test cannot answer it on the same
  *  tick the call was made. */
 async function sheet() {
@@ -54,8 +46,6 @@ beforeEach(() => {
   mocked.getWorkItemTree.mockResolvedValue({ tree: { root: { id: "ABC-59", children: [] } } } as never)
   mocked.decideWorkItemApproval.mockResolvedValue({ workItem: GATE.workItem, escalated: false } as never)
   mocked.setWorkItemStatus.mockResolvedValue({ workItem: { id: "ABC-59", status: "assigned" } } as never)
-  mocked.getWorkflowRunV2.mockResolvedValue(run([{ runId: "run_1", nodeId: "land", status: "pending", requestedAt: "2026-01-01T00:00:00Z" }]))
-  mocked.decideWorkflowApprovalV2.mockResolvedValue({ id: "run_1", status: "running" } as never)
 })
 
 afterEach(() => dismissSituation())
@@ -130,47 +120,6 @@ describe("deciding a Todo's approval", () => {
 
     expect(await pending).toMatchObject({ ok: true })
     expect(mocked.decideWorkItemApproval).toHaveBeenCalledWith("ABC-59", "reject", "neither", undefined)
-  })
-})
-
-describe("deciding a workflow run's approval", () => {
-  it("names the waiting node and fences the decision on the run's own revision", async () => {
-    const pending = executeToolCall("talk_decide_workflow_approval", '{"id":"a-flow","runId":"run_1","decision":"approve","reason":"looks right"}')
-    await sheet()
-
-    expect(mocked.decideWorkflowApprovalV2).not.toHaveBeenCalled()
-    answerSituation("go")
-    const result = await pending
-
-    expect(mocked.decideWorkflowApprovalV2).toHaveBeenCalledWith("a-flow", "run_1", "land", {
-      decision: "approve",
-      expectedRevision: 7,
-      reason: "looks right",
-    })
-    expect(result.ok).toBe(true)
-  })
-
-  it("sends the revision it read back, not one it remembered", async () => {
-    mocked.getWorkflowRunV2.mockResolvedValue(run([{ runId: "run_1", nodeId: "land", status: "pending", requestedAt: "2026-01-01T00:00:00Z" }], 12))
-    const pending = executeToolCall("talk_decide_workflow_approval", '{"id":"a-flow","runId":"run_1","decision":"reject"}')
-    await sheet()
-    answerSituation("go")
-    await pending
-
-    expect(mocked.decideWorkflowApprovalV2).toHaveBeenCalledWith("a-flow", "run_1", "land", {
-      decision: "reject",
-      expectedRevision: 12,
-    })
-  })
-
-  it("refuses a run with no node waiting, without asking anybody", async () => {
-    mocked.getWorkflowRunV2.mockResolvedValue(run([{ runId: "run_1", nodeId: "land", status: "approved", requestedAt: "2026-01-01T00:00:00Z" }]))
-
-    const result = await executeToolCall("talk_decide_workflow_approval", '{"id":"a-flow","runId":"run_1","decision":"approve"}')
-
-    expect(currentSituation()).toBeNull()
-    expect(mocked.decideWorkflowApprovalV2).not.toHaveBeenCalled()
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("nothing waiting") })
   })
 })
 
@@ -265,14 +214,14 @@ describe("the action log", () => {
     answerSituation("go")
     await granted
 
-    const refused = executeToolCall("talk_decide_workflow_approval", '{"id":"a-flow","runId":"run_1","decision":"approve"}')
+    const refused = executeToolCall("talk_decide_approval", '{"id":"ABC-59","decision":"reject"}')
     await sheet()
     dismissSituation()
     await refused
 
     expect(talkActions().map((entry) => ({ tool: entry.tool, subject: entry.subject, lane: entry.lane, consent: entry.consent }))).toEqual([
       { tool: "talk_unblock_todo", subject: "ABC-59", lane: "consent", consent: "granted" },
-      { tool: "talk_decide_workflow_approval", subject: "run_1", lane: "consent", consent: "refused" },
+      { tool: "talk_decide_approval", subject: "ABC-59", lane: "consent", consent: "refused" },
     ])
   })
 })

@@ -41,9 +41,6 @@ const FilePage = lazyRoute(() => import('./routes/file/page'), 'file')
 const MorePage = lazyRoute(() => import('./routes/more/page'), 'more')
 const RedesignPage = lazyRoute(() => import('./routes/redesign/page'), 'redesign')
 const TalkOrbHarnessPage = lazyRoute(() => import('./routes/talk-orb-harness/page'), 'talk-orb-harness')
-const WorkflowListPage = lazyRoute(() => import('./routes/workflow/list'), 'workflow-list')
-const WorkflowPage = lazyRoute(() => import('./routes/workflow/page'), 'workflow')
-const WorkflowRunPage = lazyRoute(() => import('./routes/workflow/run'), 'workflow-run')
 
 registerRoutePrefetch('/', ChatPage.prefetch)
 registerRoutePrefetch('/cron', CronPage.prefetch)
@@ -56,7 +53,6 @@ registerRoutePrefetch('/org', OrgPage.prefetch)
 registerRoutePrefetch('/settings', SettingsPage.prefetch)
 registerRoutePrefetch('/skills', SkillsPage.prefetch)
 registerRoutePrefetch('/more', MorePage.prefetch)
-registerRoutePrefetch('/workflow', WorkflowListPage.prefetch)
 
 
 function NotesFeatureRoute() {
@@ -127,9 +123,6 @@ const routeElements: Partial<Record<AppRouteId, ReactNode>> = {
   "skill-detail": <SkillDetailPage />,
   file: <FilePage />,
   more: <MorePage />,
-  "workflow-list": <WorkflowListPage />,
-  "workflow-detail": <WorkflowPage />,
-  "workflow-run": <WorkflowRunPage />,
   // The orb bench is screenshot-verified on built sandboxes, never on a dev
   // server pointed at a live gateway, so it has to survive the build. It is a
   // lazy route: nothing of it loads until someone types the path.
