@@ -169,6 +169,29 @@ describe("the operator lane", () => {
     expect([archived.status, archived.body.workItem?.status]).toEqual([200, "cancelled"]);
   });
 
+  it("keeps a connector's reopen where it put it: older attempts do not overrule the operator's lane", async () => {
+    const connector = toolHeaders(connectorSession().id);
+    const settledRun = (id: string, attemptOutcome: "failed" | "succeeded") => {
+      const attempt = reg.createSession({ engine: "codex", source: "web", sourceRef: `lane-attempt-${++n}` });
+      store.linkSession(id, attempt.id);
+      reg.updateSession(attempt.id, { status: attemptOutcome === "failed" ? "error" : "idle", attemptOutcome });
+    };
+    const reopened = store.createWorkItem({ title: "Reopened by the connector", status: "executing" });
+    settledRun(reopened.id, "failed");
+    expect((await post(reopened.id, { status: "done" }, connector)).body.workItem?.status).toBe("done");
+    expect((await post(reopened.id, { status: "backlog" }, connector)).body.workItem?.status).toBe("backlog");
+
+    // A trust-tier Todo whose last attempt succeeded would otherwise be re-closed.
+    const trusted = store.createWorkItem({ title: "Trusted, reopened", status: "executing", source: "cron" });
+    settledRun(trusted.id, "succeeded");
+    expect((await post(trusted.id, { status: "done" }, connector)).body.workItem?.status).toBe("done");
+    expect((await post(trusted.id, { status: "backlog" }, connector)).body.workItem?.status).toBe("backlog");
+
+    reconcileActiveWorkItems();
+    expect(store.getWorkItem(reopened.id)?.status).toBe("backlog");
+    expect(store.getWorkItem(trusted.id)?.status).toBe("backlog");
+  });
+
   it("lets the operator close and reopen from the board", async () => {
     const item = todo("in_review");
     expect((await call("PUT", `/api/work-items/${item.id}/status`, { status: "done" }, operatorHeaders)).body.workItem?.status).toBe("done");
@@ -205,6 +228,22 @@ describe("assignment", () => {
     expect([toEmployee.status, toEmployee.body.workItem?.status, toEmployee.body.workItem?.assignee]).toEqual([200, "backlog", "platform-worker"]);
     const toOperator = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "@operator" }, operatorHeaders);
     expect([toOperator.status, toOperator.body.workItem?.status, toOperator.body.workItem?.assignee]).toEqual([200, "backlog", "@operator"]);
+  });
+
+  it("lets the operator's pen restore @operator, and refuses it a system employee", async () => {
+    const item = store.createWorkItem({ title: "Pen restore" });
+    const restored = await call("PATCH", `/api/work-items/${item.id}`, { expectedVersion: item.version, assignee: "@operator" }, operatorHeaders);
+    expect([restored.status, restored.body.workItem?.assignee]).toEqual([200, "@operator"]);
+    const system = await call("PATCH", `/api/work-items/${item.id}`, { expectedVersion: restored.body.workItem.version, assignee: "todo-dispatcher" }, operatorHeaders);
+    expect([system.status, system.body.code]).toEqual([400, "todo_invalid_assignee"]);
+  });
+
+  it("puts a blocked Todo the operator holds in the operator's own attention queue, and in nobody else's", async () => {
+    const held = store.createWorkItem({ title: "Blocked on the operator", status: "blocked", assignee: "@operator" });
+    const ids = async (headers: Record<string, string>) =>
+      ((await call("GET", "/api/work-items?needsAttentionFor=me&limit=200", undefined, headers)).body.workItems as Array<{ id: string }>).map((row) => row.id);
+    expect(await ids(operatorHeaders)).toContain(held.id);
+    expect(await ids(toolHeaders(employeeSession().id))).not.toContain(held.id);
   });
 
   it.each(["todo-dispatcher", "todo-shaper"])("never assigns the system employee %s, by assign or by delegation", async (name) => {

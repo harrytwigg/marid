@@ -1,9 +1,8 @@
 import type { WorkItemStatus } from './store.js';
 
 /** Declared edges: from → the set of legal targets (design §1.1's diagram).
- *  Governs the human and derived lanes; the agent lane (`opts.agent`) and the
- *  workflow re-arm lane (`opts.requeue`) are bounded by their caller's target
- *  allowlist instead. */
+ *  They govern every caller; the agent lane is the narrower set of pairs below
+ *  (`isAgentLaneMove`), which the status route checks first. */
 export const EDGES: Readonly<Record<WorkItemStatus, ReadonlySet<WorkItemStatus>>> = {
   // `done` from backlog covers trivially-completed work — rare, but refusing it
   // would strand a truthful terminal.

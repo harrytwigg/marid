@@ -21,10 +21,6 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
 
 export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ["backlog", "executing", "in_review", "done", "blocked", "cancelled"];
 
-/** What an agent session may set. `backlog` is "not now": an agent that picked
- *  a Todo up and found it premature can put it back down. */
-export const AGENT_WORK_ITEM_TARGETS: readonly WorkItemStatus[] = ["backlog", "executing", "in_review", "blocked"];
-
 export type StatusLane =
   | { kind: "operator" }
   | { kind: "coordinator"; actingAs: string }

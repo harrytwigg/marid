@@ -131,7 +131,7 @@ import { handleCronApi } from "./cron-api.js";
 import { handleOrgApi } from "./org-api.js";
 import { handleTodoCaptureApi } from "./todo-capture-api.js";
 import { handleSkillsApi } from "./skills-api.js";
-import { handleSearchApi } from "./search-api.js";
+import { handleSearchApi, type NeedsAttentionTarget } from "./search-api.js";
 import { operatorOnlyControlPlaneRoute } from "./control-plane-routes.js";
 import { refuseRemoteMcpRoute, remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { handlePluginsApi } from "./plugins-api.js";
@@ -233,7 +233,7 @@ import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
 import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
-import { OPERATOR_ASSIGNEE } from "../work-items/assignment.js";
+import { checkAssignee } from "./todo-assignee.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { openWorkItemRun } from "../work-items/runs.js";
 import {
@@ -532,7 +532,7 @@ function resolveWorkItemCaller(req: HttpRequest, res: ServerResponse, context: A
   return { kind: 'session', callerId: identity.callerId, session, origin: readWriteOrigin(req.headers[WRITE_ORIGIN_HEADER]) };
 }
 
-function resolveNeedsAttentionTarget(req: HttpRequest, res: ServerResponse, requested: string, context: ApiContext): string | undefined {
+function resolveNeedsAttentionTarget(req: HttpRequest, res: ServerResponse, requested: string, context: ApiContext): NeedsAttentionTarget | undefined {
   const identity = resolveScopedWriteCallerIdentity(req, context);
   if (identity.kind === "unidentified-tool" || identity.kind === "unauthenticated") {
     json(res, { error: UNIDENTIFIED_TOOL_CALL_ERROR }, 403);
@@ -548,15 +548,16 @@ function resolveNeedsAttentionTarget(req: HttpRequest, res: ServerResponse, requ
       json(res, { error: "capability-scoped callers can only read their own queue; use needsAttentionFor=me" }, 403);
       return undefined;
     }
-    return session.employee;
+    return { needsAttentionFor: session.employee };
   }
   if (requested === "me") {
+    // The operator's own queue: routed to the root, or assigned to the operator.
     const root = resolveRootApprovalTarget()?.name;
-    if (root) return root;
+    if (root) return { needsAttentionFor: root, needsAttentionOperator: true };
     json(res, { error: "needsAttentionFor=me could not resolve a COO/root approval target" }, 403);
     return undefined;
   }
-  return requested;
+  return { needsAttentionFor: requested };
 }
 
 function scopedCallerRequest(
@@ -914,10 +915,6 @@ function resolveSpawnParentSessionId(caller: CallerIdentity, requested: unknown,
  *  operator surface → 'operator'; a session with a resolved employee comments
  *  as that employee (stable across their sessions); a bare session keeps the
  *  `session:<uuid>` identity workItemActor established. */
-function systemAssigneeRefusal(name: string): string {
-  return `"${name}" is a system employee and is never a Todo's assignee — choose an employee by role, or assign ${OPERATOR_ASSIGNEE} for the operator`;
-}
-
 function workItemCommentAuthor(caller: WorkItemCaller): { author: string; authorKind: 'operator' | 'employee' } {
   if (caller.kind === 'operator') return { author: 'operator', authorKind: 'operator' };
   return { author: caller.session.employee ?? workItemActor(caller), authorKind: 'employee' };
@@ -985,25 +982,6 @@ function spawnAsRootRefusal(caller: CallerIdentity, employeeName: string | null 
   return `a session cannot run work as "${root.name}", the employee-hierarchy root, because that identity carries operator-delegated authority; request an approval or escalate the Todo to the root instead of running as it`;
 }
 
-
-function levenshtein(a: string, b: string): number {
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const curr = [i];
-    for (let j = 1; j <= b.length; j++) {
-      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-    prev.splice(0, prev.length, ...curr);
-  }
-  return prev[b.length];
-}
-
-function nearestEmployee(name: string, names: string[]): string | undefined {
-  return names
-    .map((n) => ({ n, d: levenshtein(name.toLowerCase(), n.toLowerCase()) }))
-    .filter((x) => x.d <= 4 || x.n.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(x.n.toLowerCase()))
-    .sort((a, b) => a.d - b.d || a.n.localeCompare(b.n))[0]?.n;
-}
 
 /** Sessions already holding engine capacity: mid-turn, queued behind one, or parked on a gate.
  *  The delegated-activity index and a Workflow fan-out's ceiling both count exactly these. */
@@ -2200,7 +2178,7 @@ export async function handleApiRequest(
       if (needsAttentionFor) {
         const target = resolveNeedsAttentionTarget(req, res, needsAttentionFor, context);
         if (!target) return;
-        filter.needsAttentionFor = target;
+        Object.assign(filter, target);
       }
       return json(res, workItemPagePayload(queryWorkItems({ ...filter, limit, offset })));
     }
@@ -2439,8 +2417,13 @@ export async function handleApiRequest(
         if (typeof body.assignee === "string") {
           const assignee = body.assignee.trim();
           if (!assignee) return todoEditValidationError(res, "assignee must be a non-empty string or null");
-          if (!orgRegistry(context.getConfig()).has(assignee)) {
-            return todoEditValidationError(res, "Unknown employee for Todo assignee. Check the organization directory.", "todo_invalid_assignee");
+          const roster = orgRegistry(context.getConfig());
+          const checked = checkAssignee(roster, assignee, { operator: true });
+          // A typed validation response never reflects an unknown value back; a
+          // system employee is a roster name, so its refusal may say which one.
+          if (!checked.ok) {
+            const error = roster.has(assignee) ? checked.error : "Unknown employee for Todo assignee. Check the organization directory.";
+            return todoEditValidationError(res, error, "todo_invalid_assignee");
           }
           patch.assignee = assignee;
         } else {
@@ -2579,6 +2562,9 @@ export async function handleApiRequest(
         ...(note ? { note } : {}),
         ...(actingAsOperator ? { asOperator: actingAsOperator } : {}),
         ...(actorEmployee ? { actorEmployee } : {}),
+        // The connector moves with the operator's authority but is recorded as its
+        // own session; the marker is what lets the reconciler treat it as his.
+        ...(lane.kind === "operator" && caller.kind === "session" ? { operatorLane: true } : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
       // operator move with a note annotates the CURRENT stop instead of
@@ -2665,15 +2651,9 @@ export async function handleApiRequest(
       const roster = orgRegistry(context.getConfig());
       // The assignee is an employee or the operator; never a system employee,
       // which routes and shapes Todos but owns none.
-      const employee = assignee === OPERATOR_ASSIGNEE ? undefined : roster.get(assignee);
-      if (assignee !== OPERATOR_ASSIGNEE && !employee) {
-        const near = nearestEmployee(assignee, [...roster.keys()]);
-        return badRequest(
-          res,
-          `unknown employee "${assignee}"${near ? `. Did you mean "${near}"?` : ""} Check find_employees or GET /api/org for valid employees, or assign ${OPERATOR_ASSIGNEE} for the operator`,
-        );
-      }
-      if (employee?.system) return badRequest(res, systemAssigneeRefusal(assignee));
+      const checked = checkAssignee(roster, assignee, { operator: true });
+      if (!checked.ok) return badRequest(res, checked.error);
+      const employee = checked.employee;
       const current = getWorkItem(params.id);
       if (!current) return notFound(res);
       if (STICKY_STATUSES.has(current.status)) {
@@ -3593,12 +3573,10 @@ export async function handleApiRequest(
       let delegateEmployee: Employee | undefined;
       if (employeeName) {
         roster = orgRegistry(config);
-        delegateEmployee = roster.get(employeeName);
-        if (!delegateEmployee) {
-          return badRequest(res, `unknown employee "${employeeName}" — GET /api/org lists valid employees`);
-        }
-        // Delegation assigns the Todo to its delegate, and a system employee is never an assignee.
-        if (delegateEmployee.system) return badRequest(res, systemAssigneeRefusal(employeeName));
+        // Delegation assigns the Todo to its delegate and runs them: an employee, never a system one.
+        const checked = checkAssignee(roster, employeeName, { operator: false });
+        if (!checked.ok) return badRequest(res, checked.error);
+        delegateEmployee = checked.employee;
       }
       const employeeDefaults = delegateEmployee
         ? {

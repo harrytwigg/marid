@@ -1,3 +1,4 @@
+import { checkAssignee } from "../../gateway/todo-assignee.js";
 import { orgRegistry } from "../../gateway/org-registry.js";
 import { getMessages, getSession } from "../../sessions/registry.js";
 import { getWorkItem } from "../../work-items/store.js";
@@ -39,9 +40,9 @@ function delegateTodo(host: TalkControlHost, args: Record<string, unknown>, call
   const employeeName = requiredText(args, "employee");
   const item = getWorkItem(id);
   if (!item) throw new Error(`Todo ${id} not found`);
-  const employee = orgRegistry(host.context.getConfig()).get(employeeName);
-  if (!employee) throw new Error(`Employee ${employeeName} not found`);
-  if (employee.system) throw new Error(`${employeeName} is a system employee and is never a Todo's assignee`);
+  const checked = checkAssignee(orgRegistry(host.context.getConfig()), employeeName, { operator: false });
+  if (!checked.ok) throw new Error(checked.error);
+  const employee = checked.employee!;
   const prompt = typeof args.task === "string" && args.task.trim()
     ? args.task.trim()
     : [item.title, item.body].filter(Boolean).join("\n\n");

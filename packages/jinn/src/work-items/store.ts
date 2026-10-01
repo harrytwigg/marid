@@ -14,6 +14,7 @@ import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { VerifyMode, VerifyPolicy } from './verify-policy.js';
 import type { WorkItemEventKind } from './event-log.js';
+import { OPERATOR_ASSIGNEE } from './operator-assignee.js';
 
 /**
  * Work-item store — the substrate of the Todos ledger (GRS-002, elevated by
@@ -37,10 +38,8 @@ import type { WorkItemEventKind } from './event-log.js';
  * (DDL in `migrate.ts`).
  */
 
-/** The statuses the gateway writes. The table's CHECK still admits the two
- *  retired ones, `assigned` and `escalated`, so older databases verify; the
- *  boot migration (`migrateRetiredStatuses`) moves any such row to `backlog`
- *  or `blocked`, and nothing in code writes them again. */
+/** The statuses the gateway writes. The CHECK still admits the retired `assigned`
+ *  and `escalated`; the boot migration (`retired-statuses.ts`) moves those rows. */
 export type WorkItemStatus =
   | 'backlog'
   | 'executing'
@@ -177,6 +176,8 @@ export interface ListWorkItemsFilter {
   assignee?: string;
   source?: WorkItemSource;
   needsAttentionFor?: string;
+  /** The queue is the operator's own: Todos assigned to `@operator` count too. */
+  needsAttentionOperator?: boolean;
   /** Exact creator identity (`created_by`). */
   createdBy?: string;
   /** Direct children of this Todo. */
@@ -614,9 +615,9 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
     // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(
-      "((EXISTS (SELECT 1 FROM work_item_approvals wap WHERE wap.work_item_id = work_items.id AND wap.state = 'pending' AND wap.target = ?) OR (assignee = ? AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
+      "((EXISTS (SELECT 1 FROM work_item_approvals wap WHERE wap.work_item_id = work_items.id AND wap.state = 'pending' AND wap.target = ?) OR (assignee IN (?, ?) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
     );
-    values.push(filter.needsAttentionFor, filter.needsAttentionFor, new Date().toISOString());
+    values.push(filter.needsAttentionFor, filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, new Date().toISOString());
   }
   if (filter.since) {
     conditions.push('updated_at >= ?');
