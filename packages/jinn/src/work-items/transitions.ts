@@ -167,7 +167,9 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     if (!opts.agent && opts.manual && to === 'executing' && from !== 'backlog') {
       throw new TransitionError('illegal-edge', `illegal manual transition ${from} → ${to} for work item ${id}`);
     }
-    if (!EDGES[from].has(to)) {
+    // A same-status request reaches here only as a `dependency` re-block, which
+    // routes away from `blocked` below; it is never an undeclared edge.
+    if (from !== to && !EDGES[from].has(to)) {
       throw new TransitionError('illegal-edge', `illegal transition ${from} → ${to} for work item ${id}`);
     }
     if (to === 'done' && opts.callerSessionId) {
@@ -242,7 +244,12 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     // status that made it true and deleted the moment the Todo is no longer
     // stopped — a countdown can never outlive the wait it was counting.
     if (target !== 'blocked') clearStopCause(db, id);
-    else if (opts.stopCause) writeStopCause(db, id, opts.stopCause, now);
+    else if (escalated) {
+      // An escalation waits on the operator, not a clock: a park would release it
+      // back to the queue on its date and restart the loop this just ended.
+      clearStopCause(db, id);
+      if (opts.stopCause?.unblockHint) writeStopCause(db, id, { unblockHint: opts.stopCause.unblockHint }, now);
+    } else if (opts.stopCause) writeStopCause(db, id, opts.stopCause, now);
 
     const event = appendWorkItemEvent({
       workItemId: id,
