@@ -41,10 +41,11 @@ vi.mock("node:dgram", () => {
 });
 
 import { REMOTE_ENGINE_NAMES } from "../../shared/models.js";
-import { shq, buildSshSpawnArgs, sendWakeOnLan, FACTS_SCRIPT, FARM_SCRIPT, REMOTE_KILL_SCRIPT, buildTrustSeedCommand, trustSeedKey, runLocalWakeCommand, requireRemoteEngineBin, remoteSessionHome, remoteSessionBinDir, remoteEnginePidFile, buildSessionEnvFile } from "../remote-stage.js";
+import { shq, buildSshSpawnArgs, sendWakeOnLan, FACTS_SCRIPT, FARM_SCRIPT, REMOTE_KILL_SCRIPT, buildTrustSeedCommand, trustSeedKey, runLocalWakeCommand, requireRemoteEngineBin, assertRemoteVersion, remoteSessionHome, remoteSessionBinDir, remoteEnginePidFile, buildSessionEnvFile } from "../remote-stage.js";
 import { spawn } from "node:child_process";
 import { remotePiExtensionSource } from "../pi-mcp.js";
 import { JINN_HOME } from "../../shared/paths.js";
+import { productBanner } from "../../shared/brand.js";
 
 const isWindows = process.platform === "win32";
 
@@ -468,6 +469,19 @@ describe.skipIf(process.platform === "win32")("FACTS_SCRIPT node resolution", ()
     expect(kv.pi).toBe(pi);
     expect(kv.opencode).toBe(opencode);
     expect(kv.claude).toBe("");
+  });
+
+  it("captures the first line of `jinn --version` as the gate will see it", () => {
+    fakeNode("v22.22.3");
+    const binDir = path.join(home, "sysbin");
+    fs.mkdirSync(binDir, { recursive: true });
+    const jinn = path.join(binDir, "jinn");
+    fs.writeFileSync(jinn, `#!/bin/sh\nprintf '%s\\r\\nsecond line\\n' '${productBanner("0.33.3")}'\n`);
+    fs.chmodSync(jinn, 0o755);
+
+    const reported = runFacts(`${binDir}:/usr/bin:/bin`).jinnversion;
+    expect(reported).toBe("Marid 0.33.3 (built on Jinn)");
+    expect(assertRemoteVersion("build-box", reported, "0.33.3")).toBe("0.33.3");
   });
 
   it("prefers a node already on PATH over anything under nvm", () => {
@@ -1193,5 +1207,36 @@ describe.skipIf(isWindows)("REMOTE_KILL_SCRIPT — run for real against a proces
     expect(fs.existsSync(pidFile)).toBe(true);
     expect(runKill("sleep")).toBe("already-gone");
     expect(fs.existsSync(pidFile)).toBe(false);
+  });
+});
+
+describe("assertRemoteVersion", () => {
+  it("accepts the Marid banner when the version matches the gateway", () => {
+    expect(assertRemoteVersion("build-box", productBanner("0.33.3"), "0.33.3")).toBe("0.33.3");
+  });
+
+  it("accepts a bare version from a pre-rebrand build when it matches", () => {
+    expect(assertRemoteVersion("build-box", "0.33.3", "0.33.3")).toBe("0.33.3");
+  });
+
+  it("refuses a different version in either format, with the install hint", () => {
+    for (const line of [productBanner("0.32.0"), "0.32.0"]) {
+      expect(() => assertRemoteVersion("build-box", line, "0.33.3"))
+        .toThrow("build-box runs jinn-cli 0.32.0 but this gateway is 0.33.3 — run `npm install -g jinn-cli@0.33.3` there");
+    }
+  });
+
+  it("refuses output that is not a version, quoting it with the install hint", () => {
+    for (const line of ["", "jinn: command not found", "Marid 0.33 (built on Jinn)"]) {
+      expect(() => assertRemoteVersion("build-box", line, "0.33.3"))
+        .toThrow(`unrecognised \`jinn --version\` output: ${JSON.stringify(line)}`);
+      expect(() => assertRemoteVersion("build-box", line, "0.33.3"))
+        .toThrow("run `npm install -g jinn-cli@0.33.3` there");
+    }
+  });
+
+  it("does not accept a version that merely contains the gateway's", () => {
+    expect(() => assertRemoteVersion("build-box", productBanner("10.33.3"), "0.33.3")).toThrow("runs jinn-cli 10.33.3");
+    expect(() => assertRemoteVersion("build-box", "0.33.30", "0.33.3")).toThrow("runs jinn-cli 0.33.30");
   });
 });

@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "../shared/logger.js";
 import { JINN_HOME } from "../shared/paths.js";
+import { parseVersionOutput } from "../shared/brand.js";
 import { getPackageVersion } from "../shared/version.js";
 import { buildSessionSettings } from "../shared/claude-settings.js";
 import { readGatewayInfo } from "../gateway/gateway-info.js";
@@ -374,6 +375,20 @@ export function requireRemoteEngineBin(
   );
 }
 
+/** Check the first line of the remote's `jinn --version` against the gateway's
+ *  version. Returns the remote's bare version; throws with the fixing command
+ *  when it differs or is not a version at all. */
+export function assertRemoteVersion(destination: string, versionLine: string, local: string): string {
+  const remote = parseVersionOutput(versionLine);
+  if (remote !== local) {
+    throw new Error(
+      `${destination} runs jinn-cli ${remote ?? `(unrecognised \`jinn --version\` output: ${JSON.stringify(versionLine)})`} but this gateway is ${local} — `
+      + `run \`npm install -g jinn-cli@${local}\` there`,
+    );
+  }
+  return remote;
+}
+
 async function gatherFacts(destination: string): Promise<RemoteFacts> {
   const cached = factsCache.get(destination);
   if (cached) return cached;
@@ -393,13 +408,7 @@ async function gatherFacts(destination: string): Promise<RemoteFacts> {
   // Version skew would otherwise surface as a confusing mid-turn MCP failure:
   // the remapped config points at entrypoints from a different build. Refuse
   // now, with the command that fixes it.
-  const local = getPackageVersion();
-  if (kv.jinnversion !== local) {
-    throw new Error(
-      `${destination} runs jinn-cli ${kv.jinnversion} but this gateway is ${local} — `
-      + `run \`npm install -g jinn-cli@${local}\` there`,
-    );
-  }
+  const remoteVersion = assertRemoteVersion(destination, kv.jinnversion, getPackageVersion());
   if (!kv.entrydir) {
     throw new Error(`could not locate the jinn MCP entrypoints on ${destination}`);
   }
@@ -410,7 +419,7 @@ async function gatherFacts(destination: string): Promise<RemoteFacts> {
     ...(kv.claude ? { claudeBin: kv.claude } : {}),
     ...(kv.pi ? { piBin: kv.pi } : {}),
     ...(kv.opencode ? { opencodeBin: kv.opencode } : {}),
-    jinnVersion: kv.jinnversion,
+    jinnVersion: remoteVersion,
     entryDir: kv.entrydir,
   };
   factsCache.set(destination, facts);
