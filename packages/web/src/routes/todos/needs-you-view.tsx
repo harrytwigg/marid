@@ -17,7 +17,7 @@ import { rejectConsequence } from "./task-page/banner"
 import { reasonOf, rollupOf } from "./board/card"
 import { useBoardTrees } from "./board/use-board"
 import { useOpenDetails, useSetWorkItemStatus } from "./use-todos"
-import { displayNameOf, formatRelativeTime } from "./util"
+import { displayNameOf, formatRelativeTime, stopMoveOf } from "./util"
 
 /* Todos v2 slice 6 stage C — the Attention inbox restyled to the approved
  * states mock (states.html §1, design-doc §6): a LIST, never a board. Three
@@ -72,16 +72,9 @@ export function attentionIdLine(
   const publicId = publicWorkItemReference(item.id)
   if (publicId) parts.push(publicId)
   if (kind === "blocked") {
-    const events = detail?.events ?? []
-    let at: string | null = null
-    let escalated = false
-    for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].toStatus === "blocked") {
-        at = events[i].createdAt
-        escalated = events[i].kind === "escalated"
-        break
-      }
-    }
+    const stop = stopMoveOf(detail?.events ?? [], "blocked")
+    const at = stop?.event.createdAt ?? null
+    const escalated = stop?.event.kind === "escalated" || stop?.entered === "escalated"
     parts.push(`${escalated ? "escalated" : "blocked"} ${formatRelativeTime(at ?? item.updatedAt).toLowerCase()}`)
     const full = detail?.workItem
     if (escalated && full) parts.push(`round ${full.rounds} of ${effectiveMaxRounds(full)}`)

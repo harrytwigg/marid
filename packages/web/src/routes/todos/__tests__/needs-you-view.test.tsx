@@ -222,6 +222,19 @@ describe("NeedsYouView", () => {
     expect(line).toContain("round 2 of")
   })
 
+  it("reads a migrated escalation through the migration move, from when it escalated", () => {
+    const detail = {
+      workItem: { id: "wi_private_blocked", rounds: 1, maxRounds: 2 },
+      events: [
+        { id: "e1", workItemId: "wi_private_blocked", kind: "status_change", fromStatus: "executing", toStatus: "escalated", createdAt: "2026-07-05T11:00:00.000Z", detail: { note: "which vendor?" } },
+        { id: "e2", workItemId: "wi_private_blocked", kind: "status_change", fromStatus: "escalated", toStatus: "blocked", actor: "migration", createdAt: new Date().toISOString(), detail: { reason: "retired-status", declared: true } },
+      ],
+    } as unknown as WorkItemOpenDetailWire
+    const line = attentionIdLine(item("wi_private_blocked", "blocked", null), "blocked", detail)
+    expect(line).toMatch(/^escalated \d+ jul|^escalated jul \d+/i)
+    expect(line).toContain("round 1 of")
+  })
+
   it("the voice quotes the blocked reason note from detail enrichment", async () => {
     getWorkItems.mockImplementation((ids: string[]) =>
       Promise.resolve({
