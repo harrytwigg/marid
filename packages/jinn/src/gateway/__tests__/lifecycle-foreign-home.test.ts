@@ -18,9 +18,10 @@ engines:
   claude: {}
 `);
 
-const { getStatus, portOwnedByThisInstance, stop } = await import("../lifecycle.js");
-const { PID_FILE, GATEWAY_INFO_FILE } = await import("../../shared/paths.js");
-const { pidBelongsToAnotherHome } = await import("../process-home.js");
+const { assertPortTakeoverAllowed, getStatus, portOwnedByThisInstance, stop } = await import("../lifecycle.js");
+const { PID_FILE, GATEWAY_INFO_FILE, JINN_HOME_IDENTITY } = await import("../../shared/paths.js");
+const { pidBelongsToAnotherHome, reapableGatewayPids } = await import("../process-home.js");
+const { readGatewayInfo, writeGatewayInfo } = await import("../gateway-info.js");
 
 const itNeedsProcessEnvReads = it.skipIf(process.platform === "win32");
 
@@ -60,11 +61,16 @@ async function waitForListening(port: number): Promise<void> {
   throw new Error(`nothing listened on ${port}`);
 }
 
-/** A process listening on `port` whose environment names `jinnHome`. */
-function spawnListeningGatewayChild(port: number, opts: { jinnHome: string }): ChildProcess {
+/** A process listening on `port` whose environment names `jinnHome` — or, with none, no
+ *  home at all, as a gateway started in the foreground from a plain shell. */
+function spawnListeningGatewayChild(port: number, opts: { jinnHome?: string }): ChildProcess {
+  const env = { ...process.env };
+  delete env.JINN_HOME;
+  delete env.JINN_HOME_IDENTITY;
+  if (opts.jinnHome) env.JINN_HOME = opts.jinnHome;
   return spawn(process.execPath, ["-e", `require("node:net").createServer().listen(${port}, "127.0.0.1"); setInterval(() => {}, 1000);`], {
     stdio: "ignore",
-    env: { ...process.env, JINN_HOME: opts.jinnHome },
+    env,
   });
 }
 
@@ -109,13 +115,6 @@ describe("a home that shares a machine with another instance", () => {
     return { child, port };
   }
 
-  itNeedsProcessEnvReads("does not report a copied PID file's foreign gateway as this home's", async () => {
-    const { child } = await foreignGateway();
-    fs.writeFileSync(PID_FILE, String(child.pid));
-
-    expect(getStatus(await freePort()).running).toBe(false);
-  });
-
   itNeedsProcessEnvReads("never stops a copied PID file's foreign gateway, even with --take-port", async () => {
     const { child } = await foreignGateway();
     fs.writeFileSync(PID_FILE, String(child.pid));
@@ -157,5 +156,91 @@ describe("a home that shares a machine with another instance", () => {
     expect(portOwnedByThisInstance(ownPort)).toBe(true);
     expect(portOwnedByThisInstance(foreignPort)).toBe(false);
     expect(portOwnedByThisInstance(await freePort())).toBe(false);
+  });
+
+  /** A foreground gateway, which carries no home in its environment, and this home's
+   *  gateway.json saying `home` wrote it — a copy of that gateway's home when `home`
+   *  is another one. */
+  async function foregroundGateway(home: string | undefined): Promise<{ child: ChildProcess; port: number }> {
+    const port = await freePort();
+    const child = spawnListeningGatewayChild(port, {});
+    children.push(child);
+    await waitForSpawn(child);
+    await waitForListening(port);
+    fs.writeFileSync(GATEWAY_INFO_FILE, JSON.stringify({
+      port, host: "127.0.0.1", pid: child.pid, secret: "s", token: "live-token", ...(home ? { home } : {}),
+    }));
+    return { child, port };
+  }
+
+  itNeedsProcessEnvReads("does not take a copied gateway.json as proof a foreground gateway is ours", async () => {
+    const { child, port } = await foregroundGateway("/elsewhere/live-home");
+
+    expect(portOwnedByThisInstance(port)).toBe(false);
+    expect(() => assertPortTakeoverAllowed(port)).toThrow("owned by another jinn instance (JINN_HOME=/elsewhere/live-home)");
+    expect(() => stop(port)).toThrow(/owned by another jinn instance/);
+    expect(() => process.kill(child.pid!, 0)).not.toThrow();
+  });
+
+  itNeedsProcessEnvReads("still recognises this home's own foreground gateway by its gateway.json", async () => {
+    const { port } = await foregroundGateway(JINN_HOME_IDENTITY);
+
+    expect(portOwnedByThisInstance(port)).toBe(true);
+  });
+
+  itNeedsProcessEnvReads("keeps trusting a gateway.json written before homes were recorded", async () => {
+    const { port } = await foregroundGateway(undefined);
+
+    expect(portOwnedByThisInstance(port)).toBe(true);
+  });
+});
+
+describe("reapableGatewayPids", () => {
+  const children: ChildProcess[] = [];
+  const tempDirs: string[] = [];
+
+  afterEach(async () => {
+    for (const child of children.splice(0)) {
+      child.kill("SIGKILL");
+      await waitForExit(child);
+    }
+    for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  async function sleeper(jinnHome?: string): Promise<number> {
+    const child = spawnListeningGatewayChild(await freePort(), { jinnHome });
+    children.push(child);
+    await waitForSpawn(child);
+    return child.pid!;
+  }
+
+  itNeedsProcessEnvReads("reaps nothing from a gateway.json another home wrote, even a foreground gateway's", async () => {
+    const live = await sleeper(undefined);
+    const session = await sleeper(undefined);
+
+    expect(reapableGatewayPids({ pid: live, ptyPids: [session], home: "/elsewhere/live-home" }, JINN_HOME_IDENTITY)).toEqual([]);
+  });
+
+  itNeedsProcessEnvReads("reaps this home's orphans and skips any pid whose environment names another home", async () => {
+    const foreignHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-foreign-home-"));
+    tempDirs.push(foreignHome);
+    const ownOrphan = await sleeper(tmpHome);
+    const foreign = await sleeper(foreignHome);
+    const previousGateway = await sleeper(undefined);
+
+    expect(reapableGatewayPids({ pid: previousGateway, ptyPids: [ownOrphan, foreign], home: JINN_HOME_IDENTITY }, JINN_HOME_IDENTITY))
+      .toEqual([ownOrphan, previousGateway]);
+    expect(reapableGatewayPids({ pid: previousGateway, ptyPids: [ownOrphan, foreign] }, JINN_HOME_IDENTITY))
+      .toEqual([ownOrphan, previousGateway]);
+  });
+});
+
+describe("writeGatewayInfo", () => {
+  it("records the home that wrote it, and later pid updates keep it", () => {
+    const file = path.join(tmpHome, "gateway-info-home.json");
+    writeGatewayInfo(file, { port: 7900, pid: process.pid, home: JINN_HOME_IDENTITY });
+
+    expect(readGatewayInfo(file)?.home).toBe(JINN_HOME_IDENTITY);
+    fs.rmSync(file, { force: true });
   });
 });

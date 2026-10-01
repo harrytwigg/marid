@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { JINN_HOME_IDENTITY, resolveHomeIdentity } from "../shared/paths.js";
+import { recordedByAnotherHome, startupGatewayPids, type GatewayInfo } from "./gateway-info.js";
 
 export type ProcessJinnHomeLookup =
   | { status: "found"; jinnHome: string; identity: string }
@@ -56,4 +57,19 @@ function jinnHomeFromEnvEntries(entries: string[]): ProcessJinnHomeLookup {
 export function pidBelongsToAnotherHome(pid: number, identity: string = JINN_HOME_IDENTITY): boolean {
   const owner = readProcessJinnHome(pid);
   return owner.status === "found" && owner.identity !== identity;
+}
+
+/**
+ * The pids a booting gateway may treat as orphans of its own previous run. A
+ * gateway.json written by another home — the home was copied from a running instance —
+ * names that instance's live gateway and sessions, as does any pid whose environment
+ * names another home, and none of them is ours to signal.
+ */
+export function reapableGatewayPids(
+  info: Partial<GatewayInfo> | null | undefined,
+  identity: string = JINN_HOME_IDENTITY,
+  currentPid = process.pid,
+): number[] {
+  if (recordedByAnotherHome(info, identity)) return [];
+  return startupGatewayPids(info, currentPid).filter((pid) => !pidBelongsToAnotherHome(pid, identity));
 }

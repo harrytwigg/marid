@@ -18,7 +18,7 @@ const previous = { ...process.env };
 process.env.JINN_INSTANCES_REGISTRY = path.join(root, "instances.json");
 fs.mkdirSync(process.env.JINN_HOME!, { recursive: true });
 
-const { CONFIG_PATH } = await import("../../shared/paths.js");
+const { CONFIG_PATH, GATEWAY_INFO_FILE } = await import("../../shared/paths.js");
 const { settleGatewayPort } = await import("../setup-port.js");
 
 afterAll(() => {
@@ -221,6 +221,24 @@ describe("settleGatewayPort", () => {
       await settleGatewayPort(busy, { report });
     } finally {
       await new Promise<void>((resolve) => holder.close(() => resolve()));
+    }
+
+    expect(printed()).toContain(`Port ${busy} is already in use on this machine`);
+  });
+
+  it("still warns for a home copied from the instance holding the port", async () => {
+    const holder = net.createServer();
+    await new Promise<void>((resolve) => holder.listen(0, "127.0.0.1", () => resolve()));
+    const address = holder.address();
+    const busy = typeof address === "object" && address ? address.port : 0;
+    // The copied record names a live pid and the busy port, but another home wrote it.
+    fs.writeFileSync(GATEWAY_INFO_FILE, JSON.stringify({ port: busy, pid: process.pid, secret: "s", home: "/elsewhere/live-home" }));
+
+    try {
+      await settleGatewayPort(busy, { report });
+    } finally {
+      await new Promise<void>((resolve) => holder.close(() => resolve()));
+      fs.rmSync(GATEWAY_INFO_FILE, { force: true });
     }
 
     expect(printed()).toContain(`Port ${busy} is already in use on this machine`);

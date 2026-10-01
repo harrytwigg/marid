@@ -40,7 +40,7 @@ import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
 import { startIdleCapacityAutoStart } from "./idle-capacity.js";
 import { HookRegistry } from "./hook-registry.js";
-import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, startupGatewayPids, gatewayBaseUrl } from "./gateway-info.js";
+import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
 import { reconcileWorkItemsOnStartup, startWorkItemReconciler } from "../work-items/reconcile.js";
 import { setTodoLabelsChangeListener, setTodoLiveEmitter } from "../work-items/live-events.js";
@@ -56,7 +56,7 @@ import { seedTrust, cleanupSessionSettings } from "../shared/claude-settings.js"
 import { claudeJsonPath } from "../shared/home.js";
 import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
 import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
-import { pidBelongsToAnotherHome } from "./process-home.js";
+import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
 import { isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
@@ -533,29 +533,24 @@ export async function startGateway(
 
   // Reap any orphaned PTYs from a prior crashed run before writing the fresh gateway.json.
   const oldInfo = readGatewayInfo(GATEWAY_INFO_FILE);
-  if (oldInfo) {
-    for (const pid of startupGatewayPids(oldInfo)) {
-      // A gateway.json copied along with another instance's home records that
-      // instance's live gateway and sessions, not orphans of ours.
-      if (pidBelongsToAnotherHome(pid)) {
-        logger.warn(`Not reaping pid ${pid} from gateway.json: it belongs to another instance`);
-        continue;
-      }
-      try {
-        process.kill(pid, "SIGTERM");
-        logger.info(`Reaping stale pid ${pid} from prior gateway`);
-      } catch (err: unknown) {
-        // ESRCH = no such process — already gone, which is the normal case.
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code !== "ESRCH") {
-          logger.warn(`Unexpected error reaping stale pid ${pid}: ${err instanceof Error ? err.message : err}`);
-        }
+  if (recordedByAnotherHome(oldInfo, JINN_HOME_IDENTITY)) {
+    logger.warn(`gateway.json was written by the instance at ${oldInfo!.home}; not reaping its pids`);
+  }
+  for (const pid of reapableGatewayPids(oldInfo)) {
+    try {
+      process.kill(pid, "SIGTERM");
+      logger.info(`Reaping stale pid ${pid} from prior gateway`);
+    } catch (err: unknown) {
+      // ESRCH = no such process — already gone, which is the normal case.
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "ESRCH") {
+        logger.warn(`Unexpected error reaping stale pid ${pid}: ${err instanceof Error ? err.message : err}`);
       }
     }
   }
 
   // Write gateway connection info (port + hook secret + pid) for hook-relay discovery.
-  const gatewayInfo = writeGatewayInfo(GATEWAY_INFO_FILE, { port, host, pid: process.pid, token: gatewayAuthToken });
+  const gatewayInfo = writeGatewayInfo(GATEWAY_INFO_FILE, { port, host, pid: process.pid, token: gatewayAuthToken, home: JINN_HOME_IDENTITY });
 
   // Hook registry — shared by the interactive engine and the internal hook route.
   const hookRegistry = new HookRegistry();

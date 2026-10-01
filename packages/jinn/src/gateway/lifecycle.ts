@@ -9,7 +9,7 @@ import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
 import { startGateway } from "./server.js";
 import { loadConfig } from "../shared/config.js";
-import { gatewayBaseUrl, readGatewayInfo } from "./gateway-info.js";
+import { gatewayBaseUrl, readGatewayInfo, recordedByAnotherHome } from "./gateway-info.js";
 import { ensureGatewayAuthToken } from "./auth.js";
 import { buildRestartEntryArgv } from "./restart-entry-options.js";
 import { syncShippedSkills } from "../migrations/sync-on-boot.js";
@@ -266,13 +266,15 @@ function assertPidBelongsToThisInstance(
   // pid, so a match is the established foreground ownership fallback. It is
   // consulted only when the process environment did not name a different home;
   // port ownership was already verified by the caller.
-  if (owner.status !== "found") {
-    const info = readGatewayInfo(GATEWAY_INFO_FILE);
-    if (info && info.pid === pid && info.port === port) return;
-  }
+  // A gateway.json copied from a running instance's home records THAT gateway's pid
+  // and port; it vouches for nothing here, but it does say whose gateway it is.
+  const info = owner.status === "found" ? null : readGatewayInfo(GATEWAY_INFO_FILE);
+  const recordsThisPid = info?.pid === pid && info.port === port;
+  if (recordsThisPid && !recordedByAnotherHome(info, JINN_HOME_IDENTITY)) return;
 
   if (!pidIsAlive(pid)) return;
-  throw new PortOwnershipError(port, owner.status === "found" ? owner.jinnHome : "unknown");
+  const ownerHome = owner.status === "found" ? owner.jinnHome : recordsThisPid && info?.home ? info.home : "unknown";
+  throw new PortOwnershipError(port, ownerHome);
 }
 
 /**
@@ -696,12 +698,15 @@ export function getStatus(port?: number): GatewayStatus {
 
   if (fs.existsSync(PID_FILE)) {
     const pid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
-    // A PID file copied from another home names that home's gateway, not ours.
-    if (pidIsAlive(pid) && !pidBelongsToAnotherHome(pid)) return { running: true, pid };
-    // Process not alive (or not ours), stale PID file — fall back to port check.
-    const portPid = findPidOnPort(targetPort);
-    if (portPid) return { running: true, pid: portPid };
-    return { running: false, pid };
+    try {
+      process.kill(pid, 0);
+      return { running: true, pid };
+    } catch {
+      // Process not alive, stale PID file — fall back to port check.
+      const portPid = findPidOnPort(targetPort);
+      if (portPid) return { running: true, pid: portPid };
+      return { running: false, pid };
+    }
   }
 
   const portPid = findPidOnPort(targetPort);

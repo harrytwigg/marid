@@ -1,8 +1,9 @@
 import net from "node:net";
 import { patchConfigFile } from "../shared/config-document.js";
 import { gatewayEnvOverrides, gatewayFileBinding } from "../shared/config.js";
-import { CONFIG_PATH, GATEWAY_INFO_FILE } from "../shared/paths.js";
-import { readGatewayInfo } from "../gateway/gateway-info.js";
+import { CONFIG_PATH, GATEWAY_INFO_FILE, JINN_HOME_IDENTITY } from "../shared/paths.js";
+import { readGatewayInfo, recordedByAnotherHome } from "../gateway/gateway-info.js";
+import { pidBelongsToAnotherHome } from "../gateway/process-home.js";
 
 /** True when nothing on this machine is listening on `port` at the loopback address. */
 function portIsFree(port: number): Promise<boolean> {
@@ -14,10 +15,12 @@ function portIsFree(port: number): Promise<boolean> {
   });
 }
 
-/** This home's own gateway is the one listening — re-running setup on a live home. */
+/** This home's own gateway is the one listening — re-running setup on a live home. A
+ *  gateway.json copied from another running instance's home vouches for nothing. */
 function ownGatewayHolds(port: number): boolean {
   const info = readGatewayInfo(GATEWAY_INFO_FILE);
   if (!info || info.port !== port || !info.pid) return false;
+  if (recordedByAnotherHome(info, JINN_HOME_IDENTITY) || pidBelongsToAnotherHome(info.pid)) return false;
   try {
     process.kill(info.pid, 0);
     return true;
