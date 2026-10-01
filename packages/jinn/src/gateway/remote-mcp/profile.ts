@@ -1,6 +1,7 @@
 import { buildTools } from "../../mcp/server.js";
 import type { KnowledgeSearchWording } from "../../mcp/knowledge-tools.js";
 import type { JinnMcpTool } from "../../mcp/toolkit.js";
+import { STATUSES } from "../../mcp/work-item-tools.js";
 
 /**
  * The remote connector's closed tool profile (spec Q2 option B):
@@ -31,7 +32,13 @@ export const REMOTE_MCP_LEDGER_TOOLS = [
  */
 export const REMOTE_MCP_SESSION_TOOLS = ["read_session", "send_to_session", "delegate_task", "assign_work_item"] as const;
 
-const PROFILE = new Set<string>([...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_TOOLS, ...REMOTE_MCP_SESSION_TOOLS]);
+/** The operator lane: the connector closes, cancels, reopens and archives
+ *  Todos, as the operator does from the board. */
+export const REMOTE_MCP_LIFECYCLE_TOOLS = ["update_work_item", "archive_work_item"] as const;
+
+const PROFILE = new Set<string>([
+  ...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_TOOLS, ...REMOTE_MCP_SESSION_TOOLS, ...REMOTE_MCP_LIFECYCLE_TOOLS,
+]);
 
 /**
  * The shared hints and descriptions teach an engine session to end its turn and
@@ -39,6 +46,8 @@ const PROFILE = new Set<string>([...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_
  * runs a turn, so on this door they say where the answer will be read instead.
  */
 const REMOTE_MCP_DESCRIPTIONS: Record<string, string> = {
+  update_work_item: "Move a Todo to any status, as the operator: close, cancel, reopen. cascade with done closes open sub-tasks.",
+  archive_work_item: "Archive a Todo, as the operator; its audit is kept. cascade also cancels open sub-tasks.",
   delegate_task:
     "Hand a named employee TRACKED work: a new Todo, or an existing one by workItemId. Starts their session; " +
     "read progress with read_session or get_work_item. Use idempotencyKey for retries. Choose employee by role/persona fit.",
@@ -54,6 +63,19 @@ const REMOTE_MCP_HINTS: Partial<Record<string, (result: Record<string, unknown>)
     "Metadata only: attachment bytes are not readable over this connector. Open the Todo in the Jinn web UI to view or download them.",
 };
 
+/** The agent-lane schemas speak to an engine session (`asOperator` is the
+ *  coordinator's). On this door the caller already has the operator lane, so
+ *  the status enum is every status and the coordinator flag is gone. */
+function remoteInputSchema(tool: JinnMcpTool): JinnMcpTool["inputSchema"] {
+  const properties = { ...(tool.inputSchema.properties as Record<string, unknown>) };
+  if (tool.name === "update_work_item") {
+    delete properties.asOperator;
+    properties.status = { type: "string", enum: [...STATUSES] };
+  }
+  if (tool.name === "archive_work_item") properties.cascade = { type: "boolean" };
+  return { ...tool.inputSchema, properties };
+}
+
 /** Adapt a tool to this door. Every handler runs inside the gateway here, so
  *  every call carries `hostLocations: false`: a "read it on your host" field
  *  would name the gateway's disk and loopback port. */
@@ -62,6 +84,7 @@ function forRemoteDoor(tool: JinnMcpTool): JinnMcpTool {
   return {
     ...tool,
     description: REMOTE_MCP_DESCRIPTIONS[tool.name] ?? tool.description,
+    inputSchema: remoteInputSchema(tool),
     handler: async (args, ctx) => {
       const result = await tool.handler(args, { ...ctx, hostLocations: false });
       return hint && result && typeof result === "object" && !Array.isArray(result)

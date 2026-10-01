@@ -125,6 +125,7 @@ const assignTodo: DomainHandler = (host, args) => {
   const employeeName = requiredText(args, "assignee");
   const employee = orgRegistry(host.context.getConfig()).get(employeeName);
   if (!employee) throw new Error(`Employee ${employeeName} not found`);
+  if (employee.system) throw new Error(`${employeeName} is a system employee and is never a Todo's assignee`);
   const item = assignWorkItem(id, employee.name, employee.department ?? null, "operator", { origin: "talk" });
   if (!item) throw new Error(`Todo ${id} not found`);
   return { data: { todo: todoData(id) }, uiEffect: { invalidate: ["todos", `todo:${id}`], navigate: `/todos/${encodeURIComponent(id)}` } };

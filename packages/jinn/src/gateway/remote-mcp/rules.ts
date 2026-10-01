@@ -39,6 +39,8 @@ const ALLOWED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   // Session control.
   ["GET", "/api/sessions/:id"], ["POST", "/api/sessions/:id/message"], ["POST", "/api/delegations"],
   ["POST", "/api/work-items/:id/assign"],
+  // The operator lane: close, cancel, reopen and archive.
+  ["POST", "/api/work-items/:id/status"], ["POST", "/api/work-items/:id/archive"],
 ];
 
 export function remoteMcpRouteAllowed(method: string, pathname: string): boolean {

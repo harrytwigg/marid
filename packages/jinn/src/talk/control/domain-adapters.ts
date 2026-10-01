@@ -41,6 +41,7 @@ function delegateTodo(host: TalkControlHost, args: Record<string, unknown>, call
   if (!item) throw new Error(`Todo ${id} not found`);
   const employee = orgRegistry(host.context.getConfig()).get(employeeName);
   if (!employee) throw new Error(`Employee ${employeeName} not found`);
+  if (employee.system) throw new Error(`${employeeName} is a system employee and is never a Todo's assignee`);
   const prompt = typeof args.task === "string" && args.task.trim()
     ? args.task.trim()
     : [item.title, item.body].filter(Boolean).join("\n\n");
