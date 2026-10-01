@@ -548,10 +548,9 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     values.push(filter.label, filter.label);
   }
   if (filter.needsAttentionFor) {
-    // A blocked Todo held by the caller, or one recovery routed to a human. The operator's own queue
-    // also holds blocked Todos assigned to @operator and blocked Todos nobody holds: a dead end the
-    // Dispatcher or Shaper stopped for the operator. An unexpired park is a clock-wait (PLA-157) and
-    // leaves this set outright; an unreadable one is not a park.
+    // A blocked Todo held by the caller, or one recovery routed to a human; the operator's own queue
+    // adds blocked Todos held by @operator or by nobody (a Dispatcher or Shaper dead end). An unexpired
+    // park is a clock-wait (PLA-157) and leaves this set outright; an unreadable one is not a park.
     // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
     // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(
