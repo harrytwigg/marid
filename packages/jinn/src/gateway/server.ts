@@ -54,7 +54,9 @@ import { workflowTodoDispatch, workflowTodoSessions } from "./workflow-todo-runs
 import { workflowTodoApprovals, workflowTodoLifecycle } from "./workflow-todo-surface.js";
 import { seedTrust, cleanupSessionSettings } from "../shared/claude-settings.js";
 import { claudeJsonPath } from "../shared/home.js";
-import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
+import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
+import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
+import { pidBelongsToAnotherHome } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
 import { isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
@@ -522,6 +524,9 @@ export async function startGateway(
   // host as-is, so the URL is always reachable from the child.
   process.env.JINN_GATEWAY_TOKEN = gatewayAuthToken;
   process.env.JINN_GATEWAY_URL = gatewayBaseUrl({ port, host });
+  // Name the home that binding belongs to, so a command a session points at another
+  // home (JINN_HOME=<sandbox> jinn start) can tell the binding it inherited is not its own.
+  process.env[JINN_BINDING_HOME_ENV] = JINN_HOME_IDENTITY;
 
   // Normalize claude engine config (idempotent — loadConfig already normalized it)
   const claudeCfg = normalizeClaudeEngineConfig(config.engines.claude);
@@ -530,6 +535,12 @@ export async function startGateway(
   const oldInfo = readGatewayInfo(GATEWAY_INFO_FILE);
   if (oldInfo) {
     for (const pid of startupGatewayPids(oldInfo)) {
+      // A gateway.json copied along with another instance's home records that
+      // instance's live gateway and sessions, not orphans of ours.
+      if (pidBelongsToAnotherHome(pid)) {
+        logger.warn(`Not reaping pid ${pid} from gateway.json: it belongs to another instance`);
+        continue;
+      }
       try {
         process.kill(pid, "SIGTERM");
         logger.info(`Reaping stale pid ${pid} from prior gateway`);

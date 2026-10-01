@@ -9,6 +9,7 @@ import { loadInstances } from "../src/instances/directory.js";
 import { resolveInstanceHome } from "../src/instances/create.js";
 import { assertContainerPrimaryCommand } from "../src/cli/container-contract.js";
 import { retargetInstanceEnv } from "../src/shared/sandbox-env.js";
+import { dropInheritedBinding, parsePortOption } from "../src/cli/instance-env.js";
 import { PRODUCT_NAME, productBanner } from "../src/shared/brand.js";
 
 const program = new Command();
@@ -37,6 +38,7 @@ program.hook("preAction", (thisCommand, actionCommand) => {
   // Restore node-pty's spawn-helper exec bit if an --ignore-scripts install
   // (Homebrew's default) left it at 0644. No-op on a healthy install.
   repairNodePtySpawnHelper();
+  dropInheritedBinding(process.env);
   if (opts.instance) {
     retargetInstanceEnv({
       home: resolveInstanceHome(opts.instance, loadInstances(), os.homedir()),
@@ -49,6 +51,7 @@ program
   .command("setup")
   .description(`Initialize ${PRODUCT_NAME} and install dependencies`)
   .option("--force", "Delete existing home dir and reinitialize from scratch")
+  .option("-p, --port <port>", "Gateway port to record in this home's config.yaml (default 7777)", parsePortOption)
   .action(async (opts) => {
     const { runSetup } = await import("../src/cli/setup.js");
     await runSetup(opts);

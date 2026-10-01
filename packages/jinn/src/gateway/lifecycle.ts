@@ -3,8 +3,8 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CONFIG_PATH, PID_FILE, GATEWAY_INFO_FILE, JINN_HOME, JINN_HOME_IDENTITY, resolveHomeIdentity } from "../shared/paths.js";
-import { JINN_INSTANCE_IDENTITY_ENV_KEYS } from "../shared/sandbox-env.js";
+import { CONFIG_PATH, PID_FILE, GATEWAY_INFO_FILE, JINN_HOME, JINN_HOME_IDENTITY } from "../shared/paths.js";
+import { JINN_BINDING_HOME_ENV, JINN_INSTANCE_IDENTITY_ENV_KEYS } from "../shared/sandbox-env.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
 import { startGateway } from "./server.js";
@@ -13,8 +13,10 @@ import { gatewayBaseUrl, readGatewayInfo } from "./gateway-info.js";
 import { ensureGatewayAuthToken } from "./auth.js";
 import { buildRestartEntryArgv } from "./restart-entry-options.js";
 import { syncShippedSkills } from "../migrations/sync-on-boot.js";
+import { pidBelongsToAnotherHome, readProcessJinnHome } from "./process-home.js";
 
 export { resolveLocalGatewayConnection, type LocalGatewayConnection } from "./local-gateway-connection.js";
+export { readProcessJinnHome, type ProcessJinnHomeLookup } from "./process-home.js";
 
 export async function startForeground(config: JinnConfig): Promise<void> {
   syncShippedSkills();
@@ -137,6 +139,7 @@ export function buildGatewayChildEnv(
     ...env,
     JINN_HOME,
     JINN_HOME_IDENTITY,
+    [JINN_BINDING_HOME_ENV]: JINN_HOME_IDENTITY,
     JINN_HOST: host,
     JINN_PORT: String(port),
     JINN_GATEWAY_URL: gatewayBaseUrl({ port, host }),
@@ -191,11 +194,6 @@ export type PortOwnerLookup =
   | { status: "none" }
   | { status: "unknown" };
 
-export type ProcessJinnHomeLookup =
-  | { status: "found"; jinnHome: string; identity: string }
-  | { status: "none" }
-  | { status: "unknown" };
-
 export function selectPortOwnerPid(
   pids: number[],
   commandLooksLikeGateway: (pid: number) => boolean = pidLooksLikeGateway,
@@ -226,7 +224,7 @@ function assertContainerTakeoverSafe(options: LifecycleKillOptions): void {
 }
 
 export function formatPortOwnedByAnotherInstanceError(port: number, ownerJinnHome: string): string {
-  return `port ${port} is owned by another jinn instance (JINN_HOME=${ownerJinnHome}); change this instance's port in ${CONFIG_PATH}, or pass --take-port to override.`;
+  return `port ${port} is owned by another jinn instance (JINN_HOME=${ownerJinnHome}); give this instance its own port (jinn setup --port <port>, or edit ${CONFIG_PATH}). --take-port would stop that instance and take its port.`;
 }
 
 export function shouldSignalPidFileProcess(
@@ -247,47 +245,6 @@ export function assertPortTakeoverAllowed(port: number, options: LifecycleKillOp
   if (portOwner.status === "unknown") throw new PortOwnershipError(port, "unknown");
 
   assertPidBelongsToThisInstance(portOwner.pid, port, options);
-}
-
-export function readProcessJinnHome(pid: number): ProcessJinnHomeLookup {
-  if (process.platform === "win32") return { status: "unknown" };
-
-  const procEnvPath = `/proc/${pid}/environ`;
-  if (fs.existsSync(procEnvPath)) {
-    try {
-      const raw = fs.readFileSync(procEnvPath, "utf-8");
-      return jinnHomeFromEnvEntries(raw.split("\0"));
-    } catch {
-      return { status: "unknown" };
-    }
-  }
-
-  try {
-    const output = execFileSync("ps", ["eww", "-p", String(pid), "-o", "command="], {
-      encoding: "utf-8",
-      timeout: 1_000,
-    });
-    return jinnHomeFromEnvEntries(output.split(/\s+/));
-  } catch {
-    return { status: "unknown" };
-  }
-}
-
-function jinnHomeFromEnvEntries(entries: string[]): ProcessJinnHomeLookup {
-  let jinnHome: string | undefined;
-  let identity: string | undefined;
-  for (const entry of entries) {
-    if (entry.startsWith("JINN_HOME=")) {
-      jinnHome = entry.slice("JINN_HOME=".length);
-    } else if (entry.startsWith("JINN_HOME_IDENTITY=")) {
-      identity = entry.slice("JINN_HOME_IDENTITY=".length);
-    }
-  }
-  if (jinnHome || identity) {
-    const publicHome = jinnHome ?? identity!;
-    return { status: "found", jinnHome: publicHome, identity: identity ?? resolveHomeIdentity(publicHome) };
-  }
-  return { status: "none" };
 }
 
 function assertPidBelongsToThisInstance(
@@ -318,6 +275,22 @@ function assertPidBelongsToThisInstance(
   throw new PortOwnershipError(port, owner.status === "found" ? owner.jinnHome : "unknown");
 }
 
+/**
+ * Whether the gateway listening on `port` is this instance's own. Nothing listening, a
+ * listener that belongs to another home, or one that cannot be attributed is not —
+ * callers use this before handing that listener this instance's bearer token.
+ */
+export function portOwnedByThisInstance(port: number): boolean {
+  const owner = lookupPidOnPort(port);
+  if (owner.status !== "found") return false;
+  try {
+    assertPidBelongsToThisInstance(owner.pid, port, {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function pidIsAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -336,9 +309,14 @@ function signalGateway(port?: number, options: LifecycleKillOptions = {}): numbe
     const pid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
     const portOwner = lookupPidOnPort(targetPort);
     const commandLooksLikeGateway = pidLooksLikeGateway(pid);
-    if (!shouldSignalPidFileProcess(pid, portOwner, commandLooksLikeGateway)) {
+    // A PID file copied along with another instance's home names that instance's
+    // gateway. It does not hold our port, so --take-port gives no licence to stop it.
+    const foreignAndOffPort = portOwner.status !== "found" && pidBelongsToAnotherHome(pid);
+    if (foreignAndOffPort || !shouldSignalPidFileProcess(pid, portOwner, commandLooksLikeGateway)) {
       logger.warn(
-        portOwner.status === "none"
+        foreignAndOffPort
+          ? `PID file points to ${pid}, which belongs to another instance and does not own port ${targetPort}. Cleaning up stale PID file.`
+          : portOwner.status === "none"
           ? `PID file points to ${pid}, but no process owns port ${targetPort}. Cleaning up stale PID file.`
           : portOwner.status === "unknown"
             ? `PID file points to ${pid}, but port ${targetPort} ownership could not be verified and the process does not look like Jinn. Cleaning up stale PID file.`
@@ -712,20 +690,18 @@ export interface GatewayStatus {
   pid: number | null;
 }
 
-export function getStatus(): GatewayStatus {
-  const targetPort = resolvePort();
+/** `port` is the one the caller is about to act on (start --port); config otherwise. */
+export function getStatus(port?: number): GatewayStatus {
+  const targetPort = port ?? resolvePort();
 
   if (fs.existsSync(PID_FILE)) {
     const pid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
-    try {
-      process.kill(pid, 0);
-      return { running: true, pid };
-    } catch {
-      // Process not alive, stale PID file — fall back to port check.
-      const portPid = findPidOnPort(targetPort);
-      if (portPid) return { running: true, pid: portPid };
-      return { running: false, pid };
-    }
+    // A PID file copied from another home names that home's gateway, not ours.
+    if (pidIsAlive(pid) && !pidBelongsToAnotherHome(pid)) return { running: true, pid };
+    // Process not alive (or not ours), stale PID file — fall back to port check.
+    const portPid = findPidOnPort(targetPort);
+    if (portPid) return { running: true, pid: portPid };
+    return { running: false, pid };
   }
 
   const portPid = findPidOnPort(targetPort);

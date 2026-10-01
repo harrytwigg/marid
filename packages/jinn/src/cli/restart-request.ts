@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { gatewayBaseUrl } from "../gateway/gateway-info.js";
-import { resolveLocalGatewayConnection } from "../gateway/lifecycle.js";
+import { portOwnedByThisInstance, resolveLocalGatewayConnection } from "../gateway/lifecycle.js";
 import { JINN_HOME } from "../shared/paths.js";
 
 interface GatewayConnection {
@@ -17,9 +17,27 @@ function gatewayConnection(): GatewayConnection | null {
   return { port: info.port, host: info.host, token };
 }
 
-export async function requestRestartFromGateway(fetchImpl: typeof fetch = fetch): Promise<boolean> {
-  const connection = gatewayConnection();
-  if (!connection) return false;
+export interface RestartRequestOptions {
+  /** The port the caller is acting on; the home's configured binding otherwise. */
+  port?: number;
+  /** Ownership check for the listener on that port. */
+  isOwnGateway?: (port: number) => boolean;
+}
+
+/**
+ * Ask this instance's running gateway to restart itself. The request carries this
+ * home's bearer token and makes the gateway on the target port restart, so it is only
+ * sent to a listener verified as this instance's own: a home that shares a port with
+ * another instance must never restart that instance.
+ */
+export async function requestRestartFromGateway(
+  fetchImpl: typeof fetch = fetch,
+  options: RestartRequestOptions = {},
+): Promise<boolean> {
+  const resolved = gatewayConnection();
+  if (!resolved) return false;
+  const connection = options.port === undefined ? resolved : { ...resolved, port: options.port };
+  if (!(options.isOwnGateway ?? portOwnedByThisInstance)(connection.port)) return false;
   const currentSessionId = process.env.JINN_SESSION_ID?.trim();
 
   try {
