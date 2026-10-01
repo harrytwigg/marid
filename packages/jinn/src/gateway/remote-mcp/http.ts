@@ -192,6 +192,7 @@ function toolsFor(state: HandlerState, config: JinnConfig): JinnMcpTool[] {
   let tools = state.tools.get(key);
   if (!tools) {
     tools = buildRemoteMcpTools(notesEnabled, knowledge);
+    state.tools.clear(); // only the current config's tool set is ever served
     state.tools.set(key, tools);
   }
   return tools;

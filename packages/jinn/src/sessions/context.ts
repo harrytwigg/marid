@@ -4,7 +4,7 @@ import type { Employee, JinnConfig, OrgHierarchy, OrgNode } from "../shared/type
 import { JINN_HOME, ORG_DIR, CRON_JOBS, DOCS_DIR } from "../shared/paths.js";
 import { engineAvailable, isKnownEngine } from "../shared/models.js";
 import { gatewayBaseUrl } from "../gateway/gateway-info.js";
-import { readKnowledgeFile } from "../notes/store.js";
+import { hasControlBytes } from "../shared/sanitize.js";
 import {
   buildRosterUnavailableSection,
   buildScopedRosterSection,
@@ -26,7 +26,9 @@ import {
  *   OPTIONAL   – knowledge listing, environment scan,
  *                delegation protocol                       (trimmed first when over budget)
  *
- * Knowledge and docs files are NEVER inlined — only filenames are listed.
+ * Knowledge and docs files are NEVER inlined — only filenames are listed —
+ * except the few an instance names in context.alwaysInclude, which are inlined
+ * as ESSENTIAL sections kept whole until all optional content has been trimmed.
  * The AI can read files on demand, saving ~200K+ chars per session.
  */
 
@@ -44,6 +46,8 @@ interface Section {
   marker: string; // leading text used to identify the section in trimContext
   content: string;
   summary: string; // compact fallback when budget is tight
+  /** Kept whole until every OPTIONAL and STANDARD section has been summarized or dropped. */
+  required?: boolean;
 }
 
 /**
@@ -284,7 +288,7 @@ export function buildContext(opts: BuildContextOptions): string {
 
   // ── ESSENTIAL: Instance files injected into every prompt (context.alwaysInclude) ──
   for (const included of buildAlwaysIncludeSections(opts.config?.context?.alwaysInclude)) {
-    sections.push({ tier: Tier.ESSENTIAL, ...included });
+    sections.push({ tier: Tier.ESSENTIAL, required: true, ...included });
   }
 
   // ── STANDARD: Relationship-scoped role orientation ──────────
@@ -733,29 +737,54 @@ function buildKnowledgeContext(jinnMcpAttached?: boolean, guidance?: string): st
 export const ALWAYS_INCLUDE_FILE_CHAR_CAP = 16_000;
 
 /**
- * What `context.alwaysInclude` may name: Markdown outside `secrets/`. The files
- * ride in every session's prompt on every engine, so credential stores
- * (`secrets/`, `config.yaml`, anything not Markdown) are never eligible.
+ * What `context.alwaysInclude` may name: Markdown under the instance's
+ * `knowledge/` or `docs/`. The files ride in every session's prompt on every
+ * engine, and `knowledge/` is writable by agents, so the boundary is checked on
+ * the RESOLVED file, not on the name the config gives: a symlink out of those
+ * directories, a hidden path, or a non-Markdown target is never injected.
+ * Credential stores (`secrets/`, `config.yaml`) are outside by construction.
  */
-function alwaysIncludeAllowed(relPath: string): boolean {
-  return /\.md$/i.test(relPath) && relPath.split("/")[0].toLowerCase() !== "secrets";
+const ALWAYS_INCLUDE_ROOTS = ["knowledge", "docs"];
+
+function resolveAlwaysIncludeFile(relPath: string): string | null {
+  if (typeof relPath !== "string" || relPath.length === 0 || relPath.length > 300 || hasControlBytes(relPath)) return null;
+  if (path.isAbsolute(relPath) || path.win32.isAbsolute(relPath) || relPath.includes("\\")) return null;
+  const segments = relPath.split("/");
+  if (segments.some((seg) => seg === "" || seg.startsWith("."))) return null;
+  // Exact, case-sensitive: a lookalike that a case-insensitive filesystem might fold fails closed.
+  if (!ALWAYS_INCLUDE_ROOTS.includes(segments[0]) || segments.length < 2) return null;
+  try {
+    const realRoot = fs.realpathSync(path.join(JINN_HOME, segments[0]));
+    const realFile = fs.realpathSync(path.join(JINN_HOME, ...segments));
+    const within = path.relative(realRoot, realFile);
+    if (within === "" || within === ".." || within.startsWith(`..${path.sep}`) || path.isAbsolute(within)) return null;
+    if (within.split(path.sep).some((seg) => seg.startsWith("."))) return null;
+    if (!realFile.endsWith(".md") || !fs.statSync(realFile).isFile()) return null;
+    return realFile;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * One section per readable `context.alwaysInclude` path. Reads go through the
- * instance-file reader, so traversal, absolute paths and symlink escapes are
- * refused; an ineligible, unreadable or empty file is skipped rather than
- * failing the prompt.
+ * One section per readable `context.alwaysInclude` path. An ineligible,
+ * unreadable or empty file is skipped rather than failing the prompt.
  */
 function buildAlwaysIncludeSections(paths?: string[]): Array<Pick<Section, "marker" | "content" | "summary">> {
   if (!Array.isArray(paths)) return [];
   const out: Array<Pick<Section, "marker" | "content" | "summary">> = [];
   for (const relPath of new Set(paths)) {
-    if (!alwaysIncludeAllowed(relPath)) continue;
-    const read = readKnowledgeFile(relPath);
-    if (!read.ok || read.content.trim() === "") continue;
-    const cut = read.totalChars > ALWAYS_INCLUDE_FILE_CHAR_CAP;
-    const body = cut ? read.content.slice(0, ALWAYS_INCLUDE_FILE_CHAR_CAP).trimEnd() : read.content.trimEnd();
+    const realFile = resolveAlwaysIncludeFile(relPath);
+    if (!realFile) continue;
+    let whole: string;
+    try {
+      whole = fs.readFileSync(realFile, "utf-8");
+    } catch {
+      continue;
+    }
+    if (whole.trim() === "") continue;
+    const cut = whole.length > ALWAYS_INCLUDE_FILE_CHAR_CAP;
+    const body = (cut ? whole.slice(0, ALWAYS_INCLUDE_FILE_CHAR_CAP) : whole).trimEnd();
     const heading = `## Always in context: ${relPath}`;
     out.push({
       marker: heading,
@@ -929,7 +958,7 @@ function trimContext(sections: Section[], maxChars: number): string {
   // them before dropping summarized orientation such as the scoped roster.
   for (let i = sections.length - 1; i >= 0; i--) {
     if (result.length <= maxChars) break;
-    if (sections[i].tier === Tier.ESSENTIAL && sections[i].summary) {
+    if (sections[i].tier === Tier.ESSENTIAL && !sections[i].required && sections[i].summary) {
       parts[i] = sections[i].summary;
       result = assemble();
     }
@@ -952,6 +981,16 @@ function trimContext(sections: Section[], maxChars: number): string {
         parts[i] = null;
         result = assemble();
       }
+    }
+  }
+
+  // Required sections (instance always-include files) give way only now, after
+  // everything optional and standard has been tried.
+  for (let i = sections.length - 1; i >= 0; i--) {
+    if (result.length <= maxChars) break;
+    if (sections[i].required && parts[i] !== null) {
+      parts[i] = sections[i].summary;
+      result = assemble();
     }
   }
 

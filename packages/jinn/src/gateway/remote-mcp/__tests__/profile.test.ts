@@ -68,6 +68,13 @@ describe("remote MCP tool profile", () => {
     for (const name of [...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_TOOLS, ...REMOTE_MCP_SESSION_TOOLS]) expect(all.has(name), name).toBe(true);
   });
 
+  it("carries the instance's knowledge wording on search_knowledge", () => {
+    const search = (wording?: { guidance?: string }) =>
+      buildRemoteMcpTools(false, wording).find((tool) => tool.name === "search_knowledge")!.description;
+    expect(search({ guidance: "Use the state files." })).toBe("Search knowledge/ and docs/ markdown; snippets only. Use the state files.");
+    expect(search()).toBe("Search knowledge/ and docs/ markdown; snippets only.");
+  });
+
   it("serves the session-control tools", () => {
     const served = new Set(buildRemoteMcpTools(false).map((tool) => tool.name));
     for (const name of REMOTE_MCP_SESSION_TOOLS) expect(served.has(name), name).toBe(true);

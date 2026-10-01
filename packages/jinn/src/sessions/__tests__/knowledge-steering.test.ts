@@ -26,6 +26,8 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(home, "knowledge", "note.md"), "# Note\n\nbody\n");
   fs.writeFileSync(path.join(home, "knowledge", "state.md"), "# State\n- fact: the current truth\n");
   fs.writeFileSync(path.join(home, "knowledge", "empty.md"), "   \n");
+  // Optional index content for the trim-order test; seeded before the index is first cached.
+  for (let i = 0; i < 60; i++) fs.writeFileSync(path.join(home, "knowledge", `filler-${i}.md`), `# F${i}\n`);
   ({ buildContext, ALWAYS_INCLUDE_FILE_CHAR_CAP } = await import("../context.js"));
 });
 
@@ -106,10 +108,40 @@ describe("context.alwaysInclude", () => {
     fs.writeFileSync(path.join(home, "secrets", "notes.md"), "CRED-MD");
     fs.writeFileSync(path.join(home, "config.yaml"), "token: CRED-YAML\n");
     const out = build({
-      context: { alwaysInclude: ["secrets/api-keys.json", "secrets/notes.md", "Secrets/notes.md", "config.yaml"] },
+      context: { alwaysInclude: ["secrets/api-keys.json", "secrets/notes.md", "SECRETS/notes.md", "ſecrets/notes.md", "config.yaml"] },
     });
     expect(out).not.toMatch(/CRED-(JSON|MD|YAML)/);
     expect(out).not.toContain("## Always in context");
+  });
+
+  it("checks the RESOLVED file: symlinks into secrets/ and dot-directories are refused", () => {
+    // knowledge/ is writable by agents, so a listed name can be turned into a symlink after the fact.
+    fs.mkdirSync(path.join(home, "secrets"), { recursive: true });
+    fs.writeFileSync(path.join(home, "secrets", "api-keys.json"), '{"k":"CRED-JSON"}');
+    fs.writeFileSync(path.join(home, "secrets", "notes.md"), "CRED-MD");
+    fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(home, ".claude", "x.md"), "CRED-DOT");
+    fs.mkdirSync(path.join(home, "knowledge", ".hidden"), { recursive: true });
+    fs.writeFileSync(path.join(home, "knowledge", ".hidden", "h.md"), "CRED-HIDDEN");
+    fs.symlinkSync(path.join(home, "secrets", "api-keys.json"), path.join(home, "knowledge", "keys.md"));
+    fs.symlinkSync(path.join(home, "secrets"), path.join(home, "knowledge", "s"));
+    fs.symlinkSync(path.join(home, ".claude", "x.md"), path.join(home, "knowledge", "dot.md"));
+    const out = build({
+      context: {
+        alwaysInclude: ["knowledge/keys.md", "knowledge/s/notes.md", "knowledge/dot.md", ".claude/x.md", "knowledge/.hidden/h.md"],
+      },
+    });
+    expect(out).not.toMatch(/CRED-(JSON|MD|DOT|HIDDEN)/);
+    expect(out).not.toContain("## Always in context");
+  });
+
+  it("accepts Markdown under docs/ as well as knowledge/, and a symlink that stays inside its root", () => {
+    fs.mkdirSync(path.join(home, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(home, "docs", "x.md"), "DOCS-OK");
+    fs.symlinkSync(path.join(home, "knowledge", "state.md"), path.join(home, "knowledge", "state-alias.md"));
+    const out = build({ context: { alwaysInclude: ["docs/x.md", "knowledge/state-alias.md"] } });
+    expect(out).toContain("## Always in context: docs/x.md\nDOCS-OK");
+    expect(out).toContain("## Always in context: knowledge/state-alias.md\n# State");
   });
 
   it("skips missing and empty files without failing the prompt", () => {
@@ -130,6 +162,16 @@ describe("context.alwaysInclude", () => {
     expect(out.length).toBeLessThanOrEqual(6_000);
     expect(out).toContain("## Always in context: knowledge/wide.md\nRead `knowledge/wide.md` before acting");
     expect(out).not.toContain("Ψ");
+  });
+
+  it("keeps the file whole when a small overage is cured by trimming optional content", () => {
+    const opts = { context: { alwaysInclude: ["knowledge/state.md"] } };
+    const full = build(opts, false);
+    expect(full).toContain("filler-59.md");
+    const tight = build({ context: { ...opts.context, maxChars: full.length - 10 } }, false);
+    expect(tight.length).toBeLessThanOrEqual(full.length - 10);
+    expect(tight).toContain("- fact: the current truth");
+    expect(tight).not.toContain("Read `knowledge/state.md` before acting");
   });
 
   it("unset or empty leaves the prompt byte-identical", () => {
