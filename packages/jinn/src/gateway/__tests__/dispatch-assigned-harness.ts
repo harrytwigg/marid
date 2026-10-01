@@ -152,8 +152,9 @@ export async function stopDispatchHarness(): Promise<void> {
   setJinnAttachGate(null);
 }
 
+/** A backlog Todo with an assignee: the shape "assigned" collapsed into. */
 export function assignedTodo(title: string, assignee = "first-worker") {
-  return workItems.createWorkItem({ title, source: "human", status: "assigned", assignee, department: "platform" });
+  return workItems.createWorkItem({ title, source: "human", status: "backlog", assignee, department: "platform" });
 }
 
 /** The operator presses Dispatch. */

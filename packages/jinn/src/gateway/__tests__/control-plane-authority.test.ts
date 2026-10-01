@@ -249,17 +249,17 @@ describe("control-plane writes require operator authority", () => {
     expect(registry.getSessionDelivery(accepted.id)).toMatchObject({ status: "accepted" });
   });
   it("fails anonymous Todo writes closed while bearer, cookie, and session capabilities keep their exact authority", async () => {
-    const anonymousAssign = store.createWorkItem({ title: "Anonymous assign target", status: "assigned", assignee: "platform-worker", source: "human" });
-    const anonymousArchive = store.createWorkItem({ title: "Anonymous archive target", status: "assigned", assignee: "platform-worker", source: "human" });
+    const anonymousAssign = store.createWorkItem({ title: "Anonymous assign target", status: "backlog", assignee: "platform-worker", source: "human" });
+    const anonymousArchive = store.createWorkItem({ title: "Anonymous archive target", status: "backlog", assignee: "platform-worker", source: "human" });
 
     expect((await call("POST", `/api/work-items/${anonymousAssign.id}/assign`, { assignee: "platform-peer" })).status).toBe(403);
     expect((await call("POST", `/api/work-items/${anonymousArchive.id}/archive`, { note: "anonymous" })).status).toBe(403);
-    expect(store.getWorkItem(anonymousAssign.id)).toMatchObject({ assignee: "platform-worker", status: "assigned" });
-    expect(store.getWorkItem(anonymousArchive.id)?.status).toBe("assigned");
+    expect(store.getWorkItem(anonymousAssign.id)).toMatchObject({ assignee: "platform-worker", status: "backlog" });
+    expect(store.getWorkItem(anonymousArchive.id)?.status).toBe("backlog");
 
     const bearerHeaders = { authorization: "Bearer test-token" };
-    const bearerAssign = store.createWorkItem({ title: "Bearer assign target", status: "assigned", assignee: "platform-worker", source: "human" });
-    const bearerArchive = store.createWorkItem({ title: "Bearer archive target", status: "assigned", assignee: "platform-worker", source: "human" });
+    const bearerAssign = store.createWorkItem({ title: "Bearer assign target", status: "backlog", assignee: "platform-worker", source: "human" });
+    const bearerArchive = store.createWorkItem({ title: "Bearer archive target", status: "backlog", assignee: "platform-worker", source: "human" });
     expect((await call("POST", `/api/work-items/${bearerAssign.id}/assign`, { assignee: "platform-peer" }, bearerHeaders)).status).toBe(200);
     expect((await call("POST", `/api/work-items/${bearerArchive.id}/archive`, {}, bearerHeaders)).status).toBe(200);
 
@@ -269,17 +269,17 @@ describe("control-plane writes require operator authority", () => {
     expect(bootstrap.status).toBe(200);
     const rawCookies = Array.isArray(bootstrap.header("set-cookie")) ? bootstrap.header("set-cookie") : [bootstrap.header("set-cookie")];
     const cookie = (rawCookies as string[]).map((part) => part.split(";")[0]).join("; ");
-    const cookieAssign = store.createWorkItem({ title: "Cookie assign target", status: "assigned", assignee: "platform-worker", source: "human" });
-    const cookieArchive = store.createWorkItem({ title: "Cookie archive target", status: "assigned", assignee: "platform-worker", source: "human" });
+    const cookieAssign = store.createWorkItem({ title: "Cookie assign target", status: "backlog", assignee: "platform-worker", source: "human" });
+    const cookieArchive = store.createWorkItem({ title: "Cookie archive target", status: "backlog", assignee: "platform-worker", source: "human" });
     expect((await call("POST", `/api/work-items/${cookieAssign.id}/assign`, { assignee: "platform-peer" }, { cookie })).status).toBe(200);
     expect((await call("POST", `/api/work-items/${cookieArchive.id}/archive`, {}, { cookie })).status).toBe(200);
 
-    const scopedTarget = store.createWorkItem({ title: "Scoped authority target", status: "assigned", assignee: "platform-worker", source: "human" });
+    const scopedTarget = store.createWorkItem({ title: "Scoped authority target", status: "backlog", assignee: "platform-worker", source: "human" });
     expect((await call("POST", `/api/work-items/${scopedTarget.id}/assign`, { assignee: "platform-peer" }, toolHeaders(peer))).status).toBe(403);
     expect(store.getWorkItem(scopedTarget.id)?.assignee).toBe("platform-worker");
     const claimable = store.createWorkItem({ title: "Scoped self claim", status: "backlog", assignee: null, source: "human" });
     expect((await call("POST", `/api/work-items/${claimable.id}/assign`, { assignee: "platform-peer" }, toolHeaders(peer))).status).toBe(200);
-    expect(store.getWorkItem(claimable.id)).toMatchObject({ assignee: "platform-peer", status: "assigned" });
+    expect(store.getWorkItem(claimable.id)).toMatchObject({ assignee: "platform-peer", status: "backlog" });
   });
 
   it("rejects a capability-bound worker PUT /api/config and leaves portalName unchanged", async () => {

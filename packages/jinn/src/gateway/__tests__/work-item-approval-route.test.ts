@@ -23,7 +23,7 @@ import {
  *   2. DECISION VALIDATION: bad body / decision → 400; unknown item → 404; an
  *      item with no pending approval → 409.
  *   3. NATIVE CONSEQUENCE RULES: approve+in_review → done; reject+in_review →
- *      bounce (rounds++, critique) / max-rounds → escalated; a non-in_review
+ *      bounce (rounds++, critique) / max-rounds → blocked (escalated); a non-in_review
  *      decision is recorded, status untouched.
  */
 
@@ -417,12 +417,14 @@ describe("POST /api/work-items/:id/approval — native consequence rules", () =>
     expect(sc.detail).toMatchObject({ bounce: true, critique: "tests are red" });
   });
 
-  it("reject + in_review at max rounds → escalated instead of looping", async () => {
+  it("reject + in_review at max rounds → blocked as an escalation instead of looping", async () => {
     const item = pendingItem("in_review", { verifyPolicy: { mode: "verify", maxRounds: 1 } });
     const resp = await decide(item.id, { decision: "reject", note: "still wrong" });
     expect(resp.status).toBe(200);
-    expect(resp.body.workItem.status).toBe("escalated");
+    expect(resp.body.workItem.status).toBe("blocked");
     expect(resp.body.escalated).toBe(true);
+    const escalation = store.listWorkItemEvents(item.id).filter((e) => e.kind === "escalated").at(-1)!;
+    expect(escalation.detail).toMatchObject({ declared: true });
   });
 
   it("approve + backlog (non-in_review) → decision recorded, status untouched", async () => {

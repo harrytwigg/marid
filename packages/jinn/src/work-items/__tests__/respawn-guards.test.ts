@@ -194,7 +194,7 @@ describe("active_pr", () => {
     // comment that merely names the branch, then the operator saying "go".
     const item = store.createWorkItem({ title: "re-armed after a handback" });
     comment(item.id, `branch build/${item.id}-a-slice is intact`, minutesBefore(20));
-    const moved = transitions.transition(item.id, "assigned", "operator");
+    const moved = transitions.transition(item.id, "executing", "operator");
     db.prepare("UPDATE work_item_events SET created_at = ? WHERE id = ?").run(minutesBefore(10), moved.event!.id);
 
     expect(guards.checkRespawnGuard(item.id, NOW)).toEqual({ state: "allowed" });

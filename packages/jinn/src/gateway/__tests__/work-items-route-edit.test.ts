@@ -16,7 +16,7 @@ import {
 
 describe("PATCH /api/work-items/:id — operator metadata editing", () => {
   it("lets the operator PATCH the verify policy (set and clear) — the rail's verify picker lane", async () => {
-    const item = store.createWorkItem({ title: "Verify policy edit", status: "assigned" });
+    const item = store.createWorkItem({ title: "Verify policy edit", status: "backlog" });
     const cap = makeRes();
     await api.handleApiRequest(
       makeReq("PATCH", `/api/work-items/${item.id}`, {
@@ -43,7 +43,7 @@ describe("PATCH /api/work-items/:id — operator metadata editing", () => {
   });
 
   it("refuses an invalid verify policy mode readably", async () => {
-    const item = store.createWorkItem({ title: "Verify policy invalid", status: "assigned" });
+    const item = store.createWorkItem({ title: "Verify policy invalid", status: "backlog" });
     const cap = makeRes();
     await api.handleApiRequest(
       makeReq("PATCH", `/api/work-items/${item.id}`, {
@@ -59,7 +59,7 @@ describe("PATCH /api/work-items/:id — operator metadata editing", () => {
 
   it("keeps verifyPolicy operator-only: the creator session's PATCH is refused for that field", async () => {
     const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "vp-caller", employee: "platform-worker" });
-    const item = store.createWorkItem({ title: "Agent vp edit", status: "assigned", createdBy: "platform-worker" });
+    const item = store.createWorkItem({ title: "Agent vp edit", status: "backlog", createdBy: "platform-worker" });
     const cap = makeRes();
     await api.handleApiRequest(
       makeReq("PATCH", `/api/work-items/${item.id}`, {

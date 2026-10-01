@@ -41,7 +41,6 @@ describe("deriveWorkItemStatus — a clean settle", () => {
     expect(derive("blocked", ["idle", "error"], verifyMode)).toBe("executing");
     // Somebody put it in the queue after that attempt ran; a receipt does not undo that.
     expect(derive("backlog", ["idle"], verifyMode)).toBe("backlog");
-    expect(derive("assigned", ["idle"], verifyMode)).toBe("assigned");
   });
 
   it("derives in_review for the trust tier, whatever it settled from", () => {

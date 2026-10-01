@@ -61,11 +61,11 @@ describe("sub-tasks", () => {
     expect(() => store.createWorkItem({ title: "late child 2", parentId: cancelledParent.id })).toThrow(/closed/);
   });
 
-  it("allows creating a child under an escalated parent (decomposition is part of resolving it)", () => {
-    const escalatedParent = store.createWorkItem({ title: "escalated parent" });
-    transitions.transition(escalatedParent.id, "escalated", "operator");
-    const child = store.createWorkItem({ title: "resolution step", parentId: escalatedParent.id });
-    expect(child.parentId).toBe(escalatedParent.id);
+  it("allows creating a child under a blocked parent (decomposition is part of resolving it)", () => {
+    const blockedParent = store.createWorkItem({ title: "blocked parent" });
+    transitions.transition(blockedParent.id, "blocked", "operator");
+    const child = store.createWorkItem({ title: "resolution step", parentId: blockedParent.id });
+    expect(child.parentId).toBe(blockedParent.id);
     expect(child.depth).toBe(1);
   });
 });

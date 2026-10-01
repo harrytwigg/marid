@@ -54,7 +54,7 @@ describe("requestApproval — the native approval-request write path", () => {
   });
 
   it("persists the routed approval target and clears escalation on a new request", () => {
-    const item = store.createWorkItem({ title: "Targeted approval", status: "assigned", source: "delegation" });
+    const item = store.createWorkItem({ title: "Targeted approval", status: "backlog", source: "delegation" });
     const out = approvals.requestApproval(item.id, { request: "Manager sign-off", target: "platform-manager", actor: "session:s1" });
     expect(out.approvalState).toBe("pending");
     expect(out.approvalTarget).toBe("platform-manager");
@@ -166,7 +166,7 @@ describe("decideWorkItemApproval — native consequence rules", () => {
     expect(sc.detail).toMatchObject({ bounce: true, critique: "fix the tests" });
   });
 
-  it("REJECT + in_review at max rounds → escalated INSTEAD of executing", async () => {
+  it("REJECT + in_review at max rounds → blocked (escalated) INSTEAD of executing", async () => {
     // maxRounds:1 → the first reject bounce exhausts it and escalates.
     const item = store.createWorkItem({
       title: "Escalate on max rounds",
@@ -178,11 +178,11 @@ describe("decideWorkItemApproval — native consequence rules", () => {
     const r = await approvals.decideWorkItemApproval({ id: item.id, decision: "reject", note: "still wrong" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.item.status).toBe("escalated");
+    expect(r.item.status).toBe("blocked");
     expect(r.escalated).toBe(true);
     expect(r.item.rounds).toBe(1);
     const evt = store.listWorkItemEvents(item.id).filter((e) => e.kind === "escalated").at(-1)!;
-    expect(evt.toStatus).toBe("escalated");
+    expect(evt.toStatus).toBe("blocked");
   });
 
   it("REJECT + backlog → decision recorded, status UNTOUCHED", async () => {
@@ -263,7 +263,7 @@ describe("approvals off-row — writes land in work_item_approvals", () => {
   });
 
   it("re-request while pending overwrites the pending row in place — no second row", () => {
-    const item = store.createWorkItem({ title: "Overwrite pending", status: "assigned", source: "delegation" });
+    const item = store.createWorkItem({ title: "Overwrite pending", status: "backlog", source: "delegation" });
     approvals.requestApproval(item.id, { request: "v1 text", target: null });
     approvals.requestApproval(item.id, { request: "v2 text", target: null });
     const history = approvals.listApprovals(item.id);
@@ -309,7 +309,7 @@ describe("approvals off-row — writes land in work_item_approvals", () => {
   });
 
   it("needsAttentionFor reads pending approvals from the new table", () => {
-    const item = store.createWorkItem({ title: "Attention via table", status: "assigned", source: "delegation" });
+    const item = store.createWorkItem({ title: "Attention via table", status: "backlog", source: "delegation" });
     approvals.requestApproval(item.id, { request: "sign-off", target: "attention-target" });
     const hits = store.listWorkItems({ needsAttentionFor: "attention-target" });
     expect(hits.some((i) => i.id === item.id)).toBe(true);

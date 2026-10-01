@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildTools } from "../../../mcp/server.js";
 import type { JinnMcpContext, JinnMcpTool } from "../../../mcp/toolkit.js";
-import { buildRemoteMcpTools, REMOTE_MCP_LEDGER_TOOLS, REMOTE_MCP_READ_TOOLS, REMOTE_MCP_SESSION_TOOLS } from "../profile.js";
+import {
+  buildRemoteMcpTools, REMOTE_MCP_LEDGER_TOOLS, REMOTE_MCP_LIFECYCLE_TOOLS, REMOTE_MCP_READ_TOOLS, REMOTE_MCP_SESSION_TOOLS,
+} from "../profile.js";
 import { remoteMcpRouteAllowed } from "../rules.js";
 
 /**
@@ -13,13 +15,13 @@ import { remoteMcpRouteAllowed } from "../rules.js";
  */
 
 /** Tools the spec excludes from every option (FR-010, FR-011, Q2 classes T/X/D/A/C/P), less
- *  the four session-control tools admitted later. */
+ *  the session-control tools and the two lifecycle tools admitted later. */
 const NEVER = [
   "read_knowledge", "attach_to_work_item", "create_label", "decide_work_item_approval",
   "get_message_context", "search_messages", "spawn_session",
-  "dispatch_work_item", "update_work_item",
+  "dispatch_work_item",
   "set_work_item_dispatch",
-  "archive_work_item", "stop_session",
+  "stop_session",
   "send_connector_message", "request_work_item_approval",
   "escalate_work_item_approval", "arm_heartbeat", "stop_heartbeat", "publish_attachment", "land_on_work_item",
 ];
@@ -62,7 +64,7 @@ describe("remote MCP tool profile", () => {
   const all = new Set(buildTools({ notesEnabled: true }).map((tool) => tool.name));
 
   it("names only tools that exist", () => {
-    for (const name of [...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_TOOLS, ...REMOTE_MCP_SESSION_TOOLS]) expect(all.has(name), name).toBe(true);
+    for (const name of [...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_TOOLS, ...REMOTE_MCP_SESSION_TOOLS, ...REMOTE_MCP_LIFECYCLE_TOOLS]) expect(all.has(name), name).toBe(true);
   });
 
   it("carries the instance's knowledge wording on search_knowledge", () => {
@@ -75,6 +77,20 @@ describe("remote MCP tool profile", () => {
   it("serves the session-control tools", () => {
     const served = new Set(buildRemoteMcpTools(false).map((tool) => tool.name));
     for (const name of REMOTE_MCP_SESSION_TOOLS) expect(served.has(name), name).toBe(true);
+  });
+
+  it("serves the lifecycle tools under the operator-lane schema", () => {
+    const byName = new Map(buildRemoteMcpTools(false).map((tool) => [tool.name, tool]));
+    for (const name of REMOTE_MCP_LIFECYCLE_TOOLS) expect(byName.has(name), name).toBe(true);
+
+    const update = (byName.get("update_work_item")!.inputSchema.properties ?? {}) as Record<string, Record<string, unknown>>;
+    expect([...(update.status.enum as string[])].sort()).toEqual(
+      ["backlog", "blocked", "cancelled", "done", "executing", "in_review"],
+    );
+    expect(update).not.toHaveProperty("asOperator");
+
+    const archive = (byName.get("archive_work_item")!.inputSchema.properties ?? {}) as Record<string, Record<string, unknown>>;
+    expect(archive.cascade).toMatchObject({ type: "boolean" });
   });
 
   it("tells the connector where to read an answer, not to wait for a wake", async () => {
@@ -163,7 +179,7 @@ describe("remote MCP tool profile", () => {
 
   it("refuses the routes behind excluded tools", () => {
     for (const [method, path] of [
-      ["GET", "/api/sessions/abc/transcript"], ["GET", "/api/knowledge/read"], ["POST", "/api/work-items/TST-1/status"],
+      ["GET", "/api/sessions/abc/transcript"], ["GET", "/api/knowledge/read"],
       ["POST", "/api/sessions/abc/stop"], ["POST", "/api/work-items/TST-1/attachments"], ["POST", "/api/sessions"],
       ["POST", "/api/work-items/TST-1/approval/decide"], ["GET", "/api/experiments"], ["POST", "/api/experiments"],
       ["POST", "/api/labels"], ["POST", "/api/cron"], ["PUT", "/api/config"],

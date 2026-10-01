@@ -73,14 +73,13 @@ describe("redispatchTodo", () => {
     expect(typeof opts.emitProjectionEvent).toBe("function");
   });
 
-  it("starts the Dispatcher for an assigned Todo too", () => {
-    const item = store.createWorkItem({ title: "queued work", status: "assigned", assignee: "platform-worker" });
-    startTodoDispatcher.mockReturnValue({
-      ok: true, status: 201, body: { workItemId: item.id, sessionId: "sess-2", status: "running", reused: false },
-    });
+  // Queued work is the operator's to start: a sweep restarts stalled work, never
+  // work that has not begun.
+  it("refuses a backlog Todo that has an assignee, since a sweep restarts stalled work and not queued work", () => {
+    const item = store.createWorkItem({ title: "queued work", status: "backlog", assignee: "platform-worker" });
 
-    expect(redispatchTodo(item.id, context, REASON)).toEqual({ status: "assigned" });
-    expect(startTodoDispatcher).toHaveBeenCalledTimes(1);
+    expect(redispatchTodo(item.id, context, REASON)).toEqual({ unavailable: expect.stringContaining("backlog") });
+    expect(startTodoDispatcher).not.toHaveBeenCalled();
   });
 
   it("maps a reused Dispatcher to unavailable, since the work is already moving", () => {

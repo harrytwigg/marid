@@ -107,16 +107,17 @@ describe("work-item tools — registry + schemas", () => {
     expect(tool("list_work_items").description).toMatch(/roots and sub-tasks/i);
   });
 
-  it("create schema has no approval fields and update schema allows manual start but excludes cancelled", () => {
+  it("create schema has no approval fields and update schema allows manual start but leaves cancelling to archive", () => {
     const createProps = tool("create_work_item").inputSchema.properties;
     expect(Object.keys(createProps).sort()).toEqual(
       ["acceptance", "autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title", "verifyPolicy"].sort(),
     );
     expect(JSON.stringify(createProps)).not.toMatch(/approval/i);
     const status = tool("update_work_item").inputSchema.properties.status as { enum: string[] };
-    expect(status.enum).toEqual(["backlog", "assigned", "executing", "in_review", "blocked", "escalated", "done"]);
+    expect(status.enum).toEqual(["backlog", "executing", "in_review", "blocked", "done"]);
     expect(status.enum).not.toContain("cancelled");
-    expect(tool("update_work_item").inputSchema.properties.asOperator).toMatchObject({ type: "boolean" });
+    expect(tool("update_work_item").inputSchema.properties.asOperator).toMatchObject({ type: "boolean", description: expect.stringMatching(/coordinator.*done.*reason/i) });
+    expect(tool("update_work_item").inputSchema.properties).not.toHaveProperty("acknowledgeEscalated");
     expect(tool("get_work_item").inputSchema.properties.id).toMatchObject({
       pattern: "^[A-Z]{3}-[1-9][0-9]*$",
     });
@@ -134,7 +135,7 @@ describe("work-item tools — registry + schemas", () => {
     expect(todoSkill).toContain("One operator outcome should normally map to one root Todo.");
     expect(todoSkill).toContain("A checklist does not imply one Todo per item.");
     expect(todoSkill).toContain("Only independently assignable or independently reviewable deliverables become child Todos.");
-    expect(todoSkill).toContain("Never mark your own produced work `done`");
+    expect(todoSkill).toContain("No agent marks a Todo `done`.");
     expect(template).not.toContain(["", "Users", ""].join("/"));
   });
 });
@@ -337,17 +338,20 @@ describe("work-item tools — unit (stub gateway)", () => {
     ]);
   });
 
-  it("update is identity-gated, refuses cancel locally, and readable gateway refusals name the human surface", async () => {
+  it("update is identity-gated, leaves the lane to the gateway, and readable gateway refusals reach the caller", async () => {
     const anon = stub(() => ({ status: 200, body: {} }), null);
     await expect(tool("update_work_item").handler({ id: "JIN-1", status: "blocked" }, anon.ctx)).rejects.toThrow(/caller identity unavailable/i);
     const { calls, ctx } = stub(() => ({ status: 403, body: { error: "self-review ban — use the human review surface" } }), "sess-1");
-    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "cancelled", note: "drop" }, ctx)).rejects.toThrow(
-      /cancelling.*human surface/i,
-    );
+    // Not a client-side refusal: the status is a real one, so it goes to the gateway, which decides the lane.
+    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "cancelled", note: "drop" }, ctx)).rejects.toThrow(/refused \(403\).*human review surface/i);
     await expect(tool("update_work_item").handler({ id: "JIN-1", status: "done" }, ctx)).rejects.toThrow(/human review surface/i);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items/JIN-1/status");
-    expect(calls[0].body).toEqual({ status: "done" });
+    expect(calls[0].body).toEqual({ status: "cancelled", note: "drop" });
+    expect(calls[1].body).toEqual({ status: "done" });
+    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "assigned" }, ctx)).rejects.toThrow(/status must be one of/i);
+    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "escalated" }, ctx)).rejects.toThrow(/status must be one of/i);
+    expect(calls).toHaveLength(2);
   });
 
   it("accepts executing and sends it through the guarded status route", async () => {
@@ -366,14 +370,14 @@ describe("work-item tools — unit (stub gateway)", () => {
   });
 
   it("forwards asOperator for the gateway to authorize, and omits it when unasked", async () => {
-    const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", status: "assigned" } } }), "sess-1");
+    const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", status: "done" } } }), "sess-1");
 
-    await tool("update_work_item").handler({ id: "JIN-1", status: "assigned", asOperator: true }, ctx);
-    await tool("update_work_item").handler({ id: "JIN-1", status: "assigned" }, ctx);
+    await tool("update_work_item").handler({ id: "JIN-1", status: "done", note: "shipped", asOperator: true }, ctx);
+    await tool("update_work_item").handler({ id: "JIN-1", status: "done" }, ctx);
 
     expect(calls.map((c) => c.body)).toEqual([
-      { status: "assigned", asOperator: true },
-      { status: "assigned" },
+      { status: "done", note: "shipped", asOperator: true },
+      { status: "done" },
     ]);
   });
 
@@ -454,7 +458,8 @@ describe("work-item tools — integration against the real API + store", () => {
     const assigned = (await tool("assign_work_item").handler({ id: created.workItem.id, assignee: "platform-dev" }, ctx)) as {
       workItem: { assignee: string; department: string; status: string };
     };
-    expect(assigned.workItem).toMatchObject({ assignee: "platform-dev", department: "platform", status: "assigned" });
+    // Assigning never moves the Todo: a backlog Todo with an assignee is what "assigned" now means.
+    expect(assigned.workItem).toMatchObject({ assignee: "platform-dev", department: "platform", status: "backlog" });
 
     const started = (await tool("update_work_item").handler({ id: created.workItem.id, status: "executing" }, ctx)) as {
       workItem: { status: string };
@@ -487,7 +492,7 @@ describe("work-item tools — integration against the real API + store", () => {
     const manager = registry.createSession({ engine: "codex", source: "web", sourceRef: "assign-manager", title: "assign manager", employee: "platform-manager" });
     const root = registry.createSession({ engine: "codex", source: "web", sourceRef: "assign-root", title: "assign root", employee: "coo" });
 
-    const protectedItem = store.createWorkItem({ title: "Protected assignment", status: "assigned", assignee: "platform-dev", source: "session" });
+    const protectedItem = store.createWorkItem({ title: "Protected assignment", status: "backlog", assignee: "platform-dev", source: "session" });
     await expect(tool("assign_work_item").handler({ id: protectedItem.id, assignee: "outsider" }, ctxFor(outsider.id))).rejects.toThrow(
       /403.*does not own|403.*cannot assign/i,
     );
@@ -498,16 +503,16 @@ describe("work-item tools — integration against the real API + store", () => {
     };
     expect(ownerAssigned.workItem.assignee).toBe("outsider");
 
-    const managedItem = store.createWorkItem({ title: "Manager assignment", status: "assigned", assignee: "platform-dev", source: "session" });
+    const managedItem = store.createWorkItem({ title: "Manager assignment", status: "backlog", assignee: "platform-dev", source: "session" });
     expect(((await tool("assign_work_item").handler({ id: managedItem.id, assignee: "outsider" }, ctxFor(manager.id))) as { workItem: { assignee: string } }).workItem.assignee).toBe("outsider");
-    const rootItem = store.createWorkItem({ title: "Root assignment", status: "assigned", assignee: "platform-dev", source: "session" });
+    const rootItem = store.createWorkItem({ title: "Root assignment", status: "backlog", assignee: "platform-dev", source: "session" });
     expect(((await tool("assign_work_item").handler({ id: rootItem.id, assignee: "outsider" }, ctxFor(root.id))) as { workItem: { assignee: string } }).workItem.assignee).toBe("outsider");
 
     const unassigned = store.createWorkItem({ title: "Claimable backlog", status: "backlog", assignee: null, source: "human" });
     const claimed = (await tool("assign_work_item").handler({ id: unassigned.id, assignee: "outsider" }, ctxFor(outsider.id))) as {
       workItem: { assignee: string; status: string };
     };
-    expect(claimed.workItem).toMatchObject({ assignee: "outsider", status: "assigned" });
+    expect(claimed.workItem).toMatchObject({ assignee: "outsider", status: "backlog" });
 
     const terminal = store.createWorkItem({ title: "Closed assignment", status: "done", assignee: "platform-dev", source: "session" });
     await expect(tool("assign_work_item").handler({ id: terminal.id, assignee: "outsider" }, ctxFor(owner.id))).rejects.toThrow(
@@ -530,11 +535,11 @@ describe("work-item tools — integration against the real API + store", () => {
     };
     expect(moved.workItem.status).toBe("in_review");
     await expect(tool("update_work_item").handler({ id: delegated.workItemId, status: "done" }, execCtx)).rejects.toThrow(
-      /self-review ban.*human review surface/i,
+      /operator's decision.*in_review/i,
     );
   });
 
-  it("requires a server-minted session capability, then lets any non-executor review-close", async () => {
+  it("requires a server-minted session capability, and no agent session closes, only the coordinator for the operator", async () => {
     const reviewer = registry.createSession({ engine: "codex", source: "web", sourceRef: "qa-reviewer", title: "qa reviewer" });
     const operatorSource = registry.createSession({ engine: "codex", source: "web", sourceRef: "operator-source", title: "operator source" });
     const executor = registry.createSession({
@@ -563,15 +568,25 @@ describe("work-item tools — integration against the real API + store", () => {
     expect(store.getWorkItem(item.id)?.status).toBe("in_review");
 
     await expect(tool("update_work_item").handler({ id: item.id, status: "done" }, ctxFor(executor.id))).rejects.toThrow(
-      /self-review ban.*human review surface/i,
+      /operator's decision.*in_review/i,
     );
     expect(store.getWorkItem(item.id)?.status).toBe("in_review");
 
-    // A valid caller needs no durable relationship to the Todo; only the linked
-    // execution attempt is withheld by the self-review ban.
-    const closed = (await tool("update_work_item").handler({ id: item.id, status: "done" }, ctxFor(operatorSource.id))) as {
-      workItem: { status: string };
-    };
+    // There is no agent close path at all: the session that delegated the work cannot
+    // close it either, and neither can a coordinator that does not say it acts for the operator.
+    await expect(tool("update_work_item").handler({ id: item.id, status: "done" }, ctxFor(reviewer.id))).rejects.toThrow(
+      /operator's decision.*in_review/i,
+    );
+    await expect(tool("update_work_item").handler({ id: item.id, status: "done" }, ctxFor(operatorSource.id))).rejects.toThrow(
+      /operator's decision.*in_review/i,
+    );
+    expect(store.getWorkItem(item.id)?.status).toBe("in_review");
+
+    // The operator's coordinator chat may close for the operator, with the reason on the record.
+    const closed = (await tool("update_work_item").handler(
+      { id: item.id, status: "done", asOperator: true, note: "verified by the operator in chat" },
+      ctxFor(operatorSource.id),
+    )) as { workItem: { status: string } };
     expect(closed.workItem.status).toBe("done");
   });
 
@@ -581,17 +596,17 @@ describe("work-item tools — integration against the real API + store", () => {
 
     const backlog = store.createWorkItem({ title: "No shortcut close", status: "backlog", assignee: "platform-dev", source: "session" });
     await expect(tool("update_work_item").handler({ id: backlog.id, status: "done" }, ctxFor(owner.id))).rejects.toThrow(
-      /reviewer.*in_review|human review surface/i,
+      /operator's decision.*in_review/i,
     );
     expect(store.getWorkItem(backlog.id)?.status).toBe("backlog");
 
-    const unowned = store.createWorkItem({ title: "Assigned to someone else", status: "assigned", assignee: "platform-dev", source: "session" });
+    const unowned = store.createWorkItem({ title: "Assigned to someone else", status: "backlog", assignee: "platform-dev", source: "session" });
     const reported = (await tool("update_work_item").handler({ id: unowned.id, status: "blocked", note: "waiting" }, ctxFor(other.id))) as {
       workItem: { status: string };
     };
     expect(reported.workItem.status).toBe("blocked");
 
-    const owned = store.createWorkItem({ title: "Owner may report blocked", status: "assigned", assignee: "platform-dev", source: "session" });
+    const owned = store.createWorkItem({ title: "Owner may report blocked", status: "backlog", assignee: "platform-dev", source: "session" });
     const blocked = (await tool("update_work_item").handler({ id: owned.id, status: "blocked", note: "waiting on input" }, ctxFor(owner.id))) as {
       workItem: { status: string };
     };
@@ -601,7 +616,7 @@ describe("work-item tools — integration against the real API + store", () => {
   it("requests a default-routed approval idempotently", async () => {
     const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-owner", title: "approval owner", employee: "platform-dev" });
     const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Request routed approval", status: "assigned", assignee: "platform-dev", source: "session" });
+    const item = store.createWorkItem({ title: "Request routed approval", status: "backlog", assignee: "platform-dev", source: "session" });
     const first = (await requestTool.handler({ id: item.id, request: "Approve release" }, ctxFor(owner.id))) as {
       workItem: { approvalState: string; approvalTarget: string };
     };
@@ -617,7 +632,7 @@ describe("work-item tools — integration against the real API + store", () => {
     const linkedExecutor = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-executor", title: "approval executor" });
     const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
 
-    const explicitItem = store.createWorkItem({ title: "Explicit approval target", status: "assigned", assignee: "platform-dev", source: "session" });
+    const explicitItem = store.createWorkItem({ title: "Explicit approval target", status: "backlog", assignee: "platform-dev", source: "session" });
     const explicit = (await requestTool.handler({ id: explicitItem.id, request: "Root review", target: "coo" }, ctxFor(owner.id))) as {
       workItem: { approvalState: string; approvalTarget: string };
     };
@@ -635,7 +650,7 @@ describe("work-item tools — integration against the real API + store", () => {
     const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-reject-owner", title: "approval reject owner", employee: "platform-dev" });
     const outsider = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-outsider", title: "approval outsider", employee: "outsider" });
     const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Reject unsafe approval requests", status: "assigned", assignee: "platform-dev", source: "session" });
+    const item = store.createWorkItem({ title: "Reject unsafe approval requests", status: "backlog", assignee: "platform-dev", source: "session" });
 
     await expect(requestTool.handler({ id: item.id, request: "Steal review" }, ctxFor(outsider.id))).rejects.toThrow(
       /403.*does not own|403.*cannot request approval/i,
@@ -654,7 +669,7 @@ describe("work-item tools — integration against the real API + store", () => {
     const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
     const decideTool = buildTools().find((t) => t.name === "decide_work_item_approval")!;
     const escalateTool = buildTools().find((t) => t.name === "escalate_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Decide requested approval", status: "assigned", assignee: "platform-dev", source: "session" });
+    const item = store.createWorkItem({ title: "Decide requested approval", status: "backlog", assignee: "platform-dev", source: "session" });
 
     await requestTool.handler({ id: item.id, request: "Approve release" }, ctxFor(owner.id));
     const decided = (await decideTool.handler({ id: item.id, decision: "approve", note: "ship" }, ctxFor(manager.id))) as {
@@ -662,7 +677,7 @@ describe("work-item tools — integration against the real API + store", () => {
     };
     expect(decided.workItem.approvalState).toBe("approved");
 
-    const escalationItem = store.createWorkItem({ title: "Escalate requested approval", status: "assigned", assignee: "platform-dev", source: "session" });
+    const escalationItem = store.createWorkItem({ title: "Escalate requested approval", status: "backlog", assignee: "platform-dev", source: "session" });
     await requestTool.handler({ id: escalationItem.id, request: "Escalate release" }, ctxFor(owner.id));
     const escalated = (await escalateTool.handler({ id: escalationItem.id, reason: "operator needed" }, ctxFor(manager.id))) as {
       workItem: { approvalState: string; approvalEscalatedAt: string | null };
@@ -671,19 +686,23 @@ describe("work-item tools — integration against the real API + store", () => {
     expect(escalated.workItem.approvalEscalatedAt).toBeTruthy();
   });
 
-  it("refuses unrelated archive, while owner/root archive resolves pending approval without deleting evidence", async () => {
+  it("refuses archive to every agent session, while the operator's connector archives and resolves pending approval without deleting evidence", async () => {
     const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-owner", title: "archive owner", employee: "platform-dev" });
     const outsider = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-outsider", title: "archive outsider", employee: "outsider" });
     const root = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-root", title: "archive root", employee: "coo" });
-    const item = store.createWorkItem({ title: "Archive, do not delete", status: "assigned", assignee: "platform-dev", source: "session" });
+    const connector = registry.createSession({ engine: "codex", source: "remote-mcp", sourceRef: "remote-mcp:archive-op@example.com" });
+    const item = store.createWorkItem({ title: "Archive, do not delete", status: "backlog", assignee: "platform-dev", source: "session" });
     approvals.requestApproval(item.id, { request: "Approve release", target: "platform-manager" });
 
-    await expect(tool("archive_work_item").handler({ id: item.id, note: "malicious cancellation" }, ctxFor(outsider.id))).rejects.toThrow(
-      /403.*does not own|403.*cannot archive/i,
-    );
-    expect(store.getWorkItem(item.id)).toMatchObject({ status: "assigned", approvalState: "pending" });
+    // Archiving is the operator's: the Todo's owner and the portal/COO session are refused like anyone else.
+    for (const session of [outsider, owner, root]) {
+      await expect(tool("archive_work_item").handler({ id: item.id, note: "cancellation" }, ctxFor(session.id))).rejects.toThrow(
+        /403.*operator's decision/i,
+      );
+    }
+    expect(store.getWorkItem(item.id)).toMatchObject({ status: "backlog", approvalState: "pending" });
 
-    const archived = (await tool("archive_work_item").handler({ id: item.id, note: "obsolete" }, ctxFor(owner.id))) as {
+    const archived = (await tool("archive_work_item").handler({ id: item.id, note: "obsolete" }, ctxFor(connector.id))) as {
       archived: boolean;
       workItem: { id: string; status: string; closedAt: string | null; approvalState: string; approvalDecidedBy: string };
     };
@@ -693,17 +712,13 @@ describe("work-item tools — integration against the real API + store", () => {
       id: item.id,
       status: "cancelled",
       approvalState: "rejected",
-      approvalDecidedBy: `session:${owner.id}`,
+      approvalDecidedBy: `session:${connector.id}`,
     });
     expect(archived.workItem.closedAt).toBeTruthy();
     expect(store.getWorkItem(item.id)?.status).toBe("cancelled");
     const events = store.listWorkItemEvents(item.id);
-    expect(events.some((e) => e.kind === "approval_decided" && e.actor === `session:${owner.id}`)).toBe(true);
-    expect(events.some((e) => e.kind === "status_change" && e.fromStatus === "assigned" && e.toStatus === "cancelled")).toBe(true);
-
-    const rootOwned = store.createWorkItem({ title: "Root may archive", status: "assigned", assignee: "platform-dev", source: "session" });
-    const rootArchived = (await tool("archive_work_item").handler({ id: rootOwned.id }, ctxFor(root.id))) as { workItem: { status: string } };
-    expect(rootArchived.workItem.status).toBe("cancelled");
+    expect(events.some((e) => e.kind === "approval_decided" && e.actor === `session:${connector.id}`)).toBe(true);
+    expect(events.some((e) => e.kind === "status_change" && e.fromStatus === "backlog" && e.toStatus === "cancelled")).toBe(true);
   });
 
   it("recursively rejects approval keys and validates exact verifyPolicy/provenance schemas", async () => {

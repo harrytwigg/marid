@@ -27,20 +27,22 @@ const mk = (status: Store["createWorkItem"] extends (i: infer I) => unknown ? (I
   store.createWorkItem({ title: `t-${Math.random().toString(36).slice(2, 8)}`, status, ...extra });
 
 describe("transition — the guarded edge map", () => {
-  it.each(["backlog", "assigned"] as const)("allows an operator to manually start %s work", (status) => {
-    const wi = mk(status);
-    const { item } = tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
+  it("allows an operator to manually start backlog work, assigned or not", () => {
+    for (const extra of [{}, { assignee: "ana" }]) {
+      const wi = mk("backlog", extra);
+      const { item } = tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
 
-    expect(item.status).toBe("executing");
-    expect(store.listWorkItemEvents(wi.id).at(-1)).toMatchObject({
-      kind: "status_change",
-      fromStatus: status,
-      toStatus: "executing",
-      actor: "operator",
-    });
+      expect(item.status).toBe("executing");
+      expect(store.listWorkItemEvents(wi.id).at(-1)).toMatchObject({
+        kind: "status_change",
+        fromStatus: "backlog",
+        toStatus: "executing",
+        actor: "operator",
+      });
+    }
   });
 
-  it.each(["done", "cancelled", "in_review"] as const)("rejects a manual start from %s", (status) => {
+  it.each(["done", "cancelled", "in_review", "blocked"] as const)("rejects a manual start from %s", (status) => {
     const wi = mk(status);
 
     expect(() => tr.transition(wi.id, "executing", "operator", { human: true, manual: true })).toThrowError(
@@ -52,14 +54,33 @@ describe("transition — the guarded edge map", () => {
   it.each([
     ["blocked", "executing"],
     ["in_review", "executing"],
-    ["executing", "assigned"],
-  ] as const)("lets the agent lane walk %s → %s, which the edge map does not declare", (from, to) => {
+    ["executing", "backlog"],
+  ] as const)("lets the agent lane walk %s → %s, along a declared edge", (from, to) => {
     const wi = mk(from);
 
     expect(tr.transition(wi.id, to, "session:agent-1", { manual: true, agent: true }).item.status).toBe(to);
   });
 
-  it.each(["done", "cancelled", "escalated"] as const)("still refuses the agent lane an exit from %s", (status) => {
+  it("applies the edge map to the agent lane too: opts.agent skips only the manual-start rule", () => {
+    // in_review → backlog is no declared edge, and `agent` does not widen the map.
+    const wi = mk("in_review");
+
+    expect(() => tr.transition(wi.id, "backlog", "session:agent-1", { manual: true, agent: true })).toThrowError(
+      /illegal transition in_review → backlog/,
+    );
+    expect(store.getWorkItem(wi.id)?.status).toBe("in_review");
+  });
+
+  it("refuses a manual start from blocked unless the caller is the agent lane", () => {
+    const wi = mk("blocked");
+
+    expect(() => tr.transition(wi.id, "executing", "operator", { human: true, manual: true })).toThrowError(
+      /illegal manual transition blocked → executing/,
+    );
+    expect(tr.transition(wi.id, "executing", "session:agent-1", { manual: true, agent: true }).item.status).toBe("executing");
+  });
+
+  it.each(["done", "cancelled"] as const)("still refuses the agent lane an exit from %s", (status) => {
     const wi = mk(status);
 
     expect(() => tr.transition(wi.id, "executing", "session:agent-1", { manual: true, agent: true })).toThrowError(
@@ -77,23 +98,23 @@ describe("transition — the guarded edge map", () => {
 
   it("moves along declared edges and appends a status_change event with actor + detail", () => {
     const wi = mk("backlog");
-    const { item, escalated } = tr.transition(wi.id, "assigned", "coo", { detail: { assignee: "ana" } });
-    expect(item.status).toBe("assigned");
+    const { item, escalated } = tr.transition(wi.id, "executing", "coo", { detail: { assignee: "ana" } });
+    expect(item.status).toBe("executing");
     expect(escalated).toBe(false);
     const events = store.listWorkItemEvents(wi.id);
     expect(events.at(-1)).toMatchObject({
       kind: "status_change",
       fromStatus: "backlog",
-      toStatus: "assigned",
+      toStatus: "executing",
       actor: "coo",
       detail: { assignee: "ana" },
     });
   });
 
   it("THROWS on an undeclared edge and writes nothing (illegal transition rejected)", () => {
-    const wi = mk("executing");
-    expect(() => tr.transition(wi.id, "assigned", "anyone")).toThrowError(/illegal transition executing → assigned/);
-    expect(store.getWorkItem(wi.id)?.status).toBe("executing");
+    const wi = mk("in_review");
+    expect(() => tr.transition(wi.id, "backlog", "anyone")).toThrowError(/illegal transition in_review → backlog/);
+    expect(store.getWorkItem(wi.id)?.status).toBe("in_review");
     // No status_change event was appended for the refused edge.
     expect(store.listWorkItemEvents(wi.id).filter((e) => e.kind === "status_change")).toHaveLength(0);
   });
@@ -107,8 +128,10 @@ describe("transition — the guarded edge map", () => {
     expect(store.listWorkItemEvents(wi.id)).toHaveLength(before); // no event for a no-op
   });
 
-  it("sticky terminals (done/cancelled/escalated) are left only under human authority", () => {
-    for (const sticky of ["done", "cancelled", "escalated"] as const) {
+  it("sticky terminals (done/cancelled) are left only under human authority; blocked is not sticky", () => {
+    const parked = mk("blocked");
+    expect(tr.transition(parked.id, "backlog", "reconciler").item.status).toBe("backlog");
+    for (const sticky of ["done", "cancelled"] as const) {
       const wi = mk(sticky);
       expect(() => tr.transition(wi.id, "backlog", "reconciler")).toThrowError(/human decision/);
       expect(store.getWorkItem(wi.id)?.status).toBe(sticky);
@@ -179,7 +202,7 @@ describe("transition — the guarded edge map", () => {
     }
   });
 
-  it("assignment backlog → assigned fires the registered todo-status-change listener live", () => {
+  it("assignment never changes status, so it does not fire the todo-status-change listener", () => {
     const wi = mk("backlog");
     const seen: unknown[] = [];
     tr.setTodoStatusChangeListener((event) => {
@@ -187,31 +210,23 @@ describe("transition — the guarded edge map", () => {
     });
     try {
       const assigned = tr.assignWorkItem(wi.id, "platform-worker", "platform", "platform-manager");
-      expect(assigned?.status).toBe("assigned");
+      expect(assigned?.status).toBe("backlog");
       expect(assigned?.assignee).toBe("platform-worker");
-      expect(seen).toEqual([
-        expect.objectContaining({
-          workItemId: wi.id,
-          fromStatus: "backlog",
-          toStatus: "assigned",
-          actor: "platform-manager",
-          item: expect.objectContaining({ id: wi.id, status: "assigned", assignee: "platform-worker" }),
-        }),
-      ]);
+      expect(seen).toEqual([]);
     } finally {
       tr.setTodoStatusChangeListener(null);
     }
   });
 
-  it("atomically snapshots post-assignment provenance into an assignment-caused status event", () => {
+  it("atomically snapshots post-assignment provenance into the assignment's note event", () => {
     const wi = mk("backlog", { source: "delegation", department: "old", assignee: "old-owner" });
 
     tr.assignWorkItem(wi.id, "platform-worker", "platform", "platform-manager");
 
     expect(store.listWorkItemEvents(wi.id).at(-1)).toMatchObject({
-      kind: "status_change",
-      fromStatus: "backlog",
-      toStatus: "assigned",
+      kind: "note",
+      fromStatus: null,
+      toStatus: null,
       detail: {
         todoProvenance: {
           source: "delegation",
@@ -252,7 +267,7 @@ describe("transition — the bounce rule (rounds + max-rounds escalation)", () =
     expect(last).toMatchObject({ kind: "status_change", detail: { bounce: true, rounds: 1, critique: "fix X" } });
   });
 
-  it("the bounce that reaches maxRounds ESCALATES instead of looping, with an 'escalated' event", () => {
+  it("the bounce that reaches maxRounds ESCALATES to blocked instead of looping, with an 'escalated' event", () => {
     const wi = store.createWorkItem({
       title: "loop killer",
       status: "in_review",
@@ -261,14 +276,14 @@ describe("transition — the bounce rule (rounds + max-rounds escalation)", () =
     db.prepare("UPDATE work_items SET rounds = 1 WHERE id = ?").run(wi.id); // one bounce already burned
     const r = tr.transition(wi.id, "executing", "reviewer", { bounce: true });
     expect(r.escalated).toBe(true);
-    expect(r.item.status).toBe("escalated");
+    expect(r.item.status).toBe("blocked");
     expect(r.item.rounds).toBe(2);
     const last = store.listWorkItemEvents(wi.id).at(-1)!;
     expect(last).toMatchObject({
       kind: "escalated",
       fromStatus: "in_review",
-      toStatus: "escalated",
-      detail: { reason: "max-rounds-exhausted", maxRounds: 2 },
+      toStatus: "blocked",
+      detail: { reason: "max-rounds-exhausted", maxRounds: 2, declared: true },
     });
   });
 
@@ -284,7 +299,7 @@ describe("transition — the bounce rule (rounds + max-rounds escalation)", () =
     tr.transition(wi.id, "in_review", "worker");
     const r2 = tr.transition(wi.id, "executing", "reviewer", { bounce: true });
     expect(r2.escalated).toBe(true);
-    expect(r2.item.status).toBe("escalated");
+    expect(r2.item.status).toBe("blocked");
   });
 });
 
@@ -292,8 +307,8 @@ describe("transitionDerived — the reconciler's best-effort wrapper", () => {
   it("returns the item on success and undefined on a sticky/illegal race instead of throwing", () => {
     const wi = mk("backlog");
     expect(tr.transitionDerived(wi.id, "executing", "reconciler")?.status).toBe("executing");
-    const sticky = mk("escalated");
+    const sticky = mk("done");
     expect(tr.transitionDerived(sticky.id, "executing", "reconciler")).toBeUndefined();
-    expect(store.getWorkItem(sticky.id)?.status).toBe("escalated");
+    expect(store.getWorkItem(sticky.id)?.status).toBe("done");
   });
 });

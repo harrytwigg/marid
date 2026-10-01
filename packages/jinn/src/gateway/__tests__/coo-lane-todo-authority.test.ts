@@ -17,11 +17,13 @@ import {
  *
  * The COO is not an org employee, so `authorizeWorkItemOwnerManagerOrRoot()`
  * used to refuse it for having no employee name to check — the shape that makes
- * it the operator's own lane read as no identity at all. It is admitted now, and
- * the refusal it used to get still stands for the employee-less session anyone
- * CAN mint: a child, which carries a parent and is therefore not the portal.
+ * it the operator's own lane read as no identity at all. It is admitted now for
+ * the lifecycle routes it is meant to reach (delegation, below).
  *
- * The second half is the boundary. Widening the lifecycle lane must not reach
+ * Archiving is not among them: it is the operator's or the connector's alone, so
+ * the portal session is refused like every other session.
+ *
+ * The last half is the boundary. Widening the lifecycle lane must not reach
  * the two decisions that were routed away from agents on purpose: a gate the
  * operator reserved, and closing work you produced yourself.
  */
@@ -138,10 +140,10 @@ afterAll(() => {
 });
 
 describe("POST /api/work-items/:id/archive — the COO lane's standing", () => {
-  it("archives a Todo the COO neither created nor is assigned, and names the session that did it", async () => {
+  it("refuses it: archiving is the operator's, so the portal session cannot archive either", async () => {
     const item = store.createWorkItem({
       title: "Superseded objective",
-      status: "assigned",
+      status: "backlog",
       assignee: "platform-worker",
       source: "human",
     });
@@ -149,31 +151,11 @@ describe("POST /api/work-items/:id/archive — the COO lane's standing", () => {
 
     const cap = await post(`/api/work-items/${item.id}/archive`, { note: "Replaced by a newer objective." }, toolHeaders(coo));
 
-    expect([cap.status, cap.body.workItem.status]).toEqual([200, "cancelled"]);
-    expect(store.listWorkItemEvents(item.id).at(-1)).toMatchObject({
-      fromStatus: "assigned",
-      toStatus: "cancelled",
-      actor: `session:${coo}`,
-      detail: { action: "archive", note: "Replaced by a newer objective." },
-    });
-  });
-
-  it("still refuses the employee-less session anyone can mint — a child is not the portal", async () => {
-    const child = reg.createSession({
-      engine: "codex",
-      source: "web",
-      sourceRef: "web:coo-child-archives",
-      parentSessionId: portalSession("web:coo-parent-archives"),
-    }).id;
-    const item = store.createWorkItem({ title: "Not the child's to archive", status: "assigned", source: "human" });
-
-    const cap = await post(`/api/work-items/${item.id}/archive`, {}, toolHeaders(child));
-
     expect([cap.status, cap.body.error]).toEqual([
       403,
-      `session ${child} has no employee identity and cannot archive Todo ${item.id}`,
+      `archiving Todo ${item.id} is the operator's decision; agents do not archive Todos`,
     ]);
-    expect(store.getWorkItem(item.id)?.status).toBe("assigned");
+    expect(store.getWorkItem(item.id)?.status).toBe("backlog");
   });
 });
 
@@ -184,7 +166,7 @@ describe("POST /api/delegations — the COO lane's standing", () => {
     // used to lose the caller.
     const item = store.createWorkItem({
       title: "Objective owned elsewhere",
-      status: "assigned",
+      status: "backlog",
       assignee: "platform-worker",
       department: "platform",
       source: "human",
@@ -238,7 +220,7 @@ describe("the two decisions the COO lane still does not reach", () => {
 
     const cap = await post(
       `/api/work-items/${item.id}/status`,
-      { status: "done", asOperator: true },
+      { status: "done", asOperator: true, note: "Closing my own work." },
       toolHeaders(coo),
     );
 

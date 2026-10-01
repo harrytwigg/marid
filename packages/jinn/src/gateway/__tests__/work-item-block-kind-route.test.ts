@@ -26,12 +26,12 @@ describe("POST /api/work-items/:id/status — blockKind", () => {
     expect([cap.status, cap.body.workItem?.status]).toEqual([200, "blocked"]);
   });
 
-  it("accepts dependency and puts the Todo back in its queue instead", async () => {
-    const assigned = await block(item("dependency assigned").id, "dependency");
-    expect([assigned.status, assigned.body.workItem?.status]).toEqual([200, "assigned"]);
+  it("accepts dependency and puts the Todo back in its queue instead, owned or not", async () => {
+    const owned = await block(item("dependency owned").id, "dependency");
+    expect([owned.status, owned.body.workItem?.status, owned.body.workItem?.assignee]).toEqual([200, "backlog", "platform-worker"]);
 
-    const unassigned = await block(item("dependency unassigned", null).id, "dependency");
-    expect([unassigned.status, unassigned.body.workItem?.status]).toEqual([200, "backlog"]);
+    const unowned = await block(item("dependency unowned", null).id, "dependency");
+    expect([unowned.status, unowned.body.workItem?.status]).toEqual([200, "backlog"]);
   });
 
   it("rejects an unrecognized kind with a 400 and leaves the Todo where it was", async () => {

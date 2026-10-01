@@ -40,23 +40,37 @@ function tool(name: string): JinnMcpTool {
 /* PLA-96: the route owns who may close a tree, so the tool's only job is to
  * carry the ask there intact — and to hand the refusal back unsoftened. */
 describe("update_work_item — cascade close", () => {
-  it("declares both cascade options as booleans", () => {
-    const { properties } = tool("update_work_item").inputSchema;
-    expect(properties.cascade).toMatchObject({ type: "boolean" });
-    expect(properties.acknowledgeEscalated).toMatchObject({ type: "boolean" });
+  it("declares cascade as a boolean, and no longer declares the retired acknowledgement", () => {
+    expect(tool("update_work_item").inputSchema.properties.cascade).toMatchObject({ type: "boolean" });
+    expect(tool("update_work_item").inputSchema.properties).not.toHaveProperty("acknowledgeEscalated");
   });
 
-  it("forwards them to the guarded status route, and sends neither when unasked", async () => {
+  it("forwards it to the guarded status route, and sends it only when asked", async () => {
     const { calls, ctx } = stub();
 
-    await tool("update_work_item").handler({ id: "JIN-1", status: "done", cascade: true, acknowledgeEscalated: true }, ctx);
+    await tool("update_work_item").handler({ id: "JIN-1", status: "done", cascade: true }, ctx);
     await tool("update_work_item").handler({ id: "JIN-1", status: "done" }, ctx);
 
     expect(calls.map((c) => c.body)).toEqual([
-      { status: "done", cascade: true, acknowledgeEscalated: true },
+      { status: "done", cascade: true },
       { status: "done" },
     ]);
     expect(calls[0].url).toBe("http://gateway.test/api/work-items/JIN-1/status");
+  });
+
+  it("forwards cascade to the archive route, refuses a non-boolean, and sends it only when asked", async () => {
+    const { calls, ctx } = stub(200, { workItem: { id: "JIN-1", status: "cancelled" }, archived: true });
+
+    await tool("archive_work_item").handler({ id: "JIN-1", note: "obsolete", cascade: true }, ctx);
+    await tool("archive_work_item").handler({ id: "JIN-1", note: "obsolete" }, ctx);
+
+    expect(calls.map((c) => c.body)).toEqual([
+      { note: "obsolete", cascade: true },
+      { note: "obsolete" },
+    ]);
+    expect(calls[0].url).toBe("http://gateway.test/api/work-items/JIN-1/archive");
+    await expect(tool("archive_work_item").handler({ id: "JIN-1", cascade: "yes" }, ctx)).rejects.toThrow(/cascade must be a boolean/);
+    expect(calls).toHaveLength(2);
   });
 
   it("surfaces the route's refusal to a session that may not cascade", async () => {

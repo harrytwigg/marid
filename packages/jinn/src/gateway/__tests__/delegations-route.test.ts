@@ -715,11 +715,10 @@ describe("POST /api/delegations — the transaction (happy paths)", () => {
     });
   });
 
-  // Handing an `in_review` Todo to someone is handing it to a
-  // reviewer: the link records that, and the self-review ban — which reads the
-  // link, not the assignee — lets them record the close they were delegated to
-  // make. Producers on the same Todo stay banned.
-  it("links a delegate onto an in_review Todo as its REVIEWER, who can then close it", async () => {
+  // Handing an `in_review` Todo to someone is handing it to a reviewer: the
+  // link records that. A reviewer returns findings; it does not close the Todo —
+  // no agent session closes, so the close stays the operator's.
+  it("links a delegate onto an in_review Todo as its REVIEWER, who still cannot close it", async () => {
     const parentId = await createOperatorSession("producer handing off");
     const item = store.createWorkItem({
       title: "Ready for review",
@@ -732,7 +731,7 @@ describe("POST /api/delegations — the transaction (happy paths)", () => {
     const resp = await call(
       "POST",
       "/api/delegations",
-      { workItemId: item.id, employee: "qa-emp", task: "Review the branch and close if it holds" },
+      { workItemId: item.id, employee: "qa-emp", task: "Review the branch and report findings" },
       { [CALLER_SESSION_HEADER]: parentId, [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(parentId) },
     );
 
@@ -750,7 +749,13 @@ describe("POST /api/delegations — the transaction (happy paths)", () => {
         [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
       },
     );
-    expect([reviewerClose.status, store.getWorkItem(item.id)?.status]).toEqual([200, "done"]);
+    expect([reviewerClose.status, store.getWorkItem(item.id)?.status]).toEqual([403, "in_review"]);
+  });
+
+  it("refuses to delegate to a system employee, which routes and shapes Todos but owns none", async () => {
+    const resp = await call("POST", "/api/delegations", { employee: "todo-dispatcher", task: "Take this one" });
+    expect(resp.status).toBe(400);
+    expect(resp.body.error).toMatch(/system employee/i);
   });
 
   it("takes an explicit review intent on a Todo that is not yet in review, and refuses an unknown one", async () => {
