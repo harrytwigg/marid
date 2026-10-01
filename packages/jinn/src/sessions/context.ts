@@ -4,6 +4,7 @@ import type { Employee, JinnConfig, OrgHierarchy, OrgNode } from "../shared/type
 import { JINN_HOME, ORG_DIR, CRON_JOBS, DOCS_DIR } from "../shared/paths.js";
 import { engineAvailable, isKnownEngine } from "../shared/models.js";
 import { gatewayBaseUrl } from "../gateway/gateway-info.js";
+import { readKnowledgeFile } from "../notes/store.js";
 import {
   buildRosterUnavailableSection,
   buildScopedRosterSection,
@@ -281,6 +282,11 @@ export function buildContext(opts: BuildContextOptions): string {
     });
   }
 
+  // ── ESSENTIAL: Instance files injected into every prompt (context.alwaysInclude) ──
+  for (const included of buildAlwaysIncludeSections(opts.config?.context?.alwaysInclude)) {
+    sections.push({ tier: Tier.ESSENTIAL, ...included });
+  }
+
   // ── STANDARD: Relationship-scoped role orientation ──────────
   const jinnMcpAttached = opts.jinnMcpAttached === true;
   // A roster that could not be read is reported, never omitted — an absent
@@ -332,7 +338,7 @@ export function buildContext(opts: BuildContextOptions): string {
   // jinn-MCP-attached sessions the ~100-file index collapses to a 2-line
   // manifest pointing at search_knowledge/read_knowledge; everyone
   // else keeps the full index byte-identical.
-  const knowledgeCtx = buildKnowledgeContext(opts.jinnMcpAttached);
+  const knowledgeCtx = buildKnowledgeContext(opts.jinnMcpAttached, opts.config?.knowledge?.guidance);
   if (knowledgeCtx) {
     sections.push({
       tier: Tier.OPTIONAL,
@@ -711,12 +717,43 @@ const KNOWLEDGE_MCP_MANIFEST = [
   "Search company knowledge in `knowledge/` + `docs/` with `search_knowledge`; `read_knowledge { path }` can read any relative file inside the Jinn instance.",
 ].join("\n");
 
-function buildKnowledgeContext(jinnMcpAttached?: boolean): string | null {
+function buildKnowledgeContext(jinnMcpAttached?: boolean, guidance?: string): string | null {
   if (!knowledgeCache || Date.now() - knowledgeCache.builtAt >= KNOWLEDGE_CACHE_TTL_MS) {
     knowledgeCache = { builtAt: Date.now(), value: buildKnowledgeContextUncached() };
   }
   if (knowledgeCache.value === null) return null;
-  return jinnMcpAttached ? KNOWLEDGE_MCP_MANIFEST : knowledgeCache.value;
+  const section = jinnMcpAttached ? KNOWLEDGE_MCP_MANIFEST : knowledgeCache.value;
+  const extra = guidance?.trim();
+  // The index ends in a blank line; the manifest does not.
+  return extra ? `${section.trimEnd()}\n${extra}` : section;
+}
+
+/** Per-file cap for `context.alwaysInclude`; these files ride in every prompt, so they stay small. */
+export const ALWAYS_INCLUDE_FILE_CHAR_CAP = 16_000;
+
+/**
+ * One section per readable `context.alwaysInclude` path. Reads go through the
+ * instance-file reader, so traversal, absolute paths and symlink escapes are
+ * refused; an unreadable or empty file is skipped rather than failing the prompt.
+ */
+function buildAlwaysIncludeSections(paths?: string[]): Array<Pick<Section, "marker" | "content" | "summary">> {
+  if (!Array.isArray(paths)) return [];
+  const out: Array<Pick<Section, "marker" | "content" | "summary">> = [];
+  for (const relPath of new Set(paths)) {
+    const read = readKnowledgeFile(relPath);
+    if (!read.ok || read.content.trim() === "") continue;
+    const cut = read.totalChars > ALWAYS_INCLUDE_FILE_CHAR_CAP;
+    const body = cut ? read.content.slice(0, ALWAYS_INCLUDE_FILE_CHAR_CAP).trimEnd() : read.content.trimEnd();
+    const heading = `## Always in context: ${relPath}`;
+    out.push({
+      marker: heading,
+      content: cut
+        ? `${heading}\n${body}\n\n[Truncated at ${ALWAYS_INCLUDE_FILE_CHAR_CAP} chars — read ${relPath} for the rest]`
+        : `${heading}\n${body}`,
+      summary: `${heading}\nRead \`${relPath}\` before acting; it is current truth the prompt budget had no room for.`,
+    });
+  }
+  return out;
 }
 
 function buildKnowledgeContextUncached(): string | null {

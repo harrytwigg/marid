@@ -93,10 +93,18 @@ function gatewayFailure(what: string, status: number, body: unknown): JinnMcpToo
   return new JinnMcpToolError(`${what} failed (HTTP ${status}): ${detail}`);
 }
 
-export function buildKnowledgeTools(): JinnMcpTool[] {
+/** Instance wording for knowledge search (config `knowledge.*`); both absent leaves the built-in text. */
+export interface KnowledgeSearchWording {
+  guidance?: string;
+  missHint?: string;
+}
+
+export function buildKnowledgeTools(wording: KnowledgeSearchWording = {}): JinnMcpTool[] {
+  const guidance = wording.guidance?.trim();
+  const missHint = wording.missHint?.trim();
   const searchKnowledge: JinnMcpTool = {
     name: "search_knowledge",
-    description: "Search knowledge/ and docs/ markdown; snippets only.",
+    description: `Search knowledge/ and docs/ markdown; snippets only.${guidance ? ` ${guidance}` : ""}`,
     inputSchema: {
       type: "object",
       properties: {
@@ -116,7 +124,7 @@ export function buildKnowledgeTools(): JinnMcpTool[] {
         results,
         hint:
           results.length === 0
-            ? "No hits. Try fewer words."
+            ? missHint || "No hits. Try fewer words."
             : "Next: read_knowledge { path }.",
       };
     },

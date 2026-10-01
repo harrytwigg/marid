@@ -40,6 +40,8 @@ export function validateConfigShape(config: unknown): string[] {
   const problems: string[] = [];
   const c = config as Record<string, any>;
 
+  problems.push(...validateContextShape(c.context), ...validateKnowledgeShape(c.knowledge));
+
   if (c.gateway !== undefined) {
     if (typeof c.gateway !== "object" || c.gateway === null || Array.isArray(c.gateway)) {
       problems.push("gateway must be a mapping");
@@ -137,6 +139,30 @@ function validateRealtime(realtime: unknown): string[] {
 
   problems.push(...validateTurnDetection(r.turnDetection));
 
+  return problems;
+}
+
+function validateContextShape(context: unknown): string[] {
+  if (context === undefined || context === null) return [];
+  if (typeof context !== "object" || Array.isArray(context)) return ["context must be a mapping"];
+  const files = (context as Record<string, unknown>).alwaysInclude;
+  if (files === undefined) return [];
+  if (!Array.isArray(files) || files.some((f) => typeof f !== "string")) {
+    return ["context.alwaysInclude must be a list of instance-relative file paths"];
+  }
+  return [];
+}
+
+function validateKnowledgeShape(knowledge: unknown): string[] {
+  if (knowledge === undefined || knowledge === null) return [];
+  if (typeof knowledge !== "object" || Array.isArray(knowledge)) return ["knowledge must be a mapping"];
+  const problems: string[] = [];
+  for (const key of ["guidance", "missHint"] as const) {
+    const value = (knowledge as Record<string, unknown>)[key];
+    if (value !== undefined && typeof value !== "string") {
+      problems.push(`knowledge.${key} must be a string (got ${typeof value})`);
+    }
+  }
   return problems;
 }
 
@@ -276,7 +302,7 @@ export function withoutGatewayEnvValues<T>(
 const CONFIG_TOP_LEVEL_KEY_SET: Record<keyof JinnConfig, true> = {
   jinn: true, gateway: true, engines: true, models: true, connectors: true,
   logging: true, mcp: true, plugins: true, budgets: true, sessions: true,
-  cron: true, notifications: true, workflows: true, portal: true, context: true,
+  cron: true, notifications: true, workflows: true, portal: true, context: true, knowledge: true,
   stt: true, talk: true, realtime: true, remote: true, terminal: true,
 };
 export const CONFIG_TOP_LEVEL_KEYS = Object.keys(CONFIG_TOP_LEVEL_KEY_SET);

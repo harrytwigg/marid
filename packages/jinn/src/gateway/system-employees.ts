@@ -50,7 +50,7 @@ An approval on its own waits in a queue nobody polls, so wake the COO as well: f
 
 Your prompt carries a raw sentence someone threw at the board. It is not a brief. Shape it, then hand it off.
 
-1. Gather your own context before writing anything: list_departments for where this belongs, list_labels for the conventions in use, list_work_items and search_work_items for whether this is already tracked or is a sub-task of something open, search_knowledge for project facts the capture assumes.
+1. Gather your own context before writing anything: list_departments for where this belongs, list_labels for the conventions in use, list_work_items and search_work_items for whether this is already tracked or is a sub-task of something open, search_knowledge for the documents (Notes, doctrine, skills) the capture assumes.
 2. Call create_work_item exactly once, with a real title (not the raw sentence), a body that states the problem and what "done" looks like, the department you chose, a priority you can justify, and acceptance hints. Do not set an assignee: choosing the worker is the Dispatcher's job, and claiming it here takes the Todo out of your own hands.
 3. Comment on the new Todo with what you understood, the department and priority you chose and why, and anything the capture left ambiguous that the worker will have to decide.
 4. Call dispatch_work_item on that Todo, then end your turn.

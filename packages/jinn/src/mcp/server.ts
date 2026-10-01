@@ -7,7 +7,7 @@ import type { JinnMcpContext, JinnMcpTool } from "./toolkit.js";
 import { buildWorkflowTools } from "./workflow-tools.js";
 import { buildSessionTools } from "./session-tools.js";
 import { buildSearchTools } from "./search-tools.js";
-import { buildKnowledgeTools } from "./knowledge-tools.js";
+import { buildKnowledgeTools, type KnowledgeSearchWording } from "./knowledge-tools.js";
 import { buildNoteTools } from "./note-tools.js";
 import { buildExperimentTools } from "./experiment-tools.js";
 import { buildDelegationTools } from "./delegation-tools.js";
@@ -114,13 +114,13 @@ export { gatewayGet, gatewayRequest, JinnMcpToolError, type JinnMcpContext, type
  * revisit the SDK question only if a future group needs capabilities beyond
  * tools/list + tools/call (resources, prompts, progress).
  */
-export function buildTools(opts?: { notesEnabled?: boolean; workflowAttempt?: boolean }): JinnMcpTool[] {
+export function buildTools(opts?: { notesEnabled?: boolean; workflowAttempt?: boolean; knowledge?: KnowledgeSearchWording }): JinnMcpTool[] {
   const notesEnabled = opts?.notesEnabled ?? true;
   return [
     ...buildOrgTools(),
     ...buildSessionTools(),
     ...buildSearchTools(),
-    ...buildKnowledgeTools(),
+    ...buildKnowledgeTools(opts?.knowledge),
     ...(notesEnabled ? buildNoteTools() : []),
     ...buildExperimentTools(),
     ...buildCostTools(),
@@ -141,6 +141,16 @@ export function notesEnabledFromConfig(): boolean {
     return loadConfig().gateway.notesEnabled === true;
   } catch {
     return false;
+  }
+}
+
+/** Read once at MCP startup, like {@link notesEnabledFromConfig}: the instance's `knowledge.*` wording. */
+export function knowledgeWordingFromConfig(): KnowledgeSearchWording {
+  try {
+    const { guidance, missHint } = loadConfig().knowledge ?? {};
+    return { guidance, missHint };
+  } catch {
+    return {};
   }
 }
 
@@ -290,6 +300,7 @@ export function runJinnMcpServer(opts?: {
   };
   const tools = buildTools({
     notesEnabled: notesEnabledFromConfig(),
+    knowledge: knowledgeWordingFromConfig(),
     workflowAttempt: opts?.workflowAttempt ?? process.env[JINN_WORKFLOW_ATTEMPT_ENV] === "1",
   });
   const input = opts?.input ?? process.stdin;
