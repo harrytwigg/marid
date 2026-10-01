@@ -24,13 +24,23 @@ interface RetiredRow {
   assignee: string | null;
 }
 
+/** Drop a stop's park date, and the stop row when nothing else is left on it. */
+function unpark(db: DatabaseType, workItemId: string, at: string): void {
+  db.prepare("UPDATE work_item_stop_cause SET parked_until = NULL, updated_at = ? WHERE work_item_id = ? AND parked_until IS NOT NULL")
+    .run(at, workItemId);
+  db.prepare("DELETE FROM work_item_stop_cause WHERE work_item_id = ? AND unblock_what IS NULL AND unblock_who IS NULL")
+    .run(workItemId);
+}
+
 /**
  * Move every `assigned` row to `backlog` and every `escalated` row to `blocked`,
  * keeping the assignee. Each move bumps the row's version and writes the same
  * `status_change` event a transition would, so the event log, version-fenced
  * caches and attempt evidence agree with the row. A former escalation is
  * recorded as a declared block, so recovery leaves it for the operator rather
- * than restarting it.
+ * than restarting it, and loses any park date (its unblock hint stays): an
+ * escalation waits on the operator, and park expiry would otherwise put it
+ * back in the queue on that date, as it never did while it was escalated.
  *
  * Runs inside the Todo-DB migration's write lock on every boot; with nothing
  * left in a retired status it writes nothing. Takes `db` rather than using the
@@ -47,9 +57,11 @@ export function migrateRetiredStatuses(db: DatabaseType): number {
     `INSERT INTO work_item_events (id, work_item_id, kind, from_status, to_status, actor, detail, created_at)
      VALUES (?, ?, 'status_change', ?, ?, ?, ?, ?)`,
   );
+  const hasStopCause = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'work_item_stop_cause'").get() !== undefined;
   for (const row of rows) {
     const target = RETIRED_TARGETS[row.status];
     update.run(target, now, row.id, row.status);
+    if (target === "blocked" && hasStopCause) unpark(db, row.id, now);
     const detail = {
       reason: "retired-status",
       ...(target === "blocked" ? { declared: true } : {}),

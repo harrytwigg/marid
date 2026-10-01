@@ -63,6 +63,24 @@ describe("the retired-status migration", () => {
     expect(events.isBlockDeclared(escalated.id)).toBe(true);
   });
 
+  it("takes a former escalation off the park clock, keeping its unblock hint", async () => {
+    const parks = await import("../park-expiry.js");
+    const sc = await import("../stop-cause.js");
+    const parked = legacyRow("escalated", null);
+    const hinted = legacyRow("escalated", null);
+    const until = new Date(Date.now() + 86_400_000).toISOString();
+    sc.writeStopCause(db, parked.id, { parkedUntil: until }, new Date().toISOString());
+    sc.writeStopCause(db, hinted.id, { parkedUntil: until, unblockHint: { what: "pick a vendor", who: "the operator" } }, new Date().toISOString());
+
+    retired.migrateRetiredStatuses(db);
+    parks.releaseExpiredParks(new Date(Date.parse(until) + 1_000));
+
+    expect(store.getWorkItem(parked.id)?.status).toBe("blocked");
+    expect(store.getWorkItem(hinted.id)?.status).toBe("blocked");
+    expect(sc.readStopCause(db, parked.id)).toBeUndefined();
+    expect(sc.readStopCause(db, hinted.id)).toEqual({ unblockHint: { what: "pick a vendor", who: "the operator" } });
+  });
+
   it("writes nothing on a second boot", () => {
     legacyRow("escalated", null);
     retired.migrateRetiredStatuses(db);
