@@ -3,6 +3,7 @@ import { initDb } from '../shared/db.js';
 import { isRateLimitMessage } from '../shared/rateLimit.js';
 import type { SessionAttemptOutcome } from '../shared/types.js';
 import { TODO_RUN_OUTCOMES, type TodoRunOutcome } from './runs-schema.js';
+import { LEGACY_WORKFLOW_PHASE_SQL } from '../sessions/legacy-workflow-phase.js';
 
 /**
  * The Todo run ledger — one row per work attempt (ICI-728).
@@ -191,6 +192,25 @@ export function closeWorkItemRun(runId: string, input: CloseWorkItemRunInput): T
 export function listWorkItemRuns(workItemId: string): TodoRun[] {
   const rows = initDb()
     .prepare('SELECT * FROM work_item_runs WHERE work_item_id = ? ORDER BY started_at, rowid')
+    .all(workItemId) as WorkItemRunRow[];
+  return rows.map(toRun);
+}
+
+/**
+ * The runs that are this Todo's own attempts, oldest first: every run except
+ * those of a legacy Workflow phase session, which was linked only so its spend
+ * rolled up here. Recovery, the respawn guards and the availability sweep judge
+ * the Todo by these, the same rule `isExecutionAttempt` applies to sessions.
+ */
+export function listWorkItemAttemptRuns(workItemId: string): TodoRun[] {
+  const rows = initDb()
+    .prepare(
+      `SELECT runs.* FROM work_item_runs AS runs
+         LEFT JOIN sessions ON sessions.id = runs.session_id
+        WHERE runs.work_item_id = ?
+          AND (sessions.workflow_kind IS NULL OR NOT (sessions.${LEGACY_WORKFLOW_PHASE_SQL}))
+        ORDER BY runs.started_at, runs.rowid`,
+    )
     .all(workItemId) as WorkItemRunRow[];
   return rows.map(toRun);
 }

@@ -3,7 +3,7 @@ import { classifyEngineFailureText } from '../shared/engine-failure.js';
 import { isRateLimitMessage } from '../shared/rateLimit.js';
 import { HUMAN_ACTOR, listWorkItemEvents } from './event-log.js';
 import { parseTodoId } from './id.js';
-import { listWorkItemRuns, type TodoRun } from './runs.js';
+import { listWorkItemAttemptRuns, type TodoRun } from './runs.js';
 import { appendWorkItemEvent } from './store.js';
 
 /**
@@ -96,7 +96,7 @@ export function checkRespawnGuard(
   opts: RespawnGuardOptions = {},
 ): RespawnGuardVerdict {
   const id = parseTodoId(workItemId);
-  const lastSettled = lastSettledRun(listWorkItemRuns(id));
+  const lastSettled = lastSettledRun(listWorkItemAttemptRuns(id));
   return (opts.quotaWindowDecided ? undefined : rateLimitCooldown(lastSettled, now))
     ?? blockerAuth(lastSettled)
     ?? recentSuccess(id, lastSettled, now)

@@ -5,7 +5,7 @@ import { getWorkItemRecovery } from "./recovery-rows.js";
 import {
   EXECUTING_UNHANDED_REASON, EXECUTION_TIMEOUT_MS, executingUnhanded, TODO_RECOVERY_ACTOR, type AttentionLane,
 } from "./recovery.js";
-import { listWorkItemRuns } from "./runs.js";
+import { listWorkItemAttemptRuns } from "./runs.js";
 import { appendWorkItemEvent, getWorkItem, listWorkItems, type WorkItem } from "./store.js";
 
 export const ANOMALY_KINDS = [
@@ -34,7 +34,7 @@ function observe(item: WorkItem, anomaly: TodoAnomaly): void {
 
 function executionTimeout(item: WorkItem, now: Date): TodoAnomaly | undefined {
   if (item.status !== "executing") return undefined;
-  const open = listWorkItemRuns(item.id).find((run) => run.endedAt === null);
+  const open = listWorkItemAttemptRuns(item.id).find((run) => run.endedAt === null);
   if (!open) {
     // A pending approval is a question already on somebody's queue, not a stall.
     if (currentApproval(item.id)?.state === "pending") return undefined;

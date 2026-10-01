@@ -11,7 +11,7 @@ import {
   type RespawnGuardHold,
   type SettledRun,
 } from './respawn-guards.js';
-import { listWorkItemRuns } from './runs.js';
+import { listWorkItemAttemptRuns } from './runs.js';
 import { appendWorkItemEvent, listWorkItems, type WorkItem, type WorkItemStatus } from './store.js';
 
 /**
@@ -123,7 +123,7 @@ export function sweepAvailabilityResumes(deps: AvailabilityResumeDeps): number {
  *  word that was decided. Undefined for every Todo this sweep has no business
  *  touching, which is nearly all of them. */
 function dueForResume(workItemId: string, now: Date): DueResume | undefined {
-  const attempts = listWorkItemRuns(workItemId);
+  const attempts = listWorkItemAttemptRuns(workItemId);
   // An attempt is still going: whatever it is doing outranks a clock.
   if (attempts.some((attempt) => attempt.endedAt === null)) return undefined;
   const run = lastSettledRun(attempts);
@@ -137,7 +137,8 @@ function dueForResume(workItemId: string, now: Date): DueResume | undefined {
 }
 
 /** Runs whose restart was declined and already reported, so the warning is not
- *  repeated on every pass. Process-local: a gateway restart reports it once more. */
+ *  repeated on every pass; a run leaves once it is resumed. Process-local: a
+ *  gateway restart reports it once more. */
 const declinedRuns = new Set<string>();
 
 /** Hand the Todo to the port and, if it landed, write the resume down. */
@@ -152,6 +153,7 @@ function resumeOne(workItemId: string, due: DueResume, deps: AvailabilityResumeD
     }
     return false;
   }
+  declinedRuns.delete(due.run.id);
   appendWorkItemEvent({
     workItemId,
     kind: 'availability_resumed',
