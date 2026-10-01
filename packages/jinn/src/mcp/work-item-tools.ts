@@ -441,13 +441,9 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       assertIdentity(ctx);
       rejectApprovalFields(args, "archive_work_item");
       const id = requireTodoId(args);
-      const payload: Record<string, unknown> = {};
       const note = optionalString(args, "note", WORK_ITEM_NOTE_CHAR_CAP);
-      if (note !== undefined) payload.note = note;
-      if (args.cascade !== undefined) {
-        if (typeof args.cascade !== "boolean") throw new JinnMcpToolError("cascade must be a boolean");
-        payload.cascade = args.cascade;
-      }
+      if (args.cascade !== undefined && typeof args.cascade !== "boolean") throw new JinnMcpToolError("cascade must be a boolean");
+      const payload: Record<string, unknown> = { ...(note !== undefined ? { note } : {}), ...(args.cascade !== undefined ? { cascade: args.cascade } : {}) };
       const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/archive`, payload);
       if (status >= 400) throw gatewayFailure(`archiving work item "${id}"`, status, body);
       return mutationResult(body, "Todo archived.");

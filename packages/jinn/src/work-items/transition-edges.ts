@@ -20,15 +20,18 @@ export const EDGES: Readonly<Record<WorkItemStatus, ReadonlySet<WorkItemStatus>>
 
 /** The statuses an agent session works in. Closing (`done`, `cancelled`) and
  *  reopening closed work are the operator's. */
-const AGENT_OPEN: ReadonlySet<WorkItemStatus> = new Set(['backlog', 'executing', 'in_review']);
+const AGENT_OPEN: readonly WorkItemStatus[] = ['backlog', 'executing', 'in_review'];
 
 /** The agent lane: pick work up or put it down (backlog ↔ executing), hand it
  *  to review and take it back (executing ↔ in_review), and stop or resume any
- *  open Todo (open ↔ blocked). Every pair is also a declared edge. */
+ *  open Todo (open ↔ blocked), plus staying put. Every pair is also a declared
+ *  edge. */
+const AGENT_LANE: ReadonlySet<string> = new Set([
+  'backlog>executing', 'executing>backlog', 'executing>in_review', 'in_review>executing',
+  ...AGENT_OPEN.flatMap((open) => [`${open}>blocked`, `blocked>${open}`, `${open}>${open}`]),
+  'blocked>blocked',
+]);
+
 export function isAgentLaneMove(from: WorkItemStatus, to: WorkItemStatus): boolean {
-  if (from === to) return AGENT_OPEN.has(from) || from === 'blocked';
-  if (to === 'blocked') return AGENT_OPEN.has(from);
-  if (from === 'blocked') return AGENT_OPEN.has(to);
-  return (from === 'backlog' && to === 'executing') || (from === 'executing' && to === 'backlog')
-    || (from === 'executing' && to === 'in_review') || (from === 'in_review' && to === 'executing');
+  return AGENT_LANE.has(`${from}>${to}`);
 }

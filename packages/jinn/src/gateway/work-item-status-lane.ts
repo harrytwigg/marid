@@ -46,6 +46,28 @@ const AGENT_LANE_SHAPE =
   "agents pick work up and put it down (backlog ↔ executing), hand it to review and take it back (executing ↔ in_review), "
   + "and stop or resume it (↔ blocked)";
 
+/** `asOperator` from a session: the coordinator closing a Todo as `done` for
+ *  the operator, with the reason it will post. Nothing else rides on it. */
+function resolveCoordinatorLane(
+  caller: Extract<WorkItemCaller, { kind: "session" }>,
+  item: WorkItem,
+  target: WorkItemStatus,
+  note: string,
+): StatusLaneResult {
+  if (!isCoordinatorSession(caller.session)) {
+    const who = caller.session.employee ? `employee "${caller.session.employee}"` : `session ${caller.callerId}`;
+    return refuse(403, `asOperator is reserved for the operator's coordinator session; ${who} moves Todo ${item.id} as itself`);
+  }
+  if (target !== "done") {
+    return refuse(403, "asOperator closes a Todo as done for the operator and nothing else: cancelling, archiving and reopening stay with the operator");
+  }
+  if (STICKY_STATUSES.has(item.status)) return refuse(403, `Todo ${item.id} is already ${item.status}; reopening closed work is the operator's`);
+  if (!note) {
+    return refuse(400, "asOperator needs the reason in note: closing a Todo for the operator is for exceptional cases, and the reason is posted on the Todo");
+  }
+  return { ok: true, lane: { kind: "coordinator", actingAs: workItemActor(caller) } };
+}
+
 /** Decide the lane for moving `item` to `target`. `target` is already one of
  *  {@link WORK_ITEM_STATUSES}; `note` is trimmed. */
 export function resolveStatusLane(
@@ -56,21 +78,8 @@ export function resolveStatusLane(
 ): StatusLaneResult {
   if (hasOperatorLane(caller)) return { ok: true, lane: { kind: "operator" } };
   if (caller.kind !== "session") return refuse(403, "caller has no session identity");
+  if (asOperator) return resolveCoordinatorLane(caller, item, target, note);
   const closed = STICKY_STATUSES.has(item.status);
-  if (asOperator) {
-    if (!isCoordinatorSession(caller.session)) {
-      const who = caller.session.employee ? `employee "${caller.session.employee}"` : `session ${caller.callerId}`;
-      return refuse(403, `asOperator is reserved for the operator's coordinator session; ${who} moves Todo ${item.id} as itself`);
-    }
-    if (target !== "done") {
-      return refuse(403, "asOperator closes a Todo as done for the operator and nothing else: cancelling, archiving and reopening stay with the operator");
-    }
-    if (closed) return refuse(403, `Todo ${item.id} is already ${item.status}; reopening closed work is the operator's`);
-    if (!note) {
-      return refuse(400, "asOperator needs the reason in note: closing a Todo for the operator is for exceptional cases, and the reason is posted on the Todo");
-    }
-    return { ok: true, lane: { kind: "coordinator", actingAs: workItemActor(caller) } };
-  }
   if (target === "done" || target === "cancelled") {
     return refuse(403, `${target === "done" ? "closing" : "cancelling"} Todo ${item.id} is the operator's decision: move it to in_review and the operator closes it`);
   }
