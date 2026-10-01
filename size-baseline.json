@@ -1629,10 +1629,10 @@
       ]
     },
     "scripts/upgrade-lab/__tests__/guards.test.mjs": {
-      "lines": 812
+      "lines": 774
     },
     "scripts/upgrade-lab/run.mjs": {
-      "lines": 1130,
+      "lines": 1114,
       "exempt": [
         "complexity",
         "max-depth",
