@@ -29,18 +29,18 @@ import { appendWorkItemEvent, listWorkItems, type WorkItemStatus } from './store
  * that keeps one failure from being resumed twice.
  */
 
-/** The actor a resume records when the workflow's trigger asks for nobody in
- *  particular. A clock decided this, and the trail should say so. */
+/** The actor a resume records. A clock decided this, and the trail should say so. */
 export const AVAILABILITY_RESUME_ACTOR = 'availability-resume';
 
 /** Classes that describe the PROVIDER rather than the work — the same four
  *  `availabilityReason` names, and the only ones a wait can fix. */
 const AVAILABILITY_CLASSES = ['quota', 'rate-limit', 'provider-outage', 'network'] as const;
 
-/** Statuses a parked attempt actually leaves a Todo in. `backlog` is absent
- *  because nothing has attempted it yet, and the sticky terminals are absent
- *  because a close and an escalation are decisions a clock does not revisit. */
-const RESUMABLE_STATUSES: readonly WorkItemStatus[] = ['assigned', 'executing', 'in_review', 'blocked'];
+/** Statuses a parked attempt leaves mid-flight work in. `backlog` is absent
+ *  because nothing has attempted it yet; `in_review` is the operator's desk and
+ *  `blocked` waits on a person, so a clock revisits neither; the sticky
+ *  terminals are decisions. */
+const RESUMABLE_STATUSES: readonly WorkItemStatus[] = ['assigned', 'executing'];
 
 /** Past this, a stalled Todo stopped being a clock problem: re-arming a day-old
  *  failure is resurrecting history rather than resuming it. Measured from
@@ -55,22 +55,18 @@ const DEFAULT_RESUME_INTERVAL_MS = 5 * 60_000;
  *  the wrong moment says which of the three answers it believed. */
 export type ResetSource = 'stated' | 'engine-health' | 'cooldown';
 
-/** Where the Todo landed, as the re-arm port reports it back. */
+/** Where the Todo stands after the restart, as the re-arm port reports it back. */
 export interface AvailabilityRearmed {
   status: string;
-  /** The trigger's label filter, when one had to be restored or confirmed. */
-  label?: string;
 }
 
 export type AvailabilityRearmResult = AvailabilityRearmed | { unavailable: string };
 
 export interface AvailabilityResumeDeps {
   /**
-   * Put the Todo back where its own Workflow trigger fires — restoring the
-   * arming label if it has gone missing — or say why nothing can fire.
-   *
-   * Injected because resolving that target means reading a Workflow definition,
-   * and `work-items/` does not import `workflows/`.
+   * Restart the Todo's work, or say why nothing was started. Injected because
+   * starting a session is the gateway's job, and `work-items/` does not import
+   * `gateway/`.
    */
   rearm(workItemId: string): AvailabilityRearmResult;
   /** Test seam. */
@@ -134,7 +130,7 @@ function resumeOne(workItemId: string, due: DueResume, deps: AvailabilityResumeD
   const engine = engineOf(due.run);
   const landed = deps.rearm(workItemId);
   if ('unavailable' in landed) {
-    logger.warn(`Todo ${workItemId} waited out its ${describe(due.run)} but could not be re-armed: ${landed.unavailable}`);
+    logger.warn(`Todo ${workItemId} waited out its ${describe(due.run)} but could not be restarted: ${landed.unavailable}`);
     return false;
   }
   appendWorkItemEvent({
@@ -146,7 +142,6 @@ function resumeOne(workItemId: string, due: DueResume, deps: AvailabilityResumeD
       resetAt: new Date(due.reset.at).toISOString(),
       source: due.reset.source,
       status: landed.status,
-      ...(landed.label === undefined ? {} : { label: landed.label }),
       ...(engine === undefined ? {} : { engine }),
     },
     versionEffect: 'audit',

@@ -1,13 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { initDb } from '../shared/db.js';
 import { resolveApprovalRouteTarget, resolveRootApprovalTarget } from '../gateway/approval-authority.js';
-import { parseTodoApprovalRef } from '../workflows/todo-approval-ref.js';
 import { notifyApprovalDecision } from './approval-decision-listener.js';
 import { currentApproval } from './approval-rows.js';
 import { ApprovalChoiceError, ApprovalNotPendingError, decideApproval } from './approval-decision-row.js';
 import { openDescendantsDeepestFirst } from './cascade.js';
 import { appendWorkItemEvent, getWorkItem, type ApprovalTargetKind, type WorkItem } from './store.js';
 import { transition } from './transitions.js';
+
+/** `workflow:<workflowId>:<runId>:<nodeId>`, the ref a Workflow run stamped on
+ *  the gate it mirrored onto a Todo. */
+function isLegacyWorkflowGateRef(ref: string | null): boolean {
+  const parts = ref?.split(':') ?? [];
+  return parts.length === 4 && parts[0] === 'workflow';
+}
 
 export { currentApproval, listApprovals, type WorkItemApproval } from './approval-rows.js';
 export { ApprovalChoiceError, ApprovalNotPendingError } from './approval-decision-row.js';
@@ -291,11 +297,10 @@ function applyNativeDecisionAtomic(
     if (!item) throw new ApprovalNotPendingError(id);
     const pending = currentApproval(item.id);
     if (pending?.state !== 'pending') throw new ApprovalNotPendingError(id);
-    // A gate a Workflow run mirrored here is that run's decision point, not a
-    // review of this Todo. Recording it is the whole job — the mirror-back
-    // listener resumes the run, and the run's own reflection moves the Todo when
-    // the remaining phases say so.
-    const mirroredFromRun = parseTodoApprovalRef(pending.ref) !== null;
+    // A gate a (now removed) Workflow run mirrored here was that run's decision
+    // point, not a review of this Todo. Such rows can still be pending on an
+    // upgraded home: record the decision, but never let it move the Todo.
+    const mirroredFromRun = isLegacyWorkflowGateRef(pending.ref);
     // 1. Record the decision (approval fields + approval_decided event).
     decideApproval(id, decision, decidedBy, note, choice);
     // 2. The fixed consequence, in the SAME transaction — a failure here rolls the

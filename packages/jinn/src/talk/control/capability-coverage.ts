@@ -48,16 +48,6 @@ export const TALK_COMPANY_CAPABILITY_COVERAGE = {
     operations: ["talk_delegate_todo"],
     evidence: "Todo-to-session link, child session, and dispatch rereads",
   },
-  "workflow-core": {
-    status: "supported",
-    operations: ["talk_start_workflow_run", "read_workflow_runs", "read_workflow_run"],
-    evidence: "workflow-run repository rereads",
-  },
-  "workflow-authoring-and-gates": {
-    status: "explicit-gap",
-    reason: "workflow-command-adapter-missing",
-    plannedAdapter: "reuse definition edits, run cancellation, input gates, and workflow approval commands",
-  },
   "voice-approval": {
     status: "supported",
     operations: ["prepare_voice_approval", "commit_voice_approval"],

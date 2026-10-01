@@ -33,9 +33,6 @@ export interface TodoCaptureSessionFact {
 export interface TodoCaptureLinkedSessionFact {
   id: string;
   employee: string | null;
-  workflowId?: string | null;
-  workflowName?: string | null;
-  workflowRunId?: string | null;
 }
 
 export interface TodoCaptureTodoFact {
@@ -64,7 +61,6 @@ export interface TodoCaptureFacts {
 }
 
 export type TodoCaptureRoute =
-  | { kind: "workflow"; workflowId: string; workflowName: string | null; runId: string | null }
   | { kind: "employee"; employee: string; sessionId: string };
 
 export interface TodoCaptureState {
@@ -106,16 +102,6 @@ function waitingReasonOf(session: TodoCaptureSessionFact): string | null {
 /** The route a Todo took, if it has taken one. The Dispatcher's own session is
  *  not a route — it is the thing that chooses one. */
 function routeOf(todo: TodoCaptureTodoFact, facts: TodoCaptureFacts): TodoCaptureRoute | null {
-  for (const linked of todo.linked) {
-    if (linked.workflowId) {
-      return {
-        kind: "workflow",
-        workflowId: linked.workflowId,
-        workflowName: linked.workflowName ?? null,
-        runId: linked.workflowRunId ?? null,
-      };
-    }
-  }
   for (const linked of todo.linked) {
     if (!linked.employee) continue;
     if (linked.employee === facts.dispatcherEmployee || linked.employee === facts.shaperEmployee) continue;

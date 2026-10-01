@@ -60,11 +60,12 @@ export const STICKY_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStat
 export type { VerifyMode, VerifyPolicy } from './verify-policy.js';
 
 /** Provenance defaults when `verify_policy` is NULL (design §1.5, operator-ruled):
- *  machine pulses auto-close (cron per fire; workflow runs carry their own gates),
- *  everything a mind delegates or captures is reviewed. */
+ *  machine pulses auto-close (cron per fire), everything a mind delegates or
+ *  captures is reviewed. `workflow` is legacy provenance from the removed
+ *  Workflow runtime; those Todos are reviewed like any other. */
 export const DEFAULT_VERIFY_MODE_BY_SOURCE: Readonly<Record<WorkItemSource, VerifyMode>> = {
   cron: 'trust',
-  workflow: 'trust',
+  workflow: 'verify',
   delegation: 'verify',
   human: 'verify',
   session: 'verify',

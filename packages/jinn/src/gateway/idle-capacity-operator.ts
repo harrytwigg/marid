@@ -61,7 +61,7 @@ export interface OperatorActivityDeps {
  *  gateway on the operator's behalf, not driven by them). */
 export function operatorDrivenSession(session: Session): boolean {
   if (session.parentSessionId) return false;
-  if (session.source === "cron" || session.source === "workflow" || session.workflowProvenance) return false;
+  if (session.source === "cron" || session.source === "workflow") return false;
   return !session.employee || !isSystemEmployeeName(session.employee);
 }
 

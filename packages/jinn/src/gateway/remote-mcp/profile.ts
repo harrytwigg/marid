@@ -74,5 +74,5 @@ function forRemoteDoor(tool: JinnMcpTool): JinnMcpTool {
 
 /** The profile's tools, in `buildTools` order. Note tools appear only when Notes are enabled. */
 export function buildRemoteMcpTools(notesEnabled: boolean, knowledge?: KnowledgeSearchWording): JinnMcpTool[] {
-  return buildTools({ notesEnabled, workflowAttempt: false, knowledge }).filter((tool) => PROFILE.has(tool.name)).map(forRemoteDoor);
+  return buildTools({ notesEnabled, knowledge }).filter((tool) => PROFILE.has(tool.name)).map(forRemoteDoor);
 }

@@ -29,7 +29,7 @@ import {
   unsupportedVersionReason,
 } from "../opencode-server.js";
 import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
-import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../../sessions/workflow-interruptions.js";
+import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
 import { HELD_FOR_TURN_NOTICE, OpencodeInteractiveEngine, OPENCODE_VIEW_NEEDS_SERVER_MODE } from "../opencode-interactive.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME } from "../../shared/paths.js";

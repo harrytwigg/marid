@@ -39,9 +39,9 @@ function parked(title: string, settle: {
   return { id: item.id, runId: run.id };
 }
 
-function recorder(): { calls: string[]; rearm: (id: string) => { status: string; label: string } } {
+function recorder(): { calls: string[]; rearm: (id: string) => { status: string } } {
   const calls: string[] = [];
-  return { calls, rearm: (id) => { calls.push(id); return { status: "assigned", label: "build" }; } };
+  return { calls, rearm: (id) => { calls.push(id); return { status: "assigned" }; } };
 }
 
 function resumeEvents(workItemId: string, runId: string) {

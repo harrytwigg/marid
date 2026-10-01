@@ -213,22 +213,3 @@ export function listAllPendingQueueItems(): QueueItem[] {
   return rows.map(rowToQueueItem);
 }
 
-export function claimWorkflowAttemptDispatch(sessionId: string, sessionKey: string, prompt: string): string | null {
-  const db = initDb(); return db.transaction(() => {
-    const session = db.prepare(`SELECT id FROM sessions WHERE id = ? AND session_key = ?
-      AND workflow_kind = 'phase' AND status = 'idle'
-      AND (attempt_outcome IS NULL OR attempt_outcome = 'succeeded')`).get(sessionId, sessionKey);
-    if (!session) return null;
-    const existing = db.prepare(`${QUEUE_ITEM_SELECT} WHERE session_id = ? AND internal = 1 AND status IN ('pending', 'running') ORDER BY created_at, position LIMIT 1`).get(sessionId) as QueueItemRow | undefined;
-    if (existing && (existing.sessionKey !== sessionKey || existing.prompt !== prompt)) throw new Error(`Workflow session ${sessionId} dispatch claim does not match its immutable command.`);
-    if (existing?.status === 'running') return null; const itemId = existing?.id ?? enqueueQueueItem(sessionId, sessionKey, prompt, { internal: true });
-    return itemId; }).immediate();
-}
-export function cancelWorkflowAttemptDispatch(sessionId: string): number { return initDb().prepare(`UPDATE queue_items SET status = 'cancelled' WHERE session_id = ? AND internal = 1 AND status IN ('pending', 'running')`).run(sessionId).changes; }
-export function listPendingWorkflowAttemptDispatches(): QueueItem[] {
-  return (initDb().prepare(`${QUEUE_ITEM_SELECT} WHERE status = 'pending' AND internal = 1
-    AND EXISTS (SELECT 1 FROM sessions WHERE sessions.id = queue_items.session_id
-      AND sessions.workflow_kind = 'phase' AND sessions.status = 'idle'
-      AND (sessions.attempt_outcome IS NULL OR sessions.attempt_outcome = 'succeeded'))
-    ORDER BY created_at, position`).all() as QueueItemRow[]).map(rowToQueueItem);
-}

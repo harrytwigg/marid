@@ -4,7 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { JinnMcpContext, JinnMcpTool } from "./toolkit.js";
-import { buildWorkflowTools } from "./workflow-tools.js";
 import { buildSessionTools } from "./session-tools.js";
 import { buildSearchTools } from "./search-tools.js";
 import { buildKnowledgeTools, type KnowledgeSearchWording } from "./knowledge-tools.js";
@@ -18,7 +17,7 @@ import { buildCronTools } from "./cron-tools.js";
 import { buildFileTools } from "./file-tools.js";
 import { buildConnectorTools } from "./connector-tools.js";
 import { buildHeartbeatTools } from "./heartbeat-tools.js";
-import { JINN_SESSION_CAPABILITY_ENV, JINN_SESSION_ID_ENV, JINN_WORKFLOW_ATTEMPT_ENV } from "./identity.js";
+import { JINN_SESSION_CAPABILITY_ENV, JINN_SESSION_ID_ENV } from "./identity.js";
 import { loadConfig } from "../shared/config.js";
 import { resolveJinnHome } from "../shared/home.js";
 
@@ -71,13 +70,10 @@ function serverLog(message: string): void {
  *
  * A minimal, hand-rolled MCP stdio server (JSON-RPC 2.0, newline-delimited) that
  * exposes typed Jinn company tools to any MCP-capable engine (Claude / Codex /
- * Hermes / Grok): the org read tool plus the GRS-015 workflow group (create /
- * inspect / run — gate RESOLUTION is deliberately human-only and stays on the
- * HTTP route; see `workflow-tools.ts`). It is a *thin HTTP client
+ * Hermes / Grok). It is a *thin HTTP client
  * to the local gateway* — it holds no state of its own (no org model, scheduler,
- * memory store, workflow runtime, or session engine) and simply calls the same
- * gateway routes the web UI and tests call. Workflow runs are live operations on
- * that gateway and may spawn real sessions; isolated instances are for experiments. This is the KISS
+ * memory store, or session engine) and simply calls the same
+ * gateway routes the web UI and tests call. This is the KISS
  * guardrail from `reports/research/GRS-012-mcp-auto-attach-design.md` §3/§8.
  *
  * Why hand-rolled instead of `@modelcontextprotocol/sdk`: the repo has no MCP SDK
@@ -105,7 +101,7 @@ export { gatewayGet, gatewayRequest, JinnMcpToolError, type JinnMcpContext, type
  * Build the full tool set, one group per company surface: org, sessions,
  * company-reference search, scoped knowledge, Notes, cost reads,
  * cron reads, the delegation transaction, Todos/work-items, approvals, managed
- * files, connectors, session-armed heartbeats, and Workflows.
+ * files, connectors, and session-armed heartbeats.
  * Growth discipline: the belt budget lives in the GRS-017 design §7 and the
  * GRS-020 design §4 (net context diet positive — measured in
  * mcp/__tests__/context-diet.test.ts and knowledge-diet.test.ts); at this
@@ -113,7 +109,7 @@ export { gatewayGet, gatewayRequest, JinnMcpToolError, type JinnMcpContext, type
  * revisit the SDK question only if a future group needs capabilities beyond
  * tools/list + tools/call (resources, prompts, progress).
  */
-export function buildTools(opts?: { notesEnabled?: boolean; workflowAttempt?: boolean; knowledge?: KnowledgeSearchWording }): JinnMcpTool[] {
+export function buildTools(opts?: { notesEnabled?: boolean; knowledge?: KnowledgeSearchWording }): JinnMcpTool[] {
   const notesEnabled = opts?.notesEnabled ?? true;
   return [
     ...buildOrgTools(),
@@ -129,7 +125,6 @@ export function buildTools(opts?: { notesEnabled?: boolean; workflowAttempt?: bo
     ...buildFileTools(),
     ...buildConnectorTools(),
     ...buildHeartbeatTools(),
-    ...buildWorkflowTools({ attemptCompletion: opts?.workflowAttempt === true }),
   ];
 }
 
@@ -283,7 +278,6 @@ export function runJinnMcpServer(opts?: {
   token?: string;
   callerSessionId?: string;
   sessionCapability?: string;
-  workflowAttempt?: boolean;
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
 }): void {
@@ -299,7 +293,6 @@ export function runJinnMcpServer(opts?: {
   const tools = buildTools({
     notesEnabled: notesEnabledFromConfig(),
     knowledge: knowledgeWordingFromConfig(),
-    workflowAttempt: opts?.workflowAttempt ?? process.env[JINN_WORKFLOW_ATTEMPT_ENV] === "1",
   });
   const input = opts?.input ?? process.stdin;
   const output = opts?.output ?? process.stdout;

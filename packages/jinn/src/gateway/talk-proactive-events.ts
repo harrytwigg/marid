@@ -37,25 +37,14 @@ function todoSource(frame: Extract<GatewayEvent, { event: "company:changed" }>):
   };
 }
 
-function companySource(frame: Extract<GatewayEvent, { event: "company:changed" }>, now: number): GatewaySignalSource | null {
+function companySource(frame: Extract<GatewayEvent, { event: "company:changed" }>): GatewaySignalSource | null {
   const todo = todoSource(frame);
   if (todo) return todo;
-  const payload = frame.payload;
-  if (payload.entity === "workflow-definition") return {
-    source: "workflow", subjectIds: [payload.id], severity: "info", blocking: false, requiresOperator: false,
-    summary: "A related Workflow definition changed.", target: `workflow:${payload.id}`,
-    dedupeSeed: `workflow-definition:${payload.id}:${payload.revision}`,
-  };
-  if (payload.entity === "workflow-run") return {
-    source: "workflow", subjectIds: [payload.runId, payload.workflowId], severity: "info", blocking: false,
-    requiresOperator: false, summary: "A related Workflow run changed.", target: `workflow-run:${payload.runId}`,
-    dedupeSeed: `workflow-run:${payload.workflowId}:${payload.runId}:${bucket(now)}`,
-  };
   return null;
 }
 
 function sourceFor(frame: GatewayEvent, now: number): GatewaySignalSource | null {
-  if (frame.event === "company:changed") return companySource(frame, now);
+  if (frame.event === "company:changed") return companySource(frame);
   if (frame.event === "session:completed") {
     const failed = frame.payload.error !== null;
     return {

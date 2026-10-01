@@ -12,7 +12,7 @@ import {
 } from "../sessions/registry.js";
 import { rotatePendingToFront } from "../sessions/queue-rotation.js";
 import { supersedeRunningTurn } from "../sessions/turn/superseded.js";
-import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/workflow-interruptions.js";
+import { USER_MESSAGE_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { messageBodyError } from "../shared/message-body.js";
 import { isInterruptibleEngine, type InterruptibleEngine, type Session } from "../shared/types.js";
 import { readJsonBody } from "./http-helpers.js";

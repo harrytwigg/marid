@@ -36,5 +36,3 @@ export interface TalkProactiveCuePayload {
 
 export type CompanyChangedEvent =
   | { entity: "todo"; action: string; id: string; sessionId?: string; version: number; value?: JsonObject }
-  | { entity: "workflow-definition"; id: string; revision: number }
-  | { entity: "workflow-run"; workflowId: string; runId: string }

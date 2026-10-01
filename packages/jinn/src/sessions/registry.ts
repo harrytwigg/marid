@@ -14,7 +14,7 @@ import { stripControlChars } from '../shared/sanitize.js';
 import { getMeta, setMeta, canonicalCallbackIdentityText, canonicalSessionDeliveryIdentity, sessionDeliveryFromRow, validateSessionDeliveryIdentity, type SessionDeliveryRow } from './migrate.js';
 import { parseTodoId } from '../work-items/id.js';
 import { toWorkItemLinkRole } from '../work-items/link-role.js';
-import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs, JsonObject, ReplyContext, Session, SessionAttemptOutcome, SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload, WorkflowAttemptInterruptionCause, WorkflowSessionProvenance } from '../shared/types.js';
+import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs, JsonObject, ReplyContext, Session, SessionAttemptOutcome, SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload, SessionAttemptInterruptionCause } from '../shared/types.js';
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
 
@@ -95,46 +95,6 @@ function cleanEngineSessionRefs(refs: EngineSessionRefs | null | undefined): Eng
   return Object.keys(cleaned).length > 0 ? cleaned : null;
 }
 
-function workflowProvenanceFromRow(row: Record<string, unknown>): WorkflowSessionProvenance | null {
-  const kind = row.workflow_kind;
-  const workflowId = row.workflow_id;
-  const workflowName = row.workflow_name;
-  const runId = row.workflow_run_id;
-  const triggerSource = row.workflow_trigger_source;
-  if (
-    kind !== 'phase' ||
-    typeof workflowId !== 'string' || !workflowId ||
-    typeof workflowName !== 'string' || !workflowName ||
-    typeof runId !== 'string' || !runId ||
-    typeof triggerSource !== 'string' || !triggerSource
-  ) {
-    return null;
-  }
-  const nodeId = row.workflow_phase_node_id;
-  const name = row.workflow_phase_name;
-  const index = row.workflow_phase_index;
-  const round = row.workflow_phase_round;
-  const attempt = row.workflow_phase_attempt;
-  if (
-    typeof nodeId !== 'string' || !nodeId ||
-    typeof name !== 'string' || !name ||
-    typeof index !== 'number' || !Number.isInteger(index) || index < 1 ||
-    typeof round !== 'number' || !Number.isInteger(round) || round < 1 ||
-    typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1
-  ) {
-    logger.warn(`registry: dropped incomplete workflow phase provenance for session ${String(row.id ?? '')}`);
-    return null;
-  }
-  return {
-    kind,
-    workflowId,
-    workflowName,
-    runId,
-    triggerSource,
-    phase: { nodeId, name, index, round, attempt },
-  };
-}
-
 function rowToSession(row: Record<string, unknown>): Session {
   const replyContext = parseJsonObject(row.reply_context, 'reply_context');
   const transportMeta = parseJsonObject(row.transport_meta, 'transport_meta');
@@ -161,7 +121,6 @@ function rowToSession(row: Record<string, unknown>): Session {
     promptExcerpt: (row.prompt_excerpt as string) ?? null,
     archivedAt: (row.archived_at as string) ?? null,
     parentSessionId: (row.parent_session_id as string) ?? null,
-    workflowProvenance: workflowProvenanceFromRow(row),
     userId: (row.user_id as string) ?? null,
     effortLevel: (row.effort_level as string) ?? null,
     status: row.status as Session['status'],
@@ -169,7 +128,7 @@ function rowToSession(row: Record<string, unknown>): Session {
     attemptToken: (row.attempt_token as string) ?? null,
     attemptTerminalVersion: (row.attempt_terminal_version as number) ?? 0,
     attemptTurn: (row.attempt_turn as number) ?? 0,
-    attemptInterruptionCause: (row.attempt_interruption_cause as WorkflowAttemptInterruptionCause) ?? null,
+    attemptInterruptionCause: (row.attempt_interruption_cause as SessionAttemptInterruptionCause) ?? null,
     attemptInterruptionTurn: (row.attempt_interruption_turn as number) ?? null,
     totalCost: (row.total_cost as number) ?? 0,
     totalTurns: (row.total_turns as number) ?? 0,
@@ -444,7 +403,6 @@ export interface CreateSessionOpts {
   model?: string;
   title?: string;
   parentSessionId?: string;
-  workflowProvenance?: WorkflowSessionProvenance | null;
   userId?: string | null;
   effortLevel?: string;
   /**
@@ -491,21 +449,15 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
   const connector = opts.connector ?? opts.source;
   const replyContext = opts.replyContext ? JSON.stringify(opts.replyContext) : null;
   const transportMeta = opts.transportMeta ? JSON.stringify(opts.transportMeta) : null;
-  const workflow = opts.workflowProvenance ?? null;
-  const phase = workflow?.kind === 'phase' ? workflow.phase : undefined;
 
   const stmt = db.prepare(`
     INSERT INTO sessions (
       id, engine, source, source_ref, connector, session_key, reply_context, message_id, transport_meta,
       employee, model, title, prompt_excerpt, parent_session_id,
-      workflow_kind, workflow_id, workflow_name, workflow_run_id, workflow_trigger_source,
-      workflow_phase_node_id, workflow_phase_name, workflow_phase_index, workflow_phase_round, workflow_phase_attempt,
       user_id, effort_level, status, created_at, last_activity
     )
     VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
-      ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, 'idle', ?, ?
     )
@@ -525,16 +477,6 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     title,
     promptExcerpt,
     opts.parentSessionId ?? null,
-    workflow?.kind ?? null,
-    workflow?.workflowId ?? null,
-    workflow?.workflowName ?? null,
-    workflow?.runId ?? null,
-    workflow?.triggerSource ?? null,
-    phase?.nodeId ?? null,
-    phase?.name ?? null,
-    phase?.index ?? null,
-    phase?.round ?? null,
-    phase?.attempt ?? null,
     opts.userId ?? null,
     opts.effortLevel ?? null,
     now,
@@ -560,7 +502,6 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     promptExcerpt,
     archivedAt: null,
     parentSessionId: opts.parentSessionId ?? null,
-    workflowProvenance: workflow,
     userId: opts.userId ?? null,
     effortLevel: opts.effortLevel ?? null,
     status: 'idle',
@@ -579,23 +520,6 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
   };
 }
 
-type WorkflowAttemptSessionOpts = CreateSessionOpts & { prompt?: string; workflowProvenance: WorkflowSessionProvenance };
-function assertWorkflowAttemptSession(session: Session, opts: WorkflowAttemptSessionOpts, key: string): void {
-  const expected = opts.workflowProvenance; const actual = session.workflowProvenance; const sameOwner = expected.kind === 'phase' && expected.phase && actual?.kind === 'phase' && actual.phase
-    && actual.workflowId === expected.workflowId && actual.runId === expected.runId && actual.phase.nodeId === expected.phase.nodeId && actual.phase.attempt === expected.phase.attempt;
-  if (!sameOwner) throw new Error(`Workflow attempt session key collision for ${key}.`);
-  if (session.sessionKey !== key || session.sourceRef !== key) throw new Error(`Workflow attempt session key mismatch for ${key}.`);
-  if ([session.engine, session.employee, session.model, session.effortLevel].some((value, index) => value !== [opts.engine, opts.employee ?? null, opts.model ?? null, opts.effortLevel ?? null][index])) throw new Error(`Workflow attempt session configuration mismatch for ${key}.`);
-}
-export function getOrCreateWorkflowAttemptSession(opts: WorkflowAttemptSessionOpts): Session {
-  const database = initDb(); const workflow = opts.workflowProvenance; const phase = workflow.kind === 'phase' ? workflow.phase : undefined; if (!phase) throw new Error('Workflow attempt sessions require phase provenance.');
-  const key = opts.sessionKey ?? opts.sourceRef;
-  const getOrCreate = database.transaction(() => {
-    const rows = database.prepare(`SELECT * FROM sessions WHERE session_key = ? OR (workflow_kind = 'phase' AND workflow_id = ? AND workflow_run_id = ? AND workflow_phase_node_id = ? AND workflow_phase_attempt = ?)`).all(key, workflow.workflowId, workflow.runId, phase.nodeId, phase.attempt) as Record<string, unknown>[];
-    if (rows.length > 1) throw new Error(`Workflow attempt session key collision for ${key}.`); const existing = rows[0] ? rowToSession(rows[0]) : undefined;
-    if (!existing) return createSession(opts); assertWorkflowAttemptSession(existing, opts, key); return existing; });
-  return getOrCreate.immediate();
-}
 export function getSession(id: string): Session | undefined {
   const db = initDb();
   const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as Record<string, unknown> | undefined;
@@ -622,7 +546,7 @@ export interface UpdateSessionFields {
   attemptToken?: string | null;
   attemptTerminalVersion?: number;
   attemptTurn?: number;
-  attemptInterruptionCause?: WorkflowAttemptInterruptionCause | null;
+  attemptInterruptionCause?: SessionAttemptInterruptionCause | null;
   attemptInterruptionTurn?: number | null;
   model?: string | null;
   effortLevel?: string | null;
@@ -986,17 +910,6 @@ export function completeSessionAttempt(
   return updateSessionForAttempt(id, attemptToken, updates, ['running']);
 }
 
-export function interruptSessionAttempt(id: string, reason: string, completedAt: string): Session | undefined {
-  // The explicit stop owns this turn: clear any same-turn user-message marker in
-  // the same statement, or a crash before the completion listener would let
-  // recovery reclassify the stop as a user interruption.
-  const result = initDb().prepare(`UPDATE sessions SET status = 'interrupted', attempt_outcome = 'interrupted',
-    attempt_terminal_version = 1, attempt_turn = attempt_turn + 1, last_activity = ?, last_error = ?,
-    attempt_interruption_cause = NULL, attempt_interruption_turn = NULL
-    WHERE id = ? AND workflow_kind = 'phase' AND attempt_outcome IS NULL AND attempt_terminal_version = 0`)
-    .run(completedAt, reason, id);
-  return result.changes === 1 ? getSession(id) : undefined;
-}
 /** Upgrade a legacy terminal row that predates attempt tokens. The outcome and
  * terminal version are compare predicates, so a stale callback can never borrow
  * the token of a newer resume generation. */
@@ -1304,13 +1217,12 @@ export function coercePortalEmployee(
  * Having no employee is NOT on its own the test: an employee can spawn a plain
  * session, and that child is employee-less too. What no session can produce is
  * a PARENTLESS one — every spawn and delegation route records a session caller
- * as the child's parent, whatever the request body asks for — and a workflow
- * attempt always carries its run in `workflowProvenance`. So the shape below is
+ * as the child's parent, whatever the request body asks for. So the shape below is
  * reachable only from a surface the operator drives — web console, connector
  * chat, operator cron, the gateway — except a remote MCP anchor (FR-012).
  */
 export function isPortalAgentSession(session: Session): boolean {
-  return !session.employee && !session.parentSessionId && !session.workflowProvenance
+  return !session.employee && !session.parentSessionId
     && session.source !== "remote-mcp" && session.source !== "terminal" && session.engine !== "terminal";
 }
 
@@ -1409,9 +1321,6 @@ export interface SearchSessionsFilter {
   status?: Session['status'];
   source?: string;
   parentSessionId?: string;
-  workflowId?: string;
-  workflowRunId?: string;
-  workflowPhaseName?: string;
   /** Inclusive ISO-8601 bounds on last_activity (ISO strings compare lexicographically). */
   activeSince?: string;
   activeBefore?: string;
@@ -1451,18 +1360,6 @@ export function searchSessionsFiltered(filter: SearchSessionsFilter, limit = 20)
   if (filter.parentSessionId) {
     conditions.push('parent_session_id = ?');
     values.push(filter.parentSessionId);
-  }
-  if (filter.workflowId) {
-    conditions.push('workflow_id = ?');
-    values.push(filter.workflowId);
-  }
-  if (filter.workflowRunId) {
-    conditions.push('workflow_run_id = ?');
-    values.push(filter.workflowRunId);
-  }
-  if (filter.workflowPhaseName) {
-    conditions.push('workflow_phase_name = ?');
-    values.push(filter.workflowPhaseName);
   }
   if (filter.activeSince) {
     conditions.push('last_activity >= ?');
@@ -1534,9 +1431,9 @@ export function listAllRunningSessions(): RunningSessionRow[] {
   return rows.map((row) => ({ session: rowToSession(row), workflowAttempt: row.workflow_kind === 'phase' }));
 }
 
-/** `workflowAttempt` reads the raw `workflow_kind` column, the same predicate the
- *  recovery sweeps and the resume candidate query use — not the parsed provenance,
- *  which is null for a row whose other workflow columns are incomplete. */
+/** `workflowAttempt` marks a phase row left by the removed Workflow runtime,
+ *  read off the raw `workflow_kind` column, the same predicate the boot settle
+ *  and the resume candidate query use. */
 export interface RunningSessionRow {
   session: Session;
   workflowAttempt: boolean;
@@ -1554,40 +1451,36 @@ export function recoverStaleSessions(): number {
   ).run(now, now).changes;
 }
 
-/** Settle workflow attempts whose engine process was lost with the old gateway. The cause is stamped over any same-turn marker — that turn died with the gateway, it did not end on a message — and is what lets the runtime replace the attempt rather than spend its retry budget (see workflows/restart-redispatch.ts). */
-export function recoverStaleWorkflowAttemptSessions(): number {
+/**
+ * Settle session rows a removed Workflow runtime left running. Nothing runs a
+ * phase any more, so a phase row still marked running or waiting would sit in
+ * every running-session list forever. They are interrupted without a resume
+ * stamp (only `recoverStaleSessions` stamps one) and their queued turns are
+ * cancelled. Idempotent: a second boot finds nothing to change.
+ */
+export function settleLegacyWorkflowPhaseSessions(): number {
   const database = initDb();
   const now = new Date().toISOString();
   return database.transaction(() => {
     database.prepare(`
       UPDATE queue_items
       SET status = 'cancelled'
-      WHERE internal = 1
-        AND status IN ('pending', 'running')
+      WHERE status IN ('pending', 'running')
         AND EXISTS (
           SELECT 1
           FROM sessions
           WHERE sessions.id = queue_items.session_id
-            AND sessions.status = 'running'
             AND sessions.workflow_kind = 'phase'
-            AND sessions.attempt_outcome IS NULL
-            AND sessions.attempt_terminal_version = 0
         )
     `).run();
     return database.prepare(`
       UPDATE sessions
       SET status = 'interrupted',
-        attempt_outcome = 'interrupted',
-        attempt_terminal_version = 1,
-        attempt_turn = MAX(attempt_turn, 1),
-        attempt_interruption_cause = 'gateway-restart',
-        attempt_interruption_turn = MAX(attempt_turn, 1),
+        attempt_outcome = COALESCE(attempt_outcome, 'interrupted'),
         last_activity = ?,
-        last_error = 'Interrupted: gateway restarted while workflow attempt was running'
-      WHERE status = 'running'
+        last_error = 'Interrupted: Workflows were removed while this phase was running'
+      WHERE status IN ('running', 'waiting')
         AND workflow_kind = 'phase'
-        AND attempt_outcome IS NULL
-        AND attempt_terminal_version = 0
     `).run(now).changes;
   }).immediate();
 }
@@ -2695,8 +2588,7 @@ export function acceptSessionDelivery(
 export {
   enqueueQueueItem, markQueueItemRunning, markQueueItemCompleted, markRunningQueueItemsCompletedForSession,
   getQueueItem, cancelQueueItem, getQueueItems, cancelAllPendingQueueItems, recoverStaleQueueItems,
-  listAllPendingQueueItems, listPendingQueueItemIdsForSession, claimWorkflowAttemptDispatch, cancelWorkflowAttemptDispatch,
-  listPendingWorkflowAttemptDispatches, editPendingQueueItem, reassignPendingQueuePayloads, type QueueItem,
+  listAllPendingQueueItems, listPendingQueueItemIdsForSession, editPendingQueueItem, reassignPendingQueuePayloads, type QueueItem,
 } from './queue-item-registry.js';
 // ── File management ──────────────────────────────────────────────────
 // Kept re-exported here so the many callers that reach for a file through the

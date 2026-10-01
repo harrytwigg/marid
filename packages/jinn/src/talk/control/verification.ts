@@ -1,5 +1,4 @@
 import { getMessages, getSession, listSessionsByWorkItem } from "../../sessions/registry.js";
-import type { WorkflowService } from "../../workflows/service.js";
 import { listComments } from "../../work-items/comments.js";
 import { getWorkItem } from "../../work-items/store.js";
 import { currentApproval } from "../../work-items/approval-rows.js";
@@ -8,14 +7,9 @@ import { TalkTopicRepository } from "../topics/repository.js";
 import type { TalkControlExecution, TalkControlOperation, TalkControlVerification } from "./types.js";
 import { TALK_COMPANY_CAPABILITY_COVERAGE } from "./capability-coverage.js";
 
-interface VerificationHost {
-  workflowService?: WorkflowService;
-}
-
 type VerifyHandler = (
   args: Record<string, unknown>,
   execution: TalkControlExecution,
-  host: VerificationHost,
 ) => TalkControlVerification;
 
 function text(args: Record<string, unknown>, key: string): string {
@@ -112,19 +106,6 @@ const verifyMessage: VerifyHandler = (args, execution) => {
   return { ok: !!message, evidence: message ? { sessionId: id, messageId } : {} };
 };
 
-const verifyWorkflowRun: VerifyHandler = (args, execution, host) => {
-  const id = text(args, "id");
-  const runId = text(args, "runId") || String(execution.data.runId ?? "");
-  const run = host.workflowService?.getRun(id, runId);
-  return { ok: !!run, evidence: run ? { workflowId: id, runId, status: run.status, revision: run.revision } : {} };
-};
-
-const verifyWorkflowRuns: VerifyHandler = (args, _execution, host) => {
-  const id = text(args, "id");
-  const page = host.workflowService?.listRuns(id, { limit: 1 });
-  return { ok: !!page, evidence: { workflowId: id, count: page?.items.length ?? 0 } };
-};
-
 const verifyTopicResolution: VerifyHandler = (_args, execution) => ({
   ok: ["resolved", "ambiguous", "none"].includes(String(execution.data.status)),
   evidence: { status: execution.data.status, topicId: (execution.data.topic as { id?: unknown } | undefined)?.id },
@@ -158,9 +139,6 @@ const VERIFY_HANDLERS: Record<string, VerifyHandler> = {
   talk_delegate_todo: verifyDelegation,
   read_session: verifySession,
   talk_send_to_session: verifyMessage,
-  talk_start_workflow_run: verifyWorkflowRun,
-  read_workflow_run: verifyWorkflowRun,
-  read_workflow_runs: verifyWorkflowRuns,
   talk_recall_topic: verifyTopicResolution,
   talk_remember_topic: verifyTopicCommitment,
   read_talk_capability: verifyCapability,
@@ -175,8 +153,7 @@ export async function verifyTalkDomainOperation(
   operation: TalkControlOperation,
   args: Record<string, unknown>,
   execution: TalkControlExecution,
-  host: VerificationHost,
 ): Promise<TalkControlVerification> {
   const handler = VERIFY_HANDLERS[operation.name];
-  return handler ? handler(args, execution, host) : { ok: false, evidence: {} };
+  return handler ? handler(args, execution) : { ok: false, evidence: {} };
 }

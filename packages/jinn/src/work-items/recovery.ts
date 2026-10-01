@@ -75,7 +75,6 @@ export interface RecoveryClassification {
   class: RecoveryClass;
   lane: AttentionLane;
   reason: string;
-  owningWorkflowId?: string;
 }
 
 /** Whether any execution attempt is live, when the newest one last moved, and
@@ -96,8 +95,11 @@ export interface AttemptActivity {
  * the producer last spoke.
  */
 export function executingUnhanded(status: string, attempts: AttemptActivity | undefined, now: number): boolean {
-  if (status !== "executing" || !attempts || attempts.inFlight || !attempts.lastActivityAt) return false;
-  const quietSince = Math.max(Date.parse(attempts.lastActivityAt), Date.parse(attempts.executingSince ?? "") || 0);
+  if (status !== "executing" || !attempts || attempts.inFlight) return false;
+  // A Todo that reached `executing` with no execution session ever linked has
+  // nobody to speak for it either; its clock starts at the move itself.
+  const quietSince = Math.max(Date.parse(attempts.lastActivityAt ?? "") || 0, Date.parse(attempts.executingSince ?? "") || 0);
+  if (quietSince === 0) return false;
   return now - quietSince > EXECUTION_TIMEOUT_MS;
 }
 
@@ -109,16 +111,11 @@ export interface RecoveryIncidentInput {
   attempts?: AttemptActivity;
   approval?: { state: string; operatorOnly: boolean };
   verifyMode?: "trust" | "verify" | "thorough";
-  owningWorkflowId?: string;
   now?: Date;
 }
 
 const AVAILABILITY_CLASSES = ["quota", "rate-limit", "provider-outage", "network"] as const;
 const VERIFY_FAILURE = /independent review|verifier rejected|verification failed|review rejected the diff/i;
-
-function verdict(input: RecoveryIncidentInput, value: RecoveryClassification): RecoveryClassification {
-  return input.owningWorkflowId === undefined ? value : { ...value, owningWorkflowId: input.owningWorkflowId };
-}
 
 function isAvailability(input: RecoveryIncidentInput, error: string): boolean {
   return input.lastRun?.outcome === "rate_limited"
@@ -135,7 +132,7 @@ function classifyFromFailure(input: RecoveryIncidentInput): RecoveryClassificati
     return { class: "security", lane: "manager", reason: "credentials or auth failed; a clock retry cannot fix it" };
   }
   if (isAvailability(input, error)) {
-    return { class: "transient", lane: "recovering", reason: "provider availability; resume the owning workflow when the window reopens" };
+    return { class: "transient", lane: "recovering", reason: "provider availability; re-dispatch when the window reopens" };
   }
   if (isVerificationFailure(input, error)) {
     return { class: "verification", lane: "manager", reason: "independent verification rejected the work" };
@@ -158,11 +155,7 @@ function classifyStalledExecution(input: RecoveryIncidentInput, now: number): Re
 }
 
 function classifyStalled(input: RecoveryIncidentInput, status: string, now: number): RecoveryClassification | undefined {
-  const open = input.openRun;
   if (status === "executing") return classifyStalledExecution(input, now);
-  if (status === "assigned" && input.owningWorkflowId && !open && !runIsFresh(input.lastRun?.endedAt, now)) {
-    return { class: "transient", lane: "recovering", reason: "assigned to a pipeline with no active run" };
-  }
   return undefined;
 }
 
@@ -183,16 +176,16 @@ function classifyLeftover(input: RecoveryIncidentInput, now: number): RecoveryCl
 
 export function classifyRecovery(input: RecoveryIncidentInput): RecoveryClassification {
   if (input.todo.status === "backlog") {
-    return verdict(input, { class: "operator", lane: "operator", reason: "ordinary backlog work is never auto-started" });
+    return { class: "operator", lane: "operator", reason: "ordinary backlog work is never auto-started" };
   }
   if (input.approval?.state === "pending" && input.approval.operatorOnly) {
-    return verdict(input, { class: "operator", lane: "operator", reason: "operator-only approval is a genuine authority decision" });
+    return { class: "operator", lane: "operator", reason: "operator-only approval is a genuine authority decision" };
   }
   const fromFailure = classifyFromFailure(input);
-  if (fromFailure) return verdict(input, fromFailure);
+  if (fromFailure) return fromFailure;
   const leftover = classifyLeftover(input, (input.now ?? new Date()).getTime());
-  if (leftover) return verdict(input, leftover);
-  return verdict(input, { class: "operator", lane: "operator", reason: GENERIC_OPERATOR_REASON });
+  if (leftover) return leftover;
+  return { class: "operator", lane: "operator", reason: GENERIC_OPERATOR_REASON };
 }
 
 /** Additive: never a column on `work_items`. The exact-shape verifier refuses

@@ -26,15 +26,16 @@ export function toWorkItemLinkRole(value: unknown): WorkItemLinkRole {
 /**
  * Whether a linked session counts as having EXECUTED the Todo.
  *
- * The two exclusions are the same rule seen from different angles: a Workflow
- * phase session is linked so the run's spend rolls up to the Todo it is bound
- * to, and a review session is linked so a review round is attributed and
+ * The two exclusions are the same rule seen from different angles: a phase
+ * session left by the removed Workflow runtime (source `workflow`) was linked
+ * so a run's spend rolled up to the Todo it was bound to, and a review session
+ * is linked so a review round is attributed and
  * steerable. Neither produced the work, so neither may be treated as its
  * producer — by the self-review ban, or by the status derivation that reads
  * attempt receipts.
  */
 export function isExecutionAttempt(session: Session): boolean {
-  return session.workflowProvenance?.kind !== 'phase'
+  return session.source !== 'workflow'
     && toWorkItemLinkRole(session.workItemRole) !== 'review';
 }
 
