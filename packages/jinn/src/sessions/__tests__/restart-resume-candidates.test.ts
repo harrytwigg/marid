@@ -424,4 +424,16 @@ describe("backgroundWorkAtShutdown", () => {
       { sessionId: "unclassified", detail: "1 background agent request" },
     ]);
   });
+
+  it("counts background sub-agents and a re-run between model requests, which have none in flight", () => {
+    const activity = new Map([
+      ["subagent", { activeStreams: 0, activeAgents: 0, activeMonitors: 0, backgroundAgents: 2, lastActivityAt: 0 }],
+      ["rerun", { activeStreams: 0, activeAgents: 0, activeMonitors: 0, backgroundRerun: true, lastActivityAt: 0 }],
+    ]);
+
+    expect(restartResume.backgroundWorkAtShutdown(activity)).toEqual([
+      { sessionId: "subagent", detail: "2 background sub-agents" },
+      { sessionId: "rerun", detail: "a background re-run" },
+    ]);
+  });
 });

@@ -63,7 +63,7 @@ function makeProgressEngine(progress: {
 }
 
 describe("serializeSession", () => {
-  it("reports runtime activity as running transport state while keeping stored status idle", () => {
+  it("reports agent work after the turn as running without touching the stored status", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-01T00:00:00.000Z"));
     const session = makeSession({ status: "idle" });
@@ -73,7 +73,8 @@ describe("serializeSession", () => {
 
     const serialized = serializeSession(session, context);
 
-    expect(serialized.status).toBe("idle");
+    expect(serialized.status).toBe("running");
+    expect(session.status).toBe("idle");
     expect(serialized.transportState).toBe("running");
     expect(serialized.backgroundActivity?.activeStreams).toBe(1);
     vi.useRealTimers();

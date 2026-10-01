@@ -24,6 +24,7 @@ import {
 import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
+import { effectiveSessionStatus, isBackgroundWorkLive, runtimeTransportRunning, serializeRuntimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
 import { readTodoSessionTree } from "../sessions/session-tree.js";
 import { maybeRevertEngineOverride, type SessionManager } from "../sessions/manager.js";
 import { stripControlChars, hasControlBytes } from "../shared/sanitize.js";
@@ -373,12 +374,7 @@ export interface ApiContext {
   /** In-memory (never persisted) post-settle background activity per session,
    *  maintained in server.ts from the interactive engine's onBackgroundActivity
    *  callback. lastActivityAt is epoch ms; serializeSession converts to ISO. */
-  backgroundActivity?: Map<string, {
-    activeStreams: number;
-    activeAgents?: number;
-    activeMonitors?: number;
-    lastActivityAt: number;
-  }>;
+  backgroundActivity?: Map<string, RuntimeActivityInfo>;
   /** Gateway auth token for seamless browser/CLI access when auth is required. */
   gatewayAuthToken?: string;
   /** Test-injectable Jinn home for auth device storage. Defaults to shared JINN_HOME. */
@@ -469,23 +465,27 @@ function noteStoreFailureResponse(
   }, status);
 }
 
-function sessionHasRuntimeActivity(session: Session, context: ApiContext): boolean {
+/** The session's post-settle activity, dropping an entry that has been quiet
+ *  for too long to still be describing anything. Live work never goes stale
+ *  here: the engine reports its end, and has its own backstop for a lost one. */
+function currentRuntimeActivity(session: Session, context: ApiContext): RuntimeActivityInfo | undefined {
   const activity = context.backgroundActivity?.get(session.id);
-  if (!activity) return false;
+  if (!activity) return undefined;
   const stale = activity.activeStreams <= 0
     && (activity.activeMonitors ?? 0) <= 0
+    && !isBackgroundWorkLive(activity)
     && Date.now() - activity.lastActivityAt > BACKGROUND_ACTIVITY_STALE_MS;
   if (stale) {
     context.backgroundActivity?.delete(session.id);
-    return false;
+    return undefined;
   }
-  return activity.activeStreams > 0;
+  return activity;
 }
 
 function getSessionTransportState(session: Session, context: ApiContext): "idle" | "queued" | "running" | "error" | "interrupted" {
   const queue = context.sessionManager.getQueue();
   const base = queue.getTransportState(session.sessionKey || session.sourceRef, session.status);
-  if (sessionHasRuntimeActivity(session, context) && base !== "error" && base !== "interrupted") return "running";
+  if (runtimeTransportRunning(currentRuntimeActivity(session, context)) && base !== "error" && base !== "interrupted") return "running";
   return base;
 }
 
@@ -1063,25 +1063,21 @@ export function serializeSession(
   const queue = context.sessionManager.getQueue();
   const queueDepth = queue.getPendingCount(session.sessionKey || session.sourceRef);
   const transportState = getSessionTransportState(session, context);
-  const bg = context.backgroundActivity?.get(session.id);
-  const bgIsStale = bg
-    && bg.activeStreams <= 0
-    && (bg.activeMonitors ?? 0) <= 0
-    && Date.now() - bg.lastActivityAt > BACKGROUND_ACTIVITY_STALE_MS;
-  if (bgIsStale) context.backgroundActivity?.delete(session.id);
+  const bg = currentRuntimeActivity(session, context);
+  const working = isBackgroundWorkLive(bg);
   return {
     ...session,
+    // A turn that ended with background sub-agents (or the re-run they woke)
+    // still working is work in progress: every reader — the session list, the
+    // session tools, the stall and archive checks — must see it running.
+    status: effectiveSessionStatus(session, bg),
+    lastActivity: working && bg && bg.lastActivityAt > Date.parse(session.lastActivity)
+      ? new Date(bg.lastActivityAt).toISOString()
+      : session.lastActivity,
     queueDepth,
     transportState,
     turnProgress: computeLiveTurnProgress(session, context),
-    backgroundActivity: bg && !bgIsStale
-      ? {
-          activeStreams: bg.activeStreams,
-          ...(bg.activeAgents !== undefined ? { activeAgents: bg.activeAgents } : {}),
-          ...(bg.activeMonitors !== undefined ? { activeMonitors: bg.activeMonitors } : {}),
-          lastActivityAt: new Date(bg.lastActivityAt).toISOString(),
-        }
-      : null,
+    backgroundActivity: bg ? serializeRuntimeActivity(bg) : null,
     delegatedActivity: delegatedActivityIndex?.get(session.id) ?? null,
   };
 }
@@ -1973,7 +1969,8 @@ export async function handleApiRequest(
     if (method === "POST" && params) {
       const session = getSession(params.id);
       if (!session) return notFound(res);
-      if (session.status === "running" || session.status === "waiting") {
+      const status = effectiveSessionStatus(session, currentRuntimeActivity(session, context));
+      if (status === "running" || status === "waiting") {
         return json(res, { error: "Cannot archive a chat while it is running or waiting" }, 409);
       }
       const archived = archiveSession(params.id);

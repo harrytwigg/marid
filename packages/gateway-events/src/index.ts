@@ -39,10 +39,14 @@ export interface GatewayEventMap {
   "session:background": {
     sessionId: string
     transportState: string
+    /** The session's status as reported, background work included. */
+    status?: string
     backgroundActivity: {
       activeStreams: number
       activeAgents?: number
       activeMonitors?: number
+      backgroundAgents?: number
+      backgroundRerun?: boolean
       lastActivityAt: string
     } | null
   }

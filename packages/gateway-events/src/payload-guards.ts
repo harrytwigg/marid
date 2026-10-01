@@ -134,12 +134,18 @@ function isSessionAttachment(value: unknown): boolean {
 
 function isSessionBackground(value: unknown): boolean {
   if (!isRecord(value) || !isString(value.sessionId) || !isString(value.transportState)) return false
-  if (value.backgroundActivity === null) return true
-  return isRecord(value.backgroundActivity)
-    && isNumber(value.backgroundActivity.activeStreams)
-    && isOptionalNumber(value.backgroundActivity.activeAgents)
-    && isOptionalNumber(value.backgroundActivity.activeMonitors)
-    && isString(value.backgroundActivity.lastActivityAt)
+  if (!isOptionalString(value.status)) return false
+  return value.backgroundActivity === null || isBackgroundActivity(value.backgroundActivity)
+}
+
+function isBackgroundActivity(value: unknown): boolean {
+  return isRecord(value)
+    && isNumber(value.activeStreams)
+    && isOptionalNumber(value.activeAgents)
+    && isOptionalNumber(value.activeMonitors)
+    && isOptionalNumber(value.backgroundAgents)
+    && isOptionalBoolean(value.backgroundRerun)
+    && isString(value.lastActivityAt)
 }
 
 function isProgressPayload(value: unknown): boolean {

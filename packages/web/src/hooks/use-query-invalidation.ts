@@ -209,6 +209,7 @@ export function useQueryInvalidation() {
               p.sessionId as string,
               (p.backgroundActivity as BackgroundActivity | null) ?? null,
               typeof p.transportState === 'string' ? p.transportState : undefined,
+              typeof p.status === 'string' ? p.status : undefined,
             )
             if (hasParent) {
               pendingRef.current.add('sessions')

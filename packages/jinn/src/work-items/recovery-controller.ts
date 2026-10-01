@@ -17,6 +17,7 @@ import { appendWorkItemEvent, listWorkItems, type WorkItem } from "./store.js";
 import { owningWorkflowId } from "./workflow-ownership.js";
 import { initDb } from "../shared/db.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
+import { hasLiveBackgroundWork } from "../sessions/background-work.js";
 import type { AvailabilityRearmResult } from "./availability-resume.js";
 
 export type TodoRecoveryMode = "off" | "classify-only" | "auto";
@@ -43,16 +44,19 @@ export function todoRecoveryMode(raw: string | undefined): TodoRecoveryMode {
   return raw === "off" || raw === "auto" || raw === "classify-only" ? raw : "classify-only";
 }
 
+/** A session stored idle whose background sub-agents are still working is in
+ *  flight too: its turn ended, its work did not. */
 export function sessionInFlight(sessionId: string): boolean {
   const row = initDb().prepare("SELECT status FROM sessions WHERE id = ?").get(sessionId) as { status: string } | undefined;
-  return row?.status === "running" || row?.status === "waiting";
+  return row?.status === "running" || row?.status === "waiting" || (row?.status === "idle" && hasLiveBackgroundWork(sessionId));
 }
 
 /** Newest-first, as the registry lists them; review and phase links never count. */
 export function attemptActivity(workItemId: string): AttemptActivity {
   const attempts = listSessionsByWorkItem(workItemId).filter(isExecutionAttempt);
   return {
-    inFlight: attempts.some((session) => session.status === "running" || session.status === "waiting"),
+    inFlight: attempts.some((session) => session.status === "running" || session.status === "waiting"
+      || (session.status === "idle" && hasLiveBackgroundWork(session.id))),
     lastActivityAt: attempts[0]?.lastActivity ?? null,
     executingSince: listWorkItemEvents(workItemId)
       .filter((event) => event.kind === "status_change" && event.toStatus === "executing").at(-1)?.createdAt ?? null,
