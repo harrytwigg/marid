@@ -4,9 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { PluginServerContext } from "../backend.js";
 import {
-  PROBE_WORKFLOW_RUN,
   seedProbeHome,
-  workflowServiceStub,
   writeProbePlugin,
 } from "./probe-plugin.js";
 
@@ -71,7 +69,6 @@ beforeEach(() => {
   setPluginHostGateway({
     spawnSession: async () => ({ ok: false, error: "unused" }),
     emitNotice: () => {},
-    workflowService: workflowServiceStub(),
     sendConnectorMessage: async (connector, message) => {
       sent.push({ connector, channel: message.channel, text: message.text });
       return { ok: true };
@@ -162,29 +159,6 @@ describe("what a plugin gets back from each new verb", () => {
     expect(hits[0]).toMatchObject({ path: "knowledge/birds.md", title: "Birds" });
     expect(hits[0]!.snippet).toContain("«kestrel»");
     expect(hits[0]!.matchCount).toBeGreaterThan(0);
-  });
-
-  it("lists and gets Workflows as the contract spells them", async () => {
-    await reconcilePluginWatchers(() => config);
-    const results = await verbResults();
-
-    const expected = {
-      id: "nightly",
-      title: "Nightly digest",
-      description: null,
-      revision: 3,
-      enabled: true,
-      updatedAt: "2026-01-02T00:00:00.000Z",
-    };
-    expect(results["workflows.list"]).toEqual([expected]);
-    // The service answers `get` with the whole node graph; the verb narrows it.
-    expect(results["workflows.get"]).toEqual(expected);
-  });
-
-  it("starts a run and gets the run row, not the definition behind it", async () => {
-    await reconcilePluginWatchers(() => config);
-
-    expect((await verbResults())["workflows.start"]).toEqual(PROBE_WORKFLOW_RUN);
   });
 
   it("sends through the named connector and resolves with nothing to read", async () => {

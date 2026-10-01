@@ -76,14 +76,6 @@ describe("POST /api/work-items/:id/status — open to any authenticated session"
       engine: "codex",
       source: "workflow",
       sourceRef: "workflow:review-flow:run-1:verify:1",
-      workflowProvenance: {
-        kind: "phase",
-        workflowId: "review-flow",
-        workflowName: "Review flow",
-        runId: "run-1",
-        triggerSource: "todo-status",
-        phase: { nodeId: "verify", name: "Verify", index: 2, round: 1, attempt: 1 },
-      },
     });
     const phaseItem = store.createWorkItem({ title: "Workflow phase reviews", status: "in_review" });
     store.linkSession(phaseItem.id, phase.id);

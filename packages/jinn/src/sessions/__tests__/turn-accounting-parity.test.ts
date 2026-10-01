@@ -69,7 +69,6 @@ function harness(config: JinnConfig, claudeScript: ReturnType<typeof engineResul
     config,
     new Map([["claude", claude as never], ["codex", codex as never]]),
     "parity-boot",
-    () => employee as never,
   );
   return { manager, claude, codex };
 }

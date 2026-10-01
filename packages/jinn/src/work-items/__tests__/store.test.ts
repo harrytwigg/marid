@@ -222,9 +222,9 @@ describe("work-item store — GRS-021a Todo model fields", () => {
     expect(store.effectiveVerifyMode(store.getWorkItem(wi.id)!)).toBe("verify");
   });
 
-  it("effectiveVerifyMode / effectiveMaxRounds: explicit policy wins, else provenance defaults", () => {
+  it("effectiveVerifyMode / effectiveMaxRounds: explicit policy wins, else provenance defaults (legacy workflow provenance is reviewed)", () => {
     expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "cron" })).toBe("trust");
-    expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "workflow" })).toBe("trust");
+    expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "workflow" })).toBe("verify");
     expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "delegation" })).toBe("verify");
     expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "human" })).toBe("verify");
     expect(store.effectiveVerifyMode({ verifyPolicy: { mode: "thorough" }, source: "cron" })).toBe("thorough");

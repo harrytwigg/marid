@@ -95,16 +95,6 @@ describe("historical incident replay — classifier", () => {
     expect(verdict.lane).not.toBe("operator");
   });
 
-  it("a pipeline Todo assigned with no run and no fresh attempt is recovering", () => {
-    const verdict = classifyRecovery({
-      todo: { id: "PLA-16", status: "assigned", assignee: "platform-worker", source: "workflow" },
-      lastRun: { id: "run_old", outcome: "completed", error: null, endedAt: "2026-08-20T12:00:00.000Z" },
-      owningWorkflowId: "pipeline",
-      now: new Date("2026-08-20T12:30:00.000Z"),
-    });
-    expect(verdict).toMatchObject({ class: "transient", lane: "recovering", reason: "assigned to a pipeline with no active run" });
-  });
-
   it("execution past the 4h timeout with a dead session is manager, and the same run keeps it there while the session lives", () => {
     const stalled = {
       todo: { id: "PLA-17", status: "executing", assignee: "platform-worker", source: "workflow" },

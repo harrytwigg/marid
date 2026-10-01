@@ -6,7 +6,6 @@ import type { ServerResponse } from "node:http";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ApiContext } from "../api.js";
 import type { Engine, JinnConfig } from "../../shared/types.js";
-import type { WorkflowService } from "../../workflows/service.js";
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-talk-universal-control-"));
 process.env.JINN_HOME = home;
@@ -79,48 +78,12 @@ function response() {
   };
 }
 
-interface RunRecord {
-  id: string;
-  workflowId: string;
-  status: "completed";
-  revision: number;
-  input: Record<string, unknown>;
-}
-
 function testContext() {
   const config = {
     gateway: {},
     engines: { default: "test-engine" },
     realtime: { provider: "openai", apiKey: "test-realtime-key", model: "test-realtime-model" },
   } as unknown as JinnConfig;
-  const runs = new Map<string, RunRecord>();
-  const startManual = vi.fn(async (input: {
-    workflowId: string;
-    input: Record<string, unknown>;
-    idempotencyKey?: string;
-  }) => {
-    const key = input.idempotencyKey ?? `unkeyed:${runs.size}`;
-    const existing = runs.get(key);
-    if (existing) return existing;
-    const run: RunRecord = {
-      id: `run-${runs.size + 1}`,
-      workflowId: input.workflowId,
-      status: "completed",
-      revision: 1,
-      input: input.input,
-    };
-    runs.set(key, run);
-    return run;
-  });
-  const workflowService = {
-    startManual,
-    getRun: (workflowId: string, runId: string) =>
-      [...runs.values()].find((run) => run.workflowId === workflowId && run.id === runId),
-    listRuns: (workflowId: string) => ({
-      items: [...runs.values()].filter((run) => run.workflowId === workflowId),
-      nextCursor: null,
-    }),
-  } as unknown as WorkflowService;
   const engine: Engine = {
     name: "test-engine",
     run: async () => ({ sessionId: "test-native-session", result: "Done." }),
@@ -136,14 +99,13 @@ function testContext() {
     connectors: new Map(),
     startTime: Date.now(),
     emit: vi.fn(),
-    workflowService,
     sessionManager: {
       getEngine: (name: string) => name === engine.name ? engine : undefined,
       getEngines: () => new Map([[engine.name, engine]]),
       getQueue: () => queue,
     },
   } as unknown as ApiContext;
-  return { context, startManual };
+  return { context };
 }
 
 async function call(context: ApiContext, method: string, url: string, body?: unknown, authorized = true) {
@@ -157,12 +119,12 @@ function control(providerCallId: string, tool: string, args: Record<string, unkn
 }
 
 describe("universal Talk gateway control acceptance", () => {
-  it("routes representative Todo, delegation, and Workflow writes once while refusing browser-consent sends", async () => {
+  it("routes representative Todo, and delegation writes once while refusing browser-consent sends", async () => {
     vi.stubGlobal("fetch", async () => ({
       ok: true,
       json: async () => ({ value: "test-ephemeral-token", expires_at: Math.floor(Date.now() / 1000) + 600 }),
     }));
-    const { context, startManual } = testContext();
+    const { context } = testContext();
     const todo = workItems.createWorkItem({ title: "Prepare the operator brief", body: "Draft the first version." });
     const opened = await call(context, "POST", "/api/talk/sessions");
     expect(opened.status).toBe(201);
@@ -175,7 +137,6 @@ describe("universal Talk gateway control acceptance", () => {
       "talk_comment_todo",
       "talk_assign_todo",
       "talk_delegate_todo",
-      "talk_start_workflow_run",
     ]);
     const journeyOperations = manifest.operations.filter((operation) => names.has(operation.name));
     expect(journeyOperations).toHaveLength(names.size);
@@ -259,29 +220,6 @@ describe("universal Talk gateway control acceptance", () => {
       .toEqual(["Complete the bounded verification task."]);
 
     // That the bound send really lands is journey step 2 in talk-journey.test.ts.
-
-    const workflow = control("workflow-1", "talk_start_workflow_run", {
-      id: "verification-flow",
-      input: JSON.stringify({ artifact: "acceptance-summary" }),
-    });
-    const started = await call(context, "POST", route, workflow);
-    const startedReplay = await call(context, "POST", route, workflow);
-    expect(started.body).toMatchObject({
-      ok: true,
-      operation: "talk_start_workflow_run",
-      verified: true,
-      replayed: false,
-      data: { workflowId: "verification-flow", runId: "run-1", status: "completed" },
-      evidence: { workflowId: "verification-flow", runId: "run-1", status: "completed" },
-      uiEffect: { navigate: "/workflow/verification-flow/runs/run-1" },
-    });
-    expect(startedReplay.body).toMatchObject({ ok: true, replayed: true, receiptId: started.body.receiptId });
-    expect(startManual).toHaveBeenCalledTimes(1);
-    expect(startManual).toHaveBeenCalledWith({
-      workflowId: "verification-flow",
-      input: { artifact: "acceptance-summary" },
-      idempotencyKey: `talk:${talkId}:workflow-1`,
-    });
 
     const commentCount = comments.listComments(todo.id).comments.length;
     const rejected = await call(context, "POST", route,

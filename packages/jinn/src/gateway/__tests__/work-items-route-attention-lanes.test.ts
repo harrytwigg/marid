@@ -115,9 +115,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     expect(store.getWorkItem(item.id)!.status).toBe("in_review");
 
     controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
-    detect.detectTodoAnomalies({ persist: true,
-      approvedLandingComplete: (todoId) => todoId === item.id,
-      closeApprovedLanded: () => false });
+    detect.detectTodoAnomalies({ persist: true });
     expect(rows.getWorkItemRecovery(item.id)?.lane).toBe("manager");
 
     const feed = await attentionFeed();

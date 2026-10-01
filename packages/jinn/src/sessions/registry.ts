@@ -1223,7 +1223,8 @@ export function coercePortalEmployee(
  */
 export function isPortalAgentSession(session: Session): boolean {
   return !session.employee && !session.parentSessionId
-    && session.source !== "remote-mcp" && session.source !== "terminal" && session.engine !== "terminal";
+    && session.source !== "remote-mcp" && session.source !== "workflow"
+    && session.source !== "terminal" && session.engine !== "terminal";
 }
 
 // Build the CASE that maps a row to its sidebar group. When a portalSlug is

@@ -236,19 +236,4 @@ describe("the measured context diet", () => {
     expect(measurement.ledgers.sliceGate_cooSavingMinusNewTools).toBeGreaterThan(0);
     expect(measurement.ledgers.costCronCheckpoint_cooSavingMinusCostCronSchemas).toBeGreaterThan(0);
   });
-
-  it("keeps the canonical Workflow start surfaces discoverable in the lean shipped template", () => {
-    const template = fs.readFileSync(path.join(process.cwd(), "template", "CLAUDE.md"), "utf-8");
-    const workflowSkill = fs.readFileSync(
-      path.join(process.cwd(), "template", "skills", "workflow", "SKILL.md"),
-      "utf-8",
-    );
-
-    expect(template).toContain("Workflow runs are durable records, not Sessions.");
-    expect(template).toContain("| Workflows | `skills/workflow/SKILL.md` |");
-    expect(workflowSkill).toContain("start_workflow_run");
-    expect(workflowSkill).toContain("`manual`, `schedule`, `event`, `todo-status`, and `workflow-call`");
-    expect(workflowSkill).toContain("Definitions must have one Trigger and at least one End");
-    expect(workflowSkill).toContain("decide_workflow_approval");
-  });
 });

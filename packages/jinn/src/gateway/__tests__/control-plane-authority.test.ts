@@ -15,7 +15,6 @@ import {
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-control-plane-"));
 process.env.JINN_HOME = tmpHome;
-process.env.JINN_WORKFLOW_EVIDENCE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-control-plane-wf-"));
 
 const safePortalName = "Portal COO";
 const collidingPortalName = "platform-worker";

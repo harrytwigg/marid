@@ -43,7 +43,7 @@ const MCP_A: ResolvedMcpConfig = {
   mcpServers: { jinn: { command: "node", args: ["/opt/jinn/mcp.js"], env: { JINN_SESSION_ID: "sess-1", JINN_SESSION_CAPABILITY: "cap-a" } } },
 } as ResolvedMcpConfig;
 const MCP_B: ResolvedMcpConfig = {
-  mcpServers: { jinn: { command: "node", args: ["/opt/jinn/mcp.js"], env: { JINN_SESSION_ID: "sess-1", JINN_WORKFLOW_ATTEMPT: "1" } } },
+  mcpServers: { jinn: { command: "node", args: ["/opt/jinn/mcp.js"], env: { JINN_SESSION_ID: "sess-1", JINN_SESSION_CAPABILITY: "cap-b" } } },
 } as ResolvedMcpConfig;
 
 interface Harness {

@@ -38,11 +38,9 @@ fs.writeFileSync(
 type Api = typeof import("../api.js");
 type Reg = typeof import("../../sessions/registry.js");
 type Store = typeof import("../../work-items/store.js");
-type Feed = typeof import("../../work-items/workflow-event-feed.js");
 let api: Api;
 let reg: Reg;
 let store: Store;
-let feed: Feed;
 
 function makeRes() {
   let status = 200;
@@ -124,7 +122,6 @@ beforeAll(async () => {
   api = await import("../api.js");
   reg = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
-  feed = await import("../../work-items/workflow-event-feed.js");
   (await import("../../shared/db.js")).initDb();
 });
 
@@ -136,16 +133,13 @@ describe("POST /api/work-items/:id/status — asOperator", () => {
     const cap = await setStatus(item.id, { status: "assigned", asOperator: true }, toolHeaders(coo));
 
     expect([cap.status, cap.body.workItem.status]).toEqual([200, "assigned"]);
-    // The trigger filter reads `actor`; the audit trail reads `detail`. Both,
+    // `actor` carries the operator's authority; `detail` names the session. Both,
     // or the record is a lie nobody could reconstruct an incident from.
     expect(store.listWorkItemEvents(item.id).at(-1)).toMatchObject({
       toStatus: "assigned",
       actor: "operator",
       detail: { asOperator: `session:${coo}` },
     });
-    expect(feed.createWorkflowTodoEventFeed().listPendingEvents(500)).toContainEqual(
-      expect.objectContaining({ workItemId: item.id, toStatus: "assigned", actor: "operator" }),
-    );
   });
 
   it("refuses every employee's claim, executive rank included — the COO is not an employee", async () => {
@@ -160,22 +154,10 @@ describe("POST /api/work-items/:id/status — asOperator", () => {
     }
   });
 
-  it("refuses a session an employee could produce: a child, and a workflow attempt", async () => {
+  it("refuses a session an employee could produce: a child, and a legacy workflow attempt", async () => {
     const parent = portalSession("web:coo-parent");
     const child = reg.createSession({ engine: "codex", source: "web", sourceRef: "web:coo-child", parentSessionId: parent }).id;
-    const attempt = reg.createSession({
-      engine: "codex",
-      source: "workflow",
-      sourceRef: "wf:attempt",
-      workflowProvenance: {
-        kind: "phase",
-        workflowId: "pipeline",
-        workflowName: "Pipeline",
-        runId: "run-1",
-        triggerSource: "todo-status",
-        phase: { nodeId: "land", name: "Land", index: 2, round: 1, attempt: 1 },
-      },
-    }).id;
+    const attempt = reg.createSession({ engine: "codex", source: "workflow", sourceRef: "wf:attempt" }).id;
 
     for (const caller of [child, attempt]) {
       const item = store.createWorkItem({ title: "Derived session", status: "backlog" });

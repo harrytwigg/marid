@@ -2,7 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { seedProbeHome, workflowServiceStub } from "./probe-plugin.js";
+import { seedProbeHome } from "./probe-plugin.js";
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-plugin-perms-"));
 process.env.JINN_HOME = tmpHome;
@@ -63,9 +63,6 @@ function callsFor(pluginId: string): Record<PluginHostVerb, () => unknown> {
     "sessions.spawn": () => host.sessions.spawn({ prompt: "draft a reply" }),
     "employees.list": () => host.employees.list(),
     notify: () => host.notify("something happened"),
-    "workflows.list": () => host.workflows.list(),
-    "workflows.get": () => host.workflows.get("nightly"),
-    "workflows.start": () => host.workflows.start("nightly"),
     "notes.list": () => host.notes.list(),
     "notes.read": () => host.notes.read(readable.path),
     "notes.create": () => host.notes.create({ title: "another note", body: "more" }),
@@ -81,7 +78,6 @@ beforeEach(() => {
   setPluginHostGateway({
     spawnSession: async () => ({ ok: true, session: { id: "sess-stub" } as never, dispatched: false }),
     emitNotice: () => {},
-    workflowService: workflowServiceStub(),
     sendConnectorMessage: async () => ({ ok: true }),
   });
 });
@@ -91,7 +87,7 @@ afterEach(() => {
 });
 
 describe("denying one verb", () => {
-  it.each(PLUGIN_HOST_VERBS)("refuses %s and leaves the other fifteen working", async (target) => {
+  it.each(PLUGIN_HOST_VERBS)("refuses %s and leaves the other twelve working", async (target) => {
     const calls = callsFor("mailbox");
     denied.verb = target;
 

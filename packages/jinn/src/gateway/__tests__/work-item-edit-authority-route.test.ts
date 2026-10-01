@@ -208,35 +208,6 @@ describe("PATCH /api/work-items/:id — content is open, ownership is the operat
     expect(store.getWorkItem(item.id)).toMatchObject({ assignee: "platform-worker", rank: null });
   });
 
-  it("a workflow phase edits the Todo it runs for without any run/Todo binding to consult", async () => {
-    const item = store.createWorkItem({ title: "pipeline status block" });
-    const phase = reg.createSession({
-      engine: "codex",
-      source: "web",
-      sourceRef: "wf-phase",
-      employee: "solo-worker",
-      workflowProvenance: {
-        kind: "phase",
-        workflowId: "build-pipeline",
-        workflowName: "Build Pipeline",
-        runId: "run-1",
-        triggerSource: "todo-status",
-        phase: { nodeId: "implement", name: "Implement", index: 1, round: 1, attempt: 1 },
-      },
-    });
-
-    const cap = await call("PATCH", `/api/work-items/${item.id}`, patchBody(item.version, {
-      body: "<!-- pipeline-status -->\nIMPLEMENT: done",
-      acceptance: "gates green",
-    }), toolHeaders(phase.id));
-
-    expect(cap.status).toBe(200);
-    expect(cap.body.workItem).toMatchObject({
-      body: "<!-- pipeline-status -->\nIMPLEMENT: done",
-      acceptance: "gates green",
-    });
-  });
-
   it("expectedVersion conflicts and idempotency replay work through the open path", async () => {
     const item = store.createWorkItem({ title: "cas widened", assignee: "platform-worker" });
     const session = reg.createSession({ engine: "codex", source: "web", sourceRef: "edit-cas", employee: "platform-worker" });

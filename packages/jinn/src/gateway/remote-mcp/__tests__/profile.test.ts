@@ -15,12 +15,12 @@ import { remoteMcpRouteAllowed } from "../rules.js";
 /** Tools the spec excludes from every option (FR-010, FR-011, Q2 classes T/X/D/A/C/P), less
  *  the four session-control tools admitted later. */
 const NEVER = [
-  "read_knowledge", "attach_to_work_item", "create_label", "decide_work_item_approval", "decide_workflow_approval",
+  "read_knowledge", "attach_to_work_item", "create_label", "decide_work_item_approval",
   "get_message_context", "search_messages", "spawn_session",
-  "dispatch_work_item", "update_work_item", "start_workflow_run", "rerun_workflow_run",
-  "retry_workflow_node", "fire_workflow_event", "set_work_item_dispatch",
-  "archive_work_item", "stop_session", "cancel_workflow_run", "disable_workflow", "create_workflow", "update_workflow",
-  "duplicate_workflow", "retire_workflow", "enable_workflow", "send_connector_message", "request_work_item_approval",
+  "dispatch_work_item", "update_work_item",
+  "set_work_item_dispatch",
+  "archive_work_item", "stop_session",
+  "send_connector_message", "request_work_item_approval",
   "escalate_work_item_approval", "arm_heartbeat", "stop_heartbeat", "publish_attachment", "land_on_work_item",
 ];
 
@@ -59,7 +59,7 @@ function sampleArgs(tool: JinnMcpTool): Record<string, unknown> {
 }
 
 describe("remote MCP tool profile", () => {
-  const all = new Set(buildTools({ notesEnabled: true, workflowAttempt: true }).map((tool) => tool.name));
+  const all = new Set(buildTools({ notesEnabled: true }).map((tool) => tool.name));
 
   it("names only tools that exist", () => {
     for (const name of [...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_TOOLS, ...REMOTE_MCP_SESSION_TOOLS]) expect(all.has(name), name).toBe(true);
