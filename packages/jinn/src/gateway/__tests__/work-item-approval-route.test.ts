@@ -32,34 +32,13 @@ process.env.JINN_HOME = tmpHome;
 const orgDir = path.join(tmpHome, "org", "platform");
 fs.mkdirSync(orgDir, { recursive: true });
 fs.writeFileSync(path.join(orgDir, "department.yaml"), "name: platform\n");
-fs.writeFileSync(
-  path.join(orgDir, "coo.yaml"),
-  "name: coo\ndisplayName: COO\ndepartment: platform\nrank: executive\nengine: codex\nmodel: gpt-5.5\npersona: Runs the company.\n",
-);
-fs.writeFileSync(
-  path.join(orgDir, "platform-manager.yaml"),
-  "name: platform-manager\ndisplayName: Platform Manager\ndepartment: platform\nrank: manager\nreportsTo: platform-director\nengine: codex\nmodel: gpt-5.5\npersona: Manages platform work.\n",
-);
-fs.writeFileSync(
-  path.join(orgDir, "platform-director.yaml"),
-  "name: platform-director\ndisplayName: Platform Director\ndepartment: platform\nrank: manager\nreportsTo: coo\nengine: codex\nmodel: gpt-5.5\npersona: Manages the platform manager.\n",
-);
-fs.writeFileSync(
-  path.join(orgDir, "platform-worker.yaml"),
-  "name: platform-worker\ndisplayName: Platform Worker\ndepartment: platform\nrank: employee\nreportsTo: platform-manager\nengine: codex\nmodel: gpt-5.5\npersona: Executes platform work.\n",
-);
-fs.writeFileSync(
-  path.join(orgDir, "platform-peer.yaml"),
-  "name: platform-peer\ndisplayName: Platform Peer\ndepartment: platform\nrank: employee\nreportsTo: platform-manager\nengine: codex\nmodel: gpt-5.5\npersona: Another platform worker.\n",
-);
-fs.writeFileSync(
-  path.join(orgDir, "review-manager.yaml"),
-  "name: review-manager\ndisplayName: Review Manager\ndepartment: platform\nrank: manager\nreportsTo: coo\nengine: codex\nmodel: gpt-5.5\npersona: Manages the review team.\n",
-);
-fs.writeFileSync(
-  path.join(orgDir, "reviewer.yaml"),
-  "name: reviewer\ndisplayName: Reviewer\ndepartment: platform\nrank: employee\nreportsTo: review-manager\nengine: codex\nmodel: gpt-5.5\npersona: Reviews platform work.\n",
-);
+fs.writeFileSync(path.join(orgDir, "coo.yaml"), "name: coo\ndisplayName: COO\ndepartment: platform\nrank: executive\nengine: codex\nmodel: gpt-5.5\npersona: Runs the company.\n");
+fs.writeFileSync(path.join(orgDir, "platform-manager.yaml"), "name: platform-manager\ndisplayName: Platform Manager\ndepartment: platform\nrank: manager\nreportsTo: platform-director\nengine: codex\nmodel: gpt-5.5\npersona: Manages platform work.\n");
+fs.writeFileSync(path.join(orgDir, "platform-director.yaml"), "name: platform-director\ndisplayName: Platform Director\ndepartment: platform\nrank: manager\nreportsTo: coo\nengine: codex\nmodel: gpt-5.5\npersona: Manages the platform manager.\n");
+fs.writeFileSync(path.join(orgDir, "platform-worker.yaml"), "name: platform-worker\ndisplayName: Platform Worker\ndepartment: platform\nrank: employee\nreportsTo: platform-manager\nengine: codex\nmodel: gpt-5.5\npersona: Executes platform work.\n");
+fs.writeFileSync(path.join(orgDir, "platform-peer.yaml"), "name: platform-peer\ndisplayName: Platform Peer\ndepartment: platform\nrank: employee\nreportsTo: platform-manager\nengine: codex\nmodel: gpt-5.5\npersona: Another platform worker.\n");
+fs.writeFileSync(path.join(orgDir, "review-manager.yaml"), "name: review-manager\ndisplayName: Review Manager\ndepartment: platform\nrank: manager\nreportsTo: coo\nengine: codex\nmodel: gpt-5.5\npersona: Manages the review team.\n");
+fs.writeFileSync(path.join(orgDir, "reviewer.yaml"), "name: reviewer\ndisplayName: Reviewer\ndepartment: platform\nrank: employee\nreportsTo: review-manager\nengine: codex\nmodel: gpt-5.5\npersona: Reviews platform work.\n");
 type Api = typeof import("../api.js");
 type Store = typeof import("../../work-items/store.js");
 type Approvals = typeof import("../../work-items/approvals.js");

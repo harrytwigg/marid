@@ -118,9 +118,7 @@ describe("work-item tools — registry + schemas", () => {
     expect(status.enum).not.toContain("cancelled");
     expect(tool("update_work_item").inputSchema.properties.asOperator).toMatchObject({ type: "boolean", description: expect.stringMatching(/coordinator.*done.*reason/i) });
     expect(tool("update_work_item").inputSchema.properties).not.toHaveProperty("acknowledgeEscalated");
-    expect(tool("get_work_item").inputSchema.properties.id).toMatchObject({
-      pattern: "^[A-Z]{3}-[1-9][0-9]*$",
-    });
+    expect(tool("get_work_item").inputSchema.properties.id).toMatchObject({ pattern: "^[A-Z]{3}-[1-9][0-9]*$" });
   });
 
   it("ships the generic Todo doctrine in the repo template CLAUDE.md", () => {
@@ -360,13 +358,7 @@ describe("work-item tools — unit (stub gateway)", () => {
     await expect(tool("update_work_item").handler({ id: "JIN-1", status: "executing" }, ctx)).resolves.toMatchObject({
       workItem: { status: "executing" },
     });
-    expect(calls).toEqual([
-      expect.objectContaining({
-        method: "POST",
-        url: "http://127.0.0.1:7777/api/work-items/JIN-1/status",
-        body: { status: "executing" },
-      }),
-    ]);
+    expect(calls).toEqual([expect.objectContaining({ method: "POST", url: "http://127.0.0.1:7777/api/work-items/JIN-1/status", body: { status: "executing" } })]);
   });
 
   it("forwards asOperator for the gateway to authorize, and omits it when unasked", async () => {
@@ -395,10 +387,7 @@ describe("work-item tools — unit (stub gateway)", () => {
     await expect(tool("archive_work_item").handler({ id: "JIN-1", note: "stale" }, anon.ctx)).rejects.toThrow(/caller identity unavailable/i);
 
     const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", status: "cancelled" }, archived: true } }), "sess-1");
-    const out = (await tool("archive_work_item").handler({ id: "JIN-1", note: "stale cleanup" }, ctx)) as {
-      archived: boolean;
-      workItem: { status: string };
-    };
+    const out = (await tool("archive_work_item").handler({ id: "JIN-1", note: "stale cleanup" }, ctx)) as { archived: boolean; workItem: { status: string } };
     expect(out).toMatchObject({ archived: true, workItem: { status: "cancelled" } });
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items/JIN-1/archive");
@@ -415,7 +404,6 @@ let registry: Registry;
 let store: Store;
 let approvals: Approvals;
 
-
 function ctxFor(callerSessionId?: string, capability: "valid" | "none" | string = "valid"): JinnMcpContext {
   return {
     gatewayUrl: "http://gateway.test",
@@ -426,7 +414,6 @@ function ctxFor(callerSessionId?: string, capability: "valid" | "none" | string 
       : undefined,
   };
 }
-
 
 beforeAll(async () => {
   seedPlatformOrg(process.env.JINN_HOME!);
@@ -455,9 +442,7 @@ describe("work-item tools — integration against the real API + store", () => {
     };
     expect(found.workItems.map((w) => w.id)).toContain(created.workItem.id);
 
-    const assigned = (await tool("assign_work_item").handler({ id: created.workItem.id, assignee: "platform-dev" }, ctx)) as {
-      workItem: { assignee: string; department: string; status: string };
-    };
+    const assigned = (await tool("assign_work_item").handler({ id: created.workItem.id, assignee: "platform-dev" }, ctx)) as { workItem: { assignee: string; department: string; status: string } };
     // Assigning never moves the Todo: a backlog Todo with an assignee is what "assigned" now means.
     expect(assigned.workItem).toMatchObject({ assignee: "platform-dev", department: "platform", status: "backlog" });
 

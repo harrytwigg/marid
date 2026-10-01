@@ -152,10 +152,9 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.getWorkItem(wi.id)?.status).toBe("in_review");
   });
 
-  it("continues normal reconciliation after an operator manually starts an item", async () => {
-    const transitions = await import("../transitions.js");
+  it("continues normal reconciliation after an operator manually starts an item", () => {
     const wi = store.createWorkItem({ title: "manual start", status: "backlog", source: "human" });
-    transitions.transition(wi.id, "executing", "operator", { human: true, manual: true });
+    tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
     linkedSession("s-manual-start", wi.id, "running", new Date(Date.now() + 60_000).toISOString()); // the attempt runs AFTER his dispatch, or it is not evidence about it (PLA-98)
 
     expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: false, item: { status: "executing" } });
@@ -209,15 +208,10 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.listWorkItemEvents(wi.id).filter((event) => event.toStatus === "executing")).toHaveLength(0);
   });
 
-  it("keeps an agent-declared block while its linked session is still running", async () => {
-    const transitions = await import("../transitions.js");
-    const wi = store.createWorkItem({
-      title: "declared blocker",
-      status: "executing",
-      source: "delegation",
-    });
+  it("keeps an agent-declared block while its linked session is still running", () => {
+    const wi = store.createWorkItem({ title: "declared blocker", status: "executing", source: "delegation" });
     linkedSession("s-declared-block", wi.id, "running", "2026-07-01T01:45:00.000Z");
-    transitions.transition(wi.id, "blocked", "platform-engineer", {
+    tr.transition(wi.id, "blocked", "platform-engineer", {
       detail: { note: "operator input required" },
     });
 
@@ -228,15 +222,10 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.getWorkItem(wi.id)?.status).toBe("blocked");
   });
 
-  it("keeps a review bounce executing when the newest attempt receipt succeeded", async () => {
-    const transitions = await import("../transitions.js");
-    const wi = store.createWorkItem({
-      title: "review bounce",
-      status: "in_review",
-      source: "delegation",
-    });
+  it("keeps a review bounce executing when the newest attempt receipt succeeded", () => {
+    const wi = store.createWorkItem({ title: "review bounce", status: "in_review", source: "delegation" });
     linkedSession("s-review-bounce", wi.id, "idle", "2026-07-01T01:50:00.000Z", "succeeded");
-    transitions.transition(wi.id, "executing", "reviewer", {
+    tr.transition(wi.id, "executing", "reviewer", {
       bounce: true,
       detail: { critique: "address the review finding" },
     });
@@ -341,7 +330,6 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.getWorkItem(wi.id)?.status).toBe("blocked");
     expect(store.getWorkItemSpend(wi.id)).toBeCloseTo(2);
   });
-
 });
 
 describe("reconcileActiveWorkItems / startup sweep — the recoverStaleSessions moment", () => {
