@@ -161,7 +161,8 @@ interface HandlerState {
   deps: RemoteMcpHandlerDeps;
   status: RemoteMcpStatus;
   verifier?: { key: string; value: AccessJwtVerifier };
-  tools: Map<boolean, JinnMcpTool[]>;
+  /** Keyed by what the tool set depends on in config, so a hot-reloaded change takes effect. */
+  tools: Map<string, JinnMcpTool[]>;
 }
 
 function verifierFor(state: HandlerState, auth: ResolvedRemoteMcpAuth): AccessJwtVerifier {
@@ -184,12 +185,23 @@ function refuse(state: HandlerState, res: http.ServerResponse, refusal: Refusal)
   send(res, refusal.code, refusal.body ?? { error: refusal.detail, reason: refusal.reason }, refusal.headers);
 }
 
+function toolsFor(state: HandlerState, config: JinnConfig): JinnMcpTool[] {
+  const notesEnabled = config.gateway.notesEnabled === true;
+  const knowledge = { guidance: config.knowledge?.guidance, missHint: config.knowledge?.missHint };
+  const key = JSON.stringify([notesEnabled, knowledge.guidance ?? null, knowledge.missHint ?? null]);
+  let tools = state.tools.get(key);
+  if (!tools) {
+    tools = buildRemoteMcpTools(notesEnabled, knowledge);
+    state.tools.clear(); // only the current config's tool set is ever served
+    state.tools.set(key, tools);
+  }
+  return tools;
+}
+
 /** One message, run as the identity's anchor session over loopback. */
 async function run(state: HandlerState, msg: RpcMessage, email: string, config: JinnConfig) {
   const anchor = ensureRemoteMcpAnchor(email, config.engines.default);
-  const notesEnabled = config.gateway.notesEnabled === true;
-  if (!state.tools.has(notesEnabled)) state.tools.set(notesEnabled, buildRemoteMcpTools(notesEnabled));
-  const response = await handleMcpRequest(msg, state.tools.get(notesEnabled)!, {
+  const response = await handleMcpRequest(msg, toolsFor(state, config), {
     gatewayUrl: loopbackUrl(config), token: state.deps.gatewayAuthToken, callerSessionId: anchor.id,
     sessionCapability: ensureSessionCapability(anchor.id), ...(state.deps.fetchFn ? { fetchFn: state.deps.fetchFn } : {}),
   });
@@ -209,7 +221,7 @@ async function handleMcp(state: HandlerState, req: http.IncomingMessage, res: ht
   if ("refusal" in parsed) return refuse(state, res, parsed.refusal);
   const { msg } = parsed;
   const response = await run(state, msg, verified.email, config);
-  const outcome = outcomeOf(response, msg, state.tools.get(config.gateway.notesEnabled === true) ?? []);
+  const outcome = outcomeOf(response, msg, toolsFor(state, config));
   record(state, outcome, outcome === "tool-not-in-profile" ? outcome : undefined);
   logger.info(`[remote-mcp] ${outcome} email=${verified.email} method=${String(msg.method)}${callDetail(msg)} ms=${Date.now() - started}`);
   return response ? send(res, 200, response) : send(res, 202, undefined);

@@ -99,6 +99,40 @@ describe("knowledge tools — registry + schemas", () => {
   });
 });
 
+describe("knowledge tools — instance wording", () => {
+  const tooled = (wording?: { guidance?: string; missHint?: string }) =>
+    buildKnowledgeTools(wording).find((t) => t.name === "search_knowledge")!;
+
+  it("guidance is appended to the search_knowledge description; unset leaves it untouched", () => {
+    expect(tooled({ guidance: "For facts use X." }).description).toBe(
+      "Search knowledge/ and docs/ markdown; snippets only. For facts use X.",
+    );
+    expect(tooled().description).toBe("Search knowledge/ and docs/ markdown; snippets only.");
+    expect(tooled({ guidance: "  " }).description).toBe("Search knowledge/ and docs/ markdown; snippets only.");
+  });
+
+  it("missHint replaces the zero-hit hint only", async () => {
+    const empty = stub(() => ({ status: 200, body: { results: [] } }));
+    const worded = await tooled({ missHint: "Nothing here; facts live in X." }).handler({ query: "q" }, empty.ctx);
+    expect((worded as { hint: string }).hint).toBe("Nothing here; facts live in X.");
+
+    const hit = stub(() => ({ status: 200, body: { results: [{ path: "knowledge/a.md" }] } }));
+    const found = await tooled({ missHint: "Nothing here." }).handler({ query: "q" }, hit.ctx);
+    expect((found as { hint: string }).hint).toBe("Next: read_knowledge { path }.");
+  });
+
+  it("without a missHint a zero-hit search keeps the built-in hint", async () => {
+    const empty = stub(() => ({ status: 200, body: { results: [] } }));
+    const out = await tooled().handler({ query: "q" }, empty.ctx);
+    expect((out as { hint: string }).hint).toBe("No hits. Try fewer words.");
+  });
+
+  it("buildTools threads the wording through to search_knowledge", () => {
+    const t = buildTools({ knowledge: { guidance: "G." } }).find((x) => x.name === "search_knowledge")!;
+    expect(t.description).toContain("G.");
+  });
+});
+
 describe("knowledge tools — unit (stub gateway)", () => {
   it("search_knowledge GETs the search route with the encoded query", async () => {
     const { calls, ctx } = stub(() => ({ status: 200, body: { results: [] } }));

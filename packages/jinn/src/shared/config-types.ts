@@ -212,6 +212,23 @@ export interface JinnConfig {
   context?: {
     /** Max characters for the built system prompt. Defaults to 100000. */
     maxChars?: number;
+    /**
+     * Instance-relative files whose contents are injected into every session
+     * prompt (e.g. a small current-truth file). Each is capped and marked when
+     * cut; a path that escapes the instance home or cannot be read is skipped.
+     * Absent or empty adds nothing.
+     */
+    alwaysInclude?: string[];
+  };
+  /**
+   * Steers agents that search the instance's knowledge. Absent leaves the
+   * built-in wording untouched.
+   */
+  knowledge?: {
+    /** Appended to the knowledge section of the prompt and to the `search_knowledge` description. */
+    guidance?: string;
+    /** Returned by `search_knowledge` when a search finds nothing, in place of the built-in hint. */
+    missHint?: string;
   };
   stt?: SttConfig;
   /** Read-aloud TTS (`/api/tts` + Kokoro) — optional, off unless configured. */

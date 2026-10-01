@@ -131,12 +131,13 @@ export function remotePiExtensionSource(entryDir: string): string {
 
 function piExtensionSource(serverModuleUrl: string, piMcpModuleUrl: string): string {
   return `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { buildTools, notesEnabledFromConfig } from ${JSON.stringify(serverModuleUrl)};
+import { buildTools, knowledgeWordingFromConfig, notesEnabledFromConfig } from ${JSON.stringify(serverModuleUrl)};
 import { projectPiTool } from ${JSON.stringify(piMcpModuleUrl)};
 
 export default function jinnMcpExtension(pi: ExtensionAPI): void {
   for (const tool of buildTools({
     notesEnabled: notesEnabledFromConfig(),
+    knowledge: knowledgeWordingFromConfig(),
     workflowAttempt: process.env.JINN_WORKFLOW_ATTEMPT === "1",
   })) {
     pi.registerTool({

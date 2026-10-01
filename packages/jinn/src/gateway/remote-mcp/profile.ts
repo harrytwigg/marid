@@ -1,4 +1,5 @@
 import { buildTools } from "../../mcp/server.js";
+import type { KnowledgeSearchWording } from "../../mcp/knowledge-tools.js";
 import type { JinnMcpTool } from "../../mcp/toolkit.js";
 
 /**
@@ -72,6 +73,6 @@ function forRemoteDoor(tool: JinnMcpTool): JinnMcpTool {
 }
 
 /** The profile's tools, in `buildTools` order. Note tools appear only when Notes are enabled. */
-export function buildRemoteMcpTools(notesEnabled: boolean): JinnMcpTool[] {
-  return buildTools({ notesEnabled, workflowAttempt: false }).filter((tool) => PROFILE.has(tool.name)).map(forRemoteDoor);
+export function buildRemoteMcpTools(notesEnabled: boolean, knowledge?: KnowledgeSearchWording): JinnMcpTool[] {
+  return buildTools({ notesEnabled, workflowAttempt: false, knowledge }).filter((tool) => PROFILE.has(tool.name)).map(forRemoteDoor);
 }

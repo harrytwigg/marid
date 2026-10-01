@@ -91,6 +91,22 @@ describe("validateConfigShape", () => {
     expect(withRealtime([])).toEqual(["realtime must be a mapping"]);
   });
 
+  it("accepts knowledge steering and context.alwaysInclude, and treats empty blocks as absent", () => {
+    const base = { engines: { claude: {} } };
+    expect(validateConfigShape({ ...base, knowledge: { guidance: "g", missHint: "m" }, context: { alwaysInclude: ["knowledge/state.md"] } })).toEqual([]);
+    expect(validateConfigShape({ ...base, knowledge: null, context: null })).toEqual([]);
+  });
+
+  it("rejects malformed knowledge and context.alwaysInclude", () => {
+    const base = { engines: { claude: {} } };
+    expect(validateConfigShape({ ...base, knowledge: [] })).toEqual(["knowledge must be a mapping"]);
+    expect(validateConfigShape({ ...base, knowledge: { guidance: 3 } })).toEqual(["knowledge.guidance must be a string (got number)"]);
+    expect(validateConfigShape({ ...base, knowledge: { missHint: {} } })).toEqual(["knowledge.missHint must be a string (got object)"]);
+    expect(validateConfigShape({ ...base, context: "x" })).toEqual(["context must be a mapping"]);
+    expect(validateConfigShape({ ...base, context: { alwaysInclude: "knowledge/state.md" } })).toEqual(["context.alwaysInclude must be a list of instance-relative file paths"]);
+    expect(validateConfigShape({ ...base, context: { alwaysInclude: [1] } })).toEqual(["context.alwaysInclude must be a list of instance-relative file paths"]);
+  });
+
   it("accepts a minimal valid config", () => {
     expect(validateConfigShape({ engines: { claude: { bin: "claude", model: "opus" } } })).toEqual([]);
   });

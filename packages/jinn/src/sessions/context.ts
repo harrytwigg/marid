@@ -4,6 +4,7 @@ import type { Employee, JinnConfig, OrgHierarchy, OrgNode } from "../shared/type
 import { JINN_HOME, ORG_DIR, CRON_JOBS, DOCS_DIR } from "../shared/paths.js";
 import { engineAvailable, isKnownEngine } from "../shared/models.js";
 import { gatewayBaseUrl } from "../gateway/gateway-info.js";
+import { hasControlBytes } from "../shared/sanitize.js";
 import {
   buildRosterUnavailableSection,
   buildScopedRosterSection,
@@ -25,7 +26,9 @@ import {
  *   OPTIONAL   – knowledge listing, environment scan,
  *                delegation protocol                       (trimmed first when over budget)
  *
- * Knowledge and docs files are NEVER inlined — only filenames are listed.
+ * Knowledge and docs files are NEVER inlined — only filenames are listed —
+ * except the few an instance names in context.alwaysInclude, which are inlined
+ * as ESSENTIAL sections kept whole until all optional content has been trimmed.
  * The AI can read files on demand, saving ~200K+ chars per session.
  */
 
@@ -43,6 +46,8 @@ interface Section {
   marker: string; // leading text used to identify the section in trimContext
   content: string;
   summary: string; // compact fallback when budget is tight
+  /** Kept whole until every OPTIONAL and STANDARD section has been summarized or dropped. */
+  required?: boolean;
 }
 
 /**
@@ -281,6 +286,11 @@ export function buildContext(opts: BuildContextOptions): string {
     });
   }
 
+  // ── ESSENTIAL: Instance files injected into every prompt (context.alwaysInclude) ──
+  for (const included of buildAlwaysIncludeSections(opts.config?.context?.alwaysInclude)) {
+    sections.push({ tier: Tier.ESSENTIAL, required: true, ...included });
+  }
+
   // ── STANDARD: Relationship-scoped role orientation ──────────
   const jinnMcpAttached = opts.jinnMcpAttached === true;
   // A roster that could not be read is reported, never omitted — an absent
@@ -332,7 +342,7 @@ export function buildContext(opts: BuildContextOptions): string {
   // jinn-MCP-attached sessions the ~100-file index collapses to a 2-line
   // manifest pointing at search_knowledge/read_knowledge; everyone
   // else keeps the full index byte-identical.
-  const knowledgeCtx = buildKnowledgeContext(opts.jinnMcpAttached);
+  const knowledgeCtx = buildKnowledgeContext(opts.jinnMcpAttached, opts.config?.knowledge?.guidance);
   if (knowledgeCtx) {
     sections.push({
       tier: Tier.OPTIONAL,
@@ -711,12 +721,80 @@ const KNOWLEDGE_MCP_MANIFEST = [
   "Search company knowledge in `knowledge/` + `docs/` with `search_knowledge`; `read_knowledge { path }` can read any relative file inside the Jinn instance.",
 ].join("\n");
 
-function buildKnowledgeContext(jinnMcpAttached?: boolean): string | null {
+function buildKnowledgeContext(jinnMcpAttached?: boolean, guidance?: string): string | null {
   if (!knowledgeCache || Date.now() - knowledgeCache.builtAt >= KNOWLEDGE_CACHE_TTL_MS) {
     knowledgeCache = { builtAt: Date.now(), value: buildKnowledgeContextUncached() };
   }
-  if (knowledgeCache.value === null) return null;
-  return jinnMcpAttached ? KNOWLEDGE_MCP_MANIFEST : knowledgeCache.value;
+  const extra = guidance?.trim();
+  // No knowledge files means no section, but the instance's guidance still has to reach the agent.
+  if (knowledgeCache.value === null) return extra ? `## Knowledge base\n${extra}` : null;
+  const section = jinnMcpAttached ? KNOWLEDGE_MCP_MANIFEST : knowledgeCache.value;
+  // The index ends in a blank line; the manifest does not.
+  return extra ? `${section.trimEnd()}\n${extra}` : section;
+}
+
+/** Per-file cap for `context.alwaysInclude`; these files ride in every prompt, so they stay small. */
+export const ALWAYS_INCLUDE_FILE_CHAR_CAP = 16_000;
+
+/**
+ * What `context.alwaysInclude` may name: Markdown under the instance's
+ * `knowledge/` or `docs/`. The files ride in every session's prompt on every
+ * engine, and `knowledge/` is writable by agents, so the boundary is checked on
+ * the RESOLVED file, not on the name the config gives: a symlink out of those
+ * directories, a hidden path, or a non-Markdown target is never injected.
+ * Credential stores (`secrets/`, `config.yaml`) are outside by construction.
+ */
+const ALWAYS_INCLUDE_ROOTS = ["knowledge", "docs"];
+
+function resolveAlwaysIncludeFile(relPath: string): string | null {
+  if (typeof relPath !== "string" || relPath.length === 0 || relPath.length > 300 || hasControlBytes(relPath)) return null;
+  if (path.isAbsolute(relPath) || path.win32.isAbsolute(relPath) || relPath.includes("\\")) return null;
+  const segments = relPath.split("/");
+  if (segments.some((seg) => seg === "" || seg.startsWith("."))) return null;
+  // Exact, case-sensitive: a lookalike that a case-insensitive filesystem might fold fails closed.
+  if (!ALWAYS_INCLUDE_ROOTS.includes(segments[0]) || segments.length < 2) return null;
+  try {
+    const realRoot = fs.realpathSync(path.join(JINN_HOME, segments[0]));
+    const realFile = fs.realpathSync(path.join(JINN_HOME, ...segments));
+    const within = path.relative(realRoot, realFile);
+    if (within === "" || within === ".." || within.startsWith(`..${path.sep}`) || path.isAbsolute(within)) return null;
+    if (within.split(path.sep).some((seg) => seg.startsWith("."))) return null;
+    if (!realFile.endsWith(".md") || !fs.statSync(realFile).isFile()) return null;
+    return realFile;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One section per readable `context.alwaysInclude` path. An ineligible,
+ * unreadable or empty file is skipped rather than failing the prompt.
+ */
+function buildAlwaysIncludeSections(paths?: string[]): Array<Pick<Section, "marker" | "content" | "summary">> {
+  if (!Array.isArray(paths)) return [];
+  const out: Array<Pick<Section, "marker" | "content" | "summary">> = [];
+  for (const relPath of new Set(paths)) {
+    const realFile = resolveAlwaysIncludeFile(relPath);
+    if (!realFile) continue;
+    let whole: string;
+    try {
+      whole = fs.readFileSync(realFile, "utf-8");
+    } catch {
+      continue;
+    }
+    if (whole.trim() === "") continue;
+    const cut = whole.length > ALWAYS_INCLUDE_FILE_CHAR_CAP;
+    const body = (cut ? whole.slice(0, ALWAYS_INCLUDE_FILE_CHAR_CAP) : whole).trimEnd();
+    const heading = `## Always in context: ${relPath}`;
+    out.push({
+      marker: heading,
+      content: cut
+        ? `${heading}\n${body}\n\n[Truncated at ${ALWAYS_INCLUDE_FILE_CHAR_CAP} chars — read ${relPath} for the rest]`
+        : `${heading}\n${body}`,
+      summary: `${heading}\nRead \`${relPath}\` before acting; it is current truth the prompt budget had no room for.`,
+    });
+  }
+  return out;
 }
 
 function buildKnowledgeContextUncached(): string | null {
@@ -880,7 +958,7 @@ function trimContext(sections: Section[], maxChars: number): string {
   // them before dropping summarized orientation such as the scoped roster.
   for (let i = sections.length - 1; i >= 0; i--) {
     if (result.length <= maxChars) break;
-    if (sections[i].tier === Tier.ESSENTIAL && sections[i].summary) {
+    if (sections[i].tier === Tier.ESSENTIAL && !sections[i].required && sections[i].summary) {
       parts[i] = sections[i].summary;
       result = assemble();
     }
@@ -903,6 +981,16 @@ function trimContext(sections: Section[], maxChars: number): string {
         parts[i] = null;
         result = assemble();
       }
+    }
+  }
+
+  // Required sections (instance always-include files) give way only now, after
+  // everything optional and standard has been tried.
+  for (let i = sections.length - 1; i >= 0; i--) {
+    if (result.length <= maxChars) break;
+    if (sections[i].required && parts[i] !== null) {
+      parts[i] = sections[i].summary;
+      result = assemble();
     }
   }
 

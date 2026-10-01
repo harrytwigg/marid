@@ -153,6 +153,27 @@ describe("/mcp transport and auth order (D6, D7)", () => {
     expect(names).not.toContain("read_knowledge");
   });
 
+  it("serves the instance's knowledge wording on search_knowledge and follows a config reload", async () => {
+    let knowledge: { guidance?: string; missHint?: string } | undefined = { guidance: "FIRST-GUIDANCE" };
+    const h = mod.createRemoteMcpHandler({
+      getConfig: () => ({ ...(config() as object), ...(knowledge ? { knowledge } : {}) }) as never,
+      gatewayAuthToken: "gateway-token",
+      createVerifier: () => verifier,
+      fetchFn,
+    });
+    const searchDescription = async () => {
+      const r = await call(h, { headers: auth, body: { jsonrpc: "2.0", id: 9, method: "tools/list" } });
+      return (r.body.result.tools as Array<{ name: string; description: string }>).find((tool) => tool.name === "search_knowledge")!.description;
+    };
+    expect(await searchDescription()).toContain("FIRST-GUIDANCE");
+    knowledge = { guidance: "SECOND-GUIDANCE" };
+    const reloaded = await searchDescription();
+    expect(reloaded).toContain("SECOND-GUIDANCE");
+    expect(reloaded).not.toContain("FIRST-GUIDANCE");
+    knowledge = undefined;
+    expect(await searchDescription()).toBe("Search knowledge/ and docs/ markdown; snippets only.");
+  });
+
   it("runs a tool as the identity's anchor session, reused across calls", async () => {
     gatewayCalls.length = 0;
     const h = handler();
