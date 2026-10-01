@@ -85,7 +85,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     return res.body.workItems as Array<Record<string, unknown>>;
   }
 
-  it("QPR-4: an unowned in_review leftover survives the recovery tick into Manager attention", async () => {
+  it("QPR-4: a failed in_review leftover survives the recovery tick into Manager attention", async () => {
     const detect = await import("../../work-items/anomaly-detect.js");
     const controller = await import("../../work-items/recovery-controller.js");
     const runs = await import("../../work-items/runs.js");
@@ -94,7 +94,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     const db = dbModule.initDb();
 
     const item = store.createWorkItem({
-      title: "QPR-4 unowned landing", status: "backlog",
+      title: "QPR-4 failed landing", status: "backlog",
     });
     transitions.transition(item.id, "in_review", "session:worker", { agent: true });
     store.createWorkItem({
@@ -106,7 +106,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
        VALUES (?, 'claude', 'cron', ?, 'idle', ?, ?, ?)`,
     ).run(sessionId, `cron:${sessionId}`, item.id, new Date().toISOString(), new Date().toISOString());
     const run = runs.openWorkItemRun({ workItemId: item.id, sessionId });
-    runs.closeWorkItemRun(run.id, { outcome: "completed", endedAt: new Date().toISOString() });
+    runs.closeWorkItemRun(run.id, { outcome: "crashed", error: "the build step exited with code 1", endedAt: new Date().toISOString() });
     expect(store.getWorkItem(item.id)!.status).toBe("in_review");
 
     controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "backlog" }) });

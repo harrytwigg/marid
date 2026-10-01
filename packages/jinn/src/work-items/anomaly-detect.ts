@@ -10,7 +10,6 @@ import { appendWorkItemEvent, getWorkItem, listWorkItems, type WorkItem } from "
 export const ANOMALY_KINDS = [
   "execution-timeout",
   "executing-unhanded",
-  "review-without-reviewer",
   "blocked-without-recovery",
 ] as const;
 export type AnomalyKind = (typeof ANOMALY_KINDS)[number];
@@ -43,14 +42,6 @@ function executionTimeout(item: WorkItem, now: Date): TodoAnomaly | undefined {
   return { workItemId: item.id, kind: "execution-timeout", lane: "manager", reason: "execution has outlived the 4h timeout without an in-flight session to speak for it" };
 }
 
-function reviewAnomaly(item: WorkItem): TodoAnomaly | undefined {
-  if (item.status !== "in_review") return undefined;
-  if (!item.assignee) {
-    return { workItemId: item.id, kind: "review-without-reviewer", lane: "manager", reason: "in review with no assignee to answer for it" };
-  }
-  return undefined;
-}
-
 function blockedWithoutRecovery(item: WorkItem): TodoAnomaly | undefined {
   if (item.status !== "blocked" || getWorkItemRecovery(item.id)) return undefined;
   const verdict = classifyWorkItem(item);
@@ -59,7 +50,7 @@ function blockedWithoutRecovery(item: WorkItem): TodoAnomaly | undefined {
 }
 
 function inspect(item: WorkItem, now: Date): TodoAnomaly | undefined {
-  return executionTimeout(item, now) ?? reviewAnomaly(item) ?? blockedWithoutRecovery(item);
+  return executionTimeout(item, now) ?? blockedWithoutRecovery(item);
 }
 
 export interface DetectTodoAnomaliesInput {

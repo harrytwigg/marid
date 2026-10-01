@@ -78,20 +78,14 @@ describe("detectTodoAnomalies", () => {
     expect(found).toMatchObject({ kind: "blocked-without-recovery", lane: "manager" });
   });
 
-  it("puts an in_review Todo with no assignee on Manager attention", () => {
-    const item = store.createWorkItem({ title: "in review with nobody to answer for it", status: "in_review" });
-    expect(detect.detectAnomalyFor(item.id)).toMatchObject({
-      kind: "review-without-reviewer", lane: "manager", reason: "in review with no assignee to answer for it",
-    });
+  // in_review is the operator's desk: an unassigned Todo there is waiting on
+  // the operator, not missing a reviewer.
+  it.each([undefined, "platform-worker"])("does not flag an in_review Todo (assignee %s)", (assignee) => {
+    const item = store.createWorkItem({ title: "in review", status: "in_review", ...(assignee ? { assignee } : {}) });
+    expect(detect.detectAnomalyFor(item.id)).toBeUndefined();
     detect.detectTodoAnomalies({ persist: true });
     controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
-    const hits = store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id);
-    expect(hits).toContain(item.id);
-  });
-
-  it("does not flag an in_review Todo that has an assignee", () => {
-    const item = store.createWorkItem({ title: "in review, owned", status: "in_review", assignee: "platform-worker" });
-    expect(detect.detectAnomalyFor(item.id)).toBeUndefined();
+    expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).not.toContain(item.id);
   });
 
   it("does not flag an execution-timeout while the session is still in flight", () => {

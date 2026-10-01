@@ -82,15 +82,17 @@ describe("historical incident replay — classifier", () => {
     expect(classifyRecovery({ ...stalled, openRun: { ...stalled.openRun, sessionInFlight: true } }).lane).toBe("operator");
   });
 
-  it("an in_review Todo with no assignee is manager, not Needs you", () => {
+  // in_review is the operator's desk: an unassigned Todo there waits on the
+  // operator, so it is no manager's leftover.
+  it("an in_review Todo with no assignee is not put on Manager attention", () => {
     const verdict = classifyRecovery({ todo: { id: "PLA-18", status: "in_review", assignee: null, source: "workflow" } });
-    expect(verdict).toMatchObject({ lane: "manager", reason: "in review with no assignee to answer for it" });
+    expect(verdict).toMatchObject({ lane: "operator", reason: GENERIC_OPERATOR_REASON });
   });
 });
 
 describe("mayReplaceRecoveryLane", () => {
   const generic = { class: "operator" as const, lane: "operator" as const, reason: GENERIC_OPERATOR_REASON };
-  const leftover = { class: "operator" as const, lane: "manager" as const, reason: "in review with no assignee to answer for it" };
+  const leftover = { class: "code" as const, lane: "manager" as const, reason: "the attempt failed in the work itself" };
   const operatorOnly = { class: "operator" as const, lane: "operator" as const, reason: "a specific decision only the operator can make" };
 
   it("a generic fallback cannot downgrade an unresolved manager lane", () => {
@@ -104,6 +106,13 @@ describe("mayReplaceRecoveryLane", () => {
 
   it("operator-only authority may replace manager (Needs you)", () => {
     expect(mayReplaceRecoveryLane({ lane: "manager" }, operatorOnly, "in_review")).toBe(true);
+  });
+
+  it("a generic fallback may replace a manager row whose verdict is no longer given", () => {
+    for (const reason of ["approved landing is still open", "in review with no assignee to answer for it"]) {
+      expect(mayReplaceRecoveryLane({ lane: "manager", reason }, generic, "in_review")).toBe(true);
+    }
+    expect(mayReplaceRecoveryLane({ lane: "manager", reason: "the attempt failed in the work itself" }, generic, "in_review")).toBe(false);
   });
 
   it("a resolved Todo may drop a stale manager row", () => {

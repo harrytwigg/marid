@@ -47,6 +47,15 @@ export const EXECUTING_UNHANDED_REASON = "executing with nothing running for ove
 /** Generic fallback: classifyRecovery found no specific incident. */
 export const GENERIC_OPERATOR_REASON = "no safe automatic recovery is known";
 
+/** Verdicts an older classifier gave and this one never does. */
+const RETIRED_RECOVERY_REASONS: ReadonlySet<string> = new Set([
+  "a routed approval is waiting on an employee, not the operator",
+  "approved landing is still open",
+  "in review with no pending approval and no reviewer",
+  "in review with no assignee to answer for it",
+  "operator-only approval is a genuine authority decision",
+]);
+
 export function isGenericOperatorFallback(verdict: RecoveryClassification): boolean {
   return verdict.lane === "operator" && verdict.reason === GENERIC_OPERATOR_REASON;
 }
@@ -57,14 +66,19 @@ export function isGenericOperatorFallback(verdict: RecoveryClassification): bool
  * A later generic operator fallback cannot downgrade an unresolved specific
  * lane (manager / recovering). Specific verdicts (failure class, stalled run
  * or assignment, leftover manager) may replace. Terminal status means the prior condition resolved.
+ * So does a verdict the classifier no longer gives: those came from Todo
+ * approvals, and from treating an unassigned in_review Todo as unreviewed when
+ * in_review is the operator's desk, so a row left in one of them would hold a
+ * Todo on Manager attention for good.
  */
 export function mayReplaceRecoveryLane(
-  prior: { lane: AttentionLane } | undefined,
+  prior: { lane: AttentionLane; reason?: string } | undefined,
   next: RecoveryClassification,
   itemStatus: string,
 ): boolean {
   if (!prior) return true;
   if (itemStatus === "done" || itemStatus === "cancelled") return true;
+  if (prior.reason !== undefined && RETIRED_RECOVERY_REASONS.has(prior.reason)) return true;
   if (isGenericOperatorFallback(next) && prior.lane !== "operator") return false;
   return true;
 }
@@ -157,11 +171,7 @@ function classifyStalled(input: RecoveryIncidentInput, status: string, now: numb
 }
 
 function classifyLeftover(input: RecoveryIncidentInput, now: number): RecoveryClassification | undefined {
-  const status = input.todo.status;
-  if (status === "in_review" && !input.todo.assignee) {
-    return { class: "operator", lane: "manager", reason: "in review with no assignee to answer for it" };
-  }
-  return classifyStalled(input, status, now);
+  return classifyStalled(input, input.todo.status, now);
 }
 
 export function classifyRecovery(input: RecoveryIncidentInput): RecoveryClassification {
