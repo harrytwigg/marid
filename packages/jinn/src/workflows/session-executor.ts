@@ -31,7 +31,7 @@ export class WorkflowSessionExecutor implements WorkflowSessionExecutorContract 
     return this.sessions.remindWorkflowAttempt(input.sessionId, input.text);
   }
 
-  attemptState(sessionId: string): { idle: boolean; runningChildren: number } | null {
+  attemptState(sessionId: string): { idle: boolean; runningChildren: number; backgroundWork?: boolean } | null {
     return this.sessions.workflowAttemptState(sessionId);
   }
 

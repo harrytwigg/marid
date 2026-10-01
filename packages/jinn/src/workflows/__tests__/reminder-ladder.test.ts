@@ -40,7 +40,7 @@ const models: ModelRegistry = {
 class FakeExecutor {
   readonly commands: WorkflowAttemptCommand[] = [];
   readonly reminders: Array<{ sessionId: string; text: string }> = [];
-  readonly states = new Map<string, { idle: boolean; runningChildren: number }>();
+  readonly states = new Map<string, { idle: boolean; runningChildren: number; backgroundWork?: boolean }>();
   private readonly listeners = new Set<WorkflowAttemptCompletionListener>();
   private readonly turns = new Map<string, number>();
   private readonly receipts = new Map<string, WorkflowAttemptCompletion>();
@@ -55,7 +55,7 @@ class FakeExecutor {
   async remind(input: { sessionId: string; text: string }): Promise<void> {
     this.reminders.push(input);
   }
-  attemptState(sessionId: string): { idle: boolean; runningChildren: number } | null {
+  attemptState(sessionId: string): { idle: boolean; runningChildren: number; backgroundWork?: boolean } | null {
     return this.states.get(sessionId) ?? null;
   }
   subscribe(listener: WorkflowAttemptCompletionListener): () => void {
@@ -301,6 +301,40 @@ describe("workflow explicit completion and reminder ladder", () => {
     expect(service.getRun(definition.id, run.id)?.attempts[0]).toMatchObject({
       status: "running",
       remindersSent: 3,
+    });
+  });
+
+  it("neither nudges nor fails an attempt whose turn ended on background sub-agents, and reminds it once they are done", async () => {
+    const { definition, run, sessionId } = await start({ id: "background-after-final" });
+    await sendThreeReminders();
+    // The turn ends on narration with sub-agents still working (the manager
+    // reports such a session neither idle nor finished).
+    executor.states.set(sessionId, { idle: false, runningChildren: 0, backgroundWork: true });
+    const before = executor.reminders.length;
+    await executor.turnEnd("Launched two agents; I will carry on when they report.");
+
+    const waiting = service.getRun(definition.id, run.id)!.attempts[0]!;
+    expect(waiting).toMatchObject({ status: "running", remindersSent: 3 });
+    expect(executor.reminders).toHaveLength(before);
+    const recheckAt = waiting.nextReminderAt!;
+    expect(recheckAt).toBeDefined();
+
+    // Still working when the ladder looks: deferred again, nothing sent.
+    await recover(recheckAt);
+    expect(executor.reminders).toHaveLength(before);
+
+    // Done: the ladder spends one final rung instead of the attempt being failed.
+    executor.states.set(sessionId, { idle: true, runningChildren: 0, backgroundWork: false });
+    await recover(service.getRun(definition.id, run.id)!.attempts[0]!.nextReminderAt!);
+    expect(executor.reminders).toHaveLength(before + 1);
+    expect(executor.reminders.at(-1)?.text).toContain("final reminder");
+    expect(service.getRun(definition.id, run.id)!.attempts[0]).toMatchObject({ status: "running", remindersSent: 4 });
+
+    // A turn that still submits nothing now fails as before.
+    await executor.turnEnd();
+    expect(service.getRun(definition.id, run.id)!.attempts[0]).toMatchObject({
+      status: "failed",
+      error: { code: "workflow-no-output" },
     });
   });
 

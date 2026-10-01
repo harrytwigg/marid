@@ -15,6 +15,8 @@ const REMINDER_TEXT = "Workflow reminder: if you have finished this step, call `
 const FINAL_REMINDER_TEXT = `${REMINDER_TEXT} This is the final reminder. If you genuinely need more time, call \`workflow_extend_deadline\`.`;
 
 export const REMINDER_RUNGS_MINUTES = [5, 15, 30] as const;
+/** How long a rung owed to a busy session waits before looking again. */
+export const BUSY_DEFERRAL_MINUTES = 5;
 
 export function addMinutes(at: string, minutes: number): string {
   return new Date(Date.parse(at) + minutes * 60_000).toISOString();
@@ -42,10 +44,11 @@ function isDue(attempt: WorkflowAttemptRecord | null, now: string): attempt is D
 
 type DueAttempt = WorkflowAttemptRecord & { sessionId: string; nextReminderAt: string };
 
-/** The third rung is the last one, so it carries the deadline-extension escape.
+/** The third rung is the last one, so it carries the deadline-extension escape;
+ *  so does a rung owed past it, once background work a turn ended on is done.
  *  An output block that failed to parse is quoted back ahead of it. */
 function rungText(attempt: WorkflowAttemptRecord, rung: number): string {
-  const reminder = rung === 3 ? FINAL_REMINDER_TEXT : REMINDER_TEXT;
+  const reminder = rung >= REMINDER_RUNGS_MINUTES.length ? FINAL_REMINDER_TEXT : REMINDER_TEXT;
   return attempt.pendingOutputError
     ? `Your previous output block was invalid: ${attempt.pendingOutputError}\n\n${reminder}`
     : reminder;
@@ -59,7 +62,7 @@ export async function remindDueAttempts(now: string, ports: ReminderLadderPorts)
     const state = ports.executor.attemptState(current.sessionId);
     if (!state?.idle || state.runningChildren > 0) {
       ports.repository.mutateRun(run.id, run.revision, (tx) => {
-        tx.setAttemptReminder(current.nodeId, current.attempt, { nextReminderAt: addMinutes(now, 5) });
+        tx.setAttemptReminder(current.nodeId, current.attempt, { nextReminderAt: addMinutes(now, BUSY_DEFERRAL_MINUTES) });
       });
       ports.changed(run);
       continue;

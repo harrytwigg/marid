@@ -354,7 +354,9 @@ export interface WorkflowSessionExecutor {
   startAttempt(command: WorkflowAttemptCommand): Promise<{ sessionId: string }>;
   stopAttempt(input: { sessionId: string; reason: string }): Promise<void>;
   remind(input: { sessionId: string; text: string }): Promise<void>;
-  attemptState(sessionId: string): { idle: boolean; runningChildren: number } | null;
+  /** `backgroundWork`: the session's turn ended with background sub-agents (or
+   *  the re-run they wake) still working. Absent when the executor cannot tell. */
+  attemptState(sessionId: string): { idle: boolean; runningChildren: number; backgroundWork?: boolean } | null;
 }
 
 /** Durable attribution for a workflow-owned employee attempt session. */

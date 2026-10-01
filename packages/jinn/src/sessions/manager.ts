@@ -38,7 +38,7 @@ import { runTurn } from "./turn/runner.js";
 import { resolveTurnHierarchy } from "./turn/preflight.js";
 import { createConnectorTurnSurface } from "./turn/connector-surface.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
-import { reportedSessionStatus } from "./background-work.js";
+import { hasLiveBackgroundWork, reportedSessionStatus } from "./background-work.js";
 
 export interface RouteOptions {
   employee?: Employee;
@@ -161,7 +161,7 @@ export class SessionManager {
     if (!claim) throw new Error(`Workflow attempt session "${sessionId}" is not idle.`);
     this.enqueueWorkflowAttempt(session, text, employee, claim);
   }
-  workflowAttemptState(sessionId: string): { idle: boolean; runningChildren: number } | null {
+  workflowAttemptState(sessionId: string): { idle: boolean; runningChildren: number; backgroundWork: boolean } | null {
     const session = getSession(sessionId);
     if (!session || session.workflowProvenance?.kind !== "phase") return null;
     // A turn that ended with background sub-agents still working is not idle:
@@ -174,7 +174,7 @@ export class SessionManager {
       const transport = this.queue.getTransportState(child.sessionKey, child.status);
       return reportedSessionStatus(child) === "running" || transport === "running" || transport === "queued";
     }).length;
-    return { idle, runningChildren };
+    return { idle, runningChildren, backgroundWork: hasLiveBackgroundWork(sessionId) };
   }
   async stopWorkflowAttempt(input: { sessionId: string; reason: string }): Promise<void> {
     const session = getSession(input.sessionId); if (!session || session.workflowProvenance?.kind !== "phase") return;

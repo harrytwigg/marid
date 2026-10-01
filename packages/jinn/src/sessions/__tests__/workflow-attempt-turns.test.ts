@@ -291,7 +291,7 @@ describe("workflow attempt per-turn completion", () => {
     const queuedTurn = manager.getQueue().enqueue(queued.sessionKey, () => held);
     await waitFor(() => manager.getQueue().isRunning(queued.sessionKey));
 
-    expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: true, runningChildren: 2 });
+    expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: true, runningChildren: 2, backgroundWork: false });
     expect(manager.workflowAttemptState("missing")).toBeNull();
 
     release();
@@ -311,19 +311,19 @@ describe("workflow attempt per-turn completion", () => {
       sessionKey: "child-background",
       parentSessionId: sessionId,
     });
-    expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: true, runningChildren: 0 });
+    expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: true, runningChildren: 0, backgroundWork: false });
 
     const subagents = { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: Date.now() };
     runtimeActivity.set(sessionId, subagents);
     runtimeActivity.set(child.id, subagents);
     try {
       // A reminder pasted now, or a no-output verdict, would land on live work.
-      expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: false, runningChildren: 1 });
+      expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: false, runningChildren: 1, backgroundWork: true });
     } finally {
       runtimeActivity.delete(sessionId);
       runtimeActivity.delete(child.id);
     }
-    expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: true, runningChildren: 0 });
+    expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: true, runningChildren: 0, backgroundWork: false });
   });
 });
 

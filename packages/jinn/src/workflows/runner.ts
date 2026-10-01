@@ -28,7 +28,7 @@ import { predicatesHold } from "./predicates.js";
 import { completeBoundTodo, landingShortfall, reachedSuccessEnd, type WorkflowLandingVerifier } from "./run-closure.js";
 import { callChildren, childTerminal, fanoutInput, fanoutPlan, iterationSettings, iterationStep, validateFanoutChildren,
   type FanoutPlan, type IterationStep } from "./workflow-call.js";
-import { addMinutes, hasWorkflowOutputBlock, remindDueAttempts, REMINDER_RUNGS_MINUTES } from "./reminder-ladder.js";
+import { addMinutes, BUSY_DEFERRAL_MINUTES, hasWorkflowOutputBlock, remindDueAttempts, REMINDER_RUNGS_MINUTES } from "./reminder-ladder.js";
 import { planStopNudge, STOP_NUDGE_TEXT } from "../sessions/stop-nudge.js";
 import { WorkflowRepositoryError, type WorkflowRepository } from "./repository.js";
 import type {
@@ -961,6 +961,23 @@ export class WorkflowRunner {
     }
     const endedAt = event.completedAt;
     if (cleanTurnEnd && !output && !failure) {
+      const state = this.options.executor.attemptState(event.sessionId);
+      // The turn ended with background sub-agents still working, and what they
+      // bring back arrives in a re-run that no completion event reports. A nudge
+      // or a no-output failure now would land on work in progress: look again
+      // through the ladder, which waits for the session to go idle and then
+      // spends the next rung (past the third, a final one).
+      if (state?.backgroundWork) {
+        this.options.repository.mutateRun(run.id, run.revision, (tx) => {
+          tx.setAttemptReminder(attempt.nodeId, attempt.attempt, {
+            nextReminderAt: addMinutes(endedAt, BUSY_DEFERRAL_MINUTES),
+            ...(pendingOutputError ? { pendingOutputError } : {}),
+            lastProcessedTurn: event.turn,
+          });
+        });
+        this.changed(run);
+        return true;
+      }
       // An unparseable block already earns its own targeted reminder, so telling
       // that turn it ended on narration would simply be untrue.
       if (!pendingOutputError && await this.stopNudge(run, attempt, event)) return true;
@@ -975,7 +992,6 @@ export class WorkflowRunner {
         this.changed(run);
         return true;
       }
-      const state = this.options.executor.attemptState(event.sessionId);
       if ((state?.runningChildren ?? 0) > 0) return true;
       const noOutput: WorkflowError = { code: "workflow-no-output", message: "Workflow attempt ended without submitting output.", retryable: true, nodeId: attempt.nodeId, attempt: attempt.attempt };
       const routed = this.settleFailure(run, attempt, noOutput, "failed", endedAt, event.turn);
