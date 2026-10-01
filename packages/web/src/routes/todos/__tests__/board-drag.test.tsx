@@ -34,8 +34,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getOrg: vi.fn().mockResolvedValue({ departments: [], employees: [] }),
       createWorkItem: vi.fn(),
       assignWorkItem: vi.fn(),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -50,11 +48,6 @@ function compact(id: string, status: WorkItemStatusWire): WorkItemCompactWire {
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: id,

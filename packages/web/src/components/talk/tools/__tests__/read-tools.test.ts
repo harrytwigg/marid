@@ -18,7 +18,7 @@ const TODO = {
   workItem: {
     id: "ABC-59", title: "Ship the orb", status: "executing", assignee: "a-lead",
     department: "platform", parentId: null, dueAt: null, updatedAt: "2026-01-02T03:04:05Z",
-    approvalState: null, body: "  The   body.  ",
+    body: "  The   body.  ",
   },
   labels: [{ id: "l1", name: "build" }],
   comments: { total: 7, comments: Array.from({ length: 7 }, (_, i) => ({

@@ -5,7 +5,6 @@ import {
   Search,
   Check,
   Pause,
-  Bell,
   X,
   Clock,
   Workflow,
@@ -21,9 +20,9 @@ import { stateKeyOf, type StateKey } from "@/lib/todos"
 /* GRS-021d — the state-circle primitive. A tinted disc + a glyph from the same
  * lucide family the rest of the app uses. The disc
  * treatment (soft tinted fill, no border) is the new primitive; the glyph inside
- * is the shared family. `approval` is a synthetic key for the Needs-you bell. */
+ * is the shared family. */
 
-export type StateGlyphKey = StateKey | "approval"
+export type StateGlyphKey = StateKey
 
 interface GlyphSpec {
   Icon: LucideIcon
@@ -53,7 +52,6 @@ const SPEC: Record<StateGlyphKey, GlyphSpec> = {
     fg: "var(--system-orange)",
   },
   cancelled: { Icon: X, bg: "var(--fill-tertiary)", fg: "var(--text-quaternary)" },
-  approval: { Icon: Bell, bg: "var(--accent-fill)", fg: "var(--accent)" },
 }
 
 /** A tinted state disc. `size` is the disc diameter in px; the glyph scales to ~half. */

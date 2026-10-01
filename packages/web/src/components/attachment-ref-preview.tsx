@@ -5,8 +5,8 @@ import { api } from "@/lib/api"
 import { parseAttachmentRef, splitAttachmentRefs, type AttachmentRef } from "@/lib/attachment-ref"
 import { isImageMime } from "@/routes/todos/task-page/attachment-preview"
 
-/* Approval text carries attachments as refs, not bytes, so the
- * surfaces an operator decides at have only `attachment:<todo>:<id>:<mime>` to
+/* Todo text carries attachments as refs, not bytes, so the
+ * surfaces an operator reads it at have only `attachment:<todo>:<id>:<mime>` to
  * work with. That is enough for the byte route, and the mime is enough to pick
  * a renderer: an image becomes a thumbnail into the shared lightbox, anything
  * else — and any image whose bytes no longer resolve — becomes a named row.

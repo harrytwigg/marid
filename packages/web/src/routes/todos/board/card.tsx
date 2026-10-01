@@ -14,7 +14,7 @@ import { KeepToggle } from "./keep-control"
  *
  * Every row is unconditional, so a card's height is settled by its title alone
  * and enrichment landing later cannot push the column around. The price, taken
- * knowingly: the escalation reason, the approval bell and the "Working · 21m"
+ * knowingly: the escalation reason and the "Working · 21m"
  * line have no row of their own any more and live on the task page and in the
  * Needs-you view. The status the column used to carry alone is now also on the
  * card, as the glyph — it is what the lost red line escalated through. */

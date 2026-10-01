@@ -130,7 +130,6 @@ function factsFor(block: ChatBlock): Fact[] {
     push('Parent', text(p.parentId))
     push('Assignee', text(p.assignee))
     push('By', text(p.actor))
-    push('Approval', p.approvalState ? humanize(text(p.approvalState)) : undefined)
     push('Updated', formatWhen(p.updatedAt))
     push('Note', text(p.preview))
     push('Error', text(p.latestError), 'error')

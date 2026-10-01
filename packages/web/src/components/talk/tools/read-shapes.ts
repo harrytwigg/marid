@@ -1,4 +1,4 @@
-import type { WorkItemDetailWire, WorkItemFullWire } from "@/lib/api"
+import type { WorkItemDetailWire } from "@/lib/api"
 
 /**
  * Wire shapes trimmed to what a voice model can hold and say back.
@@ -42,17 +42,6 @@ function trimComments(detail: WorkItemDetailWire): Record<string, unknown> {
   }
 }
 
-/** The gate on a Todo, so the orb can narrate a decision before it offers to
- *  make one — including whether the answer wanted is a yes/no or a pick. */
-function trimApproval(item: WorkItemFullWire): Record<string, unknown> {
-  return {
-    approvalState: item.approvalState ?? null,
-    approvalRequest: item.approvalRequest ? clip(item.approvalRequest, COMMENT_CHARS) : null,
-    approvalOptions: item.approvalOptions ?? null,
-    approvalOperatorOnly: item.approvalOperatorOnly ?? false,
-  }
-}
-
 export function trimTodo(detail: WorkItemDetailWire, includeComments: boolean): Record<string, unknown> {
   const item = detail.workItem
   const trimmed: Record<string, unknown> = {
@@ -66,7 +55,6 @@ export function trimTodo(detail: WorkItemDetailWire, includeComments: boolean): 
     updatedAt: item.updatedAt,
     labels: (detail.labels ?? []).map((label) => label.name),
     body: clip(item.body, BODY_CHARS),
-    ...trimApproval(item),
   }
   return includeComments ? { ...trimmed, ...trimComments(detail) } : trimmed
 }
