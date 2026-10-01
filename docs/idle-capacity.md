@@ -174,37 +174,33 @@ update_work_item { id: "TST-19", status: "blocked", note: "run on/after the 1st"
 
 - **The status must be `blocked`.** `parkedUntil` belongs to the stop, and any
   move that does not stop the Todo deletes it on the same write — so the
-  gateway refuses it (400) on a move to `backlog`, `assigned`, `executing` or
-  `in_review` rather than report a park that is already gone.
+  gateway refuses it (400) on a move to `backlog`, `executing` or `in_review` rather than report a park that is already gone.
 - **Leave `blockKind` unset** (it means `needs_input`). A `dependency` block
-  re-queues the Todo to `backlog`/`assigned` on the same write, so it cannot
+  re-queues the Todo to `backlog` on the same write, so it cannot
   carry a park and is refused with one. Avoid `transient` too: it is the kind
   the reconciler writes for a failed attempt, and recurrences are counted per
   kind, so a park would share the counter that ends a failure loop.
-- **To change a park on an `escalated` Todo you need the operator's
-  authority**; an agent that tries is refused (403), because that stop is his.
 - **To move the date, send the same move again** with the new `parkedUntil`. A
   hint (`unblockHint`) already on the stop is kept unless restated.
 - **It un-parks by itself.** Once `parkedUntil` has passed, the work-item
   reconciler (at boot, then every 20 seconds) moves the Todo back to the queue
-  the way a `dependency` block would — `backlog` if it has no assignee, where
-  this loop can start it, and `assigned` if it has one, where the assignee's
-  auto-start picks it up — and records the move with actor `park-expiry`.
+  the way a `dependency` block would — to `backlog`, keeping its assignee,
+  where this loop or a dispatch can start it — and records the move with actor
+  `park-expiry`.
   Nobody has to remember to come back for it. The attempts it ran before the
   park no longer count as evidence of its status, so it is not pulled straight
   into `in_review` or back into `blocked` by an old session receipt.
 - Until then the board shows it as waiting on a clock, not on you, and it stays
   out of the needs-you queue.
-- A park on an `escalated` Todo only hides it until the date. Escalation is the
-  operator's call, and a clock does not answer it.
 
 Do not use `dueAt` for this. Elsewhere in the ledger it means a deadline, and
 the loop does not read it.
 
 Parking uses the ordinary block, so it counts toward the block-loop breaker: a
 Todo blocked with the same kind three times without being finished in between
-escalates instead. A Todo parked again and again is therefore escalated on its
-third park, the same as one blocked again and again.
+is escalated instead: it stays in `blocked`, recorded as an escalation to the
+operator. A Todo parked again and again is therefore escalated on its third
+park, the same as one blocked again and again.
 
 ## Observing it
 
