@@ -175,6 +175,27 @@ function dropActivityLedgerSchema(database: Database.Database): void {
   for (const table of present) database.exec(`DROP TABLE ${table}`);
 }
 
+/** Tables of the removed Experiments feature, children first so each drop is clean. */
+const EXPERIMENTS_TABLES = [
+  'experiment_readings',
+  'experiment_metrics',
+  'experiments',
+] as const;
+
+/**
+ * Drop the Experiments tables left behind on homes that created them. Unlike the
+ * Activity ledger these held real data, and the feature is removed outright with
+ * no export: the tables go even when they hold rows. SQLite removes a table's
+ * indexes and triggers along with the table, and nothing else references these
+ * tables, so naming them is enough. Idempotent; a no-op on a home that never had
+ * them. Runs inside the boot migration transaction.
+ */
+function dropExperimentsSchema(database: Database.Database): void {
+  const lookup = database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").pluck();
+  const present = EXPERIMENTS_TABLES.filter((table) => lookup.get(table) !== undefined);
+  for (const table of present) database.exec(`DROP TABLE ${table}`);
+}
+
 export function initDb(): Database.Database {
   if (db) return db;
   // Fail fast on a near-full disk before any write — running out of space during
@@ -242,6 +263,7 @@ export function initDb(): Database.Database {
     migrateTalkApprovalSchema(database);
     database.exec(CREATE_WORK_ITEM_SESSION_INDEX);
     dropActivityLedgerSchema(database);
+    dropExperimentsSchema(database);
     database.exec(CREATE_QUEUE_ITEMS_TABLE);
     migrateQueueItemsSchema(database);
     migrateCallbackDeliveriesSchema(database);
