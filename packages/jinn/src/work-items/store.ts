@@ -154,7 +154,7 @@ export interface ListWorkItemsFilter {
   assignee?: string;
   source?: WorkItemSource;
   needsAttentionFor?: string;
-  /** The queue is the operator's own: Todos assigned to `@operator` count too. */
+  /** The queue is the operator's own: blocked Todos assigned to `@operator`, or to nobody, count too. */
   needsAttentionOperator?: boolean;
   /** Exact creator identity (`created_by`). */
   createdBy?: string;
@@ -548,15 +548,16 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     values.push(filter.label, filter.label);
   }
   if (filter.needsAttentionFor) {
-    // A blocked Todo held by the caller (or, for the operator, by @operator), or one recovery routed
-    // to a human. An unexpired park is a clock-wait (PLA-157) and leaves this set outright; an
-    // unreadable one is not a park.
+    // A blocked Todo held by the caller, or one recovery routed to a human. The operator's own queue
+    // also holds blocked Todos assigned to @operator and blocked Todos nobody holds: a dead end the
+    // Dispatcher or Shaper stopped for the operator. An unexpired park is a clock-wait (PLA-157) and
+    // leaves this set outright; an unreadable one is not a park.
     // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
     // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(
-      "(((assignee IN (?, ?) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
+      "((((assignee IN (?, ?) OR (? = 1 AND assignee IS NULL)) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
     );
-    values.push(filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, new Date().toISOString());
+    values.push(filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, filter.needsAttentionOperator ? 1 : 0, new Date().toISOString());
   }
   if (filter.since) {
     conditions.push('updated_at >= ?');

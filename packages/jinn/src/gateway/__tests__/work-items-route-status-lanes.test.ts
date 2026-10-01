@@ -246,6 +246,19 @@ describe("assignment", () => {
     expect(await ids(toolHeaders(employeeSession().id))).not.toContain(held.id);
   });
 
+  // A dead end the Dispatcher or Shaper stopped for the operator keeps its
+  // assignee, which for a shaped capture is nobody: it must still reach them.
+  it("puts a blocked Todo nobody holds in the operator's queue, and not a blocked one an employee holds", async () => {
+    const unheld = store.createWorkItem({ title: "Dead end, nobody holds it", status: "blocked" });
+    const employeeHeld = store.createWorkItem({ title: "Blocked on its worker", status: "blocked", assignee: "platform-worker" });
+    const ids = async (headers: Record<string, string>) =>
+      ((await call("GET", "/api/work-items?needsAttentionFor=me&limit=200", undefined, headers)).body.workItems as Array<{ id: string }>).map((row) => row.id);
+    const operatorQueue = await ids(operatorHeaders);
+    expect(operatorQueue).toContain(unheld.id);
+    expect(operatorQueue).not.toContain(employeeHeld.id);
+    expect(await ids(toolHeaders(employeeSession().id))).not.toContain(unheld.id);
+  });
+
   it.each(["todo-dispatcher", "todo-shaper"])("never assigns the system employee %s, by assign or by delegation", async (name) => {
     const item = store.createWorkItem({ title: `Not for ${name}` });
     const assigned = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: name }, operatorHeaders);
