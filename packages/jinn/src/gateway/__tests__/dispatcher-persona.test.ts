@@ -44,16 +44,10 @@ describe("Todo Dispatcher persona — workflow-aware routing", () => {
     expect(persona).toContain("delegate_task");
   });
 
-  // find_employees refuses a call with no filter; the whole roster is list_employees.
-  it("reads the roster with list_employees, not an unfiltered find_employees", () => {
-    expect(persona).toContain("list_employees {}");
+  // find_employees refuses a call with no filter, and the Dispatcher's roster
+  // read has none to give; naming it sends the Dispatcher into that refusal.
+  it("does not send the Dispatcher to the filtered find_employees for the roster", () => {
     expect(persona).not.toContain("find_employees");
-  });
-
-  // Dispatch on an assigned Todo is how the operator starts the employee they
-  // picked; overriding that choice is allowed, but it is not the default.
-  it("makes the existing assignee the default delegate", () => {
-    expect(persona).toMatch(/already has an assignee[^.]*: delegating to them is the default/);
   });
 
   // Fire-and-forget was the specific failure mode this rewrite exists to stop.

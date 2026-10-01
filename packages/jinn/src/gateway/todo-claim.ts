@@ -20,10 +20,6 @@ import { TODO_DISPATCHER_NAME } from "./system-employees.js";
  * Each returns undefined once it has already answered the caller, the same shape
  * as `requireTodoRouteId` and the other route guards: `if (!claim) return;`.
  */
-/** The `code` on a refusal that means somebody is already working the Todo,
- *  so the board can say that plainly instead of a generic failure. */
-export const TODO_ALREADY_EXECUTING = "TODO_ALREADY_EXECUTING";
-
 export interface RouteTodoClaim {
   owner: string;
   /** Name the session doing the work, so the claim ends when the attempt does
@@ -33,6 +29,10 @@ export interface RouteTodoClaim {
    *  spawn calls this, or the Todo would sit unavailable for the whole lease. */
   release(): void;
 }
+
+/** The `code` on a refusal that means somebody is already working the Todo,
+ *  so the board can say that plainly instead of a generic failure. */
+export const TODO_ALREADY_EXECUTING = "TODO_ALREADY_EXECUTING";
 
 function acquired(workItemId: string, owner: string): RouteTodoClaim {
   return {

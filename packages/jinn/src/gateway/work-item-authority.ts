@@ -7,6 +7,7 @@ import { isPortalAgentSession, listSessionsByWorkItem } from "../sessions/regist
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
+import { getWorkItemClaim } from "../work-items/claims.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
 import type { WorkItem, WorkItemStatus } from "../work-items/store.js";
 
@@ -83,13 +84,23 @@ function todoDispatcherSessionKeyPrefix(workItemId: string): string {
   return `todo-dispatcher:${workItemId}:`;
 }
 
-/** A Dispatcher the gateway started on THIS Todo: the built-in employee, linked
- *  to the Todo, under the key minted for it. A session that is only called
- *  `todo-dispatcher`, or a Dispatcher started on another Todo, is not one. */
-function isDispatcherStartedFor(session: Session, item: WorkItem): boolean {
+/**
+ * A Dispatcher the gateway started on THIS Todo and that has not handed it on
+ * yet: the built-in employee, linked to the Todo, under the key minted for it,
+ * and still holding the Todo's claim. A session that is only called
+ * `todo-dispatcher`, or a Dispatcher started on another Todo, is not one.
+ *
+ * The claim is what makes the standing one-shot. The hand-off releases it, and
+ * the delegate's session is the Dispatcher's child, so every callback from that
+ * delegate wakes the Dispatcher again. Without the claim clause, a Dispatcher
+ * woken after its producer went idle could reassign the Todo and start a second
+ * attempt beside the first.
+ */
+function isDispatcherRoutingTodo(session: Session, item: WorkItem): boolean {
   return session.employee === TODO_DISPATCHER_NAME
     && session.workItemId === item.id
-    && !!session.sessionKey?.startsWith(todoDispatcherSessionKeyPrefix(item.id));
+    && !!session.sessionKey?.startsWith(todoDispatcherSessionKeyPrefix(item.id))
+    && getWorkItemClaim(item.id)?.sessionId === session.id;
 }
 
 /**
@@ -100,8 +111,9 @@ function isDispatcherStartedFor(session: Session, item: WorkItem): boolean {
  * operator who pressed Dispatch: routing is the whole of its job, so on an
  * assigned Todo — whose owner is the assignee, not the Dispatcher — the
  * owner rule would refuse the one call it exists to make. That standing is
- * bound to the Todo the Dispatcher was started for and reaches no further:
- * another Todo, or any other action, goes through the ordinary rule.
+ * bound to the Todo the Dispatcher was started for, and lasts only until it
+ * hands that Todo on: another Todo, a second hand-off, or any other action goes
+ * through the ordinary rule.
  *
  * Whether the Todo is free to take is a separate question, answered by the
  * claim the delegation takes next, so none of these callers can start a second
@@ -113,7 +125,7 @@ export function authorizeWorkItemDelegation(
 ): { ok: true } | { ok: false; status: 403; error: string } {
   const created = item.sourceRef?.startsWith(`session:${caller.callerId}:`)
     || item.sourceRef?.startsWith(`delegate:${caller.callerId}:`);
-  if (created || isDispatcherStartedFor(caller.session, item)) return { ok: true };
+  if (created || isDispatcherRoutingTodo(caller.session, item)) return { ok: true };
   return authorizeWorkItemOwnerManagerOrRoot(caller, item, "delegate");
 }
 
