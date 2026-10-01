@@ -100,6 +100,18 @@ describe("context.alwaysInclude", () => {
     expect(out).not.toContain("## Always in context");
   });
 
+  it("refuses credential stores: secrets/, config.yaml and anything that is not Markdown", () => {
+    fs.mkdirSync(path.join(home, "secrets"), { recursive: true });
+    fs.writeFileSync(path.join(home, "secrets", "api-keys.json"), '{"k":"CRED-JSON"}');
+    fs.writeFileSync(path.join(home, "secrets", "notes.md"), "CRED-MD");
+    fs.writeFileSync(path.join(home, "config.yaml"), "token: CRED-YAML\n");
+    const out = build({
+      context: { alwaysInclude: ["secrets/api-keys.json", "secrets/notes.md", "Secrets/notes.md", "config.yaml"] },
+    });
+    expect(out).not.toMatch(/CRED-(JSON|MD|YAML)/);
+    expect(out).not.toContain("## Always in context");
+  });
+
   it("skips missing and empty files without failing the prompt", () => {
     const out = build({ context: { alwaysInclude: ["knowledge/nope.md", "knowledge/empty.md", "knowledge/state.md"] } });
     expect(out).not.toContain("knowledge/nope.md");
@@ -112,10 +124,12 @@ describe("context.alwaysInclude", () => {
     expect(out.split("## Always in context: knowledge/state.md").length - 1).toBe(1);
   });
 
-  it("survives a tight prompt budget as a pointer, ahead of optional sections", () => {
-    const out = build({ context: { alwaysInclude: ["knowledge/state.md"], maxChars: 6_000 } });
+  it("falls back to a pointer when the prompt budget cannot hold the file", () => {
+    fs.writeFileSync(path.join(home, "knowledge", "wide.md"), `# Wide\n${"Ψ".repeat(9_000)}`);
+    const out = build({ context: { alwaysInclude: ["knowledge/wide.md"], maxChars: 6_000 } });
     expect(out.length).toBeLessThanOrEqual(6_000);
-    expect(out).toContain("## Always in context: knowledge/state.md");
+    expect(out).toContain("## Always in context: knowledge/wide.md\nRead `knowledge/wide.md` before acting");
+    expect(out).not.toContain("Ψ");
   });
 
   it("unset or empty leaves the prompt byte-identical", () => {

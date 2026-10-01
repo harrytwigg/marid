@@ -721,9 +721,10 @@ function buildKnowledgeContext(jinnMcpAttached?: boolean, guidance?: string): st
   if (!knowledgeCache || Date.now() - knowledgeCache.builtAt >= KNOWLEDGE_CACHE_TTL_MS) {
     knowledgeCache = { builtAt: Date.now(), value: buildKnowledgeContextUncached() };
   }
-  if (knowledgeCache.value === null) return null;
-  const section = jinnMcpAttached ? KNOWLEDGE_MCP_MANIFEST : knowledgeCache.value;
   const extra = guidance?.trim();
+  // No knowledge files means no section, but the instance's guidance still has to reach the agent.
+  if (knowledgeCache.value === null) return extra ? `## Knowledge base\n${extra}` : null;
+  const section = jinnMcpAttached ? KNOWLEDGE_MCP_MANIFEST : knowledgeCache.value;
   // The index ends in a blank line; the manifest does not.
   return extra ? `${section.trimEnd()}\n${extra}` : section;
 }
@@ -732,14 +733,25 @@ function buildKnowledgeContext(jinnMcpAttached?: boolean, guidance?: string): st
 export const ALWAYS_INCLUDE_FILE_CHAR_CAP = 16_000;
 
 /**
+ * What `context.alwaysInclude` may name: Markdown outside `secrets/`. The files
+ * ride in every session's prompt on every engine, so credential stores
+ * (`secrets/`, `config.yaml`, anything not Markdown) are never eligible.
+ */
+function alwaysIncludeAllowed(relPath: string): boolean {
+  return /\.md$/i.test(relPath) && relPath.split("/")[0].toLowerCase() !== "secrets";
+}
+
+/**
  * One section per readable `context.alwaysInclude` path. Reads go through the
  * instance-file reader, so traversal, absolute paths and symlink escapes are
- * refused; an unreadable or empty file is skipped rather than failing the prompt.
+ * refused; an ineligible, unreadable or empty file is skipped rather than
+ * failing the prompt.
  */
 function buildAlwaysIncludeSections(paths?: string[]): Array<Pick<Section, "marker" | "content" | "summary">> {
   if (!Array.isArray(paths)) return [];
   const out: Array<Pick<Section, "marker" | "content" | "summary">> = [];
   for (const relPath of new Set(paths)) {
+    if (!alwaysIncludeAllowed(relPath)) continue;
     const read = readKnowledgeFile(relPath);
     if (!read.ok || read.content.trim() === "") continue;
     const cut = read.totalChars > ALWAYS_INCLUDE_FILE_CHAR_CAP;
