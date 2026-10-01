@@ -1,4 +1,3 @@
-import { currentApproval } from "./approval-rows.js";
 import { getWorkItemRecovery, upsertWorkItemRecovery } from "./recovery-rows.js";
 import {
   classifyRecovery,
@@ -61,7 +60,6 @@ export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClas
   const runs = listWorkItemAttemptRuns(item.id);
   const last = [...runs].reverse().find((run) => run.endedAt !== null);
   const open = runs.find((run) => run.endedAt === null);
-  const approval = currentApproval(item.id);
   return classifyRecovery({
     todo: { id: item.id, status: item.status, assignee: item.assignee, source: item.source },
     lastRun: last
@@ -69,9 +67,6 @@ export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClas
       : undefined,
     openRun: open ? { startedAt: open.startedAt, sessionInFlight: sessionInFlight(open.sessionId) } : undefined,
     attempts: item.status === "executing" ? attemptActivity(item.id) : undefined,
-    approval: approval
-      ? { state: approval.state, operatorOnly: approval.operatorOnly }
-      : undefined,
     verifyMode: item.verifyPolicy?.mode,
     now,
   });

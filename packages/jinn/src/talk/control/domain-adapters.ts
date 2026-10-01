@@ -15,7 +15,6 @@ import type {
   TalkControlOperation,
 } from "./types.js";
 import { verifyTalkDomainOperation } from "./verification.js";
-import { executeVoiceApproval } from "./voice-approval-adapter.js";
 import { dispatchTalkSessionMessage } from "./session-message-adapter.js";
 import { delegateTodoWithTalk } from "./delegation-adapter.js";
 import { TALK_COMPANY_CAPABILITY_COVERAGE } from "./capability-coverage.js";
@@ -113,8 +112,6 @@ const readCapability: DomainHandler = (_host, args) => {
 
 const DOMAIN_HANDLERS: Record<string, DomainHandler> = {
   ...TODO_DOMAIN_HANDLERS,
-  prepare_voice_approval: (_host, args, call) => executeVoiceApproval("prepare", args, call),
-  commit_voice_approval: (_host, args, call) => executeVoiceApproval("commit", args, call),
   talk_delegate_todo: delegateTodo,
   read_session: (_host, args) => ({ data: sessionData(requiredText(args, "id")), uiEffect: null }),
   talk_send_to_session: sendToSession,

@@ -48,11 +48,6 @@ export const TALK_COMPANY_CAPABILITY_COVERAGE = {
     operations: ["talk_delegate_todo"],
     evidence: "Todo-to-session link, child session, and dispatch rereads",
   },
-  "voice-approval": {
-    status: "supported",
-    operations: ["prepare_voice_approval", "commit_voice_approval"],
-    evidence: "operator-bound challenge, provider transcript identity, target revision, and durable decision audit",
-  },
   "topic-memory": {
     status: "supported",
     operations: ["talk_recall_topic", "talk_remember_topic"],

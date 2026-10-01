@@ -38,15 +38,13 @@ function skipReason(item: WorkItem, required: string | null): string | undefined
   if (early) return early;
   // The operator holds it: their own work, not spare capacity's to start.
   if (item.assignee === OPERATOR_ASSIGNEE) return "assigned to the operator";
-  if (item.approvalState === "pending") return "an approval is pending";
   return undefined;
 }
 
 /**
  * Backlog Todos this loop may start, best first. A backlog Todo is skipped
  * when it says so (opt-out label, `autoStart: false`), when its next attempt
- * is pinned to a non-Claude engine, when the operator is its assignee, when an approval is pending on it (someone
- * is already being asked), or when the policy requires a label it does not
+ * is pinned to a non-Claude engine, when the operator is its assignee, or when the policy requires a label it does not
  * carry. Priority 3 is "High", so higher first; then the oldest, which has
  * waited longest.
  *

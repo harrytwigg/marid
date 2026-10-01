@@ -4,8 +4,7 @@ import { classifyEngineFailureText, hasEngineFailureClass } from "../shared/engi
  * Bounded recovery classification (PLA-240).
  *
  * A verdict here is not an action. The controller decides whether to re-arm,
- * route, or leave the Todo on Needs you. The open run, the approval and the
- * clock arrive as inputs, so the replay suite can feed it history with no DB.
+ * route, or leave the Todo on Needs you. The open run and the clock arrive as inputs, so the replay suite can feed it history with no DB.
  */
 
 export const RECOVERY_CLASSES = [
@@ -57,8 +56,7 @@ export function isGenericOperatorFallback(verdict: RecoveryClassification): bool
  * so successive verdicts on it are all this guard has to reconcile.
  * A later generic operator fallback cannot downgrade an unresolved specific
  * lane (manager / recovering). Specific verdicts (failure class, stalled run
- * or assignment, leftover manager, routed approval, operator-only) may
- * replace. Terminal status means the prior condition resolved.
+ * or assignment, leftover manager) may replace. Terminal status means the prior condition resolved.
  */
 export function mayReplaceRecoveryLane(
   prior: { lane: AttentionLane } | undefined,
@@ -109,7 +107,6 @@ export interface RecoveryIncidentInput {
   openRun?: { startedAt: string; sessionInFlight: boolean };
   /** The Todo's linked execution attempts (review and phase links excluded). */
   attempts?: AttemptActivity;
-  approval?: { state: string; operatorOnly: boolean };
   verifyMode?: "trust" | "verify" | "thorough";
   now?: Date;
 }
@@ -160,16 +157,9 @@ function classifyStalled(input: RecoveryIncidentInput, status: string, now: numb
 }
 
 function classifyLeftover(input: RecoveryIncidentInput, now: number): RecoveryClassification | undefined {
-  const state = input.approval?.state;
   const status = input.todo.status;
-  if (state === "pending") {
-    return { class: "operator", lane: "manager", reason: "a routed approval is waiting on an employee, not the operator" };
-  }
-  if (status === "in_review" && state === "approved" && input.lastRun?.outcome === "completed") {
-    return { class: "operator", lane: "manager", reason: "approved landing is still open" };
-  }
   if (status === "in_review" && !input.todo.assignee) {
-    return { class: "operator", lane: "manager", reason: "in review with no pending approval and no reviewer" };
+    return { class: "operator", lane: "manager", reason: "in review with no assignee to answer for it" };
   }
   return classifyStalled(input, status, now);
 }
@@ -177,9 +167,6 @@ function classifyLeftover(input: RecoveryIncidentInput, now: number): RecoveryCl
 export function classifyRecovery(input: RecoveryIncidentInput): RecoveryClassification {
   if (input.todo.status === "backlog") {
     return { class: "operator", lane: "operator", reason: "ordinary backlog work is never auto-started" };
-  }
-  if (input.approval?.state === "pending" && input.approval.operatorOnly) {
-    return { class: "operator", lane: "operator", reason: "operator-only approval is a genuine authority decision" };
   }
   const fromFailure = classifyFromFailure(input);
   if (fromFailure) return fromFailure;

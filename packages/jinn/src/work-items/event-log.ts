@@ -33,6 +33,7 @@ export type WorkItemEventKind =
   | 'status_change'
   | 'note'
   | 'session_linked'
+  // History only: Todo approvals are gone, but an older gateway's rows remain.
   | 'approval_requested'
   | 'approval_decided'
   | 'verify_result'

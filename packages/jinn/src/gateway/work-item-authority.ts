@@ -19,12 +19,6 @@ import type { WorkItem } from "../work-items/store.js";
  * handlers. Who owns a Todo and who the root is live in `work-item-owner.ts`.
  */
 
-export function ownsWorkItem(session: Session, item: WorkItem, linked: Session[]): boolean {
-  if (linked.some((s) => s.id === session.id)) return true;
-  if (item.assignee && session.employee && item.assignee === session.employee) return true;
-  return item.source === 'session' && !!item.sourceRef?.startsWith(`session:${session.id}:`);
-}
-
 /** The three ways an employee has standing over a Todo: the org root has it
  *  everywhere, the routed owner has it on its own, and a manager or executive
  *  has it over anyone below them in the tree. */

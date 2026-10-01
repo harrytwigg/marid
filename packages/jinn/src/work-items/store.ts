@@ -7,7 +7,6 @@ import { assertTodoDepartmentAllowed, resolveTodoDepartmentPolicy, type TodoDepa
 import { parseTodoId, resolveTodoIdPrefix } from './id.js';
 import { resolveDepartmentPrefix } from './departments.js';
 import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
-import { currentApproval, currentApprovalsByItem, type WorkItemApproval } from './approval-rows.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
@@ -28,10 +27,8 @@ import { OPERATOR_ASSIGNEE } from './operator-assignee.js';
  * GRS-021a additions: the 8-status vocabulary + 7-value provenance enum
  * (`migrate.ts` owns the DDL + rebuild), acceptance criteria, verify policy
  * (TRUST/VERIFY/THOROUGH + verifier + maxRounds), rounds, budget (spend is
- * NEVER stored — always derived live from linked sessions' total_cost), the
- * approval fields (ORTHOGONAL to lifecycle position; a fresh item's approval is
- * always none — the §1.3 anti-bottleneck principle: creates cannot attach one),
- * and the append-only `work_item_events` audit.
+ * NEVER stored — always derived live from linked sessions' total_cost), and
+ * the append-only `work_item_events` audit.
  *
  * Trust the DB, not just TS callers: status/priority/source are enforced by
  * CHECK constraints and machine-minted idempotency by a partial UNIQUE index
@@ -48,8 +45,6 @@ export type WorkItemStatus =
   | 'blocked'
   | 'cancelled';
 export type WorkItemSource = 'human' | 'delegation' | 'cron' | 'workflow' | 'session' | 'connector' | 'goal';
-export type ApprovalState = 'pending' | 'approved' | 'rejected';
-export type ApprovalTargetKind = 'employee' | 'virtual' | 'none';
 
 /** Statuses that close an item — writes stamp/clear `closed_at` on these. */
 const CLOSED_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['done', 'cancelled']);
@@ -120,20 +115,6 @@ export interface WorkItem {
   verifyPolicy: VerifyPolicy | null;
   rounds: number;
   budgetUsd: number | null;
-  approvalState: ApprovalState | null;
-  approvalRequest: string | null;
-  approvalRef: string | null;
-  /** Offered variants when the current approval asks for a PICK (else null). */
-  approvalOptions: string[] | null;
-  approvalChoice: string | null;
-  /** The current approval is reserved for the human operator: no employee may
-   *  decide it, not the COO and not through escalation. */
-  approvalOperatorOnly: boolean;
-  approvalTarget: string | null;
-  approvalTargetKind: ApprovalTargetKind | null;
-  approvalEscalatedAt: string | null;
-  approvalDecidedBy: string | null;
-  approvalDecidedAt: string | null;
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
@@ -165,9 +146,6 @@ export interface CreateWorkItemInput {
   verifyPolicy?: VerifyPolicy | null;
   budgetUsd?: number | null;
   origin?: WriteOrigin;
-  // Deliberately NO approval fields (design §1.3, anti-bottleneck principle):
-  // a fresh Todo's approval is always none; approval is attached only by the
-  // 021b decision/mirror machinery where a human decision is genuinely required.
 }
 
 export interface ListWorkItemsFilter {
@@ -232,15 +210,7 @@ function parseVerifyPolicy(raw: unknown): VerifyPolicy | null {
   }
 }
 
-/** A work_items row as stored: everything on a WorkItem EXCEPT the approval
- *  facts, which live only in `work_item_approvals`. Producing a WorkItem
- *  therefore requires `overlayApproval` — a read path that skips hydration
- *  cannot silently serve all-null approvals, because it will not typecheck. */
-type WorkItemRowBase = Omit<WorkItem,
-  | 'approvalState' | 'approvalRequest' | 'approvalRef' | 'approvalOptions' | 'approvalChoice' | 'approvalOperatorOnly'
-  | 'approvalTarget' | 'approvalTargetKind' | 'approvalEscalatedAt' | 'approvalDecidedBy' | 'approvalDecidedAt'>;
-
-function rowToWorkItem(row: Record<string, unknown>): WorkItemRowBase {
+function rowToWorkItem(row: Record<string, unknown>): WorkItem {
   return {
     id: row.id as string,
     title: row.title as string,
@@ -266,36 +236,6 @@ function rowToWorkItem(row: Record<string, unknown>): WorkItemRowBase {
     updatedAt: row.updated_at as string,
     closedAt: (row.closed_at as string) ?? null,
   };
-}
-
-/**
- * The ONLY producer of a WorkItem's approval fields: the item's current
- * `work_item_approvals` row, or "no approval" when it has none. Applied
- * explicitly at every read function (single reads hydrate per item; page/tree
- * reads batch), which keeps EVERY consumer — payloads, authority checks,
- * activity cards, transitions' returns — sourcing approvals from one place.
- */
-function overlayApproval(base: WorkItemRowBase, row: WorkItemApproval | undefined): WorkItem {
-  return {
-    ...base,
-    approvalState: row?.state ?? null,
-    approvalRequest: row?.request ?? null,
-    approvalRef: row?.ref ?? null,
-    approvalOptions: row?.options ?? null,
-    approvalChoice: row?.choice ?? null,
-    approvalOperatorOnly: row?.operatorOnly ?? false,
-    approvalTarget: row?.target ?? null,
-    approvalTargetKind: row?.targetKind ?? null,
-    approvalEscalatedAt: row?.escalatedAt ?? null,
-    approvalDecidedBy: row?.decidedBy ?? null,
-    approvalDecidedAt: row?.decidedAt ?? null,
-  };
-}
-
-function hydrateApprovals(items: WorkItemRowBase[]): WorkItem[] {
-  if (items.length === 0) return [];
-  const currentByItem = currentApprovalsByItem(items.map((item) => item.id));
-  return items.map((item) => overlayApproval(item, currentByItem.get(item.id)));
 }
 
 /** True only for a UNIQUE-constraint violation — NOT a CHECK violation (those must
@@ -443,9 +383,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
     const row = db
       .prepare('SELECT * FROM work_items WHERE source = ? AND source_ref = ?')
       .get(source, sourceRef) as Record<string, unknown> | undefined;
-    // Overlay like every other WorkItem-producing read: a retried machine mint
-    // can hit an item that has since gained an approval.
-    return row ? overlayApproval(rowToWorkItem(row), currentApproval(row.id as string)) : undefined;
+    return row ? rowToWorkItem(row) : undefined;
   };
 
   const txn = db.transaction((): WorkItem => {
@@ -536,11 +474,11 @@ export function getWorkItem(id: string): WorkItem | undefined {
   const db = initDb();
   const todoId = parseTodoId(id);
   const row = db.prepare('SELECT * FROM work_items WHERE id = ?').get(todoId) as Record<string, unknown> | undefined;
-  return row ? overlayApproval(rowToWorkItem(row), currentApproval(todoId)) : undefined;
+  return row ? rowToWorkItem(row) : undefined;
 }
 
-/** Read a bounded set of Todos in caller order with one row query and one
- * approval hydration pass. Unknown ids are omitted. */
+/** Read a bounded set of Todos in caller order with one row query. Unknown
+ * ids are omitted. */
 export function getWorkItems(ids: readonly string[]): WorkItem[] {
   const requestedIds = [...new Set(ids.map((id) => parseTodoId(id)))];
   if (requestedIds.length === 0) return [];
@@ -549,7 +487,7 @@ export function getWorkItems(ids: readonly string[]): WorkItem[] {
   const rows = db
     .prepare(`SELECT * FROM work_items WHERE id IN (${placeholders})`)
     .all(...requestedIds) as Record<string, unknown>[];
-  const byId = new Map(hydrateApprovals(rows.map(rowToWorkItem)).map((item) => [item.id, item]));
+  const byId = new Map(rows.map(rowToWorkItem).map((item) => [item.id, item]));
   return requestedIds.flatMap((id) => {
     const item = byId.get(id);
     return item ? [item] : [];
@@ -563,7 +501,7 @@ export function getWorkItemBySourceRef(source: WorkItemSource, sourceRef: string
   const row = db
     .prepare('SELECT * FROM work_items WHERE source = ? AND source_ref = ?')
     .get(source, sourceRef) as Record<string, unknown> | undefined;
-  return row ? overlayApproval(rowToWorkItem(row), currentApproval(row.id as string)) : undefined;
+  return row ? rowToWorkItem(row) : undefined;
 }
 
 export const WORK_ITEM_STATUS_VALUES: readonly WorkItemStatus[] = [
@@ -610,14 +548,15 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     values.push(filter.label, filter.label);
   }
   if (filter.needsAttentionFor) {
-    // Approvals live in work_item_approvals (their sole owner since PLA-48). An unexpired park is a
-    // clock-wait (PLA-157) and leaves this set outright, gate included; an unreadable one is not a park.
+    // A blocked Todo held by the caller (or, for the operator, by @operator), or one recovery routed
+    // to a human. An unexpired park is a clock-wait (PLA-157) and leaves this set outright; an
+    // unreadable one is not a park.
     // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
     // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(
-      "((EXISTS (SELECT 1 FROM work_item_approvals wap WHERE wap.work_item_id = work_items.id AND wap.state = 'pending' AND wap.target = ?) OR (assignee IN (?, ?) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
+      "(((assignee IN (?, ?) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
     );
-    values.push(filter.needsAttentionFor, filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, new Date().toISOString());
+    values.push(filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, new Date().toISOString());
   }
   if (filter.since) {
     conditions.push('updated_at >= ?');
@@ -658,7 +597,7 @@ export function queryWorkItems(filter: ListWorkItemsFilter = {}): WorkItemPage {
   const totals = Object.fromEntries(WORK_ITEM_STATUS_VALUES.map((status) => [status, 0])) as WorkItemTotals;
   for (const count of counts) totals[count.status] = count.total;
   const total = counts.reduce((sum, count) => sum + count.total, 0);
-  const workItems = hydrateApprovals(rows.map(rowToWorkItem));
+  const workItems = rows.map(rowToWorkItem);
   const consumed = offset + workItems.length;
   const page: WorkItemPage = {
     workItems,
@@ -708,12 +647,10 @@ export function getWorkItemTrees(ids: readonly string[]): Record<string, WorkIte
   const db = initDb();
   const placeholders = requestedIds.map(() => '?').join(', ');
   const requestedRoots = `SELECT root_id FROM work_items WHERE id IN (${placeholders})`;
-  const family = hydrateApprovals(
-    (db
-      .prepare(`SELECT * FROM work_items WHERE root_id IN (${requestedRoots})`)
-      .all(...requestedIds) as Record<string, unknown>[])
-      .map(rowToWorkItem),
-  );
+  const family = (db
+    .prepare(`SELECT * FROM work_items WHERE root_id IN (${requestedRoots})`)
+    .all(...requestedIds) as Record<string, unknown>[])
+    .map(rowToWorkItem);
   if (family.length === 0) return {};
   const itemsById = new Map(family.map((item) => [item.id, item]));
   const childrenByParent = new Map<string, WorkItem[]>();

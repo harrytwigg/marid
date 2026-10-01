@@ -41,7 +41,6 @@ A normal question uses semantic context. One bounded image is permitted only whe
 | chat-core | supported | read_session, talk_search_chat_messages, talk_draft_reply, talk_replace_draft, talk_send_draft, talk_draft_and_send, talk_send_to_session | bounded current-chat excerpts, visible-composer receipts, and a durable named-session message re-read bound to the operator's own utterance |
 | chat-lifecycle | explicit gap | — | chat-lifecycle-command-adapter-missing; reuse create, rename, archive, duplicate, delete, queue, stop, and reset commands |
 | delegation | supported | talk_delegate_todo | Todo-to-session link, child session, and dispatch rereads |
-| voice-approval | supported | prepare_voice_approval, commit_voice_approval | operator-bound challenge, provider transcript identity, target revision, and durable decision audit |
 | topic-memory | supported | talk_recall_topic, talk_remember_topic | durable topic commitments, candidates, navigation, and source rehydration |
 | screen-navigation-and-visual | supported | open_todos, open_todo, open_chats, focus_element, resolve_and_open, capture_current_view | browser receipt, awaited UI effect, or bounded sanitized visual receipt |
 | capability-inventory | supported | read_talk_capability | typed manifest-backed supported operation or exact gap id and planned adapter |

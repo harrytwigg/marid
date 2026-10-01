@@ -172,7 +172,7 @@ describe("PLA-224 journey", () => {
       arguments: JSON.stringify({ id: chat.id, message: "ping, are you still on this?" }),
     };
 
-    // The gate the voice-approval contract prescribes: the live browser
+    // The bound-evidence gate: the live browser
     // instance, its credential generation, and the operator's own final
     // transcript item. A model that decided to send on its own has none of them.
     const withoutCredential = await call(context, "POST", orb.route, { ...send, providerCallId: "send-unbound" });

@@ -21,7 +21,7 @@ import {
 /**
  * Guarded Todo transitions (GRS-021a design §1.2) — THE status write path.
  *
- * With 8 statuses + approvals + rounds, scattered `updateStatus` calls would be
+ * With 8 statuses + rounds, scattered `updateStatus` calls would be
  * the split-brain seed all over again. Every status change flows through
  * `transition()`: only declared edges are allowed (illegal edges THROW, never
  * silently write), every change appends a `work_item_events` audit row in the
@@ -273,11 +273,10 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
   });
   const result = holdLiveSignalsUntilCommit(txn);
   // ICI-749: the board's live signal belongs to the status write, not to the HTTP
-  // routes. A workflow reflecting its run, the reconciler, and an approval's
-  // consequence all commit here with no route to announce them, so the dashboard
-  // stayed stale until a reload. Emitted before the workflow bridge so a recovery
-  // failure can never swallow the update; the route lanes suppress their own
-  // duplicate (`persistTodoMutationActivity`).
+  // routes. The reconciler, a cascade and the recovery controller all commit
+  // here with no route to announce them, so the dashboard stayed stale until a
+  // reload. The route lanes suppress their own duplicate
+  // (`persistTodoMutationActivity`).
   if (result.event) notifyTodoChanged(result.item, 'status-transitioned', opts.callerSessionId);
   notifyTodoStatusChange(result.event, result.item);
   return result;

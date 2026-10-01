@@ -75,6 +75,12 @@ export function resolveStatusLane(
   if (hasOperatorLane(caller)) return { ok: true, lane: { kind: "operator" } };
   if (caller.kind !== "session") return refuse(403, "caller has no session identity");
   if (asOperator) return resolveCoordinatorLane(caller, item, target, note);
+  return resolveAgentLane(item, target, note);
+}
+
+/** Every other session: inside the open statuses, and a move into
+ *  `in_review` carries the summary the gateway posts. */
+function resolveAgentLane(item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult {
   const closed = STICKY_STATUSES.has(item.status);
   if (target === "done" || target === "cancelled") {
     return refuse(403, `${target === "done" ? "closing" : "cancelling"} Todo ${item.id} is the operator's decision: move it to in_review and the operator closes it`);

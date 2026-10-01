@@ -103,25 +103,14 @@ are then stored in `talk_tool_receipts`. A later runtime instance replays the
 same result. Transient execution or verification failures are not permanently
 cached and may retry with the same call id.
 
-## Voice approval
+## Voice transcript evidence
 
-Voice approval is two phase and derives the decision from separately persisted
-operator speech, never tool arguments.
-
-1. `prepare_voice_approval` rereads the pending gate and records an expiring
-   one-time challenge bound to the operator, Talk session, browser instance,
-   credential generation, exact object/action/options/consequence, source input
-   boundary, and target revision. It performs no domain write.
-2. `commit_voice_approval` accepts only the challenge id. The gateway loads a
-   newer final provider transcription from the same credential generation and
-   classifies it as approve, reject, modify, unrelated, or ambiguous.
-3. Only exact approve/reject classifications can consume the challenge. The
-   gateway rechecks every binding and target revision, commits through the
-   canonical decision command, and records the audit before returning success.
-
-Modified, ambiguous, unrelated, expired, stale, replayed, duplicate, or
-unauthorized evidence fails closed. One provider item/event cannot approve two
-challenges, and a replay cannot produce a second domain decision.
+Final operator speech is persisted as provider transcript items (one row per
+provider item/event, ordered per credential generation) so that operator-bound
+writes, such as sending into a named session, can cite the exact utterance that
+asked for them. Reusing a provider item or event id with different evidence is
+refused. There is no voice approval capability: Todo approvals are not decided
+over Talk.
 
 ## Topic lifecycle
 
@@ -201,8 +190,7 @@ that the turn was free.
   `packages/web/src/components/talk/transport/__tests__/`
 - Manifest/company inventory and durable runtime:
   `packages/jinn/src/talk/control/__tests__/`
-- Approval identity/audit: `packages/jinn/src/talk/approval/__tests__/` and
-  `packages/jinn/src/gateway/__tests__/talk-approval-api.test.ts`
+- Voice transcript evidence: `packages/jinn/src/talk/approval/__tests__/`
 - Topic lifecycle and GC: `packages/jinn/src/talk/topics/__tests__/`
 - Proactive policy and delivery: `packages/jinn/src/talk/proactive/__tests__/`
   and `packages/jinn/src/gateway/__tests__/talk-proactive-*.test.ts`

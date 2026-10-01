@@ -1,7 +1,6 @@
 import { getMessages, getSession, listSessionsByWorkItem } from "../../sessions/registry.js";
 import { listComments } from "../../work-items/comments.js";
 import { getWorkItem } from "../../work-items/store.js";
-import { currentApproval } from "../../work-items/approval-rows.js";
 import { initDb } from "../../shared/db.js";
 import { TalkTopicRepository } from "../topics/repository.js";
 import type { TalkControlExecution, TalkControlOperation, TalkControlVerification } from "./types.js";
@@ -59,20 +58,6 @@ const verifyEdit: VerifyHandler = (args) => {
 const verifyAssignment: VerifyHandler = (args) => {
   const item = getWorkItem(text(args, "id"));
   return { ok: !!item && item.assignee === text(args, "assignee"), evidence: item ? { id: item.id, version: item.version, assignee: item.assignee } : {} };
-};
-
-const verifyPreparedApproval: VerifyHandler = (_args, execution) => {
-  const id = String(execution.data.todoId ?? "");
-  const challengeId = String(execution.data.challengeId ?? "");
-  const approval = id ? currentApproval(id) : undefined;
-  return { ok: !!challengeId && approval?.state === "pending", evidence: { todoId: id, challengeId, approvalId: approval?.id, state: approval?.state } };
-};
-
-const verifyCommittedApproval: VerifyHandler = (_args, execution) => {
-  const id = String(execution.data.todoId ?? "");
-  const decision = String(execution.data.decision ?? "");
-  const approval = id ? currentApproval(id) : undefined;
-  return { ok: !!approval && approval.state === (decision === "approve" ? "approved" : "rejected"), evidence: { todoId: id, approvalId: approval?.id, state: approval?.state, decidedAt: approval?.decidedAt } };
 };
 
 const verifyComment: VerifyHandler = (args, execution) => {
@@ -133,8 +118,6 @@ const VERIFY_HANDLERS: Record<string, VerifyHandler> = {
   talk_set_todo_status: verifyStatus,
   talk_edit_todo: verifyEdit,
   talk_assign_todo: verifyAssignment,
-  prepare_voice_approval: verifyPreparedApproval,
-  commit_voice_approval: verifyCommittedApproval,
   talk_comment_todo: verifyComment,
   talk_delegate_todo: verifyDelegation,
   read_session: verifySession,

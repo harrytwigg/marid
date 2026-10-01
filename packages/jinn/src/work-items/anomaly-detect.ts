@@ -1,4 +1,3 @@
-import { currentApproval } from "./approval-rows.js";
 import { listWorkItemEvents } from "./event-log.js";
 import { attemptActivity, classifyWorkItem, sessionInFlight } from "./recovery-controller.js";
 import { getWorkItemRecovery } from "./recovery-rows.js";
@@ -36,8 +35,6 @@ function executionTimeout(item: WorkItem, now: Date): TodoAnomaly | undefined {
   if (item.status !== "executing") return undefined;
   const open = listWorkItemAttemptRuns(item.id).find((run) => run.endedAt === null);
   if (!open) {
-    // A pending approval is a question already on somebody's queue, not a stall.
-    if (currentApproval(item.id)?.state === "pending") return undefined;
     if (!executingUnhanded(item.status, attemptActivity(item.id), now.getTime())) return undefined;
     return { workItemId: item.id, kind: "executing-unhanded", lane: "manager", reason: EXECUTING_UNHANDED_REASON };
   }
@@ -48,9 +45,8 @@ function executionTimeout(item: WorkItem, now: Date): TodoAnomaly | undefined {
 
 function reviewAnomaly(item: WorkItem): TodoAnomaly | undefined {
   if (item.status !== "in_review") return undefined;
-  const approval = currentApproval(item.id);
-  if (approval?.state !== "pending" && !item.assignee) {
-    return { workItemId: item.id, kind: "review-without-reviewer", lane: "manager", reason: "in review with no pending approval and no reviewer" };
+  if (!item.assignee) {
+    return { workItemId: item.id, kind: "review-without-reviewer", lane: "manager", reason: "in review with no assignee to answer for it" };
   }
   return undefined;
 }

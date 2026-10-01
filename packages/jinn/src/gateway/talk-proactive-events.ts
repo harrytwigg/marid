@@ -26,13 +26,11 @@ function todoSource(frame: Extract<GatewayEvent, { event: "company:changed" }>):
   const payload = frame.payload;
   if (payload.entity !== "todo") return null;
   const status = typeof payload.value?.status === "string" ? payload.value.status : "";
-  const approval = payload.value?.approvalState === "pending";
-  const urgent = status === "blocked" || approval;
+  const blocked = status === "blocked";
   return {
-    source: "todo", subjectIds: [payload.id], severity: urgent ? "warning" : "info",
-    blocking: status === "blocked", requiresOperator: approval,
-    summary: approval ? "A related Todo needs operator input." : status === "blocked"
-      ? "A related Todo became blocked." : "A related Todo changed.",
+    source: "todo", subjectIds: [payload.id], severity: blocked ? "warning" : "info",
+    blocking: blocked, requiresOperator: false,
+    summary: blocked ? "A related Todo became blocked." : "A related Todo changed.",
     target: `todo:${payload.id}`, dedupeSeed: `todo:${payload.id}:${payload.version}`,
   };
 }

@@ -76,25 +76,6 @@ function workItemsFrom(body: unknown): Array<Record<string, unknown>> {
   return Array.isArray(rec.workItems) ? rec.workItems.map(summarize) : [];
 }
 
-function findApprovalKeysDeep(value: unknown, path = "args", found: string[] = []): string[] {
-  if (!value || typeof value !== "object") return found;
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    const childPath = `${path}.${key}`;
-    if (/^approval/i.test(key)) found.push(childPath);
-    findApprovalKeysDeep(child, childPath, found);
-  }
-  return found;
-}
-
-function rejectApprovalFields(args: Record<string, unknown>, toolName: string): void {
-  const forbidden = findApprovalKeysDeep(args);
-  if (forbidden.length > 0) {
-    throw new JinnMcpToolError(
-      `approval fields (${forbidden.join(", ")}) cannot be attached by ${toolName} — approvals are routed gates; request/decide them through the separate approval authority surface, not Todo creation/status updates.`,
-    );
-  }
-}
-
 /** PATCH the metadata pen at a freshly read version, retrying ONCE on a concurrent
  *  bump so an agent never runs the optimistic-concurrency loop itself. A second
  *  conflict surfaces the 409. */
@@ -222,7 +203,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const create: JinnMcpTool = {
     name: "create_work_item",
-    description: "Create a Todo or parentId sub-task; no approvals.",
+    description: "Create a Todo or parentId sub-task.",
     inputSchema: {
       type: "object",
       properties: {
@@ -242,7 +223,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "create_work_item");
       rejectProvenance(args);
       const body: Record<string, unknown> = { title: requireString(args, "title") };
       for (const key of ["body", "acceptance", "department"] as const) {
@@ -304,7 +284,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         id: TODO_ID_SCHEMA,
         status: { type: "string", enum: [...AGENT_UPDATE_STATUSES] },
         blockKind: { type: "string", enum: [...BLOCK_KINDS], description: "`dependency` re-queues it; the rest wait on a human." },
-        note: { type: "string" },
+        note: { type: "string", description: "Required for in_review (your summary, posted as a comment) and blocked." },
         asOperator: { type: "boolean", description: "Coordinator only: close as done for the operator; reason in note." },
         cascade: { type: "boolean", description: "With `done`, close open sub-tasks. Operator only." },
         parkedUntil: { type: "string" },
@@ -315,7 +295,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "update_work_item");
       const id = requireTodoId(args);
       const rawStatus = requireString(args, "status");
       // Who may set what is the gateway's lane to decide; this only refuses what is not a status at all.
@@ -355,7 +334,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "edit_work_item");
       const id = requireTodoId(args);
       if (args.status !== undefined) {
         throw new JinnMcpToolError("status is not a metadata edit — use update_work_item for lifecycle changes");
@@ -417,7 +395,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "assign_work_item");
       const id = requireTodoId(args);
       const assignee = requireString(args, "assignee");
       const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/assign`, { assignee });
@@ -439,7 +416,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "archive_work_item");
       const id = requireTodoId(args);
       const note = optionalString(args, "note", WORK_ITEM_NOTE_CHAR_CAP);
       if (args.cascade !== undefined && typeof args.cascade !== "boolean") throw new JinnMcpToolError("cascade must be a boolean");
