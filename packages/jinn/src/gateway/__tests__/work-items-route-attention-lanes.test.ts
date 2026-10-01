@@ -33,10 +33,10 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     expect(row).toMatchObject({ id: item.id, status: "blocked", attentionLane: "recovering" });
   });
 
-  it("returns a manager-lane in_review leftover that is not a pending approval", async () => {
+  it("returns a manager-lane in_review leftover", async () => {
     const coo = reg.createSession({ engine: "codex", source: "web", sourceRef: "coo-mgr", title: "coo", employee: "coo" });
     const item = store.createWorkItem({
-      title: "approved landing leftover", status: "in_review", assignee: "platform-worker",
+      title: "landing leftover", status: "in_review", assignee: "platform-worker",
     });
     const rows = await import("../../work-items/recovery-rows.js");
     rows.upsertWorkItemRecovery({
@@ -44,7 +44,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
       incidentId: "run_landed",
       class: "operator",
       lane: "manager",
-      reason: "approved landing is still open",
+      reason: "the landing is still open",
     });
 
     const res = makeRes();
@@ -65,7 +65,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
   function dashboardGroups(feed: Array<Record<string, unknown>>) {
     const kept = feed.filter((item) =>
       item.attentionLane === "recovering" || item.attentionLane === "manager"
-      || item.approvalState === "pending" || item.status === "blocked");
+      || item.status === "blocked");
     return {
       recovering: kept.filter((item) => item.attentionLane === "recovering").map((item) => item.id),
       manager: kept.filter((item) => item.attentionLane === "manager").map((item) => item.id),
@@ -85,17 +85,16 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     return res.body.workItems as Array<Record<string, unknown>>;
   }
 
-  it("QPR-4: refused-complete leftover survives the recovery tick into Manager attention", async () => {
+  it("QPR-4: an unowned in_review leftover survives the recovery tick into Manager attention", async () => {
     const detect = await import("../../work-items/anomaly-detect.js");
     const controller = await import("../../work-items/recovery-controller.js");
     const runs = await import("../../work-items/runs.js");
-    const approvals = await import("../../work-items/approvals.js");
     const transitions = await import("../../work-items/transitions.js");
     const rows = await import("../../work-items/recovery-rows.js");
     const db = dbModule.initDb();
 
     const item = store.createWorkItem({
-      title: "QPR-4 refused landing", status: "backlog", assignee: "platform-worker",
+      title: "QPR-4 unowned landing", status: "backlog",
     });
     transitions.transition(item.id, "in_review", "session:worker", { agent: true });
     store.createWorkItem({
@@ -108,10 +107,6 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     ).run(sessionId, `cron:${sessionId}`, item.id, new Date().toISOString(), new Date().toISOString());
     const run = runs.openWorkItemRun({ workItemId: item.id, sessionId });
     runs.closeWorkItemRun(run.id, { outcome: "completed", endedAt: new Date().toISOString() });
-    approvals.requestApproval(item.id, {
-      request: "Land?", ref: `workflow:pipeline:${run.id}:gate`, target: "operator",
-    });
-    approvals.decideWorkItemApprovalSync({ id: item.id, decision: "approve", decidedBy: "operator" });
     expect(store.getWorkItem(item.id)!.status).toBe("in_review");
 
     controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "backlog" }) });

@@ -94,8 +94,8 @@ describe("idle-capacity auto-start dispatching", () => {
     expect(h.dispatched).toHaveLength(2);
   });
 
-  it("skips Todos that opted out, are pinned to another engine, carry a pending approval, or lack a required label", async () => {
-    const { labels, dispatchConfig, approvals } = modules;
+  it("skips Todos that opted out, are pinned to another engine, or lack a required label", async () => {
+    const { labels, dispatchConfig } = modules;
     labels.createLabel({ name: "no-auto-start" });
     labels.createLabel({ name: "idle-ok" });
     const optOut = backlog("Opted out by label");
@@ -104,8 +104,6 @@ describe("idle-capacity auto-start dispatching", () => {
     dispatchConfig.setTodoDispatchConfig(flagged.id, { autoStart: false }, config(undefined));
     const pinned = backlog("Pinned to OpenCode");
     dispatchConfig.setTodoDispatchConfig(pinned.id, { engine: "opencode" }, config(undefined));
-    const asking = backlog("Awaiting approval");
-    approvals.requestApproval(asking.id, { request: "may I?" });
     const fine = backlog("Fine");
 
     const h = open();
@@ -115,7 +113,6 @@ describe("idle-capacity auto-start dispatching", () => {
       { workItemId: optOut.id, reason: "label no-auto-start" },
       { workItemId: flagged.id, reason: "autoStart is false" },
       { workItemId: pinned.id, reason: "dispatch override names engine opencode" },
-      { workItemId: asking.id, reason: "an approval is pending" },
     ]));
 
     // With an opt-in label required, an unlabelled Todo is passed over.

@@ -88,7 +88,7 @@ describe("knowledge tools — registry + schemas", () => {
     const names = buildTools().map((t) => t.name);
     expect(names).toContain("search_knowledge");
     expect(names).toContain("read_knowledge");
-    expect(names).toHaveLength(54);
+    expect(names).toHaveLength(51);
   });
 
   it("domain teaching lives on search_knowledge; read names the instance scope", () => {

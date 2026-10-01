@@ -62,52 +62,23 @@ Create a Todo only for durable work that needs an owner or review trail:
 3. Call `assign_work_item` next: creation never carries an assignee, so assignment is always its own second call. Verify the employee with `get_employee` or `find_employees` first.
 4. Use `delegate_task` instead when the assignee should start immediately; it can use an existing `workItemId` or create and link a new Todo atomically.
 
-Do not invent provenance or attach approval fields during creation. Each owning company surface records its own source provenance.
+Do not invent provenance during creation. Each owning company surface records its own source provenance.
 
 ### Auto-start and the Todo you will work yourself
 
 Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when idle capacity is enabled and its sweep picks the Todo from the backlog. To keep that sweep away from a Todo, pass `"autoStart": false` to `create_work_item`, or later to `set_work_item_dispatch`, or give it the `no-auto-start` label. Set it when you create a Todo you will work from this session, or one that should wait for a hand-over by message. `get_work_item` shows the flag under `dispatchConfig`; `set_work_item_dispatch { autoStart: true }` restores the default.
 
-## Approval flow
+## Comments are the record
 
-Approvals are routed records on a Todo, separate from its lifecycle status. Generic `update_work_item` does not perform approval decisions or review-bounce accounting; never use it as a substitute while an approval is pending.
+A Todo's comments are its conversation: questions, decisions, handoffs and evidence go there, with `comment_work_item` (pass `parentCommentId` to reply in a thread). The gateway records the session that wrote each comment from your verified identity, and the Todo page links it; never write your session id into the body yourself. A comment with no mention is recorded only and wakes no one.
 
-1. The Todo owner or linked execution session, its manager, or the COO requests a decision with `request_work_item_approval`:
-
-```json
-{
-  "id": "wi_example",
-  "request": "Do the verification artifacts satisfy the acceptance criteria?"
-}
-```
-
-   Omit `target` to use the default routed manager/COO. Repeating the identical pending request with the same target is idempotent and does not append another approval-requested event. A changed request or target replaces the pending route; there is no self-declared approval state on `create_work_item`.
-
-   Set `operatorOnly: true` to reserve the gate for the human operator when the decision authorizes something irreversible. No employee can then decide it, including the COO and including after an escalation, and the escalation itself is refused. It cannot be combined with `target`.
-
-2. The routed manager/COO decides with `decide_work_item_approval` and an optional evidence note:
-
-```json
-{
-  "id": "wi_example",
-  "decision": "approve",
-  "note": "Acceptance checks and artifacts verified."
-}
-```
-
-   The resolved routed owner cannot decide their own approval, but an employee hierarchy root/COO is exempt from that enforcement check. Linked execution alone is not checked, so routed managers/COO should avoid approving work they personally executed and use another authorized reviewer when possible. For a native approval on an in_review Todo, `approve` atomically records the decision and moves the Todo to `done`. `reject` records the critique, returns it to `executing`, and increments `rounds`; when the increment reaches `verifyPolicy.maxRounds`, it stops in `blocked` instead, recorded as an escalation to the operator. Without an explicit limit, the effective ceilings are 2 rounds for `trust`/`verify` and 3 for `thorough`. On another status, the decision is recorded but status stays unchanged.
-
-3. After a rejection, the worker revises the work, uses `update_work_item` to return it to in_review, and calls `request_work_item_approval` again for the next bounded review. Do not create a duplicate Todo.
-
-4. If the routed manager/COO deliberately needs operator/aCEO authority, call `escalate_work_item_approval` with the pending Todo id and an optional reason. Escalation exposes the pending approval to that path; it does not approve or reject it.
-
-Todo approvals affect only the Todo.
+There is no separate approval step. When work needs a person's decision, stop it in blocked and comment with what is needed and the options; when it is finished, hand it to the operator in in_review.
 
 ## Keep status honest
 
-- Worker finished and ready for review: `update_work_item` to in_review with a note naming artifacts, checks, and remaining risks.
+- Worker finished and ready for review: `update_work_item` to in_review with a note naming artifacts, checks, and remaining risks. The note is required: it is the review handoff, and the gateway posts it on the Todo as a comment.
 - Cannot proceed without an external change: move to `blocked` and state the concrete blocker plus what would unblock it.
-- A manager/operator decision is required: move to `blocked` and say in the note what is needed and the options, with your recommendation. For a pending approval, use `escalate_work_item_approval` instead.
+- A manager/operator decision is required: move to `blocked` and say in the note what is needed, then comment with the options and your recommendation.
 - Finished work waits in in_review for the operator, who closes it. No agent marks a Todo `done`.
 
 Example:
@@ -126,9 +97,9 @@ Delegating onto a Todo that already exists asks for standing over it: its owner,
 
 ## Review loop
 
-1. Reviewer calls `get_work_item` and inspects the linked execution session plus any separately supplied evidence.
-2. If the Todo has a pending approval, use `decide_work_item_approval`; approve or reject with a precise evidence note.
-3. After a rejection, the worker revises, returns the Todo to in_review, and requests the next approval. The rejection path increments rounds and stops the Todo in blocked, as an escalation, when the effective limit is reached.
-4. Use `escalate_work_item_approval` before the round cap only when the routed approver needs an operator/aCEO decision.
+1. A reviewer calls `get_work_item` and inspects the linked execution session, the handoff comment and any separately supplied evidence.
+2. The reviewer's findings go back to the producer, as a comment on the Todo or to the session that asked; the reviewer does not move or close the Todo.
+3. The producer fixes what was found while the Todo stays in executing, then hands it to in_review with a fresh summary.
+4. The operator reads in_review and closes the Todo, or sends it back with a comment.
 
 Report Todo id, title, assignee, status, verification result, and next owner. Do not create a second Todo merely because the first is blocked or under review.

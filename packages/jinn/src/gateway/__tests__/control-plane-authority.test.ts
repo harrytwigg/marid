@@ -64,15 +64,13 @@ fs.writeFileSync(path.join(cronDir, "jobs.json"), JSON.stringify([{ id: "existin
 type Api = typeof import("../api.js");
 type Registry = typeof import("../../sessions/registry.js");
 type Store = typeof import("../../work-items/store.js");
-type Approvals = typeof import("../../work-items/approvals.js");
-type ApprovalAuthority = typeof import("../approval-authority.js");
+type OrgRoot = typeof import("../work-item-owner.js");
 type Auth = typeof import("../auth.js");
 
 let api: Api;
 let registry: Registry;
 let store: Store;
-let approvals: Approvals;
-let approvalAuthority: ApprovalAuthority;
+let owner: OrgRoot;
 let auth: Auth;
 let worker: import("../../shared/types.js").Session;
 let peer: import("../../shared/types.js").Session;
@@ -168,8 +166,7 @@ beforeAll(async () => {
   api = await import("../api.js");
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
-  approvals = await import("../../work-items/approvals.js");
-  approvalAuthority = await import("../approval-authority.js");
+  owner = await import("../work-item-owner.js");
   auth = await import("../auth.js");
   (await import("../../shared/db.js")).initDb();
   worker = registry.createSession({ engine: "codex", source: "web", sourceRef: "worker", title: "worker", employee: "platform-worker" });
@@ -470,86 +467,26 @@ describe("control-plane writes require operator authority", () => {
 });
 
 describe("portal fallback is a virtual root, not employee authority", () => {
-  it("breaks the config-spoof-to-self-approve chain at both the config write and virtual-root decision check", async () => {
+  it("breaks the config-spoof-to-root-standing chain at both the config write and the virtual root", async () => {
     writeConfig();
     const blockedConfig = await call("PUT", "/api/config", { portal: { portalName: collidingPortalName } }, toolHeaders(worker));
     expect(blockedConfig.status).toBe(403);
 
     writeConfig(collidingPortalName);
-    const root = approvalAuthority.resolveRootApprovalTarget() as { name: string; department: string | null; kind?: string } | null;
+    const root = owner.resolveOrgRoot();
     expect(root).toBeTruthy();
     expect(root?.kind).toBe("virtual");
     expect(root?.name).not.toBe(collidingPortalName);
 
-    const item = store.createWorkItem({ title: "collision-root approval", source: "human", status: "backlog" });
-    const approval = approvals.requestApproval(item.id, { request: "Approve collision root", actor: "test" });
-    expect(approval.approvalTarget).toBe(root?.name);
-    expect(approval.approvalTarget).not.toBe(collidingPortalName);
+    const item = store.createWorkItem({ title: "collision-root assignment", source: "human", status: "backlog" });
+    const workerAssign = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "platform-peer" }, toolHeaders(worker));
+    expect(workerAssign.status).toBe(403);
 
-    const workerDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, toolHeaders(worker));
-    expect(workerDecision.status).toBe(403);
+    const peerAssign = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "platform-worker" }, toolHeaders(peer));
+    expect(peerAssign.status).toBe(403);
 
-    const peerDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, toolHeaders(peer));
-    expect(peerDecision.status).toBe(403);
-
-    const operatorDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, { authorization: "Bearer test-token" });
-    expect(operatorDecision.status).toBe(200);
-    expect(operatorDecision.body.workItem).toMatchObject({ approvalState: "approved", approvalDecidedBy: "operator", approvalTarget: root?.name });
-  });
-
-  it("keeps a persisted virtual-root target virtual after an org employee later claims the same name", async () => {
-    const driftRoot = "Drift Root";
-    const driftFile = path.join(orgDir, "drift-root.yaml");
-    fs.rmSync(driftFile, { force: true });
-    writeConfig(driftRoot);
-
-    const item = store.createWorkItem({ title: "org-drift virtual root", source: "human", status: "backlog" });
-    const approval = approvals.requestApproval(item.id, { request: "Approve before drift", actor: "test" });
-    expect(approval.approvalTarget).toBe(driftRoot);
-    expect(approval.approvalTargetKind).toBe("virtual");
-
-    fs.writeFileSync(
-      driftFile,
-      "name: Drift Root\ndisplayName: Drift Root\ndepartment: platform\nrank: employee\nreportsTo: platform-manager\nengine: codex\nmodel: gpt-5.5\npersona: Attempts to claim the persisted virtual root.\n",
-    );
-    const driftSession = registry.createSession({ engine: "codex", source: "web", sourceRef: "drift", title: "drift", employee: driftRoot });
-
-    const employeeDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, toolHeaders(driftSession));
-    expect(employeeDecision.status).toBe(403);
-
-    const operatorDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, { authorization: "Bearer test-token" });
-    expect(operatorDecision.status).toBe(200);
-    expect(operatorDecision.body.workItem).toMatchObject({ approvalState: "approved", approvalDecidedBy: "operator", approvalTarget: driftRoot });
-
-    fs.rmSync(driftFile, { force: true });
-    writeConfig();
-  });
-
-  it("treats legacy NULL target-kind rows as non-employee-decidable after org drift", async () => {
-    const legacyRoot = "Legacy Root";
-    const legacyFile = path.join(orgDir, "legacy-root.yaml");
-    fs.rmSync(legacyFile, { force: true });
-    writeConfig(legacyRoot);
-
-    const item = store.createWorkItem({ title: "legacy virtual root", source: "human", status: "backlog" });
-    const approval = approvals.requestApproval(item.id, { request: "Approve before kind column existed", actor: "test" });
-    expect(approval.approvalTarget).toBe(legacyRoot);
-    expect(approval.approvalTargetKind).toBe("virtual");
-
-    (await import("../../shared/db.js")).initDb().prepare("UPDATE work_item_approvals SET target_kind = NULL WHERE work_item_id = ?").run(approval.id);
-    fs.writeFileSync(
-      legacyFile,
-      "name: Legacy Root\ndisplayName: Legacy Root\ndepartment: platform\nrank: employee\nreportsTo: platform-manager\nengine: codex\nmodel: gpt-5.5\npersona: Attempts to claim a legacy persisted approval target.\n",
-    );
-    const legacySession = registry.createSession({ engine: "codex", source: "web", sourceRef: "legacy-root", title: "legacy root", employee: legacyRoot });
-
-    const employeeDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, toolHeaders(legacySession));
-    expect(employeeDecision.status).toBe(403);
-
-    const operatorDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, { authorization: "Bearer test-token" });
-    expect(operatorDecision.status).toBe(200);
-
-    fs.rmSync(legacyFile, { force: true });
-    writeConfig();
+    const operatorAssign = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "platform-peer" }, { authorization: "Bearer test-token" });
+    expect(operatorAssign.status).toBe(200);
+    expect(operatorAssign.body.workItem).toMatchObject({ assignee: "platform-peer" });
   });
 });

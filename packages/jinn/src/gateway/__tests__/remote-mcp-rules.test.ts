@@ -35,7 +35,6 @@ fs.writeFileSync(path.join(tmpHome, "knowledge", "state.md"), "# State\n");
 type Session = import("../../shared/types.js").Session;
 let api: typeof import("../api.js");
 let registry: typeof import("../../sessions/registry.js");
-let approvalAuthority: typeof import("../approval-authority.js");
 let dispatchConfig: typeof import("../../work-items/dispatch-config.js");
 let labels: typeof import("../../work-items/labels.js");
 let preflight: typeof import("../../sessions/turn/preflight.js");
@@ -86,7 +85,6 @@ const operator = { authorization: "Bearer test-token" };
 beforeAll(async () => {
   api = await import("../api.js");
   registry = await import("../../sessions/registry.js");
-  approvalAuthority = await import("../approval-authority.js");
   dispatchConfig = await import("../../work-items/dispatch-config.js");
   labels = await import("../../work-items/labels.js");
   preflight = await import("../../sessions/turn/preflight.js");
@@ -99,11 +97,6 @@ describe("the connector anchor is not the COO portal (D2, SC-007)", () => {
   it("is not portal-shaped, although an identical web session is", () => {
     expect(registry.isPortalAgentSession(connector)).toBe(false);
     expect(registry.isPortalAgentSession({ ...connector, source: "web" })).toBe(true);
-  });
-
-  it("cannot decide an operator-only approval", () => {
-    const item = { id: operatorTodo } as never;
-    expect(approvalAuthority.resolveApprovalDecisionAuthority(connectorHeaders(), item, { operatorOnly: true }).ok).toBe(false);
   });
 
   it("never runs an engine turn (D3)", () => {

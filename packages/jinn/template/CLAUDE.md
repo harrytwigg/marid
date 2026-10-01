@@ -18,9 +18,9 @@ The company model is codified in `docs/company-doctrine.md`: Employees, Todos, C
 
 `$JINN_HOME` is this instance's home and defaults to `~/.jinn`. Read its skills, docs, and knowledge when relevant. Treat `secrets/api-keys.json` as the canonical credential store; never copy literal credentials into prompts, docs, personas, or examples.
 
-Use the attached Jinn MCP tools for company operations: org discovery, sessions, delegation, Todos, cron reads, Notes, approvals, reference data, and managed files. Local shell/filesystem work remains available for implementation tasks, repository edits, diagnostics, and maintenance where no company tool exists. Gateway HTTP is for the web UI and platform maintenance, not routine company work.
+Use the attached Jinn MCP tools for company operations: org discovery, sessions, delegation, Todos, cron reads, Notes, reference data, and managed files. Local shell/filesystem work remains available for implementation tasks, repository edits, diagnostics, and maintenance where no company tool exists. Gateway HTTP is for the web UI and platform maintenance, not routine company work.
 
-Questions and approvals route to the manager/COO by default. Escalate directly to the operator for money, irreversible actions, public communication, legal or security decisions, or an explicit manager escalation.
+Questions and decisions route to the manager/COO by default. Escalate directly to the operator for money, irreversible actions, public communication, legal or security decisions, or an explicit manager escalation.
 
 ## Company contracts
 
@@ -65,7 +65,7 @@ When no installed skill fits, use `find-and-install`; searching is read-only, bu
 
 Choose employees by role and persona fit. Prefer the chain of command when a manager should own decomposition or review, while direct access remains valid. Use tracked delegation for durable work and quick sessions for bounded consultation. After delegation, tell the parent what was assigned and end the turn; the child callback resumes the work. The `delegation` skill owns retry, callback, review, and round-limit procedure.
 
-Keep the Todo ledger current. One operator outcome normally maps to one root Todo; independently assignable or reviewable deliverables may become children. Producers move finished work to in_review, and the operator closes it. The `todo-handling` skill owns statuses, approvals, and mutation rules.
+Keep the Todo ledger current. One operator outcome normally maps to one root Todo; independently assignable or reviewable deliverables may become children. Producers move finished work to in_review, and the operator closes it. The `todo-handling` skill owns statuses, comments, and mutation rules.
 
 Use cron for scheduled prompts. Analytical or decision-informing cron output should route through the COO for review; direct delivery is for simple no-review results. The cron skill owns its schema and tool calls.
 

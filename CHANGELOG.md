@@ -18,6 +18,25 @@
     - `acknowledgeEscalated` is gone from `update_work_item` and the status route.
     - An employee file whose name starts with `@` is skipped.
   - **On upgrade:** existing `assigned` Todos move to `backlog` and `escalated` ones to `blocked`, keeping their assignee. Each moved Todo gets a `migration` status event and a version bump. A former escalation counts as a declared block, so recovery leaves it for the operator, and loses any park date (its unblock hint stays). The `work_items` CHECK constraint is unchanged.
+- **Todo approvals are removed; comments are the record.**
+  - **Removed.** Requesting, deciding and escalating approvals on a Todo is gone, along with:
+    - the MCP tools `request_work_item_approval`, `decide_work_item_approval` and `escalate_work_item_approval`;
+    - the `/api/work-items/:id/approval*` routes;
+    - the approval banner, badges and Needs-you lane;
+    - the Talk voice-approval capability (`prepare_voice_approval`, `commit_voice_approval`) and the Talk `talk_decide_approval` tool.
+  - **Blocked replaces approvals.** A decision that needs a person is a Todo stopped in `blocked` with a comment saying what is needed. When the Dispatcher or the Shaper can place nobody, it does exactly that, with options for the operator, and leaves the assignee unchanged.
+  - **Review handoff.** An agent that moves a Todo to `in_review` must give a summary in `note`. The gateway posts it on the Todo as a comment.
+  - **Comment sessions.** Every comment written from a session records that session, taken from the caller's identity rather than supplied by the agent, and the Todo page links it. A reply also records the comment it actually answered, which thread flattening used to lose.
+  - **Reconciler.** A pending approval no longer holds back the trust-tier close.
+  - **Breaking:**
+    - Todo payloads no longer carry `approval*` fields.
+    - The Todo detail payload no longer carries `approvals`.
+    - Todo activity payloads no longer carry `approvalState`.
+    - Request bodies with `approval*` keys are no longer refused; the keys are ignored.
+  - **On upgrade:**
+    - Existing approval rows stay in the database, unread, and the approval tables keep their shape, so an existing database still verifies.
+    - An approval still pending on an open Todo is posted once as a comment on that Todo: its question, its options and who asked. The Todo's status is unchanged.
+    - Comment session and reply data lives in a new `work_item_comment_meta` table, created on first use. Comments written before the upgrade simply have none.
 
 ### 🐛 Fixes
 - **Each test file gets its own home, and virtualizer scroll callbacks are cancelled when their observer disconnects.** A run-level `JINN_HOME` is isolated from production but still shared by every Vitest fork, so two gateway files that didn't override it resolved one `sessions/registry.db` and wrote it in parallel — the intermittent "database is locked" chased file-by-file. `Setup` now allocates a per-file home (`createIsolatedTestFileHome`, before the file's static imports freeze `paths.ts`) within the run's temp subtree, and global teardown removes it. Separately, `@tanstack/virtual-core@3.14.0` is patched so its scroll-end debounce exposes `.cancel()` and both offset observers call it on cleanup; a pending scroll-end callback no longer fires into a transcript (or a window) that was unmounted, disabled or replaced.

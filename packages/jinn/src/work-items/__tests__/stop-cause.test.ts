@@ -16,19 +16,19 @@ process.env.JINN_HOME = tmp;
 type Store = typeof import("../store.js");
 type Transitions = typeof import("../transitions.js");
 type StopCause = typeof import("../stop-cause.js");
-type Approvals = typeof import("../approvals.js");
+type RecoveryRows = typeof import("../recovery-rows.js");
 
 let store: Store;
 let tr: Transitions;
 let sc: StopCause;
-let approvals: Approvals;
+let recoveryRows: RecoveryRows;
 let db: import("better-sqlite3").Database;
 
 beforeAll(async () => {
   store = await import("../store.js");
   tr = await import("../transitions.js");
   sc = await import("../stop-cause.js");
-  approvals = await import("../approvals.js");
+  recoveryRows = await import("../recovery-rows.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
@@ -156,14 +156,16 @@ describe("the needs-attention set counts people, not clocks", () => {
     expect(ids).not.toContain(parked.id);
   });
 
-  it("leaves out a parked Todo even when it is holding a gate — the park is what decides", () => {
+  it("keeps a parked Todo that recovery has routed to a manager — the routed lane outranks the park", () => {
     const owner = `owner-${Math.random().toString(36).slice(2, 8)}`;
     const item = mk("executing", { assignee: owner });
-    approvals.requestApproval(item.id, { request: "decide?", target: owner });
+    recoveryRows.upsertWorkItemRecovery({
+      workItemId: item.id, incidentId: "incident-1", class: "operator", lane: "manager", reason: "routed to a manager",
+    });
     expect(queue(owner)).toContain(item.id);
 
     tr.transition(item.id, "blocked", AGENT, { agent: true, stopCause: { parkedUntil: new Date(Date.now() + HOUR).toISOString() } });
-    expect(queue(owner)).not.toContain(item.id);
+    expect(queue(owner)).toContain(item.id);
   });
 
   it("keeps a Todo whose park will not parse — a field that hides work must fail open", () => {

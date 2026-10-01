@@ -70,4 +70,4 @@ Use bounded feedback loops: low effort up to 4 rounds, medium up to 8, high up t
 
 ## External and operator boundaries
 
-Default questions and approvals to the manager/COO. Escalate to the operator for money, irreversible actions, public communication, legal/security decisions, or an explicit manager escalation. A terminal instruction such as "finish" increases persistence toward the stated outcome; it does not expand authority.
+Default questions and decisions to the manager/COO. Escalate to the operator for money, irreversible actions, public communication, legal/security decisions, or an explicit manager escalation. A terminal instruction such as "finish" increases persistence toward the stated outcome; it does not expand authority.

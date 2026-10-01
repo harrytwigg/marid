@@ -208,7 +208,7 @@ describe("verify mode on create", () => {
     const created = await call("POST", "/api/work-items", { title: "Agent work" }, toolHeaders(session.id));
     const id = created.body.workItem.id as string;
     expect((await post(id, { status: "executing" }, toolHeaders(session.id))).status).toBe(200);
-    expect((await post(id, { status: "in_review" }, toolHeaders(session.id))).status).toBe(200);
+    expect((await post(id, { status: "in_review", note: "ready for the operator" }, toolHeaders(session.id))).status).toBe(200);
     reconcileActiveWorkItems();
     expect(store.getWorkItem(id)?.status).toBe("in_review");
   });

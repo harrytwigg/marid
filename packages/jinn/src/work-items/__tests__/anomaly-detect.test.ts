@@ -9,14 +9,12 @@ process.env.JINN_HOME = tmp;
 type Store = typeof import("../store.js");
 type Runs = typeof import("../runs.js");
 type Detect = typeof import("../anomaly-detect.js");
-type Approvals = typeof import("../approvals.js");
 type Controller = typeof import("../recovery-controller.js");
 type Rows = typeof import("../recovery-rows.js");
 
 let store: Store;
 let runs: Runs;
 let detect: Detect;
-let approvals: Approvals;
 let controller: Controller;
 let rows: Rows;
 let db: import("better-sqlite3").Database;
@@ -25,7 +23,6 @@ beforeAll(async () => {
   store = await import("../store.js");
   runs = await import("../runs.js");
   detect = await import("../anomaly-detect.js");
-  approvals = await import("../approvals.js");
   controller = await import("../recovery-controller.js");
   rows = await import("../recovery-rows.js");
   db = (await import("../../shared/db.js")).initDb();
@@ -81,25 +78,20 @@ describe("detectTodoAnomalies", () => {
     expect(found).toMatchObject({ kind: "blocked-without-recovery", lane: "manager" });
   });
 
-  it("puts an approved-landed leftover on Manager attention", () => {
-    const item = store.createWorkItem({
-      title: "approved landing still open for the board", status: "in_review", assignee: "platform-worker",
+  it("puts an in_review Todo with no assignee on Manager attention", () => {
+    const item = store.createWorkItem({ title: "in review with nobody to answer for it", status: "in_review" });
+    expect(detect.detectAnomalyFor(item.id)).toMatchObject({
+      kind: "review-without-reviewer", lane: "manager", reason: "in review with no assignee to answer for it",
     });
-    const sessionId = `s-${item.id}`;
-    db.prepare(
-      `INSERT INTO sessions (id, engine, source, source_ref, status, work_item_id, created_at, last_activity)
-       VALUES (?, 'claude', 'cron', ?, 'idle', ?, ?, ?)`,
-    ).run(sessionId, `cron:${sessionId}`, item.id, new Date().toISOString(), new Date().toISOString());
-    const run = runs.openWorkItemRun({ workItemId: item.id, sessionId });
-    runs.closeWorkItemRun(run.id, { outcome: "completed", endedAt: new Date().toISOString() });
-    approvals.requestApproval(item.id, {
-      request: "Land?", ref: `workflow:pipeline:${run.id}:gate`, target: "operator",
-    });
-    approvals.decideWorkItemApprovalSync({ id: item.id, decision: "approve", decidedBy: "operator" });
     detect.detectTodoAnomalies({ persist: true });
     controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
     const hits = store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id);
     expect(hits).toContain(item.id);
+  });
+
+  it("does not flag an in_review Todo that has an assignee", () => {
+    const item = store.createWorkItem({ title: "in review, owned", status: "in_review", assignee: "platform-worker" });
+    expect(detect.detectAnomalyFor(item.id)).toBeUndefined();
   });
 
   it("does not flag an execution-timeout while the session is still in flight", () => {

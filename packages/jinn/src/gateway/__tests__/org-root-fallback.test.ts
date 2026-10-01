@@ -39,13 +39,11 @@ fs.writeFileSync(
 
 type Api = typeof import("../api.js");
 type Store = typeof import("../../work-items/store.js");
-type Approvals = typeof import("../../work-items/approvals.js");
-type ApprovalAuthority = typeof import("../approval-authority.js");
+type Owner = typeof import("../work-item-owner.js");
 
 let api: Api;
 let store: Store;
-let approvals: Approvals;
-let approvalAuthority: ApprovalAuthority;
+let owner: Owner;
 
 const apiCtx = {
   getConfig: () => ({
@@ -112,63 +110,26 @@ async function call(method: string, urlPath: string, body?: unknown): Promise<{ 
   return { status: cap.status, body: cap.body };
 }
 
-function createUntargetedApproval(title: string) {
-  const item = store.createWorkItem({ title, source: "human", status: "backlog" });
-  return approvals.requestApproval(item.id, {
-    request: `Approve ${title}`,
-    actor: "test",
-  });
-}
-
 beforeAll(async () => {
   api = await import("../api.js");
   store = await import("../../work-items/store.js");
-  approvals = await import("../../work-items/approvals.js");
   await import("../../sessions/registry.js");
-  approvalAuthority = await import("../approval-authority.js");
+  owner = await import("../work-item-owner.js");
   (await import("../../shared/db.js")).initDb();
 });
 
-describe("approval root resolution without an executive employee", () => {
-  it("falls back to the configured portal as the COO/root approval target", () => {
-    expect(approvalAuthority.resolveRootApprovalTarget()).toEqual({ name: portalName, department: null, kind: "virtual" });
+describe("org root resolution without an executive employee", () => {
+  it("falls back to the configured portal as the COO/root", () => {
+    expect(owner.resolveOrgRoot()).toEqual({ name: portalName, department: null, kind: "virtual" });
   });
 
   it("lets the operator read the portal-root needs-attention queue via me", async () => {
-    const approval = createUntargetedApproval("operator inbox");
+    const held = store.createWorkItem({ title: "operator inbox", source: "human", status: "blocked", assignee: portalName });
 
     const resp = await call("GET", "/api/work-items?needsAttentionFor=me&limit=10");
 
     expect(resp.status).toBe(200);
-    expect(resp.body.workItems.map((item: { id: string }) => item.id)).toContain(approval.id);
-    expect(resp.body.workItems.find((item: { id: string }) => item.id === approval.id)).toMatchObject({
-      approvalState: "pending",
-      approvalTarget: portalName,
-    });
-  });
-
-  it("routes an approval with no explicit employee target to the portal root", () => {
-    const approval = createUntargetedApproval("default target");
-
-    expect(approval.approvalTarget).toBe(portalName);
-  });
-
-  it("lets the operator decide and escalate approvals targeted at the portal root", async () => {
-    const decisionItem = createUntargetedApproval("operator decision");
-    const decided = await call("POST", `/api/work-items/${decisionItem.id}/approval`, {
-      decision: "approve",
-      note: "operator accepted",
-    });
-    expect(decided.status).toBe(200);
-    expect(decided.body.workItem).toMatchObject({ approvalState: "approved", approvalDecidedBy: "operator", approvalTarget: portalName });
-
-    const escalateItem = createUntargetedApproval("operator escalation");
-    const escalated = await call("POST", `/api/work-items/${escalateItem.id}/approval/escalate`, {
-      reason: "operator review",
-    });
-    expect(escalated.status).toBe(200);
-    expect(escalated.body.workItem.approvalTarget).toBe(portalName);
-    expect(escalated.body.workItem.approvalEscalatedAt).toBeTruthy();
+    expect(resp.body.workItems.map((item: { id: string }) => item.id)).toContain(held.id);
   });
 
   it("keeps an executive employee as the root when one exists", async () => {
@@ -181,6 +142,6 @@ describe("approval root resolution without an executive employee", () => {
     const { refreshOrg } = await import("../org-registry.js");
     refreshOrg();
 
-    expect(approvalAuthority.resolveRootApprovalTarget()).toEqual({ name: "coo", department: "platform", kind: "employee" });
+    expect(owner.resolveOrgRoot()).toEqual({ name: "coo", department: "platform", kind: "employee" });
   });
 });

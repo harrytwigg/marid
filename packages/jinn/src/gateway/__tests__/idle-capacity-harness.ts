@@ -26,7 +26,6 @@ export const modules = {} as {
   store: Store;
   labels: typeof import("../../work-items/labels.js");
   dispatchConfig: typeof import("../../work-items/dispatch-config.js");
-  approvals: typeof import("../../work-items/approvals.js");
   stopCause: typeof import("../../work-items/stop-cause.js");
   comments: typeof import("../../work-items/comments.js");
   db: import("better-sqlite3").Database;
@@ -119,7 +118,6 @@ export async function loadModules(): Promise<void> {
   modules.store = await import("../../work-items/store.js");
   modules.labels = await import("../../work-items/labels.js");
   modules.dispatchConfig = await import("../../work-items/dispatch-config.js");
-  modules.approvals = await import("../../work-items/approvals.js");
   modules.stopCause = await import("../../work-items/stop-cause.js");
   modules.comments = await import("../../work-items/comments.js");
   modules.db = (await import("../../shared/db.js")).initDb();
@@ -129,7 +127,7 @@ export async function loadModules(): Promise<void> {
  *  so only tables that exist are cleared. */
 export function clearBoard(): void {
   const tables = ["work_item_claims", "work_item_comments", "work_item_labels", "work_item_dispatch", "work_item_auto_start",
-    "work_item_stop_cause", "work_item_approvals", "work_item_events", "work_items"];
+    "work_item_stop_cause", "work_item_events", "work_items"];
   const present = new Set(modules.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").pluck().all() as string[]);
   for (const table of tables) if (present.has(table)) modules.db.exec(`DELETE FROM ${table}`);
 }
