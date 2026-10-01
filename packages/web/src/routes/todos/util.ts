@@ -1,4 +1,4 @@
-import type { Employee } from "@/lib/api"
+import type { Employee, WorkItemEventWire } from "@/lib/api"
 
 /** Compact relative time: "22m", "4h", "Yesterday", "Jul 4". Past only. */
 export function formatRelativeTime(iso: string, now = Date.now()): string {
@@ -36,6 +36,31 @@ export function escalationReasonLabel(reason: unknown): string | null {
   if (reason === "max-rounds-exhausted") return "Review rounds exhausted"
   if (reason === "block_loop_detected") return "Blocked again for the same reason"
   return typeof reason === "string" && reason ? reason : null
+}
+
+/** Why a Todo stopped in `status`: the note, or the escalation's reason, on
+ *  the newest move into it, and that move. A boot migration out of a retired
+ *  status (`escalated`) is read through to the move into that status, which is
+ *  where the reason was given. */
+export function stopReasonOf(events: readonly WorkItemEventWire[], current: string): { note: string | null; event: WorkItemEventWire | null } {
+  let status = current
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e.toStatus !== status) continue
+    if (e.detail?.reason === "retired-status" && e.fromStatus) {
+      status = e.fromStatus
+      continue
+    }
+    const note = moveReason(e)
+    if (note || e.kind === "status_change") return { note, event: e }
+  }
+  return { note: null, event: null }
+}
+
+/** The reason one move states: its note, else an escalation's mapped reason. */
+function moveReason(e: WorkItemEventWire): string | null {
+  const note = typeof e.detail?.note === "string" ? e.detail.note.trim() : ""
+  return note || (e.kind === "escalated" ? escalationReasonLabel(e.detail?.reason) : null)
 }
 
 /** The reserved assignee value for the operator; it is not on the roster. */

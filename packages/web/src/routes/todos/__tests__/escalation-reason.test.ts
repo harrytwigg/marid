@@ -44,4 +44,16 @@ describe("the escalation why-line", () => {
     }
     expect(exceptionReasonOf(withNote).note).toBe("the upstream API is still down")
   })
+
+  it("reads a migrated escalation's reason from the move into escalated", () => {
+    const migrated: WorkItemDetailWire = {
+      ...detail("block_loop_detected"),
+      events: [
+        event("e1", "status_change", "2026-08-13T08:00:00.000Z", { toStatus: "escalated" as never, detail: { note: "which vendor?" } }),
+        event("e2", "status_change", "2026-10-01T20:53:00.000Z", { fromStatus: "escalated" as never, toStatus: "blocked", actor: "migration", detail: { reason: "retired-status", declared: true } }),
+      ],
+    }
+    expect(exceptionReasonOf(migrated).note).toBe("which vendor?")
+    expect(reasonOf({ id: "PLA-12", status: "blocked" } as WorkItemCompactWire, { events: migrated.events } as WorkItemOpenDetailWire)).toBe("which vendor?")
+  })
 })

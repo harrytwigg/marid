@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Bell, Check, Pause } from "lucide-react"
 import { AttachmentRefText } from "@/components/attachment-ref-preview"
 import type { Employee, WorkItemDetailWire, WorkItemEventWire } from "@/lib/api"
-import { displayNameOf, escalationReasonLabel, formatRelativeTime } from "../util"
+import { displayNameOf, formatRelativeTime, stopReasonOf } from "../util"
 
 /* Todos v2 slice 6 — the task page's banner zone (design-doc §7.2, states mock
  * §5). At most ONE banner: Escalated > Approval > Blocked. Neutral
@@ -31,19 +31,7 @@ export function bannerKindOf(detail: WorkItemDetailWire): BannerKind | null {
 /** The newest event that carries this exception state's reason: a transition
  *  into the status, or a same-status annotate note (both carry toStatus). */
 export function exceptionReasonOf(detail: WorkItemDetailWire): { note: string | null; event: WorkItemEventWire | null } {
-  const status = detail.workItem.status
-  for (let i = detail.events.length - 1; i >= 0; i--) {
-    const e = detail.events[i]
-    if (e.toStatus !== status) continue
-    const note = typeof e.detail?.note === "string" ? e.detail.note.trim() : ""
-    if (note) return { note, event: e }
-    if (e.kind === "escalated") {
-      const label = escalationReasonLabel(e.detail?.reason)
-      if (label) return { note: label, event: e }
-    }
-    if (e.kind === "status_change") return { note: null, event: e }
-  }
-  return { note: null, event: null }
+  return stopReasonOf(detail.events, detail.workItem.status)
 }
 
 const KIND_STYLE: Record<BannerKind, { color: string; rail: string }> = {
