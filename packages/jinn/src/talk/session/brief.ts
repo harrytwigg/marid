@@ -67,10 +67,10 @@ function identity(config: Pick<JinnConfig, "portal">): string {
   const prefix = resolveTodoIdPrefix(configured, config.portal?.companyPrefix);
   return (
     `This instance is ${configured.slice(0, COMPANY_NAME_CHARS)}. `
-    + `Its Todos are numbered ${prefix}-1, ${prefix}-2 and so on, and they move through eight statuses: `
-    + "backlog (nobody has picked it up), assigned (owned, not started), executing (in progress), "
-    + "in_review (the producer is finished and a reviewer has it), done (closed by that reviewer, never by the producer), "
-    + "blocked (waiting on something else), escalated (needs the operator), cancelled (dropped)."
+    + `Its Todos are numbered ${prefix}-1, ${prefix}-2 and so on, and they move through six statuses: `
+    + "backlog (not started; it may already have an owner), executing (in progress), "
+    + "in_review (the producer is finished and the operator has it), done (closed by the operator, never by the producer), "
+    + "blocked (stopped, waiting on something or someone), cancelled (dropped)."
   );
 }
 

@@ -16,7 +16,7 @@ import type { TalkControlOperation } from "./types.js";
  * `todo-extended` records that as a standing gap rather than an oversight.
  */
 export const TALK_TODO_STATUSES = [
-  "backlog", "assigned", "executing", "in_review", "done", "blocked", "escalated",
+  "backlog", "executing", "in_review", "done", "blocked",
 ] as const;
 
 export const TODO_GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
@@ -38,7 +38,7 @@ export const TODO_GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
   gateway("talk_set_todo_status", "Move a Todo to another status. Cancelling is not available by voice.", params({
     id: string("The full Todo id."),
     status: string("The status to move it to.", TALK_TODO_STATUSES),
-    note: string("Why, when the move is to blocked or escalated."),
+    note: string("Why, when the move is to blocked."),
   }, ["id", "status"]), "todos", { mutability: "write", verification: "todo-status-reread" }),
   gateway("talk_comment_todo", "Add one operator comment to a Todo.",
     params({ id: string("The full Todo id."), body: string("The comment body.") }, ["id", "body"]),

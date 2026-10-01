@@ -29,10 +29,9 @@ export type { WorkItemAttemptEvidence } from './attempt-evidence.js';
  * linked execution attempts (sessions), not from scattered ad-hoc writes. The
  * elevated rules:
  *
- *   - `done`/`cancelled`/`escalated` are STICKY. Closes are decisions; escalated
- *     is a deliberate routing to the operator — session churn never silently
- *     pulls an item off his queue.
- *   - ZERO linked sessions → untouched (`backlog`/`assigned` are never clobbered).
+ *   - `done`/`cancelled` are STICKY. Closes are decisions — session churn never
+ *     silently reopens them.
+ *   - ZERO linked sessions → untouched (`backlog` is never clobbered).
  *     Attempts older than the operator's own last status move are not linked
  *     evidence at all — see `attempt-evidence.ts`. With nothing left to speak the
  *     whole pass is a no-op, the TRUST close below included; and once something
@@ -111,7 +110,7 @@ export function deriveWorkItemStatus(
   // authority (an old clean settle must not mask a newer failure, and a newer
   // clean retry must clear an older failure).
   const newest = attempts[0].outcome;
-  // A clean settle is not a completion declaration: a backlog/assigned
+  // A clean settle is not a completion declaration: a backlog
   // Todo stays where somebody put it after that attempt ran.
   if (newest === 'succeeded' && opts?.verifyMode === 'trust') return 'in_review';
   if (newest === 'succeeded') return current === 'blocked' ? 'executing' : current;
@@ -211,7 +210,7 @@ export interface ReconcileSweepResult {
 /** The non-sticky statuses a sweep re-derives. `in_review` is included so a
  *  pre-existing trust-tier item settles on the next pass even if its landing
  *  pass predates this code. */
-const SWEEP_STATUSES: readonly WorkItemStatus[] = ['backlog', 'assigned', 'executing', 'in_review', 'blocked'];
+const SWEEP_STATUSES: readonly WorkItemStatus[] = ['backlog', 'executing', 'in_review', 'blocked'];
 
 /**
  * Reconcile every non-sticky item. Invoked at gateway startup right after
