@@ -112,7 +112,8 @@ describe("describing the operator's location", () => {
       ["/todos/b/platform/extra", ""],
       ["/workflow/nightly-build/garbage", ""],
       ["/workflow/nightly-build/runs/run_0f21c7/extra", ""],
-      ["/experiments/exp-1/readings", ""],
+      ["/experiments", ""],
+      ["/experiments/exp-1", ""],
       ["/cron/nightly-sync/history", ""],
       ["/org/a-lead", ""],
     ] as const) {
@@ -154,10 +155,6 @@ describe("describing the operator's location", () => {
       kind: "cron",
       filters: { lens: "week", filter: "enabled" },
       selection: null,
-    })
-    expect(describeLocation("/experiments/exp-1", "")).toMatchObject({
-      kind: "experiment",
-      selection: { kind: "experiment", id: "exp-1" },
     })
     // Folder and open note are carried independently, so the note's own path is
     // the whole knowledge-relative one, not one relative to the folder chip.

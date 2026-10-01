@@ -31,9 +31,9 @@ test("declares twelve durable topics with stable unique identities", () => {
     workflowRunId: "run_fixture",
   })
 
-  assert.equal(topics.length, 12)
-  assert.equal(new Set(topics.map(({ id }) => id)).size, 12)
-  assert.deepEqual(topics.map(({ ordinal }) => ordinal), Array.from({ length: 12 }, (_, index) => index + 1))
+  assert.equal(topics.length, 11)
+  assert.equal(new Set(topics.map(({ id }) => id)).size, 11)
+  assert.deepEqual(topics.map(({ ordinal }) => ordinal), Array.from({ length: 11 }, (_, index) => index + 1))
   assert.equal(topics[0].state, "active")
   assert.ok(topics.slice(1, 4).every(({ state }) => state === "warm"))
   assert.ok(topics.slice(4).every(({ state }) => state === "cool"))
@@ -90,7 +90,7 @@ test("seeding the same stopped home twice reuses every durable identity", async 
   const sessions = new Database(path.join(home, "sessions", "registry.db"), { readonly: true })
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM work_items").pluck().get(), 4)
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM work_item_approvals WHERE state = 'pending'").pluck().get(), 1)
-  assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_topics").pluck().get(), 12)
+  assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_topics").pluck().get(), 11)
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_proactive_receipts").pluck().get(), 2)
   assert.equal(sessions.prepare("SELECT high_water FROM work_item_id_allocator WHERE prefix = 'PLA'").pluck().get(), 4)
   sessions.close()

@@ -6,7 +6,7 @@ export const TALK_SESSION_ID = "talk-fixture-session"
 export const WORKFLOW_ID = "sandbox-approval-flow"
 const PROTECTED_PORTS = new Set([7777, 7788])
 
-const TOPIC_STATES = ["active", "warm", "warm", "warm", ...Array(8).fill("cool")]
+const TOPIC_STATES = ["active", "warm", "warm", "warm", ...Array(7).fill("cool")]
 
 export const TOPIC_SPECS = [
   ["blocked-release", "todo", "Blocked release checklist", "Explain the blocker and open its linked chat."],
@@ -14,7 +14,6 @@ export const TOPIC_SPECS = [
   ["delegated-qa", "chat", "Delegated QA evidence", "Inspect the delegated chat and its visible evidence."],
   ["workflow-graph", "workflow", "Approval workflow graph", "Answer the graph-only visual question with one bounded capture."],
   ["workflow-approval", "workflow", "Pending workflow approval", "Keep the exact operator decision pending until explicitly approved."],
-  ["experiment", "other", "Response clarity experiment", "Compare the seeded baseline with the next reading."],
   ["note", "other", "Launch constraints note", "Retrieve the durable sandbox-only constraints."],
   ["cron", "other", "Quiet review schedule", "Inspect the disabled recurring review without enabling it."],
   ["org", "other", "Sandbox platform team", "Identify the generic owner and reviewer."],
@@ -62,13 +61,12 @@ function topicAnchors(refs) {
     [{ kind: "todo", id: refs.todoIds.delegated, relation: "subject" }, ...chat(3)],
     [{ kind: "workflow", id: refs.workflowId, relation: "graph" }, ...chat(4)],
     [{ kind: "workflow-run", id: refs.workflowRunId, relation: "approval" }, ...chat(5)],
-    [{ kind: "experiment", id: "exp_talkfixture", relation: "subject" }, ...chat(6)],
-    [{ kind: "note", id: "talk-driving-journey", relation: "subject" }, ...chat(7)],
-    [{ kind: "cron", id: "sandbox-quiet-review", relation: "subject" }, ...chat(8)],
-    [{ kind: "employee", id: "sandbox-coordinator", relation: "owner" }, ...chat(9)],
-    [{ kind: "settings", id: "portal", relation: "subject" }, ...chat(10)],
-    [{ kind: "proactive-policy", id: "routine-and-urgent", relation: "subject" }, ...chat(11)],
-    [{ kind: "resilience", id: "dedupe-and-barge-in", relation: "subject" }, ...chat(12)],
+    [{ kind: "note", id: "talk-driving-journey", relation: "subject" }, ...chat(6)],
+    [{ kind: "cron", id: "sandbox-quiet-review", relation: "subject" }, ...chat(7)],
+    [{ kind: "employee", id: "sandbox-coordinator", relation: "owner" }, ...chat(8)],
+    [{ kind: "settings", id: "portal", relation: "subject" }, ...chat(9)],
+    [{ kind: "proactive-policy", id: "routine-and-urgent", relation: "subject" }, ...chat(10)],
+    [{ kind: "resilience", id: "dedupe-and-barge-in", relation: "subject" }, ...chat(11)],
   ]
 }
 

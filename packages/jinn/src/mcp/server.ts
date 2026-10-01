@@ -9,7 +9,6 @@ import { buildSessionTools } from "./session-tools.js";
 import { buildSearchTools } from "./search-tools.js";
 import { buildKnowledgeTools, type KnowledgeSearchWording } from "./knowledge-tools.js";
 import { buildNoteTools } from "./note-tools.js";
-import { buildExperimentTools } from "./experiment-tools.js";
 import { buildDelegationTools } from "./delegation-tools.js";
 import { buildOrgTools } from "./org-tools.js";
 import { buildWorkItemTools } from "./work-item-tools.js";
@@ -104,7 +103,7 @@ export { gatewayGet, gatewayRequest, JinnMcpToolError, type JinnMcpContext, type
 
 /**
  * Build the full tool set, one group per company surface: org, sessions,
- * company-reference search, scoped knowledge, Notes, Experiments, cost reads,
+ * company-reference search, scoped knowledge, Notes, cost reads,
  * cron reads, the delegation transaction, Todos/work-items, approvals, managed
  * files, connectors, session-armed heartbeats, and Workflows.
  * Growth discipline: the belt budget lives in the GRS-017 design §7 and the
@@ -122,7 +121,6 @@ export function buildTools(opts?: { notesEnabled?: boolean; workflowAttempt?: bo
     ...buildSearchTools(),
     ...buildKnowledgeTools(opts?.knowledge),
     ...(notesEnabled ? buildNoteTools() : []),
-    ...buildExperimentTools(),
     ...buildCostTools(),
     ...buildCronTools(),
     ...buildDelegationTools(),

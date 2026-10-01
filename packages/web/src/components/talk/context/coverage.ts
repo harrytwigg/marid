@@ -38,8 +38,6 @@ export const TALK_SURFACE_COVERAGE: Record<AppRouteId, TalkSurfaceCoverage> = {
   "todo-detail": supported("selected Todo, status, relations, comments, and runs", ["inspect", "comments", "runs"], ["edit", "comment", "assign", "delegate", "state"], "refresh and focus changed evidence"),
   "notes-list": supported("note list and search", ["list", "search"], ["open", "create"], "open note"),
   notes: supported("selected note and folder", ["read", "search"], ["open", "create", "update"], "focus note content"),
-  "experiments-list": supported("experiment filters and summaries", ["list", "search"], ["open", "create"], "open experiment"),
-  "experiment-detail": supported("selected hypothesis, metrics, readings, and verdict", ["inspect", "readings"], ["record", "conclude", "reopen"], "refresh experiment"),
   "kanban-redirect": supported("redirect destination", ["inspect"], ["navigate"], "redirect to Todos"),
   logs: supported("bounded redacted activity summary", ["read", "filter"], ["refresh"], "focus filtered activity"),
   limits: supported("engine limit windows and freshness", ["read"], ["refresh"], "focus engine limits"),

@@ -13,8 +13,6 @@
 | todo-detail | `/todos/:todoId` | semantic | selected Todo, status, relations, comments, and runs; controls: edit, comment, assign, delegate, state |
 | notes-list | `/notes` | semantic | note list and search; controls: open, create |
 | notes | `/notes/*` | semantic | selected note and folder; controls: open, create, update |
-| experiments-list | `/experiments` | semantic | experiment filters and summaries; controls: open, create |
-| experiment-detail | `/experiments/:id` | semantic | selected hypothesis, metrics, readings, and verdict; controls: record, conclude, reopen |
 | kanban-redirect | `/kanban` | semantic | redirect destination; controls: navigate |
 | logs | `/logs` | semantic | bounded redacted activity summary; controls: refresh |
 | limits | `/limits` | semantic | engine limit windows and freshness; controls: refresh |
@@ -53,7 +51,6 @@ A normal question uses semantic context. One bounded image is permitted only whe
 | screen-navigation-and-visual | supported | open_todos, open_todo, open_chats, open_workflows, focus_element, resolve_and_open, capture_current_view | browser receipt, awaited UI effect, or bounded sanitized visual receipt |
 | capability-inventory | supported | read_talk_capability | typed manifest-backed supported operation or exact gap id and planned adapter |
 | notes | explicit gap | — | notes-command-adapter-missing; reuse managed note list, read, create, and update commands |
-| experiments | explicit gap | — | experiments-command-adapter-missing; reuse experiment create, reading, conclude, and reopen commands |
 | cron | explicit gap | — | cron-command-adapter-missing; reuse cron update, enable, disable, trigger, and run-inspection commands |
 | org | explicit gap | — | org-command-adapter-missing; reuse employee read, editable-field update, delegation, and session commands |
 | skills | explicit gap | — | skills-command-adapter-missing; reuse managed skill read and update commands with exact content confirmation |

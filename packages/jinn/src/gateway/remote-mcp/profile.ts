@@ -14,12 +14,12 @@ export const REMOTE_MCP_READ_TOOLS = [
   "list_work_item_attachments", "list_sessions", "search_sessions", "list_employees", "get_employee",
   "find_employees", "list_departments", "list_notes", "read_note", "search_knowledge", "list_workflows",
   "get_workflow", "list_workflow_runs", "get_workflow_run", "list_cron_jobs", "get_cron_run_history",
-  "cost_report", "list_labels", "list_experiments", "get_experiment", "list_heartbeats", "list_files", "read_file",
+  "cost_report", "list_labels", "list_heartbeats", "list_files", "read_file",
 ] as const;
 
 export const REMOTE_MCP_LEDGER_TOOLS = [
   "create_work_item", "edit_work_item", "comment_work_item", "label_work_item", "link_work_items",
-  "unlink_work_items", "create_note", "update_note", "record_reading", "conclude_experiment",
+  "unlink_work_items", "create_note", "update_note",
 ] as const;
 
 /**

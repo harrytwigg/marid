@@ -150,7 +150,6 @@ type GenericSourceReader = (id: string) => Record<string, unknown> | null
 
 const GENERIC_SOURCE_READERS: Partial<Record<PageSnapshot["kind"], GenericSourceReader>> = {
   chat: (id) => envelope(["sessions", id], "session"),
-  experiment: (id) => envelope(["experiments", id], "experiment"),
   notes: (id) => envelope(["note", id], "note"),
   skill: (id) => envelope(["skill", id], "skill"),
   org: (id) => {

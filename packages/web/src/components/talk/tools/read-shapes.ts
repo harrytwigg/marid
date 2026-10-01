@@ -1,4 +1,3 @@
-import type { ExperimentResponse } from "@/routes/experiments/types"
 import type { WorkItemDetailWire, WorkItemFullWire, WorkflowRunSummaryWire } from "@/lib/api"
 
 /**
@@ -15,7 +14,6 @@ const COMMENT_CHARS = 280
 const MESSAGE_CHARS = 400
 const RECENT_COMMENTS = 5
 const RECENT_MESSAGES = 6
-const RECENT_READINGS = 12
 
 /** Collapse whitespace and cap length. Truncation is marked, never silent: a
  *  model that reads a cut-off sentence as the whole answer misreports it. */
@@ -103,28 +101,4 @@ export function trimWorkflowRuns(runs: readonly WorkflowRunSummaryWire[], limit:
     // out loud about a run that is not simply "completed".
     node: run.currentOrFailingNode ? `${run.currentOrFailingNode.label} (${run.currentOrFailingNode.state})` : null,
   }))
-}
-
-export function trimExperiment(response: ExperimentResponse): Record<string, unknown> {
-  const experiment = response.experiment
-  const readings = experiment.readings ?? []
-  return {
-    id: experiment.id,
-    name: experiment.name,
-    hypothesis: clip(experiment.hypothesis, BODY_CHARS),
-    status: experiment.status,
-    startedAt: experiment.startedAt,
-    horizonDays: experiment.horizonDays,
-    baseline: experiment.baseline,
-    metrics: (experiment.metrics ?? []).map((metric) => ({ name: metric.name, unit: metric.unit ?? null })),
-    readingCount: readings.length,
-    readings: readings.slice(-RECENT_READINGS).map((reading) => ({
-      at: reading.at,
-      metric: reading.metric,
-      value: reading.value,
-    })),
-    verdict: experiment.verdict
-      ? { outcome: experiment.verdict.outcome, note: clip(experiment.verdict.note, COMMENT_CHARS) }
-      : null,
-  }
 }

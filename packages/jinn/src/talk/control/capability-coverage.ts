@@ -88,11 +88,6 @@ export const TALK_COMPANY_CAPABILITY_COVERAGE = {
     reason: "notes-command-adapter-missing",
     plannedAdapter: "reuse managed note list, read, create, and update commands",
   },
-  experiments: {
-    status: "explicit-gap",
-    reason: "experiments-command-adapter-missing",
-    plannedAdapter: "reuse experiment create, reading, conclude, and reopen commands",
-  },
   cron: {
     status: "explicit-gap",
     reason: "cron-command-adapter-missing",

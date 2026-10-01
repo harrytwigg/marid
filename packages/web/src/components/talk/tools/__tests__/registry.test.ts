@@ -42,8 +42,8 @@ describe("the registered set", () => {
   it("covers all six domains with a navigate tool and the four read shapes", () => {
     const names = new Set(TALK_TOOLS.map((tool) => tool.name))
     for (const name of [
-      "open_todos", "open_todo", "open_workflows", "open_experiments", "open_chats", "open_org", "open_cron",
-      "read_todo", "read_session", "read_workflow_runs", "read_experiment",
+      "open_todos", "open_todo", "open_workflows", "open_chats", "open_org", "open_cron",
+      "read_todo", "read_session", "read_workflow_runs",
     ]) {
       expect(names.has(name), name).toBe(true)
     }

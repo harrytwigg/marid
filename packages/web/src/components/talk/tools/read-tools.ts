@@ -2,7 +2,7 @@ import type { QueryKey } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { queryClient } from "@/lib/query-client"
 import { queryKeys } from "@/lib/query-keys"
-import { trimExperiment, trimSession, trimTodo, trimWorkflowRuns } from "./read-shapes"
+import { trimSession, trimTodo, trimWorkflowRuns } from "./read-shapes"
 import { params, str, type TalkTool, type ToolArgs, type ToolResult } from "./tool-spec"
 
 /**
@@ -101,19 +101,4 @@ const readWorkflowRuns: TalkTool = {
   },
 }
 
-const readExperiment: TalkTool = {
-  name: "read_experiment",
-  description: "Read one experiment: its hypothesis, baseline, metrics, recent readings, and verdict if it has concluded.",
-  parameters: params({ id: str("The experiment id.") }, ["id"]),
-  execute: async (args: ToolArgs): Promise<ToolResult> => {
-    const id = String(args.id)
-    try {
-      const response = await cached(["experiments", id], () => api.getExperiment(id))
-      return { ok: true, data: trimExperiment(response) }
-    } catch (error) {
-      return failed(`experiment ${id}`, error)
-    }
-  },
-}
-
-export const READ_TOOLS: readonly TalkTool[] = [readTodo, readSession, readWorkflowRuns, readExperiment]
+export const READ_TOOLS: readonly TalkTool[] = [readTodo, readSession, readWorkflowRuns]

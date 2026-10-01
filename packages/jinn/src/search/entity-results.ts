@@ -163,7 +163,6 @@ const NAV_PAGES: readonly { id: string; title: string; url: string; keywords: st
   { id: "page-todos", title: "Todos", url: "/todos", keywords: "todos work items board kanban ledger" },
   { id: "page-notes", title: "Notes", url: "/notes", keywords: "notes knowledge documents" },
   { id: "page-workflow", title: "Workflows", url: "/workflow", keywords: "workflows automation runs" },
-  { id: "page-experiments", title: "Experiments", url: "/experiments", keywords: "experiments hypothesis metrics" },
   { id: "page-org", title: "Organization", url: "/org", keywords: "org employees roster people departments" },
   { id: "page-cron", title: "Cron", url: "/cron", keywords: "cron schedule jobs" },
   { id: "page-limits", title: "Limits", url: "/limits", keywords: "limits usage quota" },

@@ -31,8 +31,6 @@ const SURFACE_LABEL: Record<PageKind, string> = {
   workflows: "Workflows",
   workflow: "Workflow editor",
   "workflow-run": "Workflow run",
-  experiments: "Experiments",
-  experiment: "Experiment",
   org: "Org",
   cron: "Cron",
   notes: "Notes",

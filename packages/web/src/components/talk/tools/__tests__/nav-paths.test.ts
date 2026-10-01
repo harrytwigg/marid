@@ -3,7 +3,6 @@ import { filtersFromSearchParams } from "@/lib/todos"
 import {
   chatPath,
   cronPath,
-  experimentPath,
   orgPath,
   resolveTodoId,
   todoPath,
@@ -97,11 +96,6 @@ describe("the remaining five domains", () => {
 
   it("ignores a lens with no workflow to apply it to", () => {
     expect(workflowPath({ lens: "runs" })).toBe("/workflow")
-  })
-
-  it("opens the experiment list and one experiment", () => {
-    expect(experimentPath({})).toBe("/experiments")
-    expect(experimentPath({ id: "exp_a1b2c3" })).toBe("/experiments/exp_a1b2c3")
   })
 
   it("opens chats and one session", () => {

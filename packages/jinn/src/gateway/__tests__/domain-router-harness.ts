@@ -82,39 +82,3 @@ export async function call(method: string, url: string, body?: unknown, headers?
 export function expectWire(response: { status: number; raw: string }, status: number, expected: unknown): void {
   expect([response.status, response.raw]).toEqual([status, JSON.stringify(expected)]);
 }
-
-// The create body every experiment test starts from, and the wire shape it comes
-// back as. `id` and `startedAt` are generated per run, so they are read off the
-// response and everything derived from them is recomputed here rather than pinned
-// to a literal.
-export const RUN = {
-  name: "Shorter onboarding",
-  hypothesis: "Cutting the product tour raises activation.",
-  baseline: { activation: 40 },
-  metrics: [{ name: "activation", unit: "%", howToMeasure: "Read the activation dashboard." }],
-  horizonDays: 14,
-};
-
-export function runningExperiment(id: string, startedAt: string, over: Record<string, unknown> = {}) {
-  return {
-    id,
-    name: RUN.name,
-    hypothesis: RUN.hypothesis,
-    status: "running",
-    startedAt,
-    horizonDays: RUN.horizonDays,
-    horizonEndsAt: new Date(Date.parse(startedAt) + RUN.horizonDays * 86_400_000).toISOString(),
-    overdue: false,
-    baseline: RUN.baseline,
-    metrics: RUN.metrics,
-    readings: [],
-    ...over,
-  };
-}
-
-/** POST the standard body and hand back the created experiment. */
-export async function createExperiment(over: Record<string, unknown> = {}): Promise<any> {
-  const created = await call("POST", "/api/experiments", { ...RUN, ...over });
-  expect(created.status).toBe(201);
-  return created.body.experiment;
-}

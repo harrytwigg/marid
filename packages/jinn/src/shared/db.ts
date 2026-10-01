@@ -10,7 +10,6 @@ import { logger } from './logger.js';
 import { migrateWorkItemsSchema, preflightWorkItemsDatabase, UNSUPPORTED_PRERELEASE_TODO_DATA, WORK_ITEMS_BACKUP_SUFFIX } from '../work-items/migrate.js';
 import type { WorkItemSchemaPreflight } from '../work-items/migrate.js';
 import { migrateWorkItemSearchIndex } from '../work-items/search-index.js';
-import { migrateExperimentsSchema } from '../experiments/migrate.js';
 import { migrateHeartbeatsSchema } from '../heartbeats/migrate.js';
 import { migratePluginsSchema } from '../plugins/migrate.js';
 import { migrateTalkApprovalSchema } from '../talk/approval/schema.js';
@@ -237,7 +236,6 @@ export function initDb(): Database.Database {
     // directly, or replace only a read-only-preflighted empty prerelease shape.
     migrateWorkItemsSchema(database, todoPreflight);
     migrateWorkItemSearchIndex(database);
-    migrateExperimentsSchema(database);
     migrateHeartbeatsSchema(database);
     migratePluginsSchema(database);
     migrateTalkSessionSchema(database);

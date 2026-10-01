@@ -6,8 +6,6 @@ export type PageKind =
   | "workflows"
   | "workflow"
   | "workflow-run"
-  | "experiments"
-  | "experiment"
   | "org"
   | "cron"
   | "notes"
