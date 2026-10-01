@@ -197,19 +197,18 @@ export function listWorkItemRuns(workItemId: string): TodoRun[] {
 }
 
 /**
- * The runs that are this Todo's own attempts, oldest first: every run except
- * those of a legacy Workflow phase session, which was linked only so its spend
- * rolled up here. Recovery, the respawn guards and the availability sweep judge
- * the Todo by these, the same rule `isExecutionAttempt` applies to sessions.
+ * A Todo's runs, oldest first, without those of a legacy Workflow phase
+ * session: a phase was linked only so its spend rolled up here, so its run says
+ * nothing about the Todo's own attempts. Recovery, the respawn guards and the
+ * availability sweep judge the Todo by these.
  */
 export function listWorkItemAttemptRuns(workItemId: string): TodoRun[] {
   const rows = initDb()
     .prepare(
-      `SELECT runs.* FROM work_item_runs AS runs
-         LEFT JOIN sessions ON sessions.id = runs.session_id
-        WHERE runs.work_item_id = ?
-          AND (sessions.workflow_kind IS NULL OR NOT (sessions.${LEGACY_WORKFLOW_PHASE_SQL}))
-        ORDER BY runs.started_at, runs.rowid`,
+      `SELECT * FROM work_item_runs
+        WHERE work_item_id = ?
+          AND session_id NOT IN (SELECT id FROM sessions WHERE ${LEGACY_WORKFLOW_PHASE_SQL})
+        ORDER BY started_at, rowid`,
     )
     .all(workItemId) as WorkItemRunRow[];
   return rows.map(toRun);
