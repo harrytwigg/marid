@@ -20,12 +20,12 @@ import { pickEncoding, compressBuffer, MIN_COMPRESS_BYTES } from "./compress.js"
  *     envelope is its own may adapt `json`, never write past it.
  *  4. Unexpected errors throw to api.ts's outer try/catch. A module keeps a
  *     boundary of its own only if it logs the cause and answers in a shape its
- *     clients already depend on — workflow-api's `{ code, message }` is the one.
+ *     clients already depend on.
  *     Catches for an *expected* failure (a corrupt file on disk) stay put.
  *  5. Operator-only authority stays in `operatorOnlyControlPlaneRoute` wherever a
- *     route reaches it. Workflow, talk and heartbeat dispatch ahead of that table;
+ *     route reaches it. Talk and heartbeat dispatch ahead of that table;
  *     files dispatches after it but the table lists no `/api/files` route. So all
- *     four gate themselves, and each one is a place a guard can go missing.
+ *     three gate themselves, and each one is a place a guard can go missing.
  *  6. The delegation call sits exactly where the route block used to sit in the
  *     dispatch chain, in the same order.
  */

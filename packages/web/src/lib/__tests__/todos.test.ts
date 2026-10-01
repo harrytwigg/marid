@@ -5,6 +5,7 @@ import {
   deriveNeedsYou,
   provenanceSuffix,
   provenanceLabel,
+  DEFAULT_VERIFY_MODE_BY_SOURCE,
   compareRank,
   rankBetween,
   activeFilterCount,
@@ -236,5 +237,21 @@ describe("history grouping (design-todos §3)", () => {
     expect(groups.map((g) => g.bucket)).toEqual(["today", "earlier"])
     expect(groups[0].items.map((i) => i.id)).toEqual(["t2", "t1"])
     expect(groups[0].label).toBe("Today")
+  })
+})
+
+// The same literal is asserted against the gateway's map in
+// packages/jinn/src/work-items/__tests__/verify-mode-defaults.test.ts; keep the two in step.
+describe("default verify mode by source", () => {
+  it("matches the gateway's provenance defaults", () => {
+    expect(DEFAULT_VERIFY_MODE_BY_SOURCE).toEqual({
+      cron: "trust",
+      workflow: "verify",
+      delegation: "verify",
+      human: "verify",
+      session: "verify",
+      connector: "verify",
+      goal: "verify",
+    })
   })
 })

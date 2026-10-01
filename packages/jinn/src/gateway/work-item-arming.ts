@@ -3,7 +3,7 @@ import type { Session } from "../shared/types.js";
 import type { WriteOrigin } from "../work-items/origin.js";
 
 /**
- * Who may reach a `todo-status` Workflow trigger filtered on the operator.
+ * Who may have a Todo transition recorded as the operator's.
  *
  * Two roads lead there and they are deliberately different widths, so they are
  * read side by side rather than a page apart in the route file.
@@ -30,12 +30,12 @@ export function workItemActorEmployee(caller: WorkItemCaller): string | undefine
 }
 
 /**
- * `asOperator` stamps the transition's recorded actor as `operator`, so a
- * `todo-status` Workflow trigger filtered on the operator fires for work the
- * COO arms on the operator's behalf.
+ * `asOperator` stamps the transition's recorded actor as `operator`, so work
+ * the COO arms on the operator's behalf reads as the operator's in the audit
+ * trail.
  *
- * That actor string is an authority boundary — filtering on it is what keeps an
- * arbitrary employee from starting a pipeline nobody asked for — so exactly two
+ * That actor string is an authority boundary — it is what keeps an arbitrary
+ * employee from claiming the operator's standing — so exactly two
  * callers may claim it: the authenticated operator surface, for which it is a
  * no-op, and the gateway's own top-level agent session, the COO the operator is
  * talking to.

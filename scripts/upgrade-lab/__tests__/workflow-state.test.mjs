@@ -187,7 +187,7 @@ test("the retired workflow skill must be gone after the first boot, and a surviv
     )
     assert.throws(
       () => assertWorkflowSkillRetired({ home, baselineTree: { [key]: "aaa" }, finalTree: { [key]: "bbb" } }),
-      /still present because its copy was modified.*skills\/workflow\/SKILL\.md/,
+      /still present because its copy was modified.*skills\/workflow\/SKILL\.md.*no \.jinn-template-skills\.json receipt/,
     )
   } finally {
     fs.rmSync(home, { recursive: true, force: true })

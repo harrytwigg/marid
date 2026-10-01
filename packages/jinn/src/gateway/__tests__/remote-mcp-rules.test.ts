@@ -101,11 +101,9 @@ describe("the connector anchor is not the COO portal (D2, SC-007)", () => {
     expect(registry.isPortalAgentSession({ ...connector, source: "web" })).toBe(true);
   });
 
-  it("cannot decide a COO-decidable or an operator-only approval", () => {
+  it("cannot decide an operator-only approval", () => {
     const item = { id: operatorTodo } as never;
-    for (const opts of [{ cooDecidable: true }, { operatorOnly: true }]) {
-      expect(approvalAuthority.resolveApprovalDecisionAuthority(connectorHeaders(), item, opts).ok).toBe(false);
-    }
+    expect(approvalAuthority.resolveApprovalDecisionAuthority(connectorHeaders(), item, { operatorOnly: true }).ok).toBe(false);
   });
 
   it("never runs an engine turn (D3)", () => {

@@ -43,7 +43,7 @@ export function assertWorkflowSkillRetired({ home, baselineTree, finalTree }) {
   const keys = new Set([...Object.keys(baselineTree), ...Object.keys(finalTree)].filter(inSkill))
   const modified = [...keys].filter((key) => baselineTree[key] !== finalTree[key])
   if (modified.length > 0) {
-    throw new Error(`skills/workflow is still present because its copy was modified after the baseline install (${modified.join(", ")}); the upgraded gateway keeps modified skills, so this home cannot be asserted retired`)
+    throw new Error(`skills/workflow is still present because its copy was modified after the baseline install (${modified.join(", ")}); the upgraded gateway keeps a modified skill only when the home has no .jinn-template-skills.json receipt, and with a receipt it retires the skill and backs it up, so this home either had no receipt or did not list the skill in it`)
   }
   throw new Error("skills/workflow is still present although it matches the baseline copy; the upgraded gateway should have retired it on first boot")
 }

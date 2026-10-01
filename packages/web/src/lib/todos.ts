@@ -163,7 +163,7 @@ export function provenanceLabel(source: WorkItemSourceWire, sourceRef?: string |
 export type VerifyMode = "trust" | "verify" | "thorough"
 export const DEFAULT_VERIFY_MODE_BY_SOURCE: Record<WorkItemSourceWire, VerifyMode> = {
   cron: "trust",
-  workflow: "trust",
+  workflow: "verify",
   delegation: "verify",
   human: "verify",
   session: "verify",
