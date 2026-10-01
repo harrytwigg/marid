@@ -8,12 +8,8 @@ import { openDescendantsDeepestFirst } from './cascade.js';
 import { appendWorkItemEvent, getWorkItem, type ApprovalTargetKind, type WorkItem } from './store.js';
 import { transition } from './transitions.js';
 
-/** `workflow:<workflowId>:<runId>:<nodeId>`, the ref a Workflow run stamped on
- *  the gate it mirrored onto a Todo. */
-function isLegacyWorkflowGateRef(ref: string | null): boolean {
-  const parts = ref?.split(':') ?? [];
-  return parts.length === 4 && parts[0] === 'workflow';
-}
+/** `workflow:<workflowId>:<runId>:<nodeId>`: a gate an old Workflow run mirrored onto a Todo. */
+const isLegacyWorkflowGateRef = (ref: string | null) => /^workflow:[^:]+:[^:]+:[^:]+$/.test(ref ?? '');
 
 export { currentApproval, listApprovals, type WorkItemApproval } from './approval-rows.js';
 export { ApprovalChoiceError, ApprovalNotPendingError } from './approval-decision-row.js';
@@ -297,9 +293,8 @@ function applyNativeDecisionAtomic(
     if (!item) throw new ApprovalNotPendingError(id);
     const pending = currentApproval(item.id);
     if (pending?.state !== 'pending') throw new ApprovalNotPendingError(id);
-    // A gate a (now removed) Workflow run mirrored here was that run's decision
-    // point, not a review of this Todo. Such rows can still be pending on an
-    // upgraded home: record the decision, but never let it move the Todo.
+    // A legacy Workflow gate was its run's decision point, not a review of this
+    // Todo: record the decision, but never let it move the Todo.
     const mirroredFromRun = isLegacyWorkflowGateRef(pending.ref);
     // 1. Record the decision (approval fields + approval_decided event).
     decideApproval(id, decision, decidedBy, note, choice);

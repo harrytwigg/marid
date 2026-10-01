@@ -1,12 +1,6 @@
 {
   "_instructions": "Every entry is code that predates the lint floor, exempt from exactly the rules listed. To leave the list: split the function at its seams into named helpers, give the branchy part its own function with an early return per case, hoist a nested loop or condition into a helper so the body reads flat, group related parameters into one options object, await the promise or hand it to `void`. Then run `node scripts/eslint-baseline.mjs` and commit the shrunken file. Add nothing here by hand — inline eslint-disable comments are ignored outright, so this file is the only suppression channel, and it is meant to shrink.",
   "files": {
-    "e2e/workflow-layout/bounded-reporter.mjs": [
-      "complexity"
-    ],
-    "e2e/workflow-layout/fixtures.mjs": [
-      "max-params"
-    ],
     "packages/jinn/scripts/instance-migration-bundle.mjs": [
       "complexity"
     ],
@@ -227,13 +221,6 @@
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/gateway/workflow-api.ts": [
-      "@typescript-eslint/no-unused-vars",
-      "complexity"
-    ],
-    "packages/jinn/src/gateway/workflow-todo-surface.ts": [
-      "complexity"
-    ],
     "packages/jinn/src/instances/access.ts": [
       "complexity"
     ],
@@ -438,54 +425,6 @@
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/work-items/workflow-event-feed.ts": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/workflows/bindings.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/workflows/import-v1.ts": [
-      "complexity",
-      "max-depth",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/workflows/output.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/workflows/repository-run-transaction.ts": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/workflows/repository-runs.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/workflows/repository-support.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/workflows/repository.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/workflows/runner.ts": [
-      "complexity",
-      "max-depth",
-      "max-lines-per-function",
-      "max-params"
-    ],
-    "packages/jinn/src/workflows/service.ts": [
-      "complexity",
-      "max-depth"
-    ],
-    "packages/jinn/src/workflows/session-executor.ts": [
-      "complexity"
-    ],
-    "packages/jinn/src/workflows/trigger-service.ts": [
-      "complexity",
-      "max-params"
-    ],
-    "packages/jinn/src/workflows/validation.ts": [
-      "complexity"
-    ],
     "packages/web/src/components/activity/log-browser.tsx": [
       "complexity",
       "max-lines-per-function"
@@ -549,7 +488,6 @@
       "max-lines-per-function"
     ],
     "packages/web/src/components/chat/company-activity-card.tsx": [
-      "@typescript-eslint/no-floating-promises",
       "complexity",
       "max-lines-per-function"
     ],
@@ -932,45 +870,6 @@
     ],
     "packages/web/src/routes/todos/todo-status-mutation.ts": [
       "complexity"
-    ],
-    "packages/web/src/routes/workflow/editor/edge.tsx": [
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/editor/editor.tsx": [
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/editor/inspector.tsx": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/editor/node-card.tsx": [
-      "complexity"
-    ],
-    "packages/web/src/routes/workflow/editor/palette.tsx": [
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/editor/store.ts": [
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/list.tsx": [
-      "@typescript-eslint/no-floating-promises",
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/page.tsx": [
-      "@typescript-eslint/no-floating-promises",
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/run-canvas.tsx": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/run-inspector.tsx": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/workflow/run.tsx": [
-      "complexity",
-      "max-lines-per-function"
     ],
     "packages/web/vite.config.ts": [
       "max-lines-per-function"

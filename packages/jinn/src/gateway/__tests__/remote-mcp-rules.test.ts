@@ -123,6 +123,7 @@ describe("the gateway admits only the connector's profile routes (D4)", () => {
     ["GET", () => "/api/knowledge/read?path=config.yaml", undefined],
     ["POST", () => `/api/work-items/${operatorTodo}/attachments`, { path: "/etc/hostname" }],
     ["GET", () => "/api/experiments", undefined],
+    ["GET", () => "/api/workflows", undefined],
   ])("refuses %s %s", async (method, url, body) => {
     const r = await call(method, url(), body);
     expect(r.status).toBe(403);
