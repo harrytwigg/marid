@@ -321,11 +321,11 @@ describe("the board surface", () => {
       const key = boardColumnQueryKey({ kind: "home" }, "backlog", { status: "open" })
       expect(client.getQueryState(key)?.isInvalidated).toBe(true)
     })
-    expect(boardStatusRequestCount()).toBe(8)
+    expect(boardStatusRequestCount()).toBe(6)
 
     fireEvent.click(screen.getByTestId(returnControl))
     expect(screen.queryByTestId("board-skeleton")).toBeNull()
-    await waitFor(() => expect(boardStatusRequestCount()).toBe(16))
+    await waitFor(() => expect(boardStatusRequestCount()).toBe(12))
     const moved = screen.getByTestId("board-card-PLA-1")
     expect(screen.getByTestId("board-column-backlog").contains(moved)).toBe(false)
     expect(screen.getByTestId("board-column-in_review").contains(moved)).toBe(true)
@@ -371,7 +371,7 @@ describe("the board surface", () => {
     expect(screen.queryByTestId("board-card-PLA-99")).toBeNull()
     expect(screen.queryByTestId("board-skeleton")).toBeNull()
     expect(screen.queryByTestId("board-filtered-empty")).toBeNull()
-    await waitFor(() => expect(pending.filter(({ status }) => status)).toHaveLength(8))
+    await waitFor(() => expect(pending.filter(({ status }) => status)).toHaveLength(6))
     await act(async () => pending.splice(0).forEach(({ release }) => release()))
 
     const moved = await screen.findByTestId("board-card-PLA-99")
@@ -388,8 +388,8 @@ describe("the board surface", () => {
     rows.blocked = Array.from({ length: 20 }, (_, index) =>
       compact({ id: `PLA-${index + 21}`, status: "blocked" }),
     )
-    rows.escalated = Array.from({ length: 20 }, (_, index) =>
-      compact({ id: `PLA-${index + 41}`, status: "escalated" }),
+    rows.backlog = Array.from({ length: 20 }, (_, index) =>
+      compact({ id: `PLA-${index + 41}`, status: "backlog" }),
     )
 
     renderBoard("/todos/b/platform")
@@ -409,15 +409,14 @@ describe("the board surface", () => {
     expect(getWorkItem).not.toHaveBeenCalled()
   })
 
-  it("renders the four pipeline columns always, exception columns only when non-empty", async () => {
+  it("renders the three pipeline columns always, exception columns only when non-empty", async () => {
     rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
     renderBoard("/todos/b/platform")
     await waitFor(() => expect(screen.getByTestId("board-card-PLA-1")).toBeTruthy())
-    for (const status of ["backlog", "assigned", "executing", "in_review"]) {
+    for (const status of ["backlog", "executing", "in_review"]) {
       expect(screen.getByTestId(`board-column-${status}`)).toBeTruthy()
     }
     expect(screen.queryByTestId("board-column-blocked")).toBeNull()
-    expect(screen.queryByTestId("board-column-escalated")).toBeNull()
   })
 
   it("materializes the Blocked column when non-empty and shows the true count", async () => {
@@ -533,7 +532,7 @@ describe("the board surface", () => {
     await screen.findByTestId("board-card-PLA-3")
     await waitFor(() => {
       const boardCalls = listWorkItems.mock.calls.filter(([params]) => params?.status)
-      expect(boardCalls).toHaveLength(8)
+      expect(boardCalls).toHaveLength(6)
     })
     listWorkItems.mockImplementation(() => new Promise(() => {}))
 
@@ -550,7 +549,7 @@ describe("the board surface", () => {
       expect(cards).toHaveLength(1)
       expect(screen.getByTestId("board-column-executing").contains(cards[0])).toBe(false)
       expect(screen.getByTestId("board-column-in_review").contains(cards[0])).toBe(true)
-      expect(screen.getByTestId("board-column-executing").getAttribute("aria-label")).toBe("Executing column, 0 items")
+      expect(screen.getByTestId("board-column-executing").getAttribute("aria-label")).toBe("In progress column, 0 items")
       expect(screen.getByTestId("board-column-in_review").getAttribute("aria-label")).toBe("In review column, 1 items")
     })
   })
@@ -564,7 +563,7 @@ describe("the board surface", () => {
     await screen.findByTestId("board-card-PLA-4")
     await waitFor(() => {
       const boardCalls = listWorkItems.mock.calls.filter(([params]) => params?.status)
-      expect(boardCalls).toHaveLength(8)
+      expect(boardCalls).toHaveLength(6)
     })
     listWorkItems.mockImplementation(() => new Promise(() => {}))
 
@@ -771,31 +770,29 @@ describe("the switcher-in-title", () => {
 })
 
 describe("quick add", () => {
-  it("offers + on Backlog and Assigned only", async () => {
+  it("offers + on Backlog only", async () => {
     rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
     rows.blocked = [compact({ id: "PLA-9", status: "blocked" })]
     renderBoard("/todos/b/platform")
     await screen.findByTestId("board-card-PLA-1")
     expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy()
-    expect(screen.getByTestId("board-quick-add-assigned")).toBeTruthy()
+    expect(screen.queryByTestId("board-quick-add-assigned")).toBeNull()
     expect(screen.queryByTestId("board-quick-add-executing")).toBeNull()
     expect(screen.queryByTestId("board-quick-add-in_review")).toBeNull()
     expect(screen.queryByTestId("board-quick-add-blocked")).toBeNull()
   })
 
-  it("creates in the board's department and assigns for the Assigned column", async () => {
+  it("creates in the board's department from the Backlog column, assigning nobody", async () => {
     renderBoard("/todos/b/platform")
-    await waitFor(() => expect(screen.getByTestId("board-quick-add-assigned")).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy())
     createWorkItem.mockResolvedValue({ workItem: { ...emptyTree("PLA-20").root } })
-    assignWorkItem.mockResolvedValue({ workItem: { ...emptyTree("PLA-20").root } })
-    fireEvent.click(screen.getByTestId("board-quick-add-assigned"))
+    fireEvent.click(screen.getByTestId("board-quick-add-backlog"))
     fireEvent.change(screen.getByTestId("todo-new-title"), { target: { value: "Draft the launch note" } })
-    fireEvent.change(screen.getByTestId("todo-new-assignee"), { target: { value: "scout" } })
     fireEvent.click(screen.getByTestId("todo-new-create"))
     await waitFor(() =>
       expect(createWorkItem).toHaveBeenCalledWith({ title: "Draft the launch note", department: "platform" }),
     )
-    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-20", "scout"))
+    expect(assignWorkItem).not.toHaveBeenCalled()
   })
 })
 

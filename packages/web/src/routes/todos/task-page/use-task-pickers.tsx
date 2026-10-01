@@ -55,7 +55,6 @@ export function useTaskPickers({
   departments,
   openChildren,
   openDescendants,
-  escalatedDescendants,
   mobile,
   announce,
 }: {
@@ -121,7 +120,7 @@ export function useTaskPickers({
     [id, detail, qc, announce],
   )
 
-  /** Granting ownership is the assign lane's alone — roster check, backlog→assigned,
+  /** Granting ownership is the assign lane's alone — roster check, status unchanged,
    *  live notify; the pen is the one lane that can clear it. Peek ships the same split. */
   const commitAssignee = useCallback((assignee: string | null) => {
     if (!id || assignee === null) return patchField({ assignee })
@@ -169,7 +168,6 @@ export function useTaskPickers({
               {...shared}
               openChildren={openChildren}
               openDescendants={openDescendants}
-              escalatedDescendants={escalatedDescendants}
               commit={transitionTo}
             />
           )
@@ -187,7 +185,7 @@ export function useTaskPickers({
           return <VerifyPickerContent {...shared} commit={commitVerify} />
       }
     },
-    [detail, close, openChildren, openDescendants, escalatedDescendants, transitionTo, patchField, commitAssignee, employees, departments, commitLabels, commitVerify],
+    [detail, close, openChildren, openDescendants, transitionTo, patchField, commitAssignee, employees, departments, commitLabels, commitVerify],
   )
 
   /** The superimposed row index (law 1): the current value's option row sits

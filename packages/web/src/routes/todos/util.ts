@@ -38,8 +38,12 @@ export function escalationReasonLabel(reason: unknown): string | null {
   return typeof reason === "string" && reason ? reason : null
 }
 
+/** The reserved assignee value for the operator; it is not on the roster. */
+export const OPERATOR_ASSIGNEE = "@operator"
+
 /** Resolve a display name for an assignee employee key, falling back to the key. */
 export function displayNameOf(assignee: string | null, byName: Map<string, Employee>): string {
   if (!assignee) return ""
+  if (assignee === OPERATOR_ASSIGNEE) return "You"
   return byName.get(assignee)?.displayName ?? assignee
 }

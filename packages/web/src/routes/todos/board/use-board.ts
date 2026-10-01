@@ -101,7 +101,7 @@ function useBoardColumn(board: BoardId, status: WorkItemStatusWire, filters: Tod
 
 type BoardColumnQuery = ReturnType<typeof useBoardColumn>
 
-/** The eight columns, assembled from their queries. A disabled column keeps
+/** The six columns, assembled from their queries. A disabled column keeps
  *  whatever it last loaded (keepPreviousData), so the status filter gates the
  *  read too — otherwise ?status=executing still shows the backlog cards it
  *  fetched on the way in. */
@@ -133,8 +133,8 @@ export interface BoardData {
   isLoading: boolean
   isError: boolean
   error: unknown
-  /** Sum of the four PIPELINE totals — the header's "N open". Blocked and
-   *  escalated read out separately (the mock's "11 open · 1 blocked"). */
+  /** Sum of the three PIPELINE totals — the header's "N open". Blocked
+   *  reads out separately (the mock's "11 open · 1 blocked"). */
   openTotal: number
   closedTotal: number
 }
@@ -144,14 +144,12 @@ export function useBoardData(board: BoardId, filters: TodoFilters, now: number, 
   // filter leaves only its own column's query on.
   const on = (status: WorkItemStatusWire) => enabled && isColumnInStatusFilter(filters.status, status)
   const backlog = useBoardColumn(board, "backlog", filters, now, on("backlog"))
-  const assigned = useBoardColumn(board, "assigned", filters, now, on("assigned"))
   const executing = useBoardColumn(board, "executing", filters, now, on("executing"))
   const inReview = useBoardColumn(board, "in_review", filters, now, on("in_review"))
   const blocked = useBoardColumn(board, "blocked", filters, now, on("blocked"))
-  const escalated = useBoardColumn(board, "escalated", filters, now, on("escalated"))
   const done = useBoardColumn(board, "done", filters, now, on("done"))
   const cancelled = useBoardColumn(board, "cancelled", filters, now, on("cancelled"))
-  const queries = [backlog, assigned, executing, inReview, blocked, escalated, done, cancelled]
+  const queries = [backlog, executing, inReview, blocked, done, cancelled]
 
   return useMemo((): BoardData => {
     const inScope = BOARD_STATUS_ORDER.map((status) => isColumnInStatusFilter(filters.status, status))
@@ -170,17 +168,17 @@ export function useBoardData(board: BoardId, filters: TodoFilters, now: number, 
       openTotal,
       closedTotal,
     }
-    // the 8 query results are the dependencies
+    // the 6 query results are the dependencies
   }, [filters.status,
-      backlog.data, assigned.data, executing.data, inReview.data, blocked.data, escalated.data, done.data, cancelled.data,
-      backlog.isFetchingNextPage, assigned.isFetchingNextPage, executing.isFetchingNextPage, inReview.isFetchingNextPage,
-      blocked.isFetchingNextPage, escalated.isFetchingNextPage, done.isFetchingNextPage, cancelled.isFetchingNextPage,
+      backlog.data, executing.data, inReview.data, blocked.data, done.data, cancelled.data,
+      backlog.isFetchingNextPage, executing.isFetchingNextPage, inReview.isFetchingNextPage,
+      blocked.isFetchingNextPage, done.isFetchingNextPage, cancelled.isFetchingNextPage,
       // Error/pending flips carry no data change — the states surfaces
       // (skeleton, calm error card) need them as dependencies too.
-      backlog.isError, assigned.isError, executing.isError, inReview.isError,
-      blocked.isError, escalated.isError, done.isError, cancelled.isError,
-      backlog.isPending, assigned.isPending, executing.isPending, inReview.isPending,
-      blocked.isPending, escalated.isPending, done.isPending, cancelled.isPending])
+      backlog.isError, executing.isError, inReview.isError,
+      blocked.isError, done.isError, cancelled.isError,
+      backlog.isPending, executing.isPending, inReview.isPending,
+      blocked.isPending, done.isPending, cancelled.isPending])
 }
 
 // ── Switcher data ───────────────────────────────────────────────────────────

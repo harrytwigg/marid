@@ -364,25 +364,6 @@ export default function TaskPage() {
                         >
                           Unblock…
                         </button>
-                      ) : detail.workItem.status === "escalated" ? (
-                        <>
-                          <button
-                            type="button"
-                            data-testid="task-banner-route"
-                            onClick={() => pickers.setOpenPicker("status")}
-                            className="focus-ring min-h-8 rounded-full bg-[var(--fill-tertiary)] px-3 text-[12.5px] font-semibold text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-secondary)]"
-                          >
-                            Route…
-                          </button>
-                          <button
-                            type="button"
-                            data-testid="task-banner-reassign"
-                            onClick={() => pickers.setOpenPicker("assignee")}
-                            className="focus-ring min-h-8 rounded-full px-3 text-[12.5px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)]"
-                          >
-                            Reassign…
-                          </button>
-                        </>
                       ) : undefined
                     }
                   />

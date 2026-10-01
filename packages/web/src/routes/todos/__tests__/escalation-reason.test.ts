@@ -11,12 +11,12 @@ import { event } from "./fixtures/task-wire"
 
 const escalation = (reason: string) =>
   event("e1", "escalated", "2026-08-13T08:00:00.000Z", {
-    toStatus: "escalated",
+    toStatus: "blocked",
     detail: { reason, blockKind: "dependency", recurrences: 2 },
   })
 
 const detail = (reason: string): WorkItemDetailWire => ({
-  workItem: { id: "PLA-12", status: "escalated" } as WorkItemFullWire,
+  workItem: { id: "PLA-12", status: "blocked" } as WorkItemFullWire,
   spendUsd: 0,
   events: [escalation(reason)],
 })
@@ -28,7 +28,7 @@ describe("the escalation why-line", () => {
   ])("reads %s on the task-page banner and the board card", (reason, expected) => {
     expect(exceptionReasonOf(detail(reason))).toMatchObject({ note: expected })
 
-    const item = { id: "PLA-12", status: "escalated" } as WorkItemCompactWire
+    const item = { id: "PLA-12", status: "blocked" } as WorkItemCompactWire
     expect(reasonOf(item, { events: [escalation(reason)] } as WorkItemOpenDetailWire)).toBe(expected)
   })
 
@@ -37,7 +37,7 @@ describe("the escalation why-line", () => {
       ...detail("block_loop_detected"),
       events: [
         event("e1", "escalated", "2026-08-13T08:00:00.000Z", {
-          toStatus: "escalated",
+          toStatus: "blocked",
           detail: { reason: "block_loop_detected", note: "the upstream API is still down" },
         }),
       ],

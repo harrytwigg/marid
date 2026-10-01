@@ -7,7 +7,7 @@ import { KINDS, PAYLOADS } from "./situation-fixtures"
 
 vi.mock("@/lib/api", () => ({
   api: {
-    getWorkItem: vi.fn(async () => ({ workItem: { id: "AAA-1", title: "A Todo", status: "assigned", assignee: "a-lead" } })),
+    getWorkItem: vi.fn(async () => ({ workItem: { id: "AAA-1", title: "A Todo", status: "backlog", assignee: "a-lead" } })),
     getSession: vi.fn(async () => ({ title: "A session" })),
   },
 }))

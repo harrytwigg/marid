@@ -198,7 +198,7 @@ export default function TodoBoardPage() {
   const trees = useBoardTrees(detailIds)
   const reasonIds = useMemo(
     () =>
-      (data.isLoading ? [] : (["executing", "blocked", "escalated"] as const).flatMap((status) =>
+      (data.isLoading ? [] : (["executing", "blocked"] as const).flatMap((status) =>
         (data.columns[status]?.items ?? []).map((item) => item.id),
       )).slice(0, 60),
     [data.columns, data.isLoading],
@@ -275,11 +275,11 @@ export default function TodoBoardPage() {
         { id: item.id, status: to },
         {
           onSuccess: (result) => {
-            // A drop into Blocked/Escalated commits immediately, then opens the
+            // A drop into Blocked commits immediately, then opens the
             // task page with the banner's reason field focused (design-doc §5 —
             // the reason is asked for, never demanded by a modal). Review F6:
             // an exception item must never silently sit reason-less.
-            if (to === "blocked" || to === "escalated") {
+            if (to === "blocked") {
               navigate(todoPath(item.id), { state: { fromBoard: key, focusBannerReason: true } })
             }
             const version = result.workItem?.version
@@ -375,7 +375,7 @@ export default function TodoBoardPage() {
     useBoardScroll(key, navigationType, { dragging: drag !== null, attention: isAttention })
 
   // ── Page chrome state ───────────────────────────────────────────────────────
-  const [creating, setCreating] = useState<null | { department?: string; askAssignee?: boolean }>(null)
+  const [creating, setCreating] = useState<null | { department?: string }>(null)
   const [capturing, setCapturing] = useState(false)
   // A URL naming a closed status asked for closed work — never one tap short.
   const closedFilter = CLOSED_STATUSES.some((status) => status === filters.status)
@@ -400,7 +400,7 @@ export default function TodoBoardPage() {
         state: {
           fromBoard: key,
           bannerExpected: item
-            ? item.status === "blocked" || item.status === "escalated" || item.approvalState === "pending"
+            ? item.status === "blocked" || item.approvalState === "pending"
             : undefined,
         },
       }),
@@ -438,7 +438,6 @@ export default function TodoBoardPage() {
     : board.kind === "attention" ? "Attention"
     : board.kind === "everything" ? "Everything" : "Home"
   const blockedTotal = countByStatus.blocked ?? 0
-  const escalatedTotal = countByStatus.escalated ?? 0
   const closedTotal = CLOSED_STATUSES.reduce((sum, status) => sum + (countByStatus[status] ?? 0), 0)
   const visibleStatuses: WorkItemStatusWire[] = useMemo(() => {
     const exceptions = EXCEPTION_STATUSES.filter(
@@ -516,9 +515,7 @@ export default function TodoBoardPage() {
     const quickAdd =
       status === "backlog"
         ? () => setCreating({ department: board.kind === "department" ? board.slug : undefined })
-        : status === "assigned"
-          ? () => setCreating({ department: board.kind === "department" ? board.slug : undefined, askAssignee: true })
-          : undefined
+        : undefined
     return (
       <BoardColumn
         key={status}
@@ -556,7 +553,6 @@ export default function TodoBoardPage() {
                 : data.openTotal
             }
             blockedTotal={blockedTotal}
-            escalatedTotal={escalatedTotal}
             onQuickCapture={() => setCapturing(true)}
           />
         }
@@ -673,7 +669,7 @@ export default function TodoBoardPage() {
                 now={now}
                 onOpen={onOpen}
                 onKeep={keep.mutate}
-                onQuickAdd={(askAssignee) => setCreating({ department: board.kind === "department" ? board.slug : undefined, askAssignee: askAssignee || undefined })}
+                onQuickAdd={() => setCreating({ department: board.kind === "department" ? board.slug : undefined })}
               />
             )}
           </div>
@@ -770,7 +766,6 @@ export default function TodoBoardPage() {
           onCreated={() => setCreating(null)}
           defaults={{
             department: creating.department,
-            askAssignee: creating.askAssignee,
             employees: org.data?.employees ?? [],
             departments: departments.data ?? [],
           }}

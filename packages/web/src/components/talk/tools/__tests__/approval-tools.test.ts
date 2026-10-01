@@ -45,7 +45,7 @@ beforeEach(() => {
   mocked.getWorkItem.mockResolvedValue(todo({}))
   mocked.getWorkItemTree.mockResolvedValue({ tree: { root: { id: "ABC-59", children: [] } } } as never)
   mocked.decideWorkItemApproval.mockResolvedValue({ workItem: GATE.workItem, escalated: false } as never)
-  mocked.setWorkItemStatus.mockResolvedValue({ workItem: { id: "ABC-59", status: "assigned" } } as never)
+  mocked.setWorkItemStatus.mockResolvedValue({ workItem: { id: "ABC-59", status: "backlog" } } as never)
 })
 
 afterEach(() => dismissSituation())
@@ -124,7 +124,7 @@ describe("deciding a Todo's approval", () => {
 })
 
 describe("unblocking a Todo", () => {
-  const BLOCKED = '{"id":"ABC-59","status":"assigned","note":"the vendor answered"}'
+  const BLOCKED = '{"id":"ABC-59","status":"backlog","note":"the vendor answered"}'
 
   it("moves it with the note attached once the operator agrees", async () => {
     mocked.getWorkItem.mockResolvedValue(todo({ status: "blocked" }))
@@ -135,7 +135,7 @@ describe("unblocking a Todo", () => {
     answerSituation("go")
     const result = await pending
 
-    expect(mocked.setWorkItemStatus).toHaveBeenCalledWith("ABC-59", "assigned", "the vendor answered", "talk")
+    expect(mocked.setWorkItemStatus).toHaveBeenCalledWith("ABC-59", "backlog", "the vendor answered", "talk")
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("expected success")
     expect(result.data.undo).toBeUndefined()
@@ -172,7 +172,7 @@ describe("unblocking a Todo", () => {
     )
     mocked.getWorkItem.mockResolvedValue(todo({ status: "blocked" }))
     mocked.getWorkItemTree.mockResolvedValue({
-      tree: { root: { id: "ABC-59", children: [{ id: "ABC-60", status: "executing" }, { id: "ABC-61", status: "assigned" }] } },
+      tree: { root: { id: "ABC-59", children: [{ id: "ABC-60", status: "executing" }, { id: "ABC-61", status: "backlog" }] } },
     } as never)
 
     const result = await executeToolCall("talk_unblock_todo", '{"id":"ABC-59","status":"done","note":"finished"}')
@@ -209,7 +209,7 @@ describe("unblocking a Todo", () => {
 describe("the action log", () => {
   it("records one entry per attempt, in the consent lane, with how it was answered", async () => {
     mocked.getWorkItem.mockResolvedValue(todo({ status: "blocked" }))
-    const granted = executeToolCall("talk_unblock_todo", '{"id":"ABC-59","status":"assigned","note":"unstuck"}')
+    const granted = executeToolCall("talk_unblock_todo", '{"id":"ABC-59","status":"backlog","note":"unstuck"}')
     await sheet()
     answerSituation("go")
     await granted

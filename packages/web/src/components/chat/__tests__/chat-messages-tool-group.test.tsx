@@ -451,7 +451,7 @@ describe('ChatMessages tool groups', () => {
       {
         id: 'root',
         role: 'assistant',
-        content: 'Todo “Prepare release” · assigned',
+        content: 'Todo “Prepare release” · backlog',
         timestamp: 100,
         blocks: [{
           id: 'todo:JIN-1',
@@ -462,7 +462,7 @@ describe('ChatMessages tool groups', () => {
           payload: {
             todoId: 'JIN-1',
             action: 'created',
-            status: 'assigned',
+            status: 'backlog',
             parentId: null,
             rootId: 'JIN-1',
             depth: 0,
@@ -472,7 +472,7 @@ describe('ChatMessages tool groups', () => {
       {
         id: 'child-1',
         role: 'assistant',
-        content: 'Todo “Build artifacts” · assigned',
+        content: 'Todo “Build artifacts” · backlog',
         timestamp: 101,
         blocks: [{
           id: 'todo:JIN-2',
@@ -483,7 +483,7 @@ describe('ChatMessages tool groups', () => {
           payload: {
             todoId: 'JIN-2',
             action: 'created',
-            status: 'assigned',
+            status: 'backlog',
             parentId: 'JIN-1',
             rootId: 'JIN-1',
             depth: 1,
@@ -493,7 +493,7 @@ describe('ChatMessages tool groups', () => {
       {
         id: 'child-2',
         role: 'assistant',
-        content: 'Todo “Verify artifacts” · assigned',
+        content: 'Todo “Verify artifacts” · backlog',
         timestamp: 102,
         blocks: [{
           id: 'todo:JIN-3',
@@ -504,7 +504,7 @@ describe('ChatMessages tool groups', () => {
           payload: {
             todoId: 'JIN-3',
             action: 'created',
-            status: 'assigned',
+            status: 'backlog',
             parentId: 'JIN-1',
             rootId: 'JIN-1',
             depth: 1,

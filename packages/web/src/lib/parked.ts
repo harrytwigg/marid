@@ -1,8 +1,8 @@
-/** PLA-157: the stop cause a blocked/escalated Todo carries on the wire, and the
+/** PLA-157: the stop cause a blocked Todo carries on the wire, and the
  *  one rule for reading it.
  *
  *  A Todo waiting out a quota window and a Todo waiting on a person both sit in
- *  `blocked`/`escalated`. `parkedUntil` says the first is a clock-wait and when
+ *  `blocked`. `parkedUntil` says the first is a clock-wait and when
  *  it ends; `unblockHint` says the second is a you-wait and whose move it is. */
 export interface TodoUnblockHintWire {
   what: string

@@ -13,7 +13,7 @@ export interface TodoListRowHandlers {
   trees: Map<string, WorkItemTreeWire> | undefined
   now: number
   onOpen: (id: string, item: WorkItemCompactWire) => void
-  onQuickAdd: (askAssignee: boolean) => void
+  onQuickAdd: () => void
   onToggleClosed: () => void
   onKeep?: (vars: { id: string; kept: boolean }) => void
 }
@@ -39,7 +39,7 @@ function WindowedGroupHeader({
         group={group}
         open={open}
         onToggle={group.key === "closed" ? onToggleClosed : undefined}
-        onQuickAdd={() => onQuickAdd(group.key === "assigned")}
+        onQuickAdd={() => onQuickAdd()}
       />
     </section>
   )
