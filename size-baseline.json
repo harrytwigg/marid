@@ -294,7 +294,7 @@
       "lines": 374
     },
     "packages/jinn/src/gateway/api.ts": {
-      "lines": 5058,
+      "lines": 5042,
       "exempt": [
         "complexity",
         "max-depth",
@@ -1474,7 +1474,7 @@
       ]
     },
     "packages/web/src/routes/todos/needs-you-view.tsx": {
-      "lines": 476,
+      "lines": 469,
       "exempt": [
         "complexity",
         "max-lines-per-function"
