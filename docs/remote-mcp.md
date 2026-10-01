@@ -18,7 +18,7 @@ Cloudflare Access application in front of its hostname. Placeholders used throug
 
 The connector is the operator's own door into Jinn, so it acts with the operator's
 standing on the Todo ledger. It sees **reads** (Todos, sessions metadata, org, Notes,
-Workflows, cron, cost, managed files), **ledger writes**, and **session control**:
+cron, cost, managed files), **ledger writes**, and **session control**:
 
 - create, edit, comment on, label and link any Todo, and assign it (`assign_work_item`);
 - write and update Notes anywhere under `knowledge/`;

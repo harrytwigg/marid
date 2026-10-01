@@ -5,7 +5,7 @@ description: Create, assign, update, review, and archive Jinn Todos through the 
 
 # Todo Handling Skill
 
-Use this skill for deliberately authored, durable work ownership and status tracking. Todos are the live company ledger; Workflows are the reusable HOW. Search before creating a duplicate. A Workflow invocation never creates, links, transitions, approves, or mutates a Todo.
+Use this skill for deliberately authored, durable work ownership and status tracking. Todos are the live company ledger. Search before creating a duplicate.
 
 ## Find the right Todo
 
@@ -68,10 +68,7 @@ Do not invent provenance or attach approval fields during creation. Each owning 
 
 ### Auto-start and the Todo you will work yourself
 
-An instance may run a `todo-status` Workflow that starts the assignee's session whenever a Todo becomes `assigned`. Two facts let that Workflow avoid a second session on a Todo that already has one:
-
-- Every assignment event records `actorEmployee`, the employee behind the session that made the move. A Workflow trigger with `"selfAssigned": false` does not fire when that employee is the assignee — so creating a Todo and calling `assign_work_item` on yourself from the session that will do the work starts nothing extra.
-- A Todo can opt out explicitly: pass `"autoStart": false` to `create_work_item`, or later to `set_work_item_dispatch`. A trigger with `"autoStart": true` skips it. Set it when you create a Todo you will work from this session, or one that should wait for a hand-over by message. `get_work_item` shows the flag under `dispatchConfig`; `set_work_item_dispatch { autoStart: true }` restores the default.
+Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when idle capacity is enabled and its sweep picks the Todo from the backlog. To keep that sweep away from a Todo, pass `"autoStart": false` to `create_work_item`, or later to `set_work_item_dispatch`, or give it the `no-auto-start` label. Set it when you create a Todo you will work from this session, or one that should wait for a hand-over by message. `get_work_item` shows the flag under `dispatchConfig`; `set_work_item_dispatch { autoStart: true }` restores the default.
 
 ## Approval flow
 
@@ -106,7 +103,7 @@ Approvals are routed records on a Todo, separate from its lifecycle status. Gene
 
 4. If the routed manager/COO deliberately needs operator/aCEO authority, call `escalate_work_item_approval` with the pending Todo id and an optional reason. Escalation exposes the pending approval to that path; it does not approve or reject it.
 
-Todo approvals affect only the Todo. Workflow operations never mutate Todos. A Todo-status trigger is a one-way input; the resulting Workflow run is independent.
+Todo approvals affect only the Todo.
 
 ## Keep status honest
 
