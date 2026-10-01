@@ -4,6 +4,7 @@ import { listWorkItemEvents } from '../work-items/event-log.js';
 import { toWorkItemLinkRole } from '../work-items/link-role.js';
 import { getWorkItem } from '../work-items/store.js';
 import { listSessions } from './registry.js';
+import { reportedSessionStatus } from './background-work.js';
 
 /**
  * The tree of sessions a Todo caused: the sessions linked to it, and beneath
@@ -223,8 +224,8 @@ export function buildSessionTree(input: SessionTreeInput): SessionTreeResponse {
   }
 
   const live = [...visited].filter((id) => {
-    const status = byId.get(id)?.status;
-    return status ? LIVE_STATUSES.has(status) : false;
+    const session = byId.get(id);
+    return session ? LIVE_STATUSES.has(reportedSessionStatus(session)) : false;
   }).length;
 
   return { roots, directory, truncated, totals: { nodes: state.nodes, live } };

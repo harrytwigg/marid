@@ -63,7 +63,7 @@ function makeProgressEngine(progress: {
 }
 
 describe("serializeSession", () => {
-  it("reports agent work after the turn as running without touching the stored status", () => {
+  it("reports runtime activity as running transport state while keeping stored status idle", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-01T00:00:00.000Z"));
     const session = makeSession({ status: "idle" });
@@ -73,8 +73,7 @@ describe("serializeSession", () => {
 
     const serialized = serializeSession(session, context);
 
-    expect(serialized.status).toBe("running");
-    expect(session.status).toBe("idle");
+    expect(serialized.status).toBe("idle");
     expect(serialized.transportState).toBe("running");
     expect(serialized.backgroundActivity?.activeStreams).toBe(1);
     vi.useRealTimers();
@@ -100,6 +99,19 @@ describe("serializeSession", () => {
       activeMonitors: 1,
       lastActivityAt: expect.any(String),
     });
+  });
+
+  it("reports a session running while its background sub-agents work, without touching the stored status", () => {
+    const session = makeSession({ status: "idle" });
+    const context = makeContext(new Map([
+      ["sess-1", { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: Date.now() }],
+    ]));
+
+    const serialized = serializeSession(session, context);
+
+    expect(serialized.status).toBe("running");
+    expect(serialized.transportState).toBe("running");
+    expect(session.status).toBe("idle");
   });
 
   it("keeps an aux-only request transport-running even when no agents are active", () => {

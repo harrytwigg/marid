@@ -297,4 +297,33 @@ describe("workflow attempt per-turn completion", () => {
     release();
     await queuedTurn;
   });
+
+  it("does not take an attempt whose background sub-agents are working for idle, nor such a child for finished", async () => {
+    const { runtimeActivity } = await import("../background-work.js");
+    const runs: EngineRunOpts[] = [];
+    const manager = managerWith(runs);
+    const { sessionId } = await manager.runWorkflowAttempt(command);
+    await waitFor(() => manager.workflowAttemptState(sessionId)?.idle === true);
+    const child = registry.createSession({
+      engine: "test-engine",
+      source: "web",
+      sourceRef: "child-background",
+      sessionKey: "child-background",
+      parentSessionId: sessionId,
+    });
+    expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: true, runningChildren: 0 });
+
+    const subagents = { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: Date.now() };
+    runtimeActivity.set(sessionId, subagents);
+    runtimeActivity.set(child.id, subagents);
+    try {
+      // A reminder pasted now, or a no-output verdict, would land on live work.
+      expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: false, runningChildren: 1 });
+    } finally {
+      runtimeActivity.delete(sessionId);
+      runtimeActivity.delete(child.id);
+    }
+    expect(manager.workflowAttemptState(sessionId)).toEqual({ idle: true, runningChildren: 0 });
+  });
 });
+

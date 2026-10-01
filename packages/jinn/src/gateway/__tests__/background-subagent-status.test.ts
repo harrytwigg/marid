@@ -221,4 +221,50 @@ describe("a session with background sub-agents still working", () => {
 
     expect(reported().status).toBe("idle");
   });
+
+  /** The per-PTY proxy reporting its in-flight requests (mocked out above). */
+  const upstream = (activeStreams: number, activeAgents: number) =>
+    (engine as unknown as { handleUpstreamActivity(id: string, info: RuntimeActivityInfo): void })
+      .handleUpstreamActivity(SID, { activeStreams, activeAgents, lastActivityAt: Date.now() });
+
+  async function settleTurnWithAgent(): Promise<void> {
+    session = { ...session, status: "running" };
+    const turn = engine.run({ sessionId: SID, prompt: "map the call sites in the background", cwd: "/tmp" } as any);
+    await vi.advanceTimersByTimeAsync(20);
+    registry.deliver(SID, { hook_event_name: "SessionStart", session_id: "claude-1" });
+    registry.deliver(SID, { hook_event_name: "UserPromptSubmit", prompt: "map the call sites in the background" });
+    registry.deliver(SID, agentLaunched);
+    registry.deliver(SID, { hook_event_name: "Stop", session_id: "claude-1", last_assistant_message: "Waiting." });
+    await turn;
+    session = { ...session, status: "idle" };
+  }
+
+  it("is idle at the re-run's Stop even while the proxy still counts its last request", async () => {
+    await settleTurnWithAgent();
+    registry.deliver(SID, { hook_event_name: "UserPromptSubmit", prompt: NOTIFICATION });
+    upstream(1, 1);
+    expect(reported().status).toBe("running");
+
+    // Claude Code fires the Stop hook before the proxy sees the response end.
+    registry.deliver(SID, { hook_event_name: "Stop", session_id: "claude-1", last_assistant_message: "Done." });
+    expect(reported().status).toBe("idle");
+    upstream(0, 0);
+    expect(reported().status).toBe("idle");
+  });
+
+  it("does not report a finished turn running for a model request sent after its Stop", async () => {
+    session = { ...session, status: "running" };
+    const turn = engine.run({ sessionId: SID, prompt: "answer", cwd: "/tmp" } as any);
+    await vi.advanceTimersByTimeAsync(20);
+    registry.deliver(SID, { hook_event_name: "SessionStart", session_id: "claude-1" });
+    registry.deliver(SID, { hook_event_name: "Stop", session_id: "claude-1", last_assistant_message: "Answered." });
+    await turn;
+    session = { ...session, status: "idle" };
+
+    upstream(1, 1);
+    expect(reported()).toMatchObject({ status: "idle", transportState: "running" });
+    upstream(0, 0);
+    expect(reported().status).toBe("idle");
+  });
 });
+

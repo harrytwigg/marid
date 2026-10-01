@@ -38,6 +38,7 @@ import { runTurn } from "./turn/runner.js";
 import { resolveTurnHierarchy } from "./turn/preflight.js";
 import { createConnectorTurnSurface } from "./turn/connector-surface.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
+import { reportedSessionStatus } from "./background-work.js";
 
 export interface RouteOptions {
   employee?: Employee;
@@ -163,12 +164,15 @@ export class SessionManager {
   workflowAttemptState(sessionId: string): { idle: boolean; runningChildren: number } | null {
     const session = getSession(sessionId);
     if (!session || session.workflowProvenance?.kind !== "phase") return null;
-    const idle = session.status === "idle"
+    // A turn that ended with background sub-agents still working is not idle:
+    // a reminder pasted into it, or an attempt failed for no output, would
+    // land on work in progress.
+    const idle = reportedSessionStatus(session) === "idle"
       && !this.queue.isRunning(session.sessionKey)
       && this.queue.getPendingCount(session.sessionKey) === 0;
     const runningChildren = listChildSessions(sessionId).filter((child) => {
       const transport = this.queue.getTransportState(child.sessionKey, child.status);
-      return child.status === "running" || transport === "running" || transport === "queued";
+      return reportedSessionStatus(child) === "running" || transport === "running" || transport === "queued";
     }).length;
     return { idle, runningChildren };
   }

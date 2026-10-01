@@ -21,20 +21,21 @@ export interface RuntimeActivityInfo {
 
 /**
  * Whether a session's post-settle activity is work in progress, so the session
- * reports `running` rather than `idle`.
+ * reports `running` rather than `idle`: a background sub-agent not yet
+ * reported finished, or the re-run a finished one woke.
  *
- * Background shell tasks do not count on their own: a dev server or a log tail
- * launched in the background never ends, and counting it would pin the session
- * at `running` until its process died, hiding a real stall from every check
- * that reads status. Auxiliary model requests (titles, token counts) do not
- * count either; an engine that classifies its streams is judged on agent
- * requests alone, as backgroundWorkAtShutdown does.
+ * Both have an announced end, so the session reads `idle` the moment they are
+ * over. Nothing else counts on its own. A background shell task may never end
+ * (a dev server, a log tail), and counting it would pin the session at
+ * `running` until its process died, hiding a real stall from every check that
+ * reads status. A model request in flight has no announced end beyond its own
+ * response, and the requests a turn's tail sends after its Stop would hold
+ * every finished turn at `running`; requests only make the transport busy
+ * (runtimeTransportRunning).
  */
 export function isBackgroundWorkLive(info: RuntimeActivityInfo | undefined): boolean {
   if (!info) return false;
-  return info.backgroundRerun === true
-    || (info.backgroundAgents ?? 0) > 0
-    || (info.activeAgents ?? info.activeStreams) > 0;
+  return info.backgroundRerun === true || (info.backgroundAgents ?? 0) > 0;
 }
 
 /** Whether the transport is busy: any model request in flight, auxiliary ones
@@ -54,6 +55,12 @@ export const runtimeActivity = new Map<string, RuntimeActivityInfo>();
 
 export function hasLiveBackgroundWork(sessionId: string): boolean {
   return isBackgroundWorkLive(runtimeActivity.get(sessionId));
+}
+
+/** effectiveSessionStatus for a session read from the registry, against the
+ *  gateway's runtime activity. */
+export function reportedSessionStatus(session: Pick<Session, "id" | "status">): Session["status"] {
+  return effectiveSessionStatus(session, runtimeActivity.get(session.id));
 }
 
 /**
