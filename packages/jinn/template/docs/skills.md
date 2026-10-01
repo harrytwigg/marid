@@ -8,7 +8,6 @@ Read the relevant playbook before acting. Keep durable procedure in the skill, s
 
 - **cron-manager**: Manage scheduled jobs and inspect run history.
 - **delegation**: Delegate tracked work and coordinate child sessions.
-- **experiments**: Create, measure, update, and conclude experiments.
 - **find-and-install**: Find and install community skills.
 - **management**: Manage departments, employees, hierarchy, and ownership.
 - **new**: Start a fresh chat session.

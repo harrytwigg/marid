@@ -185,7 +185,6 @@ describe("template company doctrine", () => {
       ["Cron", "skills/cron-manager/SKILL.md"],
       ["Organization", "skills/management/SKILL.md"],
       ["Notes", "skills/notes/SKILL.md"],
-      ["Experiments", "skills/experiments/SKILL.md"],
     ];
 
     for (const [concern, owner] of owners) {
@@ -198,10 +197,10 @@ describe("template company doctrine", () => {
     expect(template).not.toContain("provides:");
   });
 
-  it("ships exactly six public blocks and keeps Triggers a Workflow detail", () => {
+  it("ships exactly five public blocks and keeps Triggers a Workflow detail", () => {
     for (const rel of ["CLAUDE.md", "docs/company-doctrine.md", "docs/overview.md"]) {
       const content = readTemplate(rel);
-      expect(content, rel).toContain("Employees, Todos, Workflows, Chats, Notes, and Experiments");
+      expect(content, rel).toContain("Employees, Todos, Workflows, Chats, and Notes");
       expect(content, rel).not.toContain("Employees, Todos, Workflows, Triggers, and Notes");
     }
     const template = readTemplate("CLAUDE.md");
@@ -385,16 +384,6 @@ describe("template company doctrine", () => {
           "`docs/` remains read-only",
         ],
       },
-      {
-        directory: "experiments",
-        tools: [
-          "list_experiments",
-          "get_experiment",
-          "create_experiment",
-          "update_experiment",
-          "conclude_experiment",
-        ],
-      },
     ];
 
     for (const { directory, tools } of shipped) {
@@ -409,7 +398,7 @@ describe("template company doctrine", () => {
       expect(content, rel).not.toMatch(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/api\//);
       expect(content, rel).not.toMatch(/\bcurl\b.*\/api\//);
       expect(content, rel).not.toContain("gateway API");
-      if (directory === "notes" || directory === "experiments") {
+      if (directory === "notes") {
         expect(lineCount(content), rel).toBeLessThanOrEqual(80);
       }
       for (const expected of tools) expect(content, `${rel}: ${expected}`).toContain(expected);

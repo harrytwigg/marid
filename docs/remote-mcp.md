@@ -22,7 +22,6 @@ Workflows, cron, cost, managed files), **ledger writes**, and **session control*
 
 - create, edit, comment on, label and link any Todo, and assign it (`assign_work_item`);
 - write and update Notes anywhere under `knowledge/`;
-- record experiment readings;
 - tail a session's transcript (`read_session`, `last` = how many recent messages;
   `last: 0` returns the whole transcript, uncapped);
 - message a session (`send_to_session`); the session answers in its own transcript;
