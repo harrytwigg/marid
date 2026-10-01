@@ -30,6 +30,10 @@ export interface RouteTodoClaim {
   release(): void;
 }
 
+/** The `code` on a refusal that means somebody is already working the Todo,
+ *  so the board can say that plainly instead of a generic failure. */
+export const TODO_ALREADY_EXECUTING = "TODO_ALREADY_EXECUTING";
+
 function acquired(workItemId: string, owner: string): RouteTodoClaim {
   return {
     owner,
@@ -80,7 +84,7 @@ export function claimTodoForDelegation(
 export type DispatchClaimOutcome =
   | { state: "acquired"; claim: RouteTodoClaim }
   | { state: "reused"; body: { workItemId: string; sessionId: string; status: string; reused: true } }
-  | { state: "refused"; status: 409; body: { error: string; workItemId: string; sessionId?: string } };
+  | { state: "refused"; status: 409; body: { error: string; workItemId: string; sessionId?: string; code?: string } };
 
 /**
  * Claim a Todo for the built-in Dispatcher. A Dispatcher already working this
@@ -102,6 +106,7 @@ export function takeDispatchClaim(workItemId: string): DispatchClaimOutcome {
     status: 409,
     body: {
       error: `Todo ${workItemId} is already being worked by ${claim.claim.sessionId ?? claim.claim.owner}`,
+      code: TODO_ALREADY_EXECUTING,
       workItemId,
       ...(claim.claim.sessionId ? { sessionId: claim.claim.sessionId } : {}),
     },

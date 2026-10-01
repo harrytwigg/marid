@@ -75,6 +75,7 @@ describe("conditional edit errors", () => {
     ["todo_precondition_required", "This Todo requires a current version before it can be saved. Reload it and try again."],
     ["todo_invalid_version", "This Todo version is invalid. Reload it and try again."],
     ["todo_invalid_patch", "This Todo edit is invalid. Review the changed fields and try again."],
+    ["todo_already_executing", "Someone is already working this Todo. Message their session instead of dispatching it again."],
   ])("uses closed safe copy for %s without exposing backend diagnostics", (code, safeCopy) => {
     const error = new TodoApiError(400, "SQLITE_BUSY /srv/private.db token=secret", code)
 
