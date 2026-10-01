@@ -13,7 +13,11 @@ interface MaterializedBytes {
 }
 
 type FingerprintPart = HashedBytes | MaterializedBytes
-type SkillFingerprint = Record<string, readonly FingerprintPart[]>
+/** One shipped version of a file: a sequence of hashed and substituted parts. */
+type FileVersion = readonly FingerprintPart[]
+/** A file's fingerprint: one version, or `anyOf` several that shipped over time. */
+type FileFingerprint = FileVersion | { anyOf: readonly FileVersion[] }
+type SkillFingerprint = Record<string, FileFingerprint>
 
 /**
  * Fingerprints preserve provenance without shipping a discoverable copy of retired
@@ -21,6 +25,15 @@ type SkillFingerprint = Record<string, readonly FingerprintPart[]>
  * exactly against the instance inputs that produced the installed skill.
  */
 const RECEIPTLESS_RETIRED_SKILLS: Record<string, SkillFingerprint> = {
+  experiments: {
+    // 0.29.x shipped the first version of this file; 0.30.0 added todoId/owner.
+    "SKILL.md": {
+      anyOf: [
+        [{ bytes: 1375, sha256: "f6080dc4b838eb6575da0fa06127f6d2f03e8557999f9834e8817fe25378d2ae" }],
+        [{ bytes: 1620, sha256: "bdcac32428219bc08580ecfa26a4b3aaade3ac01c6741c8650018e973f6d57b5" }],
+      ],
+    },
+  },
   migrate: {
     "SKILL.md": [
       { bytes: 90, sha256: "67cdaf6fb6891b4b50ff23fb9284e2f25a680c8a0c4c8e309040c97be6bfabe7" },
@@ -94,10 +107,19 @@ function sameStrings(actual: string[], expected: string[]): boolean {
 
 function matchesFile(
   file: string,
-  fingerprint: readonly FingerprintPart[],
+  fingerprint: FileFingerprint,
   inputs: TemplateMaterializationInputs,
 ): boolean {
   const contents = fs.readFileSync(file)
+  const versions = "anyOf" in fingerprint ? fingerprint.anyOf : [fingerprint]
+  return versions.some((version) => matchesVersion(contents, version, inputs))
+}
+
+function matchesVersion(
+  contents: Buffer,
+  fingerprint: FileVersion,
+  inputs: TemplateMaterializationInputs,
+): boolean {
   let offset = 0
   for (const part of fingerprint) {
     if ("input" in part) {
