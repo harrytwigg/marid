@@ -106,4 +106,20 @@ describe("NeedsYouView attention lanes (PLA-240)", () => {
     expect(screen.getByTestId("needs-group-blocked").textContent).toContain("operator block")
     expect(screen.getByTestId("needs-group-manager").textContent).not.toContain("operator block")
   })
+
+  // Only a blocked Todo is blocked: an executing one on Manager attention or
+  // recovering on its own says what it is doing instead.
+  it("says what each kind of entry is doing, not that every one is blocked", () => {
+    renderView([
+      item("QAP-21", "executing", { title: "auth failed", attentionLane: "manager", assignee: "platform-worker" }),
+      item("QAP-22", "executing", { title: "quota wait", attentionLane: "recovering", assignee: "platform-worker" }),
+      item("QAP-23", "blocked", { title: "needs a pick", attentionLane: "operator", assignee: "platform-worker" }),
+    ])
+    const manager = screen.getByTestId("needs-group-manager").textContent
+    expect(manager).toContain("needs a manager")
+    expect(manager).not.toContain("is blocked")
+    expect(manager).not.toContain("Blocked and waiting")
+    expect(screen.getByTestId("needs-group-recovering").textContent).toContain("is recovering")
+    expect(screen.getByTestId("needs-group-blocked").textContent).toContain("is blocked")
+  })
 })

@@ -25,7 +25,9 @@
     - the approval banner, badges and Needs-you lane;
     - the Talk voice-approval capability (`prepare_voice_approval`, `commit_voice_approval`) and the Talk `talk_decide_approval` tool.
   - **Blocked replaces approvals.** A decision that needs a person is a Todo stopped in `blocked` with a comment saying what is needed. When the Dispatcher or the Shaper can place nobody, it does exactly that, with options for the operator, and leaves the assignee unchanged.
-  - **Review handoff.** An agent that moves a Todo to `in_review` must give a summary in `note`. The gateway posts it on the Todo as a comment.
+  - **Review handoff.** An agent that moves a Todo to `in_review` must give a summary in `note`. The gateway posts it on the Todo as a comment, once, even when the move is retried. The operator's own moves (the board, the remote connector, Talk) need no summary, but one given is posted the same way.
+  - **Unassigned blocked Todos.** A blocked Todo with no assignee now appears in the operator's attention queue.
+  - **Unassigned Todos in review.** An unassigned Todo in `in_review` is no longer flagged for a manager: it is waiting on the operator.
   - **Comment sessions.** Every comment written from a session records that session, taken from the caller's identity rather than supplied by the agent, and the Todo page links it. A reply also records the comment it actually answered, which thread flattening used to lose.
   - **Reconciler.** A pending approval no longer holds back the trust-tier close.
   - **Breaking:**
@@ -35,7 +37,7 @@
     - Request bodies with `approval*` keys are no longer refused; the keys are ignored.
   - **On upgrade:**
     - Existing approval rows stay in the database, unread, and the approval tables keep their shape, so an existing database still verifies.
-    - An approval still pending on an open Todo is posted once as a comment on that Todo: its question, its options and who asked. The Todo's status is unchanged.
+    - An open Todo with an approval still pending is stopped in `blocked` once, at the first boot. It records the question as its unblock hint, waiting on the routed employee or otherwise the operator. Its question, options and asker are posted as a comment. The trust tier, idle capacity and the attention queues then treat it as the human wait it was.
     - Comment session and reply data lives in a new `work_item_comment_meta` table, created on first use. Comments written before the upgrade simply have none.
 
 ### 🐛 Fixes

@@ -11,8 +11,8 @@ import {
 import { EmployeeChip } from "@/components/ui/employee-chip"
 import { STATUS_LABEL, effectiveMaxRounds, operatorSafeTodoError, provenanceLabel, publicWorkItemReference } from "@/lib/todos"
 import { legalTargets } from "@/lib/legal-targets"
-import { ATTENTION_GROUPS, attentionKind, stopCauseQuote, type AttentionKind } from "./needs-you-support"
-import { ProvenanceIcon, StateCircle, StatusCircle } from "./state-glyph"
+import { ATTENTION_COPY, ATTENTION_GROUPS, attentionKind, stopCauseQuote, type AttentionKind } from "./needs-you-support"
+import { ProvenanceIcon, StatusCircle } from "./state-glyph"
 import { reasonOf, rollupOf } from "./board/card"
 import { useBoardTrees } from "./board/use-board"
 import { useOpenDetails, useSetWorkItemStatus } from "./use-todos"
@@ -161,7 +161,7 @@ function NeedsYouCard({
   const kind = attentionKind(item)
   const tone = kind === "blocked" ? "var(--system-orange)" : "var(--accent)"
   const reason = reasonOf(item, detail)
-  const quote = stopCauseQuote(item) ?? reason ?? "Blocked and waiting on a decision or missing input."
+  const quote = stopCauseQuote(item) ?? reason ?? ATTENTION_COPY[kind].fallback
   const railColor = `color-mix(in srgb, ${tone} 38%, transparent)`
   const idLine = attentionIdLine(item, kind, detail)
 
@@ -172,7 +172,7 @@ function NeedsYouCard({
     >
       {/* Head: 34px disc · title over the mono ID line. */}
       <button type="button" className="focus-ring flex w-full items-start gap-3 rounded-lg text-left outline-none" onClick={() => onOpen(item.id)}>
-        <StateCircle keyOf="blocked" size={34} />
+        <StatusCircle status={item.status} size={34} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-semibold leading-[1.35] text-[var(--text-primary)]">
             {item.title}
@@ -193,7 +193,7 @@ function NeedsYouCard({
         {item.assignee ? (
           <>
             <EmployeeChip employee={item.assignee} displayName={displayNameOf(item.assignee, byName)} size={22} />
-            <span className="text-[var(--text-tertiary)]">is blocked</span>
+            <span className="text-[var(--text-tertiary)]">{ATTENTION_COPY[kind].verb}</span>
           </>
         ) : (
           <WorkRef item={item} />

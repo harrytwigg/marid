@@ -121,7 +121,7 @@ function rowToComment(row: Record<string, unknown>): WorkItemComment {
 
 function getCommentRow(db: ReturnType<typeof initDb>, id: string): WorkItemComment | undefined {
   const row = db.prepare('SELECT * FROM work_item_comments WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return row ? rowToComment(row) : undefined;
+  return row ? withCommentMeta(db, [rowToComment(row)])[0] : undefined;
 }
 
 export function getComment(id: string): WorkItemComment | undefined {

@@ -65,6 +65,15 @@ describe("a comment's session", () => {
     expect(comments.commentsTail(item.id).comments[0]).toMatchObject({ id: added.id, sessionId: "sess-abc" });
   });
 
+  it("survives a single read, an edit and a tombstone", () => {
+    const item = store.createWorkItem({ title: "edited later" });
+    const added = add(item.id, "first draft", { sessionId: "sess-edit" });
+    const editor = { author: "operator", authorKind: "operator" as const, operator: true };
+    expect(comments.getComment(added.id)?.sessionId).toBe("sess-edit");
+    expect(comments.editComment(added.id, "second draft", editor).sessionId).toBe("sess-edit");
+    expect(comments.tombstoneComment(added.id, editor).sessionId).toBe("sess-edit");
+  });
+
   it("is absent, not null, on a comment written without one", () => {
     const item = store.createWorkItem({ title: "no session" });
     const added = add(item.id, "operator note");

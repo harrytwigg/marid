@@ -69,6 +69,32 @@ describe("the agent lane's review handoff", () => {
     expect(listComments(item.id).comments).toHaveLength(0);
   });
 
+  // The move commits before its comment does: a caller whose comment write
+  // failed sends the same move again, and the handoff must still land, once.
+  it("posts the handoff on a retried move whose first comment never landed, and only once", async () => {
+    const item = todo("executing");
+    const session = employeeSession();
+    const { transition } = await import("../../work-items/transitions.js");
+    transition(item.id, "in_review", `session:${session.id}`, { manual: true, agent: true, detail: { note: "Done; evidence in the PR." } });
+    expect(listComments(item.id).comments).toHaveLength(0);
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const cap = await post(item.id, { status: "in_review", note: "Done; evidence in the PR." }, toolHeaders(session.id));
+      expect(cap.status).toBe(200);
+    }
+    const posted = listComments(item.id).comments;
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ body: "Done; evidence in the PR.", sessionId: session.id });
+  });
+
+  it("does not post another caller's handoff on its same-status move", async () => {
+    const item = todo("executing");
+    const { transition } = await import("../../work-items/transitions.js");
+    transition(item.id, "in_review", `session:${employeeSession().id}`, { manual: true, agent: true, detail: { note: "mine" } });
+    await post(item.id, { status: "in_review" }, toolHeaders(employeeSession().id));
+    expect(listComments(item.id).comments).toHaveLength(0);
+  });
+
   it("does not need a summary to leave review", async () => {
     const item = todo("in_review");
     const cap = await post(item.id, { status: "executing" }, toolHeaders(employeeSession().id));

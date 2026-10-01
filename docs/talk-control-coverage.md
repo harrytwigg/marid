@@ -52,7 +52,7 @@ A normal question uses semantic context. One bounded image is permitted only whe
 | logs-and-limits | explicit gap | — | logs-limits-command-adapter-missing; reuse bounded redacted log queries and engine-limit refresh commands |
 | managed-files | explicit gap | — | managed-files-command-adapter-missing; reuse allowed-home list, read, publish, and attach commands |
 | instances-and-onboarding | explicit gap | — | instance-onboarding-command-adapter-missing; reuse guarded instance and onboarding commands with exact scope confirmation |
-| company-read-lanes | explicit gap | — | company-read-lanes-adapter-missing; reuse knowledge, search, cost, connector, heartbeat, and managed approval reads |
+| company-read-lanes | explicit gap | — | company-read-lanes-adapter-missing; reuse knowledge, search, cost, connector, and heartbeat reads |
 
 ## Reading this report
 

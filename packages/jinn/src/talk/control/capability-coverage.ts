@@ -111,7 +111,7 @@ export const TALK_COMPANY_CAPABILITY_COVERAGE = {
   "company-read-lanes": {
     status: "explicit-gap",
     reason: "company-read-lanes-adapter-missing",
-    plannedAdapter: "reuse knowledge, search, cost, connector, heartbeat, and managed approval reads",
+    plannedAdapter: "reuse knowledge, search, cost, connector, and heartbeat reads",
   },
 } as const satisfies Readonly<Record<string, TalkCompanyCapabilityCoverage>>;
 

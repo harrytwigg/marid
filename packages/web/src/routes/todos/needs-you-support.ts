@@ -11,6 +11,13 @@ export const ATTENTION_GROUPS: { kind: AttentionKind; label: string }[] = [
   { kind: "blocked", label: "Blocked" },
 ]
 
+/** What a card says the Todo is doing, and its line when nothing better is known. */
+export const ATTENTION_COPY: Record<AttentionKind, { verb: string; fallback: string }> = {
+  blocked: { verb: "is blocked", fallback: "Blocked and waiting on a decision or missing input." },
+  recovering: { verb: "is recovering", fallback: "Recovering automatically." },
+  manager: { verb: "needs a manager", fallback: "Needs a manager to look at it." },
+}
+
 export function attentionKind(item: WorkItemCompactWire): AttentionKind {
   if (item.attentionLane === "recovering") return "recovering"
   if (item.attentionLane === "manager") return "manager"
