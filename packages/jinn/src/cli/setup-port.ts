@@ -48,13 +48,14 @@ export interface SetupReport {
 export async function settleGatewayPort(
   requested: number | undefined,
   { fresh = false, report }: { fresh?: boolean; report: SetupReport },
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const container = process.env.JINN_CONTAINER === "1";
-  const envPort = container ? undefined : gatewayEnvOverrides().port;
+  const container = env.JINN_CONTAINER === "1";
+  const envPort = container ? undefined : gatewayEnvOverrides(env).port;
   const fromEnv = requested === undefined && fresh && envPort !== undefined;
   const recorded = fromEnv ? envPort : requested;
   if (recorded !== undefined) recordPort(recorded, fromEnv, report);
-  const port = gatewayFileBinding(CONFIG_PATH).port ?? 7777;
+  const port = gatewayFileBinding(CONFIG_PATH).port ?? 7777; // footgun: ok the same fallback start uses for a config.yaml with no port
   if (recorded === undefined) warnUnsavedEnvPort(envPort, port, report);
   await warnPortInUse(port, report);
 }

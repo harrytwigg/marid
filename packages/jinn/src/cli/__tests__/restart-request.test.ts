@@ -165,7 +165,7 @@ describe("requestRestartFromGateway", () => {
   });
 
   it("applies JINN_HOST/JINN_PORT over config while ignoring an unowned runtime endpoint", async () => {
-    fs.writeFileSync(path.join(tmpHome, "config.yaml"), `gateway:\n  host: 127.0.0.1\n  port: 7777\n${ENGINES}`);
+    fs.writeFileSync(path.join(tmpHome, "config.yaml"), `gateway:\n  host: 127.0.0.1\n  port: 7799\n${ENGINES}`);
     fs.writeFileSync(path.join(tmpHome, "gateway.json"), JSON.stringify({
       port: 65530,
       host: "127.0.0.1",

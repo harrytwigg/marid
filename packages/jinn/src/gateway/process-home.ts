@@ -24,6 +24,7 @@ export function readProcessJinnHome(pid: number): ProcessJinnHomeLookup {
   try {
     const output = execFileSync("ps", ["eww", "-p", String(pid), "-o", "command="], {
       encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
       timeout: 1_000,
     });
     return jinnHomeFromEnvEntries(output.split(/\s+/));

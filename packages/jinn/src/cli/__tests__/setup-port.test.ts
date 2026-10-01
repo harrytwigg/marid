@@ -31,7 +31,7 @@ const SEED = `jinn:
   version: "1.0.0"
 
 gateway:
-  port: 7777
+  port: 7799
   host: "127.0.0.1"
   authRequired: true
 engines:
@@ -90,7 +90,7 @@ describe("jinn setup --port", () => {
       JINN_BINDING_HOME: liveHome,
       JINN_HOST: "127.0.0.1",
       JINN_PORT: "7802",
-      JINN_GATEWAY_URL: "http://127.0.0.1:7777",
+      JINN_GATEWAY_URL: "http://127.0.0.1:7790",
       JINN_GATEWAY_TOKEN: "live-gateway-token",
     });
 
@@ -110,8 +110,8 @@ describe("jinn setup --port", () => {
       JINN_HOME: throwaway,
       JINN_BINDING_HOME: liveHome,
       JINN_HOST: "127.0.0.1",
-      JINN_PORT: "7777",
-      JINN_GATEWAY_URL: "http://127.0.0.1:7777",
+      JINN_PORT: "7790",
+      JINN_GATEWAY_URL: "http://127.0.0.1:7790",
       JINN_GATEWAY_TOKEN: "live-gateway-token",
       JINN_SESSION_ID: "live-session",
     });
@@ -130,7 +130,7 @@ describe("jinn setup --port", () => {
     expect(process.env.JINN_HOME).toBe(throwaway);
     expect(process.env.JINN_GATEWAY_TOKEN).toBeUndefined();
     expect(process.env.JINN_SESSION_ID).toBeUndefined();
-    expect(notice).toEqual([expect.stringContaining(`Ignoring JINN_PORT=7777: it is the port of the instance at ${liveHome}`)]);
+    expect(notice).toEqual([expect.stringContaining(`Ignoring JINN_PORT=7790: it is the port of the instance at ${liveHome}`)]);
   });
 });
 
@@ -161,7 +161,7 @@ describe("settleGatewayPort", () => {
 
     const written = fs.readFileSync(CONFIG_PATH, "utf-8");
     expect(written).toContain(`port: ${port}`);
-    expect(written).not.toContain("port: 7777");
+    expect(written).not.toContain("port: 7799");
     expect(written).toContain("authRequired: true");
     expect(written).toContain("model: opus");
     expect(printed()).toContain(`Gateway port ${port} recorded`);

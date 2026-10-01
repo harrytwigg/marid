@@ -12,7 +12,7 @@ process.env.JINN_HOME = tmpHome;
 fs.writeFileSync(path.join(tmpHome, "config.yaml"), `
 gateway:
   host: 127.0.0.1
-  port: 7777
+  port: 7799
 engines:
   default: claude
   claude: {}

@@ -526,7 +526,7 @@ export async function startGateway(
   process.env.JINN_GATEWAY_URL = gatewayBaseUrl({ port, host });
   // Name the home that binding belongs to, so a command a session points at another
   // home (JINN_HOME=<sandbox> jinn start) can tell the binding it inherited is not its own.
-  process.env[JINN_BINDING_HOME_ENV] = JINN_HOME_IDENTITY;
+  process.env[JINN_BINDING_HOME_ENV] = JINN_HOME_IDENTITY; // footgun: ok exported to spawned sessions beside JINN_GATEWAY_URL above, which every engine reads from process.env
 
   // Normalize claude engine config (idempotent — loadConfig already normalized it)
   const claudeCfg = normalizeClaudeEngineConfig(config.engines.claude);

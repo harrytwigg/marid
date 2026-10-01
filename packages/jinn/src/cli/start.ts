@@ -50,7 +50,7 @@ export async function runStart(opts: StartOptions): Promise<void> {
     config.gateway.port = opts.port;
   }
 
-  const port = config.gateway.port || 7777;
+  const port = config.gateway.port || 7777; // footgun: ok the CLI's pre-existing fallback for a config.yaml with no port, hoisted unchanged
   try {
     assertPortTakeoverAllowed(port, { takePort: opts.takePort });
   } catch (err) {

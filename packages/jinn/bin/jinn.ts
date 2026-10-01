@@ -51,7 +51,7 @@ program
   .command("setup")
   .description(`Initialize ${PRODUCT_NAME} and install dependencies`)
   .option("--force", "Delete existing home dir and reinitialize from scratch")
-  .option("-p, --port <port>", "Gateway port to record in this home's config.yaml (default 7777)", parsePortOption)
+  .option("-p, --port <port>", "Gateway port to record in this home's config.yaml", parsePortOption)
   .action(async (opts) => {
     const { runSetup } = await import("../src/cli/setup.js");
     await runSetup(opts);
