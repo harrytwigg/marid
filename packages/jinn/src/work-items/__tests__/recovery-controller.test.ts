@@ -183,6 +183,21 @@ describe("sweepTodoRecovery", () => {
     expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).not.toContain(item.id);
   });
 
+  // The row live instances actually carry: an unassigned Todo in review, once
+  // flagged as having no reviewer.
+  it("clears the unassigned in-review row in one sweep", () => {
+    const item = store.createWorkItem({ title: "handed in, nobody assigned", status: "in_review" });
+    rows.upsertWorkItemRecovery({
+      workItemId: item.id, incidentId: `stale-${item.id}`, class: "operator", lane: "manager",
+      reason: "in review with no assignee to answer for it",
+    });
+
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
+
+    expect(rows.getWorkItemRecovery(item.id)?.lane).toBe("operator");
+    expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).not.toContain(item.id);
+  });
+
   it("stops re-arming after MAX_RECOVERY_ATTEMPTS and records the exhaustion", () => {
     const { id } = parked("repeatedly failing build", "the build step exited with code 1");
     const rearm: string[] = [];
