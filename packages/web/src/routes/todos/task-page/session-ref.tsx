@@ -47,6 +47,9 @@ export interface SessionRefProps {
   byName: Map<string, Employee>
   /** Compact form for an inline audit or comment line: name only, no avatar. */
   inline?: boolean
+  /** Text to show in place of the session's name, when the surrounding line
+   *  already says whose it is. */
+  label?: string
 }
 
 /** The name to show when the directory has no entry — a shortened id beats
@@ -81,6 +84,18 @@ export function SessionActor({
   const sessionId = sessionIdFromActor(actor)
   if (!sessionId) return <>{children}</>
   return <SessionRef sessionId={sessionId} byName={byName} inline />
+}
+
+/** The "session" link in a comment's header: the session that wrote the comment.
+ *  Absent when the gateway did not record one (older comments, and comments
+ *  written from the browser). */
+export function CommentSessionLink({ sessionId, byName }: { sessionId: string | undefined; byName: Map<string, Employee> }) {
+  if (!sessionId) return null
+  return (
+    <span className="text-[10.5px] text-[var(--text-quaternary)]">
+      <SessionRef sessionId={sessionId} byName={byName} inline label="session" />
+    </span>
+  )
 }
 
 /** Named but unreachable: a link to a session that is gone is worse than text. */
@@ -125,11 +140,11 @@ function RefState({ entry }: { entry: SessionDirectoryEntryWire | undefined }) {
   )
 }
 
-export function SessionRef({ sessionId, byName, inline }: SessionRefProps) {
+export function SessionRef({ sessionId, byName, inline, label: labelOverride }: SessionRefProps) {
   const navigate = useNavigate()
   const directory = useSessionDirectory()
   const entry = directory?.[sessionId]
-  const label = sessionRefLabel(sessionId, directory, byName)
+  const label = labelOverride ?? sessionRefLabel(sessionId, directory, byName)
   const onOpen = () => navigate(`/?session=${encodeURIComponent(sessionId)}`)
 
   if (entry?.missing) return <MissingRef sessionId={sessionId} label={label} />

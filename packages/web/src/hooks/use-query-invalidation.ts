@@ -60,7 +60,7 @@ export function useQueryInvalidation() {
 
     function flush() {
       clearTimers()
-      // A Todo mutation (drag commit, editor save, approval decision) holds an
+      // A Todo mutation (drag commit, editor save, status change) holds an
       // optimistic view of the todo caches — a refetch landing mid-flight could
       // clobber it. Defer ONLY the todo keys and retry after the next quiet
       // window; every other category flushes now.

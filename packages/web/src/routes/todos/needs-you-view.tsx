@@ -11,25 +11,21 @@ import {
 import { EmployeeChip } from "@/components/ui/employee-chip"
 import { STATUS_LABEL, effectiveMaxRounds, operatorSafeTodoError, provenanceLabel, publicWorkItemReference } from "@/lib/todos"
 import { legalTargets } from "@/lib/legal-targets"
-import { ATTENTION_GROUPS, attentionKind, stateKey, stopCauseQuote, type AttentionKind } from "./needs-you-support"
+import { ATTENTION_GROUPS, attentionKind, stopCauseQuote, type AttentionKind } from "./needs-you-support"
 import { ProvenanceIcon, StateCircle, StatusCircle } from "./state-glyph"
-import { rejectConsequence } from "./task-page/banner"
 import { reasonOf, rollupOf } from "./board/card"
 import { useBoardTrees } from "./board/use-board"
 import { useOpenDetails, useSetWorkItemStatus } from "./use-todos"
 import { displayNameOf, formatRelativeTime, stopMoveOf } from "./util"
 
 /* Todos v2 slice 6 stage C — the Attention inbox restyled to the approved
- * states mock (states.html §1, design-doc §6): a LIST, never a board. Three
- * kickers in fixed order — Approvals, Escalated, Blocked — true counts,
- * oldest-first within a group (the longest-waiting ask wins). Every entry is
- * the same object: neutral card, 34px state disc, title + mono ID line, then
- * the VOICE (attribution row + 2px-rail quote in the delegation language).
- * Actions per kind: approvals decide in place (Approve · Reject…, the note
- * carried by the rejection itself — see banner.tsx); escalated routes through
- * a legal-exit menu (human-only edges); blocked unblocks through its legal
- * manual exits. The menus consume the same legalTargets() module as drag and
- * the pickers — one legality truth. */
+ * states mock (states.html §1, design-doc §6): a LIST, never a board. Kickers
+ * in fixed order, true counts, oldest-first within a group (the
+ * longest-waiting ask wins). Every entry is the same object: neutral card,
+ * 34px state disc, title + mono ID line, then the VOICE (attribution row +
+ * 2px-rail quote in the delegation language). Blocked entries unblock through
+ * their legal manual exits. The menu consumes the same legalTargets() module as
+ * drag and the pickers — one legality truth. */
 
 function shortRef(id: string): string {
   return id.length > 18 ? `${id.slice(0, 17)}…` : id
@@ -151,8 +147,6 @@ function NeedsYouCard({
   openChildren,
   byName,
   resolving,
-  onApprove,
-  onReject,
   onTransition,
   onOpen,
 }: {
@@ -161,23 +155,14 @@ function NeedsYouCard({
   openChildren: number
   byName: Map<string, Employee>
   resolving: boolean
-  onApprove: (id: string) => void
-  onReject: (id: string, note: string) => void
   onTransition: (id: string, status: WorkItemStatusWire, cascade?: boolean) => void
   onOpen: (id: string) => void
 }) {
-  const [composing, setComposing] = useState(false)
-  const [note, setNote] = useState("")
   const kind = attentionKind(item)
-  const pending = kind === "approval"
   const tone = kind === "blocked" ? "var(--system-orange)" : "var(--accent)"
-  const verb = pending ? "asks" : "is blocked"
   const reason = reasonOf(item, detail)
-  const quote = pending
-    ? item.approvalRequest ?? "Awaiting your decision."
-    : stopCauseQuote(item) ?? reason
-      ?? "Blocked and waiting on a decision or missing input."
-  const railColor = pending ? "var(--fill-primary)" : `color-mix(in srgb, ${tone} 38%, transparent)`
+  const quote = stopCauseQuote(item) ?? reason ?? "Blocked and waiting on a decision or missing input."
+  const railColor = `color-mix(in srgb, ${tone} 38%, transparent)`
   const idLine = attentionIdLine(item, kind, detail)
 
   return (
@@ -187,7 +172,7 @@ function NeedsYouCard({
     >
       {/* Head: 34px disc · title over the mono ID line. */}
       <button type="button" className="focus-ring flex w-full items-start gap-3 rounded-lg text-left outline-none" onClick={() => onOpen(item.id)}>
-        <StateCircle keyOf={stateKey(kind)} size={34} />
+        <StateCircle keyOf="blocked" size={34} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-semibold leading-[1.35] text-[var(--text-primary)]">
             {item.title}
@@ -208,21 +193,12 @@ function NeedsYouCard({
         {item.assignee ? (
           <>
             <EmployeeChip employee={item.assignee} displayName={displayNameOf(item.assignee, byName)} size={22} />
-            <span className="text-[var(--text-tertiary)]">{verb}</span>
+            <span className="text-[var(--text-tertiary)]">is blocked</span>
           </>
         ) : (
           <WorkRef item={item} />
         )}
         <span className="text-[11px] text-[var(--text-quaternary)]">{formatRelativeTime(item.updatedAt)}</span>
-        {pending && item.approvalOperatorOnly && (
-          <span
-            data-testid="needs-operator-only"
-            title="No employee can decide this gate, including the COO and through escalation."
-            className="rounded-full bg-[var(--fill-tertiary)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]"
-          >
-            Yours only
-          </span>
-        )}
       </div>
 
       {/* …and their words behind the thread-rail (quote at 58px). */}
@@ -235,104 +211,19 @@ function NeedsYouCard({
         <p className="max-w-[62ch] text-[15px] leading-[1.55] text-[var(--text-secondary)]"><AttachmentRefText text={quote} /></p>
       </div>
 
-      {/* Actions per kind (states mock §1). */}
-      {pending && composing ? (
-        <form
-          className="ml-[58px] mt-3.5 flex flex-col gap-2.5"
-          onSubmit={(e) => {
-            e.preventDefault()
-            onReject(item.id, note.trim())
-          }}
-        >
-          <textarea
-            autoFocus
-            data-testid="needs-reject-note"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="What needs to change?"
-            aria-label="Rejection feedback"
-            rows={2}
-            className="apple-input w-full resize-none text-[length:var(--text-subheadline)]"
-          />
-          <p data-testid="needs-reject-consequence" className="text-[12px] leading-[1.45] text-[var(--text-tertiary)]">
-            {rejectConsequence(note)}
-          </p>
-          <div className="flex items-center gap-2.5">
-            <button
-              type="submit"
-              data-testid="needs-reject-confirm"
-              disabled={resolving}
-              className={BTN_FILLED}
-              style={note.trim() ? undefined : { color: "var(--system-red)" }}
-            >
-              {note.trim() ? "Send back" : "Reject"}
-            </button>
-            <button type="button" onClick={() => setComposing(false)} className={BTN_QUIET}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div className="ml-[58px] mt-3.5 flex flex-wrap items-center gap-2.5">
-          {pending ? (
-            <>
-              {/* A gate that offers variants can't be settled from a summary row —
-                  the pick belongs next to what is being picked between. */}
-              {item.approvalOptions?.length ? (
-                <button type="button" data-testid="needs-choose" onClick={() => onOpen(item.id)} className={BTN}
-                  style={{
-                    background: "color-mix(in srgb, var(--accent) 16%, transparent)",
-                    color: "var(--accent)",
-                    boxShadow: "var(--inset-shine)",
-                  }}
-                >
-                  Choose…
-                </button>
-              ) : (
-              <button
-                type="button"
-                data-testid="needs-approve"
-                disabled={resolving}
-                onClick={() => onApprove(item.id)}
-                className={BTN}
-                style={{
-                  background: "color-mix(in srgb, var(--system-green) 16%, transparent)",
-                  color: "var(--system-green)",
-                  boxShadow: "var(--inset-shine)",
-                }}
-              >
-                <Check size={13} strokeWidth={2.6} aria-hidden />
-                Approve
-              </button>
-              )}
-              <button
-                type="button"
-                data-testid="needs-reject"
-                disabled={resolving}
-                onClick={() => setComposing(true)}
-                className={BTN_QUIET}
-                style={{ color: "var(--system-red)" }}
-              >
-                Reject…
-              </button>
-            </>
-          ) : (
-            <>
-              <RouteMenu
-                label="Unblock…"
-                item={item}
-                openChildren={openChildren}
-                busy={resolving}
-                onTransition={onTransition}
-                testId="needs-unblock"
-              />
-              <button type="button" data-testid="needs-open" onClick={() => onOpen(item.id)} className={BTN_QUIET}>
-                Open
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      <div className="ml-[58px] mt-3.5 flex flex-wrap items-center gap-2.5">
+        <RouteMenu
+          label="Unblock…"
+          item={item}
+          openChildren={openChildren}
+          busy={resolving}
+          onTransition={onTransition}
+          testId="needs-unblock"
+        />
+        <button type="button" data-testid="needs-open" onClick={() => onOpen(item.id)} className={BTN_QUIET}>
+          Open
+        </button>
+      </div>
     </div>
   )
 }
@@ -355,7 +246,7 @@ export function NeedsYouEmpty() {
         </div>
         <h2 className="mt-4 text-[20px] font-bold tracking-[-0.41px] text-[var(--text-primary)]">All quiet.</h2>
         <p className="mt-1.5 text-[14px] leading-[1.5] text-[var(--text-tertiary)]">
-          Nothing needs you. Approvals, escalations and blocks land here the moment they exist.
+          Nothing needs you. Escalations and blocks land here the moment they exist.
         </p>
       </div>
     </div>
@@ -365,33 +256,23 @@ export function NeedsYouEmpty() {
 export function NeedsYouView({
   items,
   byName,
-  resolvingIds,
-  onApprove,
-  onReject,
   onOpen,
 }: {
   items: WorkItemCompactWire[]
   byName: Map<string, Employee>
-  resolvingIds: Set<string>
-  onApprove: (id: string) => void
-  onReject: (id: string, note: string) => void
   onOpen: (id: string) => void
 }) {
-  const visible = items.filter((item) => !resolvingIds.has(item.id))
 
   // The voice needs the reason note + rounds (details) and the roll-up gate
   // pre-check for the route menus (trees) — the inbox is small and bounded.
-  const detailIds = useMemo(() => visible.map((item) => item.id).slice(0, 60), [items, resolvingIds])
+  const detailIds = useMemo(() => items.map((item) => item.id).slice(0, 60), [items])
   const details = useOpenDetails(detailIds)
   const detailById = useMemo(() => {
     const map = new Map<string, WorkItemOpenDetailWire>()
     for (const d of details.data ?? []) map.set(d.workItem.id, d)
     return map
   }, [details.data])
-  const routeIds = useMemo(
-    () => visible.filter((item) => attentionKind(item) !== "approval").map((item) => item.id).slice(0, 60),
-    [items, resolvingIds],
-  )
+  const routeIds = detailIds
   const trees = useBoardTrees(routeIds)
   const openChildrenOf = (id: string, status: WorkItemStatusWire): number => {
     const tree = trees.data?.get(id)
@@ -417,12 +298,12 @@ export function NeedsYouView({
     )
   }
 
-  if (visible.length === 0) return <NeedsYouEmpty />
+  if (items.length === 0) return <NeedsYouEmpty />
 
   const grouped = ATTENTION_GROUPS.map((group) => ({
     ...group,
     // Oldest-first within a group — the longest-waiting ask wins (§6).
-    items: visible
+    items: items
       .filter((item) => attentionKind(item) === group.kind)
       .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)),
   })).filter((group) => group.items.length > 0)
@@ -445,9 +326,7 @@ export function NeedsYouView({
               detail={detailById.get(item.id)}
               openChildren={openChildrenOf(item.id, item.status)}
               byName={byName}
-              resolving={resolvingIds.has(item.id) || setStatus.isPending}
-              onApprove={onApprove}
-              onReject={onReject}
+              resolving={setStatus.isPending}
               onTransition={onTransition}
               onOpen={onOpen}
             />

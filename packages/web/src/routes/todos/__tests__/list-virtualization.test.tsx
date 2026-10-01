@@ -41,8 +41,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       assignWorkItem: vi.fn(),
       setWorkItemStatus: vi.fn(),
       updateWorkItem: vi.fn(),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -71,11 +69,6 @@ function compact(id: string, status: WorkItemStatusWire, rank: number): WorkItem
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: id,

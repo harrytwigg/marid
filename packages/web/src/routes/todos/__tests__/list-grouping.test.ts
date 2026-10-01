@@ -13,11 +13,6 @@ function item(id: string, status: WorkItemStatusWire): WorkItemCompactWire {
     department: null,
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: id,
@@ -49,21 +44,21 @@ describe("groupTodoListItems", () => {
     expect(groups.find((group) => group.key === "needs-you")?.items.map(({ id }) => id)).toEqual(["PLA-3"])
   })
 
-  it("an in_review approved leftover with attentionLane manager reaches Manager attention, not Needs you", () => {
+  it("an in_review leftover with attentionLane manager reaches Manager attention, not Needs you", () => {
     const leftover = {
       ...item("QPR-4", "in_review"),
       attentionLane: "manager" as const,
-      approvalState: "approved" as const,
       assignee: "platform-worker",
     }
-    const operatorGate = { ...item("QAP-10", "in_review"), approvalState: "pending" as const, attentionLane: "operator" as const }
+    const operatorGate = { ...item("QAP-10", "blocked"), attentionLane: "operator" as const }
     const empty = { items: [], total: 0 }
     const feed = deriveNeedsYou([leftover, operatorGate])
     const groups = groupTodoListItems(
       {
         backlog: empty, executing: empty,
-        in_review: { items: [leftover, operatorGate], total: 2 },
-        blocked: empty, done: empty, cancelled: empty,
+        in_review: { items: [leftover], total: 1 },
+        blocked: { items: [operatorGate], total: 1 },
+        done: empty, cancelled: empty,
       },
       feed,
     )
@@ -74,14 +69,14 @@ describe("groupTodoListItems", () => {
 
   it("a recovering API row reaches Recovering automatically and not Needs you", () => {
     const recovering = { ...item("QAP-2", "blocked"), attentionLane: "recovering" as const, assignee: "platform-worker" }
-    const operatorGate = { ...item("QAP-10", "in_review"), approvalState: "pending" as const, attentionLane: "operator" as const }
+    const operatorGate = { ...item("QAP-10", "blocked"), attentionLane: "operator" as const }
     const empty = { items: [], total: 0 }
     const feed = deriveNeedsYou([recovering, operatorGate])
     const groups = groupTodoListItems(
       {
         backlog: empty, executing: empty,
-        in_review: { items: [operatorGate], total: 1 },
-        blocked: { items: [recovering], total: 1 },
+        in_review: empty,
+        blocked: { items: [recovering, operatorGate], total: 2 },
         done: empty, cancelled: empty,
       },
       feed,

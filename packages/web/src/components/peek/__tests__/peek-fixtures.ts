@@ -41,13 +41,6 @@ export function detailOf(
       verifyPolicy: null,
       rounds: 0,
       budgetUsd: null,
-      approvalState: null,
-      approvalRequest: null,
-      approvalRef: null,
-      approvalTarget: null,
-      approvalEscalatedAt: null,
-      approvalDecidedBy: null,
-      approvalDecidedAt: null,
       // Only ICI-1 has a parent, so following it does not loop back on itself.
       parentId: id === "ICI-1" ? "ICI-9" : null,
       createdAt: "2026-08-01T00:00:00.000Z",

@@ -20,7 +20,6 @@ import {
 } from "@/lib/work-item-edit-wire"
 import type { WorkItemCommentPageWire, WorkItemCommentWire } from "@/lib/work-item-comment-wire"
 import type { WorkItemRunWire } from "@/lib/work-item-runs-wire"
-import type { ApprovalStateWire, WorkItemApprovalWire } from "@/lib/work-item-approval-wire"
 
 export interface TranscriptContentBlock {
   type: 'text' | 'tool_use' | 'tool_result' | 'thinking'
@@ -379,16 +378,6 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
   department: string | null
   source: WorkItemSourceWire
   sourceRef: string | null
-  approvalState: ApprovalStateWire | null
-  approvalRequest: string | null
-  approvalRef: string | null
-  /** Offered variants when the pending gate asks for a PICK (older gateways omit). */
-  approvalOptions?: string[] | null
-  approvalChoice?: string | null
-  /** Reserved for the operator: no employee decides it, not even by escalation (older gateways omit). */
-  approvalOperatorOnly?: boolean
-  approvalTarget: string | null
-  approvalEscalatedAt: string | null
   sessionRef?: WorkItemSessionRefWire | null
   /** Todos v2 (optional: older gateways omit them). */
   createdBy?: string
@@ -444,19 +433,6 @@ export interface WorkItemFullWire {
   verifyPolicy: VerifyPolicyWire | null
   rounds: number
   budgetUsd: number | null
-  approvalState: ApprovalStateWire | null
-  approvalRequest: string | null
-  approvalRef: string | null
-  /** Offered variants when the pending gate asks for a PICK (older gateways omit). */
-  approvalOptions?: string[] | null
-  approvalChoice?: string | null
-  /** The gate is reserved for the operator: no employee may decide it, not the
-   *  COO and not through escalation (older gateways omit). */
-  approvalOperatorOnly?: boolean
-  approvalTarget: string | null
-  approvalEscalatedAt: string | null
-  approvalDecidedBy: string | null
-  approvalDecidedAt: string | null
   /** Todos v2 (optional: older gateways omit them). */
   createdBy?: string
   parentId?: string | null
@@ -491,10 +467,6 @@ export interface WorkItemEventWire {
   detail: Record<string, unknown> | null
   createdAt: string
 }
-
-/** The approval gate's shapes live in work-item-approval-wire.ts; re-exported
- *  so the client surface stays one import. */
-export type { ApprovalStateWire, WorkItemApprovalWire } from "./work-item-approval-wire"
 
 /** One node of GET /api/work-items/:id/tree — a full row plus nested children
  *  (rank-then-id ordered, depth-capped server-side). */
@@ -546,23 +518,12 @@ export interface WorkItemDetailWire {
   relations?: WorkItemRelationWire[]
   /** The Todo's labels, ordered by name (optional: older gateways omit it). */
   labels?: WorkItemLabelWire[]
-  /** Approval history, oldest first (optional: older gateways omit it). */
-  approvals?: WorkItemApprovalWire[]
   /** The run ledger, oldest first (optional: older gateways omit it). */
   runs?: WorkItemRunWire[]
 }
 
 /** Lightweight batch enrichment used by board/attention rows. */
 export type WorkItemOpenDetailWire = Pick<WorkItemDetailWire, "workItem" | "events">
-
-export interface ApprovalDecisionResultWire {
-  workItem: WorkItemFullWire
-  escalated: boolean
-}
-
-export interface ApprovalEscalationResultWire {
-  workItem: WorkItemFullWire
-}
 
 /** A serialized session linked to a Todo (the sheet's "Executing session" link
  *  only needs the id + a status glance; the rest is passthrough). */
@@ -788,7 +749,7 @@ export const api = {
       origin,
     ),
   /** GRS-021c: create a Todo (the "+ New Todo" affordance). The operator caller
-   *  mints a `human`-source item; approvals structurally cannot be attached here. */
+   *  mints a `human`-source item. */
   createWorkItem: (input: {
     title: string
     body?: string
@@ -831,16 +792,6 @@ export const api = {
       signal ? { signal } : undefined,
     )
   },
-  /** GRS-021b: the operator's approval DECISION. Human-only server-side; a
-   *  tool-marked caller is refused 403. Send-back is `reject` (+ optional note). */
-  decideWorkItemApproval: (id: string, decision: "approve" | "reject", note?: string, choice?: string) =>
-    post<ApprovalDecisionResultWire>(`/api/work-items/${encodeURIComponent(id)}/approval`, {
-      decision,
-      ...(note !== undefined && note !== "" ? { note } : {}),
-      ...(choice !== undefined ? { choice } : {}),
-    }),
-  escalateWorkItemApproval: (id: string) =>
-    post<ApprovalEscalationResultWire>(`/api/work-items/${encodeURIComponent(id)}/approval/escalate`, {}),
   /** GRS-002: execution attempts linked to a Todo (the sheet's session link). */
   listWorkItemSessions: (id: string) =>
     get<LinkedSessionWire[]>(`/api/work-items/${encodeURIComponent(id)}/sessions`),

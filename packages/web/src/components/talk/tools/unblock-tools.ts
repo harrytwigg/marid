@@ -1,106 +1,25 @@
-import { api, type WorkItemFullWire, type WorkItemStatusWire } from "@/lib/api"
+import { api, type WorkItemStatusWire } from "@/lib/api"
 import { legalTargets } from "@/lib/legal-targets"
 import { withConsent } from "./consent"
 import { params, str, type TalkTool, type ToolArgs, type ToolResult } from "./tool-spec"
 import { writeFailed } from "./write-lane"
 
 /**
- * The decisions, spoken.
+ * Unblocking a Todo, spoken.
  *
- * Approving a gate and unblocking a Todo are the two verbs the board has that
- * reach past this browser the moment they land: an approval releases whatever
- * was waiting on it, and an unblock puts an agent back on the work. Neither has
- * a reversal, so both are situation-first — the sheet is what stands in for
- * the undo the fast lane would have offered.
+ * An unblock reaches past this browser the moment it lands: it puts an agent
+ * back on the work, and has no reversal, so it is situation-first — the sheet
+ * is what stands in for the undo the fast lane would have offered.
  *
- * Each reads the thing it is about to decide BEFORE it asks, so the sheet quotes
- * the real request rather than the model's summary of it, and so a call against
- * a gate that is not waiting is refused without troubling the operator at all.
+ * It reads the Todo BEFORE it asks, so a call against one that is not blocked
+ * is refused without troubling the operator at all.
  */
 
 const TALK = "talk" as const
-const DECISIONS = ["approve", "reject"] as const
-type Decision = (typeof DECISIONS)[number]
 
 /** What the edge map offers out of `blocked`. Whether THIS Todo may take one of
  *  them now still depends on its sub-tasks, and is checked when the call comes. */
 const UNBLOCK_TARGETS: readonly WorkItemStatusWire[] = legalTargets("blocked").map((target) => target.status)
-
-function optional(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined
-}
-
-/**
- * Why the decision as spoken cannot be made, or null when it can.
- *
- * A gate that offers options asks WHICH ONE, not whether, so approving it
- * without naming one would be the model picking on the operator's behalf — and
- * a picked option that is not on the list is a mishearing, not a vote.
- */
-function refuseDecision(gate: WorkItemFullWire, decision: Decision, choice: string | undefined): string | null {
-  if (gate.approvalState !== "pending") {
-    return `${gate.id} has nothing waiting to be decided — its approval is ${gate.approvalState ?? "not set"}. Say so, and nothing was written.`
-  }
-  const options = gate.approvalOptions ?? []
-  if (decision !== "approve" || options.length === 0) return null
-  if (!choice) {
-    return `${gate.id} asks which one, not whether: it offers ${options.join(", ")}. Ask the operator which they want and call this again with "choice".`
-  }
-  if (!options.includes(choice)) {
-    return `"${choice}" is not one of the options on ${gate.id} — it offers ${options.join(", ")}. Read them out and let the operator pick, rather than deciding on the nearest.`
-  }
-  return null
-}
-
-const decideApproval: TalkTool = {
-  name: "talk_decide_approval",
-  description:
-    "Approve or send back a Todo's pending approval. Asks first: whatever was waiting on the gate moves as soon as it is decided, and there is no way to take a decision back.",
-  parameters: params(
-    {
-      id: str("The full Todo id, such as \"ABC-59\"."),
-      decision: str("Approve it, or reject it to send it back.", DECISIONS),
-      note: str("What the operator said about the decision, in their words."),
-      choice: str("Which of the gate's offered options they picked, when it asks for one."),
-    },
-    ["id", "decision"],
-  ),
-  execute: async (args: ToolArgs): Promise<ToolResult> => {
-    const id = String(args.id)
-    const decision = String(args.decision) as Decision
-    const note = optional(args.note)
-    const choice = optional(args.choice)
-
-    let gate: WorkItemFullWire
-    try {
-      gate = (await api.getWorkItem(id)).workItem
-    } catch (error) {
-      return writeFailed(`read ${id} before deciding its approval`, error)
-    }
-    const refusal = refuseDecision(gate, decision, choice)
-    if (refusal) return { ok: false, error: refusal }
-
-    const verb = decision === "approve" ? "Approve" : "Send back"
-    return withConsent(
-      {
-        tool: "talk_decide_approval",
-        title: `${verb} ${id}?`,
-        hint: `It asks: ${gate.approvalRequest ?? "(the gate did not say what it wants)"}${choice ? ` — picking ${choice}` : ""}`,
-        confirm: `${verb} it`,
-        subject: id,
-      },
-      async () => {
-        try {
-          await api.decideWorkItemApproval(id, decision, note, choice)
-          return { ok: true, data: { performed: `${decision === "approve" ? "Approved" : "Sent back"} ${id}.`, subject: id, ...(choice ? { choice } : {}) } }
-        } catch (error) {
-          return writeFailed(`decide the approval on ${id}`, error)
-        }
-      },
-    )
-  },
-}
-
 
 /** The close gate's pre-check, read the way the Todo peek reads it: a failed
  *  read is reported rather than counted as zero, because defaulting to zero
@@ -194,4 +113,4 @@ const unblockTodo: TalkTool = {
   },
 }
 
-export const APPROVAL_TOOLS: readonly TalkTool[] = [decideApproval, unblockTodo]
+export const UNBLOCK_TOOLS: readonly TalkTool[] = [unblockTodo]

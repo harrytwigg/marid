@@ -17,7 +17,7 @@ import { commentHeadRequest, mergeCommentPages } from "./comment-window"
 import { displayNameOf, formatRelativeTime } from "../util"
 import { AttachmentTile, useAttachmentPreview } from "./attachment-preview"
 import { formatBytes } from "./attachments"
-import { SessionActor } from "./session-ref"
+import { CommentSessionLink, SessionActor } from "./session-ref"
 import { WhisperLine } from "./whisper"
 import { buildFeed, stripCommentMarkers } from "./activity-feed"
 import { RunEndLine, RunStartLine } from "./runs"
@@ -33,7 +33,6 @@ export const COMMENT_COLLAPSE_THRESHOLD = 320
 function avatarFor(comment: WorkItemCommentWire): string {
   return comment.authorKind === "operator" ? "operator" : comment.author
 }
-
 
 function commentAuthor(comment: WorkItemCommentWire, byName: Map<string, Employee>): React.ReactNode {
   if (comment.authorKind === "operator") return "You"
@@ -120,6 +119,7 @@ function CommentBlock({
         <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">{commentAuthor(comment, byName)}</span>
         <span className="text-[10.5px] text-[var(--text-quaternary)]">{formatRelativeTime(comment.createdAt)}</span>
         {comment.editedAt && !tombstoned && <span className="text-[10.5px] text-[var(--text-quaternary)]">(edited)</span>}
+        <CommentSessionLink sessionId={comment.sessionId} byName={byName} />
       </div>
       {editing ? (
         <div className="ml-[38px] mt-[5px]">
