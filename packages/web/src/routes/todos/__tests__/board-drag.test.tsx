@@ -133,9 +133,10 @@ describe("board drag legality", () => {
       window.dispatchEvent(pointer("pointermove", 220, 50)) // beyond threshold → lift
     })
 
-    // From in_review: backlog and executing are illegal manual targets — they recede.
+    // From in_review: backlog is an illegal manual target, so it recedes;
+    // In progress stays live, since sending the work back is the review bounce.
     expect(screen.getByTestId("board-column-backlog").style.opacity).toBe("0.38")
-    expect(screen.getByTestId("board-column-executing").style.opacity).toBe("0.38")
+    expect(screen.getByTestId("board-column-executing").style.opacity).not.toBe("0.38")
 
     await act(async () => {
       window.dispatchEvent(pointer("pointerup", 220, 50))

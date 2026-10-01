@@ -94,10 +94,11 @@ export function legalTargets(
   const openChildren = ctx.openChildren ?? 0
   const out: LegalTargetOption[] = []
   for (const to of FIXTURE.edges[from] ?? []) {
-    // Manual-start rule: a human move INTO executing is legal only from
-    // backlog. From in_review, send back is a review verdict on the
-    // item (bounce, rounds++), never a drag; from blocked, work
-    // resumes through reassignment. Illegal ≠ gated: the edge is absent.
+    // Manual-start rule: a human move INTO executing is legal from backlog
+    // (a start) and from in_review, where sending the work back is the
+    // review bounce (rounds++, and the last round stops it in blocked); from
+    // blocked, work resumes through reassignment. Illegal ≠ gated: the edge
+    // is absent.
     if (to === "executing" && !MANUAL_EXECUTING_FROM.has(from)) continue
     out.push(CLOSE_GATED.has(to) && openChildren > 0 ? closeTarget(to, ctx) : { status: to, gated: false })
   }

@@ -69,6 +69,8 @@ function pendingApprovals(db: DatabaseType): PendingApprovalRow[] {
 function blockForAnswer(db: DatabaseType, row: PendingApprovalRow, now: string): void {
   const hasHint = db.prepare("SELECT 1 FROM work_item_stop_cause WHERE work_item_id = ? AND unblock_what IS NOT NULL")
     .get(row.work_item_id) !== undefined;
+  // A person was asked: no park may hold the Todo out of their queue.
+  db.prepare("UPDATE work_item_stop_cause SET parked_until = NULL WHERE work_item_id = ?").run(row.work_item_id);
   if (!hasHint) {
     db.prepare(
       `INSERT INTO work_item_stop_cause (work_item_id, parked_until, unblock_what, unblock_who, updated_at)

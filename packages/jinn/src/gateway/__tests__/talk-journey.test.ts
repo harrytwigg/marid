@@ -272,6 +272,16 @@ describe("PLA-224 journey", () => {
     expect(reviewed.body).toMatchObject({ ok: true, evidence: { status: "in_review" } });
     const { listComments } = await import("../../work-items/comments.js");
     expect(listComments(todo.id).comments.map((c) => [c.body, c.authorKind])).toContainEqual(["ready for a look", "operator"]);
+
+    // Sending it back is the review bounce, by voice as from the board.
+    const sentBack = await call(context, "POST", orb.route, {
+      providerCallId: "status-3",
+      tool: "talk_set_todo_status",
+      arguments: JSON.stringify({ id: todo.id, status: "executing", note: "add the midnight case" }),
+    });
+    expect(sentBack.body).toMatchObject({ ok: true, evidence: { status: "executing" } });
+    expect(workItems.getWorkItem(todo.id)).toMatchObject({ status: "executing", rounds: 1 });
+    expect(listComments(todo.id).comments.map((c) => c.body)).toContain("add the midnight case");
   });
 
   it("step 5a: an id that does not exist is refused in the words the operator needs", async () => {

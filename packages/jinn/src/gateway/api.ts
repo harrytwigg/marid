@@ -237,7 +237,7 @@ import { checkAssignee } from "./todo-assignee.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { openWorkItemRun } from "../work-items/runs.js";
 import { archiveWorkItem } from "../work-items/archive.js";
-import { postReviewHandoff } from "../work-items/review-handoff.js";
+import { postReviewNote } from "../work-items/review-handoff.js";
 import { resolveOrgRoot } from "./work-item-owner.js";
 import { orgRegistry } from "./org-registry.js";
 import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
@@ -2575,8 +2575,8 @@ export async function handleApiRequest(
         if (actingAsOperator && result.item.status === "done") {
           addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
         }
-        // The review handoff is a comment, under the session that made the move; a retried move posts it too.
-        if (target === "in_review") postReviewHandoff(params.id, { actor, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), origin: caller.origin });
+        // A review handoff or send-back note is a comment under whoever moved it; a retried move posts it too.
+        if (target === "in_review" || target === "executing") postReviewNote(params.id, { actor, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), origin: caller.origin });
         const activityReceiptId = persistTodoMutationActivity(
           req,
           context,

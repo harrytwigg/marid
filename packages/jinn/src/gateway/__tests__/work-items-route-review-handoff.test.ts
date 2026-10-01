@@ -168,3 +168,28 @@ describe("the Todo's session tree", () => {
     expect(cap.body.directory[session.id]).toMatchObject({ id: session.id, employee: "solo-worker", missing: false });
   });
 });
+
+describe("the operator sending work back from review", () => {
+  it("bounces it to executing, counts the round and posts the feedback once", async () => {
+    const item = todo("in_review");
+    const first = await put(item.id, { status: "executing", note: "The edge case at midnight still fails." });
+    expect([first.status, first.body.workItem?.status, first.body.workItem?.rounds]).toEqual([200, "executing", 1]);
+    await put(item.id, { status: "executing", note: "The edge case at midnight still fails." });
+    expect(listComments(item.id).comments.map((c) => [c.body, c.authorKind])).toEqual([["The edge case at midnight still fails.", "operator"]]);
+  });
+
+  it("stops it in blocked for the operator on the last round allowed", async () => {
+    const item = todo("in_review");
+    await put(item.id, { status: "executing" });
+    await post(item.id, { status: "in_review", note: "second pass" }, toolHeaders(employeeSession().id));
+    const capped = await put(item.id, { status: "executing", note: "still wrong" });
+    expect([capped.status, capped.body.workItem?.status, capped.body.workItem?.rounds, capped.body.escalated]).toEqual([200, "blocked", 2, true]);
+    expect(listComments(item.id).comments.map((c) => c.body)).toContain("still wrong");
+  });
+
+  it("leaves the agent taking its own work back out of review uncounted", async () => {
+    const item = todo("in_review");
+    const cap = await post(item.id, { status: "executing" }, toolHeaders(employeeSession().id));
+    expect([cap.status, cap.body.workItem?.rounds]).toEqual([200, 0]);
+  });
+});

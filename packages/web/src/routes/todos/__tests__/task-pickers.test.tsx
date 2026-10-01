@@ -106,18 +106,18 @@ describe("the status picker", () => {
 
     const picker = await screen.findByTestId("picker-status")
     // Current first (checked), then the design's presentation order (F2):
-    // Done · Blocked · Cancelled.
+    // In progress (sending it back) · Done · Blocked · Cancelled.
     const rows = [...picker.querySelectorAll<HTMLElement>('[data-testid^="status-option-"]')]
     expect(rows.map((row) => row.dataset.testid)).toEqual([
       "status-option-in_review",
+      "status-option-executing",
       "status-option-done",
       "status-option-blocked",
       "status-option-cancelled",
     ])
     expect(screen.queryByTestId("status-option-backlog")).toBeNull()
-    expect(screen.queryByTestId("status-option-executing")).toBeNull()
     expect(picker.textContent).toContain("Only legal moves are listed")
-    expect(picker.textContent).toContain("Backlog and In progress aren't reachable from In review")
+    expect(picker.textContent).toContain("Backlog isn't reachable from In review")
   })
 
   it("renders a gated Cancelled disabled with the inline reason while a sub-task is open, and refuses the click", async () => {

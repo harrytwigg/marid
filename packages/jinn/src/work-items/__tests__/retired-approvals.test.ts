@@ -99,18 +99,18 @@ describe("carrying pending approvals over", () => {
     expect(eligibleBacklog(resolveIdleCapacityPolicy({ enabled: true })).eligible.map((row) => row.id)).not.toContain(item.id);
   });
 
-  it("names the routed employee as who it waits on, and keeps a blocked Todo's own hint", () => {
+  it("names the routed employee as who it waits on, and keeps a blocked Todo's own hint but not its park", () => {
     const routed = store.createWorkItem({ title: "for the manager" });
     legacyApproval(routed.id, { target: "eng-manager" });
     const blocked = store.createWorkItem({ title: "already blocked", status: "blocked" });
-    db.prepare("INSERT INTO work_item_stop_cause (work_item_id, unblock_what, unblock_who, updated_at) VALUES (?, 'the key', 'ops', ?)")
-      .run(blocked.id, new Date().toISOString());
+    db.prepare("INSERT INTO work_item_stop_cause (work_item_id, parked_until, unblock_what, unblock_who, updated_at) VALUES (?, ?, 'the key', 'ops', ?)")
+      .run(blocked.id, new Date(Date.now() + 86_400_000).toISOString(), new Date().toISOString());
     legacyApproval(blocked.id);
 
     retired.postRetiredApprovals(db);
 
     expect(stopCause(routed.id)).toMatchObject({ unblock_who: "eng-manager" });
-    expect(stopCause(blocked.id)).toMatchObject({ unblock_what: "the key", unblock_who: "ops" });
+    expect(stopCause(blocked.id)).toEqual({ parked_until: null, unblock_what: "the key", unblock_who: "ops" });
     expect(store.listWorkItemEvents(blocked.id).some((event) => event.kind === "status_change" && event.actor === retired.RETIRED_APPROVAL_AUTHOR)).toBe(false);
   });
 

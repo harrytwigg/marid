@@ -11,11 +11,11 @@ const statuses = (targets: ReturnType<typeof legalTargets>) => targets.map((t) =
 
 describe("legalTargets — manual operator moves, ungated", () => {
   const MATRIX: Record<WorkItemStatusWire, WorkItemStatusWire[]> = {
-    // executing reachable only from backlog (manual-start rule).
+    // executing reachable from backlog (a start) and in_review (the bounce).
     backlog: ["executing", "in_review", "blocked", "done", "cancelled"],
     executing: ["backlog", "in_review", "blocked", "done", "cancelled"],
-    // Send back is a review verdict, never a manual move: executing absent.
-    in_review: ["done", "blocked", "cancelled"],
+    // Sending the work back is the review bounce.
+    in_review: ["executing", "done", "blocked", "cancelled"],
     // Unblock resumes through backlog; executing absent (manual rule).
     blocked: ["backlog", "in_review", "done", "cancelled"],
     // Sticky terminals exit on the human surface only — which this is.
@@ -37,7 +37,7 @@ describe("legalTargets — manual operator moves, ungated", () => {
       expect(offered).not.toContain(from)
     }
     expect(statuses(legalTargets("in_review"))).not.toContain("backlog")
-    expect(statuses(legalTargets("in_review"))).not.toContain("executing")
+    expect(statuses(legalTargets("blocked"))).not.toContain("executing")
   })
 })
 
@@ -107,10 +107,11 @@ describe("closeGateCounts — the pre-check read off a loaded tree", () => {
 describe("canDropOn — drag legality", () => {
   it("legal ungated edges are live targets", () => {
     expect(canDropOn("backlog", "executing")).toBe(true)
+    expect(canDropOn("in_review", "executing")).toBe(true)
     expect(canDropOn("done", "backlog")).toBe(true)
   })
   it("illegal edges are not targets", () => {
-    expect(canDropOn("in_review", "executing")).toBe(false)
+    expect(canDropOn("blocked", "executing")).toBe(false)
     expect(canDropOn("in_review", "backlog")).toBe(false)
     expect(canDropOn("done", "done")).toBe(false)
   })
