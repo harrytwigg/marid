@@ -13,7 +13,7 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
  *   closing, cancelling, reopening.
  * - The **agent lane** is every other session, review delegates included. It
  *   works inside the open statuses (`isAgentLaneMove`) and never closes,
- *   cancels or reopens.
+ *   cancels or reopens; a move into `in_review` carries a summary.
  * - The **coordinator lane** is the one exception: the operator's coordinator
  *   chat may close a Todo as `done` on the operator's behalf, with a reason
  *   the gateway posts on the Todo. Nothing else rides on it.
@@ -82,6 +82,11 @@ export function resolveStatusLane(
   if (closed) return refuse(403, `Todo ${item.id} is ${item.status}; reopening closed work is the operator's`);
   if (!isAgentLaneMove(item.status, target)) {
     return refuse(403, `${item.status} → ${target} is not an agent move on Todo ${item.id}: ${AGENT_LANE_SHAPE}`);
+  }
+  // Handing work to review is a handoff the operator reads: it carries a
+  // summary, which the gateway posts on the Todo as a comment.
+  if (target === "in_review" && item.status !== "in_review" && !note) {
+    return refuse(400, `moving Todo ${item.id} to in_review needs a summary in note: what was done and where the evidence is; it is posted on the Todo as a comment`);
   }
   return { ok: true, lane: { kind: "agent" } };
 }

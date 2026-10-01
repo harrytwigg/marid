@@ -30,8 +30,7 @@ The tools you need take these arguments:
 - list_employees {}, get_employee { name }
 - delegate_task { task, employee, workItemId }
 - comment_work_item { id, body }
-- request_work_item_approval { id, request }
-- list_sessions { scope }, send_to_session { sessionId, message }
+- update_work_item { id, status, note, unblockHint }
 
 For the Todo named in your prompt:
 1. Read it with get_work_item { id }.
@@ -40,9 +39,7 @@ For the Todo named in your prompt:
 
 A Todo that a live session already claimed will refuse your claim with a 409 naming the session that holds it. That refusal is correct and it means the Todo is already moving: report it in a comment and stop. Never retry around it, and never start a second attempt at the same work.
 
-Do not perform the Todo yourself, and never create untracked work. If no existing employee is a credible fit, hand it up rather than stopping at a comment: call request_work_item_approval { id, request } on the Todo, naming the missing role and asking the COO to take it over or name the owner. A 403 saying a session cannot run work as the employee-hierarchy root is the same case rather than a wall — that guard stops a session from minting a root-identity child, and this approval is the sanctioned way to put the work in the COO's hands. Any other refusal from delegate_task goes into that request verbatim.
-
-An approval on its own waits in a queue nobody polls, so wake the COO as well: find its session with list_sessions { scope: "recent" } and send_to_session { sessionId, message } naming this Todo's id and what is missing. That wake is best-effort — if you cannot identify the session, the approval still stands and the Todo is not lost. Comment what you escalated, then end your turn.`,
+Do not perform the Todo yourself, and never create untracked work. If no existing employee is a credible fit, the Todo is at a dead end, and a dead end is not something you may leave unsaid. Stop it for the operator: call update_work_item { id, status: "blocked", note, unblockHint } with an unblockHint of what is missing and who: "the operator", then comment_work_item { id, body } saying what is needed and offering the operator concrete options (for example: hire the missing role, name an existing employee to take it, or rescope the Todo). Leave the assignee as it is; the Blocked column is what puts the Todo in front of the operator. A 403 saying a session cannot run work as the employee-hierarchy root is the same case rather than a wall: that guard stops a session from minting a root-identity child, so block the Todo the same way and offer the operator the options. Any other refusal from delegate_task goes into that comment verbatim. Then end your turn.`,
     emoji: "🧭",
     jinnMcp: true,
     system: true,
@@ -67,7 +64,7 @@ Rules that make this employee safe to run unattended:
 - Never do the work yourself, and never create untracked work.
 - A capture may be a voice transcription and may be misheard. Shape what was plainly meant; if it is unintelligible rather than merely rough, create nothing and say so.
 - A 409 claim conflict on dispatch means a live session already holds the Todo: report the refusal verbatim in a Todo comment and stop. That refusal is correct, so do not work around it.
-- Any other dispatch refusal is a dead end, and a dead end is not an outcome you may leave the Todo in. Call request_work_item_approval on the Todo you just created, quoting the refusal and asking the COO to take it over, then wake the COO with list_sessions and send_to_session naming the Todo's id. The approval is what makes the hand-off durable; the wake is best-effort. Comment what you escalated and stop.`,
+- Any other dispatch refusal is a dead end, and a dead end is not an outcome you may leave unsaid. Move the Todo you just created to blocked with update_work_item { id, status: "blocked", note, unblockHint }, with an unblockHint of what is missing and who: "the operator", then comment on it quoting the refusal verbatim and offering the operator concrete options for what to do next. Leave the assignee unset; the Blocked column is what puts the Todo in front of the operator. Then stop.`,
     emoji: "✍️",
     jinnMcp: true,
     system: true,

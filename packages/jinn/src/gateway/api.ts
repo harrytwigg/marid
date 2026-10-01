@@ -920,6 +920,12 @@ function workItemCommentAuthor(caller: WorkItemCaller): { author: string; author
   return { author: caller.session.employee ?? workItemActor(caller), authorKind: 'employee' };
 }
 
+/** The session a comment came from, from the verified caller identity — the
+ *  agent never supplies it. The operator's own surface has none. */
+function workItemCommentSession(caller: WorkItemCaller): { sessionId?: string } {
+  return caller.kind === 'session' ? { sessionId: caller.callerId } : {};
+}
+
 /** Attachment identity mirrors the comments model: server-stamped, pair-safe. */
 function workItemAttachmentActor(caller: WorkItemCaller): AttachmentActor {
   return { ...workItemCommentAuthor(caller), operator: caller.kind === 'operator' };
@@ -2604,7 +2610,12 @@ export async function handleApiRequest(
         // The coordinator's reason is the record of why the operator's decision
         // was taken for them: it goes on the Todo, under the coordinator's session.
         if (actingAsOperator && result.item.status === "done") {
-          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
+          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
+        }
+        // The review handoff is a comment: the summary a move into in_review
+        // carries goes on the Todo, under the session that made the move.
+        if (note && target === "in_review" && item.status !== "in_review" && result.item.status === "in_review") {
+          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: note, origin: caller.origin });
         }
         const activityReceiptId = persistTodoMutationActivity(
           req,
@@ -2831,6 +2842,7 @@ export async function handleApiRequest(
           workItemId: params.id,
           body: text,
           ...workItemCommentAuthor(caller),
+          ...workItemCommentSession(caller),
           parentCommentId,
           origin: caller.origin,
         });

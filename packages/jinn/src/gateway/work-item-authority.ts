@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
-import { resolveApprovalRouteTarget, resolveRootApprovalTarget } from "./approval-authority.js";
 import { isOrgAncestor, resolveOrgHierarchy } from "./org-hierarchy.js";
 import { orgRegistry } from "./org-registry.js";
 import type { WorkItemCaller } from "./work-item-arming.js";
+import { resolveOrgRoot, resolveWorkItemOwner } from "./work-item-owner.js";
 import { isPortalAgentSession } from "../sessions/registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
@@ -14,10 +14,9 @@ import type { WorkItem } from "../work-items/store.js";
  * Who may act on a Todo when the caller is not the operator.
  *
  * The route file asks these questions on the way into assign, archive,
- * dispatch, delegate, request-approval, and status, and each answer is a rule
- * rather than plumbing — so they read together here instead of a page apart
- * among the handlers. Approval DECISIONS are a separate authority and live in
- * `approval-authority.ts`.
+ * dispatch, delegate, and status, and each answer is a rule rather than
+ * plumbing — so they read together here instead of a page apart among the
+ * handlers. Who owns a Todo and who the root is live in `work-item-owner.ts`.
  */
 
 export function ownsWorkItem(session: Session, item: WorkItem, linked: Session[]): boolean {
@@ -30,9 +29,9 @@ export function ownsWorkItem(session: Session, item: WorkItem, linked: Session[]
  *  everywhere, the routed owner has it on its own, and a manager or executive
  *  has it over anyone below them in the tree. */
 function hasStandingOverWorkItem(roster: Map<string, Employee>, employee: Employee, employeeName: string, item: WorkItem): boolean {
-  const root = resolveRootApprovalTarget();
+  const root = resolveOrgRoot();
   if (root?.kind === 'employee' && root.name === employeeName) return true;
-  const owner = resolveApprovalRouteTarget(item).owner;
+  const owner = resolveWorkItemOwner(item);
   if (owner === employeeName) return true;
   if (!owner || (employee.rank !== 'manager' && employee.rank !== 'executive')) return false;
   return isOrgAncestor(resolveOrgHierarchy(roster), employeeName, owner);
