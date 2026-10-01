@@ -226,7 +226,7 @@ import {
 } from "../work-items/attachments.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { authorizeActingAsOperator, resolveArmingDelegate, workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
-import { authorizeAgentWorkItemStatus, authorizeWorkItemOwnerManagerOrRoot, ownsWorkItem } from "./work-item-authority.js";
+import { authorizeAgentWorkItemStatus, authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot, ownsWorkItem } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { listDepartmentsWithCounts } from "../work-items/departments.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
@@ -3672,16 +3672,10 @@ export async function handleApiRequest(
           return json(res, { error: `Todo ${requestedWorkItemId} is ${workItem.status} and cannot accept a new delegation` }, 409);
         }
         if (delegationCaller.kind === "session") {
-          const callerSession = getSession(delegationCaller.callerId)!;
-          const callerCreated = workItem.sourceRef?.startsWith(`session:${delegationCaller.callerId}:`)
-            || workItem.sourceRef?.startsWith(`delegate:${delegationCaller.callerId}:`);
-          const authorized = callerCreated
-            ? { ok: true as const }
-            : authorizeWorkItemOwnerManagerOrRoot(
-                { kind: "session", callerId: delegationCaller.callerId, session: callerSession },
-                workItem,
-                "delegate",
-              );
+          const authorized = authorizeWorkItemDelegation(
+            { kind: "session", callerId: delegationCaller.callerId, session: getSession(delegationCaller.callerId)! },
+            workItem,
+          );
           if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
         }
         dispatcherHandoffFrom = delegationCaller.kind === "session"

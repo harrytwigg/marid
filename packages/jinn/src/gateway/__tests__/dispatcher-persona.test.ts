@@ -35,13 +35,25 @@ describe("Todo Dispatcher persona — workflow-aware routing", () => {
   it("looks for a Workflow before an employee, and says so in that order", () => {
     expect(persona).toContain("list_workflows");
     expect(persona).toContain("get_workflow");
-    expect(persona.indexOf("list_workflows")).toBeLessThan(persona.indexOf("find_employees"));
+    expect(persona.indexOf("list_workflows")).toBeLessThan(persona.indexOf("list_employees"));
   });
 
   it("keeps the employee branch as the fallback", () => {
-    expect(persona).toContain("find_employees");
+    expect(persona).toContain("list_employees");
     expect(persona).toContain("get_employee");
     expect(persona).toContain("delegate_task");
+  });
+
+  // find_employees refuses a call with no filter; the whole roster is list_employees.
+  it("reads the roster with list_employees, not an unfiltered find_employees", () => {
+    expect(persona).toContain("list_employees {}");
+    expect(persona).not.toContain("find_employees");
+  });
+
+  // Dispatch on an assigned Todo is how the operator starts the employee they
+  // picked; overriding that choice is allowed, but it is not the default.
+  it("makes the existing assignee the default delegate", () => {
+    expect(persona).toMatch(/already has an assignee[^.]*: delegating to them is the default/);
   });
 
   // Fire-and-forget was the specific failure mode this rewrite exists to stop.
@@ -115,3 +127,48 @@ describe("System employee personas — handing a Todo up instead of dead-ending"
     expect(shaper).not.toContain("escalate_work_item_approval");
   });
 });
+
+/**
+ * The personas name MCP tools and their arguments in prose, and nothing else
+ * checks that prose against the tools. The Dispatcher's first real run guessed
+ * argument names for get_work_item and delegate_task, and called find_employees
+ * with no filter, which the tool refuses. So every tool a persona names must
+ * exist, and every `tool { arg, ... }` it writes must use only arguments that
+ * tool takes, with its required ones present.
+ */
+describe.each(SYSTEM_EMPLOYEES.map((employee) => [employee.name, employee.persona] as const))(
+  "%s persona — tool signatures",
+  (_name, text) => {
+    const tools = new Map(buildTools().map((tool) => [tool.name, tool]));
+
+    it("names only MCP tools that exist", () => {
+      // Snake_case words are tool names in these personas; nothing else is written that way.
+      const named = [...new Set(text.match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? [])];
+      expect(named.filter((name) => !tools.has(name))).toEqual([]);
+    });
+
+    it("writes every tool call with arguments the tool actually takes", () => {
+      for (const { tool, args } of callShapes(text)) {
+        const schema = tools.get(tool)!.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
+        const properties = Object.keys(schema.properties ?? {});
+        expect({ tool, unknownArgs: args.filter((arg) => !properties.includes(arg)) }).toEqual({ tool, unknownArgs: [] });
+        expect({ tool, missingRequired: (schema.required ?? []).filter((arg) => !args.includes(arg)) }).toEqual({ tool, missingRequired: [] });
+      }
+    });
+  },
+);
+
+it("spells out the call shape of every tool the Dispatcher's routing depends on", () => {
+  const shaped = new Set(callShapes(persona).map((shape) => shape.tool));
+  for (const tool of ["get_work_item", "delegate_task", "comment_work_item", "request_work_item_approval", "start_workflow_run", "get_employee"]) {
+    expect(shaped).toContain(tool);
+  }
+});
+
+/** Every `tool_name { a, b }` / `tool_name { a: "x" }` call shape in a persona. */
+function callShapes(text: string): Array<{ tool: string; args: string[] }> {
+  return [...text.matchAll(/\b([a-z]+(?:_[a-z]+)+) \{([^}]*)\}/g)].map(([, tool, inner]) => ({
+    tool,
+    args: inner.split(",").map((part) => part.split(":")[0].trim()).filter(Boolean),
+  }));
+}

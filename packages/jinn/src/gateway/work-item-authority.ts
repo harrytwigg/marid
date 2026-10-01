@@ -1,9 +1,11 @@
+import crypto from "node:crypto";
 import { resolveApprovalRouteTarget, resolveRootApprovalTarget } from "./approval-authority.js";
 import { isOrgAncestor, resolveOrgHierarchy } from "./org-hierarchy.js";
 import { orgRegistry } from "./org-registry.js";
 import type { WorkItemCaller } from "./work-item-arming.js";
 import { isPortalAgentSession, listSessionsByWorkItem } from "../sessions/registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
+import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
 import type { WorkItem, WorkItemStatus } from "../work-items/store.js";
@@ -11,7 +13,7 @@ import type { WorkItem, WorkItemStatus } from "../work-items/store.js";
 /**
  * Who may act on a Todo when the caller is not the operator.
  *
- * The route file asks these three questions on the way into assign, archive,
+ * The route file asks these questions on the way into assign, archive,
  * dispatch, delegate, request-approval, and status, and each answer is a rule
  * rather than plumbing — so they read together here instead of a page apart
  * among the handlers. Approval DECISIONS are a separate authority and live in
@@ -64,6 +66,55 @@ export function authorizeWorkItemOwnerManagerOrRoot(
     status: 403,
     error: `employee "${employeeName}" does not own Todo ${item.id} and is not its authorized manager/root; cannot ${action}`,
   };
+}
+
+/**
+ * The session key the gateway gives a Dispatcher it starts on a Todo.
+ *
+ * Only `startTodoDispatcher` mints one, and no route lets a caller choose a
+ * session key, so the key is what binds a Dispatcher session to the one Todo it
+ * was started for — the binding `authorizeWorkItemDelegation` reads.
+ */
+export function todoDispatcherSessionKey(workItemId: string): string {
+  return `${todoDispatcherSessionKeyPrefix(workItemId)}${crypto.randomUUID()}`;
+}
+
+function todoDispatcherSessionKeyPrefix(workItemId: string): string {
+  return `todo-dispatcher:${workItemId}:`;
+}
+
+/** A Dispatcher the gateway started on THIS Todo: the built-in employee, linked
+ *  to the Todo, under the key minted for it. A session that is only called
+ *  `todo-dispatcher`, or a Dispatcher started on another Todo, is not one. */
+function isDispatcherStartedFor(session: Session, item: WorkItem): boolean {
+  return session.employee === TODO_DISPATCHER_NAME
+    && session.workItemId === item.id
+    && !!session.sessionKey?.startsWith(todoDispatcherSessionKeyPrefix(item.id));
+}
+
+/**
+ * Who may delegate an existing Todo from a session.
+ *
+ * The owner/manager/root rule, plus two callers it cannot see. The session that
+ * created the Todo hands on what it made. And the Dispatcher acts for the
+ * operator who pressed Dispatch: routing is the whole of its job, so on an
+ * assigned Todo — whose owner is the assignee, not the Dispatcher — the
+ * owner rule would refuse the one call it exists to make. That standing is
+ * bound to the Todo the Dispatcher was started for and reaches no further:
+ * another Todo, or any other action, goes through the ordinary rule.
+ *
+ * Whether the Todo is free to take is a separate question, answered by the
+ * claim the delegation takes next, so none of these callers can start a second
+ * attempt on top of a live one.
+ */
+export function authorizeWorkItemDelegation(
+  caller: Extract<WorkItemCaller, { kind: 'session' }>,
+  item: WorkItem,
+): { ok: true } | { ok: false; status: 403; error: string } {
+  const created = item.sourceRef?.startsWith(`session:${caller.callerId}:`)
+    || item.sourceRef?.startsWith(`delegate:${caller.callerId}:`);
+  if (created || isDispatcherStartedFor(caller.session, item)) return { ok: true };
+  return authorizeWorkItemOwnerManagerOrRoot(caller, item, "delegate");
 }
 
 /** Every refusal here names the way forward, because the way forward always

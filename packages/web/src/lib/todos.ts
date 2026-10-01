@@ -56,6 +56,7 @@ const SAFE_TODO_ERROR_BY_CODE: Readonly<Record<string, string>> = {
   TODO_INVALID_VERSION: "This Todo version is invalid. Reload it and try again.",
   TODO_INVALID_PATCH: "This Todo edit is invalid. Review the changed fields and try again.",
   WORK_ITEM_NOT_FOUND: "This Todo no longer exists.",
+  TODO_ALREADY_EXECUTING: "Someone is already working this Todo. Message their session instead of dispatching it again.",
 }
 
 function normalizedTodoErrorCode(error: ApiError): string | undefined {

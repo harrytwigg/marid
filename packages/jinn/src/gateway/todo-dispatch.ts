@@ -1,7 +1,7 @@
-import crypto from "node:crypto";
-import { createSession, insertMessage, updateSession } from "../sessions/registry.js";
+import { createSession, insertMessage, listSessionsByWorkItem, updateSession } from "../sessions/registry.js";
 import { enqueueQueueItem } from "../sessions/queue-item-registry.js";
 import { linkSession, type WorkItem } from "../work-items/store.js";
+import { isExecutionAttempt } from "../work-items/link-role.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { resolveTodoDispatch } from "../work-items/dispatch-config.js";
 import { logger } from "../shared/logger.js";
@@ -9,8 +9,9 @@ import type { Employee, Engine, Session } from "../shared/types.js";
 import { orgRegistry } from "./org-registry.js";
 import { preflightSystemEmployee } from "./system-employee-spawn.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
-import { takeDispatchClaim, type RouteTodoClaim } from "./todo-claim.js";
+import { takeDispatchClaim, TODO_ALREADY_EXECUTING, type RouteTodoClaim } from "./todo-claim.js";
 import { dispatchWebSessionRun } from "./web-session-dispatch.js";
+import { todoDispatcherSessionKey } from "./work-item-authority.js";
 import type { ApiContext } from "./api.js";
 
 /**
@@ -34,7 +35,7 @@ export interface TodoDispatchStarted {
 
 export type StartTodoDispatcherResult =
   | { ok: true; status: 200 | 201; body: TodoDispatchStarted }
-  | { ok: false; status: number; body: { error: string; workItemId?: string; sessionId?: string } };
+  | { ok: false; status: number; body: { error: string; workItemId?: string; sessionId?: string; code?: string } };
 
 export interface StartTodoDispatcherOptions {
   /** ICI-570 change signal for the Todo's projections; the route wires its own
@@ -62,10 +63,58 @@ function failure(status: number, error: string): PlanResult {
   return { ok: false, result: { ok: false, status, body: { error } } };
 }
 
+const IN_FLIGHT: ReadonlySet<Session["status"]> = new Set(["running", "waiting"]);
+
+/**
+ * The execution already under way on this Todo, if there is one.
+ *
+ * Dispatch starts work; it never starts a second attempt beside the one that is
+ * already running. Two shapes count as already running:
+ *
+ *   - an execution attempt in flight. A pickup path that claimed the Todo is
+ *     refused by the claim as well, but cron and talk link sessions without
+ *     claiming, and the claim alone would let a Dispatcher in beside them;
+ *   - an `executing` Todo whose newest attempt is its assignee's, idle between
+ *     turns. That is a producer waiting on a review or a reply, not a dead one,
+ *     and a fresh delegation would start the same work over in a second session.
+ *
+ * Earlier Dispatchers do not count: a Dispatcher routes and never executes, and
+ * one that stopped after linking is the stranded state the button must be
+ * able to restart. Nor does an attempt that failed, or an idle one whose
+ * employee is no longer the assignee: a reassigned Todo is waiting for its new
+ * owner to start, which is what Dispatch is for.
+ *
+ * A read, then a spawn: the claim stays the hard gate between racing pickups,
+ * and this check only makes the common refusals happen at click time.
+ */
+function existingExecution(item: WorkItem): { session: Session; idle: boolean } | undefined {
+  const attempts = listSessionsByWorkItem(item.id)
+    .filter((session) => isExecutionAttempt(session) && session.employee !== TODO_DISPATCHER_NAME);
+  const live = attempts.find((session) => IN_FLIGHT.has(session.status));
+  if (live) return { session: live, idle: false };
+  const newest = attempts[0];
+  if (item.status === "executing" && newest?.status === "idle" && !!newest.employee && newest.employee === item.assignee) {
+    return { session: newest, idle: true };
+  }
+  return undefined;
+}
+
+function alreadyExecuting(item: WorkItem, existing: { session: Session; idle: boolean }): StartTodoDispatcherResult {
+  const who = existing.session.employee ?? "a session";
+  const error = existing.idle
+    ? `Todo ${item.id} is executing: ${who} is working it in session ${existing.session.id}, idle between turns. `
+      + "Message that session to resume it rather than dispatching a second attempt, or reassign the Todo first if someone else should take it over."
+    : `Todo ${item.id} is already being worked by ${who} in session ${existing.session.id}. `
+      + "Dispatching would start a second attempt; message that session or stop it instead.";
+  return { ok: false, status: 409, body: { error, code: TODO_ALREADY_EXECUTING, workItemId: item.id, sessionId: existing.session.id } };
+}
+
 function dispatcherPrompt(item: WorkItem, prefix: string, suffix: string | undefined): string {
   return prefix + [
     `Dispatch Todo ${item.id}.`,
     `Title: ${item.title}`,
+    `Status: ${item.status}`,
+    `Assignee: ${item.assignee ?? "(none)"}`,
     item.body ? `Body:\n${item.body}` : "Body: (none)",
     item.acceptance ? `Acceptance criteria:\n${item.acceptance}` : "Acceptance criteria: (none)",
     ...(suffix ? [suffix] : []),
@@ -111,7 +160,7 @@ function planDispatcher(item: WorkItem, context: ApiContext, suffix: string | un
 }
 
 function createDispatcherSession(item: WorkItem, plan: DispatcherPlan, context: ApiContext): Session {
-  const sessionKey = `todo-dispatcher:${item.id}:${crypto.randomUUID()}`;
+  const sessionKey = todoDispatcherSessionKey(item.id);
   return createSession({
     engine: plan.engineName,
     source: "web",
@@ -147,6 +196,8 @@ export function startTodoDispatcher(
   context: ApiContext,
   opts: StartTodoDispatcherOptions = {},
 ): StartTodoDispatcherResult {
+  const existing = existingExecution(item);
+  if (existing) return alreadyExecuting(item, existing);
   const planned = planDispatcher(item, context, opts.promptSuffix);
   if (!planned.ok) return planned.result;
   const { plan } = planned;
