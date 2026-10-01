@@ -40,6 +40,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
         employees: [
           { name: "mason", displayName: "Mason", department: "platform", rank: "senior", engine: "codex", model: "m", persona: "p" },
           { name: "scout", displayName: "Scout", department: "marketing", rank: "employee", engine: "codex", model: "m", persona: "p" },
+          // A system employee is on the roster but never offered as an assignee.
+          { name: "todo-dispatcher", displayName: "Todo Dispatcher", department: "system", rank: "senior", engine: "claude", model: "m", persona: "p", system: true },
         ],
         hierarchy: { root: null, sorted: [], warnings: [] },
       }),
@@ -98,7 +100,7 @@ describe("the assignee picker's Unassign row", () => {
     const rows = [...picker.querySelectorAll<HTMLElement>('[data-testid^="assignee-option-"]')]
     expect(rows.map((row) => row.dataset.testid)).toEqual([
       "assignee-option-unassign",
-      "assignee-option-operator",
+      "assignee-option-@operator",
       "assignee-option-mason",
       "assignee-option-scout",
     ])
@@ -174,7 +176,7 @@ describe("the operator as an assignee", () => {
     getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
     renderTask()
     fireEvent.click(await screen.findByTestId("rail-assignee"))
-    const option = await screen.findByTestId("assignee-option-operator")
+    const option = await screen.findByTestId("assignee-option-@operator")
     expect(option.textContent).toContain("You (operator)")
     fireEvent.click(option)
     await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-12", "@operator"))

@@ -41,6 +41,10 @@ export function escalationReasonLabel(reason: unknown): string | null {
 /** The reserved assignee value for the operator; it is not on the roster. */
 export const OPERATOR_ASSIGNEE = "@operator"
 
+/** The operator as an assignee-picker row, listed before the employees. A
+ *  system employee is never offered: it routes Todos but owns none. */
+export const OPERATOR_ROW: Pick<Employee, "name" | "displayName" | "department"> = { name: OPERATOR_ASSIGNEE, displayName: "You (operator)", department: "" }
+
 /** Resolve a display name for an assignee employee key, falling back to the key. */
 export function displayNameOf(assignee: string | null, byName: Map<string, Employee>): string {
   if (!assignee) return ""
