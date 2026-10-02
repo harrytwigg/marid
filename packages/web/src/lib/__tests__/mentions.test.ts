@@ -3,14 +3,14 @@ import type { Employee } from "@/lib/api"
 import {
   activeMention,
   filterMentionCandidates,
-  findMentions,
+  scanMentions,
   insertMention,
   mentionRoster,
 } from "../mentions"
 
-const names = (text: string) => findMentions(text).map((t) => t.name)
+const names = (text: string) => scanMentions(text).map((t) => t.name)
 
-describe("findMentions", () => {
+describe("scanMentions", () => {
   it("reads the name without trailing punctuation", () => {
     expect(names("ping @build-lead, please look")).toEqual(["build-lead"])
   })
@@ -27,12 +27,6 @@ describe("findMentions", () => {
     expect(names("a.@b")).toEqual([])
   })
 
-  it("ignores inline code and fenced code, but not prose around them", () => {
-    expect(names("run `@a` now")).toEqual([])
-    expect(names("```sh\n@a\n```\n@b")).toEqual(["b"])
-    expect(names("```\n@a\nnever closed")).toEqual([])
-  })
-
   it("trims a trailing dash or underscore, then lowercases", () => {
     expect(names("@Build-")).toEqual(["build"])
     expect(names("@a_b__ x")).toEqual(["a_b"])
@@ -44,7 +38,7 @@ describe("findMentions", () => {
   })
 
   it("reports where the token sits so a renderer can split around it", () => {
-    expect(findMentions("hi @a- there")).toEqual([{ name: "a", start: 3, end: 5 }])
+    expect(scanMentions("hi @a- there")).toEqual([{ name: "a", start: 3, end: 5 }])
   })
 })
 

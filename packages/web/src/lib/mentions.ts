@@ -30,8 +30,8 @@ function readName(text: string, from: number): { name: string; end: number } | n
   return { name: text.slice(from, end).toLowerCase(), end }
 }
 
-/** Mention tokens in a run of prose. Code is the caller's business: a markdown
- *  renderer has already set it apart, so it never reaches this function. */
+/** Mention tokens in a run of prose. Code is the caller's business: the markdown
+ *  renderer works on the parsed tree, so code never reaches this function. */
 export function scanMentions(prose: string): MentionToken[] {
   const found: MentionToken[] = []
   for (let at = prose.indexOf("@"); at !== -1; at = prose.indexOf("@", at + 1)) {
@@ -40,26 +40,6 @@ export function scanMentions(prose: string): MentionToken[] {
     if (name) found.push({ name: name.name, start: at, end: name.end })
   }
   return found
-}
-
-/** Spans that are code in raw markdown: fenced blocks (an unclosed fence runs to
- *  the end) and single-line inline code. */
-function codeSpans(markdown: string): Array<[number, number]> {
-  const spans: Array<[number, number]> = []
-  const fenced = /```[\s\S]*?(?:```|$)/g
-  for (let m = fenced.exec(markdown); m; m = fenced.exec(markdown)) spans.push([m.index, m.index + m[0].length])
-  const inline = /`[^`\n]*`/g
-  for (let m = inline.exec(markdown); m; m = inline.exec(markdown)) {
-    const [start, end] = [m.index, m.index + m[0].length]
-    if (!spans.some(([s, e]) => start >= s && start < e)) spans.push([start, end])
-  }
-  return spans
-}
-
-/** Mention tokens in a raw markdown comment body, code excluded. */
-export function findMentions(markdown: string): MentionToken[] {
-  const spans = codeSpans(markdown)
-  return scanMentions(markdown).filter((t) => !spans.some(([s, e]) => t.start >= s && t.start < e))
 }
 
 /** The people a mention can name: the org's employees, system ones left out. */
