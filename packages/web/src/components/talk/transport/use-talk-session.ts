@@ -188,7 +188,14 @@ function useCloseOnLeaving(
   generationRef: RefObject<number>,
   forget: (live: LiveSession) => void,
 ): void {
+  // StrictMode tears every effect down and rebuilds it once on mount, so the
+  // cleanup below also runs on a mount that is not a leave. This flag is set by
+  // the cleanup and cleared by the rebuild; the deferred leave reads a cleared
+  // flag and does nothing. A real unmount has no rebuild after it, so the flag
+  // stays set and the session is parked.
+  const leavingRef = useRef(false)
   useEffect(() => {
+    leavingRef.current = false
     const onLeaving = () => {
       // Bumped even with nothing live: an open still in flight has a session
       // named on the gateway, and `openSession` parks it once it sees this.
@@ -204,10 +211,14 @@ function useCloseOnLeaving(
     return () => {
       window.removeEventListener("pagehide", onLeaving)
       window.removeEventListener("beforeunload", onLeaving)
-      // Unmounting the surface is a page leaving by a shorter route. Safe as a
-      // teardown because every dependency is stable for the hook's lifetime,
-      // so this effect runs once and its cleanup is the unmount.
-      onLeaving()
+      // Unmounting the surface is a page leaving by a shorter route. Defer it a
+      // microtask so StrictMode's teardown-and-rebuild — which happens
+      // synchronously, before any microtask runs — cancels it; a real unmount
+      // is not followed by a rebuild, so the leave still runs.
+      leavingRef.current = true
+      queueMicrotask(() => {
+        if (leavingRef.current) onLeaving()
+      })
     }
   }, [liveRef, generationRef, forget])
 }
