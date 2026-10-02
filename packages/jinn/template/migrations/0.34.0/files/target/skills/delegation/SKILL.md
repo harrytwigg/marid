@@ -62,7 +62,7 @@ Every delegation brief should state:
 - whether changes are allowed or the task is read-only;
 - the effort level, deadline/budget, and explicit stop condition.
 
-Review at the risk-appropriate level: TRUST for simple lookups, VERIFY for routine implementation, and THOROUGH for architecture, security, breaking, or irreversible work. Non-trivial work uses at least two independent reviewers who did not produce it. Do not forward raw employee output without checking it at the chosen level.
+Review at the risk-appropriate level: a light check for simple lookups, a normal review for routine implementation, and a thorough one for architecture, security, breaking, or irreversible work. Non-trivial work uses at least two independent reviewers who did not produce it. Do not forward raw employee output without checking it at the chosen level.
 
 Managers and the COO should orchestrate, not implement, when the task benefits from delegation; direct implementation remains valid for small organizations or tiny tasks.
 
