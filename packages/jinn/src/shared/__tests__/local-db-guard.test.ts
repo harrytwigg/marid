@@ -70,6 +70,23 @@ describe("local-db-guard", () => {
     expect(() => assertLocalDatabasePath(chained, linux)).toThrow(/fuse/);
   });
 
+  it("resolves a relative `..` link against the physical directory, as the kernel does", () => {
+    // local/linked -> mount/sessions; mount/sessions/rel.db -> ../other/registry.db.
+    // Lexically that is local/other/registry.db (absent, local); the kernel and
+    // SQLite reach mount/other/registry.db through the linked directory.
+    fs.mkdirSync(path.join(mount, "other"));
+    fs.writeFileSync(path.join(mount, "other", "registry.db"), "");
+    fs.symlinkSync("../other/registry.db", path.join(mount, "sessions", "rel.db"));
+    fs.symlinkSync(path.join(mount, "sessions"), path.join(local, "linked"));
+    const outer = path.join(local, "sessions", "registry.db");
+    fs.symlinkSync(path.join(local, "linked", "rel.db"), outer);
+    expect(fs.realpathSync(outer)).toBe(path.join(mount, "other", "registry.db"));
+    expect(() => assertLocalDatabasePath(outer, linux)).toThrow(/fuse/);
+    // Dangling variant: the target does not exist yet, so only the link walk decides.
+    fs.rmSync(path.join(mount, "other", "registry.db"));
+    expect(() => assertLocalDatabasePath(outer, linux)).toThrow(/fuse/);
+  });
+
   it("judges a symlinked directory by its target", () => {
     const linkedDir = path.join(local, "linked-sessions");
     fs.symlinkSync(path.join(mount, "sessions"), linkedDir);

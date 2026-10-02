@@ -53,29 +53,42 @@ const MAX_LINK_HOPS = 40;
  * Throws when the path cannot be resolved.
  */
 function backingPaths(dbPath: string): string[] {
+  const p = followLinks(dbPath);
+  const out: string[] = [];
+  try { out.push(fs.realpathSync.native(p)); } catch { /* not there yet */ }
+  out.push(nearestExistingDir(p, dbPath));
+  return out;
+}
+
+/** Where `dbPath` leads once every symlink on it is followed, dangling or not. */
+function followLinks(dbPath: string): string {
   let p = path.resolve(dbPath);
   for (let hops = 0; ; hops += 1) {
     let link: string | null = null;
     try {
       if (fs.lstatSync(p).isSymbolicLink()) link = fs.readlinkSync(p);
     } catch { /* missing: judged by its nearest existing ancestor */ }
-    if (link === null) break;
+    if (link === null) return p;
     if (hops >= MAX_LINK_HOPS) throw new Error(`too many symbolic links at ${dbPath}`);
-    p = path.resolve(path.dirname(p), link);
+    // A relative target resolves against the PHYSICAL parent, as the kernel and
+    // SQLite resolve it: `..` under a symlinked directory leads out of that
+    // directory's target, not out of the link's lexical parent.
+    let parent = path.dirname(p);
+    try { parent = fs.realpathSync.native(parent); } catch { /* missing: lexical parent */ }
+    p = path.resolve(parent, link);
   }
-  const out: string[] = [];
-  try { out.push(fs.realpathSync.native(p)); } catch { /* not there yet */ }
+}
+
+function nearestExistingDir(p: string, dbPath: string): string {
   for (let dir = path.dirname(p); ; ) {
     try {
-      out.push(fs.realpathSync.native(dir));
-      break;
+      return fs.realpathSync.native(dir);
     } catch {
       const up = path.dirname(dir);
       if (up === dir) throw new Error(`no existing directory above ${dbPath}`);
       dir = up;
     }
   }
-  return out;
 }
 
 /** The network filesystem `dbPath` lives on, or null when it is local.
