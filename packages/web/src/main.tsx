@@ -29,8 +29,6 @@ const CronDetailPage = lazyRoute(() => import('./routes/cron/detail'), 'cron-det
 const TodoBoardPage = lazyRoute(() => import('./routes/todos/board/board-page'), 'todo-board')
 const TaskPage = lazyRoute(() => import('./routes/todos/task-page/task-page'), 'todo-task')
 const NotesPage = lazyRoute(() => import('./routes/notes/page'), 'notes')
-const ExperimentsPage = lazyRoute(() => import('./routes/experiments/page'), 'experiments')
-const ExperimentDetailPage = lazyRoute(() => import('./routes/experiments/detail'), 'experiment-detail')
 const LogsPage = lazyRoute(() => import('./routes/logs/page'), 'logs')
 const LimitsPage = lazyRoute(() => import('./routes/limits/page'), 'limits')
 const AutoDispatchPage = lazyRoute(() => import('./routes/auto-dispatch/page'), 'auto-dispatch')
@@ -51,7 +49,6 @@ registerRoutePrefetch('/', ChatPage.prefetch)
 registerRoutePrefetch('/cron', CronPage.prefetch)
 registerRoutePrefetch('/todos', TodoBoardPage.prefetch)
 registerRoutePrefetch('/notes', NotesPage.prefetch)
-registerRoutePrefetch('/experiments', ExperimentsPage.prefetch)
 registerRoutePrefetch('/logs', LogsPage.prefetch)
 registerRoutePrefetch('/limits', LimitsPage.prefetch)
 registerRoutePrefetch('/auto-dispatch', AutoDispatchPage.prefetch)
@@ -117,8 +114,6 @@ const routeElements: Partial<Record<AppRouteId, ReactNode>> = {
   "notes-list": <NotesFeatureRoute />,
   // Folder/note deep links: /notes/f/<folder>, /notes/n/<rel>, or both.
   notes: <NotesFeatureRoute />,
-  "experiments-list": <ExperimentsPage />,
-  "experiment-detail": <ExperimentDetailPage />,
   // GRS-021d: Kanban became Todos. Old links redirect (loader-level, like
   // todos-index — straight to the board, no intermediate hop).
   "kanban-redirect": <Navigate to="/todos" replace />,

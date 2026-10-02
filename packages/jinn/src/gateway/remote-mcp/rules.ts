@@ -32,13 +32,12 @@ const ALLOWED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ["GET", "/api/workflows"], ["GET", "/api/workflows/:id"], ["GET", "/api/workflows/:id/runs"],
   ["GET", "/api/workflows/:id/runs/:runId"],
   ["GET", "/api/cron"], ["GET", "/api/cron/:id/runs"], ["GET", "/api/cost/report"],
-  ["GET", "/api/experiments"], ["GET", "/api/experiments/:id"], ["GET", "/api/heartbeats"],
+  ["GET", "/api/heartbeats"],
   ["GET", "/api/files"], ["GET", "/api/files/read"],
   // Class L writes.
   ["POST", "/api/work-items"], ["PATCH", "/api/work-items/:id"], ["POST", "/api/work-items/:id/comments"],
   ["PUT", "/api/work-items/:id/labels"], ["POST", "/api/work-items/:id/relations"],
   ["DELETE", "/api/work-items/:id/relations"], ["POST", "/api/notes"], ["PUT", "/api/notes"],
-  ["POST", "/api/experiments/:id/readings"], ["POST", "/api/experiments/:id/conclude"],
   // Session control.
   ["GET", "/api/sessions/:id"], ["POST", "/api/sessions/:id/message"], ["POST", "/api/delegations"],
   ["POST", "/api/work-items/:id/assign"],

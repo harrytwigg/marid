@@ -129,7 +129,7 @@ describe("the gateway admits only the connector's profile routes (D4)", () => {
     ["POST", () => `/api/sessions/${connector.id}/stop`, {}],
     ["GET", () => "/api/knowledge/read?path=config.yaml", undefined],
     ["POST", () => `/api/work-items/${operatorTodo}/attachments`, { path: "/etc/hostname" }],
-    ["POST", () => "/api/experiments", { name: "x" }],
+    ["GET", () => "/api/experiments", undefined],
     ["GET", () => "/api/workflows/abc/runs/xyz/approval", undefined],
   ])("refuses %s %s", async (method, url, body) => {
     const r = await call(method, url(), body);

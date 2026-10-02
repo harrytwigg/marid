@@ -3,7 +3,6 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   chatPath,
   cronPath,
-  experimentPath,
   orgPath,
   resolveTodoId,
   todoPath,
@@ -87,13 +86,6 @@ const openWorkflows: TalkTool = {
   execute: (args: ToolArgs) => go(workflowPath(args)),
 }
 
-const openExperiments: TalkTool = {
-  name: "open_experiments",
-  description: "Open the Experiments list, or one experiment by id.",
-  parameters: params({ id: str("The experiment id.") }),
-  execute: (args: ToolArgs) => go(experimentPath(args)),
-}
-
 const openChats: TalkTool = {
   name: "open_chats",
   description: "Open chat, or one session by id.",
@@ -123,7 +115,6 @@ export const NAVIGATE_TOOLS: readonly TalkTool[] = [
   openTodos,
   openTodo,
   openWorkflows,
-  openExperiments,
   openChats,
   openOrg,
   openCron,

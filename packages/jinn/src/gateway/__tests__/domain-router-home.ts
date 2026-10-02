@@ -14,22 +14,6 @@ import os from "node:os";
 /** Mutable so each paths mock can read the current temp home lazily. */
 export const home = { root: "", cronRuns: "", cronJobs: "", org: "" };
 
-/**
- * A session database of this run's own, fixed here at module load rather than
- * under `home.root`: `db.ts` derives its version sidecar and backup directory at
- * module eval and `initDb()` caches the handle, so a path that moved when
- * `seedHome()` re-rolled the home would leave both pointing at the old one.
- *
- * Private because vitest.global-setup.ts pins one JINN_HOME for the whole run:
- * on the shared database the experiment list carries rows written by whichever
- * other file is running alongside, and its bytes cannot be pinned.
- */
-export const SESSIONS_DB = path.join(
-  fs.mkdtempSync(path.join(os.tmpdir(), "domain-router-db-")),
-  "sessions",
-  "registry.db",
-);
-
 /** The session the seeded run spawned — run rows link to it. */
 export const RUN_SESSION_ID = "3f2b8c1e-9a44-4d7b-8b1a-5c0e7d216f90";
 

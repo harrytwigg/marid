@@ -7,7 +7,7 @@
  * where they can be read and tested without a page.
  */
 
-export type CandidateKind = "todo" | "session" | "workflow" | "experiment"
+export type CandidateKind = "todo" | "session" | "workflow"
 
 export interface Candidate {
   kind: CandidateKind
@@ -76,7 +76,7 @@ export function spokenId(value: unknown, prefixes: readonly (string | null)[]): 
  *  the operator uses for the kind rather than for the thing itself. */
 const FILLER = new Set([
   "a", "an", "the", "this", "that", "it", "one", "about", "for", "of", "on", "in", "and", "my", "our",
-  "todo", "task", "ticket", "item", "session", "chat", "workflow", "experiment", "run", "page", "open",
+  "todo", "task", "ticket", "item", "session", "chat", "workflow", "run", "page", "open",
 ])
 
 function words(value: string): string[] {

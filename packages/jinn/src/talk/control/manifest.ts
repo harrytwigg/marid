@@ -41,7 +41,7 @@ const GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
     unresolvedQuestion: string("One open question."),
     resolvedQuestion: string("An exact open question that is now resolved."),
   }), "memory", { mutability: "write", verification: "topic-commitment-reread" }),
-  gateway("read_talk_capability", "Read whether a company capability is supported or return its exact named gap and planned adapter. Known lanes include todos, chats, workflows, notes, experiments, cron, org, skills, settings, logs, files, instances, approvals, topics, and screen navigation.", params({
+  gateway("read_talk_capability", "Read whether a company capability is supported or return its exact named gap and planned adapter. Known lanes include todos, chats, workflows, notes, cron, org, skills, settings, logs, files, instances, approvals, topics, and screen navigation.", params({
     capability: string("The exact capability key from the Talk company inventory."),
   }, ["capability"]), "capabilities", { mutability: "read", verification: "capability-inventory-reread" }),
 ];

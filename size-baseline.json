@@ -261,12 +261,6 @@
         "max-lines-per-function"
       ]
     },
-    "packages/jinn/src/experiments/store.ts": {
-      "exempt": [
-        "complexity",
-        "max-lines-per-function"
-      ]
-    },
     "packages/jinn/src/gateway/__tests__/auth-ux-api.test.ts": {
       "lines": 475
     },
@@ -498,7 +492,7 @@
       "lines": 623
     },
     "packages/jinn/src/mcp/__tests__/server.test.ts": {
-      "lines": 479
+      "lines": 474
     },
     "packages/jinn/src/mcp/__tests__/session-tools.test.ts": {
       "lines": 838
@@ -521,11 +515,6 @@
     "packages/jinn/src/mcp/delegation-tools.ts": {
       "exempt": [
         "complexity",
-        "max-lines-per-function"
-      ]
-    },
-    "packages/jinn/src/mcp/experiment-tools.ts": {
-      "exempt": [
         "max-lines-per-function"
       ]
     },
@@ -712,7 +701,7 @@
       "lines": 338
     },
     "packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts": {
-      "lines": 463
+      "lines": 452
     },
     "packages/jinn/src/shared/activity-receipts.ts": {
       "exempt": [
@@ -1485,17 +1474,6 @@
       "lines": 336,
       "exempt": [
         "complexity",
-        "max-lines-per-function"
-      ]
-    },
-    "packages/web/src/routes/experiments/detail.tsx": {
-      "exempt": [
-        "complexity",
-        "max-lines-per-function"
-      ]
-    },
-    "packages/web/src/routes/experiments/reading-chart.tsx": {
-      "exempt": [
         "max-lines-per-function"
       ]
     },

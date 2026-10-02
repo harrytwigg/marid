@@ -60,14 +60,14 @@ async function loadRuntime(home) {
   process.env.JINN_HOME = home
   process.env.JINN_INSTANCE = path.basename(home).replace(/^\./, "")
   const moduleAt = (relative) => import(pathToFileURL(path.join(repoRoot, "packages/jinn/dist/src", relative)).href)
-  const [db, todos, comments, relations, approvals, sessions, experiments, workflowRepo, workflowDb, talkSessions, topics, proactive, policy, tools] = await Promise.all([
+  const [db, todos, comments, relations, approvals, sessions, workflowRepo, workflowDb, talkSessions, topics, proactive, policy, tools] = await Promise.all([
     moduleAt("shared/db.js"), moduleAt("work-items/store.js"), moduleAt("work-items/comments.js"),
     moduleAt("work-items/relations.js"), moduleAt("work-items/approvals.js"), moduleAt("sessions/registry.js"),
-    moduleAt("experiments/store.js"), moduleAt("workflows/repository.js"), moduleAt("workflows/repository-migrations.js"),
+    moduleAt("workflows/repository.js"), moduleAt("workflows/repository-migrations.js"),
     moduleAt("talk/session/repository.js"), moduleAt("talk/topics/repository.js"),
     moduleAt("talk/proactive/repository.js"), moduleAt("talk/proactive/policy.js"), moduleAt("talk/session/tools.js"),
   ])
-  return { db, todos, comments, relations, approvals, sessions, experiments, workflowRepo, workflowDb, talkSessions, topics, proactive, policy, tools }
+  return { db, todos, comments, relations, approvals, sessions, workflowRepo, workflowDb, talkSessions, topics, proactive, policy, tools }
 }
 
 /** @param {string} home @param {Record<string, any>} config @param {string} configPath */
@@ -153,7 +153,7 @@ function seedChats(database, todoIds) {
       last_activity=excluded.last_activity, work_item_id=excluded.work_item_id`)
   const insertMessage = database.prepare(`INSERT INTO messages (id, session_id, role, content, timestamp)
     VALUES (?, ?, ?, ?, ?)`)
-  const workItems = [todoIds.blocked, todoIds.blocker, todoIds.delegated, null, todoIds.approval, ...Array(7).fill(null)]
+  const workItems = [todoIds.blocked, todoIds.blocker, todoIds.delegated, null, todoIds.approval, ...Array(6).fill(null)]
   database.transaction(() => TOPIC_SPECS.forEach((topic, index) => {
     const id = topicSessionId(index + 1)
     const at = FIXTURE_CLOCK + index * 60_000
@@ -212,7 +212,7 @@ function seedTalk(runtime, database, refs) {
   const topics = new runtime.topics.TalkTopicRepository(database)
   topics.replaceSession(TALK_SESSION_ID, fixtureTopics(refs))
   topics.saveNavigation({ talkSessionId: TALK_SESSION_ID, currentTopicId: "talk-topic-01-blocked-release",
-    history: fixtureTopics(refs).map(({ id }) => id), lastCandidateIds: ["talk-topic-03-delegated-qa", "talk-topic-11-proactive"],
+    history: fixtureTopics(refs).map(({ id }) => id), lastCandidateIds: ["talk-topic-03-delegated-qa", "talk-topic-10-proactive"],
     credentialGeneration: 2, screenRevision: 12, updatedAt: FIXTURE_CLOCK + 30_000 })
   seedProactive(runtime, database)
 }
@@ -242,18 +242,6 @@ function seedProactive(runtime, database) {
   }
 }
 
-/** @param {any} runtime @param {string} todoId */
-function seedExperiment(runtime, todoId) {
-  const id = "exp_talkfixture"
-  const existing = runtime.experiments.getExperiment(id)
-  if (existing.ok) return id
-  const created = runtime.experiments.createExperiment({ name: "Response clarity", hypothesis: "Visible verification reduces ambiguous follow-up questions.",
-    baseline: { clarifications: 4 }, metrics: [{ name: "clarifications", unit: "count", howToMeasure: "Count explicit clarification turns in the sandbox journey." }],
-    horizonDays: 7, todoId, owner: "sandbox-reviewer" }, { id, startedAt: new Date(FIXTURE_CLOCK).toISOString() })
-  if (!created.ok) throw new Error(created.error.message)
-  return id
-}
-
 /** @param {string} home @param {Record<string, unknown>} manifest */
 function writeManifest(home, manifest) {
   const directory = path.join(home, "sandbox-artifacts")
@@ -271,10 +259,9 @@ export async function prepareSandbox(home) {
   seedChats(database, todoIds)
   runtime.todos.linkSession(todoIds.blocked, topicSessionId(1))
   const workflow = seedWorkflow(runtime, home, todoIds.approval)
-  seedExperiment(runtime, todoIds.delegated)
   seedTalk(runtime, database, { todoIds, workflowId: workflow.workflowId, workflowRunId: workflow.runId })
   const manifest = { fixture: "PLA-116", clock: new Date(FIXTURE_CLOCK).toISOString(), talkSessionId: TALK_SESSION_ID,
-    topicSessionIds: TOPIC_SPECS.map((_, index) => topicSessionId(index + 1)), todoIds, workflow, experimentId: "exp_talkfixture",
+    topicSessionIds: TOPIC_SPECS.map((_, index) => topicSessionId(index + 1)), todoIds, workflow,
     notePath: "knowledge/talk-driving-journey.md", cronIds: ["sandbox-quiet-review", "sandbox-urgent-drill"] }
   writeManifest(home, manifest)
   runtime.db.__closeDbForTest()

@@ -7,15 +7,10 @@
  */
 export type {
   CompanyChangedEvent,
-  Experiment,
-  ExperimentMetric,
-  ExperimentReading,
-  ExperimentVerdict,
   GatewayEmit,
   GatewayEvent,
   GatewayEventMap,
   GatewayEventName,
-  HydratedExperiment,
   TalkProactiveCuePayload,
   TalkProactiveUiEffect,
 } from "@jinn/gateway-events";

@@ -25,8 +25,6 @@ export const APP_ROUTES = [
   { id: "todo-detail", path: "/todos/:todoId", availability: "always", surface: "todo" },
   { id: "notes-list", path: "/notes", availability: "notes-enabled", surface: "notes" },
   { id: "notes", path: "/notes/*", availability: "notes-enabled", surface: "notes" },
-  { id: "experiments-list", path: "/experiments", availability: "always", surface: "experiments" },
-  { id: "experiment-detail", path: "/experiments/:id", availability: "always", surface: "experiment" },
   { id: "kanban-redirect", path: "/kanban", availability: "always", surface: "todos" },
   { id: "logs", path: "/logs", availability: "always", surface: "logs" },
   { id: "limits", path: "/limits", availability: "always", surface: "limits" },

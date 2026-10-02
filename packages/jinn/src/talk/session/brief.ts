@@ -59,7 +59,6 @@ const BLOCKS = [
   "- Employee — a persona with a department, a rank and a manager. Work is delegated to employees, who run as sessions.",
   "- Chat — one conversation with an employee.",
   "- Note — durable Markdown knowledge the company keeps.",
-  "- Experiment — a bet under measurement: hypothesis, baseline, metrics, verdict.",
 ].join("\n");
 
 /** The company's own name, prefix and statuses. Fixed-size by construction: the

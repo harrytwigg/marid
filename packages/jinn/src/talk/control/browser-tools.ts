@@ -49,7 +49,7 @@ export const BROWSER_CONTROL_OPERATIONS: readonly TalkControlOperation[] = [
     lens: string("The editor or runs lens.", ["editor", "runs"]),
   }), "workflows"),
   browser("focus_element", "Focus and reveal a safe visible control.", params({ target: string("The semantic control target.") }, ["target"]), "page"),
-  browser("resolve_and_open", "Resolve a spoken Todo, chat, Workflow, or Experiment reference and open it.", params({ what: string("The spoken reference.") }, ["what"]), "navigation"),
+  browser("resolve_and_open", "Resolve a spoken Todo, chat, or Workflow reference and open it.", params({ what: string("The spoken reference.") }, ["what"]), "navigation"),
   browser("talk_search_chat_messages", "Search earlier messages in the chat currently on screen. Use this for questions about what was said or decided earlier. Returns matching excerpts only; speak excerpts and relative time, never identifiers.", params({
     query: string("All words to match in the current chat, at most 512 characters."),
   }, ["query"]), "sessions", "read"),

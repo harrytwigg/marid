@@ -2,14 +2,6 @@ export type StreamDeltaType = "text" | "text_snapshot" | "tool_use" | "tool_resu
 
 export type { CompanyChangedEvent } from "./gateway-events.js";
 
-export type {
-  Experiment,
-  ExperimentMetric,
-  ExperimentReading,
-  ExperimentVerdict,
-  HydratedExperiment,
-} from "./gateway-events.js";
-
 export type { NoteDocument, NoteFolder, NoteStoreResult, NoteSummary } from "./note-types.js";
 
 /** Generous but bounded body size for durable communication-card metadata. */
@@ -516,12 +508,6 @@ export interface SessionDeliveryDeadLetter extends Omit<SessionDelivery, "payloa
   payload: SessionDeliveryPayload | null;
   payloadError: string | null;
 }
-
-export type ExperimentStoreFailureReason = "invalid" | "not-found" | "conflict";
-
-export type ExperimentStoreResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; reason: ExperimentStoreFailureReason; detail: string };
 
 export interface CronJob {
   id: string;

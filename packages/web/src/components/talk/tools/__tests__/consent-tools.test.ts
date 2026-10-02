@@ -10,7 +10,6 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   api: {
     sendMessage: vi.fn(),
     startWorkflowRunV2: vi.fn(),
-    recordExperimentReading: vi.fn(),
     addWorkItemComment: vi.fn(),
   },
 }))
@@ -22,7 +21,6 @@ const mocked = vi.mocked(api)
 const ASKED: Array<{ tool: string; args: string; reaches: keyof typeof mocked }> = [
   { tool: "talk_send_to_session", args: '{"id":"s-1","message":"ship it"}', reaches: "sendMessage" },
   { tool: "talk_start_workflow_run", args: '{"id":"jinn-build"}', reaches: "startWorkflowRunV2" },
-  { tool: "talk_record_reading", args: '{"id":"exp-1","metric":"signups","value":12}', reaches: "recordExperimentReading" },
   { tool: "jinn_action", args: '{"intent":"note that we shipped","subject":"ABC-59"}', reaches: "addWorkItemComment" },
 ]
 
@@ -31,7 +29,6 @@ beforeEach(() => {
   clearTalkActions()
   mocked.sendMessage.mockResolvedValue({} as never)
   mocked.startWorkflowRunV2.mockResolvedValue({ id: "run_1", status: "running" } as never)
-  mocked.recordExperimentReading.mockResolvedValue({ reading: { id: "r1" } } as never)
   mocked.addWorkItemComment.mockResolvedValue({ comment: { id: "wic_1" } } as never)
 })
 

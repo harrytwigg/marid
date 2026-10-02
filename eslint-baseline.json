@@ -142,10 +142,6 @@
       "max-depth",
       "max-lines-per-function"
     ],
-    "packages/jinn/src/experiments/store.ts": [
-      "complexity",
-      "max-lines-per-function"
-    ],
     "packages/jinn/src/gateway/api.ts": [
       "complexity",
       "max-depth",
@@ -260,9 +256,6 @@
     ],
     "packages/jinn/src/mcp/delegation-tools.ts": [
       "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/jinn/src/mcp/experiment-tools.ts": [
       "max-lines-per-function"
     ],
     "packages/jinn/src/mcp/file-tools.ts": [
@@ -773,13 +766,6 @@
     ],
     "packages/web/src/routes/cron/page.tsx": [
       "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/experiments/detail.tsx": [
-      "complexity",
-      "max-lines-per-function"
-    ],
-    "packages/web/src/routes/experiments/reading-chart.tsx": [
       "max-lines-per-function"
     ],
     "packages/web/src/routes/limits/page.tsx": [

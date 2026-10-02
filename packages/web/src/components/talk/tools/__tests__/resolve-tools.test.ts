@@ -11,7 +11,6 @@ vi.mock("@/lib/api", async (importOriginal) => ({
     searchWorkItems: vi.fn(),
     searchSessions: vi.fn(),
     listWorkflowDefinitionsV2: vi.fn(),
-    listExperiments: vi.fn(),
   },
 }))
 
@@ -24,7 +23,6 @@ function findNothing() {
   mocked.searchWorkItems.mockResolvedValue({ workItems: [] } as never)
   mocked.searchSessions.mockResolvedValue([] as never)
   mocked.listWorkflowDefinitionsV2.mockResolvedValue({ items: [], nextCursor: null } as never)
-  mocked.listExperiments.mockResolvedValue({ experiments: [] } as never)
 }
 
 function searchCalls(): number {
@@ -81,13 +79,12 @@ describe("an id costs nothing to resolve", () => {
   })
 })
 
-/** One lone match per kind, so the four sources and their four routes are each
+/** One lone match per kind, so the three sources and their three routes are each
  *  proven rather than the Todo path standing in for all of them. */
 const KINDS = [
   { kind: "todo", path: "/todos/ABC-744", fill: () => mocked.searchWorkItems.mockResolvedValue({ workItems: [{ id: "ABC-744", title: "Talk orb resolution", status: "executing" }] } as never) },
   { kind: "session", path: "/?session=s-1", fill: () => mocked.searchSessions.mockResolvedValue([{ id: "s-1", title: "Talk orb resolution", employee: "a-lead" }] as never) },
   { kind: "workflow", path: "/workflow/orb-check", fill: () => mocked.listWorkflowDefinitionsV2.mockResolvedValue({ items: [{ id: "orb-check", title: "Talk orb resolution" }], nextCursor: null } as never) },
-  { kind: "experiment", path: "/experiments/exp-1", fill: () => mocked.listExperiments.mockResolvedValue({ experiments: [{ id: "exp-1", name: "Talk orb resolution", status: "running" }] } as never) },
 ]
 
 describe("a description opens the one thing it fits", () => {

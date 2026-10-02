@@ -33,7 +33,6 @@ import type {
   UpdateNoteInput,
 } from "@/routes/notes/types"
 import { createConfigApi } from "@/lib/api-config"
-import { createExperimentsApi } from "@/lib/api-experiments"
 import { createSttApi } from "@/lib/api-stt"
 import { createTodoCaptureApi } from "@/lib/api-todo-capture"
 export type { TodoCaptureWire, TodoCaptureStageWire, TodoCaptureRouteWire } from "@/lib/api-todo-capture"
@@ -704,7 +703,6 @@ export const api = {
     post<NoteDocumentResponse>("/api/notes", input),
   updateNote: (input: UpdateNoteInput) =>
     put<NoteDocumentResponse>("/api/notes", input),
-  ...createExperimentsApi({ get, post }),
   getFeatures: () => get<{ notesEnabled: boolean; staleChat: StaleChatPolicy }>("/api/features"),
   getStatus: () => get<Record<string, unknown>>("/api/status"),
   listWorkflowDefinitionsV2: (cursor?: string, retired?: boolean) =>

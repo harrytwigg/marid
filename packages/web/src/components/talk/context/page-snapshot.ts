@@ -140,11 +140,6 @@ function listOrDetail(list: PageKind, detail: PageKind, selectionKind: string, i
   return { kind: detail, params: {}, filters: {}, selection: { kind: selectionKind, id } }
 }
 
-function experimentsView(rest: string[]): View {
-  if (rest.length > 1) return null
-  return listOrDetail("experiments", "experiment", "experiment", rest[0])
-}
-
 /** Org keeps the open employee in the query string, so it is one route deep
  *  whether or not anything is selected. */
 function orgView(rest: string[], params: URLSearchParams): View {
@@ -187,7 +182,6 @@ function redirectView(head: "chat" | "kanban", rest: string[]): View {
 const ROUTE_READERS: Readonly<Record<string, RouteReader>> = {
   todos: (rest, params) => todosView(rest, params),
   workflow: (rest, params) => workflowView(rest, params),
-  experiments: (rest) => experimentsView(rest),
   cron: (rest, params) => cronView(rest, params),
   org: (rest, params) => orgView(rest, params),
   notes: (_rest, _params, pathname) => notesView(pathname),

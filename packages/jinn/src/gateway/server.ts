@@ -91,6 +91,7 @@ import { DiscordConnector, type DiscordConnectorConfig } from "../connectors/dis
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
 import { TelegramConnector } from "../connectors/telegram/index.js";
 import { loadJobs } from "../cron/jobs.js";
+import { removeRetiredExperimentCheckInJobs } from "../cron/retired-jobs.js";
 import { startScheduler, stopScheduler } from "../cron/scheduler.js";
 import { orgRegistry, refreshOrg } from "./org-registry.js";
 
@@ -997,6 +998,7 @@ export async function startGateway(
     });
   });
 
+  removeRetiredExperimentCheckInJobs();
   const cronJobs = loadJobs();
   startScheduler(cronJobs, { sessionManager, getConfig: () => currentConfig, connectors: connectorMap, emit });
   logger.info(`Loaded ${cronJobs.length} cron job(s)`);
