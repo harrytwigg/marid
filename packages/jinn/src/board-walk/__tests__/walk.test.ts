@@ -6,6 +6,7 @@ import type { CronJob, EngineLimitEngineSnapshot, EngineLimitsResponse, JinnConf
 import type { StartTodoDispatcherResult } from "../../gateway/todo-dispatch.js";
 import type { CapacitySnapshot } from "../snapshot.js";
 import type { WalkTurn, WalkTurnResult } from "../walk.js";
+import type { WalkToolResult } from "../turn.js";
 import type { LinkState } from "../pr-state.js";
 
 /**
@@ -44,6 +45,7 @@ const m = {} as {
   stopCause: typeof import("../../work-items/stop-cause.js");
   parkExpiry: typeof import("../../work-items/park-expiry.js");
   boardStore: typeof import("../store.js");
+  registry: typeof import("../../sessions/registry.js");
   db: import("better-sqlite3").Database;
 };
 
@@ -57,6 +59,7 @@ beforeAll(async () => {
   m.stopCause = await import("../../work-items/stop-cause.js");
   m.parkExpiry = await import("../../work-items/park-expiry.js");
   m.boardStore = await import("../store.js");
+  m.registry = await import("../../sessions/registry.js");
   m.db = (await import("../../shared/db.js")).initDb();
   fs.writeFileSync(RULES, TEMPLATE);
 });
@@ -112,7 +115,7 @@ function section(prompt: string, heading: string): unknown {
   return JSON.parse(prompt.slice(fence, prompt.indexOf("\n```", fence)));
 }
 
-/** A Todo as a reader of the prompt sees it. */
+/** A Todo as the model reads it from \`walk_todo\`. */
 interface ShownTodo {
   id: string;
   title: string;
@@ -124,36 +127,68 @@ interface ShownTodo {
   links: Array<{ kind: "pull" | "issue"; url: string; state: string }>;
 }
 
-/** The board section of the prompt, read back the way a model reads it: one
- *  `### <id>: <title>` block per Todo, a labelled line per fact, and the
- *  Todo's own words indented under `body:`. */
-function readBoard(prompt: string): ShownTodo[] {
-  const start = prompt.indexOf("## The board");
-  const board = prompt.slice(start, prompt.indexOf("\n## Your answer", start));
-  return board.split(/\n(?=### )/).slice(1).map((block) => {
-    const lines = block.split("\n");
-    const [, id, title] = /^### (\S+): (.*)$/.exec(lines[0])!;
-    const body: string[] = [];
-    for (let i = lines.indexOf("body:") + 1; i > 0 && i < lines.length && lines[i].startsWith("  "); i++) body.push(lines[i]);
-    return {
-      id,
-      title,
-      status: /^status (\S+) since /m.exec(block)![1],
-      body: body.map((line) => line.slice(2)).join("\n"),
-      noAutoStart: /^no auto-start: /m.test(block),
-      flaggedStuck: /^already flagged stuck: yes/m.test(block),
-      relations: [...block.matchAll(/^relation: (blocked by|blocks|duplicated by|duplicates|relates to) (\S+) \((\w+)\): (.*)$/gm)]
-        .map(([, verb, other, status, otherTitle]) => ({ verb, id: other, status, title: otherTitle })),
-      links: [...block.matchAll(/^link: (pull request|issue) (\S+) is (\S+)/gm)]
-        .map(([, kind, url, state]) => ({ kind: kind === "pull request" ? "pull" as const : "issue" as const, url, state })),
-    };
-  });
+/** One Todo's text from \`walk_todo\`, read back the way a model reads it: a
+ *  \`### <id>: <title>\` heading, a labelled line per fact, and the Todo's own
+ *  words indented under \`body:\`. */
+function readTodo(block: string): ShownTodo {
+  const lines = block.split("\n");
+  const [, id, title] = /^### (\S+): (.*)$/.exec(lines[0])!;
+  const body: string[] = [];
+  for (let i = lines.indexOf("body:") + 1; i > 0 && i < lines.length && lines[i].startsWith("  "); i++) body.push(lines[i]);
+  return {
+    id,
+    title,
+    status: /^status (\S+) since /m.exec(block)![1],
+    body: body.map((line) => line.slice(2)).join("\n"),
+    noAutoStart: /^no auto-start: /m.test(block),
+    flaggedStuck: /^already flagged stuck: yes/m.test(block),
+    relations: [...block.matchAll(/^relation: (blocked by|blocks|duplicated by|duplicates|relates to) (\S+) \((\w+)\): (.*)$/gm)]
+      .map(([, verb, other, status, otherTitle]) => ({ verb, id: other, status, title: otherTitle })),
+    links: [...block.matchAll(/^link: (pull request|issue) (\S+) is (\S+)/gm)]
+      .map(([, kind, url, state]) => ({ kind: kind === "pull request" ? "pull" as const : "issue" as const, url, state })),
+  };
 }
 
-/** The shipped rules, as a model would apply them, reading only the prompt. */
-function fakeModel(prompt: string, opts: { startAll?: boolean } = {}): string {
-  const todos = readBoard(prompt);
-  const snapshot = section(prompt, "## Capacity snapshot") as CapacitySnapshot;
+/** The ids on the board, as \`walk_board\` lists them. */
+async function boardIds(turn: WalkTurn): Promise<string[]> {
+  const board = await turn.tools.call("walk_board", { limit: 100 });
+  return [...board.text.matchAll(/^([A-Z]+-\d+): /gm)].map(([, id]) => id);
+}
+
+/** The board as a model reads it through its tools: the list, then each Todo in full. */
+async function readBoard(turn: WalkTurn): Promise<ShownTodo[]> {
+  const todos: ShownTodo[] = [];
+  for (const id of await boardIds(turn)) todos.push(readTodo((await turn.tools.call("walk_todo", { id })).text));
+  return todos;
+}
+
+interface Answer {
+  todos: Array<Record<string, unknown>>;
+  dispatch: { start: Array<Record<string, unknown>>; reason: string };
+  summary?: string;
+}
+
+/** Hand an answer over the way the model does: one \`walk_decide\` per Todo,
+ *  the starts, then \`walk_finish\`. Returns what each call answered. */
+async function submit(turn: WalkTurn, answer: Answer): Promise<WalkToolResult[]> {
+  const results: WalkToolResult[] = [];
+  for (const decision of answer.todos) results.push(await turn.tools.call("walk_decide", decision));
+  for (const start of answer.dispatch.start) results.push(await turn.tools.call("walk_start", start));
+  results.push(await turn.tools.call("walk_finish", { summary: answer.summary ?? `${answer.todos.length} decisions`, dispatchReason: answer.dispatch.reason }));
+  return results;
+}
+
+/** A model that hands over exactly this answer, whatever the board says. */
+const scripted = (answer: Answer) => async (turn: WalkTurn): Promise<WalkTurnResult> => {
+  await submit(turn, answer);
+  return { sessionId: "scripted", reply: "done" };
+};
+
+/** The shipped rules, as a model would apply them, reading the board through
+ *  its tools and the snapshot from the prompt. */
+async function fakeModel(turn: WalkTurn, opts: { startAll?: boolean } = {}): Promise<ShownTodo[]> {
+  const todos = await readBoard(turn);
+  const snapshot = section(turn.prompt, "## Capacity snapshot") as CapacitySnapshot;
   const now = Date.parse(snapshot.now);
   const decisions: Array<Record<string, unknown>> = [];
   for (const item of todos) {
@@ -169,13 +204,13 @@ function fakeModel(prompt: string, opts: { startAll?: boolean } = {}): string {
     if (/stuck/.test(item.title)) {
       decisions.push({ id: item.id, verdict: "stuck", action: "flag", reason: "no change for days; the operator should decide" });
     } else if (gateMet === undefined) {
-      continue;
+      decisions.push({ id: item.id, verdict: "ready", action: "leave", reason: "no gate" });
     } else if (item.status === "blocked" && gateMet) {
       decisions.push({ id: item.id, verdict: "ready", action: "release", reason: `gate met: ${reason}`, gates });
     } else if (!gateMet && date && /park/.test(item.title)) {
       decisions.push({ id: item.id, verdict: "gated", action: "park", until: `${date}T00:00:00Z`, reason: `gate open: ${reason}` });
     } else if (!gateMet) {
-      decisions.push({ id: item.id, verdict: "gated", action: "none", reason: `gate open: ${reason}` });
+      decisions.push({ id: item.id, verdict: "gated", action: "leave", reason: `gate open: ${reason}` });
     }
   }
   const claude5h = snapshot.engines.find((engine) => engine.name === "claude")?.windows.find((window) => window.name === "5h");
@@ -192,12 +227,15 @@ function fakeModel(prompt: string, opts: { startAll?: boolean } = {}): string {
     start = (opts.startAll ? ready : ready.slice(0, 1)).map((item) => ({ id: item.id, reason: "daytime, the five-hour window lapses in 40 min at 15%", engine: "claude" }));
     why = "allowance about to lapse";
   }
-  return "Here is my answer.\n\n```json\n" + JSON.stringify({ todos: decisions, dispatch: { start, reason: why }, summary: `${decisions.length} decisions` }) + "\n```\n";
+  await submit(turn, { todos: decisions, dispatch: { start, reason: why } });
+  return todos;
 }
 
 interface Harness {
   walk: import("../walk.js").BoardWalk;
   turns: WalkTurn[];
+  /** Per tick, the board as the stand-in model read it through its tools. */
+  seen: ShownTodo[][];
   dispatched: string[];
 }
 
@@ -214,6 +252,7 @@ function open(opts: {
   armed?: CronJob;
 } = {}): Harness {
   const turns: WalkTurn[] = [];
+  const seen: ShownTodo[][] = [];
   const dispatched: string[] = [];
   const walk = m.walk.startBoardWalk({
     getConfig: () => config,
@@ -224,7 +263,9 @@ function open(opts: {
     armedJob: () => opts.armed,
     runTurn: async (turn) => {
       turns.push(turn);
-      return opts.reply ? opts.reply(turn) : { sessionId: `walk-${turns.length}`, reply: fakeModel(turn.prompt, { startAll: opts.startAll }) };
+      if (opts.reply) return opts.reply(turn);
+      seen.push(await fakeModel(turn, { startAll: opts.startAll }));
+      return { sessionId: `walk-${turns.length}`, reply: "Done." };
     },
     ...(opts.turnTimeoutMs ? { turnTimeoutMs: opts.turnTimeoutMs } : {}),
     stopTurn: (sessionKey) => opts.stopped?.push(sessionKey),
@@ -245,14 +286,7 @@ function open(opts: {
       exhausted: () => false,
     },
   });
-  return { walk, turns, dispatched };
-}
-
-/** One tick's prompt, from a fresh walk. */
-async function runOnce(): Promise<WalkTurn> {
-  const h = open();
-  await h.walk.tick();
-  return h.turns[0];
+  return { walk, turns, seen, dispatched };
 }
 
 const status = (id: string) => m.store.getWorkItem(id)!.status;
@@ -286,8 +320,7 @@ describe("board walk readiness", () => {
 
     await h.walk.tick();
     expect(status(waiting.id)).toBe("blocked");
-    const prompt = readBoard(h.turns[0].prompt);
-    expect(prompt.find((item) => item.id === waiting.id)?.relations).toEqual([
+    expect(h.seen[0].find((item) => item.id === waiting.id)?.relations).toEqual([
       { verb: "blocked by", id: blocker.id, status: "backlog", title: "Migrate the database" },
     ]);
 
@@ -307,7 +340,7 @@ describe("board walk readiness", () => {
     state = "MERGED";
     await h.walk.tick();
     expect(status(gated.id)).toBe("backlog");
-    expect(readBoard(h.turns[1].prompt)[0].links).toEqual([{ url, kind: "pull", state: "MERGED" }]);
+    expect(h.seen[1][0].links).toEqual([{ url, kind: "pull", state: "MERGED" }]);
   });
 
   it("flags a stuck Todo with exactly one comment across two ticks", async () => {
@@ -320,8 +353,8 @@ describe("board walk readiness", () => {
     expect(walkComments(stuck.id)[0].body).toMatch(/^Board walk: this looks stuck\./);
     expect(first.entries).toContainEqual(expect.objectContaining({ kind: "stuck", workItemId: stuck.id, outcome: "flagged with a comment" }));
     expect(second.entries).toContainEqual(expect.objectContaining({ kind: "stuck", workItemId: stuck.id, outcome: "already flagged; not raised again" }));
-    // The second prompt tells the model it already raised this one.
-    expect(readBoard(h.turns[1].prompt)[0].flaggedStuck).toBe(true);
+    // The second tick tells the model it already raised this one.
+    expect(h.seen[1][0].flaggedStuck).toBe(true);
   });
 
   it("raises a stuck Todo again once it has moved and got stuck anew", async () => {
@@ -443,7 +476,7 @@ describe("board walk switches and the tick log", () => {
     todo("Ready work");
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const h = open({ reply: async (turn) => { await gate; return { sessionId: "slow", reply: fakeModel(turn.prompt) }; } });
+    const h = open({ reply: async (turn) => { await gate; await fakeModel(turn); return { sessionId: "slow", reply: "Done." }; } });
     const first = h.walk.tick("schedule");
     const second = await h.walk.tick("schedule");
     expect(second).toMatchObject({ outcome: "busy", trigger: "schedule" });
@@ -484,12 +517,39 @@ describe("board walk switches and the tick log", () => {
     expect(log[0].sessionId).toBe("walk-1");
   });
 
-  it("an unreadable answer is a failed tick that changes nothing", async () => {
+  it("a turn that only talks changes nothing, and logs every Todo as not decided", async () => {
     const past = blocked("Renew the cert", { body: "not before 2026-09-30" });
     const h = open({ reply: () => ({ sessionId: "s", reply: "I released it for you." }) });
     const tick = await h.walk.tick();
-    expect(tick).toMatchObject({ outcome: "failed", summary: "the answer could not be used: the reply carried no JSON object" });
     expect(status(past.id)).toBe("blocked");
+    expect(tick.outcome).toBe("ok");
+    expect(tick.summary).toBe("1 not decided. Dispatch: the walk did not finish the tick, so gave no reason");
+    expect(tick.entries).toEqual([
+      { kind: "undecided", workItemId: past.id, reason: "no decision was made on it this tick", outcome: "left as it was" },
+      { kind: "hold", reason: "the walk gave no reason: it did not finish the tick", outcome: "nothing started" },
+    ]);
+  });
+
+  it("refuses an unreadable decision for its Todo alone, and the other decisions still apply", async () => {
+    const past = blocked("Renew the cert", { body: "not before 2026-09-30" });
+    const other = blocked("Renew the domain", { body: "not before 2026-09-29" });
+    let answers: WalkToolResult[] = [];
+    const h = open({ reply: async (turn) => {
+      answers = await submit(turn, { todos: [
+        { id: past.id, verdict: "ready", action: "release", reason: "met", gates: "the date passed" },
+        { id: other.id, verdict: "ready", action: "release", reason: "met", gates: [{ kind: "date", date: "2026-09-29", quote: "not before 2026-09-29" }] },
+      ], dispatch: { start: [], reason: "nothing ready" } });
+      return { reply: "done" };
+    } });
+    const tick = await h.walk.tick();
+    expect(status(past.id)).toBe("blocked");
+    expect(status(other.id)).toBe("backlog");
+    expect(answers[0]).toEqual({ ok: false, text: expect.stringMatching(new RegExp(`^refused for ${past.id}: some gates cannot be read`)) });
+    expect(answers[1]).toEqual({ ok: true, text: `${other.id}: moved to backlog` });
+    expect(tick.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "refused", workItemId: past.id, reason: "unreadable decision" }),
+      expect.objectContaining({ kind: "release", workItemId: other.id, outcome: "moved to backlog" }),
+    ]));
   });
 
   it("a failed model turn is logged and changes nothing", async () => {
@@ -513,17 +573,16 @@ describe("board walk switches and the tick log", () => {
     const closed = todo("Closed");
     m.transitions.transition(closed.id, "done", "operator", { human: true });
     todo("Open");
-    const reply = JSON.stringify({ todos: [
+    const h = open({ reply: scripted({ todos: [
       { id: closed.id, verdict: "ready", action: "release", reason: "x" },
       { id: "ZZZ-999", verdict: "ready", action: "release", reason: "y" },
       { id: "ZZZ-1", verdict: "maybe", action: "release", reason: "z" },
-    ], dispatch: { start: [], reason: "nothing ready" } });
-    const h = open({ reply: () => ({ reply }) });
+    ], dispatch: { start: [], reason: "nothing ready" } }) });
     const tick = await h.walk.tick();
     expect(tick.entries).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "refused", workItemId: closed.id, outcome: "the walk only touches open Todos; this one is done" }),
       expect.objectContaining({ kind: "refused", workItemId: "ZZZ-999", outcome: "no such Todo" }),
-      expect.objectContaining({ kind: "refused", outcome: "unreadable decision, ignored" }),
+      expect.objectContaining({ kind: "refused", workItemId: "ZZZ-1", outcome: 'verdict "maybe" is not one of ready, gated, stuck, unclear' }),
     ]));
   });
 });
@@ -533,12 +592,11 @@ describe("board walk guards from review", () => {
     const mine = blocked("Renew the cert, my call", { body: "not before 2026-09-30", assignee: "@operator" });
     const named = todo("Pick the vendor, park me", { body: "not before 2026-10-10" });
     m.transitions.transition(named.id, "blocked", "operator", { human: true, stopCause: { unblockHint: { what: "choose a vendor", who: "the operator" } } });
-    const reply = JSON.stringify({ todos: [
+    const h = open({ reply: scripted({ todos: [
       { id: mine.id, verdict: "ready", action: "release", reason: "date passed" },
       { id: named.id, verdict: "gated", action: "park", until: "2026-10-10T00:00:00Z", reason: "date" },
       { id: mine.id, verdict: "stuck", action: "flag", reason: "nobody decided" },
-    ], dispatch: { start: [], reason: "nothing" } });
-    const h = open({ reply: () => ({ reply }) });
+    ], dispatch: { start: [], reason: "nothing" } }) });
     const tick = await h.walk.tick();
     expect(status(mine.id)).toBe("blocked");
     expect(m.stopCause.readStopCause(m.db, named.id, NOW)).toEqual({ unblockHint: { what: "choose a vendor", who: "the operator" } });
@@ -568,7 +626,7 @@ describe("board walk guards from review", () => {
     todo("Ready work");
     let calls = 0;
     const stopped: string[] = [];
-    const h = open({ turnTimeoutMs: 50, stopped, reply: () => { calls++; return calls === 1 ? new Promise<WalkTurnResult>(() => {}) : { reply: JSON.stringify({ todos: [], dispatch: { start: [], reason: "fine" } }) }; } });
+    const h = open({ turnTimeoutMs: 50, stopped, reply: (turn) => { calls++; return calls === 1 ? new Promise<WalkTurnResult>(() => {}) : scripted({ todos: [], dispatch: { start: [], reason: "fine" } })(turn); } });
     const stalled = await h.walk.tick();
     expect(stalled).toMatchObject({ outcome: "failed", summary: "the model turn failed: the model turn did not finish within 0 s; it was stopped" });
     expect(h.dispatched).toEqual([]);
@@ -589,33 +647,62 @@ describe("board walk review round 2", () => {
     expect(h.turns[0].prompt).not.toContain("### Default: Release");
   });
 
-  it("keeps the board inside the prompt's budget and counts what it left out", async () => {
-    const { buildBoardDigest } = await import("../board.js");
-    const { buildPrompt } = await import("../prompt.js");
-    const { readRules } = await import("../settings.js");
-    for (let i = 0; i < 5; i++) todo(`Long ${i}`, { body: "x".repeat(1500) });
-    const board = await buildBoardDigest({ resolveLink: async (url, kind) => ({ url, kind, state: "unknown" }) });
-    expect(board.todos).toHaveLength(5);
-    const rules = readRules(RULES);
-    const snapshot = section((await runOnce()).prompt, "## Capacity snapshot") as CapacitySnapshot;
-    const small = buildPrompt({ settings: rules.settings, rules: rules.body, snapshot, board, budgetBytes: Buffer.byteLength(buildPrompt({ settings: rules.settings, rules: rules.body, snapshot, board: { ...board, todos: [] } })) + 4000 });
-    const shown = readBoard(small);
-    expect(shown.length).toBeGreaterThan(0);
-    expect(shown.length).toBeLessThan(5);
-    expect(small).toContain(`## The board (${shown.length} open Todo${shown.length === 1 ? "" : "s"}, ${5 - shown.length} more not shown; 0 in review`);
+  it("keeps the board out of the prompt: the model reads it through its tools", async () => {
+    const item = todo("A distinctive title for the prompt check", { body: "a distinctive body" });
+    const h = open();
+    await h.walk.tick();
+    expect(h.turns[0].prompt).not.toContain("distinctive");
+    expect(h.turns[0].prompt).toContain("The board has 1 open Todo; 0 more are in review");
+    expect(h.seen[0].map((shown) => shown.id)).toEqual([item.id]);
   });
 
   it("cuts a long Todo's text short, says so, and keeps only its newest comments", async () => {
     const item = todo("A Todo with a long thread", { body: `not before 2026-09-30. ${"Detail. ".repeat(400)}` });
     for (let i = 0; i < 9; i++) m.comments.addComment({ workItemId: item.id, body: `note ${i}: ${"words ".repeat(150)}`, author: "operator", authorKind: "operator" });
-    const { prompt } = await runOnce();
-    const block = prompt.slice(prompt.indexOf(`### ${item.id}:`));
+    let block = "";
+    await open({ reply: async (turn) => { block = (await turn.tools.call("walk_todo", { id: item.id })).text; return { reply: "done" }; } }).walk.tick();
     expect(block).toContain("not before 2026-09-30.");
     expect(block).toMatch(/… \[truncated, \d+ chars\]/);
     expect(block).toContain("comments (newest 4 of 9, oldest first):");
     expect(block).toContain("note 8:");
     expect(block).not.toContain("note 4:");
-    expect(Buffer.byteLength(block.slice(0, block.indexOf("\n## Your answer")), "utf8")).toBeLessThan(4500);
+    expect(Buffer.byteLength(block, "utf8")).toBeLessThan(4500);
+  });
+
+  it("refuses every call past the tick's budget, and anything once the tick is over", async () => {
+    todo("Only one");
+    let late: WalkTurn | undefined;
+    const answers: WalkToolResult[] = [];
+    const h = open({ reply: async (turn) => {
+      late = turn;
+      for (let i = 0; i < 24; i++) answers.push(await turn.tools.call("walk_board", {}));
+      return { reply: "done" };
+    } });
+    await h.walk.tick();
+    // One open Todo: three calls for it and twenty to spare.
+    expect(answers.filter((answer) => answer.ok)).toHaveLength(23);
+    expect(answers[23]).toEqual({ ok: false, text: "this tick's budget of 23 tool calls is spent: call nothing more. Anything not decided waits for the next tick." });
+    expect(await late!.tools.call("walk_board", {})).toEqual({ ok: false, text: "this tick is over; nothing more is taken from this turn" });
+  });
+
+  it("answers the walk's tools only for the running tick's own session", async () => {
+    const item = blocked("Renew the cert", { body: "not before 2026-09-30" });
+    const walkSession = m.registry.createSession({ engine: "claude", source: "cron", sourceRef: "x", sessionKey: "pending" } as never);
+    const other = m.registry.createSession({ engine: "claude", source: "web", sourceRef: "y", sessionKey: "web:other" } as never);
+    const answers: unknown[] = [];
+    const h = open({ reply: async (turn) => {
+      m.registry.updateSession(walkSession.id, { sessionKey: turn.sessionKey } as never);
+      const decision = { id: item.id, verdict: "ready", action: "release", reason: "met", gates: [{ kind: "date", date: "2026-09-30", quote: "not before 2026-09-30" }] };
+      answers.push(await h.walk.turnTool(other.id, "walk_decide", decision));
+      answers.push(await h.walk.turnTool(walkSession.id, "walk_decide", decision));
+      return { reply: "done" };
+    } });
+    await h.walk.tick();
+    expect(answers).toEqual([
+      { status: 403, body: { error: "only the running board walk's own turn may use the walk's tools" } },
+      { status: 200, body: { ok: true, text: `${item.id}: moved to backlog` } },
+    ]);
+    expect(await h.walk.turnTool(walkSession.id, "walk_board", {})).toEqual({ status: 409, body: { error: "no board walk turn is running" } });
   });
 
   it("starts through the real Dispatcher path with the board's dispatched event and the walk's mark", async () => {
@@ -623,7 +710,7 @@ describe("board walk review round 2", () => {
     const events: string[] = [];
     const walk = m.walk.startBoardWalk({
       getConfig: () => config, context: {} as never, rulesFile: RULES, now: () => NOW, scheduleJob: () => undefined, armedJob: () => undefined,
-      runTurn: async (turn) => ({ reply: fakeModel(turn.prompt) }),
+      runTurn: async (turn) => { await fakeModel(turn); return { reply: "Done." }; },
       resolveLink: async (url, kind) => ({ url, kind, state: "unknown" }),
       sessions: () => [], holdingCapacity: () => [], collectClaude: async () => claude(15),
       emitProjectionEvent: (id, action) => events.push(`${id}:${action}`),
@@ -641,13 +728,15 @@ describe("board walk review round 2", () => {
 });
 
 describe("a release is checked against the gates it cites", () => {
-  const releaseReply = (id: string, gates?: unknown) => () => ({ reply: JSON.stringify({ todos: [{ id, verdict: "ready", action: "release", reason: "met", ...(gates ? { gates } : {}) }], dispatch: { start: [], reason: "nothing" } }) });
+  const releaseReply = (id: string, gates?: unknown) => scripted({ todos: [{ id, verdict: "ready", action: "release", reason: "met", ...(gates ? { gates } : {}) }], dispatch: { start: [], reason: "nothing" } });
 
   it.each([
     ["no gate at all", undefined, "a release must cite the gates that are met"],
     ["a quote that names no date", [{ kind: "date", date: "2026-09-01", quote: "after https://github.com" }], "do not name 2026-09-01"],
     ["a past date the Todo never names", [{ kind: "date", date: "2026-09-01", quote: "not before 1 September" }], "the quoted words \"not before 1 September\" are not in this Todo"],
-    ["a date with no quote", [{ kind: "date", date: "2026-09-01" }], "a release must cite the gates that are met"],
+    // Refused whole, before any gate is checked: a release never rides on the
+    // gates that could be read while one that could not is dropped.
+    ["a date with no quote", [{ kind: "date", date: "2026-09-01" }], "some gates cannot be read"],
     ["a pull request the Todo does not link", [{ kind: "pr", url: "https://github.com/acme/widgets/pull/9" }], "https://github.com/acme/widgets/pull/9 is not linked from this Todo"],
     ["an open pull request", [{ kind: "pr", url: "https://github.com/acme/widgets/pull/18" }], "https://github.com/acme/widgets/pull/18 is OPEN"],
   ])("refuses a release citing %s", async (_label, gates, outcome) => {
@@ -667,7 +756,7 @@ describe("a release is checked against the gates it cites", () => {
       [{ kind: "date", date: "2026-01-01", quote: "1 January" }],
     ]) {
       const tick = await open({ reply: releaseReply(item.id, gates) }).walk.tick();
-      expect(tick.entries.find((entry) => entry.workItemId === item.id)).toMatchObject({ kind: "refused", outcome: expect.stringMatching(/^gate not confirmed: /) });
+      expect(tick.entries.find((entry) => entry.workItemId === item.id)).toMatchObject({ kind: "refused", outcome: expect.stringMatching(/^(gate not confirmed: |some gates cannot be read)/) });
     }
     expect(status(item.id)).toBe("blocked");
   });
@@ -711,9 +800,9 @@ describe("a release is checked against the gates it cites", () => {
     const open1 = todo("Still going");
     const item = blocked("Waiting", { body: `after ${open1.id}` });
     const first = await open({ reply: releaseReply(item.id, [{ kind: "blocker", id: stranger.id }]) }).walk.tick();
-    expect(first.entries[0].outcome).toBe(`gate not confirmed: ${stranger.id} is not a blocker this Todo names`);
+    expect(first.entries.find((entry) => entry.workItemId === item.id)?.outcome).toBe(`gate not confirmed: ${stranger.id} is not a blocker this Todo names`);
     const second = await open({ reply: releaseReply(item.id, [{ kind: "blocker", id: open1.id }]) }).walk.tick();
-    expect(second.entries[0].outcome).toBe(`gate not confirmed: blocker ${open1.id} is backlog, not done`);
+    expect(second.entries.find((entry) => entry.workItemId === item.id)?.outcome).toBe(`gate not confirmed: blocker ${open1.id} is backlog, not done`);
     expect(status(item.id)).toBe("blocked");
   });
 

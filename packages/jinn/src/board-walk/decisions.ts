@@ -1,16 +1,16 @@
 /**
- * What the walk's model answers with, and how that answer is read.
+ * What the walk's model decides, one Todo at a time, and how each decision is
+ * read.
  *
- * The model does not act. It returns one JSON object; the gateway validates it
- * and carries it out (apply.ts), so every act is checked against the switches,
- * the Todo's real state and its opt-outs, and lands in the tick log with the
- * model's own reason. A reply that cannot be read is a failed tick that does
- * nothing, never a partial guess.
+ * The model does not act. It hands the gateway one decision per tool call
+ * (board-walk/turn.ts); each is read here on its own, and a decision that
+ * cannot be read is refused for that Todo alone, with the reason, so the
+ * model can correct it. The gateway then checks and carries it out (apply.ts).
  */
 
 export const VERDICTS = ["ready", "gated", "stuck", "unclear"] as const;
 export type Verdict = (typeof VERDICTS)[number];
-export const TODO_ACTIONS = ["release", "park", "flag", "none"] as const;
+export const TODO_ACTIONS = ["release", "park", "flag", "leave"] as const;
 export type TodoAction = (typeof TODO_ACTIONS)[number];
 
 /** A gate the gateway can check for itself. A release must cite every gate
@@ -39,60 +39,6 @@ export interface StartDecision {
   model?: string;
 }
 
-export interface WalkDecisions {
-  todos: TodoDecision[];
-  dispatch: { start: StartDecision[]; reason: string };
-  summary: string;
-}
-
-export type ParsedDecisions =
-  | { ok: true; decisions: WalkDecisions; problems: string[] }
-  | { ok: false; error: string };
-
-/** Every fenced block in a reply, paired line by line: a fence opens on a
- *  line starting with three backticks (any info string) and closes on the next
- *  bare one. Pairing by line is what stops the closing fence of an earlier
- *  block being read as the opening of the answer. */
-function fencedBlocks(reply: string): Array<{ info: string; body: string }> {
-  const blocks: Array<{ info: string; body: string }> = [];
-  let open: { info: string; lines: string[] } | undefined;
-  for (const line of reply.split(/\r?\n/)) {
-    const fence = /^\s*```(.*)$/.exec(line);
-    if (!open) {
-      if (fence) open = { info: fence[1].trim().toLowerCase(), lines: [] };
-    } else if (fence && fence[1].trim() === "") {
-      blocks.push({ info: open.info, body: open.lines.join("\n").trim() });
-      open = undefined;
-    } else {
-      open.lines.push(line);
-    }
-  }
-  return blocks;
-}
-
-function parsesAsObject(text: string): boolean {
-  try {
-    const value: unknown = JSON.parse(text);
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-  } catch {
-    return false;
-  }
-}
-
-/** The JSON object in a reply: the last fenced block that parses as one
- *  (a `json` block preferred), else the outermost braces of the reply. */
-export function extractJson(reply: string): string | undefined {
-  const blocks = fencedBlocks(reply).reverse();
-  const fenced = blocks.find((block) => block.info === "json" && parsesAsObject(block.body))
-    ?? blocks.find((block) => parsesAsObject(block.body));
-  if (fenced) return fenced.body;
-  const jsonBlock = blocks.find((block) => block.info === "json");
-  if (jsonBlock) return jsonBlock.body;
-  const start = reply.indexOf("{");
-  const end = reply.lastIndexOf("}");
-  return start !== -1 && end > start ? reply.slice(start, end + 1) : undefined;
-}
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const text = (value: unknown): string | undefined =>
@@ -106,69 +52,43 @@ function gate(raw: unknown): Gate | undefined {
   return undefined;
 }
 
-function gatesOf(raw: unknown, id: string, problems: string[]): Gate[] | undefined {
+function gatesOf(raw: unknown, problems: string[]): Gate[] | undefined {
   if (raw === undefined) return undefined;
   const list = Array.isArray(raw) ? raw : [];
   const gates = list.map(gate);
   if (!Array.isArray(raw) || gates.some((entry) => entry === undefined)) {
-    problems.push(`${id} has gates the gateway cannot read; each is {kind: date, date, quote} | {kind: blocker, id} | {kind: pr|issue, url}`);
+    problems.push("some gates cannot be read; each is {kind: date, date, quote} | {kind: blocker, id} | {kind: pr|issue, url}");
   }
   return gates.filter((entry): entry is Gate => entry !== undefined);
 }
 
-function todoDecision(raw: unknown, index: number, problems: string[]): TodoDecision | undefined {
-  if (!isRecord(raw)) { problems.push(`todos[${index}] is not an object`); return undefined; }
+export type Read<T> = { ok: true; decision: T } | { ok: false; problem: string };
+
+/** One Todo decision, or why it cannot be used. */
+export function readTodoDecision(raw: unknown): Read<TodoDecision> {
+  if (!isRecord(raw)) return { ok: false, problem: "the decision is not an object" };
   const id = text(raw.id);
   const reason = text(raw.reason);
   const verdict = raw.verdict as Verdict;
-  const action = (raw.action ?? "none") as TodoAction;
-  if (!id) { problems.push(`todos[${index}] has no id`); return undefined; }
-  if (!VERDICTS.includes(verdict)) { problems.push(`todos[${index}] (${id}) has verdict ${JSON.stringify(raw.verdict)}; expected ${VERDICTS.join(", ")}`); return undefined; }
-  if (!TODO_ACTIONS.includes(action)) { problems.push(`todos[${index}] (${id}) has action ${JSON.stringify(raw.action)}; expected ${TODO_ACTIONS.join(", ")}`); return undefined; }
-  if (!reason) { problems.push(`todos[${index}] (${id}) gives no reason`); return undefined; }
+  const action = raw.action as TodoAction;
+  if (!id) return { ok: false, problem: "the decision names no Todo id" };
+  if (!VERDICTS.includes(verdict)) return { ok: false, problem: `verdict ${JSON.stringify(raw.verdict)} is not one of ${VERDICTS.join(", ")}` };
+  if (!TODO_ACTIONS.includes(action)) return { ok: false, problem: `action ${JSON.stringify(raw.action)} is not one of ${TODO_ACTIONS.join(", ")}` };
+  if (!reason) return { ok: false, problem: "the decision gives no reason" };
+  const problems: string[] = [];
   const until = text(raw.until);
-  const gates = gatesOf(raw.gates, id, problems);
-  return { id, verdict, action, reason, ...(until ? { until } : {}), ...(gates ? { gates } : {}) };
+  const gates = gatesOf(raw.gates, problems);
+  if (problems.length > 0) return { ok: false, problem: problems.join("; ") };
+  return { ok: true, decision: { id, verdict, action, reason, ...(until ? { until } : {}), ...(gates ? { gates } : {}) } };
 }
 
-function startDecision(raw: unknown, index: number, problems: string[]): StartDecision | undefined {
-  if (!isRecord(raw)) { problems.push(`dispatch.start[${index}] is not an object`); return undefined; }
+/** One start, or why it cannot be used. */
+export function readStartDecision(raw: unknown): Read<StartDecision> {
+  if (!isRecord(raw)) return { ok: false, problem: "the start is not an object" };
   const id = text(raw.id);
   const reason = text(raw.reason);
-  if (!id || !reason) { problems.push(`dispatch.start[${index}] needs an id and a reason`); return undefined; }
+  if (!id || !reason) return { ok: false, problem: "a start needs a Todo id and a reason" };
   const engine = text(raw.engine);
   const model = text(raw.model);
-  return { id, reason, ...(engine ? { engine } : {}), ...(model ? { model } : {}) };
-}
-
-function parseObject(reply: string): { ok: true; raw: Record<string, unknown> } | { ok: false; error: string } {
-  const json = extractJson(reply);
-  if (!json) return { ok: false, error: "the reply carried no JSON object" };
-  let raw: unknown;
-  try {
-    raw = JSON.parse(json);
-  } catch (error) {
-    return { ok: false, error: `the reply's JSON does not parse: ${error instanceof Error ? error.message : String(error)}` };
-  }
-  return isRecord(raw) ? { ok: true, raw } : { ok: false, error: "the reply's JSON is not an object" };
-}
-
-function listOf<T>(raw: unknown, name: string, read: (entry: unknown, index: number, problems: string[]) => T | undefined, problems: string[]): T[] {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw)) { problems.push(`${name} is not a list`); return []; }
-  return raw.map((entry, index) => read(entry, index, problems)).filter((entry): entry is T => entry !== undefined);
-}
-
-export function parseDecisions(reply: string): ParsedDecisions {
-  const parsed = parseObject(reply);
-  if (!parsed.ok) return parsed;
-  const { raw } = parsed;
-  const problems: string[] = [];
-  const todos = listOf(raw.todos, "todos", todoDecision, problems);
-  const dispatchRaw = isRecord(raw.dispatch) ? raw.dispatch : {};
-  const start = listOf(dispatchRaw.start, "dispatch.start", startDecision, problems);
-  const dispatchReason = text(dispatchRaw.reason);
-  if (!dispatchReason) return { ok: false, error: "the reply gives no dispatch.reason (why it starts something, or why nothing)" };
-  const summary = text(raw.summary) ?? dispatchReason;
-  return { ok: true, decisions: { todos, dispatch: { start, reason: dispatchReason }, summary }, problems };
+  return { ok: true, decision: { id, reason, ...(engine ? { engine } : {}), ...(model ? { model } : {}) } };
 }

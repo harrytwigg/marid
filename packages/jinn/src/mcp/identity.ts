@@ -52,6 +52,11 @@ export function stripMcpBootstrapArgs(args: readonly string[] = []): string[] {
  * `gateway/session-comm-guards.ts#resolveCallerIdentity`.
  */
 
+/** Names the toolset a jinn server serves in place of the company belt
+ *  (server.ts `toolsFor`). The gateway sets it on the server's spec; nothing
+ *  the model can reach sets it. */
+export const JINN_TOOLSET_ENV = "JINN_MCP_TOOLSET";
+
 /** Env var carrying the calling session's id into the jinn MCP server process. */
 export const JINN_SESSION_ID_ENV = "JINN_SESSION_ID";
 

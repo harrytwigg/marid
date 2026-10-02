@@ -1,49 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { extractJson, parseDecisions } from "../decisions.js";
-import { lockedDownEmployee } from "../walk.js";
+import { readStartDecision, readTodoDecision } from "../decisions.js";
+import { lockedDownEmployee } from "../route-turn.js";
 import type { Employee } from "../../shared/types.js";
 
-const answer = { todos: [], dispatch: { start: [], reason: "nothing ready" }, summary: "quiet" };
-
-describe("reading the walk's answer", () => {
-  it("does not mistake the close of an earlier fence for the answer's opening", () => {
-    const reply = [
-      "I checked the gate with:",
-      "```bash",
-      "gh pr view 18 --json state",
-      "```",
-      "Then decided. Note the braces {like these} in prose.",
-      "```json",
-      JSON.stringify(answer),
-      "```",
-    ].join("\n");
-    expect(JSON.parse(extractJson(reply)!)).toEqual(answer);
-    expect(parseDecisions(reply)).toMatchObject({ ok: true, decisions: { summary: "quiet" } });
+describe("reading one decision", () => {
+  it("reads a decision with its gates", () => {
+    expect(readTodoDecision({
+      id: " T-1 ", verdict: "ready", action: "release", reason: "met",
+      gates: [{ kind: "date", date: "2026-09-30", quote: "not before 2026-09-30" }, { kind: "blocker", id: "T-2" }, { kind: "pr", url: "https://github.com/a/b/pull/1" }],
+    })).toEqual({ ok: true, decision: {
+      id: "T-1", verdict: "ready", action: "release", reason: "met",
+      gates: [{ kind: "date", date: "2026-09-30", quote: "not before 2026-09-30" }, { kind: "blocker", id: "T-2" }, { kind: "pr", url: "https://github.com/a/b/pull/1" }],
+    } });
+    expect(readTodoDecision({ id: "T-1", verdict: "gated", action: "leave", reason: "waits" })).toEqual({ ok: true, decision: { id: "T-1", verdict: "gated", action: "leave", reason: "waits" } });
   });
 
-  it("takes the last block that parses, and an unlabelled one when there is no json block", () => {
-    const first = { ...answer, summary: "first" };
-    const last = { ...answer, summary: "last" };
-    expect(JSON.parse(extractJson(`\`\`\`json\n${JSON.stringify(first)}\n\`\`\`\n\`\`\`json\n${JSON.stringify(last)}\n\`\`\``)!).summary).toBe("last");
-    expect(JSON.parse(extractJson(`\`\`\`\n${JSON.stringify(last)}\n\`\`\``)!).summary).toBe("last");
-    expect(JSON.parse(extractJson(`Answer: ${JSON.stringify(last)}`)!).summary).toBe("last");
+  it("refuses rather than guesses, and says what is wrong", () => {
+    expect(readTodoDecision({ verdict: "ready", action: "leave", reason: "x" })).toEqual({ ok: false, problem: "the decision names no Todo id" });
+    expect(readTodoDecision({ id: "T-1", verdict: "ready", action: "none", reason: "x" })).toEqual({ ok: false, problem: 'action "none" is not one of release, park, flag, leave' });
+    expect(readTodoDecision({ id: "T-1", verdict: "ready", action: "leave" })).toEqual({ ok: false, problem: "the decision gives no reason" });
+    // A gate the gateway could not check is never dropped silently: the whole
+    // decision is refused, so a release cannot ride on the gates that did parse.
+    expect(readTodoDecision({ id: "T-1", verdict: "ready", action: "release", reason: "x", gates: [{ kind: "date", date: "2026-09-30" }] }))
+      .toMatchObject({ ok: false, problem: expect.stringContaining("some gates cannot be read") });
   });
 
-  it("fails rather than guessing when nothing parses", () => {
-    expect(parseDecisions("```json\n{not json\n```")).toMatchObject({ ok: false });
-    expect(parseDecisions("no answer at all")).toEqual({ ok: false, error: "the reply carried no JSON object" });
-    expect(parseDecisions(JSON.stringify({ todos: [] }))).toMatchObject({ ok: false, error: expect.stringContaining("dispatch.reason") });
+  it("reads a start, and refuses one with no reason", () => {
+    expect(readStartDecision({ id: "T-1", reason: "spare capacity", engine: "codex" })).toEqual({ ok: true, decision: { id: "T-1", reason: "spare capacity", engine: "codex" } });
+    expect(readStartDecision({ id: "T-1" })).toEqual({ ok: false, problem: "a start needs a Todo id and a reason" });
   });
 });
 
-describe("the walk's turn has no tools", () => {
-  it("runs as the employee on Claude, on the gateway, with no MCP, no built-in tools and none of its own flags", () => {
+describe("the walk's turn has only the walk's tools", () => {
+  it("runs as the employee on Claude, on the gateway, with the board-walk toolset alone, no built-in tools and none of its own flags", () => {
     const employee = {
       name: "assistant", engine: "opencode", model: "x", cliFlags: ["--agent", "build"], mcp: true,
       remoteHost: "box", remoteUser: "u", remoteCwd: "/w",
     } as unknown as Employee;
     expect(lockedDownEmployee(employee, "sonnet")).toEqual({
-      name: "assistant", engine: "claude", model: "sonnet", mcp: false, jinnMcp: false,
+      name: "assistant", engine: "claude", model: "sonnet", mcp: false, jinnMcp: false, toolset: "board-walk",
       cliFlags: ["--no-chrome", "--tools", "", "--strict-mcp-config"],
     });
     const onClaude = { name: "assistant", engine: "claude", model: "opus", cliFlags: ["--chrome"] } as unknown as Employee;

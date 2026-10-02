@@ -36,7 +36,6 @@ const m = {} as {
   walk: typeof import("../walk.js");
   store: typeof import("../../work-items/store.js");
   comments: typeof import("../../work-items/comments.js");
-  prompt: typeof import("../prompt.js");
   manager: typeof import("../../sessions/manager.js");
   db: import("better-sqlite3").Database;
 };
@@ -45,7 +44,6 @@ beforeAll(async () => {
   m.walk = await import("../walk.js");
   m.store = await import("../../work-items/store.js");
   m.comments = await import("../../work-items/comments.js");
-  m.prompt = await import("../prompt.js");
   m.manager = await import("../../sessions/manager.js");
   m.db = (await import("../../shared/db.js")).initDb();
   fs.writeFileSync(RULES, TEMPLATE);
@@ -58,22 +56,20 @@ beforeEach(() => {
 });
 
 /** The engine the walk's turn reaches, recording what it was handed. */
-function engine(answer: (opts: EngineRunOpts) => EngineResult) {
+function engine(answer: (opts: EngineRunOpts) => EngineResult | Promise<EngineResult>) {
   const runs: EngineRunOpts[] = [];
   return {
     runs,
     name: "claude",
     async run(opts: EngineRunOpts): Promise<EngineResult> {
       runs.push(opts);
-      return answer(opts);
+      return await answer(opts);
     },
     isAlive: () => false,
     kill: () => {},
     killAll: () => {},
   };
 }
-
-const NOTHING = "```json\n" + JSON.stringify({ todos: [], dispatch: { start: [], reason: "nothing is ready" }, summary: "nothing to do" }) + "\n```";
 
 function walkWith(fake: ReturnType<typeof engine>) {
   const manager = new m.manager.SessionManager(config, new Map([["claude", fake]]) as never, "walk-route-boot");
@@ -118,26 +114,44 @@ function bigBoard(): number {
 }
 
 describe("the board walk's turn through the session layer", () => {
-  it("completes for an opencode-native employee, locked down on Claude, with a prompt inside its budget", async () => {
+  it("goes through a big board one Todo at a time for an opencode-native employee, on Claude with only the walk's tools", async () => {
     const raw = bigBoard();
     expect(raw).toBeGreaterThan(131_072 * 4);
-    const fake = engine(() => ({ sessionId: "native-1", result: NOTHING }));
-    const tick = await walkWith(fake).tick("manual");
+    let walk: ReturnType<typeof walkWith> | undefined;
+    // The model: read the board through the tools, as the session the gateway
+    // bound them to, and leave every Todo with a reason.
+    const fake = engine(async (opts) => {
+      const call = async (name: string, args: Record<string, unknown> = {}) => (await walk!.turnTool(opts.sessionId!, name, args)).body as { ok: boolean; text: string };
+      const ids: string[] = [];
+      for (let offset = 0; ; offset += 50) {
+        const page = await call("walk_board", { offset });
+        ids.push(...[...page.text.matchAll(/^([A-Z]+-\d+): /gm)].map(([, id]) => id));
+        if (!page.text.includes("More: call walk_board")) break;
+      }
+      for (const id of ids) await call("walk_decide", { id, verdict: "ready", action: "leave", reason: "nothing to do yet" });
+      await call("walk_finish", { summary: "all left", dispatchReason: "nothing is ready" });
+      return { sessionId: "native-1", result: "Done." };
+    });
+    walk = walkWith(fake);
+    const tick = await walk.tick("manual");
 
     expect(tick.outcome).toBe("ok");
-    expect(tick.summary).toContain("nothing is ready");
-    expect(fake.runs).toHaveLength(1);
+    expect(tick.summary).toBe("nothing to do. Dispatch: nothing is ready");
+    expect(tick.modelSummary).toBe("all left");
+    expect(tick.entries.filter((entry) => entry.kind === "ready" && entry.outcome === "left alone")).toHaveLength(47);
     const [run] = fake.runs;
-    // On Claude, whatever the employee's own engine, with every tool taken away.
+    // On Claude, whatever the employee's own engine, with every built-in tool off
+    // and one MCP server: the jinn server serving the walk's toolset, bound to
+    // this session.
     expect(run.cliFlags).toEqual(["--no-chrome", "--tools", "", "--strict-mcp-config"]);
     expect(run.model).toBe("sonnet");
-    const bytes = Buffer.byteLength(run.prompt, "utf8");
-    expect(bytes).toBeLessThanOrEqual(m.prompt.PROMPT_BUDGET_BYTES);
-    // The cut is counted, never silent.
-    const heading = /^## The board \((\d+) open Todos, (\d+) more not shown; 0 in review/m.exec(run.prompt);
-    expect(heading).not.toBeNull();
-    expect(Number(heading![1]) + Number(heading![2])).toBe(47);
-    expect(Number(heading![1])).toBeGreaterThanOrEqual(20);
+    expect(Object.keys(run.resolvedMcp!.mcpServers)).toEqual(["jinn"]);
+    const server = run.resolvedMcp!.mcpServers.jinn as { args: string[]; env: Record<string, string> };
+    expect(server.env).toMatchObject({ JINN_MCP_TOOLSET: "board-walk", JINN_SESSION_ID: run.sessionId });
+    expect(JSON.parse(fs.readFileSync(run.mcpConfigPath!, "utf-8"))).toEqual(run.resolvedMcp);
+    // The board is not in the prompt, so a big board leaves it the same size.
+    expect(run.prompt).not.toContain("Long description of the work");
+    expect(Buffer.byteLength(run.prompt, "utf8")).toBeLessThan(20_000);
   });
 
   it("records a turn whose process never started as failed, with the process's own reason", async () => {

@@ -2766,8 +2766,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
   /** Wrap a freshly-spawned pty.IPty in a PtyHandle and wire its output into
    *  the session's scrollback ring buffer + live subscribers. On PTY exit, if this
-   *  proc is the one bound to the active turn, the resolver is interrupted (a crash
-   *  with no Stop hook); a stale proc replaced by a respawn is treated as benign.
+   *  proc is the one bound to the active turn, the resolver settles it: as failed
+   *  with the process's last output when it never started its session, else as
+   *  interrupted (a crash with no Stop hook). A stale proc replaced by a respawn
+   *  is treated as benign.
    *  `proxy` (the per-PTY SSE forward proxy) is torn down when this PTY exits. */
   private wireProcToStream(jinnSessionId: string, proc: pty.IPty, proxy?: SsePtyProxy): PtyHandle {
     const handle = createPtyHandle(proc);

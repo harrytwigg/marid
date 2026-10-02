@@ -6,7 +6,7 @@
 # run it now, change its schedule or switch it off there. Its timezone is the
 # one "local time" below is read in (none = the gateway host's zone).
 # Who the walk's one turn per tick runs as. It always runs on Claude, on the
-# gateway, with no tools: the walk decides and the gateway acts.
+# gateway, with only the walk's own tools: the walk decides and the gateway acts.
 employee: assistant
 # Claude model for that turn. Empty = the employee's own, or Claude's default.
 model: sonnet
