@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import { useMentionPicker } from "@/components/mention-picker"
 import { STATUS_LABEL } from "@/lib/todos"
 import { StatusCircle } from "@/routes/todos/state-glyph"
@@ -56,6 +56,11 @@ function Composer({ workbench }: { workbench: TodoWorkbench }) {
     employees: workbench.employees,
     textareaRef: inputRef,
   })
+  const { onPickerOpenChange } = workbench
+  useEffect(() => {
+    onPickerOpenChange(picker.open)
+    return () => onPickerOpenChange(false)
+  }, [picker.open, onPickerOpenChange])
   return (
     <div className="mt-2">
       <div className="relative">

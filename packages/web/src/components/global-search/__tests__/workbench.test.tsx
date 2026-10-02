@@ -247,6 +247,21 @@ describe("the search workbench", () => {
     expect(screen.getByTestId(`search-row-todo:${TODO_ID}`)).toBeTruthy()
   })
 
+  it("lets Escape close the @mention list without closing the overlay or clearing the query", async () => {
+    await openOnTheTodo()
+
+    const field = screen.getByTestId("workbench-comment") as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: "ask @b" } })
+    expect(screen.getByTestId("mention-picker")).toBeTruthy()
+
+    fireEvent.keyDown(field, { key: "Escape" })
+
+    await waitFor(() => expect(screen.queryByTestId("mention-picker")).toBeNull())
+    expect(screen.getByTestId("search-workbench")).toBeTruthy()
+    expect(searchField().value).toBe("match")
+    expect(field.value).toBe("ask @b")
+  })
+
   it("gives a row of any other kind no write control at all", async () => {
     renderOverlay()
     fireEvent.change(searchField(), { target: { value: "match" } })
