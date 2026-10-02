@@ -15,7 +15,8 @@ import { resolveJinnHome } from "./home.js";
  * path>`, and that is the path the remote model is given.
  *
  * Two kinds of file are not reachable that way and are COPIED into
- * `uploads/remote-attachments/<session>/` first (the farm links `uploads/`):
+ * `uploads/<date>/<session>/` first (the farm links `uploads/`, and the gateway's
+ * upload sweep ages the copies out like any other upload):
  *  - files in `tmp/`, where the connectors (Telegram, Discord) download media,
  *    because `tmp/` is deliberately a real per-session directory on the remote;
  *  - files elsewhere on the gateway host, which the mount cannot reach at all.
@@ -28,8 +29,13 @@ import { resolveJinnHome } from "./home.js";
 /** Top-level gateway-home entries the staged home does NOT link (FARM_SCRIPT). */
 const UNLINKED_HOME_ENTRIES = new Set(["gateway.json", "tmp"]);
 
-/** Where copied attachments land, relative to the gateway home. */
-export const REMOTE_ATTACHMENTS_SUBDIR = path.join("uploads", "remote-attachments");
+/** Where a copy made today for `sessionId` lands, relative to the gateway home.
+ *  The same `uploads/<YYYY-MM-DD>/<session>/` layout a web upload gets, so the
+ *  gateway's existing age sweep of date buckets removes the copies too. File
+ *  names carry a content digest, so they cannot clash with a real upload. */
+export function remoteAttachmentsDir(sessionId: string, now: Date = new Date()): string {
+  return path.join("uploads", now.toISOString().slice(0, 10), segmentSafe(sessionId));
+}
 
 export interface RemoteAttachmentOpts {
   /** The remote session's staged home, as that host names it (a posix path). */
@@ -59,7 +65,7 @@ function toSessionHome(sessionHome: string, rel: string): string {
 function copyIntoUploads(real: string, home: string, sessionId: string): string {
   const bytes = fs.readFileSync(real);
   const digest = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16);
-  const rel = path.join(REMOTE_ATTACHMENTS_SUBDIR, segmentSafe(sessionId), `${digest}-${segmentSafe(path.basename(real))}`);
+  const rel = path.join(remoteAttachmentsDir(sessionId), `${digest}-${segmentSafe(path.basename(real))}`);
   const dest = path.join(home, rel);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   if (!fs.existsSync(dest)) {

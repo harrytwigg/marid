@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mapAttachmentsForRemote, REMOTE_ATTACHMENTS_SUBDIR } from "../remote-attachments.js";
+import { mapAttachmentsForRemote, remoteAttachmentsDir } from "../remote-attachments.js";
 
 const SESSION_HOME = "/home/builder/.jinn-remote-stage/sessions/sess-1__claude";
 
@@ -31,14 +31,16 @@ describe("mapAttachmentsForRemote", () => {
     const file = write(home, "uploads/2026-10-02/sess-1/a.png");
     expect(mapAttachmentsForRemote([file], opts())).toEqual([`${SESSION_HOME}/uploads/2026-10-02/sess-1/a.png`]);
     // Nothing is copied when the file is already reachable.
-    expect(fs.existsSync(path.join(home, REMOTE_ATTACHMENTS_SUBDIR))).toBe(false);
+    expect(fs.readdirSync(path.join(home, "uploads/2026-10-02/sess-1"))).toEqual(["a.png"]);
   });
 
   it("copies a connector download in tmp/, which the staged home does not link, into uploads/", () => {
     const file = write(home, "tmp/telegram-photo.jpg", "jpeg-bytes");
     const [mapped] = mapAttachmentsForRemote([file], opts());
-    expect(mapped.startsWith(`${SESSION_HOME}/${REMOTE_ATTACHMENTS_SUBDIR}/sess-1/`)).toBe(true);
+    expect(mapped.startsWith(`${SESSION_HOME}/${remoteAttachmentsDir("sess-1")}/`)).toBe(true);
     expect(mapped.endsWith("-telegram-photo.jpg")).toBe(true);
+    // A YYYY-MM-DD bucket, so the gateway's upload sweep ages the copy out.
+    expect(mapped.slice(`${SESSION_HOME}/uploads/`.length)).toMatch(/^\d{4}-\d{2}-\d{2}\/sess-1\//);
     const onGateway = path.join(home, mapped.slice(SESSION_HOME.length + 1));
     expect(fs.readFileSync(onGateway, "utf8")).toBe("jpeg-bytes");
     expect(fs.statSync(onGateway).mode & 0o777).toBe(0o600);
@@ -49,7 +51,7 @@ describe("mapAttachmentsForRemote", () => {
     const first = mapAttachmentsForRemote([file], opts());
     const second = mapAttachmentsForRemote([file], opts());
     expect(second).toEqual(first);
-    const dir = path.join(home, REMOTE_ATTACHMENTS_SUBDIR, "sess-1");
+    const dir = path.join(home, remoteAttachmentsDir("sess-1"));
     expect(fs.readdirSync(dir)).toHaveLength(1);
   });
 
@@ -68,7 +70,7 @@ describe("mapAttachmentsForRemote", () => {
     const [mapped] = mapAttachmentsForRemote([link], opts());
     // The target is outside the home, so it is copied; the link's own name must
     // not be trusted to be reachable remotely.
-    expect(mapped).toContain(`/${REMOTE_ATTACHMENTS_SUBDIR}/sess-1/`);
+    expect(mapped).toContain(`/${remoteAttachmentsDir("sess-1")}/`);
   });
 
   it("refuses credential and session-config files, and a missing file, naming the file", () => {
@@ -79,7 +81,7 @@ describe("mapAttachmentsForRemote", () => {
     expect(() => mapAttachmentsForRemote([path.join(home, "uploads/nope.png")], opts())).toThrow(/nope\.png.*does not exist/);
     expect(() => mapAttachmentsForRemote([home], opts())).toThrow(/not a regular file/);
     // Nothing was copied for a refused file.
-    expect(fs.existsSync(path.join(home, REMOTE_ATTACHMENTS_SUBDIR))).toBe(false);
+    expect(fs.existsSync(path.join(home, remoteAttachmentsDir("sess-1")))).toBe(false);
   });
 
   it("scopes copies by session and sanitises the segments", () => {
@@ -87,7 +89,7 @@ describe("mapAttachmentsForRemote", () => {
     const [mapped] = mapAttachmentsForRemote([file], { ...opts(), sessionId: "../evil" });
     expect(mapped.split("/")).not.toContain("..");
     // Session segment and file name are each ONE path segment under the subdir.
-    expect(mapped.slice(`${SESSION_HOME}/${REMOTE_ATTACHMENTS_SUBDIR}/`.length).split("/")).toHaveLength(2);
+    expect(mapped.slice(`${SESSION_HOME}/uploads/`.length).split("/")).toHaveLength(3); // date / session / file
     expect(mapped).not.toContain("$");
     expect(mapped).not.toContain(" ");
   });
