@@ -10,7 +10,7 @@ import {
 } from "./recovery.js";
 import { isExecutionAttempt } from "./link-role.js";
 import { listWorkItemAttemptRuns } from "./runs.js";
-import { listWorkItemEvents } from "./event-log.js";
+import { latestEvidenceFloorAt, listWorkItemEvents } from "./event-log.js";
 import { appendWorkItemEvent, listWorkItems, type WorkItem } from "./store.js";
 import { initDb } from "../shared/db.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
@@ -60,8 +60,18 @@ export function attemptActivity(workItemId: string): AttemptActivity {
   };
 }
 
+/** The runs the operator's last move has not already answered. A run that ended
+ *  before he decided where the Todo belongs says nothing about the work after
+ *  it, the same floor `collectAttemptEvidence` holds the status derivation to.
+ *  An open run is current by definition. */
+function runsAfterDecision(workItemId: string) {
+  const floor = latestEvidenceFloorAt(workItemId);
+  const runs = listWorkItemAttemptRuns(workItemId);
+  return floor ? runs.filter((run) => run.endedAt === null || run.endedAt > floor) : runs;
+}
+
 export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClassification {
-  const runs = listWorkItemAttemptRuns(item.id);
+  const runs = runsAfterDecision(item.id);
   const last = [...runs].reverse().find((run) => run.endedAt !== null);
   const open = runs.find((run) => run.endedAt === null);
   return classifyRecovery({
@@ -137,7 +147,7 @@ function applyCodeRepair(item: WorkItem, deps: RecoveryApplyDeps, lastRunId: str
  */
 function recoverOne(item: WorkItem, deps: RecoveryApplyDeps, now: Date): { classified: boolean; applied: boolean } {
   const verdict = classifyWorkItem(item, now);
-  const lastRunId = [...listWorkItemAttemptRuns(item.id)].reverse().find((run) => run.endedAt !== null)?.id;
+  const lastRunId = [...runsAfterDecision(item.id)].reverse().find((run) => run.endedAt !== null)?.id;
   const before = getWorkItemRecovery(item.id);
   recordClassified(item, verdict, lastRunId, now);
   const classified = !before || before.incidentId !== incidentId(item, lastRunId) || before.lane !== verdict.lane;

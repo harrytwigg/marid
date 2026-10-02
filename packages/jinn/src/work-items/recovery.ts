@@ -61,7 +61,8 @@ export function isGenericOperatorFallback(verdict: RecoveryClassification): bool
 }
 
 /**
- * The recovery sweep is the only writer of a Todo's `work_item_recovery` row,
+ * The recovery sweep is the only writer of a Todo's `work_item_recovery` row
+ * (bar the operator's manual resume out of blocked, which deletes it),
  * so successive verdicts on it are all this guard has to reconcile.
  * A later generic operator fallback cannot downgrade an unresolved specific
  * lane (manager / recovering). Specific verdicts (failure class, stalled run

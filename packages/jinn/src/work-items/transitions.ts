@@ -1,6 +1,7 @@
 import { listSessionsByWorkItem } from '../sessions/registry.js';
 import { isExecutionAttempt } from './link-role.js';
 import { initDb } from '../shared/db.js';
+import { clearWorkItemRecovery } from './recovery-rows.js';
 import { clearBlockRecord, DEFAULT_BLOCK_KIND, recordBlock, resolveBlock, type BlockKind } from './blocks.js';
 import { cascadeCloseDescendants } from './cascade.js';
 import { holdLiveSignalsUntilCommit, notifyTodoChanged, notifyTodoStatusChange } from './live-events.js';
@@ -230,6 +231,11 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     }
 
     const releasedSessions = target === 'backlog' ? releaseSelfStartedLinks(db, id) : [];
+    // The operator resuming stopped work answers the incident the recovery
+    // sweep classified while it was stopped (the sweep reads runs from after
+    // his move, so it will not write it back).
+    if (from === 'blocked' && target === 'executing' && opts.human && opts.manual) clearWorkItemRecovery(id);
+
     if (block) recordBlock(db, id, block, now);
     // Only a successful completion resets the block history; `cancelled` keeps
     // it, because abandoning work is not evidence its blocks were resolved.

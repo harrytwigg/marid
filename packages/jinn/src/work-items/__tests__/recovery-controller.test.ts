@@ -12,6 +12,7 @@ type Rows = typeof import("../recovery-rows.js");
 type Controller = typeof import("../recovery-controller.js");
 type Claims = typeof import("../claims.js");
 type Recovery = typeof import("../recovery.js");
+type Transitions = typeof import("../transitions.js");
 type BackgroundWork = typeof import("../../sessions/background-work.js");
 
 let store: Store;
@@ -20,6 +21,7 @@ let rows: Rows;
 let controller: Controller;
 let claims: Claims;
 let recovery: Recovery;
+let transitions: Transitions;
 let backgroundWork: BackgroundWork;
 let db: import("better-sqlite3").Database;
 
@@ -30,6 +32,7 @@ beforeAll(async () => {
   controller = await import("../recovery-controller.js");
   claims = await import("../claims.js");
   recovery = await import("../recovery.js");
+  transitions = await import("../transitions.js");
   backgroundWork = await import("../../sessions/background-work.js");
   db = (await import("../../shared/db.js")).initDb();
 });
@@ -242,3 +245,42 @@ describe("a producer whose turn ended with background sub-agents still working",
   });
 });
 
+describe("the operator resuming a blocked Todo", () => {
+  it("answers the failed attempt: the row goes, and the sweep neither reads it back nor rearms from it", () => {
+    const { id } = parked("operator resumes", "the build step exited with code 1");
+    const rearm: string[] = [];
+    const sweep = (mode: "classify-only" | "auto") => controller.sweepTodoRecovery({
+      mode,
+      rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; },
+    });
+
+    sweep("classify-only");
+    expect(rows.getWorkItemRecovery(id)).toMatchObject({ class: "code", lane: "manager" });
+
+    // The run ended before the operator moved the Todo, so it cannot speak for it.
+    transitions.transition(id, "executing", "operator", { human: true, manual: true });
+    expect(rows.getWorkItemRecovery(id)).toBeUndefined();
+
+    sweep("auto");
+    expect(rearm).not.toContain(id);
+    expect(rows.getWorkItemRecovery(id)).not.toMatchObject({ lane: "manager" });
+    expect(rows.getWorkItemRecovery(id)).not.toMatchObject({ lane: "recovering" });
+    expect(store.getWorkItem(id)?.status).toBe("executing");
+  });
+
+  it("still reads a run that ended after the operator's move", () => {
+    const { id } = parked("fails again after resume", "the build step exited with code 1");
+    transitions.transition(id, "executing", "operator", { human: true, manual: true });
+    const sessionId = `s2-${id}`;
+    const now = new Date(Date.now() + 5).toISOString();
+    db.prepare(
+      `INSERT INTO sessions (id, engine, source, source_ref, status, work_item_id, created_at, last_activity)
+       VALUES (?, 'claude', 'cron', ?, 'idle', ?, ?, ?)`,
+    ).run(sessionId, `cron:${sessionId}`, id, now, now);
+    const run = runs.openWorkItemRun({ workItemId: id, sessionId });
+    runs.closeWorkItemRun(run.id, { outcome: "crashed", endedAt: now, error: "the build step exited with code 1" });
+
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
+    expect(rows.getWorkItemRecovery(id)).toMatchObject({ class: "code", lane: "manager", lastRunId: run.id });
+  });
+});
