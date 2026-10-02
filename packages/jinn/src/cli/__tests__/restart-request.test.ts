@@ -11,11 +11,16 @@ process.env.JINN_HOME = tmpHome;
 
 const { requestRestartFromGateway } = await import("../restart-request.js");
 
-let runtimePort = 0;
-let gatewayChild: ChildProcess;
+const foreignHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-restart-request-foreign-"));
+const ENGINES = "engines:\n  default: claude\n  claude:\n    bin: claude\n    model: opus\n";
 
-beforeAll(async () => {
-  runtimePort = await new Promise<number>((resolve, reject) => {
+let runtimePort = 0;
+let foreignPort = 0;
+let gatewayChild: ChildProcess;
+let foreignChild: ChildProcess;
+
+function freePort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
     const probe = net.createServer();
     probe.once("error", reject);
     probe.listen(0, "::1", () => {
@@ -24,29 +29,41 @@ beforeAll(async () => {
       probe.close(() => resolve(port));
     });
   });
-  gatewayChild = spawn(process.execPath, ["-e", `require("node:net").createServer().listen(${runtimePort}, "::1"); setInterval(() => {}, 1000);`], {
+}
+
+async function listenAs(home: string, port: number): Promise<ChildProcess> {
+  const child = spawn(process.execPath, ["-e", `require("node:net").createServer().listen(${port}, "::1"); setInterval(() => {}, 1000);`], {
     stdio: "ignore",
-    env: { ...process.env, JINN_HOME: tmpHome, JINN_HOME_IDENTITY: fs.realpathSync.native(tmpHome) },
+    env: { ...process.env, JINN_HOME: home, JINN_HOME_IDENTITY: fs.realpathSync.native(home) },
   });
   await new Promise<void>((resolve, reject) => {
-    gatewayChild.once("error", reject);
-    gatewayChild.once("spawn", resolve);
+    child.once("error", reject);
+    child.once("spawn", resolve);
   });
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const listening = await new Promise<boolean>((resolve) => {
-      const socket = net.connect(runtimePort, "::1", () => { socket.destroy(); resolve(true); });
+      const socket = net.connect(port, "::1", () => { socket.destroy(); resolve(true); });
       socket.once("error", () => resolve(false));
     });
     if (listening) break;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
+  return child;
+}
+
+beforeAll(async () => {
+  runtimePort = await freePort();
+  foreignPort = await freePort();
+  gatewayChild = await listenAs(tmpHome, runtimePort);
+  // Another instance's gateway: a different home, on its own port.
+  foreignChild = await listenAs(foreignHome, foreignPort);
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.JINN_SESSION_ID;
   fs.mkdirSync(tmpHome, { recursive: true });
-  fs.writeFileSync(path.join(tmpHome, "config.yaml"), `gateway:\n  host: ::1\n  port: ${runtimePort}\n`);
+  fs.writeFileSync(path.join(tmpHome, "config.yaml"), `gateway:\n  host: "::1"\n  port: ${runtimePort}\n${ENGINES}`);
   fs.writeFileSync(path.join(tmpHome, "gateway.json"), JSON.stringify({
     port: runtimePort,
     host: "::1",
@@ -57,8 +74,11 @@ beforeEach(() => {
 });
 
 afterAll(async () => {
-  gatewayChild.kill("SIGKILL");
-  await new Promise<void>((resolve) => gatewayChild.once("exit", () => resolve()));
+  for (const child of [gatewayChild, foreignChild]) {
+    child.kill("SIGKILL");
+    await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  }
+  fs.rmSync(foreignHome, { recursive: true, force: true });
   try {
     fs.rmSync(tmpHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   } catch {}
@@ -120,8 +140,32 @@ describe("requestRestartFromGateway", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("never hands this home's token to another instance's gateway on the target port", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "restarting" }), { status: 200 }));
+
+    await expect(requestRestartFromGateway(fetchMock as unknown as typeof fetch, { port: foreignPort })).resolves.toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not send a request when nothing is listening on the target port", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "restarting" }), { status: 200 }));
+    const idlePort = await freePort();
+
+    await expect(requestRestartFromGateway(fetchMock as unknown as typeof fetch, { port: idlePort })).resolves.toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("targets the port the caller acts on, not the configured one", async () => {
+    fs.writeFileSync(path.join(tmpHome, "config.yaml"), `gateway:\n  host: "::1"\n  port: ${foreignPort}\n${ENGINES}`);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "restarting" }), { status: 200 }));
+
+    await expect(requestRestartFromGateway(fetchMock as unknown as typeof fetch, { port: runtimePort })).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(`http://[::1]:${runtimePort}/api/system/restart`);
+  });
+
   it("applies JINN_HOST/JINN_PORT over config while ignoring an unowned runtime endpoint", async () => {
-    fs.writeFileSync(path.join(tmpHome, "config.yaml"), "gateway:\n  host: 127.0.0.1\n  port: 7777\n");
+    fs.writeFileSync(path.join(tmpHome, "config.yaml"), `gateway:\n  host: 127.0.0.1\n  port: 7799\n${ENGINES}`);
     fs.writeFileSync(path.join(tmpHome, "gateway.json"), JSON.stringify({
       port: 65530,
       host: "127.0.0.1",
@@ -136,7 +180,9 @@ describe("requestRestartFromGateway", () => {
     process.env.JINN_PORT = "8894";
 
     try {
-      await expect(requestRestartFromGateway(fetchMock as unknown as typeof fetch)).resolves.toBe(true);
+      const ownership = vi.fn(() => true);
+      await expect(requestRestartFromGateway(fetchMock as unknown as typeof fetch, { isOwnGateway: ownership })).resolves.toBe(true);
+      expect(ownership).toHaveBeenCalledWith(8894);
       expect(fetchMock).toHaveBeenCalledWith(
         "http://[::1]:8894/api/system/restart",
         expect.objectContaining({

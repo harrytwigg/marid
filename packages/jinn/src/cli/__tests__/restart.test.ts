@@ -32,6 +32,7 @@ describe("runRestart", () => {
     await runRestart();
 
     expect(restartRequest.requestRestartFromGateway).toHaveBeenCalledTimes(1);
+    expect(restartRequest.requestRestartFromGateway).toHaveBeenCalledWith(fetch, { port: 21877 });
     expect(lifecycle.restartDetached).not.toHaveBeenCalled();
   });
 
