@@ -4,7 +4,7 @@ import { useSessions } from '@/hooks/use-sessions'
 import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
 import { PaneTabStrip } from './pane-tab-strip'
-import { closeSession, findGroup, focusedGroup, groupIdsByPaneKey, groupOfSession, hasTabbedGroup, isLastChatWithFiles, paneSessionOf, type LayoutGroup, type SplitLayout } from './split-layout'
+import { closeSession, findGroup, focusedGroup, groupIdsByPaneKey, groupOfSession, hasTabbedGroup, isLastChatWithFiles, paneSessionOf, workingSetFromLayout, type LayoutGroup, type SplitLayout } from './split-layout'
 import { parseFileTabId } from './file-tab'
 import { FilePane } from './file-pane'
 import type { SplitLayoutControls } from './use-split-working-set'
@@ -60,19 +60,27 @@ function useKeepRequests(layout: SplitLayoutControls['layout'], pin: (sessionId:
  * chat of each group and so cannot name that neighbour. Closing a group's last chat closes the file
  * tabs beside it with it, and the route follows focus to wherever it lands.
  */
+/** Whether `sessionId` (a tab of `owner`) is the chat the route is on: its pane's, when that pane has
+ * focus, or the working set's when a file-only pane has it instead. */
+function isRouteChat(layout: SplitLayout, owner: LayoutGroup, sessionId: string): boolean {
+  const shownInFocused = layout.focusedGroupId === owner.id
+    && (owner.activeTab === sessionId || paneSessionOf(owner, layout.focusHistory) === sessionId)
+  return shownInFocused || workingSetFromLayout(layout).focusedId === sessionId
+}
+
 function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) => void) {
   const { layout } = split
   return useCallback((sessionId: string) => {
     if (isLastChatWithFiles(layout, sessionId)) return
     const owner = groupOfSession(layout, sessionId)
-    // The route is the focused pane's chat, which a file tab shown over it does not change.
-    const wasRoute = owner !== null && layout.focusedGroupId === owner.id
-      && (owner.activeTab === sessionId || paneSessionOf(owner, layout.focusHistory) === sessionId)
+    // The route is the focused pane's chat, which a file tab shown over it does not change. With a
+    // file-only pane focused it is the working set's chat, so the route is that one's.
+    const wasRoute = owner !== null && isRouteChat(layout, owner, sessionId)
     split.close(sessionId)
     if (!owner || !wasRoute) return
     const next = closeSession(layout, sessionId)
     const pane = findGroup(next, owner.id) ?? focusedGroup(next)
-    const replacement = pane ? paneSessionOf(pane, next.focusHistory) : ''
+    const replacement = (pane ? paneSessionOf(pane, next.focusHistory) : '') || workingSetFromLayout(next).focusedId
     if (replacement) onSelect(replacement)
   }, [layout, onSelect, split])
 }

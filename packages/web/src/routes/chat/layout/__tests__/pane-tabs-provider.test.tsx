@@ -242,6 +242,17 @@ describe('PaneTabsProvider', () => {
       expect(h.onSelect).not.toHaveBeenCalledWith(report)
     })
 
+    it('closing the route\'s chat tab while the file pane holds focus still moves the route on', () => {
+      const tabbed = openInFocusedGroup(createSplitLayout(['a'], 'a'), 'x')
+      const withFile = openFileTab(tabbed, 'x', report)
+      const h = harness(splitGroup(materializeLayout(withFile, 1), groupOfSession(withFile, 'x')!.id, 'right', report))
+      expect(h.layout.focusedGroupId).toBe(groupOfSession(h.layout, report)!.id)
+      render(<Mount h={h} sessionId="x" />)
+      fireEvent.click(screen.getByLabelText('Close tab Xray'))
+      expect(groupOfSession(h.layout, 'x')).toBeNull()
+      expect(h.onSelect).toHaveBeenLastCalledWith('a')
+    })
+
     it('dragged into a chat\'s strip, goes back to that chat and the route follows it', () => {
       const h = harness(placeTab(splitOut(), groupOfSession(splitOut(), 'x')!.id, 'b'))
       const fileGroup = groupOfSession(h.layout, report)!

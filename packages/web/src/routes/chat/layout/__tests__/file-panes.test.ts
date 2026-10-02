@@ -11,6 +11,7 @@ import {
   isLastChatWithFiles,
   materializeLayout,
   openFileTab,
+  openInFocusedGroup,
   paneKeyOf,
   paneKeysFromLayout,
   paneSetFromLayout,
@@ -152,6 +153,39 @@ describe('closing, moving and pruning around a file-only pane', () => {
     // Without the chat they sat beside, the lone chat's files go; a file-only pane stays while any chat does.
     expect(pruneSessions(layout, (id) => id !== 'a').root).not.toBeNull()
     expect(pruneSessions(layout, () => false).root).toBeNull()
+  })
+})
+
+describe('moving the only chat while a file-only pane stands beside it', () => {
+  /** a (the only chat) beside the report's own pane. */
+  function lone() {
+    const base = openFileTab(materializeLayout(createSplitLayout(['a'], 'a'), 1), 'a', report)
+    return splitGroup(base, groupId(base, 'a'), 'right', report)
+  }
+
+  it('can be dragged into the file pane\'s strip as a tab', () => {
+    const layout = lone()
+    expect(tabsOf(layout)).toEqual([['a'], [report]])
+    const moved = placeTab(layout, groupId(layout, report), 'a')
+    expect(tabsOf(moved)).toHaveLength(1)
+    expect(new Set(groupsOf(moved)[0].tabs)).toEqual(new Set(['a', report]))
+  })
+
+  it('can be split onto the file pane\'s edge', () => {
+    const layout = lone()
+    const split = splitGroup(layout, groupId(layout, report), 'right', 'a')
+    expect(tabsOf(split)).toEqual([[report], ['a']])
+  })
+})
+
+describe('opening a chat while a file-only pane has focus', () => {
+  it('lands beside the route\'s chat, not inside the file pane', () => {
+    const layout = reportSplitOut()
+    expect(layout.focusedGroupId).toBe(groupId(layout, report))
+    const opened = openInFocusedGroup(layout, 'c')
+    expect(groupOfSession(opened, report)!.tabs).toEqual([report])
+    const route = workingSetFromLayout(layout).focusedId!
+    expect(groupOfSession(opened, 'c')!.id).toBe(groupId(opened, route))
   })
 })
 
