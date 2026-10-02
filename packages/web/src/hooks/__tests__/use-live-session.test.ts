@@ -627,6 +627,31 @@ describe("useLiveSession (read-only)", () => {
     expect(result.current.messages.filter((m) => m.content === "PROGRESS-FINAL")).toHaveLength(1)
   })
 
+  it("a sub-agent's tool call does not split the answer being streamed", async () => {
+    getSession.mockResolvedValue({ status: "running", messages: [] })
+    const { subscribe, emit } = makeBus()
+    const { result } = renderHook(() =>
+      useLiveSession("s1", { subscribe, readOnly: true }),
+    )
+    await act(async () => { await Promise.resolve() })
+
+    act(() => {
+      emit("session:delta", { sessionId: "s1", type: "text", content: "Started it in the background. " })
+      // Out of band: a background sub-agent's call lands mid-answer.
+      emit("session:delta", { sessionId: "s1", type: "tool_use", content: "Grep", toolName: "Grep", toolId: "sub-1", sidechain: true })
+      emit("session:delta", { sessionId: "s1", type: "tool_result", content: "Grep", toolName: "Grep", toolId: "sub-1" })
+      emit("session:delta", { sessionId: "s1", type: "text", content: "I will report back." })
+    })
+    expect(result.current.streamingText).toBe("Started it in the background. I will report back.")
+
+    await act(async () => {
+      emit("session:completed", { sessionId: "s1", result: "Started it in the background. I will report back." })
+      await Promise.resolve()
+    })
+    expect(result.current.messages.map((m) => m.content)).toEqual(["Used Grep", "Started it in the background. I will report back."])
+    expect(result.current.messages.find((m) => m.toolCall)?.meta).toEqual({ sidechain: true })
+  })
+
   it("dedupes a flushed bubble that IS the final answer (exactly one answer live)", async () => {
     getSession.mockResolvedValue({ status: "running", messages: [] })
     const { subscribe, emit } = makeBus()

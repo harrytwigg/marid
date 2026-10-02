@@ -377,7 +377,18 @@ export function buildInteractiveArgs(o: InteractiveArgsOpts): string[] {
   return args;
 }
 
+/**
+ * Translate one tool hook into StreamDeltas.
+ *  - PostToolUse → `tool_result` (the completion marker; the SSE stream has none).
+ *  - PreToolUse  → `tool_use`. On a local session the SSE proxy has usually
+ *    reported the same call already and the turn drops the repeat by tool id;
+ *    the hook is the only report of a call made inside a sub-agent (whose
+ *    stream the proxy does not tee) or on a session with no proxy at all (a
+ *    remote one, or one whose proxy failed to bind). A sub-agent's hooks carry
+ *    `agent_id`, which marks the call as a sidechain.
+ */
 export function claudeHookToDeltas(h: Record<string, unknown>): StreamDelta[] {
+  if (h.hook_event_name === "PreToolUse") return claudePreToolUseToDeltas(h);
   if (h.hook_event_name !== "PostToolUse") return [];
   const toolName = typeof h.tool_name === "string" ? h.tool_name : undefined;
   const response = h.tool_response;
@@ -400,6 +411,21 @@ export function claudeHookToDeltas(h: Record<string, unknown>): StreamDelta[] {
     toolName,
     ...(toolId ? { toolId } : {}),
     ...(activityReceiptId ? { activityReceiptId } : {}),
+  }];
+}
+
+function claudePreToolUseToDeltas(h: Record<string, unknown>): StreamDelta[] {
+  // Without an id the call cannot be matched against the proxy's report of it,
+  // and recording it twice is worse than relying on the proxy alone.
+  const toolId = typeof h.tool_use_id === "string" && h.tool_use_id ? h.tool_use_id : undefined;
+  if (!toolId) return [];
+  const toolName = typeof h.tool_name === "string" && h.tool_name ? h.tool_name : "tool";
+  return [{
+    type: "tool_use",
+    content: toolName,
+    toolName,
+    toolId,
+    ...(typeof h.agent_id === "string" ? { sidechain: true } : {}),
   }];
 }
 
@@ -1202,6 +1228,10 @@ interface ActiveTurn {
   boundProc?: pty.IPty;
   /** Suppresses auto-compaction summaries from leaking into the chat stream. */
   gate?: CompactionStreamGate;
+  /** Tool ids this turn has already reported as `tool_use`. A main-agent call
+   *  is reported twice — by the SSE proxy and by its PreToolUse hook, in
+   *  either order — and must be streamed (and recorded) once. */
+  reportedToolIds?: Set<string>;
   /** Local tool calls in flight (PreToolUse seen, PostToolUse not yet). A long
    *  tool is real work, so a quiet PTY with tools running is NOT a stall. */
   activeTools: number;
@@ -2295,8 +2325,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           entry.promptSubmitted = true;
         }
         // tool_use markers + intermediate text stream from the per-PTY SSE proxy
-        // in true order. The hook only supplies tool_result; SSE has no local tool
-        // completion event because tools execute between assistant messages.
+        // in true order. The hooks supply tool_result (SSE has no local tool
+        // completion event because tools execute between assistant messages) and
+        // the tool_use of every call the proxy does not see (see claudeHookToDeltas).
         if (h.hook_event_name === "PreToolUse") {
           entry.activeTools += 1;
         }
@@ -2305,7 +2336,12 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // The tool ran, so whatever prompt was gating it is gone — whether we
           // answered it or a human did in the CLI/xterm view.
           entry.blockedOnPermissionAt = undefined;
-          if (!foreign && !held) for (const delta of claudeHookToDeltas(h as Record<string, unknown>)) opts.onStream?.(delta);
+        }
+        // A replayed PreToolUse predates this turn: its call, if it was ours,
+        // was reported by the turn that made it.
+        const toolHook = h.hook_event_name === "PostToolUse" || (h.hook_event_name === "PreToolUse" && !replaying);
+        if (toolHook && !foreign && !held) {
+          for (const delta of claudeHookToDeltas(h as Record<string, unknown>)) this.forwardDelta(entry, delta);
         }
         // Only a prompt of this turn's own. A replayed one predates the turn,
         // and before our UserPromptSubmit a gated turn's prompts belong to
@@ -2658,8 +2694,18 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // through the gate before reaching the transcript.
     const gate = entry.gate ?? (entry.gate = new CompactionStreamGate());
     if (e.type === "message_start") gate.reset();
-    for (const d of gate.accept(sseEventToDeltas(e))) entry.onStream(d);
-    if (e.type === "message_stop") for (const d of gate.end()) entry.onStream(d);
+    for (const d of gate.accept(sseEventToDeltas(e))) this.forwardDelta(entry, d);
+    if (e.type === "message_stop") for (const d of gate.end()) this.forwardDelta(entry, d);
+  }
+
+  /** Stream one delta to the turn, dropping a `tool_use` already reported. */
+  private forwardDelta(entry: ActiveTurn, d: StreamDelta): void {
+    if (d.type === "tool_use" && d.toolId) {
+      const reported = entry.reportedToolIds ?? (entry.reportedToolIds = new Set());
+      if (reported.has(d.toolId)) return;
+      reported.add(d.toolId);
+    }
+    entry.onStream?.(d);
   }
 
   /** Allocate + start a per-PTY SSE forward proxy. Returns the proxy and its port,

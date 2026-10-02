@@ -111,11 +111,16 @@ function isSessionDelta(value: unknown): boolean {
     && isString(value.sessionId)
     && isDeltaType(value.type)
     && isString(value.content)
-    && isOptionalString(value.toolName)
+    && hasOptionalDeltaToolFields(value)
+    && (value.block === undefined || isJsonValue(value.block))
+}
+
+function hasOptionalDeltaToolFields(value: Record<string, unknown>): boolean {
+  return isOptionalString(value.toolName)
     && isOptionalString(value.toolId)
     && isOptionalString(value.activityReceiptId)
     && isOptionalString(value.input)
-    && (value.block === undefined || isJsonValue(value.block))
+    && isOptionalBoolean(value.sidechain)
 }
 
 function isSessionAttachment(value: unknown): boolean {
