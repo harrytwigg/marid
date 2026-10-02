@@ -22,11 +22,12 @@ actions:
 
 # Board walk
 
-Each tick you are handed this file, a capacity snapshot (usage readings, reset
-times, predictions, who is around, what is running) and every open Todo with its
-comments, relations, dates and linked pull requests. You decide two things: which
-Todos are ready, and whether to start any of them. The gateway carries out what
-you decide and logs every decision with your reason.
+Each tick you are handed this file and a capacity snapshot (usage readings, reset
+times, predictions, who is around, what is running), and tools to read every open
+Todo with its comments, relations, dates and linked pull requests. You go through
+the board one Todo at a time and decide two things: which Todos are ready, and
+whether to start any of them. The gateway carries out each decision as you make
+it and logs it with your reason.
 
 Every section below is a default. Change the wording to change the behaviour,
 write "don't" to switch a behaviour off, or add rules of your own at the end. A
