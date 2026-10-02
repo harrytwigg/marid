@@ -147,7 +147,8 @@ describe("the board walk's turn through the session layer", () => {
     expect(run.model).toBe("sonnet");
     expect(Object.keys(run.resolvedMcp!.mcpServers)).toEqual(["jinn"]);
     const server = run.resolvedMcp!.mcpServers.jinn as { args: string[]; env: Record<string, string> };
-    expect(server.env).toMatchObject({ JINN_MCP_TOOLSET: "board-walk", JINN_SESSION_ID: run.sessionId });
+    expect(server.args).toEqual(expect.arrayContaining(["--jinn-toolset", "board-walk"]));
+    expect(server.env).toMatchObject({ JINN_SESSION_ID: run.sessionId });
     expect(JSON.parse(fs.readFileSync(run.mcpConfigPath!, "utf-8"))).toEqual(run.resolvedMcp);
     // The board is not in the prompt, so a big board leaves it the same size.
     expect(run.prompt).not.toContain("Long description of the work");

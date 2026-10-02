@@ -19,6 +19,7 @@ process.env.JINN_HOME = home;
 const m = {} as {
   server: typeof import("../server.js");
   toolsets: typeof import("../toolsets.js");
+  bootstrap: typeof import("../server-bootstrap.js");
   tools: typeof import("../board-walk-tools.js");
   identity: typeof import("../identity.js");
   runMcp: typeof import("../../sessions/engine-run-mcp.js");
@@ -29,6 +30,7 @@ const m = {} as {
 beforeAll(async () => {
   m.server = await import("../server.js");
   m.toolsets = await import("../toolsets.js");
+  m.bootstrap = await import("../server-bootstrap.js");
   m.tools = await import("../board-walk-tools.js");
   m.identity = await import("../identity.js");
   m.runMcp = await import("../../sessions/engine-run-mcp.js");
@@ -94,7 +96,10 @@ describe("a turn whose employee names the walk's toolset", () => {
     });
     expect(Object.keys(resolvedMcp!.mcpServers)).toEqual(["jinn"]);
     const server = resolvedMcp!.mcpServers.jinn as { env: Record<string, string>; args: string[] };
-    expect(server.env).toMatchObject({ JINN_MCP_TOOLSET: "board-walk", JINN_SESSION_ID: "walk-session" });
+    expect(server.args.slice(1, 3)).toEqual(["--jinn-toolset", "board-walk"]);
+    expect(server.env).toMatchObject({ JINN_SESSION_ID: "walk-session" });
+    // What the server reads back from that spec at startup.
+    expect(m.bootstrap.resolveMcpServerBootstrap(server.args.slice(1))).toMatchObject({ toolset: "board-walk", callerSessionId: "walk-session" });
     expect(server.env.JINN_SESSION_CAPABILITY).toBe(m.identity.ensureSessionCapability("walk-session"));
     expect(JSON.parse(fs.readFileSync(mcpConfigPath!, "utf-8"))).toEqual(resolvedMcp);
   });
@@ -105,7 +110,7 @@ describe("a turn whose employee names the walk's toolset", () => {
       employee: { name: "worker", persona: "", mcp: true } as never,
     });
     expect(Object.keys(resolvedMcp?.mcpServers ?? {})).toContain("everything");
-    expect((resolvedMcp?.mcpServers.jinn as { env?: Record<string, string> } | undefined)?.env?.JINN_MCP_TOOLSET).toBeUndefined();
+    expect((resolvedMcp?.mcpServers.jinn as { args?: string[] } | undefined)?.args ?? []).not.toContain("--jinn-toolset");
   });
 });
 

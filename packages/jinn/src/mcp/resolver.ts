@@ -7,7 +7,7 @@ import { logger } from "../shared/logger.js";
 import { resolveEnvVar } from "../shared/env-ref.js";
 import { wrapServersWithScrub } from "./env-scrub.js";
 import { decideJinnAttachment } from "./attachment.js";
-import { JINN_TOOLSET_ENV } from "./identity.js";
+import { MCP_TOOLSET_ARG } from "./identity.js";
 
 export type { ResolvedMcpConfig } from "../shared/types.js";
 
@@ -99,9 +99,9 @@ export function resolveMcpServers(
  */
 export function buildJinnServerSpec(toolset?: JinnToolset): McpServerStdioConfig {
   const entry = fileURLToPath(new URL("./server-entry.js", import.meta.url));
-  const server: McpServerStdioConfig = { command: process.execPath, args: [entry] };
+  const server: McpServerStdioConfig = { command: process.execPath, args: toolset ? [entry, MCP_TOOLSET_ARG, toolset] : [entry] };
   const url = process.env.JINN_GATEWAY_URL;
-  server.env = { ...(url ? { JINN_GATEWAY_URL: url } : {}), JINN_HOME, ...(toolset ? { [JINN_TOOLSET_ENV]: toolset } : {}) };
+  server.env = { ...(url ? { JINN_GATEWAY_URL: url } : {}), JINN_HOME };
   return server;
 }
 

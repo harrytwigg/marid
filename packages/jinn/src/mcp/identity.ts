@@ -4,6 +4,10 @@ import path from "node:path";
 import type { ResolvedMcpConfig, McpServerStdioConfig } from "../shared/types.js";
 import { resolveJinnHome, resolveMcpSessionCapabilityKeyFile } from "../shared/home.js";
 
+/** Names the toolset a jinn server serves in place of the company belt
+ *  (toolsets.ts `toolsFor`). The gateway puts it on the server's spec; nothing
+ *  the model can reach sets it. */
+export const MCP_TOOLSET_ARG = "--jinn-toolset";
 export const MCP_SESSION_ID_ARG = "--jinn-session-id";
 export const MCP_HOME_ARG = "--jinn-home";
 export const MCP_GATEWAY_URL_ARG = "--jinn-gateway-url";
@@ -51,11 +55,6 @@ export function stripMcpBootstrapArgs(args: readonly string[] = []): string[] {
  * operator/UI/internal, unchanged. The gateway side of this rule lives in
  * `gateway/session-comm-guards.ts#resolveCallerIdentity`.
  */
-
-/** Names the toolset a jinn server serves in place of the company belt
- *  (server.ts `toolsFor`). The gateway sets it on the server's spec; nothing
- *  the model can reach sets it. */
-export const JINN_TOOLSET_ENV = "JINN_MCP_TOOLSET";
 
 /** Env var carrying the calling session's id into the jinn MCP server process. */
 export const JINN_SESSION_ID_ENV = "JINN_SESSION_ID";
