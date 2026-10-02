@@ -6,6 +6,7 @@ import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { TodoDialog } from "./todo-dialog"
 import { DATE_OPTIONS, DUE_OPTIONS, SOURCE_OPTIONS, STATUS_OPTIONS } from "./filter-options"
 import { useLabelRegistry } from "./use-todos"
+import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
 
 type FilterPanel = "root" | "status" | "person" | "department" | "source" | "date" | "label" | "due"
 
@@ -81,7 +82,7 @@ export function TodoFilterSheet({
           <div className="flex flex-col gap-1">
             {([
               ["status", "Status", STATUS_OPTIONS.find((option) => option.value === filters.status)?.label ?? "Open"],
-              ["person", "Person", filters.assignee ? (byName.get(filters.assignee)?.displayName ?? filters.assignee) : "Anyone"],
+              ["person", "Person", assigneeFilterLabel(filters.assignee, byName) ?? "Anyone"],
               ["label", "Label", filters.label ?? "Any"],
               ["due", "Due", DUE_OPTIONS.find((option) => option.value === filters.due)?.label ?? "Any"],
               ["department", "Department", filters.department ? filters.department.charAt(0).toUpperCase() + filters.department.slice(1) : "Any"],
@@ -115,6 +116,12 @@ export function TodoFilterSheet({
           <>
             <button type="button" onClick={() => choose({ ...filters, assignee: undefined })} className={ROW_CLASS}>
               Anyone<Selection selected={!filters.assignee} />
+            </button>
+            <button type="button" onClick={() => choose({ ...filters, assignee: OPERATOR_ASSIGNEE })} className={ROW_CLASS}>
+              Assigned to me<Selection selected={filters.assignee === OPERATOR_ASSIGNEE} />
+            </button>
+            <button type="button" onClick={() => choose({ ...filters, assignee: UNASSIGNED_FILTER })} className={ROW_CLASS}>
+              Unassigned<Selection selected={filters.assignee === UNASSIGNED_FILTER} />
             </button>
             {employees.map((employee) => (
               <button key={employee.name} type="button" onClick={() => choose({ ...filters, assignee: employee.name })} className={ROW_CLASS}>
