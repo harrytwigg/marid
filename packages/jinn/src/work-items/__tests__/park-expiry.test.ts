@@ -36,7 +36,7 @@ const hint = { what: "run the 30-day check", who: "whoever picks it up" };
 const inDays = (days: number): string => new Date(Date.now() + days * DAY).toISOString();
 const justAfter = (iso: string): Date => new Date(Date.parse(iso) + 1_000);
 
-const mk = (status: "backlog" | "assigned" | "executing", extra: Record<string, unknown> = {}) =>
+const mk = (status: "backlog" | "executing", extra: Record<string, unknown> = {}) =>
   store.createWorkItem({ title: `t-${Math.random().toString(36).slice(2, 8)}`, status, ...extra });
 
 /** Park the way the docs now say to: a plain block carrying `parkedUntil`. */
@@ -78,13 +78,13 @@ describe("releaseExpiredParks — a park ends on its own", () => {
     expect(resumed?.detail).toMatchObject({ reason: "park-expired", parkedUntil: until });
   });
 
-  it("re-queues an owned Todo to assigned, as a dependency block would", () => {
-    const item = mk("assigned", { assignee: "junior-developer" });
+  it("re-queues an owned Todo to backlog with its assignee, as a dependency block would", () => {
+    const item = mk("backlog", { assignee: "junior-developer" });
     const until = inDays(2);
     park(item.id, until);
 
     parks.releaseExpiredParks(justAfter(until));
-    expect(store.getWorkItem(item.id)).toMatchObject({ status: "assigned", assignee: "junior-developer" });
+    expect(store.getWorkItem(item.id)).toMatchObject({ status: "backlog", assignee: "junior-developer" });
   });
 
   it("releases each park once — a second sweep over the same clock moves nothing", () => {
@@ -112,16 +112,7 @@ describe("releaseExpiredParks — a park ends on its own", () => {
     expect(cause(hinted.id)).toEqual({ unblockHint: hint });
   });
 
-  it("does not answer an escalation: a sticky stop outlives its park", () => {
-    const item = mk("executing");
-    const until = inDays(1);
-    tr.transition(item.id, "escalated", AGENT, { agent: true, stopCause: { parkedUntil: until, unblockHint: hint }, detail: { note: "operator call" } });
-
-    parks.releaseExpiredParks(justAfter(until));
-    expect(store.getWorkItem(item.id)?.status).toBe("escalated");
-  });
-
-  it("counts toward the block-loop breaker like any block: the third park of an unfinished Todo escalates", () => {
+  it("counts toward the block-loop breaker like any block: the third park of an unfinished Todo escalates into blocked", () => {
     const item = mk("backlog");
     for (const round of [1, 2]) {
       const until = inDays(round);
@@ -130,8 +121,14 @@ describe("releaseExpiredParks — a park ends on its own", () => {
       parks.releaseExpiredParks(justAfter(until));
       expect(store.getWorkItem(item.id)?.status).toBe("backlog");
     }
-    park(item.id, inDays(3));
-    expect(store.getWorkItem(item.id)?.status).toBe("escalated");
+    const third = inDays(3);
+    park(item.id, third);
+    expect(store.getWorkItem(item.id)?.status).toBe("blocked");
+    expect(store.listWorkItemEvents(item.id).at(-1)).toMatchObject({ kind: "escalated", toStatus: "blocked" });
+
+    // The escalation waits on the operator, not the clock: its date does not release it.
+    parks.releaseExpiredParks(justAfter(third));
+    expect(store.getWorkItem(item.id)?.status).toBe("blocked");
   });
 
   it("runs on the reconciler's periodic tick, so a park ends without a restart", async () => {
@@ -234,25 +231,5 @@ describe("re-parking a Todo that is already parked", () => {
     const result = tr.transition(item.id, "blocked", AGENT, { agent: true, detail: { note: "still stuck" } });
     expect(result.event).toBeUndefined();
     expect(store.getWorkItem(item.id)?.version).toBe(before.version);
-  });
-
-  it("refuses an agent changing the cause on an escalation — that stop is the operator's — instead of answering success", () => {
-    const item = mk("executing");
-    const until = inDays(1);
-    tr.transition(item.id, "escalated", AGENT, { agent: true, stopCause: { parkedUntil: until, unblockHint: hint }, detail: { note: "operator call" } });
-
-    expect(() => tr.transition(item.id, "escalated", AGENT, { agent: true, stopCause: { parkedUntil: inDays(30) } }))
-      .toThrow(expect.objectContaining({ code: "human-required" }));
-    expect(cause(item.id)).toEqual({ parkedUntil: until, unblockHint: hint });
-
-    // Retrying the same escalation is still the idempotent no-op it always was.
-    const version = store.getWorkItem(item.id)!.version;
-    const retried = tr.transition(item.id, "escalated", AGENT, { agent: true, stopCause: { unblockHint: hint } });
-    expect(retried.event).toBeUndefined();
-    expect(store.getWorkItem(item.id)?.version).toBe(version);
-
-    const later = inDays(30);
-    tr.transition(item.id, "escalated", "operator", { human: true, stopCause: { parkedUntil: later } });
-    expect(cause(item.id)?.parkedUntil).toBe(later);
   });
 });

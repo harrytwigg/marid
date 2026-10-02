@@ -125,7 +125,7 @@ Two named volumes hold every stateful path:
 
 | Volume | Contents |
 | --- | --- |
-| `jinn-home` | `~/.jinn` — `config.yaml`, your customised `CLAUDE.md`, `sessions/registry.db` and transcripts, paired browsers (`auth-devices.json`), cron jobs, connectors, workflows, knowledge, skills, `secrets/`, logs, and whisper models if you enable STT |
+| `jinn-home` | `~/.jinn` — `config.yaml`, your customised `CLAUDE.md`, `sessions/registry.db` and transcripts, paired browsers (`auth-devices.json`), cron jobs, connectors, knowledge, skills, `secrets/`, logs, and whisper models if you enable STT |
 | `jinn-claude` | `~/.claude` — the engine login (`.credentials.json`), skills, agents, commands, plugins, hooks, Claude Code's own session history, **and `.claude.json`** |
 
 That last entry is the one worth knowing about. Claude Code normally writes its global config to `~/.claude.json` — *outside* `~/.claude` — which in a container means the container layer, discarded on every rebuild. That file holds your user-scope MCP servers, per-project trust settings, account and subscription identity, and onboarding flags, so losing it means re-adding MCP servers and re-approving every mounted repository after each upgrade.

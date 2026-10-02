@@ -10,9 +10,11 @@ process.env.JINN_HOME = tmp;
 
 type Store = typeof import("../store.js");
 type Reconcile = typeof import("../reconcile.js");
+type Transitions = typeof import("../transitions.js");
 
 let store: Store;
 let reconcile: Reconcile;
+let tr: Transitions;
 let db: import("better-sqlite3").Database;
 
 type SessionStatus = "idle" | "running" | "error" | "waiting" | "interrupted";
@@ -46,6 +48,7 @@ function phaseSession(id: string, workItemId: string, status: SessionStatus, at:
 beforeAll(async () => {
   store = await import("../store.js");
   reconcile = await import("../reconcile.js");
+  tr = await import("../transitions.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
@@ -56,24 +59,28 @@ describe("deriveWorkItemStatus — pure truth table (GRS-021a elevated vocabular
     source?: Parameters<Reconcile["deriveWorkItemStatus"]>[2],
   ) => reconcile.deriveWorkItemStatus(current, statuses.map((status) => evidence(status)), source);
 
-  it("keeps sticky terminals (done/cancelled/ESCALATED) regardless of session evidence", () => {
+  it("keeps sticky terminals (done/cancelled) regardless of session evidence", () => {
     expect(D()("done", ["running"])).toBe("done");
     expect(D()("done", ["error", "interrupted"])).toBe("done");
     expect(D()("cancelled", ["idle"])).toBe("cancelled");
-    expect(D()("escalated", ["running"])).toBe("escalated"); // operator queue never silently drained
-    expect(D()("escalated", ["idle"])).toBe("escalated");
   });
 
-  it("leaves an item with NO linked sessions untouched (no evidence — backlog/assigned safe)", () => {
+  it("keeps a DECLARED block (an escalation is one) regardless of session evidence", () => {
+    const declared = { blockDeclared: true };
+    const derive = (statuses: SessionStatus[]) =>
+      reconcile.deriveWorkItemStatus("blocked", statuses.map((status) => evidence(status)), undefined, declared);
+    expect(derive(["running"])).toBe("blocked"); // operator queue never silently drained
+    expect(derive(["idle"])).toBe("blocked");
+  });
+
+  it("leaves an item with NO linked sessions untouched (no evidence — backlog safe)", () => {
     expect(D()("backlog", [])).toBe("backlog");
-    expect(D()("assigned", [])).toBe("assigned");
     expect(D()("executing", [])).toBe("executing");
     expect(D()("blocked", [])).toBe("blocked");
   });
 
   it("is executing when any linked session is in flight (running/waiting)", () => {
     expect(D()("backlog", ["running"])).toBe("executing");
-    expect(D()("assigned", ["running"])).toBe("executing");
     expect(D()("blocked", ["waiting"])).toBe("executing");
     expect(D()("backlog", ["interrupted", "running"])).toBe("executing");
     expect(D()("blocked", ["error", "waiting"])).toBe("executing");
@@ -86,7 +93,7 @@ describe("deriveWorkItemStatus — pure truth table (GRS-021a elevated vocabular
 
   it("does not treat conversational idle without a successful terminal receipt as completed work", () => {
     expect(reconcile.deriveWorkItemStatus("executing", [evidence("idle", null)])).toBe("executing");
-    expect(reconcile.deriveWorkItemStatus("assigned", [evidence("idle", null)])).toBe("assigned");
+    expect(reconcile.deriveWorkItemStatus("backlog", [evidence("idle", null)])).toBe("backlog");
   });
 
   it("is blocked when the NEWEST attempt failed, even if an older attempt settled idle", () => {
@@ -145,10 +152,9 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.getWorkItem(wi.id)?.status).toBe("in_review");
   });
 
-  it("continues normal reconciliation after an operator manually starts an item", async () => {
-    const transitions = await import("../transitions.js");
+  it("continues normal reconciliation after an operator manually starts an item", () => {
     const wi = store.createWorkItem({ title: "manual start", status: "backlog", source: "human" });
-    transitions.transition(wi.id, "executing", "operator", { human: true, manual: true });
+    tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
     linkedSession("s-manual-start", wi.id, "running", new Date(Date.now() + 60_000).toISOString()); // the attempt runs AFTER his dispatch, or it is not evidence about it (PLA-98)
 
     expect(reconcile.reconcileWorkItem(wi.id)).toMatchObject({ changed: false, item: { status: "executing" } });
@@ -202,15 +208,10 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.listWorkItemEvents(wi.id).filter((event) => event.toStatus === "executing")).toHaveLength(0);
   });
 
-  it("keeps an agent-declared block while its linked session is still running", async () => {
-    const transitions = await import("../transitions.js");
-    const wi = store.createWorkItem({
-      title: "declared blocker",
-      status: "executing",
-      source: "delegation",
-    });
+  it("keeps an agent-declared block while its linked session is still running", () => {
+    const wi = store.createWorkItem({ title: "declared blocker", status: "executing", source: "delegation" });
     linkedSession("s-declared-block", wi.id, "running", "2026-07-01T01:45:00.000Z");
-    transitions.transition(wi.id, "blocked", "platform-engineer", {
+    tr.transition(wi.id, "blocked", "platform-engineer", {
       detail: { note: "operator input required" },
     });
 
@@ -221,15 +222,10 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.getWorkItem(wi.id)?.status).toBe("blocked");
   });
 
-  it("keeps a review bounce executing when the newest attempt receipt succeeded", async () => {
-    const transitions = await import("../transitions.js");
-    const wi = store.createWorkItem({
-      title: "review bounce",
-      status: "in_review",
-      source: "delegation",
-    });
+  it("keeps a review bounce executing when the newest attempt receipt succeeded", () => {
+    const wi = store.createWorkItem({ title: "review bounce", status: "in_review", source: "delegation" });
     linkedSession("s-review-bounce", wi.id, "idle", "2026-07-01T01:50:00.000Z", "succeeded");
-    transitions.transition(wi.id, "executing", "reviewer", {
+    tr.transition(wi.id, "executing", "reviewer", {
       bounce: true,
       detail: { critique: "address the review finding" },
     });
@@ -292,22 +288,23 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.getWorkItem(wi.id)?.updatedAt).toBe(before);
   });
 
-  it("keeps done sticky even though its session errored; keeps ESCALATED sticky through churn", () => {
+  it("keeps done sticky even though its session errored; keeps a declared escalation blocked through churn", () => {
     const done = store.createWorkItem({ title: "finished", status: "done", source: "cron", sourceRef: "cron:j6:1" });
     linkedSession("s-err-6", done.id, "error", "2026-07-01T00:00:00.000Z");
     expect(reconcile.reconcileWorkItem(done.id)?.changed).toBe(false);
     expect(store.getWorkItem(done.id)?.status).toBe("done");
 
-    const esc = store.createWorkItem({ title: "with operator", status: "escalated", source: "delegation", sourceRef: "delegate:j7:1" });
+    const esc = store.createWorkItem({ title: "with operator", status: "executing", source: "delegation", sourceRef: "delegate:j7:1" });
+    tr.transition(esc.id, "blocked", "session:agent-1", { agent: true, detail: { declared: true } });
     linkedSession("s-idle-7", esc.id, "idle", "2026-07-01T00:00:00.000Z");
     expect(reconcile.reconcileWorkItem(esc.id)?.changed).toBe(false);
-    expect(store.getWorkItem(esc.id)?.status).toBe("escalated");
+    expect(store.getWorkItem(esc.id)?.status).toBe("blocked");
   });
 
-  it("leaves an item with no linked sessions untouched (backlog/assigned never clobbered)", () => {
-    const wi = store.createWorkItem({ title: "unlinked", status: "assigned", source: "human" });
+  it("leaves an item with no linked sessions untouched (an owned backlog Todo is never clobbered)", () => {
+    const wi = store.createWorkItem({ title: "unlinked", status: "backlog", assignee: "ana", source: "human" });
     expect(reconcile.reconcileWorkItem(wi.id)?.changed).toBe(false);
-    expect(store.getWorkItem(wi.id)?.status).toBe("assigned");
+    expect(store.getWorkItem(wi.id)?.status).toBe("backlog");
   });
 
   it("counts a linked Workflow phase session's spend without deriving the Todo from it", () => {
@@ -333,7 +330,6 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(store.getWorkItem(wi.id)?.status).toBe("blocked");
     expect(store.getWorkItemSpend(wi.id)).toBeCloseTo(2);
   });
-
 });
 
 describe("reconcileActiveWorkItems / startup sweep — the recoverStaleSessions moment", () => {
@@ -352,7 +348,7 @@ describe("reconcileActiveWorkItems / startup sweep — the recoverStaleSessions 
     expect(store.listWorkItemEvents(wi.id).filter((event) => event.actor === "reconciler")).toHaveLength(0);
   });
 
-  it("sweeps non-sticky items (incl. in_review) and skips done/cancelled/escalated", () => {
+  it("sweeps non-sticky items (incl. in_review) and skips done/cancelled", () => {
     const dying = store.createWorkItem({ title: "sweep-dying", status: "executing", source: "cron", sourceRef: "cron:sw1:1" });
     linkedSession("s-sw-int", dying.id, "interrupted", "2026-07-01T02:00:00.000Z");
     const closed = store.createWorkItem({ title: "sweep-closed", status: "done", source: "cron", sourceRef: "cron:sw2:1" });

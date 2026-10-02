@@ -11,16 +11,14 @@ const statuses = (targets: ReturnType<typeof legalTargets>) => targets.map((t) =
 
 describe("legalTargets — manual operator moves, ungated", () => {
   const MATRIX: Record<WorkItemStatusWire, WorkItemStatusWire[]> = {
-    // executing reachable only from backlog/assigned (manual-start rule).
-    backlog: ["assigned", "executing", "in_review", "blocked", "done", "cancelled", "escalated"],
-    assigned: ["backlog", "executing", "in_review", "blocked", "done", "cancelled", "escalated"],
-    executing: ["in_review", "blocked", "done", "cancelled", "escalated"],
-    // Send back is a review verdict, never a manual move: executing absent.
-    in_review: ["done", "blocked", "cancelled", "escalated"],
-    // Unblock resumes through backlog/assigned; executing absent (manual rule).
-    blocked: ["backlog", "assigned", "in_review", "done", "cancelled", "escalated"],
+    // executing reachable from backlog (a start) and in_review (the bounce).
+    backlog: ["executing", "in_review", "blocked", "done", "cancelled"],
+    executing: ["backlog", "in_review", "blocked", "done", "cancelled"],
+    // Sending the work back is the review bounce.
+    in_review: ["executing", "done", "blocked", "cancelled"],
+    // Unblock resumes through backlog; executing absent (manual rule).
+    blocked: ["backlog", "in_review", "done", "cancelled"],
     // Sticky terminals exit on the human surface only — which this is.
-    escalated: ["backlog", "assigned", "in_review", "done", "blocked", "cancelled"],
     done: ["backlog"],
     cancelled: ["backlog"],
   }
@@ -38,8 +36,8 @@ describe("legalTargets — manual operator moves, ungated", () => {
       const offered = statuses(legalTargets(from))
       expect(offered).not.toContain(from)
     }
-    expect(statuses(legalTargets("executing"))).not.toContain("backlog")
-    expect(statuses(legalTargets("in_review"))).not.toContain("executing")
+    expect(statuses(legalTargets("in_review"))).not.toContain("backlog")
+    expect(statuses(legalTargets("blocked"))).not.toContain("executing")
   })
 })
 
@@ -80,13 +78,6 @@ describe("legalTargets — the cascade close (PLA-96)", () => {
     expect(done?.reason).toBe("also closes 1 open sub-task")
   })
 
-  it("keeps done gated while an escalation sits under it — that answer is owed first", () => {
-    const done = legalTargets("in_review", { openChildren: 3, escalatedDescendants: 1 }).find((t) => t.status === "done")
-    expect(done).toEqual({ status: "done", gated: true, reason: "1 escalated sub-task needs an answer first" })
-    const two = legalTargets("in_review", { openChildren: 3, escalatedDescendants: 2 }).find((t) => t.status === "done")
-    expect(two?.reason).toBe("2 escalated sub-tasks need an answer first")
-  })
-
   it("never cascades cancelled", () => {
     const cancelled = legalTargets("in_review", { openChildren: 3, openDescendants: 7 }).find((t) => t.status === "cancelled")
     expect(cancelled).toEqual({ status: "cancelled", gated: true, reason: "3 sub-tasks still open" })
@@ -97,17 +88,17 @@ describe("closeGateCounts — the pre-check read off a loaded tree", () => {
   const node = (status: WorkItemStatusWire, children: unknown[] = []) =>
     ({ status, children }) as unknown as WorkItemTreeNodeWire
 
-  it("keeps direct children apart from the whole open subtree, and finds escalations at depth", () => {
+  it("keeps direct children apart from the whole open subtree", () => {
     const counts = closeGateCounts(node("executing", [
-      node("executing", [node("escalated"), node("done")]),
+      node("executing", [node("blocked"), node("done")]),
       node("done"),
       node("backlog"),
     ]))
-    expect(counts).toEqual({ openChildren: 2, openDescendants: 3, escalatedDescendants: 1 })
+    expect(counts).toEqual({ openChildren: 2, openDescendants: 3 })
   })
 
   it("reads a leaf — and a tree that never loaded — as nothing to close", () => {
-    const nothing = { openChildren: 0, openDescendants: 0, escalatedDescendants: 0 }
+    const nothing = { openChildren: 0, openDescendants: 0 }
     expect(closeGateCounts(node("executing"))).toEqual(nothing)
     expect(closeGateCounts(undefined)).toEqual(nothing)
   })
@@ -116,11 +107,12 @@ describe("closeGateCounts — the pre-check read off a loaded tree", () => {
 describe("canDropOn — drag legality", () => {
   it("legal ungated edges are live targets", () => {
     expect(canDropOn("backlog", "executing")).toBe(true)
+    expect(canDropOn("in_review", "executing")).toBe(true)
     expect(canDropOn("done", "backlog")).toBe(true)
   })
   it("illegal edges are not targets", () => {
-    expect(canDropOn("in_review", "executing")).toBe(false)
-    expect(canDropOn("executing", "backlog")).toBe(false)
+    expect(canDropOn("blocked", "executing")).toBe(false)
+    expect(canDropOn("in_review", "backlog")).toBe(false)
     expect(canDropOn("done", "done")).toBe(false)
   })
   it("a gated column dims like an illegal one", () => {

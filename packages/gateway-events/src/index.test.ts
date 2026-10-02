@@ -42,16 +42,11 @@ describe("decodeGatewayEvent", () => {
     })).toBeNull()
   })
 
-  it("accepts experiment lifecycle events", () => {
-    for (const action of ["created", "updated", "reading-recorded", "concluded"]) {
-      expect(decodeGatewayEvent({
-        event: "experiments:changed",
-        payload: { id: "experiment-1", action },
-      })).toEqual({
-        event: "experiments:changed",
-        payload: { id: "experiment-1", action },
-      })
-    }
+  it("no longer decodes the removed experiments:changed event", () => {
+    expect(decodeGatewayEvent({
+      event: "experiments:changed",
+      payload: { id: "experiment-1", action: "created" },
+    })).toBeNull()
   })
 
   it("accepts video media in session attachment events", () => {

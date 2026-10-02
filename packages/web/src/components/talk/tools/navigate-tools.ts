@@ -3,12 +3,10 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   chatPath,
   cronPath,
-  experimentPath,
   orgPath,
   resolveTodoId,
   todoPath,
   todosPath,
-  workflowPath,
 } from "./nav-paths"
 import { talkNavigator } from "./router-handle"
 import { params, str, type TalkTool, type ToolArgs, type ToolResult } from "./tool-spec"
@@ -44,7 +42,7 @@ const BOARD = str(
   'Which board: "home" for what the operator asked for or kept, "attention" for what needs them, "everything", or a department slug.',
 )
 const STATUS = str("Restrict the board to one status.", [
-  "all", "backlog", "assigned", "executing", "blocked", "in_review", "escalated", "done", "cancelled",
+  "all", "backlog", "executing", "blocked", "in_review", "done", "cancelled",
 ])
 
 const openTodos: TalkTool = {
@@ -77,23 +75,6 @@ const openTodo: TalkTool = {
   },
 }
 
-const openWorkflows: TalkTool = {
-  name: "open_workflows",
-  description: "Open the Workflow list, or one workflow by id. Ask for the runs lens to see its run history instead of its editor.",
-  parameters: params({
-    id: str("The workflow id, which is a slug such as \"nightly-digest\"."),
-    lens: str("Which lens to open the workflow in.", ["editor", "runs"]),
-  }),
-  execute: (args: ToolArgs) => go(workflowPath(args)),
-}
-
-const openExperiments: TalkTool = {
-  name: "open_experiments",
-  description: "Open the Experiments list, or one experiment by id.",
-  parameters: params({ id: str("The experiment id.") }),
-  execute: (args: ToolArgs) => go(experimentPath(args)),
-}
-
 const openChats: TalkTool = {
   name: "open_chats",
   description: "Open chat, or one session by id.",
@@ -122,8 +103,6 @@ const openCron: TalkTool = {
 export const NAVIGATE_TOOLS: readonly TalkTool[] = [
   openTodos,
   openTodo,
-  openWorkflows,
-  openExperiments,
   openChats,
   openOrg,
   openCron,

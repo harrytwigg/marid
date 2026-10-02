@@ -56,7 +56,7 @@ If any one of these is false, the turn runs exactly as it would without the feat
 
 ## Where it runs
 
-Inside the turn it precedes, between the turn's preflight and its engine run. Every transport reaches an engine through the same turn runner, so it applies the same way to the web chat, the CLI view's composer, connectors, cron jobs, delegation callbacks and workflow steps.
+Inside the turn it precedes, between the turn's preflight and its engine run. Every transport reaches an engine through the same turn runner, so it applies the same way to the web chat, the CLI view's composer, connectors, cron jobs, and delegation callbacks.
 
 Because it runs inside the turn:
 
@@ -74,7 +74,7 @@ Because it runs inside the turn:
 
 An error, a usage limit, an engine that never confirmed the compaction, or an exception is logged and shown as the notice above. The message then runs on the full context as planned. A usage limit is left to the message's own turn, which takes the normal rate-limit path.
 
-The one exception is preemption. If the operator presses Stop, or a workflow interrupts the session, while it is compacting, the turn ends there, as it would have ended the engine run it was about to start.
+The one exception is preemption. If the operator presses Stop, or something else interrupts the session, while it is compacting, the turn ends there, as it would have ended the engine run it was about to start.
 
 A new operator message does **not** interrupt an auto-compaction in progress, even with `sessions.interruptOnNewMessage` on. It waits, as it waits for an operator's `/compact`: cutting the compaction off would waste it, and the next turn, still cold, would only start it again.
 

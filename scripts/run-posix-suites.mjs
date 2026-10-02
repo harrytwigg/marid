@@ -20,6 +20,7 @@ const SUITES = [
   "scripts/__tests__/device-scroll-fixture.test.mjs",
   "scripts/__tests__/reap-worktrees.test.mjs",
   "scripts/upgrade-lab/__tests__/guards.test.mjs",
+  "scripts/upgrade-lab/__tests__/workflow-state.test.mjs",
   "tools/prerelease-todo-converter/__tests__/artifacts.test.mjs",
   "tools/prerelease-todo-converter/__tests__/backup.test.mjs",
 ];

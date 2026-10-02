@@ -130,7 +130,6 @@ function factsFor(block: ChatBlock): Fact[] {
     push('Parent', text(p.parentId))
     push('Assignee', text(p.assignee))
     push('By', text(p.actor))
-    push('Approval', p.approvalState ? humanize(text(p.approvalState)) : undefined)
     push('Updated', formatWhen(p.updatedAt))
     push('Note', text(p.preview))
     push('Error', text(p.latestError), 'error')
@@ -152,14 +151,6 @@ function factsFor(block: ChatBlock): Fact[] {
     push('Error', text(p.latestError), 'error')
   }
   return facts
-}
-
-/** Only accept the exact object route derived from the receipt's durable identity. */
-function safeWorkflowPath(value: JsonValue | undefined, expected: string, legacy?: string): string | null {
-  const path = text(value)
-  if (path === expected) return expected
-  if (legacy !== undefined && path === legacy) return expected
-  return null
 }
 
 export function CompanyActivityCard({ block }: { block: ChatBlock }) {
@@ -184,22 +175,9 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
   const objectName = `${title} ${meta.noun}`
   const todoId = block.type === 'todo-activity' ? text(block.payload.todoId) : ''
 
-  const openObject = () => {
-    if (block.type === 'todo-activity') {
-      navigate(todoPath(todoId))
-      return
-    }
-    const workflowId = encodeURIComponent(text(block.payload.workflowId))
-    if (block.type === 'workflow-definition') {
-      const expected = `/workflow/${workflowId}?mode=edit`
-      const legacy = `/workflow/${workflowId}`
-      navigate(safeWorkflowPath(block.payload.openPath, expected, legacy) ?? expected)
-      return
-    }
-    const runId = encodeURIComponent(text(block.payload.runId))
-    const expected = `/workflow/${workflowId}?mode=runs&run=${runId}`
-    navigate(safeWorkflowPath(block.payload.openPath, expected) ?? expected)
-  }
+  // Only a Todo has a page to open; the other receipts are history with no
+  // surface left behind them, so they offer a Preview and nothing else.
+  const openObject = block.type === 'todo-activity' ? () => navigate(todoPath(todoId)) : null
 
   return (
     // Reconciliation — live same-block patch vs. card replacement — remains
@@ -256,6 +234,7 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
               />
             </button>
           )}
+          {openObject && (
           <button
             type="button"
             onClick={openObject}
@@ -265,6 +244,7 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
             Open
             <ArrowUpRight size={12} strokeWidth={2.25} aria-hidden="true" className="shrink-0 text-[var(--text-tertiary)]" />
           </button>
+          )}
         </span>
       </div>
 

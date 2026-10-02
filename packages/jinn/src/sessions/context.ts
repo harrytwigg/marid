@@ -493,15 +493,15 @@ function buildCompanyIdentityBlock(
 ): string {
   const engineName = engine ? `\`${engine}\`` : "current";
   const mcpLine = jinnMcpAttached
-    ? `Your hands are the attached Jinn MCP on the ${engineName} engine - default to it to read/update the company (org, sessions, Todos, Workflows, cron, reference). Local shell/filesystem access remains available for implementation work or when MCP has no hand.`
+    ? `Your hands are the attached Jinn MCP on the ${engineName} engine - default to it to read/update the company (org, sessions, Todos, cron, reference). Local shell/filesystem access remains available for implementation work or when MCP has no hand.`
     : "";
 
   return [
     "## Company Identity",
     mcpLine,
     "Pick colleagues by role/persona fit. One employee may run multiple child sessions in parallel; reuse the fit instead of spreading to unrelated employees. If none fits, propose a hire.",
-    "Todos are your live work ledger - find and update your Todo; when it is finished, move it to in_review yourself (a run ending does not); create one only for durable work you own.",
-    "Workflows are reusable automations (the HOW) - use or propose one when a job is repeatable/scheduled/multi-step; Todos and Workflows are SEPARATE.",
+    "Todos are your live work ledger - find and update your Todo; when it is finished, move it to in_review yourself with a summary in note, which is posted as a comment (a run ending does not); create one only for durable work you own.",
+    "Use cron for scheduled or recurring prompts; split multi-step work into a root Todo with child Todos and delegation.",
     "You have autonomy in your lane; end your turn when waiting on another employee.",
     "Do NOT bombard the operator. Questions and approvals route to your manager/COO by default; the aCEO/operator is the exception (money, irreversible, public, legal/security, or explicit COO escalation).",
   ].filter(Boolean).join("\n");
@@ -512,7 +512,7 @@ function buildCompanyIdentitySummary(engine: string | undefined): string {
   return [
     "## Company Identity",
     `Use the attached Jinn MCP${engineName} for company state and delegation.`,
-    "Track durable work in Todos; use Workflows for reusable multi-step work.",
+    "Track durable work in Todos; use cron for scheduled or recurring prompts.",
     "Route ordinary questions and approvals through your manager/COO.",
   ].join("\n");
 }
@@ -604,7 +604,7 @@ function buildCooCompanyAnchor(engine?: string, jinnMcpAttached = false): string
     mcpLine,
     "- Pick the employee whose role/persona matches the task. One employee may run multiple child sessions in parallel; reuse the fit instead of spreading to unrelated employees. If none fits, propose a hire.",
     "- Todos/work-items are the source of truth for task tracking: list/search/read/create/update/assign them through the MCP.",
-    "- Use Workflows for multi-step or scheduled orchestration.",
+    "- Use cron for scheduled prompts; split multi-step work into a root Todo with child Todos and delegation.",
     "- Use company-reference reads before asking the operator: sessions/search, knowledge, cost, and cron.",
     "- Keep the operator out of the firehose: route questions and approvals through managers/COO by default, escalating to the operator only for money, irreversible, public, legal/security, or explicit escalation cases.",
   ].filter(Boolean).join("\n");
@@ -614,7 +614,7 @@ function buildCooCompanyAnchorSummary(engine?: string): string {
   const engineName = engine ? ` on the \`${engine}\` engine` : "";
   return [
     "## COO Company Anchor",
-    `Use the attached Jinn MCP${engineName} for company state, delegation, Todos, Workflows, and reference reads.`,
+    `Use the attached Jinn MCP${engineName} for company state, delegation, Todos, and reference reads.`,
     "Match work to employee roles and keep routine coordination away from the operator.",
   ].join("\n");
 }
@@ -911,7 +911,7 @@ function buildApiReference(
   if (jinnMcpAttached) {
     return [
       header,
-      `Use the attached Jinn MCP tools for company operations (sessions, delegation, Todos, Workflows, org, reference reads, and managed files).`,
+      `Use the attached Jinn MCP tools for company operations (sessions, delegation, Todos, org, reference reads, and managed files).`,
       `Use \`publish_attachment\` to present a local file or image in this chat. Viewing a file yourself does not send it to the operator.`,
       `The full HTTP endpoint reference remains in CLAUDE.md / AGENTS.md for gateway maintenance and non-MCP fallback.`,
     ].join("\n");

@@ -4,8 +4,7 @@ import { classifyEngineFailureText, hasEngineFailureClass } from "../shared/engi
  * Bounded recovery classification (PLA-240).
  *
  * A verdict here is not an action. The controller decides whether to re-arm,
- * route, or leave the Todo on Needs you. The open run, the approval and the
- * clock arrive as inputs, so the replay suite can feed it history with no DB.
+ * route, or leave the Todo on Needs you. The open run and the clock arrive as inputs, so the replay suite can feed it history with no DB.
  */
 
 export const RECOVERY_CLASSES = [
@@ -30,7 +29,7 @@ export const EXECUTION_TIMEOUT_MS = 4 * 60 * 60_000;
  *  never look at the Todo again, so no reader may treat the row as current
  *  outside this set. Without this guard a lane classified while `blocked`
  *  (e.g. a generic operator fallback) outlives the re-queue to backlog. */
-export const RECOVERY_SWEPT_STATUSES = ["assigned", "executing", "in_review", "blocked", "escalated"] as const;
+export const RECOVERY_SWEPT_STATUSES = ["executing", "in_review", "blocked"] as const;
 
 export function isRecoverySweptStatus(status: string): boolean {
   return (RECOVERY_SWEPT_STATUSES as readonly string[]).includes(status);
@@ -48,6 +47,15 @@ export const EXECUTING_UNHANDED_REASON = "executing with nothing running for ove
 /** Generic fallback: classifyRecovery found no specific incident. */
 export const GENERIC_OPERATOR_REASON = "no safe automatic recovery is known";
 
+/** Verdicts an older classifier gave and this one never does. */
+const RETIRED_RECOVERY_REASONS: ReadonlySet<string> = new Set([
+  "a routed approval is waiting on an employee, not the operator",
+  "approved landing is still open",
+  "in review with no pending approval and no reviewer",
+  "in review with no assignee to answer for it",
+  "operator-only approval is a genuine authority decision",
+]);
+
 export function isGenericOperatorFallback(verdict: RecoveryClassification): boolean {
   return verdict.lane === "operator" && verdict.reason === GENERIC_OPERATOR_REASON;
 }
@@ -57,16 +65,20 @@ export function isGenericOperatorFallback(verdict: RecoveryClassification): bool
  * so successive verdicts on it are all this guard has to reconcile.
  * A later generic operator fallback cannot downgrade an unresolved specific
  * lane (manager / recovering). Specific verdicts (failure class, stalled run
- * or assignment, leftover manager, routed approval, operator-only) may
- * replace. Terminal status means the prior condition resolved.
+ * or assignment, leftover manager) may replace. Terminal status means the prior condition resolved.
+ * So does a verdict the classifier no longer gives: those came from Todo
+ * approvals, and from treating an unassigned in_review Todo as unreviewed when
+ * in_review is the operator's desk, so a row left in one of them would hold a
+ * Todo on Manager attention for good.
  */
 export function mayReplaceRecoveryLane(
-  prior: { lane: AttentionLane } | undefined,
+  prior: { lane: AttentionLane; reason?: string } | undefined,
   next: RecoveryClassification,
   itemStatus: string,
 ): boolean {
   if (!prior) return true;
   if (itemStatus === "done" || itemStatus === "cancelled") return true;
+  if (prior.reason !== undefined && RETIRED_RECOVERY_REASONS.has(prior.reason)) return true;
   if (isGenericOperatorFallback(next) && prior.lane !== "operator") return false;
   return true;
 }
@@ -75,7 +87,6 @@ export interface RecoveryClassification {
   class: RecoveryClass;
   lane: AttentionLane;
   reason: string;
-  owningWorkflowId?: string;
 }
 
 /** Whether any execution attempt is live, when the newest one last moved, and
@@ -96,8 +107,11 @@ export interface AttemptActivity {
  * the producer last spoke.
  */
 export function executingUnhanded(status: string, attempts: AttemptActivity | undefined, now: number): boolean {
-  if (status !== "executing" || !attempts || attempts.inFlight || !attempts.lastActivityAt) return false;
-  const quietSince = Math.max(Date.parse(attempts.lastActivityAt), Date.parse(attempts.executingSince ?? "") || 0);
+  if (status !== "executing" || !attempts || attempts.inFlight) return false;
+  // A Todo that reached `executing` with no execution session ever linked has
+  // nobody to speak for it either; its clock starts at the move itself.
+  const quietSince = Math.max(Date.parse(attempts.lastActivityAt ?? "") || 0, Date.parse(attempts.executingSince ?? "") || 0);
+  if (quietSince === 0) return false;
   return now - quietSince > EXECUTION_TIMEOUT_MS;
 }
 
@@ -107,18 +121,12 @@ export interface RecoveryIncidentInput {
   openRun?: { startedAt: string; sessionInFlight: boolean };
   /** The Todo's linked execution attempts (review and phase links excluded). */
   attempts?: AttemptActivity;
-  approval?: { state: string; operatorOnly: boolean };
   verifyMode?: "trust" | "verify" | "thorough";
-  owningWorkflowId?: string;
   now?: Date;
 }
 
 const AVAILABILITY_CLASSES = ["quota", "rate-limit", "provider-outage", "network"] as const;
 const VERIFY_FAILURE = /independent review|verifier rejected|verification failed|review rejected the diff/i;
-
-function verdict(input: RecoveryIncidentInput, value: RecoveryClassification): RecoveryClassification {
-  return input.owningWorkflowId === undefined ? value : { ...value, owningWorkflowId: input.owningWorkflowId };
-}
 
 function isAvailability(input: RecoveryIncidentInput, error: string): boolean {
   return input.lastRun?.outcome === "rate_limited"
@@ -135,7 +143,7 @@ function classifyFromFailure(input: RecoveryIncidentInput): RecoveryClassificati
     return { class: "security", lane: "manager", reason: "credentials or auth failed; a clock retry cannot fix it" };
   }
   if (isAvailability(input, error)) {
-    return { class: "transient", lane: "recovering", reason: "provider availability; resume the owning workflow when the window reopens" };
+    return { class: "transient", lane: "recovering", reason: "provider availability; re-dispatch when the window reopens" };
   }
   if (isVerificationFailure(input, error)) {
     return { class: "verification", lane: "manager", reason: "independent verification rejected the work" };
@@ -158,41 +166,23 @@ function classifyStalledExecution(input: RecoveryIncidentInput, now: number): Re
 }
 
 function classifyStalled(input: RecoveryIncidentInput, status: string, now: number): RecoveryClassification | undefined {
-  const open = input.openRun;
   if (status === "executing") return classifyStalledExecution(input, now);
-  if (status === "assigned" && input.owningWorkflowId && !open && !runIsFresh(input.lastRun?.endedAt, now)) {
-    return { class: "transient", lane: "recovering", reason: "assigned to a pipeline with no active run" };
-  }
   return undefined;
 }
 
 function classifyLeftover(input: RecoveryIncidentInput, now: number): RecoveryClassification | undefined {
-  const state = input.approval?.state;
-  const status = input.todo.status;
-  if (state === "pending") {
-    return { class: "operator", lane: "manager", reason: "a routed approval is waiting on an employee, not the operator" };
-  }
-  if (status === "in_review" && state === "approved" && input.lastRun?.outcome === "completed") {
-    return { class: "operator", lane: "manager", reason: "approved landing is still open" };
-  }
-  if (status === "in_review" && !input.todo.assignee) {
-    return { class: "operator", lane: "manager", reason: "in review with no pending approval and no reviewer" };
-  }
-  return classifyStalled(input, status, now);
+  return classifyStalled(input, input.todo.status, now);
 }
 
 export function classifyRecovery(input: RecoveryIncidentInput): RecoveryClassification {
   if (input.todo.status === "backlog") {
-    return verdict(input, { class: "operator", lane: "operator", reason: "ordinary backlog work is never auto-started" });
-  }
-  if (input.approval?.state === "pending" && input.approval.operatorOnly) {
-    return verdict(input, { class: "operator", lane: "operator", reason: "operator-only approval is a genuine authority decision" });
+    return { class: "operator", lane: "operator", reason: "ordinary backlog work is never auto-started" };
   }
   const fromFailure = classifyFromFailure(input);
-  if (fromFailure) return verdict(input, fromFailure);
+  if (fromFailure) return fromFailure;
   const leftover = classifyLeftover(input, (input.now ?? new Date()).getTime());
-  if (leftover) return verdict(input, leftover);
-  return verdict(input, { class: "operator", lane: "operator", reason: GENERIC_OPERATOR_REASON });
+  if (leftover) return leftover;
+  return { class: "operator", lane: "operator", reason: GENERIC_OPERATOR_REASON };
 }
 
 /** Additive: never a column on `work_items`. The exact-shape verifier refuses

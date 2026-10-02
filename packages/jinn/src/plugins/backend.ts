@@ -20,7 +20,7 @@ export interface PluginServerContext {
   id: string;
   log: (message: string) => void;
   storage: PluginStorage;
-  /** The typed verb door: Todos, a scoped session spawn, the org, Workflows,
+  /** The typed verb door: Todos, a scoped session spawn, the org,
    *  notes, a connector send, cron reads, knowledge search, and a dashboard
    *  notice. The same object the plugin's registrar gets is the one its watcher
    *  starts with, so a background task and a route act as one plugin rather

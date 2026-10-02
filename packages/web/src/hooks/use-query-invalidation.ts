@@ -9,7 +9,7 @@ import { mergeTodoIntoCaches } from '@/routes/todos/todo-edit-request'
 import type { BackgroundActivity, SessionsResponse } from '@/lib/api'
 import { GATEWAY_EVENTS, type GatewayEvent } from '@jinn/gateway-events'
 
-/** The one company mutation event (Todo, Workflow definition, run). */
+/** The one company mutation event (Todo). */
 function handleCompanyChanged(
   qc: ReturnType<typeof useQueryClient>,
   p: Record<string, unknown>,
@@ -28,16 +28,6 @@ function handleCompanyChanged(
     }
     pending.add('todos')
     if (id) pending.add(`todo:${id}`)
-  } else if (entity === 'workflow-definition') {
-    qc.invalidateQueries({ queryKey: queryKeys.workflows.all })
-    if (id) qc.invalidateQueries({ queryKey: queryKeys.workflows.definition(id) })
-  } else if (entity === 'workflow-run') {
-    const workflowId = typeof p.workflowId === 'string' ? p.workflowId : ''
-    const runId = typeof p.runId === 'string' ? p.runId : ''
-    if (workflowId) {
-      qc.invalidateQueries({ queryKey: queryKeys.workflows.runs(workflowId) })
-      if (runId) qc.invalidateQueries({ queryKey: queryKeys.workflows.run(workflowId, runId) })
-    }
   }
   // Loss recovery for the invoking transcript; normal session:delta stays the
   // surgical live path when the session is streaming.
@@ -70,7 +60,7 @@ export function useQueryInvalidation() {
 
     function flush() {
       clearTimers()
-      // A Todo mutation (drag commit, editor save, approval decision) holds an
+      // A Todo mutation (drag commit, editor save, status change) holds an
       // optimistic view of the todo caches — a refetch landing mid-flight could
       // clobber it. Defer ONLY the todo keys and retry after the next quiet
       // window; every other category flushes now.
@@ -158,12 +148,6 @@ export function useQueryInvalidation() {
           qc.invalidateQueries({ queryKey: queryKeys.notes.all })
           if (typeof p?.path === 'string' && p.path) {
             qc.invalidateQueries({ queryKey: queryKeys.notes.document(p.path) })
-          }
-          return
-        case 'experiments:changed':
-          qc.invalidateQueries({ queryKey: ['experiments'] })
-          if (typeof p?.id === 'string' && p.id) {
-            qc.invalidateQueries({ queryKey: ['experiments', p.id] })
           }
           return
         case 'session:started':
@@ -268,7 +252,6 @@ export function useQueryInvalidation() {
     if (connectionSeq === previousConnectionSeqRef.current) return
     previousConnectionSeqRef.current = connectionSeq
     pendingRef.current.add('todos')
-    qc.invalidateQueries({ queryKey: queryKeys.workflows.all })
     qc.invalidateQueries({ queryKey: queryKeys.sessions.all })
     scheduleFlushRef.current()
   }, [connectionSeq, qc])

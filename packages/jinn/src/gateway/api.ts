@@ -79,7 +79,7 @@ import {
 } from "../sessions/registry.js";
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
-import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/workflow-interruptions.js";
+import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 export {
   foldPartialText,
   normalizeBlockDeltaForTurn,
@@ -132,11 +132,10 @@ import { handleCronApi } from "./cron-api.js";
 import { handleOrgApi } from "./org-api.js";
 import { handleTodoCaptureApi } from "./todo-capture-api.js";
 import { handleSkillsApi } from "./skills-api.js";
-import { handleSearchApi } from "./search-api.js";
+import { handleSearchApi, type NeedsAttentionTarget } from "./search-api.js";
 import { operatorOnlyControlPlaneRoute } from "./control-plane-routes.js";
 import { refuseRemoteMcpRoute, remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { handlePluginsApi } from "./plugins-api.js";
-import { handleExperimentsApi } from "./experiments-api.js";
 import QRCode from "qrcode";
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
 import { handleFilesRequest, handleSessionAttachment, fileIdsToMedia, rehomeAttachmentsToSession, mimeFromFilename, MultipartUploadError, readLocalFileForIngestion, readMultipartFile, sanitizeUploadFilename, isFileNotModified } from "./files.js";
@@ -146,7 +145,7 @@ import { readJsonBody, readBodyRaw } from "./http-helpers.js";
 import { applyLabelChange, parseLabelChange } from "./work-item-label-change.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
 import { isJsonMediaType } from "./media-type.js";
-import { forwardWorkflowTodoComment } from "./workflow-todo-surface.js";
+import { forwardTodoComment } from "./todo-comment-steering.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { clipSessionMessage, sessionCommGuards, prepareLateralSend, isDescendantOf, resolveCallerIdentity, type CallerIdentity } from "./session-comm-guards.js";
@@ -177,6 +176,7 @@ import {
   linkSession,
   listWorkItemEventsForItems,
   queryWorkItems,
+  DEFAULT_VERIFY_MODE_BY_SOURCE,
   resolveTodoDepartments,
   STICKY_STATUSES,
   updateWorkItemConditional,
@@ -189,7 +189,7 @@ import {
   type WorkItemStatus,
 } from "../work-items/store.js";
 import { resolveDelegationLinkRole, WORK_ITEM_LINK_ROLES, type WorkItemLinkRole } from "../work-items/link-role.js";
-import { validateVerifyPolicy } from "../work-items/verify-policy.js";
+import { declaresOnlyDeliverable, validateVerifyPolicy } from "../work-items/verify-policy.js";
 import { resolveTodoEditAuthority, todoEditRefusal } from "./todo-edit-authority.js";
 import { isTodoId, resolveTodoIdPrefix } from "../work-items/id.js";
 import {
@@ -226,25 +226,20 @@ import {
   type AttachmentActor,
 } from "../work-items/attachments.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
-import { authorizeActingAsOperator, resolveArmingDelegate, workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
-import { authorizeAgentWorkItemStatus, authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot, ownsWorkItem } from "./work-item-authority.js";
+import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
+import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { listDepartmentsWithCounts } from "../work-items/departments.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
+import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
+import { checkAssignee } from "./todo-assignee.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { openWorkItemRun } from "../work-items/runs.js";
-import {
-  archiveWorkItem,
-  ApprovalChoiceError,
-  currentApproval,
-  decideWorkItemApproval,
-  escalateApproval,
-  requestApproval,
-} from "../work-items/approvals.js";
-import { resolveApprovalDecisionAuthority, resolveRootApprovalTarget, type ApprovalDecisionAuthorityOptions } from "./approval-authority.js";
-import { approvalGateClass } from "./workflow-todo-binding.js";
+import { archiveWorkItem } from "../work-items/archive.js";
+import { postReviewNote } from "../work-items/review-handoff.js";
+import { resolveOrgRoot } from "./work-item-owner.js";
 import { orgRegistry } from "./org-registry.js";
 import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import { cachedRemoteFacts } from "../engines/remote-stage.js";
@@ -311,8 +306,6 @@ import {
   restartDetached,
   type RestartDetachedOptions,
 } from "./lifecycle.js";
-import type { WorkflowService } from "../workflows/service.js";
-import { handleWorkflowApi } from "./workflow-api.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
 import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
@@ -394,7 +387,6 @@ export interface ApiContext {
   createWorkspaceInstance?: (input: CreateInstanceInput) => Promise<CreateInstanceResult>;
   startWorkspaceInstance?: (input: StartInstanceInput) => Promise<StartInstanceResult>;
   issueWorkspacePairingCode?: (home: string) => string;
-  workflowService?: WorkflowService;
 }
 
 function killSessionEngines(context: ApiContext, session: Session, reason: string): void {
@@ -510,16 +502,8 @@ function compactSessionSummary(session: Session): Record<string, unknown> {
     status: session.status,
     lastActivity: session.lastActivity ?? null,
     parentSessionId: session.parentSessionId ?? null,
-    ...(session.workflowProvenance ? { workflowProvenance: session.workflowProvenance } : {}),
   };
 }
-
-const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['backlog', 'assigned', 'executing', 'in_review', 'done', 'blocked', 'escalated', 'cancelled'];
-/** `backlog` is here because "not now" is a legitimate move: an agent that
- *  picked a Todo up and found it premature can put it back down. The sticky
- *  terminals are unreachable from here anyway — leaving `done`, `cancelled` or
- *  `escalated` still needs the human surface. */
-const AGENT_WORK_ITEM_TARGETS: readonly WorkItemStatus[] = ['backlog', 'assigned', 'executing', 'in_review', 'blocked', 'escalated', 'done'];
 
 function requireTodoRouteId(res: ServerResponse, value: string): boolean {
   if (isTodoId(value)) return true;
@@ -542,7 +526,7 @@ function resolveWorkItemCaller(req: HttpRequest, res: ServerResponse, context: A
   return { kind: 'session', callerId: identity.callerId, session, origin: readWriteOrigin(req.headers[WRITE_ORIGIN_HEADER]) };
 }
 
-function resolveNeedsAttentionTarget(req: HttpRequest, res: ServerResponse, requested: string, context: ApiContext): string | undefined {
+function resolveNeedsAttentionTarget(req: HttpRequest, res: ServerResponse, requested: string, context: ApiContext): NeedsAttentionTarget | undefined {
   const identity = resolveScopedWriteCallerIdentity(req, context);
   if (identity.kind === "unidentified-tool" || identity.kind === "unauthenticated") {
     json(res, { error: UNIDENTIFIED_TOOL_CALL_ERROR }, 403);
@@ -558,15 +542,16 @@ function resolveNeedsAttentionTarget(req: HttpRequest, res: ServerResponse, requ
       json(res, { error: "capability-scoped callers can only read their own queue; use needsAttentionFor=me" }, 403);
       return undefined;
     }
-    return session.employee;
+    return { needsAttentionFor: session.employee };
   }
   if (requested === "me") {
-    const root = resolveRootApprovalTarget()?.name;
-    if (root) return root;
-    json(res, { error: "needsAttentionFor=me could not resolve a COO/root approval target" }, 403);
+    // The operator's own queue: held by the org root, or assigned to the operator.
+    const root = resolveOrgRoot()?.name;
+    if (root) return { needsAttentionFor: root, needsAttentionOperator: true };
+    json(res, { error: "needsAttentionFor=me could not resolve the org root" }, 403);
     return undefined;
   }
-  return requested;
+  return { needsAttentionFor: requested };
 }
 
 function scopedCallerRequest(
@@ -684,9 +669,6 @@ const TODO_ACTIVITY_TOOLS: Record<string, string> = {
   "status-transitioned": "update_work_item",
   assigned: "assign_work_item",
   archived: "archive_work_item",
-  "approval-requested": "request_work_item_approval",
-  "approval-decided": "decide_work_item_approval",
-  "approval-escalated": "escalate_work_item_approval",
 };
 
 function persistTodoMutationActivity(
@@ -856,14 +838,6 @@ function rejectUnverifiedIdentifiedApiCaller(req: HttpRequest, res: ServerRespon
   return true;
 }
 
-/** Who this Todo's pending gate is reserved for: the human operator (the Todo asked for it, or the
- *  workflow node it mirrors declared it), or the COO's own lane. Both decision surfaces read this
- *  one answer, so escalating cannot open a path that deciding refuses. */
-function approvalReservation(item: WorkItem, service: WorkflowService | undefined): Pick<ApprovalDecisionAuthorityOptions, "operatorOnly" | "cooDecidable"> {
-  const gate = approvalGateClass(item, service);
-  return { operatorOnly: currentApproval(item.id)?.operatorOnly === true || gate === "operator", cooDecidable: gate === "coo" };
-}
-
 function requireOperatorControlPlaneAuthority(req: HttpRequest, res: ServerResponse, action: string, context: ApiContext): boolean {
   const identity = resolveScopedWriteCallerIdentity(req, context);
   if (identity.kind === "unidentified-tool" || identity.kind === "unauthenticated") {
@@ -930,6 +904,12 @@ function workItemCommentAuthor(caller: WorkItemCaller): { author: string; author
   return { author: caller.session.employee ?? workItemActor(caller), authorKind: 'employee' };
 }
 
+/** The session a comment came from, from the verified caller identity — the
+ *  agent never supplies it. The operator's own surface has none. */
+function workItemCommentSession(caller: WorkItemCaller): { sessionId?: string } {
+  return caller.kind === 'session' ? { sessionId: caller.callerId } : {};
+}
+
 /** Attachment identity mirrors the comments model: server-stamped, pair-safe. */
 function workItemAttachmentActor(caller: WorkItemCaller): AttachmentActor {
   return { ...workItemCommentAuthor(caller), operator: caller.kind === 'operator' };
@@ -957,60 +937,29 @@ function workItemCommentFailure(res: ServerResponse, err: unknown): void {
   return badRequest(res, String(err));
 }
 
-function findApprovalKeysDeep(value: unknown, path = 'body', found: string[] = []): string[] {
-  if (!value || typeof value !== 'object') return found;
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    const childPath = `${path}.${key}`;
-    if (/^approval/i.test(key)) found.push(childPath);
-    findApprovalKeysDeep(child, childPath, found);
-  }
-  return found;
-}
-
-
-
 /**
  * The refusal for a session trying to mint a child that IS the employee-
  * hierarchy root, or undefined when the spawn is fine.
  *
- * Root identity decides approvals the rest of the org cannot: it can approve any
- * Todo routed anywhere beneath it. A session that can obtain a root-identity
- * child holds that authority in two hops, so every route that mints a session
+ * Root identity carries standing the rest of the org lacks: it may assign,
+ * delegate and archive any Todo anywhere beneath it. A session that can obtain
+ * a root-identity child holds that authority in two hops, so every route that mints a session
  * refuses it. Which route it takes does not matter, hence one helper for both.
  * The operator surface is unrestricted: it already holds the authority the
  * impersonation would be reaching for.
  *
  * Only an `employee` root can be impersonated. With no executive at the top,
- * `resolveRootApprovalTarget()` answers with a virtual root whose name belongs to
+ * `resolveOrgRoot()` answers with a virtual root whose name belongs to
  * no employee — the spawn route already collapses that name to a plain session —
  * so there is nothing to claim and nothing is refused.
  */
 function spawnAsRootRefusal(caller: CallerIdentity, employeeName: string | null | undefined): string | undefined {
   if (!employeeName || caller.kind !== "session") return undefined;
-  const root = resolveRootApprovalTarget();
+  const root = resolveOrgRoot();
   if (root?.kind !== "employee" || employeeName !== root.name) return undefined;
-  return `a session cannot run work as "${root.name}", the employee-hierarchy root, because that identity carries operator-delegated authority; request an approval or escalate the Todo to the root instead of running as it`;
+  return `a session cannot run work as "${root.name}", the employee-hierarchy root, because that identity carries operator-delegated authority; block the Todo for the operator instead of running as it`;
 }
 
-
-function levenshtein(a: string, b: string): number {
-  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const curr = [i];
-    for (let j = 1; j <= b.length; j++) {
-      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    }
-    prev.splice(0, prev.length, ...curr);
-  }
-  return prev[b.length];
-}
-
-function nearestEmployee(name: string, names: string[]): string | undefined {
-  return names
-    .map((n) => ({ n, d: levenshtein(name.toLowerCase(), n.toLowerCase()) }))
-    .filter((x) => x.d <= 4 || x.n.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(x.n.toLowerCase()))
-    .sort((a, b) => a.d - b.d || a.n.localeCompare(b.n))[0]?.n;
-}
 
 /** Sessions already holding engine capacity: mid-turn, queued behind one, or parked on a gate.
  *  The delegated-activity index and a Workflow fan-out's ceiling both count exactly these. */
@@ -1212,10 +1161,8 @@ export async function handleApiRequest(
     if (identifiedCaller && rejectUnverifiedIdentifiedApiCaller(req, res, method, pathname, context)) {
       return;
     }
-    // D4: ahead of every handler, the Workflow API included, a connector anchor reaches only its tool profile's routes.
+    // D4: ahead of every handler, a connector anchor reaches only its tool profile's routes.
     if (identifiedCaller && refuseRemoteMcpRoute(res, method, pathname, resolveScopedWriteCallerIdentity(req, context))) return;
-    if (context.workflowService && await handleWorkflowApi(req, res, { method, pathname, url }, { service: context.workflowService,
-      authenticated: authenticateGatewayRequest(req, context.gatewayAuthToken, jinnHome).ok })) return;
     if (await handleTalkApi(req, res, { method, pathname, url }, {
       getConfig: context.getConfig, caller: resolveScopedWriteCallerIdentity(req, context),
       context,
@@ -1710,7 +1657,6 @@ export async function handleApiRequest(
       return json(res, { note: result.value });
     }
 
-    if (await handleExperimentsApi(req, res, { method, pathname, url }, context)) return;
 
     // GET /api/knowledge/search — GRS-020b: deterministic token-AND search over
     // the two allowlisted knowledge roots (knowledge/ + docs/, .md only).
@@ -2207,13 +2153,12 @@ export async function handleApiRequest(
       if (needsAttentionFor) {
         const target = resolveNeedsAttentionTarget(req, res, needsAttentionFor, context);
         if (!target) return;
-        filter.needsAttentionFor = target;
+        Object.assign(filter, target);
       }
       return json(res, workItemPagePayload(queryWorkItems({ ...filter, limit, offset })));
     }
 
-    // POST /api/work-items — GRS-021c create. Tool callers must carry identity;
-    // create structurally cannot attach approvals (anti-bottleneck LAW).
+    // POST /api/work-items — GRS-021c create. Tool callers must carry identity.
     if (method === "POST" && pathname === "/api/work-items") {
       const caller = resolveWorkItemCaller(req, res, context);
       if (!caller) return;
@@ -2223,14 +2168,10 @@ export async function handleApiRequest(
         return badRequest(res, "request body must be a JSON object");
       }
       const body = parsed.body as Record<string, unknown>;
-      const approvalKeys = findApprovalKeysDeep(body);
-      if (approvalKeys.length > 0) {
-        return badRequest(res, `approval fields (${approvalKeys.join(", ")}) cannot be attached at Todo creation — approvals are requested/decided through the approval authority surface`);
-      }
       if (body.provenance !== undefined) {
         return badRequest(res, "provenance cannot be supplied on public Todo creation — the server assigns source provenance: public creation uses source=human or source=session, while cron and delegation create their own records; source=workflow is historical audit provenance and is not currently minted");
       }
-      if (body.assignee !== undefined) return badRequest(res, "assignee cannot be supplied at Todo creation — create first, then grant ownership through the assign flow (assign_work_item / POST /api/work-items/:id/assign), which is its own action: it validates the roster, derives the department (unless gateway.todoDepartments keeps it), moves backlog→assigned, and notifies the assignee");
+      if (body.assignee !== undefined) return badRequest(res, "assignee cannot be supplied at Todo creation — create first, then grant ownership through the assign flow (assign_work_item / POST /api/work-items/:id/assign), which is its own action: it validates the roster and derives the department (unless gateway.todoDepartments keeps it). Assigning starts nothing; a dispatch does");
       const title = typeof body.title === "string" ? stripControlChars(body.title).trim() : "";
       if (!title) return badRequest(res, "title is required");
       const verifyPolicy = validateVerifyPolicy(body.verifyPolicy);
@@ -2281,6 +2222,13 @@ export async function handleApiRequest(
         if (/[\x00-\x1f\x7f]/.test(idempotencyKey)) return badRequest(res, "idempotencyKey contains invalid characters");
       }
       const source: WorkItemSource = caller.kind === "session" ? "session" : "human";
+      // The verify mode decides whether the reconciler may close a Todo without
+      // the operator (`trust`), so like the edit guard (todo-edit-authority.ts)
+      // a session may declare only where the product lands.
+      if (verifyPolicy.value && !hasOperatorLane(caller)
+        && !declaresOnlyDeliverable(null, verifyPolicy.value, DEFAULT_VERIFY_MODE_BY_SOURCE[source])) {
+        return json(res, { error: `verifyPolicy mode, verifier and maxRounds are the operator's to set; a session may declare only deliverable, with mode ${DEFAULT_VERIFY_MODE_BY_SOURCE[source]}` }, 403);
+      }
       const input: CreateWorkItemInput = {
         title: title.slice(0, 200),
         body: typeof body.body === "string" ? body.body : null,
@@ -2367,7 +2315,7 @@ export async function handleApiRequest(
     // session, ownership and review are the operator's, and the Todo's own
     // assignee or creator may declare where its product lands. Status is
     // intentionally excluded: lifecycle changes remain behind the guarded
-    // transition/archive/approval surfaces below.
+    // transition and archive surfaces below.
     params = matchRoute("/api/work-items/:id", pathname);
     if (method === "PATCH" && params) {
       const caller = resolveWorkItemCaller(req, res, context);
@@ -2439,8 +2387,13 @@ export async function handleApiRequest(
         if (typeof body.assignee === "string") {
           const assignee = body.assignee.trim();
           if (!assignee) return todoEditValidationError(res, "assignee must be a non-empty string or null");
-          if (!orgRegistry(context.getConfig()).has(assignee)) {
-            return todoEditValidationError(res, "Unknown employee for Todo assignee. Check the organization directory.", "todo_invalid_assignee");
+          const roster = orgRegistry(context.getConfig());
+          const checked = checkAssignee(roster, assignee, { operator: true });
+          // A typed validation response never reflects an unknown value back; a
+          // system employee is a roster name, so its refusal may say which one.
+          if (!checked.ok) {
+            const error = roster.has(assignee) ? checked.error : "Unknown employee for Todo assignee. Check the organization directory.";
+            return todoEditValidationError(res, error, "todo_invalid_assignee");
           }
           patch.assignee = assignee;
         } else {
@@ -2551,61 +2504,39 @@ export async function handleApiRequest(
       if (!parsed.ok) return;
       if (!parsed.body || typeof parsed.body !== "object" || Array.isArray(parsed.body)) return badRequest(res, "request body must be a JSON object");
       const body = parsed.body as Record<string, unknown>;
-      const approvalKeys = findApprovalKeysDeep(body);
-      if (approvalKeys.length > 0) {
-        return badRequest(res, `approval fields (${approvalKeys.join(", ")}) cannot be attached through Todo status updates — approvals are requested/decided through the approval authority surface`);
-      }
       const target = typeof body.status === "string" ? body.status : "";
-      // The operator PUT lane IS the human surface (Todos v2 slice 6): it may
-      // walk every declared edge — reopening closed work, unblocking, routing
-      // escalated items — so it carries human authority into transition() and
-      // is not confined to the agent target allowlist. Cancellation keeps its
-      // dedicated archive path below.
-      const isOperatorPut = method === "PUT" && caller.kind === "operator";
-      const isOperatorPutCancellation = isOperatorPut && target === "cancelled";
-      if (target === "cancelled" && !isOperatorPutCancellation) {
-        return json(res, { error: "cancelling a Todo is a human surface decision; agents do not have a cancel tool" }, 403);
-      }
-      if (isOperatorPut && !(WORK_ITEM_STATUSES as readonly string[]).includes(target)) {
+      if (!(WORK_ITEM_STATUSES as readonly string[]).includes(target)) {
         return badRequest(res, `status must be one of ${WORK_ITEM_STATUSES.join(", ")}`);
       }
-      if (!isOperatorPut && !(AGENT_WORK_ITEM_TARGETS as readonly string[]).includes(target)) {
-        return badRequest(res, `status must be one of ${AGENT_WORK_ITEM_TARGETS.join(", ")} for agent updates; other lifecycle edits use the human surface`);
-      }
-      const fields = parseStatusUpdateFields(body, target, isOperatorPut);
+      // The lane (work-item-status-lane.ts) decides who may make this move: the
+      // operator's surfaces walk every declared edge with human authority, the
+      // coordinator may close as done with a reason, every other session stays
+      // inside the open statuses.
+      const operatorLane = hasOperatorLane(caller);
+      const fields = parseStatusUpdateFields(body, target, operatorLane);
       if (!fields.ok) return json(res, { error: fields.error }, fields.status);
-      const { note, blockKind, cascade, acknowledgeEscalated, stopCause } = fields;
+      const { note, blockKind, cascade, stopCause } = fields;
       const item = getWorkItem(params.id);
       if (!item) return notFound(res);
-      const authorized = authorizeAgentWorkItemStatus(caller, item, target as WorkItemStatus);
-      if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
-      let actingAsOperator: string | undefined;
-      if (fields.asOperator) {
-        const permitted = authorizeActingAsOperator(caller);
-        if (!permitted.ok) return json(res, { error: permitted.error }, 403);
-        actingAsOperator = permitted.actingAs;
-      }
-      // A granted claim is the operator's authority arriving on the COO lane,
-      // not just their name on the record: it releases a sticky terminal the
-      // way the operator PUT does. The cascade is not part of it —
-      // parseStatusUpdateFields keeps that on the operator's own surface.
-      const humanAuthority = isOperatorPut || actingAsOperator !== undefined;
-      const actor = fields.asOperator ? "operator" : workItemActor(caller);
-      // Read the list per request, so adding or removing a delegate takes effect
-      // on the next move rather than at the next restart.
-      const armedAsDelegate = resolveArmingDelegate(caller, target, context.getConfig());
-      const actorEmployee = fields.asOperator ? undefined : workItemActorEmployee(caller);
+      const resolved = resolveStatusLane(caller, item, target as WorkItemStatus, fields);
+      if (!resolved.ok) return json(res, { error: resolved.error }, resolved.status);
+      const lane = resolved.lane;
+      const actingAsOperator = lane.kind === "coordinator" ? lane.actingAs : undefined;
+      const actor = actingAsOperator ? "operator" : workItemActor(caller);
+      const actorEmployee = actingAsOperator ? undefined : workItemActorEmployee(caller);
       const detail = writeDetail({
         ...(note ? { note } : {}),
         ...(actingAsOperator ? { asOperator: actingAsOperator } : {}),
-        ...(armedAsDelegate ? { armedAsDelegate } : {}),
         ...(actorEmployee ? { actorEmployee } : {}),
+        // The connector moves with the operator's authority but is recorded as its
+        // own session; the marker is what lets the reconciler treat it as his.
+        ...(lane.kind === "operator" && caller.kind === "session" ? { operatorLane: true } : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
-      // operator PUT with a note annotates the CURRENT exception state instead
-      // of vanishing in transition()'s same-status no-op. The note event
-      // carries toStatus so the reason surfaces read it like a transition note.
-      if (isOperatorPut && note && target === item.status && (target === "blocked" || target === "escalated") && !(stopCause && changedStopCause(initDb(), item.id, stopCause))) {
+      // operator move with a note annotates the CURRENT stop instead of
+      // vanishing in transition()'s same-status no-op. The note event carries
+      // toStatus so the reason surfaces read it like a transition note.
+      if (operatorLane && note && target === item.status && target === "blocked" && !(stopCause && changedStopCause(initDb(), item.id, stopCause))) {
         appendWorkItemEvent({
           workItemId: params.id,
           kind: "note",
@@ -2619,25 +2550,30 @@ export async function handleApiRequest(
         return json(res, withActivityReceipt({ workItem: annotated, escalated: false }, activityReceiptId));
       }
       try {
-        const result = isOperatorPutCancellation
+        const result = operatorLane && target === "cancelled"
           ? {
-              // The operator PUT lane is the human surface: the archive lane
-              // carries the same human authority as every other sticky exit,
-              // so escalated → cancelled (a declared edge) is reachable here.
+              // Cancellation keeps its dedicated archive path, with the human
+              // authority every other operator-lane exit carries.
               item: archiveWorkItem(params.id, actor, { human: true, ...(note ? { note } : {}) }),
               escalated: false,
             }
           : transition(params.id, target as WorkItemStatus, actor, {
               manual: true,
-              human: humanAuthority || undefined,
-              // Agent lane: the target allowlist above is what bounds this
-              // caller, so the edge map does not also govern it.
-              agent: !isOperatorPut || undefined,
+              human: operatorLane || undefined,
+              // Agent lane: resolveStatusLane already held the move to the
+              // agent pairs, so the manual-start rule does not also govern it.
+              agent: lane.kind === "agent" || undefined,
               callerSessionId: caller.kind === "session" ? caller.callerId : undefined, ...(blockKind ? { blockKind } : {}),
-              ...(cascade ? { cascade: true } : {}),
-              ...(acknowledgeEscalated ? { acknowledgeEscalated: true } : {}), ...(stopCause ? { stopCause } : {}),
+              ...(cascade ? { cascade: true } : {}), ...(stopCause ? { stopCause } : {}),
               detail,
             });
+        // The coordinator's reason is the record of why the operator's decision
+        // was taken for them: it goes on the Todo, under the coordinator's session.
+        if (actingAsOperator && result.item.status === "done") {
+          addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
+        }
+        // A review handoff or send-back note is a comment under whoever moved it; a retried move posts it too.
+        if (target === "in_review" || target === "executing") postReviewNote(params.id, { actor, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), origin: caller.origin });
         const activityReceiptId = persistTodoMutationActivity(
           req,
           context,
@@ -2650,14 +2586,10 @@ export async function handleApiRequest(
       } catch (err) {
         if (err instanceof TransitionError) {
           if (err.code === "not-found") return notFound(res);
-          // A refused cascade leaves the tree intact and the caller a next move
-          // (answer the escalation, or acknowledge it): a conflict with the
-          // item's state, not a refusal of who asked.
           const human = err.code === "self-review-banned"
             ? `${err.message} — use the human review surface / a reviewer session to mark done`
-            : err.code === "escalated-descendant" ? err.message
             : `${err.message} — use the human surface for this transition if it is intentional`;
-          const statusCode = err.code === "illegal-edge" ? 400 : err.code === "escalated-descendant" ? 409 : 403;
+          const statusCode = err.code === "illegal-edge" ? 400 : 403;
           return json(res, { error: human }, statusCode);
         }
         throw err;
@@ -2676,23 +2608,16 @@ export async function handleApiRequest(
         return badRequest(res, "request body must be a JSON object");
       }
       const body = parsed.body as Record<string, unknown>;
-      const approvalKeys = findApprovalKeysDeep(body);
-      if (approvalKeys.length > 0) {
-        return badRequest(res, `approval fields (${approvalKeys.join(", ")}) cannot be attached through Todo assignment — approvals are requested/decided through the approval authority surface`);
-      }
       const assignee = typeof body.assignee === "string"
         ? (body.assignee as string).trim()
         : "";
       if (!assignee) return badRequest(res, "assignee is required");
       const roster = orgRegistry(context.getConfig());
-      const employee = roster.get(assignee);
-      if (!employee) {
-        const near = nearestEmployee(assignee, [...roster.keys()]);
-        return badRequest(
-          res,
-          `unknown employee "${assignee}"${near ? `. Did you mean "${near}"?` : ""} Check find_employees or GET /api/org for valid employees`,
-        );
-      }
+      // The assignee is an employee or the operator; never a system employee,
+      // which routes and shapes Todos but owns none.
+      const checked = checkAssignee(roster, assignee, { operator: true });
+      if (!checked.ok) return badRequest(res, checked.error);
+      const employee = checked.employee;
       const current = getWorkItem(params.id);
       if (!current) return notFound(res);
       if (STICKY_STATUSES.has(current.status)) {
@@ -2708,7 +2633,7 @@ export async function handleApiRequest(
         if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
       }
       try {
-        const item = assignWorkItem(params.id, assignee, employee.department ?? null, workItemActor(caller),
+        const item = assignWorkItem(params.id, assignee, employee?.department ?? null, workItemActor(caller),
           { origin: caller.origin, actorEmployee: workItemActorEmployee(caller) });
         if (!item) return notFound(res);
         const activityReceiptId = persistTodoMutationActivity(req, context, item, "assigned", item.version !== current.version);
@@ -2736,19 +2661,18 @@ export async function handleApiRequest(
         return badRequest(res, "request body must be a JSON object");
       }
       const body = (parsed.body ?? {}) as Record<string, unknown>;
-      const approvalKeys = findApprovalKeysDeep(body);
-      if (approvalKeys.length > 0) {
-        return badRequest(res, `approval fields (${approvalKeys.join(", ")}) cannot be attached through Todo archive — approvals are requested/decided through the approval authority surface`);
-      }
       const note = typeof body.note === "string" ? body.note.trim() : "";
       const cascade = body.cascade === true;
       const item = getWorkItem(params.id);
       if (!item) return notFound(res);
-      const authorized = authorizeWorkItemOwnerManagerOrRoot(caller, item, "archive");
-      if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
+      // Archiving is the operator's alone: their own surface or their remote
+      // connector. No agent session archives, whatever its standing on the Todo.
+      if (!hasOperatorLane(caller)) {
+        return json(res, { error: `archiving Todo ${item.id} is the operator's decision; agents do not archive Todos` }, 403);
+      }
       try {
         const archived = archiveWorkItem(params.id, workItemActor(caller), {
-          ...(caller.kind === "operator" ? { human: true, ...(cascade ? { cascade: true } : {}) } : {}),
+          human: true, ...(cascade ? { cascade: true } : {}),
           ...(caller.kind === "session" ? { callerSessionId: caller.callerId } : {}),
           ...(note ? { note } : {}),
         });
@@ -2867,10 +2791,11 @@ export async function handleApiRequest(
           workItemId: params.id,
           body: text,
           ...workItemCommentAuthor(caller),
+          ...workItemCommentSession(caller),
           parentCommentId,
           origin: caller.origin,
         });
-        forwardWorkflowTodoComment(comment);
+        forwardTodoComment(comment);
         emitTodoProjectionEvent(context, params.id, "commented");
         return json(res, { comment }, 201);
       } catch (err) {
@@ -3306,162 +3231,6 @@ export async function handleApiRequest(
       }
     }
 
-    // POST /api/work-items/:id/approval/request — agent-legal request surface.
-    // Persistence/default routing stays in requestApproval; this route only
-    // validates identity, Todo ownership/execution authority, and explicit targets.
-    params = matchRoute("/api/work-items/:id/approval/request", pathname);
-    if (method === "POST" && params) {
-      const caller = resolveWorkItemCaller(req, res, context);
-      if (!caller) return;
-      if (!requireTodoRouteId(res, params.id)) return;
-      const parsed = await readJsonBody(req, res);
-      if (!parsed.ok) return;
-      if (!parsed.body || typeof parsed.body !== "object" || Array.isArray(parsed.body)) {
-        return badRequest(res, "request body must be a JSON object");
-      }
-      const body = parsed.body as Record<string, unknown>;
-      const request = typeof body.request === "string" ? body.request.trim() : "";
-      if (!request) return badRequest(res, "request is required");
-      if (body.target !== undefined && (typeof body.target !== "string" || !body.target.trim())) {
-        return badRequest(res, "target must be a non-empty string when provided");
-      }
-      const target = typeof body.target === "string" ? body.target.trim() : undefined;
-      const item = getWorkItem(params.id);
-      if (!item) return notFound(res);
-      const linkedOwner = caller.kind === "session" && ownsWorkItem(caller.session, item, listSessionsByWorkItem(item.id));
-      const authorized = linkedOwner
-        ? { ok: true as const }
-        : authorizeWorkItemOwnerManagerOrRoot(caller, item, "request approval on");
-      if (!authorized.ok) return json(res, { error: authorized.error }, authorized.status);
-      if (target) {
-        const roster = orgRegistry(context.getConfig());
-        const root = resolveRootApprovalTarget();
-        if (!roster.has(target) && root?.name !== target) {
-          return badRequest(res, `approval target "${target}" is not an org employee or the configured root approval target`);
-        }
-      }
-      if (body.options !== undefined && !Array.isArray(body.options)) {
-        return badRequest(res, "options must be an array of labels when provided");
-      }
-      if (body.operatorOnly !== undefined && typeof body.operatorOnly !== "boolean") {
-        return badRequest(res, "operatorOnly must be a boolean when provided");
-      }
-      // Reserving a gate for the operator and routing it at an employee are
-      // contradictory instructions; refuse rather than silently honour one.
-      if (body.operatorOnly === true && target) {
-        return badRequest(res, "an operator-only approval cannot also be routed to an employee target");
-      }
-      let updated: WorkItem;
-      try {
-        updated = requestApproval(params.id, {
-          request,
-          ...(body.options !== undefined ? { options: body.options as string[] } : {}),
-          ...(target ? { target } : {}),
-          ...(body.operatorOnly === true ? { operatorOnly: true } : {}),
-          actor: workItemActor(caller),
-        });
-      } catch (err) {
-        if (err instanceof ApprovalChoiceError) return badRequest(res, err.message);
-        throw err;
-      }
-      const activityReceiptId = persistTodoMutationActivity(req, context, updated, "approval-requested", updated.version !== item.version);
-      return json(res, withActivityReceipt({ workItem: updated }, activityReceiptId));
-    }
-
-    // POST /api/work-items/:id/approvals/decide — approval DECISION surface.
-    // The singular /approval route remains as a compatibility alias.
-    // COO-default: routed manager or root/COO can decide through the same
-    // identity/capability seam MCP uses; operator/aCEO HTTP can decide only after
-    // explicit escalation persisted on the Todo.
-    // {decision:"approve"|"reject", note?}. Native decisions apply the FIXED
-    // consequence rules (approve+in_review → done; reject+in_review → bounce/escalate;
-    // otherwise the decision is recorded, status untouched).
-    params = matchRoute("/api/work-items/:id/approvals/decide", pathname)
-      ?? matchRoute("/api/work-items/:id/approval", pathname);
-    if (method === "POST" && params) {
-      const parsed = await readJsonBody(req, res);
-      if (!parsed.ok) return;
-      if (!parsed.body || typeof parsed.body !== "object" || Array.isArray(parsed.body)) {
-        return badRequest(res, "request body must be a JSON object");
-      }
-      const decision = (parsed.body as { decision?: unknown }).decision;
-      if (decision !== "approve" && decision !== "reject") {
-        return badRequest(res, 'decision must be "approve" or "reject"');
-      }
-      if (!requireTodoRouteId(res, params.id)) return;
-      const noteRaw = (parsed.body as { note?: unknown }).note;
-      const note = typeof noteRaw === "string" ? noteRaw : undefined;
-      const choiceRaw = (parsed.body as { choice?: unknown }).choice;
-      if (choiceRaw !== undefined && typeof choiceRaw !== "string") {
-        return badRequest(res, "choice must be a string when provided");
-      }
-      const item = getWorkItem(params.id);
-      if (!item) return notFound(res);
-      const authority = resolveApprovalDecisionAuthority(req.headers, item, {
-        operatorCanActOnRootTarget: true,
-        operatorAuthenticated: scopedOperatorAuthenticated(req, context),
-        ...approvalReservation(item, context.workflowService),
-      });
-      if (!authority.ok) return json(res, { error: authority.error }, authority.status);
-
-      const result = await decideWorkItemApproval(
-        { id: params.id, decision, ...(note !== undefined ? { note } : {}),
-          ...(choiceRaw !== undefined ? { choice: choiceRaw } : {}), decidedBy: authority.authority.actor },
-      );
-      if (!result.ok) {
-        switch (result.code) {
-          case "not-found":
-            return notFound(res);
-          case "no-pending":
-            return json(res, { error: result.message }, 409);
-          default:
-            return json(res, { error: result.message }, 400);
-        }
-      }
-      const activityReceiptId = persistTodoMutationActivity(req, context, result.item, "approval-decided", true, item.status);
-      return json(res, withActivityReceipt({
-        workItem: result.item,
-        escalated: result.escalated,
-      }, activityReceiptId));
-    }
-
-    // POST /api/work-items/:id/approval/escalate — routed approval authority can
-    // deliberately expose this pending approval to the operator/aCEO path.
-    params = matchRoute("/api/work-items/:id/approval/escalate", pathname);
-    if (method === "POST" && params) {
-      const parsed = await readJsonBody(req, res, { allowEmpty: true });
-      if (!parsed.ok) return;
-      if (!requireTodoRouteId(res, params.id)) return;
-      const item = getWorkItem(params.id);
-      if (!item) return notFound(res);
-      // Same reservation the decision surface reads: escalating an operator-only
-      // gate must not open an employee path to it that deciding refuses.
-      const authority = resolveApprovalDecisionAuthority(req.headers, item, {
-        operatorCanActOnRootTarget: true,
-        operatorAuthenticated: scopedOperatorAuthenticated(req, context),
-        ...approvalReservation(item, context.workflowService),
-      });
-      if (!authority.ok) return json(res, { error: authority.error }, authority.status);
-      const body = (parsed.body ?? {}) as { reason?: unknown };
-      const reason = typeof body.reason === "string" ? body.reason : undefined;
-      try {
-        const updated = escalateApproval(params.id, authority.authority.actor, reason);
-        const activityReceiptId = persistTodoMutationActivity(
-          req,
-          context,
-          updated,
-          "approval-escalated",
-          updated.version !== item.version,
-        );
-        return json(res, withActivityReceipt({ workItem: updated }, activityReceiptId));
-      } catch (err) {
-        if (err instanceof Error && /no pending approval/i.test(err.message)) {
-          return json(res, { error: err.message }, 409);
-        }
-        throw err;
-      }
-    }
-
     // GET /api/sessions/:id/transcript — return raw Claude Code session transcript
     params = matchRoute("/api/sessions/:id/transcript", pathname);
     if (method === "GET" && params) {
@@ -3609,10 +3378,10 @@ export async function handleApiRequest(
       let delegateEmployee: Employee | undefined;
       if (employeeName) {
         roster = orgRegistry(config);
-        delegateEmployee = roster.get(employeeName);
-        if (!delegateEmployee) {
-          return badRequest(res, `unknown employee "${employeeName}" — GET /api/org lists valid employees`);
-        }
+        // Delegation assigns the Todo to its delegate and runs them: an employee, never a system one.
+        const checked = checkAssignee(roster, employeeName, { operator: false });
+        if (!checked.ok) return badRequest(res, checked.error);
+        delegateEmployee = checked.employee;
       }
       const employeeDefaults = delegateEmployee
         ? {

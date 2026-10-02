@@ -254,7 +254,10 @@ export function readTodoSessionTree(todoId: string): SessionTreeResponse {
     if (id) referenced.add(id);
   };
   add(item?.createdBy);
-  for (const comment of listComments(todoId, { limit: 200 }).comments) add(comment.author);
+  for (const comment of listComments(todoId, { limit: 200 }).comments) {
+    add(comment.author);
+    if (comment.sessionId) referenced.add(comment.sessionId);
+  }
   for (const event of listWorkItemEvents(todoId)) add(event.actor);
   return buildSessionTree({ todoId, sessions: listSessions(), referencedSessionIds: [...referenced] });
 }

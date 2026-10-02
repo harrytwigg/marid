@@ -30,6 +30,7 @@ import {
   type TemplateMaterializationInputs,
 } from "../shared/template-materialization.js";
 import { PRODUCT_NAME } from "../shared/brand.js";
+import { settleGatewayPort } from "./setup-port.js";
 
 const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
@@ -345,7 +346,7 @@ Agents are configured via employees in the org/ directory.
 `;
 }
 
-export async function runSetup(opts?: { force?: boolean }): Promise<void> {
+export async function runSetup(opts?: { force?: boolean; port?: number }): Promise<void> {
   console.log(`\n${PRODUCT_NAME} Setup\n`);
 
   if (opts?.force && fs.existsSync(JINN_HOME)) {
@@ -553,6 +554,7 @@ export async function runSetup(opts?: { force?: boolean }): Promise<void> {
     ensureFile(CONFIG_PATH, source);
     created.push(CONFIG_PATH);
   }
+  await settleGatewayPort(opts?.port, { fresh: isFreshSetup, report: { ok, warn, info } });
 
   // Read portal name from config for template replacements
   const selectedConfig = (() => {

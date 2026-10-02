@@ -36,9 +36,10 @@ const WORK_ITEM_BODY_CHAR_CAP = 64_000;
 const WORK_ITEM_TITLE_CHAR_CAP = 200;
 const WORK_ITEM_NOTE_CHAR_CAP = 8_000;
 
-const STATUSES = ["backlog", "assigned", "executing", "in_review", "done", "blocked", "escalated", "cancelled"] as const;
+export const STATUSES = ["backlog", "executing", "in_review", "done", "blocked", "cancelled"] as const;
 const SOURCES = ["human", "delegation", "cron", "workflow", "session", "connector", "goal"] as const;
-const AGENT_UPDATE_STATUSES = ["backlog", "assigned", "executing", "in_review", "blocked", "escalated", "done"] as const;
+/** The agent lane plus `done`, which only the coordinator reaches (asOperator). */
+const AGENT_UPDATE_STATUSES = ["backlog", "executing", "in_review", "blocked", "done"] as const;
 const TODO_ID_SCHEMA = { type: "string", pattern: "^[A-Z]{3}-[1-9][0-9]*$" } as const;
 const COMMENT_ID_SCHEMA = { type: "string", pattern: "^wic_[0-9a-f]{12}$" } as const;
 const COMMENT_ID_PATTERN = /^wic_[0-9a-f]{12}$/;
@@ -73,25 +74,6 @@ function summarize(item: Record<string, unknown>): Record<string, unknown> {
 function workItemsFrom(body: unknown): Array<Record<string, unknown>> {
   const rec = (body ?? {}) as { workItems?: Array<Record<string, unknown>> };
   return Array.isArray(rec.workItems) ? rec.workItems.map(summarize) : [];
-}
-
-function findApprovalKeysDeep(value: unknown, path = "args", found: string[] = []): string[] {
-  if (!value || typeof value !== "object") return found;
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    const childPath = `${path}.${key}`;
-    if (/^approval/i.test(key)) found.push(childPath);
-    findApprovalKeysDeep(child, childPath, found);
-  }
-  return found;
-}
-
-function rejectApprovalFields(args: Record<string, unknown>, toolName: string): void {
-  const forbidden = findApprovalKeysDeep(args);
-  if (forbidden.length > 0) {
-    throw new JinnMcpToolError(
-      `approval fields (${forbidden.join(", ")}) cannot be attached by ${toolName} — approvals are routed gates; request/decide them through the separate approval authority surface, not Todo creation/status updates.`,
-    );
-  }
 }
 
 /** PATCH the metadata pen at a freshly read version, retrying ONCE on a concurrent
@@ -221,7 +203,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const create: JinnMcpTool = {
     name: "create_work_item",
-    description: "Create a Todo or parentId sub-task; no approvals.",
+    description: "Create a Todo or parentId sub-task.",
     inputSchema: {
       type: "object",
       properties: {
@@ -235,13 +217,12 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         dueAt: { type: "string" },
         labels: { type: "array", items: { type: "string" } },
         idempotencyKey: { type: "string" },
-        autoStart: { type: "boolean", description: "false: todo-status triggers filtering on autoStart skip it." },
+        autoStart: { type: "boolean", description: "false: idle-capacity auto-start skips it." },
       },
       required: ["title"],
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "create_work_item");
       rejectProvenance(args);
       const body: Record<string, unknown> = { title: requireString(args, "title") };
       for (const key of ["body", "acceptance", "department"] as const) {
@@ -303,23 +284,21 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         id: TODO_ID_SCHEMA,
         status: { type: "string", enum: [...AGENT_UPDATE_STATUSES] },
         blockKind: { type: "string", enum: [...BLOCK_KINDS], description: "`dependency` re-queues it; the rest wait on a human." },
-        note: { type: "string" },
-        asOperator: { type: "boolean", description: "Record the move as the operator's. COO only." },
+        note: { type: "string", description: "Required for in_review (your summary, posted as a comment) and blocked." },
+        asOperator: { type: "boolean", description: "Coordinator only: close as done for the operator; reason in note." },
         cascade: { type: "boolean", description: "With `done`, close open sub-tasks. Operator only." },
-        acknowledgeEscalated: { type: "boolean", description: "Let it close an escalated sub-task." },
         parkedUntil: { type: "string" },
-        unblockHint: { type: "object", description: "{what, who}. Required to escalate." },
+        unblockHint: { type: "object", description: "{what, who}." },
         verifyPolicy: { type: "object" },
       },
       required: ["id", "status"],
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "update_work_item");
       const id = requireTodoId(args);
       const rawStatus = requireString(args, "status");
-      if (rawStatus === "cancelled") throw new JinnMcpToolError("cancelling a Todo is a human surface decision; agents do not have a cancel tool.");
-      if (!(AGENT_UPDATE_STATUSES as readonly string[]).includes(rawStatus)) throw new JinnMcpToolError(`status must be one of ${AGENT_UPDATE_STATUSES.join(", ")}; cancellation/other lifecycle edits are human surface decisions.`);
+      // Who may set what is the gateway's lane to decide; this only refuses what is not a status at all.
+      if (!(STATUSES as readonly string[]).includes(rawStatus)) throw new JinnMcpToolError(`status must be one of ${STATUSES.join(", ")}.`);
       const blockKind = parseBlockKind(args.blockKind);
       if (blockKind === null) throw new JinnMcpToolError(`${BLOCK_KIND_ERROR}.`);
       // The route's validator AND its words verbatim: a trailing full stop is enough to make them unequal.
@@ -331,7 +310,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       // cannot move the status — and a refused move says what did land, not "nothing happened".
       const verifyPolicy = validatedVerifyPolicy(args);
       if (verifyPolicy !== undefined) await patchWorkItem(ctx, id, { verifyPolicy }, `updating work item "${id}"`);
-      const payload: Record<string, unknown> = { status: rawStatus, ...(blockKind ? { blockKind } : {}), ...(note !== undefined ? { note } : {}), ...Object.fromEntries((["asOperator", "cascade", "acknowledgeEscalated", "parkedUntil", "unblockHint"] as const).filter((key) => args[key] !== undefined).map((key) => [key, args[key]])) };
+      const payload: Record<string, unknown> = { status: rawStatus, ...(blockKind ? { blockKind } : {}), ...(note !== undefined ? { note } : {}), ...Object.fromEntries((["asOperator", "cascade", "parkedUntil", "unblockHint"] as const).filter((key) => args[key] !== undefined).map((key) => [key, args[key]])) };
       const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/status`, payload);
       if (status >= 400) throw new JinnMcpToolError(`${gatewayFailure(`updating work item "${id}"`, status, body).message}${verifyPolicy === undefined ? "" : " — the deliverable declaration was written and stands; only the status move failed, so a retry does not need to carry verifyPolicy again"}`);
       return mutationResult(body, "Todo status updated.");
@@ -355,7 +334,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "edit_work_item");
       const id = requireTodoId(args);
       if (args.status !== undefined) {
         throw new JinnMcpToolError("status is not a metadata edit — use update_work_item for lifecycle changes");
@@ -417,7 +395,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "assign_work_item");
       const id = requireTodoId(args);
       const assignee = requireString(args, "assignee");
       const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/assign`, { assignee });
@@ -428,7 +405,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const archive: JinnMcpTool = {
     name: "archive_work_item",
-    description: "Archive a Todo; retain its audit.",
+    description: "Archive a Todo; retain its audit. Operator only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -439,11 +416,10 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     },
     handler: async (args, ctx) => {
       assertIdentity(ctx);
-      rejectApprovalFields(args, "archive_work_item");
       const id = requireTodoId(args);
-      const payload: Record<string, unknown> = {};
       const note = optionalString(args, "note", WORK_ITEM_NOTE_CHAR_CAP);
-      if (note !== undefined) payload.note = note;
+      if (args.cascade !== undefined && typeof args.cascade !== "boolean") throw new JinnMcpToolError("cascade must be a boolean");
+      const payload: Record<string, unknown> = { ...(note !== undefined ? { note } : {}), ...(args.cascade !== undefined ? { cascade: args.cascade } : {}) };
       const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/archive`, payload);
       if (status >= 400) throw gatewayFailure(`archiving work item "${id}"`, status, body);
       return mutationResult(body, "Todo archived.");

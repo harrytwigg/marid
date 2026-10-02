@@ -9,18 +9,18 @@ process.env.JINN_HOME = tmp;
 
 type Store = typeof import("../store.js");
 type Transitions = typeof import("../transitions.js");
-type Approvals = typeof import("../approvals.js");
+type Archive = typeof import("../archive.js");
 type LiveEvents = typeof import("../live-events.js");
 let store: Store;
 let transitions: Transitions;
-let approvals: Approvals;
+let archive: Archive;
 let liveEvents: LiveEvents;
 let db: Database;
 
 beforeAll(async () => {
   store = await import("../store.js");
   transitions = await import("../transitions.js");
-  approvals = await import("../approvals.js");
+  archive = await import("../archive.js");
   liveEvents = await import("../live-events.js");
   db = (await import("../../shared/db.js")).initDb();
 });
@@ -97,7 +97,7 @@ describe("roll-up close gate", () => {
     const parent = store.createWorkItem({ title: "cascade parent" });
     const mid = store.createWorkItem({ title: "mid", parentId: parent.id });
     const leaf = store.createWorkItem({ title: "leaf", parentId: mid.id });
-    const archived = approvals.archiveWorkItem(parent.id, "operator", { human: true, cascade: true });
+    const archived = archive.archiveWorkItem(parent.id, "operator", { human: true, cascade: true });
     expect(archived.status).toBe("cancelled");
     expect(store.getWorkItem(mid.id)!.status).toBe("cancelled");
     expect(store.getWorkItem(leaf.id)!.status).toBe("cancelled");
@@ -106,7 +106,7 @@ describe("roll-up close gate", () => {
   it("refuses archive on a parent with open children when cascade is not set", () => {
     const parent = store.createWorkItem({ title: "no-cascade parent" });
     store.createWorkItem({ title: "still open", parentId: parent.id });
-    expect(() => approvals.archiveWorkItem(parent.id, "operator", { human: true })).toThrow();
+    expect(() => archive.archiveWorkItem(parent.id, "operator", { human: true })).toThrow();
   });
 });
 
@@ -170,29 +170,12 @@ describe("cascade close", () => {
     expect(heard).toEqual([]);
   });
 
-  it("refuses over an escalated descendant, names it, and changes nothing", () => {
-    const parent = store.createWorkItem({ title: "escalated parent" });
-    const mid = store.createWorkItem({ title: "escalated mid", parentId: parent.id });
-    const leaf = store.createWorkItem({ title: "escalated leaf", parentId: mid.id });
-    transitions.transition(leaf.id, "escalated", "operator", { human: true });
-    const refused = refusalOf(() => transitions.transition(parent.id, "done", "operator", { human: true, cascade: true }));
-    expect(refused.code).toBe("escalated-descendant");
-    expect(refused.message).toContain(leaf.id);
-    expect(store.getWorkItem(parent.id)!.status).toBe("backlog");
-    expect(store.getWorkItem(mid.id)!.status).toBe("backlog");
-    expect(store.getWorkItem(leaf.id)!.status).toBe("escalated");
-  });
-
-  it("closes the same tree once the escalation is acknowledged", () => {
-    const parent = store.createWorkItem({ title: "acknowledged parent" });
-    const mid = store.createWorkItem({ title: "acknowledged mid", parentId: parent.id });
-    const leaf = store.createWorkItem({ title: "acknowledged leaf", parentId: mid.id });
-    transitions.transition(leaf.id, "escalated", "operator", { human: true });
-    const result = transitions.transition(parent.id, "done", "operator", {
-      human: true,
-      cascade: true,
-      acknowledgeEscalated: true,
-    });
+  it("closes over a blocked descendant — a declared stop is not an unanswered question that withholds the close", () => {
+    const parent = store.createWorkItem({ title: "blocked-descendant parent" });
+    const mid = store.createWorkItem({ title: "blocked-descendant mid", parentId: parent.id });
+    const leaf = store.createWorkItem({ title: "blocked-descendant leaf", parentId: mid.id });
+    transitions.transition(leaf.id, "blocked", "operator", { human: true });
+    const result = transitions.transition(parent.id, "done", "operator", { human: true, cascade: true });
     expect(result.item.status).toBe("done");
     expect(store.getWorkItem(mid.id)!.status).toBe("done");
     expect(store.getWorkItem(leaf.id)!.status).toBe("done");

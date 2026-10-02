@@ -83,7 +83,7 @@ describe("parseToolArgs", () => {
   })
 
   it("lists the allowed values when an enum is violated", () => {
-    const parsed = parseToolArgs("open_workflows", SHAPE, '{"id":"a","lens":"timeline"}')
+    const parsed = parseToolArgs("open_todo", SHAPE, '{"id":"a","lens":"timeline"}')
     expect(parsed.ok).toBe(false)
     if (parsed.ok) throw new Error("expected a failure")
     expect(parsed.error).toContain("editor, runs")

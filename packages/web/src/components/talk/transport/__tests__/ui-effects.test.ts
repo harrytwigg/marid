@@ -28,13 +28,12 @@ describe("verified Talk UI effects", () => {
     expect(order).toContain('invalidate:["work-item-sessions","PLA-116"]')
   })
 
-  it("maps exact Workflow and chat receipts to their live caches", async () => {
+  it("maps exact Todo and chat receipts to their live caches", async () => {
     const invalidate = vi.spyOn(queryClient, "invalidateQueries").mockResolvedValue(undefined)
-    await applyTalkUiEffect({ invalidate: ["sessions", "session:s-1", "workflow-runs:build", "workflow-run:build:run-1"] })
+    await applyTalkUiEffect({ invalidate: ["sessions", "session:s-1", "todo:PLA-116"] })
     const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
     expect(keys).toContainEqual(["sessions"])
     expect(keys).toContainEqual(["sessions", "s-1"])
-    expect(keys).toContainEqual(["workflows", "runs", "build"])
-    expect(keys).toContainEqual(["workflows", "runs", "build", "run-1"])
+    expect(keys).toContainEqual(["work-item", "PLA-116"])
   })
 })

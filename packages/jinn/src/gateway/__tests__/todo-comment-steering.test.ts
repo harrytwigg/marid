@@ -116,28 +116,6 @@ function delegatedSession(todoId: string, employee = "a-worker") {
   return registry.getSession(session.id)!;
 }
 
-function phaseSession(todoId: string, runId: string, nodeId: string) {
-  const key = `workflow:content-flow:${runId}:${nodeId}:1`;
-  const session = registry.createSession({
-    engine: "codex",
-    source: "workflow",
-    sourceRef: key,
-    sessionKey: key,
-    connector: "workflow",
-    employee: "a-worker",
-    workflowProvenance: {
-      kind: "phase",
-      workflowId: "content-flow",
-      workflowName: "Content flow",
-      runId,
-      triggerSource: "todo-status",
-      phase: { nodeId, name: nodeId, index: 1, round: 1, attempt: 1 },
-    },
-  });
-  store.linkSession(todoId, session.id);
-  return registry.getSession(session.id)!;
-}
-
 function todo(title: string) {
   return store.createWorkItem({ title, source: "delegation", status: "executing" });
 }
@@ -175,7 +153,21 @@ describe("Todo comments steered into a delegated session", () => {
     expect(deliveries[0]!.payload.message).toContain("Prefer the smaller migration.");
     expect(deliveries[0]!.payload.message).toContain("comment_work_item");
     expect(deliveries[0]!.payload.message).toContain(comment.id);
-    expect(deliveries[0]!.payload.message).not.toContain("workflow_submit_output");
+  });
+
+  it("skips a newer session the removed Workflow runtime left on the Todo", async () => {
+    const item = todo("Steer past a legacy phase");
+    const worker = delegatedSession(item.id);
+    const phase = registry.createSession({ engine: "codex", source: "workflow", sourceRef: "wf:legacy:run:plan", employee: "a-worker" });
+    database.prepare("UPDATE sessions SET status = 'idle', workflow_kind = 'phase', last_activity = ? WHERE id = ?")
+      .run(new Date(Date.now() + 60_000).toISOString(), phase.id);
+    store.linkSession(item.id, phase.id);
+
+    await postComment(item.id, "Carry on with the worker's plan.");
+
+    const deliveries = registry.listPendingSessionDeliveries();
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]!.targetSessionId).toBe(worker.id);
   });
 
   it("forwards one comment exactly once however often it is replayed", async () => {
@@ -183,8 +175,8 @@ describe("Todo comments steered into a delegated session", () => {
     delegatedSession(item.id);
 
     const comment = await postComment(item.id, "Only once, please.");
-    steering.forwardWorkflowTodoComment(comment);
-    steering.forwardWorkflowTodoComment(comment);
+    steering.forwardTodoComment(comment);
+    steering.forwardTodoComment(comment);
 
     expect(registry.listPendingSessionDeliveries()).toHaveLength(1);
   });
@@ -214,22 +206,6 @@ describe("Todo comments steered into a delegated session", () => {
     const deliveries = registry.listPendingSessionDeliveries();
     expect(deliveries).toHaveLength(1);
     expect(deliveries[0]!.payload.message).toContain("now do the second half");
-  });
-
-  it("leaves a Todo with a workflow phase on the phase branch", async () => {
-    const item = todo("Workflow still wins");
-    delegatedSession(item.id);
-    const phase = phaseSession(item.id, "run-current", "verify");
-
-    await postComment(item.id, "Why this approach?");
-
-    const deliveries = registry.listPendingSessionDeliveries();
-    expect(deliveries).toHaveLength(1);
-    expect(deliveries[0]).toMatchObject({
-      targetSessionId: phase.id,
-      sourceKind: "workflow-run",
-      sourceId: "run-current",
-    });
   });
 
   it("caps one Todo at five steered comments and explains the sixth on the Todo", async () => {

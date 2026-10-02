@@ -56,7 +56,7 @@ const employee = { name: EMPLOYEE, engine: "claude", persona: "Turn receipts fix
 function managerWith(script: ReturnType<typeof engineResult>[], engines = new Map<string, unknown>()) {
   const claude = scriptedEngine("claude", script);
   engines.set("claude", claude);
-  return new ManagerClass(testConfig(), engines as never, "receipts-boot", () => employee as never);
+  return new ManagerClass(testConfig(), engines as never, "receipts-boot");
 }
 
 /** Route one connector turn and wait for it to reach a terminal status. */

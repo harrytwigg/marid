@@ -2,7 +2,7 @@
  * Where the operator is, read straight off the URL.
  *
  * Almost every Jinn surface already keeps "what you are looking at" in the
- * location — the board and its filters, the open Todo, the workflow run, the
+ * location — the board and its filters, the open Todo, the
  * selected chat session — so the orb can be told without asking the page
  * anything. This is `tools/nav-paths.ts` in reverse, and it holds to the same
  * rule: nothing here invents state a page does not actually carry in its URL.
@@ -84,23 +84,6 @@ function todosView(rest: string[], params: URLSearchParams): View {
   }
 }
 
-function workflowView(rest: string[], params: URLSearchParams): View {
-  const id = rest[0]
-  if (!id) return { kind: "workflows", params: {}, filters: {}, selection: null }
-  if (rest.length === 3 && rest[1] === "runs") {
-    return { kind: "workflow-run", params: { workflow: id }, filters: {}, selection: { kind: "workflow run", id: rest[2] } }
-  }
-  if (rest.length > 1) return null
-  // `editor` is the page's default lens and it writes no param for it, so the
-  // runs lens is the only one ever in the URL to report.
-  return {
-    kind: "workflow",
-    params: {},
-    filters: present([["lens", params.get("lens") === "runs" ? "runs" : null]]),
-    selection: { kind: "workflow", id },
-  }
-}
-
 function chatView(params: URLSearchParams): View {
   // Same precedence the chat page itself resolves by: a session id beats an
   // employee, because it is the more specific intent.
@@ -138,11 +121,6 @@ function notesView(pathname: string): View {
 function listOrDetail(list: PageKind, detail: PageKind, selectionKind: string, id: string | undefined): View {
   if (!id) return { kind: list, params: {}, filters: {}, selection: null }
   return { kind: detail, params: {}, filters: {}, selection: { kind: selectionKind, id } }
-}
-
-function experimentsView(rest: string[]): View {
-  if (rest.length > 1) return null
-  return listOrDetail("experiments", "experiment", "experiment", rest[0])
 }
 
 /** Org keeps the open employee in the query string, so it is one route deep
@@ -186,8 +164,6 @@ function redirectView(head: "chat" | "kanban", rest: string[]): View {
 
 const ROUTE_READERS: Readonly<Record<string, RouteReader>> = {
   todos: (rest, params) => todosView(rest, params),
-  workflow: (rest, params) => workflowView(rest, params),
-  experiments: (rest) => experimentsView(rest),
   cron: (rest, params) => cronView(rest, params),
   org: (rest, params) => orgView(rest, params),
   notes: (_rest, _params, pathname) => notesView(pathname),

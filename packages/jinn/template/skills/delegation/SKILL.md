@@ -40,7 +40,7 @@ Use `spawn_session` for a quick, untracked question or short consultation:
 }
 ```
 
-If the work is repeatable, scheduled, or a reusable multi-phase procedure, use or propose a Workflow instead of carrying the whole process in a delegation prompt.
+If the work is scheduled, use a cron job; if it is a multi-phase procedure, split it into child Todos instead of carrying the whole process in one delegation prompt.
 
 ## The child-session protocol
 
@@ -70,4 +70,4 @@ Use bounded feedback loops: low effort up to 4 rounds, medium up to 8, high up t
 
 ## External and operator boundaries
 
-Default questions and approvals to the manager/COO. Escalate to the operator for money, irreversible actions, public communication, legal/security decisions, or an explicit manager escalation. A terminal instruction such as "finish" increases persistence toward the stated outcome; it does not expand authority.
+Default questions and decisions to the manager/COO. Escalate to the operator for money, irreversible actions, public communication, legal/security decisions, or an explicit manager escalation. A terminal instruction such as "finish" increases persistence toward the stated outcome; it does not expand authority.

@@ -81,7 +81,7 @@ describe("listWorkItems SQL LIMIT", () => {
     const match = store.createWorkItem({
       title: "filter-needle title",
       body: "matching body",
-      status: "assigned",
+      status: "in_review",
       assignee: "filter-person",
       department: "filter-department",
       source: "connector",
@@ -89,14 +89,14 @@ describe("listWorkItems SQL LIMIT", () => {
     const bodyMatch = store.createWorkItem({
       title: "body-only candidate",
       body: "contains filter-needle here",
-      status: "assigned",
+      status: "in_review",
       assignee: "other-person",
       department: "other-department",
       source: "connector",
     });
     const outsideWindow = store.createWorkItem({
       title: "filter-needle outside",
-      status: "assigned",
+      status: "in_review",
       assignee: "filter-person",
       department: "filter-department",
       source: "connector",
@@ -106,7 +106,7 @@ describe("listWorkItems SQL LIMIT", () => {
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2031-04-11T12:00:00.000Z", bodyMatch.id);
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2031-05-01T12:00:00.000Z", outsideWindow.id);
 
-    expect(store.queryWorkItems({ status: "assigned", limit: 100 }).workItems.every((item) => item.status === "assigned")).toBe(true);
+    expect(store.queryWorkItems({ status: "in_review", limit: 100 }).workItems.every((item) => item.status === "in_review")).toBe(true);
     expect(store.queryWorkItems({ assignee: "filter-person", limit: 100 }).workItems.every((item) => item.assignee === "filter-person")).toBe(true);
     expect(store.queryWorkItems({ department: "filter-department", limit: 100 }).workItems.every((item) => item.department === "filter-department")).toBe(true);
     expect(store.queryWorkItems({ source: "connector", limit: 100 }).workItems.every((item) => item.source === "connector")).toBe(true);
@@ -115,7 +115,7 @@ describe("listWorkItems SQL LIMIT", () => {
     );
 
     const composed = store.queryWorkItems({
-      status: "assigned",
+      status: "in_review",
       assignee: "filter-person",
       department: "filter-department",
       source: "connector",

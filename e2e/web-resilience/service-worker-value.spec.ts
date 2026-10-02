@@ -6,7 +6,7 @@ test('without a worker an uncached offline document cannot show app recovery', a
   await page.goto('/settings')
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible()
   await context.setOffline(true)
-  await expect(page.goto('/experiments?offline-probe')).rejects.toThrow()
+  await expect(page.goto('/cron?offline-probe')).rejects.toThrow()
   await context.setOffline(false)
   await page.goto('/settings')
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible()

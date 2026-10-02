@@ -88,21 +88,17 @@ none. This is the right answer far more often than it feels like it is.
 **Rung 2 — a CLI command, or a skill.** Both cost zero context.
 A command goes in `packages/jinn/bin/jinn.ts`; every handler is lazily `import()`ed inside its
 action (`:79`), so adding one loads nothing until it runs.
-A skill is a Markdown file at `packages/jinn/template/skills/<name>/SKILL.md` — 14 ship today.
+A skill is a Markdown file at `packages/jinn/template/skills/<name>/SKILL.md` — 12 ship today.
 `packages/jinn/src/cli/setup.ts:622` copies them into the instance home and
 `packages/jinn/src/gateway/watcher.ts:28` symlinks them where engines look. There is no
 runtime and no loader: the engine reads the file when it needs it, so an unused skill costs
 nothing.
 
-**Rung 3 — a gated MCP tool.** Ships only when something turns it on. Two precedents:
+**Rung 3 — a gated MCP tool.** Ships only when something turns it on. The precedent is a config key:
 
 - *Config key.* `packages/jinn/src/mcp/server.ts:125` — `notesEnabled ? buildNoteTools() : []`,
   resolved at startup by `notesEnabledFromConfig` (`:139`), typed at
   `packages/jinn/src/shared/types.ts:911`.
-- *Per-session environment.* `packages/jinn/src/mcp/workflow-tools.ts:181` filters
-  `workflow_submit_output` and `workflow_extend_deadline` out of the manifest unless the
-  session is a workflow attempt; the variable is `packages/jinn/src/mcp/identity.ts:62` and it
-  is stamped onto the child at `:208`.
 
 **Rung 4 — a custom, out-of-process MCP server.** Declared under `mcp.custom` in the instance
 `config.yaml` and scoped per employee by the persona's `mcp` field
@@ -201,9 +197,6 @@ Done right:
 
 - `packages/jinn/src/shared/__tests__/privacy-guard.test.ts:9` — walks the shipped trees and
   fails on a blocked term. No runtime behaviour could ever express this.
-- `packages/jinn/src/workflows/__tests__/todo-capability-boundary.test.ts:15` — reads every
-  production file in the workflows directory and enforces which ones may touch storage. An
-  architectural boundary, checked at the only place it is visible.
 
 The boundary — a source-reading test is legitimate only when **all three** hold:
 
@@ -213,7 +206,7 @@ The boundary — a source-reading test is legitimate only when **all three** hol
    matching indentation is not.
 3. No other tool already enforces it.
 
-Failing those, the same three files show what it looks like:
+Failing those, the same two files show what it looks like:
 
 - `packages/jinn/src/gateway/__tests__/server-boot-ordering.test.ts:19-25` compares
   `String.indexOf` offsets in `server.ts` to assert call order, and `:37` pins the exact
@@ -222,11 +215,6 @@ Failing those, the same three files show what it looks like:
 - `packages/jinn/src/cli/__tests__/config-seed.test.ts:17` regexes an exact multi-line YAML
   literal, indentation included, out of `setup.ts` — instead of calling the seeding function
   and parsing what it produced.
-- `packages/jinn/src/cli/__tests__/workflow-v2-registration.test.ts:42-61` walks the
-  TypeScript AST of `bin/jinn.ts` to re-implement a function-length cap and a parameter cap.
-  `eslint.config.mjs:30` enforces both for real, on that exact file (`:7` includes
-  `packages/jinn/bin/**/*.ts`), and its length cap is stricter. Duplicated enforcement that
-  can only drift.
 
 ### Where tests are required
 

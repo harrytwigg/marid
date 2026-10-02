@@ -21,7 +21,7 @@ import { isNonTerminalNarration, MAX_STOP_NUDGES, STOP_NUDGE_TEXT } from "./stop
 
 const META_KEY = "delegationCompletionContract";
 export const DELEGATION_COMPLETION_TRACKED_META_KEY = "delegationCompletionTracked";
-const OPEN_EXECUTION_STATUSES = new Set(["backlog", "assigned", "executing"]);
+const OPEN_EXECUTION_STATUSES = new Set(["backlog", "executing"]);
 
 export const DELEGATION_COMPLETION_NUDGE_DISPLAY =
   "Completion contract: continuing this delegated task to a final report.";

@@ -16,14 +16,14 @@ import { PickerNote, PickerRow } from "./picker-shell"
  * moves only. */
 
 const ALL_STATUSES: readonly WorkItemStatusWire[] = [
-  "backlog", "assigned", "executing", "in_review", "done", "blocked", "escalated", "cancelled",
+  "backlog", "executing", "in_review", "done", "blocked", "cancelled",
 ]
 
 /** The design's presentation order (§7.3 + the popover mock): pipeline first,
  *  then Done, then the exception/closed states — regardless of legalTargets()
  *  enumeration order. Mockup wins (stage-B review F2). */
 const STATUS_DISPLAY_ORDER: readonly WorkItemStatusWire[] = [
-  "backlog", "assigned", "executing", "in_review", "done", "blocked", "escalated", "cancelled",
+  "backlog", "executing", "in_review", "done", "blocked", "cancelled",
 ]
 
 /** The close gate's counts (see legal-targets.ts) travel as the rest of the
@@ -32,7 +32,6 @@ const STATUS_DISPLAY_ORDER: readonly WorkItemStatusWire[] = [
 interface StatusPickerProps {
   openChildren: number
   openDescendants?: number
-  escalatedDescendants?: number
   commit: (status: WorkItemStatusWire, options?: { cascade?: boolean }) => void
   showCurrent?: boolean
 }

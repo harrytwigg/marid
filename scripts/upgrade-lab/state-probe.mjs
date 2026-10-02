@@ -19,8 +19,13 @@ const workflowTitle = "Upgrade lab representative workflow"
 const legacyDefinitionFile = path.join(evidenceRoot, "workflows", `${workflowId}.definition.json`)
 const legacyDefinitionStore = path.join(packageRoot, "dist", "src", "workflows", "definition-store.js")
 const usesLegacyWorkflowStore = fs.existsSync(legacyDefinitionStore)
+const hasWorkflowRepository = fs.existsSync(path.join(packageRoot, "dist", "src", "workflows", "repository.js"))
+const workflowsDbFile = path.join(path.dirname(evidenceRoot), "workflows", "workflows.db")
 const sharedDbModule = path.join(packageRoot, "dist", "src", "shared", "db.js")
 const sha256File = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")
+const snapshotWorkflowsDb = () => fs.existsSync(workflowsDbFile)
+  ? { exists: true, sha256: sha256File(workflowsDbFile) }
+  : { exists: false, sha256: null }
 
 const sessions = await load("sessions/registry.js")
 const cron = await load("cron/jobs.js")
@@ -77,7 +82,7 @@ if (mode === "seed-old") {
         edges: [{ id: "edge", from: "trigger", to: "step", kind: "sequence" }],
       })
     }
-  } else {
+  } else if (hasWorkflowRepository) {
     const workflows = await load("workflows/repository.js")
     const migrations = await load("workflows/repository-migrations.js")
     const database = migrations.openWorkflowDatabase()
@@ -91,11 +96,14 @@ if (mode === "seed-old") {
 }
 
 async function snapshot() {
+  // Measured before any module can open the database, so the hash is what the package left behind.
+  const workflowsDb = snapshotWorkflowsDb()
   db.initDb()
   const session = sessions.getSessionBySessionKey(sessionKey)
   const jobs = cron.loadJobs().filter((job) => job.id === cronId)
   const employees = [...org.scanOrg().values()].filter((employee) => employee.name === employeeName)
   const result = {
+    workflowsDb,
     session: session ? {
       count: 1,
       id: session.id,
@@ -136,7 +144,7 @@ async function snapshot() {
       status: definitions[0].status,
       sourceSha256: sha256File(legacyDefinitionFile),
     } : { count: definitions.length }
-  } else {
+  } else if (hasWorkflowRepository) {
     const workflows = await load("workflows/repository-migrations.js")
     const database = workflows.openWorkflowDatabase()
     try {
@@ -164,6 +172,8 @@ async function snapshot() {
     } finally {
       database.close()
     }
+  } else {
+    result.workflow = { storage: "none" }
   }
   return result
 }

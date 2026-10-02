@@ -1,6 +1,6 @@
 # Marid vs upstream Jinn
 
-Marid is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors, released under the MIT License. Most of the code here is theirs: the gateway, the org model, Todos, Workflows, the web dashboard and most of the engine adapters. Marid keeps the internal codename ("Jinn": the `jinn` command, `jinn-cli`, `~/.jinn`, `JINN_*`) so upstream fixes can still be merged. See [`NOTICE`](../NOTICE) and the [README](../README.md#built-on-jinn).
+Marid is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors, released under the MIT License. Most of the code here is theirs: the gateway, the org model, Todos, the web dashboard and most of the engine adapters. Marid keeps the internal codename ("Jinn": the `jinn` command, `jinn-cli`, `~/.jinn`, `JINN_*`) so upstream fixes can still be merged. See [`NOTICE`](../NOTICE) and the [README](../README.md#built-on-jinn).
 
 This page lists the headline features Marid has that upstream does not, and is just as plain about where upstream already has the feature. It is not an exhaustive changelog; smaller fixes and hardening are in [`CHANGELOG.md`](../CHANGELOG.md).
 
@@ -72,7 +72,7 @@ This page lists the headline features Marid has that upstream does not, and is j
 | Closed Todo departments | ✅ | ❌ | `gateway.todoDepartments` makes the department list one the operator owns. Unset, any name still becomes a department, as upstream. |
 | Idle-capacity auto-start | ✅ | ❌ | Opt-in (`gateway.idleCapacity`, off by default). When a Claude usage window is about to reset with capacity to spare, it starts eligible backlog Todos, with overnight, daytime and interactive tiers. See [`idle-capacity.md`](idle-capacity.md). |
 | Auto-Dispatch dashboard page | ✅ | ❌ | `/auto-dispatch`: policy editing, next-tick preview, start history and a usage chart. |
-| Per-Todo auto-start opt-out | ✅ | ❌ | `autoStart` in a Todo's dispatch config, and the `no-auto-start` label. `todo-status` triggers gain `selfAssigned` and `autoStart` filters. |
+| Per-Todo auto-start opt-out | ✅ | ❌ | `autoStart` in a Todo's dispatch config, and the `no-auto-start` label. |
 | Session tree on a Todo | ✅ | ❌ | The Details rail lists the sessions working the Todo, with their delegations underneath, and every session links to its chat. |
-| Parked Todos come back on their own | ✅ | partial | Upstream can park a Todo until a date but nothing releases it. Marid's reconciler moves an expired park back to `assigned` (or `backlog` with no owner). |
+| Parked Todos come back on their own | ✅ | partial | Upstream can park a Todo until a date but nothing releases it. Marid's reconciler moves an expired park back to `backlog`, keeping its owner. |
 | Flag Todos left in `executing` with no one on them | ✅ | partial | Upstream flags an executing Todo whose open run has outlived four hours with nothing in flight (`execution-timeout`). Marid also flags one with no open run at all and nothing running for over four hours (`executing-unhanded`, `work-items/anomaly-detect.ts`, `recovery.ts`), so it does not sit in the column unseen. |

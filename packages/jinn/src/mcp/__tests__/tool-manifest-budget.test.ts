@@ -4,10 +4,11 @@ import { buildTools } from "../server.js";
 import { projectPiToolManifest } from "../../engines/pi-mcp.js";
 import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-manifest-expectations.js";
 
-// Fixed provider budget. Rebased for the experiment Todo link with the same
-// ~zero headroom discipline as before: new tool prose must stay concise rather
-// than growing into this ceiling.
-const MAX_MANIFEST_TOKENS = 6226;
+// Fixed provider budget. ~Zero headroom discipline: new tool prose must stay
+// concise rather than growing into this ceiling. Rebased down when the
+// Experiments and Workflow tools were removed, so the ceiling again sits ON
+// the largest wrapper (Pi).
+const MAX_MANIFEST_TOKENS = 4159;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -41,31 +42,11 @@ const ATTESTED = {
   // tokens; shortening its redundant description from an enumeration of the
   // same scopes to "by scope" bought those back plus four,
   // leaving Pi five under the unchanged ceiling.
-  // Rebased for the six-tool Experiments ledger. This is a new public company
-  // block rather than prose growth on an existing tool; Pi remains five tokens
-  // under the fixed ceiling.
-  // Rebased for the three-tool heartbeats group (arm/list/stop). Like the
-  // Experiments ledger this is a new public capability rather than prose growth
+  // Rebased for the three-tool heartbeats group (arm/list/stop). This is a new public capability rather than prose growth
   // on an existing tool, and unlike the earlier rebases there was no dead prose
   // left to buy it back with: its own descriptions were tightened first (19
   // tokens), and the remaining 175 are the group's honest cost. Pi stays five
   // under the ceiling, so the next addition still has to pay its own way.
-  // Rebased for the Experiments audit fixes: `limit` on list_experiments and
-  // `baseline` plus the one line teaching that a new metric needs one on
-  // update_experiment — the client halves of the bounded list and the
-  // baseline-on-update fix, without which an agent editing metrics just gets
-  // `invalid`. Two redundant clauses bought 7 of the 24 back: "optionally by
-  // status" on list_experiments, whose property carries its own enum and now
-  // sits beside `limit`, and "'s definition"/"here" on update_experiment. The
-  // remaining 17 are the fixes' honest cost. Pi stays five under the ceiling.
-  // Rebased for `todoId` and `owner` on create_experiment and update_experiment:
-  // the fields that stop an experiment being an island with no owner and no link
-  // to the work it informs. Four schema properties and not one word of prose —
-  // both tool descriptions are byte-for-byte what they were, because the property
-  // names say what they are and `["string","null"]` on the update pair says that
-  // null clears them. Create declares plain strings: there is nothing to clear at
-  // creation. That leaves 35 tokens with nothing dead left in this group to buy
-  // them back from, so the ceiling moves by exactly that. Pi stays five under it.
   // Rebased for `blockKind` on update_work_item: the four-value enum that says
   // WHY a Todo is blocked, and with it where the block lands. It has to be on
   // the tool rather than inferred, because `dependency` returns the Todo to its
@@ -77,7 +58,7 @@ const ATTESTED = {
   // Pi stays five under it.
   // Rebased for `set_work_item_dispatch` and `idempotencyKey` on
   // create_work_item (ICI-733): how a Todo's next attempt runs, and a
-  // caller-supplied create key. Like the Experiments ledger and the heartbeats
+  // caller-supplied create key. Like the heartbeats
   // group before it, this is a new public capability rather than prose growth on
   // an existing tool, and there was no dead prose left in this group to buy it
   // back with — its own description was tightened first ("and an engine/model
@@ -227,9 +208,16 @@ const ATTESTED = {
   // wording was then made precise (5 more): "main agent only" read as barring
   // Jinn child sessions — a Todo-dispatched session among them — which can and
   // should compact themselves. The bar is on a Task sub-agent, so it says that.
-  rpc: { tokens: 5699, sha256: "8e3683a4c72ea682b8d2c19f1ff75531813b3ffdf22fe4b943aa011495bd01a4" },
-  pi: { tokens: 6226, sha256: "03fb59934fdd4f3523df27bab7d2e6b1b40e78c4fe271c5564b1576c20470b3e" },
-  openai: { tokens: 5913, sha256: "47a0f2a3b2dd11493be5d2def9056d4e307433451d926a15db5fc960325438b9" },
+  // Rebased DOWN for the removal of the six Experiments tools and the sixteen
+  // Workflow tools (and the prose spent on them above): the ceiling, all three
+  // totals and the tool count moved down, and nothing moved up.
+  // Rebased DOWN for the reduced status set (`assigned`, `escalated` and
+  // `acknowledgeEscalated` left, the asOperator description grew: net 38 off
+  // every total), then for the three Todo approval tools (net of the `note`
+  // description: 199 off Pi). The ceiling follows each time; Pi sits ON it.
+  rpc: { tokens: 3824, sha256: "6d61983ae7ca2d170891b2c40dd059840f99b221449134b21ec91f70fd28ccc0" },
+  pi: { tokens: 4159, sha256: "b19fdc443771b335a1a1ec410e4b6af6a56593a4bd3006ea8d8c1f8690407a69" },
+  openai: { tokens: 3963, sha256: "bb3bc790e97b042822f1ee17902e88a31ce4ad2eb6794cf5d5421912de38d021" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
@@ -296,7 +284,7 @@ describe("tool manifest budget", () => {
   it("keeps tool names, required arrays, and enum arrays stable", () => {
     const tools = buildTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
-    expect(tools).toHaveLength(76);
+    expect(tools).toHaveLength(51);
 
     const required = Object.fromEntries(tools.map((t) => [t.name, t.inputSchema.required ?? []]));
     expect(required).toEqual(EXPECTED_REQUIRED);

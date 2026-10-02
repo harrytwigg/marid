@@ -12,7 +12,6 @@ import {
   type UpdateSessionFields,
 } from "../registry.js";
 import { createPartialStreamWriter } from "../partial-stream.js";
-import { isDurableWorkflowUserMessageInterruption } from "../workflow-interruptions.js";
 import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./engine-run.js";
 import { compactColdSessionFirst, settlePreemptedBeforeEngine } from "./auto-compact.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
@@ -143,12 +142,10 @@ function claimSettleableSession(run: TurnRun, what: "result" | "error"): Session
 
 /**
  * Was this turn's answer preempted before it could land? A newer user message,
- * a stop, a workflow interruption, or another turn taking the attempt all mean
+ * a stop, or another turn taking the attempt all mean
  * the same thing: settle as interrupted and say nothing to anyone.
  */
 function wasQuietlyPreempted(run: TurnRun, live: Session, result: EngineResult, superseded: boolean): boolean {
-  const completionTurn = (live.attemptTurn ?? 0) + 1;
-  if (isDurableWorkflowUserMessageInterruption(live, completionTurn)) return true;
   if (result.error?.startsWith("Interrupted")) return true;
   if (live.attemptToken !== run.input.attemptToken || live.status !== "running") return true;
   return superseded;

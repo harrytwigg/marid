@@ -2,6 +2,7 @@ import { initDb } from '../shared/db.js';
 import { listCommentAttachments, type WorkItemAttachmentHandle } from './comment-attachments.js';
 import { parseTodoId } from './id.js';
 import type { WriteOrigin } from './origin.js';
+import { withCommentMeta } from './comment-meta.js';
 import { appendWorkItemEvent } from './store.js';
 
 /**
@@ -32,6 +33,10 @@ export interface WorkItemComment {
   createdAt: string;
   editedAt: string | null;
   deletedAt: string | null;
+  /** The session that wrote it, when a session did (`comment-meta.ts`). */
+  sessionId?: string;
+  /** The comment it replied to before flattening, when it was a reply. */
+  repliedToId?: string;
 }
 
 export interface AddCommentInput {
@@ -40,6 +45,8 @@ export interface AddCommentInput {
   author: string;
   authorKind: WorkItemComment['authorKind'];
   parentCommentId?: string | null;
+  /** The writer's session, from its verified caller identity. */
+  sessionId?: string;
   /** The surface the write was issued from, when the request declared one. */
   origin?: WriteOrigin;
   /** Stable machine-operation identity. When present, an exact retry returns
@@ -114,7 +121,7 @@ function rowToComment(row: Record<string, unknown>): WorkItemComment {
 
 function getCommentRow(db: ReturnType<typeof initDb>, id: string): WorkItemComment | undefined {
   const row = db.prepare('SELECT * FROM work_item_comments WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return row ? rowToComment(row) : undefined;
+  return row ? withCommentMeta(db, [rowToComment(row)])[0] : undefined;
 }
 
 export function getComment(id: string): WorkItemComment | undefined {
@@ -242,7 +249,7 @@ export function listComments(workItemId: string, opts?: { limit?: number; offset
     .prepare('SELECT * FROM work_item_comments WHERE work_item_id = ? ORDER BY created_at, rowid LIMIT ? OFFSET ?')
     .all(id, limit, offset) as Record<string, unknown>[];
   const total = Number(db.prepare('SELECT COUNT(*) FROM work_item_comments WHERE work_item_id = ?').pluck().get(id));
-  return { comments: rows.map(rowToComment), total };
+  return { comments: withCommentMeta(db, rows.map(rowToComment)), total };
 }
 
 /** The last `n` comments (default 10) in chronological order, with the exact
@@ -255,5 +262,5 @@ export function commentsTail(workItemId: string, n = COMMENT_TAIL_DEFAULT): Comm
     .prepare('SELECT * FROM work_item_comments WHERE work_item_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
     .all(id, limit) as Record<string, unknown>[];
   const total = Number(db.prepare('SELECT COUNT(*) FROM work_item_comments WHERE work_item_id = ?').pluck().get(id));
-  return { comments: rows.map(rowToComment).reverse(), total };
+  return { comments: withCommentMeta(db, rows.map(rowToComment).reverse()), total };
 }

@@ -54,10 +54,6 @@ export interface GatewayEventMap {
   "company:changed": CompanyChangedEvent
   "pins:changed": Record<string, never>
   "notes:changed": { path: string; revision: string; action: "created" | "updated" }
-  "experiments:changed": {
-    id: string
-    action: "created" | "updated" | "reading-recorded" | "concluded"
-  }
   /** A quick capture moved. The payload is a nudge, not the truth: the browser
    *  re-reads GET /api/todo-captures/:id, which DERIVES the stage from real
    *  state, so a reload recovers and no stage can be shown before its fact. */
@@ -108,7 +104,6 @@ export const GATEWAY_EVENTS = {
   companyChanged: "company:changed",
   pinsChanged: "pins:changed",
   notesChanged: "notes:changed",
-  experimentsChanged: "experiments:changed",
   todoCaptureStage: "todo-capture:stage",
   orgChanged: "org:changed",
   configReloaded: "config:reloaded",

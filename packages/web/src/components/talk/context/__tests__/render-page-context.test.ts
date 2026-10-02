@@ -77,7 +77,7 @@ describe("rendering the page context", () => {
     for (const [pathname, search] of [
       ["/", `?session=${long}`],
       [`/todos/${long}`, ""],
-      [`/workflow/${long}/runs/${long}`, ""],
+      [`/cron/${long}`, ""],
       [`/notes/f/${long}/n/${long}`, ""],
       [`/${long}`, `?${long}=${long}`],
     ] as const) {

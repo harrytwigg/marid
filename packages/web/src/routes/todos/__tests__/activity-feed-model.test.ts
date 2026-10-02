@@ -82,13 +82,19 @@ describe("the merged feed model", () => {
     expect(blocks.map((b) => b.kind)).toEqual(["run-start", "comment", "run-end"])
   })
 
-  it("whispers read as actor + verb (bounce carries its round; approvals decide readably)", () => {
+  it("whispers read as actor + verb (bounce carries its round)", () => {
     expect(whisperOf(event("e", "status_change", "t", { toStatus: "in_review" })).text).toBe("moved it to In review")
+    // History written before the retired statuses were migrated still names them.
+    expect(whisperOf(event("e", "status_change", "t", { toStatus: "escalated" as never })).text).toBe("moved it to Escalated")
+    expect(whisperOf(event("e", "note", "t", { detail: { assignee: "@operator" } })).text).toBe("assigned it to the operator")
     expect(
       whisperOf(event("e", "status_change", "t", { fromStatus: "in_review", toStatus: "executing", detail: { bounce: true, rounds: 2 } })).text,
     ).toBe("sent it back · round 2")
-    expect(whisperOf(event("e", "approval_decided", "t", { detail: { decision: "approve" } })).text).toBe("approved it")
     expect(whisperOf(event("e", "escalated", "t", { detail: { reason: "max-rounds-exhausted" } })).text).toContain("rounds exhausted")
+    // Approval rows written before the approval flow was removed stay in history
+    // as plain lines; they carry no decision and render without one.
+    expect(whisperOf(event("e", "approval_requested", "t", { detail: { request: "ship it?" } })).text).toBe("approval requested")
+    expect(whisperOf(event("e", "approval_decided", "t", { detail: { decision: "approve" } })).text).toBe("approval decided")
     // A suppressed dispatch has to name the guard, or the operator re-arms blind.
     expect(whisperOf(event("e", "respawn_guard_held", "t", { detail: { guard: "active_pr" } })).text).toContain("active_pr")
     // A clock-driven resume has to read as the wait ending, not as the raw kind

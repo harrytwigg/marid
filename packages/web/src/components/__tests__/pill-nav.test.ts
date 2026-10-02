@@ -24,12 +24,12 @@ describe("isNavItemActive", () => {
   })
 })
 
-describe("Experiments navigation", () => {
-  it("keeps Experiments in desktop and More navigation, not the mobile primary bar", () => {
+describe("navigation", () => {
+  it("offers no Experiments destination", () => {
     const navigation = navigationFor(true)
 
-    expect(navigation.items.map((item) => item.href)).toContain("/experiments")
-    expect(navigation.overflowHrefs).toContain("/experiments")
+    expect(navigation.items.map((item) => item.href)).not.toContain("/experiments")
+    expect(navigation.overflowHrefs).not.toContain("/experiments")
     expect(navigation.mobileItems.map((item) => item.href)).not.toContain("/experiments")
   })
 })

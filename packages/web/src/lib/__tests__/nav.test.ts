@@ -5,15 +5,14 @@ import { NAV_ITEMS, MOBILE_TAB_ITEMS, OVERFLOW_ITEMS, MORE_NAV_ITEM } from '../n
 // surfaces and More, with everything else under the More
 // overflow screen.
 describe('MOBILE_TAB_ITEMS', () => {
-  it('has exactly 4 entries while Notes is disabled', () => {
-    expect(MOBILE_TAB_ITEMS).toHaveLength(4)
+  it('has exactly 3 entries while Notes is disabled', () => {
+    expect(MOBILE_TAB_ITEMS).toHaveLength(3)
   })
 
   it('lists the primary hrefs in order, ending with More', () => {
     expect(MOBILE_TAB_ITEMS.map((item) => item.href)).toEqual([
       '/',
       '/todos',
-      '/workflow',
       '/more',
     ])
   })
@@ -22,7 +21,7 @@ describe('MOBILE_TAB_ITEMS', () => {
     expect(MOBILE_TAB_ITEMS.some((i) => i.href === '/todos' && i.label === 'Todos')).toBe(true)
   })
 
-  it('derives the 4 primary destinations from NAV_ITEMS (icons/labels stay in sync)', () => {
+  it('derives the primary destinations from NAV_ITEMS (icons/labels stay in sync)', () => {
     for (const item of MOBILE_TAB_ITEMS) {
       if (item.href === MORE_NAV_ITEM.href) continue // More is the synthetic overflow entry
       expect(NAV_ITEMS).toContain(item)
@@ -33,7 +32,6 @@ describe('MOBILE_TAB_ITEMS', () => {
 describe('OVERFLOW_ITEMS (the More screen)', () => {
   it('holds every non-Chat destination that is not a primary tab', () => {
     expect(OVERFLOW_ITEMS.map((i) => i.href)).toEqual([
-      '/experiments',
       '/org',
       '/cron',
       '/limits',

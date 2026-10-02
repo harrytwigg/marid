@@ -137,8 +137,8 @@ describe("restart interruption marking", () => {
 
     restartResume.interruptRunningSessionsForShutdown(GATEWAY);
     registry.recoverStaleSessions();
-    // Workflow attempts have their own restart recovery; this is the one that owns them.
-    expect(registry.recoverStaleWorkflowAttemptSessions()).toBe(1);
+    // Phase rows left by the removed Workflow runtime are settled by their own boot sweep.
+    expect(registry.settleLegacyWorkflowPhaseSessions()).toBe(1);
 
     expect(registry.getSession(attempt.id)?.status).toBe("interrupted");
     expect(restartResume.consumeRestartResumeCandidates()).toEqual(NONE);

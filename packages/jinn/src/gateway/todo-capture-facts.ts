@@ -1,7 +1,7 @@
 import { getMessages, getSession, listSessionsByWorkItem } from "../sessions/registry.js";
 import { getWorkItem, listWorkItems } from "../work-items/store.js";
 import { logger } from "../shared/logger.js";
-import { sourceSessionId } from "./approval-authority.js";
+import { sourceSessionId } from "./work-item-owner.js";
 import { TODO_DISPATCHER_NAME, TODO_SHAPER_NAME } from "./system-employees.js";
 import { deriveTodoCaptureState, type TodoCaptureFacts, type TodoCaptureState, type TodoCaptureTodoFact } from "./todo-capture-stage.js";
 import type { ApiContext } from "./api.js";
@@ -77,9 +77,6 @@ function factsFor(captureId: string, dispatcherEmployee: string, shaperEmployee:
       linked: listSessionsByWorkItem(item.id).map((linked) => ({
         id: linked.id,
         employee: linked.employee,
-        workflowId: linked.workflowProvenance?.workflowId ?? null,
-        workflowName: linked.workflowProvenance?.workflowName ?? null,
-        workflowRunId: linked.workflowProvenance?.runId ?? null,
       })),
     })),
     dispatcherEmployee,

@@ -107,7 +107,7 @@ afterAll(() => {
 });
 
 describe("PUT /api/config top-level key allowlist", () => {
-  it("accepts and persists the workflows block", async () => {
+  it("accepts and persists a stale workflows block, though Workflows are gone", async () => {
     const response = await call("PUT", "/api/config", {
       workflows: {
         armingDelegates: ["platform-delegate"],
@@ -122,7 +122,7 @@ describe("PUT /api/config top-level key allowlist", () => {
     });
   });
 
-  it("round-trips a gateway configured with arming delegates", async () => {
+  it("round-trips a gateway whose config still carries a stale workflows block", async () => {
     currentConfig = { ...baseConfig(), workflows: { armingDelegates: ["platform-delegate"] } };
     fs.writeFileSync(path.join(jinnHome, "config.yaml"), yaml.dump(currentConfig));
 

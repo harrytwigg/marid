@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
-import type { WorkItemCompactWire, WorkItemStatusWire, ApprovalStateWire } from "@/lib/api"
+import type { WorkItemCompactWire, WorkItemStatusWire } from "@/lib/api"
 import { createBrowserGatewayTransport, installGatewayTransport } from "@/lib/gateway-transport"
 import { NeedsYouView } from "../needs-you-view"
 
@@ -36,7 +36,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
 function item(
   id: string,
   status: WorkItemStatusWire,
-  approvalState: ApprovalStateWire | null,
   over: Partial<WorkItemCompactWire> = {},
 ): WorkItemCompactWire {
   return {
@@ -47,11 +46,6 @@ function item(
     assignee: null,
     source: "cron",
     sourceRef: "cron:job:2026",
-    approvalState,
-    approvalRequest: approvalState === "pending" ? "Approve posting this?" : null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     updatedAt: "2026-07-05T11:00:00.000Z",
     ...over,
   }
@@ -65,9 +59,6 @@ function renderView(items: WorkItemCompactWire[]) {
         <NeedsYouView
           items={items}
           byName={new Map()}
-          resolvingIds={new Set()}
-          onApprove={vi.fn()}
-          onReject={vi.fn()}
           onOpen={vi.fn()}
         />
       </MemoryRouter>
@@ -96,23 +87,39 @@ afterEach(() => {
 describe("NeedsYouView attention lanes (PLA-240)", () => {
   it("a recovering leftover reaches Recovering automatically and not Blocked", () => {
     renderView([
-      item("QAP-2", "blocked", null, { title: "quota parked build", attentionLane: "recovering", assignee: "platform-worker" }),
-      item("QAP-10", "in_review", "pending", { title: "operator gate", attentionLane: "operator" }),
+      item("QAP-2", "blocked", { title: "quota parked build", attentionLane: "recovering", assignee: "platform-worker" }),
+      item("QAP-10", "blocked", { title: "operator block", attentionLane: "operator" }),
     ])
     expect(screen.getByTestId("needs-group-recovering").textContent).toContain("Recovering automatically")
     expect(screen.getByTestId("needs-group-recovering").textContent).toContain("quota parked build")
-    expect(screen.getByTestId("needs-group-approval").textContent).toContain("operator gate")
-    expect(screen.queryByTestId("needs-group-blocked")).toBeNull()
+    expect(screen.getByTestId("needs-group-blocked").textContent).toContain("operator block")
+    expect(screen.getByTestId("needs-group-recovering").textContent).not.toContain("operator block")
   })
 
-  it("an approved in_review leftover with attentionLane manager reaches Manager attention, not Approvals", () => {
+  it("an in_review leftover with attentionLane manager reaches Manager attention, not Blocked", () => {
     renderView([
-      item("QAP-15", "in_review", "approved", { title: "approved landing leftover", attentionLane: "manager", assignee: "platform-worker" }),
-      item("QAP-10", "in_review", "pending", { title: "operator gate", attentionLane: "operator" }),
+      item("QAP-15", "in_review", { title: "landing leftover", attentionLane: "manager", assignee: "platform-worker" }),
+      item("QAP-10", "blocked", { title: "operator block", attentionLane: "operator" }),
     ])
     expect(screen.getByTestId("needs-group-manager").textContent).toContain("Manager attention")
-    expect(screen.getByTestId("needs-group-manager").textContent).toContain("approved landing leftover")
-    expect(screen.getByTestId("needs-group-approval").textContent).toContain("operator gate")
-    expect(screen.getByTestId("needs-group-manager").textContent).not.toContain("operator gate")
+    expect(screen.getByTestId("needs-group-manager").textContent).toContain("landing leftover")
+    expect(screen.getByTestId("needs-group-blocked").textContent).toContain("operator block")
+    expect(screen.getByTestId("needs-group-manager").textContent).not.toContain("operator block")
+  })
+
+  // Only a blocked Todo is blocked: an executing one on Manager attention or
+  // recovering on its own says what it is doing instead.
+  it("says what each kind of entry is doing, not that every one is blocked", () => {
+    renderView([
+      item("QAP-21", "executing", { title: "auth failed", attentionLane: "manager", assignee: "platform-worker" }),
+      item("QAP-22", "executing", { title: "quota wait", attentionLane: "recovering", assignee: "platform-worker" }),
+      item("QAP-23", "blocked", { title: "needs a pick", attentionLane: "operator", assignee: "platform-worker" }),
+    ])
+    const manager = screen.getByTestId("needs-group-manager").textContent
+    expect(manager).toContain("needs a manager")
+    expect(manager).not.toContain("is blocked")
+    expect(manager).not.toContain("Blocked and waiting")
+    expect(screen.getByTestId("needs-group-recovering").textContent).toContain("is recovering")
+    expect(screen.getByTestId("needs-group-blocked").textContent).toContain("is blocked")
   })
 })

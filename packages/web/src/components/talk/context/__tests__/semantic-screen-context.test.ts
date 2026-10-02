@@ -103,25 +103,19 @@ describe("authoritative semantic screen context", () => {
     expect(context.selectedObject).toBeNull()
   })
 
-  it("declares graph layout as visual-only evidence while preserving structured workflow state", () => {
-    queryClient.setQueryData(["workflows", "definition", "release"], {
-      id: "release",
-      title: "Release train",
-      revision: 4,
-      enabled: true,
-      nodes: [{ id: "build", type: "employee", name: "Build", config: {} }],
-      edges: [],
-      ui: { positions: { build: { x: 100, y: 80 } } },
+  it("declares chart layout as visual-only evidence while preserving the selected object", () => {
+    queryClient.setQueryData(["org"], {
+      employees: [{ name: "a-lead", displayName: "A Lead" }],
     })
     const context = buildScreenContext({
-      location: describeLocation("/workflow/release", ""),
+      location: describeLocation("/org", "?employee=a-lead"),
       browserInstanceId: "browser-1",
-      root: root('<h1>Release train</h1><div data-talk-visual-gap="workflow-graph-spatial-layout"></div>'),
+      root: root('<h1>Organization</h1><div data-talk-visual-gap="org-chart-spatial-layout"></div>'),
       capturedAt: "2026-08-18T08:01:00.000Z",
     })
 
-    expect(context.selectedObject).toMatchObject({ id: "release", title: "Release train", status: "enabled" })
-    expect(context.visualGaps).toEqual(["workflow-graph-spatial-layout"])
+    expect(context.selectedObject).toMatchObject({ kind: "employee", id: "a-lead" })
+    expect(context.visualGaps).toEqual(["org-chart-spatial-layout"])
   })
 })
 

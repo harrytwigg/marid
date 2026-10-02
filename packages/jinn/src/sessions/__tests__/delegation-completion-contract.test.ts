@@ -54,7 +54,7 @@ function child(overrides: Partial<Session> = {}): Session {
   };
 }
 
-function openItem(status: "backlog" | "assigned" | "executing" | "in_review" | "done" = "executing") {
+function openItem(status: "backlog" | "executing" | "in_review" | "done" = "executing") {
   return { id: "wi_open", status, source: "delegation" };
 }
 

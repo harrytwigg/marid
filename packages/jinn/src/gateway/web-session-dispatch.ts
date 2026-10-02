@@ -54,16 +54,13 @@ async function settleDispatchFailure(
   const errMsg = err instanceof Error ? err.message : String(err);
   logger.error(`Web session ${session.id} dispatch error: ${errMsg}`);
   if (!attemptToken) return;
-  const erroredOnDispatch = await settleTurn({
+  await settleTurn({
     sessionId: session.id,
     attemptToken,
     outcome: "failed",
     error: errMsg,
     surface: webTurnSurface(session.id, context),
   });
-  if (erroredOnDispatch?.workflowProvenance?.kind === "phase") {
-    context.sessionManager.emitWorkflowAttemptTurnCompletion(session.id);
-  }
 }
 
 /**
@@ -93,9 +90,6 @@ async function runQueuedTurn(
   // Item moved pending → running: refresh the queue panel.
   if (opts.queueItemId) context.emit("queue:updated", { sessionId: session.id, sessionKey: opts.sessionKey });
   await runWebSession(startedAttempt, context, { ...request, attemptToken: startedAttempt.attemptToken });
-  if (startedAttempt.workflowProvenance?.kind === "phase") {
-    context.sessionManager.emitWorkflowAttemptTurnCompletion(session.id);
-  }
 }
 
 /**

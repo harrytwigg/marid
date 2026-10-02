@@ -5,24 +5,24 @@ import { createVisualCapture } from "../visual-capture"
 const partialContext = (revision = 9): TalkScreenContext => ({
   version: 1,
   revision,
-  routeId: "workflow-detail",
-  kind: "workflow",
-  path: "/workflow/release",
+  routeId: "org",
+  kind: "org",
+  path: "/org",
   params: {},
   filters: {},
-  selection: { kind: "workflow", id: "release" },
+  selection: null,
   capturedAt: "2026-08-18T08:00:00.000Z",
   freshness: "partial",
-  missing: ["workflow-graph-spatial-layout"],
-  title: "Release train",
+  missing: ["org-chart-spatial-layout"],
+  title: "Org chart",
   selectedObject: null,
   visibleItems: [],
   controls: [],
-  meaningfulText: "Release train",
+  meaningfulText: "Org chart",
   browserInstanceId: "browser-1",
   focus: null,
   hidden: false,
-  visualGaps: ["workflow-graph-spatial-layout"],
+  visualGaps: ["org-chart-spatial-layout"],
 })
 
 describe("bounded visual fallback", () => {
@@ -32,7 +32,7 @@ describe("bounded visual fallback", () => {
 
     const result = await capture.request({
       context: { ...partialContext(), freshness: "complete", missing: [], visualGaps: [] },
-      reason: "workflow-graph-spatial-layout",
+      reason: "org-chart-spatial-layout",
       requestKey: "utterance-1",
       root: document.createElement("main"),
     })
@@ -54,8 +54,8 @@ describe("bounded visual fallback", () => {
     root.innerHTML = '<h1>Release train</h1><input type="password" value="never-render"><div data-talk-orb-overlay>orb</div>'
 
     const [first, duplicate] = await Promise.all([
-      capture.request({ context: partialContext(), reason: "workflow-graph-spatial-layout", requestKey: "utterance-1", root }),
-      capture.request({ context: partialContext(), reason: "workflow-graph-spatial-layout", requestKey: "utterance-1", root }),
+      capture.request({ context: partialContext(), reason: "org-chart-spatial-layout", requestKey: "utterance-1", root }),
+      capture.request({ context: partialContext(), reason: "org-chart-spatial-layout", requestKey: "utterance-1", root }),
     ])
 
     expect(first).toMatchObject({
@@ -70,7 +70,7 @@ describe("bounded visual fallback", () => {
       },
       receipt: {
         contextRevision: 9,
-        reason: "workflow-graph-spatial-layout",
+        reason: "org-chart-spatial-layout",
         bytes: 1_500,
         width: 1200,
         height: 750,
@@ -93,7 +93,7 @@ describe("bounded visual fallback", () => {
 
     const laterQuestion = await capture.request({
       context: partialContext(),
-      reason: "workflow-graph-spatial-layout",
+      reason: "org-chart-spatial-layout",
       requestKey: "utterance-2",
       root,
     })
@@ -121,7 +121,7 @@ describe("bounded visual fallback", () => {
 
     await expect(capture.request({
       context: partialContext(),
-      reason: "workflow-graph-spatial-layout",
+      reason: "org-chart-spatial-layout",
       requestKey: "utterance-1",
       root,
     })).resolves.toMatchObject({ ok: false, code: "visual-fallback-out-of-bounds" })

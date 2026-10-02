@@ -53,6 +53,8 @@ describe("runStart", () => {
     await runStart({ daemon: false });
 
     expect(restartRequest.requestRestartFromGateway).toHaveBeenCalledTimes(1);
+    expect(restartRequest.requestRestartFromGateway).toHaveBeenCalledWith(fetch, { port: 21877 });
+    expect(lifecycle.getStatus).toHaveBeenCalledWith(21877);
     expect(lifecycle.restartDetached).not.toHaveBeenCalled();
     expect(lifecycle.startForeground).not.toHaveBeenCalled();
     expect(lifecycle.startDaemon).not.toHaveBeenCalled();
@@ -72,6 +74,17 @@ describe("runStart", () => {
     await runStart({ daemon: false, takePort: true });
 
     expect(lifecycle.restartDetached).toHaveBeenCalledWith({ takePort: true, port: 21877 });
+  });
+
+  it("checks status and asks for the restart on the port --port names, not the configured one", async () => {
+    restartRequest.requestRestartFromGateway.mockResolvedValueOnce(false);
+
+    await runStart({ daemon: true, port: 21901 });
+
+    expect(lifecycle.assertPortTakeoverAllowed).toHaveBeenCalledWith(21901, { takePort: undefined });
+    expect(lifecycle.getStatus).toHaveBeenCalledWith(21901);
+    expect(restartRequest.requestRestartFromGateway).toHaveBeenCalledWith(fetch, { port: 21901 });
+    expect(lifecycle.restartDetached).toHaveBeenCalledWith({ takePort: undefined, port: 21901 });
   });
 
   it("opens an auth-required local dashboard with a valid one-time bootstrap grant", async () => {

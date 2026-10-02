@@ -53,6 +53,28 @@ const BLOCKED_TERMS = [
   ["/", "Users", "/", "jim", "my", "english"].join(""),
 ];
 
+// The fork must keep its MIT attribution to the upstream project, which names
+// the upstream author's handle both in the repository link and in the "by ..."
+// credit (see docs/marid-vs-jinn.md). That handle is also one of the personal
+// terms the guard blocks, so allow exactly those two attribution forms through
+// while still scanning the rest of the tree, and the rest of that same file.
+const UPSTREAM_OWNER = ["hris", "to", "2612"].join("");
+const ALLOWED_ATTRIBUTION = [
+  `github.com/${UPSTREAM_OWNER}/jinn`,
+  `by ${UPSTREAM_OWNER}`,
+];
+
+function maskAllowedAttribution(text: string): string {
+  let masked = text;
+  for (const allowed of ALLOWED_ATTRIBUTION) {
+    const escaped = allowed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    masked = masked.replace(new RegExp(escaped, "gi"), (match) =>
+      "x".repeat(match.length),
+    );
+  }
+  return masked;
+}
+
 function listTrackedTextFiles(repo: string, scanPaths: string[]): string[] {
   const tracked = execFileSync("git", ["ls-files", "-z", "--", ...scanPaths], {
     cwd: repo,
@@ -70,7 +92,7 @@ function findBlockedTerms(files: string[], root: string): string[] {
   const findings: string[] = [];
 
   for (const file of files) {
-    const text = readFileSync(file, "utf-8");
+    const text = maskAllowedAttribution(readFileSync(file, "utf-8"));
     const lower = text.toLowerCase();
     for (const term of BLOCKED_TERMS) {
       const index = lower.indexOf(term.toLowerCase());
@@ -95,6 +117,27 @@ describe("privacy guard", () => {
 
   it("keeps shipped templates and public source fixtures generic", () => {
     expect(findBlockedTerms(listTrackedTextFiles(REPO, SCAN_PATHS), REPO)).toEqual([]);
+  });
+
+  it("allows the upstream attribution but still blocks the handle elsewhere", () => {
+    const repo = mkdtempSync(join(tmpdir(), "jinn-privacy-guard-"));
+    try {
+      mkdirSync(join(repo, "docs"));
+      const file = join(repo, "docs", "marid-vs-jinn.md");
+      writeFileSync(
+        file,
+        [
+          `Marid is a fork of [Jinn](https://github.com/${UPSTREAM_OWNER}/jinn) by ${UPSTREAM_OWNER} and contributors.`,
+          `Same file, outside the attribution: ${BLOCKED_TERMS[0]}.`,
+        ].join("\n"),
+      );
+
+      const findings = findBlockedTerms([file], repo);
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toContain(`${join("docs", "marid-vs-jinn.md")}:2 contains`);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it("ignores an untracked personal path but catches it once tracked", () => {

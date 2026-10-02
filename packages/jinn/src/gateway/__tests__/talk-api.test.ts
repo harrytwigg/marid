@@ -238,7 +238,7 @@ describe("the standing brief", () => {
   it("hands the browser the brief and reports what it costs", async () => {
     const body = await open();
 
-    expect(String(body.brief)).toContain("Workflow");
+    expect(String(body.brief)).toContain("Todo");
     expect(body.briefChars).toBe(String(body.brief).length);
     expect(body.briefChars as number).toBeGreaterThan(0);
     expect(body.briefChars as number).toBeLessThanOrEqual(TALK_BRIEF_BUDGET_CHARS);

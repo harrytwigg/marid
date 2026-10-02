@@ -18,11 +18,6 @@ function compact(over: Partial<WorkItemCompactWire> & { id: string; status: Work
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: over.id,
@@ -100,23 +95,23 @@ describe("a parked card counts down", () => {
   })
 })
 
-describe("an escalated card leads with the hint", () => {
-  const escalated = compact({
+describe("a blocked card leads with the hint", () => {
+  const stopped = compact({
     id: "PLA-6",
-    status: "escalated",
+    status: "blocked",
     title: "Renew the provider contract",
     unblockHint: { what: "sign the renewal", who: "the operator" },
   })
 
   it("says what and who", () => {
-    renderCard(escalated)
+    renderCard(stopped)
     const lead = screen.getByTestId("stop-lead-PLA-6")
     expect(lead.textContent).toContain("sign the renewal")
     expect(lead.textContent).toContain("the operator")
   })
 
   it("puts them above the title in the card's own reading order", () => {
-    renderCard(escalated)
+    renderCard(stopped)
     const card = screen.getByTestId("board-card-PLA-6")
     const lead = screen.getByTestId("stop-lead-PLA-6")
     const title = [...card.querySelectorAll("div")].find((el) => el.textContent === "Renew the provider contract")!
@@ -124,12 +119,12 @@ describe("an escalated card leads with the hint", () => {
   })
 
   it("is not hidden on the phone, unlike the trailing why-line it replaces", () => {
-    renderCard(escalated)
+    renderCard(stopped)
     expect(screen.getByTestId("stop-lead-PLA-6").className).not.toContain("max-[700px]:hidden")
   })
 
   it("gives who its own line, so a narrow column cannot truncate it away", () => {
-    renderCard(escalated)
+    renderCard(stopped)
     const lines = [...screen.getByTestId("stop-lead-PLA-6").querySelectorAll("span")]
       .filter((el) => el.className.includes("truncate"))
       .map((el) => el.textContent)
@@ -164,7 +159,7 @@ describe("the Needs-you inbox speaks in the stop's own voice", () => {
   const NOW = Date.parse("2026-08-21T12:00:00.000Z")
 
   it("quotes the hint when there is one", () => {
-    const item = compact({ id: "PLA-8", status: "escalated", unblockHint: { what: "sign the renewal", who: "the operator" } })
+    const item = compact({ id: "PLA-8", status: "blocked", unblockHint: { what: "sign the renewal", who: "the operator" } })
     expect(stopCauseQuote(item, NOW)).toBe("sign the renewal — the operator")
   })
 

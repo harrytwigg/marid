@@ -5,8 +5,6 @@ import {
   Search,
   Check,
   Pause,
-  TriangleAlert,
-  Bell,
   X,
   Clock,
   Workflow,
@@ -20,12 +18,11 @@ import type { WorkItemSourceWire, WorkItemStatusWire } from "@/lib/api"
 import { stateKeyOf, type StateKey } from "@/lib/todos"
 
 /* GRS-021d — the state-circle primitive. A tinted disc + a glyph from the same
- * lucide family the shipped Workflows surface uses (node-card `stateGlyph`), so
- * a Todo's status reads in the same visual language as a workflow step. The disc
+ * lucide family the rest of the app uses. The disc
  * treatment (soft tinted fill, no border) is the new primitive; the glyph inside
- * is the shared family. `approval` is a synthetic key for the Needs-you bell. */
+ * is the shared family. */
 
-export type StateGlyphKey = StateKey | "approval"
+export type StateGlyphKey = StateKey
 
 interface GlyphSpec {
   Icon: LucideIcon
@@ -38,11 +35,6 @@ interface GlyphSpec {
 
 const SPEC: Record<StateGlyphKey, GlyphSpec> = {
   backlog: { Icon: Inbox, bg: "var(--fill-tertiary)", fg: "var(--text-tertiary)" },
-  assigned: {
-    Icon: UserRound,
-    bg: "color-mix(in srgb, var(--system-blue) 16%, transparent)",
-    fg: "var(--system-blue)",
-  },
   executing: { Icon: Loader2, bg: "var(--accent-fill)", fg: "var(--accent)", spin: true },
   review: {
     Icon: Search,
@@ -59,13 +51,7 @@ const SPEC: Record<StateGlyphKey, GlyphSpec> = {
     bg: "color-mix(in srgb, var(--system-orange) 18%, transparent)",
     fg: "var(--system-orange)",
   },
-  escalated: {
-    Icon: TriangleAlert,
-    bg: "color-mix(in srgb, var(--system-red) 18%, transparent)",
-    fg: "var(--system-red)",
-  },
   cancelled: { Icon: X, bg: "var(--fill-tertiary)", fg: "var(--text-quaternary)" },
-  approval: { Icon: Bell, bg: "var(--accent-fill)", fg: "var(--accent)" },
 }
 
 /** A tinted state disc. `size` is the disc diameter in px; the glyph scales to ~half. */

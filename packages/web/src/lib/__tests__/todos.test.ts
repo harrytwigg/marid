@@ -30,19 +30,13 @@ function compact(over: Partial<WorkItemCompactWire> & { id: string; status: Work
     updatedAt: over.updatedAt ?? "2026-07-05T11:00:00.000Z",
     ...over,
     sourceRef: over.sourceRef ?? null,
-    approvalState: over.approvalState ?? null,
-    approvalRequest: over.approvalRequest ?? null,
-    approvalRef: over.approvalRef ?? null,
-    approvalTarget: over.approvalTarget ?? null,
-    approvalEscalatedAt: over.approvalEscalatedAt ?? null,
   }
 }
 
 describe("stateKeyOf", () => {
-  it("keeps the true glyph key — blocked/escalated stay themselves, in_review maps to review", () => {
+  it("keeps the true glyph key — blocked stays itself, in_review maps to review", () => {
     expect(stateKeyOf("in_review")).toBe("review")
     expect(stateKeyOf("blocked")).toBe("blocked")
-    expect(stateKeyOf("escalated")).toBe("escalated")
     expect(stateKeyOf("executing")).toBe("executing")
   })
 })
@@ -96,16 +90,15 @@ describe("deriveNeedsYou", () => {
   it("preserves the server's updated-first order and only keeps attention items", () => {
     const items = [
       compact({ id: "blk1", status: "blocked" }),
-      compact({ id: "ap1", status: "in_review", approvalState: "pending" }),
-      compact({ id: "esc1", status: "escalated" }),
-      compact({ id: "both", status: "escalated", approvalState: "pending" }),
-      compact({ id: "done1", status: "done", approvalState: "approved" }),
+      compact({ id: "review1", status: "in_review" }),
+      compact({ id: "blk2", status: "blocked" }),
+      compact({ id: "done1", status: "done" }),
     ]
     const set = deriveNeedsYou(items)
-    expect(set.map((item) => item.id)).toEqual(["blk1", "ap1", "esc1", "both"])
-    expect(set).toHaveLength(4)
+    expect(set.map((item) => item.id)).toEqual(["blk1", "blk2"])
+    expect(set).toHaveLength(2)
   })
-  it("is empty when nothing is pending/escalated/blocked", () => {
+  it("is empty when nothing is blocked", () => {
     expect(deriveNeedsYou([compact({ id: "x", status: "executing" })])).toHaveLength(0)
   })
 
@@ -117,28 +110,21 @@ describe("deriveNeedsYou", () => {
     const items = [
       compact({ id: "parked", status: "blocked", parkedUntil: ahead }),
       compact({ id: "expired", status: "blocked", parkedUntil: behind }),
-      compact({ id: "unreadable", status: "escalated", parkedUntil: "whenever" }),
-      compact({ id: "escalated-parked", status: "escalated", parkedUntil: ahead }),
+      compact({ id: "unreadable", status: "blocked", parkedUntil: "whenever" }),
       compact({ id: "plain", status: "blocked" }),
     ]
     expect(deriveNeedsYou(items, NOW).map((item) => item.id)).toEqual(["expired", "unreadable", "plain"])
   })
 
-  it("drops a parked Todo even when it is holding a gate — the park is what decides", () => {
-    const parked = new Date(NOW + 3_600_000).toISOString()
-    expect(deriveNeedsYou([compact({ id: "gated", status: "blocked", approvalState: "pending", parkedUntil: parked })], NOW)).toHaveLength(0)
-    expect(deriveNeedsYou([compact({ id: "gated-open", status: "blocked", approvalState: "pending" })], NOW)).toHaveLength(1)
-  })
-
   it("keeps recovering and manager lanes so they reach the dashboard groups", () => {
     const parked = new Date(NOW + 3_600_000).toISOString()
     const set = deriveNeedsYou([
-      compact({ id: "rec-assigned", status: "assigned", attentionLane: "recovering" }),
+      compact({ id: "rec-backlog", status: "backlog", attentionLane: "recovering" }),
       compact({ id: "rec-parked", status: "blocked", attentionLane: "recovering", parkedUntil: parked }),
-      compact({ id: "mgr-review", status: "in_review", attentionLane: "manager", approvalState: "approved" }),
-      compact({ id: "plain-assigned", status: "assigned" }),
+      compact({ id: "mgr-review", status: "in_review", attentionLane: "manager" }),
+      compact({ id: "plain-backlog", status: "backlog" }),
     ], NOW)
-    expect(set.map((item) => item.id)).toEqual(["rec-assigned", "rec-parked", "mgr-review"])
+    expect(set.map((item) => item.id)).toEqual(["rec-backlog", "rec-parked", "mgr-review"])
   })
 })
 

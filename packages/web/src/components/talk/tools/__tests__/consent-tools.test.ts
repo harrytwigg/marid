@@ -9,8 +9,6 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   api: {
     sendMessage: vi.fn(),
-    startWorkflowRunV2: vi.fn(),
-    recordExperimentReading: vi.fn(),
     addWorkItemComment: vi.fn(),
   },
 }))
@@ -21,8 +19,6 @@ const mocked = vi.mocked(api)
  *  not reach until an answer comes back. */
 const ASKED: Array<{ tool: string; args: string; reaches: keyof typeof mocked }> = [
   { tool: "talk_send_to_session", args: '{"id":"s-1","message":"ship it"}', reaches: "sendMessage" },
-  { tool: "talk_start_workflow_run", args: '{"id":"jinn-build"}', reaches: "startWorkflowRunV2" },
-  { tool: "talk_record_reading", args: '{"id":"exp-1","metric":"signups","value":12}', reaches: "recordExperimentReading" },
   { tool: "jinn_action", args: '{"intent":"note that we shipped","subject":"ABC-59"}', reaches: "addWorkItemComment" },
 ]
 
@@ -30,8 +26,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearTalkActions()
   mocked.sendMessage.mockResolvedValue({} as never)
-  mocked.startWorkflowRunV2.mockResolvedValue({ id: "run_1", status: "running" } as never)
-  mocked.recordExperimentReading.mockResolvedValue({ reading: { id: "r1" } } as never)
   mocked.addWorkItemComment.mockResolvedValue({ comment: { id: "wic_1" } } as never)
 })
 
@@ -113,13 +107,13 @@ describe("the consent decision itself is logged", () => {
     answerSituation("go")
     await granted
 
-    const refused = executeToolCall("talk_start_workflow_run", '{"id":"jinn-build"}')
+    const refused = executeToolCall("talk_send_to_session", '{"id":"s-2","message":"hold it"}')
     dismissSituation()
     await refused
 
     expect(talkActions().map((entry) => ({ tool: entry.tool, subject: entry.subject, lane: entry.lane, consent: entry.consent }))).toEqual([
       { tool: "talk_send_to_session", subject: "s-1", lane: "consent", consent: "granted" },
-      { tool: "talk_start_workflow_run", subject: "jinn-build", lane: "consent", consent: "refused" },
+      { tool: "talk_send_to_session", subject: "s-2", lane: "consent", consent: "refused" },
     ])
   })
 })

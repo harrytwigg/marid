@@ -2,7 +2,6 @@ import { getWorkItemSpend, listWorkItemEvents, type queryWorkItems, type WorkIte
 import { commentsTail } from "../work-items/comments.js";
 import { blockedSet, isBlocked, listRelations } from "../work-items/relations.js";
 import { getWorkItemLabels, labelSets, type Label } from "../work-items/labels.js";
-import { listApprovals } from "../work-items/approvals.js";
 import { listWorkItemRuns } from "../work-items/runs.js";
 import { getTodoDispatchConfig } from "../work-items/dispatch-config.js";
 import { readStopCause, type TodoStopCause } from "../work-items/stop-cause.js";
@@ -26,8 +25,7 @@ function attentionLaneOf(
   // left behind by a move to backlog (or a terminal) is stale — reading it here
   // kept a lane the Todo no longer had a reason for.
   if (recovery && isRecoverySweptStatus(item.status)) return recovery.lane;
-  if (item.approvalOperatorOnly && item.approvalState === "pending") return "operator";
-  if (item.status === "blocked" || item.status === "escalated") {
+  if (item.status === "blocked") {
     const cause = readStopCause(initDb(), item.id);
     if (cause?.parkedUntil) return "recovering";
     return "operator";
@@ -62,14 +60,6 @@ export function compactWorkItem(
     labels: extras ? extras.labels.get(item.id) ?? [] : getWorkItemLabels(item.id),
     blocked: extras ? extras.blocked.has(item.id) : isBlocked(item.id),
     kept: extras ? extras.kept.has(item.id) : isWorkItemKept(initDb(), item.id),
-    approvalState: item.approvalState,
-    approvalRequest: item.approvalRequest,
-    approvalRef: item.approvalRef,
-    approvalOptions: item.approvalOptions,
-    approvalChoice: item.approvalChoice,
-    approvalOperatorOnly: item.approvalOperatorOnly,
-    approvalTarget: item.approvalTarget,
-    approvalEscalatedAt: item.approvalEscalatedAt,
     sessionRef: sessionRef(item),
     attentionLane: attentionLaneOf(item, extras?.recovery?.get(item.id)),
     ...stopCause(item),
@@ -106,7 +96,7 @@ export function workItemPagePayload(page: ReturnType<typeof queryWorkItems>): Re
  *  entirely once the park has passed, so no surface has to re-check the clock
  *  to avoid showing a countdown that already ran out. */
 function stopCause(item: WorkItem): TodoStopCause {
-  if (item.status !== "blocked" && item.status !== "escalated") return {};
+  if (item.status !== "blocked") return {};
   return readStopCause(initDb(), item.id) ?? {};
 }
 
@@ -129,9 +119,6 @@ export function fullWorkItemPayload(item: WorkItem): Record<string, unknown> {
     labels: getWorkItemLabels(item.id),
     // ICI-1357 (additive): whether this Todo sits on the operator's Home board.
     kept: isWorkItemKept(initDb(), item.id),
-    // Slice 4 (additive): the full approval history, oldest request first. The
-    // legacy approval* fields on `workItem` remain the current row's values.
-    approvals: listApprovals(item.id),
     // ICI-728 (additive): the attempt ledger, oldest first. Status says where the
     // Todo is; runs say what each attempt at it actually did.
     runs: listWorkItemRuns(item.id),
@@ -142,7 +129,7 @@ export function fullWorkItemPayload(item: WorkItem): Record<string, unknown> {
 }
 
 /** The board/attention enrichment contract: only the two projections those
- * surfaces read. Heavy comments, relations, labels and approval history stay
+ * surfaces read. Heavy comments, relations and labels stay
  * behind the single-item detail route. */
 export function openWorkItemPayload(item: WorkItem, events = listWorkItemEvents(item.id)): Record<string, unknown> {
   return {

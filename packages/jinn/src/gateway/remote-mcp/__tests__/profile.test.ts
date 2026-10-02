@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildTools } from "../../../mcp/server.js";
 import type { JinnMcpContext, JinnMcpTool } from "../../../mcp/toolkit.js";
-import { buildRemoteMcpTools, REMOTE_MCP_LEDGER_TOOLS, REMOTE_MCP_READ_TOOLS, REMOTE_MCP_SESSION_TOOLS } from "../profile.js";
+import {
+  buildRemoteMcpTools, REMOTE_MCP_LEDGER_TOOLS, REMOTE_MCP_LIFECYCLE_TOOLS, REMOTE_MCP_READ_TOOLS, REMOTE_MCP_SESSION_TOOLS,
+} from "../profile.js";
 import { remoteMcpRouteAllowed } from "../rules.js";
 
 /**
@@ -13,14 +15,14 @@ import { remoteMcpRouteAllowed } from "../rules.js";
  */
 
 /** Tools the spec excludes from every option (FR-010, FR-011, Q2 classes T/X/D/A/C/P), less
- *  the four session-control tools admitted later. */
+ *  the session-control tools and the two lifecycle tools admitted later. */
 const NEVER = [
-  "read_knowledge", "attach_to_work_item", "create_label", "decide_work_item_approval", "decide_workflow_approval",
+  "read_knowledge", "attach_to_work_item", "create_label", "decide_work_item_approval",
   "get_message_context", "search_messages", "spawn_session",
-  "dispatch_work_item", "update_work_item", "start_workflow_run", "rerun_workflow_run",
-  "retry_workflow_node", "fire_workflow_event", "set_work_item_dispatch", "create_experiment", "update_experiment",
-  "archive_work_item", "stop_session", "cancel_workflow_run", "disable_workflow", "create_workflow", "update_workflow",
-  "duplicate_workflow", "retire_workflow", "enable_workflow", "send_connector_message", "request_work_item_approval",
+  "dispatch_work_item",
+  "set_work_item_dispatch",
+  "stop_session",
+  "send_connector_message", "request_work_item_approval",
   "escalate_work_item_approval", "arm_heartbeat", "stop_heartbeat", "publish_attachment", "land_on_work_item",
 ];
 
@@ -30,10 +32,8 @@ const BY_KEY: Record<string, unknown> = {
   path: "knowledge/remote-mcp/note.md", expectedRevision: "a".repeat(64),
   parentCommentId: "wic_0a1b2c3d4e5f", since: "2026-01-01T00:00:00Z", activeSince: "2026-01-01T00:00:00Z",
 };
-const EXPERIMENT_TOOLS = new Set(["get_experiment", "record_reading", "conclude_experiment"]);
 
-function sample(schema: Record<string, unknown>, key: string, tool: string): unknown {
-  if (key === "id" && EXPERIMENT_TOOLS.has(tool)) return "exp_0a1b2c3d4e5f";
+function sample(schema: Record<string, unknown>, key: string): unknown {
   if (key in BY_KEY) return BY_KEY[key];
   if (Array.isArray(schema.enum)) return schema.enum[0];
   if (schema.type === "number" || schema.type === "integer") return 1;
@@ -48,9 +48,8 @@ function sampleArgs(tool: JinnMcpTool): Record<string, unknown> {
   const props = (tool.inputSchema.properties ?? {}) as Record<string, Record<string, unknown>>;
   const required = (tool.inputSchema.required ?? []) as string[];
   const args: Record<string, unknown> = {};
-  for (const key of required) args[key] = sample(props[key] ?? {}, key, tool.name);
+  for (const key of required) args[key] = sample(props[key] ?? {}, key);
   if (tool.name === "label_work_item") args.labels = ["x"];
-  if (tool.name === "record_reading") Object.assign(args, { metric: "m", value: 1 });
   if (tool.name === "read_file") args.path = "files/x.txt";
   // Tools that insist on at least one optional filter or field.
   if (tool.name === "find_employees") args.department = "x";
@@ -62,10 +61,10 @@ function sampleArgs(tool: JinnMcpTool): Record<string, unknown> {
 }
 
 describe("remote MCP tool profile", () => {
-  const all = new Set(buildTools({ notesEnabled: true, workflowAttempt: true }).map((tool) => tool.name));
+  const all = new Set(buildTools({ notesEnabled: true }).map((tool) => tool.name));
 
   it("names only tools that exist", () => {
-    for (const name of [...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_TOOLS, ...REMOTE_MCP_SESSION_TOOLS]) expect(all.has(name), name).toBe(true);
+    for (const name of [...REMOTE_MCP_READ_TOOLS, ...REMOTE_MCP_LEDGER_TOOLS, ...REMOTE_MCP_SESSION_TOOLS, ...REMOTE_MCP_LIFECYCLE_TOOLS]) expect(all.has(name), name).toBe(true);
   });
 
   it("carries the instance's knowledge wording on search_knowledge", () => {
@@ -78,6 +77,20 @@ describe("remote MCP tool profile", () => {
   it("serves the session-control tools", () => {
     const served = new Set(buildRemoteMcpTools(false).map((tool) => tool.name));
     for (const name of REMOTE_MCP_SESSION_TOOLS) expect(served.has(name), name).toBe(true);
+  });
+
+  it("serves the lifecycle tools under the operator-lane schema", () => {
+    const byName = new Map(buildRemoteMcpTools(false).map((tool) => [tool.name, tool]));
+    for (const name of REMOTE_MCP_LIFECYCLE_TOOLS) expect(byName.has(name), name).toBe(true);
+
+    const update = (byName.get("update_work_item")!.inputSchema.properties ?? {}) as Record<string, Record<string, unknown>>;
+    expect([...(update.status.enum as string[])].sort()).toEqual(
+      ["backlog", "blocked", "cancelled", "done", "executing", "in_review"],
+    );
+    expect(update).not.toHaveProperty("asOperator");
+
+    const archive = (byName.get("archive_work_item")!.inputSchema.properties ?? {}) as Record<string, Record<string, unknown>>;
+    expect(archive.cascade).toMatchObject({ type: "boolean" });
   });
 
   it("tells the connector where to read an answer, not to wait for a wake", async () => {
@@ -166,9 +179,9 @@ describe("remote MCP tool profile", () => {
 
   it("refuses the routes behind excluded tools", () => {
     for (const [method, path] of [
-      ["GET", "/api/sessions/abc/transcript"], ["GET", "/api/knowledge/read"], ["POST", "/api/work-items/TST-1/status"],
+      ["GET", "/api/sessions/abc/transcript"], ["GET", "/api/knowledge/read"],
       ["POST", "/api/sessions/abc/stop"], ["POST", "/api/work-items/TST-1/attachments"], ["POST", "/api/sessions"],
-      ["POST", "/api/work-items/TST-1/approval/decide"], ["POST", "/api/experiments"], ["PATCH", "/api/experiments/e1"],
+      ["POST", "/api/work-items/TST-1/approval/decide"], ["GET", "/api/experiments"], ["POST", "/api/experiments"],
       ["POST", "/api/labels"], ["POST", "/api/cron"], ["PUT", "/api/config"],
     ] as const) {
       expect(remoteMcpRouteAllowed(method, path), `${method} ${path}`).toBe(false);

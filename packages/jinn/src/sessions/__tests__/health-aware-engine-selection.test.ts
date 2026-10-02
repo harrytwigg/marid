@@ -77,7 +77,7 @@ function manager() {
     ["codex", scriptedEngine("codex", [engineResult({ result: "ok" })])],
     ["claude", scriptedEngine("claude", [engineResult({ result: "ok" })])],
   ]);
-  return new ManagerClass(config(), engines as never, "selection-boot", () => employee);
+  return new ManagerClass(config(), engines as never, "selection-boot");
 }
 
 /** Route one turn and hand back the session it created. */

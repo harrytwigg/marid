@@ -21,7 +21,7 @@ import { claudeResetsAtSeconds } from "../shared/engine-reset-times.js";
 import { writeMcpConfigFile } from "../mcp/resolver.js";
 import { parsePermissionPrompt, chooseApproval, keystrokesToSelect } from "./claude-permission-prompt.js";
 import { resolveClaudeConfigDir } from "../shared/home.js";
-import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/workflow-interruptions.js";
+import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { assertRemoteTarget, isRemoteTarget, resolveRemoteClaudeConfigDir } from "../shared/remote-target.js";
 import type { RemoteTarget, ResolvedMcpConfig } from "../shared/types.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";

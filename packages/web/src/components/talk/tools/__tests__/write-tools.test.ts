@@ -26,10 +26,10 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 const mocked = vi.mocked(api)
 
-// `assigned` because the fast lane is per-edge: from `executing` the board has
-// no way back to anywhere, so every status move off it asks.
+// `backlog` because the fast lane is per-edge: the board has no way back from
+// `in_review` to `backlog`, so a move there asks, while `blocked` can be undone.
 const TODO = {
-  workItem: { id: "ABC-59", title: "Ship the orb", status: "assigned", assignee: "a-lead", department: "platform", version: 4 },
+  workItem: { id: "ABC-59", title: "Ship the orb", status: "backlog", assignee: "a-lead", department: "platform", version: 4 },
   labels: [{ id: "l1", name: "build" }],
   comments: { total: 1, comments: [{ id: "c1", author: "operator", createdAt: "2026-01-02T00:00:00Z", body: "first" }] },
 }
@@ -41,7 +41,7 @@ function stubEveryWrite() {
   mocked.addWorkItemComment.mockResolvedValue({ comment: { id: "wic_1" } } as never)
   mocked.createWorkItem.mockResolvedValue({ workItem: { id: "ABC-60", title: "New", status: "backlog", version: 1 } } as never)
   mocked.setWorkItemStatus.mockResolvedValue({ workItem: { id: "ABC-59", status: "blocked", version: 5 } } as never)
-  mocked.assignWorkItem.mockResolvedValue({ workItem: { id: "ABC-59", assignee: "b-lead", status: "assigned", version: 5 } } as never)
+  mocked.assignWorkItem.mockResolvedValue({ workItem: { id: "ABC-59", assignee: "b-lead", status: "backlog", version: 5 } } as never)
   mocked.setWorkItemLabels.mockResolvedValue({ labels: [{ id: "l2", name: "shipped" }] } as never)
 }
 
@@ -133,7 +133,7 @@ describe("the fast lane's one rule", () => {
     },
   )
 
-  it("puts a backlog Todo back where it was — nobody assigned, no department, and back in the backlog", async () => {
+  it("puts an unassigned Todo back where it was — nobody assigned, no department, and its status untouched", async () => {
     // Assigning writes the new employee's department onto the Todo as well as
     // their name, so clearing only the name leaves theirs behind on a Todo
     // nobody is assigned to.
@@ -150,7 +150,8 @@ describe("the fast lane's one rule", () => {
       patch: { assignee: null, department: null },
       expectedVersion: 5,
     }))
-    expect(mocked.setWorkItemStatus).toHaveBeenCalledWith("ABC-59", "backlog", undefined, "talk")
+    // Assigning does not move the Todo, so there is no status to put back.
+    expect(mocked.setWorkItemStatus).not.toHaveBeenCalled()
   })
 
   it("restores the department the Todo held, not the one its new assignee brought, and moves nothing already assigned", async () => {
@@ -199,7 +200,7 @@ describe("the fast lane's one rule", () => {
 
 describe("a status move the board cannot take back", () => {
   it("asks first rather than offering an undo the ledger would refuse", async () => {
-    const pending = executeToolCall("talk_set_todo_status", '{"id":"ABC-59","status":"done"}')
+    const pending = executeToolCall("talk_set_todo_status", '{"id":"ABC-59","status":"in_review"}')
     await vi.waitFor(() => expect(mocked.getWorkItem).toHaveBeenCalled())
 
     expect(mocked.setWorkItemStatus).not.toHaveBeenCalled()
@@ -213,7 +214,7 @@ describe("a status move the board cannot take back", () => {
   })
 
   it("writes nothing when the operator waves it off", async () => {
-    const pending = executeToolCall("talk_set_todo_status", '{"id":"ABC-59","status":"done"}')
+    const pending = executeToolCall("talk_set_todo_status", '{"id":"ABC-59","status":"in_review"}')
     await vi.waitFor(() => expect(mocked.getWorkItem).toHaveBeenCalled())
     dismissSituation()
 

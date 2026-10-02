@@ -7,6 +7,7 @@ import {
   PRODUCTION_GATEWAY_PORTS,
   assertNotProductionGateway,
   buildSandboxChildEnv,
+  dropForeignInstanceEnv,
   retargetInstanceEnv,
 } from "../sandbox-env.js";
 
@@ -38,6 +39,7 @@ function liveSessionEnv(): NodeJS.ProcessEnv {
     JINN_SESSION_ID: "live-session",
     JINN_SESSION_CAPABILITY: "live-capability",
     JINN_TAKE_PORT: "1",
+    JINN_BINDING_HOME: defaultInstanceHome,
   };
 }
 
@@ -134,5 +136,70 @@ describe("retargetInstanceEnv", () => {
 
     expect(env.JINN_HOST).toBe("0.0.0.0");
     expect(env.JINN_PORT).toBe("8080");
+  });
+});
+
+describe("dropForeignInstanceEnv", () => {
+  it("drops the binding and session a live session leaked into a command aimed at another home", () => {
+    const home = path.join(scratch, "throwaway");
+    const env: NodeJS.ProcessEnv = { ...liveSessionEnv(), JINN_HOME: home };
+
+    const dropped = dropForeignInstanceEnv(env);
+
+    expect(dropped).toEqual(expect.arrayContaining(["JINN_HOST", "JINN_PORT", "JINN_GATEWAY_TOKEN", "JINN_SESSION_ID", "JINN_BINDING_HOME"]));
+    expect(dropped).not.toContain("JINN_HOME");
+    expect(env.JINN_HOME).toBe(home);
+    for (const key of JINN_INSTANCE_IDENTITY_ENV_KEYS) {
+      if (key !== "JINN_HOME") expect(env[key], key).toBeUndefined();
+    }
+    expect(env.PATH).toBe("/usr/bin:/bin");
+  });
+
+  it("keeps a JINN_PORT set for this command, and only that", () => {
+    const home = path.join(scratch, "throwaway");
+    const env: NodeJS.ProcessEnv = { ...liveSessionEnv(), JINN_HOME: home, JINN_PORT: "7899" };
+
+    const dropped = dropForeignInstanceEnv(env);
+
+    expect(env.JINN_PORT).toBe("7899");
+    expect(dropped).not.toContain("JINN_PORT");
+    expect(env.JINN_HOST).toBeUndefined();
+    expect(env.JINN_GATEWAY_TOKEN).toBeUndefined();
+  });
+
+  it("drops JINN_PORT when it cannot tell whose it is", () => {
+    const home = path.join(scratch, "throwaway");
+    const env: NodeJS.ProcessEnv = { ...liveSessionEnv(), JINN_HOME: home };
+    delete env.JINN_GATEWAY_URL;
+
+    expect(dropForeignInstanceEnv(env)).toContain("JINN_PORT");
+    expect(env.JINN_PORT).toBeUndefined();
+  });
+
+  it("keeps the binding when the command targets the home it belongs to", () => {
+    const env = liveSessionEnv();
+
+    expect(dropForeignInstanceEnv(env)).toEqual([]);
+    expect(env.JINN_PORT).toBe("7801");
+    expect(env.JINN_GATEWAY_TOKEN).toBe("live-gateway-token");
+  });
+
+  it("keeps an explicit binding no gateway attributed to a home (a container's published port)", () => {
+    const env: NodeJS.ProcessEnv = { JINN_HOME: path.join(scratch, "container-home"), JINN_HOST: "0.0.0.0", JINN_PORT: "8080" };
+
+    expect(dropForeignInstanceEnv(env)).toEqual([]);
+    expect(env.JINN_PORT).toBe("8080");
+  });
+
+  // Creating a symlink needs Developer Mode or elevation on Windows.
+  it.skipIf(process.platform === "win32")("compares homes by identity, not spelling", () => {
+    const real = path.join(scratch, "real-home");
+    fs.mkdirSync(real, { recursive: true });
+    const alias = path.join(scratch, "alias-home");
+    fs.symlinkSync(real, alias);
+    const env: NodeJS.ProcessEnv = { JINN_HOME: alias, JINN_PORT: "7802", JINN_BINDING_HOME: real };
+
+    expect(dropForeignInstanceEnv(env)).toEqual([]);
+    expect(env.JINN_PORT).toBe("7802");
   });
 });

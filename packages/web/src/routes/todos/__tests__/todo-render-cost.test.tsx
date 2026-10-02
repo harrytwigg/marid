@@ -48,10 +48,9 @@ vi.mock("../state-glyph", async (importOriginal) => {
     ...actual,
     StateCircle: (props: React.ComponentProps<typeof Actual>) => {
       // A board card's disc: 16px and a real status. Columns and the closed
-      // rail draw 20px, the list group's own 16px disc carries the synthetic
-      // `approval` key that `stateKeyOf` never returns, and the list row draws
-      // a `StatusCircle`, whose inner disc is a self-reference this cannot see.
-      if (props.size === 16 && props.keyOf !== "approval") counters.boardCards += 1
+      // rail draw 20px, and the list row and group header draw a
+      // `StatusCircle`, whose inner disc is a self-reference this cannot see.
+      if (props.size === 16) counters.boardCards += 1
       return <Actual {...props} />
     },
   }
@@ -75,8 +74,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       assignWorkItem: vi.fn(),
       setWorkItemStatus: vi.fn(),
       updateWorkItem: vi.fn(),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -90,7 +87,7 @@ const WINDOW_CEILING = 40
 const NOW = Date.parse("2026-08-01T09:00:00.000Z")
 
 const ALL_STATUSES: WorkItemStatusWire[] = [
-  "backlog", "assigned", "executing", "in_review", "blocked", "escalated", "done", "cancelled",
+  "backlog", "executing", "in_review", "blocked", "done", "cancelled",
 ]
 
 function compact(id: string, status: WorkItemStatusWire, rank: number): WorkItemCompactWire {
@@ -103,11 +100,6 @@ function compact(id: string, status: WorkItemStatusWire, rank: number): WorkItem
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: id,

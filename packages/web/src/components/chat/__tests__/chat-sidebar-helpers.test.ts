@@ -1,9 +1,6 @@
-import { render, screen } from '@testing-library/react'
-import { createElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { isFocusedSession } from '../chat-route-helpers'
-import { isDirectSession, isVisibleSource, pickDeleteFallbackId, pickNeighborSessionId, resolveRowIdentity, shouldFloatPinned, WorkflowSessionChip } from '../chat-sidebar'
+import { isDirectSession, isVisibleSource, pickDeleteFallbackId, pickNeighborSessionId, resolveRowIdentity, shouldFloatPinned } from '../chat-sidebar'
 
 describe('chat sidebar grouping helpers', () => {
   it('treats only employee-less, non-cron sessions as direct', () => {
@@ -37,7 +34,7 @@ describe('historical Talk sessions in generic chat discovery', () => {
   })
 })
 
-describe('workflow sessions in the chat sidebar', () => {
+describe('historical workflow sessions in the chat sidebar', () => {
   it('keeps workflow sessions visible under their employee group and out of direct/focused lanes', () => {
     const session = {
       source: 'workflow',
@@ -48,40 +45,6 @@ describe('workflow sessions in the chat sidebar', () => {
     expect(isVisibleSource(session)).toBe(true)
     expect(isDirectSession(session, 'jimbo')).toBe(false)
     expect(isFocusedSession(session)).toBe(false)
-  })
-
-  it('links a workflow chip to the owning run parsed from sourceRef', () => {
-    render(
-      createElement(
-        MemoryRouter,
-        null,
-        createElement(WorkflowSessionChip, { session: {
-          source: 'workflow',
-          sourceRef: 'workflow:daily-report:run-42:writer:1',
-        } }),
-      ),
-    )
-
-    const link = screen.getByRole('link', { name: 'Open workflow run' })
-    expect(link.getAttribute('href'))
-      .toBe('/workflow/daily-report/runs/run-42')
-    expect(link.textContent).not.toContain('Workflow')
-  })
-
-  it('degrades a malformed workflow sourceRef to a non-link chip', () => {
-    render(
-      createElement(
-        MemoryRouter,
-        null,
-        createElement(WorkflowSessionChip, {
-          session: { source: 'workflow', sourceRef: 'workflow:incomplete' },
-        }),
-      ),
-    )
-
-    expect(screen.getByRole('img', { name: 'Workflow session' })).toBeTruthy()
-    expect(screen.queryByText('Workflow')).toBeNull()
-    expect(screen.queryByRole('link')).toBeNull()
   })
 })
 

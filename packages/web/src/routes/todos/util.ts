@@ -1,4 +1,4 @@
-import type { Employee } from "@/lib/api"
+import type { Employee, WorkItemEventWire } from "@/lib/api"
 
 /** Compact relative time: "22m", "4h", "Yesterday", "Jul 4". Past only. */
 export function formatRelativeTime(iso: string, now = Date.now()): string {
@@ -38,8 +38,55 @@ export function escalationReasonLabel(reason: unknown): string | null {
   return typeof reason === "string" && reason ? reason : null
 }
 
+/** Why a Todo stopped in `status`: the note, or the escalation's reason, on
+ *  the newest move into it, and that move. A boot migration out of a retired
+ *  status (`escalated`) is read through to the move into that status, which is
+ *  where the reason was given. */
+export function stopReasonOf(events: readonly WorkItemEventWire[], current: string): { note: string | null; event: WorkItemEventWire | null } {
+  let status = current
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e.toStatus !== status) continue
+    if (e.detail?.reason === "retired-status" && e.fromStatus) {
+      status = e.fromStatus
+      continue
+    }
+    const note = moveReason(e)
+    if (note || e.kind === "status_change") return { note, event: e }
+  }
+  return { note: null, event: null }
+}
+
+/** The newest move into `current`, read through a boot migration out of a
+ *  retired status: that move, and the status it really entered (`escalated`
+ *  for a migrated escalation). */
+export function stopMoveOf(events: readonly WorkItemEventWire[], current: string): { event: WorkItemEventWire; entered: string } | null {
+  let status = current
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e.toStatus !== status) continue
+    if (e.detail?.reason !== "retired-status" || !e.fromStatus) return { event: e, entered: status }
+    status = e.fromStatus
+  }
+  return null
+}
+
+/** The reason one move states: its note, else an escalation's mapped reason. */
+function moveReason(e: WorkItemEventWire): string | null {
+  const note = typeof e.detail?.note === "string" ? e.detail.note.trim() : ""
+  return note || (e.kind === "escalated" ? escalationReasonLabel(e.detail?.reason) : null)
+}
+
+/** The reserved assignee value for the operator; it is not on the roster. */
+export const OPERATOR_ASSIGNEE = "@operator"
+
+/** The operator as an assignee-picker row, listed before the employees. A
+ *  system employee is never offered: it routes Todos but owns none. */
+export const OPERATOR_ROW: Pick<Employee, "name" | "displayName" | "department"> = { name: OPERATOR_ASSIGNEE, displayName: "You (operator)", department: "" }
+
 /** Resolve a display name for an assignee employee key, falling back to the key. */
 export function displayNameOf(assignee: string | null, byName: Map<string, Employee>): string {
   if (!assignee) return ""
+  if (assignee === OPERATOR_ASSIGNEE) return "You"
   return byName.get(assignee)?.displayName ?? assignee
 }

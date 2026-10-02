@@ -3,7 +3,7 @@
  * re-exported from it, so the one file a plugin author reads stays one file.
  *
  * Every payload below is spelled out rather than imported: the gateway's own
- * Todo, workflow and note types live in a package a plugin cannot install, and
+ * Todo and note types live in a package a plugin cannot install, and
  * naming them would put the app's internals into this contract.
  *
  * v1 grants every verb; the union below is the vocabulary a grant is written in.
@@ -16,9 +16,6 @@ export type PluginHostVerb =
   | 'sessions.spawn'
   | 'employees.list'
   | 'notify'
-  | 'workflows.list'
-  | 'workflows.get'
-  | 'workflows.start'
   | 'notes.list'
   | 'notes.read'
   | 'notes.create'
@@ -27,15 +24,13 @@ export type PluginHostVerb =
   | 'cron.runs'
   | 'knowledge.search'
 
-/** The eight states a Todo can be in, as the gateway spells them. */
+/** The six states a Todo can be in, as the gateway spells them. */
 export type HostTodoStatus =
   | 'backlog'
-  | 'assigned'
   | 'executing'
   | 'in_review'
   | 'done'
   | 'blocked'
-  | 'escalated'
   | 'cancelled'
 
 /** A Todo as the list verb returns it: the columns a board renders. */
@@ -102,27 +97,6 @@ export interface HostEmployee {
   model: string
   /** The persona's first line, when short enough to be a label. */
   role?: string
-}
-
-/** A Workflow, as both `workflows.list` and `workflows.get` return it. The two
- *  agree on purpose: `get` also carries the node graph, which is the Workflow
- *  engine's own vocabulary and not something this contract can spell without
- *  pulling the gateway's internals into it. */
-export interface HostWorkflow {
-  id: string
-  title: string
-  description: string | null
-  revision: number
-  enabled: boolean
-  updatedAt: string
-}
-
-/** A run of a Workflow, as `workflows.start` returns it once the row exists. */
-export interface HostWorkflowRun {
-  id: string
-  workflowId: string
-  status: string
-  startedAt: string
 }
 
 /** A note as the list verb returns it: the row a browser renders, without the
@@ -214,13 +188,6 @@ export interface PluginHostSessions {
 
 export interface PluginHostEmployees {
   list(): Promise<HostEmployee[]>
-}
-
-export interface PluginHostWorkflows {
-  list(): Promise<HostWorkflow[]>
-  get(workflowId: string): Promise<HostWorkflow>
-  /** Start a manual run. `input` is the Workflow's own declared input. */
-  start(workflowId: string, input?: Record<string, unknown>): Promise<HostWorkflowRun>
 }
 
 export interface PluginHostNotes {

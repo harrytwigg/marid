@@ -22,11 +22,7 @@ interface TalkToolExecutionOptions {
 /** Operations the gateway will only accept bound to the operator's own live
  *  utterance. Posting one without that identity is refused there, so it is
  *  refused here too rather than sent to fail. */
-const BOUND_EVIDENCE_OPERATIONS = new Set([
-  "prepare_voice_approval",
-  "commit_voice_approval",
-  "talk_send_to_session",
-])
+const BOUND_EVIDENCE_OPERATIONS = new Set(["talk_send_to_session"])
 const APPLIED_EFFECT_LIMIT = 500
 const appliedEffects = new Set<string>()
 

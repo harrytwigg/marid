@@ -109,7 +109,7 @@ describe("the hover glance on a Todo mention", () => {
     await openGlance("ICI-7101")
 
     const strip = stripFor("Hover glance strip")
-    expect(strip.textContent).toBe("ICI-7101Hover glance stripExecuting")
+    expect(strip.textContent).toBe("ICI-7101Hover glance stripIn progress")
     expect(strip.querySelector("svg")).not.toBeNull()
   })
 
@@ -168,7 +168,7 @@ describe("the hover glance on a Todo mention", () => {
   })
 
   it("closes on Escape and leaves focus on the mention", async () => {
-    rows.set("ICI-7107", { title: "Escape closes it", status: "assigned" })
+    rows.set("ICI-7107", { title: "Escape closes it", status: "backlog" })
     renderMentions(["ICI-7107"])
     await openGlance("ICI-7107")
     const link = screen.getByRole("link", { name: "ICI-7107" })
