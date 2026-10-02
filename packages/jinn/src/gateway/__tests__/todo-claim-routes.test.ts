@@ -9,19 +9,20 @@ import type { JinnConfig } from "../../shared/types.js";
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-todo-claim-routes-"));
 process.env.JINN_HOME = home;
 fs.mkdirSync(path.join(home, "org"), { recursive: true });
-fs.writeFileSync(
-  path.join(home, "org", "claim-worker.yaml"),
-  [
-    "name: claim-worker",
-    "displayName: Claim Worker",
-    "department: platform",
-    "rank: employee",
-    "engine: codex",
-    "model: gpt-5.6-sol",
-    "persona: Completes bounded route work",
-    "",
-  ].join("\n"),
-);
+for (const name of ["claim-worker", "claim-second"]) {
+  fs.writeFileSync(
+    path.join(home, "org", `${name}.yaml`),
+    [
+      `name: ${name}`,
+      "department: platform",
+      "rank: employee",
+      "engine: codex",
+      "model: gpt-5.6-sol",
+      "persona: Completes bounded route work",
+      "",
+    ].join("\n"),
+  );
+}
 
 type Api = typeof import("../api.js");
 type Registry = typeof import("../../sessions/registry.js");
@@ -153,17 +154,19 @@ describe("POST /api/delegations onto a claimed Todo", () => {
     expect(runs.findOpenWorkItemRunBySession(sessionId)?.workItemId).toBe(item.id);
   });
 
-  it("claims the Todo it minted, so a second delegation onto it is refused", async () => {
+  it("claims the Todo it minted, so a second delegation onto it never works it in a second session", async () => {
     const minted = await call("POST", "/api/delegations", { employee: "claim-worker", task: "Fresh work" });
 
     expect(minted.status).toBe(201);
     const workItemId = String(minted.body?.workItemId);
     expect(claims.getWorkItemClaim(workItemId)?.sessionId).toBe(String(minted.body?.sessionId));
 
-    const second = await call("POST", "/api/delegations", {
-      workItemId, employee: "claim-worker", task: "Work it again",
-    });
+    // The same employee is handed the brief in the session already working it.
+    const again = await call("POST", "/api/delegations", { workItemId, employee: "claim-worker", task: "Work it again" });
+    expect(again).toMatchObject({ status: 200, body: { sessionId: minted.body?.sessionId, reused: true } });
 
+    // Anyone else is refused while that session holds the claim.
+    const second = await call("POST", "/api/delegations", { workItemId, employee: "claim-second", task: "Work it too" });
     expect(second.status).toBe(409);
     expect(String(second.body?.error)).toContain(String(minted.body?.sessionId));
   });

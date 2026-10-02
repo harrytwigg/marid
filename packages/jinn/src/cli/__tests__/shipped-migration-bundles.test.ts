@@ -103,10 +103,12 @@ describe("0.34.0 bundle: self-compaction doctrine", () => {
   }
 
   // An instance that wrote its own version of the section where the stock one
-  // goes: a three-way merge must stop on the wording, not stack two sections.
-  // A same-named section added somewhere else is invisible to a textual merge,
-  // which is why the bundle's MIGRATION.md asks for a merge by heading.
-  it("conflicts instead of duplicating a section the instance already added", () => {
+  // goes. A textual three-way merge cannot be relied on to stop there: the
+  // stock section lands right after a line the release also rewrote, so
+  // `git merge-file` keeps both copies without a conflict. What stops the
+  // second copy is the bundle telling its merger to merge Markdown by heading,
+  // and naming this section as one an instance may already have.
+  it("tells its merger to keep one copy of a section the instance already added", () => {
     const base = payload("base")
     const anchor = "## Durable knowledge\n"
     expect(base).toContain(anchor)
@@ -125,10 +127,13 @@ describe("0.34.0 bundle: self-compaction doctrine", () => {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     })
-
-    expect(merged.status).toBe(1)
-    expect(merged.stdout.match(/^<<<<<<< /gm)).toHaveLength(1)
-    expect(merged.stdout.split("\n").filter((line) => line === heading)).toHaveLength(1)
     expect(merged.stdout).toContain("Our own note")
+    // Why the instruction matters: left to the textual merge, both copies stay.
+    expect(merged.stdout.split("\n").filter((line) => line === heading)).toHaveLength(2)
+
+    const instructions = fs.readFileSync(path.join(bundle, "MIGRATION.md"), "utf8")
+    expect(instructions).toContain("Merge Markdown by heading")
+    expect(instructions).toContain("never append a second section with the same heading")
+    expect(instructions).toMatch(/already added its own self-compaction section by hand[\s\S]*Keep one copy/)
   })
 })

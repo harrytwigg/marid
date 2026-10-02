@@ -339,9 +339,9 @@ export type SessionAttemptOutcome = "succeeded" | "failed" | "interrupted";
 /** Why the latest turn was interrupted, recorded before the engine is killed. */
 export type SessionAttemptInterruptionCause = "user-message" | "attempt-stop" | "gateway-restart";
 
-/** Why a session is linked to a Todo: it executed it, or it was delegated its
- *  review. The predicates that read it live in work-items/link-role.ts. */
-export type WorkItemLinkRole = "execute" | "review";
+/** Why a session is linked to a Todo: it executed it, reviewed it, or was
+ *  consulted by a mention. The predicates live in work-items/link-role.ts. */
+export type WorkItemLinkRole = "execute" | "review" | "consult";
 
 export interface Session {
   id: string;

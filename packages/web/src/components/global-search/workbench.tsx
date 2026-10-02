@@ -1,4 +1,5 @@
-import type { ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
+import { useMentionPicker } from "@/components/mention-picker"
 import { STATUS_LABEL } from "@/lib/todos"
 import { StatusCircle } from "@/routes/todos/state-glyph"
 import type { TodoQuickPickerKey } from "@/routes/todos/pickers/use-todo-quick-pickers"
@@ -48,13 +49,30 @@ export function WorkbenchField({ field, label, value, workbench, primary = false
 
 function Composer({ workbench }: { workbench: TodoWorkbench }) {
   const { comment, id } = workbench
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const picker = useMentionPicker({
+    value: comment.draft,
+    setValue: comment.setDraft,
+    employees: workbench.employees,
+    textareaRef: inputRef,
+  })
+  const { onPickerOpenChange } = workbench
+  useEffect(() => {
+    onPickerOpenChange(picker.open)
+    return () => onPickerOpenChange(false)
+  }, [picker.open, onPickerOpenChange])
   return (
     <div className="mt-2">
+      <div className="relative">
+      {picker.list}
       <textarea
+        ref={inputRef}
         rows={2}
         value={comment.draft}
-        onChange={event => comment.setDraft(event.target.value)}
+        onChange={picker.onChange}
+        onSelect={picker.onSelect}
         onKeyDown={event => {
+          if (picker.onKeyDown(event)) return
           if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return
           event.preventDefault()
           comment.submit()
@@ -64,6 +82,7 @@ function Composer({ workbench }: { workbench: TodoWorkbench }) {
         data-testid="workbench-comment"
         className={COMPOSER}
       />
+      </div>
       <div className="mt-1.5 flex justify-end">
         <button
           type="button"

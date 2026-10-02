@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom"
-import { ArrowUpRight, CornerDownRight, Eye } from "lucide-react"
+import { ArrowUpRight, CornerDownRight, Eye, MessageCircle } from "lucide-react"
 import type { Employee } from "@/lib/api"
 import type { SessionTreeNodeWire, SessionTreeWire } from "@/lib/session-tree-api"
 import { SessionRef } from "./session-ref"
@@ -41,6 +41,21 @@ function ReviewBadge({ id }: { id: string }) {
     >
       <Eye size={9} aria-hidden />
       Review
+    </span>
+  )
+}
+
+/** The badge for a session a mention started: it was asked a question on this
+ *  Todo, it did not take the Todo on. */
+function ConsultBadge({ id }: { id: string }) {
+  return (
+    <span
+      data-testid={`session-tree-consult-${id}`}
+      title="Consulted, not executing"
+      className="flex flex-none items-center gap-1 rounded-[9px] bg-[var(--fill-tertiary)] px-[6px] py-[1px] text-[10.5px] font-medium text-[var(--text-tertiary)]"
+    >
+      <MessageCircle size={9} aria-hidden />
+      Consulted
     </span>
   )
 }
@@ -97,6 +112,7 @@ function TreeRow({
       >
         {depth > 0 && <CornerDownRight size={11} aria-hidden className="flex-none text-[var(--text-quaternary)]" />}
         {node.role === "review" && <ReviewBadge id={node.id} />}
+        {node.role === "consult" && <ConsultBadge id={node.id} />}
         <SessionRef sessionId={node.id} byName={byName} />
         <span className="flex-none text-[11.5px] text-[var(--text-quaternary)]">{stateLabel(node)}</span>
         {otherTodo && <NodeTodo id={node.id} todoId={otherTodo} />}

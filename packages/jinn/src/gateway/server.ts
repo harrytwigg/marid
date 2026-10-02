@@ -40,6 +40,7 @@ import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
 import { startIdleCapacityAutoStart } from "./idle-capacity.js";
+import { installTodoCommentRouting } from "./todo-comment-routing.js";
 import { HookRegistry } from "./hook-registry.js";
 import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
@@ -428,9 +429,7 @@ export async function startGateway(
     logger.info(`Recovered ${recovered} stale session(s) — marked as "interrupted" for resume`);
   }
   const settledPhases = settleLegacyWorkflowPhaseSessions();
-  if (settledPhases > 0) {
-    logger.info(`Settled ${settledPhases} Workflow phase session(s) left running by a previous version`);
-  }
+  if (settledPhases > 0) logger.info(`Settled ${settledPhases} Workflow phase session(s) left running by a previous version`);
   // GRS-003a split-brain fix: the sessions just flipped running→interrupted above, so any
   // work item still marked `executing` on the strength of one of those sessions is now stale.
   // Re-derive work-item status from linked-session evidence. Best-effort and idempotent, and
@@ -868,10 +867,11 @@ export async function startGateway(
     backgroundActivity,
     gatewayAuthToken,
   };
-  // Idle-capacity auto-start: below apiContext because a start goes
-  // through the same Dispatcher spawn the dispatch route uses, which reads it.
+  // Below apiContext, which both start sessions through: the idle-capacity
+  // auto-start, and the comment routing that wakes a mentioned employee.
   const idleCapacity = startIdleCapacityAutoStart({ getConfig: () => currentConfig, context: apiContext });
   apiContext.idleCapacity = idleCapacity;
+  const stopCommentRouting = installTodoCommentRouting(apiContext);
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)
   // and by API handlers that write config.yaml and need getConfig() to reflect
@@ -1221,7 +1221,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop(); idleCapacity.stop();
+    backgroundRefreshes.stop(); idleCapacity.stop(); stopCommentRouting();
 
     // Stop caffeinate
     if (caffeinate && caffeinate.exitCode === null) {
