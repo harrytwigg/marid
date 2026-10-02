@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { Pin, Search } from "lucide-react"
+import { Search } from "lucide-react"
 
 /* The cards a board shows instead of columns when it has nothing to draw.
  *
@@ -67,20 +67,6 @@ export function FilteredEmptyCard({
       title="No todos match."
       caption={caption}
       action={{ label: "Clear filters", onClick: onClear, testId: clearTestId }}
-      testId={testId}
-    />
-  )
-}
-
-/** Home holds what the operator created or pinned (PLA-230), so an empty one is
- *  the ordinary first state rather than a failure — and the only place the
- *  gestures that fill it can be taught. */
-export function HomeEmptyCard({ testId = "board-home-empty" }: { testId?: string }) {
-  return (
-    <EmptyCard
-      icon={<Pin size={24} strokeWidth={2} />}
-      title="Nothing yet."
-      caption="Create a Todo, or pin one from any board."
       testId={testId}
     />
   )

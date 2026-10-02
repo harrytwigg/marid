@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, Globe, House } from "lucide-react"
+import { Bell, ChevronDown, Globe } from "lucide-react"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
@@ -15,11 +15,11 @@ import { useBoardMenuCounts } from "./use-board"
 /* Todos v2 slice 6 — the switcher-in-title (design-doc §1.1, HIG title-menu).
  * The page title IS the menu trigger: current board name + chevron.
  *
- * ICI-1357 splits the rows into lenses and places. The three lenses lead —
- * Home · Attention (the ONLY badge anywhere, §8's one ambient signal) ·
- * Everything — and the departments follow under their own group label. Order
- * is the whole point: Everything used to sit last, so at fourteen departments
- * the operator had to scroll the menu to reach it. Open counts load lazily
+ * ICI-1357 splits the rows into lenses and places. The two lenses lead —
+ * Attention (the ONLY badge anywhere, §8's one ambient signal) · Everything —
+ * and the departments follow under their own group label. Order is the whole
+ * point: Everything used to sit last, so at fourteen departments the operator
+ * had to scroll the menu to reach it. Open counts load lazily
  * when the menu opens. */
 
 const MENU_CLASS =
@@ -62,11 +62,6 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className={MENU_CLASS}>
-        <DropdownMenuItem className={ROW_CLASS} data-testid="board-menu-home" onClick={() => go({ kind: "home" })}>
-          <LensIcon of={House} />
-          Home
-          {countOf(counts.data?.home)}
-        </DropdownMenuItem>
         <DropdownMenuItem className={ROW_CLASS} data-testid="board-menu-attention" onClick={() => go({ kind: "attention" })}>
           <LensIcon of={Bell} />
           Attention
@@ -112,7 +107,7 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
 
 /** The lens rows' leading glyph. Departments use their mono prefix instead —
  *  a place has a name in the ID scheme, a lens does not. */
-function LensIcon({ of: Icon }: { of: typeof House }) {
+function LensIcon({ of: Icon }: { of: typeof Bell }) {
   return <Icon size={15} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-tertiary)]" />
 }
 

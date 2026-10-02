@@ -163,7 +163,7 @@ function DetailNavigationProbe() {
         Change status
       </button>
       <button type="button" data-testid="detail-browser-back" onClick={() => navigate(-1)}>Back</button>
-      <button type="button" data-testid="detail-home" onClick={() => navigate("/todos/b/my")}>Home</button>{/* the pre-rename alias still lands on Home */}
+      <button type="button" data-testid="detail-retired-home-link" onClick={() => navigate("/todos/b/my")}>Retired home link</button>{/* the retired alias still lands on Everything */}
     </>
   )
 }
@@ -271,9 +271,6 @@ beforeEach(() => {
 })
 
 describe("boardScopeParams — the board data wiring", () => {
-  it("Home = the union scope + roots only", () => {
-    expect(boardScopeParams({ kind: "home" })).toEqual({ home: true, rootsOnly: true })
-  })
   it("a department board = department scope + roots only", () => {
     expect(boardScopeParams({ kind: "department", slug: "platform" })).toEqual({ department: "platform", rootsOnly: true })
   })
@@ -285,7 +282,7 @@ describe("boardScopeParams — the board data wiring", () => {
 describe("the board surface", () => {
   it.each([
     ["browser Back", "detail-browser-back"],
-    ["Home link", "detail-home"],
+    ["retired Home link", "detail-retired-home-link"],
   ])("resyncs invalidated columns after a detail status write via %s, but skips a fresh no-write return", async (_label, returnControl) => {
     const todo = compact({ id: "PLA-1", status: "backlog", version: 4 })
     rows.backlog = [todo]
@@ -303,7 +300,7 @@ describe("the board surface", () => {
     await screen.findByTestId("detail-change-status")
     fireEvent.click(screen.getByTestId("detail-change-status"))
     await waitFor(() => {
-      const key = boardColumnQueryKey({ kind: "home" }, "backlog", { status: "open" })
+      const key = boardColumnQueryKey({ kind: "everything" }, "backlog", { status: "open" })
       expect(client.getQueryState(key)?.isInvalidated).toBe(true)
     })
     expect(boardStatusRequestCount()).toBe(6)
@@ -342,7 +339,7 @@ describe("the board surface", () => {
     fireEvent.click(screen.getByTestId("open-unloaded-todo"))
     fireEvent.click(await screen.findByTestId("detail-change-status"))
     await waitFor(() => {
-      const key = boardColumnQueryKey({ kind: "home" }, "backlog", { status: "open" })
+      const key = boardColumnQueryKey({ kind: "everything" }, "backlog", { status: "open" })
       expect(client.getQueryState(key)?.isInvalidated).toBe(true)
     })
 
@@ -439,16 +436,6 @@ describe("the board surface", () => {
     // follows what's visible, not the server total.
     expect(screen.queryByTestId("board-card-PLA-2")).toBeNull()
     expect(screen.getByTestId("board-column-backlog").textContent).toContain("1")
-  })
-
-  // PLA-230: Home asks for the union scope. `kept` alone would drop the Todos
-  // the operator created, and sending both would be the intersection.
-  it("queries with home=true, not kept=true, on Home", async () => {
-    renderBoard("/todos/b/home")
-    await waitFor(() => expect(listWorkItems).toHaveBeenCalled())
-    const statusCalls = listWorkItems.mock.calls.map(([params]) => params).filter((p) => p?.status)
-    expect(statusCalls.length).toBeGreaterThan(0)
-    for (const p of statusCalls) { expect(p).toMatchObject({ home: true, rootsOnly: true }); expect(p.kept).toBeUndefined() }
   })
 
   it("folds Done and Cancelled into the Closed rail with the combined true count", async () => {
@@ -730,15 +717,15 @@ describe("card anatomy", () => {
 })
 
 describe("the switcher-in-title", () => {
-  it("renders the board title as the menu trigger and lists home, attention, departments, everything", async () => {
+  it("renders the board title as the menu trigger and lists attention, departments, everything", async () => {
     rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
     renderBoard("/todos/b/platform")
     const trigger = await screen.findByTestId("board-switcher")
     expect(trigger.textContent).toContain("Platform")
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByTestId("board-menu-home")).toBeTruthy())
-    expect(screen.getByTestId("board-menu-attention")).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId("board-menu-attention")).toBeTruthy())
+    expect(screen.queryByTestId("board-menu-home")).toBeNull()
     expect(screen.getByTestId("board-menu-platform").textContent).toContain("PLA")
     expect(screen.getByTestId("board-menu-everything")).toBeTruthy()
   })

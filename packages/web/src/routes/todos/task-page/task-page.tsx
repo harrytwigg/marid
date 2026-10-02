@@ -208,11 +208,11 @@ export default function TaskPage() {
   )
   // ── Board context (the crumb's back affordance) ───────────────────────────
   const keep = useKeepWorkItem(announce)
-  const boardKeyRaw = routeState.fromBoard ?? item?.department ?? "home"
+  const boardKeyRaw = routeState.fromBoard ?? item?.department ?? "everything"
   const board = parseBoardParam(boardKeyRaw)
   const boardLabel = board.kind === "department" ? departmentTitle(board.slug)
     : board.kind === "attention" ? "Attention"
-    : board.kind === "everything" ? "Everything" : "Home"
+    : "Everything"
   const goBack = useCallback(() => {
     // Arriving from a board leaves it one POP away — going back that way
     // restores the board's cached scroll position. Otherwise push its path.

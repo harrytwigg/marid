@@ -33,7 +33,7 @@ import { QuickCaptureBar } from "../quick-add/capture-bar"
 import { BoardHeader } from "./board-header"
 import { TodoList } from "../list/todo-list"
 import { BoardCard, cardLayoutKey, rollupOf, type CardEnrichment } from "./card"
-import { FilteredEmptyCard, HomeEmptyCard } from "./board-empty"
+import { FilteredEmptyCard } from "./board-empty"
 import { BoardColumn, DragSlot } from "./column"
 import { ClosedColumnGroup, ClosedColumnHeader, ClosedRail } from "./closed-rail"
 import { departmentTitle } from "./board-switcher"
@@ -410,7 +410,7 @@ export default function TodoBoardPage() {
   const deptSummary = board.kind === "department" ? departments.data?.find((d) => d.slug === board.slug) : undefined
   const title = board.kind === "department" ? departmentTitle(board.slug)
     : board.kind === "attention" ? "Attention"
-    : board.kind === "everything" ? "Everything" : "Home"
+    : "Everything"
   const blockedTotal = countByStatus.blocked ?? 0
   const closedTotal = CLOSED_STATUSES.reduce((sum, status) => sum + (countByStatus[status] ?? 0), 0)
   const visibleStatuses: WorkItemStatusWire[] = useMemo(() => {
@@ -427,13 +427,10 @@ export default function TodoBoardPage() {
 
   // Filtered-empty (states mock §6): zero visible items with filters/search
   // set always offers the way back. An unfiltered empty board celebrates
-  // quietly — the columns and their quick-adds ARE the empty state — except
-  // Home, which is empty until the operator creates or pins something and so
-  // has to name those gestures rather than look broken (PLA-230).
+  // quietly — the columns and their quick-adds ARE the empty state.
   const filterCount = activeFilterCount(filters) + (filters.q ? 1 : 0)
   const boardEmpty = !data.isLoading && visibleItemCount(filters.status, itemsByStatus) === 0
   const filteredEmpty = boardEmpty && filterCount > 0
-  const homeEmpty = boardEmpty && filterCount === 0 && board.kind === "home"
   const listStatusInScope = useCallback((s: WorkItemStatusWire) => isColumnInStatusFilter(filters.status, s), [filters.status])
   const listColumns = useMemo(() => {
     const columns = {} as typeof data.columns
@@ -546,7 +543,7 @@ export default function TodoBoardPage() {
               filters={filters}
               onChange={setFilters}
               employees={org.data?.employees ?? []}
-              departments={board.kind === "everything" || board.kind === "home" ? org.data?.departments ?? [] : []}
+              departments={board.kind === "everything" ? org.data?.departments ?? [] : []}
               byName={byName}
               hideStatus
               hideDepartment={board.kind === "department"}
@@ -626,8 +623,6 @@ export default function TodoBoardPage() {
                 testId="todo-list-filtered-empty"
                 clearTestId="todo-list-clear-filters"
               />
-            ) : homeEmpty ? (
-              <HomeEmptyCard testId="todo-list-home-empty" />
             ) : (
               <TodoList
                 columns={listColumns}
@@ -658,8 +653,6 @@ export default function TodoBoardPage() {
               <BoardSkeleton />
             ) : filteredEmpty ? (
               <FilteredEmptyCard count={filterCount} onClear={clearAllFilters} />
-            ) : homeEmpty ? (
-              <HomeEmptyCard />
             ) : (
             <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5">
               {visibleStatuses.map((status) => columnFor(status))}
@@ -750,7 +743,7 @@ export default function TodoBoardPage() {
           filters={filters}
           onChange={setFilters}
           employees={org.data?.employees ?? []}
-          departments={board.kind === "everything" || board.kind === "home" ? org.data?.departments ?? [] : []}
+          departments={board.kind === "everything" ? org.data?.departments ?? [] : []}
           byName={byName}
           onClose={() => setMobileFilterOpen(false)}
           hideStatus

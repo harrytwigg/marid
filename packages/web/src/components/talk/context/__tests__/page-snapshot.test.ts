@@ -29,11 +29,11 @@ describe("describing the operator's location", () => {
     }
   })
 
-  it("keeps the home board's implied status filter, which is what the board shows", () => {
-    expect(describeLocation("/todos/b/home", "")).toEqual({
+  it("keeps the everything board's implied status filter, which is what the board shows", () => {
+    expect(describeLocation("/todos/b/everything", "")).toEqual({
       kind: "todos",
-      path: "/todos/b/home",
-      params: { board: "home" },
+      path: "/todos/b/everything",
+      params: { board: "everything" },
       filters: { status: "open" },
       selection: null,
     })

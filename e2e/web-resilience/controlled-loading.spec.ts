@@ -53,7 +53,7 @@ test('controlled mobile loading and transcript interaction', async ({ browser, b
     for (const name of ['Todos', 'More']) {
       const start = await page.evaluate(() => performance.now())
       await page.getByRole('link', { name, exact: true }).click()
-      await expect(page.getByRole('heading', { name: name === 'Todos' ? 'Home' : name, exact: true }).first()).toBeVisible()
+      await expect(page.getByRole('heading', { name: name === 'Todos' ? 'Everything' : name, exact: true }).first()).toBeVisible()
       tabs.push({ name, ms: await page.evaluate(() => performance.now()) - start })
     }
     if (sample >= 0) samples.push({ composerMs, interactions, costs, tabs, responses })

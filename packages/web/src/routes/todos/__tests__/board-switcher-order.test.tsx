@@ -27,33 +27,33 @@ async function openMenu(count: number) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={["/todos/b/home"]}>
-        <BoardSwitcher board={{ kind: "home" }} title="Home" departments={departments(count)} attentionCount={3} />
+      <MemoryRouter initialEntries={["/todos/b/everything"]}>
+        <BoardSwitcher board={{ kind: "everything" }} title="Everything" departments={departments(count)} attentionCount={3} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
   const trigger = await screen.findByTestId("board-switcher")
   fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
   fireEvent.click(trigger)
-  await waitFor(() => expect(screen.getByTestId("board-menu-home")).toBeTruthy())
+  await waitFor(() => expect(screen.getByTestId("board-menu-attention")).toBeTruthy())
 }
 
 /** Every menu row and group label, in the order the DOM actually holds them. */
 function rowOrder(): string[] {
-  const menu = screen.getByTestId("board-menu-home").closest("[role='menu']") ?? document.body
+  const menu = screen.getByTestId("board-menu-attention").closest("[role='menu']") ?? document.body
   return Array.from(menu.querySelectorAll("[data-testid^='board-menu-'], [data-slot='dropdown-menu-label']")).map(
     (el) => el.getAttribute("data-testid") ?? `label:${el.textContent?.trim()}`,
   )
 }
 
 describe.each([5, 14, 22])("the switcher at %i departments", (count) => {
-  it("leads with Home, Attention and Everything, above the departments group", async () => {
+  it("leads with Attention and Everything, above the departments group", async () => {
     await openMenu(count)
     const order = rowOrder()
 
-    expect(order.slice(0, 3)).toEqual(["board-menu-home", "board-menu-attention", "board-menu-everything"])
-    expect(order[3]).toBe("label:Departments")
-    expect(order.slice(4)).toEqual(departments(count).map((d) => `board-menu-${d.slug}`))
+    expect(order.slice(0, 2)).toEqual(["board-menu-attention", "board-menu-everything"])
+    expect(order[2]).toBe("label:Departments")
+    expect(order.slice(3)).toEqual(departments(count).map((d) => `board-menu-${d.slug}`))
   })
 
   it("puts every department after Everything, never before it", async () => {
@@ -67,22 +67,8 @@ describe.each([5, 14, 22])("the switcher at %i departments", (count) => {
 })
 
 describe("the switcher with no departments", () => {
-  it("renders the three lenses and no empty group label", async () => {
+  it("renders the two lenses and no empty group label", async () => {
     await openMenu(0)
-    expect(rowOrder()).toEqual(["board-menu-home", "board-menu-attention", "board-menu-everything"])
-  })
-})
-
-/* PLA-230, criterion 7. The Home row counts the very set the Home board draws,
- * so it asks for the same union scope — a pinned-only count here would label
- * Home with a number the board itself disagrees with. */
-describe("the switcher's Home count", () => {
-  it("counts the union scope rather than the pinned one", async () => {
-    listWorkItems.mockClear()
-    await openMenu(2)
-
-    const scopes = listWorkItems.mock.calls.map(([params]) => params)
-    expect(scopes).toContainEqual({ home: true, rootsOnly: true, limit: 1 })
-    for (const params of scopes) expect(params?.kept).toBeUndefined()
+    expect(rowOrder()).toEqual(["board-menu-attention", "board-menu-everything"])
   })
 })
