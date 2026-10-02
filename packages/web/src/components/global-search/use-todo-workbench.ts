@@ -39,6 +39,9 @@ export interface TodoWorkbench {
   missing: boolean
   /** The org's employees, for the composer's @mention picker. */
   employees: Employee[]
+  /** The composer's @mention list is a picker too: it tells the overlay while it
+   *  is up, so one Escape closes the list and nothing else. */
+  onPickerOpenChange: (open: boolean) => void
   rowFor: (key: TodoQuickPickerKey) => TodoQuickPickerRow
   /** The one refusal line — a picker's or the composer's, whichever spoke last. */
   error: string | null
@@ -112,6 +115,7 @@ export function useTodoWorkbench(
     loading: detailQuery.isPending,
     missing: !detailQuery.isPending && !detail,
     employees,
+    onPickerOpenChange,
     rowFor: pickers.rowFor,
     error: pickers.refusal.message,
     comment,
