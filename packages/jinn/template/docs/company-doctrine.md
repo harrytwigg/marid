@@ -24,7 +24,7 @@ For company state, the Jinn MCP is the hands. Employees should use it to read an
 
 The same contract should hold everywhere: sources emit events, cron runs scheduled prompts, Todos are deliberately authored to record owned work, and Notes preserve Markdown knowledge. Avoid parallel concepts that do the same job in different shapes.
 
-Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when idle capacity is enabled and its sweep picks the Todo from the backlog. A human gate is a Todo stopped in blocked with a comment that says what is needed, or finished work waiting in in_review.
+Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), when idle capacity is enabled and its sweep picks the Todo from the backlog, or when a comment mentions an `@employee` who has no session on it yet. An employee has one session per Todo, so a later mention, dispatch or delegation lands in that same session. A human gate is a Todo stopped in blocked with a comment that says what is needed, or finished work waiting in in_review.
 
 ## 6. Lean Identity Context
 
