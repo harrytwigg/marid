@@ -128,8 +128,8 @@ describe("activity comment markdown", () => {
     expect(row.textContent).not.toContain("pipeline-status")
   })
 
-  it("collapses only above the boundary, strips syntax from the preview, and toggles both ways", async () => {
-    const longBody = `# Heading\n\n**bold** and \`code\`\n\n${"preview words ".repeat(30)}`
+  it("keeps links clickable in a collapsed preview and toggles both ways", async () => {
+    const longBody = `# Heading\n\n**bold** and a [link](https://x.test) and \`code\`\n\n${"preview words ".repeat(30)}`
     expect(longBody.length).toBeGreaterThan(COLLAPSE_THRESHOLD)
     renderActivity([
       comment("wic_exact", "x".repeat(COLLAPSE_THRESHOLD)),
@@ -141,6 +141,9 @@ describe("activity comment markdown", () => {
 
     const long = screen.getByTestId("activity-comment-wic_long")
     const more = within(long).getByRole("button", { name: "Show more" })
+    // The preview is the real Markdown render, clamped — so a link is live and
+    // the syntax is gone, not shown literally.
+    expect(within(long).getByRole("link", { name: "link" }).getAttribute("href")).toBe("https://x.test")
     expect(long.textContent).not.toContain("**")
     expect(long.textContent).not.toContain("#")
     expect(long.textContent).not.toContain("`")
