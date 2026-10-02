@@ -59,7 +59,7 @@ export function flattenTodoListSections(sections: TodoListSection[]): TodoListVi
     rows.push({ kind: "header", key: `header-${groupKey}`, section, first: index === 0 })
     if (!section.open) return
     for (const item of section.group.items) {
-      // Scoped by group so a Todo hoisted into "Needs you" while still listed by
+      // Scoped by group so a Todo hoisted into an attention group while still listed by
       // its own status could never collide with itself.
       rows.push({ kind: "item", key: `item-${groupKey}-${item.id}`, section, item })
     }
