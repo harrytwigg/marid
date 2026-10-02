@@ -118,9 +118,19 @@ describe("instance migration bundle generator", () => {
     }
     const prompt = firstPrompt.toString("utf8")
     expect(prompt.match(/^## `.+`$/gm)).toHaveLength(manifest.files.length)
-    expect(prompt).toMatch(/materialized base payload.*materialized target payload/is)
-    expect(prompt).toMatch(/never.*raw.*placeholder/is)
+    // Every payload input the prompt tells the reader to open must exist in the
+    // bundle. It must not name the gateway-side materialized snapshot payloads the
+    // manual migration handoff used to create: that handoff was removed, so a
+    // reader could not find them and the instruction was unfollowable.
+    const namedPayloads = [...prompt.matchAll(/`(files\/(?:base|target)\/[^`]+)`/g)].map((match) => match[1])
+    expect(namedPayloads.length).toBeGreaterThan(0)
+    for (const payload of namedPayloads) {
+      expect(fs.existsSync(path.join(out, payload)), `${payload} is named but not shipped`).toBe(true)
+    }
+    expect(prompt).toMatch(/\{\{portalName\}\}.*\{\{portalSlug\}\}/s)
     expect(prompt).toMatch(/merge Markdown by heading.*never append a second section with the same heading/is)
+    expect(prompt).not.toMatch(/instance migration snapshot/i)
+    expect(prompt).not.toMatch(/gateway creates/i)
   })
 
   it("checks committed output and detects drift", () => {

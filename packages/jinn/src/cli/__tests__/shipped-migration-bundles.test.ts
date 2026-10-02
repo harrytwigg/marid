@@ -128,6 +128,8 @@ describe("0.34.0 bundle: self-compaction doctrine", () => {
       stdio: ["ignore", "pipe", "pipe"],
     })
     expect(merged.stdout).toContain("Our own note")
+    // Why the instruction matters: left to the textual merge, both copies stay.
+    expect(merged.stdout.split("\n").filter((line) => line === heading)).toHaveLength(2)
 
     const instructions = fs.readFileSync(path.join(bundle, "MIGRATION.md"), "utf8")
     expect(instructions).toContain("Merge Markdown by heading")
