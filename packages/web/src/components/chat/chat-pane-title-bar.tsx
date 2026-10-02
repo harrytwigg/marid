@@ -109,7 +109,8 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
           cliTitle={cliTitle}
         />
       ) : null}
-      <span className="grid size-[26px] place-items-center transition-opacity duration-[var(--duration-fast)] group-hover/chat-pane:opacity-0 group-focus-within/title-actions:opacity-0">
+      {/* The dot gives way to the close button on hover; with no close button it stays. */}
+      <span className={`grid size-[26px] place-items-center transition-opacity duration-[var(--duration-fast)] ${onClose ? 'group-hover/chat-pane:opacity-0 group-focus-within/title-actions:opacity-0' : ''}`}>
         {status ? <StatusDot data-testid="chat-pane-status-dot" color={status.color} pulse={status.pulse} title={status.label} className="size-2" /> : null}
       </span>
       {onClose ? <button

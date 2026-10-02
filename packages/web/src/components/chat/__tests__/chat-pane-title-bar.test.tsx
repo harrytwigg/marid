@@ -25,6 +25,16 @@ describe('ChatPaneTitleBar', () => {
     expect(screen.getByTestId('chat-pane-title-actions').className).toContain('w-[52px]')
   })
 
+  it('keeps the state dot on hover when there is no close button to give way to', () => {
+    const session = { id: 'a', status: 'running' }
+    const { rerender } = render(<ChatPaneTitleBar active title="Chat" employee="op" session={session} onClose={vi.fn()} />)
+    const slot = () => screen.getByTestId('chat-pane-status-dot').parentElement!.className
+    expect(slot()).toContain('group-hover/chat-pane:opacity-0')
+    rerender(<ChatPaneTitleBar active title="Chat" employee="op" session={session} />)
+    expect(screen.queryByRole('button', { name: 'Close Chat' })).toBeNull()
+    expect(slot()).not.toContain('opacity-0')
+  })
+
   it('cross-fades only selection ink and keeps the state dot fully legible', () => {
     const session = { id: 'a', status: 'running' }
     const { rerender } = render(

@@ -45,6 +45,7 @@ const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
 import { FileOpenContext, type OpenFile } from '@/components/chat/file-open-context'
+import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
 import { useChatTabs, type ChatTab } from '@/hooks/use-chat-tabs'
 import { invalidateLiveSessionSnapshot, prefetchLiveSessionSnapshot } from '@/hooks/use-live-session'
@@ -432,21 +433,15 @@ function ChatPage() {
     return true
   }, [chatTabs, viewport.mobile, workingSet])
 
-  // Mobile-only: close the file tab and return to the chat it was opened from, if
-  // its tab is still open; otherwise (or for a file tab restored from an earlier
-  // visit) to the chat list. Closing it keeps file tabs from piling up into the
-  // open-chats cap, whose eviction could take the very chat Back returns to.
+  // Mobile-only: back from the file view to the chat it was opened from (closing the
+  // file tab, so they do not pile up into the open-chats cap), or to the chat list
+  // when that chat's tab is gone. See fileBackPlan.
   const handleFileBack = useCallback(() => {
-    const backId = fileBackTargetRef.current
-    const fileIndex = chatTabs.activeTab?.kind === 'file' ? chatTabs.activeIndex : -1
-    const index = backId ? chatTabs.tabs.findIndex((t) => t.kind === 'session' && t.sessionId === backId) : -1
-    if (fileIndex >= 0) chatTabs.closeTab(fileIndex)
-    if (index >= 0) {
-      chatTabs.switchTab(fileIndex >= 0 && index > fileIndex ? index - 1 : index)
-      setMobileView('chat')
-      return
-    }
-    setMobileView('sidebar')
+    const plan = fileBackPlan(chatTabs.tabs, chatTabs.activeIndex, fileBackTargetRef.current)
+    if (!plan) return setMobileView('sidebar')
+    if (plan.close !== null) chatTabs.closeTab(plan.close)
+    chatTabs.switchTab(plan.switchTo)
+    setMobileView('chat')
   }, [chatTabs])
 
   // A chat chosen from the list is the operator asking for that chat: shown even

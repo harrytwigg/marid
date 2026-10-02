@@ -147,6 +147,14 @@ describe('dragging a file tab', () => {
     clearPaneTabDrag()
   })
 
+  it('a pane dropped back onto its own centre only focuses, the file staying shown', () => {
+    const layout = focusSession(openFileTab(twoPanes(), 'a', report), 'b')
+    const own = groupOfSession(layout, 'a')!
+    const dropped = applySplitDrop(layout, 'a', { region: 'center', key: 'a', groupId: own.id }, { columns: 2, cap: 4 })
+    expect(groupOfSession(dropped, 'a')).toMatchObject({ tabs: ['a', report], activeTab: report })
+    expect(dropped.focusedGroupId).toBe(own.id)
+  })
+
   it('cannot be dropped onto the pane surface, so it is never lost or routed to', () => {
     const layout = openFileTab(twoPanes(), 'a', report)
     const context = { columns: 2, cap: 4 }

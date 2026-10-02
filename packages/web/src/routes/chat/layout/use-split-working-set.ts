@@ -151,16 +151,21 @@ function useLayoutSync(
   return { shown, state, project, hydrated: hydratedRef.current }
 }
 
-function useSplitControls(layout: SplitLayout, setLayout: Dispatch<SetStateAction<SplitLayout>>): SplitLayoutControls {
+function useSplitControls(
+  layout: SplitLayout,
+  setLayout: Dispatch<SetStateAction<SplitLayout>>,
+  project: (layout: SplitLayout) => SplitLayout,
+): SplitLayoutControls {
   const resize = useCallback((columns: number, splitId: string, childIds: string[], sizes: number[]) => {
     setLayout((current) => setVisibleSplitSizes(materializeLayout(current, columns), splitId, childIds, sizes))
   }, [setLayout])
   const equalize = useCallback((columns: number, splitId: string) => {
     setLayout((current) => equalizeSplit(materializeLayout(current, columns), splitId))
   }, [setLayout])
+  // On the layout as shown, which the strip predicted the placement on (pane-tab-ops place).
   const place = useCallback((groupId: string, sessionId: string, index: number) => {
-    setLayout((current) => placeTab(current, groupId, sessionId, index))
-  }, [setLayout])
+    setLayout((current) => placeTab(project(current), groupId, sessionId, index))
+  }, [project, setLayout])
   const close = useCallback((sessionId: string) => setLayout((current) => closeSession(current, sessionId)), [setLayout])
   const pin = useCallback((sessionId: string) => setLayout((current) => pinTab(current, sessionId)), [setLayout])
   const show = useCallback((tabId: string) => setLayout((current) => showTab(current, tabId)), [setLayout])
@@ -180,7 +185,7 @@ export function useSplitWorkingSet(
     committedId ? createPreviewLayout(committedId) : emptySplitLayout()
   ))
   const { shown, state, project, hydrated } = useLayoutSync(committedId, sessions, layout, setLayout)
-  const split = useSplitControls(shown, setLayout)
+  const split = useSplitControls(shown, setLayout, project)
 
   const add = useCallback((sessionId: string) => {
     setLayout((current) => evictToCap(appendSession(current, sessionId), viewportCap()))
@@ -200,7 +205,9 @@ export function useSplitWorkingSet(
   const afterRemove = useCallback((sessionId: string) => workingSetFromLayout(closeSession(shown, sessionId)), [shown])
   /** Opens a file preview as a tab beside `ownerSessionId`'s chat (else the focused one), on the
    *  layout as shown (the URL's chat in it). False when there is no chat on screen to open it
-   *  beside, or the stored layout has yet to load over this one, so the caller can fall back. */
+   *  beside, or the stored layout has yet to load over this one, so the caller can fall back: until
+   *  the session list first loads (or if it never does) links open in a browser tab, as they did
+   *  before file tabs, rather than land in a layout hydration is about to replace. */
   const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => {
     const tabId = fileTabId(file)
     if (!hydrated || (openFileTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId))) return false

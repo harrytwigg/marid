@@ -7,6 +7,7 @@ import {
   findGroup,
   groupOfSession,
   materializeLayout,
+  paneSessionOf,
   placeTab,
   focusSession,
   splitGroup,
@@ -43,7 +44,9 @@ export function applySplitDrop(layout: SplitLayout, sessionId: string, hit: Spli
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
   if (!target || hit.region === 'end') return evictToCap(dropAtEnd(layout, sessionId), context.cap)
   if (hit.region === 'center') {
-    const next = target.activeTab === sessionId ? focusSession(layout, sessionId) : placeTab(layout, target.id, sessionId)
+    // A pane dropped back onto itself (its chat, though a file of its group may be shown) only focuses.
+    const own = target.activeTab === sessionId || paneSessionOf(target, layout.focusHistory) === sessionId
+    const next = own ? focusSession(layout, sessionId) : placeTab(layout, target.id, sessionId)
     return evictToCap(next, context.cap, target.tabs)
   }
   return splitAt(layout, target, hit.region, sessionId, context)

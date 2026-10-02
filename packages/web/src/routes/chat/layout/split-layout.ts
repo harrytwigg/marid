@@ -122,10 +122,7 @@ export function paneSessionOf(target: LayoutGroup, focusHistory: readonly string
  * picker, which is a pane the layout does not hold).
  */
 export function isLastChatWithFiles(layout: SplitLayout, tabId: string): boolean {
-  const groups = groupsOf(layout)
-  if (groups.length !== 1 || isFileTabId(tabId) || !groups[0].tabs.includes(tabId)) return false
-  const others = groups[0].tabs.filter((id) => id !== tabId)
-  return others.length > 0 && others.every(isFileTabId)
+  return groupsOf(layout).length === 1 && strandedFiles(layout, tabId).length > 0
 }
 
 /** Each group's id by its pane's chat: how a pane key (a session id) finds its group. */
