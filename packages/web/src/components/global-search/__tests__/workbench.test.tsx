@@ -127,6 +127,17 @@ describe("the search workbench", () => {
     await waitFor(() => expect(mocks.getWorkItem.mock.calls.length).toBeGreaterThan(1))
   })
 
+  it("inserts a picked @mention on Enter instead of posting", async () => {
+    await openOnTheTodo()
+
+    const field = screen.getByTestId("workbench-comment") as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: "ask @b-l" } })
+    fireEvent.keyDown(field, { key: "Enter" })
+
+    expect(field.value).toBe("ask @b-lead ")
+    expect(mocks.addWorkItemComment).not.toHaveBeenCalled()
+  })
+
   it("refuses a gated move with the very string the task page refuses it with", async () => {
     // An open sub-task with a blocked one below it: cancel is gated while they stay open.
     const tree = treeOf(["executing", "blocked"])

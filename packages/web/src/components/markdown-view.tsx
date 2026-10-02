@@ -1,3 +1,4 @@
+import { useMemo, type ComponentProps } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 // PrismAsyncLight ships NO grammars by default (the full `Prism` build bundles
@@ -41,6 +42,9 @@ import markdown from "react-syntax-highlighter/dist/esm/languages/prism/markdown
 import { CodeBlockChrome } from "./code-block-chrome";
 import { TodoMention } from "./todo-mention";
 import { rehypeTodoMentions, TODO_MENTION_TAG } from "@/lib/markdown-todo-mentions";
+import { EMPLOYEE_MENTION_TAG, rehypeEmployeeMentions } from "@/lib/markdown-employee-mentions";
+import { mentionRoster } from "@/lib/mentions";
+import type { Employee } from "@/lib/api";
 
 // The languages reachable from file-view's EXT_TO_LANG (plus common fenced-block langs).
 const PRISM_LANGUAGES: Record<string, unknown> = {
@@ -60,6 +64,22 @@ const TODO_MENTION_COMPONENT = {
   [TODO_MENTION_TAG]: ({ id }: { id?: string }) => <TodoMention id={id ?? ""} />,
 } as Components;
 
+/** The chip an `@name` in a comment becomes: the roster employee's display name,
+ *  with the handle as its title. */
+function employeeMentionComponent(roster: Map<string, Employee>): Components {
+  return {
+    [EMPLOYEE_MENTION_TAG]: ({ name }: { name?: string }) => (
+      <span
+        data-testid="employee-mention"
+        title={`@${name ?? ""}`}
+        className="whitespace-nowrap rounded-[6px] bg-[var(--accent-fill)] px-1 font-medium text-[var(--accent)]"
+      >
+        {roster.get(name ?? "")?.displayName ?? name}
+      </span>
+    ),
+  } as Components;
+}
+
 /** GitHub-flavored markdown rendering with highlighted fenced code blocks.
  *  Shared by the file viewer and the skills pages so documents read the same
  *  everywhere. */
@@ -68,6 +88,7 @@ export function MarkdownView({
   isDark,
   density = "comfortable",
   mentions = false,
+  employees,
 }: {
   content: string;
   isDark: boolean;
@@ -75,7 +96,20 @@ export function MarkdownView({
   /** Rewrite bare Todo ids into mentions. Off unless the document is about the
    *  board: a skill, a note and a file mean the string. */
   mentions?: boolean;
+  /** The employees an `@name` may name, keyed by name. Given, a mention of one
+   *  of them renders as a chip; system employees and unknown names stay text. */
+  employees?: Map<string, Employee>;
 }) {
+  const roster = useMemo(
+    () => (employees ? new Map(mentionRoster(employees.values()).map((e) => [e.name.toLowerCase(), e])) : null),
+    [employees],
+  );
+  const rehypePlugins = useMemo(() => {
+    const plugins: NonNullable<ComponentProps<typeof ReactMarkdown>["rehypePlugins"]> = [];
+    if (mentions) plugins.push(rehypeTodoMentions);
+    if (roster) plugins.push([rehypeEmployeeMentions, { isRoster: (name: string) => roster.has(name) }]);
+    return plugins;
+  }, [mentions, roster]);
   const codeTheme = isDark ? oneDark : oneLight;
   const compact = density === "compact";
   return (
@@ -88,9 +122,10 @@ export function MarkdownView({
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={mentions ? [rehypeTodoMentions] : []}
+        rehypePlugins={rehypePlugins}
         components={{
           ...(mentions ? TODO_MENTION_COMPONENT : {}),
+          ...(roster ? employeeMentionComponent(roster) : {}),
           h1: ({ children }) => (
             <h1
               className={

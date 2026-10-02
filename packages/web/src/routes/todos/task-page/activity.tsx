@@ -12,6 +12,7 @@ import { commentAuthorLabel, operatorSafeTodoError } from "@/lib/todos"
 import { stripMarkdown } from "@/lib/strip-markdown"
 import { MarkdownView } from "@/components/markdown-view"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
+import { useMentionPicker } from "@/components/mention-picker"
 import { invalidateTodoComments, useAddTodoComment } from "../use-todo-comment"
 import { commentHeadRequest, mergeCommentPages } from "./comment-window"
 import { displayNameOf, formatRelativeTime } from "../util"
@@ -89,6 +90,7 @@ function CommentBlock({
   attachments,
   workItemId,
   reply,
+  repliedTo,
   onReply,
   onEdit,
   onDelete,
@@ -100,6 +102,9 @@ function CommentBlock({
   attachments: WorkItemAttachmentWire[]
   workItemId: string
   reply?: boolean
+  /** The comment this one answered when the gateway flattened the thread to its
+   *  root; set only when that differs from the root and is loaded. */
+  repliedTo?: WorkItemCommentWire
   onReply?: () => void
   /** Operator-authored comments edit in place (gateway-enforced authority). */
   onEdit?: (body: string) => void
@@ -121,6 +126,11 @@ function CommentBlock({
         {comment.editedAt && !tombstoned && <span className="text-[10.5px] text-[var(--text-quaternary)]">(edited)</span>}
         <CommentSessionLink sessionId={comment.sessionId} byName={byName} />
       </div>
+      {repliedTo && (
+        <div data-testid={`activity-replied-to-${comment.id}`} className="ml-[26px] mt-[3px] pl-3 text-[11.5px] text-[var(--text-quaternary)]">
+          ↪ replying to {commentAuthor(repliedTo, byName)}
+        </div>
+      )}
       {editing ? (
         <div className="ml-[38px] mt-[5px]">
           <textarea
@@ -170,7 +180,7 @@ function CommentBlock({
               {commentPreview(comment.body)}
             </p>
           ) : (
-            <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions />
+            <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={byName} />
           )}
           {collapsible && (
             <button
@@ -274,6 +284,11 @@ export function ActivitySection({
   }, [attachmentsQuery.data])
 
   const comments = useMemo(() => mergeCommentPages(commentsQuery.data, detail.comments), [commentsQuery.data, detail.comments])
+  const commentsById = useMemo(() => new Map(comments.map((c) => [c.id, c])), [comments])
+  const repliedToOf = (comment: WorkItemCommentWire) =>
+    comment.repliedToId && comment.repliedToId !== comment.parentCommentId
+      ? commentsById.get(comment.repliedToId)
+      : undefined
   const blocks = useMemo(
     () => buildFeed(detail.events, comments, detail.runs ?? []).reverse(),
     [detail.events, comments, detail.runs],
@@ -289,6 +304,8 @@ export function ActivitySection({
   const invalidate = () => invalidateTodoComments(qc, id)
 
   const send = useAddTodoComment(id)
+  const allEmployees = useMemo(() => [...byName.values()], [byName])
+  const picker = useMentionPicker({ value: draft, setValue: setDraft, employees: allEmployees, textareaRef: composerRef })
 
   // Comment edit/delete carried over from the retired sheet (stage-B review
   // disposition b): edit only what the operator authored, delete anything —
@@ -378,8 +395,10 @@ export function ActivitySection({
 
   const inputProps = {
     value: draft,
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setDraft(e.target.value),
+    onChange: picker.onChange,
+    onSelect: picker.onSelect,
     onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (picker.onKeyDown(e)) return
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
         submit()
@@ -400,13 +419,16 @@ export function ActivitySection({
     <div className="rounded-[22px] bg-[var(--bg-secondary)] p-3 shadow-[var(--shadow-card)]">
       {pendingChips && <div className="mb-[9px]">{pendingChips}</div>}
       {replyRow}
-      <textarea
-        {...inputProps}
-        ref={composerRef}
-        rows={2}
-        placeholder={replyTo ? "Reply…" : mobile ? "Comment" : "Comment…  ⇧↩ for a new line"}
-        className="max-h-36 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 text-[15px] leading-[1.5] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
-      />
+      <div className="relative">
+        {picker.list}
+        <textarea
+          {...inputProps}
+          ref={composerRef}
+          rows={2}
+          placeholder={replyTo ? "Reply…" : mobile ? "Comment" : "Comment…  ⇧↩ for a new line"}
+          className="max-h-36 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 text-[15px] leading-[1.5] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
+        />
+      </div>
       <div className="mt-1 flex min-h-[34px] items-center gap-2">
         <button
           type="button"
@@ -468,6 +490,7 @@ export function ActivitySection({
                   isDark={isDark}
                   attachments={attachmentsByComment.get(block.node.comment.id) ?? []}
                   workItemId={id}
+                  repliedTo={repliedToOf(block.node.comment)}
                   onReply={() => setReplyTo(block.node.comment)}
                   {...commentActions(block.node.comment)}
                 />
@@ -480,6 +503,9 @@ export function ActivitySection({
                     attachments={attachmentsByComment.get(replyComment.id) ?? []}
                     workItemId={id}
                     reply
+                    repliedTo={repliedToOf(replyComment)}
+                    // The gateway flattens this to the thread root and records the comment answered.
+                    onReply={() => setReplyTo(replyComment)}
                     {...commentActions(replyComment)}
                   />
                 ))}
