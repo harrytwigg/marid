@@ -409,6 +409,16 @@ function killSessionEngines(context: ApiContext, session: Session, reason: strin
   context.terminalEngine?.forget(session.id);
 }
 
+/** Stop a session's turn the way `POST /api/sessions/:id/stop` does: kill its
+ *  engines, clear its queue, and leave the record interrupted (recoverable).
+ *  Shared with the board walk, which stops its own turn when it times out. */
+export function interruptSessionTurn(context: ApiContext, session: Session, reason: string, lastError: string): void {
+  killSessionEngines(context, session, reason);
+  context.sessionManager.getQueue().clearQueue(session.sessionKey || session.sourceRef || session.id);
+  updateSession(session.id, { status: "interrupted", attemptOutcome: "interrupted", lastActivity: new Date().toISOString(), lastError });
+  context.emit("session:stopped", { sessionId: session.id });
+}
+
 /** Preserve a linked execution attempt as durable evidence when deletion is
  * requested. Unsettled work becomes explicitly interrupted; an existing
  * terminal receipt remains authoritative. The periodic reconciler is also a
@@ -1968,10 +1978,7 @@ export async function handleApiRequest(
         }));
         return;
       }
-      killSessionEngines(context, session, USER_STOP_INTERRUPTION_REASON);
-      context.sessionManager.getQueue().clearQueue(session.sessionKey || session.sourceRef || session.id);
-      updateSession(params.id, { status: "interrupted", attemptOutcome: "interrupted", lastActivity: new Date().toISOString(), lastError: "Interrupted by user" });
-      context.emit("session:stopped", { sessionId: params.id });
+      interruptSessionTurn(context, session, USER_STOP_INTERRUPTION_REASON, "Interrupted by user");
       return json(res, { status: "stopped", sessionId: params.id });
     }
 

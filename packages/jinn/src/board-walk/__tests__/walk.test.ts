@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { EngineLimitEngineSnapshot, EngineLimitsResponse, JinnConfig, Session } from "../../shared/types.js";
 import type { StartTodoDispatcherResult } from "../../gateway/todo-dispatch.js";
 import type { BoardTodo } from "../board.js";
@@ -17,6 +17,16 @@ import type { LinkState } from "../pr-state.js";
  * prompt, the answer is carried out against the Todo's real state, the switches
  * are enforced in code, and every tick is logged with its reasons.
  */
+
+// The default dispatch path is the real Todo Dispatcher start; it is mocked
+// only so the test can see the options the walk hands it.
+const dispatcherStarts = vi.hoisted(() => [] as Array<{ id: string; opts: Record<string, unknown> }>);
+vi.mock("../../gateway/todo-dispatch.js", () => ({
+  startTodoDispatcher: (item: { id: string }, _context: unknown, opts: Record<string, unknown>) => {
+    dispatcherStarts.push({ id: item.id, opts });
+    return { ok: true, status: 201, body: { workItemId: item.id, sessionId: `real-${item.id}`, status: "running", reused: false } };
+  },
+}));
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-board-walk-"));
 process.env.JINN_HOME = home;
@@ -163,6 +173,7 @@ function open(opts: {
   links?: Record<string, string>;
   startAll?: boolean;
   turnTimeoutMs?: number;
+  stopped?: string[];
 } = {}): Harness {
   const turns: WalkTurn[] = [];
   const dispatched: string[] = [];
@@ -177,6 +188,8 @@ function open(opts: {
       return opts.reply ? opts.reply(turn) : { sessionId: `walk-${turns.length}`, reply: fakeModel(turn.prompt, { startAll: opts.startAll }) };
     },
     ...(opts.turnTimeoutMs ? { turnTimeoutMs: opts.turnTimeoutMs } : {}),
+    stopTurn: (sessionKey) => opts.stopped?.push(sessionKey),
+    templateRules: () => TEMPLATE,
     dispatch: (item): StartTodoDispatcherResult => {
       dispatched.push(item.id);
       return { ok: true, status: 201, body: { workItemId: item.id, sessionId: `dispatch-${item.id}`, status: "running", reused: false } };
@@ -457,24 +470,74 @@ describe("board walk guards from review", () => {
     ]));
   });
 
-  it("parking a Todo already stopped keeps who it waits on", async () => {
-    const item = todo("Ship after the freeze, park me", { body: "not before 2026-10-10" });
-    m.transitions.transition(item.id, "blocked", "operator", { human: true, stopCause: { unblockHint: { what: "the release freeze ends", who: "the platform team" } } });
+  it("re-parks a clock-wait keeping who it waits on, and never parks a Todo stopped for a person", async () => {
+    const clock = todo("Ship after the freeze, park me", { body: "not before 2026-10-10" });
+    m.transitions.transition(clock.id, "blocked", "operator", { human: true, blockKind: "transient", stopCause: { parkedUntil: "2026-10-05T00:00:00Z", unblockHint: { what: "the release freeze ends", who: "the platform team" } } });
+    const person = todo("Waiting on legal, park me", { body: "not before 2026-10-10" });
+    m.transitions.transition(person.id, "blocked", "operator", { human: true, stopCause: { unblockHint: { what: "legal sign-off", who: "the legal team" } } });
     const h = open();
-    await h.walk.tick();
-    expect(m.stopCause.readStopCause(m.db, item.id, NOW)).toEqual({
+    const tick = await h.walk.tick();
+    expect(m.stopCause.readStopCause(m.db, clock.id, NOW)).toEqual({
       parkedUntil: "2026-10-10T00:00:00.000Z",
       unblockHint: { what: "the release freeze ends", who: "the platform team" },
     });
+    expect(m.stopCause.readStopCause(m.db, person.id, NOW)).toEqual({ unblockHint: { what: "legal sign-off", who: "the legal team" } });
+    expect(tick.entries).toContainEqual(expect.objectContaining({ kind: "refused", workItemId: person.id, outcome: "it is stopped for a person (needs_input); a park would release it on the date" }));
   });
 
   it("gives up on a turn that does not finish, logs it, and frees the walk for the next tick", async () => {
     todo("Ready work");
     let calls = 0;
-    const h = open({ turnTimeoutMs: 50, reply: () => { calls++; return calls === 1 ? new Promise<WalkTurnResult>(() => {}) : { reply: JSON.stringify({ todos: [], dispatch: { start: [], reason: "fine" } }) }; } });
+    const stopped: string[] = [];
+    const h = open({ turnTimeoutMs: 50, stopped, reply: () => { calls++; return calls === 1 ? new Promise<WalkTurnResult>(() => {}) : { reply: JSON.stringify({ todos: [], dispatch: { start: [], reason: "fine" } }) }; } });
     const stalled = await h.walk.tick();
-    expect(stalled).toMatchObject({ outcome: "failed", summary: "the model turn failed: the model turn did not finish within 0 s" });
+    expect(stalled).toMatchObject({ outcome: "failed", summary: "the model turn failed: the model turn did not finish within 0 s; it was stopped" });
     expect(h.dispatched).toEqual([]);
+    expect(stopped).toEqual([h.turns[0].sessionKey]);
     expect((await h.walk.tick()).outcome).toBe("ok");
+  });
+});
+
+describe("board walk review round 2", () => {
+  it("gives the model the shipped default for a section the operator deleted", async () => {
+    const withoutDispatch = TEMPLATE.replace(/## Dispatch[\s\S]*?(?=## Your own rules)/, "");
+    fs.writeFileSync(RULES, withoutDispatch);
+    todo("Anything");
+    const h = open();
+    await h.walk.tick();
+    expect(h.turns[0].prompt).toContain("## Shipped defaults for the sections the operator's file leaves out");
+    expect(h.turns[0].prompt).toContain("### Default: Dispatch");
+    expect(h.turns[0].prompt).not.toContain("### Default: Release");
+  });
+
+  it("keeps the board inside its share of the prompt and counts what it left out", async () => {
+    const { buildBoardDigest } = await import("../board.js");
+    for (let i = 0; i < 5; i++) todo(`Long ${i}`, { body: "x".repeat(1500) });
+    const digest = await buildBoardDigest({ resolveLink: async (url, kind) => ({ url, kind, state: "unknown" }), maxChars: 4000 });
+    expect(digest.todos.length).toBeGreaterThan(0);
+    expect(digest.todos.length).toBeLessThan(5);
+    expect(digest.omitted).toBe(5 - digest.todos.length);
+  });
+
+  it("starts through the real Dispatcher path with the board's dispatched event and the walk's mark", async () => {
+    const item = todo("Write the release notes", { priority: 3 });
+    const events: string[] = [];
+    const walk = m.walk.startBoardWalk({
+      getConfig: () => config, context: {} as never, rulesFile: RULES, now: () => NOW, pollMs: 3_600_000,
+      runTurn: async (turn) => ({ reply: fakeModel(turn.prompt) }),
+      resolveLink: async (url, kind) => ({ url, kind, state: "unknown" }),
+      sessions: () => [], holdingCapacity: () => [], collectClaude: async () => claude(15),
+      emitProjectionEvent: (id, action) => events.push(`${id}:${action}`),
+      snapshot: { collect: async () => limits(15), usageHistory: () => [], statuslineMtime: () => undefined, startedSince: () => [], exhausted: () => false },
+    });
+    walks.push(walk);
+    dispatcherStarts.length = 0;
+    await walk.tick();
+    expect(dispatcherStarts.map((start) => start.id)).toEqual([item.id]);
+    const opts = dispatcherStarts[0].opts as { emitProjectionEvent: (id: string, action: string) => void; transportMeta: unknown; promptSuffix: string };
+    expect(opts.transportMeta).toEqual({ startedBy: "board-walk" });
+    expect(opts.promptSuffix).toMatch(/^The board walk started this Todo\. Its reason: /);
+    opts.emitProjectionEvent(item.id, "dispatched");
+    expect(events).toEqual([`${item.id}:dispatched`]);
   });
 });

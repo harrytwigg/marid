@@ -56,7 +56,7 @@ The shipped Dispatch section restates the old numeric policy in plain English:
 - no start while a session holds capacity;
 - priority first, then the oldest.
 
-Change any of it. Write "don't" to switch a behaviour off, or add rules in "Your own rules". A section you delete falls back to the shipped default.
+Change any of it. Write "don't" to switch a behaviour off, or add rules in "Your own rules". A section you delete falls back to the shipped default: the gateway gives the model the shipped section, marked as a default that the operator's own rules override.
 
 **Switches are the only certain "off".** The prose is read by a model; the switches are read by the gateway. With `actions.dispatch: false`, every start the walk asks for is refused, whatever the prose says, while readiness keeps running. With `enabled: false`, nothing runs at all. The prose can narrow what a switch allows; it cannot widen it.
 
@@ -74,12 +74,12 @@ A rules file that does not parse holds the walk; it never runs on guesses. The s
    - what is running on it;
    - the live state of every GitHub pull request or issue it links to, looked up with `gh`. A link that cannot be resolved is `unknown`, and an unknown gate is treated as not met.
 
-   Long text is truncated, and the board is capped so it fits one prompt.
+   Long text is truncated. The board is capped at 150 Todos and about 120,000 characters, highest priority first; the rest are counted as left out. Link lookups run six at a time, and a failed lookup is remembered for two minutes.
 3. **Build the capacity snapshot** (below).
-4. **Ask the model.** One turn, routed as a session to the configured employee with the configured model, and **with no tools**: every MCP server, the Jinn toolset included, is detached, and on Claude the built-in tools are switched off too (`--tools ""`, `--strict-mcp-config`). The turn is then pinned to Claude, because those flags mean nothing to another engine. On any other engine only the MCP servers are detached. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A turn that has not answered within 10 minutes (one stuck behind a rate-limit wait, say) fails the tick, and the walk is free again for the next one. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
+4. **Ask the model.** One turn, routed as a session to the configured employee with the configured model, and **with no tools**: every MCP server, the Jinn toolset included, is detached, and on Claude the built-in tools are switched off too (`--tools ""`, `--strict-mcp-config`). The turn is then pinned to Claude, because those flags mean nothing to another engine. On any other engine only the MCP servers are detached. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A turn that has not answered within 10 minutes (one stuck behind a rate-limit wait, say) is stopped, the tick fails, and the walk is free again for the next one. If the walk's engine is recorded as exhausted, the tick is skipped without a turn: the model is named, so the session layer's healthy-engine choice does not apply. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
 5. **Carry out the answer.** The gateway checks every decision against the switches and the Todo's state at that moment:
    - **release:** a `blocked` Todo goes back to `backlog`, keeping its assignee, with a comment giving the reason.
-   - **park:** a `backlog` or `blocked` Todo goes to `blocked` with `parkedUntil` set. The park expiry puts it back in the queue when the date passes (see below). An `executing` Todo is never parked. A Todo that was already stopped keeps its unblock hint: the park adds a date, it does not change who the wait is on.
+   - **park:** a `backlog` or `blocked` Todo goes to `blocked` with `parkedUntil` set. The park expiry puts it back in the queue when the date passes (see below). An `executing` Todo is never parked. A `blocked` Todo is re-parked only when its stop is already a clock-wait (block kind `transient`), and it keeps its unblock hint. A Todo stopped for a person is never parked, because a park releases itself on its date and would dissolve the wait; it is released instead, once its gate is met.
    - **The operator's Todos are theirs.** A Todo assigned to the operator, or stopped with the operator named as who must act, is never released or parked by the walk, whatever the model asks. It may still be flagged as stuck.
    - **flag:** a stuck Todo gets one comment. Each stuck episode is raised once, across ticks. If the Todo moves and later gets stuck again, that is a new episode.
    - **start:** a ready `backlog` Todo is handed to the Todo Dispatcher, with the walk's reason and any engine preference added to the Dispatcher's prompt.

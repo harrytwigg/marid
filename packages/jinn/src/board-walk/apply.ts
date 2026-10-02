@@ -2,6 +2,7 @@ import { initDb } from "../shared/db.js";
 import { logger } from "../shared/logger.js";
 import { OPERATOR_ASSIGNEE } from "../work-items/assignment.js";
 import { readStopCause } from "../work-items/stop-cause.js";
+import { readBlockRecord } from "../work-items/blocks.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { transition } from "../work-items/transitions.js";
 import { addComment } from "../work-items/comment-add.js";
@@ -81,16 +82,34 @@ function release(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): TickE
   return { ...entry, outcome: "moved to backlog" };
 }
 
+/** The park date, or why the decision names none that can be used. */
+function parkDate(decision: TodoDecision, now: number): { refused: string } | { parkedUntil: string } {
+  const until = decision.until ? Date.parse(decision.until) : Number.NaN;
+  if (!Number.isFinite(until)) return { refused: `park needs an ISO-8601 until (got ${JSON.stringify(decision.until ?? null)})` };
+  if (until <= now) return { refused: `the park date ${decision.until} has already passed` };
+  return { parkedUntil: new Date(until).toISOString() };
+}
+
+/** Why this Todo may not be parked, or undefined. A park releases itself on
+ *  its date. On a Todo stopped for a person that would dissolve the wait, so
+ *  only a clock-wait (a park or a transient stop) is re-parked; anything else
+ *  stays as it is, for release when its gate is met. */
+function parkRefusal(item: WorkItem): string | undefined {
+  if (item.status !== "backlog" && item.status !== "blocked") return `only a backlog or blocked Todo is parked; this one is ${item.status}`;
+  const gate = operatorGate(item);
+  if (gate) return `only the operator parks it: ${gate}`;
+  if (item.status !== "blocked") return undefined;
+  const kind = readBlockRecord(initDb(), item.id)?.kind ?? "needs_input";
+  return kind === "transient" ? undefined : `it is stopped for a person (${kind}); a park would release it on the date`;
+}
+
 /** Why a park cannot go ahead, or the date it parks until. */
 function parkPlan(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): { refused: string } | { parkedUntil: string } {
   if (!deps.settings.actions.park) return { refused: "park is switched off" };
-  const until = decision.until ? Date.parse(decision.until) : Number.NaN;
-  if (!Number.isFinite(until)) return { refused: `park needs an ISO-8601 until (got ${JSON.stringify(decision.until ?? null)})` };
-  if (until <= deps.now()) return { refused: `the park date ${decision.until} has already passed` };
-  if (item.status !== "backlog" && item.status !== "blocked") return { refused: `only a backlog or blocked Todo is parked; this one is ${item.status}` };
-  const gate = operatorGate(item);
-  if (gate) return { refused: `only the operator parks it: ${gate}` };
-  return { parkedUntil: new Date(until).toISOString() };
+  const date = parkDate(decision, deps.now());
+  if ("refused" in date) return date;
+  const refused = parkRefusal(item);
+  return refused ? { refused } : date;
 }
 
 function park(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): TickEntry {

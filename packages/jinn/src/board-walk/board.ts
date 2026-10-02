@@ -32,6 +32,11 @@ const ACCEPTANCE_CHARS = 1000;
 const COMMENT_CHARS = 600;
 const COMMENTS_PER_TODO = 6;
 const DEFAULT_MAX_TODOS = 150;
+/** The board's share of one prompt, in characters of JSON. Todos past it are
+ *  left out (lowest priority, newest first) and counted in `omitted`. */
+const DEFAULT_MAX_BOARD_CHARS = 120_000;
+/** GitHub lookups in flight at once. */
+const LINK_CONCURRENCY = 6;
 
 export interface BoardTodo {
   id: string;
@@ -118,6 +123,21 @@ export interface DigestOptions {
   /** Todo ids whose current stuck episode is already flagged. */
   flagged?: ReadonlySet<string>;
   maxTodos?: number;
+  maxChars?: number;
+}
+
+/** Map with at most `limit` calls in flight, results in input order. */
+async function mapLimited<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 /** Present keys only: an absent optional reads as absent, not as `undefined`. */
@@ -166,8 +186,18 @@ async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<BoardTod
 export async function buildBoardDigest(opts: DigestOptions): Promise<BoardDigest> {
   const open = OPEN_STATUSES.flatMap((status) => listWorkItems({ status }))
     .sort((a, b) => b.priority - a.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-  const max = opts.maxTodos ?? DEFAULT_MAX_TODOS;
+  const candidates = open.slice(0, opts.maxTodos ?? DEFAULT_MAX_TODOS);
+  // Links are resolved concurrently and bounded, so an offline `gh` costs one
+  // timeout per batch rather than one per link, one Todo at a time.
+  const digests = await mapLimited(candidates, LINK_CONCURRENCY, (item) => digestTodo(item, opts));
+  const budget = opts.maxChars ?? DEFAULT_MAX_BOARD_CHARS;
   const todos: BoardTodo[] = [];
-  for (const item of open.slice(0, max)) todos.push(await digestTodo(item, opts));
-  return { todos, omitted: Math.max(0, open.length - max), inReview: listWorkItems({ status: "in_review" }).length };
+  let used = 0;
+  for (const digest of digests) {
+    const size = JSON.stringify(digest).length;
+    if (used + size > budget && todos.length > 0) break;
+    todos.push(digest);
+    used += size;
+  }
+  return { todos, omitted: open.length - todos.length, inReview: listWorkItems({ status: "in_review" }).length };
 }

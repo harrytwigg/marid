@@ -41,7 +41,19 @@ function switches(settings: BoardWalkSettings): string {
     : `These actions are switched OFF and the gateway will refuse them: ${off.join(", ")}. Do not propose them.`;
 }
 
-export function buildPrompt(input: { settings: BoardWalkSettings; rules: string; snapshot: CapacitySnapshot; board: BoardDigest }): string {
+function defaultsSection(defaults: string[]): string[] {
+  if (defaults.length === 0) return [];
+  return [
+    "",
+    "## Shipped defaults for the sections the operator's file leaves out",
+    "",
+    "These apply because the operator's file has no section of the same name. Anything the operator's rules above say wins over them, including a rule not to do something.",
+    "",
+    ...defaults.map((section) => section.replace(/^## /m, "### Default: ")),
+  ];
+}
+
+export function buildPrompt(input: { settings: BoardWalkSettings; rules: string; defaults?: string[]; snapshot: CapacitySnapshot; board: BoardDigest }): string {
   const { settings, rules, snapshot, board } = input;
   return [
     "You are running the board walk: a scheduled pass over this company's Todo board.",
@@ -53,7 +65,8 @@ export function buildPrompt(input: { settings: BoardWalkSettings; rules: string;
     "",
     "## The operator's rules (board-walk.md)",
     "",
-    rules || "(The rules file has no body. Release only Todos whose gates are plainly met, and start nothing.)",
+    rules || "(The operator's file has no body of its own.)",
+    ...defaultsSection(input.defaults ?? []),
     "",
     "## Capacity snapshot",
     "",

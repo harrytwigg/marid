@@ -146,16 +146,19 @@ describe("linked pull requests and issues", () => {
     ]);
   });
 
-  it("caches answers but not unknowns", async () => {
+  it("caches answers, and unknowns only briefly", async () => {
     let calls = 0;
+    let clock = NOW;
     let state = "unknown";
-    const resolve = cachedResolver(async (url, kind): Promise<LinkState> => { calls++; return { url, kind, state }; }, 60_000, () => NOW);
+    const resolve = cachedResolver(async (url, kind): Promise<LinkState> => { calls++; return { url, kind, state }; }, 60_000, () => clock, 10_000);
     await resolve("u", "pull");
     await resolve("u", "pull");
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
+    clock += 11_000;
     state = "OPEN";
     await resolve("u", "pull");
+    clock += 30_000;
     await resolve("u", "pull");
-    expect(calls).toBe(3);
+    expect(calls).toBe(2);
   });
 });

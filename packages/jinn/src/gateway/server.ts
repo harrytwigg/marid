@@ -14,7 +14,7 @@ import {
 } from "../shared/models.js";
 import { configureLogger, logger } from "../shared/logger.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
-import { scheduleFtsBackfill, recoverStaleSessions, settleLegacyWorkflowPhaseSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, listAllSessionIds, listPendingQueueItemIdsForSession } from "../sessions/registry.js";
+import { scheduleFtsBackfill, recoverStaleSessions, settleLegacyWorkflowPhaseSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, listAllSessionIds, listPendingQueueItemIdsForSession, getSessionBySessionKey } from "../sessions/registry.js";
 import { getPackageVersion } from "../shared/version.js";
 import { PRODUCT_NAME, productBanner } from "../shared/brand.js";
 import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunningSessionsForShutdown, recordSessionsRunningAtBoot, resumeRestartInterruptedSessions } from "../sessions/restart-resume.js";
@@ -50,7 +50,7 @@ import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CL
 import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
 import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
-import { emitTodoProjectionEvent, isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
+import { emitTodoProjectionEvent, interruptSessionTurn, isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
 import { createGatewayRequestHandler } from "./request-handler.js";
 import { sessionCommGuards, LATERAL_MAX_HOPS } from "./session-comm-guards.js";
@@ -899,6 +899,10 @@ export async function startGateway(
     context: apiContext,
     holdingCapacity: (sessions) => sessionsHoldingEngineCapacity(sessions, apiContext),
     emitProjectionEvent: (id, action) => emitTodoProjectionEvent(apiContext, id, action),
+    stopTurn: (sessionKey) => {
+      const session = getSessionBySessionKey(sessionKey);
+      if (session) interruptSessionTurn(apiContext, session, "Interrupted: board walk turn timed out", "Board walk turn timed out");
+    },
   });
   apiContext.boardWalk = boardWalk;
 

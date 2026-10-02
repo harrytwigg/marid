@@ -2,13 +2,14 @@ import cron from "node-cron";
 import type { Employee, EngineLimitEngineSnapshot, JinnConfig, Session } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { collectClaudeLimits } from "../shared/engine-limits-claude.js";
+import { isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
 import { listSessions, getMessages, getSession } from "../sessions/registry.js";
 import { orgRegistry } from "../gateway/org-registry.js";
 import { CronConnector } from "../connectors/cron/index.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { startTodoDispatcher, type StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { ApiContext } from "../gateway/api.js";
-import { readRules, boardWalkPath, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
+import { readRules, boardWalkPath, missingDefaultSections, readTemplateRules, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
 import { buildCapacitySnapshot, claudeFiveHour, type SnapshotDeps } from "./snapshot.js";
 import { buildBoardDigest, type BoardDigest } from "./board.js";
 import { buildPrompt } from "./prompt.js";
@@ -73,6 +74,10 @@ export interface BoardWalkDeps {
   /** The board's change signal for a Todo the walk started (the dispatch
    *  route's own `dispatched` event). Passed in by the server. */
   emitProjectionEvent?: (workItemId: string, action: string) => void;
+  /** Stop the walk's own turn, by its session key, when it times out. */
+  stopTurn?: (sessionKey: string) => void;
+  /** The shipped rules file, for the sections an operator's file leaves out. */
+  templateRules?: () => string;
 }
 
 /** Long enough for a slow turn on a big board; short enough that a turn stuck
@@ -132,6 +137,11 @@ function routeTurn(deps: BoardWalkDeps): (turn: WalkTurn) => Promise<WalkTurnRes
     const configured = orgRegistry(config).get(turn.settings.employee);
     if (!configured) return { error: `employee ${turn.settings.employee} named in board-walk.md does not exist` };
     const { employee, engine } = lockedDownEmployee(configured);
+    // A named model (and, on Claude, the pinned engine) skips the session
+    // layer's healthy-engine choice, so check health here rather than walk
+    // into a window that is already spent and wait out its reset.
+    const runOn = engine ?? configured.engine;
+    if (isEngineExhausted(readEngineHealth(), runOn)) return { error: `${runOn} is recorded as exhausted; this tick is skipped` };
     const connector = new CronConnector(new Map());
     const routed = await deps.context.sessionManager.route(
       {
@@ -207,35 +217,53 @@ interface Walker {
   dispatch: (item: WorkItem, decision: StartDecision) => StartTodoDispatcherResult;
   snapshot: BoardWalkDeps["snapshot"];
   turnTimeoutMs: number;
+  stopTurn: (sessionKey: string) => void;
+  templateRules: () => string;
 }
 
-function walker(deps: BoardWalkDeps): Walker {
+function defaultDispatch(deps: BoardWalkDeps): Walker["dispatch"] {
+  return (item, decision) => startTodoDispatcher(item, deps.context, {
+    promptSuffix: dispatcherSuffix(decision),
+    transportMeta: { startedBy: BOARD_WALK_STARTED_BY },
+    ...(deps.emitProjectionEvent ? { emitProjectionEvent: deps.emitProjectionEvent } : {}),
+  });
+}
+
+function runtimeDeps(deps: BoardWalkDeps): Pick<Walker, "now" | "rulesFile" | "resolveLink" | "runTurn" | "sessions" | "collectClaude"> {
   return {
-    getConfig: deps.getConfig,
     now: deps.now ?? Date.now,
     rulesFile: deps.rulesFile ?? boardWalkPath(),
     resolveLink: deps.resolveLink ?? cachedResolver(ghResolver()),
     runTurn: deps.runTurn ?? routeTurn(deps),
     sessions: deps.sessions ?? (() => listSessions()),
-    holding: deps.holdingCapacity,
     collectClaude: deps.collectClaude ?? collectClaudeLimits,
-    dispatch: deps.dispatch ?? ((item, decision) => startTodoDispatcher(item, deps.context, {
-      promptSuffix: dispatcherSuffix(decision),
-      transportMeta: { startedBy: BOARD_WALK_STARTED_BY },
-      ...(deps.emitProjectionEvent ? { emitProjectionEvent: deps.emitProjectionEvent } : {}),
-    })),
-    snapshot: deps.snapshot,
-    turnTimeoutMs: deps.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
   };
 }
 
-/** The turn, or a failure once `ms` has passed. A turn that outlives the
- *  timeout keeps running in its session; its answer is never read. */
-function withTimeout(turn: Promise<WalkTurnResult>, ms: number): Promise<WalkTurnResult> {
+function walker(deps: BoardWalkDeps): Walker {
+  return {
+    ...runtimeDeps(deps),
+    getConfig: deps.getConfig,
+    holding: deps.holdingCapacity,
+    dispatch: deps.dispatch ?? defaultDispatch(deps),
+    snapshot: deps.snapshot,
+    turnTimeoutMs: deps.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
+    stopTurn: deps.stopTurn ?? (() => {}),
+    templateRules: deps.templateRules ?? (() => readTemplateRules()),
+  };
+}
+
+/** The turn, or a failure once `ms` has passed — when the turn is also
+ *  stopped, so a turn parked behind a rate-limit wait does not run on (or
+ *  answer) after the tick has given up on it. */
+function withTimeout(turn: Promise<WalkTurnResult>, ms: number, stop: () => void): Promise<WalkTurnResult> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<WalkTurnResult>((resolve) => {
     const span = ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 1000)} s`;
-    timer = setTimeout(() => resolve({ error: `the model turn did not finish within ${span}` }), ms);
+    timer = setTimeout(() => {
+      try { stop(); } catch (error) { logger.warn(`Board walk: could not stop the timed-out turn: ${errorText(error)}`); }
+      resolve({ error: `the model turn did not finish within ${span}; it was stopped` });
+    }, ms);
     timer.unref?.();
   });
   return Promise.race([turn, timeout]).finally(() => clearTimeout(timer));
@@ -274,10 +302,12 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
     ...(state.priorFiveHour ? { prior: state.priorFiveHour } : {}),
     ...w.snapshot,
   });
-  const prompt = buildPrompt({ settings, rules: rules.body, snapshot, board });
+  const prompt = buildPrompt({ settings, rules: rules.body, defaults: missingDefaultSections(rules.body, w.templateRules()), snapshot, board });
+  const sessionKey = `${BOARD_WALK_SESSION_KEY_PREFIX}${at}`;
   const turn = await withTimeout(
-    w.runTurn({ prompt, settings, sessionKey: `${BOARD_WALK_SESSION_KEY_PREFIX}${at}`, title: `Board walk ${at.slice(0, 16).replace("T", " ")}` }),
+    w.runTurn({ prompt, settings, sessionKey, title: `Board walk ${at.slice(0, 16).replace("T", " ")}` }),
     w.turnTimeoutMs,
+    () => w.stopTurn(sessionKey),
   );
   await recordClaudeReading(w, config, state);
 

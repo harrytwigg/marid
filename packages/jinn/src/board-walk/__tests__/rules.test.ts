@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { BOARD_WALK_DEFAULTS, parseRules, readRules, splitFrontmatter } from "../settings.js";
+import { BOARD_WALK_DEFAULTS, missingDefaultSections, parseRules, readRules, splitFrontmatter } from "../settings.js";
 import {
   convertLegacyBlock,
   renderDispatchSection,
@@ -62,6 +62,15 @@ describe("board-walk.md settings", () => {
   it("an empty model means the employee's own", () => {
     expect(parseRules("---\nmodel: \"\"\n---\n").settings.model).toBeUndefined();
     expect(splitFrontmatter("no frontmatter here").frontmatter).toBeNull();
+  });
+});
+
+describe("shipped defaults for missing sections", () => {
+  it("names every shipped section the operator's file leaves out, never 'Your own rules'", () => {
+    const mine = "# Board walk\n\n## Gates\n\nOnly dates count.\n\n## dispatch\n\nNever.\n";
+    const missing = missingDefaultSections(mine, TEMPLATE).map((section) => section.split("\n")[0]);
+    expect(missing).toEqual(["## Release", "## Park plain date gates", "## Flag stuck Todos", "## Comments"]);
+    expect(missingDefaultSections(parseRules(TEMPLATE).body, TEMPLATE)).toEqual([]);
   });
 });
 

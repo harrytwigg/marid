@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
-import { JINN_HOME } from "../shared/paths.js";
+import { JINN_HOME, TEMPLATE_DIR } from "../shared/paths.js";
 import { validateCronSchedule } from "../cron/validation.js";
 
 /**
@@ -174,4 +174,39 @@ export function readRules(file: string = boardWalkPath()): BoardWalkRules {
     };
   }
   return { ...parseRules(text), exists: true };
+}
+
+// ── Shipped defaults for missing sections ───────────────────────────────────
+
+export const TEMPLATE_RULES_FILE = path.join(TEMPLATE_DIR, BOARD_WALK_FILE);
+
+/** The `## ` sections of a rules body, keyed by lowercased heading. */
+export function rulesSections(body: string): Map<string, string> {
+  const sections = new Map<string, string>();
+  const parts = body.split(/^(?=## )/m);
+  for (const part of parts) {
+    const heading = /^## (.+)$/m.exec(part)?.[1]?.trim();
+    if (heading && part.startsWith("## ")) sections.set(heading.toLowerCase(), part.trim());
+  }
+  return sections;
+}
+
+/**
+ * The shipped sections the operator's rules leave out. The file promises that
+ * a deleted section falls back to the shipped default, so those sections go to
+ * the model beside the operator's own, marked as defaults. "Your own rules" has
+ * no default content and is never added.
+ */
+export function missingDefaultSections(body: string, template: string): string[] {
+  const present = rulesSections(body);
+  const shipped = rulesSections(splitFrontmatter(template).body);
+  return [...shipped].filter(([heading]) => heading !== "your own rules" && !present.has(heading)).map(([, text]) => text);
+}
+
+export function readTemplateRules(file: string = TEMPLATE_RULES_FILE): string {
+  try {
+    return fs.readFileSync(file, "utf-8");
+  } catch {
+    return "";
+  }
 }

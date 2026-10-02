@@ -75,14 +75,16 @@ export function ghResolver(timeoutMs = 15_000): LinkResolver {
   };
 }
 
-/** A resolver that remembers answers for `ttlMs`. Unknowns are not cached. */
-export function cachedResolver(inner: LinkResolver, ttlMs = 10 * 60_000, now: () => number = Date.now): LinkResolver {
+/** A resolver that remembers answers for `ttlMs`, and failed lookups for the
+ *  shorter `unknownTtlMs` — long enough that an offline `gh` is not retried
+ *  for every Todo that links the same PR, short enough to recover soon. */
+export function cachedResolver(inner: LinkResolver, ttlMs = 10 * 60_000, now: () => number = Date.now, unknownTtlMs = 2 * 60_000): LinkResolver {
   const cache = new Map<string, { at: number; value: LinkState }>();
   return async (url, kind) => {
     const hit = cache.get(url);
-    if (hit && now() - hit.at < ttlMs) return hit.value;
+    if (hit && now() - hit.at < (hit.value.state === "unknown" ? unknownTtlMs : ttlMs)) return hit.value;
     const value = await inner(url, kind);
-    if (value.state !== "unknown") cache.set(url, { at: now(), value });
+    cache.set(url, { at: now(), value });
     return value;
   };
 }

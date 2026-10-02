@@ -106,9 +106,12 @@ describe("0.34.0 bundle: self-compaction doctrine", () => {
   // goes. A textual three-way merge cannot be trusted to stop on it: against
   // the current template the stock section's insertion and the instance's sit
   // in neighbouring hunks, and `git merge-file` stacks the two without a
-  // conflict. What stops the duplicate is the bundle's instruction to merge
-  // Markdown by heading, so that is what this pins — beside the hazard it
-  // exists for, so the test fails loudly if either side changes.
+  // conflict. Said plainly: a purely textual apply of this bundle WOULD
+  // duplicate the self-compaction section on an instance that already wrote
+  // one. What stops that is the bundle's instruction to merge Markdown by
+  // heading, which holds only because the migrator is a model that follows
+  // MIGRATION.md. So this pins those instructions beside the hazard they exist
+  // for; it is documentation of the guard more than the guard itself.
   it("tells the migrator to merge by heading, because a textual merge would stack the section twice", () => {
     const base = payload("base")
     const anchor = "## Durable knowledge\n"
