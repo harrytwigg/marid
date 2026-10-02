@@ -9,6 +9,7 @@ import { createWorkItem, linkSession, type WorkItem } from "../work-items/store.
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { notifyTodoChanged } from "../work-items/live-events.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
+import { runActionJob, type CronActionTrigger } from "./actions.js";
 
 export interface RunCronJobOptions {
   /**
@@ -25,6 +26,9 @@ export interface RunCronJobOptions {
   fireIso?: string;
   /** Gateway broadcast seam. Absent in CLI/unit contexts without a live server. */
   emit?: GatewayEmit;
+  /** What fired the job. The scheduler passes `schedule`; every other caller is
+   *  a person's run-now. Only an `action` job reads it. */
+  trigger?: CronActionTrigger;
 }
 
 /**
@@ -46,6 +50,10 @@ export async function runCronJob(
   connectors: Map<string, Connector>,
   opts?: RunCronJobOptions,
 ): Promise<void> {
+  // A built-in action runs in the gateway: no session, no Todo, no prompt.
+  if (job.action) {
+    return runActionJob({ ...job, action: job.action }, { trigger: opts?.trigger ?? "manual", ...(opts?.emit ? { emit: opts.emit } : {}) });
+  }
   const startTime = Date.now();
   logger.info(`Cron job "${job.name}" (${job.id}) starting`);
 

@@ -1,5 +1,4 @@
-import cron from "node-cron";
-import type { Employee, EngineLimitEngineSnapshot, JinnConfig, Session } from "../shared/types.js";
+import type { CronJob, Employee, EngineLimitEngineSnapshot, JinnConfig, Session } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { collectClaudeLimits } from "../shared/engine-limits-claude.js";
 import { isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
@@ -10,7 +9,11 @@ import { CronConnector } from "../connectors/cron/index.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { startTodoDispatcher, type StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { ApiContext } from "../gateway/api.js";
-import { readRules, boardWalkPath, missingDefaultSections, readTemplateRules, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
+import { loadJobs } from "../cron/jobs.js";
+import { armedActionJob } from "../cron/scheduler.js";
+import { validateCronSchedule } from "../cron/validation.js";
+import { readRules, boardWalkPath, hostTimezone, missingDefaultSections, readTemplateRules, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
+import { findBoardWalkJob } from "./job.js";
 import { buildCapacitySnapshot, claudeFiveHour, type SnapshotDeps } from "./snapshot.js";
 import { buildBoardDigest, type BoardDigest } from "./board.js";
 import { buildPrompt } from "./prompt.js";
@@ -21,11 +24,13 @@ import { BOARD_WALK_SESSION_KEY_PREFIX, BOARD_WALK_STARTED_BY } from "./started-
 import { appendTick, readState, readTicks, writeState, type BoardWalkState, type TickEntry, type TickRecord } from "./store.js";
 
 /**
- * The board walk: one scheduled pass over the board that decides what is ready
- * and what to start. It replaces the numeric idle-capacity loop — there is no
- * other timer that starts work.
+ * The board walk: one pass over the board that decides what is ready and what
+ * to start. It replaces the numeric idle-capacity loop — there is no other
+ * timer that starts work. It has no timer of its own either: the `board-walk`
+ * cron job (job.ts) fires it, and the cron controls run it now, reschedule it
+ * and switch it off.
  *
- * Each tick: read board-walk.md; stop if it is switched off or broken; build the
+ * Each tick: read board-walk.md; stop if it is broken; build the
  * capacity snapshot and the board digest; ask the configured employee's engine
  * for one structured answer (one turn, no tool calls); carry the answer out
  * through apply.ts; log the tick, every decision in it, and the reason when
@@ -68,8 +73,12 @@ export interface BoardWalkDeps {
   /** The Claude reading taken after the turn, for the next tick's usage delta. */
   collectClaude?: (config: JinnConfig) => Promise<EngineLimitEngineSnapshot>;
   snapshot?: Partial<Pick<SnapshotDeps, "collect" | "usageHistory" | "statuslineMtime" | "startedSince" | "exhausted">>;
-  /** Re-read the rules file this often to pick up schedule changes. */
-  pollMs?: number;
+  /** The job the cron scheduler armed for the walk: the one that fires, whose
+   *  zone is the walk's "local time". Defaults to the live scheduler's. */
+  armedJob?: () => CronJob | undefined;
+  /** The walk's job when none is armed (switched off, or not valid), so the
+   *  status can still name it. Defaults to the one in cron/jobs.json. */
+  scheduleJob?: () => CronJob | undefined;
   /** How long the model turn may take before the tick gives up on it. */
   turnTimeoutMs?: number;
   /** The board's change signal for a Todo the walk started (the dispatch
@@ -85,11 +94,27 @@ export interface BoardWalkDeps {
  *  behind a rate-limit wait does not hold the walk until the window resets. */
 export const DEFAULT_TURN_TIMEOUT_MS = 10 * 60_000;
 
+/** The cron job that schedules the walk, as the status reports it. */
+export interface BoardWalkJobStatus {
+  id: string;
+  name: string;
+  enabled: boolean;
+  schedule: string;
+  /** The job's zone, or the gateway host's when it names none. */
+  timezone: string;
+}
+
 export interface BoardWalkStatus {
   path: string;
   exists: boolean;
   settings: BoardWalkSettings;
   problems: string[];
+  /** Retired schedule keys still in board-walk.md, which are not read. */
+  retiredKeys: string[];
+  /** The job: the one the scheduler armed, else the one on file; null when
+   *  there is none and the walk runs only by hand. */
+  job: BoardWalkJobStatus | null;
+  /** The cron scheduler has armed a job for the walk, so it fires. */
   scheduled: boolean;
   running: boolean;
   lastTick?: TickRecord;
@@ -98,7 +123,6 @@ export interface BoardWalkStatus {
 export interface BoardWalk {
   tick: (trigger?: TickRecord["trigger"]) => Promise<TickRecord>;
   status: () => BoardWalkStatus;
-  stop: () => void;
 }
 
 function errorText(error: unknown): string {
@@ -236,6 +260,8 @@ interface Walker {
   turnTimeoutMs: number;
   stopTurn: (sessionKey: string) => void;
   templateRules: () => string;
+  armedJob: () => CronJob | undefined;
+  scheduleJob: () => CronJob | undefined;
 }
 
 function defaultDispatch(deps: BoardWalkDeps): Walker["dispatch"] {
@@ -267,7 +293,22 @@ function walker(deps: BoardWalkDeps): Walker {
     turnTimeoutMs: deps.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
     stopTurn: deps.stopTurn ?? (() => {}),
     templateRules: deps.templateRules ?? (() => readTemplateRules()),
+    armedJob: deps.armedJob ?? (() => armedActionJob("board-walk")),
+    scheduleJob: deps.scheduleJob ?? (() => findBoardWalkJob(loadJobs())),
   };
+}
+
+/** The job the status describes: the armed one, else the one on file. */
+function walkJob(w: Walker): CronJob | undefined {
+  return w.armedJob() ?? w.scheduleJob();
+}
+
+/** The zone the walk reads "local time" in: its job's, else the host's. A
+ *  hand-edited zone that is not valid (the scheduler skips that job) falls
+ *  back to the host's too, so a run-now still works. */
+function walkTimezone(w: Walker): string {
+  const zone = walkJob(w)?.timezone?.trim();
+  return zone && validateCronSchedule({ schedule: "0 * * * *", timezone: zone }).length === 0 ? zone : hostTimezone();
 }
 
 /** The turn, or a failure once `ms` has passed — when the turn is also
@@ -315,7 +356,7 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
   const { settings } = rules;
   const config = w.getConfig();
   const snapshot = await buildCapacitySnapshot({
-    config, timezone: settings.timezone, now: startedAt, sessions: w.sessions(), holdingCapacity: w.holding,
+    config, timezone: walkTimezone(w), now: startedAt, sessions: w.sessions(), holdingCapacity: w.holding,
     ...(state.priorFiveHour ? { prior: state.priorFiveHour } : {}),
     ...w.snapshot,
   });
@@ -358,9 +399,6 @@ async function evaluate(w: Walker, trigger: TickRecord["trigger"]): Promise<Tick
     const reason = rules.problems.join("; ");
     return finish(frame, { outcome: "invalid-rules", summary: reason, entries: [{ kind: "error", reason }] });
   }
-  if (!rules.settings.enabled) {
-    return finish(frame, { outcome: "disabled", summary: "the board walk is switched off (enabled: false)", entries: [] });
-  }
   const state = readState();
   const board = await buildBoardDigest({ resolveLink: w.resolveLink, flagged: flaggedSet(state) });
   if (board.todos.length === 0) {
@@ -373,35 +411,9 @@ async function evaluate(w: Walker, trigger: TickRecord["trigger"]): Promise<Tick
   }
 }
 
-/** The schedule follows the file: re-read on a poll, re-armed only when the
- *  schedule, zone or switch changed. Disabled means no task at all. */
-function scheduler(rulesFile: string, fire: () => void, pollMs: number): { scheduled: () => boolean; stop: () => void } {
-  let task: cron.ScheduledTask | null = null;
-  let armed = "";
-  const arm = (): void => {
-    const rules = readRules(rulesFile);
-    const { settings } = rules;
-    const scheduleProblem = rules.problems.some((problem) => problem.startsWith("schedule") || problem.startsWith("timezone"));
-    const key = rules.exists && settings.enabled && !scheduleProblem ? `${settings.schedule}|${settings.timezone}` : "";
-    if (key === armed) return;
-    task?.stop();
-    task = null;
-    armed = key;
-    if (!key) {
-      logger.info(rules.problems.length > 0 ? `Board walk not scheduled: ${rules.problems.join("; ")}` : "Board walk not scheduled: switched off in board-walk.md");
-      return;
-    }
-    task = cron.schedule(settings.schedule, fire, { timezone: settings.timezone, scheduled: false });
-    task.start();
-    logger.info(`Board walk scheduled: ${settings.schedule} (${settings.timezone})`);
-  };
-  arm();
-  const poll = setInterval(arm, pollMs);
-  poll.unref?.();
-  return {
-    scheduled: () => task !== null,
-    stop: () => { clearInterval(poll); task?.stop(); task = null; },
-  };
+function jobStatus(job: CronJob | undefined): BoardWalkJobStatus | null {
+  if (!job) return null;
+  return { id: job.id, name: job.name, enabled: job.enabled, schedule: job.schedule, timezone: job.timezone?.trim() || hostTimezone() };
 }
 
 export function startBoardWalk(deps: BoardWalkDeps): BoardWalk {
@@ -409,11 +421,14 @@ export function startBoardWalk(deps: BoardWalkDeps): BoardWalk {
   let inFlight: Promise<TickRecord> | null = null;
 
   // One tick at a time: a scheduled fire that lands mid-tick is logged and
-  // dropped, never stacked; a manual tick joins the one running.
+  // dropped, never stacked, and answers with its own skipped record so its
+  // cron run says so; a manual tick joins the one running.
   const tick = (trigger: TickRecord["trigger"] = "manual"): Promise<TickRecord> => {
     if (inFlight) {
-      if (trigger === "schedule") appendTick({ at: new Date(w.now()).toISOString(), trigger, outcome: "busy", summary: "the previous tick is still running; this one was skipped", entries: [] });
-      return inFlight;
+      if (trigger !== "schedule") return inFlight;
+      const skipped: TickRecord = { at: new Date(w.now()).toISOString(), trigger, outcome: "busy", summary: "the previous tick is still running; this one was skipped", entries: [] };
+      appendTick(skipped);
+      return Promise.resolve(skipped);
     }
     inFlight = evaluate(w, trigger)
       .catch((error) => {
@@ -426,17 +441,16 @@ export function startBoardWalk(deps: BoardWalkDeps): BoardWalk {
     return inFlight;
   };
 
-  const schedule = scheduler(w.rulesFile, () => { void tick("schedule"); }, deps.pollMs ?? 60_000);
   return {
     tick,
     status: () => {
       const rules = readRules(w.rulesFile);
       const last = readTicks(1)[0];
+      const armed = w.armedJob();
       return {
-        path: w.rulesFile, exists: rules.exists, settings: rules.settings, problems: rules.problems,
-        scheduled: schedule.scheduled(), running: inFlight !== null, ...(last ? { lastTick: last } : {}),
+        path: w.rulesFile, exists: rules.exists, settings: rules.settings, problems: rules.problems, retiredKeys: rules.retiredKeys,
+        job: jobStatus(armed ?? w.scheduleJob()), scheduled: armed !== undefined, running: inFlight !== null, ...(last ? { lastTick: last } : {}),
       };
     },
-    stop: schedule.stop,
   };
 }

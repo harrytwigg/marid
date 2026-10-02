@@ -43,9 +43,6 @@ export interface StartedSession {
 export type BoardWalkAction = "release" | "park" | "flagStuck" | "dispatch" | "comment"
 
 export interface BoardWalkSettings {
-  enabled: boolean
-  schedule: string
-  timezone: string
   employee: string
   model?: string
   actions: Record<BoardWalkAction, boolean>
@@ -71,11 +68,27 @@ export interface TickRecord {
   entries: TickEntry[]
 }
 
+/** The cron job that schedules the walk. */
+export interface BoardWalkJob {
+  id: string
+  name: string
+  enabled: boolean
+  schedule: string
+  /** The job's zone, or the gateway host's. */
+  timezone: string
+}
+
 export interface BoardWalkStatus {
   path: string
   exists: boolean
   settings: BoardWalkSettings
   problems: string[]
+  /** Old schedule keys still in board-walk.md, which are not read. */
+  retiredKeys: string[]
+  /** The armed job, else the one on file; null when there is none, and the
+   *  walk runs only when started by hand. */
+  job: BoardWalkJob | null
+  /** The cron scheduler has armed the job, so it fires. */
   scheduled: boolean
   running: boolean
   lastTick?: TickRecord

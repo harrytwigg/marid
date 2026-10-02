@@ -190,16 +190,19 @@ export function replaceDispatchSection(text: string, section: string): string {
 
 export interface ConvertedRules {
   text: string;
-  /** What the conversion changed in the frontmatter, for the upgrade log. */
+  /** What the conversion carried over, for the upgrade log. */
   notes: string[];
+  /** The block's zone, for the board walk's cron job (job.ts). */
+  timezone: string;
 }
 
 /**
  * The shipped rules file, rewritten to say what a custom `gateway.idleCapacity`
- * block said: its numbers in the Dispatch section, its timezone in the
- * frontmatter, and dispatch switched off when the block left the old loop off —
- * the board walk ships on, but an operator who had the auto-start off had not
- * agreed to automatic starts.
+ * block said: its numbers in the Dispatch section, and dispatch switched off
+ * when the block left the old loop off — its timezone goes to the walk's cron
+ * job instead (job.ts), which is when the walk runs and whose zone "local time"
+ * is read in. The walk ships on, but
+ * an operator who had the auto-start off had not agreed to automatic starts.
  *
  * The old `intervalMinutes` is deliberately NOT carried into the schedule. It
  * paced a code loop whose tick cost nothing; here every tick is a model turn
@@ -210,7 +213,6 @@ export function convertLegacyBlock(template: string, raw: unknown): ConvertedRul
   const policy = resolveLegacyPolicy(raw);
   const notes: string[] = [];
   let text = replaceDispatchSection(template, renderDispatchSection(policy));
-  text = text.replace(/^timezone:.*$/m, `timezone: ${JSON.stringify(policy.timezone)}`);
   notes.push(`timezone ${policy.timezone}`);
   if (isMapping(raw) && typeof raw.intervalMinutes === "number") {
     notes.push(`schedule left hourly (the old loop ticked every ${raw.intervalMinutes} min; each tick is now a model turn)`);
@@ -219,5 +221,5 @@ export function convertLegacyBlock(template: string, raw: unknown): ConvertedRul
     text = text.replace(/^(\s+dispatch:)\s*true\s*$/m, "$1 false");
     notes.push("dispatch off (the auto-start was not enabled)");
   }
-  return { text, notes };
+  return { text, notes, timezone: policy.timezone };
 }

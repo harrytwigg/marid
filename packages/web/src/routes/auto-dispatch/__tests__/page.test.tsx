@@ -32,10 +32,12 @@ const status: BoardWalkStatus = {
   path: "/home/op/.jinn/board-walk.md",
   exists: true,
   settings: {
-    enabled: true, schedule: "0 * * * *", timezone: "Europe/London", employee: "assistant", model: "sonnet",
+    employee: "assistant", model: "sonnet",
     actions: { release: true, park: true, flagStuck: true, dispatch: false, comment: true },
   },
   problems: [],
+  retiredKeys: [],
+  job: { id: "board-walk", name: "Board walk", enabled: true, schedule: "0 * * * *", timezone: "Europe/London" },
   scheduled: true,
   running: false,
 }
@@ -76,8 +78,28 @@ describe("the Auto-Dispatch page", () => {
     expect(within(card).getByText("scheduled")).toBeTruthy()
     expect(within(card).getByText("0 * * * *")).toBeTruthy()
     expect(within(card).getByText(/Switched off: dispatch\./)).toBeTruthy()
+    // When it runs is its cron job, linked for run-now, rescheduling and the switch.
+    expect(within(card).getByRole("link", { name: "Board walk" }).getAttribute("href")).toBe("/cron/board-walk")
     expect(within(card).getByText(tick.summary)).toBeTruthy()
     expect(within(card).getByText(/release — moved to backlog: not before 30 September has passed/)).toBeTruthy()
+  })
+
+  it("says when the cron job is switched off or gone, and names stale schedule keys in the file", async () => {
+    reads.getBoardWalkStatus.mockResolvedValue({ ...status, scheduled: false, job: { ...status.job!, enabled: false }, retiredKeys: ["enabled", "schedule"] })
+    const { unmount } = render(<MemoryRouter><AutoDispatchPage /></MemoryRouter>)
+    const card = await screen.findByTestId("board-walk")
+    expect(await within(card).findByText("switched off")).toBeTruthy()
+    expect(within(card).getByText(/enabled, schedule in board-walk.md are no longer read/)).toBeTruthy()
+    unmount()
+
+    reads.getBoardWalkStatus.mockResolvedValue({ ...status, scheduled: false })
+    const invalid = render(<MemoryRouter><AutoDispatchPage /></MemoryRouter>)
+    expect(await within(await screen.findByTestId("board-walk")).findByText(/not scheduled — the cron job's schedule or zone is not valid/)).toBeTruthy()
+    invalid.unmount()
+
+    reads.getBoardWalkStatus.mockResolvedValue({ ...status, scheduled: false, job: null })
+    render(<MemoryRouter><AutoDispatchPage /></MemoryRouter>)
+    expect(await within(await screen.findByTestId("board-walk")).findByText(/no cron job — runs only when started by hand/)).toBeTruthy()
   })
 
   it("lists every session started on an engine, a board-walk start and a manual one alike, one engine at a time", async () => {

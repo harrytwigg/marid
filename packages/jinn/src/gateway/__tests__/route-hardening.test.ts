@@ -134,6 +134,7 @@ describe("GET /api/cron — read-tier summary scrubs prompt/env", () => {
         employee: "ops",
         engine: null,
         timezone: null,
+        action: null,
         lastRun: { timestamp: "2026-07-06T08:00:00.000Z", status: "success" },
       },
     ]);

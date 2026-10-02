@@ -49,6 +49,7 @@ describe("cron routes still answer identically through handleCronApi", () => {
         employee: "ops",
         engine: null,
         timezone: null,
+        action: null,
         lastRun: { timestamp: "2026-08-01T03:00:00.000Z", sessionId: RUN_SESSION_ID, status: "success" },
       },
     ]);
@@ -100,5 +101,59 @@ describe("cron routes still answer identically through handleCronApi", () => {
     expect(runCronJob).toHaveBeenCalledTimes(1);
 
     expect((await call("POST", "/api/cron/ghost/trigger", {})).status).toBe(404);
+  });
+});
+
+describe("a cron job that runs a built-in action", () => {
+  const WALK = { id: "board-walk", name: "Board walk", schedule: "0 * * * *", action: "board-walk" };
+
+  it("is created and listed with its action, and the trigger hands it to the runner as a manual fire", async () => {
+    const created = await call("POST", "/api/cron", WALK);
+    expect(created.status).toBe(201);
+    expect(created.body).toEqual({ ...WALK, enabled: true, prompt: "" });
+    const listed = await call("GET", "/api/cron");
+    expect((listed.body as Array<Record<string, unknown>>).find((job) => job.id === "board-walk")).toMatchObject({ action: "board-walk", lastRun: null });
+
+    expect((await call("POST", "/api/cron/board-walk/trigger", {})).status).toBe(200);
+    expect(runCronJob).toHaveBeenCalledTimes(1);
+    const args = runCronJob.mock.calls[0] as unknown[];
+    expect(args[0]).toMatchObject({ id: "board-walk", action: "board-walk" });
+    expect(args[4]).toMatchObject({ trigger: "manual" });
+  });
+
+  it("refuses an unknown action, and a second job for the same action", async () => {
+    const unknown = await call("POST", "/api/cron", { ...WALK, action: "self-destruct" });
+    expect(unknown.status).toBe(400);
+    expect(unknown.body).toEqual({ error: "action must be one of board-walk" });
+
+    expect((await call("POST", "/api/cron", WALK)).status).toBe(201);
+    const twin = await call("POST", "/api/cron", { ...WALK, id: "walk-2" });
+    expect(twin.status).toBe(400);
+    expect(twin.body).toEqual({ error: 'the board-walk action already runs from cron job "board-walk"' });
+    // Nor can an existing prompt job be turned into a second one.
+    const turned = await call("PUT", "/api/cron/nightly", { action: "board-walk" });
+    expect(turned.status).toBe(400);
+  });
+
+  it("a hand-edited second job for the action can still be switched off and rescheduled", async () => {
+    const { home } = await import("./domain-router-home.js");
+    const fs = await import("node:fs");
+    const twins = [{ ...WALK, enabled: true, prompt: "" }, { ...WALK, id: "board-walk-copy", enabled: true, prompt: "" }];
+    fs.writeFileSync(home.cronJobs, JSON.stringify(twins));
+    const off = await call("PUT", "/api/cron/board-walk-copy", { enabled: false });
+    expect(off.status).toBe(200);
+    expect(off.body).toMatchObject({ id: "board-walk-copy", enabled: false });
+    expect((await call("PUT", "/api/cron/board-walk", { schedule: "15 * * * *" })).status).toBe(200);
+  });
+
+  it("can be rescheduled and switched off, but not turned into a prompt job", async () => {
+    await call("POST", "/api/cron", WALK);
+    const moved = await call("PUT", "/api/cron/board-walk", { schedule: "*/30 * * * *", timezone: "Europe/London", enabled: false });
+    expect(moved.status).toBe(200);
+    expect(moved.body).toMatchObject({ schedule: "*/30 * * * *", timezone: "Europe/London", enabled: false, action: "board-walk" });
+
+    const stripped = await call("PUT", "/api/cron/board-walk", { action: null, prompt: "do something" });
+    expect(stripped.status).toBe(400);
+    expect(stripped.body).toEqual({ error: "a cron job's action cannot be changed; create a new job instead" });
   });
 });

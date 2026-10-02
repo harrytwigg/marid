@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import type {
+  CronAction,
   CronJob,
   JinnConfig,
   Connector,
@@ -10,6 +11,7 @@ import type { SessionManager } from "../sessions/manager.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
 import { loadJobs, saveJobs } from "./jobs.js";
 import { validateCronSchedule } from "./validation.js";
+import { cronActionError } from "./actions.js";
 
 type SchedulerDeps = {
   sessionManager: SessionManager;
@@ -20,6 +22,14 @@ type SchedulerDeps = {
 
 let tasks: cron.ScheduledTask[] = [];
 let deps: SchedulerDeps;
+/** The job each built-in action is armed from, as of the last reload. */
+let armedActions = new Map<CronAction, CronJob>();
+
+/** The job the scheduler armed for `action`, or undefined when none is armed
+ *  (no job, all disabled, or none valid). This is the job that fires. */
+export function armedActionJob(action: CronAction): CronJob | undefined {
+  return armedActions.get(action);
+}
 
 export function startScheduler(jobs: CronJob[], schedulerDeps: SchedulerDeps): void {
   deps = schedulerDeps;
@@ -29,12 +39,22 @@ export function startScheduler(jobs: CronJob[], schedulerDeps: SchedulerDeps): v
 export function reloadScheduler(jobs: CronJob[]): { scheduled: number; skipped: number } {
   const started: cron.ScheduledTask[] = [];
   let skipped = 0;
+  // A built-in action is scheduled once: a second enabled job naming the same
+  // action (a hand-edited copy) would tick it twice, so it is skipped.
+  const armed = new Map<CronAction, CronJob>();
   for (const job of jobs) {
     if (!job.enabled) continue;
+    const first = job.action ? armed.get(job.action) : undefined;
+    if (first) {
+      skipped += 1;
+      logger.warn(`Skipping cron job "${job.name}" (${job.id}): the ${job.action} action is already scheduled by "${first.id}"`);
+      continue;
+    }
     try {
       const task = createTask(job);
       task.start();
       started.push(task);
+      if (job.action) armed.set(job.action, job);
       logger.info(`Scheduled cron job "${job.name}" (${job.schedule})`);
     } catch (err) {
       skipped += 1;
@@ -43,6 +63,7 @@ export function reloadScheduler(jobs: CronJob[]): { scheduled: number; skipped: 
   }
   for (const task of tasks) task.stop();
   tasks = started;
+  armedActions = armed;
   return { scheduled: started.length, skipped };
 }
 
@@ -51,6 +72,7 @@ export function stopScheduler(): void {
     task.stop();
   }
   tasks = [];
+  armedActions = new Map();
 }
 
 function createTask(job: CronJob): cron.ScheduledTask {
@@ -58,6 +80,8 @@ function createTask(job: CronJob): cron.ScheduledTask {
   if (validation.length > 0) {
     throw new Error(validation.map((entry) => entry.message).join('; '));
   }
+  const actionError = cronActionError(job);
+  if (actionError) throw new Error(actionError);
   return cron.schedule(
     job.schedule,
     () => {
@@ -65,7 +89,7 @@ function createTask(job: CronJob): cron.ScheduledTask {
       // (not recomputed inside runCronJob) and names the same session/work-item/link
       // on any re-invocation of this fire (GRS-003b-1).
       const fireIso = new Date().toISOString();
-      runCronJob(job, deps.sessionManager, deps.getConfig(), deps.connectors, { fireIso, emit: deps.emit }).catch((err) => {
+      runCronJob(job, deps.sessionManager, deps.getConfig(), deps.connectors, { fireIso, emit: deps.emit, trigger: "schedule" }).catch((err) => {
         logger.error(`Cron job "${job.name}" crashed: ${err instanceof Error ? err.message : err}`);
       });
     },

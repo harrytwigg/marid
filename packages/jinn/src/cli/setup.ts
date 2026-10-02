@@ -1,4 +1,5 @@
 import { seedBoardWalk } from "../board-walk/seed.js";
+import { describeJobSeed } from "../board-walk/job.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -632,10 +633,16 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
   created.push(...copyTemplateDir(path.join(TEMPLATE_DIR, "org"), ORG_DIR, templateMaterialization));
   created.push(...copyTemplateDir(path.join(TEMPLATE_DIR, "scripts"), path.join(JINN_HOME, "scripts"), templateMaterialization));
   // The board walk's rules file: seeded only when missing, so a re-run of
-  // setup (and every upgrade) leaves the operator's wording alone.
+  // setup (and every upgrade) leaves the operator's wording alone. Its
+  // schedule, the `board-walk` cron job, is added to jobs.json once.
   const boardWalkSeed = seedBoardWalk();
   if (boardWalkSeed.seeded) created.push(path.join(JINN_HOME, "board-walk.md"));
   if (boardWalkSeed.error) warn(`Could not seed board-walk.md: ${boardWalkSeed.error}`);
+  // What happened to its cron job, in the boot log's words: added, keys moved
+  // out of board-walk.md, a deleted job, keys no longer read, or why not.
+  if (boardWalkSeed.job) {
+    for (const line of describeJobSeed(boardWalkSeed.job)) (boardWalkSeed.job.error && line.startsWith("could not") ? warn : info)(`Board walk: ${line}`);
+  }
 
   // Copy skills.json manifest
   const templateSkillsJson = path.join(TEMPLATE_DIR, "skills.json");

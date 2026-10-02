@@ -66,6 +66,8 @@ export interface TickEntry {
   sessionId?: string;
 }
 
+/** `disabled` is only in older log lines: the walk was switched off in
+ *  board-walk.md then. A disabled cron job now simply does not fire. */
 export type TickOutcome = "ok" | "disabled" | "invalid-rules" | "failed" | "busy";
 
 export interface TickRecord {

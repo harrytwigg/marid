@@ -30,7 +30,15 @@ Use `list_cron_jobs` for current definitions and `get_cron_run_history` for exec
 - `schedule` is a five-field cron expression; `timezone` is an IANA timezone.
 - `engine` is one of claude, codex, antigravity, grok, pi, hermes, opencode.
 - `model` is optional and must be supported by the selected engine.
-- `employee` and `delivery` are optional; `prompt` is required.
+- `employee` and `delivery` are optional; `prompt` is required, except on an `action` job.
+
+## Built-in action jobs
+
+A job with `"action": "board-walk"` runs the board walk in the gateway instead of sending a prompt. Every installation ships one, `board-walk`, which is when the walk runs; its rules stay in `$JINN_HOME/board-walk.md`. Its `prompt` is empty and its `engine`, `model`, `employee` and `delivery` are not used.
+
+- Run it now, change its `schedule` or `timezone`, or toggle `enabled` like any job. The timezone is also the zone the walk reads "local time" in.
+- To stop the walk, disable the job. Deleting it is permanent: the gateway does not re-create it, and the walk then runs only when started by hand.
+- Never add a second job with the same `action`, or change a job's `action`: the gateway refuses both, and skips a hand-edited duplicate.
 
 ## Operations
 

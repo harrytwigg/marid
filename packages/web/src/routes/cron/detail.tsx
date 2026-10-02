@@ -14,6 +14,7 @@ import { PageScaffold } from "@/components/shell/page-scaffold"
 import { CronJobHeader } from "./detail-header"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import {
+  actionLabel,
   displayNameOf,
   runTimestamp,
   type CronJobWire,
@@ -172,7 +173,9 @@ export default function CronDetailPage() {
                 </div>
                 <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]">
                   <OverviewRow label="Target">
-                    {job.employee ? (
+                    {job.action ? (
+                      <span className="truncate">{actionLabel(job.action)}</span>
+                    ) : job.employee ? (
                       <>
                         <EmployeeAvatar name={job.employee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
                         <span className="truncate">{displayNameOf(job.employee, byName)}</span>

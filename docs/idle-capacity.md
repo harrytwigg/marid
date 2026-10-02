@@ -5,7 +5,7 @@ The board walk is a scheduled pass over the Todo board. It ships on by default, 
 1. **What is ready.** A Todo's gates are usually written in prose: "not before the 10th", "after #18 merges", a `blocks` relation. The walk releases a `blocked` Todo whose gates are met, parks a Todo whose only gate is a plain date, and flags a stuck Todo once.
 2. **What to start.** It reads the account's usage, reset times and predictions, then decides whether spare capacity should start a ready backlog Todo, and which one. It starts it through the same Todo Dispatcher the board's dispatch button uses.
 
-It replaced the numeric idle-capacity loop (`gateway.idleCapacity`) and is the only timer that starts work. Everything it does is ruled by one file the operator edits, `$JINN_HOME/board-walk.md`.
+It replaced the numeric idle-capacity loop (`gateway.idleCapacity`) and is the only timer that starts work. What it does is ruled by one file the operator edits, `$JINN_HOME/board-walk.md`. When it runs is an ordinary cron job, `board-walk`, so it is listed, run, rescheduled and switched off from the normal cron controls.
 
 ## Why a model turn, when this used to be a code loop
 
@@ -15,18 +15,33 @@ The question is no longer numeric. Gates are prose, and the operator wants to sa
 
 - **Sonnet, hourly by default.** One turn per tick, with no tool calls: the board and the snapshot arrive in the prompt, and the answer is one JSON object.
 - **Nothing open, no turn.** A tick on a board with no open Todos spends nothing.
-- **Off when you say so.** `enabled: false` stops every tick.
+- **Off when you say so.** Disable the `board-walk` cron job and nothing ticks.
+
+## The schedule: the `board-walk` cron job
+
+Every installation has a cron job in `$JINN_HOME/cron/jobs.json`:
+
+```json
+{ "id": "board-walk", "name": "Board walk", "enabled": true, "schedule": "0 * * * *", "prompt": "", "action": "board-walk" }
+```
+
+`action: "board-walk"` makes the job run a walk tick in the gateway instead of sending a prompt to an engine. Its `prompt` is empty, and `engine`, `model`, `employee` and `delivery` are not used: who the walk's turn runs as is in `board-walk.md`.
+
+- **Run it now** from the Cron page, `POST /api/cron/board-walk/trigger` or `/cron run board-walk`. A run-now ticks even while the job is disabled, as for any job. `POST /api/board-walk/tick` still works too.
+- **Change when it runs** by editing the job's `schedule` (and `timezone`) the way any job's is changed: in `jobs.json` (the gateway reloads it) or with `PUT /api/cron/board-walk`. The job's timezone is also the zone the walk reads "local time" in; with none, the gateway host's.
+- **Switch it off** by disabling the job. Deleting it is permanent: the gateway records that it seeded the job once and does not re-create it, so the walk then runs only when started by hand. To bring it back, create a cron job with `"action": "board-walk"`.
+- **It never ticks twice.** Only one job may carry the action: the cron API refuses a second one and refuses changing a job's action, and the scheduler skips a hand-edited duplicate. A fire that lands while a tick is still running is logged as `busy` and skipped.
+- **Each fire is a cron run** in the job's run history, with the walk turn's session. A failed or invalid-rules tick is an error run; an idle or skipped tick is a success. The walk's own tick log keeps the detail. No Todo is minted per fire, and the cron failure alert is not sent.
+
+The job is added on `jinn setup` and at gateway boot when it has never been seeded. On a fresh install it is hourly and enabled.
 
 ## The rules file
 
-`board-walk.md` is seeded from the template on `jinn setup` and at every gateway boot when it is missing. It is **never overwritten**: an upgrade leaves an edited file alone. It is re-read on every tick, and the scheduler re-reads it once a minute, so edits take effect without a restart.
+`board-walk.md` is seeded from the template on `jinn setup` and at every gateway boot when it is missing. It is **never overwritten** (the one-time move of the schedule, below, is the only edit the gateway makes to it). It is re-read on every tick, so edits take effect without a restart.
 
 The **frontmatter** holds the mechanical settings:
 
 ```yaml
-enabled: true            # false stops everything
-schedule: "0 * * * *"    # cron expression; hourly by default
-timezone: ""             # for the schedule and "local time"; empty = the host's zone
 employee: assistant      # who the walk's turn runs as (always on Claude, with no tools)
 model: sonnet            # Claude model for that turn; empty = the employee's own, or Claude's default
 actions:                 # hard switches, enforced by the gateway
@@ -58,9 +73,18 @@ The shipped Dispatch section restates the old numeric policy in plain English:
 
 Change any of it. Write "don't" to switch a behaviour off, or add rules in "Your own rules". A section you delete falls back to the shipped default: the gateway gives the model the shipped section, marked as a default that the operator's own rules override.
 
-**Switches are the only certain "off".** The prose is read by a model; the switches are read by the gateway. With `actions.dispatch: false`, every start the walk asks for is refused, whatever the prose says, while readiness keeps running. With `enabled: false`, nothing runs at all. The prose can narrow what a switch allows; it cannot widen it.
+**Switches are the only certain "off".** The prose is read by a model; the switches are read by the gateway. With `actions.dispatch: false`, every start the walk asks for is refused, whatever the prose says, while readiness keeps running. With the cron job disabled, nothing runs at all. The prose can narrow what a switch allows; it cannot widen it.
 
-A rules file that does not parse holds the walk; it never runs on guesses. The same applies to a bad switch value, a bad schedule or zone, or a missing file. The problem is shown on the Auto-Dispatch page and logged on each tick.
+A rules file that does not parse holds the walk; it never runs on guesses. The same applies to a bad switch value or a missing file. The problem is shown on the Auto-Dispatch page and logged on each tick.
+
+## Upgrading from a file that held the schedule
+
+Before the cron job, the frontmatter carried `enabled`, `schedule` and `timezone`. At the first boot of this version, when the job has never been seeded:
+
+- The job is created from those keys: same schedule, same zone, enabled as the file had it. A schedule or zone the old scheduler would not have armed, or an `enabled` that is not true or false, gives a job that is switched off, so the move never starts a walk that was not running. The boot log says what was carried over.
+- The three keys, and the stock comments that described them, are taken out of the frontmatter, with a copy of the file kept as `board-walk.md.pre-cron-<time>`. A comment pointing at the cron job takes their place. Nothing below the frontmatter changes. If the rewritten frontmatter cannot be shown to parse to the same settings less those keys, the file is left alone instead.
+- Any of the three keys still in the file afterwards is not read. The boot log and the Auto-Dispatch page say so.
+- An existing `jobs.json` keeps every job in it. One that does not parse is never rewritten: the job is not added, and the next boot tries again.
 
 ## What one tick does
 
@@ -127,9 +151,9 @@ The numeric loop and its config are gone. At the first boot of this version:
   - a switched-off tier;
   - quiet hours and the operator-activity thresholds;
   - `requireLabel`;
-  - the timezone.
+  - the timezone, which goes to the `board-walk` cron job.
 
-  The old tick interval is **not** carried over: it paced a code loop whose ticks cost nothing, and every tick is now a model turn over the whole board. The schedule stays hourly, and the boot log says so. Change `schedule` by hand if you want another cadence.
+  The old tick interval is **not** carried over: it paced a code loop whose ticks cost nothing, and every tick is now a model turn over the whole board. The schedule stays hourly, and the boot log says so. Change the cron job's schedule if you want another cadence.
 
   If the block did not enable the old loop, `actions.dispatch` is set to `false`. The board walk ships on, but an operator who had automatic starts off never agreed to them.
 - **In every case,** the block is removed from `config.yaml`. A copy of the file as it was is kept beside it, as `config.yaml.pre-board-walk-<time>`.
@@ -141,13 +165,13 @@ Without a block, an upgrade seeds the stock file, **with dispatch on**. That is 
 
 The **Auto-Dispatch** page is read-only. It shows:
 
-- **The board walk:** whether it is scheduled, its schedule, zone, employee and model, which switches are off, any problems with the rules file, and the last ten ticks with every Todo they touched and why.
+- **The board walk:** whether its cron job is scheduled (armed by the cron scheduler), switched off, not valid or missing, its schedule and zone with a link to the job, the employee and model, which switches are off, any retired keys left in the file, any problems with the rules file, and the last ten ticks with every Todo they touched and why.
 - **Where the Claude allowance is heading:** the weekly verdict leads, worst bucket first, with the five-hour projection and a twelve-hour graph beneath it. The graph marks window resets and every session started on Claude; the starts the board walk made are marked in green.
 - **Sessions started this week:** every session started on each engine, newest first, whatever started it (the board walk, the dispatch button, quick capture, cron, a delegation, a chat). It is read from the session registry, one engine at a time. A Dispatcher session the walk started carries `transportMeta.startedBy: board-walk`; that is how the registry tells it apart from a manual dispatch.
 
 The HTTP routes:
 
-- `GET /api/board-walk`: the rules file's settings and problems, whether the walk is scheduled or running, and the last tick.
+- `GET /api/board-walk`: the rules file's settings, problems and retired keys, the cron job that schedules the walk (`job`: the one the scheduler armed, else the one on file, or `null`), whether a job is armed (`scheduled`) or a tick is running, and the last tick.
 - `GET /api/board-walk/ticks?limit=`: the tick log, newest first.
 - `POST /api/board-walk/tick`: run a tick now. Operator only. `?wait=1` waits for the result; otherwise it answers 202 at once.
 - `GET /api/auto-dispatch/sessions?hours=&engine=`: sessions started, with what started each one.
