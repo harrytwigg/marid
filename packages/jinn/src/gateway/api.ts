@@ -138,8 +138,9 @@ import { refuseRemoteMcpRoute, remoteMcpHasOperatorStanding } from "./remote-mcp
 import { handlePluginsApi } from "./plugins-api.js";
 import QRCode from "qrcode";
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
-import { handleFilesRequest, handleSessionAttachment, fileIdsToMedia, rehomeAttachmentsToSession, mimeFromFilename, MultipartUploadError, readLocalFileForIngestion, readMultipartFile, sanitizeUploadFilename, isFileNotModified } from "./files.js";
+import { handleFilesRequest, fileIdsToMedia, rehomeAttachmentsToSession, mimeFromFilename, MultipartUploadError, readLocalFileForIngestion, readMultipartFile, sanitizeUploadFilename, isFileNotModified } from "./files.js";
 import { streamFile } from "./byte-range.js";
+import { handleSessionFileRoutes } from "./session-file-read.js";
 import { selectAttachmentVariant } from "./attachment-variants.js";
 import { readJsonBody, readBodyRaw } from "./http-helpers.js";
 import { applyLabelChange, parseLabelChange } from "./work-item-label-change.js";
@@ -4117,17 +4118,8 @@ export async function handleApiRequest(
       });
     }
 
-    // POST /api/sessions/:id/attachments — running agent pushes a file/image into the chat.
-    // Accepts multipart (file + optional text/caption) OR JSON ({path|content|url, filename?, text?}).
-    // The file is stored under ~/.jinn/uploads/<date>/<sessionId>/ and surfaced as an assistant
-    // message with rendered media (image/audio/file). Only the path/URL reaches the UI — never raw bytes in the prompt.
-    params = matchRoute("/api/sessions/:id/attachments", pathname);
-    if (method === "POST" && params) {
-      const session = getSession(params.id);
-      if (!session) return notFound(res);
-      await handleSessionAttachment(req, res, params.id, context);
-      return;
-    }
+    // POST /api/sessions/:id/attachments and GET /api/sessions/:id/files/{read,raw} (session-file-read.ts).
+    if (await handleSessionFileRoutes(req, res, { method, pathname, url }, () => resolveScopedWriteCallerIdentity(req, context), context)) return;
 
     if (await handleCronApi(req, res, { method, pathname, url }, context)) return;
     if (await handleTodoCaptureApi(req, res, { method, pathname, url }, context)) return;

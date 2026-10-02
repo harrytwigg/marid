@@ -3,6 +3,7 @@ import { MemoryRouter, useLocation } from "react-router-dom"
 import { describe, expect, it } from "vitest"
 import { TodoPrefixContext } from "../todo-prefix-context"
 import { formatMessage } from "../chat-messages"
+import { FileLinkSessionContext } from "../file-link-session-context"
 
 function LocationProbe() {
   return <span data-testid="location">{useLocation().pathname}</span>
@@ -123,11 +124,13 @@ describe("Todo links in chat messages", () => {
   })
 
   it("renders a file-viewer link inside bold text", () => {
-    const { container } = renderMessage("**src/index.ts**", new Set())
+    const { container } = render(
+      <FileLinkSessionContext.Provider value="s-1">{formatMessage("**src/index.ts**")}</FileLinkSessionContext.Provider>,
+    )
 
     const strong = container.querySelector("strong")
     const link = screen.getByRole("link", { name: "src/index.ts" })
-    expect(link.getAttribute("href")).toBe("/file?path=src%2Findex.ts")
+    expect(link.getAttribute("href")).toBe("/file?path=src%2Findex.ts&session=s-1")
     expect(strong?.contains(link)).toBe(true)
   })
 

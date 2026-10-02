@@ -3,11 +3,29 @@ const KNOWLEDGE_ROOTS = new Set(["knowledge", "docs"]);
 const MANAGED_ROOTS = new Set(["files", "uploads"]);
 
 export type FileReadRequest =
-  | { ok: true; url: string }
+  | { ok: true; url: string; rawUrl?: string }
   | { ok: false; error: string };
 
-/** Build the scoped gateway request for a path already decoded once by the UI. */
-export function buildFileReadRequest(path: string): FileReadRequest {
+const SUPPORTED_ROOT_RE = /^(?:knowledge|docs|files|uploads)\//;
+
+/**
+ * A path outside the instance's own roots is read where the SESSION that named
+ * it runs (absolute, `~/`, or relative to its working directory; local or on a
+ * build host). Only a link that knows its session can be opened this way.
+ */
+function sessionFileRequest(path: string, sessionId: string): FileReadRequest {
+  const base = `/api/sessions/${encodeURIComponent(sessionId)}/files`;
+  try {
+    const query = `?path=${encodeURIComponent(path)}`;
+    return { ok: true, url: `${base}/read${query}`, rawUrl: `${base}/raw${query}` };
+  } catch {
+    return { ok: false, error: "File path contains invalid Unicode" };
+  }
+}
+
+/** Build the scoped gateway request for a path already decoded once by the UI.
+ *  `sessionId` is the chat the path was linked from, when there is one. */
+export function buildFileReadRequest(path: string, sessionId?: string | null): FileReadRequest {
   if (!path) return { ok: false, error: "No file path provided" };
   if (path !== path.trim()) {
     return { ok: false, error: "File path must not have leading or trailing whitespace" };
@@ -15,6 +33,7 @@ export function buildFileReadRequest(path: string): FileReadRequest {
   if (CONTROL_BYTES.test(path)) {
     return { ok: false, error: "File path contains control bytes" };
   }
+  if (sessionId && !SUPPORTED_ROOT_RE.test(path)) return sessionFileRequest(path, sessionId);
   if (path.startsWith("/") || path.startsWith("~/") || /^[A-Za-z]:[\\/]/.test(path)) {
     return { ok: false, error: "File path must be relative to a supported root" };
   }

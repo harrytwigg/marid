@@ -43,7 +43,6 @@ import { useSessionLifecycleActions } from './use-session-lifecycle-actions'
 const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
-import { FileOpenContext } from '@/components/chat/file-open-context'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
 import { useChatTabs, type ChatTab } from '@/hooks/use-chat-tabs'
 import { invalidateLiveSessionSnapshot, prefetchLiveSessionSnapshot } from '@/hooks/use-live-session'
@@ -415,32 +414,9 @@ function ChatPage() {
     setSearchParams(next, { replace: true })
   }, [searchParams, contactEmployee, setSearchParams])
 
-  // Back target for the mobile file-view "back" button: the session that was
-  // active when a file link was clicked. selectedIdRef (declared above) is read
-  // at call time so the callback stays stable.
-  const fileBackTargetRef = useRef<string | null>(null)
-
-  // Open a file in an in-app tab (used by message path-links via FileOpenContext).
-  const openFile = useCallback((path: string) => {
-    fileBackTargetRef.current = selectedIdRef.current
-    chatTabs.openFileTab(path)
-    setMobileView('chat')
-  }, [chatTabs])
-
-  // Mobile-only: return from a file tab to the chat it was opened from. Switch
-  // to that session's tab if it still exists; otherwise fall back to the sidebar.
-  const handleFileBack = useCallback(() => {
-    const backId = fileBackTargetRef.current
-    if (backId) {
-      const idx = chatTabs.tabs.findIndex((t) => t.kind === 'session' && t.sessionId === backId)
-      if (idx >= 0) {
-        chatTabs.switchTab(idx)
-        setMobileView('chat')
-        return
-      }
-    }
-    setMobileView('sidebar')
-  }, [chatTabs])
+  // Mobile-only: leave a file tab (one restored from an earlier visit; chat file
+  // links now open in a new browser tab instead) for the chat list.
+  const handleFileBack = useCallback(() => setMobileView('sidebar'), [])
 
   const handleSessionsLoaded = useCallback(
     (sessions: { id: string }[]) => {
@@ -832,7 +808,6 @@ function ChatPage() {
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
   const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: mountedSessionIds, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
-    <FileOpenContext.Provider value={openFile}>
     <PeekProvider>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">
@@ -960,11 +935,6 @@ function ChatPage() {
                 delegatedActivityFor={(sessionId) => selectedDelegatedActivityFromList(sessionsQuery.data, sessionId)}
                 onMeta={paneState.updateMeta}
                 onNewMeta={paneState.updateNewMeta}
-                onOpenFile={(sessionId, path) => {
-                  fileBackTargetRef.current = sessionId
-                  chatTabs.openFileTab(path)
-                  setMobileView('chat')
-                }}
                 onPeek={requestThreadPreview}
                 onNewChat={handleNewChat}
                 onRefresh={handleRefresh}
@@ -1025,6 +995,5 @@ function ChatPage() {
       `}</style>
     </PageLayout>
     </PeekProvider>
-    </FileOpenContext.Provider>
   )
 }

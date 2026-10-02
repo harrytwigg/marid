@@ -99,7 +99,7 @@ interface SshRunOpts {
   outliveGateway?: boolean;
 }
 
-async function sshRun(destination: string, args: string[], opts: SshRunOpts = {}): Promise<SshRunResult> {
+export async function sshRun(destination: string, args: string[], opts: SshRunOpts = {}): Promise<SshRunResult> {
   const full = [
     ...controlSshOpts(opts.connectTimeoutSeconds ?? CONTROL_CONNECT_TIMEOUT_S),
     // Same shape as the interactive spawn: `--` BEFORE the destination so a host
@@ -389,7 +389,7 @@ export function assertRemoteVersion(destination: string, versionLine: string, lo
   return remote;
 }
 
-async function gatherFacts(destination: string): Promise<RemoteFacts> {
+export async function gatherFacts(destination: string): Promise<RemoteFacts> {
   const cached = factsCache.get(destination);
   if (cached) return cached;
 
