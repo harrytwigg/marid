@@ -1,6 +1,6 @@
 # Organization
 
-{{portalName}} supports an organizational structure with employee personas, departments, ranks, Todos, Workflows, and inter-agent sessions.
+{{portalName}} supports an organizational structure with employee personas, departments, ranks, Todos, and inter-agent sessions.
 
 ## Employee Personas
 
@@ -64,13 +64,11 @@ displayName: Engineering
 description: Builds and maintains the product codebase.
 ```
 
-### Todos and Workflows
+### Todos
 
-Todos are deliberately authored work in the live ledger. Employees find and update their assigned Todos, move finished work to in review, and use blocked or escalated only when they cannot proceed.
+Todos are deliberately authored work in the live ledger. Employees find and update their assigned Todos, move finished work to in review, and use blocked only when they cannot proceed. Closing, cancelling and archiving Todos are the operator's.
 
-Workflows are reusable automations - the HOW. Use or propose one when the same job is repeatable, scheduled, event-driven, or multi-step. A Workflow invocation never creates, links, transitions, approves, or mutates a Todo. A Todo-status trigger is a one-way input; the resulting Workflow run is independent.
-
-Workflow runs are durable records, not Sessions. Human approvals and cancellation belong to the Workflow run and never change a Todo.
+Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when the board walk starts it from the backlog (`board-walk.md` rules what it may start, and when). For a multi-step job, split the work into child Todos and delegate them; use cron for scheduled prompts.
 
 ### Todo departments
 
