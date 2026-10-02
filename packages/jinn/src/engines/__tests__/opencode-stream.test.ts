@@ -170,6 +170,37 @@ describe("OpencodeEngine — reading opencode's event stream", () => {
     expect(result.sessionId).toBe(SESSION);
   });
 
+  it("fails a turn whose last word is an error, even after an earlier step's text", async () => {
+    // A provider refusing step 2 after step 1 narrated and called a tool: the
+    // narration is not the answer, and the turn did not finish.
+    hoisted.exitCode = 1;
+    hoisted.lines = [
+      { type: "step_start", sessionID: SESSION, part: { type: "step-start" } },
+      text("Let me verify x before y."),
+      step({ total: 100, input: 90, output: 10, reasoning: 0, cache: { write: 0, read: 0 } }, 0.001, "tool-calls"),
+      { type: "error", sessionID: SESSION, error: { name: "APIError", data: { message: 'Bad Request: {"model":"m"}', statusCode: 400 } } },
+    ];
+
+    const result = await new OpencodeEngine().run(runOpts());
+
+    expect(result.error).toBe('APIError: Bad Request: {"model":"m"}');
+    expect(result.result).toBe("");
+    expect(result.numTurns).toBe(1);
+  });
+
+  it("still answers with text that came after an error: the turn went on and finished", async () => {
+    hoisted.lines = [
+      { type: "error", sessionID: SESSION, error: { name: "UnknownError", data: { message: "blip" } } },
+      text("pong"),
+      step({ total: 100, input: 90, output: 10, reasoning: 0, cache: { write: 0, read: 0 } }, 0),
+    ];
+
+    const result = await new OpencodeEngine().run(runOpts());
+
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("pong");
+  });
+
   it("marks a usage limit as one, so it is not mistaken for a stale session id", async () => {
     // The order matters: the turn runner asks isDeadSessionError FIRST, and a
     // limit that lands before the first step leaves zero cost and zero turns —

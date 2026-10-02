@@ -19,7 +19,8 @@ import { USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.
  *   2. create the opencode session, or resume the one named;
  *   3. POST the prompt with `prompt_async`;
  *   4. translate the stream until the turn's own reply is done — or, failing
- *      that, until the session goes idle.
+ *      that, until the session goes idle and the turn's newest reply has
+ *      closed (completed, or failed).
  *
  * Step 4 turns each event into the line `opencode run --format json` would
  * have printed for it — those lines are `{type, sessionID, part}` around the
@@ -88,8 +89,9 @@ export interface ServerTurnDeps {
  *  `session.idle` that never arrives; two idle answers in a row, after the
  *  prompt has had time to start, are needed before it counts. The connect
  *  budget covers only opening the stream: the pool hands out a server once its
- *  instance has bootstrapped, which is the slow part. */
-export const SERVER_TURN_TIMING = { statusPollMs: 30_000, connectMs: 15_000 };
+ *  instance has bootstrapped, which is the slow part. `closeWaitMs` is how long
+ *  an idle session waits for the turn's newest reply to close (see onIdle). */
+export const SERVER_TURN_TIMING = { statusPollMs: 30_000, connectMs: 15_000, closeWaitMs: 2_000 };
 
 /** A parsed SSE event from the server's `/event` stream. */
 interface ServerEvent {
@@ -483,6 +485,12 @@ export class OpencodeServerTurn {
   private readonly pendingParts = new Map<string, ServerEvent[]>();
   /** The newest assistant message in the session: whose step is running now. */
   private activeAssistant = "";
+  /** The turn's newest reply, and whether it is still open: neither completed
+   *  nor failed. */
+  private newestOwn = "";
+  private newestOwnOpen = false;
+  /** The session went idle while that reply was still open (see onIdle). */
+  private closeWait?: NodeJS.Timeout;
   /** Sub-sessions this turn's replies spawned (a subagent's), transitively. */
   private readonly children = new Set<string>();
   private sawBusy = false;
@@ -545,6 +553,7 @@ export class OpencodeServerTurn {
     } finally {
       clearTimeout(timeout);
       if (this.statusPoll) clearInterval(this.statusPoll);
+      clearTimeout(this.closeWait);
       this.controller.abort();
     }
     return this.turn.result({
@@ -846,11 +855,23 @@ export class OpencodeServerTurn {
     "question.asked": (props) => this.answerFor(props, "/question", "/reject", undefined),
   };
 
-  /** The session went idle: the turn is over, once its prompt is on its way
-   *  and the session has been busy. An idle before the prompt is sent ends
-   *  someone else's busy period, not one this turn's prompt is part of. */
+  /**
+   * The session went idle: the turn is over, once its prompt is on its way
+   * and the session has been busy. An idle before the prompt is sent ends
+   * someone else's busy period, not one this turn's prompt is part of.
+   *
+   * If the turn's newest reply is still open, the turn waits (briefly) for it
+   * to close first: opencode closes a failed reply AFTER the idle. For a
+   * provider error on a later step, 1.18.32 and 1.18.34 emit session.error,
+   * idle, and only then the reply's message.updated carrying the error — so
+   * that update, not the idle, is the turn's last word whenever the
+   * session.error is missing or comes late.
+   */
   private onIdle(): void {
-    if (this.sawBusy && this.posting) this.finish();
+    if (!this.sawBusy || !this.posting) return;
+    if (!this.newestOwnOpen) return this.finish();
+    this.closeWait ??= setTimeout(() => this.finish(), SERVER_TURN_TIMING.closeWaitMs);
+    this.closeWait.unref?.();
   }
 
   private onEvent(event: ServerEvent): void {
@@ -864,7 +885,20 @@ export class OpencodeServerTurn {
     if (!id || info.sessionID !== this.sessionId || info.role !== "assistant") return;
     if (id > this.activeAssistant) this.activeAssistant = id;
     if (!this.own.has(id) && !this.foreign.has(id)) this.classify(id, info.parentID === this.userMessageId);
-    if (this.own.has(id) && replyIsDone(info)) this.finish();
+    if (this.own.has(id)) this.onOwnReply(id, info);
+  }
+
+  /** One of the turn's own replies changed. One that failed is the turn's
+   *  error — the same one session.error carries, which the stream does not
+   *  promise to deliver first (or at all, before the idle). */
+  private onOwnReply(id: string, info: Record<string, unknown>): void {
+    if (id >= this.newestOwn) {
+      this.newestOwn = id;
+      this.newestOwnOpen = !record(info.time)?.completed && !info.error;
+    }
+    const error = record(info.error);
+    if (error && !this.terminationReason) this.feed(JSON.stringify({ type: "error", sessionID: this.sessionId, error }));
+    if (replyIsDone(info) || (this.closeWait && !this.newestOwnOpen)) this.finish();
   }
 
   private classify(messageId: string, mine: boolean): void {
@@ -945,6 +979,7 @@ export class OpencodeServerTurn {
   private finish(): void {
     if (this.settled) return;
     this.settled = true;
+    clearTimeout(this.closeWait);
     this.resolveDone();
   }
 

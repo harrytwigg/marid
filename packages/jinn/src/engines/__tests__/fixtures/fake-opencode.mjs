@@ -46,6 +46,13 @@
 //   FAILSTART   the prompt fails with a session.error before any reply exists
 //   GHOSTIDLE   the stream says busy then idle at once, but /session/status
 //               keeps the session busy for 1.5 s, and the prompt never runs
+//   MIDFAIL     a provider error partway through: a step says something and
+//               calls a tool, then the next step's request is refused before
+//               its stream starts. The ending is the order real 1.18.32 and
+//               1.18.34 emit for a pre-stream 400: session.error, idle, the
+//               failed reply's message.updated (completed, error, no finish),
+//               idle again. ORDER=<err|idle|msg,...> emits those instead, in
+//               the order given.
 // Directives are read from the prompt's own text only, never from a synthetic
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
@@ -159,6 +166,7 @@ function serve() {
     }
     newReply(sessionID, turn);
     if (text.includes("ORPHAN")) return;
+    if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
     if (text.includes("TOOLONLY")) {
       toolRound(sessionID, turn, 1);
@@ -227,6 +235,22 @@ function serve() {
     turn.reply.info.tokens = { input: 1200, output: 2, cache: { read: 20000, write: 600 } };
   }
 
+  /** MIDFAIL: the turn ends itself, in the order its prompt asks for. */
+  function midTurnFailure(sessionID, turn) {
+    part(sessionID, turn, { type: "text", text: "Let me verify x before y.", time: { start: 1, end: 2 } });
+    toolRound(sessionID, turn, 1);
+    const error = { name: "APIError", data: { message: 'Bad Request: {"model":"mock-model"}', statusCode: 400, isRetryable: false } };
+    turn.reply.info.error = error;
+    turn.reply.info.time.completed = Date.now();
+    turn.endedItself = true;
+    const emit = {
+      err: () => publish("session.error", { sessionID, error }),
+      idle: () => setStatus(sessionID, "idle"),
+      msg: () => messageUpdated(sessionID, turn.reply),
+    };
+    for (const step of (turn.text.match(/ORDER=([a-z,]+)/)?.[1] ?? "err,idle,msg,idle").split(",")) emit[step]();
+  }
+
   /** Run the session's queued prompts, one busy period for all of them. */
   async function pump(sessionID) {
     const s = sessions.get(sessionID);
@@ -237,13 +261,13 @@ function serve() {
       const turn = s.queue.shift();
       s.running = turn;
       await runTurn(sessionID, turn);
-      if (turn.reply && !turn.text.includes("ORPHAN")) {
+      if (turn.reply && !turn.text.includes("ORPHAN") && !turn.endedItself) {
         turn.reply.info.time.completed = Date.now();
         if (!turn.aborted && !turn.reply.info.error) turn.reply.info.finish = "stop";
         if (!turn.text.includes("NOIDLE") && !turn.text.includes("NOCOMPLETE")) messageUpdated(sessionID, turn.reply);
       }
       s.running = null;
-      end = turn.text.includes("NOIDLE") ? "none" : turn.text.includes("STATUSIDLE") ? "status" : "both";
+      end = turn.text.includes("NOIDLE") || turn.endedItself ? "none" : turn.text.includes("STATUSIDLE") ? "status" : "both";
       if (turn.aborted) s.queue.length = 0;
     }
     setStatus(sessionID, "idle", end);

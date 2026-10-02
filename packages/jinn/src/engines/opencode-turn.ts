@@ -28,6 +28,8 @@ export class OpencodeTurn {
   /** The answer: the last non-empty text part wins. */
   private resultText = "";
   private turnError: string | null = null;
+  /** The turn's last word was an error: no text came after it. */
+  private endedInError = false;
   /** Model round trips. A turn that called tools has more than one. */
   private steps = 0;
   private cost = 0;
@@ -63,6 +65,7 @@ export class OpencodeTurn {
         break;
       case "error":
         this.turnError = opencodeErrorText(event) ?? "opencode reported an error with no message";
+        this.endedInError = true;
         break;
     }
   }
@@ -73,6 +76,7 @@ export class OpencodeTurn {
     // A turn that called tools emits one text part per step, and the answer is
     // the one after the last tool round trip.
     this.resultText = text;
+    this.endedInError = false;
     if (onStream) onStream({ type: "text", content: text });
   }
 
@@ -122,9 +126,11 @@ export class OpencodeTurn {
     if (outcome.terminationReason) {
       return { sessionId: this.sessionId, result: "", error: outcome.terminationReason, ...accounting };
     }
-    // A non-empty answer means the turn succeeded even if a benign error item
-    // also appeared — don't surface it as a failure.
-    if (this.resultText.trim()) {
+    // A non-empty answer means the turn succeeded even if an error also
+    // appeared — unless the error came after the last text. Then the turn
+    // stopped partway: the text was an earlier step's narration ("Let me check
+    // X first"), and a provider refusing the next step is the turn's outcome.
+    if (this.resultText.trim() && !this.endedInError) {
       return { sessionId: this.sessionId, result: this.resultText, ...accounting };
     }
 
