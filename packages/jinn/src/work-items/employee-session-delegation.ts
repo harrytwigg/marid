@@ -109,14 +109,25 @@ function recordedHop(session: ReportingSession): { to: string | null; recorded: 
   return { to: session.parentSessionId ?? null, recorded: false };
 }
 
-/** Whether following who reports to whom from `start` reaches `target`. */
+/** Everyone `sessionId` reports to or will: its recorded delegator or parent,
+ *  and the delegator of every brief waiting to start in it. */
+function reportsToNow(sessionId: string): string[] {
+  const session = getSession(sessionId);
+  const waiting = briefsTable().prepare('SELECT delegator_session_id FROM work_item_delegation_briefs WHERE session_id = ?')
+    .pluck().all(sessionId) as Array<string | null>;
+  return [session ? recordedHop(session).to : null, ...waiting].filter((id): id is string => !!id);
+}
+
+/** Whether following who reports to whom from `start`, counting briefs that
+ *  have landed but not started, reaches `target`. */
 export function reportsUpTo(start: string | null | undefined, target: string): boolean {
   const seen = new Set<string>();
-  for (let current = start ?? null; current && !seen.has(current);) {
+  const pending = start ? [start] : [];
+  for (let current = pending.pop(); current; current = pending.pop()) {
     if (current === target) return true;
+    if (seen.has(current)) continue;
     seen.add(current);
-    const session = getSession(current);
-    current = session ? recordedHop(session).to : null;
+    pending.push(...reportsToNow(current));
   }
   return false;
 }

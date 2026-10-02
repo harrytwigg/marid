@@ -87,6 +87,24 @@ describe("a delegation that lands in a live session", () => {
     expect(h.delegation.reportingParentSessionId(h.registry.getSession(alpha.id)!)).toBeNull();
   });
 
+  it("refuses a delegation back into a session whose own brief to it has not started yet", async () => {
+    const item = h.store.createWorkItem({ title: "crossed briefs" });
+    const first = await h.delegate(item.id, "alpha");
+    const alpha = h.registry.getSession(first.body.sessionId)!;
+    h.registry.updateSession(alpha.id, { status: "idle" });
+    h.claims.releaseWorkItemClaimForSession(alpha.id);
+    await h.comment(item.id, "@bravo can you help?");
+    const [bravo] = h.sessionsOf(item.id, "bravo");
+    h.registry.updateSession(bravo.id, { status: "idle" });
+
+    expect((await h.delegate(item.id, "bravo", sessionHeaders(alpha.id))).body.reused).toBe(true);
+    h.claims.releaseWorkItemClaimForSession(bravo.id);
+
+    const back = await h.delegate(item.id, "alpha", sessionHeaders(bravo.id));
+    expect(back.status).toBe(409);
+    expect(back.body.error).toContain("report to each other");
+  });
+
   it("says when the session keeps a selection other than the one the delegation resolved to", async () => {
     const item = h.store.createWorkItem({ title: "different model" });
     await h.comment(item.id, "@bravo look");

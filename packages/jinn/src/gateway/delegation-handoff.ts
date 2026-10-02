@@ -159,6 +159,9 @@ export function landInLiveSession(input: LandInLiveSessionInput): void {
   rehomeAttachmentsToSession(input.attachments, session.id);
   linkSession(workItem.id, session.id, input.actor, relinkRole(session, input.role));
   input.claim.bind(session.id);
+  if (input.delegateEmployee?.displayName) {
+    updateSession(session.id, { transportMeta: { ...(session.transportMeta ?? {}), delegationEmployeeDisplay: input.delegateEmployee.displayName } });
+  }
   const briefKey = `delegation:${input.idempotencyDigest ?? crypto.randomUUID()}`;
   recordLandedBrief({ briefKey, workItemId: workItem.id, employee: input.employeeName, sessionId: session.id, delegatorSessionId: input.parentSessionId ?? null });
   try {

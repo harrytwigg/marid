@@ -37,7 +37,7 @@ describe("delegation onto a Todo where the employee already has a session", () =
 
     expect(res).toMatchObject({ status: 200, body: { sessionId: mentioned.id, reused: true } });
     expect(h.sessionsOf(item.id, "alpha")).toHaveLength(1);
-    expect(h.registry.getSession(mentioned.id)?.workItemRole).toBe("execute");
+    expect(h.registry.getSession(mentioned.id)).toMatchObject({ workItemRole: "execute", transportMeta: { delegationEmployeeDisplay: "Alpha" } });
     expect(h.claims.getWorkItemClaim(item.id)?.sessionId).toBe(mentioned.id);
     expect(h.deliveriesTo(mentioned.id, "todo-delegation")).toHaveLength(1);
     expect(h.store.getWorkItem(item.id)?.assignee).toBe("alpha");
