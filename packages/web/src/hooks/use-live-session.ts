@@ -64,6 +64,13 @@ export function shouldRecoverStuckTurn(args: {
   return args.serverStatus !== 'running'
 }
 
+/** A gateway turn is in flight. The gateway also reports a session `running`
+ *  while only its background work (sub-agents, the re-run they wake) goes on;
+ *  that work carries backgroundActivity, and there is no turn here to wait on. */
+function turnInFlight(session: Record<string, unknown> | null | undefined): boolean {
+  return session?.status === 'running' && !session.backgroundActivity
+}
+
 function appendStatusChunk(prev: string, next: string): string {
   if (!prev) return next
   if (!next) return prev
@@ -448,7 +455,7 @@ export async function prefetchLiveSessionSnapshot(id: string, signal?: AbortSign
   if (signal?.aborted) throw abortError()
   const history = session.messages || session.history || []
   const { messages } = normalizeHistoryMessages(history)
-  const running = session.status === 'running'
+  const running = turnInFlight(session)
   const waiting = session.status === 'waiting'
   writeLiveSessionSnapshot(id, {
     messages,
@@ -496,7 +503,7 @@ export function useLiveSession(
     !!opts.pendingUserMessage
     || initialSnapshot?.turnPending === true
     || initialSnapshot?.loading === true
-    || initialSnapshot?.session?.status === 'running'
+    || turnInFlight(initialSnapshot?.session)
     || initialSnapshot?.session?.status === 'waiting',
   )
   const [liveFinalResponseId, setLiveFinalResponseId] = useState<string | null>(null)
@@ -1015,7 +1022,7 @@ export function useLiveSession(
         }
       }
 
-      const isRunning = session.status === 'running'
+      const isRunning = turnInFlight(session)
       const isWaiting = session.status === 'waiting'
       const hasFinalResponse = hasFinalAssistantAfterLastUser(backendMessages)
       setTurnPending(isRunning || isWaiting || !hasFinalResponse)
@@ -1140,7 +1147,7 @@ export function useLiveSession(
       setTurnPending(
         cached.turnPending === true
         || cached.loading
-        || cached.session?.status === 'running'
+        || turnInFlight(cached.session)
         || cached.session?.status === 'waiting',
       )
       setCurrentSession(cached.session)
@@ -1252,7 +1259,8 @@ export function useLiveSession(
         if (shouldRecoverStuckTurn({
           loading: loadingRef.current,
           msSinceLastDelta: Date.now() - lastDeltaAtRef.current,
-          serverStatus: session.status as string | undefined,
+          // Background work alone leaves this pane no turn to finish.
+          serverStatus: turnInFlight(session) ? 'running' : 'not running',
         })) {
           // Missed the terminal event — clear the stuck spinner and reconcile
           // messages from the authoritative server snapshot.

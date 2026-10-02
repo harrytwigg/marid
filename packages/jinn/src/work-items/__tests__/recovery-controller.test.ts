@@ -12,6 +12,7 @@ type Rows = typeof import("../recovery-rows.js");
 type Controller = typeof import("../recovery-controller.js");
 type Claims = typeof import("../claims.js");
 type Recovery = typeof import("../recovery.js");
+type BackgroundWork = typeof import("../../sessions/background-work.js");
 
 let store: Store;
 let runs: Runs;
@@ -19,6 +20,7 @@ let rows: Rows;
 let controller: Controller;
 let claims: Claims;
 let recovery: Recovery;
+let backgroundWork: BackgroundWork;
 let db: import("better-sqlite3").Database;
 
 beforeAll(async () => {
@@ -28,6 +30,7 @@ beforeAll(async () => {
   controller = await import("../recovery-controller.js");
   claims = await import("../claims.js");
   recovery = await import("../recovery.js");
+  backgroundWork = await import("../../sessions/background-work.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
@@ -215,3 +218,27 @@ describe("sweepTodoRecovery", () => {
     expect(rows.getWorkItemRecovery(id)).toMatchObject({ lane: "manager", reason: "automatic repair attempts exhausted" });
   });
 });
+
+describe("a producer whose turn ended with background sub-agents still working", () => {
+  it("counts as in flight, so recovery does not take its executing Todo for stalled", () => {
+    const item = store.createWorkItem({ title: "mapping in the background", status: "executing", assignee: "platform-worker" });
+    const sessionId = `s-${item.id}`;
+    const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60_000).toISOString();
+    db.prepare(
+      `INSERT INTO sessions (id, engine, source, source_ref, status, work_item_id, created_at, last_activity)
+       VALUES (?, 'claude', 'web', ?, 'idle', ?, ?, ?)`,
+    ).run(sessionId, `web:${sessionId}`, item.id, fiveHoursAgo, fiveHoursAgo);
+
+    expect(controller.sessionInFlight(sessionId)).toBe(false);
+    expect(controller.attemptActivity(item.id).inFlight).toBe(false);
+
+    backgroundWork.runtimeActivity.set(sessionId, { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: Date.now() });
+    try {
+      expect(controller.sessionInFlight(sessionId)).toBe(true);
+      expect(controller.attemptActivity(item.id).inFlight).toBe(true);
+    } finally {
+      backgroundWork.runtimeActivity.delete(sessionId);
+    }
+  });
+});
+

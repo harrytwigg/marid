@@ -109,4 +109,74 @@ describe("InteractiveClaudeEngine — background monitors", () => {
     vi.advanceTimersByTime(5_000);
     expect(events.at(-1)).toMatchObject({ activeMonitors: 1 });
   });
+
+  describe("background sub-agents", () => {
+    const launchAgent = (agentId: string, extra: Partial<HookPayload> = {}) => hook({
+      hook_event_name: "PostToolUse",
+      tool_name: "Agent",
+      tool_input: { description: "explore", prompt: "…", run_in_background: true },
+      tool_response: { isAsync: true, status: "async_launched", agentId },
+      ...extra,
+    });
+
+    it("counts an agent launched in the background until a notification announces it", () => {
+      launchAgent("agent-1");
+      expect(events.at(-1)).toMatchObject({ backgroundAgents: 1 });
+
+      notified(["agent-1"]);
+      // Its end is reported at once, not after the quiet window: the session
+      // stops reading as running the moment its work is done.
+      expect(events.at(-1)).toMatchObject({ backgroundAgents: 0 });
+      vi.advanceTimersByTime(1_000);
+      expect(events.at(-1)).toBeNull();
+    });
+
+    it("forgets an agent a TaskOutput found finished, which no notification will announce", () => {
+      launchAgent("agent-1");
+      hook({
+        hook_event_name: "PostToolUse",
+        tool_name: "TaskOutput",
+        tool_input: { task_id: "agent-1", block: true },
+        tool_response: { retrieval_status: "timeout", task: { task_id: "agent-1", task_type: "local_agent", status: "running" } },
+      });
+      expect(events.at(-1)).toMatchObject({ backgroundAgents: 1 });
+
+      hook({
+        hook_event_name: "PostToolUse",
+        tool_name: "TaskOutput",
+        tool_input: { task_id: "agent-1", block: true },
+        tool_response: { retrieval_status: "success", task: { task_id: "agent-1", task_type: "local_agent", status: "completed" } },
+      });
+      expect(events.at(-1)).toMatchObject({ backgroundAgents: 0 });
+    });
+
+    it("does not count an agent a sub-agent launched: that sub-agent waits on it", () => {
+      launchAgent("agent-2", { agent_id: "agent-1" });
+      expect(events).toEqual([]);
+    });
+
+    it("does not count a foreground agent call", () => {
+      hook({
+        hook_event_name: "PostToolUse",
+        tool_name: "Agent",
+        tool_input: { description: "explore", prompt: "…" },
+        tool_response: { status: "completed", content: [] },
+      });
+      expect(events).toEqual([]);
+    });
+
+    it("stops counting an agent that has gone silent past the backstop with no end reported", () => {
+      engine.backgroundSilenceMs = 60_000;
+      launchAgent("agent-1");
+      vi.advanceTimersByTime(59_000);
+      // A sub-agent's tool hook is a sign of life: the backstop starts over.
+      (engine as unknown as { observeBackgroundWork(id: string, h: HookPayload): void })
+        .observeBackgroundWork("s1", { hook_event_name: "PostToolUse", agent_id: "agent-1", tool_name: "Read" });
+      vi.advanceTimersByTime(59_000);
+      expect(events.at(-1)).toMatchObject({ backgroundAgents: 1 });
+
+      vi.advanceTimersByTime(1_000);
+      expect(events.at(-1)).toMatchObject({ backgroundAgents: 0 });
+    });
+  });
 });

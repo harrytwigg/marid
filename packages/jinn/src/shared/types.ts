@@ -400,12 +400,14 @@ export interface Session {
   queueDepth?: number;
   transportState?: "idle" | "queued" | "running" | "error" | "interrupted";
   /** Serialize-time only (in-memory, never persisted): post-settle background
-   *  work — upstream agent requests or tracked Bash monitors after the turn
-   *  settled. Null when none. */
+   *  work — upstream agent requests, background sub-agents, a background re-run
+   *  or tracked Bash monitors after the turn settled. Null when none. */
   backgroundActivity?: {
     activeStreams: number;
     activeAgents?: number;
     activeMonitors?: number;
+    backgroundAgents?: number;
+    backgroundRerun?: boolean;
     lastActivityAt: string;
   } | null;
   /** Serialize-time only (derived, never persisted): the in-flight turn's progress,

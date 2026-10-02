@@ -101,6 +101,19 @@ describe("serializeSession", () => {
     });
   });
 
+  it("reports a session running while its background sub-agents work, without touching the stored status", () => {
+    const session = makeSession({ status: "idle" });
+    const context = makeContext(new Map([
+      ["sess-1", { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: Date.now() }],
+    ]));
+
+    const serialized = serializeSession(session, context);
+
+    expect(serialized.status).toBe("running");
+    expect(serialized.transportState).toBe("running");
+    expect(session.status).toBe("idle");
+  });
+
   it("keeps an aux-only request transport-running even when no agents are active", () => {
     const session = makeSession({ status: "idle" });
     const context = makeContext(new Map([

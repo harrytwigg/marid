@@ -244,6 +244,23 @@ describe("useLiveSession (read-only)", () => {
     expect(result.current.loading).toBe(true) // running → spinner
   })
 
+  it("shows no spinner for a session running only on its background sub-agents", async () => {
+    // The gateway reports it running, but no turn of this pane's is in flight:
+    // the reply, if any, arrives as an external turn.
+    getSession.mockResolvedValue({
+      status: "running",
+      backgroundActivity: { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: "2026-10-01T20:00:00.000Z" },
+      messages: [{ id: "m1", role: "user", content: "hi" }, { id: "m2", role: "assistant", content: "Waiting on the agent." }],
+    })
+    const { subscribe } = makeBus()
+    const { result } = renderHook(() =>
+      useLiveSession("s1", { subscribe, readOnly: true }),
+    )
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.messages.map((m) => m.content)).toEqual(["hi", "Waiting on the agent."])
+    expect(result.current.loading).toBe(false)
+  })
+
   it("filters obsolete block types from loaded history", async () => {
     getSession.mockResolvedValue({
       status: "idle",
