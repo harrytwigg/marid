@@ -11,6 +11,8 @@ import { assertContainerPrimaryCommand } from "../src/cli/container-contract.js"
 import { retargetInstanceEnv } from "../src/shared/sandbox-env.js";
 import { dropInheritedBinding, parsePortOption } from "../src/cli/instance-env.js";
 import { PRODUCT_NAME, productBanner } from "../src/shared/brand.js";
+import { resolveJinnHome } from "../src/shared/home.js";
+import { assertCommandAllowedInHome } from "../src/cli/remote-stage-guard.js";
 
 const program = new Command();
 program
@@ -45,6 +47,11 @@ program.hook("preAction", (thisCommand, actionCommand) => {
       instance: opts.instance,
     });
   }
+  // A remote session's staged home leads to the gateway's live data: refuse the
+  // commands that would start, stop, migrate or snapshot it from here.
+  const commandPath: string[] = [];
+  for (let c: Command | null = actionCommand; c && c !== program; c = c.parent) commandPath.unshift(c.name());
+  assertCommandAllowedInHome(commandPath, resolveJinnHome());
 });
 
 program

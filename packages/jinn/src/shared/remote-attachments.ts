@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expandPath, readLocalFileForIngestion } from "./file-read-policy.js";
 import { resolveJinnHome } from "./home.js";
+import { isLinkedInFarm } from "./remote-farm.js";
 
 /**
  * Chat attachments for a session that runs on another host.
@@ -10,15 +11,20 @@ import { resolveJinnHome } from "./home.js";
  * An attachment arrives as a path on the GATEWAY's disk, and the prompt names
  * it verbatim, so on another machine it names nothing. What a remote session
  * does see is its staged home: a symlink farm over the sshfs mount of the
- * gateway's home (see FARM_SCRIPT), minus `gateway.json` and `tmp/`. So a file
- * under the gateway home is the same bytes at `<session home>/<same relative
- * path>`, and that is the path the remote model is given.
+ * gateway's home (see FARM_SCRIPT and shared/remote-farm.ts), minus
+ * `gateway.json` and `tmp/`, and minus the SQLite databases and `backups/`
+ * inside `sessions/` and `workflows/`. So a file under the gateway home is the
+ * same bytes at `<session home>/<same relative path>`, and that is the path the
+ * remote model is given.
  *
- * Two kinds of file are not reachable that way and are COPIED into
+ * Some files are not reachable that way and are COPIED into
  * `uploads/<date>/<session>/` first (the farm links `uploads/`, and the gateway's
  * upload sweep ages the copies out like any other upload):
  *  - files in `tmp/`, where the connectors (Telegram, Discord) download media,
  *    because `tmp/` is deliberately a real per-session directory on the remote;
+ *  - the entries of `sessions/` and `workflows/` the farm leaves out (database
+ *    files, their sidecars, `backups/`), which must never be opened through the
+ *    mount;
  *  - files elsewhere on the gateway host, which the mount cannot reach at all.
  *
  * The file-read policy gates only the COPY. A file under a linked entry is
@@ -29,9 +35,6 @@ import { resolveJinnHome } from "./home.js";
  * ingestion reader (lexical and real name judged, one O_NOFOLLOW descriptor,
  * inode check, size cap): a file the policy refuses is never copied.
  */
-
-/** Top-level gateway-home entries the staged home does NOT link (FARM_SCRIPT). */
-const UNLINKED_HOME_ENTRIES = new Set(["gateway.json", "tmp"]);
 
 /** Where a copy made today for `sessionId` lands, relative to the gateway home.
  *  The same `uploads/<YYYY-MM-DD>/<session>/` layout a web upload gets, so the
@@ -170,7 +173,7 @@ export function mapAttachmentsForRemote(attachments: readonly string[], opts: Re
   return attachments.map((requested) => {
     const real = existingRegularFile(requested);
     const rel = inside(real, home);
-    const linked = rel !== undefined && !UNLINKED_HOME_ENTRIES.has(rel.split(path.sep)[0]!);
+    const linked = rel !== undefined && isLinkedInFarm(rel.split(path.sep));
     return toSessionHome(opts.sessionHome, linked ? rel : copyIntoUploads(requested, home, opts.sessionId));
   });
 }

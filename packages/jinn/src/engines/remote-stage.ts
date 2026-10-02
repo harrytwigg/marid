@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "../shared/logger.js";
 import { JINN_HOME } from "../shared/paths.js";
+import { FARM_FILTERED_DIRS, REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
 import { parseVersionOutput } from "../shared/brand.js";
 import { getPackageVersion } from "../shared/version.js";
 import { buildSessionSettings } from "../shared/claude-settings.js";
@@ -975,16 +976,49 @@ chmod 700 "$root" "$root/sessions" "$home"
 # so a live session's directory is never older than its last turn.
 find "$root/sessions" -mindepth 1 -maxdepth 1 -type d -mtime +"$ttl" -exec rm -rf {} + 2>/dev/null || true
 # Drop every symlink first so an entry removed from the gateway's home does not
-# linger here as a dangling one. gateway.json and tmp/ are real, not symlinks,
-# so they are untouched by this.
+# linger here as a dangling one. gateway.json, tmp/ and the filtered directories
+# below are real, not symlinks, so they are untouched by this. (A stage built
+# before the filtered directories existed linked sessions/ whole; that link goes
+# here, and the directory is rebuilt as a real one below.)
 find "$home" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
+# Marks this as a remote session's stage, so Marid code started here refuses to
+# start a gateway or open a database (shared/local-db-guard.ts).
+printf 'remote session stage: linked entries lead to the gateway home\\n' > "$home/${REMOTE_STAGE_MARKER}"
 for entry in "$mount"/* "$mount"/.[!.]*; do
   [ -e "$entry" ] || continue
   name=$(basename "$entry")
   case "$name" in
-    gateway.json|tmp) continue ;;
+    gateway.json|tmp|${REMOTE_STAGE_MARKER}|${FARM_FILTERED_DIRS.join("|")}) continue ;;
   esac
   ln -sfn "$entry" "$home/$name"
+done
+# The directories that hold the gateway's SQLite databases are real directories
+# here, linked entry by entry WITHOUT the database files. A WAL database opened
+# from this host through sshfs is corrupted by the open itself, read-only or
+# not: this host's locks are invisible to the gateway. Each database the gateway
+# has is a DIRECTORY here, so a stray open fails instead of creating an empty
+# local database that remote code would read as real. backups/ holds database
+# snapshots and is left out too. Keep the patterns in step with
+# shared/remote-farm.ts.
+for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
+  [ -d "$mount/$dir" ] || continue
+  [ -d "$home/$dir" ] || mkdir "$home/$dir"
+  chmod 700 "$home/$dir"
+  find "$home/$dir" -mindepth 1 -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
+  find "$home/$dir" -mindepth 1 -maxdepth 1 -type f \\( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.db-journal' \\) -exec rm -f {} + 2>/dev/null || true
+  for entry in "$mount/$dir"/* "$mount/$dir"/.[!.]*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    name=$(basename "$entry")
+    case "$name" in
+      backups|*.db|*.db-wal|*.db-shm|*.db-journal) continue ;;
+    esac
+    ln -sfn "$entry" "$home/$dir/$name"
+  done
+  for db in "$mount/$dir"/*.db; do
+    [ -e "$db" ] || continue
+    name=$(basename "$db")
+    [ -d "$home/$dir/$name" ] || mkdir "$home/$dir/$name"
+  done
 done
 # The company's operating rules, where the SESSION will actually look for them.
 # A local employee gets these free: its cwd IS the gateway home, so Claude Code
@@ -1019,11 +1053,19 @@ done
  * skills rather than copies. Also reaps dead session stages and reports which
  * per-host assets are genuinely present.
  *
- * Two entries are deliberately excluded and staged for real instead:
+ * Some entries are deliberately excluded and staged for real instead:
  *  - `gateway.json`, because the mounted one names the gateway's own port,
  *    which on this host would point the hook relay at the wrong process.
  *  - `tmp/`, because per-session settings and MCP configs churn there and a
  *    network filesystem is the wrong place for it.
+ *  - `sessions/` and `workflows/` (FARM_FILTERED_DIRS), which are real
+ *    directories linking every entry except the SQLite databases, their
+ *    sidecars and `backups/`. A WAL database opened from this host through
+ *    the mount is corrupted by the open, so each database is a directory
+ *    here and any open of it fails (shared/remote-farm.ts).
+ *  - `.jinn-remote-stage` (REMOTE_STAGE_MARKER), a real file that tells Marid
+ *    code started inside the session that this home is not one to start a
+ *    gateway or open a database from.
  *
  * Rebuilt every spawn rather than once: that is what keeps the farm honest when
  * the gateway's home gains a new top-level directory.

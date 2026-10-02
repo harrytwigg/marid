@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { assertLocalDatabasePath } from "../shared/local-db-guard.js";
 import Database, { type Database as DatabaseType } from "better-sqlite3";
 import {
   resolveTodoIdPrefix,
@@ -840,6 +841,8 @@ function classifyOpenWorkItemsDatabase(db: DatabaseType): WorkItemSchemaPrefligh
 
 /** Read-only and side-effect free. It runs before WAL mode or any schema write. */
 export function preflightWorkItemsDatabase(filename: string): WorkItemSchemaPreflight {
+  // Even a read-only open corrupts a WAL database on a FUSE/network mount.
+  assertLocalDatabasePath(filename);
   if (!fs.existsSync(filename) || fs.statSync(filename).size === 0) return "absent";
   let db: DatabaseType;
   try {

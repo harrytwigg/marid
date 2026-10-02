@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
+import { assertLocalDatabasePath } from "../shared/local-db-guard.js";
 
 /**
  * Small enough that a source being written to still gets several chances to
@@ -25,6 +26,9 @@ export async function backupSqliteDatabase(
   destination: string,
   onStep?: () => void,
 ): Promise<number> {
+  // The source is a live WAL database; opening it across a FUSE/network mount
+  // corrupts it (shared/local-db-guard.ts).
+  assertLocalDatabasePath(source);
   fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
   const db = new Database(source);
   try {
