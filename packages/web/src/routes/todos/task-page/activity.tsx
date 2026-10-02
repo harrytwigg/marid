@@ -16,8 +16,7 @@ import { useMentionPicker } from "@/components/mention-picker"
 import { invalidateTodoComments, useAddTodoComment } from "../use-todo-comment"
 import { commentHeadRequest, mergeCommentPages } from "./comment-window"
 import { displayNameOf, formatRelativeTime } from "../util"
-import { AttachmentTile, useAttachmentPreview } from "./attachment-preview"
-import { formatBytes } from "./attachments"
+import { AttachmentChips } from "./comment-attachments"
 import { CommentSessionLink, SessionActor } from "./session-ref"
 import { WhisperLine } from "./whisper"
 import { buildFeed, stripCommentMarkers } from "./activity-feed"
@@ -43,44 +42,6 @@ function commentAuthor(comment: WorkItemCommentWire, byName: Map<string, Employe
 
 function commentPreview(body: string): string {
   return stripMarkdown(stripCommentMarkers(body)).replace(/\s*\n+\s*/g, " ")
-}
-
-function AttachmentChips({ attachments, workItemId }: { attachments: WorkItemAttachmentWire[]; workItemId: string }) {
-  const preview = useAttachmentPreview()
-  if (attachments.length === 0) return null
-  const images = attachments.filter((attachment) => preview.canPreview(attachment))
-  return (
-    <div className="ml-[38px] mt-[7px] flex flex-wrap gap-2">
-      {attachments.map((attachment) =>
-        preview.canPreview(attachment) ? (
-          <AttachmentTile
-            key={attachment.id}
-            attachment={attachment}
-            preview={preview}
-            gallery={images}
-            meta={formatBytes(attachment.bytes)}
-            dense
-            testId={`comment-attachment-${attachment.id}`}
-          />
-        ) : (
-          <a
-            key={attachment.id}
-            href={api.workItemAttachmentUrl(workItemId, attachment.id)}
-            download={attachment.filename}
-            data-testid={`comment-attachment-${attachment.id}`}
-            className="focus-ring flex h-10 items-center gap-2 rounded-[10px] bg-[var(--fill-tertiary)] pl-2 pr-3 text-[12.5px] font-medium text-[var(--text-primary)] shadow-[var(--shadow-ambient)] outline-none"
-          >
-            <span className="grid size-6 place-items-center rounded-[7px] bg-[var(--fill-secondary)] text-[var(--text-tertiary)]">
-              <FileText size={12} strokeWidth={1.8} aria-hidden />
-            </span>
-            {attachment.filename}
-            <span className="text-[11px] font-normal text-[var(--text-quaternary)]">{formatBytes(attachment.bytes)}</span>
-          </a>
-        ),
-      )}
-      {preview.lightbox}
-    </div>
-  )
 }
 
 function CommentBlock({
