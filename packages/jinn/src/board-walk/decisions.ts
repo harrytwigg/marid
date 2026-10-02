@@ -40,11 +40,45 @@ export type ParsedDecisions =
   | { ok: true; decisions: WalkDecisions; problems: string[] }
   | { ok: false; error: string };
 
-/** The JSON object in a reply: the last fenced ```json block, else the
- *  outermost braces. */
+/** Every fenced block in a reply, paired line by line: a fence opens on a
+ *  line starting with three backticks (any info string) and closes on the next
+ *  bare one. Pairing by line is what stops the closing fence of an earlier
+ *  block being read as the opening of the answer. */
+function fencedBlocks(reply: string): Array<{ info: string; body: string }> {
+  const blocks: Array<{ info: string; body: string }> = [];
+  let open: { info: string; lines: string[] } | undefined;
+  for (const line of reply.split(/\r?\n/)) {
+    const fence = /^\s*```(.*)$/.exec(line);
+    if (!open) {
+      if (fence) open = { info: fence[1].trim().toLowerCase(), lines: [] };
+    } else if (fence && fence[1].trim() === "") {
+      blocks.push({ info: open.info, body: open.lines.join("\n").trim() });
+      open = undefined;
+    } else {
+      open.lines.push(line);
+    }
+  }
+  return blocks;
+}
+
+function parsesAsObject(text: string): boolean {
+  try {
+    const value: unknown = JSON.parse(text);
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
+}
+
+/** The JSON object in a reply: the last fenced block that parses as one
+ *  (a `json` block preferred), else the outermost braces of the reply. */
 export function extractJson(reply: string): string | undefined {
-  const fences = [...reply.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)];
-  if (fences.length > 0) return fences[fences.length - 1][1].trim();
+  const blocks = fencedBlocks(reply).reverse();
+  const fenced = blocks.find((block) => block.info === "json" && parsesAsObject(block.body))
+    ?? blocks.find((block) => parsesAsObject(block.body));
+  if (fenced) return fenced.body;
+  const jsonBlock = blocks.find((block) => block.info === "json");
+  if (jsonBlock) return jsonBlock.body;
   const start = reply.indexOf("{");
   const end = reply.lastIndexOf("}");
   return start !== -1 && end > start ? reply.slice(start, end + 1) : undefined;

@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import { BOARD_WALK_DEFAULTS, parseRules, readRules, splitFrontmatter } from "../settings.js";
 import {
   convertLegacyBlock,
-  intervalToCron,
   renderDispatchSection,
   replaceDispatchSection,
   resolveLegacyPolicy,
@@ -83,7 +82,8 @@ describe("converting gateway.idleCapacity into prose", () => {
     const { text, notes } = convertLegacyBlock(TEMPLATE, block);
     const rules = parseRules(text);
     expect(rules.problems).toEqual([]);
-    expect(rules.settings).toMatchObject({ timezone: "America/New_York", schedule: "*/15 * * * *" });
+    // The old loop's interval is not a model schedule: every tick is a turn now.
+    expect(rules.settings).toMatchObject({ timezone: "America/New_York", schedule: "0 * * * *" });
     expect(rules.settings.actions.dispatch).toBe(false);
     const section = dispatchSection(text);
     expect(section).toContain("within the last 45 minutes");
@@ -94,8 +94,8 @@ describe("converting gateway.idleCapacity into prose", () => {
     expect(section).toContain("Never start anything in these situations: operator live.");
     expect(section).toContain("Only Todos labelled `auto-ok`.");
     // Every other section is the template's, untouched.
-    expect(text.replace(section, "")).toBe(TEMPLATE.replace(dispatchSection(TEMPLATE), "").replace('timezone: ""', 'timezone: "America/New_York"').replace('schedule: "0 * * * *"', 'schedule: "*/15 * * * *"').replace(/^(\s+dispatch:) true$/m, "$1 false"));
-    expect(notes).toEqual(expect.arrayContaining([expect.stringContaining("schedule */15"), "dispatch off (the auto-start was not enabled)"]));
+    expect(text.replace(section, "")).toBe(TEMPLATE.replace(dispatchSection(TEMPLATE), "").replace('timezone: ""', 'timezone: "America/New_York"').replace(/^(\s+dispatch:) true$/m, "$1 false"));
+    expect(notes).toEqual(expect.arrayContaining([expect.stringContaining("schedule left hourly (the old loop ticked every 15 min"), "dispatch off (the auto-start was not enabled)"]));
   });
 
   it("an enabled block keeps dispatch on, and an absent interval keeps the hourly default", () => {
@@ -111,12 +111,6 @@ describe("converting gateway.idleCapacity into prose", () => {
     expect(section).toContain("daytime: while any session already holds engine capacity");
   });
 
-  it("turns an interval into the nearest cron step", () => {
-    expect(intervalToCron(10)).toBe("*/10 * * * *");
-    expect(intervalToCron(60)).toBe("0 * * * *");
-    expect(intervalToCron(180)).toBe("0 */3 * * *");
-    expect(intervalToCron(5000)).toBe("0 0 * * *");
-  });
 
   it("appends a Dispatch section to a file that lost it", () => {
     expect(replaceDispatchSection("# Board walk\n\nnothing else\n", "## Dispatch\n\nrules")).toBe("# Board walk\n\nnothing else\n\n## Dispatch\n\nrules\n");

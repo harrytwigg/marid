@@ -15,6 +15,11 @@ export const BOARD_WALK_SESSION_KEY_PREFIX = "board-walk:";
 /** `transportMeta.startedBy` on a Dispatcher session the walk started. */
 export const BOARD_WALK_STARTED_BY = "board-walk";
 
+/** A session that is one of the walk's own turns. */
+export function isBoardWalkTurn(session: Pick<Session, "sessionKey" | "sourceRef">): boolean {
+  return (session.sessionKey ?? session.sourceRef ?? "").startsWith(BOARD_WALK_SESSION_KEY_PREFIX);
+}
+
 export type StartedBy =
   | "board-walk-dispatch"
   | "board-walk"
@@ -39,8 +44,7 @@ export interface StartedSession {
 /** What started a session, as far as the registry already knows. */
 export function startedBy(session: Session): StartedBy {
   if (session.transportMeta?.startedBy === BOARD_WALK_STARTED_BY) return "board-walk-dispatch";
-  const key = session.sessionKey ?? session.sourceRef ?? "";
-  if (key.startsWith(BOARD_WALK_SESSION_KEY_PREFIX)) return "board-walk";
+  if (isBoardWalkTurn(session)) return "board-walk";
   if (session.employee === TODO_DISPATCHER_NAME) return "dispatch";
   if (session.employee === TODO_SHAPER_NAME) return "capture";
   if (session.source === "cron") return "cron";

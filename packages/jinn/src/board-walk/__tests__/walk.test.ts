@@ -156,12 +156,13 @@ interface Harness {
 }
 
 function open(opts: {
-  reply?: (turn: WalkTurn) => WalkTurnResult;
+  reply?: (turn: WalkTurn) => WalkTurnResult | Promise<WalkTurnResult>;
   fiveHourUsed?: number;
   sessions?: Session[];
   holding?: number;
   links?: Record<string, string>;
   startAll?: boolean;
+  turnTimeoutMs?: number;
 } = {}): Harness {
   const turns: WalkTurn[] = [];
   const dispatched: string[] = [];
@@ -175,6 +176,7 @@ function open(opts: {
       turns.push(turn);
       return opts.reply ? opts.reply(turn) : { sessionId: `walk-${turns.length}`, reply: fakeModel(turn.prompt, { startAll: opts.startAll }) };
     },
+    ...(opts.turnTimeoutMs ? { turnTimeoutMs: opts.turnTimeoutMs } : {}),
     dispatch: (item): StartTodoDispatcherResult => {
       dispatched.push(item.id);
       return { ok: true, status: 201, body: { workItemId: item.id, sessionId: `dispatch-${item.id}`, status: "running", reused: false } };
@@ -431,5 +433,48 @@ describe("board walk switches and the tick log", () => {
       expect.objectContaining({ kind: "refused", workItemId: "ZZZ-999", outcome: "no such Todo" }),
       expect.objectContaining({ kind: "refused", outcome: "unreadable decision, ignored" }),
     ]));
+  });
+});
+
+describe("board walk guards from review", () => {
+  it("never releases or parks a Todo that waits on the operator, but may flag it", async () => {
+    const mine = blocked("Renew the cert, my call", { body: "not before 2026-09-30", assignee: "@operator" });
+    const named = todo("Pick the vendor, park me", { body: "not before 2026-10-10" });
+    m.transitions.transition(named.id, "blocked", "operator", { human: true, stopCause: { unblockHint: { what: "choose a vendor", who: "the operator" } } });
+    const reply = JSON.stringify({ todos: [
+      { id: mine.id, verdict: "ready", action: "release", reason: "date passed" },
+      { id: named.id, verdict: "gated", action: "park", until: "2026-10-10T00:00:00Z", reason: "date" },
+      { id: mine.id, verdict: "stuck", action: "flag", reason: "nobody decided" },
+    ], dispatch: { start: [], reason: "nothing" } });
+    const h = open({ reply: () => ({ reply }) });
+    const tick = await h.walk.tick();
+    expect(status(mine.id)).toBe("blocked");
+    expect(m.stopCause.readStopCause(m.db, named.id, NOW)).toEqual({ unblockHint: { what: "choose a vendor", who: "the operator" } });
+    expect(tick.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "refused", workItemId: mine.id, outcome: "only the operator releases it: it is assigned to the operator" }),
+      expect.objectContaining({ kind: "refused", workItemId: named.id, outcome: "only the operator parks it: it waits on the operator (choose a vendor)" }),
+      expect.objectContaining({ kind: "stuck", workItemId: mine.id, outcome: "flagged with a comment" }),
+    ]));
+  });
+
+  it("parking a Todo already stopped keeps who it waits on", async () => {
+    const item = todo("Ship after the freeze, park me", { body: "not before 2026-10-10" });
+    m.transitions.transition(item.id, "blocked", "operator", { human: true, stopCause: { unblockHint: { what: "the release freeze ends", who: "the platform team" } } });
+    const h = open();
+    await h.walk.tick();
+    expect(m.stopCause.readStopCause(m.db, item.id, NOW)).toEqual({
+      parkedUntil: "2026-10-10T00:00:00.000Z",
+      unblockHint: { what: "the release freeze ends", who: "the platform team" },
+    });
+  });
+
+  it("gives up on a turn that does not finish, logs it, and frees the walk for the next tick", async () => {
+    todo("Ready work");
+    let calls = 0;
+    const h = open({ turnTimeoutMs: 50, reply: () => { calls++; return calls === 1 ? new Promise<WalkTurnResult>(() => {}) : { reply: JSON.stringify({ todos: [], dispatch: { start: [], reason: "fine" } }) }; } });
+    const stalled = await h.walk.tick();
+    expect(stalled).toMatchObject({ outcome: "failed", summary: "the model turn failed: the model turn did not finish within 0 s" });
+    expect(h.dispatched).toEqual([]);
+    expect((await h.walk.tick()).outcome).toBe("ok");
   });
 });

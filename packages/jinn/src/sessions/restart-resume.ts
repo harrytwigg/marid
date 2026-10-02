@@ -20,6 +20,7 @@ import {
   updateSession,
 } from "./registry.js";
 import { recordRestartInterruption, recordRestartResume, type RestartRecordGateway } from "./restart-record.js";
+import { isBoardWalkTurn } from "../board-walk/started-sessions.js";
 
 /**
  * A restart can strand any number of conversational sessions at once. Waking
@@ -410,12 +411,26 @@ function notifyMarkedRestartResume(
  * queue replay, so a session already back on the engine through its own queue
  * item is skipped rather than resumed twice.
  */
+/** A board walk turn is never resumed: the next tick replaces it, and resuming
+ *  would re-run it as the configured employee, tools and all, with an answer
+ *  nobody reads. Recorded, then dropped from the plan. */
+function withoutBoardWalkTurns<T extends { session: Session }>(gateway: RestartRecordGateway, candidates: T[]): T[] {
+  return candidates.filter(({ session }) => {
+    if (!isBoardWalkTurn(session)) return true;
+    recordRestartResume(gateway, session, "board-walk-turn");
+    logger.info(`Interrupted board walk turn ${session.id} is not resumed; the next tick replaces it`);
+    return false;
+  });
+}
+
 export function resumeRestartInterruptedSessions(gateway: RestartRecordGateway): void {
   // A requester re-driven by its own pending queue item is left to it like any other
   // replaying session: it gets the restart notice and its queued input, not the requester
   // message, and the loop guard does not count it — the queued input, not a nudge, is what
   // brings it back.
-  const { resumable, replaying } = consumeRestartResumeCandidates();
+  const consumed = consumeRestartResumeCandidates();
+  const { replaying } = consumed;
+  const resumable = withoutBoardWalkTurns(gateway, consumed.resumable);
   for (const session of replaying) {
     recordRestartResume(gateway, session, "queue-replay");
     logger.info(`Interrupted session ${session.id} (${describe(session)}) resumes through its pending queue item, not a restart nudge`);

@@ -9,7 +9,7 @@
   - **Routes:** `GET /api/idle-capacity`, `/policy` and `/history` are removed, and `/usage` moves to `/api/auto-dispatch/usage`.
   - **Breaking:** a client of the removed routes, or a config writer that set `gateway.idleCapacity`, must move to `board-walk.md` and the new routes.
   - **On upgrade:**
-    - The first boot creates `$JINN_HOME/board-walk.md` when it is missing. A `gateway.idleCapacity` block becomes equivalent prose in its Dispatch section: ceilings, lookaheads, starts per window, concurrency, switched-off tiers, quiet hours, operator thresholds, label, timezone, and the interval when it was set. If the block did not enable the old loop, `actions.dispatch: false` is set.
+    - The first boot creates `$JINN_HOME/board-walk.md` when it is missing. A `gateway.idleCapacity` block becomes equivalent prose in its Dispatch section: ceilings, lookaheads, starts per window, concurrency, switched-off tiers, quiet hours, operator thresholds, label and timezone. If the block did not enable the old loop, `actions.dispatch: false` is set. The old `intervalMinutes` is not carried over: every tick is now a model turn, so the schedule stays hourly.
     - The block is then removed from `config.yaml`. A copy of the old file is kept as `config.yaml.pre-board-walk-<time>`.
     - If `board-walk.md` already exists, the block is removed without being merged, and the boot log says so.
     - **An instance with no block gets the stock file, with dispatch on.** The old loop was off by default. Set `actions.dispatch: false` in `board-walk.md` if you do not want automatic starts.
@@ -66,12 +66,13 @@
 ### ✨ Features
 - **A default board walk releases ready Todos and starts work on spare capacity.**
   - **One rules file.** `$JINN_HOME/board-walk.md` is seeded from the template and never overwritten. Its frontmatter holds `enabled`, `schedule` (hourly), `timezone`, `employee` (the Assistant), `model` (Sonnet) and one hard switch per action. The prose body says what counts as a gate, what the walk may do, and when and what to start; the shipped Dispatch section restates the old numeric policy in plain English.
-  - **One turn per tick.** Each tick builds a capacity snapshot: every engine's readings, reset times, Claude predictions, sessions holding capacity, starts this window by what started them, and the operator-activity signals. It reads every open Todo with its comments, relations and linked GitHub PR or issue state. It then asks the configured employee's engine for one structured answer, with no tool calls.
+  - **One turn per tick.** Each tick builds a capacity snapshot: every engine's readings, reset times, Claude predictions, sessions holding capacity, starts this window by what started them, and the operator-activity signals. It reads every open Todo with its comments, relations and linked GitHub PR or issue state. It then asks the configured employee's engine for one structured answer, in a turn with no tools: every MCP server is detached and, on Claude, the built-in tools are switched off. A turn that has not answered in 10 minutes fails the tick, and a walk turn cut off by a restart is not resumed.
   - **The gateway carries the answer out.**
     - It releases a `blocked` Todo whose gate is met, with a reason comment.
     - It parks a plain date gate.
     - It flags a stuck Todo once per stuck episode.
     - It starts a ready backlog Todo through the Todo Dispatcher. A `no-auto-start` label, `autoStart: false` and an operator-assigned Todo are refused in code.
+    - It never releases or parks a Todo assigned to the operator, or stopped with the operator named as who must act; it may flag one.
     - Every decision and every "nothing to do" goes to `logs/board-walk.jsonl` with a reason.
   - **Off is certain.** `enabled: false` stops everything. `actions.dispatch: false` keeps readiness running and starts nothing.
   - **The Auto-Dispatch page is read-only.** It shows the walk's settings and recent ticks, the usage graph, and every session started per engine, read from the session registry whatever started it.

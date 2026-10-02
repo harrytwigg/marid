@@ -76,10 +76,11 @@ A rules file that does not parse holds the walk; it never runs on guesses. The s
 
    Long text is truncated, and the board is capped so it fits one prompt.
 3. **Build the capacity snapshot** (below).
-4. **Ask the model.** One turn, routed as a session to the configured employee with the configured model. The session's key starts with `board-walk:`, and it is visible in Chats like any other session.
+4. **Ask the model.** One turn, routed as a session to the configured employee with the configured model, and **with no tools**: every MCP server, the Jinn toolset included, is detached, and on Claude the built-in tools are switched off too (`--tools ""`, `--strict-mcp-config`). The turn is then pinned to Claude, because those flags mean nothing to another engine. On any other engine only the MCP servers are detached. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A turn that has not answered within 10 minutes (one stuck behind a rate-limit wait, say) fails the tick, and the walk is free again for the next one. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
 5. **Carry out the answer.** The gateway checks every decision against the switches and the Todo's state at that moment:
    - **release:** a `blocked` Todo goes back to `backlog`, keeping its assignee, with a comment giving the reason.
-   - **park:** a `backlog` or `blocked` Todo goes to `blocked` with `parkedUntil` set. The park expiry puts it back in the queue when the date passes (see below). An `executing` Todo is never parked.
+   - **park:** a `backlog` or `blocked` Todo goes to `blocked` with `parkedUntil` set. The park expiry puts it back in the queue when the date passes (see below). An `executing` Todo is never parked. A Todo that was already stopped keeps its unblock hint: the park adds a date, it does not change who the wait is on.
+   - **The operator's Todos are theirs.** A Todo assigned to the operator, or stopped with the operator named as who must act, is never released or parked by the walk, whatever the model asks. It may still be flagged as stuck.
    - **flag:** a stuck Todo gets one comment. Each stuck episode is raised once, across ticks. If the Todo moves and later gets stuck again, that is a new episode.
    - **start:** a ready `backlog` Todo is handed to the Todo Dispatcher, with the walk's reason and any engine preference added to the Dispatcher's prompt.
 
@@ -126,8 +127,9 @@ The numeric loop and its config are gone. At the first boot of this version:
   - a switched-off tier;
   - quiet hours and the operator-activity thresholds;
   - `requireLabel`;
-  - the timezone;
-  - the tick interval, as a cron schedule, when the block set one. Otherwise the schedule is hourly.
+  - the timezone.
+
+  The old tick interval is **not** carried over: it paced a code loop whose ticks cost nothing, and every tick is now a model turn over the whole board. The schedule stays hourly, and the boot log says so. Change `schedule` by hand if you want another cadence.
 
   If the block did not enable the old loop, `actions.dispatch` is set to `false`. The board walk ships on, but an operator who had automatic starts off never agreed to them.
 - **In every case,** the block is removed from `config.yaml`. A copy of the file as it was is kept beside it, as `config.yaml.pre-board-walk-<time>`.

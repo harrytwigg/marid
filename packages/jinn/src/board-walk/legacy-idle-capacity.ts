@@ -177,15 +177,6 @@ export function renderDispatchSection(policy: LegacyIdleCapacityPolicy): string 
   return lines.join("\n");
 }
 
-/** The cron expression closest to "every `minutes` minutes". Under an hour a
- *  step that does not divide 60 restarts at each hour, which is close enough. */
-export function intervalToCron(minutes: number): string {
-  const n = Math.max(1, Math.round(minutes));
-  if (n < 60) return `*/${n} * * * *`;
-  const hours = Math.max(1, Math.round(n / 60));
-  return hours >= 24 ? "0 0 * * *" : hours === 1 ? "0 * * * *" : `0 */${hours} * * *`;
-}
-
 /** Replace the `## Dispatch` section of a rules file (up to the next `## `
  *  heading) with `section`. A file without one gets it appended. */
 export function replaceDispatchSection(text: string, section: string): string {
@@ -205,10 +196,15 @@ export interface ConvertedRules {
 
 /**
  * The shipped rules file, rewritten to say what a custom `gateway.idleCapacity`
- * block said: its numbers in the Dispatch section, its timezone and (when set)
- * its tick interval in the frontmatter, and dispatch switched off when the block
- * left the old loop off — the board walk ships on, but an operator who had the
- * auto-start off had not agreed to automatic starts.
+ * block said: its numbers in the Dispatch section, its timezone in the
+ * frontmatter, and dispatch switched off when the block left the old loop off —
+ * the board walk ships on, but an operator who had the auto-start off had not
+ * agreed to automatic starts.
+ *
+ * The old `intervalMinutes` is deliberately NOT carried into the schedule. It
+ * paced a code loop whose tick cost nothing; here every tick is a model turn
+ * over the whole board, so a 10-minute interval would mean 144 turns a day. The
+ * walk keeps the hourly default, and the note says so.
  */
 export function convertLegacyBlock(template: string, raw: unknown): ConvertedRules {
   const policy = resolveLegacyPolicy(raw);
@@ -217,9 +213,7 @@ export function convertLegacyBlock(template: string, raw: unknown): ConvertedRul
   text = text.replace(/^timezone:.*$/m, `timezone: ${JSON.stringify(policy.timezone)}`);
   notes.push(`timezone ${policy.timezone}`);
   if (isMapping(raw) && typeof raw.intervalMinutes === "number") {
-    const schedule = intervalToCron(raw.intervalMinutes);
-    text = text.replace(/^schedule:.*$/m, `schedule: ${JSON.stringify(schedule)}`);
-    notes.push(`schedule ${schedule} (was every ${raw.intervalMinutes} min)`);
+    notes.push(`schedule left hourly (the old loop ticked every ${raw.intervalMinutes} min; each tick is now a model turn)`);
   }
   if (!policy.enabled) {
     text = text.replace(/^(\s+dispatch:)\s*true\s*$/m, "$1 false");

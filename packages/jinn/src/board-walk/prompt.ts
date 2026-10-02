@@ -46,7 +46,7 @@ export function buildPrompt(input: { settings: BoardWalkSettings; rules: string;
   return [
     "You are running the board walk: a scheduled pass over this company's Todo board.",
     "You decide which Todos are ready and whether to start any of them, following the operator's rules below.",
-    "You do not act and you must not call any tools. The gateway reads your answer, checks it, and carries it out.",
+    "You do not act, and this turn has no tools: everything you need is below. The gateway reads your answer, checks it, and carries it out.",
     "",
     `It is now ${snapshot.now} (UTC); local time is ${snapshot.localTime}, ${snapshot.weekday}, in ${snapshot.timezone}.`,
     switches(settings),

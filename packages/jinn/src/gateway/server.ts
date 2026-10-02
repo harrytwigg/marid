@@ -50,7 +50,7 @@ import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CL
 import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
 import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
-import { isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
+import { emitTodoProjectionEvent, isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
 import { createGatewayRequestHandler } from "./request-handler.js";
 import { sessionCommGuards, LATERAL_MAX_HOPS } from "./session-comm-guards.js";
@@ -898,6 +898,7 @@ export async function startGateway(
     getConfig: () => currentConfig,
     context: apiContext,
     holdingCapacity: (sessions) => sessionsHoldingEngineCapacity(sessions, apiContext),
+    emitProjectionEvent: (id, action) => emitTodoProjectionEvent(apiContext, id, action),
   });
   apiContext.boardWalk = boardWalk;
 

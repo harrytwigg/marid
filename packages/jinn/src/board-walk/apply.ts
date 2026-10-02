@@ -1,4 +1,7 @@
+import { initDb } from "../shared/db.js";
 import { logger } from "../shared/logger.js";
+import { OPERATOR_ASSIGNEE } from "../work-items/assignment.js";
+import { readStopCause } from "../work-items/stop-cause.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { transition } from "../work-items/transitions.js";
 import { addComment } from "../work-items/comment-add.js";
@@ -48,6 +51,16 @@ function comment(settings: BoardWalkSettings, item: WorkItem, body: string): voi
   }
 }
 
+/** Why a Todo is the operator's to move, or undefined. A Todo assigned to the
+ *  operator, or stopped with the operator named as who must act, is waiting on
+ *  a person's decision: the walk may flag it, never release or park it. */
+export function operatorGate(item: WorkItem): string | undefined {
+  if (item.assignee === OPERATOR_ASSIGNEE) return "it is assigned to the operator";
+  const hint = readStopCause(initDb(), item.id)?.unblockHint;
+  if (hint && /\boperator\b/i.test(hint.who)) return `it waits on ${hint.who} (${hint.what})`;
+  return undefined;
+}
+
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -56,6 +69,8 @@ function release(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): TickE
   const entry: TickEntry = { kind: "release", workItemId: item.id, reason: decision.reason };
   if (!deps.settings.actions.release) return { ...entry, kind: "refused", outcome: "release is switched off" };
   if (item.status === "backlog") return { ...entry, outcome: "already in the queue" };
+  const gate = operatorGate(item);
+  if (gate) return { ...entry, kind: "refused", outcome: `only the operator releases it: ${gate}` };
   if (item.status !== "blocked") return { ...entry, kind: "refused", outcome: `only a blocked Todo is released; this one is ${item.status}` };
   try {
     transition(item.id, "backlog", BOARD_WALK_ACTOR, { detail: { reason: "board-walk-release", note: decision.reason } });
@@ -66,20 +81,30 @@ function release(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): TickE
   return { ...entry, outcome: "moved to backlog" };
 }
 
+/** Why a park cannot go ahead, or the date it parks until. */
+function parkPlan(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): { refused: string } | { parkedUntil: string } {
+  if (!deps.settings.actions.park) return { refused: "park is switched off" };
+  const until = decision.until ? Date.parse(decision.until) : Number.NaN;
+  if (!Number.isFinite(until)) return { refused: `park needs an ISO-8601 until (got ${JSON.stringify(decision.until ?? null)})` };
+  if (until <= deps.now()) return { refused: `the park date ${decision.until} has already passed` };
+  if (item.status !== "backlog" && item.status !== "blocked") return { refused: `only a backlog or blocked Todo is parked; this one is ${item.status}` };
+  const gate = operatorGate(item);
+  if (gate) return { refused: `only the operator parks it: ${gate}` };
+  return { parkedUntil: new Date(until).toISOString() };
+}
+
 function park(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): TickEntry {
   const entry: TickEntry = { kind: "park", workItemId: item.id, reason: decision.reason };
-  if (!deps.settings.actions.park) return { ...entry, kind: "refused", outcome: "park is switched off" };
-  const until = decision.until ? Date.parse(decision.until) : Number.NaN;
-  if (!Number.isFinite(until)) return { ...entry, kind: "refused", outcome: `park needs an ISO-8601 until (got ${JSON.stringify(decision.until ?? null)})` };
-  if (until <= deps.now()) return { ...entry, kind: "refused", outcome: `the park date ${decision.until} has already passed` };
-  if (item.status !== "backlog" && item.status !== "blocked") {
-    return { ...entry, kind: "refused", outcome: `only a backlog or blocked Todo is parked; this one is ${item.status}` };
-  }
-  const parkedUntil = new Date(until).toISOString();
+  const plan = parkPlan(deps, item, decision);
+  if ("refused" in plan) return { ...entry, kind: "refused", outcome: plan.refused };
+  const { parkedUntil } = plan;
+  // A Todo already stopped keeps the hint it was stopped with: the park adds a
+  // date to that wait, it does not rewrite who the wait is on.
+  const hint = item.status === "blocked" ? readStopCause(initDb(), item.id)?.unblockHint : undefined;
   try {
     transition(item.id, "blocked", BOARD_WALK_ACTOR, {
       blockKind: "transient",
-      stopCause: { parkedUntil, unblockHint: { what: decision.reason, who: "the clock" } },
+      stopCause: { parkedUntil, unblockHint: hint ?? { what: decision.reason, who: "the clock" } },
       detail: { reason: "board-walk-park", note: decision.reason },
     });
   } catch (error) {

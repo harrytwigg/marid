@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import type { EngineLimitEngineSnapshot, JinnConfig, Session } from "../shared/types.js";
+import type { Employee, EngineLimitEngineSnapshot, JinnConfig, Session } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { collectClaudeLimits } from "../shared/engine-limits-claude.js";
 import { listSessions, getMessages, getSession } from "../sessions/registry.js";
@@ -68,7 +68,16 @@ export interface BoardWalkDeps {
   snapshot?: Partial<Pick<SnapshotDeps, "collect" | "usageHistory" | "statuslineMtime" | "startedSince" | "exhausted">>;
   /** Re-read the rules file this often to pick up schedule changes. */
   pollMs?: number;
+  /** How long the model turn may take before the tick gives up on it. */
+  turnTimeoutMs?: number;
+  /** The board's change signal for a Todo the walk started (the dispatch
+   *  route's own `dispatched` event). Passed in by the server. */
+  emitProjectionEvent?: (workItemId: string, action: string) => void;
 }
+
+/** Long enough for a slow turn on a big board; short enough that a turn stuck
+ *  behind a rate-limit wait does not hold the walk until the window resets. */
+export const DEFAULT_TURN_TIMEOUT_MS = 10 * 60_000;
 
 export interface BoardWalkStatus {
   path: string;
@@ -97,13 +106,32 @@ function dispatcherSuffix(decision: StartDecision): string {
   return `The board walk started this Todo. Its reason: ${decision.reason}${prefer}`;
 }
 
+/**
+ * The employee the walk's turn runs as: the configured one with every tool
+ * taken away. The walk decides; the gateway acts. A tool call in this turn
+ * would be an act nobody checked, so the Jinn MCP toolset and every other MCP
+ * server are detached, and on Claude the built-in tools are switched off too
+ * (`--tools ""`, `--strict-mcp-config`). Those two flags are Claude's, so the
+ * turn is then pinned to Claude rather than handed to a fallback engine that
+ * would reject them.
+ */
+export function lockedDownEmployee(employee: Employee): { employee: Employee; engine?: string } {
+  const detached: Employee = { ...employee, mcp: false, jinnMcp: false };
+  if (employee.engine !== "claude") return { employee: detached };
+  return {
+    employee: { ...detached, cliFlags: [...(employee.cliFlags ?? []).filter((flag) => flag !== "--chrome"), "--tools", "", "--strict-mcp-config"] },
+    engine: "claude",
+  };
+}
+
 /** The default turn: a session routed to the rules file's employee, read back
  *  from the registry once the turn settles. */
 function routeTurn(deps: BoardWalkDeps): (turn: WalkTurn) => Promise<WalkTurnResult> {
   return async (turn) => {
     const config = deps.getConfig();
-    const employee = orgRegistry(config).get(turn.settings.employee);
-    if (!employee) return { error: `employee ${turn.settings.employee} named in board-walk.md does not exist` };
+    const configured = orgRegistry(config).get(turn.settings.employee);
+    if (!configured) return { error: `employee ${turn.settings.employee} named in board-walk.md does not exist` };
+    const { employee, engine } = lockedDownEmployee(configured);
     const connector = new CronConnector(new Map());
     const routed = await deps.context.sessionManager.route(
       {
@@ -122,7 +150,7 @@ function routeTurn(deps: BoardWalkDeps): (turn: WalkTurn) => Promise<WalkTurnRes
         transportMeta: { boardWalk: true },
       },
       connector,
-      { employee, ...(turn.settings.model ? { model: turn.settings.model } : {}), title: turn.title },
+      { employee, ...(engine ? { engine } : {}), ...(turn.settings.model ? { model: turn.settings.model } : {}), title: turn.title },
     );
     return routed?.sessionId ? settledTurn(routed.sessionId) : { error: "the walk's session was not started" };
   };
@@ -178,6 +206,7 @@ interface Walker {
   collectClaude: (config: JinnConfig) => Promise<EngineLimitEngineSnapshot>;
   dispatch: (item: WorkItem, decision: StartDecision) => StartTodoDispatcherResult;
   snapshot: BoardWalkDeps["snapshot"];
+  turnTimeoutMs: number;
 }
 
 function walker(deps: BoardWalkDeps): Walker {
@@ -193,9 +222,23 @@ function walker(deps: BoardWalkDeps): Walker {
     dispatch: deps.dispatch ?? ((item, decision) => startTodoDispatcher(item, deps.context, {
       promptSuffix: dispatcherSuffix(decision),
       transportMeta: { startedBy: BOARD_WALK_STARTED_BY },
+      ...(deps.emitProjectionEvent ? { emitProjectionEvent: deps.emitProjectionEvent } : {}),
     })),
     snapshot: deps.snapshot,
+    turnTimeoutMs: deps.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
   };
+}
+
+/** The turn, or a failure once `ms` has passed. A turn that outlives the
+ *  timeout keeps running in its session; its answer is never read. */
+function withTimeout(turn: Promise<WalkTurnResult>, ms: number): Promise<WalkTurnResult> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<WalkTurnResult>((resolve) => {
+    const span = ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 1000)} s`;
+    timer = setTimeout(() => resolve({ error: `the model turn did not finish within ${span}` }), ms);
+    timer.unref?.();
+  });
+  return Promise.race([turn, timeout]).finally(() => clearTimeout(timer));
 }
 
 interface TickFrame { w: Walker; trigger: TickRecord["trigger"]; startedAt: number; at: string }
@@ -232,7 +275,10 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
     ...w.snapshot,
   });
   const prompt = buildPrompt({ settings, rules: rules.body, snapshot, board });
-  const turn = await w.runTurn({ prompt, settings, sessionKey: `${BOARD_WALK_SESSION_KEY_PREFIX}${at}`, title: `Board walk ${at.slice(0, 16).replace("T", " ")}` });
+  const turn = await withTimeout(
+    w.runTurn({ prompt, settings, sessionKey: `${BOARD_WALK_SESSION_KEY_PREFIX}${at}`, title: `Board walk ${at.slice(0, 16).replace("T", " ")}` }),
+    w.turnTimeoutMs,
+  );
   await recordClaudeReading(w, config, state);
 
   const session = turn.sessionId ? { sessionId: turn.sessionId } : {};
