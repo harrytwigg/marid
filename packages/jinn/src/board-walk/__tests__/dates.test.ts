@@ -10,6 +10,9 @@ describe("dates as written in a Todo", () => {
     ["November 1", true],
     ["Nov 1st, 2026", true],
     ["Nov. 1", true],
+    ["not before the 1st", true],
+    ["not before the 2nd", false],
+    ["the 1st of December", false],
     ["1 November 2025", false],
     ["2 November", false],
     ["01/11", false],
@@ -19,10 +22,11 @@ describe("dates as written in a Todo", () => {
   });
 
   it("reads every form it knows, and ignores impossible days", () => {
-    expect(datesIn("2026-09-30, 3rd of March and Dec 25, 2027; 31 Febtember")).toEqual([
+    expect(datesIn("2026-09-30, 3rd of March and Dec 25, 2027; 31 Febtember; after the 10th")).toEqual([
       { year: 2026, month: 9, day: 30 },
       { day: 3, month: 3 },
       { month: 12, day: 25, year: 2027 },
+      { day: 10 },
     ]);
     expect(namesDate("anything", "not a date")).toBe(false);
   });
