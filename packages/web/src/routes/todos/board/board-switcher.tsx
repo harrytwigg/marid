@@ -15,7 +15,7 @@ import { useBoardMenuCounts } from "./use-board"
 /* Todos v2 slice 6 — the switcher-in-title (design-doc §1.1, HIG title-menu).
  * The page title IS the menu trigger: current board name + chevron.
  *
- * ICI-1357 splits the rows into lenses and places. The two lenses lead —
+ * The rows split into lenses and places. The two lenses lead —
  * Attention (the ONLY badge anywhere, §8's one ambient signal) · Everything —
  * and the departments follow under their own group label. Order is the whole
  * point: Everything used to sit last, so at fourteen departments the operator

@@ -48,7 +48,7 @@ const STATUS = str("Restrict the board to one status.", [
 const openTodos: TalkTool = {
   name: "open_todos",
   description:
-    'Open the Todo board, optionally scoped and filtered. For "todos I started" or "my requests" use the source or assignee filters on the everything board.',
+    'Open the Todo board, optionally scoped and filtered. For "todos I started" or "my requests" use the source filter on the everything board.',
   parameters: params({
     board: BOARD,
     status: STATUS,
