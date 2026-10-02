@@ -6,12 +6,12 @@ import { ToggleSwitch } from "@/routes/settings/shared"
 import { invalidateTodoCaches } from "../todo-edit-request"
 
 /** The label that also keeps a Todo out of every automatic start — the
- *  idle-capacity loop's opt-out (`IDLE_CAPACITY_OPT_OUT_LABEL`) and the auto-start one. */
+ *  board walk's and the assignment auto-start's. */
 const OPT_OUT_LABEL = "no-auto-start"
 
 /**
  * The Todo's auto-start switch (User Story 5). The rule already lives
- * in the gateway — the idle-capacity loop skips a Todo whose dispatch config
+ * in the gateway — the board walk never starts a Todo whose dispatch config
  * says `autoStart: false` — and the route already exists; this is the first
  * place the dashboard shows or sets it. Off is the exception to the global
  * policy for this one Todo.
@@ -44,7 +44,7 @@ export function AutoStartRow({ detail }: { detail: WorkItemDetailWire }) {
         <span className="block text-[11.5px] text-[var(--text-tertiary)]">
           {error ?? (labelled
             ? `Off by label: ${OPT_OUT_LABEL} keeps every automatic start away, whatever this switch says`
-            : autoStart ? "The idle-capacity loop may start this Todo" : "The idle-capacity loop skips this Todo")}
+            : autoStart ? "The board walk may start this Todo" : "The board walk never starts this Todo")}
         </span>
       </span>
       <span className={pending ? "opacity-50" : undefined}>

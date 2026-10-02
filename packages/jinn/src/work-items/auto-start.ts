@@ -2,7 +2,7 @@ import type { Database as DatabaseType } from 'better-sqlite3';
 
 /** the per-Todo auto-start opt-out, as rows. The table is declared in
  *  `dispatch-schema.ts` and the flag is surfaced through the Todo's dispatch
- *  config, where the idle-capacity loop reads it; this module is the one
+ *  config, where the board walk reads it; this module is the one
  *  reader and writer of the rows. */
 
 export interface AutoStartRow {

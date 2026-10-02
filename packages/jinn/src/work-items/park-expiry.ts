@@ -17,7 +17,7 @@ import { transition } from './transitions.js';
  * So the sweep does the move the park promised: once `parkedUntil` has passed,
  * the Todo goes back to the work queue the same way a `dependency` block does
  * (`blocks.ts`): `backlog`, keeping its assignee, where a dispatch, the
- * idle-capacity loop and the operator can see it. The transition deletes the
+ * board walk and the operator can see it. The transition deletes the
  * stop cause, as leaving `blocked` always does, so a released park cannot be
  * released twice.
  */

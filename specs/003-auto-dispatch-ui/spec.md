@@ -1,5 +1,7 @@
 # Feature Specification: Auto-Dispatch Dashboard
 
+> **Superseded.** The numeric idle-capacity loop and its policy form were replaced by the board walk (`board-walk.md`); see `docs/idle-capacity.md`. Kept as the record of what was built.
+
 **Feature Branch**: `feat/gen-100-auto-dispatch-ui`
 
 **Created**: 2026-09-21

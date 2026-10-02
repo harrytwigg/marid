@@ -26,7 +26,7 @@ export const WORK_ITEM_DISPATCH_DDL = `
 ${WORK_ITEM_DISPATCH_TABLE_DDL};
 `;
 
-/** whether the idle-capacity sweep may start a Todo from the backlog. A Todo
+/** whether the board walk may start a Todo from the backlog. A Todo
  *  an employee creates and claims from a session that is already working it
  *  wants NO second session, and so does one the operator intends to hand over
  *  by message.

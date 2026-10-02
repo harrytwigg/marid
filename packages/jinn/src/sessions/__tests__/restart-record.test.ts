@@ -217,6 +217,23 @@ describe("the restart record on boot", () => {
     expect(lines().at(-1)).toEqual(expect.objectContaining({ event: "resume", outcome: "queue-replay", sessionId: worker.id }));
   });
 
+  it("never resumes a board walk turn: it records it, sends no nudge, and still nudges the rest", () => {
+    vi.useFakeTimers();
+    const walkTurn = registry.createSession({ engine: "claude", source: "cron", sourceRef: "board-walk:2026-10-02T09:00:00.000Z", sessionKey: "board-walk:2026-10-02T09:00:00.000Z", employee: "assistant" });
+    db.prepare("UPDATE sessions SET status = 'running' WHERE id = ?").run(walkTurn.id);
+    const worker = running();
+    restartResume.interruptRunningSessionsForShutdown(OLD_GATEWAY);
+
+    restartResume.resumeRestartInterruptedSessions(NEW_GATEWAY);
+    vi.advanceTimersByTime(10 * 60_000);
+
+    expect(registry.listPendingSessionDeliveries().map((delivery) => delivery.targetSessionId)).toEqual([worker.id]);
+    expect(lines()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: "resume", outcome: "board-walk-turn", sessionId: walkTurn.id }),
+      expect.objectContaining({ event: "resume", outcome: "nudged", sessionId: worker.id }),
+    ]));
+  });
+
   it("records every session left for the operator when nudges are switched off", () => {
     vi.useFakeTimers();
     const worker = running();

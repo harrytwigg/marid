@@ -60,7 +60,9 @@ export type RestartResumeOutcome =
   /** A restart requester that asked again too soon after its last requester nudge: notice only. */
   | "loop-guard"
   /** A restart acknowledgement older than this restart (a request whose restart never ran): notice only. */
-  | "stale";
+  | "stale"
+  /** One of the board walk's own turns: the next tick replaces it, so it is not resumed. */
+  | "board-walk-turn";
 
 interface RestartRecordSession {
   sessionId: string;

@@ -10,6 +10,8 @@ Experiments and Workflows are removed. `CLAUDE.md`, the reference docs and the s
 The Todo model changes with them, and the docs and skills say so: the statuses `assigned` and `escalated` are gone, agents can no longer close, reopen or archive a Todo, approvals are gone (a decision that needs a person is a Todo stopped in `blocked` with a comment, and finished work is handed over in `in_review` with a summary), and comments are the record: an `@employee` mention wakes that employee on the Todo, a reply reaches the session whose comment it answers, and a comment that does neither wakes no one. An instance whose own `CLAUDE.md` tells employees to request approvals or to rely on Workflows should be reconciled to that model rather than keep the old wording; flag it as a conflict where its wording differs.
 
 Shipped skills are rewritten from the template on every gateway start, so the `skills/` records here are informational; `CLAUDE.md` and `docs/` are never rewritten automatically and need this merge.
+
+The board walk replaces the idle-capacity auto-start. `docs/company-doctrine.md`, `docs/org.md` and the `todo-handling` skill now say that work starts on a dispatch or when the board walk starts it from the backlog. `board-walk.md` is new. The gateway itself creates it at the first boot of this version when it is missing, converting any `gateway.idleCapacity` block into its prose. So the `board-walk.md` record here is informational: never create, overwrite or merge into an instance's existing `board-walk.md`. Its wording is the operator's, and it may have been converted from their old settings.
 <!-- END RELEASE RATIONALE -->
 
 This file is generated. The manifest is authoritative; each record below appears exactly once.
@@ -24,6 +26,13 @@ Merge Markdown by heading. When the target adds a section whose heading the inst
 - Base payload: `files/base/CLAUDE.md`
 - Target payload: `files/target/CLAUDE.md`
 - Merge instruction: materialize the base and target payloads named above with this instance's values, then three-way merge them against the current instance path `CLAUDE.md` (a missing base means the file is new, a missing target means it is removed from stock); preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
+
+## `board-walk.md`
+
+- Operation: `add`
+- Base payload: none (file did not exist)
+- Target payload: `files/target/board-walk.md`
+- Merge instruction: materialize the base and target payloads named above with this instance's values, then three-way merge them against the current instance path `board-walk.md` (a missing base means the file is new, a missing target means it is removed from stock); preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
 
 ## `docs/architecture.md`
 

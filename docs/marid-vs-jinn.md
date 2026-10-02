@@ -70,7 +70,7 @@ This page lists the headline features Marid has that upstream does not, and is j
 | Feature | Marid | Jinn upstream | Notes |
 |---|---|---|---|
 | Closed Todo departments | ✅ | ❌ | `gateway.todoDepartments` makes the department list one the operator owns. Unset, any name still becomes a department, as upstream. |
-| Idle-capacity auto-start | ✅ | ❌ | Opt-in (`gateway.idleCapacity`, off by default). When a Claude usage window is about to reset with capacity to spare, it starts eligible backlog Todos, with overnight, daytime and interactive tiers. See [`idle-capacity.md`](idle-capacity.md). |
+| Board walk | ✅ | ❌ | On by default, ruled by `board-walk.md`. A scheduled model pass releases Todos whose gates are met (dates, blockers, merged PRs), parks date gates, flags stuck Todos once, and starts ready backlog work when spare capacity would otherwise lapse. See [`idle-capacity.md`](idle-capacity.md). |
 | Auto-Dispatch dashboard page | ✅ | ❌ | `/auto-dispatch`: policy editing, next-tick preview, start history and a usage chart. |
 | Per-Todo auto-start opt-out | ✅ | ❌ | `autoStart` in a Todo's dispatch config, and the `no-auto-start` label. |
 | Session tree on a Todo | ✅ | ❌ | The Details rail lists the sessions working the Todo, with their delegations underneath, and every session links to its chat. |

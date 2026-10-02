@@ -219,9 +219,12 @@ const ATTESTED = {
   // Rebased DOWN 33 on every total for the removal of `acceptance` (create and
   // edit) and `verifyPolicy` (create and update) from the Todo tools. The
   // ceiling follows; Pi sits ON it.
-  rpc: { tokens: 3796, sha256: "e6d21adf3a5b9f28721a2bb8ef2a09eaa057786efb6db260d2806370d5c650d2" },
-  pi: { tokens: 4131, sha256: "c2696841dbf10959db0f8ee1b6aa2720457c10bd70f587410e17711c962ab75c" },
-  openai: { tokens: 3935, sha256: "99fc72441d0ac0e9395a91fa006f94921e41871f63b9b26a8ed41996e4c2a5a3" },
+  // Reattested for create_work_item's `autoStart` prose, which now names the
+  // board walk instead of the retired idle-capacity auto-start. One token
+  // cheaper on every wrapper; Pi sits one under the unchanged ceiling.
+  rpc: { tokens: 3795, sha256: "8540470912b189834d333658d353d3c6ddce89994e0e6924c5ad738dde92b49a" },
+  pi: { tokens: 4130, sha256: "c2d5eb470ad7e77d07f8122d07eaadda1f8905f885bf0c20e801f812cab441ca" },
+  openai: { tokens: 3934, sha256: "dd321e9684b89656c45355ced912cf65a77c1ba686d781bb95cdfa1de53bfd70" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

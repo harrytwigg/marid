@@ -215,7 +215,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         dueAt: { type: "string" },
         labels: { type: "array", items: { type: "string" } },
         idempotencyKey: { type: "string" },
-        autoStart: { type: "boolean", description: "false: idle-capacity auto-start skips it." },
+        autoStart: { type: "boolean", description: "false: the board walk never starts it." },
       },
       required: ["title"],
     },

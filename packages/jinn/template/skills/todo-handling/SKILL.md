@@ -60,7 +60,7 @@ Do not invent provenance during creation. Each owning company surface records it
 
 ### Auto-start and the Todo you will work yourself
 
-Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when idle capacity is enabled and its sweep picks the Todo from the backlog. To keep that sweep away from a Todo, pass `"autoStart": false` to `create_work_item`, or later to `set_work_item_dispatch`, or give it the `no-auto-start` label. Set it when you create a Todo you will work from this session, or one that should wait for a hand-over by message. `get_work_item` shows the flag under `dispatchConfig`; `set_work_item_dispatch { autoStart: true }` restores the default.
+Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when the board walk starts it from the backlog. To keep the board walk away from a Todo, pass `"autoStart": false` to `create_work_item`, or later to `set_work_item_dispatch`, or give it the `no-auto-start` label. Set it when you create a Todo you will work from this session, or one that should wait for a hand-over by message. `get_work_item` shows the flag under `dispatchConfig`; `set_work_item_dispatch { autoStart: true }` restores the default.
 
 ## Comments are the record
 

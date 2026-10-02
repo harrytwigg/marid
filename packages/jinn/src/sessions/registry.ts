@@ -1101,6 +1101,25 @@ export function listSessions(filter?: ListSessionsFilter): Session[] {
 }
 
 /**
+ * Sessions created at or after `sinceIso`, newest first — archived ones
+ * included, since an archived session was still started. What the Auto-Dispatch
+ * page and the board walk's capacity snapshot count as "started on this engine".
+ */
+export function listSessionsCreatedSince(sinceIso: string, opts: { engine?: string; limit?: number } = {}): Session[] {
+  const conditions = ['created_at >= ?', 'workflow_kind IS NULL'];
+  const values: unknown[] = [sinceIso];
+  if (opts.engine) {
+    conditions.push('engine = ?');
+    values.push(opts.engine);
+  }
+  const limit = Math.max(1, Math.floor(opts.limit ?? 1000));
+  const rows = initDb()
+    .prepare(`SELECT * FROM sessions WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC, rowid DESC LIMIT ?`)
+    .all(...values, limit) as Record<string, unknown>[];
+  return rows.map(rowToSession);
+}
+
+/**
  * Every session id in the registry — archived and workflow-phase rows included.
  * Retention sweeps over per-session on-disk state must use this rather than
  * `listSessions`, whose `archived_at IS NULL AND workflow_kind IS NULL` filter is

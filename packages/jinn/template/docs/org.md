@@ -68,7 +68,7 @@ description: Builds and maintains the product codebase.
 
 Todos are deliberately authored work in the live ledger. Employees find and update their assigned Todos, move finished work to in review, and use blocked only when they cannot proceed. Closing, cancelling and archiving Todos are the operator's.
 
-Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when idle capacity is enabled and its sweep picks the Todo from the backlog. For a multi-step job, split the work into child Todos and delegate them; use cron for scheduled prompts.
+Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when the scheduled walk over the open Todos starts it from the backlog (its rules file, in the instance home, says what it may start and when). For a multi-step job, split the work into child Todos and delegate them; use cron for scheduled prompts.
 
 ### Todo departments
 

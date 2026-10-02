@@ -23,6 +23,7 @@
  * or the order of side effects without auditing both call sites.
  */
 
+import { isBoardWalkTurn } from "../board-walk/started-sessions.js";
 import type { RateLimitHandlerOpts, RateLimitOutcome } from "./rate-limit-contract.js";
 import type { Engine, EngineResult, RemoteTarget } from "../shared/types.js";
 import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
@@ -131,7 +132,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const isUsable = (candidate: EngineName) => engines.has(candidate) && (remote
     ? engineSupportsRemote(candidate) && remoteEngineAvailable(sshDestination(remote), candidate) !== false
     : engineAvailable(config, candidate));
-  const substituteName = resolveHealthyFallbackEngine(
+  // A board walk turn never changes engine: it runs on Claude because that is
+  // where its tools can be switched off, and a substitute would bring its own.
+  const substituteName = isBoardWalkTurn(session) ? undefined : resolveHealthyFallbackEngine(
     config,
     session.engine,
     isUsable,

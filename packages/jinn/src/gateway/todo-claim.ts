@@ -79,7 +79,7 @@ export function claimTodoForDelegation(
 /** The outcome of asking for a Dispatcher claim, before any HTTP shape is put
  *  on it. `reused` is the idempotency receipt — a Dispatcher already holds the
  *  Todo — and `refused` is anything else in the way. Both carry the body the
- *  route answers with, so a non-HTTP caller (the idle-capacity auto-start) sees
+ *  route answers with, so a non-HTTP caller (the board walk) sees
  *  exactly the reason the route would have sent. */
 export type DispatchClaimOutcome =
   | { state: "acquired"; claim: RouteTodoClaim }

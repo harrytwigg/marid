@@ -9,7 +9,7 @@ import { authFetch } from "@/lib/auth"
 
 /** `dispatchConfig` as `GET /api/work-items/:id` carries it. */
 export interface WorkItemDispatchConfigWire {
-  /** False keeps every automatic start (the idle-capacity loop's) away from the Todo. */
+  /** False keeps every automatic start (the board walk's) away from the Todo. */
   autoStart: boolean
   engine?: string | null
   model?: string | null

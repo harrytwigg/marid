@@ -14,7 +14,7 @@ import {
 } from "../shared/models.js";
 import { configureLogger, logger } from "../shared/logger.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
-import { scheduleFtsBackfill, recoverStaleSessions, settleLegacyWorkflowPhaseSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, listAllSessionIds, listPendingQueueItemIdsForSession, updateSession } from "../sessions/registry.js";
+import { scheduleFtsBackfill, recoverStaleSessions, settleLegacyWorkflowPhaseSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, listAllSessionIds, listPendingQueueItemIdsForSession, getSessionBySessionKey, updateSession } from "../sessions/registry.js";
 import { runtimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
 import { createRuntimeActivityHandler } from "./runtime-activity.js";
 import { getPackageVersion } from "../shared/version.js";
@@ -39,7 +39,8 @@ import { HermesAcpEngine } from "../engines/hermes-acp.js";
 import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
-import { startIdleCapacityAutoStart } from "./idle-capacity.js";
+import { startBoardWalk } from "../board-walk/walk.js";
+import { describeSeed, seedBoardWalk } from "../board-walk/seed.js";
 import { installTodoCommentRouting } from "./todo-comment-routing.js";
 import { HookRegistry } from "./hook-registry.js";
 import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
@@ -52,7 +53,7 @@ import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CL
 import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
 import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
-import { isSameOriginBrowserRequest, resumePendingWebQueueItems, type ApiContext } from "./api.js";
+import { emitTodoProjectionEvent, interruptSessionTurn, isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
 import { createGatewayRequestHandler } from "./request-handler.js";
 import { sessionCommGuards, LATERAL_MAX_HOPS } from "./session-comm-guards.js";
@@ -867,10 +868,24 @@ export async function startGateway(
     backgroundActivity,
     gatewayAuthToken,
   };
-  // Below apiContext, which both start sessions through: the idle-capacity
-  // auto-start, and the comment routing that wakes a mentioned employee.
-  const idleCapacity = startIdleCapacityAutoStart({ getConfig: () => currentConfig, context: apiContext });
-  apiContext.idleCapacity = idleCapacity;
+  // The board walk: below apiContext because a start goes through the same
+  // Dispatcher spawn the dispatch route uses, which reads it. Seeding first
+  // gives a fresh install its rules file and retires an old idleCapacity block.
+  const seedLine = describeSeed(seedBoardWalk());
+  if (seedLine) logger.info(seedLine);
+  const boardWalk = startBoardWalk({
+    getConfig: () => currentConfig,
+    context: apiContext,
+    holdingCapacity: (sessions) => sessionsHoldingEngineCapacity(sessions, apiContext),
+    emitProjectionEvent: (id, action) => emitTodoProjectionEvent(apiContext, id, action),
+    stopTurn: (sessionKey) => {
+      const session = getSessionBySessionKey(sessionKey);
+      if (session) interruptSessionTurn(apiContext, session, "Interrupted: board walk turn timed out", "Board walk turn timed out");
+    },
+  });
+  apiContext.boardWalk = boardWalk;
+  // Comment routing wakes a mentioned employee; like the walk, it starts
+  // sessions through apiContext.
   const stopCommentRouting = installTodoCommentRouting(apiContext);
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)
@@ -1221,7 +1236,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop(); idleCapacity.stop(); stopCommentRouting();
+    backgroundRefreshes.stop(); boardWalk.stop(); stopCommentRouting();
 
     // Stop caffeinate
     if (caffeinate && caffeinate.exitCode === null) {
