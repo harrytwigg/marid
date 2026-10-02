@@ -148,7 +148,11 @@ export function buildCompactCommand(handoff: Pick<CompactionHandoff, "goal">): s
 }
 
 export const COMPACTION_TURN_DISPLAY = "🗜️ Compacting context — requested by this session";
-export const RESUME_TURN_DISPLAY = "🗜️ Context compacted — resuming from the session's handoff";
+/** Shown when the resume turn is QUEUED. The transcript records a queued turn's
+ *  display text at that moment, not when the turn runs, so this must not claim
+ *  the compaction is done: the measured "Context compacted: N → M" notice
+ *  (`compactionConfirmation`) is the only one that says so. */
+export const RESUME_TURN_DISPLAY = "🗜️ Handoff queued — this session resumes from it once the compaction has finished";
 
 /** The resume turn: the handoff, verbatim, with the one instruction that turns
  *  it into a continuation rather than a message to answer. */
