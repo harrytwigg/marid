@@ -81,6 +81,9 @@ function moveReason(e: WorkItemEventWire): string | null {
 /** The reserved assignee value for the operator; it is not on the roster. */
 export const OPERATOR_ASSIGNEE = "@operator"
 
+/** The `assignee` filter value that matches Todos with no assignee. */
+export const UNASSIGNED_FILTER = "@unassigned"
+
 /** The operator as an assignee-picker row, listed before the employees. A
  *  system employee is never offered: it routes Todos but owns none. */
 export const OPERATOR_ROW: Pick<Employee, "name" | "displayName" | "department"> = { name: OPERATOR_ASSIGNEE, displayName: "You (operator)", department: "" }
@@ -89,5 +92,14 @@ export const OPERATOR_ROW: Pick<Employee, "name" | "displayName" | "department">
 export function displayNameOf(assignee: string | null, byName: Map<string, Employee>): string {
   if (!assignee) return ""
   if (assignee === OPERATOR_ASSIGNEE) return "You"
+  return byName.get(assignee)?.displayName ?? assignee
+}
+
+/** What the Assignee filter reads when set: the person's name, "Assigned to me" for the
+ *  operator, "Unassigned" for the no-assignee sentinel; null when unset. */
+export function assigneeFilterLabel(assignee: string | undefined, byName: Map<string, Employee>): string | null {
+  if (!assignee) return null
+  if (assignee === OPERATOR_ASSIGNEE) return "Assigned to me"
+  if (assignee === UNASSIGNED_FILTER) return "Unassigned"
   return byName.get(assignee)?.displayName ?? assignee
 }

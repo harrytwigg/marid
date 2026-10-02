@@ -18,6 +18,7 @@ import { DATE_OPTIONS, DUE_OPTIONS, SOURCE_OPTIONS, STATUS_OPTIONS } from "./fil
 import { useLabelRegistry } from "./use-todos"
 import { SearchLauncher } from "./search-launcher"
 import { TodoFilterSheet } from "./todo-filter-sheet"
+import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
 
 const MENU_CLASS =
   "w-[min(320px,calc(100vw-24px))] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-2 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
@@ -200,7 +201,7 @@ export function FilterBar({
   }
 
   const active = activeFilterCount(filters)
-  const personName = filters.assignee ? (byName.get(filters.assignee)?.displayName ?? filters.assignee) : null
+  const personName = assigneeFilterLabel(filters.assignee, byName)
   const statusLabel = filters.status === "open" ? null : (STATUS_OPTIONS.find((s) => s.value === filters.status)?.label ?? filters.status)
   const sourceLabel = SOURCE_OPTIONS.find((s) => s.value === filters.source)?.label
   const dateLabel = DATE_OPTIONS.find((d) => d.value === filters.date)?.label
@@ -215,6 +216,12 @@ export function FilterBar({
         <ValueChip label="Assignee" set={!!filters.assignee} display={personName} testId="filter-chip-assignee">
           <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: undefined })}>
             Anyone<MenuCheck on={!filters.assignee} />
+          </DropdownMenuItem>
+          <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: OPERATOR_ASSIGNEE })}>
+            Assigned to me<MenuCheck on={filters.assignee === OPERATOR_ASSIGNEE} />
+          </DropdownMenuItem>
+          <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: UNASSIGNED_FILTER })}>
+            Unassigned<MenuCheck on={filters.assignee === UNASSIGNED_FILTER} />
           </DropdownMenuItem>
           {employees.map((employee) => (
             <DropdownMenuItem key={employee.name} className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: employee.name })}>
@@ -410,6 +417,12 @@ export function FilterBar({
               <DropdownMenuSubContent className={SUBMENU_CLASS}>
                 <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: undefined })}>
                   Anyone<MenuCheck on={!filters.assignee} />
+                </DropdownMenuItem>
+                <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: OPERATOR_ASSIGNEE })}>
+                  Assigned to me<MenuCheck on={filters.assignee === OPERATOR_ASSIGNEE} />
+                </DropdownMenuItem>
+                <DropdownMenuItem className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: UNASSIGNED_FILTER })}>
+                  Unassigned<MenuCheck on={filters.assignee === UNASSIGNED_FILTER} />
                 </DropdownMenuItem>
                 {employees.map((employee) => (
                   <DropdownMenuItem key={employee.name} className={ITEM_CLASS} onClick={() => onChange({ ...filters, assignee: employee.name })}>

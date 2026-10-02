@@ -12,7 +12,7 @@ import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { WorkItemEventKind } from './event-log.js';
-import { OPERATOR_ASSIGNEE } from './operator-assignee.js';
+import { OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from './operator-assignee.js';
 
 /**
  * Work-item store — the substrate of the Todos ledger (GRS-002, elevated by
@@ -481,6 +481,10 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
   for (const [key, column] of EQUALITY_FILTERS) {
     const value = filter[key];
     if (!value) continue;
+    if (key === 'assignee' && value === UNASSIGNED_FILTER) {
+      conditions.push(`${column} IS NULL`);
+      continue;
+    }
     conditions.push(`${column} = ?`);
     values.push(value);
   }
