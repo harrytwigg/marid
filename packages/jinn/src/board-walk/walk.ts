@@ -117,8 +117,10 @@ function dispatcherSuffix(decision: StartDecision): string {
  * every tool taken away. The walk decides; the gateway acts. A tool call in
  * this turn would be an act nobody checked, so:
  *   - every MCP server, the Jinn toolset included, is detached;
- *   - Claude's built-in tools are switched off (`--tools ""`) and no other MCP
- *     configuration is read (`--strict-mcp-config`);
+ *   - Claude's built-in tools are switched off (`--tools ""`), no other MCP
+ *     configuration is read (`--strict-mcp-config`), and the Chrome
+ *     integration the engine always enables is switched off again
+ *     (`--no-chrome`), which otherwise brings its browser tools back;
  *   - the turn always runs on Claude, on the gateway, whatever engine or host
  *     the employee normally uses. Claude is the one engine whose tools can be
  *     switched off from the command line; opencode in server mode ignores those
@@ -139,7 +141,9 @@ export function lockedDownEmployee(employee: Employee, claudeModel: string): Emp
     model: employee.engine === WALK_ENGINE ? employee.model : claudeModel,
     mcp: false,
     jinnMcp: false,
-    cliFlags: ["--tools", "", "--strict-mcp-config"],
+    // `--no-chrome` must come after the engine's own `--chrome` (it does:
+    // employee flags are appended), or the browser tools come back.
+    cliFlags: ["--no-chrome", "--tools", "", "--strict-mcp-config"],
   };
 }
 

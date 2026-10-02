@@ -44,9 +44,9 @@ describe("the walk's turn has no tools", () => {
     } as unknown as Employee;
     expect(lockedDownEmployee(employee, "sonnet")).toEqual({
       name: "assistant", engine: "claude", model: "sonnet", mcp: false, jinnMcp: false,
-      cliFlags: ["--tools", "", "--strict-mcp-config"],
+      cliFlags: ["--no-chrome", "--tools", "", "--strict-mcp-config"],
     });
     const onClaude = { name: "assistant", engine: "claude", model: "opus", cliFlags: ["--chrome"] } as unknown as Employee;
-    expect(lockedDownEmployee(onClaude, "sonnet")).toMatchObject({ engine: "claude", model: "opus", cliFlags: ["--tools", "", "--strict-mcp-config"] });
+    expect(lockedDownEmployee(onClaude, "sonnet")).toMatchObject({ engine: "claude", model: "opus", cliFlags: ["--no-chrome", "--tools", "", "--strict-mcp-config"] });
   });
 });
