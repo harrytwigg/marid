@@ -109,7 +109,7 @@ describe("unblocking a Todo", () => {
   it("refuses a target the board does not offer out of blocked", async () => {
     mocked.getWorkItem.mockResolvedValue(todo({ status: "blocked" }))
 
-    const result = await executeToolCall("talk_unblock_todo", '{"id":"ABC-59","status":"executing","note":"back on it"}')
+    const result = await executeToolCall("talk_unblock_todo", '{"id":"ABC-59","status":"blocked","note":"back on it"}')
 
     expect(mocked.setWorkItemStatus).not.toHaveBeenCalled()
     expect(result).toMatchObject({ ok: false })

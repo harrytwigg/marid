@@ -163,11 +163,11 @@ describe("NeedsYouView", () => {
     const trigger = screen.getByTestId("needs-unblock")
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
     fireEvent.click(trigger)
-    // The legality module's edges from blocked (manual-start rule: never
-    // executing) — backlog leads the manual exits.
+    // The legality module's edges from blocked — backlog leads the manual
+    // exits, and executing resumes the work in place.
     const backlog = await screen.findByTestId("needs-unblock-backlog")
     expect(screen.getByTestId("needs-unblock-in_review")).toBeTruthy()
-    expect(screen.queryByTestId("needs-unblock-executing")).toBeNull()
+    expect(screen.getByTestId("needs-unblock-executing")).toBeTruthy()
     fireEvent.click(backlog)
     await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("wi_private_blocked", "backlog", undefined))
   })
