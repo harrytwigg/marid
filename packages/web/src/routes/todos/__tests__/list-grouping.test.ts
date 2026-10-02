@@ -126,6 +126,22 @@ describe("groupTodoListItems", () => {
     expect(groups.find((group) => group.key === "blocked")?.count).toBe(2)
   })
 
+  it("leaves an operator-lane in_review Todo in its own status group", () => {
+    const awaitingOperator = { ...item("ICI-5", "in_review"), attentionLane: "operator" as const }
+    const empty = { items: [], total: 0 }
+    const groups = groupTodoListItems(
+      {
+        backlog: empty, executing: empty,
+        in_review: { items: [awaitingOperator], total: 1 },
+        blocked: empty, done: empty, cancelled: empty,
+      },
+      [awaitingOperator],
+    )
+
+    expect(groups.find((group) => group.key === "in-review")?.items.map(({ id }) => id)).toEqual(["ICI-5"])
+    expect(groups.find((group) => group.key === "in-review")?.count).toBe(1)
+  })
+
   it("omits the groups a one-status view never queried, rather than showing them as 0", () => {
     const executing = item("ICI-9", "executing")
     const empty = { items: [], total: 0 }
