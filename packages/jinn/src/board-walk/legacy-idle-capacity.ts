@@ -49,14 +49,17 @@ function isMapping(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const VALID: Record<string, (raw: unknown) => boolean> = {
+  number: (raw) => typeof raw === "number" && Number.isFinite(raw),
+  boolean: (raw) => typeof raw === "boolean",
+  string: (raw) => typeof raw === "string" && raw.trim() !== "",
+};
+
 /** Keep a value only when it has the type the default has; anything else is
  *  dropped, as the old loader would have refused it outright. */
 function pick<T>(raw: unknown, fallback: T): T {
-  if (raw === undefined || raw === null) return fallback;
-  if (typeof fallback === "number") return (typeof raw === "number" && Number.isFinite(raw) ? raw : fallback) as T;
-  if (typeof fallback === "boolean") return (typeof raw === "boolean" ? raw : fallback) as T;
-  if (typeof fallback === "string") return (typeof raw === "string" && raw.trim() ? raw.trim() : fallback) as T;
-  return fallback;
+  if (!VALID[typeof fallback]?.(raw)) return fallback;
+  return (typeof raw === "string" ? raw.trim() : raw) as T;
 }
 
 function resolveWindow(base: LegacyWindowPolicy, raw: unknown): LegacyWindowPolicy {

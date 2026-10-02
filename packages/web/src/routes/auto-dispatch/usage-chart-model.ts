@@ -1,9 +1,9 @@
-import type { IdleCapacityStart, UsageSample } from "@/lib/api-idle-capacity"
+import type { StartedSession, UsageSample } from "@/lib/api-auto-dispatch"
 import type { Projection } from "./usage-projection"
 
 /**
- * The usage graph's geometry (US4), pure: samples, starts and a
- * projection in; pixel coordinates out. The chart component only draws.
+ * The usage graph's geometry (US4), pure: samples, the sessions started
+ * on the engine and a projection in; pixel coordinates out. The chart component only draws.
  */
 
 export interface ChartFrame {
@@ -29,11 +29,11 @@ export interface ChartModel {
    *  found across that gap (A, absent × n, B), which is the marker the
    *  operator most wants. */
   resets: Array<{ x: number; at: number }>
-  starts: Array<{ x: number; y: number; start: IdleCapacityStart }>
+  /** Sessions started in the tail, placed on the five-hour line as it read then. */
+  starts: Array<{ x: number; y: number; start: StartedSession }>
   /** Hour ticks along the domain, at clean local hours. */
   ticks: Array<{ x: number; at: number }>
   projection?: { from: ChartPoint; to: ChartPoint; dashed: true }
-  ceiling?: { y: number; percent: number }
   nowX: number
 }
 
@@ -89,11 +89,21 @@ function hourTicks(domain: { start: number; end: number }): number[] {
   return ticks
 }
 
+/** The five-hour share as the last reading at or before `at` showed it. */
+function fiveHourAt(samples: readonly UsageSample[], at: number): number {
+  let used = 0
+  for (const sample of samples) {
+    if (sample.at > at) break
+    const window = sample.windows.find((entry) => entry.name === "5h")
+    if (window) used = window.usedPercent
+  }
+  return used
+}
+
 export function buildChartModel(input: {
   samples: readonly UsageSample[]
-  starts: readonly IdleCapacityStart[]
+  starts: readonly StartedSession[]
   projection?: Projection
-  ceiling?: number
   now: number
   frame: ChartFrame
   tailMs?: number
@@ -111,9 +121,9 @@ export function buildChartModel(input: {
     series: names.map((name) => ({ name, segments: seriesSegments(inRange, name, x, y) })),
     resets: fiveHourResets(inRange).map((at) => ({ x: x(at), at })),
     starts: input.starts
-      .map((start) => ({ start, at: Date.parse(start.startedAt) }))
+      .map((start) => ({ start, at: Date.parse(start.createdAt) }))
       .filter(({ at }) => at >= domain.start && at <= now)
-      .map(({ start, at }) => ({ x: x(at), y: y(start.fiveHour?.usedPercent ?? 0), start })),
+      .map(({ start, at }) => ({ x: x(at), y: y(fiveHourAt(inRange, at)), start })),
     ticks: hourTicks(domain).map((at) => ({ x: x(at), at })),
     nowX: x(now),
   }
@@ -124,6 +134,5 @@ export function buildChartModel(input: {
       dashed: true,
     }
   }
-  if (input.ceiling !== undefined) model.ceiling = { y: y(input.ceiling), percent: input.ceiling }
   return model
 }

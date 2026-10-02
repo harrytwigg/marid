@@ -79,7 +79,7 @@ function startDecision(raw: unknown, index: number, problems: string[]): StartDe
   return { id, reason, ...(engine ? { engine } : {}), ...(model ? { model } : {}) };
 }
 
-export function parseDecisions(reply: string): ParsedDecisions {
+function parseObject(reply: string): { ok: true; raw: Record<string, unknown> } | { ok: false; error: string } {
   const json = extractJson(reply);
   if (!json) return { ok: false, error: "the reply carried no JSON object" };
   let raw: unknown;
@@ -88,16 +88,23 @@ export function parseDecisions(reply: string): ParsedDecisions {
   } catch (error) {
     return { ok: false, error: `the reply's JSON does not parse: ${error instanceof Error ? error.message : String(error)}` };
   }
-  if (!isRecord(raw)) return { ok: false, error: "the reply's JSON is not an object" };
+  return isRecord(raw) ? { ok: true, raw } : { ok: false, error: "the reply's JSON is not an object" };
+}
+
+function listOf<T>(raw: unknown, name: string, read: (entry: unknown, index: number, problems: string[]) => T | undefined, problems: string[]): T[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) { problems.push(`${name} is not a list`); return []; }
+  return raw.map((entry, index) => read(entry, index, problems)).filter((entry): entry is T => entry !== undefined);
+}
+
+export function parseDecisions(reply: string): ParsedDecisions {
+  const parsed = parseObject(reply);
+  if (!parsed.ok) return parsed;
+  const { raw } = parsed;
   const problems: string[] = [];
-  const todos = (Array.isArray(raw.todos) ? raw.todos : [])
-    .map((entry, index) => todoDecision(entry, index, problems))
-    .filter((entry): entry is TodoDecision => entry !== undefined);
-  if (raw.todos !== undefined && !Array.isArray(raw.todos)) problems.push("todos is not a list");
+  const todos = listOf(raw.todos, "todos", todoDecision, problems);
   const dispatchRaw = isRecord(raw.dispatch) ? raw.dispatch : {};
-  const start = (Array.isArray(dispatchRaw.start) ? dispatchRaw.start : [])
-    .map((entry, index) => startDecision(entry, index, problems))
-    .filter((entry): entry is StartDecision => entry !== undefined);
+  const start = listOf(dispatchRaw.start, "dispatch.start", startDecision, problems);
   const dispatchReason = text(dispatchRaw.reason);
   if (!dispatchReason) return { ok: false, error: "the reply gives no dispatch.reason (why it starts something, or why nothing)" };
   const summary = text(raw.summary) ?? dispatchReason;

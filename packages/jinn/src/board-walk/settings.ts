@@ -114,24 +114,32 @@ function actionSettings(raw: unknown, problems: string[]): Record<BoardWalkActio
   return actions;
 }
 
+function enabledSetting(raw: unknown, problems: string[]): boolean {
+  if (raw === undefined) return BOARD_WALK_DEFAULTS.enabled;
+  if (typeof raw === "boolean") return raw;
+  problems.push("enabled must be true or false");
+  return BOARD_WALK_DEFAULTS.enabled;
+}
+
+/** An explicit empty model means "the employee's own"; absent means the default. */
+function modelSetting(mapping: Record<string, unknown>, problems: string[]): string | undefined {
+  if (mapping.model === undefined) return BOARD_WALK_DEFAULTS.model;
+  return stringSetting(mapping, "model", problems) || undefined;
+}
+
 /** Resolve a parsed frontmatter mapping onto the defaults, collecting problems. */
 export function resolveSettings(raw: unknown): { settings: BoardWalkSettings; problems: string[] } {
   const problems: string[] = [];
-  const mapping = raw === undefined || raw === null ? {} : raw;
+  const mapping = raw ?? {};
   if (!isMapping(mapping)) {
     return { settings: { ...BOARD_WALK_DEFAULTS, timezone: hostTimezone() }, problems: ["the frontmatter must be a YAML mapping"] };
   }
-  let enabled = BOARD_WALK_DEFAULTS.enabled;
-  if (mapping.enabled !== undefined) {
-    if (typeof mapping.enabled === "boolean") enabled = mapping.enabled;
-    else problems.push("enabled must be true or false");
-  }
+  const enabled = enabledSetting(mapping.enabled, problems);
   const schedule = stringSetting(mapping, "schedule", problems) || BOARD_WALK_DEFAULTS.schedule;
   const timezone = stringSetting(mapping, "timezone", problems) || hostTimezone();
   for (const error of validateCronSchedule({ schedule, timezone })) problems.push(`${error.field}: ${error.message}`);
   const employee = stringSetting(mapping, "employee", problems) || BOARD_WALK_DEFAULTS.employee;
-  // An explicit empty model means "the employee's own"; absent means the default.
-  const model = mapping.model === undefined ? BOARD_WALK_DEFAULTS.model : stringSetting(mapping, "model", problems) || undefined;
+  const model = modelSetting(mapping, problems);
   const actions = actionSettings(mapping.actions, problems);
   return { settings: { enabled, schedule, timezone, employee, ...(model ? { model } : {}), actions }, problems };
 }

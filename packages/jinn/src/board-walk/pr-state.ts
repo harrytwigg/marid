@@ -50,18 +50,25 @@ function gh(args: string[], timeoutMs: number): Promise<string> {
   });
 }
 
+function linkState(url: string, kind: "pull" | "issue", raw: Record<string, unknown>): LinkState {
+  const field = (key: string): string | undefined => (typeof raw[key] === "string" && raw[key] ? raw[key] as string : undefined);
+  const title = field("title");
+  const mergedAt = field("mergedAt");
+  const closedAt = field("closedAt");
+  return {
+    url, kind,
+    state: field("state") ?? "unknown",
+    ...(title ? { title } : {}),
+    ...(mergedAt ? { mergedAt } : {}),
+    ...(closedAt ? { closedAt } : {}),
+  };
+}
+
 export function ghResolver(timeoutMs = 15_000): LinkResolver {
   return async (url, kind) => {
     const fields = kind === "pull" ? "state,title,mergedAt,closedAt" : "state,title,closedAt";
     try {
-      const raw = JSON.parse(await gh([kind === "pull" ? "pr" : "issue", "view", url, "--json", fields], timeoutMs)) as Record<string, unknown>;
-      return {
-        url, kind,
-        state: typeof raw.state === "string" ? raw.state : "unknown",
-        ...(typeof raw.title === "string" ? { title: raw.title } : {}),
-        ...(typeof raw.mergedAt === "string" && raw.mergedAt ? { mergedAt: raw.mergedAt } : {}),
-        ...(typeof raw.closedAt === "string" && raw.closedAt ? { closedAt: raw.closedAt } : {}),
-      };
+      return linkState(url, kind, JSON.parse(await gh([kind === "pull" ? "pr" : "issue", "view", url, "--json", fields], timeoutMs)) as Record<string, unknown>);
     } catch (error) {
       return { url, kind, state: "unknown", error: error instanceof Error ? error.message : String(error) };
     }

@@ -50,7 +50,7 @@ import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CL
 import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
 import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
-import { isSameOriginBrowserRequest, resumePendingWebQueueItems, type ApiContext } from "./api.js";
+import { isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
 import { createGatewayRequestHandler } from "./request-handler.js";
 import { sessionCommGuards, LATERAL_MAX_HOPS } from "./session-comm-guards.js";
@@ -894,7 +894,11 @@ export async function startGateway(
   // gives a fresh install its rules file and retires an old idleCapacity block.
   const seedLine = describeSeed(seedBoardWalk());
   if (seedLine) logger.info(seedLine);
-  const boardWalk = startBoardWalk({ getConfig: () => currentConfig, context: apiContext });
+  const boardWalk = startBoardWalk({
+    getConfig: () => currentConfig,
+    context: apiContext,
+    holdingCapacity: (sessions) => sessionsHoldingEngineCapacity(sessions, apiContext),
+  });
   apiContext.boardWalk = boardWalk;
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)

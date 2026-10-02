@@ -1,262 +1,156 @@
-# Idle-capacity auto-start
+# The board walk: readiness and idle-capacity dispatch
 
-A Claude subscription meters two rolling windows — five hours and seven days.
-Whatever is unused when a window resets is gone. The idle-capacity auto-start
-watches the account's **real** windows (the same reading the Limits page and
-`jinn limits` show), and when a window is about to reset with capacity to
-spare, starts an eligible backlog Todo so the allowance is used rather than
-lapsed. Spec: `specs/002-idle-capacity-auto-start/`.
+The board walk is a scheduled pass over the Todo board. It ships on by default, and each tick decides two things:
 
-It is a gateway loop, not a cron job. A cron job is a prompt run by an engine,
-so it would spend Claude capacity — on the very window it is measuring — to
-answer a question that is a handful of numeric comparisons. The loop decides in
-code and starts the same built-in Todo Dispatcher the board's dispatch button
-starts; that one Sonnet turn is where judgement is needed (which employee should own
-the Todo).
+1. **What is ready.** A Todo's gates are usually written in prose: "not before the 10th", "after #18 merges", a `blocks` relation. The walk releases a `blocked` Todo whose gates are met, parks a Todo whose only gate is a plain date, and flags a stuck Todo once.
+2. **What to start.** It reads the account's usage, reset times and predictions, then decides whether spare capacity should start a ready backlog Todo, and which one. It starts it through the same Todo Dispatcher the board's dispatch button uses.
 
-## Three tiers
+It replaced the numeric idle-capacity loop (`gateway.idleCapacity`) and is the only timer that starts work. Everything it does is ruled by one file the operator edits, `$JINN_HOME/board-walk.md`.
 
-How aggressive the loop is depends on who is around:
+## Why a model turn, when this used to be a code loop
 
-| Tier | When | Default ceilings (5h / weekly) | Lookahead (5h) | Starts per 5h window |
-|---|---|---|---|---|
-| `overnight` | inside the quiet hours, operator not live | 85% / 85% | whole window (300 min) | 3 |
-| `daytime` | outside the quiet hours, operator not live | 50% / 75% | 120 min | 2 |
-| `interactive` | the operator is live, at any hour | 20% / 60% | 30 min | 1 |
+An earlier version of this page argued for a code loop. A cron job is a prompt run by an engine, so it spends the capacity it measures, to answer what was then a handful of numeric comparisons.
 
-Overnight spends deep because the window resets unused otherwise; the 15% it
-leaves is the hard floor. Daytime leaves real headroom in case an interactive
-session starts later. Interactive barely touches the window: one start, only
-in the last half hour of a window that is almost untouched — and it can be
-switched off outright (`tiers.interactive.enabled: false`).
+The question is no longer numeric. Gates are prose, and the operator wants to say what they like dispatched and when, in words: "never while I'm working", "Codex can take docs work any time". Two separate LLM schedulers, one for readiness and one for dispatch, would race each other. So one turn does both:
 
-**The operator is live** when any of three signals has fired within
-`operatorActivity.idleMinutes` (default 30):
+- **Sonnet, hourly by default.** One turn per tick, with no tool calls: the board and the snapshot arrive in the prompt, and the answer is one JSON object.
+- **Nothing open, no turn.** A tick on a board with no open Todos spends nothing.
+- **Off when you say so.** `enabled: false` stops every tick.
 
-1. An **operator-driven session** had activity. That is a session whose turns
-   the operator initiates: top-level (no parent session — a delegated or
-   spawned child has one), not started by cron, and not a system
-   employee's (the Todo Dispatcher and Shaper are started by the gateway on the
-   operator's behalf). A dashboard chat with the COO, a Telegram conversation
-   with the PA, a direct chat with any employee: the operator reading the reply
-   and typing the next message is an active session even though no turn is
-   running. Read from the session registry's `lastActivity`. A heartbeat armed
-   on such a session re-runs it on a timer and bumps that stamp, so it reads as
-   the operator for `idleMinutes` after each beat — the safe direction.
-2. A Jinn interactive Claude session (the dashboard's CLI mode) wrote its
-   statusline snapshot — the recorder the gateway installs in those sessions
-   writes on every turn, so the newest snapshot's mtime is the last moment the
-   operator drove Claude that way.
-3. The five-hour window's used share rose by `operatorActivity.usageDeltaPercent`
-   (default 2, floor 1) or more between two **ticks'** readings of the same
-   window, while no Jinn session was active in between. Usage the system did
-   not spend is the operator's, on whatever machine they spent it — this is the
-   one signal that reaches a Claude Code session outside Jinn. It fails towards
-   caution: a Jinn session too brief to be seen between two ticks can read as
-   the operator, which backs the loop off. A preview never advances this
-   signal's reference reading; only a tick does.
+## The rules file
 
-**A session holds engine capacity** — the `maxActiveSessions` guard — when it
-is mid-turn or queued (transport `running`/`queued`) or parked on a gate
-(`waiting`), on any engine. Jinn cannot see interactive Claude Code use outside
-itself except through signal 2.
+`board-walk.md` is seeded from the template on `jinn setup` and at every gateway boot when it is missing. It is **never overwritten**: an upgrade leaves an edited file alone. It is re-read on every tick, and the scheduler re-reads it once a minute, so edits take effect without a restart.
 
-## What it never does
-
-- Run while `gateway.idleCapacity.enabled` is not `true` (the default).
-- Start anything without a usable reading: an unsupported, errored or stale
-  reading, or one that lacks the five-hour or weekly window or names a reset
-  that is not still ahead, is a reason to hold, never a reason to go.
-- Start while a window is above the tier's ceiling. Every weekly bucket the
-  account reports, per-model ones included, must be under the weekly ceiling.
-- Start while more sessions hold engine capacity than the tier allows.
-- Start more than the tier's `maxDispatchesPerWindow` Todos in one five-hour
-  window (counted by the window's reset time), or more than one per tick.
-- Touch a Todo that opted out (`no-auto-start` label or `autoStart: false`),
-  whose next attempt is pinned to a non-Claude engine, or has an approval
-  pending.
-- Touch anything outside `backlog`. A parked Todo is `blocked`, so it is not a
-  candidate until its park runs out and it is back in the queue — see
-  [Parking date-gated work](#parking-date-gated-work).
-
-## What the ceilings are — and are not
-
-A ceiling is a **gate on starting**, re-checked against the live account
-before every start. It is **not a bound on consumption**. Once a Todo is
-started its session runs to completion, and a senior-developer Opus session
-can run for one to three hours: a start at the end of a five-hour window can
-carry the window past its ceiling and spend the front of the next one. Two
-things bound the damage — the per-window start cap, and the fact that the
-next tick's ceiling check holds once the window is over — but nothing stops a
-running session on the ceiling. Set the ceilings with that in mind: the
-overnight floor of 15% is a floor on *starting*, and a start at 84% can still
-run the window to the top. Stop-on-ceiling (interrupting a started session
-when the window crosses a line) is a deliberate omission in this version and
-is recorded as an open decision in the spec.
-
-The downstream assignee's engine is likewise not constrained. The Dispatcher is
-told the start exists to use Claude allowance and to prefer a Claude-engine
-employee, and Todos pinned to another engine are skipped, but the Dispatcher's
-routing is its own judgement.
-
-## Configuration
+The **frontmatter** holds the mechanical settings:
 
 ```yaml
-gateway:
-  idleCapacity:
-    enabled: true                    # default false
-    intervalMinutes: 10              # how often the reading is re-taken
-    timezone: Europe/London          # the zone the quiet hours are read in
-    quietHours: { start: "01:00", end: "06:00" }   # may wrap midnight
-    operatorActivity:
-      idleMinutes: 30                # how long the operator counts as live
-      usageDeltaPercent: 2           # 5h usage rising this much outside Jinn = operator
-    tiers:
-      overnight:
-        enabled: true
-        fiveHour: { maxUsedPercent: 85, lookaheadMinutes: 300 }
-        sevenDay: { maxUsedPercent: 85, lookaheadMinutes: 1440 }
-        maxDispatchesPerWindow: 3
-        maxActiveSessions: 1
-      daytime:
-        fiveHour: { maxUsedPercent: 50, lookaheadMinutes: 120 }
-        sevenDay: { maxUsedPercent: 75, lookaheadMinutes: 1440 }
-        maxDispatchesPerWindow: 2
-        maxActiveSessions: 1
-      interactive:
-        fiveHour: { maxUsedPercent: 20, lookaheadMinutes: 30 }
-        sevenDay: { maxUsedPercent: 60, lookaheadMinutes: 1440 }
-        maxDispatchesPerWindow: 1
-        maxActiveSessions: 1
-    requireLabel: null               # e.g. idle-ok — opt-in mode
+enabled: true            # false stops everything
+schedule: "0 * * * *"    # cron expression; hourly by default
+timezone: ""             # for the schedule and "local time"; empty = the host's zone
+employee: assistant      # whose engine runs the walk's turn
+model: sonnet            # model for that turn; empty = the employee's own
+actions:                 # hard switches, enforced by the gateway
+  release: true
+  park: true
+  flagStuck: true
+  dispatch: true
+  comment: true
 ```
 
-The values shown are the defaults; any key may be omitted. Config is
-hot-reloaded: switching the feature on, or changing a tier, takes effect on
-the next tick without a restart. A malformed block is refused at config load
-with the key named.
+The **body** is prose, one section per default behaviour:
 
-The dashboard's **Auto-Dispatch** page edits the same block: every key above
-is a control there, pre-filled with the values the loop is using (defaults
-included). A save writes the whole block through `PUT /api/config`, the same
-path the Settings page uses, carrying the file's revision so a hand edit made
-under an open page is refused rather than overwritten; a value the validator
-refuses is shown against its field and never reaches the file. Toggles apply
-on click, fields on blur or Enter — never per keystroke, since a prefix of
-`30` idle minutes or of `Europe/London` is a different policy. The page also
-shows a switch on each Todo's page, **Auto-start**, which sets the Todo's
-`dispatchConfig.autoStart`; off keeps the loop away from that one Todo
-whatever the policy says, as the `no-auto-start` label does.
+- Gates
+- Release
+- Park plain date gates
+- Flag stuck Todos
+- Comments
+- Dispatch
+- Your own rules
 
-Two triggers, both inside the tier's ceilings:
+The shipped Dispatch section restates the old numeric policy in plain English:
 
-1. the five-hour window resets within the tier's `fiveHour.lookaheadMinutes`
-   with its used share at or below `fiveHour.maxUsedPercent`;
-2. the seven-day window resets within `sevenDay.lookaheadMinutes` with its used
-   share at or below `sevenDay.maxUsedPercent` — the five-hour ceiling still
-   applies, because that is the interactive headroom whatever the week says.
+- three situations (overnight, daytime, operator live), each with its own ceilings and lookahead;
+- quiet hours;
+- the operator-activity signals;
+- one start per tick, and the starts per five-hour window;
+- no start while a session holds capacity;
+- priority first, then the oldest.
 
-Eligible backlog Todos are tried highest priority first, then oldest first.
-Set `requireLabel` to make it opt-in: only backlog Todos carrying that label
-are considered. Date-gated work ("run on/after …") has to be parked — the loop
-cannot read a date out of a title.
+Change any of it. Write "don't" to switch a behaviour off, or add rules in "Your own rules". A section you delete falls back to the shipped default.
+
+**Switches are the only certain "off".** The prose is read by a model; the switches are read by the gateway. With `actions.dispatch: false`, every start the walk asks for is refused, whatever the prose says, while readiness keeps running. With `enabled: false`, nothing runs at all. The prose can narrow what a switch allows; it cannot widen it.
+
+A rules file that does not parse holds the walk; it never runs on guesses. The same applies to a bad switch value, a bad schedule or zone, or a missing file. The problem is shown on the Auto-Dispatch page and logged on each tick.
+
+## What one tick does
+
+1. **Read** `board-walk.md`. Stop if it is switched off or broken.
+2. **Build the board.** Every open Todo (`backlog`, `blocked`, `executing`) goes in, with:
+   - title, body, acceptance criteria, labels, dates and priority;
+   - its last comments;
+   - its relations, with each related Todo's current status;
+   - its stop cause (block kind, park date, unblock hint);
+   - whether it refuses automatic starts;
+   - what is running on it;
+   - the live state of every GitHub pull request or issue it links to, looked up with `gh`. A link that cannot be resolved is `unknown`, and an unknown gate is treated as not met.
+
+   Long text is truncated, and the board is capped so it fits one prompt.
+3. **Build the capacity snapshot** (below).
+4. **Ask the model.** One turn, routed as a session to the configured employee with the configured model. The session's key starts with `board-walk:`, and it is visible in Chats like any other session.
+5. **Carry out the answer.** The gateway checks every decision against the switches and the Todo's state at that moment:
+   - **release:** a `blocked` Todo goes back to `backlog`, keeping its assignee, with a comment giving the reason.
+   - **park:** a `backlog` or `blocked` Todo goes to `blocked` with `parkedUntil` set. The park expiry puts it back in the queue when the date passes (see below). An `executing` Todo is never parked.
+   - **flag:** a stuck Todo gets one comment. Each stuck episode is raised once, across ticks. If the Todo moves and later gets stuck again, that is a new episode.
+   - **start:** a ready `backlog` Todo is handed to the Todo Dispatcher, with the walk's reason and any engine preference added to the Dispatcher's prompt.
+
+     Some starts are refused in code, whatever the model asks: a Todo with the `no-auto-start` label, a Todo whose dispatch config says `autoStart: false` (the **Auto-start** switch on a Todo's page), and a Todo assigned to the operator. These are choices the operator made per Todo; they are not capacity limits.
+6. **Log the tick** to `logs/board-walk.jsonl`. Every decision is logged with the model's reason and what the gateway did with it, refusals included. A tick that starts nothing logs why. The gateway log gets one line per tick.
+
+A tick that fails starts nothing and moves nothing: an engine error, an answer with no readable JSON, or an answer with no `dispatch.reason`. The failure is logged. Ticks never overlap: a scheduled fire that lands while one is running is logged as `busy` and skipped.
+
+## The capacity snapshot
+
+The prompt carries one structure with readings and predictions, and no verdict:
+
+- **Every engine with a reading.** Claude, Codex, and opencode when `engines.opencode.usageLimits` is set. Each has its windows (used share, reset time, minutes to reset), whether it is recorded as exhausted, how many sessions on it hold capacity now, and the sessions started on it in the current five-hour window, broken down by what started them.
+
+  Engines the registry knows but that have no usable reading are listed by name, with the reason.
+- **Predictions for the Claude windows.** These come from the retained readings (`tmp/engine-limits/claude-usage-history.json`): the rate, the share expected at the reset, the share expected to lapse unused, and the exhaustion time if it comes before the reset. A prediction needs three readings, over half an hour for the five-hour window and six hours for a weekly one. Otherwise it says why it has none.
+- **The operator-activity signals.** These are given as times and deltas, not as a verdict:
+  - when the newest activity was on a session the operator drives (top-level, not cron, not a system employee);
+  - when a Jinn interactive Claude session last wrote its statusline;
+  - how much the Claude five-hour usage has risen since the previous tick's reading, and whether any Jinn session ran in between.
+
+  The previous reading is taken after the walk's own turn, so the walk's own spend is not counted as the operator's. Whether all of this means "the operator is live" is the rules file's call.
+- **The local time, weekday and zone.**
 
 ## Parking date-gated work
 
-The loop starts whatever is in `backlog`, so work that must not run before a
-date has to be out of `backlog` until then. That is a **park**: a plain block
-carrying `parkedUntil`.
+A park is a `blocked` Todo carrying `parkedUntil`. The walk parks plain date gates itself when `park` is on, and anyone can park by hand:
 
 ```
 update_work_item { id: "TST-19", status: "blocked", note: "run on/after the 1st",
                    parkedUntil: "2026-10-01T00:00:00Z" }
 ```
 
-- **The status must be `blocked`.** `parkedUntil` belongs to the stop, and any
-  move that does not stop the Todo deletes it on the same write — so the
-  gateway refuses it (400) on a move to `backlog`, `executing` or `in_review` rather than report a park that is already gone.
-- **Leave `blockKind` unset** (it means `needs_input`). A `dependency` block
-  re-queues the Todo to `backlog` on the same write, so it cannot
-  carry a park and is refused with one. Avoid `transient` too: it is the kind
-  the reconciler writes for a failed attempt, and recurrences are counted per
-  kind, so a park would share the counter that ends a failure loop.
-- **To move the date, send the same move again** with the new `parkedUntil`. A
-  hint (`unblockHint`) already on the stop is kept unless restated.
-- **It un-parks by itself.** Once `parkedUntil` has passed, the work-item
-  reconciler (at boot, then every 20 seconds) moves the Todo back to the queue
-  the way a `dependency` block would — to `backlog`, keeping its assignee,
-  where this loop or a dispatch can start it — and records the move with actor
-  `park-expiry`.
-  Nobody has to remember to come back for it. The attempts it ran before the
-  park no longer count as evidence of its status, so it is not pulled straight
-  into `in_review` or back into `blocked` by an old session receipt.
-- Until then the board shows it as waiting on a clock, not on you, and it stays
-  out of the needs-you queue.
+- **The status must be `blocked`.** A move that does not stop the Todo deletes the park, so the gateway refuses `parkedUntil` on any other move.
+- **It un-parks by itself.** Once the date passes, the work-item reconciler moves the Todo back to `backlog`, keeping its assignee, with actor `park-expiry`. It runs at boot and then every 20 seconds.
+- **Parks count toward the block-loop breaker.** The walk parks with `blockKind: transient`, so a Todo parked again and again is escalated on its third park, like any repeated block.
 
-Do not use `dueAt` for this. Elsewhere in the ledger it means a deadline, and
-the loop does not read it.
+## Upgrading from `gateway.idleCapacity`
 
-Parking uses the ordinary block, so it counts toward the block-loop breaker: a
-Todo blocked with the same kind three times without being finished in between
-is escalated instead: it stays in `blocked`, recorded as an escalation to the
-operator. A Todo parked again and again is therefore escalated on its third
-park, the same as one blocked again and again.
+The numeric loop and its config are gone. At the first boot of this version:
+
+- **No `board-walk.md` yet:** it is created. A `gateway.idleCapacity` block is turned into equivalent prose in its Dispatch section:
+  - every tier's ceilings, lookaheads, starts per window and concurrency;
+  - a switched-off tier;
+  - quiet hours and the operator-activity thresholds;
+  - `requireLabel`;
+  - the timezone;
+  - the tick interval, as a cron schedule, when the block set one. Otherwise the schedule is hourly.
+
+  If the block did not enable the old loop, `actions.dispatch` is set to `false`. The board walk ships on, but an operator who had automatic starts off never agreed to them.
+- **In every case,** the block is removed from `config.yaml`. A copy of the file as it was is kept beside it, as `config.yaml.pre-board-walk-<time>`.
+- **`board-walk.md` already exists:** the block is removed without being merged, and the boot log says so. Copy any setting you still want into the Dispatch section by hand.
+
+Without a block, an upgrade seeds the stock file, **with dispatch on**. That is a change from the old default, where the loop was off. Set `actions.dispatch: false` before upgrading if you do not want automatic starts.
 
 ## Observing it
 
-- `GET /api/idle-capacity` — what the next tick would do and why: the resolved
-  policy, the tier and the evidence behind it (whether the operator is live,
-  from which signal, whether the clock is in the quiet hours), the live verdict
-  against the account's windows including each window's reset time and
-  minutes to go, the eligible backlog in order, the Todos passed over with the
-  reason, and how many starts are charged to the current five-hour window.
-  Read-only; it never starts anything.
-- Every start leaves a system comment on the Todo (author `idle-capacity`)
-  quoting the tier and reading it acted on, the Dispatcher session it started,
-  and the count against the window cap.
-- The gateway log carries one `Idle-capacity: started …` line per start.
-- The **Auto-Dispatch** page shows the preview as a card, lists every start
-  the loop has made (read back from those comments, newest first, with the
-  Todo's current status), and graphs the account's five-hour and weekly used
-  share over the last twelve hours with the starts and window resets marked.
-  The gateway keeps the readings it makes (`tmp/engine-limits/claude-usage-history.json`,
-  one per five minutes, a week deep; a reading without a reset instant is not
-  kept, as the loop does not act on one). Above the graph the page projects
-  where each window is heading — a straight line at the rate of the current
-  window's readings, from the last reading to the reset, against the tier's
-  start gate — and leads with the weekly verdict, worst bucket first. The
-  projection is the page's arithmetic over served readings: the gateway
-  computes, stores and logs none, and the loop never reads one. It needs
-  three readings before it says anything — over half an hour for the
-  five-hour window, over six hours for a weekly bucket (a single 1% step over
-  half an hour would read as a week exhausted by tonight) — and it says what
-  it is ("linear, at the last 2 h rate"). A window whose reset has passed, or
-  a per-model bucket the account has stopped reporting, gets no verdict.
-- `GET /api/idle-capacity/history`, `/policy` and `/usage` are the page's
-  reads; all are read-only.
-- On first enablement, watch one overnight through the preview. An account
-  that has been idle long enough to have no five-hour window open reports no
-  reset for it, and the loop holds (a missing reset is never a reason to go)
-  until something opens a window. That is consistent with "capacity about to
-  lapse" — there is none — but it means a fully idle night starts nothing.
+The **Auto-Dispatch** page is read-only. It shows:
 
-## Engines
+- **The board walk:** whether it is scheduled, its schedule, zone, employee and model, which switches are off, any problems with the rules file, and the last ten ticks with every Todo they touched and why.
+- **Where the Claude allowance is heading:** the weekly verdict leads, worst bucket first, with the five-hour projection and a twelve-hour graph beneath it. The graph marks window resets and every session started on Claude; the starts the board walk made are marked in green.
+- **Sessions started this week:** every session started on each engine, newest first, whatever started it (the board walk, the dispatch button, quick capture, cron, a delegation, a chat). It is read from the session registry, one engine at a time. A Dispatcher session the walk started carries `transportMeta.startedBy: board-walk`; that is how the registry tells it apart from a manual dispatch.
 
-**Claude** is the only engine with a windowed account quota to read. The
-collector (`shared/engine-limits-claude.ts`) queries the OAuth usage API the
-CLI's `/usage` screen uses, falling back to the CLI's statusline snapshot; it
-was already a library function, a CLI (`jinn limits --json --engine claude`) and
-an HTTP route (`GET /api/engine-limits?engine=claude`) before this feature, and
-the loop calls the function directly. Each window carries `resetsAt`, so the
-loop reads the real reset rather than assuming a cadence — the account's
-five-hour-window pattern never needs to be inferred.
+The HTTP routes:
 
-**OpenCode** is not an input to this loop. OpenCode routes to whatever provider
-its own config names (here OpenCode Go, falling back to OpenRouter
-pay-per-token). Neither the CLI nor the Go provider publishes an account quota
-the CLI can read., `engines.opencode.usageLimits` meters jinn's
-own opencode spend against Go's documented windows (docs/engines-opencode.md).
-That is enough to stop routing work onto a spent opencode. It is not a reading
-of the account's unused allowance, so the loop still acts only on Claude's.
-Without that setting, `jinn limits` says opencode has no quota to read, rather
-than "no collector is registered".
+- `GET /api/board-walk`: the rules file's settings and problems, whether the walk is scheduled or running, and the last tick.
+- `GET /api/board-walk/ticks?limit=`: the tick log, newest first.
+- `POST /api/board-walk/tick`: run a tick now. Operator only. `?wait=1` waits for the result; otherwise it answers 202 at once.
+- `GET /api/auto-dispatch/sessions?hours=&engine=`: sessions started, with what started each one.
+- `GET /api/auto-dispatch/usage?hours=`: the retained Claude readings.
+
+## What a start does not bound
+
+A start is a decision made against the readings of that moment. It does not bound consumption. A started session runs to completion, and a long one can carry a window past whatever ceiling the rules name. The rules file says when to start; nothing stops a running session on a ceiling. Write the ceilings with that in mind.

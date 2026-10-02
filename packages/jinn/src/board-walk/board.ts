@@ -120,48 +120,54 @@ export interface DigestOptions {
   maxTodos?: number;
 }
 
+/** Present keys only: an absent optional reads as absent, not as `undefined`. */
+function optional<T extends object>(entries: { [K in keyof T]: T[K] | undefined | null | false | "" }): Partial<T> {
+  return Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined && value !== null && value !== false && value !== "")) as Partial<T>;
+}
+
+async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<BoardTodo> {
+  const labels = getWorkItemLabels(item.id).map((label) => label.name);
+  const tail = commentsTail(item.id, COMMENTS_PER_TODO);
+  const comments = tail.comments.filter((comment) => !comment.deletedAt)
+    .map((comment) => ({ author: comment.author, authorKind: comment.authorKind, at: comment.createdAt, body: truncate(comment.body, COMMENT_CHARS) ?? "" }));
+  const links = await Promise.all(
+    findLinks([item.body, item.acceptance, ...tail.comments.map((comment) => comment.body)])
+      .map(({ url, kind }) => opts.resolveLink(url, kind)),
+  );
+  return {
+    id: item.id,
+    title: item.title,
+    status: item.status,
+    statusSince: statusSince(item),
+    assignee: item.assignee,
+    priority: item.priority,
+    department: item.department,
+    labels,
+    parentId: item.parentId,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    dueAt: item.dueAt,
+    comments,
+    commentsTotal: tail.total,
+    relations: listRelations(item.id).map((relation) => ({ kind: relation.kind, direction: relation.direction, other: relation.other })),
+    sessions: sessionsOn(item),
+    links,
+    ...optional<Pick<BoardTodo, "body" | "acceptance" | "stop" | "noAutoStart" | "dispatchEngine" | "flaggedStuck">>({
+      body: truncate(item.body, BODY_CHARS),
+      acceptance: truncate(item.acceptance, ACCEPTANCE_CHARS),
+      stop: stopOf(item),
+      noAutoStart: noAutoStartReason(item, labels),
+      dispatchEngine: getTodoDispatchConfig(item.id)?.engine,
+      flaggedStuck: opts.flagged?.has(item.id) === true,
+    }),
+  };
+}
+
 export async function buildBoardDigest(opts: DigestOptions): Promise<BoardDigest> {
   const open = OPEN_STATUSES.flatMap((status) => listWorkItems({ status }))
     .sort((a, b) => b.priority - a.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const max = opts.maxTodos ?? DEFAULT_MAX_TODOS;
   const todos: BoardTodo[] = [];
-  for (const item of open.slice(0, max)) {
-    const labels = getWorkItemLabels(item.id).map((label) => label.name);
-    const tail = commentsTail(item.id, COMMENTS_PER_TODO);
-    const comments = tail.comments.filter((comment) => !comment.deletedAt)
-      .map((comment) => ({ author: comment.author, authorKind: comment.authorKind, at: comment.createdAt, body: truncate(comment.body, COMMENT_CHARS) ?? "" }));
-    const links = await Promise.all(
-      findLinks([item.body, item.acceptance, ...tail.comments.map((comment) => comment.body)])
-        .map(({ url, kind }) => opts.resolveLink(url, kind)),
-    );
-    const dispatch = getTodoDispatchConfig(item.id);
-    const noAutoStart = noAutoStartReason(item, labels);
-    const stop = stopOf(item);
-    todos.push({
-      id: item.id,
-      title: item.title,
-      status: item.status,
-      statusSince: statusSince(item),
-      assignee: item.assignee,
-      priority: item.priority,
-      department: item.department,
-      labels,
-      parentId: item.parentId,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      dueAt: item.dueAt,
-      ...(item.body ? { body: truncate(item.body, BODY_CHARS) } : {}),
-      ...(item.acceptance ? { acceptance: truncate(item.acceptance, ACCEPTANCE_CHARS) } : {}),
-      comments,
-      commentsTotal: tail.total,
-      relations: listRelations(item.id).map((relation) => ({ kind: relation.kind, direction: relation.direction, other: relation.other })),
-      ...(stop ? { stop } : {}),
-      ...(noAutoStart ? { noAutoStart } : {}),
-      ...(dispatch?.engine ? { dispatchEngine: dispatch.engine } : {}),
-      sessions: sessionsOn(item),
-      links,
-      ...(opts.flagged?.has(item.id) ? { flaggedStuck: true } : {}),
-    });
-  }
+  for (const item of open.slice(0, max)) todos.push(await digestTodo(item, opts));
   return { todos, omitted: Math.max(0, open.length - max), inReview: listWorkItems({ status: "in_review" }).length };
 }

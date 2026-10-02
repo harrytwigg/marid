@@ -1,11 +1,11 @@
-import type { UsageSample } from "@/lib/api-idle-capacity"
+import type { UsageSample } from "@/lib/api-auto-dispatch"
 import { formatMinutes, shortClock } from "./format"
 
 /**
  * Where a window is heading, from the readings the gateway kept (
- * FR-011). Pure: samples, a ceiling and an injected `now` in; a projection or
- * a reason there is none out. Nothing here is persisted, logged, or read by
- * the loop — the loop decides on live windows, and a projection on the wire
+ * FR-011). Pure: samples and an injected `now` in; a projection or
+ * a reason there is none out. Nothing here is persisted or logged — the board
+ * walk gets its own prediction in its capacity snapshot, and a projection on the wire
  * beside real samples would sooner or later be read as a reading.
  *
  * The operator asked for "a simple rate-based projection, not a real
@@ -48,12 +48,8 @@ export type Projection =
       resetAt: number
       /** Used share expected at the reset, clamped at 100. */
       atReset: number
-      /** When the tier's start gate is reached, if before the reset. */
-      gateAt?: number
       /** When 100 is reached, if before the reset. */
       exhaustsAt?: number
-      /** Already at or above the gate as of the last reading. */
-      aboveGate: boolean
     }
 
 /** The readings of one window: those sharing the reset instant of the latest
@@ -88,7 +84,7 @@ export function slopePerHour(points: readonly WindowPoint[]): number {
   return den === 0 ? 0 : (num / den) * 3_600_000
 }
 
-export function projectWindow(samples: readonly UsageSample[], name: string, ceiling: number, now: number): Projection {
+export function projectWindow(samples: readonly UsageSample[], name: string, now: number): Projection {
   const current = currentWindowPoints(samples, name)
   if (!current) return { kind: "none", reason: "no-window" }
   const { points, resetAt } = current
@@ -110,15 +106,14 @@ export function projectWindow(samples: readonly UsageSample[], name: string, cei
   const atReset = Math.min(100, from.usedPercent + (rate * (resetAt - from.at)) / 3_600_000)
   return {
     kind: "projected", ratePerHour: rate, basisMs, from, resetAt, atReset,
-    gateAt: at(ceiling), exhaustsAt: at(100), aboveGate: from.usedPercent >= ceiling,
+    exhaustsAt: at(100),
   }
 }
 
 const basis = (ms: number): string => `linear, at the last ${formatMinutes(ms / 60_000)} rate`
 
-/** One sentence the operator can act on. The tier's ceiling is a start gate,
- *  not a problem, and is worded as one; 100% is the real warning. */
-export function readout(projection: Projection, label: { window: string; tier: string; ceiling: number }): string {
+/** One sentence the operator can act on; 100% is the real warning. */
+export function readout(projection: Projection, label: { window: string }): string {
   switch (projection.kind) {
     case "none":
       if (projection.reason === "no-window") return `${label.window}: no reading with a reset yet`
@@ -132,13 +127,7 @@ export function readout(projection: Projection, label: { window: string; tier: s
         return `${label.window}: exhausts the allowance at about ${shortClock(projection.exhaustsAt)} — refused until the reset ${shortClock(projection.resetAt)} ${tail}`
       }
       const reach = `${Math.round(projection.atReset)}% by the reset ${shortClock(projection.resetAt)}`
-      if (projection.aboveGate) {
-        return `${label.window}: already above the ${label.ceiling}% ${label.tier} start gate; ${reach} ${tail}`
-      }
-      if (projection.gateAt !== undefined) {
-        return `${label.window}: the ${label.tier} tier stops starting work at ${label.ceiling}% — at this rate, about ${shortClock(projection.gateAt)}; ${reach} ${tail}`
-      }
-      return `${label.window}: ${reach} ${tail}`
+      return `${label.window}: ${reach}, ${Math.max(0, 100 - Math.round(projection.atReset))}% left to lapse ${tail}`
     }
   }
 }
@@ -156,16 +145,15 @@ export function currentWeeklyNames(samples: readonly UsageSample[]): string[] {
 }
 
 /** Every weekly bucket the account currently reports, worst first: soonest
- *  exhaustion, then soonest gate, then highest share at the reset. */
-export function weeklyVerdicts(samples: readonly UsageSample[], ceiling: number, now: number): Array<{ name: string; projection: Projection }> {
+ *  exhaustion, then highest share at the reset. */
+export function weeklyVerdicts(samples: readonly UsageSample[], now: number): Array<{ name: string; projection: Projection }> {
   const names = new Set(currentWeeklyNames(samples))
   const rank = (projection: Projection): number => {
     if (projection.kind !== "projected") return Number.POSITIVE_INFINITY
     if (projection.exhaustsAt !== undefined) return projection.exhaustsAt
-    if (projection.gateAt !== undefined) return 1e15 + projection.gateAt
     return 1e16 - projection.atReset
   }
   return [...names]
-    .map((name) => ({ name, projection: projectWindow(samples, name, ceiling, now) }))
+    .map((name) => ({ name, projection: projectWindow(samples, name, now) }))
     .sort((a, b) => rank(a.projection) - rank(b.projection) || a.name.localeCompare(b.name))
 }

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react"
-import type { IdleCapacityStart, UsageSample } from "@/lib/api-idle-capacity"
+import { STARTED_BY_LABEL, type StartedSession, type UsageSample } from "@/lib/api-auto-dispatch"
 import { shortClock } from "./format"
 import { buildChartModel, type ChartFrame, type ChartModel, type ChartPoint } from "./usage-chart-model"
 import type { Projection } from "./usage-projection"
 
 /**
  * The usage graph: the five-hour used share over the last twelve hours with
- * the weekly buckets beneath it, the loop's starts and the window resets on
- * the same axis, and the projection as a dashed line from the last reading
- * to the reset against the tier's start gate. Inline SVG; the geometry is
+ * the weekly buckets beneath it, every session started on Claude and the
+ * window resets on the same axis, and the projection as a dashed line from
+ * the last reading to the reset. Inline SVG; the geometry is
  * usage-chart-model.ts and this only draws it.
  */
 
@@ -71,19 +71,13 @@ function Markers({ model }: { model: ChartModel }) {
           <text x={reset.x + 3} y={top + 9} fontSize={9} fill="var(--text-tertiary)">reset</text>
         </g>
       ))}
-      {model.ceiling && (
-        <g data-marker="ceiling">
-          <line x1={INSET.left} x2={model.x(model.domain.end)} y1={model.ceiling.y} y2={model.ceiling.y} stroke="var(--system-orange)" strokeWidth={1} />
-          <text x={model.x(model.domain.end) - 2} y={model.ceiling.y - 3} fontSize={9} textAnchor="end" fill="var(--text-tertiary)">gate {model.ceiling.percent}%</text>
-        </g>
-      )}
       {model.projection && (
         <line data-marker="projection" x1={model.projection.from.x} y1={model.projection.from.y} x2={model.projection.to.x} y2={model.projection.to.y} stroke="var(--accent)" strokeWidth={2} strokeDasharray="4 4" strokeLinecap="round" />
       )}
       <line data-marker="now" x1={model.nowX} x2={model.nowX} y1={top} y2={bottom} stroke="var(--separator)" strokeWidth={1} />
       {model.starts.map((start) => (
-        <circle key={start.start.commentId} data-marker="start" cx={start.x} cy={start.y} r={5} fill="var(--system-green)" stroke="var(--bg-secondary)" strokeWidth={2}>
-          <title>{start.start.workItemId} started {shortClock(Date.parse(start.start.startedAt))}</title>
+        <circle key={start.start.id} data-marker="start" cx={start.x} cy={start.y} r={start.start.startedBy === "board-walk-dispatch" ? 5 : 3.5} fill={start.start.startedBy === "board-walk-dispatch" ? "var(--system-green)" : "var(--text-tertiary)"} stroke="var(--bg-secondary)" strokeWidth={2}>
+          <title>{start.start.title ?? start.start.id} — {STARTED_BY_LABEL[start.start.startedBy]}, {shortClock(Date.parse(start.start.createdAt))}</title>
         </circle>
       ))}
     </>
@@ -119,16 +113,15 @@ function nearest(samples: readonly UsageSample[], model: ChartModel, px: number)
   return best
 }
 
-export function UsageChart({ samples, starts, projection, ceiling, now }: {
+export function UsageChart({ samples, starts, projection, now }: {
   samples: readonly UsageSample[]
-  starts: readonly IdleCapacityStart[]
+  starts: readonly StartedSession[]
   projection?: Projection
-  ceiling?: number
   now: number
 }) {
   const [ref, width] = useElementWidth(640)
   const frame: ChartFrame = useMemo(() => ({ width, height: HEIGHT, inset: INSET }), [width])
-  const model = useMemo(() => buildChartModel({ samples, starts, projection, ceiling, now, frame }), [samples, starts, projection, ceiling, now, frame])
+  const model = useMemo(() => buildChartModel({ samples, starts, projection, now, frame }), [samples, starts, projection, now, frame])
   const [hover, setHover] = useState<UsageSample | null>(null)
   const onMove = (event: PointerEvent<SVGSVGElement>) => {
     const box = event.currentTarget.getBoundingClientRect()
@@ -149,7 +142,7 @@ export function UsageChart({ samples, starts, projection, ceiling, now }: {
         width="100%"
         height={HEIGHT}
         role="img"
-        aria-label={`Five-hour and weekly usage over the last twelve hours with ${model.starts.length} auto-start${model.starts.length === 1 ? "" : "s"} and ${model.resets.length} reset${model.resets.length === 1 ? "" : "s"} marked`}
+        aria-label={`Five-hour and weekly usage over the last twelve hours with ${model.starts.length} session start${model.starts.length === 1 ? "" : "s"} and ${model.resets.length} reset${model.resets.length === 1 ? "" : "s"} marked`}
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
       >

@@ -86,32 +86,43 @@ function removeBlock(configPath: string, doc: Record<string, unknown>, now: Date
   return backupPath;
 }
 
-export function seedBoardWalk(opts: SeedOptions = {}): SeedResult {
+function retireBlock(configPath: string, doc: Record<string, unknown>, now: Date, fileExisted: boolean, result: SeedResult): void {
+  result.backupPath = removeBlock(configPath, doc, now);
+  result.removedBlock = true;
+  result.blockDiscarded = fileExisted;
+}
+
+/** Write the rules file — from the legacy block when there is one — if it is missing. */
+function seedFile(home: string, templateDir: string, legacy: { present: boolean; value: unknown }, result: SeedResult): boolean {
+  const file = boardWalkPath(home);
+  if (fs.existsSync(file)) return true;
+  const template = fs.readFileSync(path.join(templateDir, BOARD_WALK_FILE), "utf-8");
+  const converted = legacy.present ? convertLegacyBlock(template, legacy.value) : undefined;
+  fs.writeFileSync(file, converted?.text ?? template, { encoding: "utf-8", flag: "wx" });
+  result.seeded = true;
+  result.converted = converted !== undefined;
+  result.notes = converted?.notes ?? [];
+  return false;
+}
+
+function resolved(opts: SeedOptions): Required<SeedOptions> {
   const home = opts.home ?? JINN_HOME;
-  const templateDir = opts.templateDir ?? TEMPLATE_DIR;
-  const configPath = opts.configPath ?? path.join(home, "config.yaml");
-  const now = (opts.now ?? (() => new Date()))();
+  return {
+    home,
+    templateDir: opts.templateDir ?? TEMPLATE_DIR,
+    configPath: opts.configPath ?? path.join(home, "config.yaml"),
+    now: opts.now ?? (() => new Date()),
+  };
+}
+
+export function seedBoardWalk(opts: SeedOptions = {}): SeedResult {
+  const { home, templateDir, configPath, now } = resolved(opts);
   const result: SeedResult = { seeded: false, converted: false, notes: [], removedBlock: false, blockDiscarded: false };
   try {
-    const file = boardWalkPath(home);
-    const exists = fs.existsSync(file);
-    const doc = fs.existsSync(configPath) ? readConfigDocument(configPath) : undefined;
+    const doc = readConfigDocument(configPath);
     const legacy = legacyBlock(doc);
-
-    if (!exists) {
-      const template = fs.readFileSync(path.join(templateDir, BOARD_WALK_FILE), "utf-8");
-      const converted = legacy.present ? convertLegacyBlock(template, legacy.value) : undefined;
-      fs.writeFileSync(file, converted?.text ?? template, { encoding: "utf-8", flag: "wx" });
-      result.seeded = true;
-      result.converted = converted !== undefined;
-      result.notes = converted?.notes ?? [];
-    }
-
-    if (legacy.present && doc) {
-      result.backupPath = removeBlock(configPath, doc, now);
-      result.removedBlock = true;
-      result.blockDiscarded = exists;
-    }
+    const existed = seedFile(home, templateDir, legacy, result);
+    if (legacy.present && doc) retireBlock(configPath, doc, now(), existed, result);
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
   }

@@ -175,60 +175,77 @@ function windowStart(engine: EngineLimitEngineSnapshot, now: number): number {
 
 const USABLE: ReadonlySet<EngineLimitEngineSnapshot["status"]> = new Set(["live", "snapshot", "static"]);
 
-export async function buildCapacitySnapshot(deps: SnapshotDeps): Promise<CapacitySnapshot> {
-  const { now, sessions } = deps;
-  const collect = deps.collect ?? collectEngineLimits;
-  const limits = await collect(deps.config);
-  const history = (deps.usageHistory ?? readClaudeUsageHistory)(now - 7 * 24 * 60 * 60_000);
-  const holding = deps.holdingCapacity(sessions);
-  const startedSince = deps.startedSince ?? ((sinceMs: number, engine: string) => listStartedSessions(sinceMs, { engine }));
-  const health = deps.exhausted ? undefined : readEngineHealth();
-  const exhausted = deps.exhausted ?? ((engine: string, at: number) => isEngineExhausted(health!, engine, new Date(at)));
+function unusableNote(engine: EngineLimitEngineSnapshot): string {
+  const why = engine.unsupportedReason ?? engine.error;
+  return `${engine.name} (${engine.status}${why ? `: ${why}` : ""})`;
+}
 
-  const engines: SnapshotEngine[] = [];
-  const withoutReadings: string[] = [];
-  for (const engine of Object.values(limits.engines)) {
-    if (!USABLE.has(engine.status)) {
-      if (engine.available) withoutReadings.push(`${engine.name} (${engine.status}${engine.unsupportedReason ? `: ${engine.unsupportedReason}` : engine.error ? `: ${engine.error}` : ""})`);
-      continue;
-    }
-    const since = windowStart(engine, now);
-    engines.push({
-      name: engine.name,
-      status: engine.status,
-      ...(engine.stale ? { stale: true } : {}),
-      ...(engine.unsupportedReason ? { note: engine.unsupportedReason } : {}),
-      ...(engine.accountPlan ? { plan: engine.accountPlan } : {}),
-      exhausted: exhausted(engine.name, now),
-      windows: snapshotWindows(engine, now, history),
-      holdingCapacityNow: holding.filter((session) => session.engine === engine.name).length,
-      startedThisWindow: { ...countStarts(startedSince(since, engine.name)), since: new Date(since).toISOString() },
-    });
-  }
+interface EngineContext {
+  now: number;
+  history: UsageSample[];
+  holding: readonly Session[];
+  startedSince: (sinceMs: number, engine: string) => StartedSession[];
+  exhausted: (engine: string, now: number) => boolean;
+}
 
+function snapshotEngine(engine: EngineLimitEngineSnapshot, ctx: EngineContext): SnapshotEngine {
+  const since = windowStart(engine, ctx.now);
+  return {
+    name: engine.name,
+    status: engine.status,
+    ...(engine.stale ? { stale: true } : {}),
+    ...(engine.unsupportedReason ? { note: engine.unsupportedReason } : {}),
+    ...(engine.accountPlan ? { plan: engine.accountPlan } : {}),
+    exhausted: ctx.exhausted(engine.name, ctx.now),
+    windows: snapshotWindows(engine, ctx.now, ctx.history),
+    holdingCapacityNow: ctx.holding.filter((session) => session.engine === engine.name).length,
+    startedThisWindow: { ...countStarts(ctx.startedSince(since, engine.name)), since: new Date(since).toISOString() },
+  };
+}
+
+function operatorSignals(deps: SnapshotDeps, claude: EngineLimitEngineSnapshot | undefined, holding: readonly Session[]): OperatorSignals {
+  const { now, sessions, prior } = deps;
   const operator: OperatorSignals = {};
   const operatorAt = sighting(newestOperatorSessionActivity(sessions), now);
   if (operatorAt) operator.lastOperatorSessionActivity = operatorAt;
   const cliAt = sighting((deps.statuslineMtime ?? newestStatuslineMtime)(), now);
   if (cliAt) operator.lastInteractiveCliTurn = cliAt;
-  const fiveHour = claudeFiveHour(limits.engines.claude, now);
-  if (fiveHour && deps.prior && deps.prior.resetsAt === fiveHour.resetsAt) {
+  const fiveHour = claudeFiveHour(claude, now);
+  if (fiveHour && prior && prior.resetsAt === fiveHour.resetsAt) {
     operator.claudeUsageSincePreviousTick = {
-      previousAt: new Date(deps.prior.atMs).toISOString(),
-      previousUsedPercent: deps.prior.usedPercent,
+      previousAt: new Date(prior.atMs).toISOString(),
+      previousUsedPercent: prior.usedPercent,
       usedPercentNow: fiveHour.usedPercent,
-      risePoints: Math.round((fiveHour.usedPercent - deps.prior.usedPercent) * 10) / 10,
-      jinnSessionActiveInBetween: jinnActiveSince(sessions, deps.prior.atMs, holding),
+      risePoints: Math.round((fiveHour.usedPercent - prior.usedPercent) * 10) / 10,
+      jinnSessionActiveInBetween: jinnActiveSince(sessions, prior.atMs, holding),
     };
   }
+  return operator;
+}
 
+function engineContext(deps: SnapshotDeps, holding: readonly Session[]): EngineContext {
+  const health = deps.exhausted ? undefined : readEngineHealth();
   return {
-    now: new Date(now).toISOString(),
+    now: deps.now,
+    history: (deps.usageHistory ?? readClaudeUsageHistory)(deps.now - 7 * 24 * 60 * 60_000),
+    holding,
+    startedSince: deps.startedSince ?? ((sinceMs, engine) => listStartedSessions(sinceMs, { engine })),
+    exhausted: deps.exhausted ?? ((engine, at) => isEngineExhausted(health!, engine, new Date(at))),
+  };
+}
+
+export async function buildCapacitySnapshot(deps: SnapshotDeps): Promise<CapacitySnapshot> {
+  const limits = await (deps.collect ?? collectEngineLimits)(deps.config);
+  const holding = deps.holdingCapacity(deps.sessions);
+  const ctx = engineContext(deps, holding);
+  const all = Object.values(limits.engines);
+  return {
+    now: new Date(deps.now).toISOString(),
     timezone: deps.timezone,
-    ...localClock(now, deps.timezone),
-    engines,
-    enginesWithoutReadings: withoutReadings,
+    ...localClock(deps.now, deps.timezone),
+    engines: all.filter((engine) => USABLE.has(engine.status)).map((engine) => snapshotEngine(engine, ctx)),
+    enginesWithoutReadings: all.filter((engine) => !USABLE.has(engine.status) && engine.available).map(unusableNote),
     sessionsHoldingCapacityNow: holding.length,
-    operator,
+    operator: operatorSignals(deps, limits.engines.claude, holding),
   };
 }

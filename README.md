@@ -53,7 +53,7 @@ Everything in upstream Jinn still applies. On top of it, Marid adds:
 | Remote hosts | Claude, Pi and opencode employees run over SSH on another machine | not supported |
 | Remote MCP connector | use your instance as a custom connector in claude.ai, Claude Desktop and Claude Code (opt-in) | not supported |
 | Sessions | self-compaction (`compact_session`), engine-aware `/compact`, opt-in auto-compaction of long cache-cold sessions, fuller restart resume, Claude auth outage handling | Claude-only `/compact`, basic restart resume |
-| Todos and dispatch | closed departments, idle-capacity auto-start with an Auto-Dispatch page (opt-in), per-Todo auto-start opt-out, session tree per Todo | open departments, no idle-capacity auto-start |
+| Todos and dispatch | closed departments, a default board walk that releases gated Todos and starts work on spare capacity, with an Auto-Dispatch page, per-Todo auto-start opt-out, session tree per Todo | open departments, no board walk |
 
 The full feature-by-feature table, with what upstream already has, is in [`docs/marid-vs-jinn.md`](docs/marid-vs-jinn.md).
 
