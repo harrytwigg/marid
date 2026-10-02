@@ -8,7 +8,7 @@ import type { BoardDragState } from "./use-board-drag"
 
 /* Todos v2 slice 6 — one status column (design-doc §2). Sticky header carries
  * the page background (polish law 21) so cards scroll under it; the track is
- * transparent — cards sit directly on --bg. The `+` lives on Backlog/Assigned
+ * transparent — cards sit directly on --bg. The `+` lives on Backlog
  * only: creation is birth, never a teleport into mid-pipeline. During a drag,
  * an illegal/gated column recedes to 38% and renders no slot. */
 

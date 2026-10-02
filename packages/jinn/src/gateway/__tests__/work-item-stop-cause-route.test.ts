@@ -3,10 +3,11 @@ import { api, ctx, makeReq, makeRes, operatorHeaders, reg, store, toolHeaders } 
 import { readStopCause } from "../../work-items/stop-cause.js";
 import { initDb } from "../../shared/db.js";
 
-/* PLA-157: an escalation nobody can act on is the failure this route exists to
+/* PLA-157: a stop nobody can act on is the failure this route exists to
  * stop. "Blocked again for the same reason" tells the operator a Todo stopped
- * and nothing about whose move it is, so the agent lane has to say what has to
- * happen and who has to do it before it may escalate at all. */
+ * and nothing about whose move it is, so a block may say what has to happen and
+ * who has to do it. The hint is optional, but a malformed one is refused rather
+ * than stored half-said. */
 describe("POST /api/work-items/:id/status — stop cause", () => {
   const session = () => reg.createSession({ engine: "codex", source: "web", sourceRef: `stop-cause-${Math.random()}` });
 
@@ -26,15 +27,6 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
   const hint = { what: "approve the vendor invoice", who: "the operator" };
   const cause = (id: string) => readStopCause(initDb(), id);
 
-  it("refuses a hintless escalation and leaves the Todo where it was", async () => {
-    const wi = item("hintless");
-    const cap = await post(wi.id, { status: "escalated", note: "stuck" });
-
-    expect(cap.status).toBe(400);
-    expect(cap.body.error).toMatch(/unblockHint \{what, who\} is required when escalating/);
-    expect(store.getWorkItem(wi.id)?.status).toBe("executing");
-  });
-
   it.each([
     ["an empty what", { what: "", who: "the operator" }],
     ["a whitespace what", { what: "   ", who: "the operator" }],
@@ -46,7 +38,7 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
     ["an array", [{ what: "decide", who: "the operator" }]],
   ])("refuses %s without transitioning", async (_label, unblockHint) => {
     const wi = item("bad hint");
-    const cap = await post(wi.id, { status: "escalated", note: "stuck", unblockHint });
+    const cap = await post(wi.id, { status: "blocked", note: "stuck", unblockHint });
 
     expect(cap.status).toBe(400);
     expect(cap.body.error).toMatch(/unblockHint must be an object with non-empty what and who strings, and no other keys/);
@@ -54,17 +46,17 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
     expect(cause(wi.id)).toBeUndefined();
   });
 
-  it("accepts a valid hint, escalates, and stores it", async () => {
+  it("accepts a valid hint, blocks, and stores it", async () => {
     const wi = item("good hint");
-    const cap = await post(wi.id, { status: "escalated", note: "stuck", unblockHint: hint });
+    const cap = await post(wi.id, { status: "blocked", note: "stuck", unblockHint: hint });
 
-    expect([cap.status, cap.body.workItem?.status]).toEqual([200, "escalated"]);
+    expect([cap.status, cap.body.workItem?.status]).toEqual([200, "blocked"]);
     expect(cause(wi.id)).toEqual({ unblockHint: hint });
   });
 
   it("trims the hint it stores, so a padded value cannot read as a different one", async () => {
     const wi = item("padded hint");
-    await post(wi.id, { status: "escalated", note: "stuck", unblockHint: { what: "  decide  ", who: " the operator " } });
+    await post(wi.id, { status: "blocked", note: "stuck", unblockHint: { what: "  decide  ", who: " the operator " } });
     expect(cause(wi.id)?.unblockHint).toEqual({ what: "decide", who: "the operator" });
   });
 
@@ -91,15 +83,18 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
     expect(store.getWorkItem(wi.id)?.status).toBe("executing");
   });
 
-  it("leaves the operator PUT lane alone: it may escalate without a hint", async () => {
-    const wi = item("operator escalation");
-    const cap = await put(wi.id, { status: "escalated" });
-    expect([cap.status, cap.body.workItem?.status]).toEqual([200, "escalated"]);
+  it("needs no hint to block, on the agent lane or the operator PUT lane", async () => {
+    const byAgent = await post(item("agent block").id, { status: "blocked", note: "stuck" });
+    expect([byAgent.status, byAgent.body.workItem?.status]).toEqual([200, "blocked"]);
+    expect(cause(byAgent.body.workItem.id)).toBeUndefined();
+
+    const byOperator = await put(item("operator block").id, { status: "blocked" });
+    expect([byOperator.status, byOperator.body.workItem?.status]).toEqual([200, "blocked"]);
   });
 
-  it("deletes the cause when the operator routes an escalated Todo back to the queue", async () => {
-    const wi = item("unescalated");
-    await post(wi.id, { status: "escalated", note: "stuck", unblockHint: hint });
+  it("deletes the cause when the operator routes a blocked Todo back to the queue", async () => {
+    const wi = item("unblocked");
+    await post(wi.id, { status: "blocked", note: "stuck", unblockHint: hint });
     expect(cause(wi.id)).toEqual({ unblockHint: hint });
 
     const cap = await put(wi.id, { status: "backlog" });
@@ -133,7 +128,7 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
       expect(cause(wi.id)).toBeUndefined();
     });
 
-    it.each(["assigned", "executing", "in_review"])("refuses parkedUntil on a move to %s", async (status) => {
+    it.each(["backlog", "executing", "in_review"])("refuses parkedUntil on a move to %s", async (status) => {
       const wi = item(`park via ${status}`);
       const cap = await post(wi.id, { status, note: "date-gated", parkedUntil: until() });
       expect(cap.status).toBe(400);
@@ -160,7 +155,7 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
 
     it("refuses the same from the operator surface — the operator's park is deleted by the same write", async () => {
       const wi = backlogItem("operator park via backlog");
-      const cap = await put(wi.id, { status: "assigned", parkedUntil: until() });
+      const cap = await put(wi.id, { status: "backlog", parkedUntil: until() });
       expect(cap.status).toBe(400);
     });
 
@@ -198,20 +193,6 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
       const note = store.listWorkItemEvents(wi.id).at(-1);
       expect(note).toMatchObject({ kind: "note", toStatus: "blocked", actor: "operator" });
       expect(note?.detail).toMatchObject({ note: "checked, still the 1st" });
-    });
-
-    it("refuses an agent moving the date on an escalated Todo (403), and keeps the operator's date", async () => {
-      const wi = item("escalated park");
-      const parkedUntil = until();
-      await post(wi.id, { status: "escalated", note: "operator call", unblockHint: hint, parkedUntil });
-
-      const cap = await post(wi.id, { status: "escalated", note: "pushing it out", unblockHint: hint, parkedUntil: new Date(Date.now() + 30 * 86_400_000).toISOString() });
-      expect(cap.status).toBe(403);
-      expect(cap.body.error).toMatch(/changing why it is stopped is a human decision/);
-      expect(cause(wi.id)).toEqual({ parkedUntil, unblockHint: hint });
-
-      const retry = await post(wi.id, { status: "escalated", note: "operator call", unblockHint: hint });
-      expect(retry.status).toBe(200);
     });
   });
 });

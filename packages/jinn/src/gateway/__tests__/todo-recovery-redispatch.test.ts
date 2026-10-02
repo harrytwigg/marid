@@ -102,7 +102,7 @@ describe("auto recovery through the Dispatcher", () => {
 
 describe("a Todo only a legacy Workflow phase was working", () => {
   function phaseOnly(source: "human" | "workflow") {
-    const item = store.createWorkItem({ title: `phase-only ${source}`, source, status: "assigned", assignee: "platform-worker" });
+    const item = store.createWorkItem({ title: `phase-only ${source}`, source, status: "backlog", assignee: "platform-worker" });
     transitions.transition(item.id, "executing", "reconciler");
     const phase = registry.createSession({ engine: "claude", source: "workflow", sourceRef: `wf:${source}`, employee: "platform-worker" });
     db.prepare("UPDATE sessions SET status = 'running', workflow_kind = 'phase' WHERE id = ?").run(phase.id);

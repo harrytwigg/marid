@@ -126,18 +126,18 @@ export const EXPECTED_ENUMS = {
   list_sessions: [["properties.scope", ["children", "employee", "recent", "pinned"]]],
   label_work_item: [["properties.mode", ["add", "remove"]]],
   list_work_items: [
-    ["properties.status", ["backlog", "assigned", "executing", "in_review", "done", "blocked", "escalated", "cancelled"]],
+    ["properties.status", ["backlog", "executing", "in_review", "done", "blocked", "cancelled"]],
     ["properties.source", ["human", "delegation", "cron", "workflow", "session", "connector", "goal"]],
   ],
   search_messages: [["properties.role", ["user", "assistant"]]],
   search_sessions: [["properties.status", ["idle", "running", "error", "waiting", "interrupted"]]],
   search_work_items: [
-    ["properties.status", ["backlog", "assigned", "executing", "in_review", "done", "blocked", "escalated", "cancelled"]],
+    ["properties.status", ["backlog", "executing", "in_review", "done", "blocked", "cancelled"]],
     ["properties.source", ["human", "delegation", "cron", "workflow", "session", "connector", "goal"]],
   ],
   unlink_work_items: [["properties.kind", ["blocks", "relates", "duplicates"]]],
   update_work_item: [
-    ["properties.status", ["backlog", "assigned", "executing", "in_review", "blocked", "escalated", "done"]],
+    ["properties.status", ["backlog", "executing", "in_review", "blocked", "done"]],
     ["properties.blockKind", ["dependency", "needs_input", "capability", "transient"]],
   ],
 } as const;

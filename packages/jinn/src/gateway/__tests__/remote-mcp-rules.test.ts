@@ -115,7 +115,6 @@ describe("the connector anchor is not the COO portal (D2, SC-007)", () => {
 
 describe("the gateway admits only the connector's profile routes (D4)", () => {
   it.each([
-    ["POST", () => `/api/work-items/${operatorTodo}/status`, { status: "executing" }],
     ["POST", () => "/api/sessions", { prompt: "hi" }],
     ["POST", () => `/api/sessions/${connector.id}/stop`, {}],
     ["GET", () => "/api/knowledge/read?path=config.yaml", undefined],
@@ -176,6 +175,31 @@ describe("connector writes stand where the operator's do (FR-013a lifted)", () =
     const operatorNote = await call("POST", "/api/notes", { title: "Operator runbook", folder: "runbooks" }, operator);
     const updated = await call("PUT", "/api/notes", { path: operatorNote.body.note.path, expectedRevision: operatorNote.body.note.revision, body: "rewritten by voice" });
     expect(updated.status).toBe(200);
+  });
+
+  it("closes, cancels and archives a Todo, where an ordinary employee session cannot", async () => {
+    const employee = registry.createSession({ engine: "codex", source: "web", sourceRef: "web:remote-rules-employee", employee: "platform-worker" });
+    const employeeHeaders = {
+      [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
+      [CALLER_SESSION_HEADER]: employee.id,
+      [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(employee.id),
+    };
+    const fresh = async (title: string) => (await call("POST", "/api/work-items", { title }, operator)).body.workItem.id as string;
+    const statusOf = async (id: string) => (await call("GET", `/api/work-items/${id}`, undefined, operator)).body.workItem.status;
+
+    const toClose = await fresh("Close from claude.ai");
+    const toCancel = await fresh("Cancel from claude.ai");
+    const toArchive = await fresh("Archive from claude.ai");
+    const refused = await fresh("Refused for an employee");
+
+    expect((await call("POST", `/api/work-items/${toClose}/status`, { status: "done" })).status).toBe(200);
+    expect((await call("POST", `/api/work-items/${toCancel}/status`, { status: "cancelled" })).status).toBe(200);
+    expect((await call("POST", `/api/work-items/${toArchive}/archive`, {})).status).toBe(200);
+    expect([await statusOf(toClose), await statusOf(toCancel), await statusOf(toArchive)]).toEqual(["done", "cancelled", "cancelled"]);
+
+    expect((await call("POST", `/api/work-items/${refused}/status`, { status: "done" }, employeeHeaders)).status).toBe(403);
+    expect((await call("POST", `/api/work-items/${refused}/archive`, {}, employeeHeaders)).status).toBe(403);
+    expect(await statusOf(refused)).toBe("backlog");
   });
 
   it("still records a comment, and still has no attachment route", async () => {

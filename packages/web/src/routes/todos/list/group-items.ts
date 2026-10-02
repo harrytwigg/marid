@@ -13,10 +13,8 @@ export type TodoListGroupKey =
   | "manager"
   | "executing"
   | "in-review"
-  | "assigned"
   | "backlog"
   | "blocked"
-  | "escalated"
   | "closed"
 
 export interface TodoListGroup {
@@ -34,12 +32,10 @@ const OPEN_GROUPS: Array<{
   status: WorkItemStatusWire
   omitWhenEmpty?: boolean
 }> = [
-  { key: "executing", label: "Executing", status: "executing" },
+  { key: "executing", label: "In progress", status: "executing" },
   { key: "in-review", label: "In review", status: "in_review" },
-  { key: "assigned", label: "Assigned", status: "assigned" },
   { key: "backlog", label: "Backlog", status: "backlog" },
   { key: "blocked", label: "Blocked", status: "blocked", omitWhenEmpty: true },
-  { key: "escalated", label: "Escalated", status: "escalated", omitWhenEmpty: true },
 ]
 
 function attentionGroup(key: Extract<TodoListGroupKey, "recovering" | "manager" | "needs-you">, label: string, items: WorkItemCompactWire[]): TodoListGroup {

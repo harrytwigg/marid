@@ -47,7 +47,7 @@ afterAll(async () => {
 });
 
 function tick(mode: "classify-only" | "auto" = "classify-only"): void {
-  controller.sweepTodoRecovery({ mode, rearm: () => ({ status: "assigned" }) });
+  controller.sweepTodoRecovery({ mode, rearm: () => ({ status: "executing" }) });
   detect.detectTodoAnomalies({ persist: true });
 }
 
@@ -82,11 +82,11 @@ describe("recovery fixture isolation", () => {
 describe("approved leftovers and the classifier", () => {
   it("keeps a refused open-child leftover on Manager attention across repeated ticks", () => {
     const item = store.createWorkItem({
-      title: "approved landing with open child", status: "assigned", assignee: "platform-worker",
+      title: "approved landing with open child", status: "backlog", assignee: "platform-worker",
     });
     transitions.transition(item.id, "in_review", "session:worker", { agent: true });
     store.createWorkItem({
-      title: "open child leftover", parentId: item.id, status: "assigned", assignee: "platform-worker",
+      title: "open child leftover", parentId: item.id, status: "backlog", assignee: "platform-worker",
     });
     const sessionId = `s-child-${item.id}`;
     db.prepare(
@@ -110,9 +110,29 @@ describe("approved leftovers and the classifier", () => {
     expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).toContain(item.id);
   });
 
+  // Queued work has no attempt to recover: the sweep walks only the statuses
+  // work is in flight or stopped in.
+  it("does not sweep a backlog Todo that has an assignee, even with a failed attempt behind it", () => {
+    const item = store.createWorkItem({ title: "queued after a failure", status: "backlog", assignee: "platform-worker" });
+    const sessionId = `s-queued-${item.id}`;
+    db.prepare(
+      `INSERT INTO sessions (id, engine, source, source_ref, status, work_item_id, created_at, last_activity)
+       VALUES (?, 'claude', 'cron', ?, 'idle', ?, ?, ?)`,
+    ).run(sessionId, `cron:${sessionId}`, item.id, new Date().toISOString(), new Date().toISOString());
+    const attempt = runs.openWorkItemRun({ workItemId: item.id, sessionId });
+    runs.closeWorkItemRun(attempt.id, {
+      outcome: "crashed", endedAt: new Date(Date.now() - 20 * 60_000).toISOString(), error: "the build step exited with code 1",
+    });
+
+    tick("auto");
+
+    expect(rows.getWorkItemRecovery(item.id)).toBeUndefined();
+    expect(store.getWorkItem(item.id)!.status).toBe("backlog");
+  });
+
   it("keeps the classifier's verdict when the detector disagrees, across repeated ticks", () => {
     const item = store.createWorkItem({
-      title: "failed attempt", status: "assigned", assignee: "platform-worker",
+      title: "failed attempt", status: "executing", assignee: "platform-worker",
     });
     const sessionId = `s-disagree-${item.id}`;
     db.prepare(
@@ -125,7 +145,7 @@ describe("approved leftovers and the classifier", () => {
       error: "the build step exited with code 1",
     });
     store.appendWorkItemEvent({
-      workItemId: item.id, kind: "status_change", fromStatus: "backlog", toStatus: "assigned",
+      workItemId: item.id, kind: "status_change", fromStatus: "backlog", toStatus: "executing",
       actor: "operator", detail: { runId: attempt.id }, versionEffect: "audit",
     });
     expect(detect.detectAnomalyFor(item.id)).toBeUndefined();

@@ -35,7 +35,7 @@ beforeAll(async () => {
  *  the detector reads for a Todo with no session starts that long ago. */
 function executingSince(id: string, agoMs: number): void {
   store.appendWorkItemEvent({
-    workItemId: id, kind: "status_change", fromStatus: "assigned", toStatus: "executing",
+    workItemId: id, kind: "status_change", fromStatus: "backlog", toStatus: "executing",
     actor: "operator", versionEffect: "audit",
   });
   db.prepare("UPDATE work_item_events SET created_at = ? WHERE work_item_id = ? AND kind = 'status_change' AND to_status = 'executing'")
@@ -97,7 +97,7 @@ describe("detectTodoAnomalies", () => {
     });
     approvals.decideWorkItemApprovalSync({ id: item.id, decision: "approve", decidedBy: "operator" });
     detect.detectTodoAnomalies({ persist: true });
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
     const hits = store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id);
     expect(hits).toContain(item.id);
   });

@@ -269,7 +269,7 @@ export function runOutcomeForReceipt(receipt: SessionAttemptOutcome, error: stri
  * would read as still running forever, which is worse than no row at all.
  *
  * Driven off the open rows rather than the Todo list: it is O(open runs) and
- * covers `done` and `escalated` on the same terms, instead of re-deriving every
+ * covers `done` and `cancelled` on the same terms, instead of re-deriving every
  * closed Todo in history on each tick.
  *
  * Returns how many runs were settled.

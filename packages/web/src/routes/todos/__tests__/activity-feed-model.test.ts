@@ -84,6 +84,9 @@ describe("the merged feed model", () => {
 
   it("whispers read as actor + verb (bounce carries its round; approvals decide readably)", () => {
     expect(whisperOf(event("e", "status_change", "t", { toStatus: "in_review" })).text).toBe("moved it to In review")
+    // History written before the retired statuses were migrated still names them.
+    expect(whisperOf(event("e", "status_change", "t", { toStatus: "escalated" as never })).text).toBe("moved it to Escalated")
+    expect(whisperOf(event("e", "note", "t", { detail: { assignee: "@operator" } })).text).toBe("assigned it to the operator")
     expect(
       whisperOf(event("e", "status_change", "t", { fromStatus: "in_review", toStatus: "executing", detail: { bounce: true, rounds: 2 } })).text,
     ).toBe("sent it back · round 2")

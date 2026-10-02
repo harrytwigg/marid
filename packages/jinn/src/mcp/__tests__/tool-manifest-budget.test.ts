@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4396;
+const MAX_MANIFEST_TOKENS = 4358;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -211,9 +211,14 @@ const ATTESTED = {
   // Rebased DOWN for the removal of the six Experiments tools and the sixteen
   // Workflow tools (and the prose spent on them above): the ceiling, all three
   // totals and the tool count moved down, and nothing moved up.
-  rpc: { tokens: 4034, sha256: "03199fbc5876e97dbf14537858028781b4ed87a0bfa396557bea88e7dc94e42f" },
-  pi: { tokens: 4396, sha256: "31a8dd9f926ebe4dcc9b8c63d27d477e60f479c55839b58a1ccac1f901bf8ae8" },
-  openai: { tokens: 4182, sha256: "ac98377496dc1b60ceb4c3a0d8a213869b2b84c0350c2db855328facdcd67796" },
+  // Rebased DOWN again for the reduced status set: `assigned` and `escalated`
+  // left update_work_item's enum and the list enums, and `acknowledgeEscalated`
+  // left the tool; the asOperator description grew to name the one move it now
+  // makes, and the removals paid for that. Net 38 tokens off every total; the
+  // ceiling follows them down and Pi sits ON it.
+  rpc: { tokens: 3996, sha256: "2e4ce16e3ab5d0bf26575b0e704d5a54df19cfb189c7fe0a48966a7bf3642c05" },
+  pi: { tokens: 4358, sha256: "a6ff0f491f9f579d5f0d94c0637a0f191c8b468739fb6751281541f8c71a7eb3" },
+  openai: { tokens: 4144, sha256: "47b9342896bbf95544f9adda1c3d5a7305f8140382a8cfd67c65981280da7b6e" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

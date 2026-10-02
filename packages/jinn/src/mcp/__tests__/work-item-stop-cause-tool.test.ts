@@ -25,7 +25,7 @@ function stub() {
       method: init?.method ?? "GET",
       body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
     });
-    return { status: 200, text: async () => JSON.stringify({ workItem: { id: "JIN-1", status: "escalated" } }) } as unknown as Response;
+    return { status: 200, text: async () => JSON.stringify({ workItem: { id: "JIN-1", status: "blocked" } }) } as unknown as Response;
   }) as unknown as typeof fetch;
   return {
     calls,
@@ -55,17 +55,17 @@ describe("update_work_item — stop cause", () => {
     const { calls, ctx } = stub();
     const parkedUntil = "2026-09-01T10:00:00.000Z";
 
-    await tool("update_work_item").handler({ id: "JIN-1", status: "escalated", unblockHint: hint }, ctx);
+    await tool("update_work_item").handler({ id: "JIN-1", status: "blocked", unblockHint: hint }, ctx);
     await tool("update_work_item").handler({ id: "JIN-1", status: "blocked", parkedUntil }, ctx);
 
-    expect(calls.map((c) => c.body)).toEqual([{ status: "escalated", unblockHint: hint }, { status: "blocked", parkedUntil }]);
+    expect(calls.map((c) => c.body)).toEqual([{ status: "blocked", unblockHint: hint }, { status: "blocked", parkedUntil }]);
     expect(calls[0].url).toBe("http://gateway.test/api/work-items/JIN-1/status");
   });
 
   it("refuses an unknown hint key locally, without calling the gateway", async () => {
     const { calls, ctx } = stub();
 
-    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "escalated", unblockHint: { ...hint, when: "soon" } }, ctx))
+    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "blocked", unblockHint: { ...hint, when: "soon" } }, ctx))
       .rejects.toThrow(UNBLOCK_HINT_ERROR);
     expect(calls).toEqual([]);
   });
@@ -80,6 +80,7 @@ describe("update_work_item — stop cause", () => {
 
   it.each([
     ["a backlog move", { status: "backlog" }],
+    ["an executing move", { status: "executing" }],
     ["a dependency block", { status: "blocked", blockKind: "dependency" }],
   ])("refuses a park on %s locally, in the route's own words", async (_label, move) => {
     const { calls, ctx } = stub();
@@ -97,8 +98,8 @@ describe("update_work_item — stop cause", () => {
     const { ctx } = stub();
     const bad = { ...hint, when: "soon" };
 
-    const route = parseStatusUpdateFields({ status: "escalated", note: "n", unblockHint: bad }, "escalated", false);
-    const mcp = await tool("update_work_item").handler({ id: "JIN-1", status: "escalated", unblockHint: bad }, ctx).catch((err: Error) => err);
+    const route = parseStatusUpdateFields({ status: "blocked", note: "n", unblockHint: bad }, "blocked", false);
+    const mcp = await tool("update_work_item").handler({ id: "JIN-1", status: "blocked", unblockHint: bad }, ctx).catch((err: Error) => err);
 
     expect(route).toMatchObject({ ok: false, status: 400 });
     // Equal, not merely containing: a trailing full stop on one lane is exactly

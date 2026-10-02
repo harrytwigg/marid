@@ -12,6 +12,7 @@ import {
 import { effectiveMaxRounds, effectiveVerifyMode, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { RailPriorityBars, VerifyPill } from "../task-page/rail-rows"
+import { OPERATOR_ROW } from "../util"
 import { PickerNote, PickerRow } from "./picker-shell"
 
 /* Todos v2 slice 6 — the picker CONTENTS (design-doc §7.3): one component per
@@ -65,11 +66,10 @@ export function AssigneePickerContent({
   const [query, setQuery] = useState("")
   const current = detail.workItem.assignee
   const filtered = useMemo(() => {
+    const people = [OPERATOR_ROW, ...employees.filter((e) => !e.system)]
     const q = query.trim().toLowerCase()
-    if (!q) return employees
-    return employees.filter(
-      (e) => e.name.toLowerCase().includes(q) || e.displayName.toLowerCase().includes(q),
-    )
+    if (!q) return people
+    return people.filter((e) => e.name.toLowerCase().includes(q) || e.displayName.toLowerCase().includes(q))
   }, [employees, query])
   return (
     <>

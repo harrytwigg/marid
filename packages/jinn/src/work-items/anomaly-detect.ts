@@ -81,7 +81,7 @@ export function detectTodoAnomalies(input: DetectTodoAnomaliesInput = {}): TodoA
   const now = input.now ?? new Date();
   const persist = input.persist !== false;
   const found: TodoAnomaly[] = [];
-  for (const status of ["assigned", "executing", "in_review", "blocked"] as const) {
+  for (const status of ["executing", "in_review", "blocked"] as const) {
     for (const item of listWorkItems({ status })) {
       const anomaly = inspect(item, now);
       if (!anomaly) continue;

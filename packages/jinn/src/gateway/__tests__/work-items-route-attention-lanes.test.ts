@@ -65,7 +65,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
   function dashboardGroups(feed: Array<Record<string, unknown>>) {
     const kept = feed.filter((item) =>
       item.attentionLane === "recovering" || item.attentionLane === "manager"
-      || item.approvalState === "pending" || item.status === "escalated" || item.status === "blocked");
+      || item.approvalState === "pending" || item.status === "blocked");
     return {
       recovering: kept.filter((item) => item.attentionLane === "recovering").map((item) => item.id),
       manager: kept.filter((item) => item.attentionLane === "manager").map((item) => item.id),
@@ -95,11 +95,11 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     const db = dbModule.initDb();
 
     const item = store.createWorkItem({
-      title: "QPR-4 refused landing", status: "assigned", assignee: "platform-worker",
+      title: "QPR-4 refused landing", status: "backlog", assignee: "platform-worker",
     });
     transitions.transition(item.id, "in_review", "session:worker", { agent: true });
     store.createWorkItem({
-      title: "open child leftover", parentId: item.id, status: "assigned", assignee: "platform-worker",
+      title: "open child leftover", parentId: item.id, status: "backlog", assignee: "platform-worker",
     });
     const sessionId = `s-qpr4-${item.id}`;
     db.prepare(
@@ -114,7 +114,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     approvals.decideWorkItemApprovalSync({ id: item.id, decision: "approve", decidedBy: "operator" });
     expect(store.getWorkItem(item.id)!.status).toBe("in_review");
 
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "backlog" }) });
     detect.detectTodoAnomalies({ persist: true });
     expect(rows.getWorkItemRecovery(item.id)?.lane).toBe("manager");
 
@@ -145,11 +145,11 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
       error: "Usage limit exceeded; try again at 2026-08-27T12:00:00.000Z",
     });
     store.appendWorkItemEvent({
-      workItemId: item.id, kind: "status_change", fromStatus: "assigned", toStatus: "blocked",
+      workItemId: item.id, kind: "status_change", fromStatus: "backlog", toStatus: "blocked",
       actor: "workflow:run", detail: { workflowId: "pipeline", runId: run.id }, versionEffect: "audit",
     });
 
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "backlog" }) });
     const feed = await attentionFeed();
     const compact = feed.find((entry) => entry.id === item.id);
     expect(compact).toMatchObject({ id: item.id, attentionLane: "recovering" });
@@ -180,7 +180,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     const rows = await import("../../work-items/recovery-rows.js");
 
     const item = store.createWorkItem({ title: "re-check re-queued to backlog", status: "blocked" });
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "backlog" }) });
     expect(rows.getWorkItemRecovery(item.id)).toMatchObject({ class: "operator", lane: "operator" });
 
     const before = (await compactRows()).find((entry) => entry.id === item.id);

@@ -37,7 +37,7 @@ beforeAll(async () => {
     store.createWorkItem({ title, createdBy, ...extra }).id;
 
   fixture.operatorUnpinned = mk("operator's own, never pinned", "operator", { source: "human", status: "backlog" });
-  fixture.operatorPinned = mk("operator's own, also pinned", "operator", { source: "human", status: "assigned" });
+  fixture.operatorPinned = mk("operator's own, also pinned", "operator", { source: "human", status: "in_review" });
   fixture.agentUnpinned = mk("an agent's, not pinned", "session:agent-1", { status: "executing" });
   fixture.agentPinned = mk("an agent's, pinned", "session:agent-2", { status: "backlog" });
   fixture.operatorChild = store.createWorkItem({
@@ -73,7 +73,7 @@ describe("the Home scope is the union of pinned and operator-created", () => {
     const page = homePage();
     expect(page.total).toBe(3);
     expect(page.totals.backlog).toBe(2); // operatorUnpinned + agentPinned
-    expect(page.totals.assigned).toBe(1); // operatorPinned
+    expect(page.totals.in_review).toBe(1); // operatorPinned
     expect(page.totals.executing).toBe(0); // agentUnpinned is not on Home
   });
 

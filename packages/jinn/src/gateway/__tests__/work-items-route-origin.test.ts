@@ -78,7 +78,8 @@ describe("X-Jinn-Origin write provenance on work-item events", () => {
 
     const assigned = await call("POST", `/api/work-items/${id}/assign`, { assignee: "platform-worker" }, talkHeaders);
     expect(assigned.status).toBe(200);
-    expect(lastEvent(id, "status_change").detail).toMatchObject({ assignee: "platform-worker", origin: "talk" });
+    // Assigning no longer moves the Todo, so it leaves a note rather than a status change.
+    expect(lastEvent(id, "note").detail).toMatchObject({ assignee: "platform-worker", origin: "talk" });
 
     expect((await call("POST", "/api/labels", { name: "orb-tag" }, operatorHeaders)).status).toBe(201);
     const labelled = await call("PUT", `/api/work-items/${id}/labels`, { labels: ["orb-tag"] }, talkHeaders);

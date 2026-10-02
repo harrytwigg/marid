@@ -56,8 +56,7 @@ export class WorkItemRelationError extends Error {
   }
 }
 
-/** Non-terminal blocker statuses: everything except done/cancelled blocks —
- *  including `escalated`, which is sticky but decidedly not finished. */
+/** Non-terminal blocker statuses: everything except done/cancelled blocks. */
 const TERMINAL_SQL = "('done', 'cancelled')";
 
 function rowToRelation(row: Record<string, unknown>): WorkItemRelation {

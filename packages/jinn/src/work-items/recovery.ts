@@ -30,7 +30,7 @@ export const EXECUTION_TIMEOUT_MS = 4 * 60 * 60_000;
  *  never look at the Todo again, so no reader may treat the row as current
  *  outside this set. Without this guard a lane classified while `blocked`
  *  (e.g. a generic operator fallback) outlives the re-queue to backlog. */
-export const RECOVERY_SWEPT_STATUSES = ["assigned", "executing", "in_review", "blocked", "escalated"] as const;
+export const RECOVERY_SWEPT_STATUSES = ["executing", "in_review", "blocked"] as const;
 
 export function isRecoverySweptStatus(status: string): boolean {
   return (RECOVERY_SWEPT_STATUSES as readonly string[]).includes(status);

@@ -74,5 +74,5 @@ This page lists the headline features Marid has that upstream does not, and is j
 | Auto-Dispatch dashboard page | ✅ | ❌ | `/auto-dispatch`: policy editing, next-tick preview, start history and a usage chart. |
 | Per-Todo auto-start opt-out | ✅ | ❌ | `autoStart` in a Todo's dispatch config, and the `no-auto-start` label. |
 | Session tree on a Todo | ✅ | ❌ | The Details rail lists the sessions working the Todo, with their delegations underneath, and every session links to its chat. |
-| Parked Todos come back on their own | ✅ | partial | Upstream can park a Todo until a date but nothing releases it. Marid's reconciler moves an expired park back to `assigned` (or `backlog` with no owner). |
+| Parked Todos come back on their own | ✅ | partial | Upstream can park a Todo until a date but nothing releases it. Marid's reconciler moves an expired park back to `backlog`, keeping its owner. |
 | Flag Todos left in `executing` with no one on them | ✅ | partial | Upstream flags an executing Todo whose open run has outlived four hours with nothing in flight (`execution-timeout`). Marid also flags one with no open run at all and nothing running for over four hours (`executing-unhanded`, `work-items/anomaly-detect.ts`, `recovery.ts`), so it does not sit in the column unseen. |

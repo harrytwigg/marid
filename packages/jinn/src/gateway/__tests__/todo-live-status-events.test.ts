@@ -168,8 +168,8 @@ describe("the operator surface still emits once, not twice", () => {
     expect(todoEvents()).toHaveLength(1);
   });
 
-  it("POST /assign emits one todo event when the assignment starts the work", async () => {
-    const item = store.createWorkItem({ title: "assign starts it", status: "backlog" });
+  it("POST /assign emits one todo event when the assignment leaves the Todo in backlog", async () => {
+    const item = store.createWorkItem({ title: "assign keeps it queued", status: "backlog" });
 
     const cap = makeRes();
     await api.handleApiRequest(
@@ -178,7 +178,7 @@ describe("the operator surface still emits once, not twice", () => {
       ctx,
     );
 
-    expect([cap.status, cap.body.workItem.status]).toEqual([200, "assigned"]);
+    expect([cap.status, cap.body.workItem.status]).toEqual([200, "backlog"]);
     expect(todoEvents()).toHaveLength(1);
   });
 

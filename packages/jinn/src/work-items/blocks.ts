@@ -13,7 +13,8 @@ export type BlockKind = (typeof BLOCK_KINDS)[number];
 export const DEFAULT_BLOCK_KIND: BlockKind = "needs_input";
 
 /** Same-kind recurrences a Todo may accumulate before the block routes to
- *  `escalated` instead: block, unblock, re-block, unblock, re-block. */
+ *  the operator instead (blocked, as an escalation): block, unblock, re-block,
+ *  unblock, re-block. */
 export const BLOCK_RECURRENCE_LIMIT = 2;
 
 /** ICI-730: one row per Todo that has ever been blocked — the kind of its latest
@@ -81,8 +82,8 @@ export function readBlockRecord(db: DatabaseType, workItemId: string): WorkItemB
 export function resolveBlock(db: DatabaseType, item: WorkItem, kind: BlockKind): ResolvedBlock {
   const previous = readBlockRecord(db, item.id);
   const recurrences = previous?.kind === kind ? previous.recurrences + 1 : 0;
-  if (recurrences >= BLOCK_RECURRENCE_LIMIT) return { kind, recurrences, target: "escalated", escalated: true };
-  const target = kind === "dependency" ? (item.assignee ? "assigned" : "backlog") : "blocked";
+  if (recurrences >= BLOCK_RECURRENCE_LIMIT) return { kind, recurrences, target: "blocked", escalated: true };
+  const target = kind === "dependency" ? "backlog" : "blocked";
   return { kind, recurrences, target, escalated: false };
 }
 

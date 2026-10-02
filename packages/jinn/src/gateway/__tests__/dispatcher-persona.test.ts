@@ -36,6 +36,17 @@ describe("Todo Dispatcher persona — routing", () => {
     expect(persona).toMatch(/never retry around it/i);
   });
 
+  // An unowned Todo, or one the operator kept for themselves, has no employee
+  // somebody chose; the Dispatcher picks one, and never picks itself or the Shaper.
+  it("tells it to choose an employee when the assignee is unset or is @operator", () => {
+    expect(persona).toMatch(/assignee is unset/);
+    expect(persona).toMatch(/@operator/);
+  });
+
+  it("forbids choosing a system employee", () => {
+    expect(persona).toMatch(/Never choose a system employee/);
+  });
+
   it("still forbids doing the Todo itself", () => {
     expect(persona).toMatch(/Do not perform the Todo yourself/i);
   });

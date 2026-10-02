@@ -39,7 +39,7 @@ const AVAILABILITY_CLASSES = ['quota', 'rate-limit', 'provider-outage', 'network
 /** Statuses a parked attempt can leave mid-flight work in. `backlog` is absent
  *  because nothing has attempted it yet; `in_review` is the operator's desk;
  *  the sticky terminals are decisions. */
-const CANDIDATE_STATUSES: readonly WorkItemStatus[] = ['assigned', 'executing', 'blocked'];
+const CANDIDATE_STATUSES: readonly WorkItemStatus[] = ['executing', 'blocked'];
 
 /**
  * Whether a clock may restart this Todo. A failed or interrupted attempt is
@@ -48,7 +48,7 @@ const CANDIDATE_STATUSES: readonly WorkItemStatus[] = ['assigned', 'executing', 
  * that person moves it.
  */
 export function isClockRestartable(item: Pick<WorkItem, 'id' | 'status'>): boolean {
-  if (item.status === 'assigned' || item.status === 'executing') return true;
+  if (item.status === 'executing') return true;
   return item.status === 'blocked' && !isBlockDeclared(item.id);
 }
 

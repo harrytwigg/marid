@@ -285,7 +285,7 @@
       "lines": 317
     },
     "packages/jinn/src/gateway/__tests__/work-item-approval-route.test.ts": {
-      "lines": 539
+      "lines": 520
     },
     "packages/jinn/src/gateway/__tests__/work-item-attachments-route.test.ts": {
       "lines": 329
@@ -294,7 +294,7 @@
       "lines": 374
     },
     "packages/jinn/src/gateway/api.ts": {
-      "lines": 5058,
+      "lines": 5042,
       "exempt": [
         "complexity",
         "max-depth",
@@ -674,7 +674,7 @@
       "lines": 338
     },
     "packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts": {
-      "lines": 383
+      "lines": 382
     },
     "packages/jinn/src/shared/activity-receipts.ts": {
       "exempt": [
@@ -795,13 +795,13 @@
       "lines": 336
     },
     "packages/jinn/src/work-items/__tests__/reconcile.test.ts": {
-      "lines": 423
+      "lines": 419
     },
     "packages/jinn/src/work-items/__tests__/relations.test.ts": {
       "lines": 334
     },
     "packages/jinn/src/work-items/__tests__/store.test.ts": {
-      "lines": 324
+      "lines": 318
     },
     "packages/jinn/src/work-items/approvals.ts": {
       "lines": 360,
@@ -837,7 +837,7 @@
       ]
     },
     "packages/jinn/src/work-items/transitions.ts": {
-      "lines": 302,
+      "lines": 296,
       "exempt": [
         "complexity",
         "max-lines-per-function"
@@ -1278,7 +1278,7 @@
       ]
     },
     "packages/web/src/lib/todos.ts": {
-      "lines": 368,
+      "lines": 364,
       "exempt": [
         "complexity"
       ]
@@ -1403,19 +1403,19 @@
       ]
     },
     "packages/web/src/routes/todos/__tests__/board-page.test.tsx": {
-      "lines": 869
+      "lines": 866
     },
     "packages/web/src/routes/todos/__tests__/filter-bar.test.tsx": {
       "lines": 307
     },
     "packages/web/src/routes/todos/__tests__/task-page.test.tsx": {
-      "lines": 582
+      "lines": 581
     },
     "packages/web/src/routes/todos/__tests__/task-sections.test.tsx": {
       "lines": 652
     },
     "packages/web/src/routes/todos/board/board-page.tsx": {
-      "lines": 891,
+      "lines": 886,
       "exempt": [
         "@typescript-eslint/no-floating-promises",
         "complexity",
@@ -1474,7 +1474,7 @@
       ]
     },
     "packages/web/src/routes/todos/needs-you-view.tsx": {
-      "lines": 503,
+      "lines": 469,
       "exempt": [
         "complexity",
         "max-lines-per-function"
@@ -1566,7 +1566,7 @@
       ]
     },
     "packages/web/src/routes/todos/task-page/task-page.tsx": {
-      "lines": 586,
+      "lines": 565,
       "exempt": [
         "@typescript-eslint/no-floating-promises",
         "complexity",

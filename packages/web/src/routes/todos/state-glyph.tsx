@@ -5,7 +5,6 @@ import {
   Search,
   Check,
   Pause,
-  TriangleAlert,
   Bell,
   X,
   Clock,
@@ -37,11 +36,6 @@ interface GlyphSpec {
 
 const SPEC: Record<StateGlyphKey, GlyphSpec> = {
   backlog: { Icon: Inbox, bg: "var(--fill-tertiary)", fg: "var(--text-tertiary)" },
-  assigned: {
-    Icon: UserRound,
-    bg: "color-mix(in srgb, var(--system-blue) 16%, transparent)",
-    fg: "var(--system-blue)",
-  },
   executing: { Icon: Loader2, bg: "var(--accent-fill)", fg: "var(--accent)", spin: true },
   review: {
     Icon: Search,
@@ -57,11 +51,6 @@ const SPEC: Record<StateGlyphKey, GlyphSpec> = {
     Icon: Pause,
     bg: "color-mix(in srgb, var(--system-orange) 18%, transparent)",
     fg: "var(--system-orange)",
-  },
-  escalated: {
-    Icon: TriangleAlert,
-    bg: "color-mix(in srgb, var(--system-red) 18%, transparent)",
-    fg: "var(--system-red)",
   },
   cancelled: { Icon: X, bg: "var(--fill-tertiary)", fg: "var(--text-quaternary)" },
   approval: { Icon: Bell, bg: "var(--accent-fill)", fg: "var(--accent)" },

@@ -24,15 +24,13 @@ export type PluginHostVerb =
   | 'cron.runs'
   | 'knowledge.search'
 
-/** The eight states a Todo can be in, as the gateway spells them. */
+/** The six states a Todo can be in, as the gateway spells them. */
 export type HostTodoStatus =
   | 'backlog'
-  | 'assigned'
   | 'executing'
   | 'in_review'
   | 'done'
   | 'blocked'
-  | 'escalated'
   | 'cancelled'
 
 /** A Todo as the list verb returns it: the columns a board renders. */

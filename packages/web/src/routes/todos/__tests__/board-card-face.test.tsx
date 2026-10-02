@@ -279,7 +279,7 @@ describe("a stopped card still leads with its cause", () => {
   it("puts the lead above all four rows", () => {
     const { card } = renderCard(compact({
       id: "PLA-13",
-      status: "escalated",
+      status: "blocked",
       title: "Renew the provider contract",
       unblockHint: { what: "sign the renewal", who: "the operator" },
     }))

@@ -2,6 +2,7 @@ import { IDLE_CAPACITY_OPT_OUT_LABEL, type IdleCapacityPolicy } from "../shared/
 import { listWorkItems, type WorkItem } from "../work-items/store.js";
 import { getWorkItemLabels, normalizeLabelName } from "../work-items/labels.js";
 import { getTodoDispatchConfig } from "../work-items/dispatch-config.js";
+import { OPERATOR_ASSIGNEE } from "../work-items/assignment.js";
 
 /**
  * Which backlog Todos the idle-capacity auto-start may start, and in
@@ -35,6 +36,8 @@ function dispatchReason(item: WorkItem): string | undefined {
 function skipReason(item: WorkItem, required: string | null): string | undefined {
   const early = labelReason(item, required) ?? dispatchReason(item);
   if (early) return early;
+  // The operator holds it: their own work, not spare capacity's to start.
+  if (item.assignee === OPERATOR_ASSIGNEE) return "assigned to the operator";
   if (item.approvalState === "pending") return "an approval is pending";
   return undefined;
 }
@@ -42,7 +45,7 @@ function skipReason(item: WorkItem, required: string | null): string | undefined
 /**
  * Backlog Todos this loop may start, best first. A backlog Todo is skipped
  * when it says so (opt-out label, `autoStart: false`), when its next attempt
- * is pinned to a non-Claude engine, when an approval is pending on it (someone
+ * is pinned to a non-Claude engine, when the operator is its assignee, when an approval is pending on it (someone
  * is already being asked), or when the policy requires a label it does not
  * carry. Priority 3 is "High", so higher first; then the oldest, which has
  * waited longest.

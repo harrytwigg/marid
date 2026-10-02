@@ -65,7 +65,7 @@ When no installed skill fits, use `find-and-install`; searching is read-only, bu
 
 Choose employees by role and persona fit. Prefer the chain of command when a manager should own decomposition or review, while direct access remains valid. Use tracked delegation for durable work and quick sessions for bounded consultation. After delegation, tell the parent what was assigned and end the turn; the child callback resumes the work. The `delegation` skill owns retry, callback, review, and round-limit procedure.
 
-Keep the Todo ledger current. One operator outcome normally maps to one root Todo; independently assignable or reviewable deliverables may become children. Producers submit finished work for review, and reviewers close it. The `todo-handling` skill owns statuses, approvals, and mutation rules.
+Keep the Todo ledger current. One operator outcome normally maps to one root Todo; independently assignable or reviewable deliverables may become children. Producers move finished work to in_review, and the operator closes it. The `todo-handling` skill owns statuses, approvals, and mutation rules.
 
 Use cron for scheduled prompts. Analytical or decision-informing cron output should route through the COO for review; direct delivery is for simple no-review results. The cron skill owns its schema and tool calls.
 

@@ -32,7 +32,7 @@ beforeAll(async () => {
   db = (await import("../../shared/db.js")).initDb();
 });
 
-const mk = (status: "backlog" | "assigned" | "executing", extra: Record<string, unknown> = {}) =>
+const mk = (status: "backlog" | "executing", extra: Record<string, unknown> = {}) =>
   store.createWorkItem({ title: `t-${Math.random().toString(36).slice(2, 8)}`, status, ...extra });
 
 const AGENT = "session:agent-1";
@@ -125,13 +125,6 @@ describe("the cause belongs to the stop", () => {
 
     tr.transition(item.id, to, AGENT, { agent: true });
     expect(sc.readStopCause(db, item.id)).toBeUndefined();
-  });
-
-  it("survives a move from blocked to escalated, which is still a stop", () => {
-    const item = mk("executing");
-    tr.transition(item.id, "blocked", AGENT, { agent: true, stopCause: { unblockHint: hint } });
-    tr.transition(item.id, "escalated", AGENT, { agent: true });
-    expect(sc.readStopCause(db, item.id)).toEqual({ unblockHint: hint });
   });
 
   it("goes with the Todo when the Todo goes", () => {

@@ -121,7 +121,7 @@ describe("GET /api/work-items and /api/search/work-items — pagination, totals,
     expect(totals.status).toBe(200);
     expect(totals.body).toMatchObject({
       total: 27,
-      totals: { backlog: 25, done: 2, assigned: 0, executing: 0, in_review: 0, blocked: 0, escalated: 0, cancelled: 0 },
+      totals: { backlog: 25, done: 2, executing: 0, in_review: 0, blocked: 0, cancelled: 0 },
       limit: 20,
       offset: 0,
       nextOffset: 20,
@@ -143,7 +143,7 @@ describe("GET /api/work-items and /api/search/work-items — pagination, totals,
     const match = store.createWorkItem({
       title: "route-filter-needle",
       body: "body",
-      status: "assigned",
+      status: "backlog",
       assignee: "route-filter-person",
       department: "route-filter-department",
       source: "connector",
@@ -151,14 +151,14 @@ describe("GET /api/work-items and /api/search/work-items — pagination, totals,
     const bodyOnly = store.createWorkItem({
       title: "route body candidate",
       body: "route-filter-needle in body",
-      status: "assigned",
+      status: "backlog",
       assignee: "someone-else",
       department: "somewhere-else",
       source: "connector",
     });
     const outside = store.createWorkItem({
       title: "route-filter-needle outside",
-      status: "assigned",
+      status: "backlog",
       assignee: "route-filter-person",
       department: "route-filter-department",
       source: "connector",
@@ -171,7 +171,7 @@ describe("GET /api/work-items and /api/search/work-items — pagination, totals,
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2033-02-10T08:00:00.000Z", match.id);
 
     const query = new URLSearchParams({
-      status: "assigned",
+      status: "backlog",
       assignee: "route-filter-person",
       department: "route-filter-department",
       source: "connector",
@@ -186,7 +186,7 @@ describe("GET /api/work-items and /api/search/work-items — pagination, totals,
       expect(cap.status).toBe(200);
       expect(cap.body.workItems.map((item: { id: string }) => item.id)).toEqual([match.id]);
       expect(cap.body.workItems[0]).toMatchObject({ rank: 7 });
-      expect(cap.body).toMatchObject({ total: 1, totals: { assigned: 1 }, offset: 0, nextOffset: null });
+      expect(cap.body).toMatchObject({ total: 1, totals: { backlog: 1 }, offset: 0, nextOffset: null });
     }
 
     const qMatches = makeRes();

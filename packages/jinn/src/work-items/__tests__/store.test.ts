@@ -89,17 +89,17 @@ describe("work-item store — manual rank", () => {
   });
 
   it("clearing rank returns a row to deterministic newest-first fallback ordering", () => {
-    const older = store.createWorkItem({ title: "older unranked", status: "assigned", department: "rank-clear-fixture" });
-    const newer = store.createWorkItem({ title: "newer unranked", status: "assigned", department: "rank-clear-fixture" });
+    const older = store.createWorkItem({ title: "older unranked", status: "backlog", department: "rank-clear-fixture" });
+    const newer = store.createWorkItem({ title: "newer unranked", status: "backlog", department: "rank-clear-fixture" });
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-01-01T00:00:00.000Z", older.id);
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2031-01-01T00:00:00.000Z", newer.id);
 
     store.updateWorkItem(older.id, { rank: 5 }, "operator");
-    expect(store.listWorkItems({ status: "assigned", department: "rank-clear-fixture" })[0]?.id).toBe(older.id);
+    expect(store.listWorkItems({ status: "backlog", department: "rank-clear-fixture" })[0]?.id).toBe(older.id);
 
     store.updateWorkItem(older.id, { rank: null }, "operator");
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-01-01T00:00:00.000Z", older.id);
-    const fallback = store.listWorkItems({ status: "assigned", department: "rank-clear-fixture" });
+    const fallback = store.listWorkItems({ status: "backlog", department: "rank-clear-fixture" });
     expect(fallback.map((item) => item.id)).toEqual([newer.id, older.id]);
     expect(store.getWorkItem(older.id)?.rank).toBeNull();
   });
@@ -282,12 +282,6 @@ describe("work-item store — GRS-021a Todo model fields", () => {
     })!;
     expect(db.prepare("SELECT total_cost FROM sessions WHERE id = ?").pluck().get("sess-codex-cost")).toBe(expected);
     expect(store.getWorkItemSpend(wi.id)).toBe(expected);
-  });
-
-  it("the ifNotSticky guard also protects escalated (operator queue is never silently drained)", () => {
-    const wi = store.createWorkItem({ title: "escalated sticky", status: "escalated" });
-    expect(wi.status).toBe("escalated");
-    expect(store.getWorkItem(wi.id)?.status).toBe("escalated");
   });
 });
 

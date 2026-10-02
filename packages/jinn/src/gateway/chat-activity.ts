@@ -22,7 +22,7 @@ export interface ChatActivityContext {
 }
 
 function todoBlockStatus(status: WorkItem["status"]) {
-  if (status === "backlog" || status === "assigned") return "queued" as const;
+  if (status === "backlog") return "queued" as const;
   if (status === "executing") return "running" as const;
   if (status === "done") return "completed" as const;
   if (status === "cancelled") return "error" as const;

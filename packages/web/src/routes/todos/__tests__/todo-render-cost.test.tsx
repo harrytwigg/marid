@@ -90,7 +90,7 @@ const WINDOW_CEILING = 40
 const NOW = Date.parse("2026-08-01T09:00:00.000Z")
 
 const ALL_STATUSES: WorkItemStatusWire[] = [
-  "backlog", "assigned", "executing", "in_review", "blocked", "escalated", "done", "cancelled",
+  "backlog", "executing", "in_review", "blocked", "done", "cancelled",
 ]
 
 function compact(id: string, status: WorkItemStatusWire, rank: number): WorkItemCompactWire {

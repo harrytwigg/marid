@@ -14,7 +14,7 @@ import type { SearchWorkItemsFilter, WorkItemSource, WorkItemStatus } from "../w
  * Todos and looks like data loss.
  */
 
-const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['backlog', 'assigned', 'executing', 'in_review', 'done', 'blocked', 'escalated', 'cancelled'];
+const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['backlog', 'executing', 'in_review', 'done', 'blocked', 'cancelled'];
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = ['human', 'delegation', 'cron', 'workflow', 'session', 'connector', 'goal'];
 
 export interface WorkItemQueryParams {

@@ -27,7 +27,7 @@ function attentionLaneOf(
   // kept a lane the Todo no longer had a reason for.
   if (recovery && isRecoverySweptStatus(item.status)) return recovery.lane;
   if (item.approvalOperatorOnly && item.approvalState === "pending") return "operator";
-  if (item.status === "blocked" || item.status === "escalated") {
+  if (item.status === "blocked") {
     const cause = readStopCause(initDb(), item.id);
     if (cause?.parkedUntil) return "recovering";
     return "operator";
@@ -106,7 +106,7 @@ export function workItemPagePayload(page: ReturnType<typeof queryWorkItems>): Re
  *  entirely once the park has passed, so no surface has to re-check the clock
  *  to avoid showing a countdown that already ran out. */
 function stopCause(item: WorkItem): TodoStopCause {
-  if (item.status !== "blocked" && item.status !== "escalated") return {};
+  if (item.status !== "blocked") return {};
   return readStopCause(initDb(), item.id) ?? {};
 }
 

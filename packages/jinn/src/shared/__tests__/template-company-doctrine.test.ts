@@ -290,7 +290,6 @@ describe("template company doctrine", () => {
           "escalate_work_item_approval",
           "in_review",
           "blocked",
-          "escalated",
         ],
       },
       {

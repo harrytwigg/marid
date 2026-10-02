@@ -4,7 +4,7 @@ import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemTre
 import { stateKeyOf } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
-import { escalationReasonLabel } from "../util"
+import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
@@ -40,21 +40,11 @@ export function rollupOf(tree: WorkItemTreeWire | undefined, rootStatus: string)
   return { closed, total }
 }
 
-/** The one-line why on blocked/escalated cards: the latest transition note. The
+/** The one-line why on blocked cards: the latest transition note. The
  *  card face has no row for it since Variant A; the Needs-you view still does. */
 export function reasonOf(item: WorkItemCompactWire, detail: WorkItemOpenDetailWire | undefined): string | null {
-  if (item.status !== "blocked" && item.status !== "escalated") return null
-  const events = detail?.events ?? []
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]
-    if (e.toStatus === item.status) {
-      const note = typeof e.detail?.note === "string" ? e.detail.note.trim() : ""
-      if (note) return note
-      if (e.kind === "escalated") return escalationReasonLabel(e.detail?.reason)
-      return null
-    }
-  }
-  return null
+  if (item.status !== "blocked") return null
+  return stopReasonOf(detail?.events ?? [], item.status).note
 }
 
 /** Vertical anatomy used by the column FLIP dependency. Variant A's four rows

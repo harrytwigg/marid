@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react"
-import { Bell, Check, Pause, TriangleAlert } from "lucide-react"
+import { Bell, Check, Pause } from "lucide-react"
 import { AttachmentRefText } from "@/components/attachment-ref-preview"
 import type { Employee, WorkItemDetailWire, WorkItemEventWire } from "@/lib/api"
-import { effectiveMaxRounds } from "@/lib/todos"
-import { displayNameOf, escalationReasonLabel, formatRelativeTime } from "../util"
+import { displayNameOf, formatRelativeTime, stopReasonOf } from "../util"
 
 /* Todos v2 slice 6 — the task page's banner zone (design-doc §7.2, states mock
  * §5). At most ONE banner: Escalated > Approval > Blocked. Neutral
@@ -20,11 +19,10 @@ import { displayNameOf, escalationReasonLabel, formatRelativeTime } from "../uti
  * stops. Deciding first and writing after took the "stop" path and orphaned
  * the feedback. */
 
-export type BannerKind = "escalated" | "approval" | "blocked"
+export type BannerKind = "approval" | "blocked"
 
 export function bannerKindOf(detail: WorkItemDetailWire): BannerKind | null {
   const item = detail.workItem
-  if (item.status === "escalated") return "escalated"
   if (item.approvalState === "pending") return "approval"
   if (item.status === "blocked") return "blocked"
   return null
@@ -33,29 +31,15 @@ export function bannerKindOf(detail: WorkItemDetailWire): BannerKind | null {
 /** The newest event that carries this exception state's reason: a transition
  *  into the status, or a same-status annotate note (both carry toStatus). */
 export function exceptionReasonOf(detail: WorkItemDetailWire): { note: string | null; event: WorkItemEventWire | null } {
-  const status = detail.workItem.status
-  for (let i = detail.events.length - 1; i >= 0; i--) {
-    const e = detail.events[i]
-    if (e.toStatus !== status) continue
-    const note = typeof e.detail?.note === "string" ? e.detail.note.trim() : ""
-    if (note) return { note, event: e }
-    if (e.kind === "escalated") {
-      const label = escalationReasonLabel(e.detail?.reason)
-      if (label) return { note: label, event: e }
-    }
-    if (e.kind === "status_change") return { note: null, event: e }
-  }
-  return { note: null, event: null }
+  return stopReasonOf(detail.events, detail.workItem.status)
 }
 
 const KIND_STYLE: Record<BannerKind, { color: string; rail: string }> = {
-  escalated: { color: "var(--system-red)", rail: "color-mix(in srgb, var(--system-red) 38%, transparent)" },
   approval: { color: "var(--accent)", rail: "color-mix(in srgb, var(--accent) 38%, transparent)" },
   blocked: { color: "var(--system-orange)", rail: "color-mix(in srgb, var(--system-orange) 38%, transparent)" },
 }
 
 function BannerGlyph({ kind }: { kind: BannerKind }) {
-  if (kind === "escalated") return <TriangleAlert size={15} strokeWidth={2} aria-hidden />
   if (kind === "approval") return <Bell size={15} strokeWidth={2} aria-hidden />
   return <Pause size={14} strokeWidth={2} aria-hidden />
 }
@@ -113,17 +97,13 @@ export function TaskBanner({
   const options = detail.approvals?.find((a) => a.state === "pending")?.options ?? null
   const approveDisabled = busy || (options !== null && choice === null)
 
-  const headWord = kind === "escalated" ? "Escalated" : kind === "approval" ? "Approval requested" : "Blocked"
+  const headWord = kind === "approval" ? "Approval requested" : "Blocked"
   const when =
     kind === "approval"
       ? [item.approvalEscalatedAt ? "escalated" : null, formatRelativeTime(item.updatedAt)].filter(Boolean).join(" · ")
-      : kind === "escalated"
-        ? [event ? formatRelativeTime(event.createdAt) : null, `round ${item.rounds} of ${effectiveMaxRounds(item)}`]
-            .filter(Boolean)
-            .join(" · ")
-        : [event ? formatRelativeTime(event.createdAt) : null, event?.actor ? displayNameOf(event.actor, byName) : null]
-            .filter(Boolean)
-            .join(" · ")
+      : [event ? formatRelativeTime(event.createdAt) : null, event?.actor ? displayNameOf(event.actor, byName) : null]
+          .filter(Boolean)
+          .join(" · ")
 
   const body =
     kind === "approval" ? item.approvalRequest : note
@@ -171,7 +151,7 @@ export function TaskBanner({
             value={reason}
             disabled={busy}
             onChange={(e) => setReason(e.target.value)}
-            placeholder={kind === "escalated" ? "Why is this escalated?" : "What is this waiting on?"}
+            placeholder={"What is this waiting on?"}
             aria-label="Reason"
             className="min-w-0 flex-1 rounded-[9px] bg-[var(--fill-quaternary)] px-2.5 py-1.5 text-[14px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
           />

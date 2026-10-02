@@ -41,7 +41,7 @@ function parked(title: string, error: string, outcome: import("../runs.js").Todo
   const run = runs.openWorkItemRun({ workItemId: item.id, sessionId });
   runs.closeWorkItemRun(run.id, { outcome, endedAt: new Date().toISOString(), error });
   store.appendWorkItemEvent({
-    workItemId: item.id, kind: "status_change", fromStatus: "assigned", toStatus: "blocked",
+    workItemId: item.id, kind: "status_change", fromStatus: "executing", toStatus: "blocked",
     actor: "workflow:run", detail: { workflowId: "pipeline", runId: run.id }, versionEffect: "audit",
   });
   return { id: item.id, runId: run.id };
@@ -53,7 +53,7 @@ describe("sweepTodoRecovery", () => {
     const rearm: string[] = [];
     const result = controller.sweepTodoRecovery({
       mode: "classify-only",
-      rearm: (todoId) => { rearm.push(todoId); return { status: "assigned" }; },
+      rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; },
     });
     expect(result.applied).toBe(0);
     expect(rearm).toHaveLength(0);
@@ -66,7 +66,7 @@ describe("sweepTodoRecovery", () => {
     const rearm: string[] = [];
     controller.sweepTodoRecovery({
       mode: "auto",
-      rearm: (todoId) => { rearm.push(todoId); return { status: "assigned" }; },
+      rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; },
     });
     expect(rearm).not.toContain(item.id);
     expect(item.status).toBe("backlog");
@@ -78,7 +78,7 @@ describe("sweepTodoRecovery", () => {
     const rearm: string[] = [];
     const first = controller.sweepTodoRecovery({
       mode: "auto",
-      rearm: (todoId) => { rearm.push(todoId); return { status: "assigned" }; },
+      rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; },
     });
     expect(first.applied).toBeGreaterThanOrEqual(1);
     expect(rearm).toContain(id);
@@ -111,7 +111,7 @@ describe("sweepTodoRecovery", () => {
     const { id } = parked("quota off", "Usage limit exceeded; try again at 2026-08-27T12:00:00.000Z", "rate_limited");
     const result = controller.sweepTodoRecovery({
       mode: "off",
-      rearm: () => ({ status: "assigned" }),
+      rearm: () => ({ status: "executing" }),
     });
     expect(result).toEqual({ classified: 0, applied: 0 });
     expect(rows.getWorkItemRecovery(id)).toBeUndefined();
@@ -119,7 +119,7 @@ describe("sweepTodoRecovery", () => {
 
   it("feeds recovering leftovers into the attention query so the dashboard can split them", () => {
     const { id } = parked("quota parked", "Usage limit exceeded; try again at 2026-08-27T12:00:00.000Z", "rate_limited");
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
     expect(rows.getWorkItemRecovery(id)?.lane).toBe("recovering");
     const hits = store.listWorkItems({ needsAttentionFor: "platform-worker" }).map((item) => item.id);
     expect(hits).toContain(id);
@@ -127,7 +127,7 @@ describe("sweepTodoRecovery", () => {
 
   it("feeds recovering leftovers even when the caller is not the assignee", () => {
     const { id } = parked("quota for another worker", "Usage limit exceeded; try again at 2026-08-27T12:00:00.000Z", "rate_limited");
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
     const hits = store.listWorkItems({ needsAttentionFor: "operator" }).map((item) => item.id);
     expect(hits).toContain(id);
   });
@@ -151,7 +151,7 @@ describe("sweepTodoRecovery", () => {
       reason: "approved landing is still open",
     });
 
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
 
     expect(rows.getWorkItemRecovery(item.id)).toMatchObject({ lane: "manager", incidentId: run.id });
     expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).toContain(item.id);
@@ -162,7 +162,7 @@ describe("sweepTodoRecovery", () => {
     const rearm: string[] = [];
     const sweep = () => controller.sweepTodoRecovery({
       mode: "auto",
-      rearm: (todoId) => { rearm.push(todoId); return { status: "assigned" }; },
+      rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; },
     });
     sweep();
     expect(rows.getWorkItemRecovery(id)?.attempts).toBe(1);

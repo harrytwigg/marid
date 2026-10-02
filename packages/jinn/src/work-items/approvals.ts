@@ -38,7 +38,7 @@ export {
  * Consequence rules are FIXED and deterministic (not per-request config):
  *   - approve + status `in_review`  → `transition(done)`
  *   - reject  + status `in_review`  → bounce `transition(executing)` (rounds++;
- *     the bounce that reaches maxRounds `escalated`s instead — the transitions
+ *     the bounce that reaches maxRounds stops in `blocked` instead — the transitions
  *     module enforces that)
  *   - any OTHER status              → the decision is recorded, status UNTOUCHED
  *   - a gate MIRRORED from a Workflow run → the decision is recorded, status

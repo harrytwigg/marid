@@ -9,7 +9,10 @@ import {
 } from "../sessions/registry.js";
 import { JINN_HOME } from "../shared/paths.js";
 import type { Session } from "../shared/types.js";
-import { queryWorkItems } from "../work-items/store.js";
+import { queryWorkItems, type ListWorkItemsFilter } from "../work-items/store.js";
+
+/** Whose attention queue a list reads, as the route resolved it. */
+export type NeedsAttentionTarget = Pick<ListWorkItemsFilter, "needsAttentionFor" | "needsAttentionOperator">;
 import type { ApiContext } from "./api.js";
 import { badRequest, json, type ParsedRoute } from "./route-helpers.js";
 import { workItemPagePayload } from "./work-item-payload.js";
@@ -35,7 +38,7 @@ export interface SearchApiOptions {
   /** Request-bound authority check. It answers on the response itself and
    *  returns undefined once it has; the caller-identity machinery it needs
    *  stays in api.ts. */
-  resolveNeedsAttentionTarget: (requested: string) => string | undefined;
+  resolveNeedsAttentionTarget: (requested: string) => NeedsAttentionTarget | undefined;
 }
 
 function messageSearchFilter(url: URL): ReadResult<MessageSearchFilter> {
@@ -156,7 +159,7 @@ function searchWorkItemsRoute(res: ServerResponse, url: URL, options: SearchApiO
   if (needsAttentionFor) {
     const target = options.resolveNeedsAttentionTarget(needsAttentionFor);
     if (!target) return;
-    filter.needsAttentionFor = target;
+    Object.assign(filter, target);
   }
   if (Object.keys(filter).length === 0) {
     return badRequest(res, "at least one filter is required (q, text, status, source, assignee, department, since, until, needsAttentionFor)");

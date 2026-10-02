@@ -14,6 +14,7 @@ import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { VerifyMode, VerifyPolicy } from './verify-policy.js';
 import type { WorkItemEventKind } from './event-log.js';
+import { OPERATOR_ASSIGNEE } from './operator-assignee.js';
 
 /**
  * Work-item store — the substrate of the Todos ledger (GRS-002, elevated by
@@ -37,14 +38,14 @@ import type { WorkItemEventKind } from './event-log.js';
  * (DDL in `migrate.ts`).
  */
 
+/** The statuses the gateway writes. The CHECK still admits the retired `assigned`
+ *  and `escalated`; the boot migration (`retired-statuses.ts`) moves those rows. */
 export type WorkItemStatus =
   | 'backlog'
-  | 'assigned'
   | 'executing'
   | 'in_review'
   | 'done'
   | 'blocked'
-  | 'escalated'
   | 'cancelled';
 export type WorkItemSource = 'human' | 'delegation' | 'cron' | 'workflow' | 'session' | 'connector' | 'goal';
 export type ApprovalState = 'pending' | 'approved' | 'rejected';
@@ -53,9 +54,9 @@ export type ApprovalTargetKind = 'employee' | 'virtual' | 'none';
 /** Statuses that close an item — writes stamp/clear `closed_at` on these. */
 const CLOSED_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['done', 'cancelled']);
 /** Sticky terminals (design §1.1): the reconciler never derives an item OUT of
- *  these — `done`/`cancelled` are decisions, `escalated` is a deliberate routing
- *  to the operator that session churn must not silently undo. */
-export const STICKY_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['done', 'cancelled', 'escalated']);
+ *  these, and leaving one is the operator's decision — `done`/`cancelled` are
+ *  decisions, not states session churn may undo. */
+export const STICKY_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['done', 'cancelled']);
 
 export type { VerifyMode, VerifyPolicy } from './verify-policy.js';
 
@@ -175,6 +176,8 @@ export interface ListWorkItemsFilter {
   assignee?: string;
   source?: WorkItemSource;
   needsAttentionFor?: string;
+  /** The queue is the operator's own: Todos assigned to `@operator` count too. */
+  needsAttentionOperator?: boolean;
   /** Exact creator identity (`created_by`). */
   createdBy?: string;
   /** Direct children of this Todo. */
@@ -408,9 +411,8 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
     parent = getWorkItem(input.parentId);
     if (!parent) throw new Error(`parent Todo ${input.parentId} not found`);
     // Closed parents refuse new children (the roll-up gate would otherwise be
-    // violable by construction order). `escalated` deliberately stays creatable-
-    // under: escalation routes an item to the operator, and decomposing it into
-    // sub-tasks is a legitimate part of resolving it.
+    // violable by construction order). A blocked parent stays creatable-under:
+    // decomposing it into sub-tasks is a legitimate part of resolving it.
     if (parent.status === 'done' || parent.status === 'cancelled') {
       throw new Error(`parent Todo ${parent.id} is ${parent.status} — sub-tasks cannot be added under a closed Todo`);
     }
@@ -566,12 +568,10 @@ export function getWorkItemBySourceRef(source: WorkItemSource, sourceRef: string
 
 export const WORK_ITEM_STATUS_VALUES: readonly WorkItemStatus[] = [
   'backlog',
-  'assigned',
   'executing',
   'in_review',
   'done',
   'blocked',
-  'escalated',
   'cancelled',
 ];
 
@@ -615,9 +615,9 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
     // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(
-      "((EXISTS (SELECT 1 FROM work_item_approvals wap WHERE wap.work_item_id = work_items.id AND wap.state = 'pending' AND wap.target = ?) OR (assignee = ? AND status IN ('blocked', 'escalated')) OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('assigned', 'executing', 'in_review', 'blocked', 'escalated'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
+      "((EXISTS (SELECT 1 FROM work_item_approvals wap WHERE wap.work_item_id = work_items.id AND wap.state = 'pending' AND wap.target = ?) OR (assignee IN (?, ?) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
     );
-    values.push(filter.needsAttentionFor, filter.needsAttentionFor, new Date().toISOString());
+    values.push(filter.needsAttentionFor, filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, new Date().toISOString());
   }
   if (filter.since) {
     conditions.push('updated_at >= ?');

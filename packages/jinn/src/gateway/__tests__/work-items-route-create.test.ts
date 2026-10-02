@@ -50,7 +50,7 @@ describe("POST /api/work-items — provenance and approval routing fields", () =
     const cooApproval = store.createWorkItem({ title: "COO approval", source: "workflow", sourceRef: "workflow:wf-coo:run-1", status: "in_review" });
     const workerApproval = store.createWorkItem({ title: "Worker approval", source: "workflow", sourceRef: "workflow:wf-worker:run-2", status: "in_review" });
     const cooBlocked = store.createWorkItem({ title: "COO blocked", source: "session", sourceRef: `session:${coo.id}:abc123`, assignee: "coo", status: "blocked" });
-    const cooNormal = store.createWorkItem({ title: "COO normal", assignee: "coo", status: "assigned" });
+    const cooNormal = store.createWorkItem({ title: "COO normal", assignee: "coo", status: "backlog" });
 
     const approvals = await import("../../work-items/approvals.js");
     approvals.requestApproval(cooApproval.id, { request: "approve coo", target: "coo" });

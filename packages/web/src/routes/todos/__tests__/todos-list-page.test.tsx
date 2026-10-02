@@ -200,7 +200,6 @@ describe("the viewport-driven Todos surface", () => {
     expect(screen.getByTestId("todo-list-group-needs-you")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-executing")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-in-review")).toBeTruthy()
-    expect(screen.getByTestId("todo-list-group-assigned")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-backlog")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-closed")).toBeTruthy()
     expect(screen.queryByTestId("todo-list-row-PLA-2")).toBeNull()
