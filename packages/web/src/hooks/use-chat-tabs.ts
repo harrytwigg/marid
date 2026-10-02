@@ -18,13 +18,15 @@ export interface SessionTab extends BaseTab {
 export interface FileTab extends BaseTab {
   kind: 'file'
   path: string
+  sessionId?: string | null // the chat that linked the path, whose host reads a non-root one
 }
 
 export type ChatTab = SessionTab | FileTab
 
 /** Stable identity for keying/dedupe across both kinds. */
 export function tabKey(t: ChatTab): string {
-  return t.kind === 'file' ? `file:${t.path}` : t.sessionId
+  if (t.kind === 'session') return t.sessionId
+  return t.sessionId ? `file:${t.sessionId}:${t.path}` : `file:${t.path}`
 }
 
 const STORAGE_KEY = 'jinn-chat-tabs'
@@ -132,14 +134,13 @@ export function useChatTabs() {
     })
   }, [])
 
-  /** Open (or focus, if already open) a file tab. File tabs are pinned so the
-   *  preview-open flow never replaces them. */
-  const openFileTab = useCallback((path: string) => {
+  /** Open (or focus, if already open) a file tab, pinned so the preview-open flow never replaces it. */
+  const openFileTab = useCallback((path: string, sessionId: string | null = null) => {
     setState((current) => {
-      const existing = current.tabs.findIndex((t) => t.kind === 'file' && t.path === path)
+      const existing = current.tabs.findIndex((t) => t.kind === 'file' && t.path === path && (t.sessionId ?? null) === sessionId)
       if (existing >= 0) return { tabs: current.tabs, activeIndex: existing }
       const label = path.split(/[\\/]/).pop() || path // basename only
-      const tab: FileTab = { kind: 'file', path, label, pinned: true }
+      const tab: FileTab = { kind: 'file', path, sessionId, label, pinned: true }
       if (current.tabs.length >= MAX_TABS) {
         const replaceIdx = current.tabs.findIndex((t) => !t.pinned)
         if (replaceIdx >= 0) {

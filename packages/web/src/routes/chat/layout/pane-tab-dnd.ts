@@ -1,5 +1,6 @@
 import type { DragEvent } from 'react'
 import { clearChatSessionDrag, writeChatSessionDrag } from '../chat-session-dnd'
+import { isFileTabId } from './file-tab'
 
 /** Carries a tab being dragged between (or within) pane tab strips. */
 export const PANE_TAB_DND_MIME = 'application/x-jinn-pane-tab'
@@ -17,12 +18,14 @@ export function hasPaneTabDrag(dataTransfer: DataTransfer): boolean {
 }
 
 /**
- * A tab drag is also a chat-session drag (the tab's id is its session id), so the split layout's pane drop
- * surface takes it with no knowledge of tabs: the middle of a pane adds the tab there, an edge
+ * A chat tab's drag is also a chat-session drag (the tab's id is its session id), so the split layout's
+ * pane drop surface takes it with no knowledge of tabs: the middle of a pane adds the tab there, an edge
  * splits the pane. The tab MIME rides along for the strips, which need to know where it came from.
+ * A file tab's drag is a tab drag only: it is no session, so the pane surface (which would split it into
+ * a pane of its own, or route to it) never sees it, and it moves between strips alone.
  */
 export function writePaneTabDrag(dataTransfer: DataTransfer, payload: PaneTabDragPayload): void {
-  writeChatSessionDrag(dataTransfer, payload.tabId)
+  if (!isFileTabId(payload.tabId)) writeChatSessionDrag(dataTransfer, payload.tabId)
   activeDrag = payload
   dataTransfer.setData(PANE_TAB_DND_MIME, JSON.stringify(payload))
   dataTransfer.effectAllowed = 'copyMove'

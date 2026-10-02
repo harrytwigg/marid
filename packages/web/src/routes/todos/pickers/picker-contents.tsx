@@ -1,17 +1,16 @@
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import {
   api,
   type DepartmentSummaryWire,
   type Employee,
-  type VerifyModeWire,
   type WorkItemDetailWire,
   type WorkItemLabelWire,
 } from "@/lib/api"
-import { effectiveMaxRounds, effectiveVerifyMode, priorityLabel } from "@/lib/todos"
+import { priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
-import { RailPriorityBars, VerifyPill } from "../task-page/rail-rows"
+import { RailPriorityBars } from "../task-page/rail-rows"
 import { OPERATOR_ROW } from "../util"
 import { PickerNote, PickerRow } from "./picker-shell"
 
@@ -297,69 +296,6 @@ export function DepartmentPickerContent({
         testId="department-option-none"
       />
       <PickerNote>Moving departments never changes the ID — it keeps its birth prefix.</PickerNote>
-    </>
-  )
-}
-
-const VERIFY_MODES: readonly VerifyModeWire[] = ["trust", "verify", "thorough"]
-
-export function VerifyPickerContent({
-  detail,
-  commit,
-  sheet,
-}: PickerContentProps & { commit: (policy: { mode: VerifyModeWire; maxRounds: number } | null) => void }) {
-  const item = detail.workItem
-  const mode = effectiveVerifyMode(item)
-  const maxRounds = effectiveMaxRounds(item)
-  const explicit = item.verifyPolicy !== null
-  return (
-    <>
-      {VERIFY_MODES.map((option) => (
-        <PickerRow
-          key={option}
-          sheet={sheet}
-          glyph={<VerifyPill mode={option} />}
-          label={<span className="sr-only">{option}</span>}
-          checked={explicit && mode === option}
-          onSelect={() => commit({ mode: option, maxRounds })}
-          testId={`verify-option-${option}`}
-        />
-      ))}
-      <div className="flex items-center gap-2.5 px-2.5 py-1.5">
-        <span className="text-[12px] text-[var(--text-tertiary)]">Rounds</span>
-        <button
-          type="button"
-          aria-label="Fewer rounds"
-          data-testid="verify-rounds-down"
-          disabled={maxRounds <= 1}
-          onClick={() => commit({ mode, maxRounds: maxRounds - 1 })}
-          className="focus-ring grid size-6 place-items-center rounded-lg bg-[var(--fill-tertiary)] text-[var(--text-secondary)] outline-none disabled:opacity-40"
-        >
-          <Minus size={11} aria-hidden />
-        </button>
-        <span className="text-[12.5px] font-semibold tabular-nums text-[var(--text-primary)]" data-testid="verify-rounds">
-          {maxRounds}
-        </span>
-        <button
-          type="button"
-          aria-label="More rounds"
-          data-testid="verify-rounds-up"
-          disabled={maxRounds >= 20}
-          onClick={() => commit({ mode, maxRounds: maxRounds + 1 })}
-          className="focus-ring grid size-6 place-items-center rounded-lg bg-[var(--fill-tertiary)] text-[var(--text-secondary)] outline-none disabled:opacity-40"
-        >
-          <Plus size={11} aria-hidden />
-        </button>
-      </div>
-      {explicit && (
-        <PickerRow
-          sheet={sheet}
-          label={<span className="text-[var(--text-tertiary)]">Use the provenance default</span>}
-          onSelect={() => commit(null)}
-          testId="verify-clear"
-        />
-      )}
-      <PickerNote>Review policy is the operator's knob — how this Todo's work gets verified.</PickerNote>
     </>
   )
 }

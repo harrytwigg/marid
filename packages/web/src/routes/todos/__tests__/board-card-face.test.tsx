@@ -46,8 +46,7 @@ function tree(id: string, over: Partial<WorkItemTreeWire> = {}): WorkItemTreeWir
       rank: null,
       source: "human",
       sourceRef: null,
-      acceptance: null,
-      verifyPolicy: null,
+
       rounds: 0,
       budgetUsd: null,
       createdAt: "2026-08-21T08:00:00.000Z",

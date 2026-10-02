@@ -28,7 +28,6 @@ export const OPEN_STATUSES: readonly WorkItemStatus[] = ["backlog", "blocked", "
 export const NO_AUTO_START_LABEL = "no-auto-start";
 
 const BODY_CHARS = 2000;
-const ACCEPTANCE_CHARS = 1000;
 const COMMENT_CHARS = 600;
 const COMMENTS_PER_TODO = 6;
 const DEFAULT_MAX_TODOS = 150;
@@ -53,7 +52,6 @@ export interface BoardTodo {
   updatedAt: string;
   dueAt: string | null;
   body?: string;
-  acceptance?: string;
   comments: Array<{ author: string; authorKind: string; at: string; body: string }>;
   commentsTotal: number;
   relations: Array<{ kind: string; direction: "out" | "in"; other: { id: string; title: string; status: WorkItemStatus } }>;
@@ -151,7 +149,7 @@ async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<BoardTod
   const comments = tail.comments.filter((comment) => !comment.deletedAt)
     .map((comment) => ({ author: comment.author, authorKind: comment.authorKind, at: comment.createdAt, body: truncate(comment.body, COMMENT_CHARS) ?? "" }));
   const links = await Promise.all(
-    findLinks([item.body, item.acceptance, ...tail.comments.map((comment) => comment.body)])
+    findLinks([item.body, ...tail.comments.map((comment) => comment.body)])
       .map(({ url, kind }) => opts.resolveLink(url, kind)),
   );
   return {
@@ -172,9 +170,8 @@ async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<BoardTod
     relations: listRelations(item.id).map((relation) => ({ kind: relation.kind, direction: relation.direction, other: relation.other })),
     sessions: sessionsOn(item),
     links,
-    ...optional<Pick<BoardTodo, "body" | "acceptance" | "stop" | "noAutoStart" | "dispatchEngine" | "flaggedStuck">>({
+    ...optional<Pick<BoardTodo, "body" | "stop" | "noAutoStart" | "dispatchEngine" | "flaggedStuck">>({
       body: truncate(item.body, BODY_CHARS),
-      acceptance: truncate(item.acceptance, ACCEPTANCE_CHARS),
       stop: stopOf(item),
       noAutoStart: noAutoStartReason(item, labels),
       dispatchEngine: getTodoDispatchConfig(item.id)?.engine,

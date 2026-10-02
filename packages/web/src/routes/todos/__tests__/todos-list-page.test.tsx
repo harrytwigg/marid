@@ -64,8 +64,7 @@ function tree(item: WorkItemCompactWire): WorkItemTreeWire {
       rank: item.rank ?? null,
       body: null,
       priority: 2,
-      acceptance: null,
-      verifyPolicy: null,
+
       rounds: 0,
       budgetUsd: null,
       createdAt: item.updatedAt,

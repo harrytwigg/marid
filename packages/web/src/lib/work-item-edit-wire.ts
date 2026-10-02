@@ -1,4 +1,4 @@
-import type { VerifyPolicyWire, WorkItemFullWire } from "@/lib/api"
+import type { WorkItemFullWire } from "@/lib/api"
 
 /**
  * The version-fenced Todo edit lane's wire shapes, its version rule, and the
@@ -25,11 +25,7 @@ export interface WorkItemEditPatch {
   priority?: number
   rank?: number
   /** Todos v2 slice 4 (optional: older gateways reject unknown fields). */
-  acceptance?: string | null
   dueAt?: string | null
-  /** Todos v2 slice 6 — the rail's verify picker (operator-only; null clears
-   *  to the provenance default). Older gateways reject the field. */
-  verifyPolicy?: VerifyPolicyWire | null
 }
 
 export interface WorkItemEditRequest {

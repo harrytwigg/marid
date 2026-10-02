@@ -176,7 +176,6 @@ import {
   linkSession,
   listWorkItemEventsForItems,
   queryWorkItems,
-  DEFAULT_VERIFY_MODE_BY_SOURCE,
   resolveTodoDepartments,
   STICKY_STATUSES,
   updateWorkItemConditional,
@@ -189,7 +188,7 @@ import {
   type WorkItemStatus,
 } from "../work-items/store.js";
 import { resolveDelegationLinkRole, WORK_ITEM_LINK_ROLES, type WorkItemLinkRole } from "../work-items/link-role.js";
-import { declaresOnlyDeliverable, validateVerifyPolicy } from "../work-items/verify-policy.js";
+import { retiredTodoFieldError } from "../work-items/retired-fields.js";
 import { resolveTodoEditAuthority, todoEditRefusal } from "./todo-edit-authority.js";
 import { isTodoId, resolveTodoIdPrefix } from "../work-items/id.js";
 import {
@@ -2181,10 +2180,10 @@ export async function handleApiRequest(
         return badRequest(res, "provenance cannot be supplied on public Todo creation — the server assigns source provenance: public creation uses source=human or source=session, while cron and delegation create their own records; source=workflow is historical audit provenance and is not currently minted");
       }
       if (body.assignee !== undefined) return badRequest(res, "assignee cannot be supplied at Todo creation — create first, then grant ownership through the assign flow (assign_work_item / POST /api/work-items/:id/assign), which is its own action: it validates the roster and derives the department (unless gateway.todoDepartments keeps it). Assigning starts nothing; a dispatch does");
+      const retired = retiredTodoFieldError(body);
+      if (retired) return badRequest(res, retired);
       const title = typeof body.title === "string" ? stripControlChars(body.title).trim() : "";
       if (!title) return badRequest(res, "title is required");
-      const verifyPolicy = validateVerifyPolicy(body.verifyPolicy);
-      if (!verifyPolicy.ok) return badRequest(res, verifyPolicy.error);
       const parentId = typeof body.parentId === 'string' && body.parentId.trim() ? body.parentId.trim() : null;
       let dueAt = typeof body.dueAt === 'string' && body.dueAt.trim() ? body.dueAt.trim() : null;
       if (dueAt !== null) {
@@ -2231,17 +2230,9 @@ export async function handleApiRequest(
         if (/[\x00-\x1f\x7f]/.test(idempotencyKey)) return badRequest(res, "idempotencyKey contains invalid characters");
       }
       const source: WorkItemSource = caller.kind === "session" ? "session" : "human";
-      // The verify mode decides whether the reconciler may close a Todo without
-      // the operator (`trust`), so like the edit guard (todo-edit-authority.ts)
-      // a session may declare only where the product lands.
-      if (verifyPolicy.value && !hasOperatorLane(caller)
-        && !declaresOnlyDeliverable(null, verifyPolicy.value, DEFAULT_VERIFY_MODE_BY_SOURCE[source])) {
-        return json(res, { error: `verifyPolicy mode, verifier and maxRounds are the operator's to set; a session may declare only deliverable, with mode ${DEFAULT_VERIFY_MODE_BY_SOURCE[source]}` }, 403);
-      }
       const input: CreateWorkItemInput = {
         title: title.slice(0, 200),
         body: typeof body.body === "string" ? body.body : null,
-        acceptance: typeof body.acceptance === "string" ? body.acceptance : null,
         // The department key is included only when the request carries one, so a
         // sub-task with no department inherits the parent's at the store layer.
         ...(body.department !== undefined
@@ -2256,7 +2247,6 @@ export async function handleApiRequest(
               ? `idempotency:${crypto.createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 24)}`
               : crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
           : null,
-        verifyPolicy: verifyPolicy.value,
         parentId,
         dueAt,
         ...(priority !== undefined ? { priority } : {}),
@@ -2359,7 +2349,9 @@ export async function handleApiRequest(
       if (Object.prototype.hasOwnProperty.call(body, "status")) {
         return todoEditValidationError(res, "Todo status must use the guarded status transition surface.");
       }
-      const metadataFields = ["title", "body", "assignee", "department", "priority", "rank", "acceptance", "dueAt", "verifyPolicy"] as const;
+      const retired = retiredTodoFieldError(body);
+      if (retired) return todoEditValidationError(res, retired);
+      const metadataFields = ["title", "body", "assignee", "department", "priority", "rank", "dueAt"] as const;
       const allowed = new Set([...metadataFields, "expectedVersion", "idempotencyKey"]);
       const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
       if (unsupported.length > 0) {
@@ -2431,12 +2423,6 @@ export async function handleApiRequest(
         }
         patch.rank = body.rank as number | null;
       }
-      if (Object.prototype.hasOwnProperty.call(body, "acceptance")) {
-        if (body.acceptance !== null && typeof body.acceptance !== "string") {
-          return todoEditValidationError(res, "acceptance must be a string or null");
-        }
-        patch.acceptance = body.acceptance as string | null;
-      }
       if (Object.prototype.hasOwnProperty.call(body, "dueAt")) {
         if (body.dueAt !== null && typeof body.dueAt !== "string") {
           return todoEditValidationError(res, "dueAt must be an ISO 8601 timestamp or null");
@@ -2451,19 +2437,14 @@ export async function handleApiRequest(
           patch.dueAt = null;
         }
       }
-      if (Object.prototype.hasOwnProperty.call(body, "verifyPolicy")) {
-        const verifyPolicy = validateVerifyPolicy(body.verifyPolicy);
-        if (!verifyPolicy.ok) return todoEditValidationError(res, verifyPolicy.error);
-        patch.verifyPolicy = verifyPolicy.value;
-      }
 
       const item = getWorkItem(params.id);
       if (!item) return notFound(res);
-      const authority = resolveTodoEditAuthority(caller, item, patch);
+      const authority = resolveTodoEditAuthority(caller);
       const patchedFields = (Object.keys(patch) as Array<keyof UpdateWorkItemInput>);
       for (const field of patchedFields) {
         if (!authority.fields.has(field)) {
-          return json(res, { error: todoEditRefusal(field, item, authority.who) }, 403);
+          return json(res, { error: todoEditRefusal(field, authority.who) }, 403);
         }
       }
 

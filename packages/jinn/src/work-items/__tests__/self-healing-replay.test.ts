@@ -37,20 +37,6 @@ describe("historical incident replay — classifier", () => {
     expect(verdict).toMatchObject({ class: "code", lane: "manager" });
   });
 
-  it("verification failure routes to the independent verifier lane", () => {
-    const verdict = classifyRecovery({
-      todo: { id: "PLA-3", status: "blocked", assignee: "platform-worker", source: "session" },
-      lastRun: {
-        id: "run_old",
-        outcome: "failed",
-        error: "independent review rejected the diff",
-        endedAt: "2026-08-20T12:00:00.000Z",
-      },
-      verifyMode: "thorough",
-    });
-    expect(verdict).toMatchObject({ class: "verification", lane: "manager" });
-  });
-
   it("security/auth-terminal is manager, not a clock retry", () => {
     const verdict = classifyRecovery({
       todo: { id: "PLA-4", status: "blocked", assignee: "platform-worker", source: "session" },

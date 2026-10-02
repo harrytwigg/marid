@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4164;
+const MAX_MANIFEST_TOKENS = 4131;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -216,12 +216,15 @@ const ATTESTED = {
   // every total), then for the three Todo approval tools (net of the `note`
   // description: 199 off Pi). The ceiling follows each time; Pi sits ON it.
   // Up 5 for "@employee wakes them" on comment_work_item; no dead prose was left to buy it back.
+  // Rebased DOWN 33 on every total for the removal of `acceptance` (create and
+  // edit) and `verifyPolicy` (create and update) from the Todo tools. The
+  // ceiling follows; Pi sits ON it.
   // Reattested for create_work_item's `autoStart` prose, which now names the
   // board walk instead of the retired idle-capacity auto-start. One token
   // cheaper on every wrapper; Pi sits one under the unchanged ceiling.
-  rpc: { tokens: 3828, sha256: "7e17e178db6720d05cb0ade91f5e45e447bb4bd4702fe520e6c223e1983342bd" },
-  pi: { tokens: 4163, sha256: "9e289d6f3ece8d5c89fbef8f6b9a703df67f5103745e0697f3d9cc75403b2a76" },
-  openai: { tokens: 3967, sha256: "7780e06bc9febdb552b276c35866bf95c67b1a71d02ee5a4d6b13da8f6c67dac" },
+  rpc: { tokens: 3795, sha256: "8540470912b189834d333658d353d3c6ddce89994e0e6924c5ad738dde92b49a" },
+  pi: { tokens: 4130, sha256: "c2d5eb470ad7e77d07f8122d07eaadda1f8905f885bf0c20e801f812cab441ca" },
+  openai: { tokens: 3934, sha256: "dd321e9684b89656c45355ced912cf65a77c1ba686d781bb95cdfa1de53bfd70" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

@@ -338,7 +338,6 @@ export type WorkItemStatusWire =
   | "backlog" | "executing" | "in_review" | "done" | "blocked" | "cancelled"
 export type WorkItemSourceWire =
   | "human" | "delegation" | "cron" | "workflow" | "session" | "connector" | "goal"
-export type VerifyModeWire = "trust" | "verify" | "thorough"
 
 /** The compact row's session provenance (gateway `sessionRef()`): the session
  *  id parsed from a `session:`/`delegate:` sourceRef, plus the optional
@@ -410,12 +409,6 @@ export interface WorkItemListWire {
   nextOffset?: number | null
 }
 
-export interface VerifyPolicyWire {
-  mode: VerifyModeWire
-  verifier?: { employee?: string; engine?: string; model?: string }
-  maxRounds?: number
-}
-
 /** The full row GET /api/work-items/:id returns under `workItem`. */
 export interface WorkItemFullWire {
   id: string
@@ -431,8 +424,6 @@ export interface WorkItemFullWire {
   rank: number | null
   source: WorkItemSourceWire
   sourceRef: string | null
-  acceptance: string | null
-  verifyPolicy: VerifyPolicyWire | null
   rounds: number
   budgetUsd: number | null
   /** Todos v2 (optional: older gateways omit them). */
@@ -760,7 +751,6 @@ export const api = {
     department?: string
     priority?: number
     dueAt?: string
-    acceptance?: string
     labels?: string[]
   }, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>("/api/work-items", input, origin),

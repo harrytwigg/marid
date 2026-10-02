@@ -83,7 +83,8 @@ interface ChatPaneTitleBarProps {
   employee: string
   session: Session
   backTo?: { label: string; onClick: () => void }
-  onClose: () => void
+  /** Closes the pane's chat; without it the pane offers no close button. */
+  onClose?: () => void
   sessionActions?: PaneSessionActions
   viewMode?: ViewMode
   cliModeAvailable?: boolean
@@ -108,10 +109,11 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
           cliTitle={cliTitle}
         />
       ) : null}
-      <span className="grid size-[26px] place-items-center transition-opacity duration-[var(--duration-fast)] group-hover/chat-pane:opacity-0 group-focus-within/title-actions:opacity-0">
+      {/* The dot gives way to the close button on hover; with no close button it stays. */}
+      <span className={`grid size-[26px] place-items-center transition-opacity duration-[var(--duration-fast)] ${onClose ? 'group-hover/chat-pane:opacity-0 group-focus-within/title-actions:opacity-0' : ''}`}>
         {status ? <StatusDot data-testid="chat-pane-status-dot" color={status.color} pulse={status.pulse} title={status.label} className="size-2" /> : null}
       </span>
-      <button
+      {onClose ? <button
         type="button"
         data-pane-focus-preserving
         aria-label={`Close ${title}`}
@@ -122,7 +124,7 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
         className="absolute right-0 grid size-[26px] place-items-center rounded-[var(--radius-sm)] border-0 bg-[var(--bg)] text-[var(--text-secondary)] opacity-0 transition-[color,opacity] duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] focus-visible:opacity-100 group-hover/chat-pane:opacity-100 group-focus-within/title-actions:opacity-100"
       >
         <X size={14} aria-hidden />
-      </button>
+      </button> : null}
     </span>
   )
 }

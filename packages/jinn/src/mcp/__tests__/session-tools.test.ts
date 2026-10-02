@@ -546,7 +546,6 @@ describe("session tools — integration against the real routes/registry", () =>
       title: "Preserve attempt evidence",
       status: "executing",
       source: "cron",
-      verifyPolicy: { mode: "trust" },
     });
     workItems.linkSession(item.id, sessionId);
     registry.accumulateSessionCost(sessionId, 4.25, 3);
@@ -574,7 +573,6 @@ describe("session tools — integration against the real routes/registry", () =>
       title: `Unfinished ${action}`,
       status: "executing",
       source: "cron",
-      verifyPolicy: { mode: "trust" },
     });
     workItems.linkSession(item.id, sessionId);
     registry.updateSession(sessionId, { status: "running" });

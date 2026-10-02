@@ -19,7 +19,7 @@
       "path": "board-walk.md",
       "operation": "add",
       "baseSha256": null,
-      "targetSha256": "db27b55f6100c05c9f3b2ebc0905d24838d6cf57dc2e985a8259d948f7b80ebf",
+      "targetSha256": "7497001daf0e12becbb4af9c2429c453e7d60912bbd5451c5b7dc666835f0bdd",
       "basePayload": null,
       "targetPayload": "files/target/board-walk.md"
     },
@@ -115,7 +115,7 @@
       "path": "skills/delegation/SKILL.md",
       "operation": "modify",
       "baseSha256": "99a8c9e13f7fe70297244186dde3786f5dc4c0c94ccb45a287eaf80813d1d453",
-      "targetSha256": "4cbb5bd879eed50c0a859a2b3913fe6994277346a5c3a700cb1f5f2d1987b5c1",
+      "targetSha256": "8c5c18a6f55079b1f102970b283be40b17f53f027026cb6d20fea48a66fe5a82",
       "basePayload": "files/base/skills/delegation/SKILL.md",
       "targetPayload": "files/target/skills/delegation/SKILL.md"
     },
@@ -147,7 +147,7 @@
       "path": "skills/todo-handling/SKILL.md",
       "operation": "modify",
       "baseSha256": "07f721103523c7a5cf33489338ccb0afd4756d44905ba575119f575612b59456",
-      "targetSha256": "3694c529aeff67ff0f9f558d23d7d3c71444c91d0b7be765ec6281a9f452d3b6",
+      "targetSha256": "c210a80c1dd3a2486f8653e636a0036d47083ca51540f7f686e488067fb0eb47",
       "basePayload": "files/base/skills/todo-handling/SKILL.md",
       "targetPayload": "files/target/skills/todo-handling/SKILL.md"
     },

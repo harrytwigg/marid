@@ -11,7 +11,6 @@ import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
-import type { VerifyMode, VerifyPolicy } from './verify-policy.js';
 import type { WorkItemEventKind } from './event-log.js';
 import { OPERATOR_ASSIGNEE } from './operator-assignee.js';
 
@@ -25,10 +24,13 @@ import { OPERATOR_ASSIGNEE } from './operator-assignee.js';
  * `work-items/transitions.ts` are the ONLY write paths.
  *
  * GRS-021a additions: the 8-status vocabulary + 7-value provenance enum
- * (`migrate.ts` owns the DDL + rebuild), acceptance criteria, verify policy
- * (TRUST/VERIFY/THOROUGH + verifier + maxRounds), rounds, budget (spend is
- * NEVER stored — always derived live from linked sessions' total_cost), and
- * the append-only `work_item_events` audit.
+ * (`migrate.ts` owns the DDL + rebuild), rounds, budget (spend is NEVER
+ * stored — always derived live from linked sessions' total_cost), and the
+ * append-only `work_item_events` audit.
+ *
+ * The `acceptance` and `verify_policy` columns are retired: they stay in the
+ * DDL so existing rows keep their data, but nothing reads or writes them.
+ * Acceptance criteria belong in the body.
  *
  * Trust the DB, not just TS callers: status/priority/source are enforced by
  * CHECK constraints and machine-minted idempotency by a partial UNIQUE index
@@ -53,38 +55,11 @@ const CLOSED_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['d
  *  decisions, not states session churn may undo. */
 export const STICKY_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['done', 'cancelled']);
 
-export type { VerifyMode, VerifyPolicy } from './verify-policy.js';
-
-/** Provenance defaults when `verify_policy` is NULL (design §1.5, operator-ruled):
- *  machine pulses auto-close (cron per fire), everything a mind delegates or
- *  captures is reviewed, legacy `workflow` provenance included. */
-export const DEFAULT_VERIFY_MODE_BY_SOURCE: Readonly<Record<WorkItemSource, VerifyMode>> = {
-  cron: 'trust',
-  workflow: 'verify',
-  delegation: 'verify',
-  human: 'verify',
-  session: 'verify',
-  connector: 'verify',
-  goal: 'verify',
-};
-
-/** Bounce ceilings when the policy does not set `maxRounds` (design §1.5). */
-export const DEFAULT_MAX_ROUNDS: Readonly<Record<VerifyMode, number>> = {
-  trust: 2,
-  verify: 2,
-  thorough: 3,
-};
-
-/** Resolve the effective verify mode for an item (explicit policy, else the
- *  provenance default). Exported for the reconciler's TRUST hook and, later,
- *  the phase-2 dispatcher. */
-export function effectiveVerifyMode(item: Pick<WorkItem, 'verifyPolicy' | 'source'>): VerifyMode {
-  return item.verifyPolicy?.mode ?? DEFAULT_VERIFY_MODE_BY_SOURCE[item.source];
-}
-
-/** Resolve the effective bounce ceiling for an item. */
-export function effectiveMaxRounds(item: Pick<WorkItem, 'verifyPolicy' | 'source'>): number {
-  return item.verifyPolicy?.maxRounds ?? DEFAULT_MAX_ROUNDS[effectiveVerifyMode(item)];
+/** Whether a clean settle closes the item without operator review. Machine
+ *  pulses (one cron fire each) are trusted; everything a mind delegates or
+ *  captures goes to the operator, legacy `workflow` provenance included. */
+export function autoClosesOnSuccess(item: Pick<WorkItem, 'source'>): boolean {
+  return item.source === 'cron';
 }
 
 export interface WorkItem {
@@ -108,11 +83,8 @@ export interface WorkItem {
   version: number;
   source: WorkItemSource;
   sourceRef: string | null;
-  acceptance: string | null;
-  /** Parsed `verify_policy` JSON; null = provenance default applies. A corrupt
-   *  stored value fails closed to VERIFY rather than falling back to a source
-   *  default such as cron/workflow TRUST. */
-  verifyPolicy: VerifyPolicy | null;
+  /** Times the operator has sent this item back from review. A count only:
+   *  nothing caps it. */
   rounds: number;
   budgetUsd: number | null;
   createdAt: string;
@@ -142,8 +114,6 @@ export interface CreateWorkItemInput {
    * creating a duplicate. NULL refs never collide.
    */
   sourceRef?: string | null;
-  acceptance?: string | null;
-  verifyPolicy?: VerifyPolicy | null;
   budgetUsd?: number | null;
   origin?: WriteOrigin;
 }
@@ -199,17 +169,6 @@ export interface WorkItemPage {
   matches?: Record<string, WorkItemMatch[]>;
 }
 
-function parseVerifyPolicy(raw: unknown): VerifyPolicy | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  try {
-    const parsed = JSON.parse(raw) as VerifyPolicy;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { mode: 'verify' };
-    return parsed.mode === 'trust' || parsed.mode === 'verify' || parsed.mode === 'thorough' ? parsed : { mode: 'verify' };
-  } catch {
-    return { mode: 'verify' };
-  }
-}
-
 function rowToWorkItem(row: Record<string, unknown>): WorkItem {
   return {
     id: row.id as string,
@@ -228,8 +187,6 @@ function rowToWorkItem(row: Record<string, unknown>): WorkItem {
     version: row.version as number,
     source: row.source as WorkItemSource,
     sourceRef: (row.source_ref as string) ?? null,
-    acceptance: (row.acceptance as string) ?? null,
-    verifyPolicy: parseVerifyPolicy(row.verify_policy),
     rounds: (row.rounds as number) ?? 0,
     budgetUsd: (row.budget_usd as number) ?? null,
     createdAt: row.created_at as string,
@@ -376,7 +333,6 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
   const sourceRef = input.sourceRef ?? null;
   const priority = input.priority ?? 2;
   const closedAt = CLOSED_STATUSES.has(status) ? now : null;
-  const verifyPolicyJson = input.verifyPolicy ? JSON.stringify(input.verifyPolicy) : null;
   const createdBy = input.createdBy ?? (source === 'human' ? 'operator' : 'system');
 
   const selectExisting = (): WorkItem | undefined => {
@@ -395,8 +351,8 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
       db.prepare(
         `INSERT INTO work_items
            (id, title, body, status, department, assignee, created_by, parent_id, root_id, depth, due_at,
-            priority, source, source_ref, acceptance, verify_policy, budget_usd, created_at, updated_at, closed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            priority, source, source_ref, budget_usd, created_at, updated_at, closed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         input.title,
@@ -412,8 +368,6 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
         priority,
         source,
         sourceRef,
-        input.acceptance ?? null,
-        verifyPolicyJson,
         input.budgetUsd ?? null,
         now,
         now,
@@ -710,12 +664,8 @@ export interface UpdateWorkItemInput {
   department?: string | null;
   priority?: number;
   rank?: number | null;
-  /** Todos v2 slice 4 — the widened metadata pen also covers these. */
-  acceptance?: string | null;
+  /** Todos v2 slice 4 — the widened metadata pen also covers this. */
   dueAt?: string | null;
-  /** Todos v2 slice 6 — the rail's verify picker (operator-only at the route).
-   *  null clears to the provenance default. */
-  verifyPolicy?: VerifyPolicy | null;
 }
 
 export interface ConditionalWorkItemUpdateOptions {
@@ -758,17 +708,8 @@ const UPDATE_FIELD_COLUMNS: Readonly<Record<keyof UpdateWorkItemInput, string>> 
   rank: 'rank',
   // Appended AFTER the original six so pre-slice-4 idempotency-receipt
   // fingerprints (key order feeds the canonical JSON) stay byte-stable.
-  acceptance: 'acceptance',
   dueAt: 'due_at',
-  // Slice 6, appended for the same fingerprint-stability reason.
-  verifyPolicy: 'verify_policy',
 };
-
-/** SQL-storable value for one update field (verify_policy is a JSON column). */
-function updateFieldSqlValue(input: UpdateWorkItemInput, key: keyof UpdateWorkItemInput): unknown {
-  if (key === 'verifyPolicy') return input.verifyPolicy ? JSON.stringify(input.verifyPolicy) : null;
-  return input[key];
-}
 
 function canonicalUpdateFingerprint(id: string, input: UpdateWorkItemInput, expectedVersion: number): string {
   const patch: Record<string, unknown> = {};
@@ -786,7 +727,6 @@ function updateChangesItem(item: WorkItem, input: UpdateWorkItemInput): boolean 
   return (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof UpdateWorkItemInput>)
     .some((key) => {
       if (input[key] === undefined) return false;
-      if (key === 'verifyPolicy') return JSON.stringify(item.verifyPolicy) !== JSON.stringify(input.verifyPolicy);
       return item[key] !== input[key];
     });
 }
@@ -831,7 +771,7 @@ export function updateWorkItemConditional(
     if (updateChangesItem(current, input)) {
       const fields = (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof UpdateWorkItemInput>)
         .filter((key) => input[key] !== undefined)
-        .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: updateFieldSqlValue(input, key) }));
+        .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: input[key] }));
       if (typeof input.department === 'string') ensureDepartmentRegistered(input.department);
       const now = new Date().toISOString();
       const result = db

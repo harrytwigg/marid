@@ -70,18 +70,6 @@ export function RailPriorityBars({ priority }: { priority: number }) {
   )
 }
 
-export function VerifyPill({ mode }: { mode: string }) {
-  const tint = mode === "thorough" ? "var(--system-red)" : "var(--system-purple)"
-  return (
-    <span
-      className="flex h-5 items-center rounded-[10px] px-2 text-[10.5px] font-semibold tracking-[.06em]"
-      style={{ background: `color-mix(in srgb, ${tint} 18%, transparent)`, color: tint }}
-    >
-      {mode.toUpperCase()}
-    </span>
-  )
-}
-
 export function formatDueLong(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ""

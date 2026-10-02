@@ -25,7 +25,7 @@ import {
   requireString,
   requireTodoId,
   requireTodoIdField,
-  validatedVerifyPolicy,
+  rejectRetiredFields,
 } from "./work-item-args.js";
 
 export const WORK_ITEM_SEARCH_LIMIT_MAX = 100;
@@ -209,9 +209,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       properties: {
         title: { type: "string" },
         body: { type: "string" },
-        acceptance: { type: "string" },
         department: { type: "string" },
-        verifyPolicy: { type: "object" },
         parentId: TODO_ID_SCHEMA,
         priority: { type: "number", enum: [0, 1, 2, 3] },
         dueAt: { type: "string" },
@@ -224,13 +222,12 @@ export function buildWorkItemTools(): JinnMcpTool[] {
     handler: async (args, ctx) => {
       assertIdentity(ctx);
       rejectProvenance(args);
+      rejectRetiredFields(args);
       const body: Record<string, unknown> = { title: requireString(args, "title") };
-      for (const key of ["body", "acceptance", "department"] as const) {
-        const v = optionalString(args, key, key === "body" || key === "acceptance" ? WORK_ITEM_BODY_CHAR_CAP : FILTER_CHAR_CAP);
+      for (const key of ["body", "department"] as const) {
+        const v = optionalString(args, key, key === "body" ? WORK_ITEM_BODY_CHAR_CAP : FILTER_CHAR_CAP);
         if (v !== undefined) body[key] = v;
       }
-      const verifyPolicy = validatedVerifyPolicy(args);
-      if (verifyPolicy !== undefined) body.verifyPolicy = verifyPolicy;
       if (args.parentId !== undefined) {
         try { body.parentId = parseTodoId(args.parentId); }
         catch { throw new JinnMcpToolError("parentId must be a canonical Todo ID such as ACM-42"); }
@@ -289,7 +286,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         cascade: { type: "boolean", description: "With `done`, close open sub-tasks. Operator only." },
         parkedUntil: { type: "string" },
         unblockHint: { type: "object", description: "{what, who}." },
-        verifyPolicy: { type: "object" },
       },
       required: ["id", "status"],
     },
@@ -305,14 +301,10 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       if (parseUnblockHint(args.unblockHint) === null) throw new JinnMcpToolError(UNBLOCK_HINT_ERROR);
       const refusedPark = parkRefusal(args.parkedUntil, rawStatus, blockKind); if (refusedPark) throw new JinnMcpToolError(refusedPark);
       const note = optionalString(args, "note", WORK_ITEM_NOTE_CHAR_CAP);
-      // Where a Todo's product lands is metadata, not a lifecycle edge: it rides the same
-      // pen the web surface writes it through, and rides it first, so a refused declaration
-      // cannot move the status — and a refused move says what did land, not "nothing happened".
-      const verifyPolicy = validatedVerifyPolicy(args);
-      if (verifyPolicy !== undefined) await patchWorkItem(ctx, id, { verifyPolicy }, `updating work item "${id}"`);
+      rejectRetiredFields(args);
       const payload: Record<string, unknown> = { status: rawStatus, ...(blockKind ? { blockKind } : {}), ...(note !== undefined ? { note } : {}), ...Object.fromEntries((["asOperator", "cascade", "parkedUntil", "unblockHint"] as const).filter((key) => args[key] !== undefined).map((key) => [key, args[key]])) };
       const { status, body } = await gatewayRequest(ctx, "POST", `/api/work-items/${encodeURIComponent(id)}/status`, payload);
-      if (status >= 400) throw new JinnMcpToolError(`${gatewayFailure(`updating work item "${id}"`, status, body).message}${verifyPolicy === undefined ? "" : " — the deliverable declaration was written and stands; only the status move failed, so a retry does not need to carry verifyPolicy again"}`);
+      if (status >= 400) throw gatewayFailure(`updating work item "${id}"`, status, body);
       return mutationResult(body, "Todo status updated.");
     },
   };
@@ -326,7 +318,6 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         id: TODO_ID_SCHEMA,
         title: { type: "string" },
         body: { type: "string" },
-        acceptance: { type: ["string", "null"] },
         priority: { type: "number", enum: [0, 1, 2, 3] },
         dueAt: { type: ["string", "null"] },
       },
@@ -346,6 +337,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       if (args.department !== undefined || args.rank !== undefined) {
         throw new JinnMcpToolError("department and rank are operator-only edits (web/HTTP surface) — edit_work_item cannot change them");
       }
+      rejectRetiredFields(args);
       const patch: Record<string, unknown> = {};
       {
         const v = optionalString(args, "title", WORK_ITEM_TITLE_CHAR_CAP);
@@ -355,20 +347,14 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         const v = optionalString(args, "body", WORK_ITEM_BODY_CHAR_CAP);
         if (v !== undefined) patch.body = v;
       }
-      // Explicit null CLEARS acceptance/dueAt (slice-4 review F3), passing
-      // through to the route's existing null support.
-      if (args.acceptance === null) {
-        patch.acceptance = null;
-      } else {
-        const v = optionalString(args, "acceptance", WORK_ITEM_BODY_CHAR_CAP);
-        if (v !== undefined) patch.acceptance = v;
-      }
       if (args.priority !== undefined) {
         if (typeof args.priority !== "number" || !Number.isInteger(args.priority) || args.priority < 0 || args.priority > 3) {
           throw new JinnMcpToolError("priority must be an integer 0..3");
         }
         patch.priority = args.priority;
       }
+      // Explicit null CLEARS dueAt (slice-4 review F3), passing through to the
+      // route's existing null support.
       if (args.dueAt === null) {
         patch.dueAt = null;
       } else {
@@ -376,7 +362,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         if (dueAt !== undefined) patch.dueAt = dueAt;
       }
       if (Object.keys(patch).length === 0) {
-        throw new JinnMcpToolError("pass at least one editable field (title, body, acceptance, priority, dueAt)");
+        throw new JinnMcpToolError("pass at least one editable field (title, body, priority, dueAt)");
       }
       return mutationResult(await patchWorkItem(ctx, id, patch, `editing work item "${id}"`), "Todo metadata edited.");
     },

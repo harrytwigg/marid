@@ -40,7 +40,6 @@ describe("typed API errors", () => {
     await api.createWorkItem({
       title: "Ship the ledger",
       body: "Keep the board intact.",
-      acceptance: "List and board both work.",
       department: "operations",
       priority: 3,
       dueAt: "2026-08-12T12:00:00.000Z",
@@ -55,7 +54,6 @@ describe("typed API errors", () => {
     expect(JSON.parse(String(fetchInit.body))).toEqual({
       title: "Ship the ledger",
       body: "Keep the board intact.",
-      acceptance: "List and board both work.",
       department: "operations",
       priority: 3,
       dueAt: "2026-08-12T12:00:00.000Z",

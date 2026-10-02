@@ -38,7 +38,7 @@ frontmatter is the only way to turn an action off for certain.
 ## Gates
 
 A gate is anything a Todo says it is waiting for before work should start. Read
-the title, body, acceptance criteria, comments and relations for them. Common
+the title, body, comments and relations for them. Common
 gates:
 
 - a date: "not before the 10th", "after 1 November", "next week";

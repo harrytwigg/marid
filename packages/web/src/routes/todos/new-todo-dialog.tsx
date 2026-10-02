@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Building2,
   CalendarDays,
-  CheckSquare2,
   ChevronDown,
   Flag,
   GitBranch,
@@ -102,7 +101,6 @@ export function NewTodoDialog({
   const mobile = useIsCreateMobile()
   const [title, setTitle] = useState(defaults?.title ?? "")
   const [body, setBody] = useState("")
-  const [acceptance, setAcceptance] = useState("")
   const [parentId, setParentId] = useState("")
   const seededDepartment = creatableDepartment(defaults?.departments ?? [], defaults?.department)
   const [department, setDepartment] = useState<string | null>(seededDepartment)
@@ -111,7 +109,6 @@ export function NewTodoDialog({
   const [dueAt, setDueAt] = useState<string | null>(null)
   const [labelIds, setLabelIds] = useState<string[]>([])
   const [picker, setPicker] = useState<CreatePicker | null>(null)
-  const [showAcceptance, setShowAcceptance] = useState(false)
   const [showParent, setShowParent] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -133,14 +130,13 @@ export function NewTodoDialog({
     labels: selectedLabels,
   }), [title, department, assignee, priority, dueAt, selectedLabels])
   const dirty = Boolean(
-    title.trim() || body.trim() || acceptance.trim() || parentId.trim() || assignee
+    title.trim() || body.trim() || parentId.trim() || assignee
     || priority || dueAt || labelIds.length || department !== seededDepartment,
   )
 
   const reset = useCallback(() => {
     setTitle("")
     setBody("")
-    setAcceptance("")
     setParentId("")
     setDepartment(seededDepartment)
     setAssignee(null)
@@ -148,7 +144,6 @@ export function NewTodoDialog({
     setDueAt(null)
     setLabelIds([])
     setPicker(null)
-    setShowAcceptance(false)
     setShowParent(false)
     setError(null)
   }, [seededDepartment])
@@ -167,7 +162,6 @@ export function NewTodoDialog({
       const created = await api.createWorkItem({
         title: nextTitle,
         ...(body.trim() ? { body: body.trim() } : {}),
-        ...(acceptance.trim() ? { acceptance: acceptance.trim() } : {}),
         ...(parentId.trim() ? { parentId: parentId.trim() } : {}),
         ...(department ? { department } : {}),
         ...(priority ? { priority } : {}),
@@ -186,7 +180,7 @@ export function NewTodoDialog({
       setBusy(false)
       setError(operatorSafeTodoError(caught, "Failed to create"))
     }
-  }, [acceptance, assignee, body, busy, department, dueAt, labelIds, parentId, priority, reset, title, defaults?.askAssignee])
+  }, [assignee, body, busy, department, dueAt, labelIds, parentId, priority, reset, title, defaults?.askAssignee])
 
   const closePicker = () => setPicker(null)
   const togglePicker = (next: CreatePicker) => setPicker((current) => current === next ? null : next)
@@ -325,44 +319,21 @@ export function NewTodoDialog({
             active={showParent}
             onClick={() => setShowParent((shown) => !shown)}
           />
-          <PropertyChip
-            icon={<CheckSquare2 size={13} aria-hidden />}
-            label={acceptance ? "Acceptance added" : "Acceptance"}
-            testId="todo-new-acceptance-chip"
-            active={showAcceptance}
-            onClick={() => setShowAcceptance((shown) => !shown)}
-          />
         </div>
 
-        {(showParent || showAcceptance) && (
-          <div className="mt-4 grid gap-3 rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-3 sm:grid-cols-2">
-            {showParent && (
-              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-quaternary)]">
-                Parent Todo
-                <input
-                  autoFocus
-                  data-testid="todo-new-parent"
-                  value={parentId}
-                  onChange={(event) => setParentId(event.target.value)}
-                  placeholder="e.g. OPS-2"
-                  className="apple-input mt-1.5 min-h-10 w-full normal-case tracking-normal"
-                />
-              </label>
-            )}
-            {showAcceptance && (
-              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-quaternary)]">
-                Acceptance
-                <textarea
-                  autoFocus
-                  data-testid="todo-new-acceptance"
-                  value={acceptance}
-                  onChange={(event) => setAcceptance(event.target.value)}
-                  placeholder="What proves this is done?"
-                  rows={2}
-                  className="apple-input mt-1.5 min-h-[72px] w-full resize-y py-2 normal-case tracking-normal"
-                />
-              </label>
-            )}
+        {showParent && (
+          <div className="mt-4 rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-3">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-quaternary)]">
+              Parent Todo
+              <input
+                autoFocus
+                data-testid="todo-new-parent"
+                value={parentId}
+                onChange={(event) => setParentId(event.target.value)}
+                placeholder="e.g. OPS-2"
+                className="apple-input mt-1.5 min-h-10 w-full normal-case tracking-normal"
+              />
+            </label>
           </div>
         )}
 

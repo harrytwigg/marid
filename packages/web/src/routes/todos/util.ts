@@ -33,6 +33,7 @@ export function formatCountdown(iso: string, now = Date.now()): string {
 /** An escalation event's own reason, phrased for the banner and the card. A
  *  guard that escalates without one of these leaves the why-line blank. */
 export function escalationReasonLabel(reason: unknown): string | null {
+  // Retired with the round ceiling; older escalation events still carry it.
   if (reason === "max-rounds-exhausted") return "Review rounds exhausted"
   if (reason === "block_loop_detected") return "Blocked again for the same reason"
   return typeof reason === "string" && reason ? reason : null

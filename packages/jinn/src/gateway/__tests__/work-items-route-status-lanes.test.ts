@@ -199,11 +199,13 @@ describe("the operator lane", () => {
   });
 });
 
-describe("verify mode on create", () => {
-  it("refuses a trust-mode Todo from an agent, so the reconciler cannot close an agent's own work", async () => {
+describe("review on create", () => {
+  it("refuses a review policy from anyone, so the reconciler cannot close an agent's own work", async () => {
     const session = employeeSession();
     const refused = await call("POST", "/api/work-items", { title: "Trust me", verifyPolicy: { mode: "trust" } }, toolHeaders(session.id));
-    expect(refused.status).toBe(403);
+    expect(refused.status).toBe(400);
+    const operator = await call("POST", "/api/work-items", { title: "Operator trusts", verifyPolicy: { mode: "trust" } }, operatorHeaders);
+    expect(operator.status).toBe(400);
 
     const created = await call("POST", "/api/work-items", { title: "Agent work" }, toolHeaders(session.id));
     const id = created.body.workItem.id as string;
@@ -211,13 +213,6 @@ describe("verify mode on create", () => {
     expect((await post(id, { status: "in_review", note: "ready for the operator" }, toolHeaders(session.id))).status).toBe(200);
     reconcileActiveWorkItems();
     expect(store.getWorkItem(id)?.status).toBe("in_review");
-  });
-
-  it("still lets an agent declare where the product lands, and the operator set any mode", async () => {
-    const declared = await call("POST", "/api/work-items", { title: "Declares deliverable", verifyPolicy: { mode: "verify", deliverable: "repo" } }, toolHeaders(employeeSession().id));
-    expect(declared.status).toBe(201);
-    const trusted = await call("POST", "/api/work-items", { title: "Operator trusts", verifyPolicy: { mode: "trust" } }, operatorHeaders);
-    expect(trusted.status).toBe(201);
   });
 });
 

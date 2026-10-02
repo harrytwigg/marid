@@ -35,6 +35,7 @@ const WHISPERS: Record<string, WhisperRule> = {
     }
     return { Icon: ChevronRight, text: `moved it to ${event.toStatus ? statusLabel(event.toStatus) : "?"}` }
   },
+  // `max-rounds-exhausted` is retired with the round ceiling; older events still carry it.
   escalated: (detail) => ({
     Icon: CornerDownRight,
     text: detail.reason === "max-rounds-exhausted" ? "escalated it — review rounds exhausted" : "escalated it",

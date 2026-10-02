@@ -83,12 +83,12 @@ export function operatorGate(item: WorkItem): string | undefined {
   return undefined;
 }
 
-/** Everything a Todo says, where a gate can be named: title, body,
- *  acceptance and every comment except the walk's own, which would let one
+/** Everything a Todo says, where a gate can be named: title, body and
+ *  every comment except the walk's own, which would let one
  *  tick's words become the next tick's evidence. */
 function todoText(item: WorkItem): string[] {
   const comments = listComments(item.id, { limit: 500 }).comments.filter((comment) => comment.author !== BOARD_WALK_ACTOR);
-  return [item.title, item.body ?? "", item.acceptance ?? "", ...comments.map((comment) => comment.body)];
+  return [item.title, item.body ?? "", ...comments.map((comment) => comment.body)];
 }
 
 const normalised = (value: string): string => value.toLowerCase().replace(/\s+/g, " ").trim();

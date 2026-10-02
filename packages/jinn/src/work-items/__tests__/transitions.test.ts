@@ -183,13 +183,9 @@ describe("transition — the guarded edge map", () => {
   });
 });
 
-describe("transition — the bounce rule (rounds + max-rounds escalation)", () => {
-  it("a bounce increments rounds and returns to executing below the ceiling", () => {
-    const wi = store.createWorkItem({
-      title: "bounced",
-      status: "in_review",
-      verifyPolicy: { mode: "verify", maxRounds: 3 },
-    });
+describe("transition — the bounce rule (rounds count, nothing caps them)", () => {
+  it("a bounce increments rounds and returns to executing", () => {
+    const wi = store.createWorkItem({ title: "bounced", status: "in_review" });
     const r1 = tr.transition(wi.id, "executing", "reviewer", { bounce: true, detail: { critique: "fix X" } });
     expect(r1.item.status).toBe("executing");
     expect(r1.item.rounds).toBe(1);
@@ -198,24 +194,16 @@ describe("transition — the bounce rule (rounds + max-rounds escalation)", () =
     expect(last).toMatchObject({ kind: "status_change", detail: { bounce: true, rounds: 1, critique: "fix X" } });
   });
 
-  it("the bounce that reaches maxRounds ESCALATES to blocked instead of looping, with an 'escalated' event", () => {
-    const wi = store.createWorkItem({
-      title: "loop killer",
-      status: "in_review",
-      verifyPolicy: { mode: "verify", maxRounds: 2 },
-    });
-    db.prepare("UPDATE work_items SET rounds = 1 WHERE id = ?").run(wi.id); // one bounce already burned
+  it("a bounce past the old ceiling still returns to executing, never to blocked", () => {
+    const wi = store.createWorkItem({ title: "many rounds", status: "in_review" });
+    db.prepare("UPDATE work_items SET rounds = 5 WHERE id = ?").run(wi.id);
     const r = tr.transition(wi.id, "executing", "reviewer", { bounce: true });
-    expect(r.escalated).toBe(true);
-    expect(r.item.status).toBe("blocked");
-    expect(r.item.rounds).toBe(2);
+    expect(r.escalated).toBe(false);
+    expect(r.item.status).toBe("executing");
+    expect(r.item.rounds).toBe(6);
     const last = store.listWorkItemEvents(wi.id).at(-1)!;
-    expect(last).toMatchObject({
-      kind: "escalated",
-      fromStatus: "in_review",
-      toStatus: "blocked",
-      detail: { reason: "max-rounds-exhausted", maxRounds: 2, declared: true },
-    });
+    expect(last).toMatchObject({ kind: "status_change", fromStatus: "in_review", toStatus: "executing", detail: { bounce: true, rounds: 6 } });
+    expect(last.detail).not.toHaveProperty("reason");
   });
 
   it("a plain (non-bounce) in_review → executing does NOT touch rounds", () => {
@@ -224,13 +212,14 @@ describe("transition — the bounce rule (rounds + max-rounds escalation)", () =
     expect(item.rounds).toBe(0);
   });
 
-  it("provenance default maxRounds applies when the policy sets none (delegation → 2)", () => {
-    const wi = store.createWorkItem({ title: "default rounds", status: "in_review", source: "delegation", sourceRef: "delegate:t:1" });
+  it("the operator's second round of feedback goes back to the producer too (delegation)", () => {
+    const wi = store.createWorkItem({ title: "two rounds", status: "in_review", source: "delegation", sourceRef: "delegate:t:1" });
     tr.transition(wi.id, "executing", "reviewer", { bounce: true });
     tr.transition(wi.id, "in_review", "worker");
     const r2 = tr.transition(wi.id, "executing", "reviewer", { bounce: true });
-    expect(r2.escalated).toBe(true);
-    expect(r2.item.status).toBe("blocked");
+    expect(r2.escalated).toBe(false);
+    expect(r2.item.status).toBe("executing");
+    expect(r2.item.rounds).toBe(2);
   });
 });
 

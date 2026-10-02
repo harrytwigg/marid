@@ -148,7 +148,7 @@ function searchSessionsRoute(res: ServerResponse, url: URL, options: SearchApiOp
 /**
  * GET /api/search/work-items — GRS-021c: deterministic AND-composed Todo
  * search. Text is matched by the FTS5 indexes over title, body and comments and
- * structured filters are exact. Compact summaries only — body/acceptance
+ * structured filters are exact. Compact summaries only — body
  * dumps stay behind GET /api/work-items/:id.
  */
 function searchWorkItemsRoute(res: ServerResponse, url: URL, options: SearchApiOptions): void {

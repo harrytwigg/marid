@@ -7,7 +7,7 @@ import {
   readChatSessionDrop,
 } from '../chat-session-dnd'
 import { capForViewport, layoutFor } from '../grid-layout'
-import { findGroup, groupsOf, workingSetFromLayout, type SplitLayout } from './split-layout'
+import { findGroup, groupIdsByPaneSession, paneSessionOf, workingSetFromLayout, type SplitLayout } from './split-layout'
 import { splitDropForPointer, type Rect, type SplitDropHit, type SplitDropRegion } from './split-geometry'
 import { previewSplitDrop, type SplitDropContext } from './split-drop'
 import { isTabStripDropTarget } from './pane-tab-dnd'
@@ -48,7 +48,7 @@ function pointerInside(node: HTMLElement, x: number, y: number): boolean {
 function flatIndex(layout: SplitLayout, hit: SplitDropHit): number {
   const members = workingSetFromLayout(layout).sessionIds
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
-  const index = target ? members.indexOf(target.activeTab) : -1
+  const index = target ? members.indexOf(paneSessionOf(target, layout.focusHistory)) : -1
   if (index < 0 || hit.region === 'end') return members.length
   return hit.region === 'right' || hit.region === 'bottom' ? index + 1 : index
 }
@@ -63,7 +63,7 @@ interface MeasureInput {
 function measure(event: DragEvent, { layout, sessionId, context, sessionForKey }: MeasureInput): SplitDropPlacement | null {
   const grid = event.currentTarget.querySelector<HTMLElement>('[data-testid="chat-grid"]')
   if (!grid) return null
-  const groupBySession = new Map(groupsOf(layout).map((group) => [group.activeTab, group.id]))
+  const groupBySession = groupIdsByPaneSession(layout)
   const panes = Array.from(grid.querySelectorAll<HTMLElement>('[data-chat-grid-pane]')).map((pane) => {
     const key = pane.dataset.chatGridPane ?? ''
     const session = sessionForKey(key)

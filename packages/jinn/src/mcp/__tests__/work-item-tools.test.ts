@@ -108,7 +108,7 @@ describe("work-item tools — registry + schemas", () => {
   it("update schema allows manual start but leaves cancelling to archive", () => {
     const createProps = tool("create_work_item").inputSchema.properties;
     expect(Object.keys(createProps).sort()).toEqual(
-      ["acceptance", "autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title", "verifyPolicy"].sort(),
+      ["autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title"].sort(),
     );
     const status = tool("update_work_item").inputSchema.properties.status as { enum: string[] };
     expect(status.enum).toEqual(["backlog", "executing", "in_review", "blocked", "done"]);
@@ -228,8 +228,6 @@ describe("work-item tools — unit (stub gateway)", () => {
           title: "WF",
           body: "body",
           status: "in_review",
-          acceptance: "- pass",
-          verifyPolicy: { mode: "verify" },
           rounds: 1,
           budgetUsd: 5,
           source: "workflow",
@@ -240,7 +238,7 @@ describe("work-item tools — unit (stub gateway)", () => {
     const out = (await tool("get_work_item").handler({ id: "JIN-2" }, ctx)) as Record<string, unknown>;
     expect(out).toMatchObject({ spendUsd: 1.25 });
     expect(out).not.toHaveProperty("workflowRun");
-    expect(out.workItem).toMatchObject({ acceptance: "- pass", rounds: 1 });
+    expect(out.workItem).toMatchObject({ rounds: 1 });
   });
 
   it("get_work_item_tree hits the tree route and returns the subtree with a hint", async () => {
@@ -290,11 +288,11 @@ describe("work-item tools — unit (stub gateway)", () => {
     await expect(tool("create_work_item").handler({ title: "T" }, anon.ctx)).rejects.toThrow(/caller identity unavailable/i);
 
     const { calls, ctx } = stub(() => ({ status: 201, body: { workItem: { id: "JIN-103", title: "T", status: "backlog" } } }), "sess-caller");
-    await tool("create_work_item").handler({ title: "T", body: "B", acceptance: "- ok", verifyPolicy: { mode: "verify" } }, ctx);
+    await tool("create_work_item").handler({ title: "T", body: "B" }, ctx);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items");
     expect(calls[0].headers[CALLER_SESSION_HEADER]).toBe("sess-caller");
-    expect(calls[0].body).toMatchObject({ title: "T", body: "B", acceptance: "- ok", verifyPolicy: { mode: "verify" } });
+    expect(calls[0].body).toEqual({ title: "T", body: "B" });
   });
 
   it("create refuses caller-supplied provenance instead of forwarding spoofable source/sourceRef", async () => {
@@ -398,7 +396,7 @@ describe("work-item tools — integration against the real API + store", () => {
     const ctx = ctxFor(caller.id);
 
     const created = (await tool("create_work_item").handler(
-      { title: "Polish narwhal queue", body: "Literal %_\\ body", acceptance: "- ship", verifyPolicy: { mode: "verify" } },
+      { title: "Polish narwhal queue", body: "Literal %_\\ body" },
       ctx,
     )) as { workItem: { id: string } };
     expect(created.workItem.id).toBeTruthy();
@@ -429,11 +427,11 @@ describe("work-item tools — integration against the real API + store", () => {
     expect(bounced.workItem.status).toBe("executing");
 
     const read = (await tool("get_work_item").handler({ id: created.workItem.id }, ctx)) as {
-      workItem: { acceptance: string; verifyPolicy: { mode: string } };
+      workItem: Record<string, unknown>;
       spendUsd: number;
     };
-    expect(read.workItem.acceptance).toBe("- ship");
-    expect(read.workItem.verifyPolicy.mode).toBe("verify");
+    expect(read.workItem).not.toHaveProperty("acceptance");
+    expect(read.workItem).not.toHaveProperty("verifyPolicy");
     expect(read.spendUsd).toBe(0);
   });
 
@@ -595,15 +593,12 @@ describe("work-item tools — integration against the real API + store", () => {
     expect(events.some((e) => e.kind === "status_change" && e.fromStatus === "backlog" && e.toStatus === "cancelled")).toBe(true);
   });
 
-  it("validates exact verifyPolicy/provenance schemas", async () => {
+  it("refuses retired fields and supplied provenance", async () => {
     const caller = registry.createSession({ engine: "codex", source: "web", sourceRef: "schema-caller", title: "schema caller" });
     const ctx = ctxFor(caller.id);
 
-    await expect(tool("create_work_item").handler({ title: "Unknown policy key", verifyPolicy: { mode: "verify", extra: true } }, ctx)).rejects.toThrow(
-      /verifyPolicy.*unknown key|verifyPolicy.*only/i,
-    );
-    await expect(tool("create_work_item").handler({ title: "Bad policy mode", verifyPolicy: { mode: "maybe" } }, ctx)).rejects.toThrow(
-      /verifyPolicy\.mode.*trust, verify, thorough/i,
+    await expect(tool("create_work_item").handler({ title: "Retired policy", verifyPolicy: { mode: "verify" } }, ctx)).rejects.toThrow(
+      /verifyPolicy was removed from Todos/,
     );
     await expect(tool("create_work_item").handler({ title: "Unknown provenance key", provenance: { source: "session", extra: true } }, ctx)).rejects.toThrow(
       /provenance.*dedicated bridge|cannot be supplied/i,
@@ -734,7 +729,7 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
     await expect(tool("edit_work_item").handler({ id: "JIN-1", body: "x", rank: 3 }, silent.ctx)).rejects.toThrow(/operator/);
     expect(silent.calls).toEqual([]);
     const props = Object.keys(tool("edit_work_item").inputSchema.properties);
-    expect(props.sort()).toEqual(["acceptance", "body", "dueAt", "id", "priority", "title"]);
+    expect(props.sort()).toEqual(["body", "dueAt", "id", "priority", "title"]);
   });
 
   it("edit_work_item reads a fresh version and PATCHes with it", async () => {
@@ -778,9 +773,9 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
   it("edit_work_item surfaces the route's authority words verbatim", async () => {
     const { ctx } = stub((call) => {
       if (call.method === "GET") return { status: 200, body: { workItem: { id: "JIN-9", version: 1 } } };
-      return { status: 403, body: { error: 'field "verifyPolicy" is not editable by employee "platform-dev": assignee, department, rank, verifyPolicy are operator-only' } };
+      return { status: 403, body: { error: 'field "rank" is not editable by employee "platform-dev": assignee, department, rank are operator-only' } };
     });
-    await expect(tool("edit_work_item").handler({ id: "JIN-9", body: "x" }, ctx)).rejects.toThrow(/refused \(403\).*"verifyPolicy"/);
+    await expect(tool("edit_work_item").handler({ id: "JIN-9", body: "x" }, ctx)).rejects.toThrow(/refused \(403\).*"rank"/);
   });
 
   it("edit_work_item round-trips content edits through the real API, including the title", async () => {
@@ -789,13 +784,12 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
     const item = store.createWorkItem({ title: "slice4 editable", assignee: "platform-dev" });
 
     const edited = (await tool("edit_work_item").handler(
-      { id: item.id, title: "renamed over MCP", body: "refined over MCP", acceptance: "AC v2", priority: 1, dueAt: "2026-08-20" },
+      { id: item.id, title: "renamed over MCP", body: "refined over MCP", priority: 1, dueAt: "2026-08-20" },
       devCtx,
     )) as { workItem: Record<string, unknown> };
     expect(edited.workItem).toMatchObject({
       title: "renamed over MCP",
       body: "refined over MCP",
-      acceptance: "AC v2",
       priority: 1,
       dueAt: "2026-08-20T00:00:00.000Z",
     });
@@ -992,15 +986,15 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("edit_work_item accepts explicit null to CLEAR acceptance and dueAt (slice-4 review F3)", async () => {
+  it("edit_work_item accepts explicit null to CLEAR dueAt (slice-4 review F3)", async () => {
     const { calls, ctx } = stub((call) =>
       call.method === "GET"
         ? { status: 200, body: { workItem: { id: "JIN-7", version: 4 } } }
-        : { status: 200, body: { workItem: { id: "JIN-7", acceptance: null, dueAt: null, version: 5 } } },
+        : { status: 200, body: { workItem: { id: "JIN-7", dueAt: null, version: 5 } } },
     );
     await tool("edit_work_item").handler({ id: "JIN-7", acceptance: null, dueAt: null }, ctx);
     const patch = calls.find((c) => c.method === "PATCH")!;
-    expect(patch.body).toEqual({ acceptance: null, dueAt: null, expectedVersion: 4 });
+    expect(patch.body).toEqual({ dueAt: null, expectedVersion: 4 });
   });
 
   it("attach → list → Read storagePath byte-compare, comment attachments, and the null-clear edit round-trip through the real API", async () => {
@@ -1035,11 +1029,11 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     expect(withFile.attachments).toHaveLength(1);
     expect(withFile.attachments[0].commentId).toBe(withFile.comment.id);
 
-    // Null-clear round trip (F3): set, then clear, acceptance + dueAt.
-    await tool("edit_work_item").handler({ id: item.id, acceptance: "AC", dueAt: "2026-09-01" }, ctx);
-    expect(store.getWorkItem(item.id)).toMatchObject({ acceptance: "AC", dueAt: "2026-09-01T00:00:00.000Z" });
-    await tool("edit_work_item").handler({ id: item.id, acceptance: null, dueAt: null }, ctx);
-    expect(store.getWorkItem(item.id)).toMatchObject({ acceptance: null, dueAt: null });
+    // Null-clear round trip (F3): set, then clear, dueAt.
+    await tool("edit_work_item").handler({ id: item.id, dueAt: "2026-09-01" }, ctx);
+    expect(store.getWorkItem(item.id)).toMatchObject({ dueAt: "2026-09-01T00:00:00.000Z" });
+    await tool("edit_work_item").handler({ id: item.id, dueAt: null }, ctx);
+    expect(store.getWorkItem(item.id)).toMatchObject({ dueAt: null });
 
     // Departments surface reflects the registered department + count.
     store.createWorkItem({ title: "dept item", department: "platform" });

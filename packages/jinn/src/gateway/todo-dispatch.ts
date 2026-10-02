@@ -119,7 +119,6 @@ function dispatcherPrompt(item: WorkItem, prefix: string, suffix: string | undef
     `Status: ${item.status}`,
     `Assignee: ${item.assignee ?? "(none)"}`,
     item.body ? `Body:\n${item.body}` : "Body: (none)",
-    item.acceptance ? `Acceptance criteria:\n${item.acceptance}` : "Acceptance criteria: (none)",
     ...(suffix ? [suffix] : []),
   ].join("\n\n");
 }
