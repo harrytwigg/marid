@@ -116,13 +116,16 @@ export function paneSessionOf(target: LayoutGroup, focusHistory: readonly string
 }
 
 /**
- * Whether `tabId` is the only chat on screen: one group, and it that group's only chat. Closing it
- * would take its file tabs with it and leave the route on a chat no pane holds, so it stays.
+ * Whether `tabId` is the layout's only chat and has file tabs beside it: one group, holding that
+ * chat and files alone. Closing it would take the files with it and leave the route on a chat no
+ * pane holds, so it stays. A lone chat with no files closes as it always has (beside a new-chat
+ * picker, which is a pane the layout does not hold).
  */
-export function isOnlyChat(layout: SplitLayout, tabId: string): boolean {
+export function isLastChatWithFiles(layout: SplitLayout, tabId: string): boolean {
   const groups = groupsOf(layout)
   if (groups.length !== 1 || isFileTabId(tabId) || !groups[0].tabs.includes(tabId)) return false
-  return groups[0].tabs.every((id) => id === tabId || isFileTabId(id))
+  const others = groups[0].tabs.filter((id) => id !== tabId)
+  return others.length > 0 && others.every(isFileTabId)
 }
 
 /** Each group's id by its pane's chat: how a pane key (a session id) finds its group. */

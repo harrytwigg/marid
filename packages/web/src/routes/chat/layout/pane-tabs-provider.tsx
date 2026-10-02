@@ -4,7 +4,7 @@ import { useSessions } from '@/hooks/use-sessions'
 import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
 import { PaneTabStrip } from './pane-tab-strip'
-import { closeSession, findGroup, focusedGroup, groupOfSession, hasTabbedGroup, isOnlyChat, paneSessionOf, type SplitLayout } from './split-layout'
+import { closeSession, findGroup, focusedGroup, groupOfSession, hasTabbedGroup, isLastChatWithFiles, paneSessionOf, type SplitLayout } from './split-layout'
 import { parseFileTabId } from './file-tab'
 import type { SplitLayoutControls } from './use-split-working-set'
 
@@ -62,7 +62,7 @@ function useKeepRequests(layout: SplitLayoutControls['layout'], pin: (sessionId:
 function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) => void) {
   const { layout } = split
   return useCallback((sessionId: string) => {
-    if (isOnlyChat(layout, sessionId)) return
+    if (isLastChatWithFiles(layout, sessionId)) return
     const owner = groupOfSession(layout, sessionId)
     // The route is the focused pane's chat, which a file tab shown over it does not change.
     const wasRoute = owner !== null && layout.focusedGroupId === owner.id
@@ -95,7 +95,7 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
   const binding = useMemo<PaneTabsBinding>(() => ({
     hasStrips: hasTabbedGroup(layout),
     keep,
-    closable: (sessionId) => !isOnlyChat(layout, sessionId),
+    closable: (sessionId) => !isLastChatWithFiles(layout, sessionId),
     shownFile: (sessionId) => {
       const group = groupOfSession(layout, sessionId)
       if (!group || paneSessionOf(group, layout.focusHistory) !== sessionId) return null
@@ -108,7 +108,7 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
       return (
         <PaneTabStrip
           groupId={group.id}
-          tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isOnlyChat(layout, tab.id) ? { ...tab, closable: false } : tab))}
+          tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isLastChatWithFiles(layout, tab.id) ? { ...tab, closable: false } : tab))}
           activeId={group.activeTab}
           focused={layout.focusedGroupId === group.id}
           {...paneTabHandlers(group.id, ops)}

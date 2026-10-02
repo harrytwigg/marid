@@ -28,7 +28,7 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, isFileTabId, isOnlyChat, selectTab, useSplitGridAdd, useSplitGridWorkspace } from './layout'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, isFileTabId, isLastChatWithFiles, selectTab, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
@@ -750,7 +750,7 @@ function ChatPage() {
       'keyboard-shortcuts': { action: () => setShowShortcutOverlay(v => !v) },
       'close-tab': { action: () => {
         const shown = groupTabs ? groupShownTab(groupTabs.tabs, groupTabs.active) : null
-        if (shown) { if (!isOnlyChat(workingSet.split.layout, shown)) handleRemovePane(shown) }
+        if (shown) { if (!isLastChatWithFiles(workingSet.split.layout, shown)) handleRemovePane(shown) }
         else if (chatTabs.activeIndex >= 0) chatTabs.closeTab(chatTabs.activeIndex)
       } },
       'prev-tab': { action: () => cycleTab(-1) },

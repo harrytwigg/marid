@@ -13,7 +13,7 @@ export interface PaneTabsBinding {
   keep: (sessionId: string) => void
   /** The file this chat's pane is showing in place of the chat (a file tab of its group), if any. */
   shownFile: (sessionId: string) => FileTabRef | null
-  /** False for the only chat on screen, whose file tabs would have nowhere to go. */
+  /** False for the layout's only chat when file tabs sit beside it: they would have nowhere to go. */
   closable: (sessionId: string) => boolean
 }
 

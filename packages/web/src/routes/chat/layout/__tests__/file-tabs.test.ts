@@ -7,6 +7,7 @@ import {
   focusSession,
   groupOfSession,
   groupsOf,
+  isLastChatWithFiles,
   openFileTab,
   openInFocusedGroup,
   paneSessionForTab,
@@ -189,5 +190,18 @@ describe('a group\'s only chat and its file tabs', () => {
     const closed = closeSession(openFileTab(twoPanes(), 'a', report), 'a')
     expect(groupsOf(closed).map((group) => group.tabs)).toEqual([['b']])
     expect(closed.focusHistory).toEqual(['b'])
+  })
+})
+
+describe('isLastChatWithFiles', () => {
+  it('holds only for the layout\'s only chat with file tabs beside it', () => {
+    const lone = createSplitLayout(['a'], 'a')
+    // A lone chat with no files closes as before (beside the new-chat picker, say).
+    expect(isLastChatWithFiles(lone, 'a')).toBe(false)
+    expect(isLastChatWithFiles(openFileTab(lone, 'a', report), 'a')).toBe(true)
+    expect(isLastChatWithFiles(openFileTab(lone, 'a', report), report)).toBe(false)
+    expect(isLastChatWithFiles(openFileTab(twoPanes(), 'a', report), 'a')).toBe(false)
+    const twoChats = openFileTab(placeTab(lone, groupsOf(lone)[0].id, 'x'), 'a', report)
+    expect(isLastChatWithFiles(twoChats, 'a')).toBe(false)
   })
 })
