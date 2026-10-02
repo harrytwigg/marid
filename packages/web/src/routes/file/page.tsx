@@ -33,10 +33,11 @@ const codeSurfaceOverride = `
 export default function FilePage() {
   const [sp] = useSearchParams();
   const path = sp.get("path") ?? "";
+  const sessionId = sp.get("session");
   return (
     <div className="jinn-file-view">
       <style>{codeSurfaceOverride}</style>
-      <FileView path={path} />
+      <FileView path={path} sessionId={sessionId} />
     </div>
   );
 }

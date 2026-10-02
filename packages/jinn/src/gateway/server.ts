@@ -14,7 +14,9 @@ import {
 } from "../shared/models.js";
 import { configureLogger, logger } from "../shared/logger.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
-import { scheduleFtsBackfill, recoverStaleSessions, settleLegacyWorkflowPhaseSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, listAllSessionIds, listPendingQueueItemIdsForSession, getSessionBySessionKey } from "../sessions/registry.js";
+import { scheduleFtsBackfill, recoverStaleSessions, settleLegacyWorkflowPhaseSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, listAllSessionIds, listPendingQueueItemIdsForSession, getSessionBySessionKey, updateSession } from "../sessions/registry.js";
+import { runtimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
+import { createRuntimeActivityHandler } from "./runtime-activity.js";
 import { getPackageVersion } from "../shared/version.js";
 import { PRODUCT_NAME, productBanner } from "../shared/brand.js";
 import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunningSessionsForShutdown, recordSessionsRunningAtBoot, resumeRestartInterruptedSessions } from "../sessions/restart-resume.js";
@@ -39,6 +41,7 @@ import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
 import { startBoardWalk } from "../board-walk/walk.js";
 import { describeSeed, seedBoardWalk } from "../board-walk/seed.js";
+import { installTodoCommentRouting } from "./todo-comment-routing.js";
 import { HookRegistry } from "./hook-registry.js";
 import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
@@ -126,12 +129,6 @@ export function isAllowedCorsOrigin(origin: string | undefined, requestHost?: st
   return false;
 }
 
-type RuntimeActivityInfo = {
-  activeStreams: number;
-  activeAgents?: number;
-  activeMonitors?: number;
-  lastActivityAt: number;
-};
 type RuntimeActivitySource = {
   onRuntimeActivity?: (cb: (sessionId: string, info: RuntimeActivityInfo | null) => void) => void;
 };
@@ -433,9 +430,7 @@ export async function startGateway(
     logger.info(`Recovered ${recovered} stale session(s) — marked as "interrupted" for resume`);
   }
   const settledPhases = settleLegacyWorkflowPhaseSessions();
-  if (settledPhases > 0) {
-    logger.info(`Settled ${settledPhases} Workflow phase session(s) left running by a previous version`);
-  }
+  if (settledPhases > 0) logger.info(`Settled ${settledPhases} Workflow phase session(s) left running by a previous version`);
   // GRS-003a split-brain fix: the sessions just flipped running→interrupted above, so any
   // work item still marked `executing` on the strength of one of those sessions is now stale.
   // Re-derive work-item status from linked-session evidence. Best-effort and idempotent, and
@@ -832,30 +827,14 @@ export async function startGateway(
   // Native CLI schedulers such as /loop wake inside the PTY without entering
   // Jinn's queue; engines can expose onRuntimeActivity so the UI stops showing
   // those sessions as transport-idle while the native work is awake.
-  const backgroundActivity = new Map<string, RuntimeActivityInfo>();
-  const handleRuntimeActivity = (sessionId: string, info: RuntimeActivityInfo | null): void => {
-    if (info) backgroundActivity.set(sessionId, info);
-    else backgroundActivity.delete(sessionId);
-    const session = getSession(sessionId);
-    const baseTransportState = session
-      ? sessionManager.getQueue().getTransportState(session.sessionKey || session.sourceRef, session.status)
-      : "idle";
-    const transportState = info && info.activeStreams > 0 && baseTransportState !== "error" && baseTransportState !== "interrupted"
-      ? "running"
-      : baseTransportState;
-    emit("session:background", {
-      sessionId,
-      transportState,
-      backgroundActivity: info
-        ? {
-            activeStreams: info.activeStreams,
-            ...(info.activeAgents !== undefined ? { activeAgents: info.activeAgents } : {}),
-            ...(info.activeMonitors !== undefined ? { activeMonitors: info.activeMonitors } : {}),
-            lastActivityAt: new Date(info.lastActivityAt).toISOString(),
-          }
-        : null,
-    });
-  };
+  const backgroundActivity = runtimeActivity;
+  const handleRuntimeActivity = createRuntimeActivityHandler({
+    activity: backgroundActivity,
+    getSession,
+    transportState: (session) => sessionManager.getQueue().getTransportState(session.sessionKey || session.sourceRef, session.status),
+    setLastActivity: (sessionId, iso) => updateSession(sessionId, { lastActivity: iso }),
+    emit,
+  });
   for (const engine of new Set(Object.values(ptyViewEngines))) {
     (engine as RuntimeActivitySource).onRuntimeActivity?.(handleRuntimeActivity);
   }
@@ -905,6 +884,9 @@ export async function startGateway(
     },
   });
   apiContext.boardWalk = boardWalk;
+  // Comment routing wakes a mentioned employee; like the walk, it starts
+  // sessions through apiContext.
+  const stopCommentRouting = installTodoCommentRouting(apiContext);
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)
   // and by API handlers that write config.yaml and need getConfig() to reflect
@@ -1254,7 +1236,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop(); boardWalk.stop();
+    backgroundRefreshes.stop(); boardWalk.stop(); stopCommentRouting();
 
     // Stop caffeinate
     if (caffeinate && caffeinate.exitCode === null) {

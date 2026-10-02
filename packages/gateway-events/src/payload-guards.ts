@@ -111,11 +111,16 @@ function isSessionDelta(value: unknown): boolean {
     && isString(value.sessionId)
     && isDeltaType(value.type)
     && isString(value.content)
-    && isOptionalString(value.toolName)
+    && hasOptionalDeltaToolFields(value)
+    && (value.block === undefined || isJsonValue(value.block))
+}
+
+function hasOptionalDeltaToolFields(value: Record<string, unknown>): boolean {
+  return isOptionalString(value.toolName)
     && isOptionalString(value.toolId)
     && isOptionalString(value.activityReceiptId)
     && isOptionalString(value.input)
-    && (value.block === undefined || isJsonValue(value.block))
+    && isOptionalBoolean(value.sidechain)
 }
 
 function isSessionAttachment(value: unknown): boolean {
@@ -130,12 +135,18 @@ function isSessionAttachment(value: unknown): boolean {
 
 function isSessionBackground(value: unknown): boolean {
   if (!isRecord(value) || !isString(value.sessionId) || !isString(value.transportState)) return false
-  if (value.backgroundActivity === null) return true
-  return isRecord(value.backgroundActivity)
-    && isNumber(value.backgroundActivity.activeStreams)
-    && isOptionalNumber(value.backgroundActivity.activeAgents)
-    && isOptionalNumber(value.backgroundActivity.activeMonitors)
-    && isString(value.backgroundActivity.lastActivityAt)
+  if (!isOptionalString(value.status)) return false
+  return value.backgroundActivity === null || isBackgroundActivity(value.backgroundActivity)
+}
+
+function isBackgroundActivity(value: unknown): boolean {
+  return isRecord(value)
+    && isNumber(value.activeStreams)
+    && isOptionalNumber(value.activeAgents)
+    && isOptionalNumber(value.activeMonitors)
+    && isOptionalNumber(value.backgroundAgents)
+    && isOptionalBoolean(value.backgroundRerun)
+    && isString(value.lastActivityAt)
 }
 
 function isProgressPayload(value: unknown): boolean {

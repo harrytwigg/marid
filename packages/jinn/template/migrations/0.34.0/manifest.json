@@ -35,7 +35,7 @@
       "path": "docs/company-doctrine.md",
       "operation": "modify",
       "baseSha256": "7e7c6c9da3639492ba9b9ca5914546fdc9fa081cc0613d065698d130a6c25159",
-      "targetSha256": "51f8e0bf92eeb155de1fa9b13b8a8d76d02705ba019e7e947c5d2abcbaa02298",
+      "targetSha256": "4692e7ea6c98b216d73ff2be4d414e77e59e84d693e730353f8efa2efe87de23",
       "basePayload": "files/base/docs/company-doctrine.md",
       "targetPayload": "files/target/docs/company-doctrine.md"
     },
@@ -147,7 +147,7 @@
       "path": "skills/todo-handling/SKILL.md",
       "operation": "modify",
       "baseSha256": "07f721103523c7a5cf33489338ccb0afd4756d44905ba575119f575612b59456",
-      "targetSha256": "d670d8cbdb74101d5d439a5c315ff37e6e2b863af7bf76538722301b196bf9a3",
+      "targetSha256": "3694c529aeff67ff0f9f558d23d7d3c71444c91d0b7be765ec6281a9f452d3b6",
       "basePayload": "files/base/skills/todo-handling/SKILL.md",
       "targetPayload": "files/target/skills/todo-handling/SKILL.md"
     },

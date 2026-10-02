@@ -80,9 +80,14 @@ describe("InteractiveClaudeEngine — submit confirmation wiring", () => {
     ptys.length = 0;
     hookCb = undefined;
     lifecycle = new PtyLifecycleManager({ maxLivePtys: 10 });
+    // Like HookRegistry.deliver: every hook passes the taps before the turn's listener.
+    const taps: Array<(id: string, h: any) => void> = [];
     const hookRegistry = {
-      register: (_id: string, cb: (h: any) => void) => { hookCb = cb; },
+      register: (id: string, cb: (h: any) => void) => {
+        hookCb = (h) => { for (const tap of taps) tap(id, h); cb(h); };
+      },
       unregister: () => {},
+      tap: (observer: (id: string, h: any) => void) => { taps.push(observer); return () => {}; },
     } as any;
     engine = new InteractiveClaudeEngine(lifecycle, hookRegistry);
   });

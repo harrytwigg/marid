@@ -12,6 +12,7 @@ import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
 import type { HookRegistry, HookPayload } from "../gateway/hook-registry.js";
 import { SsePtyProxy, MAIN_AGENT_SENTINEL, type SseDataEvent, type UpstreamActivityInfo } from "./sse-pty-proxy.js";
+import { finishedTaskNotificationIds } from "./task-notifications.js";
 import { isCompactCommand, isNativeClaudeCommand, neutralizeForPaste } from "../shared/skill-commands.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
 import { extractActivityReceiptId } from "../shared/activity-receipts.js";
@@ -21,14 +22,17 @@ import { writeMcpConfigFile } from "../mcp/resolver.js";
 import { parsePermissionPrompt, chooseApproval, keystrokesToSelect } from "./claude-permission-prompt.js";
 import { resolveClaudeConfigDir } from "../shared/home.js";
 import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
-import { assertRemoteTarget, isRemoteTarget, resolveRemoteClaudeConfigDir } from "../shared/remote-target.js";
+import { assertRemoteTarget, isRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination } from "../shared/remote-target.js";
+import { mapAttachmentsForRemote, withRemoteAttachments } from "../shared/remote-attachments.js";
 import type { RemoteTarget, ResolvedMcpConfig } from "../shared/types.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import {
   buildSshSpawnArgs,
   remoteSessionBinDir,
+  cachedRemoteFacts,
   ensureRemoteReady,
   remoteNodeDir,
+  remoteSessionHome,
   prepareRemoteSession,
   requireRemoteEngineBin,
   type RemoteFacts,
@@ -376,7 +380,18 @@ export function buildInteractiveArgs(o: InteractiveArgsOpts): string[] {
   return args;
 }
 
+/**
+ * Translate one tool hook into StreamDeltas.
+ *  - PostToolUse → `tool_result` (the completion marker; the SSE stream has none).
+ *  - PreToolUse  → `tool_use`. On a local session the SSE proxy has usually
+ *    reported the same call already and the turn drops the repeat by tool id;
+ *    the hook is the only report of a call made inside a sub-agent (whose
+ *    stream the proxy does not tee) or on a session with no proxy at all (a
+ *    remote one, or one whose proxy failed to bind). A sub-agent's hooks carry
+ *    `agent_id`, which marks the call as a sidechain.
+ */
 export function claudeHookToDeltas(h: Record<string, unknown>): StreamDelta[] {
+  if (h.hook_event_name === "PreToolUse") return claudePreToolUseToDeltas(h);
   if (h.hook_event_name !== "PostToolUse") return [];
   const toolName = typeof h.tool_name === "string" ? h.tool_name : undefined;
   const response = h.tool_response;
@@ -399,6 +414,21 @@ export function claudeHookToDeltas(h: Record<string, unknown>): StreamDelta[] {
     toolName,
     ...(toolId ? { toolId } : {}),
     ...(activityReceiptId ? { activityReceiptId } : {}),
+  }];
+}
+
+function claudePreToolUseToDeltas(h: Record<string, unknown>): StreamDelta[] {
+  // Without an id the call cannot be matched against the proxy's report of it,
+  // and recording it twice is worse than relying on the proxy alone.
+  const toolId = typeof h.tool_use_id === "string" && h.tool_use_id ? h.tool_use_id : undefined;
+  if (!toolId) return [];
+  const toolName = typeof h.tool_name === "string" && h.tool_name ? h.tool_name : "tool";
+  return [{
+    type: "tool_use",
+    content: toolName,
+    toolName,
+    toolId,
+    ...(typeof h.agent_id === "string" ? { sidechain: true } : {}),
   }];
 }
 
@@ -890,6 +920,17 @@ export class TurnResolver {
  *  the indicator from flapping null↔active on every inter-request beat. */
 const BACKGROUND_CLEAR_QUIET_MS = 10_000;
 
+/** How long a session's background sub-agents or re-run may go without a sign
+ *  of life (a hook, an upstream request) before the engine stops counting them.
+ *  Their end is only ever announced (a task notification, the re-run's Stop),
+ *  so a lost announcement would otherwise report the session as running until
+ *  its PTY died. A sub-agent running one long tool is silent for that long, so
+ *  this is generous: the cost of tripping it is the old `idle`, not lost work. */
+const BACKGROUND_SILENCE_MS = 30 * 60_000;
+
+/** Task statuses TaskOutput reports for a task that is still going. */
+const UNFINISHED_TASK_STATUSES = new Set(["running", "pending"]);
+
 const NATIVE_COMMAND_QUIET_MS = 1800;
 const NATIVE_COMMAND_MIN_MS = 3000;
 const NATIVE_COMMAND_MAX_MS = 90_000;
@@ -1190,6 +1231,10 @@ interface ActiveTurn {
   boundProc?: pty.IPty;
   /** Suppresses auto-compaction summaries from leaking into the chat stream. */
   gate?: CompactionStreamGate;
+  /** Tool ids this turn has already reported as `tool_use`. A main-agent call
+   *  is reported twice — by the SSE proxy and by its PreToolUse hook, in
+   *  either order — and must be streamed (and recorded) once. */
+  reportedToolIds?: Set<string>;
   /** Local tool calls in flight (PreToolUse seen, PostToolUse not yet). A long
    *  tool is real work, so a quiet PTY with tools running is NOT a stall. */
   activeTools: number;
@@ -1449,14 +1494,28 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  API error, but the CLI may still finish — a late Stop supersedes). */
   private lateRecovery = new Map<string, { timer: NodeJS.Timeout }>();
   /** Post-settle background work per session: the CLI's SSE proxy still has
-   *  upstream requests in flight or a background Bash monitor after the Stop
-   *  hook settled the turn. `emitted` tracks whether the gateway was told, so a
-   *  cleared (null) notification is only sent when there's something to clear. */
-  private bgActivity = new Map<string, { info: UpstreamActivityInfo; clearTimer?: NodeJS.Timeout; emitted: boolean }>();
+   *  upstream requests in flight, or a background Bash monitor, background
+   *  sub-agent or background re-run is open, after the Stop hook settled the
+   *  turn. `emitted` tracks whether the gateway was told, so a cleared (null)
+   *  notification is only sent when there's something to clear. */
+  private bgActivity = new Map<string, {
+    info: UpstreamActivityInfo;
+    clearTimer?: NodeJS.Timeout;
+    emitted: boolean;
+    /** The last emission reported background sub-agents or a re-run. */
+    emittedDiscreteWork?: boolean;
+  }>();
   private backgroundMonitors = new Map<string, Set<string>>();
+  /** Background sub-agents per session, by agent id: launched by a top-level
+   *  Agent/Task call that returned async, ended by the task notification
+   *  announcing them, a TaskStop, or a TaskOutput that found them finished. */
+  private backgroundAgents = new Map<string, Set<string>>();
+  private backgroundSilenceTimers = new Map<string, NodeJS.Timeout>();
   private backgroundActivityCb?: (jinnSessionId: string, info: UpstreamActivityInfo | null) => void;
   /** Test override for the post-settle clear quiet window (default 10s). */
   backgroundClearQuietMs = BACKGROUND_CLEAR_QUIET_MS;
+  /** Test override for the background silence backstop (default 30m). */
+  backgroundSilenceMs = BACKGROUND_SILENCE_MS;
 
   /** Answer Claude Code's hardcoded safety prompts automatically. On by default:
    *  a gateway PTY has no keyboard, so the alternative is a wedged session. Set
@@ -1488,10 +1547,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // LRU eviction, sweep reap, cold respawn) so these maps don't grow forever
     // in a long-running daemon. Both are meaningful only while a PTY is live and
     // are repopulated on the next spawn. lastGeom is NOT purged here — see above.
-    // Every hook, claimed or not: notices turns typed into the terminal and
-    // background re-invocations.
+    // Every hook, claimed or not: notices turns typed into the terminal,
+    // background re-invocations and the background tasks a turn launches.
     this.hookRegistry.tap?.((id, h) => this.observeHook(id, h));
-    this.hookRegistry.tap?.((id, h) => this.observeBackgroundRerun(id, h));
+    this.hookRegistry.tap?.((id, h) => this.observeBackgroundWork(id, h));
     this.lifecycle.onRelease((id) => {
       this.lastOutputAt.delete(id);
       this.terminalTurns.delete(id);
@@ -1588,26 +1647,22 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   /** Per-PTY SSE proxy reported an in-flight change. Always record it (counts
    *  must stay truthful across the run boundary); emission is gated downstream. */
   private handleUpstreamActivity(jinnSessionId: string, info: UpstreamActivityInfo): void {
-    this.lifecycle.setRuntimeActive(jinnSessionId, info.activeStreams > 0);
-    const mergedInfo = {
-      ...info,
-      activeMonitors: this.backgroundMonitors.get(jinnSessionId)?.size ?? 0,
-    };
-    let st = this.bgActivity.get(jinnSessionId);
-    if (!st) {
-      st = { info: mergedInfo, emitted: false };
-      this.bgActivity.set(jinnSessionId, st);
-    } else {
-      st.info = mergedInfo;
-    }
+    const st = this.bgActivity.get(jinnSessionId);
+    // A hook may have moved lastActivityAt past the proxy's own clock.
+    const merged = { ...info, lastActivityAt: Math.max(info.lastActivityAt, st?.info.lastActivityAt ?? 0) };
+    if (!st) this.bgActivity.set(jinnSessionId, { info: merged, emitted: false });
+    else st.info = merged;
     this.maybeEmitBackground(jinnSessionId);
   }
 
-  /** Track the installed Claude CLI's observed monitor lifecycle. A top-level
-   *  PostToolUse Bash returns backgroundTaskId when launch succeeds; TaskStop
-   *  PostToolUse carries the stopped id in tool_input when termination succeeds.
-   *  Background Bash calls made inside Task subagents carry agent_id and are
-   *  not session monitors. */
+  /** Track the installed Claude CLI's observed background-task lifecycle. A
+   *  top-level PostToolUse Bash returns backgroundTaskId when launch succeeds,
+   *  and a top-level Agent/Task call run in the background returns
+   *  `status: "async_launched"` with its agentId (verified on 2.1.283). TaskStop
+   *  PostToolUse carries the stopped id in tool_input when termination
+   *  succeeds; TaskOutput reports a task's status when it is read. Background
+   *  calls made inside Task subagents carry agent_id: the subagent waits on
+   *  them itself, so they are not the session's. */
   private handleBackgroundMonitorHook(jinnSessionId: string, hook: HookPayload): void {
     if (hook.hook_event_name !== "PostToolUse") return;
     const input = hook.tool_input && typeof hook.tool_input === "object" && !Array.isArray(hook.tool_input)
@@ -1616,80 +1671,98 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     const response = hook.tool_response && typeof hook.tool_response === "object" && !Array.isArray(hook.tool_response)
       ? hook.tool_response as Record<string, unknown>
       : undefined;
+    const topLevel = typeof hook.agent_id !== "string";
 
-    let taskId: string | undefined;
-    let add = false;
     if (
       hook.tool_name === "Bash"
-      && typeof hook.agent_id !== "string"
+      && topLevel
       && input?.run_in_background === true
       && typeof response?.backgroundTaskId === "string"
     ) {
-      taskId = response.backgroundTaskId;
-      add = true;
+      this.addBackgroundTask(this.backgroundMonitors, jinnSessionId, response.backgroundTaskId);
     } else if (
-      hook.tool_name === "TaskStop"
-      && typeof input?.task_id === "string"
+      (hook.tool_name === "Agent" || hook.tool_name === "Task")
+      && topLevel
+      && response?.status === "async_launched"
+      && typeof response.agentId === "string"
     ) {
-      taskId = input.task_id;
+      this.addBackgroundTask(this.backgroundAgents, jinnSessionId, response.agentId);
+    } else if (hook.tool_name === "TaskStop" && typeof input?.task_id === "string") {
+      this.dropBackgroundMonitors(jinnSessionId, [input.task_id]);
+    } else if (hook.tool_name === "TaskOutput") {
+      // A task read to completion may never be announced by a notification.
+      const task = response?.task && typeof response.task === "object" ? response.task as Record<string, unknown> : undefined;
+      if (typeof task?.task_id === "string" && typeof task.status === "string" && !UNFINISHED_TASK_STATUSES.has(task.status)) {
+        this.dropBackgroundMonitors(jinnSessionId, [task.task_id]);
+      }
     }
-    if (!taskId) return;
+  }
 
-    if (!add) {
-      this.dropBackgroundMonitors(jinnSessionId, [taskId]);
-      return;
-    }
-    const monitors = this.backgroundMonitors.get(jinnSessionId) ?? new Set<string>();
-    const previousSize = monitors.size;
-    monitors.add(taskId);
-    if (monitors.size === previousSize) return;
-    this.backgroundMonitors.set(jinnSessionId, monitors);
-    this.publishMonitorCount(jinnSessionId);
+  private addBackgroundTask(tasks: Map<string, Set<string>>, jinnSessionId: string, taskId: string): void {
+    const ids = tasks.get(jinnSessionId) ?? new Set<string>();
+    if (ids.has(taskId)) return;
+    ids.add(taskId);
+    tasks.set(jinnSessionId, ids);
+    this.publishBackgroundState(jinnSessionId);
   }
 
   /** Forget background tasks that ended — stopped with TaskStop, or finished on
-   *  their own and announced by a task-notification. Unknown ids are ignored:
-   *  the notification also covers agents and Monitors, which are not counted here. */
+   *  their own and announced by a task-notification. Covers background Bash
+   *  tasks and background sub-agents alike; unknown ids (Monitors, tasks a
+   *  subagent launched) are ignored. */
   private dropBackgroundMonitors(jinnSessionId: string, taskIds: string[]): void {
-    const monitors = this.backgroundMonitors.get(jinnSessionId);
-    if (!monitors) return;
     let dropped = false;
-    for (const taskId of taskIds) dropped = monitors.delete(taskId) || dropped;
-    if (!dropped) return;
-    if (monitors.size === 0) this.backgroundMonitors.delete(jinnSessionId);
-    this.publishMonitorCount(jinnSessionId);
+    for (const tasks of [this.backgroundMonitors, this.backgroundAgents]) {
+      const ids = tasks.get(jinnSessionId);
+      if (!ids) continue;
+      for (const taskId of taskIds) dropped = ids.delete(taskId) || dropped;
+      if (ids.size === 0) tasks.delete(jinnSessionId);
+    }
+    if (dropped) this.publishBackgroundState(jinnSessionId);
   }
 
-  private publishMonitorCount(jinnSessionId: string): void {
-    const monitors = this.backgroundMonitors.get(jinnSessionId);
-    let state = this.bgActivity.get(jinnSessionId);
-    const info: UpstreamActivityInfo = {
-      activeStreams: state?.info.activeStreams ?? 0,
-      activeAgents: state?.info.activeAgents ?? 0,
-      activeMonitors: monitors?.size ?? 0,
-      lastActivityAt: Date.now(),
-    };
-    if (!state) {
-      state = { info, emitted: false };
-      this.bgActivity.set(jinnSessionId, state);
+  /** A background-work fact changed (a task started or ended, a re-run opened
+   *  or closed, a background hook arrived): record it as activity and re-emit. */
+  private publishBackgroundState(jinnSessionId: string): void {
+    const st = this.bgActivity.get(jinnSessionId);
+    if (!st) {
+      this.bgActivity.set(jinnSessionId, { info: { activeStreams: 0, activeAgents: 0, lastActivityAt: Date.now() }, emitted: false });
     } else {
-      state.info = info;
+      st.info = { ...st.info, lastActivityAt: Date.now() };
     }
     this.maybeEmitBackground(jinnSessionId);
   }
 
+  /** The session's background state as reported: the proxy's in-flight counts
+   *  plus what the hook stream says is still open. */
+  private backgroundSnapshot(jinnSessionId: string, info: UpstreamActivityInfo): UpstreamActivityInfo {
+    return {
+      ...info,
+      activeMonitors: this.backgroundMonitors.get(jinnSessionId)?.size ?? 0,
+      backgroundAgents: this.backgroundAgents.get(jinnSessionId)?.size ?? 0,
+      backgroundRerun: this.backgroundReruns.has(jinnSessionId),
+    };
+  }
+
   /** Emit the session's background state if it's post-settle and changed:
-   *  active streams/monitors emit immediately (cancelling any pending clear);
-   *  zero activity arms a quiet-window timer that emits `null` once, only if
+   *  any activity emits immediately (cancelling any pending clear); zero
+   *  activity arms a quiet-window timer that emits `null` once, only if
    *  activity was previously reported. Suppressed while a run() is in flight. */
   private maybeEmitBackground(jinnSessionId: string): void {
     const st = this.bgActivity.get(jinnSessionId);
     if (!st) return;
+    const info = this.backgroundSnapshot(jinnSessionId, st.info);
+    const discreteWork = (info.backgroundAgents ?? 0) > 0 || info.backgroundRerun === true;
+    // An open sub-agent or re-run keeps the PTY from being reaped as idle, as
+    // an upstream request in flight does: either is work that dies with it.
+    this.lifecycle.setRuntimeActive(jinnSessionId, info.activeStreams > 0 || discreteWork);
+    this.armBackgroundSilence(jinnSessionId, discreteWork);
     if (this.active.has(jinnSessionId)) return; // in-flight turn — already "running"
-    if (st.info.activeStreams > 0 || (st.info.activeMonitors ?? 0) > 0) {
+    if (info.activeStreams > 0 || (info.activeMonitors ?? 0) > 0 || discreteWork) {
       if (st.clearTimer) { clearTimeout(st.clearTimer); st.clearTimer = undefined; }
       st.emitted = true;
-      this.backgroundActivityCb?.(jinnSessionId, { ...st.info });
+      st.emittedDiscreteWork = discreteWork;
+      this.backgroundActivityCb?.(jinnSessionId, info);
       return;
     }
     if (!st.emitted) {
@@ -1697,18 +1770,52 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       this.bgActivity.delete(jinnSessionId);
       return;
     }
+    if (st.emittedDiscreteWork) {
+      // The sub-agents and the re-run they woke are done. Say so now, not at
+      // the end of the quiet window: a parent woken by the re-run's reply reads
+      // this session next, and must not find it still running.
+      st.emittedDiscreteWork = false;
+      this.backgroundActivityCb?.(jinnSessionId, info);
+    }
     if (st.clearTimer) return; // quiet window already armed
     st.clearTimer = setTimeout(() => {
       const cur = this.bgActivity.get(jinnSessionId);
       if (cur !== st) return; // state was recreated/cleared since arming
-      if (cur.info.activeStreams > 0 || (cur.info.activeMonitors ?? 0) > 0) {
-        cur.clearTimer = undefined;
-        return;
-      }
+      cur.clearTimer = undefined;
+      const now = this.backgroundSnapshot(jinnSessionId, cur.info);
+      if (now.activeStreams > 0 || (now.activeMonitors ?? 0) > 0 || (now.backgroundAgents ?? 0) > 0 || now.backgroundRerun) return;
       this.bgActivity.delete(jinnSessionId);
       this.backgroundActivityCb?.(jinnSessionId, null);
     }, this.backgroundClearQuietMs);
     st.clearTimer.unref?.();
+  }
+
+  /** (Re)arm the silence backstop while sub-agents or a re-run are open; every
+   *  sign of life passes through maybeEmitBackground and pushes it back. */
+  private armBackgroundSilence(jinnSessionId: string, discreteWork: boolean): void {
+    const prior = this.backgroundSilenceTimers.get(jinnSessionId);
+    if (prior) clearTimeout(prior);
+    this.backgroundSilenceTimers.delete(jinnSessionId);
+    if (!discreteWork) return;
+    const timer = setTimeout(() => {
+      this.backgroundSilenceTimers.delete(jinnSessionId);
+      if (this.active.has(jinnSessionId)) return; // the turn's end re-arms it
+      const st = this.bgActivity.get(jinnSessionId);
+      if (st && st.info.activeStreams > 0) {
+        this.armBackgroundSilence(jinnSessionId, true); // a request in flight is a sign of life
+        return;
+      }
+      logger.warn(
+        `InteractiveClaudeEngine: ${jinnSessionId} background work (${this.backgroundAgents.get(jinnSessionId)?.size ?? 0} sub-agent(s)`
+        + `${this.backgroundReruns.has(jinnSessionId) ? ", a re-run" : ""}) silent for ${Math.round(this.backgroundSilenceMs / 60_000)}m `
+        + `with no end reported — no longer counting it as running`,
+      );
+      this.backgroundAgents.delete(jinnSessionId);
+      this.backgroundReruns.delete(jinnSessionId);
+      this.publishBackgroundState(jinnSessionId);
+    }, this.backgroundSilenceMs);
+    timer.unref?.();
+    this.backgroundSilenceTimers.set(jinnSessionId, timer);
   }
 
   /** A new run() is taking the session: retract any reported background state
@@ -1720,6 +1827,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (st.clearTimer) { clearTimeout(st.clearTimer); st.clearTimer = undefined; }
     const wasEmitted = st.emitted;
     st.emitted = false;
+    st.emittedDiscreteWork = false;
     if (wasEmitted) this.backgroundActivityCb?.(jinnSessionId, null);
   }
 
@@ -1728,6 +1836,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private clearBackground(jinnSessionId: string): void {
     this.lifecycle.setRuntimeActive(jinnSessionId, false);
     this.backgroundMonitors.delete(jinnSessionId);
+    this.backgroundAgents.delete(jinnSessionId);
+    const silence = this.backgroundSilenceTimers.get(jinnSessionId);
+    if (silence) clearTimeout(silence);
+    this.backgroundSilenceTimers.delete(jinnSessionId);
     const st = this.bgActivity.get(jinnSessionId);
     if (!st) return;
     if (st.clearTimer) clearTimeout(st.clearTimer);
@@ -1739,10 +1851,17 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     return (this.bgActivity.get(jinnSessionId)?.info.activeStreams ?? 0) > 0;
   }
 
-  /** Track background re-invocations while no gateway turn owns the session
-   *. A running turn's resolver does this for itself. */
-  private observeBackgroundRerun(jinnSessionId: string, h: HookPayload): void {
+  /** Track background work from the hook stream: background tasks launched
+   *  and ended at any time, and — while no gateway turn owns the session (a
+   *  running turn's resolver does this for itself) — background
+   *  re-invocations. A hook from a sub-agent or from an open re-run is a sign
+   *  the session is working, so it counts as activity. */
+  private observeBackgroundWork(jinnSessionId: string, h: HookPayload): void {
+    this.handleBackgroundMonitorHook(jinnSessionId, h);
+    // The re-run a notification opens is the announcement that its tasks ended.
+    if (isBackgroundReinvocation(h)) this.dropBackgroundMonitors(jinnSessionId, finishedTaskNotificationIds(String(h.prompt)));
     if (this.active.has(jinnSessionId)) return;
+    const rerunWasOpen = this.backgroundReruns.has(jinnSessionId);
     // A notification folded into a typed turn is taken for a re-run too: a
     // typed prompt that is only queued also counts as "open" (its
     // UserPromptSubmit fires at once), so being open does not show it is the
@@ -1750,6 +1869,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // and the next gateway turn waiting out the quiet backstop (F6).
     if (isBackgroundReinvocation(h)) this.backgroundReruns.add(jinnSessionId);
     else if (endsTurn(h)) this.backgroundReruns.delete(jinnSessionId);
+    if (rerunWasOpen || this.backgroundReruns.has(jinnSessionId) || typeof h.agent_id === "string") {
+      this.publishBackgroundState(jinnSessionId);
+    }
   }
 
   /**
@@ -2058,20 +2180,6 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       return { sessionId: opts.resumeSessionId ?? "", result: "", error: "Interactive engine: a turn is already running for this session" };
     }
 
-    // Attachments are gateway-local file paths (buildAttachmentSuffix), so they
-    // name nothing on another host. Refused HERE rather than in spawnRemote,
-    // because only the COLD path goes through spawn(): a remote session with a
-    // warm ssh PTY takes injectPrompt instead, which appends the same suffix
-    // unconditionally and would paste gateway paths into a session running
-    // elsewhere — the exact thing the guard exists to stop.
-    if (isRemoteTarget(opts) && opts.attachments?.length) {
-      return {
-        sessionId: opts.resumeSessionId ?? "",
-        result: "",
-        error: "Attachments are not supported for remote employees — the file paths are local to the gateway",
-      };
-    }
-
     // A previous turn may have left a late-recovery listener armed; this new
     // turn owns the session (and the hook registration) now.
     this.cancelLateRecovery(jinnSessionId);
@@ -2188,7 +2296,6 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           compactedBy = h;
           resolver.completeNativeCommand();
         }
-        this.handleBackgroundMonitorHook(jinnSessionId, h);
         entry.lastHookAt = Date.now();
         // Submit acknowledgement. UserPromptSubmit is the direct signal; the in-turn
         // hooks are accepted too because none of them can fire before a prompt is
@@ -2207,8 +2314,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           entry.promptSubmitted = true;
         }
         // tool_use markers + intermediate text stream from the per-PTY SSE proxy
-        // in true order. The hook only supplies tool_result; SSE has no local tool
-        // completion event because tools execute between assistant messages.
+        // in true order. The hooks supply tool_result (SSE has no local tool
+        // completion event because tools execute between assistant messages) and
+        // the tool_use of every call the proxy does not see (see claudeHookToDeltas).
         if (h.hook_event_name === "PreToolUse") {
           entry.activeTools += 1;
         }
@@ -2217,7 +2325,12 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // The tool ran, so whatever prompt was gating it is gone — whether we
           // answered it or a human did in the CLI/xterm view.
           entry.blockedOnPermissionAt = undefined;
-          if (!foreign && !held) for (const delta of claudeHookToDeltas(h as Record<string, unknown>)) opts.onStream?.(delta);
+        }
+        // A replayed PreToolUse predates this turn: its call, if it was ours,
+        // was reported by the turn that made it.
+        const toolHook = h.hook_event_name === "PostToolUse" || (h.hook_event_name === "PreToolUse" && !replaying);
+        if (toolHook && !foreign && !held) {
+          for (const delta of claudeHookToDeltas(h as Record<string, unknown>)) this.forwardDelta(entry, delta);
         }
         // Only a prompt of this turn's own. A replayed one predates the turn,
         // and before our UserPromptSubmit a gated turn's prompts belong to
@@ -2284,7 +2397,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // the confirmation loop on its first tick rather than re-sending CRs
           // at a prompt that already did its work — the exclusion the lost-Stop
           // recovery below makes, for the same reason.
-          entry.cancelSubmitConfirm = resolver.isSettled ? undefined : this.injectPrompt(warm, opts, {
+          entry.cancelSubmitConfirm = resolver.isSettled ? undefined : this.injectPrompt(warm, opts, jinnSessionId, {
             // A settled turn is no longer ours to submit — stop either way. Without
             // this the loop would outlive an early interrupt until run()'s finally.
             submitted: () => nativeCommand || entry.promptSubmitted || resolver.isSettled,
@@ -2570,8 +2683,18 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // through the gate before reaching the transcript.
     const gate = entry.gate ?? (entry.gate = new CompactionStreamGate());
     if (e.type === "message_start") gate.reset();
-    for (const d of gate.accept(sseEventToDeltas(e))) entry.onStream(d);
-    if (e.type === "message_stop") for (const d of gate.end()) entry.onStream(d);
+    for (const d of gate.accept(sseEventToDeltas(e))) this.forwardDelta(entry, d);
+    if (e.type === "message_stop") for (const d of gate.end()) this.forwardDelta(entry, d);
+  }
+
+  /** Stream one delta to the turn, dropping a `tool_use` already reported. */
+  private forwardDelta(entry: ActiveTurn, d: StreamDelta): void {
+    if (d.type === "tool_use" && d.toolId) {
+      const reported = entry.reportedToolIds ?? (entry.reportedToolIds = new Set());
+      if (reported.has(d.toolId)) return;
+      reported.add(d.toolId);
+    }
+    entry.onStream?.(d);
   }
 
   /** Allocate + start a per-PTY SSE forward proxy. Returns the proxy and its port,
@@ -2748,12 +2871,6 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts): Promise<PtyHandle>;
   private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts, standDown: () => boolean): Promise<PtyHandle | undefined>;
   private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts, standDown?: () => boolean): Promise<PtyHandle | undefined> {
-    if (opts.attachments?.length) {
-      // buildAttachmentSuffix appends GATEWAY filesystem paths into the prompt.
-      // On another host they name nothing, and a turn that silently references
-      // files the model cannot open is worse than one that refuses.
-      throw new Error("attachments are not supported for remote employees — the file paths are local to the gateway");
-    }
     // A turn's own spawn passes no `standDown`: it owns the session by the time
     // it reaches here and never stands down, so staging always happens. A
     // redelivery respawn (JIN-3) can outlive its turn — stopped during the
@@ -2769,6 +2886,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
     const args = buildInteractiveArgs({
       prompt: buildPromptWithPlatformContext(opts),
+      // The attachments as the remote session's staged home names them: the
+      // gateway's own paths open nothing on another host.
+      ...(opts.attachments?.length ? { attachments: withRemoteAttachments(opts, staging.sessionHome, jinnSessionId).attachments } : {}),
       // The REMOTE staged paths, not the gateway's.
       settingsPath: staging.settingsPath,
       ...(staging.mcpConfigPath ? { mcpConfigPath: staging.mcpConfigPath } : {}),
@@ -2985,13 +3105,27 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     })();
   }
 
+  /** The turn's attachment paths as the session can open them. A remote
+   *  session's warm PTY was staged by an earlier spawn, so its home is recomputed
+   *  from the host's cached facts rather than asked of the host again. */
+  private attachmentsForSession(jinnSessionId: string, opts: EngineRunOpts): string[] {
+    const attachments = opts.attachments ?? [];
+    if (!isRemoteTarget(opts) || attachments.length === 0) return attachments;
+    const facts = cachedRemoteFacts(sshDestination(opts));
+    if (!facts) throw new Error("cannot give attachments to the remote session: the host has not been staged this gateway boot");
+    return mapAttachmentsForRemote(attachments, {
+      sessionHome: remoteSessionHome(facts, jinnSessionId, "claude"),
+      sessionId: jinnSessionId,
+    });
+  }
+
   /** Inject a follow-up prompt into a warm PTY via bracketed-paste + CR. */
-  private injectPrompt(handle: PtyHandle, opts: EngineRunOpts, confirm?: SubmitConfirmation): (() => void) | undefined {
+  private injectPrompt(handle: PtyHandle, opts: EngineRunOpts, jinnSessionId: string, confirm?: SubmitConfirmation): (() => void) | undefined {
     const proc = (handle as any)._proc as pty.IPty | undefined;
     if (!proc) return undefined;
     let text = buildPromptWithPlatformContext(opts);
     if (opts.attachments?.length) {
-      text += buildAttachmentSuffix(opts.attachments);
+      text += buildAttachmentSuffix(this.attachmentsForSession(jinnSessionId, opts));
     }
     return pasteAndSubmit(proc, neutralizeImagePathsForPaste(text), confirm);
   }

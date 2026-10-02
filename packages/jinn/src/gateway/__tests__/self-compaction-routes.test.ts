@@ -5,6 +5,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import type { ServerResponse } from "node:http";
 import { ensureSessionCapability, UNIDENTIFIED_TOOL_CALL_ERROR } from "../../mcp/identity.js";
+import type { Engine, JinnConfig } from "../../shared/types.js";
 
 /**
  * `POST /api/compactions` against the REAL gateway API, registry and session
@@ -201,6 +202,65 @@ describe("POST /api/compactions — integration against the real routes and outb
       .prepare("SELECT status, delivery_kind AS kind FROM callback_deliveries WHERE target_session_id = ?")
       .all(me) as Array<{ status: string; kind: string }>;
     expect(delivery).toEqual([{ status: "accepted", kind: "self-compaction-resume" }]);
+  });
+
+  it("says 'compacted' only once the compaction has run, never when the turns are merely queued", async () => {
+    const { runTurn } = await import("../../sessions/turn/runner.js");
+    const { createWebTurnSurface } = await import("../web-turn-surface.js");
+    const me = newSession("claude");
+    registry.recordEngineSessionId(me, "claude", "claude-thread-1", { model: "opus" });
+    const transcript = () => registry.getMessages(me).map((m) => `${m.role}: ${m.content}`);
+    const claimsCompacted = (lines: string[]) => lines.filter((line) => /compacted/i.test(line));
+
+    expect((await request("POST", "/api/compactions", { headers: asSession(me), body: HANDOFF })).status).toBe(202);
+
+    // Scheduled, not run: the transcript says compacting and that a resume is
+    // queued — and nothing yet claims the context was compacted.
+    const scheduled = transcript();
+    expect(scheduled).toEqual([
+      "notification: 🗜️ Compacting context — requested by this session",
+      "notification: 🗜️ Handoff queued — this session resumes from it once the compaction has finished",
+    ]);
+    expect(claimsCompacted(scheduled)).toEqual([]);
+
+    // Run the compaction turn itself. While the engine is compacting — the
+    // window in which the model still holds its full context — the transcript
+    // must still not claim it is done.
+    let midCompaction: string[] = [];
+    const engine: Engine = {
+      name: "claude",
+      async run() {
+        midCompaction = transcript();
+        return { sessionId: "claude-thread-1", result: "", compaction: { preTokens: 531_000, postTokens: 8_800 }, contextTokens: 8_800 };
+      },
+    };
+    const surface = createWebTurnSurface({
+      sessionId: me,
+      emit: (() => {}) as never,
+      connectors: new Map(),
+      getConfig: () => ({}) as JinnConfig,
+    });
+    const started = registry.beginSessionAttempt(me)!;
+    await runTurn({
+      session: registry.getSession(me)!,
+      attemptToken: started.attemptToken!,
+      prompt: queuedPrompts(me)[0]!,
+      attachments: [],
+      config: { gateway: {}, engines: { default: "claude", opencode: { mode: "server" } }, sessions: {} } as unknown as JinnConfig,
+      engines: new Map([["claude", engine]]),
+      gatewayBootId: "test-boot",
+      connectorNames: [],
+      channel: "web",
+      user: "operator",
+    }, surface);
+
+    expect(claimsCompacted(midCompaction)).toEqual([]);
+    // After completion the measured notice is the one and only "compacted",
+    // and it comes last.
+    const finished = transcript();
+    expect(claimsCompacted(finished)).toEqual(["notification: 🗜️ Context compacted: 531k tokens → 8.8k tokens."]);
+    expect(finished.at(-1)).toBe("notification: 🗜️ Context compacted: 531k tokens → 8.8k tokens.");
+    expect(finished.slice(0, scheduled.length)).toEqual(scheduled);
   });
 
   it("allows one compaction per cooldown window, so a second call in the same turn is refused", async () => {

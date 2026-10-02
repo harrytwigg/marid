@@ -94,6 +94,9 @@ export interface StreamDelta {
    *  `tool_use` deltas (fired just before the tool runs, full input assembled).
    *  Absent on the SSE-proxy `content_block_start` delta (input not yet known). */
   input?: string;
+  /** Set on a `tool_use` made inside a sub-agent (a sidechain) rather than by
+   *  the session's main agent. Persisted on the tool row's meta. */
+  sidechain?: boolean;
   /** Structured chat-view UI update. CLI and connector transports may ignore it. */
   block?: ChatBlockEnvelope;
 }
@@ -339,9 +342,9 @@ export type SessionAttemptOutcome = "succeeded" | "failed" | "interrupted";
 /** Why the latest turn was interrupted, recorded before the engine is killed. */
 export type SessionAttemptInterruptionCause = "user-message" | "attempt-stop" | "gateway-restart";
 
-/** Why a session is linked to a Todo: it executed it, or it was delegated its
- *  review. The predicates that read it live in work-items/link-role.ts. */
-export type WorkItemLinkRole = "execute" | "review";
+/** Why a session is linked to a Todo: it executed it, reviewed it, or was
+ *  consulted by a mention. The predicates live in work-items/link-role.ts. */
+export type WorkItemLinkRole = "execute" | "review" | "consult";
 
 export interface Session {
   id: string;
@@ -400,12 +403,14 @@ export interface Session {
   queueDepth?: number;
   transportState?: "idle" | "queued" | "running" | "error" | "interrupted";
   /** Serialize-time only (in-memory, never persisted): post-settle background
-   *  work — upstream agent requests or tracked Bash monitors after the turn
-   *  settled. Null when none. */
+   *  work — upstream agent requests, background sub-agents, a background re-run
+   *  or tracked Bash monitors after the turn settled. Null when none. */
   backgroundActivity?: {
     activeStreams: number;
     activeAgents?: number;
     activeMonitors?: number;
+    backgroundAgents?: number;
+    backgroundRerun?: boolean;
     lastActivityAt: string;
   } | null;
   /** Serialize-time only (derived, never persisted): the in-flight turn's progress,

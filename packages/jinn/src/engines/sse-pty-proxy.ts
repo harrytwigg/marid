@@ -2,6 +2,7 @@ import http from "node:http";
 import https from "node:https";
 import { StringDecoder } from "node:string_decoder";
 import { logger } from "../shared/logger.js";
+import { finishedTaskNotificationIds } from "./task-notifications.js";
 import {
   createUpstreamPool,
   isRetriableUpstreamError,
@@ -41,6 +42,10 @@ export interface UpstreamActivityInfo {
   activeAgents?: number;
   /** Background Bash monitors tracked by the interactive engine. */
   activeMonitors?: number;
+  /** Background sub-agents tracked by the interactive engine. */
+  backgroundAgents?: number;
+  /** A background re-invocation is in progress (tracked by the interactive engine). */
+  backgroundRerun?: boolean;
   lastActivityAt: number;
 }
 
@@ -79,14 +84,9 @@ function newestUserText(messages: unknown): string {
  * without a `<status>` (a Monitor's per-event notice) is not an ending.
  */
 export function finishedBackgroundTaskIds(messages: unknown): string[] {
-  const text = newestUserText(messages);
-  const ids: string[] = [];
-  for (const [, body] of text.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)) {
-    const id = /<task-id>([^<\s]+)<\/task-id>/.exec(body)?.[1];
-    if (id && /<status>[^<]+<\/status>/.test(body)) ids.push(id);
-  }
-  return ids;
+  return finishedTaskNotificationIds(newestUserText(messages));
 }
+
 
 /**
  * Per-PTY forward proxy. The genuine `claude` CLI is pointed at this proxy via

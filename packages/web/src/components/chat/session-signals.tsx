@@ -194,12 +194,18 @@ export function formatStallAge(ms: number): string {
  *  A stalled turn must not look like a working one. Same blue-dot spinner for
  *  both is exactly why a 51-minute hang can sit unnoticed: amber + an elapsed
  *  count is the difference between "thinking" and "go look at this". */
+/** A session the gateway reports running on its background sub-agents says how many. */
+function runningLabel(session: Session): string {
+  const subagents = session.backgroundActivity?.backgroundAgents ?? 0
+  return subagents > 0 ? `running · ${subagents} sub-agent${subagents === 1 ? "" : "s"}` : "running"
+}
+
 function runningStatusDot(session: Session, now: number): StatusDotState {
   if (session.turnProgress?.waitingForTerminalTurn) {
     return { color: "var(--system-blue)", label: "waiting for the turn typed in the terminal", pulse: false }
   }
   const stall = getTurnStall(session, now)
-  if (!stall) return { color: "var(--system-blue)", label: "running", pulse: true }
+  if (!stall) return { color: "var(--system-blue)", label: runningLabel(session), pulse: true }
   return {
     color: "var(--system-orange)",
     label: stall.awaitingSubmit

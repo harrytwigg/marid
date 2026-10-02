@@ -2197,6 +2197,7 @@ export function applyBlockEnvelope(
 /**
  * Insert a live mid-turn block (`partial=1`). `seq` orders blocks within the turn;
  * `toolCall` is set when the block is a tool call (renders as a tool card on reload).
+ * `meta` carries safe structured UI metadata (e.g. a sub-agent tool's sidechain flag).
  * These rows are usually wiped by `deletePartialMessages` at turn end.
  */
 export function insertPartialMessage(
@@ -2206,11 +2207,13 @@ export function insertPartialMessage(
   seq: number,
   toolCall?: string,
   toolId?: string,
+  meta?: JsonObject,
 ): string {
   const db = initDb();
   const id = uuidv4();
-  db.prepare('INSERT INTO messages (id, session_id, role, content, timestamp, partial, seq, tool_call, tool_id) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)').run(
+  db.prepare('INSERT INTO messages (id, session_id, role, content, timestamp, partial, seq, tool_call, tool_id, meta) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)').run(
     id, sessionId, role, content, Date.now(), seq, toolCall ?? null, toolId ?? null,
+    meta && Object.keys(meta).length > 0 ? JSON.stringify(meta) : null,
   );
   return id;
 }

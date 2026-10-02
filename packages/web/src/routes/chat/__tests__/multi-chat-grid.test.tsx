@@ -50,7 +50,6 @@ function gridProps(overrides: Partial<GridProps> = {}): GridProps {
     onRemove: noop,
     onMeta: noop,
     onNewMeta: noop,
-    onOpenFile: noop,
     onPeek: noop,
     onNewChat: noop,
     onRefresh: noop,
@@ -91,7 +90,6 @@ describe('MultiChatGrid close labels', () => {
         onRemove={onRemove}
         onMeta={noop}
         onNewMeta={noop}
-        onOpenFile={noop}
         onPeek={noop}
         onNewChat={noop}
         onRefresh={noop}
@@ -159,7 +157,6 @@ describe('MultiChatGrid close labels', () => {
         onRemove={noop}
         onMeta={noop}
         onNewMeta={noop}
-        onOpenFile={noop}
         onPeek={noop}
         onNewChat={noop}
         onRefresh={noop}
@@ -192,7 +189,6 @@ describe('MultiChatGrid close labels', () => {
         onRemove={noop}
         onMeta={noop}
         onNewMeta={noop}
-        onOpenFile={noop}
         onPeek={noop}
         onNewChat={noop}
         onRefresh={noop}

@@ -289,7 +289,7 @@ export function mimeFromFilename(filename: string): string {
 export const MAX_READ_SIZE = 5 * 1024 * 1024; // 5 MB
 
 /** MIME types treated as binary regardless of NUL-byte scan. */
-function isBinaryMime(mime: string): boolean {
+export function isBinaryMime(mime: string): boolean {
   return (
     mime.startsWith("image/") ||
     mime.startsWith("audio/") ||

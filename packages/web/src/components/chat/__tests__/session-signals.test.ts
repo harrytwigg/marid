@@ -210,6 +210,12 @@ describe('useStallClock', () => {
 describe('getStatusDot: a stalled turn must not look like a working one', () => {
   const read = new Set(['s1'])
 
+  it('counts the sub-agents of a session running on its background work', () => {
+    const background = { activeStreams: 0, backgroundAgents: 2, lastActivityAt: '2026-10-01T20:00:00.000Z' }
+    expect(getStatusDot({ id: 's1', status: 'running', backgroundActivity: background }, read)?.label).toBe('running · 2 sub-agents')
+    expect(getStatusDot({ id: 's1', status: 'running', backgroundActivity: { ...background, backgroundAgents: 0, backgroundRerun: true } }, read)?.label).toBe('running')
+  })
+
   it('paints a working turn blue and pulsing', () => {
     expect(getStatusDot({ id: 's1', status: 'running' }, read)).toEqual({
       color: 'var(--system-blue)',

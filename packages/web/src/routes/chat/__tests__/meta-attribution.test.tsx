@@ -54,7 +54,6 @@ function Harness({ paneKey, sessionId, onState }: {
       onRemove={noop}
       onMeta={paneState.updateMeta}
       onNewMeta={paneState.updateNewMeta}
-      onOpenFile={noop}
       onPeek={noop}
       onNewChat={noop}
       onRefresh={noop}

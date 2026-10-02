@@ -24,6 +24,12 @@ export interface TodoSessions {
   railSession: LinkedSessionWire | undefined
 }
 
+/** A session a mention started to answer a question: it is not working the Todo.
+ *  The gateway's own Dispatch, reconciler and recovery already ignore it. */
+function isConsult(session: LinkedSessionWire): boolean {
+  return session.workItemRole === "consult"
+}
+
 /**
  * Which linked session the rail offers.
  *
@@ -32,16 +38,26 @@ export interface TodoSessions {
  * click. The dispatcher still wins when it is live, because it is the durable
  * thread for the Todo; past that, any live session beats a finished one, and a
  * finished one is still worth reaching (an audit reads the attempt that ended).
+ * A consulted session never outranks one that is working the Todo; it is offered
+ * only when it is the sole kind there is.
  */
 export function pickRailSession(sessions: readonly LinkedSessionWire[]): LinkedSessionWire | undefined {
-  const live = sessions.filter((s) => LIVE_SESSION_STATES.has(s.status ?? ""))
-  return live.find((s) => s.employee === "todo-dispatcher") ?? live[0] ?? sessions[0]
+  const working = sessions.filter((s) => !isConsult(s))
+  const pool = working.length > 0 ? working : sessions
+  const live = pool.filter((s) => LIVE_SESSION_STATES.has(s.status ?? ""))
+  return live.find((s) => s.employee === "todo-dispatcher") ?? live[0] ?? pool[0]
 }
 
 /** Whether the rail's session is still doing something — the flag that decides
  *  if Dispatch stays on offer. */
 export function isLiveSession(session: LinkedSessionWire | undefined): boolean {
   return LIVE_SESSION_STATES.has(session?.status ?? "")
+}
+
+/** Whether anything is working the Todo right now — what decides if Dispatch
+ *  stays on offer. A consulted session answering a question does not count. */
+export function hasLiveWorker(sessions: readonly LinkedSessionWire[]): boolean {
+  return sessions.some((s) => !isConsult(s) && LIVE_SESSION_STATES.has(s.status ?? ""))
 }
 
 export function useTodoSessions(id: string | null | undefined): TodoSessions {
@@ -61,7 +77,7 @@ export function useTodoSessions(id: string | null | undefined): TodoSessions {
   return {
     sessions,
     tree,
-    hasLiveSession: all.some((s) => LIVE_SESSION_STATES.has(s.status ?? "")),
+    hasLiveSession: hasLiveWorker(all),
     railSession: pickRailSession(all),
   }
 }

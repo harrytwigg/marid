@@ -21,7 +21,26 @@ afterEach(() => {
 });
 
 describe("claudeHookToDeltas", () => {
-  it("does not emit a duplicate tool_use for PreToolUse", () => {
+  it("emits a tool_use for PreToolUse, which the turn dedupes by id against the SSE proxy's", () => {
+    expect(claudeHookToDeltas({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_use_id: "call-1",
+      tool_input: { command: "printf ok" },
+    })).toEqual([{ type: "tool_use", content: "Bash", toolName: "Bash", toolId: "call-1" }]);
+  });
+
+  it("marks a sub-agent's PreToolUse (it carries agent_id) as a sidechain call", () => {
+    expect(claudeHookToDeltas({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_use_id: "call-2",
+      agent_id: "agent-1",
+      agent_type: "general-purpose",
+    })).toEqual([{ type: "tool_use", content: "Bash", toolName: "Bash", toolId: "call-2", sidechain: true }]);
+  });
+
+  it("emits nothing for a PreToolUse with no tool id: it could not be deduped", () => {
     expect(claudeHookToDeltas({
       hook_event_name: "PreToolUse",
       tool_name: "Bash",

@@ -1,3 +1,4 @@
+import { reportingParentSessionId } from "../work-items/employee-session-delegation.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { UNIDENTIFIED_TOOL_CALL_ERROR } from "../mcp/identity.js";
 import { readJsonBody } from "./http-helpers.js";
@@ -177,7 +178,7 @@ async function requestCompaction(
  * self-expiring with the attempt.
  */
 function suppressStopgapCallback(session: Session): void {
-  if (session.parentSessionId && session.attemptToken && session.status === "running") {
+  if (reportingParentSessionId(session) && session.attemptToken && session.status === "running") {
     recordChildReportedToParent(session.id, session.attemptToken);
   }
 }

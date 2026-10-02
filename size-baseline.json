@@ -288,7 +288,7 @@
       "lines": 374
     },
     "packages/jinn/src/gateway/api.ts": {
-      "lines": 4850,
+      "lines": 4803,
       "exempt": [
         "complexity",
         "max-depth",
@@ -1478,7 +1478,7 @@
       ]
     },
     "packages/web/src/routes/todos/task-page/activity.tsx": {
-      "lines": 555,
+      "lines": 542,
       "exempt": [
         "complexity",
         "max-lines-per-function"

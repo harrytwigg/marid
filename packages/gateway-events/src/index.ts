@@ -32,6 +32,8 @@ export interface GatewayEventMap {
     toolId?: string
     activityReceiptId?: string
     input?: string
+    /** A tool call made inside a sub-agent rather than by the main agent. */
+    sidechain?: boolean
     block?: JsonValue
   }
   "session:notification": { sessionId: string; message: string; meta?: JsonObject }
@@ -39,10 +41,14 @@ export interface GatewayEventMap {
   "session:background": {
     sessionId: string
     transportState: string
+    /** The session's status as reported, background work included. */
+    status?: string
     backgroundActivity: {
       activeStreams: number
       activeAgents?: number
       activeMonitors?: number
+      backgroundAgents?: number
+      backgroundRerun?: boolean
       lastActivityAt: string
     } | null
   }

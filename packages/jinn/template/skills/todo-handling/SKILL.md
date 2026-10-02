@@ -70,7 +70,15 @@ Assigning a Todo, or changing its status, starts nothing. A session starts when 
 
 ## Comments are the record
 
-A Todo's comments are its conversation: questions, decisions, handoffs and evidence go there, with `comment_work_item` (pass `parentCommentId` to reply in a thread). The gateway records the session that wrote each comment from your verified identity, and the Todo page links it; never write your session id into the body yourself. A comment with no mention is recorded only and wakes no one.
+A Todo's comments are its conversation: questions, decisions, handoffs and evidence go there, with `comment_work_item` (pass `parentCommentId` to reply in a thread). The gateway records the session that wrote each comment from your verified identity, and the Todo page links it; never write your session id into the body yourself.
+
+Who a comment wakes:
+
+- **`@employee`** wakes that employee on this Todo, in a comment or a reply. If they already have a session on it, even an idle one from days ago, the comment is delivered there; otherwise one is started, with your comment as its brief. A tagged employee is consulted, not handed the work: the claim stays with whoever holds the Todo.
+- **A reply** reaches the session that wrote the comment it answers. Reply to the comment itself (its own `parentCommentId`), not the thread root, or it goes to the root's author. Reply when the thread needs something from you, not to acknowledge: replies between sessions on one Todo are capped.
+- **Anything else.** A comment with no mention is recorded only and wakes no one. To get someone's attention, mention them.
+
+One employee has one session per Todo. A delegation or dispatch to an employee who already has a session on the Todo lands in that session, which takes the Todo's claim and reports to whoever delegated it.
 
 There is no separate approval step. When work needs a person's decision, stop it in blocked and comment with what is needed and the options; when it is finished, hand it to the operator in in_review.
 

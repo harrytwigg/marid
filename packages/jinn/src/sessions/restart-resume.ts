@@ -76,26 +76,38 @@ export interface BackgroundActivityCounts {
   activeStreams: number;
   activeAgents?: number;
   activeMonitors?: number;
+  backgroundAgents?: number;
+  backgroundRerun?: boolean;
 }
 
-/** Sessions whose engine still reports post-settle work: a background Bash task it has not seen
- *  finish, or an agent request in flight after the turn settled. A shutdown kills that work
+/** Sessions whose engine still reports post-settle work: a background Bash task or sub-agent it
+ *  has not seen finish, a background re-run, or an agent request in flight after the turn settled. A shutdown kills that work
  *  with the engine process, so these are owed a resume nudge. Auxiliary requests
  *  (titles, token counts) are not work anyone waits on, so an engine that classifies its
  *  streams is judged on agents alone. */
 export function backgroundWorkAtShutdown(activity: ReadonlyMap<string, BackgroundActivityCounts>): BackgroundWorkAtShutdown[] {
   const waiting: BackgroundWorkAtShutdown[] = [];
   for (const [sessionId, info] of activity) {
-    const monitors = info.activeMonitors ?? 0;
-    const agents = info.activeAgents ?? info.activeStreams;
-    if (monitors <= 0 && agents <= 0) continue;
-    const parts = [
-      ...(monitors > 0 ? [`${monitors} background task${monitors === 1 ? "" : "s"}`] : []),
-      ...(agents > 0 ? [`${agents} background agent request${agents === 1 ? "" : "s"}`] : []),
-    ];
-    waiting.push({ sessionId, detail: parts.join(" and ") });
+    const detail = describeBackgroundWork(info);
+    if (detail) waiting.push({ sessionId, detail });
   }
   return waiting;
+}
+
+function counted(n: number, noun: string): string[] {
+  return n > 0 ? [`${n} ${noun}${n === 1 ? "" : "s"}`] : [];
+}
+
+/** The work a session's post-settle activity describes, or undefined for none. */
+function describeBackgroundWork(info: BackgroundActivityCounts): string | undefined {
+  const parts = [
+    ...counted(info.activeMonitors ?? 0, "background task"),
+    // A sub-agent between model requests (running a tool) has none in flight.
+    ...counted(info.backgroundAgents ?? 0, "background sub-agent"),
+    ...counted(info.activeAgents ?? info.activeStreams, "background agent request"),
+    ...(info.backgroundRerun === true ? ["a background re-run"] : []),
+  ];
+  return parts.length > 0 ? parts.join(" and ") : undefined;
 }
 
 export interface RestartShutdownOptions {
