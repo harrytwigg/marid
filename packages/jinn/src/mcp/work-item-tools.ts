@@ -428,7 +428,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
 
   const comment: JinnMcpTool = {
     name: "comment_work_item",
-    description: "Comment on a Todo.",
+    description: "Comment on a Todo; @employee wakes them.",
     inputSchema: {
       type: "object",
       properties: {

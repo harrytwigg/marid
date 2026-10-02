@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4159;
+const MAX_MANIFEST_TOKENS = 4164;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -215,9 +215,10 @@ const ATTESTED = {
   // `acknowledgeEscalated` left, the asOperator description grew: net 38 off
   // every total), then for the three Todo approval tools (net of the `note`
   // description: 199 off Pi). The ceiling follows each time; Pi sits ON it.
-  rpc: { tokens: 3824, sha256: "6d61983ae7ca2d170891b2c40dd059840f99b221449134b21ec91f70fd28ccc0" },
-  pi: { tokens: 4159, sha256: "b19fdc443771b335a1a1ec410e4b6af6a56593a4bd3006ea8d8c1f8690407a69" },
-  openai: { tokens: 3963, sha256: "bb3bc790e97b042822f1ee17902e88a31ce4ad2eb6794cf5d5421912de38d021" },
+  // Up 5 for "@employee wakes them" on comment_work_item; no dead prose was left to buy it back.
+  rpc: { tokens: 3829, sha256: "8ed1c4c168e943a1e9ed2c26486f02ecb690b2289c77672431217ae9f8a8f817" },
+  pi: { tokens: 4164, sha256: "1fa418a86ad948712f6c1f3fba366abae0bd99bb17aba988cd2311fae87339a3" },
+  openai: { tokens: 3968, sha256: "512094217e7ba573e9cdfdcff75dc45241a000acf5fe3581ad687d8be3cb3f83" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

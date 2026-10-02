@@ -144,7 +144,6 @@ import { readJsonBody, readBodyRaw } from "./http-helpers.js";
 import { applyLabelChange, parseLabelChange } from "./work-item-label-change.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
 import { isJsonMediaType } from "./media-type.js";
-import { forwardTodoComment } from "./todo-comment-steering.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { clipSessionMessage, sessionCommGuards, prepareLateralSend, isDescendantOf, resolveCallerIdentity, type CallerIdentity } from "./session-comm-guards.js";
@@ -260,7 +259,8 @@ import {
   readWorkItemQueryParams,
   SEARCH_QUERY_ROUTE_CHAR_CAP,
 } from "./work-item-query.js";
-import { surfaceManagerVisibility } from "./manager-visibility.js";
+import { announceDelegation, claimHeldBy, landInLiveSession } from "./delegation-handoff.js";
+import { liveEmployeeSession, recordNewDelegateSession, reportingParentSessionId } from "../work-items/employee-sessions.js";
 import { NOTE_FILE_MAX_BYTES, createNote, listNotes, readKnowledgeFile, readNote, searchKnowledge, updateNote, type NoteStoreResult } from "../notes/store.js";
 import { loadInstances, saveInstances, type Instance, type InstanceInput } from "../instances/directory.js";
 import { createInstance, type CreateInstanceInput, type CreateInstanceResult } from "../instances/create.js";
@@ -2798,7 +2798,6 @@ export async function handleApiRequest(
           parentCommentId,
           origin: caller.origin,
         });
-        forwardTodoComment(comment);
         emitTodoProjectionEvent(context, params.id, "commented");
         return json(res, { comment }, 201);
       } catch (err) {
@@ -3477,13 +3476,17 @@ export async function handleApiRequest(
           return json(res, { error: "delegation failed before any work started — the work item could not be minted; nothing was spawned" }, 500);
         }
       }
-      const claim = claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
+      // One session per employee per Todo: when the delegate already has a live
+      // session on it, the brief lands there and that session takes the claim
+      // (or keeps the one it holds) instead of a second session being spawned.
+      const reused = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
+      const claim = (reused && claimHeldBy(workItem.id, reused.id)) || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
       if (!claim) return;
 
       // 2. SPAWN — the irreversible step. A failure here PRESERVES the minted
       //    `backlog` item (durable intent, recoverable) and reports its id.
       const engine = context.sessionManager.getEngine(engineName);
-      if (!engine) {
+      if (!engine && !reused) {
         claim.release();
         return json(res, {
           error: `engine "${engineName}" not available`,
@@ -3504,6 +3507,28 @@ export async function handleApiRequest(
           claim.release();
           return json(res, { error: assignmentErr instanceof Error ? assignmentErr.message : String(assignmentErr) }, 409);
         }
+      }
+      const announcement = {
+        context, activity: chatActivityContext(context), parentSessionId, delegatorSession, workItem,
+        employeeName, engineName, delegateEmployee, roster, title,
+      };
+      if (reused && employeeName) {
+        try {
+          landInLiveSession({
+            workItem, session: reused, employeeName, delegateEmployee, claim, actor: delegationActor,
+            role: resolveDelegationLinkRole(intent, workItem.status), parentSessionId, brief, title, idempotencyDigest,
+          });
+        } catch (linkErr) {
+          claim.release();
+          return json(res, { error: `delegation into session ${reused.id} failed: ${linkErr instanceof Error ? linkErr.message : linkErr}`, workItemId: workItem.id }, 500);
+        }
+        logger.info(`Delegation ${workItem.id}: brief delivered into ${employeeName}'s live session ${reused.id}`);
+        announceDelegation({ ...announcement, session: reused, dispatchedAt: Date.now() });
+        const current = getSession(reused.id) ?? reused;
+        return json(res, {
+          workItemId: workItem.id, sessionId: reused.id, employee: employeeName, engine: current.engine,
+          model: current.model ?? null, effortLevel: current.effortLevel ?? null, status: current.status, title, reused: true,
+        });
       }
       // The key is the session's turn lane: SessionQueue serializes turns per
       // key, so it must be unique per session. Keyed on the Todo alone, every
@@ -3568,6 +3593,7 @@ export async function handleApiRequest(
       try {
         linkSession(workItem.id, session.id, delegationActor, resolveDelegationLinkRole(intent, workItem.status));
         claim.bind(session.id);
+        if (employeeName) recordNewDelegateSession(workItem.id, employeeName, session.id, parentSessionId);
       } catch (linkErr) {
         claim.release();
         logger.warn(`Delegation ${workItem.id} link failed before dispatch: ${linkErr instanceof Error ? linkErr.message : linkErr}`);
@@ -3598,74 +3624,16 @@ export async function handleApiRequest(
       } catch (reconcileErr) {
         logger.warn(`Delegation ${workItem.id} reconcile failed: ${reconcileErr instanceof Error ? reconcileErr.message : reconcileErr}`);
       }
-      if (parentSessionId && getSession(parentSessionId)) {
-        const handoffEnvelope: ChatBlockEnvelope = {
-          op: "put",
-          block: {
-            id: `dg-${workItem.id}`,
-            type: "delegation",
-            version: 1,
-            status: "running",
-            payload: {
-              employee: employeeName ?? engineName,
-              employeeDisplay: delegateEmployee?.displayName ?? employeeName ?? engineName,
-              title,
-              childSessionId: session.id,
-              workItemId: workItem.id,
-              dispatchedAt: Date.parse(session.createdAt) || Date.now(),
-            },
-          },
-        };
-        try {
-          applyBlockEnvelope(parentSessionId, handoffEnvelope, title);
-          context.emit("session:delta", {
-            sessionId: parentSessionId,
-            type: "block",
-            content: title,
-            block: handoffEnvelope,
-          });
-        } catch (blockErr) {
-          logger.warn(`Delegation ${workItem.id} handoff block failed: ${blockErr instanceof Error ? blockErr.message : blockErr}`);
-        }
-      }
       logger.info(`Delegation ${workItem.id}: session ${session.id} linked + dispatching for ${employeeName ?? engineName}`);
       const delegationQueueKey = session.sessionKey || session.sourceRef || session.id;
       const delegationQueueItemId = enqueueQueueItem(session.id, delegationQueueKey, brief);
       context.emit("queue:updated", { sessionId: session.id, sessionKey: delegationQueueKey });
       const attachmentPaths = resolveAttachmentPaths(attachments);
-      dispatchWebSessionRun(session, brief, engine, context, {
+      dispatchWebSessionRun(session, brief, engine as Engine, context, {
         queueItemId: delegationQueueItemId,
         attachments: attachmentPaths.length > 0 ? attachmentPaths : undefined,
       });
-      if (employeeName && roster) {
-        surfaceManagerVisibility({
-          roster,
-          employee: employeeName,
-          delegatorSession,
-          childSession: session,
-          workItemId: workItem.id,
-          title,
-        });
-      }
-
-      // The delegation card above is the atomic response's sole transcript row.
-      // Publish the Todo cache invalidation through the shared boundary without
-      // synthesizing a second Todo activity block for the same delegation.
-      const delegatedItem = getWorkItem(workItem.id) ?? workItem;
-      const eventSessionId = delegatorSession && isActivityProjectionEligibleSession(delegatorSession.id)
-        ? delegatorSession.id
-        : undefined;
-      persistAndEmitActivityBlock({
-        context: chatActivityContext(context),
-        companyEvent: {
-          entity: "todo",
-          action: "delegated",
-          id: delegatedItem.id,
-          version: delegatedItem.version,
-          value: delegatedItem as unknown as JsonObject,
-          ...(eventSessionId ? { sessionId: eventSessionId } : {}),
-        },
-      });
+      announceDelegation({ ...announcement, session, dispatchedAt: Date.parse(session.createdAt) || Date.now() });
 
       return json(res, {
         workItemId: workItem.id,
@@ -3820,7 +3788,7 @@ export async function handleApiRequest(
         body.meta = plan.meta;
         if (session.parentSessionId === caller.id) {
           parentFollowUp = { caller, message: String(rawMessage) };
-        } else if (caller.parentSessionId === session.id && caller.attemptToken) {
+        } else if (reportingParentSessionId(caller) === session.id && caller.attemptToken) {
           // The child is reporting UP to its parent via send_to_session. The
           // automatic parent-completion callback fired at this child's settle
           // would be a SECOND injection of the same turn (the operator sees a

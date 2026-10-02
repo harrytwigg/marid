@@ -327,7 +327,7 @@ function wakeParentForExternalReply(
   turnKey: string,
   options?: SyncExternalTurnOptions,
 ): void {
-  if (!session.parentSessionId || newest?.role !== "assistant") return;
+  if (newest?.role !== "assistant") return;
   const employee = session.employee ? options?.resolveEmployee?.(session.employee) : undefined;
   void notifyParentOfExternalTurn(session, newest.content, turnKey, { alwaysNotify: employee?.alwaysNotify });
 }
