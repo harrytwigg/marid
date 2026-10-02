@@ -77,6 +77,20 @@ describe("streamed block persistence", () => {
     })]).toEqual(["first", "tool", "final"]);
   });
 
+  it("keeps a completed turn's sub-agent calls that finished, and drops one still running", () => {
+    expect([...completedStreamedBlockIds({
+      quietPreempted: false,
+      rateLimited: false,
+      result: "Launched it.",
+      error: null,
+      streamedBlocks: [
+        { id: "main", content: "Using Agent", toolCall: "Agent" },
+        { id: "sub-done", content: "Used Bash", toolCall: "Bash", meta: { sidechain: true } },
+        { id: "sub-running", content: "Using WebFetch", toolCall: "WebFetch", meta: { sidechain: true } },
+      ],
+    })]).toEqual(["main", "sub-done"]);
+  });
+
   describe("a turn that does not complete still keeps the tool calls that ran", () => {
     const streamed = [
       { id: "prose", content: "Looking into it." },

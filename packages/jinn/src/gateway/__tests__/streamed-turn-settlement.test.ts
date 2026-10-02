@@ -280,6 +280,37 @@ describe("completed streamed-turn settlement", () => {
     ]);
   });
 
+  it("a sub-agent's call landing mid-answer neither splits the answer nor repeats it", async () => {
+    const { reload } = await runTurn([
+      { type: "text", content: "Started the audit in the background. " },
+      { type: "tool_use", content: "Grep", toolName: "Grep", toolId: "sub-1", sidechain: true },
+      { type: "tool_result", content: "ok", toolName: "Grep", toolId: "sub-1" },
+      { type: "text", content: "I will report back when it finishes." },
+    ], { sessionId: "engine-sidechain", result: "Started the audit in the background. I will report back when it finishes." });
+
+    expect(normalizedRows(reload).map(({ content, toolCall }) => [content, toolCall])).toEqual([
+      ["perform the task", undefined],
+      ["Used Grep", "Grep"],
+      ["Started the audit in the background. I will report back when it finishes.", undefined],
+    ]);
+    expect((reload.messages as Array<Record<string, unknown>>).find((message) => message.toolCall)?.meta)
+      .toEqual({ sidechain: true });
+  });
+
+  it("drops a sub-agent call still running when the turn ends, rather than keep it in progress forever", async () => {
+    const { reload } = await runTurn([
+      { type: "tool_use", content: "Agent", toolName: "Agent", toolId: "main-1" },
+      { type: "tool_result", content: "ok", toolName: "Agent", toolId: "main-1" },
+      { type: "tool_use", content: "WebFetch", toolName: "WebFetch", toolId: "sub-2", sidechain: true },
+    ], { sessionId: "engine-sidechain-open", result: "Launched it." });
+
+    expect(normalizedRows(reload).map(({ content }) => content)).toEqual([
+      "perform the task",
+      "Used Agent",
+      "Launched it.",
+    ]);
+  });
+
   it("an interrupted turn keeps the tool rows that completed and drops the rest", async () => {
     const queue = new (await import("../../sessions/queue.js")).SessionQueue();
     const started = deferred<void>();

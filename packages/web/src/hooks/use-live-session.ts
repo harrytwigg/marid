@@ -706,7 +706,10 @@ export function useLiveSession(
           setStreamingText(snapshot)
         } else if (deltaType === 'tool_use') {
           clearStatusMessage()
-          if (streamingTextRef.current) {
+          // A sub-agent's call arrives out of band, not in order with the main
+          // agent's text, so it must not split the answer being streamed.
+          const sidechain = p.sidechain === true
+          if (streamingTextRef.current && !sidechain) {
             const flushed = streamingTextRef.current
             streamingTextRef.current = ''
             setStreamingText('')
@@ -737,7 +740,7 @@ export function useLiveSession(
                 timestamp: Date.now(),
                 toolCall: toolName,
                 ...(toolId ? { toolId } : {}),
-                ...(p.sidechain === true ? { meta: { sidechain: true } } : {}),
+                ...(sidechain ? { meta: { sidechain: true } } : {}),
               },
             ]
             return updated

@@ -103,8 +103,15 @@ export function createPartialStreamWriter(sessionId: string): PartialStreamWrite
       }
 
       if (delta.type === "tool_use") {
-        clearScheduledFlush();
-        flushPartialText();
+        // A sub-agent's call arrives out of band (from its hook), not in order
+        // with the main agent's text, so it must not end that text's block:
+        // splitting the answer around it leaves its fragments as interim prose
+        // beside the canonical final row, and the answer reads twice.
+        const sidechain = delta.sidechain === true;
+        if (!sidechain) {
+          clearScheduledFlush();
+          flushPartialText();
+        }
         const tool = delta.toolName || String(delta.content ?? "");
         const messageId = insertPartialMessage(
           sessionId,
@@ -113,15 +120,17 @@ export function createPartialStreamWriter(sessionId: string): PartialStreamWrite
           partialSeq++,
           tool,
           delta.toolId,
-          delta.sidechain ? { sidechain: true } : undefined,
+          sidechain ? { sidechain: true } : undefined,
         );
         openPartialTools.push({
           messageId,
           toolName: tool,
           ...(delta.toolId ? { toolId: delta.toolId } : {}),
         });
-        curTextId = null;
-        curText = "";
+        if (!sidechain) {
+          curTextId = null;
+          curText = "";
+        }
         return;
       }
 
