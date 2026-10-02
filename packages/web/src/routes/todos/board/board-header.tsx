@@ -46,16 +46,14 @@ function QuickCaptureButton({ onClick }: { onClick: () => void }) {
 }
 
 function BoardSubtitle({
-  isHome,
   deptPrefix,
   isAttention,
   attentionCount,
   openCount,
   blockedTotal,
-}: BoardCounts & { isHome: boolean; deptPrefix: string | undefined }) {
+}: BoardCounts & { deptPrefix: string | undefined }) {
   return (
     <>
-      {isHome && <p>The Todos you created or pinned.</p>}
       <div className="flex items-center gap-2">
         {deptPrefix && (
           <>
@@ -87,7 +85,7 @@ export function BoardHeader({ board, title, departments, deptPrefix, onQuickCapt
   return (
     <LargeTitleHeader
       title={<BoardSwitcher board={board} title={title} departments={departments} attentionCount={counts.attentionCount} />}
-      subtitle={<BoardSubtitle isHome={board.kind === "home"} deptPrefix={deptPrefix} {...counts} />}
+      subtitle={<BoardSubtitle deptPrefix={deptPrefix} {...counts} />}
       trailing={<QuickCaptureButton onClick={onQuickCapture} />}
     />
   )

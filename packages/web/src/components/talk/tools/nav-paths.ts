@@ -54,7 +54,7 @@ function todoFilters(args: ToolArgs): TodoFilters {
 }
 
 export function todosPath(args: ToolArgs): string {
-  // parseBoardParam falls back to the home board for anything unusable, which is
+  // parseBoardParam falls back to the everything board for anything unusable, which is
   // the behaviour a stale department link already gets.
   const board = boardPath(parseBoardParam(text(args.board)))
   return `${board}${query([...filtersToSearchParams(todoFilters(args))])}`

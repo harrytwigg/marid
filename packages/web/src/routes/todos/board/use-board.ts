@@ -16,11 +16,8 @@ import { BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isColumnInStat
 
 /* Todos v2 slice 6 — the board data layer (design-doc §11 queries).
  * One infinite query per status column, scoped per board:
- *   Home          → home=true + rootsOnly
  *   department    → department=<slug> + rootsOnly
  *   Everything    → rootsOnly (no board-scope filter)
- * Home is a union in one scope (PLA-230): pinned OR operator-created — sending
- * `kept` and `createdBy` would be the intersection. Creating writes no pin row.
  * True per-column counts come from each query's `total` (the gateway counts the
  * whole filtered set before LIMIT/OFFSET — never a capped page length). */
 
@@ -30,8 +27,7 @@ export const BOARD_PAGE_SIZE = 20
 
 /** Server params for a board scope (pure — unit-tested). Boards show roots
  *  only (§4): children live in the in-place tree tray, not as cards. */
-export function boardScopeParams(board: BoardId): { home?: true; department?: string; rootsOnly: true } {
-  if (board.kind === "home") return { home: true, rootsOnly: true }
+export function boardScopeParams(board: BoardId): { department?: string; rootsOnly: true } {
   if (board.kind === "department") return { department: board.slug, rootsOnly: true }
   return { rootsOnly: true }
 }
@@ -191,11 +187,10 @@ export function useBoardMenuCounts(departments: DepartmentSummaryWire[] | undefi
     queryKey: ["work-items", "board-menu-counts", slugs.join(",")],
     enabled: enabled && departments !== undefined,
     ...TODO_QUERY_FRESHNESS,
-    queryFn: async (): Promise<{ home: number; everything: number; byDepartment: Record<string, number> }> => {
+    queryFn: async (): Promise<{ everything: number; byDepartment: Record<string, number> }> => {
       const openOf = (totals: Partial<Record<WorkItemStatusWire, number>> | undefined): number =>
         OPEN_STATUSES.reduce((sum, s) => sum + (totals?.[s] ?? 0), 0)
-      const [home, everything, ...perDept] = await Promise.all([
-        api.listWorkItems({ home: true, rootsOnly: true, limit: 1 }),
+      const [everything, ...perDept] = await Promise.all([
         api.listWorkItems({ rootsOnly: true, limit: 1 }),
         ...slugs.map((slug) => api.listWorkItems({ department: slug, rootsOnly: true, limit: 1 })),
       ])
@@ -203,7 +198,7 @@ export function useBoardMenuCounts(departments: DepartmentSummaryWire[] | undefi
       slugs.forEach((slug, i) => {
         byDepartment[slug] = openOf(perDept[i].totals)
       })
-      return { home: openOf(home.totals), everything: openOf(everything.totals), byDepartment }
+      return { everything: openOf(everything.totals), byDepartment }
     },
   })
 }

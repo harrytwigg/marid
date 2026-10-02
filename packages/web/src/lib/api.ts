@@ -676,11 +676,10 @@ export const api = {
     rootsOnly?: boolean
     label?: string
     kept?: boolean
-    home?: boolean
   }, signal?: AbortSignal) => {
     const q = new URLSearchParams()
     for (const key of TODO_LIST_PARAMS) if (params?.[key]) q.set(key, String(params[key]))
-    for (const flag of ["rootsOnly", "kept", "home"] as const) if (params?.[flag]) q.set(flag, "true")
+    for (const flag of ["rootsOnly", "kept"] as const) if (params?.[flag]) q.set(flag, "true")
     q.set("limit", String(params?.limit ?? 20))
     return get<WorkItemListWire>(`/api/work-items?${q.toString()}`, signal ? { signal } : undefined)
   },
