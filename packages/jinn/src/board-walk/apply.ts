@@ -10,6 +10,7 @@ import type { StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { BoardWalkSettings } from "./settings.js";
 import type { Gate, StartDecision, TodoDecision, WalkDecisions } from "./decisions.js";
 import { findLinks, type LinkResolver } from "./pr-state.js";
+import { namesDate } from "./dates.js";
 import { listComments } from "../work-items/comments.js";
 import { listRelations } from "../work-items/relations.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
@@ -93,13 +94,15 @@ function todoText(item: WorkItem): string[] {
 const normalised = (value: string): string => value.toLowerCase().replace(/\s+/g, " ").trim();
 
 /** A date gate holds only when the Todo itself names it: the quote must be
- *  the Todo's own words, found in its text, so a past date picked from
- *  nowhere cannot release a Todo that is waiting on something else. */
+ *  the Todo's own words, found in its text, and those words must name the
+ *  cited date — so a past date picked from nowhere, or a quote that names some
+ *  other day, cannot release a Todo that is waiting on something else. */
 function dateProblem(gate: Extract<Gate, { kind: "date" }>, now: number, text: string[]): string | undefined {
   const quote = normalised(gate.quote);
   if (quote.length < 4 || !text.some((part) => normalised(part).includes(quote))) {
     return `the quoted words "${gate.quote}" are not in this Todo, so the date gate is not its own`;
   }
+  if (!namesDate(gate.quote, gate.date)) return `the quoted words "${gate.quote}" do not name ${gate.date}`;
   const at = Date.parse(gate.date);
   if (!Number.isFinite(at)) return `the date ${gate.date} does not parse`;
   return at <= now ? undefined : `the date ${gate.date} has not passed`;

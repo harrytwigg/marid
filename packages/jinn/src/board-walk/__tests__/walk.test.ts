@@ -549,7 +549,7 @@ describe("a release is checked against the gates it cites", () => {
 
   it.each([
     ["no gate at all", undefined, "a release must cite the gates that are met"],
-    ["a date still ahead", [{ kind: "date", date: "2026-11-01", quote: "after https://github.com" }], "the date 2026-11-01 has not passed"],
+    ["a quote that names no date", [{ kind: "date", date: "2026-09-01", quote: "after https://github.com" }], "do not name 2026-09-01"],
     ["a past date the Todo never names", [{ kind: "date", date: "2026-09-01", quote: "not before 1 September" }], "the quoted words \"not before 1 September\" are not in this Todo"],
     ["a date with no quote", [{ kind: "date", date: "2026-09-01" }], "a release must cite the gates that are met"],
     ["a pull request the Todo does not link", [{ kind: "pr", url: "https://github.com/acme/widgets/pull/9" }], "https://github.com/acme/widgets/pull/9 is not linked from this Todo"],
@@ -560,6 +560,34 @@ describe("a release is checked against the gates it cites", () => {
     const tick = await h.walk.tick();
     expect(status(item.id)).toBe("blocked");
     expect(tick.entries.find((entry) => entry.workItemId === item.id)).toMatchObject({ kind: "refused", workItemId: item.id, outcome: expect.stringContaining(outcome) });
+  });
+
+  it("QA repro: a person's decision cannot be released by citing any past date", async () => {
+    const item = todo("Pick a vendor", { body: "Harry to choose between vendor A and vendor B.", assignee: "senior-developer" });
+    m.transitions.transition(item.id, "blocked", "operator", { human: true, blockKind: "needs_input", stopCause: { unblockHint: { what: "pick a vendor", who: "Harry" } } });
+    for (const gates of [
+      [{ kind: "date", date: "2026-01-01" }],
+      [{ kind: "date", date: "2026-01-01", quote: "Harry to choose" }],
+      [{ kind: "date", date: "2026-01-01", quote: "1 January" }],
+    ]) {
+      const tick = await open({ reply: releaseReply(item.id, gates) }).walk.tick();
+      expect(tick.entries.find((entry) => entry.workItemId === item.id)).toMatchObject({ kind: "refused", outcome: expect.stringMatching(/^gate not confirmed: /) });
+    }
+    expect(status(item.id)).toBe("blocked");
+  });
+
+  it("refuses a date the Todo names that is still ahead", async () => {
+    const item = blocked("Invoice", { body: "Not before 1 November." });
+    const tick = await open({ reply: releaseReply(item.id, [{ kind: "date", date: "2026-11-01", quote: "Not before 1 November" }]) }).walk.tick();
+    expect(status(item.id)).toBe("blocked");
+    expect(tick.entries[0].outcome).toBe("gate not confirmed: the date 2026-11-01 has not passed");
+  });
+
+  it("refuses a quote that is the Todo's own words but names another day", async () => {
+    const item = blocked("Renew", { body: "Not before 30 September; reminder sent 1 September." });
+    const tick = await open({ reply: releaseReply(item.id, [{ kind: "date", date: "2026-09-30", quote: "reminder sent 1 September" }]) }).walk.tick();
+    expect(status(item.id)).toBe("blocked");
+    expect(tick.entries[0].outcome).toBe('gate not confirmed: the quoted words "reminder sent 1 September" do not name 2026-09-30');
   });
 
   it("refuses a Todo whose only gate is a person's reply, and says so in the tick log", async () => {
