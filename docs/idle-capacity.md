@@ -13,7 +13,7 @@ An earlier version of this page argued for a code loop. A cron job is a prompt r
 
 The question is no longer numeric. Gates are prose, and the operator wants to say what they like dispatched and when, in words: "never while I'm working", "Codex can take docs work any time". Two separate LLM schedulers, one for readiness and one for dispatch, would race each other. So one turn does both:
 
-- **Sonnet, hourly by default.** One turn per tick, with no tool calls: the board and the snapshot arrive in the prompt, and the answer is one JSON object.
+- **Sonnet, hourly by default.** One turn per tick. The rules and the snapshot arrive in the prompt; the model reads the board through five tools of its own and hands over one decision per Todo, which the gateway checks and carries out as it comes.
 - **Nothing open, no turn.** A tick on a board with no open Todos spends nothing.
 - **Off when you say so.** Disable the `board-walk` cron job and nothing ticks.
 
@@ -42,7 +42,7 @@ The job is added on `jinn setup` and at gateway boot when it has never been seed
 The **frontmatter** holds the mechanical settings:
 
 ```yaml
-employee: assistant      # who the walk's turn runs as (always on Claude, with no tools)
+employee: assistant      # who the walk's turn runs as (always on Claude, with only the walk's tools)
 model: sonnet            # Claude model for that turn; empty = the employee's own, or Claude's default
 actions:                 # hard switches, enforced by the gateway
   release: true
@@ -89,19 +89,18 @@ Before the cron job, the frontmatter carried `enabled`, `schedule` and `timezone
 ## What one tick does
 
 1. **Read** `board-walk.md`. Stop if it is switched off or broken.
-2. **Build the board.** Every open Todo (`backlog`, `blocked`, `executing`) goes in, with:
-   - title, body, labels, dates and priority;
-   - its last comments;
-   - its relations, with each related Todo's current status;
-   - its stop cause (block kind, park date, unblock hint);
-   - whether it refuses automatic starts;
-   - what is running on it;
-   - the live state of every GitHub pull request or issue it links to, looked up with `gh`. A link that cannot be resolved is `unknown`, and an unknown gate is treated as not met.
+2. **Build the capacity snapshot** (below).
+3. **Run the walk's turn.** One turn, routed as a session to the configured employee, **always on Claude, on the gateway, with the walk's tools and nothing else**. Its only MCP server is the jinn server serving the `board-walk` toolset, in place of the company toolset and every custom server; Claude's built-in tools are switched off (`--tools ""`, `--strict-mcp-config`, and `--no-chrome`, without which the engine's Chrome integration brings its browser tools back). The employee's own engine, host and flags are set aside: Claude is the one engine whose tools can be switched off from the command line (opencode in server mode ignores those flags), and a rate-limited walk turn is never handed to a fallback engine. If Claude is not installed, or is recorded as exhausted, the whole tick is skipped without a turn, readiness included: nothing is released, parked or flagged until Claude is back, and the reason is logged. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
 
-   Long text is truncated. The board is capped at 150 Todos and about 120,000 characters, highest priority first; the rest are counted as left out. Link lookups run six at a time, and a failed lookup is remembered for two minutes.
-3. **Build the capacity snapshot** (below).
-4. **Ask the model.** One turn, routed as a session to the configured employee, **always on Claude, on the gateway, with no tools**. Every MCP server is detached, the Jinn toolset included, and Claude's built-in tools are switched off (`--tools ""`, `--strict-mcp-config`, and `--no-chrome`, without which the engine's Chrome integration brings its browser tools back). The employee's own engine, host and flags are set aside: Claude is the one engine whose tools can be switched off from the command line (opencode in server mode ignores those flags), and a rate-limited walk turn is never handed to a fallback engine. If Claude is not installed, or is recorded as exhausted, the whole tick is skipped without a turn, readiness included: nothing is released, parked or flagged until Claude is back, and the reason is logged. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A turn that has not answered within 10 minutes (one stuck behind a rate-limit wait, say) is stopped, the tick fails, and the walk is free again for the next one. If the walk's engine is recorded as exhausted, the tick is skipped without a turn: the model is named, so the session layer's healthy-engine choice does not apply. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
-5. **Carry out the answer.** The gateway checks every decision against the switches and the Todo's state at that moment:
+   The prompt carries the rules, the snapshot and how to use the tools. The board is not in it: the model reads it, one Todo at a time, through its tools.
+   - `walk_board` lists the open Todos, one line each, highest priority first, with what this tick has already decided.
+   - `walk_todo` shows one Todo in full: title, labels, dates and priority; its stop cause (block kind, park date, unblock hint); whether it refuses automatic starts; what is running on it; its relations, with each related Todo's current status; the live state of every GitHub pull request or issue it links to, looked up with `gh` (a link that cannot be resolved is `unknown`, and an unknown gate is treated as not met); its body and its newest comments. Long text is cut short and says so.
+   - `walk_decide` hands over the decision on one Todo, with the model's reason: release, park, flag or leave. The gateway checks it and carries it out at once (below) and answers with what it did. A decision that cannot be read, or that is refused, changes nothing, and the model may decide that Todo again; a Todo decided and carried out is not decided twice in one tick.
+   - `walk_start` starts one backlog Todo through the Todo Dispatcher.
+   - `walk_finish` ends the tick with a summary and why the walk started what it started, or nothing.
+
+   The gateway answers these tools only for the running tick's own session, bound by its session capability. Each tick has a budget of tool calls (three per open Todo plus twenty, at most 600); past it every call is refused, and whatever is not decided waits for the next tick. The tick also gives up on its turn after ten minutes, plus fifteen seconds for each open Todo past the twentieth, at most thirty; the turn is stopped, and the decisions already carried out stand.
+4. **Carry out each decision as it comes.** The gateway checks every decision against the switches and the Todo's state at that moment:
    - **release:** a `blocked` Todo goes back to `backlog`, keeping its assignee, with a comment giving the reason. A release must cite every gate it relies on, and the gateway checks each one itself before the Todo moves: a date gate quotes the Todo's own words naming the date (found in its title, body or comments, the walk's own comments excluded), the quote must contain that date (as `2026-11-01`, `1 November`, `Nov 1` or `the 1st`, the last matched on the day of the month alone; a numeric `01/11` is ambiguous and not accepted), and the date has passed; the blocker is `done` and is named by this Todo (a `blocks` relation or its id in the text); the pull request linked from this Todo has merged, or the issue has closed. A release whose gates cannot be checked is refused, so a Todo waiting on a person's decision is flagged rather than released.
    - **park:** a `backlog` or `blocked` Todo goes to `blocked` with `parkedUntil` set. The park expiry puts it back in the queue when the date passes (see below). An `executing` Todo is never parked. A `blocked` Todo is re-parked only when its stop is already a clock-wait (block kind `transient`), and it keeps its unblock hint. A Todo stopped for a person is never parked, because a park releases itself on its date and would dissolve the wait; it is released instead, once its gate is met.
    - **The operator's Todos are theirs.** A Todo assigned to the operator, stopped with the operator named as who must act, or holding an approval question carried over from the retired approvals, is never released or parked by the walk, whatever the model asks. It may still be flagged as stuck.
@@ -109,9 +108,9 @@ Before the cron job, the frontmatter carried `enabled`, `schedule` and `timezone
    - **start:** a ready `backlog` Todo is handed to the Todo Dispatcher, with the walk's reason and any engine preference added to the Dispatcher's prompt.
 
      Some starts are refused in code, whatever the model asks: a Todo with the `no-auto-start` label, a Todo whose dispatch config says `autoStart: false` (the **Auto-start** switch on a Todo's page), and a Todo assigned to the operator. These are choices the operator made per Todo; they are not capacity limits.
-6. **Log the tick** to `logs/board-walk.jsonl`. Every decision is logged with the model's reason and what the gateway did with it, refusals included. A tick that starts nothing logs why. The gateway log gets one line per tick.
+5. **Log the tick** to `logs/board-walk.jsonl`. Every open Todo gets one entry: the decision carried out, the refusal it last got, or that it got no decision. Every other refusal is logged too, with the model's reason and why the gateway refused it. A tick that starts nothing logs why. The gateway log gets one line per tick.
 
-A tick that fails starts nothing and moves nothing: an engine error, an answer with no readable JSON, or an answer with no `dispatch.reason`. The failure is logged. Ticks never overlap: a scheduled fire that lands while one is running is logged as `busy` and skipped.
+A tick whose turn fails (an engine error, or a turn that does not finish in time) is logged as failed, with the engine's own reason, and with the decisions it carried out before it stopped. Ticks never overlap: a scheduled fire that lands while one is running is logged as `busy` and skipped.
 
 ## The capacity snapshot
 

@@ -84,7 +84,7 @@ export class PtyStreamManager {
     this.snapshotStore = options.snapshotStore ?? ptySnapshotStore;
   }
 
-  attach(sessionId: string, proc: pty.IPty, onData?: () => void): void {
+  attach(sessionId: string, proc: pty.IPty, onData?: (raw: string) => void): void {
     const stream = this.streamFor(sessionId);
     const respawn = stream.hasSeenPty;
     stream.hasSeenPty = true;
@@ -119,7 +119,7 @@ export class PtyStreamManager {
     });
 
     proc.onData((raw) => {
-      onData?.();
+      onData?.(raw);
       const current = this.streams.get(sessionId);
       if (current !== stream || !stream.snapshot) return;
       const data = Buffer.from(raw, "utf8");

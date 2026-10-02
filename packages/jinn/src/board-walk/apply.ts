@@ -8,7 +8,7 @@ import { transition } from "../work-items/transitions.js";
 import { addComment } from "../work-items/comment-add.js";
 import type { StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { BoardWalkSettings } from "./settings.js";
-import type { Gate, StartDecision, TodoDecision, WalkDecisions } from "./decisions.js";
+import type { Gate, StartDecision, TodoDecision } from "./decisions.js";
 import { findLinks, type LinkResolver } from "./pr-state.js";
 import { namesDate } from "./dates.js";
 import { listComments } from "../work-items/comments.js";
@@ -18,7 +18,8 @@ import { OPEN_STATUSES, noAutoStartReason, statusSince } from "./board.js";
 import type { BoardWalkState, TickEntry } from "./store.js";
 
 /**
- * Carry out the walk's decisions. The model proposes; this module disposes:
+ * Carry out the walk's decisions, each one as it is made. The model proposes;
+ * this module disposes:
  *
  *   - a switched-off action is refused, whatever the model asked for;
  *   - every move is checked against the Todo's state NOW, not as it was when
@@ -225,7 +226,8 @@ function flag(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): TickEntr
   return { ...entry, outcome: deps.settings.actions.comment ? "flagged with a comment" : "flagged (comments are switched off)" };
 }
 
-async function applyTodo(deps: ApplyDeps, decision: TodoDecision): Promise<TickEntry> {
+/** One Todo decision, checked against the Todo as it is now and carried out. */
+export async function applyTodo(deps: ApplyDeps, decision: TodoDecision): Promise<TickEntry> {
   const item = getWorkItem(decision.id);
   if (!item) return { kind: "refused", workItemId: decision.id, reason: decision.reason, outcome: "no such Todo" };
   if (!OPEN.has(item.status)) {
@@ -235,12 +237,14 @@ async function applyTodo(deps: ApplyDeps, decision: TodoDecision): Promise<TickE
     case "release": return release(deps, item, decision);
     case "park": return park(deps, item, decision);
     case "flag": return flag(deps, item, decision);
-    case "none": return { kind: decision.verdict, workItemId: item.id, reason: decision.reason, outcome: "left alone" };
+    case "leave": return { kind: decision.verdict, workItemId: item.id, reason: decision.reason, outcome: "left alone" };
   }
 }
 
-function start(deps: ApplyDeps, decision: StartDecision): TickEntry {
+/** One start, through the Todo Dispatcher, unless the switch or the Todo refuses it. */
+export function startTodo(deps: ApplyDeps, decision: StartDecision): TickEntry {
   const entry: TickEntry = { kind: "dispatch", workItemId: decision.id, reason: decision.reason };
+  if (!deps.settings.actions.dispatch) return { ...entry, kind: "refused", outcome: "dispatch is switched off" };
   const item = getWorkItem(decision.id);
   if (!item) return { ...entry, kind: "refused", outcome: "no such Todo" };
   if (item.status !== "backlog") return { ...entry, kind: "refused", outcome: `only a backlog Todo is started; this one is ${item.status}` };
@@ -259,27 +263,9 @@ function start(deps: ApplyDeps, decision: StartDecision): TickEntry {
 }
 
 /** Forget flags for Todos that are no longer in the episode they were flagged in. */
-function pruneFlags(state: BoardWalkState): void {
+export function pruneFlags(state: BoardWalkState): void {
   for (const id of Object.keys(state.stuckFlags)) {
     const item = getWorkItem(id);
     if (!item || !OPEN.has(item.status) || stuckEpisode(item) !== state.stuckFlags[id]) delete state.stuckFlags[id];
   }
-}
-
-export async function applyDecisions(deps: ApplyDeps, decisions: WalkDecisions): Promise<TickEntry[]> {
-  const entries: TickEntry[] = [];
-  for (const decision of decisions.todos) entries.push(await applyTodo(deps, decision));
-
-  const { start: starts, reason } = decisions.dispatch;
-  if (!deps.settings.actions.dispatch) {
-    entries.push({ kind: "hold", reason, outcome: "dispatch is switched off" });
-    for (const decision of starts) entries.push({ kind: "refused", workItemId: decision.id, reason: decision.reason, outcome: "dispatch is switched off" });
-  } else if (starts.length === 0) {
-    entries.push({ kind: "hold", reason, outcome: "nothing started" });
-  } else {
-    for (const decision of starts) entries.push(start(deps, decision));
-  }
-
-  pruneFlags(deps.state);
-  return entries;
 }

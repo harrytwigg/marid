@@ -7,6 +7,7 @@ interface FakePty {
   _exitCode: number | null;
   _killCalled: boolean;
   _exitCb?: (e: { exitCode: number }) => void;
+  _dataCb?: (d: string) => void;
   onData: (cb: (d: string) => void) => void;
   onExit: (cb: (e: { exitCode: number }) => void) => void;
   kill: (signal?: string) => void;
@@ -14,6 +15,7 @@ interface FakePty {
   resize: (c: number, r: number) => void;
   on: (event: string, cb: (...a: any[]) => void) => void;
   fireExit: () => void;
+  emitData: (d: string) => void;
 }
 const ptys: FakePty[] = [];
 function makeFakePty(): FakePty {
@@ -21,13 +23,14 @@ function makeFakePty(): FakePty {
     pid: 1000 + ptys.length,
     _exitCode: null,
     _killCalled: false,
-    onData() {},
+    onData(cb) { p._dataCb = cb; },
     onExit(cb) { p._exitCb = cb; },
     kill() { p._killCalled = true; }, // signal sent; real exit is async (fireExit)
     write() {},
     resize() {},
     on() {},
     fireExit() { p._exitCode = 0; p._exitCb?.({ exitCode: 0 }); },
+    emitData(d) { p._dataCb?.(d); },
   };
   return p;
 }
@@ -110,8 +113,26 @@ describe("InteractiveClaudeEngine — kill->respawn race (Item C)", () => {
     const p = engine.run({ sessionId: "s2", prompt: "c", cwd: "/tmp" } as any);
     await flush();
     const ptyC = ptys[0];
+    hookCb!({ hook_event_name: "SessionStart", session_id: "c3" });
     ptyC.fireExit(); // current PTY dies mid-turn with no Stop hook
     const r = await p;
-    expect(r.error).toMatch(/claude process exited/);
+    expect(r.error).toMatch(/^Interrupted: claude process exited/);
+  });
+
+  it("a process that dies before its session starts fails the turn with what it printed", async () => {
+    const p = engine.run({ sessionId: "s3", prompt: "d", cwd: "/tmp" } as any);
+    await flush();
+    const ptyD = ptys[0];
+    // What node-pty's forked child prints when the exec itself is refused.
+    ptyD.emitData("\x1b[0mexecvp(3) failed.: Argument list too long\r\n");
+    ptyD._exitCode = 1;
+    ptyD._exitCb?.({ exitCode: 1 });
+    const r = await p;
+    // Not "Interrupted…": that would be filed as a quiet preemption and the
+    // reason dropped.
+    expect(r.error).toBe(
+      "claude did not start: its process exited (code 1, signal unknown) before its session began. "
+      + "Its last output: execvp(3) failed.: Argument list too long",
+    );
   });
 });

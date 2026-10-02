@@ -4,6 +4,10 @@ import path from "node:path";
 import type { ResolvedMcpConfig, McpServerStdioConfig } from "../shared/types.js";
 import { resolveJinnHome, resolveMcpSessionCapabilityKeyFile } from "../shared/home.js";
 
+/** Names the toolset a jinn server serves in place of the company belt
+ *  (toolsets.ts `toolsFor`). The gateway puts it on the server's spec; nothing
+ *  the model can reach sets it. */
+export const MCP_TOOLSET_ARG = "--jinn-toolset";
 export const MCP_SESSION_ID_ARG = "--jinn-session-id";
 export const MCP_HOME_ARG = "--jinn-home";
 export const MCP_GATEWAY_URL_ARG = "--jinn-gateway-url";

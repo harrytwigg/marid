@@ -17,6 +17,7 @@ import { buildFileTools } from "./file-tools.js";
 import { buildConnectorTools } from "./connector-tools.js";
 import { buildHeartbeatTools } from "./heartbeat-tools.js";
 import { JINN_SESSION_CAPABILITY_ENV, JINN_SESSION_ID_ENV } from "./identity.js";
+import { toolsFor } from "./toolsets.js";
 import { loadConfig } from "../shared/config.js";
 import { resolveJinnHome } from "../shared/home.js";
 
@@ -276,6 +277,7 @@ export function runJinnMcpServer(opts?: {
   token?: string;
   callerSessionId?: string;
   sessionCapability?: string;
+  toolset?: string;
   input?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
 }): void {
@@ -288,10 +290,8 @@ export function runJinnMcpServer(opts?: {
     callerSessionId: opts?.callerSessionId ?? process.env[JINN_SESSION_ID_ENV] ?? undefined,
     sessionCapability: opts?.sessionCapability ?? process.env[JINN_SESSION_CAPABILITY_ENV] ?? undefined,
   };
-  const tools = buildTools({
-    notesEnabled: notesEnabledFromConfig(),
-    knowledge: knowledgeWordingFromConfig(),
-  });
+  const belt = () => buildTools({ notesEnabled: notesEnabledFromConfig(), knowledge: knowledgeWordingFromConfig() });
+  const tools = toolsFor(opts?.toolset, belt, serverLog);
   const input = opts?.input ?? process.stdin;
   const output = opts?.output ?? process.stdout;
   const rl = readline.createInterface({ input, crlfDelay: Infinity });

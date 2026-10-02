@@ -55,7 +55,7 @@ export function writeState(state: BoardWalkState, file = BOARD_WALK_STATE_FILE):
 
 export type TickEntryKind =
   | "release" | "park" | "stuck" | "dispatch" | "gated" | "ready" | "unclear"
-  | "hold" | "nothing" | "refused" | "error";
+  | "hold" | "nothing" | "refused" | "undecided" | "error";
 
 export interface TickEntry {
   kind: TickEntryKind;

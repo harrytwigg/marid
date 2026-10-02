@@ -4,6 +4,10 @@ import type { ApiContext } from "./api.js";
 import { readTicks } from "../board-walk/store.js";
 import { countStarts, listStartedSessions } from "../board-walk/started-sessions.js";
 import { readClaudeUsageHistory } from "../shared/claude-usage-history.js";
+import { getSession } from "../sessions/registry.js";
+import { verifySessionCapability } from "../mcp/identity.js";
+import { readJsonBody } from "./http-helpers.js";
+import { resolveCallerIdentity } from "./session-comm-guards.js";
 
 /**
  * The board walk and the Auto-Dispatch page.
@@ -13,6 +17,9 @@ import { readClaudeUsageHistory } from "../shared/claude-usage-history.js";
  *   GET  /api/board-walk/ticks      the tick log, newest first
  *   POST /api/board-walk/tick       run a tick now (operator only; `?wait=1` waits
  *                                   for it, otherwise it answers 202 at once)
+ *   POST /api/board-walk/turn/<tool>  one call from the walk's own tools
+ *                                   (mcp/board-walk-tools.ts): only from the
+ *                                   running tick's session, bound by its capability
  *   GET  /api/auto-dispatch/sessions  sessions started per engine, from the
  *                                   session registry, whatever started them
  *   GET  /api/auto-dispatch/usage   the retained Claude readings the graph draws
@@ -25,6 +32,26 @@ import { readClaudeUsageHistory } from "../shared/claude-usage-history.js";
 function bounded(url: URL, key: string, fallback: number, max: number): number {
   const raw = Number(url.searchParams.get(key));
   return Number.isFinite(raw) && raw > 0 ? Math.min(max, raw) : fallback;
+}
+
+const TURN_TOOL_PREFIX = "/api/board-walk/turn/";
+
+/** A walk tool's call: answered only for a caller that proves which session it
+ *  is, and the walk then answers only its running tick's own session. */
+async function handleTurnTool(req: HttpRequest, res: ServerResponse, route: ParsedRoute, context: ApiContext): Promise<true> {
+  const walk = context.boardWalk;
+  if (!walk) { json(res, { error: "the board walk is not running in this gateway" }, 503); return true; }
+  const identity = resolveCallerIdentity(req.headers, { sessionExists: (id) => !!getSession(id), verifySessionCapability, requireCapability: true });
+  if (identity.kind !== "session") {
+    json(res, { error: "the walk's tools answer only a session that proves which one it is" }, 403);
+    return true;
+  }
+  const parsed = await readJsonBody(req, res);
+  if (!parsed.ok) return true;
+  const args = parsed.body && typeof parsed.body === "object" && !Array.isArray(parsed.body) ? parsed.body as Record<string, unknown> : {};
+  const answer = await walk.turnTool(identity.callerId, route.pathname.slice(TURN_TOOL_PREFIX.length), args);
+  json(res, answer.body, answer.status);
+  return true;
 }
 
 async function handleWalk(res: ServerResponse, route: ParsedRoute, context: ApiContext): Promise<boolean> {
@@ -70,11 +97,12 @@ function handleAutoDispatch(res: ServerResponse, route: ParsedRoute): boolean {
 }
 
 export async function handleBoardWalkApi(
-  _req: HttpRequest,
+  req: HttpRequest,
   res: ServerResponse,
   route: ParsedRoute,
   context: ApiContext,
 ): Promise<boolean> {
+  if (route.method === "POST" && route.pathname.startsWith(TURN_TOOL_PREFIX)) return handleTurnTool(req, res, route, context);
   if (route.pathname.startsWith("/api/board-walk")) return handleWalk(res, route, context);
   if (route.method === "GET" && route.pathname.startsWith("/api/auto-dispatch")) return handleAutoDispatch(res, route);
   return false;

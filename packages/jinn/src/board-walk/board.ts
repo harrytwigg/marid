@@ -20,22 +20,22 @@ import { findLinks, type LinkResolver, type LinkState } from "./pr-state.js";
  *
  * Open means `backlog`, `blocked` and `executing`. `in_review` is the operator's
  * desk and `done`/`cancelled` are closed; the walk touches none of them.
- * Text is truncated so a board of long Todos still fits one prompt.
+ *
+ * The walk's model reads the board through its tools (turn.ts): one line per
+ * Todo to go through the board, and one Todo in full when it needs the
+ * detail (board-render.ts). Every part of a Todo is capped, so one stays a
+ * few kilobytes however long its thread.
  */
 
 export const OPEN_STATUSES: readonly WorkItemStatus[] = ["backlog", "blocked", "executing"];
 /** The opt-out label every automatic start honours. */
 export const NO_AUTO_START_LABEL = "no-auto-start";
 
-const BODY_CHARS = 2000;
-const COMMENT_CHARS = 600;
-const COMMENTS_PER_TODO = 6;
-const DEFAULT_MAX_TODOS = 150;
-/** The board's share of one prompt, in characters of JSON. Todos past it are
- *  left out (lowest priority, newest first) and counted in `omitted`. */
-const DEFAULT_MAX_BOARD_CHARS = 120_000;
-/** GitHub lookups in flight at once. */
-const LINK_CONCURRENCY = 6;
+const TITLE_CHARS = 200;
+const BODY_CHARS = 1200;
+const COMMENT_CHARS = 400;
+const COMMENTS_PER_TODO = 4;
+const LINKS_PER_TODO = 6;
 
 export interface BoardTodo {
   id: string;
@@ -66,14 +66,7 @@ export interface BoardTodo {
   flaggedStuck?: boolean;
 }
 
-export interface BoardDigest {
-  todos: BoardTodo[];
-  /** Open Todos left out because the board is bigger than one prompt holds. */
-  omitted: number;
-  inReview: number;
-}
-
-const truncate = (text: string | null | undefined, max: number): string | undefined => {
+export const truncate = (text: string | null | undefined, max: number): string | undefined => {
   if (!text) return undefined;
   return text.length <= max ? text : `${text.slice(0, max)}… [truncated, ${text.length} chars]`;
 };
@@ -98,7 +91,7 @@ export function noAutoStartReason(item: WorkItem, labels?: string[]): string | u
 
 const IN_FLIGHT = new Set<Session["status"]>(["running", "waiting"]);
 
-function sessionsOn(item: WorkItem): BoardTodo["sessions"] {
+export function sessionsOn(item: WorkItem): BoardTodo["sessions"] {
   const sessions = listSessionsByWorkItem(item.id);
   const newest = sessions[0];
   return {
@@ -107,7 +100,7 @@ function sessionsOn(item: WorkItem): BoardTodo["sessions"] {
   };
 }
 
-function stopOf(item: WorkItem): BoardTodo["stop"] {
+export function stopOf(item: WorkItem): BoardTodo["stop"] {
   if (item.status !== "blocked") return undefined;
   const db = initDb();
   const cause = readStopCause(db, item.id);
@@ -120,22 +113,6 @@ export interface DigestOptions {
   resolveLink: LinkResolver;
   /** Todo ids whose current stuck episode is already flagged. */
   flagged?: ReadonlySet<string>;
-  maxTodos?: number;
-  maxChars?: number;
-}
-
-/** Map with at most `limit` calls in flight, results in input order. */
-async function mapLimited<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < items.length) {
-      const index = next++;
-      results[index] = await fn(items[index]);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }
 
 /** Present keys only: an absent optional reads as absent, not as `undefined`. */
@@ -143,18 +120,19 @@ function optional<T extends object>(entries: { [K in keyof T]: T[K] | undefined 
   return Object.fromEntries(Object.entries(entries).filter(([, value]) => value !== undefined && value !== null && value !== false && value !== "")) as Partial<T>;
 }
 
-async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<BoardTodo> {
+/** One Todo with everything a gate can hang on, links resolved. */
+export async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<BoardTodo> {
   const labels = getWorkItemLabels(item.id).map((label) => label.name);
   const tail = commentsTail(item.id, COMMENTS_PER_TODO);
   const comments = tail.comments.filter((comment) => !comment.deletedAt)
     .map((comment) => ({ author: comment.author, authorKind: comment.authorKind, at: comment.createdAt, body: truncate(comment.body, COMMENT_CHARS) ?? "" }));
   const links = await Promise.all(
-    findLinks([item.body, ...tail.comments.map((comment) => comment.body)])
+    findLinks([item.body, ...tail.comments.map((comment) => comment.body)], LINKS_PER_TODO)
       .map(({ url, kind }) => opts.resolveLink(url, kind)),
   );
   return {
     id: item.id,
-    title: item.title,
+    title: truncate(item.title.replace(/\s+/g, " ").trim(), TITLE_CHARS) ?? "",
     status: item.status,
     statusSince: statusSince(item),
     assignee: item.assignee,
@@ -180,21 +158,8 @@ async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<BoardTod
   };
 }
 
-export async function buildBoardDigest(opts: DigestOptions): Promise<BoardDigest> {
-  const open = OPEN_STATUSES.flatMap((status) => listWorkItems({ status }))
+/** The open Todos, highest priority first, oldest first within a priority. */
+export function listOpenTodos(): WorkItem[] {
+  return OPEN_STATUSES.flatMap((status) => listWorkItems({ status }))
     .sort((a, b) => b.priority - a.priority || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-  const candidates = open.slice(0, opts.maxTodos ?? DEFAULT_MAX_TODOS);
-  // Links are resolved concurrently and bounded, so an offline `gh` costs one
-  // timeout per batch rather than one per link, one Todo at a time.
-  const digests = await mapLimited(candidates, LINK_CONCURRENCY, (item) => digestTodo(item, opts));
-  const budget = opts.maxChars ?? DEFAULT_MAX_BOARD_CHARS;
-  const todos: BoardTodo[] = [];
-  let used = 0;
-  for (const digest of digests) {
-    const size = JSON.stringify(digest).length;
-    if (used + size > budget && todos.length > 0) break;
-    todos.push(digest);
-    used += size;
-  }
-  return { todos, omitted: open.length - todos.length, inReview: listWorkItems({ status: "in_review" }).length };
 }

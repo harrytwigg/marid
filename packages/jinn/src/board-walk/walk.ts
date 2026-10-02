@@ -1,11 +1,7 @@
-import type { CronJob, Employee, EngineLimitEngineSnapshot, JinnConfig, Session } from "../shared/types.js";
+import type { CronJob, EngineLimitEngineSnapshot, JinnConfig, Session } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { collectClaudeLimits } from "../shared/engine-limits-claude.js";
-import { isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
-import { engineAvailable } from "../shared/models.js";
-import { listSessions, getMessages, getSession } from "../sessions/registry.js";
-import { orgRegistry } from "../gateway/org-registry.js";
-import { CronConnector } from "../connectors/cron/index.js";
+import { listSessions, getSession } from "../sessions/registry.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { startTodoDispatcher, type StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { ApiContext } from "../gateway/api.js";
@@ -15,10 +11,13 @@ import { validateCronSchedule } from "../cron/validation.js";
 import { readRules, boardWalkPath, hostTimezone, missingDefaultSections, readTemplateRules, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
 import { findBoardWalkJob } from "./job.js";
 import { buildCapacitySnapshot, claudeFiveHour, type SnapshotDeps } from "./snapshot.js";
-import { buildBoardDigest, type BoardDigest } from "./board.js";
+import { listOpenTodos } from "./board.js";
 import { buildPrompt } from "./prompt.js";
-import { parseDecisions, type StartDecision } from "./decisions.js";
-import { applyDecisions, stuckEpisode } from "./apply.js";
+import type { StartDecision } from "./decisions.js";
+import { stuckEpisode } from "./apply.js";
+import { walkCallBudget, WalkTools, type WalkToolResult } from "./turn.js";
+import { routeTurn } from "./route-turn.js";
+import { listWorkItems } from "../work-items/store.js";
 import { cachedResolver, ghResolver, type LinkResolver } from "./pr-state.js";
 import { BOARD_WALK_SESSION_KEY_PREFIX, BOARD_WALK_STARTED_BY } from "./started-sessions.js";
 import { appendTick, readState, readTicks, writeState, type BoardWalkState, type TickEntry, type TickRecord } from "./store.js";
@@ -30,11 +29,12 @@ import { appendTick, readState, readTicks, writeState, type BoardWalkState, type
  * cron job (job.ts) fires it, and the cron controls run it now, reschedule it
  * and switch it off.
  *
- * Each tick: read board-walk.md; stop if it is broken; build the
- * capacity snapshot and the board digest; ask the configured employee's engine
- * for one structured answer (one turn, no tool calls); carry the answer out
- * through apply.ts; log the tick, every decision in it, and the reason when
- * there was nothing to do.
+ * Each tick: read board-walk.md; stop if it is broken; build the capacity
+ * snapshot; run one turn as the configured employee, whose only tools are the
+ * walk's own (turn.ts): it reads the board through them one Todo at a time
+ * and hands over a decision on each, which the gateway checks and carries out
+ * as it comes (apply.ts); then log the tick, every decision in it, and the
+ * reason when there was nothing to do.
  *
  * Why a model turn and not code, when docs/idle-capacity.md once argued the
  * opposite: the decision is no longer a handful of numeric comparisons. Gates
@@ -48,6 +48,8 @@ export interface WalkTurn {
   settings: BoardWalkSettings;
   sessionKey: string;
   title: string;
+  /** The turn's tools, as the gateway serves them to its session. */
+  tools: WalkTools;
 }
 
 export interface WalkTurnResult {
@@ -79,7 +81,8 @@ export interface BoardWalkDeps {
   /** The walk's job when none is armed (switched off, or not valid), so the
    *  status can still name it. Defaults to the one in cron/jobs.json. */
   scheduleJob?: () => CronJob | undefined;
-  /** How long the model turn may take before the tick gives up on it. */
+  /** How long the model turn may take before the tick gives up on it.
+   *  Defaults to walkTimeoutMs for the board's size. */
   turnTimeoutMs?: number;
   /** The board's change signal for a Todo the walk started (the dispatch
    *  route's own `dispatched` event). Passed in by the server. */
@@ -90,9 +93,13 @@ export interface BoardWalkDeps {
   templateRules?: () => string;
 }
 
-/** Long enough for a slow turn on a big board; short enough that a turn stuck
- *  behind a rate-limit wait does not hold the walk until the window resets. */
-export const DEFAULT_TURN_TIMEOUT_MS = 10 * 60_000;
+/** How long a tick waits for its turn: long enough to go through a big board
+ *  one Todo at a time, never so long that a turn stuck behind a rate-limit
+ *  wait holds the walk until the window resets. Ten minutes, plus fifteen
+ *  seconds a Todo past the twentieth, up to thirty. */
+export function walkTimeoutMs(openTodos: number): number {
+  return Math.min(30, 10 + Math.max(0, openTodos - 20) / 4) * 60_000;
+}
 
 /** The cron job that schedules the walk, as the status reports it. */
 export interface BoardWalkJobStatus {
@@ -123,6 +130,9 @@ export interface BoardWalkStatus {
 export interface BoardWalk {
   tick: (trigger?: TickRecord["trigger"]) => Promise<TickRecord>;
   status: () => BoardWalkStatus;
+  /** One call from a walk tool (gateway/board-walk-api.ts). Answered only for
+   *  the running tick's own session. */
+  turnTool: (callerSessionId: string, name: string, args: Record<string, unknown>) => Promise<{ status: number; body: WalkToolResult | { error: string } }>;
 }
 
 function errorText(error: unknown): string {
@@ -134,94 +144,6 @@ function dispatcherSuffix(decision: StartDecision): string {
     ? ` It prefers engine ${decision.engine}${decision.model ? ` (model ${decision.model})` : ""}: route the Todo to an employee on that engine if one fits the work.`
     : "";
   return `The board walk started this Todo. Its reason: ${decision.reason}${prefer}`;
-}
-
-/**
- * The employee the walk's turn runs as: the configured one, on Claude, with
- * every tool taken away. The walk decides; the gateway acts. A tool call in
- * this turn would be an act nobody checked, so:
- *   - every MCP server, the Jinn toolset included, is detached;
- *   - Claude's built-in tools are switched off (`--tools ""`), no other MCP
- *     configuration is read (`--strict-mcp-config`), and the Chrome
- *     integration the engine always enables is switched off again
- *     (`--no-chrome`), which otherwise brings its browser tools back;
- *   - the turn always runs on Claude, on the gateway, whatever engine or host
- *     the employee normally uses. Claude is the one engine whose tools can be
- *     switched off from the command line; opencode in server mode ignores those
- *     flags, so a walk on it would keep its shell. The employee's own flags are
- *     dropped for the same reason: they were written for its own engine.
- * The rate-limit handler never hands a walk turn to a fallback engine either
- * (rate-limit-handler.ts); a limited walk waits, and the walk's timeout stops it.
- */
-export const WALK_ENGINE = "claude";
-
-/** `claudeModel` stands in for the employee's own model when that model
- *  belongs to another engine. */
-export function lockedDownEmployee(employee: Employee, claudeModel: string): Employee {
-  const { remoteHost: _host, remoteUser: _user, remoteCwd: _cwd, ...local } = employee;
-  return {
-    ...local,
-    engine: WALK_ENGINE,
-    model: employee.engine === WALK_ENGINE ? employee.model : claudeModel,
-    mcp: false,
-    jinnMcp: false,
-    // `--no-chrome` must come after the engine's own `--chrome` (it does:
-    // employee flags are appended), or the browser tools come back.
-    cliFlags: ["--no-chrome", "--tools", "", "--strict-mcp-config"],
-  };
-}
-
-/** The default turn: a session routed to the rules file's employee, read back
- *  from the registry once the turn settles. */
-function routeTurn(deps: BoardWalkDeps): (turn: WalkTurn) => Promise<WalkTurnResult> {
-  return async (turn) => {
-    const config = deps.getConfig();
-    const configured = orgRegistry(config).get(turn.settings.employee);
-    if (!configured) return { error: `employee ${turn.settings.employee} named in board-walk.md does not exist` };
-    const employee = lockedDownEmployee(configured, config.engines.claude?.model ?? "sonnet");
-    // The pinned engine and named model skip the session layer's healthy-engine
-    // choice, so check here rather than walk into a spent window and wait.
-    if (!engineAvailable(config, WALK_ENGINE)) return { error: "the board walk runs on Claude so that its turn has no tools, and Claude is not installed" };
-    if (isEngineExhausted(readEngineHealth(), WALK_ENGINE)) return { error: "Claude is recorded as exhausted; this tick is skipped" };
-    const connector = new CronConnector(new Map());
-    const routed = await deps.context.sessionManager.route(
-      {
-        connector: connector.name,
-        source: "cron",
-        sessionKey: turn.sessionKey,
-        replyContext: { channel: "board-walk", messageTs: null },
-        messageId: undefined,
-        channel: "board-walk",
-        thread: undefined,
-        user: "system",
-        userId: "system",
-        text: turn.prompt,
-        attachments: [],
-        raw: { trigger: "board-walk" },
-        transportMeta: { boardWalk: true },
-      },
-      connector,
-      { employee, engine: WALK_ENGINE, ...(turn.settings.model ? { model: turn.settings.model } : {}), title: turn.title },
-    );
-    return routed?.sessionId ? settledTurn(routed.sessionId) : { error: "the walk's session was not started" };
-  };
-}
-
-/** Why a settled walk session failed, or undefined when it did not. */
-function turnFailure(sessionId: string): string | undefined {
-  const settled = getSession(sessionId);
-  if (!settled) return undefined;
-  const outcome = settled.attemptOutcome === "failed" || settled.attemptOutcome === "interrupted" ? settled.attemptOutcome : undefined;
-  if (!outcome && settled.status !== "error") return undefined;
-  return settled.lastError ?? `the walk's turn ${outcome ?? settled.status}`;
-}
-
-/** What a settled walk session came to: its reply, or why there is none. */
-function settledTurn(sessionId: string): WalkTurnResult {
-  const failure = turnFailure(sessionId);
-  if (failure) return { sessionId, error: failure };
-  const reply = [...getMessages(sessionId)].reverse().find((message) => message.role === "assistant" && !message.partial)?.content;
-  return reply ? { sessionId, reply } : { sessionId, error: "the walk's turn produced no reply" };
 }
 
 function flaggedSet(state: ReturnType<typeof readState>): Set<string> {
@@ -237,9 +159,10 @@ function flaggedSet(state: ReturnType<typeof readState>): Set<string> {
  *  verdict left alone, or a release of a Todo already queued, is not an act. */
 function summarise(entries: TickEntry[]): string {
   const did = (kind: TickEntry["kind"], outcome: string) => entries.filter((entry) => entry.kind === kind && entry.outcome?.startsWith(outcome)).length;
+  const count = (kind: TickEntry["kind"]) => entries.filter((entry) => entry.kind === kind).length;
   const parts: Array<[number, string]> = [
     [did("release", "moved"), "released"], [did("park", "parked"), "parked"], [did("stuck", "flagged"), "flagged stuck"],
-    [did("dispatch", "started"), "started"], [entries.filter((entry) => entry.kind === "refused").length, "refused"],
+    [did("dispatch", "started"), "started"], [count("refused"), "refused"], [count("undecided"), "not decided"],
   ];
   const text = parts.filter(([n]) => n > 0).map(([n, label]) => `${n} ${label}`);
   return text.length > 0 ? text.join(", ") : "nothing to do";
@@ -257,11 +180,14 @@ interface Walker {
   collectClaude: (config: JinnConfig) => Promise<EngineLimitEngineSnapshot>;
   dispatch: (item: WorkItem, decision: StartDecision) => StartTodoDispatcherResult;
   snapshot: BoardWalkDeps["snapshot"];
-  turnTimeoutMs: number;
+  /** Undefined: walkTimeoutMs for the board's size. */
+  turnTimeoutMs?: number;
   stopTurn: (sessionKey: string) => void;
   templateRules: () => string;
   armedJob: () => CronJob | undefined;
   scheduleJob: () => CronJob | undefined;
+  /** The tick's turn while it runs: its session key, and the tools it may call. */
+  active: { sessionKey: string; tools: WalkTools } | null;
 }
 
 function defaultDispatch(deps: BoardWalkDeps): Walker["dispatch"] {
@@ -290,11 +216,12 @@ function walker(deps: BoardWalkDeps): Walker {
     holding: deps.holdingCapacity,
     dispatch: deps.dispatch ?? defaultDispatch(deps),
     snapshot: deps.snapshot,
-    turnTimeoutMs: deps.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
+    ...(deps.turnTimeoutMs ? { turnTimeoutMs: deps.turnTimeoutMs } : {}),
     stopTurn: deps.stopTurn ?? (() => {}),
     templateRules: deps.templateRules ?? (() => readTemplateRules()),
     armedJob: deps.armedJob ?? (() => armedActionJob("board-walk")),
     scheduleJob: deps.scheduleJob ?? (() => findBoardWalkJob(loadJobs())),
+    active: null,
   };
 }
 
@@ -350,8 +277,38 @@ async function recordClaudeReading(w: Walker, config: JinnConfig, state: BoardWa
   }
 }
 
-/** Ask the model and carry out its answer. */
-async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWalkState, board: BoardDigest): Promise<TickRecord> {
+/** How a tick that ran its turn came out: the turn's failure, if any, beside
+ *  every decision the gateway carried out before it. */
+function turnRecord(turn: WalkTurnResult, tools: WalkTools): Omit<TickRecord, "at" | "trigger"> {
+  const entries = tools.entries();
+  const session = turn.sessionId ? { sessionId: turn.sessionId } : {};
+  const modelSummary = tools.modelSummary ? { modelSummary: tools.modelSummary } : {};
+  if (turn.error) {
+    return {
+      outcome: "failed",
+      summary: `the model turn failed: ${turn.error}${tools.carriedOut > 0 ? ` (before it stopped: ${summarise(entries)})` : ""}`,
+      ...modelSummary, ...session,
+      entries: [...entries, { kind: "error", reason: turn.error }],
+    };
+  }
+  // A turn that decided nothing and never finished did not walk the board: the
+  // likeliest cause is that its tools never reached it. That must not read as
+  // a quiet, successful tick.
+  if (tools.carriedOut === 0 && !tools.finished) {
+    const reason = "the walk's turn decided nothing and did not finish the tick; its tools may not have reached it";
+    return { outcome: "failed", summary: reason, ...modelSummary, ...session, entries: [...entries, { kind: "error", reason }] };
+  }
+  return {
+    outcome: "ok",
+    summary: `${summarise(entries)}. Dispatch: ${tools.dispatchReason ?? "the walk did not finish the tick, so gave no reason"}`,
+    ...modelSummary, ...session,
+    entries,
+  };
+}
+
+/** Run the walk's turn: the model goes through the board with its tools, and
+ *  the gateway carries out each decision as it is made. */
+async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWalkState, openIds: string[]): Promise<TickRecord> {
   const { w, at, startedAt } = frame;
   const { settings } = rules;
   const config = w.getConfig();
@@ -360,35 +317,34 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
     ...(state.priorFiveHour ? { prior: state.priorFiveHour } : {}),
     ...w.snapshot,
   });
-  const prompt = buildPrompt({ settings, rules: rules.body, defaults: missingDefaultSections(rules.body, w.templateRules()), snapshot, board });
-  const sessionKey = `${BOARD_WALK_SESSION_KEY_PREFIX}${at}`;
-  const turn = await withTimeout(
-    w.runTurn({ prompt, settings, sessionKey, title: `Board walk ${at.slice(0, 16).replace("T", " ")}` }),
-    w.turnTimeoutMs,
-    () => w.stopTurn(sessionKey),
-  );
-  await recordClaudeReading(w, config, state);
-
-  const session = turn.sessionId ? { sessionId: turn.sessionId } : {};
-  if (turn.error || !turn.reply) {
-    const reason = turn.error ?? "no reply";
-    return finish(frame, { outcome: "failed", summary: `the model turn failed: ${reason}`, ...session, entries: [{ kind: "error", reason }] });
-  }
-  const parsed = parseDecisions(turn.reply);
-  if (!parsed.ok) {
-    return finish(frame, { outcome: "failed", summary: `the answer could not be used: ${parsed.error}`, ...session, entries: [{ kind: "error", reason: parsed.error }] });
-  }
-  const entries = [
-    ...parsed.problems.map((problem): TickEntry => ({ kind: "refused", reason: problem, outcome: "unreadable decision, ignored" })),
-    ...await applyDecisions({ settings, state, dispatch: w.dispatch, now: w.now, resolveLink: w.resolveLink }, parsed.decisions),
-  ];
-  return finish(frame, {
-    outcome: "ok",
-    summary: `${summarise(entries)}. Dispatch: ${parsed.decisions.dispatch.reason}`,
-    modelSummary: parsed.decisions.summary,
-    ...session,
-    entries,
+  const maxCalls = walkCallBudget(openIds.length);
+  const tools = new WalkTools({
+    apply: { settings, state, dispatch: w.dispatch, now: w.now, resolveLink: w.resolveLink },
+    flagged: flaggedSet(state),
+    openIds,
+    maxCalls,
+    persist: () => writeState(state),
   });
+  const prompt = buildPrompt({
+    settings, rules: rules.body, defaults: missingDefaultSections(rules.body, w.templateRules()), snapshot,
+    board: { open: openIds.length, inReview: listWorkItems({ status: "in_review" }).length }, maxCalls,
+  });
+  const sessionKey = `${BOARD_WALK_SESSION_KEY_PREFIX}${at}`;
+  w.active = { sessionKey, tools };
+  let turn: WalkTurnResult;
+  try {
+    turn = await withTimeout(
+      w.runTurn({ prompt, settings, sessionKey, title: `Board walk ${at.slice(0, 16).replace("T", " ")}`, tools }),
+      w.turnTimeoutMs ?? walkTimeoutMs(openIds.length),
+      () => w.stopTurn(sessionKey),
+    );
+  } finally {
+    // Nothing a stopped or late turn calls is carried out after this.
+    tools.close();
+    w.active = null;
+  }
+  await recordClaudeReading(w, config, state);
+  return finish(frame, turnRecord(turn, tools));
 }
 
 async function evaluate(w: Walker, trigger: TickRecord["trigger"]): Promise<TickRecord> {
@@ -400,12 +356,12 @@ async function evaluate(w: Walker, trigger: TickRecord["trigger"]): Promise<Tick
     return finish(frame, { outcome: "invalid-rules", summary: reason, entries: [{ kind: "error", reason }] });
   }
   const state = readState();
-  const board = await buildBoardDigest({ resolveLink: w.resolveLink, flagged: flaggedSet(state) });
-  if (board.todos.length === 0) {
+  const openIds = listOpenTodos().map((item) => item.id);
+  if (openIds.length === 0) {
     return finish(frame, { outcome: "ok", summary: "nothing to do: the board has no open Todos", entries: [{ kind: "nothing", reason: "the board has no open Todos; no model turn was spent" }] });
   }
   try {
-    return await walkBoard(frame, rules, state, board);
+    return await walkBoard(frame, rules, state, openIds);
   } finally {
     writeState(state);
   }
@@ -441,8 +397,20 @@ export function startBoardWalk(deps: BoardWalkDeps): BoardWalk {
     return inFlight;
   };
 
+  const turnTool: BoardWalk["turnTool"] = async (callerSessionId, name, args) => {
+    const active = w.active;
+    if (!active) return { status: 409, body: { error: "no board walk turn is running" } };
+    // The session key is minted per tick and only the walk's own turn runs
+    // under it: no other session, however it is bound, reaches these tools.
+    if (getSession(callerSessionId)?.sessionKey !== active.sessionKey) {
+      return { status: 403, body: { error: "only the running board walk's own turn may use the walk's tools" } };
+    }
+    return { status: 200, body: await active.tools.call(name, args) };
+  };
+
   return {
     tick,
+    turnTool,
     status: () => {
       const rules = readRules(w.rulesFile);
       const last = readTicks(1)[0];

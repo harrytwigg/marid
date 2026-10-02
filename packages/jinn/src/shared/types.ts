@@ -536,6 +536,11 @@ export interface Employee extends RemoteTarget {
    *  general `mcp` field (specific-over-general); the global `enabled: false` kill
    *  switch and a per-engine opt-out beat it. */
   jinnMcp?: boolean;
+  /** Set in code, never read from an employee's YAML (gateway/org.ts lists the
+   *  fields it reads): the turn's whole MCP surface is this one purpose-built
+   *  toolset of the jinn server, in place of everything `mcp` and `jinnMcp`
+   *  would attach. The board walk's turn is the one user (board-walk/walk.ts). */
+  toolset?: JinnToolset;
   /** Default effort level for sessions assigned to this employee */
   effortLevel?: string;
   /** Whether to notify the parent session when this employee's child session completes. Default: true */
@@ -859,3 +864,7 @@ export interface EngineModelsConfig {
 export type ModelsConfig = Record<string, EngineModelsConfig>;
 
 export type { JinnConfig, PortalConfig, RemoteExecutionConfig, OpencodeMode, OpencodeServerConfig } from "./config-types.js";
+
+/** A purpose-built jinn MCP toolset served instead of the company belt
+ *  (mcp/server.ts). */
+export type JinnToolset = "board-walk";
