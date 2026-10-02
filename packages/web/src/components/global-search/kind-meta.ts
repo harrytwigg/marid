@@ -52,7 +52,7 @@ export const FIELD_ATTRIBUTION: Record<SearchMatchFieldWire, string> = {
  *  because that is the colour the Todos board already gives it. */
 export function statusTint(status: string): string {
   const state = status.toLowerCase()
-  if (state === "blocked" || state === "escalated") return "var(--system-orange)"
+  if (state === "blocked") return "var(--system-orange)"
   if (state === "crashed" || state === "failed" || state === "disabled") return "var(--system-red)"
   if (state === "done" || state === "completed" || state === "enabled") return "var(--system-green)"
   return "var(--text-quaternary)"

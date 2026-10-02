@@ -17,6 +17,7 @@ export function useSplitGridWorkspace(
     sessions,
     pickerOpen: Boolean(gridPicker.paneKey),
     systemPrimedId,
+    layout: workingSet.split.layout,
   })
   // As upstream: on a phone the picker is the whole grid and nothing inside it can close it,
   // so every navigation away has to release it (use-chat-grid-workspace.ts).

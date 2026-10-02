@@ -114,53 +114,57 @@ describe("the restart record on shutdown", () => {
   });
 });
 
-describe("the restart record for workflow attempts", () => {
+describe("the restart record for legacy workflow phase rows", () => {
+  // A phase row a removed Workflow runtime left behind: nothing resumes it, so it
+  // is never recorded, and the boot sweep settles it.
   function runningAttempt() {
     const attempt = running();
     db.prepare("UPDATE sessions SET workflow_kind = 'phase', workflow_id = 'release', workflow_name = 'Release', workflow_run_id = 'run-1', workflow_trigger_source = 'manual', workflow_phase_node_id = 'build', workflow_phase_name = 'Build', workflow_phase_index = 1, workflow_phase_round = 1, workflow_phase_attempt = 1 WHERE id = ?").run(attempt.id);
     return registry.getSession(attempt.id)!;
   }
 
-  it("records a clean shutdown's workflow attempt under the old boot, and leaves it running for the workflow sweep", () => {
+  const recorded = () => (fs.existsSync(recordFile) ? lines() : []);
+
+  it("leaves a clean shutdown's phase row running and unrecorded, for the boot settle", () => {
     const attempt = runningAttempt();
 
     restartResume.interruptRunningSessionsForShutdown(OLD_GATEWAY);
 
-    expect(lines()).toEqual([expect.objectContaining({
-      event: "interrupted", cause: "shutdown", resume: "workflow-runtime", bootId: "old00001", sessionId: attempt.id, workflowKind: "phase",
-    })]);
+    expect(recorded()).toEqual([]);
     expect(registry.getSession(attempt.id)?.status).toBe("running");
-    expect(registry.recoverStaleWorkflowAttemptSessions()).toBe(1);
+    expect(registry.settleLegacyWorkflowPhaseSessions()).toBe(1);
+    expect(registry.getSession(attempt.id)?.status).toBe("interrupted");
   });
 
-  it("does not record the same attempt again as a crash when the next boot finds it still running", () => {
+  it("does not record the phase row at the next boot either", () => {
     const attempt = runningAttempt();
     restartResume.interruptRunningSessionsForShutdown(OLD_GATEWAY);
 
     const boot = restartResume.recordSessionsRunningAtBoot(NEW_GATEWAY);
 
     expect(boot).toEqual({ recorded: [], cleanShutdownBootId: "old00001" });
-    expect(lines().filter((entry) => entry.sessionId === attempt.id)).toHaveLength(1);
+    expect(recorded().filter((entry) => entry.sessionId === attempt.id)).toEqual([]);
   });
 
-  it("records everything still running as stale-on-boot under the new boot when no shutdown receipt exists", () => {
+  it("records only conversational rows as stale-on-boot when no shutdown receipt exists", () => {
     const attempt = runningAttempt();
     const chat = running();
 
     const boot = restartResume.recordSessionsRunningAtBoot(NEW_GATEWAY);
 
     expect(boot.cleanShutdownBootId).toBeNull();
-    expect(boot.recorded.map((session) => session.id).sort()).toEqual([attempt.id, chat.id].sort());
-    expect(lines()).toEqual(expect.arrayContaining([
-      expect.objectContaining({ cause: "stale-on-boot", resume: "workflow-runtime", bootId: "new00002", sessionId: attempt.id }),
+    expect(boot.recorded.map((session) => session.id)).toEqual([chat.id]);
+    expect(lines()).toEqual([
       expect.objectContaining({ cause: "stale-on-boot", resume: "restart-resume", bootId: "new00002", sessionId: chat.id }),
-    ]));
+    ]);
+    expect(recorded().filter((entry) => entry.sessionId === attempt.id)).toEqual([]);
   });
 
   it("consumes the shutdown receipt, so a crash of the new gateway is not mistaken for a clean shutdown", () => {
     runningAttempt();
     restartResume.interruptRunningSessionsForShutdown(OLD_GATEWAY);
     restartResume.recordSessionsRunningAtBoot(NEW_GATEWAY);
+    running();
 
     const crashed = restartResume.recordSessionsRunningAtBoot({ bootId: "new00003", gatewayVersion: "0.33.3" });
 
@@ -211,6 +215,23 @@ describe("the restart record on boot", () => {
 
     expect(registry.listPendingSessionDeliveries()).toEqual([]);
     expect(lines().at(-1)).toEqual(expect.objectContaining({ event: "resume", outcome: "queue-replay", sessionId: worker.id }));
+  });
+
+  it("never resumes a board walk turn: it records it, sends no nudge, and still nudges the rest", () => {
+    vi.useFakeTimers();
+    const walkTurn = registry.createSession({ engine: "claude", source: "cron", sourceRef: "board-walk:2026-10-02T09:00:00.000Z", sessionKey: "board-walk:2026-10-02T09:00:00.000Z", employee: "assistant" });
+    db.prepare("UPDATE sessions SET status = 'running' WHERE id = ?").run(walkTurn.id);
+    const worker = running();
+    restartResume.interruptRunningSessionsForShutdown(OLD_GATEWAY);
+
+    restartResume.resumeRestartInterruptedSessions(NEW_GATEWAY);
+    vi.advanceTimersByTime(10 * 60_000);
+
+    expect(registry.listPendingSessionDeliveries().map((delivery) => delivery.targetSessionId)).toEqual([worker.id]);
+    expect(lines()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ event: "resume", outcome: "board-walk-turn", sessionId: walkTurn.id }),
+      expect.objectContaining({ event: "resume", outcome: "nudged", sessionId: worker.id }),
+    ]));
   });
 
   it("records every session left for the operator when nudges are switched off", () => {

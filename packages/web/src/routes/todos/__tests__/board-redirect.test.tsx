@@ -4,7 +4,7 @@ import { MemoryRouter, Routes, Route, useParams } from "react-router-dom"
 import { TodosIndexRedirect, legacyTodosRedirectTarget } from "../board/todos-index-redirect"
 
 /* Slice 6 stage C — /todos IS the board surface (the index redirects into
- * Home) and /todos/:todoId is the task page. The legacy list route is
+ * Everything) and /todos/:todoId is the task page. The legacy list route is
  * gone; its lenses map onto the boards that superseded them. The route
  * arrangement mirrors main.tsx; the components are stand-ins. */
 
@@ -26,8 +26,8 @@ function Shell({ start }: { start: string }) {
 }
 
 describe("legacyTodosRedirectTarget", () => {
-  it("lands on Home by default", () => {
-    expect(legacyTodosRedirectTarget("")).toBe("/todos/b/home")
+  it("lands on Everything by default", () => {
+    expect(legacyTodosRedirectTarget("")).toBe("/todos/b/everything")
   })
   it("maps the needs lens to the Attention board", () => {
     expect(legacyTodosRedirectTarget("?view=needs")).toBe("/todos/b/attention")
@@ -37,14 +37,14 @@ describe("legacyTodosRedirectTarget", () => {
   })
   it("carries filter params through", () => {
     expect(legacyTodosRedirectTarget("?assignee=scout&view=needs")).toBe("/todos/b/attention?assignee=scout")
-    expect(legacyTodosRedirectTarget("?department=platform")).toBe("/todos/b/home?department=platform")
+    expect(legacyTodosRedirectTarget("?department=platform")).toBe("/todos/b/everything?department=platform")
   })
 })
 
 describe("/todos route arrangement", () => {
-  it("redirects /todos to the Home board", () => {
+  it("redirects /todos to the Everything board", () => {
     render(<Shell start="/todos" />)
-    expect(screen.getByTestId("board-page").textContent).toBe("home")
+    expect(screen.getByTestId("board-page").textContent).toBe("everything")
   })
 
   it("serves department boards at /todos/b/:board", () => {
@@ -72,7 +72,7 @@ describe("todosIndexLoader", () => {
     const res = todosIndexLoader({ request: new Request("http://x/todos"), params: {}, context: {} } as never) as Response
     expect(res instanceof Response).toBe(true)
     expect(res.status).toBe(302)
-    expect(res.headers.get("Location")).toBe("/todos/b/home")
+    expect(res.headers.get("Location")).toBe("/todos/b/everything")
   })
 
   it("carries legacy view params to their mapped boards, keeping other filters", async () => {

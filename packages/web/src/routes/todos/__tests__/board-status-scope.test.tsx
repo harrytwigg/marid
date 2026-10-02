@@ -9,7 +9,7 @@ import { clearBoardScrollCache } from "../board/board-route"
 
 /* A board URL that names one status is a board of that one column. This is the
  * done-when of the Talk orb's open_todos: "executing todos I started" resolves
- * to /todos/b/home?status=executing, and that link has to render what it says. */
+ * to /todos/b/everything?status=executing, and that link has to render what it says. */
 
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { employeeOverrides: {} } }) }))
@@ -39,8 +39,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       updateWorkItem: vi.fn(),
       createWorkItem: vi.fn(),
       assignWorkItem: vi.fn(),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -48,8 +46,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
 function compact(id: string, status: WorkItemStatusWire): WorkItemCompactWire {
   return {
     id, status, version: 3, title: `Item ${id}`, assignee: null, department: "platform",
-    source: "human", sourceRef: null, approvalState: null, approvalRequest: null,
-    approvalRef: null, approvalTarget: null, approvalEscalatedAt: null, createdBy: "operator",
+    source: "human", sourceRef: null,
+    createdBy: "operator",
     parentId: null, rootId: id, depth: 0, dueAt: null, labels: [], blocked: false,
     updatedAt: "2026-07-23T08:00:00.000Z", rank: null,
   }
@@ -59,10 +57,9 @@ function tree(id: string): WorkItemTreeWire {
   return {
     root: {
       id, version: 3, title: `Item ${id}`, body: null, status: "executing", department: "platform",
-      assignee: null, priority: 2, rank: null, source: "human", sourceRef: null, acceptance: null,
-      verifyPolicy: null, rounds: 0, budgetUsd: null, approvalState: null, approvalRequest: null,
-      approvalRef: null, approvalTarget: null, approvalEscalatedAt: null, approvalDecidedBy: null,
-      approvalDecidedAt: null, createdAt: "2026-07-23T08:00:00.000Z",
+      assignee: null, priority: 2, rank: null, source: "human", sourceRef: null,
+      rounds: 0, budgetUsd: null,
+      createdAt: "2026-07-23T08:00:00.000Z",
       updatedAt: "2026-07-23T08:00:00.000Z", closedAt: null, children: [],
     },
     totals: { executing: 1 },
@@ -135,15 +132,15 @@ describe("isColumnInStatusFilter", () => {
 
   it("keeps only the named column when the URL names one status", () => {
     expect(isColumnInStatusFilter("executing", "executing")).toBe(true)
-    for (const status of ["backlog", "assigned", "in_review", "blocked", "escalated", "done", "cancelled"] as const) {
+    for (const status of ["backlog", "in_review", "blocked", "done", "cancelled"] as const) {
       expect(isColumnInStatusFilter("executing", status)).toBe(false)
     }
   })
 })
 
-describe("/todos/b/home?status=executing", () => {
+describe("/todos/b/everything?status=executing", () => {
   it("renders only the executing column, and only asks the gateway for it", async () => {
-    renderBoard("/todos/b/home?status=executing")
+    renderBoard("/todos/b/everything?status=executing")
 
     await waitFor(() => expect(screen.getByTestId("board-column-executing")).toBeTruthy())
     expect(screen.getAllByText("Item PLA-2").length).toBeGreaterThan(0)
@@ -154,12 +151,13 @@ describe("/todos/b/home?status=executing", () => {
 
     const asked = listWorkItems.mock.calls.map(([params]) => params).filter((params) => params?.status)
     expect(asked.map((params) => params.status)).toEqual(["executing"])
-    // Board `home` is home: true — the other half of the done-when.
-    expect(asked[0]).toMatchObject({ status: "executing", home: true, rootsOnly: true })
+    // Everything is roots only with no board-scope filter.
+    expect(asked[0]).toMatchObject({ status: "executing", rootsOnly: true })
+    expect(asked[0].home).toBeUndefined()
   })
 
   it("still draws the whole pipeline with no status in the URL", async () => {
-    renderBoard("/todos/b/home")
+    renderBoard("/todos/b/everything")
 
     await waitFor(() => expect(screen.getByTestId("board-column-backlog")).toBeTruthy())
     expect(screen.getByTestId("board-column-executing")).toBeTruthy()
@@ -171,9 +169,9 @@ describe("/todos/b/home?status=executing", () => {
 /* A closed status is a scope like any other. The board loaded the row all
  * along; it was the empty-state gate, counting only open columns, that told the
  * operator "No todos match." about a Todo sitting one element further down. */
-describe("/todos/b/home?status=done", () => {
+describe("/todos/b/everything?status=done", () => {
   it("shows the done Todo in the list instead of the filtered-empty card", async () => {
-    renderBoard("/todos/b/home?status=done")
+    renderBoard("/todos/b/everything?status=done")
 
     const list = screen.getByTestId("todo-list-scroll")
     await waitFor(() => expect(within(list).getByTestId("todo-list-group-closed")).toBeTruthy())
@@ -183,7 +181,7 @@ describe("/todos/b/home?status=done", () => {
   })
 
   it("arrives on the desktop board with the closed column already expanded", async () => {
-    renderBoard("/todos/b/home?status=done")
+    renderBoard("/todos/b/everything?status=done")
 
     const board = screen.getByTestId("todo-board-scroll")
     await waitFor(() => expect(within(board).getByTestId("board-closed-column")).toBeTruthy())
@@ -197,14 +195,14 @@ describe("/todos/b/home?status=done", () => {
   })
 
   it("arrives on the mobile Closed segment with the Todo visible, untapped", async () => {
-    renderMobileBoard("/todos/b/home?status=done")
+    renderMobileBoard("/todos/b/everything?status=done")
 
     const board = screen.getByTestId("todo-board-scroll")
     await waitFor(() => expect(within(board).getAllByText("Item PLA-3").length).toBeGreaterThan(0))
   })
 
   it("shows the cancelled Todo the same way", async () => {
-    renderBoard("/todos/b/home?status=cancelled")
+    renderBoard("/todos/b/everything?status=cancelled")
 
     const board = screen.getByTestId("todo-board-scroll")
     await waitFor(() => expect(within(board).getByTestId("board-closed-group-cancelled")).toBeTruthy())
@@ -216,7 +214,7 @@ describe("/todos/b/home?status=done", () => {
     listWorkItems.mockImplementation(() =>
       Promise.resolve({ workItems: [], total: 0, totals: {}, nextOffset: null }),
     )
-    renderBoard("/todos/b/home?status=done&q=zzzz")
+    renderBoard("/todos/b/everything?status=done&q=zzzz")
 
     await waitFor(() => expect(screen.getByTestId("todo-list-filtered-empty")).toBeTruthy())
   })
@@ -228,7 +226,7 @@ describe("/todos/b/home?status=done", () => {
     listWorkItems.mockImplementation(() =>
       Promise.resolve({ workItems: [], total: 0, totals: {}, nextOffset: null }),
     )
-    renderMobileBoard("/todos/b/home?status=done&q=zzzz")
+    renderMobileBoard("/todos/b/everything?status=done&q=zzzz")
 
     const board = screen.getByTestId("todo-board-scroll")
     await waitFor(() => expect(within(board).getByTestId("board-filtered-empty")).toBeTruthy())
@@ -236,21 +234,21 @@ describe("/todos/b/home?status=done", () => {
   })
 })
 
-/* ICI-1357 criterion 11. A fresh instance keeps nothing, so Home's FIRST render
- * is the empty one. It has to be the board's own quiet empty state — the columns
- * and their quick-adds — not a crash, and not a blank region where cards go. */
-/* PLA-230, criterion 6: an empty Home names both gestures that fill it. */
-describe("/todos/b/home with nothing on it", () => {
+/* A fresh instance has nothing on it. The unfiltered empty board is its own
+ * quiet empty state — the columns and their quick-adds — not a crash, not a
+ * "No todos match." card, and not a blank region where cards go. */
+describe("/todos/b/everything with nothing on it", () => {
   beforeEach(() => listWorkItems.mockImplementation(() => Promise.resolve({ workItems: [], total: 0, totals: {}, nextOffset: null })))
-  it("renders the create-or-pin empty state, not the filtered-empty card", async () => {
-    renderBoard("/todos/b/home")
-    expect((await screen.findByTestId("board-home-empty")).textContent).toMatch(/Create a Todo.*pin one/)
+  it("renders the empty board, not the filtered-empty card", async () => {
+    renderBoard("/todos/b/everything")
+    await waitFor(() => expect(screen.getByTestId("board-column-backlog")).toBeTruthy())
     expect(screen.queryByTestId("board-filtered-empty")).toBeNull()
     expect(document.querySelectorAll("[data-testid^=board-card-]").length).toBe(0)
   })
   it("reaches the phone", async () => {
-    renderMobileBoard("/todos/b/home")
-    expect((await screen.findByTestId("todo-list-home-empty")).textContent).toMatch(/Create a Todo.*pin one/)
+    renderMobileBoard("/todos/b/everything")
+    await waitFor(() => expect(screen.getByTestId("todo-board-scroll")).toBeTruthy())
+    expect(screen.queryByTestId("todo-list-filtered-empty")).toBeNull()
   })
 })
 
@@ -265,7 +263,7 @@ describe("the phone board's keep control", () => {
   }
 
   it("gives every row a labelled keep button that survives without a pointer", async () => {
-    renderMobileBoard("/todos/b/home")
+    renderMobileBoard("/todos/b/everything")
     await screen.findByTestId("todo-list-row-PLA-1")
 
     const button = await phoneRow("PLA-1")
@@ -280,7 +278,7 @@ describe("the phone board's keep control", () => {
   })
 
   it("keeps the Todo the row names", async () => {
-    renderMobileBoard("/todos/b/home")
+    renderMobileBoard("/todos/b/everything")
     await screen.findByTestId("todo-list-row-PLA-1")
 
     fireEvent.click(await phoneRow("PLA-1"))
@@ -290,7 +288,7 @@ describe("the phone board's keep control", () => {
   /* Round-1 review: no onError anywhere, so a refused PUT said nothing. */
   it("says so when the gateway refuses, instead of looking like a dead click", async () => {
     setWorkItemKept.mockRejectedValue(new Error("boom"))
-    renderMobileBoard("/todos/b/home")
+    renderMobileBoard("/todos/b/everything")
     await screen.findByTestId("todo-list-row-PLA-1")
 
     fireEvent.click(await phoneRow("PLA-1"))

@@ -5,18 +5,23 @@ describe("PUT/POST /api/work-items/:id/status — the operator authority lane", 
   // Every declared edge the operator drives, with the audit event each one must
   // leave behind. The cancellation rows also cover the archive lane, which has
   // to carry the same human authority the PUT lane carries for every other
-  // sticky exit (Stage-A review F2) — escalated → cancelled included.
+  // sticky exit (Stage-A review F2).
   it.each([
     ["backlog", "executing", { fromStatus: "backlog", toStatus: "executing", actor: "operator" }],
-    ["assigned", "executing", { fromStatus: "assigned", toStatus: "executing", actor: "operator" }],
+    ["backlog+assignee", "executing", { fromStatus: "backlog", toStatus: "executing", actor: "operator" }],
     ["backlog", "cancelled", { kind: "status_change", fromStatus: "backlog", toStatus: "cancelled", actor: "operator" }],
-    ["assigned", "cancelled", { kind: "status_change", fromStatus: "assigned", toStatus: "cancelled", actor: "operator" }],
+    ["backlog+assignee", "cancelled", { kind: "status_change", fromStatus: "backlog", toStatus: "cancelled", actor: "operator" }],
     ["executing", "cancelled", { kind: "status_change", fromStatus: "executing", toStatus: "cancelled", actor: "operator" }],
     ["in_review", "cancelled", { kind: "status_change", fromStatus: "in_review", toStatus: "cancelled", actor: "operator" }],
     ["blocked", "cancelled", { kind: "status_change", fromStatus: "blocked", toStatus: "cancelled", actor: "operator" }],
-    ["escalated", "cancelled", { kind: "status_change", fromStatus: "escalated", toStatus: "cancelled", actor: "operator" }],
   ] as const)("round-trips an authenticated operator PUT from %s to %s", async (from, to, expectedEvent) => {
-    const item = store.createWorkItem({ title: `Operator ${from} to ${to}`, status: from });
+    // "backlog+assignee" is what `assigned` used to be: backlog, owned by someone.
+    const owned = from === "backlog+assignee";
+    const item = store.createWorkItem({
+      title: `Operator ${from} to ${to}`,
+      status: owned ? "backlog" : from,
+      ...(owned ? { assignee: "platform-worker" } : {}),
+    });
     const cap = makeRes();
 
     await api.handleApiRequest(
@@ -34,7 +39,7 @@ describe("PUT/POST /api/work-items/:id/status — the operator authority lane", 
   // boundary if the operator string is exclusive to the operator surface. An
   // employee session moving the SAME Todo the SAME way must never record it.
   it("stamps an employee session's identical transition as session:<id>, never as the operator", async () => {
-    const item = store.createWorkItem({ title: "Employee start", status: "assigned", assignee: "platform-worker" });
+    const item = store.createWorkItem({ title: "Employee start", status: "backlog", assignee: "platform-worker" });
     const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "web:employee-actor", employee: "platform-worker" });
     store.linkSession(item.id, caller.id);
     const cap = makeRes();
@@ -52,31 +57,6 @@ describe("PUT/POST /api/work-items/:id/status — the operator authority lane", 
     });
   });
 
-  it("keeps capability-scoped POST cancellation forbidden", async () => {
-    const caller = reg.createSession({
-      engine: "codex",
-      source: "web",
-      sourceRef: "cancel-caller",
-      employee: "platform-worker",
-    });
-    const item = store.createWorkItem({
-      title: "Agent cancellation forbidden",
-      status: "assigned",
-      assignee: "platform-worker",
-    });
-    const cap = makeRes();
-
-    await api.handleApiRequest(
-      makeReq("POST", `/api/work-items/${item.id}/status`, { status: "cancelled" }, toolHeaders(caller.id)),
-      cap.res,
-      ctx,
-    );
-
-    expect(cap.status).toBe(403);
-    expect(cap.body.error).toMatch(/cancelling.*human surface/i);
-    expect(store.getWorkItem(item.id)?.status).toBe("assigned");
-  });
-
   it("keeps done → cancelled rejected (no declared edge, even for the operator)", async () => {
     const item = store.createWorkItem({ title: "Already done", status: "done" });
     const cap = makeRes();
@@ -92,10 +72,10 @@ describe("PUT/POST /api/work-items/:id/status — the operator authority lane", 
     expect(store.getWorkItem(item.id)?.status).toBe("done");
   });
 
-  it.each(["blocked", "escalated"] as const)(
+  it.each(["blocked"] as const)(
     "records a same-status %s note through the operator PUT lane (the banner's asked-for-after reason)",
     async (status) => {
-      // Design-doc §5: a drop into Blocked/Escalated commits immediately and the
+      // Design-doc §5: a drop into Blocked commits immediately and the
       // reason is asked for AFTER, in the opened task page's banner. That write
       // is a same-status PUT with a note — it must land as a reason-carrying
       // event (toStatus = the current status so the reason line reads it), not

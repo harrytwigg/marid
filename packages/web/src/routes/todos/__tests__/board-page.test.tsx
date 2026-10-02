@@ -60,8 +60,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       updateWorkItem: (...args: unknown[]) => updateWorkItem(...args),
       createWorkItem: (...args: unknown[]) => createWorkItem(...args),
       assignWorkItem: (...args: unknown[]) => assignWorkItem(...args),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -74,11 +72,6 @@ function compact(partial: Partial<WorkItemCompactWire> & { id: string; status: W
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: partial.id,
@@ -121,17 +114,9 @@ function emptyTree(id: string, status: WorkItemStatusWire = "backlog", priority 
       rank: null,
       source: "human",
       sourceRef: null,
-      acceptance: null,
-      verifyPolicy: null,
+
       rounds: 0,
       budgetUsd: null,
-      approvalState: null,
-      approvalRequest: null,
-      approvalRef: null,
-      approvalTarget: null,
-      approvalEscalatedAt: null,
-      approvalDecidedBy: null,
-      approvalDecidedAt: null,
       createdAt: "2026-07-23T08:00:00.000Z",
       updatedAt: "2026-07-23T08:00:00.000Z",
       closedAt: null,
@@ -178,7 +163,7 @@ function DetailNavigationProbe() {
         Change status
       </button>
       <button type="button" data-testid="detail-browser-back" onClick={() => navigate(-1)}>Back</button>
-      <button type="button" data-testid="detail-home" onClick={() => navigate("/todos/b/my")}>Home</button>{/* the pre-rename alias still lands on Home */}
+      <button type="button" data-testid="detail-retired-home-link" onClick={() => navigate("/todos/b/my")}>Retired home link</button>{/* the retired alias still lands on Everything */}
     </>
   )
 }
@@ -286,9 +271,6 @@ beforeEach(() => {
 })
 
 describe("boardScopeParams — the board data wiring", () => {
-  it("Home = the union scope + roots only", () => {
-    expect(boardScopeParams({ kind: "home" })).toEqual({ home: true, rootsOnly: true })
-  })
   it("a department board = department scope + roots only", () => {
     expect(boardScopeParams({ kind: "department", slug: "platform" })).toEqual({ department: "platform", rootsOnly: true })
   })
@@ -300,7 +282,7 @@ describe("boardScopeParams — the board data wiring", () => {
 describe("the board surface", () => {
   it.each([
     ["browser Back", "detail-browser-back"],
-    ["Home link", "detail-home"],
+    ["retired Home link", "detail-retired-home-link"],
   ])("resyncs invalidated columns after a detail status write via %s, but skips a fresh no-write return", async (_label, returnControl) => {
     const todo = compact({ id: "PLA-1", status: "backlog", version: 4 })
     rows.backlog = [todo]
@@ -318,14 +300,14 @@ describe("the board surface", () => {
     await screen.findByTestId("detail-change-status")
     fireEvent.click(screen.getByTestId("detail-change-status"))
     await waitFor(() => {
-      const key = boardColumnQueryKey({ kind: "home" }, "backlog", { status: "open" })
+      const key = boardColumnQueryKey({ kind: "everything" }, "backlog", { status: "open" })
       expect(client.getQueryState(key)?.isInvalidated).toBe(true)
     })
-    expect(boardStatusRequestCount()).toBe(8)
+    expect(boardStatusRequestCount()).toBe(6)
 
     fireEvent.click(screen.getByTestId(returnControl))
     expect(screen.queryByTestId("board-skeleton")).toBeNull()
-    await waitFor(() => expect(boardStatusRequestCount()).toBe(16))
+    await waitFor(() => expect(boardStatusRequestCount()).toBe(12))
     const moved = screen.getByTestId("board-card-PLA-1")
     expect(screen.getByTestId("board-column-backlog").contains(moved)).toBe(false)
     expect(screen.getByTestId("board-column-in_review").contains(moved)).toBe(true)
@@ -357,7 +339,7 @@ describe("the board surface", () => {
     fireEvent.click(screen.getByTestId("open-unloaded-todo"))
     fireEvent.click(await screen.findByTestId("detail-change-status"))
     await waitFor(() => {
-      const key = boardColumnQueryKey({ kind: "home" }, "backlog", { status: "open" })
+      const key = boardColumnQueryKey({ kind: "everything" }, "backlog", { status: "open" })
       expect(client.getQueryState(key)?.isInvalidated).toBe(true)
     })
 
@@ -371,7 +353,7 @@ describe("the board surface", () => {
     expect(screen.queryByTestId("board-card-PLA-99")).toBeNull()
     expect(screen.queryByTestId("board-skeleton")).toBeNull()
     expect(screen.queryByTestId("board-filtered-empty")).toBeNull()
-    await waitFor(() => expect(pending.filter(({ status }) => status)).toHaveLength(8))
+    await waitFor(() => expect(pending.filter(({ status }) => status)).toHaveLength(6))
     await act(async () => pending.splice(0).forEach(({ release }) => release()))
 
     const moved = await screen.findByTestId("board-card-PLA-99")
@@ -388,8 +370,8 @@ describe("the board surface", () => {
     rows.blocked = Array.from({ length: 20 }, (_, index) =>
       compact({ id: `PLA-${index + 21}`, status: "blocked" }),
     )
-    rows.escalated = Array.from({ length: 20 }, (_, index) =>
-      compact({ id: `PLA-${index + 41}`, status: "escalated" }),
+    rows.backlog = Array.from({ length: 20 }, (_, index) =>
+      compact({ id: `PLA-${index + 41}`, status: "backlog" }),
     )
 
     renderBoard("/todos/b/platform")
@@ -409,15 +391,14 @@ describe("the board surface", () => {
     expect(getWorkItem).not.toHaveBeenCalled()
   })
 
-  it("renders the four pipeline columns always, exception columns only when non-empty", async () => {
+  it("renders the three pipeline columns always, exception columns only when non-empty", async () => {
     rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
     renderBoard("/todos/b/platform")
     await waitFor(() => expect(screen.getByTestId("board-card-PLA-1")).toBeTruthy())
-    for (const status of ["backlog", "assigned", "executing", "in_review"]) {
+    for (const status of ["backlog", "executing", "in_review"]) {
       expect(screen.getByTestId(`board-column-${status}`)).toBeTruthy()
     }
     expect(screen.queryByTestId("board-column-blocked")).toBeNull()
-    expect(screen.queryByTestId("board-column-escalated")).toBeNull()
   })
 
   it("materializes the Blocked column when non-empty and shows the true count", async () => {
@@ -455,16 +436,6 @@ describe("the board surface", () => {
     // follows what's visible, not the server total.
     expect(screen.queryByTestId("board-card-PLA-2")).toBeNull()
     expect(screen.getByTestId("board-column-backlog").textContent).toContain("1")
-  })
-
-  // PLA-230: Home asks for the union scope. `kept` alone would drop the Todos
-  // the operator created, and sending both would be the intersection.
-  it("queries with home=true, not kept=true, on Home", async () => {
-    renderBoard("/todos/b/home")
-    await waitFor(() => expect(listWorkItems).toHaveBeenCalled())
-    const statusCalls = listWorkItems.mock.calls.map(([params]) => params).filter((p) => p?.status)
-    expect(statusCalls.length).toBeGreaterThan(0)
-    for (const p of statusCalls) { expect(p).toMatchObject({ home: true, rootsOnly: true }); expect(p.kept).toBeUndefined() }
   })
 
   it("folds Done and Cancelled into the Closed rail with the combined true count", async () => {
@@ -533,7 +504,7 @@ describe("the board surface", () => {
     await screen.findByTestId("board-card-PLA-3")
     await waitFor(() => {
       const boardCalls = listWorkItems.mock.calls.filter(([params]) => params?.status)
-      expect(boardCalls).toHaveLength(8)
+      expect(boardCalls).toHaveLength(6)
     })
     listWorkItems.mockImplementation(() => new Promise(() => {}))
 
@@ -550,7 +521,7 @@ describe("the board surface", () => {
       expect(cards).toHaveLength(1)
       expect(screen.getByTestId("board-column-executing").contains(cards[0])).toBe(false)
       expect(screen.getByTestId("board-column-in_review").contains(cards[0])).toBe(true)
-      expect(screen.getByTestId("board-column-executing").getAttribute("aria-label")).toBe("Executing column, 0 items")
+      expect(screen.getByTestId("board-column-executing").getAttribute("aria-label")).toBe("In progress column, 0 items")
       expect(screen.getByTestId("board-column-in_review").getAttribute("aria-label")).toBe("In review column, 1 items")
     })
   })
@@ -564,7 +535,7 @@ describe("the board surface", () => {
     await screen.findByTestId("board-card-PLA-4")
     await waitFor(() => {
       const boardCalls = listWorkItems.mock.calls.filter(([params]) => params?.status)
-      expect(boardCalls).toHaveLength(8)
+      expect(boardCalls).toHaveLength(6)
     })
     listWorkItems.mockImplementation(() => new Promise(() => {}))
 
@@ -746,15 +717,15 @@ describe("card anatomy", () => {
 })
 
 describe("the switcher-in-title", () => {
-  it("renders the board title as the menu trigger and lists home, attention, departments, everything", async () => {
+  it("renders the board title as the menu trigger and lists attention, departments, everything", async () => {
     rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
     renderBoard("/todos/b/platform")
     const trigger = await screen.findByTestId("board-switcher")
     expect(trigger.textContent).toContain("Platform")
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
     fireEvent.click(trigger)
-    await waitFor(() => expect(screen.getByTestId("board-menu-home")).toBeTruthy())
-    expect(screen.getByTestId("board-menu-attention")).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId("board-menu-attention")).toBeTruthy())
+    expect(screen.queryByTestId("board-menu-home")).toBeNull()
     expect(screen.getByTestId("board-menu-platform").textContent).toContain("PLA")
     expect(screen.getByTestId("board-menu-everything")).toBeTruthy()
   })
@@ -771,31 +742,29 @@ describe("the switcher-in-title", () => {
 })
 
 describe("quick add", () => {
-  it("offers + on Backlog and Assigned only", async () => {
+  it("offers + on Backlog only", async () => {
     rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
     rows.blocked = [compact({ id: "PLA-9", status: "blocked" })]
     renderBoard("/todos/b/platform")
     await screen.findByTestId("board-card-PLA-1")
     expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy()
-    expect(screen.getByTestId("board-quick-add-assigned")).toBeTruthy()
+    expect(screen.queryByTestId("board-quick-add-assigned")).toBeNull()
     expect(screen.queryByTestId("board-quick-add-executing")).toBeNull()
     expect(screen.queryByTestId("board-quick-add-in_review")).toBeNull()
     expect(screen.queryByTestId("board-quick-add-blocked")).toBeNull()
   })
 
-  it("creates in the board's department and assigns for the Assigned column", async () => {
+  it("creates in the board's department from the Backlog column, assigning nobody", async () => {
     renderBoard("/todos/b/platform")
-    await waitFor(() => expect(screen.getByTestId("board-quick-add-assigned")).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy())
     createWorkItem.mockResolvedValue({ workItem: { ...emptyTree("PLA-20").root } })
-    assignWorkItem.mockResolvedValue({ workItem: { ...emptyTree("PLA-20").root } })
-    fireEvent.click(screen.getByTestId("board-quick-add-assigned"))
+    fireEvent.click(screen.getByTestId("board-quick-add-backlog"))
     fireEvent.change(screen.getByTestId("todo-new-title"), { target: { value: "Draft the launch note" } })
-    fireEvent.change(screen.getByTestId("todo-new-assignee"), { target: { value: "scout" } })
     fireEvent.click(screen.getByTestId("todo-new-create"))
     await waitFor(() =>
       expect(createWorkItem).toHaveBeenCalledWith({ title: "Draft the launch note", department: "platform" }),
     )
-    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-20", "scout"))
+    expect(assignWorkItem).not.toHaveBeenCalled()
   })
 })
 

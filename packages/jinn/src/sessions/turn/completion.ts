@@ -18,6 +18,13 @@ export interface SettleTurnInput {
   outcome: TurnOutcome;
   result?: string | null;
   error?: string | null;
+  /**
+   * Why an `interrupted` turn stopped, as the engine said it ("Interrupted:
+   * claude process exited (…)", "Interrupted: session reset"). It is recorded
+   * as the session's last error and goes no further: an interrupted turn
+   * reports no error to the parent or the transport.
+   */
+  interruption?: string;
   cost?: number;
   durationMs?: number;
   /**
@@ -102,7 +109,7 @@ function writeReceipt(input: SettleTurnInput, settledAt: string): Session | unde
     status: STATUS_FOR_OUTCOME[input.outcome],
     attemptOutcome: input.outcome,
     lastActivity: settledAt,
-    lastError: input.error ?? (input.outcome === "interrupted" ? "Interrupted" : null),
+    lastError: input.error ?? (input.outcome === "interrupted" ? input.interruption ?? "Interrupted" : null),
   });
   return input.expectedStatuses
     ? updateSessionForAttempt(input.sessionId, input.attemptToken, fields, input.expectedStatuses)

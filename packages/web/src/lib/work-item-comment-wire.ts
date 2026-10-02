@@ -21,6 +21,11 @@ export interface WorkItemCommentWire {
   createdAt: string
   editedAt: string | null
   deletedAt: string | null
+  /** The session that wrote the comment; absent when the gateway has none. */
+  sessionId?: string
+  /** The comment a reply actually answered, before the thread was flattened to
+   *  its root; absent when unknown. */
+  repliedToId?: string
 }
 
 /** A chronological comment page; `total` is the exact per-item count. */

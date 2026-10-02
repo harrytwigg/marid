@@ -172,7 +172,7 @@ describe("PLA-224 journey", () => {
       arguments: JSON.stringify({ id: chat.id, message: "ping, are you still on this?" }),
     };
 
-    // The gate the voice-approval contract prescribes: the live browser
+    // The bound-evidence gate: the live browser
     // instance, its credential generation, and the operator's own final
     // transcript item. A model that decided to send on its own has none of them.
     const withoutCredential = await call(context, "POST", orb.route, { ...send, providerCallId: "send-unbound" });
@@ -262,6 +262,26 @@ describe("PLA-224 journey", () => {
     });
     expect(cancel.body).toMatchObject({ ok: false, code: "invalid-arguments" });
     expect(workItems.getWorkItem(todo.id)).toMatchObject({ status: "executing" });
+
+    // A summary spoken with a move into review is posted, as it is from the board.
+    const reviewed = await call(context, "POST", orb.route, {
+      providerCallId: "status-2",
+      tool: "talk_set_todo_status",
+      arguments: JSON.stringify({ id: todo.id, status: "in_review", note: "ready for a look" }),
+    });
+    expect(reviewed.body).toMatchObject({ ok: true, evidence: { status: "in_review" } });
+    const { listComments } = await import("../../work-items/comments.js");
+    expect(listComments(todo.id).comments.map((c) => [c.body, c.authorKind])).toContainEqual(["ready for a look", "operator"]);
+
+    // Sending it back is the review bounce, by voice as from the board.
+    const sentBack = await call(context, "POST", orb.route, {
+      providerCallId: "status-3",
+      tool: "talk_set_todo_status",
+      arguments: JSON.stringify({ id: todo.id, status: "executing", note: "add the midnight case" }),
+    });
+    expect(sentBack.body).toMatchObject({ ok: true, evidence: { status: "executing" } });
+    expect(workItems.getWorkItem(todo.id)).toMatchObject({ status: "executing", rounds: 1 });
+    expect(listComments(todo.id).comments.map((c) => c.body)).toContain("add the midnight case");
   });
 
   it("step 5a: an id that does not exist is refused in the words the operator needs", async () => {

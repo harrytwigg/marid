@@ -26,11 +26,10 @@ export const WORK_ITEM_DISPATCH_DDL = `
 ${WORK_ITEM_DISPATCH_TABLE_DDL};
 `;
 
-/** whether a Todo may be auto-started by a `todo-status` Workflow
- *  trigger when it is assigned. The instance's auto-start Workflow spawns the
- *  assignee's session on backlog→assigned; a Todo an employee creates and
- *  self-assigns from a session that is already working it wants NO second
- *  session, and so does one the operator intends to hand over by message.
+/** whether the board walk may start a Todo from the backlog. A Todo
+ *  an employee creates and claims from a session that is already working it
+ *  wants NO second session, and so does one the operator intends to hand over
+ *  by message.
  *
  *  Its own table rather than a column on `work_item_dispatch`, for the same
  *  reason that table is not a column on `work_items`: the exact-shape verifier

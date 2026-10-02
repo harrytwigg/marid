@@ -3,14 +3,12 @@ import { queryClient } from "@/lib/query-client"
 import { queryKeys } from "@/lib/query-keys"
 import { api } from "@/lib/api"
 import { executeToolCall } from "../registry"
-import { clip, trimSession, trimWorkflowRuns } from "../read-shapes"
+import { clip, trimSession } from "../read-shapes"
 
 vi.mock("@/lib/api", () => ({
   api: {
     getWorkItem: vi.fn(),
     getSession: vi.fn(),
-    listWorkflowRunsV2: vi.fn(),
-    getExperiment: vi.fn(),
   },
 }))
 
@@ -20,7 +18,7 @@ const TODO = {
   workItem: {
     id: "ABC-59", title: "Ship the orb", status: "executing", assignee: "a-lead",
     department: "platform", parentId: null, dueAt: null, updatedAt: "2026-01-02T03:04:05Z",
-    approvalState: null, body: "  The   body.  ",
+    body: "  The   body.  ",
   },
   labels: [{ id: "l1", name: "build" }],
   comments: { total: 7, comments: Array.from({ length: 7 }, (_, i) => ({
@@ -59,47 +57,19 @@ describe("a warm cache answers without touching the network", () => {
     expect(result.data.comments).toHaveLength(5)
   })
 
-  it("reads a session, a workflow's runs, and an experiment the same way", async () => {
+  it("reads a session the same way", async () => {
     warm([...queryKeys.sessions.detail("s1")], {
       id: "s1", title: "Orb work", employee: "a-lead", status: "running",
       messages: [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }],
     })
-    warm([...queryKeys.workflows.runs("build")], {
-      items: [{
-        id: "run_1", workflowId: "build", workflowTitle: "Build", definitionRevision: 1,
-        status: "running", trigger: { nodeId: "t", kind: "manual" },
-        startedAt: "2026-01-01T00:00:00Z", endedAt: null,
-        currentOrFailingNode: { nodeId: "n", label: "Implement", employeeId: null, state: "current" },
-      }],
-      nextCursor: null,
-    })
-    warm(["experiments", "exp_1"], {
-      experiment: {
-        id: "exp_1", name: "Orb latency", hypothesis: "Faster than clicking", status: "running",
-        startedAt: "2026-01-01T00:00:00Z", horizonDays: 14, baseline: { ms: 900 },
-        metrics: [{ name: "ms", unit: "ms", howToMeasure: "instrumented" }],
-        readings: [{ id: "r1", experimentId: "exp_1", at: "2026-01-02T00:00:00Z", metric: "ms", value: 120 }],
-      },
-    })
 
     const session = await executeToolCall("read_session", '{"id":"s1"}')
-    const runs = await executeToolCall("read_workflow_runs", '{"id":"build"}')
-    const experiment = await executeToolCall("read_experiment", '{"id":"exp_1"}')
 
     expect(mocked.getSession).not.toHaveBeenCalled()
-    expect(mocked.listWorkflowRunsV2).not.toHaveBeenCalled()
-    expect(mocked.getExperiment).not.toHaveBeenCalled()
     expect(session.ok && session.data.status).toBe("running")
     expect(session.ok && session.data.messages).toEqual([
       { role: "user", text: "hi" },
       { role: "assistant", text: "hello" },
-    ])
-    expect(runs.ok && runs.data.runs).toEqual([{
-      runId: "run_1", status: "running", trigger: "manual",
-      startedAt: "2026-01-01T00:00:00Z", endedAt: null, node: "Implement (current)",
-    }])
-    expect(experiment.ok && experiment.data.readings).toEqual([
-      { at: "2026-01-02T00:00:00Z", metric: "ms", value: 120 },
     ])
   })
 })
@@ -117,7 +87,7 @@ describe("a cold miss falls through and fills the cache", () => {
   })
 
   it("refetches a session the app cached without its messages", async () => {
-    // What the Talk object renderer and the workflow run inspector leave on this
+    // What the Talk object renderer leaves on this
     // key: api.getSession(id, { messages: false }). Answering from it would read
     // out "no messages" for a busy session, so it is a miss, not a cheap hit.
     warm([...queryKeys.sessions.detail("s2")], { id: "s2", title: "Orb work", status: "running" })
@@ -156,8 +126,8 @@ describe("a cold miss falls through and fills the cache", () => {
   })
 
   it("reports a failed read rather than throwing into the caller", async () => {
-    mocked.getExperiment.mockRejectedValue(new Error("gateway is down"))
-    await expect(executeToolCall("read_experiment", '{"id":"exp_x"}')).resolves.toEqual({
+    mocked.getSession.mockRejectedValue(new Error("gateway is down"))
+    await expect(executeToolCall("read_session", '{"id":"missing"}')).resolves.toEqual({
       ok: false,
       error: expect.stringContaining("gateway is down"),
     })
@@ -178,13 +148,5 @@ describe("the trimmed shapes", () => {
     })
     // Older sessions carry their rows under `history` instead of `messages`.
     expect(trimSession({ history: [{ role: "user", content: "x" }] }, "s9").messageCount).toBe(1)
-  })
-
-  it("caps a run list at the asked-for length", () => {
-    const run = {
-      id: "r", workflowId: "w", workflowTitle: "W", definitionRevision: 1, status: "completed" as const,
-      trigger: { nodeId: "t", kind: "manual" as const }, startedAt: "x", endedAt: "y", currentOrFailingNode: null,
-    }
-    expect(trimWorkflowRuns([run, run, run], 2)).toHaveLength(2)
   })
 })

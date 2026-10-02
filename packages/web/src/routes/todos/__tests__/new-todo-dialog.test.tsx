@@ -82,8 +82,7 @@ describe("NewTodoDialog", () => {
     await user.click(await screen.findByTestId("label-option-lab_1"))
     await user.click(screen.getByTestId("todo-new-parent-chip"))
     await user.type(screen.getByTestId("todo-new-parent"), "OPS-2")
-    await user.click(screen.getByTestId("todo-new-acceptance-chip"))
-    await user.type(screen.getByTestId("todo-new-acceptance"), "List and board both work.")
+    expect(screen.queryByTestId("todo-new-acceptance-chip")).toBeNull()
     await user.click(screen.getByTestId("todo-new-assignee-chip"))
     await user.click(screen.getByTestId("assignee-option-mason"))
     await user.click(screen.getByTestId("todo-new-create"))
@@ -93,16 +92,16 @@ describe("NewTodoDialog", () => {
     expect(createWorkItem).toHaveBeenCalledWith(expect.objectContaining({
       title: "Ship the ledger",
       body: "Keep the board intact.",
-      acceptance: "List and board both work.",
       department: "operations",
       priority: 3,
       dueAt: expect.stringMatching(/T12:00:00\.000Z$/),
       parentId: "OPS-2",
       labels: ["lab_1"],
     }))
+    expect(createWorkItem.mock.calls[0][0]).not.toHaveProperty("acceptance")
     expect(assignWorkItem).toHaveBeenCalledWith("PLA-9", "mason")
     expect(createWorkItem.mock.invocationCallOrder[0]).toBeLessThan(assignWorkItem.mock.invocationCallOrder[0])
-    // Fifteen keyboard-and-pointer round trips through userEvent's real timers.
+    // Thirteen keyboard-and-pointer round trips through userEvent's real timers.
     // The default 5s budget is enough on an idle machine and not on a loaded
     // one, and a timeout here leaves in-flight typing to land in the next test.
   }, 20000)

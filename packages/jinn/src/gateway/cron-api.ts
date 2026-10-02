@@ -9,6 +9,7 @@ import { summarizeCronRun } from "../cron/run-summary.js";
 import { reloadScheduler } from "../cron/scheduler.js";
 import { validateCronSchedule } from "../cron/validation.js";
 import { runCronJob } from "../cron/runner.js";
+import { cronActionError } from "../cron/actions.js";
 import { readJsonlTail } from "./jsonl-tail.js";
 import { readJsonBody } from "./http-helpers.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
@@ -23,6 +24,7 @@ function cronJobSummary(job: Record<string, unknown>, lastRun: unknown): Record<
     employee: job.employee ?? null,
     engine: job.engine ?? null,
     timezone: job.timezone ?? null,
+    action: job.action ?? null,
     lastRun: lastRun ? summarizeCronRun(lastRun) : null,
   };
 }
@@ -34,6 +36,20 @@ function scheduleError(job: Pick<CronJob, "schedule" | "timezone">): string | nu
     ...(job.timezone !== undefined ? { timezone: job.timezone } : {}),
   });
   return errors.length > 0 ? errors.map((entry) => entry.message).join("; ") : null;
+}
+
+/** Why `job` cannot be stored, or null. */
+function jobError(job: CronJob): string | null {
+  return scheduleError(job) ?? cronActionError(job);
+}
+
+/** Why a new job cannot join `jobs`: a built-in action runs from one job
+ *  only, so a second job naming it would tick it twice. (An update cannot add
+ *  a twin, since a job's action never changes; and it must stay free to
+ *  switch off a hand-edited one.) */
+function twinError(job: CronJob, jobs: CronJob[]): string | null {
+  const twin = job.action ? jobs.find((other) => other.action === job.action) : undefined;
+  return twin ? `the ${job.action} action already runs from cron job "${twin.id}"` : null;
 }
 
 async function listJobs(res: ServerResponse): Promise<void> {
@@ -72,6 +88,7 @@ function jobFromBody(body: any): CronJob {
     employee: body.employee,
     prompt: body.prompt || "",
     delivery: body.delivery,
+    ...(body.action !== undefined && body.action !== null ? { action: body.action } : {}),
   };
 }
 
@@ -94,7 +111,7 @@ async function createJob(req: HttpRequest, res: ServerResponse): Promise<void> {
     return badRequest(res, `a cron job with id "${body.id}" already exists`);
   }
   const newJob = jobFromBody(body);
-  const invalid = scheduleError(newJob);
+  const invalid = jobError(newJob) ?? twinError(newJob, jobs);
   if (invalid) return badRequest(res, invalid);
   jobs.push(newJob);
   saveJobs(jobs);
@@ -109,7 +126,13 @@ async function updateJob(req: HttpRequest, res: ServerResponse, id: string): Pro
   const _parsed = await readJsonBody(req, res);
   if (!_parsed.ok) return;
   const merged = { ...jobs[idx], ...(_parsed.body as any), id } as CronJob;
-  const invalid = scheduleError(merged);
+  if (merged.action === null) delete merged.action;
+  // What a job runs is fixed when it is made: an action job turned into a
+  // prompt job would fire an empty prompt, and the reverse would drop one.
+  if ((merged.action ?? null) !== (jobs[idx].action ?? null)) {
+    return badRequest(res, "a cron job's action cannot be changed; create a new job instead");
+  }
+  const invalid = jobError(merged);
   if (invalid) return badRequest(res, invalid);
   jobs[idx] = merged;
   saveJobs(jobs);
@@ -134,7 +157,7 @@ function triggerJob(res: ServerResponse, id: string, context: ApiContext): void 
   logger.info(`Manual trigger for cron job "${job.name}" (${job.id})`);
 
   // Fire and forget — respond immediately, run in background.
-  runCronJob(job, context.sessionManager, context.getConfig(), context.connectors, { emit: context.emit }).catch(
+  runCronJob(job, context.sessionManager, context.getConfig(), context.connectors, { emit: context.emit, trigger: "manual" }).catch(
     (err) => logger.error(`Manual cron trigger failed for "${job.name}": ${err}`)
   );
 

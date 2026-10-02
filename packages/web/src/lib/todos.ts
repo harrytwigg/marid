@@ -16,12 +16,10 @@ export { isPositiveTodoVersion } from "./api"
 /** Human label for a raw status (sheet, people queue, sub-lines). */
 export const STATUS_LABEL: Record<WorkItemStatusWire, string> = {
   backlog: "Backlog",
-  assigned: "Assigned",
-  executing: "Executing",
+  executing: "In progress",
   in_review: "In review",
   done: "Done",
   blocked: "Blocked",
-  escalated: "Escalated",
   cancelled: "Cancelled",
 }
 
@@ -29,12 +27,10 @@ export const STATUS_LABEL: Record<WorkItemStatusWire, string> = {
  *  a blocked card sits in Executing but keeps its blocked glyph + colour. */
 export type StateKey =
   | "backlog"
-  | "assigned"
   | "executing"
   | "review"
   | "done"
   | "blocked"
-  | "escalated"
   | "cancelled"
 export function stateKeyOf(status: WorkItemStatusWire): StateKey {
   return status === "in_review" ? "review" : status
@@ -48,7 +44,6 @@ export function isOpen(status: WorkItemStatusWire): boolean {
 
 const SAFE_TODO_ERROR_BY_CODE: Readonly<Record<string, string>> = {
   WORK_ITEM_ESCALATED: "This Todo is escalated. Use the human operator surface for this transition.",
-  WORK_ITEM_APPROVAL_PENDING: "This Todo is awaiting approval. Resolve the approval before changing its status.",
   WORK_ITEM_VERSION_CONFLICT: "This Todo changed elsewhere. Reload it before saving again.",
   TODO_VERSION_CONFLICT: "This Todo changed elsewhere. Reload it before saving again.",
   TODO_IDEMPOTENCY_CONFLICT: "This edit request conflicts with an earlier request. Reload remote to discard all local edits before starting a new edit.",
@@ -82,7 +77,7 @@ export function operatorSafeTodoError(error: unknown, fallback: string): string 
   if (code && SAFE_TODO_ERROR_BY_CODE[code]) return SAFE_TODO_ERROR_BY_CODE[code]
   if (isTodoVersionConflictError(error)) return SAFE_TODO_ERROR_BY_CODE.WORK_ITEM_VERSION_CONFLICT
   if (error.status === 404) return SAFE_TODO_ERROR_BY_CODE.WORK_ITEM_NOT_FOUND
-  if (error.status === 403 && /\b(?:escalated|approval (?:is )?pending|sticky terminal)\b/i.test(error.message)) {
+  if (error.status === 403 && /\b(?:escalated|sticky terminal)\b/i.test(error.message)) {
     return "This transition needs explicit operator authority. Use the human operator surface if it is intentional."
   }
   return fallback
@@ -118,7 +113,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export type NeedsYouSet = WorkItemCompactWire[]
 
 export function needsAttention(item: WorkItemCompactWire, now = Date.now()): boolean {
-  return item.attentionLane === "recovering" || item.attentionLane === "manager" || (!isParked(item.parkedUntil, now) && (item.approvalState === "pending" || item.status === "escalated" || item.status === "blocked"))
+  return item.attentionLane === "recovering" || item.attentionLane === "manager" || (!isParked(item.parkedUntil, now) && item.status === "blocked")
 }
 
 export function deriveNeedsYou(items: WorkItemCompactWire[], now = Date.now()): NeedsYouSet {
@@ -158,31 +153,7 @@ export function provenanceLabel(source: WorkItemSourceWire, sourceRef?: string |
   return suffix ? `${base} · ${suffix}` : base
 }
 
-// ── Verify policy + priority (mirror the gateway's provenance defaults so the
-// sheet shows the SAME effective tier the server will enforce) ───────────────
-export type VerifyMode = "trust" | "verify" | "thorough"
-export const DEFAULT_VERIFY_MODE_BY_SOURCE: Record<WorkItemSourceWire, VerifyMode> = {
-  cron: "trust",
-  workflow: "trust",
-  delegation: "verify",
-  human: "verify",
-  session: "verify",
-  connector: "verify",
-  goal: "verify",
-}
-export const DEFAULT_MAX_ROUNDS: Record<VerifyMode, number> = { trust: 2, verify: 2, thorough: 3 }
-
-interface VerifyShape {
-  source: WorkItemSourceWire
-  verifyPolicy: { mode: VerifyMode; maxRounds?: number } | null
-}
-export function effectiveVerifyMode(item: VerifyShape): VerifyMode {
-  return item.verifyPolicy?.mode ?? DEFAULT_VERIFY_MODE_BY_SOURCE[item.source]
-}
-export function effectiveMaxRounds(item: VerifyShape): number {
-  return item.verifyPolicy?.maxRounds ?? DEFAULT_MAX_ROUNDS[effectiveVerifyMode(item)]
-}
-
+// ── Priority ────────────────────────────────────────────────────────────────
 /** Priority int (0–3) → label. Higher int = higher priority; 2 is the default. */
 export function priorityLabel(priority: number): string {
   return priority >= 3 ? "High" : priority === 2 ? "Medium" : priority === 1 ? "Low" : "None"
@@ -292,7 +263,7 @@ export function filtersToSearchParams(f: TodoFilters): URLSearchParams {
 }
 
 const STATUS_FILTER_VALUES: ReadonlySet<string> = new Set([
-  "all", "backlog", "assigned", "executing", "blocked", "in_review", "escalated", "done", "cancelled",
+  "all", "backlog", "executing", "blocked", "in_review", "done", "cancelled",
 ])
 const SOURCE_VALUES: ReadonlySet<string> = new Set(["human", "delegation", "cron", "workflow", "session", "connector", "goal"])
 const DATE_VALUES: ReadonlySet<string> = new Set(["today", "week", "month"])

@@ -7,7 +7,6 @@ import {
   isPositiveTodoVersion,
   type DepartmentSummaryWire,
   type Employee,
-  type VerifyModeWire,
   type WorkItemDetailWire,
   type WorkItemEditPatch,
   type WorkItemLabelWire,
@@ -24,7 +23,6 @@ import {
   DuePickerContent,
   LabelsPickerContent,
   PriorityPickerContent,
-  VerifyPickerContent,
 } from "../pickers/picker-contents"
 import { StatusPickerContent } from "../pickers/status-picker-content"
 import { offeredDepartments } from "../pickers/department-filters"
@@ -35,7 +33,7 @@ import { offeredDepartments } from "../pickers/department-filters"
  * chips, law 4). Commits are optimistic; a server refusal snaps the value back
  * (cache invalidation) and surfaces the gateway's words via `announce`. */
 
-export type PickerKey = "status" | "priority" | "assignee" | "labels" | "due" | "department" | "verify"
+export type PickerKey = "status" | "priority" | "assignee" | "labels" | "due" | "department"
 
 const PICKER_TITLE: Record<PickerKey, string> = {
   status: "Status",
@@ -44,7 +42,6 @@ const PICKER_TITLE: Record<PickerKey, string> = {
   labels: "Labels",
   due: "Due date",
   department: "Department",
-  verify: "Review policy",
 }
 
 const PRIORITY_ORDER = [3, 2, 1, 0]
@@ -55,7 +52,6 @@ export function useTaskPickers({
   departments,
   openChildren,
   openDescendants,
-  escalatedDescendants,
   mobile,
   announce,
 }: {
@@ -121,7 +117,7 @@ export function useTaskPickers({
     [id, detail, qc, announce],
   )
 
-  /** Granting ownership is the assign lane's alone — roster check, backlog→assigned,
+  /** Granting ownership is the assign lane's alone — roster check, status unchanged,
    *  live notify; the pen is the one lane that can clear it. Peek ships the same split. */
   const commitAssignee = useCallback((assignee: string | null) => {
     if (!id || assignee === null) return patchField({ assignee })
@@ -151,11 +147,6 @@ export function useTaskPickers({
     [id, detail, qc, labelsMutation],
   )
 
-  const commitVerify = useCallback(
-    (policy: { mode: VerifyModeWire; maxRounds: number } | null) => patchField({ verifyPolicy: policy }),
-    [patchField],
-  )
-
   // ── Shell assembly ────────────────────────────────────────────────────────
 
   const contentFor = useCallback(
@@ -169,7 +160,6 @@ export function useTaskPickers({
               {...shared}
               openChildren={openChildren}
               openDescendants={openDescendants}
-              escalatedDescendants={escalatedDescendants}
               commit={transitionTo}
             />
           )
@@ -183,11 +173,9 @@ export function useTaskPickers({
           return <DuePickerContent {...shared} commit={(dueAt) => patchField({ dueAt })} />
         case "department":
           return <DepartmentPickerContent {...shared} departments={offeredDepartments(departments, detail.workItem.department)} commit={(department) => patchField({ department })} />
-        case "verify":
-          return <VerifyPickerContent {...shared} commit={commitVerify} />
       }
     },
-    [detail, close, openChildren, openDescendants, escalatedDescendants, transitionTo, patchField, commitAssignee, employees, departments, commitLabels, commitVerify],
+    [detail, close, openChildren, openDescendants, transitionTo, patchField, commitAssignee, employees, departments, commitLabels],
   )
 
   /** The superimposed row index (law 1): the current value's option row sits

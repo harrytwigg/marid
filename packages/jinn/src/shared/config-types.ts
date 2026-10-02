@@ -5,7 +5,6 @@
  * unaffected.
  */
 import type { TerminalConfig } from "./terminal-config.js";
-import type { IdleCapacityConfig } from "./idle-capacity-config.js";
 import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { AutoCompactConfig } from "./auto-compact-config.js";
@@ -60,11 +59,6 @@ export interface JinnConfig {
     todoRecovery?: { mode?: "off" | "classify-only" | "auto" };
     /** Closed Todo departments (JIN-1): unset = open; see shared/todo-departments-config.ts. */
     todoDepartments?: TodoDepartmentsConfig;
-    /** Idle-capacity auto-start: when the account's real Claude
-     *  five-hour / weekly windows are about to reset with capacity unused,
-     *  start eligible backlog Todos to use it. Off unless `enabled: true`;
-     *  the remaining keys tune the ceilings, see shared/idle-capacity.ts. */
-    idleCapacity?: IdleCapacityConfig;
     /** Remote MCP connector at `/mcp`: off unless enabled; see shared/remote-mcp-config.ts. */
     remoteMcp?: RemoteMcpConfig;
     /** Opt-in: when set, POST /api/sessions reads the forwarded SSO identity
@@ -188,26 +182,11 @@ export interface JinnConfig {
     connector?: string;  // defaults to "discord"
     channel?: string;    // Discord channel ID for admin notifications
   };
-  workflows?: {
-    /** Local Git branch a code Workflow must prove delivery to before its Todo
-     * may close. Defaults to `main`. */
-    delivery?: {
-      /** @deprecated Remote publication is not part of Workflow delivery. */
-      remote?: string;
-      branch?: string;
-    };
-    /**
-     * Employees whose OWN move of a Todo to `assigned` may satisfy a
-     * `todo-status` trigger's `actor: operator` filter, so an autonomous
-     * continuation can arm a pipeline without impersonating the operator.
-     *
-     * It grants arming and nothing else: the transition is still recorded
-     * against the session that made it, `asOperator` stays refused, and
-     * approvals, cancellation, and every other status are untouched. Absent or
-     * empty is the default and behaves exactly as if the key did not exist.
-     */
-    armingDelegates?: string[];
-  };
+  /**
+   * @deprecated Workflows were removed. The key is still accepted so an older
+   * config.yaml loads and saves unchanged; nothing reads it.
+   */
+  workflows?: unknown;
   portal?: PortalConfig;
   context?: {
     /** Max characters for the built system prompt. Defaults to 100000. */

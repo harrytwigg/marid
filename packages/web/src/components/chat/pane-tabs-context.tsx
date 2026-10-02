@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
+import type { FileTabRef } from '@/routes/chat/layout/file-tab'
 
 /**
  * How a pane's title bar gets its tab strip without ChatPane threading it through: whoever owns
@@ -10,6 +11,12 @@ export interface PaneTabsBinding {
   hasStrips: boolean
   /** The operator is working in this chat: keep its tab if it is a preview. */
   keep: (sessionId: string) => void
+  /** The file this chat's pane is showing in place of the chat (a file tab of its group), if any. */
+  shownFile: (sessionId: string) => FileTabRef | null
+  /** False for the layout's only chat when file tabs sit beside it: they would have nowhere to go. */
+  closable: (sessionId: string) => boolean
+  /** The body of a file-only pane (a file tab dragged out to a pane of its own), by its pane key. */
+  renderFilePane?: (paneKey: string) => ReactNode | null
 }
 
 export const PaneTabsContext = createContext<PaneTabsBinding | null>(null)
@@ -24,6 +31,22 @@ export function usePaneTabsShown(): boolean {
 
 const NO_KEEP = () => undefined
 
+export function usePaneClosable(sessionId: string | null): boolean {
+  const binding = useContext(PaneTabsContext)
+  return !sessionId || !binding || binding.closable(sessionId)
+}
+
+export function usePaneShownFile(sessionId: string | null): FileTabRef | null {
+  const binding = useContext(PaneTabsContext)
+  return sessionId && binding ? binding.shownFile(sessionId) : null
+}
+
 export function usePaneTabsKeep(): (sessionId: string) => void {
   return useContext(PaneTabsContext)?.keep ?? NO_KEEP
 }
+
+export function usePaneTabsFilePane(): (paneKey: string) => ReactNode | null {
+  return useContext(PaneTabsContext)?.renderFilePane ?? NO_FILE_PANE
+}
+
+const NO_FILE_PANE = () => null

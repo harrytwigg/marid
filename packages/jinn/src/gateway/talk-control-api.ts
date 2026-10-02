@@ -66,8 +66,6 @@ async function readControlBody(
  * operator's token. `operator-evidence.ts` states the same contract adapter-side.
  */
 const BOUND_CREDENTIAL_OPERATIONS = new Set([
-  "prepare_voice_approval",
-  "commit_voice_approval",
   "talk_send_to_session",
 ]);
 
@@ -89,8 +87,8 @@ function auditVerifiedControl(
   options.registry.recordAction(id, {
     tool: operation.name,
     subject: typeof args.id === "string" ? args.id : null,
-    lane: body.tool === "commit_voice_approval" ? "consent" : "fast",
-    consent: body.tool === "commit_voice_approval" ? "granted" : "not-required",
+    lane: "fast",
+    consent: "not-required",
   });
 }
 

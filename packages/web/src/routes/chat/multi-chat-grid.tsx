@@ -2,7 +2,7 @@ import type { ComponentProps, ComponentType, ReactNode } from 'react'
 import { ChatPane } from '@/components/chat/chat-pane'
 import { resolvePaneTitle, safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { usePaneTabsShown } from '@/components/chat/pane-tabs-context'
-import { FileOpenContext } from '@/components/chat/file-open-context'
+import { FileLinkSessionContext } from '@/components/chat/file-link-session-context'
 import type { CommsPeekData } from '@/components/chat/thread-peek'
 import type { DelegatedActivity } from '@/lib/api'
 import type { ViewMode } from '@/lib/view-mode'
@@ -10,6 +10,7 @@ import { ChatGrid } from './chat-grid'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { isTerminalSession } from '@/lib/terminal-session'
 import { deriveChatGridIds } from './grid-placement'
+import { isFileTabId } from './layout/file-tab'
 import { useArrivedByTabSwitch } from '@/components/chat/tab-switch-mark'
 import { SessionPicker } from './session-picker'
 import type { SessionMeta } from './use-chat-pane-state'
@@ -50,7 +51,6 @@ interface MultiChatGridProps {
   onRemove: (sessionId: string) => void
   onMeta: (sessionId: string, meta: PaneMetaUpdate) => void
   onNewMeta: (meta: PaneMetaUpdate) => void
-  onOpenFile: (sessionId: string, path: string) => void
   onPeek: (sessionId: string, peek: CommsPeekData) => void
   onNewChat: PaneProps['onNewChat']
   onRefresh: PaneProps['onRefresh']
@@ -67,6 +67,8 @@ interface MultiChatGridProps {
 }
 
 function sessionForGridId(props: MultiChatGridProps, gridId: string): string | null {
+  // A file-only pane's key is a file tab id: no session. The split grid handles those panes itself.
+  if (isFileTabId(gridId)) return null
   if (gridId === props.primary.paneKey) return props.primary.sessionId
   return gridId === props.pickerPane?.paneKey ? null : gridId
 }
@@ -184,9 +186,9 @@ function GridChatPane({
     />
   )
   return (
-    <FileOpenContext.Provider value={(path) => { if (sessionId) owner.onOpenFile(sessionId, path) }}>
+    <FileLinkSessionContext.Provider value={sessionId}>
       {pane}
-    </FileOpenContext.Provider>
+    </FileLinkSessionContext.Provider>
   )
 }
 

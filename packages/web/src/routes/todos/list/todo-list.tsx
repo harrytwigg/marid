@@ -29,7 +29,7 @@ export interface TodoListProps {
   trees: Map<string, WorkItemTreeWire> | undefined
   now: number
   onOpen: (id: string, item: WorkItemCompactWire) => void
-  onQuickAdd: (askAssignee: boolean) => void
+  onQuickAdd: () => void
   onKeep?: (vars: { id: string; kept: boolean }) => void
   /** The scrollport this list lives in — a long list windows against it. */
   scrollRef: React.RefObject<HTMLDivElement | null>
@@ -91,7 +91,7 @@ function PlainTodoList({ sections, handlers }: { sections: TodoListSection[]; ha
           now={handlers.now}
           open={section.open}
           onToggle={section.group.key === "closed" ? handlers.onToggleClosed : undefined}
-          onQuickAdd={() => handlers.onQuickAdd(section.group.key === "assigned")}
+          onQuickAdd={() => handlers.onQuickAdd()}
           onOpen={handlers.onOpen}
           onKeep={handlers.onKeep}
           hasMore={section.hasMore}

@@ -54,9 +54,9 @@ function parked(title: string, settle: {
 
 /** A port that records what it was asked to re-arm and reports where it landed,
  *  so the sweep's decisions are observable without a Workflow behind them. */
-function recorder(): { calls: string[]; rearm: (id: string) => { status: string; label: string } } {
+function recorder(): { calls: string[]; rearm: (id: string) => { status: string } } {
   const calls: string[] = [];
-  return { calls, rearm: (id) => { calls.push(id); return { status: "assigned", label: "build" }; } };
+  return { calls, rearm: (id) => { calls.push(id); return { status: "assigned" }; } };
 }
 
 function resumeEvents(workItemId: string, runId: string) {
@@ -84,7 +84,7 @@ describe("re-arming once a stated reset has passed", () => {
     expect(port.calls).toContain(id);
     const [event, ...rest] = resumeEvents(id, runId);
     expect(rest).toHaveLength(0);
-    expect(event?.detail).toMatchObject({ source: "stated", status: "assigned", label: "build", engine: "claude" });
+    expect(event?.detail).toMatchObject({ source: "stated", status: "assigned", engine: "claude" });
     expect(event?.detail?.resetAt).toBe("2026-08-20T11:30:00.000Z");
   });
 

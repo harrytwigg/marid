@@ -244,6 +244,23 @@ describe("useLiveSession (read-only)", () => {
     expect(result.current.loading).toBe(true) // running → spinner
   })
 
+  it("shows no spinner for a session running only on its background sub-agents", async () => {
+    // The gateway reports it running, but no turn of this pane's is in flight:
+    // the reply, if any, arrives as an external turn.
+    getSession.mockResolvedValue({
+      status: "running",
+      backgroundActivity: { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: "2026-10-01T20:00:00.000Z" },
+      messages: [{ id: "m1", role: "user", content: "hi" }, { id: "m2", role: "assistant", content: "Waiting on the agent." }],
+    })
+    const { subscribe } = makeBus()
+    const { result } = renderHook(() =>
+      useLiveSession("s1", { subscribe, readOnly: true }),
+    )
+    await act(async () => { await Promise.resolve() })
+    expect(result.current.messages.map((m) => m.content)).toEqual(["hi", "Waiting on the agent."])
+    expect(result.current.loading).toBe(false)
+  })
+
   it("filters obsolete block types from loaded history", async () => {
     getSession.mockResolvedValue({
       status: "idle",
@@ -608,6 +625,31 @@ describe("useLiveSession (read-only)", () => {
     // duplicate of the result would drop).
     expect(result.current.messages.map((m) => m.content)).toEqual(["PROGRESS-FIRST", "Used Bash", "PROGRESS-FINAL"])
     expect(result.current.messages.filter((m) => m.content === "PROGRESS-FINAL")).toHaveLength(1)
+  })
+
+  it("a sub-agent's tool call does not split the answer being streamed", async () => {
+    getSession.mockResolvedValue({ status: "running", messages: [] })
+    const { subscribe, emit } = makeBus()
+    const { result } = renderHook(() =>
+      useLiveSession("s1", { subscribe, readOnly: true }),
+    )
+    await act(async () => { await Promise.resolve() })
+
+    act(() => {
+      emit("session:delta", { sessionId: "s1", type: "text", content: "Started it in the background. " })
+      // Out of band: a background sub-agent's call lands mid-answer.
+      emit("session:delta", { sessionId: "s1", type: "tool_use", content: "Grep", toolName: "Grep", toolId: "sub-1", sidechain: true })
+      emit("session:delta", { sessionId: "s1", type: "tool_result", content: "Grep", toolName: "Grep", toolId: "sub-1" })
+      emit("session:delta", { sessionId: "s1", type: "text", content: "I will report back." })
+    })
+    expect(result.current.streamingText).toBe("Started it in the background. I will report back.")
+
+    await act(async () => {
+      emit("session:completed", { sessionId: "s1", result: "Started it in the background. I will report back." })
+      await Promise.resolve()
+    })
+    expect(result.current.messages.map((m) => m.content)).toEqual(["Used Grep", "Started it in the background. I will report back."])
+    expect(result.current.messages.find((m) => m.toolCall)?.meta).toEqual({ sidechain: true })
   })
 
   it("dedupes a flushed bubble that IS the final answer (exactly one answer live)", async () => {

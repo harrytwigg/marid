@@ -2,25 +2,24 @@
 // Pure helpers: the /todos/b/:board param ⇄ BoardId mapping and the per-board
 // scroll cache the board restores on POP/breadcrumb return. No React in here.
 
-/** The four board kinds the switcher serves (design-doc §1.1). */
+/** The three board kinds the switcher serves (design-doc §1.1). */
 export type BoardId =
-  | { kind: "home" }
   | { kind: "attention" }
   | { kind: "everything" }
   | { kind: "department"; slug: string }
 
-export const DEFAULT_BOARD_PATH = "/todos/b/home"
+export const DEFAULT_BOARD_PATH = "/todos/b/everything"
 
-/** Parse the :board route param. Unknown/empty values fall back to Home rather
- *  than erroring — a stale department link should land somewhere sane, not on a
- *  dead page. `my` is the board Home replaced (ICI-1357); it still parses, so
- *  every link and bookmark written before the rename keeps working. */
+/** Parse the :board route param. Unknown/empty values fall back to Everything
+ *  rather than erroring — a stale department link should land somewhere sane,
+ *  not on a dead page. `home` and `my` name boards that no longer exist; they
+ *  fall through to Everything too, so every link and bookmark written before
+ *  the Home board was removed keeps working. */
 export function parseBoardParam(param: string | undefined | null): BoardId {
   const value = (param ?? "").trim().toLowerCase()
-  if (!value || value === "home" || value === "my") return { kind: "home" }
+  if (!value || value === "home" || value === "my" || value === "everything") return { kind: "everything" }
   if (value === "attention") return { kind: "attention" }
-  if (value === "everything") return { kind: "everything" }
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(value)) return { kind: "home" }
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(value)) return { kind: "everything" }
   return { kind: "department", slug: value }
 }
 

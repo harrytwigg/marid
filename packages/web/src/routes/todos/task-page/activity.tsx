@@ -9,23 +9,23 @@ import {
   type WorkItemDetailWire,
 } from "@/lib/api"
 import { commentAuthorLabel, operatorSafeTodoError } from "@/lib/todos"
-import { stripMarkdown } from "@/lib/strip-markdown"
 import { MarkdownView } from "@/components/markdown-view"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
+import { useMentionPicker } from "@/components/mention-picker"
 import { invalidateTodoComments, useAddTodoComment } from "../use-todo-comment"
 import { commentHeadRequest, mergeCommentPages } from "./comment-window"
 import { displayNameOf, formatRelativeTime } from "../util"
-import { AttachmentTile, useAttachmentPreview } from "./attachment-preview"
-import { formatBytes } from "./attachments"
-import { SessionActor } from "./session-ref"
+import { AttachmentChips } from "./comment-attachments"
+import { CommentSessionLink, SessionActor } from "./session-ref"
 import { WhisperLine } from "./whisper"
 import { buildFeed, stripCommentMarkers } from "./activity-feed"
 import { RunEndLine, RunStartLine } from "./runs"
 
 /* The merged activity feed keeps audit events quiet and comment voices
- * prominent. Long comments collapse independently to syntax-free previews;
- * full bodies share MarkdownView with the rest of Jinn. The same multiline
- * composer docks at the thread edge on desktop and mobile. */
+ * prominent. Long comments collapse independently to a clamped preview; the
+ * preview renders the same Markdown as the expanded body so links stay
+ * clickable while collapsed. The same multiline composer docks at the thread
+ * edge on desktop and mobile. */
 
 export const COMMENT_COLLAPSE_THRESHOLD = 320
 
@@ -34,53 +34,10 @@ function avatarFor(comment: WorkItemCommentWire): string {
   return comment.authorKind === "operator" ? "operator" : comment.author
 }
 
-
 function commentAuthor(comment: WorkItemCommentWire, byName: Map<string, Employee>): React.ReactNode {
   if (comment.authorKind === "operator") return "You"
   const label = comment.authorKind === "employee" ? displayNameOf(comment.author, byName) : commentAuthorLabel(comment.author, comment.authorKind)
   return <SessionActor actor={comment.author} byName={byName}>{label}</SessionActor>
-}
-
-function commentPreview(body: string): string {
-  return stripMarkdown(stripCommentMarkers(body)).replace(/\s*\n+\s*/g, " ")
-}
-
-function AttachmentChips({ attachments, workItemId }: { attachments: WorkItemAttachmentWire[]; workItemId: string }) {
-  const preview = useAttachmentPreview()
-  if (attachments.length === 0) return null
-  const images = attachments.filter((attachment) => preview.canPreview(attachment))
-  return (
-    <div className="ml-[38px] mt-[7px] flex flex-wrap gap-2">
-      {attachments.map((attachment) =>
-        preview.canPreview(attachment) ? (
-          <AttachmentTile
-            key={attachment.id}
-            attachment={attachment}
-            preview={preview}
-            gallery={images}
-            meta={formatBytes(attachment.bytes)}
-            dense
-            testId={`comment-attachment-${attachment.id}`}
-          />
-        ) : (
-          <a
-            key={attachment.id}
-            href={api.workItemAttachmentUrl(workItemId, attachment.id)}
-            download={attachment.filename}
-            data-testid={`comment-attachment-${attachment.id}`}
-            className="focus-ring flex h-10 items-center gap-2 rounded-[10px] bg-[var(--fill-tertiary)] pl-2 pr-3 text-[12.5px] font-medium text-[var(--text-primary)] shadow-[var(--shadow-ambient)] outline-none"
-          >
-            <span className="grid size-6 place-items-center rounded-[7px] bg-[var(--fill-secondary)] text-[var(--text-tertiary)]">
-              <FileText size={12} strokeWidth={1.8} aria-hidden />
-            </span>
-            {attachment.filename}
-            <span className="text-[11px] font-normal text-[var(--text-quaternary)]">{formatBytes(attachment.bytes)}</span>
-          </a>
-        ),
-      )}
-      {preview.lightbox}
-    </div>
-  )
 }
 
 function CommentBlock({
@@ -90,6 +47,7 @@ function CommentBlock({
   attachments,
   workItemId,
   reply,
+  repliedTo,
   onReply,
   onEdit,
   onDelete,
@@ -101,6 +59,9 @@ function CommentBlock({
   attachments: WorkItemAttachmentWire[]
   workItemId: string
   reply?: boolean
+  /** The comment this one answered when the gateway flattened the thread to its
+   *  root; set only when that differs from the root and is loaded. */
+  repliedTo?: WorkItemCommentWire
   onReply?: () => void
   /** Operator-authored comments edit in place (gateway-enforced authority). */
   onEdit?: (body: string) => void
@@ -120,7 +81,13 @@ function CommentBlock({
         <span className="text-[12.5px] font-semibold text-[var(--text-secondary)]">{commentAuthor(comment, byName)}</span>
         <span className="text-[10.5px] text-[var(--text-quaternary)]">{formatRelativeTime(comment.createdAt)}</span>
         {comment.editedAt && !tombstoned && <span className="text-[10.5px] text-[var(--text-quaternary)]">(edited)</span>}
+        <CommentSessionLink sessionId={comment.sessionId} byName={byName} />
       </div>
+      {repliedTo && (
+        <div data-testid={`activity-replied-to-${comment.id}`} className="ml-[26px] mt-[3px] pl-3 text-[11.5px] text-[var(--text-quaternary)]">
+          ↪ replying to {commentAuthor(repliedTo, byName)}
+        </div>
+      )}
       {editing ? (
         <div className="ml-[38px] mt-[5px]">
           <textarea
@@ -166,11 +133,14 @@ function CommentBlock({
           {tombstoned ? (
             <span className="italic text-[var(--text-quaternary)]">[deleted]</span>
           ) : collapsible && !expanded ? (
-            <p className="line-clamp-3 break-words text-[var(--text-tertiary)]">
-              {commentPreview(comment.body)}
-            </p>
+            <div
+              data-testid={`activity-preview-${comment.id}`}
+              className="line-clamp-3 break-words text-[var(--text-tertiary)] [&_.jinn-markdown]:text-[var(--text-tertiary)] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+            >
+              <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={byName} />
+            </div>
           ) : (
-            <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions />
+            <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={byName} />
           )}
           {collapsible && (
             <button
@@ -274,6 +244,11 @@ export function ActivitySection({
   }, [attachmentsQuery.data])
 
   const comments = useMemo(() => mergeCommentPages(commentsQuery.data, detail.comments), [commentsQuery.data, detail.comments])
+  const commentsById = useMemo(() => new Map(comments.map((c) => [c.id, c])), [comments])
+  const repliedToOf = (comment: WorkItemCommentWire) =>
+    comment.repliedToId && comment.repliedToId !== comment.parentCommentId
+      ? commentsById.get(comment.repliedToId)
+      : undefined
   const blocks = useMemo(
     () => buildFeed(detail.events, comments, detail.runs ?? []).reverse(),
     [detail.events, comments, detail.runs],
@@ -289,6 +264,8 @@ export function ActivitySection({
   const invalidate = () => invalidateTodoComments(qc, id)
 
   const send = useAddTodoComment(id)
+  const allEmployees = useMemo(() => [...byName.values()], [byName])
+  const picker = useMentionPicker({ value: draft, setValue: setDraft, employees: allEmployees, textareaRef: composerRef })
 
   // Comment edit/delete carried over from the retired sheet (stage-B review
   // disposition b): edit only what the operator authored, delete anything —
@@ -378,8 +355,10 @@ export function ActivitySection({
 
   const inputProps = {
     value: draft,
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setDraft(e.target.value),
+    onChange: picker.onChange,
+    onSelect: picker.onSelect,
     onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (picker.onKeyDown(e)) return
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
         submit()
@@ -400,13 +379,16 @@ export function ActivitySection({
     <div className="rounded-[22px] bg-[var(--bg-secondary)] p-3 shadow-[var(--shadow-card)]">
       {pendingChips && <div className="mb-[9px]">{pendingChips}</div>}
       {replyRow}
-      <textarea
-        {...inputProps}
-        ref={composerRef}
-        rows={2}
-        placeholder={replyTo ? "Reply…" : mobile ? "Comment" : "Comment…  ⇧↩ for a new line"}
-        className="max-h-36 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 text-[15px] leading-[1.5] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
-      />
+      <div className="relative">
+        {picker.list}
+        <textarea
+          {...inputProps}
+          ref={composerRef}
+          rows={2}
+          placeholder={replyTo ? "Reply…" : mobile ? "Comment" : "Comment…  ⇧↩ for a new line"}
+          className="max-h-36 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-1 text-[15px] leading-[1.5] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-quaternary)]"
+        />
+      </div>
       <div className="mt-1 flex min-h-[34px] items-center gap-2">
         <button
           type="button"
@@ -468,6 +450,7 @@ export function ActivitySection({
                   isDark={isDark}
                   attachments={attachmentsByComment.get(block.node.comment.id) ?? []}
                   workItemId={id}
+                  repliedTo={repliedToOf(block.node.comment)}
                   onReply={() => setReplyTo(block.node.comment)}
                   {...commentActions(block.node.comment)}
                 />
@@ -480,6 +463,9 @@ export function ActivitySection({
                     attachments={attachmentsByComment.get(replyComment.id) ?? []}
                     workItemId={id}
                     reply
+                    repliedTo={repliedToOf(replyComment)}
+                    // The gateway flattens this to the thread root and records the comment answered.
+                    onReply={() => setReplyTo(replyComment)}
                     {...commentActions(replyComment)}
                   />
                 ))}

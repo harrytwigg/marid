@@ -48,6 +48,7 @@ export function patchSessionBackgroundActivity(
   id: string,
   backgroundActivity: BackgroundActivity | null,
   transportState?: string,
+  reportedStatus?: string,
 ) {
   qc.setQueryData<SessionsResponse>(queryKeys.sessions.all, (old) => {
     if (!old) return old
@@ -69,7 +70,9 @@ export function patchSessionBackgroundActivity(
               : queueDepth > 0
                 ? 'queued'
                 : 'idle')
-      return { ...s, backgroundActivity, transportState: nextTransportState }
+      // The gateway reports a session running while its background sub-agents
+      // work, and idle again once they are done.
+      return { ...s, backgroundActivity, transportState: nextTransportState, ...(reportedStatus ? { status: reportedStatus } : {}) }
     })
     return changed ? { ...old, sessions } : old
   })

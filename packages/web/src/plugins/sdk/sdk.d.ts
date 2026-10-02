@@ -23,7 +23,6 @@ import type {
   PluginHostNotes,
   PluginHostSessions,
   PluginHostTodos,
-  PluginHostWorkflows,
 } from './sdk-host'
 
 /** The app's components, which are their own half of the contract. */
@@ -114,8 +113,6 @@ export type {
   HostTodoDraft,
   HostTodoFilter,
   HostTodoStatus,
-  HostWorkflow,
-  HostWorkflowRun,
   PluginHostConnectors,
   PluginHostCron,
   PluginHostEmployees,
@@ -124,7 +121,6 @@ export type {
   PluginHostSessions,
   PluginHostTodos,
   PluginHostVerb,
-  PluginHostWorkflows,
 } from './sdk-host'
 
 export interface PluginHost {
@@ -148,7 +144,6 @@ export interface PluginHost {
   todos: PluginHostTodos
   sessions: PluginHostSessions
   employees: PluginHostEmployees
-  workflows: PluginHostWorkflows
   notes: PluginHostNotes
   connectors: PluginHostConnectors
   cron: PluginHostCron

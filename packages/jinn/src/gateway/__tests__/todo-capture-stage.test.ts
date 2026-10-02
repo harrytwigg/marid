@@ -92,18 +92,7 @@ describe("deriveTodoCaptureState — the forward path", () => {
     expect(state).toMatchObject({ stage: "dispatching", workItemId: "PLA-9", routedTo: null });
   });
 
-  it("is routed, naming the workflow, once a phase session is linked", () => {
-    const state = deriveTodoCaptureState(facts({
-      todos: [todo({ linked: [dispatcher, { id: "phase-1", employee: "some-employee", workflowId: "jinn-build", workflowName: "Jinn Build", workflowRunId: "run_7" }] })],
-    }));
-
-    expect(state).toMatchObject({
-      stage: "routed",
-      routedTo: { kind: "workflow", workflowId: "jinn-build", workflowName: "Jinn Build", runId: "run_7" },
-    });
-  });
-
-  it("is routed, naming the employee, once a delegate is linked and no workflow is", () => {
+  it("is routed, naming the employee, once a delegate is linked", () => {
     const state = deriveTodoCaptureState(facts({
       todos: [todo({ linked: [dispatcher, { id: "worker-1", employee: "route-worker" }] })],
     }));
@@ -123,17 +112,6 @@ describe("deriveTodoCaptureState — the forward path", () => {
     }));
 
     expect(state).toMatchObject({ stage: "created", routedTo: null });
-  });
-
-  // A workflow run is the stronger fact: when both are present the Todo went
-  // through the workflow, and the phase session's employee is an implementation
-  // detail of that run rather than a delegation the Dispatcher chose.
-  it("prefers the workflow when a run and a plain employee session are both linked", () => {
-    const state = deriveTodoCaptureState(facts({
-      todos: [todo({ linked: [{ id: "worker-1", employee: "route-worker" }, { id: "phase-1", employee: "x", workflowId: "wf", workflowRunId: "run_1" }] })],
-    }));
-
-    expect(state.routedTo).toMatchObject({ kind: "workflow", workflowId: "wf" });
   });
 });
 

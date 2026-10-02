@@ -25,17 +25,3 @@ export function agoLabel(atMs: number, now: number): string {
 export function shortClock(atMs: number): string {
   return new Date(atMs).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
 }
-
-export function clampPercent(value: number): number {
-  return Math.max(0, Math.min(100, value))
-}
-
-const SIGNAL_COPY: Record<string, string> = {
-  "operator-session": "a chat the operator drives had activity",
-  "jinn-interactive-session": "an interactive Claude session wrote its statusline",
-  "usage-outside-jinn": "five-hour usage rose while no Marid session ran",
-}
-
-export function operatorSignalCopy(source: string | undefined): string {
-  return (source && SIGNAL_COPY[source]) ?? "no sign of the operator yet"
-}

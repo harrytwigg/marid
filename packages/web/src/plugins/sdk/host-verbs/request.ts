@@ -15,8 +15,8 @@ import { assertVerbAllowed, type PluginHostVerb } from '../host-permissions'
  *  was not an error envelope. Either beats "request failed".
  *
  *  Two spellings, because the gateway has two: most routes answer `{ error }`,
- *  while the Workflow API answers `{ code, message }`. Reading only the first
- *  would turn every Workflow refusal into a bare status line. */
+ *  while some answer `{ code, message }`. Reading only the first would turn
+ *  those refusals into a bare status line. */
 async function failureOf(verb: PluginHostVerb, response: Response): Promise<PluginSdkError> {
   let detail = `${response.status} ${response.statusText}`.trim()
   try {

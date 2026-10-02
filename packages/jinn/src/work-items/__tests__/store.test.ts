@@ -89,17 +89,17 @@ describe("work-item store — manual rank", () => {
   });
 
   it("clearing rank returns a row to deterministic newest-first fallback ordering", () => {
-    const older = store.createWorkItem({ title: "older unranked", status: "assigned", department: "rank-clear-fixture" });
-    const newer = store.createWorkItem({ title: "newer unranked", status: "assigned", department: "rank-clear-fixture" });
+    const older = store.createWorkItem({ title: "older unranked", status: "backlog", department: "rank-clear-fixture" });
+    const newer = store.createWorkItem({ title: "newer unranked", status: "backlog", department: "rank-clear-fixture" });
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-01-01T00:00:00.000Z", older.id);
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2031-01-01T00:00:00.000Z", newer.id);
 
     store.updateWorkItem(older.id, { rank: 5 }, "operator");
-    expect(store.listWorkItems({ status: "assigned", department: "rank-clear-fixture" })[0]?.id).toBe(older.id);
+    expect(store.listWorkItems({ status: "backlog", department: "rank-clear-fixture" })[0]?.id).toBe(older.id);
 
     store.updateWorkItem(older.id, { rank: null }, "operator");
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-01-01T00:00:00.000Z", older.id);
-    const fallback = store.listWorkItems({ status: "assigned", department: "rank-clear-fixture" });
+    const fallback = store.listWorkItems({ status: "backlog", department: "rank-clear-fixture" });
     expect(fallback.map((item) => item.id)).toEqual([newer.id, older.id]);
     expect(store.getWorkItem(older.id)?.rank).toBeNull();
   });
@@ -198,39 +198,28 @@ describe("work-item store — raw status write door", () => {
 });
 
 describe("work-item store — GRS-021a Todo model fields", () => {
-  it("round-trips acceptance, verifyPolicy, and budgetUsd; a fresh item carries NO approval", () => {
-    const wi = store.createWorkItem({
-      title: "elevated",
-      acceptance: "- [ ] tests green",
-      verifyPolicy: { mode: "thorough", verifier: { engine: "codex" }, maxRounds: 5 },
-      budgetUsd: 12.5,
-    });
+  it("round-trips budgetUsd and starts rounds at zero", () => {
+    const wi = store.createWorkItem({ title: "elevated", budgetUsd: 12.5 });
     const fetched = store.getWorkItem(wi.id)!;
-    expect(fetched.acceptance).toBe("- [ ] tests green");
-    expect(fetched.verifyPolicy).toEqual({ mode: "thorough", verifier: { engine: "codex" }, maxRounds: 5 });
     expect(fetched.budgetUsd).toBe(12.5);
     expect(fetched.rounds).toBe(0);
-    // The anti-bottleneck principle (design §1.3): approval is none, always, at create.
-    expect(fetched.approvalState).toBeNull();
-    expect(fetched.approvalRequest).toBeNull();
   });
 
-  it("a corrupt stored verify_policy fails closed to VERIFY", () => {
-    const wi = store.createWorkItem({ title: "corrupt policy" });
-    db.prepare("UPDATE work_items SET verify_policy = 'not json{' WHERE id = ?").run(wi.id);
-    expect(store.getWorkItem(wi.id)!.verifyPolicy).toEqual({ mode: "verify" });
-    expect(store.effectiveVerifyMode(store.getWorkItem(wi.id)!)).toBe("verify");
+  it("leaves the retired acceptance and verify_policy columns alone: old data stays, nothing surfaces it", () => {
+    const wi = store.createWorkItem({ title: "legacy row" });
+    db.prepare("UPDATE work_items SET acceptance = ?, verify_policy = ? WHERE id = ?").run("- [ ] old criteria", '{"mode":"thorough"}', wi.id);
+    const fetched = store.getWorkItem(wi.id)! as unknown as Record<string, unknown>;
+    expect(fetched).not.toHaveProperty("acceptance");
+    expect(fetched).not.toHaveProperty("verifyPolicy");
+    const raw = db.prepare("SELECT acceptance, verify_policy FROM work_items WHERE id = ?").get(wi.id);
+    expect(raw).toEqual({ acceptance: "- [ ] old criteria", verify_policy: '{"mode":"thorough"}' });
   });
 
-  it("effectiveVerifyMode / effectiveMaxRounds: explicit policy wins, else provenance defaults", () => {
-    expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "cron" })).toBe("trust");
-    expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "workflow" })).toBe("trust");
-    expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "delegation" })).toBe("verify");
-    expect(store.effectiveVerifyMode({ verifyPolicy: null, source: "human" })).toBe("verify");
-    expect(store.effectiveVerifyMode({ verifyPolicy: { mode: "thorough" }, source: "cron" })).toBe("thorough");
-    expect(store.effectiveMaxRounds({ verifyPolicy: null, source: "delegation" })).toBe(2);
-    expect(store.effectiveMaxRounds({ verifyPolicy: { mode: "thorough" }, source: "cron" })).toBe(3);
-    expect(store.effectiveMaxRounds({ verifyPolicy: { mode: "verify", maxRounds: 7 }, source: "cron" })).toBe(7);
+  it("autoClosesOnSuccess: only cron provenance closes without review (legacy workflow provenance is reviewed)", () => {
+    expect(store.autoClosesOnSuccess({ source: "cron" })).toBe(true);
+    for (const source of ["workflow", "delegation", "human", "session", "connector", "goal"] as const) {
+      expect(store.autoClosesOnSuccess({ source })).toBe(false);
+    }
   });
 
   it("getWorkItemBySourceRef resolves machine-minted items by their stable key", () => {
@@ -282,12 +271,6 @@ describe("work-item store — GRS-021a Todo model fields", () => {
     })!;
     expect(db.prepare("SELECT total_cost FROM sessions WHERE id = ?").pluck().get("sess-codex-cost")).toBe(expected);
     expect(store.getWorkItemSpend(wi.id)).toBe(expected);
-  });
-
-  it("the ifNotSticky guard also protects escalated (operator queue is never silently drained)", () => {
-    const wi = store.createWorkItem({ title: "escalated sticky", status: "escalated" });
-    expect(wi.status).toBe("escalated");
-    expect(store.getWorkItem(wi.id)?.status).toBe("escalated");
   });
 });
 

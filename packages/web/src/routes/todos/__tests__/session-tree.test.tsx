@@ -5,7 +5,7 @@ import type { Employee } from "@/lib/api"
 import type { SessionDirectoryEntryWire, SessionTreeNodeWire, SessionTreeWire } from "@/lib/session-tree-api"
 import { SessionRef, SessionDirectoryProvider } from "../task-page/session-ref"
 import { SessionTreePanel } from "../task-page/session-tree"
-import { isLiveSession, pickRailSession } from "../task-page/use-todo-sessions"
+import { hasLiveWorker, isLiveSession, pickRailSession } from "../task-page/use-todo-sessions"
 
 /* The Todo page used to dead-end: `createdBy` printed as `session:<uuid>`, the
  * audit line said "A session", and only a live todo-dispatcher was clickable.
@@ -129,6 +129,15 @@ describe("the session tree", () => {
     expect(screen.queryByTestId("session-tree-review-s-1")).toBeNull()
   })
 
+  it("marks a session a mention started as consulted, not executing", () => {
+    const consulted = node({ id: "s-2", role: "consult", isRootLink: true })
+    mount(<SessionTreePanel tree={tree({ roots: [node({ id: "s-1" }), consulted] })} byName={byName} todoId="TST-81" />)
+
+    expect(screen.getByTestId("session-tree-consult-s-2").textContent).toContain("Consulted")
+    expect(screen.queryByTestId("session-tree-review-s-2")).toBeNull()
+    expect(screen.queryByTestId("session-tree-consult-s-1")).toBeNull()
+  })
+
   it("says what a bound withheld instead of showing a short tree silently", () => {
     mount(
       <SessionTreePanel
@@ -152,7 +161,7 @@ describe("the session tree", () => {
 })
 
 describe("which session the rail offers", () => {
-  const s = (id: string, over: Partial<{ employee: string; status: string }> = {}) =>
+  const s = (id: string, over: Partial<{ employee: string; status: string; workItemRole: string }> = {}) =>
     ({ id, employee: null, status: "idle", ...over }) as never
 
   it("prefers the live dispatcher — it is the Todo's durable thread", () => {
@@ -171,6 +180,24 @@ describe("which session the rail offers", () => {
     expect(picked?.id).toBe("a")
     // Dispatch must stay on offer: a Todo whose only attempt ended still needs it.
     expect(isLiveSession(picked)).toBe(false)
+  })
+
+  it("keeps a live consulted session from displacing the executor, so Dispatch stays on offer", () => {
+    const sessions = [
+      s("consult", { employee: "reviewer", status: "running", workItemRole: "consult" }),
+      s("exec", { employee: "builder", status: "idle", workItemRole: "execute" }),
+    ]
+    const picked = pickRailSession(sessions)
+    expect(picked?.id).toBe("exec")
+    expect(isLiveSession(picked)).toBe(false)
+    // A live consult is not a live worker, so Dispatch is not hidden by it.
+    expect(hasLiveWorker(sessions)).toBe(false)
+    expect(hasLiveWorker([...sessions, s("exec2", { status: "running", workItemRole: "execute" })])).toBe(true)
+  })
+
+  it("offers a consulted session when it is the only kind there is", () => {
+    const picked = pickRailSession([s("consult", { employee: "reviewer", status: "idle", workItemRole: "consult" })])
+    expect(picked?.id).toBe("consult")
   })
 
   it("offers nothing for a Todo no session has touched", () => {

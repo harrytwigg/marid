@@ -1,31 +1,5 @@
 import { authFetch, authUrl } from "@/lib/auth"
 import type { TodoStopCauseWire } from "@/lib/parked"
-// Type-only, and it has to stay that way: `workflows/model.ts` value-imports
-// `node:util/types` and the web build carries no Node polyfills.
-import type {
-  Binding as WorkflowBindingWire,
-  ConditionPredicate as WorkflowPredicateWire,
-  JsonValue as JsonValueWire,
-  WorkflowApprovalRecord as WorkflowApprovalWire,
-  WorkflowAttemptStatus as WorkflowAttemptStatusWire,
-  WorkflowAttemptWire,
-  WorkflowChildRunSummary as WorkflowChildRunWire,
-  WorkflowDefinition as WorkflowDefinitionWire,
-  WorkflowDefinitionSummary as WorkflowDefinitionSummaryWire,
-  WorkflowError as WorkflowRunErrorWire,
-  WorkflowNode as WorkflowNodeWire,
-  WorkflowNodeOutput as WorkflowNodeOutputWire,
-  WorkflowNodeRunRecord as WorkflowNodeRunWire,
-  WorkflowNodeRunStatus as WorkflowNodeRunStatusWire,
-  WorkflowOutputSchema as WorkflowOutputSchemaWire,
-  WorkflowRunDetailUnprojectedWire,
-  WorkflowRunDetailWire,
-  WorkflowRunLeanWire,
-  WorkflowRunStatus as WorkflowRunStatusWire,
-  WorkflowRunSummary as WorkflowRunSummaryWire,
-  WorkflowTriggerKind as WorkflowTriggerKindWire,
-  WorkflowValidationIssue as WorkflowIssueWire,
-} from "@jinn/workflow-wire"
 import type {
   CreateNoteInput,
   NoteDocumentResponse,
@@ -33,11 +7,9 @@ import type {
   UpdateNoteInput,
 } from "@/routes/notes/types"
 import { createConfigApi } from "@/lib/api-config"
-import { createExperimentsApi } from "@/lib/api-experiments"
 import { createSttApi } from "@/lib/api-stt"
 import { createTodoCaptureApi } from "@/lib/api-todo-capture"
 export type { TodoCaptureWire, TodoCaptureStageWire, TodoCaptureRouteWire } from "@/lib/api-todo-capture"
-import { createWorkflowLifecycleApi } from "@/lib/api-workflow-lifecycle"
 import type { StaleChatPolicy } from "@/lib/stale-chat"
 import type { EnginesResponse, ModelInfo } from "@/lib/engine-registry"
 import {
@@ -48,7 +20,6 @@ import {
 } from "@/lib/work-item-edit-wire"
 import type { WorkItemCommentPageWire, WorkItemCommentWire } from "@/lib/work-item-comment-wire"
 import type { WorkItemRunWire } from "@/lib/work-item-runs-wire"
-import type { ApprovalStateWire, WorkItemApprovalWire } from "@/lib/work-item-approval-wire"
 
 export interface TranscriptContentBlock {
   type: 'text' | 'tool_use' | 'tool_result' | 'thinking'
@@ -238,44 +209,6 @@ async function put<T>(path: string, body: unknown, origin?: WriteOriginWire): Pr
   return res.json();
 }
 
-/** The `issues` array on a workflow error envelope is untrusted input, so the
- *  entries that lack the two fields every renderer reads are dropped rather than
- *  asserted into shape. Deliberately a local read and not an import of
- *  `parseWorkflowIssues()` from `workflows/issues.ts`: that module is runtime
- *  code, and nothing runtime crosses from the gateway package into the bundle. */
-function workflowIssues(value: unknown[]): WorkflowIssueWire[] {
-  return value.flatMap((entry): WorkflowIssueWire[] => {
-    if (!entry || typeof entry !== "object") return [];
-    const { code, message, nodeId, edgeId, path } = entry as Record<string, unknown>;
-    if (typeof code !== "string" || typeof message !== "string") return [];
-    return [{
-      code,
-      message,
-      ...(typeof nodeId === "string" ? { nodeId } : {}),
-      ...(typeof edgeId === "string" ? { edgeId } : {}),
-      ...(typeof path === "string" ? { path } : {}),
-    }];
-  });
-}
-
-/** Workflow writes keep the server's structured validation issues intact. */
-async function workflowWrite<T>(path: string, method: "POST" | "PUT", body: unknown): Promise<T> {
-  const res = await authFetch(path, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (res.ok) return res.json();
-  let payload: Record<string, unknown> = {};
-  try { payload = await res.json() } catch { /* non-JSON error body */ }
-  const message = typeof payload.message === "string" ? payload.message : `API error: ${res.status}`;
-  const code = typeof payload.code === "string" ? payload.code : undefined;
-  if (Array.isArray(payload.issues)) {
-    throw new WorkflowValidationApiError(res.status, message, code, workflowIssues(payload.issues));
-  }
-  throw new ApiError(res.status, message, code);
-}
-
 async function patch<T>(path: string, body: unknown): Promise<T> {
   const res = await authFetch(path, {
     method: "PATCH",
@@ -295,14 +228,16 @@ interface UploadedFile {
 
 /**
  * Background work still running after a session's turn officially ended
- * (agent API calls or tracked Bash monitors). Present on session rows (list +
- * detail) and pushed live via the `session:background` WS event.
- * null/absent = no background work.
+ * (agent API calls, background sub-agents, the re-run they wake, or tracked
+ * Bash monitors). Present on session rows (list + detail) and pushed live via
+ * the `session:background` WS event. null/absent = no background work.
  */
 export interface BackgroundActivity {
   activeStreams: number
   activeAgents?: number
   activeMonitors?: number
+  backgroundAgents?: number
+  backgroundRerun?: boolean
   lastActivityAt: string
 }
 
@@ -399,55 +334,10 @@ export interface EngineLimitsResponse {
   engines: Record<string, EngineLimitEngineSnapshot>;
 }
 
-/* ── Workflow wire types ──────────────────────────────────────────────────
- * Derived from the canonical schemas, never restated. The gateway has no
- * serializer — `json()` is a bare `JSON.stringify` of what the repository
- * returned — so those types ARE the wire contract, and a copy kept by hand here
- * is drift with a delay on it. Re-exported under this file's `*Wire` naming so
- * the workflow surfaces keep importing their types from one place. */
-export type {
-  JsonValueWire,
-  WorkflowApprovalWire,
-  WorkflowBindingWire,
-  WorkflowPredicateWire,
-  WorkflowAttemptStatusWire,
-  WorkflowAttemptWire,
-  WorkflowChildRunWire,
-  WorkflowDefinitionWire,
-  WorkflowDefinitionSummaryWire,
-  WorkflowRunErrorWire,
-  WorkflowNodeWire,
-  WorkflowNodeOutputWire,
-  WorkflowNodeRunWire,
-  WorkflowNodeRunStatusWire,
-  WorkflowOutputSchemaWire,
-  WorkflowRunDetailUnprojectedWire,
-  WorkflowRunDetailWire,
-  WorkflowRunLeanWire,
-  WorkflowRunStatusWire,
-  WorkflowRunSummaryWire,
-  WorkflowTriggerKindWire,
-  WorkflowIssueWire,
-}
-
-/** A workflow API error carrying structured validation issues. Not only a 422:
- *  `failure()` in the gateway attaches `issues` to whatever status the error
- *  maps to, which is also 403, 404, 409 and 500. */
-export class WorkflowValidationApiError extends ApiError {
-  readonly issues: WorkflowIssueWire[]
-
-  constructor(status: number, message: string, code: string | undefined, issues: WorkflowIssueWire[]) {
-    super(status, message, code)
-    this.name = "WorkflowValidationApiError"
-    this.issues = issues
-  }
-}
-
 export type WorkItemStatusWire =
-  | "backlog" | "assigned" | "executing" | "in_review" | "done" | "blocked" | "escalated" | "cancelled"
+  | "backlog" | "executing" | "in_review" | "done" | "blocked" | "cancelled"
 export type WorkItemSourceWire =
   | "human" | "delegation" | "cron" | "workflow" | "session" | "connector" | "goal"
-export type VerifyModeWire = "trust" | "verify" | "thorough"
 
 /** The compact row's session provenance (gateway `sessionRef()`): the session
  *  id parsed from a `session:`/`delegate:` sourceRef, plus the optional
@@ -489,16 +379,6 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
   department: string | null
   source: WorkItemSourceWire
   sourceRef: string | null
-  approvalState: ApprovalStateWire | null
-  approvalRequest: string | null
-  approvalRef: string | null
-  /** Offered variants when the pending gate asks for a PICK (older gateways omit). */
-  approvalOptions?: string[] | null
-  approvalChoice?: string | null
-  /** Reserved for the operator: no employee decides it, not even by escalation (older gateways omit). */
-  approvalOperatorOnly?: boolean
-  approvalTarget: string | null
-  approvalEscalatedAt: string | null
   sessionRef?: WorkItemSessionRefWire | null
   /** Todos v2 (optional: older gateways omit them). */
   createdBy?: string
@@ -529,12 +409,6 @@ export interface WorkItemListWire {
   nextOffset?: number | null
 }
 
-export interface VerifyPolicyWire {
-  mode: VerifyModeWire
-  verifier?: { employee?: string; engine?: string; model?: string }
-  maxRounds?: number
-}
-
 /** The full row GET /api/work-items/:id returns under `workItem`. */
 export interface WorkItemFullWire {
   id: string
@@ -550,23 +424,8 @@ export interface WorkItemFullWire {
   rank: number | null
   source: WorkItemSourceWire
   sourceRef: string | null
-  acceptance: string | null
-  verifyPolicy: VerifyPolicyWire | null
   rounds: number
   budgetUsd: number | null
-  approvalState: ApprovalStateWire | null
-  approvalRequest: string | null
-  approvalRef: string | null
-  /** Offered variants when the pending gate asks for a PICK (older gateways omit). */
-  approvalOptions?: string[] | null
-  approvalChoice?: string | null
-  /** The gate is reserved for the operator: no employee may decide it, not the
-   *  COO and not through escalation (older gateways omit). */
-  approvalOperatorOnly?: boolean
-  approvalTarget: string | null
-  approvalEscalatedAt: string | null
-  approvalDecidedBy: string | null
-  approvalDecidedAt: string | null
   /** Todos v2 (optional: older gateways omit them). */
   createdBy?: string
   parentId?: string | null
@@ -601,10 +460,6 @@ export interface WorkItemEventWire {
   detail: Record<string, unknown> | null
   createdAt: string
 }
-
-/** The approval gate's shapes live in work-item-approval-wire.ts; re-exported
- *  so the client surface stays one import. */
-export type { ApprovalStateWire, WorkItemApprovalWire } from "./work-item-approval-wire"
 
 /** One node of GET /api/work-items/:id/tree — a full row plus nested children
  *  (rank-then-id ordered, depth-capped server-side). */
@@ -656,23 +511,12 @@ export interface WorkItemDetailWire {
   relations?: WorkItemRelationWire[]
   /** The Todo's labels, ordered by name (optional: older gateways omit it). */
   labels?: WorkItemLabelWire[]
-  /** Approval history, oldest first (optional: older gateways omit it). */
-  approvals?: WorkItemApprovalWire[]
   /** The run ledger, oldest first (optional: older gateways omit it). */
   runs?: WorkItemRunWire[]
 }
 
 /** Lightweight batch enrichment used by board/attention rows. */
 export type WorkItemOpenDetailWire = Pick<WorkItemDetailWire, "workItem" | "events">
-
-export interface ApprovalDecisionResultWire {
-  workItem: WorkItemFullWire
-  escalated: boolean
-}
-
-export interface ApprovalEscalationResultWire {
-  workItem: WorkItemFullWire
-}
 
 /** A serialized session linked to a Todo (the sheet's "Executing session" link
  *  only needs the id + a status glance; the rest is passthrough). */
@@ -704,50 +548,8 @@ export const api = {
     post<NoteDocumentResponse>("/api/notes", input),
   updateNote: (input: UpdateNoteInput) =>
     put<NoteDocumentResponse>("/api/notes", input),
-  ...createExperimentsApi({ get, post }),
   getFeatures: () => get<{ notesEnabled: boolean; staleChat: StaleChatPolicy }>("/api/features"),
   getStatus: () => get<Record<string, unknown>>("/api/status"),
-  listWorkflowDefinitionsV2: (cursor?: string, retired?: boolean) =>
-    get<{ items: WorkflowDefinitionSummaryWire[]; nextCursor: string | null }>(`/api/workflows?${new URLSearchParams({ ...(cursor ? { cursor } : {}), ...(retired ? { retired: "true" } : {}) })}`),
-  getWorkflowDefinitionV2: (id: string) =>
-    get<WorkflowDefinitionWire>(`/api/workflows/${encodeURIComponent(id)}`),
-  listWorkflowRunsV2: (id: string, limit = 50) =>
-    get<{ items: WorkflowRunSummaryWire[]; nextCursor: string | null }>(
-      `/api/workflows/${encodeURIComponent(id)}/runs?limit=${limit}`,
-    ),
-  /** The polled shape: no definition snapshot, no attempt prompts. */
-  getWorkflowRunV2: (id: string, runId: string) =>
-    get<WorkflowRunLeanWire>(
-      `/api/workflows/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`,
-    ),
-  /** The snapshot the run canvas needs to draw the graph at the revision the run
-   *  started on, plus the prompts the inspector shows. Fetched once per run, and
-   *  again only when a node is opened whose prompt the snapshot predates. */
-  getWorkflowRunFullV2: (id: string, runId: string) =>
-    get<WorkflowRunDetailWire>(
-      `/api/workflows/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}?view=full`,
-    ),
-  createWorkflowV2: (input: { id: string; title: string; description?: string }) =>
-    workflowWrite<WorkflowDefinitionWire>("/api/workflows", "POST", input),
-  saveWorkflowDefinitionV2: (id: string, definition: WorkflowDefinitionWire, expectedRevision: number) =>
-    workflowWrite<WorkflowDefinitionWire>(
-      `/api/workflows/${encodeURIComponent(id)}`, "PUT", { definition, expectedRevision },
-    ),
-  ...createWorkflowLifecycleApi({ workflowWrite }),
-  /** Unprojected, like every workflow write route: the body carries
-   *  `attempts[].input` and no `spendUsd`. See ICI-1190. */
-  startWorkflowRunV2: (id: string) =>
-    post<WorkflowRunDetailUnprojectedWire>(`/api/workflows/${encodeURIComponent(id)}/runs`, { input: {} }),
-  decideWorkflowApprovalV2: (
-    id: string,
-    runId: string,
-    nodeId: string,
-    body: { decision: "approve" | "reject"; expectedRevision: number; reason?: string; choice?: string },
-  ) =>
-    post<WorkflowRunDetailUnprojectedWire>(
-      `/api/workflows/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/nodes/${encodeURIComponent(nodeId)}/approval`,
-      body,
-    ),
   /** Resolved model + capability registry (engines, their models, effort levels). */
   getEngines: () => get<EnginesResponse>("/api/engines"),
   /** Force re-discovery of dynamic (pi) models, returning the rebuilt registry. */
@@ -874,11 +676,10 @@ export const api = {
     rootsOnly?: boolean
     label?: string
     kept?: boolean
-    home?: boolean
   }, signal?: AbortSignal) => {
     const q = new URLSearchParams()
     for (const key of TODO_LIST_PARAMS) if (params?.[key]) q.set(key, String(params[key]))
-    for (const flag of ["rootsOnly", "kept", "home"] as const) if (params?.[flag]) q.set(flag, "true")
+    for (const flag of ["rootsOnly", "kept"] as const) if (params?.[flag]) q.set(flag, "true")
     q.set("limit", String(params?.limit ?? 20))
     return get<WorkItemListWire>(`/api/work-items?${q.toString()}`, signal ? { signal } : undefined)
   },
@@ -940,7 +741,7 @@ export const api = {
       origin,
     ),
   /** GRS-021c: create a Todo (the "+ New Todo" affordance). The operator caller
-   *  mints a `human`-source item; approvals structurally cannot be attached here. */
+   *  mints a `human`-source item. */
   createWorkItem: (input: {
     title: string
     body?: string
@@ -949,11 +750,10 @@ export const api = {
     department?: string
     priority?: number
     dueAt?: string
-    acceptance?: string
     labels?: string[]
   }, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>("/api/work-items", input, origin),
-  /** Todos v2 slice 6: roster-validated assignment (backlog → assigned). */
+  /** Todos v2 slice 6: roster-validated assignment; status is unchanged. `@operator` assigns to the operator. */
   assignWorkItem: (id: string, assignee: string, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>(`/api/work-items/${encodeURIComponent(id)}/assign`, { assignee }, origin),
   /** Non-deleting archive: the row and its audit survive as `cancelled`. */
@@ -983,16 +783,6 @@ export const api = {
       signal ? { signal } : undefined,
     )
   },
-  /** GRS-021b: the operator's approval DECISION. Human-only server-side; a
-   *  tool-marked caller is refused 403. Send-back is `reject` (+ optional note). */
-  decideWorkItemApproval: (id: string, decision: "approve" | "reject", note?: string, choice?: string) =>
-    post<ApprovalDecisionResultWire>(`/api/work-items/${encodeURIComponent(id)}/approval`, {
-      decision,
-      ...(note !== undefined && note !== "" ? { note } : {}),
-      ...(choice !== undefined ? { choice } : {}),
-    }),
-  escalateWorkItemApproval: (id: string) =>
-    post<ApprovalEscalationResultWire>(`/api/work-items/${encodeURIComponent(id)}/approval/escalate`, {}),
   /** GRS-002: execution attempts linked to a Todo (the sheet's session link). */
   listWorkItemSessions: (id: string) =>
     get<LinkedSessionWire[]>(`/api/work-items/${encodeURIComponent(id)}/sessions`),

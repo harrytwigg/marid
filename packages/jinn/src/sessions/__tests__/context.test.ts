@@ -251,7 +251,7 @@ describe("buildContext — Jinn MCP usage directive", () => {
     expect(out).toContain("## COO Company Anchor");
     expect(out).toContain("Your `codex` engine has the built-in `jinn` MCP attached for this session.");
     expect(out).toContain("Todos/work-items are the source of truth for task tracking");
-    expect(out).toContain("Use Workflows for multi-step or scheduled orchestration");
+    expect(out).toContain("Use cron for scheduled prompts; split multi-step work into a root Todo with child Todos and delegation");
     expect(out).toContain("Use company-reference reads before asking the operator");
     expect(out).toContain("role/persona matches the task");
     expect(out).not.toContain("## Company Identity");
@@ -318,8 +318,7 @@ describe("buildContext — Jinn MCP usage directive", () => {
     expect(companyBlock).not.toContain("You report to Ops Director");
     expect(out).toContain("Your hands are the attached Jinn MCP");
     expect(out).toContain("Todos are your live work ledger - find and update your Todo; when it is finished, move it to in_review yourself");
-    expect(out).toContain("Workflows are reusable automations (the HOW)");
-    expect(out).toContain("Todos and Workflows are SEPARATE");
+    expect(out).toContain("Use cron for scheduled or recurring prompts; split multi-step work into a root Todo with child Todos and delegation");
     expect(out).toContain("One employee may run multiple child sessions");
     expect(out).toContain("Questions and approvals route to your manager/COO by default");
     expect(out).toContain("aCEO/operator is the exception");

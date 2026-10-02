@@ -100,7 +100,6 @@ test('a controlled progressive response stops and keeps the next unsent draft', 
 test('secondary phone controls fit and remain reachable with enlarged text', async ({ page }) => {
   const routes = [
     { path: '/todos', labels: ['Filters', 'Switch workspace'] },
-    { path: '/workflow', labels: ['Active', 'Archived'] },
     { path: '/more', labels: ['Dark', 'Light', 'System'] },
     { path: '/settings', labels: ['Red', 'Blue', 'Custom accent hex color'] },
   ]

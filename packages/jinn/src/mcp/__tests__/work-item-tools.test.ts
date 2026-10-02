@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { CALLER_SESSION_CAPABILITY_HEADER, CALLER_SESSION_HEADER, TOOL_CALL_HEADER, TOOL_CALL_HEADER_VALUE, ensureSessionCapability } from "../identity.js";
+import { CALLER_SESSION_HEADER, ensureSessionCapability } from "../identity.js";
 import type { JinnMcpContext, JinnMcpTool } from "../toolkit.js";
 import { inProcessGatewayFetch, seedPlatformOrg } from "./helpers/in-process-gateway.js";
 
@@ -60,7 +60,7 @@ function tool(name: string): JinnMcpTool {
 }
 
 describe("work-item tools — registry + schemas", () => {
-  it("exposes the generic Todo verbs separately from COO approval verbs", () => {
+  it("exposes the generic Todo verbs and no approval verbs", () => {
     expect(buildWorkItemTools().map((t) => t.name)).toEqual([
       "list_work_items",
       "get_work_item",
@@ -85,14 +85,10 @@ describe("work-item tools — registry + schemas", () => {
     const names = buildTools().map((t) => t.name).sort();
     expect(names).toContain("create_work_item");
     expect(names).toContain("assign_work_item");
-    expect(names).toContain("request_work_item_approval");
-    expect(names).toContain("decide_work_item_approval");
-    expect(names).toContain("escalate_work_item_approval");
+    expect(names.some((n) => /approval/.test(n))).toBe(false);
     expect(names).toContain("archive_work_item");
-    expect(names).toContain("fire_workflow_event");
-    expect(names).toContain("cancel_workflow_run");
     expect(names.some((n) => /cancel/i.test(n) && /work_item/.test(n))).toBe(false);
-    expect(names).toHaveLength(76);
+    expect(names).toHaveLength(51);
   });
 
   it("positions list as recent/filter summaries and search as text/filter hits", () => {
@@ -109,19 +105,17 @@ describe("work-item tools — registry + schemas", () => {
     expect(tool("list_work_items").description).toMatch(/roots and sub-tasks/i);
   });
 
-  it("create schema has no approval fields and update schema allows manual start but excludes cancelled", () => {
+  it("update schema allows manual start but leaves cancelling to archive", () => {
     const createProps = tool("create_work_item").inputSchema.properties;
     expect(Object.keys(createProps).sort()).toEqual(
-      ["acceptance", "autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title", "verifyPolicy"].sort(),
+      ["autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title"].sort(),
     );
-    expect(JSON.stringify(createProps)).not.toMatch(/approval/i);
     const status = tool("update_work_item").inputSchema.properties.status as { enum: string[] };
-    expect(status.enum).toEqual(["backlog", "assigned", "executing", "in_review", "blocked", "escalated", "done"]);
+    expect(status.enum).toEqual(["backlog", "executing", "in_review", "blocked", "done"]);
     expect(status.enum).not.toContain("cancelled");
-    expect(tool("update_work_item").inputSchema.properties.asOperator).toMatchObject({ type: "boolean" });
-    expect(tool("get_work_item").inputSchema.properties.id).toMatchObject({
-      pattern: "^[A-Z]{3}-[1-9][0-9]*$",
-    });
+    expect(tool("update_work_item").inputSchema.properties.asOperator).toMatchObject({ type: "boolean", description: expect.stringMatching(/coordinator.*done.*reason/i) });
+    expect(tool("update_work_item").inputSchema.properties).not.toHaveProperty("acknowledgeEscalated");
+    expect(tool("get_work_item").inputSchema.properties.id).toMatchObject({ pattern: "^[A-Z]{3}-[1-9][0-9]*$" });
   });
 
   it("ships the generic Todo doctrine in the repo template CLAUDE.md", () => {
@@ -136,7 +130,7 @@ describe("work-item tools — registry + schemas", () => {
     expect(todoSkill).toContain("One operator outcome should normally map to one root Todo.");
     expect(todoSkill).toContain("A checklist does not imply one Todo per item.");
     expect(todoSkill).toContain("Only independently assignable or independently reviewable deliverables become child Todos.");
-    expect(todoSkill).toContain("Never mark your own produced work `done`");
+    expect(todoSkill).toContain("No agent marks a Todo `done`.");
     expect(template).not.toContain(["", "Users", ""].join("/"));
   });
 });
@@ -234,11 +228,7 @@ describe("work-item tools — unit (stub gateway)", () => {
           title: "WF",
           body: "body",
           status: "in_review",
-          acceptance: "- pass",
-          verifyPolicy: { mode: "verify" },
           rounds: 1,
-          approvalState: "pending",
-          approvalRequest: "decide",
           budgetUsd: 5,
           source: "workflow",
         },
@@ -248,7 +238,7 @@ describe("work-item tools — unit (stub gateway)", () => {
     const out = (await tool("get_work_item").handler({ id: "JIN-2" }, ctx)) as Record<string, unknown>;
     expect(out).toMatchObject({ spendUsd: 1.25 });
     expect(out).not.toHaveProperty("workflowRun");
-    expect(out.workItem).toMatchObject({ acceptance: "- pass", approvalState: "pending", rounds: 1 });
+    expect(out.workItem).toMatchObject({ rounds: 1 });
   });
 
   it("get_work_item_tree hits the tree route and returns the subtree with a hint", async () => {
@@ -293,20 +283,16 @@ describe("work-item tools — unit (stub gateway)", () => {
     );
   });
 
-  it("create requires caller identity, posts session provenance, and structurally refuses approval fields", async () => {
+  it("create requires caller identity, and posts session provenance", async () => {
     const anon = stub(() => ({ status: 201, body: {} }), null);
     await expect(tool("create_work_item").handler({ title: "T" }, anon.ctx)).rejects.toThrow(/caller identity unavailable/i);
 
-    const { calls, ctx } = stub(() => ({ status: 201, body: { workItem: { id: "JIN-103", title: "T", status: "backlog", approvalState: null } } }), "sess-caller");
-    await expect(tool("create_work_item").handler({ title: "T", approvalRequest: "decide" }, ctx)).rejects.toThrow(
-      /approval.*authority surface/i,
-    );
-    await tool("create_work_item").handler({ title: "T", body: "B", acceptance: "- ok", verifyPolicy: { mode: "verify" } }, ctx);
+    const { calls, ctx } = stub(() => ({ status: 201, body: { workItem: { id: "JIN-103", title: "T", status: "backlog" } } }), "sess-caller");
+    await tool("create_work_item").handler({ title: "T", body: "B" }, ctx);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items");
     expect(calls[0].headers[CALLER_SESSION_HEADER]).toBe("sess-caller");
-    expect(calls[0].body).toMatchObject({ title: "T", body: "B", acceptance: "- ok", verifyPolicy: { mode: "verify" } });
-    expect(calls[0].body).not.toHaveProperty("approvalRequest");
+    expect(calls[0].body).toEqual({ title: "T", body: "B" });
   });
 
   it("create refuses caller-supplied provenance instead of forwarding spoofable source/sourceRef", async () => {
@@ -317,39 +303,20 @@ describe("work-item tools — unit (stub gateway)", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("approval tools post to the separate request/decision/escalation routes", async () => {
-    const names = new Set(buildTools().map((t) => t.name));
-    expect(names.has("request_work_item_approval")).toBe(true);
-    expect(names.has("decide_work_item_approval")).toBe(true);
-    expect(names.has("escalate_work_item_approval")).toBe(true);
-
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const decideTool = buildTools().find((t) => t.name === "decide_work_item_approval")!;
-    const escalateTool = buildTools().find((t) => t.name === "escalate_work_item_approval")!;
-    const { calls, ctx } = stub((call) => ({ status: 200, body: { ok: true, route: new URL(call.url).pathname } }), "sess-coo");
-
-    await requestTool.handler({ id: "JIN-102", request: "Approve release", target: "platform-manager" }, ctx);
-    await decideTool.handler({ id: "JIN-102", decision: "approve", note: "ship" }, ctx);
-    await escalateTool.handler({ id: "JIN-102", reason: "operator needed" }, ctx);
-
-    expect(calls.map((c) => [c.method, new URL(c.url).pathname, c.body])).toEqual([
-      ["POST", "/api/work-items/JIN-102/approval/request", { request: "Approve release", target: "platform-manager" }],
-      ["POST", "/api/work-items/JIN-102/approval", { decision: "approve", note: "ship" }],
-      ["POST", "/api/work-items/JIN-102/approval/escalate", { reason: "operator needed" }],
-    ]);
-  });
-
-  it("update is identity-gated, refuses cancel locally, and readable gateway refusals name the human surface", async () => {
+  it("update is identity-gated, leaves the lane to the gateway, and readable gateway refusals reach the caller", async () => {
     const anon = stub(() => ({ status: 200, body: {} }), null);
     await expect(tool("update_work_item").handler({ id: "JIN-1", status: "blocked" }, anon.ctx)).rejects.toThrow(/caller identity unavailable/i);
     const { calls, ctx } = stub(() => ({ status: 403, body: { error: "self-review ban — use the human review surface" } }), "sess-1");
-    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "cancelled", note: "drop" }, ctx)).rejects.toThrow(
-      /cancelling.*human surface/i,
-    );
+    // Not a client-side refusal: the status is a real one, so it goes to the gateway, which decides the lane.
+    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "cancelled", note: "drop" }, ctx)).rejects.toThrow(/refused \(403\).*human review surface/i);
     await expect(tool("update_work_item").handler({ id: "JIN-1", status: "done" }, ctx)).rejects.toThrow(/human review surface/i);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items/JIN-1/status");
-    expect(calls[0].body).toEqual({ status: "done" });
+    expect(calls[0].body).toEqual({ status: "cancelled", note: "drop" });
+    expect(calls[1].body).toEqual({ status: "done" });
+    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "assigned" }, ctx)).rejects.toThrow(/status must be one of/i);
+    await expect(tool("update_work_item").handler({ id: "JIN-1", status: "escalated" }, ctx)).rejects.toThrow(/status must be one of/i);
+    expect(calls).toHaveLength(2);
   });
 
   it("accepts executing and sends it through the guarded status route", async () => {
@@ -358,24 +325,18 @@ describe("work-item tools — unit (stub gateway)", () => {
     await expect(tool("update_work_item").handler({ id: "JIN-1", status: "executing" }, ctx)).resolves.toMatchObject({
       workItem: { status: "executing" },
     });
-    expect(calls).toEqual([
-      expect.objectContaining({
-        method: "POST",
-        url: "http://127.0.0.1:7777/api/work-items/JIN-1/status",
-        body: { status: "executing" },
-      }),
-    ]);
+    expect(calls).toEqual([expect.objectContaining({ method: "POST", url: "http://127.0.0.1:7777/api/work-items/JIN-1/status", body: { status: "executing" } })]);
   });
 
   it("forwards asOperator for the gateway to authorize, and omits it when unasked", async () => {
-    const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", status: "assigned" } } }), "sess-1");
+    const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", status: "done" } } }), "sess-1");
 
-    await tool("update_work_item").handler({ id: "JIN-1", status: "assigned", asOperator: true }, ctx);
-    await tool("update_work_item").handler({ id: "JIN-1", status: "assigned" }, ctx);
+    await tool("update_work_item").handler({ id: "JIN-1", status: "done", note: "shipped", asOperator: true }, ctx);
+    await tool("update_work_item").handler({ id: "JIN-1", status: "done" }, ctx);
 
     expect(calls.map((c) => c.body)).toEqual([
-      { status: "assigned", asOperator: true },
-      { status: "assigned" },
+      { status: "done", note: "shipped", asOperator: true },
+      { status: "done" },
     ]);
   });
 
@@ -393,10 +354,7 @@ describe("work-item tools — unit (stub gateway)", () => {
     await expect(tool("archive_work_item").handler({ id: "JIN-1", note: "stale" }, anon.ctx)).rejects.toThrow(/caller identity unavailable/i);
 
     const { calls, ctx } = stub(() => ({ status: 200, body: { workItem: { id: "JIN-1", status: "cancelled" }, archived: true } }), "sess-1");
-    const out = (await tool("archive_work_item").handler({ id: "JIN-1", note: "stale cleanup" }, ctx)) as {
-      archived: boolean;
-      workItem: { status: string };
-    };
+    const out = (await tool("archive_work_item").handler({ id: "JIN-1", note: "stale cleanup" }, ctx)) as { archived: boolean; workItem: { status: string } };
     expect(out).toMatchObject({ archived: true, workItem: { status: "cancelled" } });
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items/JIN-1/archive");
@@ -407,12 +365,9 @@ describe("work-item tools — unit (stub gateway)", () => {
 type Api = typeof import("../../gateway/api.js");
 type Registry = typeof import("../../sessions/registry.js");
 type Store = typeof import("../../work-items/store.js");
-type Approvals = typeof import("../../work-items/approvals.js");
 let api: Api;
 let registry: Registry;
 let store: Store;
-let approvals: Approvals;
-
 
 function ctxFor(callerSessionId?: string, capability: "valid" | "none" | string = "valid"): JinnMcpContext {
   return {
@@ -425,7 +380,6 @@ function ctxFor(callerSessionId?: string, capability: "valid" | "none" | string 
   };
 }
 
-
 beforeAll(async () => {
   seedPlatformOrg(process.env.JINN_HOME!);
   ({ buildTools } = await import("../server.js"));
@@ -433,7 +387,6 @@ beforeAll(async () => {
   api = await import("../../gateway/api.js");
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
-  approvals = await import("../../work-items/approvals.js");
   (await import("../../shared/db.js")).initDb();
 });
 
@@ -443,20 +396,19 @@ describe("work-item tools — integration against the real API + store", () => {
     const ctx = ctxFor(caller.id);
 
     const created = (await tool("create_work_item").handler(
-      { title: "Polish narwhal queue", body: "Literal %_\\ body", acceptance: "- ship", verifyPolicy: { mode: "verify" } },
+      { title: "Polish narwhal queue", body: "Literal %_\\ body" },
       ctx,
-    )) as { workItem: { id: string; approvalState: null } };
-    expect(created.workItem.approvalState).toBeNull();
+    )) as { workItem: { id: string } };
+    expect(created.workItem.id).toBeTruthy();
 
     const found = (await tool("search_work_items").handler({ text: "Literal %_\\", status: "backlog" }, ctx)) as {
       workItems: Array<{ id: string }>;
     };
     expect(found.workItems.map((w) => w.id)).toContain(created.workItem.id);
 
-    const assigned = (await tool("assign_work_item").handler({ id: created.workItem.id, assignee: "platform-dev" }, ctx)) as {
-      workItem: { assignee: string; department: string; status: string };
-    };
-    expect(assigned.workItem).toMatchObject({ assignee: "platform-dev", department: "platform", status: "assigned" });
+    const assigned = (await tool("assign_work_item").handler({ id: created.workItem.id, assignee: "platform-dev" }, ctx)) as { workItem: { assignee: string; department: string; status: string } };
+    // Assigning never moves the Todo: a backlog Todo with an assignee is what "assigned" now means.
+    expect(assigned.workItem).toMatchObject({ assignee: "platform-dev", department: "platform", status: "backlog" });
 
     const started = (await tool("update_work_item").handler({ id: created.workItem.id, status: "executing" }, ctx)) as {
       workItem: { status: string };
@@ -475,11 +427,11 @@ describe("work-item tools — integration against the real API + store", () => {
     expect(bounced.workItem.status).toBe("executing");
 
     const read = (await tool("get_work_item").handler({ id: created.workItem.id }, ctx)) as {
-      workItem: { acceptance: string; verifyPolicy: { mode: string } };
+      workItem: Record<string, unknown>;
       spendUsd: number;
     };
-    expect(read.workItem.acceptance).toBe("- ship");
-    expect(read.workItem.verifyPolicy.mode).toBe("verify");
+    expect(read.workItem).not.toHaveProperty("acceptance");
+    expect(read.workItem).not.toHaveProperty("verifyPolicy");
     expect(read.spendUsd).toBe(0);
   });
 
@@ -489,7 +441,7 @@ describe("work-item tools — integration against the real API + store", () => {
     const manager = registry.createSession({ engine: "codex", source: "web", sourceRef: "assign-manager", title: "assign manager", employee: "platform-manager" });
     const root = registry.createSession({ engine: "codex", source: "web", sourceRef: "assign-root", title: "assign root", employee: "coo" });
 
-    const protectedItem = store.createWorkItem({ title: "Protected assignment", status: "assigned", assignee: "platform-dev", source: "session" });
+    const protectedItem = store.createWorkItem({ title: "Protected assignment", status: "backlog", assignee: "platform-dev", source: "session" });
     await expect(tool("assign_work_item").handler({ id: protectedItem.id, assignee: "outsider" }, ctxFor(outsider.id))).rejects.toThrow(
       /403.*does not own|403.*cannot assign/i,
     );
@@ -500,16 +452,16 @@ describe("work-item tools — integration against the real API + store", () => {
     };
     expect(ownerAssigned.workItem.assignee).toBe("outsider");
 
-    const managedItem = store.createWorkItem({ title: "Manager assignment", status: "assigned", assignee: "platform-dev", source: "session" });
+    const managedItem = store.createWorkItem({ title: "Manager assignment", status: "backlog", assignee: "platform-dev", source: "session" });
     expect(((await tool("assign_work_item").handler({ id: managedItem.id, assignee: "outsider" }, ctxFor(manager.id))) as { workItem: { assignee: string } }).workItem.assignee).toBe("outsider");
-    const rootItem = store.createWorkItem({ title: "Root assignment", status: "assigned", assignee: "platform-dev", source: "session" });
+    const rootItem = store.createWorkItem({ title: "Root assignment", status: "backlog", assignee: "platform-dev", source: "session" });
     expect(((await tool("assign_work_item").handler({ id: rootItem.id, assignee: "outsider" }, ctxFor(root.id))) as { workItem: { assignee: string } }).workItem.assignee).toBe("outsider");
 
     const unassigned = store.createWorkItem({ title: "Claimable backlog", status: "backlog", assignee: null, source: "human" });
     const claimed = (await tool("assign_work_item").handler({ id: unassigned.id, assignee: "outsider" }, ctxFor(outsider.id))) as {
       workItem: { assignee: string; status: string };
     };
-    expect(claimed.workItem).toMatchObject({ assignee: "outsider", status: "assigned" });
+    expect(claimed.workItem).toMatchObject({ assignee: "outsider", status: "backlog" });
 
     const terminal = store.createWorkItem({ title: "Closed assignment", status: "done", assignee: "platform-dev", source: "session" });
     await expect(tool("assign_work_item").handler({ id: terminal.id, assignee: "outsider" }, ctxFor(owner.id))).rejects.toThrow(
@@ -532,11 +484,11 @@ describe("work-item tools — integration against the real API + store", () => {
     };
     expect(moved.workItem.status).toBe("in_review");
     await expect(tool("update_work_item").handler({ id: delegated.workItemId, status: "done" }, execCtx)).rejects.toThrow(
-      /self-review ban.*human review surface/i,
+      /operator's decision.*in_review/i,
     );
   });
 
-  it("requires a server-minted session capability, then lets any non-executor review-close", async () => {
+  it("requires a server-minted session capability, and no agent session closes, only the coordinator for the operator", async () => {
     const reviewer = registry.createSession({ engine: "codex", source: "web", sourceRef: "qa-reviewer", title: "qa reviewer" });
     const operatorSource = registry.createSession({ engine: "codex", source: "web", sourceRef: "operator-source", title: "operator source" });
     const executor = registry.createSession({
@@ -565,15 +517,25 @@ describe("work-item tools — integration against the real API + store", () => {
     expect(store.getWorkItem(item.id)?.status).toBe("in_review");
 
     await expect(tool("update_work_item").handler({ id: item.id, status: "done" }, ctxFor(executor.id))).rejects.toThrow(
-      /self-review ban.*human review surface/i,
+      /operator's decision.*in_review/i,
     );
     expect(store.getWorkItem(item.id)?.status).toBe("in_review");
 
-    // A valid caller needs no durable relationship to the Todo; only the linked
-    // execution attempt is withheld by the self-review ban.
-    const closed = (await tool("update_work_item").handler({ id: item.id, status: "done" }, ctxFor(operatorSource.id))) as {
-      workItem: { status: string };
-    };
+    // There is no agent close path at all: the session that delegated the work cannot
+    // close it either, and neither can a coordinator that does not say it acts for the operator.
+    await expect(tool("update_work_item").handler({ id: item.id, status: "done" }, ctxFor(reviewer.id))).rejects.toThrow(
+      /operator's decision.*in_review/i,
+    );
+    await expect(tool("update_work_item").handler({ id: item.id, status: "done" }, ctxFor(operatorSource.id))).rejects.toThrow(
+      /operator's decision.*in_review/i,
+    );
+    expect(store.getWorkItem(item.id)?.status).toBe("in_review");
+
+    // The operator's coordinator chat may close for the operator, with the reason on the record.
+    const closed = (await tool("update_work_item").handler(
+      { id: item.id, status: "done", asOperator: true, note: "verified by the operator in chat" },
+      ctxFor(operatorSource.id),
+    )) as { workItem: { status: string } };
     expect(closed.workItem.status).toBe("done");
   });
 
@@ -583,146 +545,60 @@ describe("work-item tools — integration against the real API + store", () => {
 
     const backlog = store.createWorkItem({ title: "No shortcut close", status: "backlog", assignee: "platform-dev", source: "session" });
     await expect(tool("update_work_item").handler({ id: backlog.id, status: "done" }, ctxFor(owner.id))).rejects.toThrow(
-      /reviewer.*in_review|human review surface/i,
+      /operator's decision.*in_review/i,
     );
     expect(store.getWorkItem(backlog.id)?.status).toBe("backlog");
 
-    const unowned = store.createWorkItem({ title: "Assigned to someone else", status: "assigned", assignee: "platform-dev", source: "session" });
+    const unowned = store.createWorkItem({ title: "Assigned to someone else", status: "backlog", assignee: "platform-dev", source: "session" });
     const reported = (await tool("update_work_item").handler({ id: unowned.id, status: "blocked", note: "waiting" }, ctxFor(other.id))) as {
       workItem: { status: string };
     };
     expect(reported.workItem.status).toBe("blocked");
 
-    const owned = store.createWorkItem({ title: "Owner may report blocked", status: "assigned", assignee: "platform-dev", source: "session" });
+    const owned = store.createWorkItem({ title: "Owner may report blocked", status: "backlog", assignee: "platform-dev", source: "session" });
     const blocked = (await tool("update_work_item").handler({ id: owned.id, status: "blocked", note: "waiting on input" }, ctxFor(owner.id))) as {
       workItem: { status: string };
     };
     expect(blocked.workItem.status).toBe("blocked");
   });
 
-  it("requests a default-routed approval idempotently", async () => {
-    const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-owner", title: "approval owner", employee: "platform-dev" });
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Request routed approval", status: "assigned", assignee: "platform-dev", source: "session" });
-    const first = (await requestTool.handler({ id: item.id, request: "Approve release" }, ctxFor(owner.id))) as {
-      workItem: { approvalState: string; approvalTarget: string };
-    };
-    const second = (await requestTool.handler({ id: item.id, request: "Approve release" }, ctxFor(owner.id))) as typeof first;
-
-    expect(second).toEqual(first);
-    expect(first.workItem).toMatchObject({ approvalState: "pending", approvalTarget: "platform-manager" });
-    expect(store.listWorkItemEvents(item.id).filter((event) => event.kind === "approval_requested")).toHaveLength(1);
-  });
-
-  it("permits linked executors and accepts a valid explicit approval target", async () => {
-    const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-explicit-owner", title: "approval explicit owner", employee: "platform-dev" });
-    const linkedExecutor = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-executor", title: "approval executor" });
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-
-    const explicitItem = store.createWorkItem({ title: "Explicit approval target", status: "assigned", assignee: "platform-dev", source: "session" });
-    const explicit = (await requestTool.handler({ id: explicitItem.id, request: "Root review", target: "coo" }, ctxFor(owner.id))) as {
-      workItem: { approvalState: string; approvalTarget: string };
-    };
-    expect(explicit.workItem).toMatchObject({ approvalState: "pending", approvalTarget: "coo" });
-
-    const linkedItem = store.createWorkItem({ title: "Linked executor request", status: "executing", source: "delegation" });
-    store.linkSession(linkedItem.id, linkedExecutor.id);
-    const linked = (await requestTool.handler({ id: linkedItem.id, request: "Review linked work" }, ctxFor(linkedExecutor.id))) as {
-      workItem: { approvalState: string; approvalTarget: string };
-    };
-    expect(linked.workItem).toMatchObject({ approvalState: "pending", approvalTarget: "coo" });
-  });
-
-  it("rejects missing, foreign, and invalid-target approval requests without writing events", async () => {
-    const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-reject-owner", title: "approval reject owner", employee: "platform-dev" });
-    const outsider = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-outsider", title: "approval outsider", employee: "outsider" });
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Reject unsafe approval requests", status: "assigned", assignee: "platform-dev", source: "session" });
-
-    await expect(requestTool.handler({ id: item.id, request: "Steal review" }, ctxFor(outsider.id))).rejects.toThrow(
-      /403.*does not own|403.*cannot request approval/i,
-    );
-    await expect(requestTool.handler({ id: "JIN-999", request: "Missing" }, ctxFor(owner.id))).rejects.toThrow(/404.*not found/i);
-    await expect(requestTool.handler({ id: item.id, request: "Bad route", target: "unknown-reviewer" }, ctxFor(owner.id))).rejects.toThrow(
-      /400.*not an org employee|400.*approval target/i,
-    );
-    expect(store.listWorkItemEvents(item.id).filter((event) => event.kind === "approval_requested")).toHaveLength(0);
-    expect(store.getWorkItem(item.id)?.approvalState).toBeNull();
-  });
-
-  it("keeps requested approvals compatible with decision and escalation", async () => {
-    const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-compat-owner", title: "approval compatibility owner", employee: "platform-dev" });
-    const manager = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-manager", title: "approval manager", employee: "platform-manager" });
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const decideTool = buildTools().find((t) => t.name === "decide_work_item_approval")!;
-    const escalateTool = buildTools().find((t) => t.name === "escalate_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Decide requested approval", status: "assigned", assignee: "platform-dev", source: "session" });
-
-    await requestTool.handler({ id: item.id, request: "Approve release" }, ctxFor(owner.id));
-    const decided = (await decideTool.handler({ id: item.id, decision: "approve", note: "ship" }, ctxFor(manager.id))) as {
-      workItem: { approvalState: string };
-    };
-    expect(decided.workItem.approvalState).toBe("approved");
-
-    const escalationItem = store.createWorkItem({ title: "Escalate requested approval", status: "assigned", assignee: "platform-dev", source: "session" });
-    await requestTool.handler({ id: escalationItem.id, request: "Escalate release" }, ctxFor(owner.id));
-    const escalated = (await escalateTool.handler({ id: escalationItem.id, reason: "operator needed" }, ctxFor(manager.id))) as {
-      workItem: { approvalState: string; approvalEscalatedAt: string | null };
-    };
-    expect(escalated.workItem).toMatchObject({ approvalState: "pending" });
-    expect(escalated.workItem.approvalEscalatedAt).toBeTruthy();
-  });
-
-  it("refuses unrelated archive, while owner/root archive resolves pending approval without deleting evidence", async () => {
+  it("refuses archive to every agent session, while the operator's connector archives without deleting evidence", async () => {
     const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-owner", title: "archive owner", employee: "platform-dev" });
     const outsider = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-outsider", title: "archive outsider", employee: "outsider" });
     const root = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-root", title: "archive root", employee: "coo" });
-    const item = store.createWorkItem({ title: "Archive, do not delete", status: "assigned", assignee: "platform-dev", source: "session" });
-    approvals.requestApproval(item.id, { request: "Approve release", target: "platform-manager" });
+    const connector = registry.createSession({ engine: "codex", source: "remote-mcp", sourceRef: "remote-mcp:archive-op@example.com" });
+    const item = store.createWorkItem({ title: "Archive, do not delete", status: "backlog", assignee: "platform-dev", source: "session" });
 
-    await expect(tool("archive_work_item").handler({ id: item.id, note: "malicious cancellation" }, ctxFor(outsider.id))).rejects.toThrow(
-      /403.*does not own|403.*cannot archive/i,
-    );
-    expect(store.getWorkItem(item.id)).toMatchObject({ status: "assigned", approvalState: "pending" });
+    // Archiving is the operator's: the Todo's owner and the portal/COO session are refused like anyone else.
+    for (const session of [outsider, owner, root]) {
+      await expect(tool("archive_work_item").handler({ id: item.id, note: "cancellation" }, ctxFor(session.id))).rejects.toThrow(
+        /403.*operator's decision/i,
+      );
+    }
+    expect(store.getWorkItem(item.id)).toMatchObject({ status: "backlog" });
 
-    const archived = (await tool("archive_work_item").handler({ id: item.id, note: "obsolete" }, ctxFor(owner.id))) as {
+    const archived = (await tool("archive_work_item").handler({ id: item.id, note: "obsolete" }, ctxFor(connector.id))) as {
       archived: boolean;
-      workItem: { id: string; status: string; closedAt: string | null; approvalState: string; approvalDecidedBy: string };
+      workItem: { id: string; status: string; closedAt: string | null };
     };
 
     expect(archived.archived).toBe(true);
     expect(archived.workItem).toMatchObject({
       id: item.id,
       status: "cancelled",
-      approvalState: "rejected",
-      approvalDecidedBy: `session:${owner.id}`,
     });
     expect(archived.workItem.closedAt).toBeTruthy();
     expect(store.getWorkItem(item.id)?.status).toBe("cancelled");
     const events = store.listWorkItemEvents(item.id);
-    expect(events.some((e) => e.kind === "approval_decided" && e.actor === `session:${owner.id}`)).toBe(true);
-    expect(events.some((e) => e.kind === "status_change" && e.fromStatus === "assigned" && e.toStatus === "cancelled")).toBe(true);
-
-    const rootOwned = store.createWorkItem({ title: "Root may archive", status: "assigned", assignee: "platform-dev", source: "session" });
-    const rootArchived = (await tool("archive_work_item").handler({ id: rootOwned.id }, ctxFor(root.id))) as { workItem: { status: string } };
-    expect(rootArchived.workItem.status).toBe("cancelled");
+    expect(events.some((e) => e.kind === "status_change" && e.fromStatus === "backlog" && e.toStatus === "cancelled")).toBe(true);
   });
 
-  it("recursively rejects approval keys and validates exact verifyPolicy/provenance schemas", async () => {
+  it("refuses retired fields and supplied provenance", async () => {
     const caller = registry.createSession({ engine: "codex", source: "web", sourceRef: "schema-caller", title: "schema caller" });
     const ctx = ctxFor(caller.id);
 
-    await expect(
-      tool("create_work_item").handler({ title: "Nested approval", verifyPolicy: { mode: "verify", approvalState: "pending" } }, ctx),
-    ).rejects.toThrow(/approval.*authority surface/i);
-    await expect(
-      tool("create_work_item").handler({ title: "Deep approval", provenance: { source: "session", nested: { approvalAlias: true } } }, ctx),
-    ).rejects.toThrow(/approval.*authority surface/i);
-    await expect(tool("create_work_item").handler({ title: "Unknown policy key", verifyPolicy: { mode: "verify", extra: true } }, ctx)).rejects.toThrow(
-      /verifyPolicy.*unknown key|verifyPolicy.*only/i,
-    );
-    await expect(tool("create_work_item").handler({ title: "Bad policy mode", verifyPolicy: { mode: "maybe" } }, ctx)).rejects.toThrow(
-      /verifyPolicy\.mode.*trust, verify, thorough/i,
+    await expect(tool("create_work_item").handler({ title: "Retired policy", verifyPolicy: { mode: "verify" } }, ctx)).rejects.toThrow(
+      /verifyPolicy was removed from Todos/,
     );
     await expect(tool("create_work_item").handler({ title: "Unknown provenance key", provenance: { source: "session", extra: true } }, ctx)).rejects.toThrow(
       /provenance.*dedicated bridge|cannot be supplied/i,
@@ -730,26 +606,6 @@ describe("work-item tools — integration against the real API + store", () => {
     await expect(tool("create_work_item").handler({ title: "Bad provenance source", provenance: { source: "bogus" } }, ctx)).rejects.toThrow(
       /provenance.*dedicated bridge|cannot be supplied/i,
     );
-    await expect(tool("update_work_item").handler({ id: "JIN-9999", status: "blocked", note: "x", metadata: { approvalBypass: true } }, ctx)).rejects.toThrow(
-      /approval.*authority surface/i,
-    );
-
-    const assignTarget = store.createWorkItem({ title: "Assign approval reject", status: "backlog", source: "session" });
-    const { status, body } = await (async () => {
-      const res = await inProcessGatewayFetch(api)("http://gateway.test/api/work-items/" + encodeURIComponent(assignTarget.id) + "/assign", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
-          [CALLER_SESSION_HEADER]: caller.id,
-          [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(caller.id),
-        },
-        body: JSON.stringify({ assignee: "platform-dev", nested: { approvalState: "pending" } }),
-      });
-      return { status: res.status, body: JSON.parse(await res.text()) as { error: string } };
-    })();
-    expect(status).toBe(400);
-    expect(body.error).toMatch(/approval.*authority surface/i);
   });
 });
 
@@ -859,12 +715,11 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
     expect(silent.calls).toEqual([]);
   });
 
-  it("edit_work_item validates locally: at least one field, priority 0..3, no status, approval fields rejected", async () => {
+  it("edit_work_item validates locally: at least one field, priority 0..3, no status", async () => {
     const silent = stub(() => ({ status: 500, body: { error: "must not run" } }));
     await expect(tool("edit_work_item").handler({ id: "JIN-1" }, silent.ctx)).rejects.toThrow(/at least one/i);
     await expect(tool("edit_work_item").handler({ id: "JIN-1", priority: 9 }, silent.ctx)).rejects.toThrow(/priority/);
     await expect(tool("edit_work_item").handler({ id: "nope", body: "x" }, silent.ctx)).rejects.toThrow(/canonical Todo ID/);
-    await expect(tool("edit_work_item").handler({ id: "JIN-1", approvalState: "approved", body: "x" }, silent.ctx)).rejects.toThrow(/approval/i);
     await expect(tool("edit_work_item").handler({ id: "JIN-1", body: "a".repeat(64_001) }, silent.ctx)).rejects.toThrow(/too long/);
     await expect(tool("edit_work_item").handler({ id: "JIN-1", title: "a".repeat(201) }, silent.ctx)).rejects.toThrow(/too long/);
     // Review F2: stray non-editable args refuse LOUDLY instead of silently
@@ -874,7 +729,7 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
     await expect(tool("edit_work_item").handler({ id: "JIN-1", body: "x", rank: 3 }, silent.ctx)).rejects.toThrow(/operator/);
     expect(silent.calls).toEqual([]);
     const props = Object.keys(tool("edit_work_item").inputSchema.properties);
-    expect(props.sort()).toEqual(["acceptance", "body", "dueAt", "id", "priority", "title"]);
+    expect(props.sort()).toEqual(["body", "dueAt", "id", "priority", "title"]);
   });
 
   it("edit_work_item reads a fresh version and PATCHes with it", async () => {
@@ -918,9 +773,9 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
   it("edit_work_item surfaces the route's authority words verbatim", async () => {
     const { ctx } = stub((call) => {
       if (call.method === "GET") return { status: 200, body: { workItem: { id: "JIN-9", version: 1 } } };
-      return { status: 403, body: { error: 'field "verifyPolicy" is not editable by employee "platform-dev": assignee, department, rank, verifyPolicy are operator-only' } };
+      return { status: 403, body: { error: 'field "rank" is not editable by employee "platform-dev": assignee, department, rank are operator-only' } };
     });
-    await expect(tool("edit_work_item").handler({ id: "JIN-9", body: "x" }, ctx)).rejects.toThrow(/refused \(403\).*"verifyPolicy"/);
+    await expect(tool("edit_work_item").handler({ id: "JIN-9", body: "x" }, ctx)).rejects.toThrow(/refused \(403\).*"rank"/);
   });
 
   it("edit_work_item round-trips content edits through the real API, including the title", async () => {
@@ -929,13 +784,12 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
     const item = store.createWorkItem({ title: "slice4 editable", assignee: "platform-dev" });
 
     const edited = (await tool("edit_work_item").handler(
-      { id: item.id, title: "renamed over MCP", body: "refined over MCP", acceptance: "AC v2", priority: 1, dueAt: "2026-08-20" },
+      { id: item.id, title: "renamed over MCP", body: "refined over MCP", priority: 1, dueAt: "2026-08-20" },
       devCtx,
     )) as { workItem: Record<string, unknown> };
     expect(edited.workItem).toMatchObject({
       title: "renamed over MCP",
       body: "refined over MCP",
-      acceptance: "AC v2",
       priority: 1,
       dueAt: "2026-08-20T00:00:00.000Z",
     });
@@ -1132,15 +986,15 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("edit_work_item accepts explicit null to CLEAR acceptance and dueAt (slice-4 review F3)", async () => {
+  it("edit_work_item accepts explicit null to CLEAR dueAt (slice-4 review F3)", async () => {
     const { calls, ctx } = stub((call) =>
       call.method === "GET"
         ? { status: 200, body: { workItem: { id: "JIN-7", version: 4 } } }
-        : { status: 200, body: { workItem: { id: "JIN-7", acceptance: null, dueAt: null, version: 5 } } },
+        : { status: 200, body: { workItem: { id: "JIN-7", dueAt: null, version: 5 } } },
     );
     await tool("edit_work_item").handler({ id: "JIN-7", acceptance: null, dueAt: null }, ctx);
     const patch = calls.find((c) => c.method === "PATCH")!;
-    expect(patch.body).toEqual({ acceptance: null, dueAt: null, expectedVersion: 4 });
+    expect(patch.body).toEqual({ dueAt: null, expectedVersion: 4 });
   });
 
   it("attach → list → Read storagePath byte-compare, comment attachments, and the null-clear edit round-trip through the real API", async () => {
@@ -1175,11 +1029,11 @@ describe("work-item attachment + department tools (Todos v2 slice 5)", () => {
     expect(withFile.attachments).toHaveLength(1);
     expect(withFile.attachments[0].commentId).toBe(withFile.comment.id);
 
-    // Null-clear round trip (F3): set, then clear, acceptance + dueAt.
-    await tool("edit_work_item").handler({ id: item.id, acceptance: "AC", dueAt: "2026-09-01" }, ctx);
-    expect(store.getWorkItem(item.id)).toMatchObject({ acceptance: "AC", dueAt: "2026-09-01T00:00:00.000Z" });
-    await tool("edit_work_item").handler({ id: item.id, acceptance: null, dueAt: null }, ctx);
-    expect(store.getWorkItem(item.id)).toMatchObject({ acceptance: null, dueAt: null });
+    // Null-clear round trip (F3): set, then clear, dueAt.
+    await tool("edit_work_item").handler({ id: item.id, dueAt: "2026-09-01" }, ctx);
+    expect(store.getWorkItem(item.id)).toMatchObject({ dueAt: "2026-09-01T00:00:00.000Z" });
+    await tool("edit_work_item").handler({ id: item.id, dueAt: null }, ctx);
+    expect(store.getWorkItem(item.id)).toMatchObject({ dueAt: null });
 
     // Departments surface reflects the registered department + count.
     store.createWorkItem({ title: "dept item", department: "platform" });

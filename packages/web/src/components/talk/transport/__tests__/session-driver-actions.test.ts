@@ -30,11 +30,11 @@ const operation = {
   verification: "comment-reread",
 }
 
-const approvalOperation = {
+const boundOperation = {
   ...operation,
-  name: "commit_voice_approval",
-  description: "Commit from durable speech evidence.",
-  parameters: { ...operation.parameters, properties: { challengeId: { type: "string" } }, required: ["challengeId"] },
+  name: "talk_send_to_session",
+  description: "Send the operator's spoken message to a session.",
+  parameters: { ...operation.parameters, properties: { sessionId: { type: "string" }, message: { type: "string" } }, required: ["sessionId", "message"] },
 }
 
 function response(body: unknown) {
@@ -153,28 +153,28 @@ describe("gateway-target Talk controls", () => {
     expect(applyUiEffect).not.toHaveBeenCalled()
   })
 
-  it("persists final voice evidence before one approval call and applies one verified effect", async () => {
+  it("persists final voice evidence before one bound call and applies one verified effect", async () => {
     const applyUiEffect = vi.fn().mockResolvedValue(undefined)
     authFetch
       .mockResolvedValueOnce(response({ ok: true, inputOrdinal: 2 }))
       .mockResolvedValueOnce(response({
-        ok: true, verified: true, receiptId: "approval-receipt", replayed: false,
-        operation: approvalOperation.name, data: { decision: "approve" }, evidence: { state: "approved" },
-        uiEffect: { navigate: "/todos/ABC-1" },
+        ok: true, verified: true, receiptId: "bound-receipt", replayed: false,
+        operation: boundOperation.name, data: { delivered: true }, evidence: { state: "sent" },
+        uiEffect: { navigate: "/?session=s-1" },
       }))
     const sent: Array<Record<string, unknown>> = []
     const driver = createTalkDriver({
       sessionId: "talk-1", browserInstanceId: "browser-1", credentialGeneration: 3,
-      manifest: { version: 1, operations: [approvalOperation] }, send: (event) => sent.push(event),
+      manifest: { version: 1, operations: [boundOperation] }, send: (event) => sent.push(event),
       onState: () => {}, onError: () => {}, applyUiEffect,
     })
     driver.receive(JSON.stringify({
       type: "conversation.item.input_audio_transcription.completed", event_id: "voice-event-2",
-      item_id: "voice-item-2", transcript: "approve",
+      item_id: "voice-item-2", transcript: "tell it to carry on",
     }))
     const call = JSON.stringify({
       type: "response.function_call_arguments.done", event_id: "tool-event-1", item_id: "tool-item-1",
-      call_id: "approval-call-1", name: approvalOperation.name, arguments: '{"challengeId":"challenge-1"}',
+      call_id: "bound-call-1", name: boundOperation.name, arguments: '{"sessionId":"s-1","message":"carry on"}',
     })
     driver.receive(call)
     driver.receive(call)
@@ -186,9 +186,9 @@ describe("gateway-target Talk controls", () => {
     ])
     const control = JSON.parse(String((authFetch.mock.calls[1]![1] as RequestInit).body))
     expect(control).toMatchObject({
-      providerCallId: "approval-call-1", providerEventId: "tool-event-1", providerItemId: "tool-item-1",
+      providerCallId: "bound-call-1", providerEventId: "tool-event-1", providerItemId: "tool-item-1",
       providerTranscriptItemId: "voice-item-2", browserInstanceId: "browser-1", credentialGeneration: 3,
-      arguments: '{"challengeId":"challenge-1"}',
+      arguments: '{"sessionId":"s-1","message":"carry on"}',
     })
     expect(sent.filter((event) => event.type === "conversation.item.create")).toHaveLength(1)
   })

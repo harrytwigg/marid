@@ -10,13 +10,16 @@ process.env.JINN_HOME = tmp;
 
 type Store = typeof import("../store.js");
 type Claims = typeof import("../claims.js");
+type BackgroundWork = typeof import("../../sessions/background-work.js");
 let store: Store;
 let claims: Claims;
+let backgroundWork: BackgroundWork;
 let db: import("better-sqlite3").Database;
 
 beforeAll(async () => {
   store = await import("../store.js");
   claims = await import("../claims.js");
+  backgroundWork = await import("../../sessions/background-work.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
@@ -122,6 +125,57 @@ describe("claimWorkItem", () => {
 
     expect(taken.state).toBe("acquired");
     expect(claims.getWorkItemClaim(item.id)?.owner).toBe("owner-b");
+  });
+});
+
+describe("claimWorkItem against a holder whose turn has ended", () => {
+  function seedIdleSession(sessionId: string, workItemId: string): void {
+    const now = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO sessions (id, engine, source, source_ref, status, work_item_id, created_at, last_activity)
+       VALUES (?, 'claude', 'web', ?, 'idle', ?, ?, ?)`,
+    ).run(sessionId, `web:${sessionId}`, workItemId, now, now);
+  }
+
+  it("lets a new owner take the claim from an idle session with nothing running behind it", () => {
+    const item = store.createWorkItem({ title: "producer finished", status: "executing" });
+    seedIdleSession("idle-holder", item.id);
+    claims.claimWorkItem({ workItemId: item.id, owner: "owner-a", sessionId: "idle-holder" });
+
+    expect(claims.claimWorkItem({ workItemId: item.id, owner: "owner-b" }).state).toBe("acquired");
+  });
+
+  it("refuses a new owner while the idle holder still has background sub-agents working", () => {
+    const item = store.createWorkItem({ title: "producer mapping in the background", status: "executing" });
+    seedIdleSession("background-holder", item.id);
+    claims.claimWorkItem({ workItemId: item.id, owner: "owner-a", sessionId: "background-holder" });
+
+    backgroundWork.runtimeActivity.set("background-holder", { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: Date.now() });
+    try {
+      expect(claims.claimWorkItem({ workItemId: item.id, owner: "owner-b" }))
+        .toMatchObject({ state: "held", claim: { owner: "owner-a", sessionId: "background-holder" } });
+
+      // The overlay is the whole difference: once the sub-agents report finished the
+      // same holder is idle again and the claim is free to take.
+      backgroundWork.runtimeActivity.delete("background-holder");
+      expect(claims.claimWorkItem({ workItemId: item.id, owner: "owner-b" }).state).toBe("acquired");
+    } finally {
+      backgroundWork.runtimeActivity.delete("background-holder");
+    }
+  });
+
+  it("still lets the lease run out on a holder with background work, so a dead engine cannot pin the Todo", () => {
+    const item = store.createWorkItem({ title: "background work that never reports", status: "executing" });
+    seedIdleSession("stuck-holder", item.id);
+    claims.claimWorkItem({ workItemId: item.id, owner: "owner-a", sessionId: "stuck-holder" });
+    moveLease(item.id, LEASE_RAN_OUT);
+
+    backgroundWork.runtimeActivity.set("stuck-holder", { activeStreams: 0, backgroundAgents: 1, lastActivityAt: Date.now() });
+    try {
+      expect(claims.claimWorkItem({ workItemId: item.id, owner: "owner-b" }).state).toBe("acquired");
+    } finally {
+      backgroundWork.runtimeActivity.delete("stuck-holder");
+    }
   });
 });
 

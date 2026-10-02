@@ -7,13 +7,12 @@ import { assertTodoDepartmentAllowed, resolveTodoDepartmentPolicy, type TodoDepa
 import { parseTodoId, resolveTodoIdPrefix } from './id.js';
 import { resolveDepartmentPrefix } from './departments.js';
 import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
-import { currentApproval, currentApprovalsByItem, type WorkItemApproval } from './approval-rows.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
-import type { VerifyMode, VerifyPolicy } from './verify-policy.js';
 import type { WorkItemEventKind } from './event-log.js';
+import { OPERATOR_ASSIGNEE } from './operator-assignee.js';
 
 /**
  * Work-item store — the substrate of the Todos ledger (GRS-002, elevated by
@@ -25,70 +24,42 @@ import type { WorkItemEventKind } from './event-log.js';
  * `work-items/transitions.ts` are the ONLY write paths.
  *
  * GRS-021a additions: the 8-status vocabulary + 7-value provenance enum
- * (`migrate.ts` owns the DDL + rebuild), acceptance criteria, verify policy
- * (TRUST/VERIFY/THOROUGH + verifier + maxRounds), rounds, budget (spend is
- * NEVER stored — always derived live from linked sessions' total_cost), the
- * approval fields (ORTHOGONAL to lifecycle position; a fresh item's approval is
- * always none — the §1.3 anti-bottleneck principle: creates cannot attach one),
- * and the append-only `work_item_events` audit.
+ * (`migrate.ts` owns the DDL + rebuild), rounds, budget (spend is NEVER
+ * stored — always derived live from linked sessions' total_cost), and the
+ * append-only `work_item_events` audit.
+ *
+ * The `acceptance` and `verify_policy` columns are retired: they stay in the
+ * DDL so existing rows keep their data, but nothing reads or writes them.
+ * Acceptance criteria belong in the body.
  *
  * Trust the DB, not just TS callers: status/priority/source are enforced by
  * CHECK constraints and machine-minted idempotency by a partial UNIQUE index
  * (DDL in `migrate.ts`).
  */
 
+/** The statuses the gateway writes. The CHECK still admits the retired `assigned`
+ *  and `escalated`; the boot migration (`retired-statuses.ts`) moves those rows. */
 export type WorkItemStatus =
   | 'backlog'
-  | 'assigned'
   | 'executing'
   | 'in_review'
   | 'done'
   | 'blocked'
-  | 'escalated'
   | 'cancelled';
 export type WorkItemSource = 'human' | 'delegation' | 'cron' | 'workflow' | 'session' | 'connector' | 'goal';
-export type ApprovalState = 'pending' | 'approved' | 'rejected';
-export type ApprovalTargetKind = 'employee' | 'virtual' | 'none';
 
 /** Statuses that close an item — writes stamp/clear `closed_at` on these. */
 const CLOSED_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['done', 'cancelled']);
 /** Sticky terminals (design §1.1): the reconciler never derives an item OUT of
- *  these — `done`/`cancelled` are decisions, `escalated` is a deliberate routing
- *  to the operator that session churn must not silently undo. */
-export const STICKY_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['done', 'cancelled', 'escalated']);
+ *  these, and leaving one is the operator's decision — `done`/`cancelled` are
+ *  decisions, not states session churn may undo. */
+export const STICKY_STATUSES: ReadonlySet<WorkItemStatus> = new Set<WorkItemStatus>(['done', 'cancelled']);
 
-export type { VerifyMode, VerifyPolicy } from './verify-policy.js';
-
-/** Provenance defaults when `verify_policy` is NULL (design §1.5, operator-ruled):
- *  machine pulses auto-close (cron per fire; workflow runs carry their own gates),
- *  everything a mind delegates or captures is reviewed. */
-export const DEFAULT_VERIFY_MODE_BY_SOURCE: Readonly<Record<WorkItemSource, VerifyMode>> = {
-  cron: 'trust',
-  workflow: 'trust',
-  delegation: 'verify',
-  human: 'verify',
-  session: 'verify',
-  connector: 'verify',
-  goal: 'verify',
-};
-
-/** Bounce ceilings when the policy does not set `maxRounds` (design §1.5). */
-export const DEFAULT_MAX_ROUNDS: Readonly<Record<VerifyMode, number>> = {
-  trust: 2,
-  verify: 2,
-  thorough: 3,
-};
-
-/** Resolve the effective verify mode for an item (explicit policy, else the
- *  provenance default). Exported for the reconciler's TRUST hook and, later,
- *  the phase-2 dispatcher. */
-export function effectiveVerifyMode(item: Pick<WorkItem, 'verifyPolicy' | 'source'>): VerifyMode {
-  return item.verifyPolicy?.mode ?? DEFAULT_VERIFY_MODE_BY_SOURCE[item.source];
-}
-
-/** Resolve the effective bounce ceiling for an item. */
-export function effectiveMaxRounds(item: Pick<WorkItem, 'verifyPolicy' | 'source'>): number {
-  return item.verifyPolicy?.maxRounds ?? DEFAULT_MAX_ROUNDS[effectiveVerifyMode(item)];
+/** Whether a clean settle closes the item without operator review. Machine
+ *  pulses (one cron fire each) are trusted; everything a mind delegates or
+ *  captures goes to the operator, legacy `workflow` provenance included. */
+export function autoClosesOnSuccess(item: Pick<WorkItem, 'source'>): boolean {
+  return item.source === 'cron';
 }
 
 export interface WorkItem {
@@ -112,27 +83,10 @@ export interface WorkItem {
   version: number;
   source: WorkItemSource;
   sourceRef: string | null;
-  acceptance: string | null;
-  /** Parsed `verify_policy` JSON; null = provenance default applies. A corrupt
-   *  stored value fails closed to VERIFY rather than falling back to a source
-   *  default such as cron/workflow TRUST. */
-  verifyPolicy: VerifyPolicy | null;
+  /** Times the operator has sent this item back from review. A count only:
+   *  nothing caps it. */
   rounds: number;
   budgetUsd: number | null;
-  approvalState: ApprovalState | null;
-  approvalRequest: string | null;
-  approvalRef: string | null;
-  /** Offered variants when the current approval asks for a PICK (else null). */
-  approvalOptions: string[] | null;
-  approvalChoice: string | null;
-  /** The current approval is reserved for the human operator: no employee may
-   *  decide it, not the COO and not through escalation. */
-  approvalOperatorOnly: boolean;
-  approvalTarget: string | null;
-  approvalTargetKind: ApprovalTargetKind | null;
-  approvalEscalatedAt: string | null;
-  approvalDecidedBy: string | null;
-  approvalDecidedAt: string | null;
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
@@ -160,13 +114,8 @@ export interface CreateWorkItemInput {
    * creating a duplicate. NULL refs never collide.
    */
   sourceRef?: string | null;
-  acceptance?: string | null;
-  verifyPolicy?: VerifyPolicy | null;
   budgetUsd?: number | null;
   origin?: WriteOrigin;
-  // Deliberately NO approval fields (design §1.3, anti-bottleneck principle):
-  // a fresh Todo's approval is always none; approval is attached only by the
-  // 021b decision/mirror machinery where a human decision is genuinely required.
 }
 
 export interface ListWorkItemsFilter {
@@ -175,6 +124,8 @@ export interface ListWorkItemsFilter {
   assignee?: string;
   source?: WorkItemSource;
   needsAttentionFor?: string;
+  /** The queue is the operator's own: blocked Todos assigned to `@operator`, or to nobody, count too. */
+  needsAttentionOperator?: boolean;
   /** Exact creator identity (`created_by`). */
   createdBy?: string;
   /** Direct children of this Todo. */
@@ -218,26 +169,7 @@ export interface WorkItemPage {
   matches?: Record<string, WorkItemMatch[]>;
 }
 
-function parseVerifyPolicy(raw: unknown): VerifyPolicy | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  try {
-    const parsed = JSON.parse(raw) as VerifyPolicy;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { mode: 'verify' };
-    return parsed.mode === 'trust' || parsed.mode === 'verify' || parsed.mode === 'thorough' ? parsed : { mode: 'verify' };
-  } catch {
-    return { mode: 'verify' };
-  }
-}
-
-/** A work_items row as stored: everything on a WorkItem EXCEPT the approval
- *  facts, which live only in `work_item_approvals`. Producing a WorkItem
- *  therefore requires `overlayApproval` — a read path that skips hydration
- *  cannot silently serve all-null approvals, because it will not typecheck. */
-type WorkItemRowBase = Omit<WorkItem,
-  | 'approvalState' | 'approvalRequest' | 'approvalRef' | 'approvalOptions' | 'approvalChoice' | 'approvalOperatorOnly'
-  | 'approvalTarget' | 'approvalTargetKind' | 'approvalEscalatedAt' | 'approvalDecidedBy' | 'approvalDecidedAt'>;
-
-function rowToWorkItem(row: Record<string, unknown>): WorkItemRowBase {
+function rowToWorkItem(row: Record<string, unknown>): WorkItem {
   return {
     id: row.id as string,
     title: row.title as string,
@@ -255,44 +187,12 @@ function rowToWorkItem(row: Record<string, unknown>): WorkItemRowBase {
     version: row.version as number,
     source: row.source as WorkItemSource,
     sourceRef: (row.source_ref as string) ?? null,
-    acceptance: (row.acceptance as string) ?? null,
-    verifyPolicy: parseVerifyPolicy(row.verify_policy),
     rounds: (row.rounds as number) ?? 0,
     budgetUsd: (row.budget_usd as number) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
     closedAt: (row.closed_at as string) ?? null,
   };
-}
-
-/**
- * The ONLY producer of a WorkItem's approval fields: the item's current
- * `work_item_approvals` row, or "no approval" when it has none. Applied
- * explicitly at every read function (single reads hydrate per item; page/tree
- * reads batch), which keeps EVERY consumer — payloads, authority checks,
- * activity cards, transitions' returns — sourcing approvals from one place.
- */
-function overlayApproval(base: WorkItemRowBase, row: WorkItemApproval | undefined): WorkItem {
-  return {
-    ...base,
-    approvalState: row?.state ?? null,
-    approvalRequest: row?.request ?? null,
-    approvalRef: row?.ref ?? null,
-    approvalOptions: row?.options ?? null,
-    approvalChoice: row?.choice ?? null,
-    approvalOperatorOnly: row?.operatorOnly ?? false,
-    approvalTarget: row?.target ?? null,
-    approvalTargetKind: row?.targetKind ?? null,
-    approvalEscalatedAt: row?.escalatedAt ?? null,
-    approvalDecidedBy: row?.decidedBy ?? null,
-    approvalDecidedAt: row?.decidedAt ?? null,
-  };
-}
-
-function hydrateApprovals(items: WorkItemRowBase[]): WorkItem[] {
-  if (items.length === 0) return [];
-  const currentByItem = currentApprovalsByItem(items.map((item) => item.id));
-  return items.map((item) => overlayApproval(item, currentByItem.get(item.id)));
 }
 
 /** True only for a UNIQUE-constraint violation — NOT a CHECK violation (those must
@@ -408,9 +308,8 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
     parent = getWorkItem(input.parentId);
     if (!parent) throw new Error(`parent Todo ${input.parentId} not found`);
     // Closed parents refuse new children (the roll-up gate would otherwise be
-    // violable by construction order). `escalated` deliberately stays creatable-
-    // under: escalation routes an item to the operator, and decomposing it into
-    // sub-tasks is a legitimate part of resolving it.
+    // violable by construction order). A blocked parent stays creatable-under:
+    // decomposing it into sub-tasks is a legitimate part of resolving it.
     if (parent.status === 'done' || parent.status === 'cancelled') {
       throw new Error(`parent Todo ${parent.id} is ${parent.status} — sub-tasks cannot be added under a closed Todo`);
     }
@@ -434,16 +333,13 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
   const sourceRef = input.sourceRef ?? null;
   const priority = input.priority ?? 2;
   const closedAt = CLOSED_STATUSES.has(status) ? now : null;
-  const verifyPolicyJson = input.verifyPolicy ? JSON.stringify(input.verifyPolicy) : null;
   const createdBy = input.createdBy ?? (source === 'human' ? 'operator' : 'system');
 
   const selectExisting = (): WorkItem | undefined => {
     const row = db
       .prepare('SELECT * FROM work_items WHERE source = ? AND source_ref = ?')
       .get(source, sourceRef) as Record<string, unknown> | undefined;
-    // Overlay like every other WorkItem-producing read: a retried machine mint
-    // can hit an item that has since gained an approval.
-    return row ? overlayApproval(rowToWorkItem(row), currentApproval(row.id as string)) : undefined;
+    return row ? rowToWorkItem(row) : undefined;
   };
 
   const txn = db.transaction((): WorkItem => {
@@ -455,8 +351,8 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
       db.prepare(
         `INSERT INTO work_items
            (id, title, body, status, department, assignee, created_by, parent_id, root_id, depth, due_at,
-            priority, source, source_ref, acceptance, verify_policy, budget_usd, created_at, updated_at, closed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            priority, source, source_ref, budget_usd, created_at, updated_at, closed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         input.title,
@@ -472,8 +368,6 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
         priority,
         source,
         sourceRef,
-        input.acceptance ?? null,
-        verifyPolicyJson,
         input.budgetUsd ?? null,
         now,
         now,
@@ -534,11 +428,11 @@ export function getWorkItem(id: string): WorkItem | undefined {
   const db = initDb();
   const todoId = parseTodoId(id);
   const row = db.prepare('SELECT * FROM work_items WHERE id = ?').get(todoId) as Record<string, unknown> | undefined;
-  return row ? overlayApproval(rowToWorkItem(row), currentApproval(todoId)) : undefined;
+  return row ? rowToWorkItem(row) : undefined;
 }
 
-/** Read a bounded set of Todos in caller order with one row query and one
- * approval hydration pass. Unknown ids are omitted. */
+/** Read a bounded set of Todos in caller order with one row query. Unknown
+ * ids are omitted. */
 export function getWorkItems(ids: readonly string[]): WorkItem[] {
   const requestedIds = [...new Set(ids.map((id) => parseTodoId(id)))];
   if (requestedIds.length === 0) return [];
@@ -547,7 +441,7 @@ export function getWorkItems(ids: readonly string[]): WorkItem[] {
   const rows = db
     .prepare(`SELECT * FROM work_items WHERE id IN (${placeholders})`)
     .all(...requestedIds) as Record<string, unknown>[];
-  const byId = new Map(hydrateApprovals(rows.map(rowToWorkItem)).map((item) => [item.id, item]));
+  const byId = new Map(rows.map(rowToWorkItem).map((item) => [item.id, item]));
   return requestedIds.flatMap((id) => {
     const item = byId.get(id);
     return item ? [item] : [];
@@ -561,17 +455,15 @@ export function getWorkItemBySourceRef(source: WorkItemSource, sourceRef: string
   const row = db
     .prepare('SELECT * FROM work_items WHERE source = ? AND source_ref = ?')
     .get(source, sourceRef) as Record<string, unknown> | undefined;
-  return row ? overlayApproval(rowToWorkItem(row), currentApproval(row.id as string)) : undefined;
+  return row ? rowToWorkItem(row) : undefined;
 }
 
 export const WORK_ITEM_STATUS_VALUES: readonly WorkItemStatus[] = [
   'backlog',
-  'assigned',
   'executing',
   'in_review',
   'done',
   'blocked',
-  'escalated',
   'cancelled',
 ];
 
@@ -610,14 +502,15 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     values.push(filter.label, filter.label);
   }
   if (filter.needsAttentionFor) {
-    // Approvals live in work_item_approvals (their sole owner since PLA-48). An unexpired park is a
-    // clock-wait (PLA-157) and leaves this set outright, gate included; an unreadable one is not a park.
+    // A blocked Todo held by the caller, or one recovery routed to a human; the operator's own queue
+    // adds blocked Todos held by @operator or by nobody (a Dispatcher or Shaper dead end). An unexpired
+    // park is a clock-wait (PLA-157) and leaves this set outright; an unreadable one is not a park.
     // A recovery row only counts while the Todo is in a status the sweep visits — the sweep
     // statuses are RECOVERY_SWEPT_STATUSES in work-items/recovery.ts; keep this list in step with it.
     conditions.push(
-      "((EXISTS (SELECT 1 FROM work_item_approvals wap WHERE wap.work_item_id = work_items.id AND wap.state = 'pending' AND wap.target = ?) OR (assignee = ? AND status IN ('blocked', 'escalated')) OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('assigned', 'executing', 'in_review', 'blocked', 'escalated'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
+      "((((assignee IN (?, ?) OR (? = 1 AND assignee IS NULL)) AND status = 'blocked') OR EXISTS (SELECT 1 FROM work_item_recovery rec WHERE rec.work_item_id = work_items.id AND rec.lane IN ('recovering', 'manager') AND work_items.status IN ('executing', 'in_review', 'blocked'))) AND NOT EXISTS (SELECT 1 FROM work_item_stop_cause sc WHERE sc.work_item_id = work_items.id AND strftime('%s', sc.parked_until) > strftime('%s', ?) AND NOT EXISTS (SELECT 1 FROM work_item_recovery rec2 WHERE rec2.work_item_id = work_items.id AND rec2.lane IN ('recovering', 'manager'))))",
     );
-    values.push(filter.needsAttentionFor, filter.needsAttentionFor, new Date().toISOString());
+    values.push(filter.needsAttentionFor, filter.needsAttentionOperator ? OPERATOR_ASSIGNEE : filter.needsAttentionFor, filter.needsAttentionOperator ? 1 : 0, new Date().toISOString());
   }
   if (filter.since) {
     conditions.push('updated_at >= ?');
@@ -658,7 +551,7 @@ export function queryWorkItems(filter: ListWorkItemsFilter = {}): WorkItemPage {
   const totals = Object.fromEntries(WORK_ITEM_STATUS_VALUES.map((status) => [status, 0])) as WorkItemTotals;
   for (const count of counts) totals[count.status] = count.total;
   const total = counts.reduce((sum, count) => sum + count.total, 0);
-  const workItems = hydrateApprovals(rows.map(rowToWorkItem));
+  const workItems = rows.map(rowToWorkItem);
   const consumed = offset + workItems.length;
   const page: WorkItemPage = {
     workItems,
@@ -708,12 +601,10 @@ export function getWorkItemTrees(ids: readonly string[]): Record<string, WorkIte
   const db = initDb();
   const placeholders = requestedIds.map(() => '?').join(', ');
   const requestedRoots = `SELECT root_id FROM work_items WHERE id IN (${placeholders})`;
-  const family = hydrateApprovals(
-    (db
-      .prepare(`SELECT * FROM work_items WHERE root_id IN (${requestedRoots})`)
-      .all(...requestedIds) as Record<string, unknown>[])
-      .map(rowToWorkItem),
-  );
+  const family = (db
+    .prepare(`SELECT * FROM work_items WHERE root_id IN (${requestedRoots})`)
+    .all(...requestedIds) as Record<string, unknown>[])
+    .map(rowToWorkItem);
   if (family.length === 0) return {};
   const itemsById = new Map(family.map((item) => [item.id, item]));
   const childrenByParent = new Map<string, WorkItem[]>();
@@ -773,12 +664,8 @@ export interface UpdateWorkItemInput {
   department?: string | null;
   priority?: number;
   rank?: number | null;
-  /** Todos v2 slice 4 — the widened metadata pen also covers these. */
-  acceptance?: string | null;
+  /** Todos v2 slice 4 — the widened metadata pen also covers this. */
   dueAt?: string | null;
-  /** Todos v2 slice 6 — the rail's verify picker (operator-only at the route).
-   *  null clears to the provenance default. */
-  verifyPolicy?: VerifyPolicy | null;
 }
 
 export interface ConditionalWorkItemUpdateOptions {
@@ -821,17 +708,8 @@ const UPDATE_FIELD_COLUMNS: Readonly<Record<keyof UpdateWorkItemInput, string>> 
   rank: 'rank',
   // Appended AFTER the original six so pre-slice-4 idempotency-receipt
   // fingerprints (key order feeds the canonical JSON) stay byte-stable.
-  acceptance: 'acceptance',
   dueAt: 'due_at',
-  // Slice 6, appended for the same fingerprint-stability reason.
-  verifyPolicy: 'verify_policy',
 };
-
-/** SQL-storable value for one update field (verify_policy is a JSON column). */
-function updateFieldSqlValue(input: UpdateWorkItemInput, key: keyof UpdateWorkItemInput): unknown {
-  if (key === 'verifyPolicy') return input.verifyPolicy ? JSON.stringify(input.verifyPolicy) : null;
-  return input[key];
-}
 
 function canonicalUpdateFingerprint(id: string, input: UpdateWorkItemInput, expectedVersion: number): string {
   const patch: Record<string, unknown> = {};
@@ -849,7 +727,6 @@ function updateChangesItem(item: WorkItem, input: UpdateWorkItemInput): boolean 
   return (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof UpdateWorkItemInput>)
     .some((key) => {
       if (input[key] === undefined) return false;
-      if (key === 'verifyPolicy') return JSON.stringify(item.verifyPolicy) !== JSON.stringify(input.verifyPolicy);
       return item[key] !== input[key];
     });
 }
@@ -894,7 +771,7 @@ export function updateWorkItemConditional(
     if (updateChangesItem(current, input)) {
       const fields = (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof UpdateWorkItemInput>)
         .filter((key) => input[key] !== undefined)
-        .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: updateFieldSqlValue(input, key) }));
+        .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: input[key] }));
       if (typeof input.department === 'string') ensureDepartmentRegistered(input.department);
       const now = new Date().toISOString();
       const result = db
@@ -905,11 +782,16 @@ export function updateWorkItemConditional(
         if (!latest) return undefined;
         throw new WorkItemVersionConflictError(latest.version);
       }
+      const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
       appendWorkItemEvent({
         workItemId: id,
         kind: 'metadata_edited',
         actor: opts.actor ?? null,
-        detail: { updatedFields: fields.map((field) => field.name), ...(opts.origin ? { origin: opts.origin } : {}) },
+        detail: {
+          updatedFields: fields.map((field) => field.name),
+          ...(opts.origin ? { origin: opts.origin } : {}),
+          ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
+        },
         versionEffect: 'companion',
       });
       item = getWorkItem(id)!;
@@ -953,11 +835,12 @@ export function updateWorkItem(id: string, input: UpdateWorkItemInput, actor?: s
       .prepare(`UPDATE work_items SET ${changedFields.map((field) => `${field.column} = ?`).join(', ')}, updated_at = ?, version = version + 1 WHERE id = ?`)
       .run(...changedFields.map((field) => field.value), now, id);
     if (result.changes === 0) return undefined;
+    const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
     appendWorkItemEvent({
       workItemId: id,
       kind: 'note',
       actor: actor ?? null,
-      detail: { updatedFields: changedFields.map((field) => field.name) },
+      detail: { updatedFields: changedFields.map((field) => field.name), ...(releasedSessions.length > 0 ? { releasedSessions } : {}) },
       versionEffect: 'companion',
     });
     return getWorkItem(id);
@@ -989,8 +872,19 @@ export function getWorkItemSpend(id: string): number {
  * the call verifies both rows exist and then returns WITHOUT writing — so a
  * redundant re-link (e.g. a cron re-fire re-linking the same item to the same session)
  * does not churn `work_items.updated_at` or the event log.
+ *
+ * `selfStarted` marks the link as one a session made by starting its own Todo
+ * with no dispatch (`gateway/todo-self-start.ts`); any other link clears the
+ * mark. A marked link holds only while the Todo is being worked: the move that
+ * puts the Todo back in the backlog releases it ({@link releaseSelfStartedLinks}).
  */
-export function linkSession(workItemId: string, sessionId: string, actor?: string | null, role: WorkItemLinkRole = 'execute'): void {
+export function linkSession(
+  workItemId: string,
+  sessionId: string,
+  actor?: string | null,
+  role: WorkItemLinkRole = 'execute',
+  opts: { selfStarted?: boolean } = {},
+): void {
   const db = initDb();
   const todoId = parseTodoId(workItemId);
   const now = new Date().toISOString();
@@ -1005,9 +899,58 @@ export function linkSession(workItemId: string, sessionId: string, actor?: strin
     // `updated_at` bump. A re-link that CHANGES the role still writes: the role
     // is what the self-review ban reads, and a stale one is not a detail.
     if (session.work_item_id === todoId && toWorkItemLinkRole(session.work_item_role) === role) return;
-    db.prepare('UPDATE sessions SET work_item_id = ?, work_item_role = ? WHERE id = ?').run(todoId, role, sessionId);
+    const meta = opts.selfStarted
+      ? `json_set(COALESCE(transport_meta, '{}'), '$.${SELF_STARTED_META_KEY}', ?)`
+      : `json_remove(transport_meta, '$.${SELF_STARTED_META_KEY}')`;
+    db.prepare(`UPDATE sessions SET work_item_id = ?, work_item_role = ?, transport_meta = ${meta} WHERE id = ?`)
+      .run(todoId, role, ...(opts.selfStarted ? [todoId] : []), sessionId);
     db.prepare('UPDATE work_items SET updated_at = ?, version = version + 1 WHERE id = ?').run(now, todoId);
-    appendWorkItemEvent({ workItemId: todoId, kind: 'session_linked', actor, detail: { sessionId, role } });
+    appendWorkItemEvent({
+      workItemId: todoId,
+      kind: 'session_linked',
+      actor,
+      detail: { sessionId, role, ...(opts.selfStarted ? { selfStarted: true } : {}) },
+    });
   });
   txn();
+}
+
+/** The session meta key naming the Todo a session linked itself to by starting it. */
+export const SELF_STARTED_META_KEY = 'selfStartedTodo';
+
+/**
+ * Release the self-started links on a Todo that is going back to the backlog
+ * or to another owner, and return the sessions released. Called inside the
+ * status or assignment write's own transaction; `exceptEmployee` keeps the
+ * links of the employee the Todo now belongs to.
+ *
+ * A chat session that started its own Todo keeps running turns after the Todo
+ * is put down, by the agent or by the operator, and a linked session in flight
+ * derives `executing`: left linked, every later turn would pull a parked Todo
+ * back to work. A dispatched attempt's link is not marked and is left alone.
+ * The session's run stays on the Todo's ledger and settles with the session.
+ */
+export function releaseSelfStartedLinks(
+  db: ReturnType<typeof initDb>,
+  workItemId: string,
+  { exceptEmployee }: { exceptEmployee?: string } = {},
+): string[] {
+  const rows = db
+    .prepare(`SELECT id FROM sessions WHERE work_item_id = ? AND json_extract(transport_meta, '$.${SELF_STARTED_META_KEY}') = ?
+      AND (? IS NULL OR employee IS NULL OR employee <> ?)`)
+    .all(workItemId, workItemId, exceptEmployee ?? null, exceptEmployee ?? null) as { id: string }[];
+  const release = db.prepare(
+    `UPDATE sessions SET work_item_id = NULL, work_item_role = NULL, transport_meta = json_remove(transport_meta, '$.${SELF_STARTED_META_KEY}') WHERE id = ?`,
+  );
+  for (const row of rows) release.run(row.id);
+  return rows.map((row) => row.id);
+}
+
+/** The self-started links an assignee write releases: none unless it changed
+ *  the assignee. Every writer of `assignee` calls this, in its own transaction,
+ *  so a Todo given to someone else — or to nobody — never keeps the old owner's
+ *  chat as its executor. */
+function releaseOnOwnerChange(db: ReturnType<typeof initDb>, current: WorkItem, assignee: string | null | undefined): string[] {
+  if (assignee === undefined || assignee === current.assignee) return [];
+  return releaseSelfStartedLinks(db, current.id, { exceptEmployee: assignee ?? undefined });
 }

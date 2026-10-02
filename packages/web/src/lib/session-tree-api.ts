@@ -19,7 +19,7 @@ export interface SessionTreeNodeWire {
   employee: string | null
   status: string | null
   title: string | null
-  role: "execute" | "review"
+  role: "execute" | "review" | "consult"
   workItemId: string | null
   isRootLink: boolean
   archived: boolean

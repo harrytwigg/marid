@@ -10,13 +10,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS } from "@/components/chat/session-row-menu"
 import { api } from "@/lib/api"
-import { DIALOG_CANCEL_CLASS } from "@/routes/workflow/name-dialog"
+import { DIALOG_CANCEL_CLASS } from "@/components/ui/dialog-actions"
 
 /* design-cron §2 — deleting a job is the one cron action with no undo, so it
- * sits behind the same `⋯` grammar the Workflow list and the chat sidebar
- * already use: always visible (a hover-only control does not exist on a phone),
- * a 44pt target on a row and 34px beside the header's Run-now, and a confirm
- * that names the job before anything leaves. Disable stays the reversible
+ * sits behind the same `⋯` grammar the chat sidebar already uses: always
+ * visible (a hover-only control does not exist on a phone), a 44pt target on a
+ * row and 34px beside the header's Run-now, and a confirm that names the job
+ * before anything leaves. Disable stays the reversible
  * option one item away in the same menu's neighbourhood. */
 
 const TRIGGER_CLASS = {
@@ -24,8 +24,8 @@ const TRIGGER_CLASS = {
   header: "grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none transition-colors hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]",
 } as const
 
-/** The destructive twin of `DIALOG_ACTION_CLASS`: the Workflow dialogs' geometry
- *  so the pair keeps one height, wearing the tinted-fill-and-saturated-text
+/** The destructive twin of `DIALOG_ACTION_CLASS`: the shared dialog geometry so
+ *  the pair keeps one height, wearing the tinted-fill-and-saturated-text
  *  grammar the cron header's own Run-now already uses — in red, because this
  *  button ends the job rather than starting it. */
 const DELETE_ACTION_CLASS =

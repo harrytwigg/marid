@@ -193,7 +193,7 @@ async function announceCompaction(run: TurnRun, result: EngineResult): Promise<v
  *  agree, or an outage reads as a run of completions to anyone grepping it. */
 function logSettledTurn(sessionId: string, result: EngineResult, quietPreempted: boolean): void {
   const timing = (result.durationMs ? ` in ${result.durationMs}ms` : "") + (result.cost ? ` ($${result.cost.toFixed(4)})` : "");
-  if (quietPreempted) logger.info(`Session ${sessionId} interrupted${timing}`);
+  if (quietPreempted) logger.info(`Session ${sessionId} interrupted${timing}${result.error?.startsWith("Interrupted") ? `: ${result.error}` : ""}`);
   else if (result.error) logger.error(`Session ${sessionId} failed${timing}: ${result.error}`);
   else logger.info(`Session ${sessionId} completed${timing}`);
 }
@@ -216,6 +216,12 @@ function holdPromptTheEngineNeverRead(run: TurnRun, verdict: TurnVerdict): void 
   retainUnseenInterruptedPrompt(run.input.session.id, run.input.prompt);
 }
 
+/** The engine's own account of an interruption, for the session's last error.
+ *  A turn preempted with no such account keeps the bare placeholder. */
+function interruptionOf(result: EngineResult, quietPreempted: boolean): { interruption?: string } {
+  return quietPreempted && result.error?.startsWith("Interrupted") ? { interruption: result.error } : {};
+}
+
 /** The receipt a turn that reached the engine writes, preempted or not. */
 function answeredReceipt(
   run: TurnRun,
@@ -234,6 +240,7 @@ function answeredReceipt(
     outcome: quietPreempted ? "interrupted" : (result.error ? "failed" : "succeeded"),
     result: quietPreempted ? null : result.result,
     error: quietPreempted ? null : (result.error ?? null),
+    ...interruptionOf(result, quietPreempted),
     cost: result.cost,
     durationMs: result.durationMs,
     accounting: { cost: result.cost, numTurns: result.numTurns, ...(model ? { model } : {}) },

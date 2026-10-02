@@ -140,17 +140,13 @@ describe("recent_success", () => {
     expect(guards.checkRespawnGuard(id, NOW)).toEqual({ state: "allowed" });
   });
 
-  it("counts the operator's max-rounds escalation, which is not a status_change event", () => {
-    const item = store.createWorkItem({
-      title: "escalated after the rounds ran out",
-      status: "in_review",
-      verifyPolicy: { mode: "verify", maxRounds: 1 },
-    });
+  it("counts the operator sending it back from review", () => {
+    const item = store.createWorkItem({ title: "sent back for another round", status: "in_review" });
     const run = runs.openWorkItemRun({ workItemId: item.id, sessionId: `s-${item.id}`, startedAt: minutesBefore(180) });
     runs.closeWorkItemRun(run.id, { outcome: "completed", endedAt: minutesBefore(30) });
 
     const bounced = transitions.transition(item.id, "executing", "operator", { bounce: true });
-    expect(bounced.escalated).toBe(true); // the real path records `escalated`, never `status_change`
+    expect(bounced.escalated).toBe(false); // no round ceiling: every bounce returns to executing
     db.prepare("UPDATE work_item_events SET created_at = ? WHERE id = ?").run(minutesBefore(20), bounced.event!.id);
 
     expect(guards.checkRespawnGuard(item.id, NOW)).toEqual({ state: "allowed" });
@@ -194,7 +190,7 @@ describe("active_pr", () => {
     // comment that merely names the branch, then the operator saying "go".
     const item = store.createWorkItem({ title: "re-armed after a handback" });
     comment(item.id, `branch build/${item.id}-a-slice is intact`, minutesBefore(20));
-    const moved = transitions.transition(item.id, "assigned", "operator");
+    const moved = transitions.transition(item.id, "executing", "operator");
     db.prepare("UPDATE work_item_events SET created_at = ? WHERE id = ?").run(minutesBefore(10), moved.event!.id);
 
     expect(guards.checkRespawnGuard(item.id, NOW)).toEqual({ state: "allowed" });

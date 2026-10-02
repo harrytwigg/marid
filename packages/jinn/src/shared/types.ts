@@ -2,14 +2,6 @@ export type StreamDeltaType = "text" | "text_snapshot" | "tool_use" | "tool_resu
 
 export type { CompanyChangedEvent } from "./gateway-events.js";
 
-export type {
-  Experiment,
-  ExperimentMetric,
-  ExperimentReading,
-  ExperimentVerdict,
-  HydratedExperiment,
-} from "./gateway-events.js";
-
 export type { NoteDocument, NoteFolder, NoteStoreResult, NoteSummary } from "./note-types.js";
 
 /** Generous but bounded body size for durable communication-card metadata. */
@@ -38,7 +30,6 @@ export type TodoActivityPayload = JsonObject & {
   status: string;
   assignee?: string | null;
   actor?: string | null;
-  approvalState?: string | null;
   updatedAt?: string;
   preview?: string;
   latestError?: string | null;
@@ -103,6 +94,9 @@ export interface StreamDelta {
    *  `tool_use` deltas (fired just before the tool runs, full input assembled).
    *  Absent on the SSE-proxy `content_block_start` delta (input not yet known). */
   input?: string;
+  /** Set on a `tool_use` made inside a sub-agent (a sidechain) rather than by
+   *  the session's main agent. Persisted on the tool row's meta. */
+  sidechain?: boolean;
   /** Structured chat-view UI update. CLI and connector transports may ignore it. */
   block?: ChatBlockEnvelope;
 }
@@ -345,40 +339,12 @@ export interface EngineSessionRef {
 
 export type EngineSessionRefs = Record<string, EngineSessionRef>;
 export type SessionAttemptOutcome = "succeeded" | "failed" | "interrupted";
-export type WorkflowAttemptInterruptionCause = "user-message" | "attempt-stop" | "gateway-restart";
-export interface WorkflowAttemptContinuation { engine: string; engineSessionId: string; sourceSessionId: string }
-export interface WorkflowAttemptCommand { owner: { workflowId: string; runId: string; nodeId: string; attempt: number }; employeeId: string; engine: string; model?: string; effort?: "low" | "medium" | "high" | "xhigh"; prompt: string; continueFrom?: WorkflowAttemptContinuation }
-export interface WorkflowAttemptCompletion { sessionId: string; owner: { workflowId: string; runId: string; nodeId: string; attempt: number }; turn: number; terminalVersion: number; outcome: "succeeded" | "failed" | "interrupted"; interruptionCause?: WorkflowAttemptInterruptionCause; finalText?: string; error?: string; completedAt: string }
-export type WorkflowAttemptCompletionListener = (event: WorkflowAttemptCompletion) => void | Promise<void>;
-export interface WorkflowSessionExecutor {
-  startAttempt(command: WorkflowAttemptCommand): Promise<{ sessionId: string }>;
-  stopAttempt(input: { sessionId: string; reason: string }): Promise<void>;
-  remind(input: { sessionId: string; text: string }): Promise<void>;
-  attemptState(sessionId: string): { idle: boolean; runningChildren: number } | null;
-}
+/** Why the latest turn was interrupted, recorded before the engine is killed. */
+export type SessionAttemptInterruptionCause = "user-message" | "attempt-stop" | "gateway-restart";
 
-/** Durable attribution for a workflow-owned employee attempt session. */
-/** Why a session is linked to a Todo: it executed it, or it was delegated its
- *  review. The predicates that read it live in work-items/link-role.ts. */
-export type WorkItemLinkRole = "execute" | "review";
-
-export interface WorkflowSessionProvenance {
-  kind: "phase";
-  workflowId: string;
-  /** Canonical agent-facing workflow name (definition.name, falling back to id). */
-  workflowName: string;
-  runId: string;
-  /** Uniform workflow trigger source: manual, schedule, event-webhook, etc. */
-  triggerSource: string;
-  phase: {
-    nodeId: string;
-    name: string;
-    /** One-based position in the run's frozen execution order. */
-    index: number;
-    round: number;
-    attempt: number;
-  };
-}
+/** Why a session is linked to a Todo: it executed it, reviewed it, or was
+ *  consulted by a mention. The predicates live in work-items/link-role.ts. */
+export type WorkItemLinkRole = "execute" | "review" | "consult";
 
 export interface Session {
   id: string;
@@ -408,8 +374,6 @@ export interface Session {
    *  attempt) or `review` (it was delegated the review of one). Null/undefined
    *  reads as `execute`. See work-items/link-role.ts. */
   workItemRole?: WorkItemLinkRole | null;
-  /** Explicit workflow/run/phase attribution for grouping and filtered reads. */
-  workflowProvenance?: WorkflowSessionProvenance | null;
   /** Forwarded SSO identity captured from an auth proxy (opt-in via
    *  `gateway.userHeader`). Null/undefined for single-user installs. */
   userId?: string | null;
@@ -424,12 +388,12 @@ export interface Session {
   /** Monotonic terminal-receipt version within the current attempt generation.
    * Reset to zero on dispatch and incremented for every accepted terminal state. */
   attemptTerminalVersion?: number;
-  /** Monotonic count of completed turns in a workflow attempt session. Unlike
+  /** Monotonic count of completed turns in an attempt session. Unlike
    * attemptTerminalVersion, this is not reset when the next turn begins. */
   attemptTurn?: number;
   /** Durable interruption classification recorded before an engine is killed.
    * The paired turn fence prevents an older cause from leaking into a later turn. */
-  attemptInterruptionCause?: WorkflowAttemptInterruptionCause | null;
+  attemptInterruptionCause?: SessionAttemptInterruptionCause | null;
   attemptInterruptionTurn?: number | null;
   effortLevel: string | null;
   totalCost: number;
@@ -439,12 +403,14 @@ export interface Session {
   queueDepth?: number;
   transportState?: "idle" | "queued" | "running" | "error" | "interrupted";
   /** Serialize-time only (in-memory, never persisted): post-settle background
-   *  work — upstream agent requests or tracked Bash monitors after the turn
-   *  settled. Null when none. */
+   *  work — upstream agent requests, background sub-agents, a background re-run
+   *  or tracked Bash monitors after the turn settled. Null when none. */
   backgroundActivity?: {
     activeStreams: number;
     activeAgents?: number;
     activeMonitors?: number;
+    backgroundAgents?: number;
+    backgroundRerun?: boolean;
     lastActivityAt: string;
   } | null;
   /** Serialize-time only (derived, never persisted): the in-flight turn's progress,
@@ -517,12 +483,6 @@ export interface SessionDeliveryDeadLetter extends Omit<SessionDelivery, "payloa
   payloadError: string | null;
 }
 
-export type ExperimentStoreFailureReason = "invalid" | "not-found" | "conflict";
-
-export type ExperimentStoreResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; reason: ExperimentStoreFailureReason; detail: string };
-
 export interface CronJob {
   id: string;
   name: string;
@@ -533,10 +493,18 @@ export interface CronJob {
   model?: string;
   effortLevel?: string;
   employee?: string;
-  /** The prompt a fire routes to an engine session. */
+  /** The prompt a fire routes to an engine session. Not used by an `action`
+   *  job, whose prompt is empty. */
   prompt: string;
   delivery?: CronDelivery;
+  /** A built-in gateway action the job runs instead of an engine session (see
+   *  cron/actions.ts). Such a job has no prompt, and its engine, model,
+   *  employee and delivery fields are not used. */
+  action?: CronAction;
 }
+
+/** The built-in actions a cron job can run. */
+export type CronAction = "board-walk";
 
 export interface CronDelivery {
   /** Connector instance id, matching the gateway registry key. */
@@ -568,6 +536,11 @@ export interface Employee extends RemoteTarget {
    *  general `mcp` field (specific-over-general); the global `enabled: false` kill
    *  switch and a per-engine opt-out beat it. */
   jinnMcp?: boolean;
+  /** Set in code, never read from an employee's YAML (gateway/org.ts lists the
+   *  fields it reads): the turn's whole MCP surface is this one purpose-built
+   *  toolset of the jinn server, in place of everything `mcp` and `jinnMcp`
+   *  would attach. The board walk's turn is the one user (board-walk/walk.ts). */
+  toolset?: JinnToolset;
   /** Default effort level for sessions assigned to this employee */
   effortLevel?: string;
   /** Whether to notify the parent session when this employee's child session completes. Default: true */
@@ -891,3 +864,7 @@ export interface EngineModelsConfig {
 export type ModelsConfig = Record<string, EngineModelsConfig>;
 
 export type { JinnConfig, PortalConfig, RemoteExecutionConfig, OpencodeMode, OpencodeServerConfig } from "./config-types.js";
+
+/** A purpose-built jinn MCP toolset served instead of the company belt
+ *  (mcp/server.ts). */
+export type JinnToolset = "board-walk";

@@ -20,6 +20,7 @@ import {
   updateSession,
 } from "./registry.js";
 import { recordRestartInterruption, recordRestartResume, type RestartRecordGateway } from "./restart-record.js";
+import { isBoardWalkTurn } from "../board-walk/started-sessions.js";
 
 /**
  * A restart can strand any number of conversational sessions at once. Waking
@@ -75,26 +76,38 @@ export interface BackgroundActivityCounts {
   activeStreams: number;
   activeAgents?: number;
   activeMonitors?: number;
+  backgroundAgents?: number;
+  backgroundRerun?: boolean;
 }
 
-/** Sessions whose engine still reports post-settle work: a background Bash task it has not seen
- *  finish, or an agent request in flight after the turn settled. A shutdown kills that work
+/** Sessions whose engine still reports post-settle work: a background Bash task or sub-agent it
+ *  has not seen finish, a background re-run, or an agent request in flight after the turn settled. A shutdown kills that work
  *  with the engine process, so these are owed a resume nudge. Auxiliary requests
  *  (titles, token counts) are not work anyone waits on, so an engine that classifies its
  *  streams is judged on agents alone. */
 export function backgroundWorkAtShutdown(activity: ReadonlyMap<string, BackgroundActivityCounts>): BackgroundWorkAtShutdown[] {
   const waiting: BackgroundWorkAtShutdown[] = [];
   for (const [sessionId, info] of activity) {
-    const monitors = info.activeMonitors ?? 0;
-    const agents = info.activeAgents ?? info.activeStreams;
-    if (monitors <= 0 && agents <= 0) continue;
-    const parts = [
-      ...(monitors > 0 ? [`${monitors} background task${monitors === 1 ? "" : "s"}`] : []),
-      ...(agents > 0 ? [`${agents} background agent request${agents === 1 ? "" : "s"}`] : []),
-    ];
-    waiting.push({ sessionId, detail: parts.join(" and ") });
+    const detail = describeBackgroundWork(info);
+    if (detail) waiting.push({ sessionId, detail });
   }
   return waiting;
+}
+
+function counted(n: number, noun: string): string[] {
+  return n > 0 ? [`${n} ${noun}${n === 1 ? "" : "s"}`] : [];
+}
+
+/** The work a session's post-settle activity describes, or undefined for none. */
+function describeBackgroundWork(info: BackgroundActivityCounts): string | undefined {
+  const parts = [
+    ...counted(info.activeMonitors ?? 0, "background task"),
+    // A sub-agent between model requests (running a tool) has none in flight.
+    ...counted(info.backgroundAgents ?? 0, "background sub-agent"),
+    ...counted(info.activeAgents ?? info.activeStreams, "background agent request"),
+    ...(info.backgroundRerun === true ? ["a background re-run"] : []),
+  ];
+  return parts.length > 0 ? parts.join(" and ") : undefined;
 }
 
 export interface RestartShutdownOptions {
@@ -123,11 +136,10 @@ const RESTART_SHUTDOWN_RECEIPT_KEY = "restart.shutdown_recorded_by";
  * marks. Two kinds of session that are not `running` are owed a resume too, and
  * are recorded here: the ones that asked for this restart (the next
  * boot stamps them from their acknowledgement), and the idle ones still waiting
- * on background work that this shutdown is about to kill. Workflow attempts are
- * recorded but left `running`: the boot sweep
- * (`recoverStaleWorkflowAttemptSessions`) settles them and the workflow runtime
- * re-dispatches them, and both key on the row still being `running`. The
- * receipt written last tells the next boot not to record those again as a crash.
+ * on background work that this shutdown is about to kill. A phase row left by
+ * the removed Workflow runtime is skipped: nothing resumes it, and the boot
+ * sweep (`settleLegacyWorkflowPhaseSessions`) settles it. The receipt written
+ * last tells the next boot not to record the shutdown again as a crash.
  * Exported as a shutdown test seam.
  */
 export function interruptRunningSessionsForShutdown(gateway: RestartRecordGateway, options: RestartShutdownOptions = {}): void {
@@ -135,11 +147,7 @@ export function interruptRunningSessionsForShutdown(gateway: RestartRecordGatewa
   const idleRequesters = listIdleRestartRequesters();
   for (const { session, workflowAttempt } of listAllRunningSessions()) {
     const now = new Date().toISOString();
-    if (workflowAttempt) {
-      recordRestartInterruption(gateway, session, "shutdown", "workflow-runtime");
-      logger.info(`Recorded workflow attempt session ${session.id} for the workflow runtime to re-dispatch after restart`);
-      continue;
-    }
+    if (workflowAttempt) continue;
     if (hasRestartAcknowledgement(session)) {
       updateSession(session.id, {
         status: "idle",
@@ -226,17 +234,17 @@ export function acknowledgeRestartRequesters(gateway: RestartRecordGateway): num
  * Boot step, before the recovery sweeps settle anything: write the sessions the
  * previous gateway did not get to record itself. With a shutdown receipt, that
  * is only a conversational row that slipped past the shutdown marking (a turn
- * that started during the drain) — the workflow attempts still `running` were
- * recorded by the old gateway under its own boot id and cause. Without one, the
- * old process died mid-flight (kill, crash, power) and this boot is the first
- * to know about every row.
+ * that started during the drain). Without one, the old process died mid-flight
+ * (kill, crash, power) and this boot is the first to know about every row.
+ * Phase rows left by the removed Workflow runtime are never recorded: nothing
+ * resumes them, and the boot sweep settles them.
  */
 export function recordSessionsRunningAtBoot(gateway: RestartRecordGateway): { recorded: Session[]; cleanShutdownBootId: string | null } {
   const cleanShutdownBootId = consumeRestartShutdownReceipt();
   const running = listAllRunningSessions();
-  const unrecorded = cleanShutdownBootId ? running.filter((row) => !row.workflowAttempt) : running;
-  for (const { session, workflowAttempt } of unrecorded) {
-    recordRestartInterruption(gateway, session, "stale-on-boot", workflowAttempt ? "workflow-runtime" : "restart-resume");
+  const unrecorded = running.filter((row) => !row.workflowAttempt);
+  for (const { session } of unrecorded) {
+    recordRestartInterruption(gateway, session, "stale-on-boot", "restart-resume");
   }
   return { recorded: unrecorded.map((row) => row.session), cleanShutdownBootId };
 }
@@ -415,12 +423,26 @@ function notifyMarkedRestartResume(
  * queue replay, so a session already back on the engine through its own queue
  * item is skipped rather than resumed twice.
  */
+/** A board walk turn is never resumed: the next tick replaces it, and resuming
+ *  would re-run it as the configured employee, tools and all, with an answer
+ *  nobody reads. Recorded, then dropped from the plan. */
+function withoutBoardWalkTurns<T extends { session: Session }>(gateway: RestartRecordGateway, candidates: T[]): T[] {
+  return candidates.filter(({ session }) => {
+    if (!isBoardWalkTurn(session)) return true;
+    recordRestartResume(gateway, session, "board-walk-turn");
+    logger.info(`Interrupted board walk turn ${session.id} is not resumed; the next tick replaces it`);
+    return false;
+  });
+}
+
 export function resumeRestartInterruptedSessions(gateway: RestartRecordGateway): void {
   // A requester re-driven by its own pending queue item is left to it like any other
   // replaying session: it gets the restart notice and its queued input, not the requester
   // message, and the loop guard does not count it — the queued input, not a nudge, is what
   // brings it back.
-  const { resumable, replaying } = consumeRestartResumeCandidates();
+  const consumed = consumeRestartResumeCandidates();
+  const { replaying } = consumed;
+  const resumable = withoutBoardWalkTurns(gateway, consumed.resumable);
   for (const session of replaying) {
     recordRestartResume(gateway, session, "queue-replay");
     logger.info(`Interrupted session ${session.id} (${describe(session)}) resumes through its pending queue item, not a restart nudge`);

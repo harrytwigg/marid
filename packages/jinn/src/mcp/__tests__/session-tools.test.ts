@@ -15,7 +15,6 @@ import {
   ensureSessionCapability,
   JINN_SESSION_CAPABILITY_ENV,
   JINN_SESSION_ID_ENV,
-  JINN_WORKFLOW_ATTEMPT_ENV,
   CALLER_SESSION_CAPABILITY_HEADER,
   CALLER_SESSION_HEADER,
   TOOL_CALL_HEADER,
@@ -382,19 +381,6 @@ describe("the identity seam", () => {
     expect(attachSessionIdentity(noJinn, "s")).toBe(noJinn);
   });
 
-  it("stamps the attempt-only visibility hint only for workflow attempt sessions", () => {
-    const resolved: ResolvedMcpConfig = {
-      mcpServers: { jinn: { command: "node", args: ["server-entry.js"] } },
-    };
-    const ordinary = attachSessionIdentity(resolved, "ordinary");
-    const attempt = attachSessionIdentity(resolved, "attempt", { workflowAttempt: true });
-
-    expect((ordinary.mcpServers.jinn as { env?: Record<string, string> }).env)
-      .not.toHaveProperty(JINN_WORKFLOW_ATTEMPT_ENV);
-    expect((attempt.mcpServers.jinn as { env?: Record<string, string> }).env)
-      .toHaveProperty(JINN_WORKFLOW_ATTEMPT_ENV, "1");
-  });
-
   it(`every gateway call carries ${CALLER_SESSION_HEADER} and ${CALLER_SESSION_CAPABILITY_HEADER} when the ctx has a bound identity`, async () => {
     const withId = stub(() => ({ status: 200, body: { id: "s", messages: [] } }), "sess-42");
     await tool("read_session").handler({ sessionId: "s" }, withId.ctx);
@@ -560,7 +546,6 @@ describe("session tools — integration against the real routes/registry", () =>
       title: "Preserve attempt evidence",
       status: "executing",
       source: "cron",
-      verifyPolicy: { mode: "trust" },
     });
     workItems.linkSession(item.id, sessionId);
     registry.accumulateSessionCost(sessionId, 4.25, 3);
@@ -588,7 +573,6 @@ describe("session tools — integration against the real routes/registry", () =>
       title: `Unfinished ${action}`,
       status: "executing",
       source: "cron",
-      verifyPolicy: { mode: "trust" },
     });
     workItems.linkSession(item.id, sessionId);
     registry.updateSession(sessionId, { status: "running" });

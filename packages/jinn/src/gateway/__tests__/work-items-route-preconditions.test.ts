@@ -105,19 +105,14 @@ describe("PATCH /api/work-items/:id — preconditions, conflicts, and idempotenc
     expect(JSON.stringify(misuse.body)).not.toContain("different private content");
   });
 
-  it("invalidates stale edits after status, approval, and reconciler changes", async () => {
+  it("invalidates stale edits after status and reconciler changes", async () => {
     const transitions = await import("../../work-items/transitions.js");
-    const approvals = await import("../../work-items/approvals.js");
     const reconcile = await import("../../work-items/reconcile.js");
     const stale: Array<{ id: string; version: number; currentVersion: number }> = [];
 
     const statusItem = store.createWorkItem({ title: "status stale" });
     transitions.transition(statusItem.id, "executing", "system");
     stale.push({ id: statusItem.id, version: statusItem.version, currentVersion: 2 });
-
-    const approvalItem = store.createWorkItem({ title: "approval stale" });
-    approvals.requestApproval(approvalItem.id, { request: "decide", target: "reviewer" });
-    stale.push({ id: approvalItem.id, version: approvalItem.version, currentVersion: 2 });
 
     const reconciledItem = store.createWorkItem({ title: "reconcile stale", source: "session" });
     const session = reg.createSession({ engine: "codex", source: "web", sourceRef: "route-cas-reconcile" });

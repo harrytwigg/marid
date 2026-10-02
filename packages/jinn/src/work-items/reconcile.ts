@@ -1,18 +1,16 @@
 import {
-  effectiveVerifyMode,
+  autoClosesOnSuccess,
   getWorkItem,
   isBlockDeclared,
   isReviewBounceDeclared,
   listWorkItems,
   RECONCILER_ACTOR,
   STICKY_STATUSES,
-  type VerifyMode,
   type WorkItem,
   type WorkItemSource,
   type WorkItemStatus,
 } from './store.js';
 import { transitionDerived } from './transitions.js';
-import { currentApproval } from './approval-rows.js';
 import { expireWorkItemClaims } from './claims.js';
 import { collectAttemptEvidence, type SessionStatus, type WorkItemAttemptEvidence } from './attempt-evidence.js';
 import { closeOrphanedWorkItemRuns, closeRunsForSettledSessions } from './runs.js';
@@ -29,10 +27,9 @@ export type { WorkItemAttemptEvidence } from './attempt-evidence.js';
  * linked execution attempts (sessions), not from scattered ad-hoc writes. The
  * elevated rules:
  *
- *   - `done`/`cancelled`/`escalated` are STICKY. Closes are decisions; escalated
- *     is a deliberate routing to the operator — session churn never silently
- *     pulls an item off his queue.
- *   - ZERO linked sessions → untouched (`backlog`/`assigned` are never clobbered).
+ *   - `done`/`cancelled` are STICKY. Closes are decisions — session churn never
+ *     silently reopens them.
+ *   - ZERO linked sessions → untouched (`backlog` is never clobbered).
  *     Attempts older than the operator's own last status move are not linked
  *     evidence at all — see `attempt-evidence.ts`. With nothing left to speak the
  *     whole pass is a no-op, the TRUST close below included; and once something
@@ -78,8 +75,9 @@ function trustCloseIsLicensed(attempts: readonly WorkItemAttemptEvidence[], deci
 export interface DeriveWorkItemOptions {
   blockDeclared?: boolean;
   reviewBounceDeclared?: boolean;
-  /** Only `trust` lets a clean settle derive `in_review`; absent means reviewed. */
-  verifyMode?: VerifyMode;
+  /** Only an auto-closing (cron) item lets a clean settle derive `in_review`;
+   *  absent means reviewed. */
+  autoClose?: boolean;
 }
 
 /**
@@ -111,9 +109,9 @@ export function deriveWorkItemStatus(
   // authority (an old clean settle must not mask a newer failure, and a newer
   // clean retry must clear an older failure).
   const newest = attempts[0].outcome;
-  // A clean settle is not a completion declaration: a backlog/assigned
+  // A clean settle is not a completion declaration: a backlog
   // Todo stays where somebody put it after that attempt ran.
-  if (newest === 'succeeded' && opts?.verifyMode === 'trust') return 'in_review';
+  if (newest === 'succeeded' && opts?.autoClose) return 'in_review';
   if (newest === 'succeeded') return current === 'blocked' ? 'executing' : current;
   if (newest === 'failed' || newest === 'interrupted') return 'blocked';
   return current;
@@ -145,20 +143,20 @@ export function reconcileWorkItem(id: string): ReconcileResult | undefined {
   // status nor the TRUST close, which would otherwise end a review he opened
   // himself on the strength of an older receipt.
   if (decisionFloorAt && attempts.length === 0) return { item, changed: false };
-  const verifyMode = effectiveVerifyMode(item);
-  let derived = deriveWorkItemStatus(item.status, attempts, item.source, { verifyMode });
+  const autoClose = autoClosesOnSuccess(item);
+  let derived = deriveWorkItemStatus(item.status, attempts, item.source, { autoClose });
   // Provenance is only needed when receipt derivation would overwrite the
   // current state. Since a Todo cannot be blocked and executing simultaneously,
   // this performs at most one indexed event-row lookup per reconcile.
   if (derived !== item.status) {
     if (item.status === 'blocked') {
       derived = deriveWorkItemStatus(item.status, attempts, item.source, {
-        verifyMode,
+        autoClose,
         blockDeclared: isBlockDeclared(id),
       });
     } else if (item.status === 'executing') {
       derived = deriveWorkItemStatus(item.status, attempts, item.source, {
-        verifyMode,
+        autoClose,
         reviewBounceDeclared: isReviewBounceDeclared(id),
       });
     }
@@ -182,17 +180,11 @@ export function reconcileWorkItem(id: string): ReconcileResult | undefined {
     }
   }
 
-  // TRUST policy hook (design §1.5): an item landing (or sitting) in `in_review`
-  // whose effective verify mode is `trust` auto-closes in the SAME pass —
+  // TRUST hook (design §1.5): an auto-closing (cron) item landing (or sitting)
+  // in `in_review` closes in the SAME pass —
   // settle → in_review → done reads as one truthful story in the event log.
-  //
-  // A PENDING approval withholds it: an open routed gate IS the review, so
-  // closing over one asserts a decision nobody made. This matters most for a
-  // Todo-bound Workflow run, which parks its gates here — a trust-tier item would
-  // otherwise reach `done` inside one sweep with the merge still unapproved.
-  if (current.status === 'in_review' && effectiveVerifyMode(current) === 'trust'
-    && trustCloseIsLicensed(attempts, decisionFloorAt)
-    && currentApproval(current.id)?.state !== 'pending') {
+  if (current.status === 'in_review' && autoClosesOnSuccess(current)
+    && trustCloseIsLicensed(attempts, decisionFloorAt)) {
     const closed = transitionDerived(id, 'done', 'policy:trust', { policy: 'trust', auto: true });
     if (closed) {
       current = closed;
@@ -211,7 +203,7 @@ export interface ReconcileSweepResult {
 /** The non-sticky statuses a sweep re-derives. `in_review` is included so a
  *  pre-existing trust-tier item settles on the next pass even if its landing
  *  pass predates this code. */
-const SWEEP_STATUSES: readonly WorkItemStatus[] = ['backlog', 'assigned', 'executing', 'in_review', 'blocked'];
+const SWEEP_STATUSES: readonly WorkItemStatus[] = ['backlog', 'executing', 'in_review', 'blocked'];
 
 /**
  * Reconcile every non-sticky item. Invoked at gateway startup right after

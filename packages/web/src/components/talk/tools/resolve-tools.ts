@@ -1,5 +1,5 @@
 import { api } from "@/lib/api"
-import { chatPath, experimentPath, todoPath, workflowPath } from "./nav-paths"
+import { chatPath, todoPath } from "./nav-paths"
 import { companyTodoPrefix, go } from "./navigate-tools"
 import {
   looksLikeId,
@@ -32,8 +32,6 @@ const SEARCH_LIMIT = 20
 const KIND_LABEL: Record<CandidateKind, string> = {
   todo: "Todo",
   session: "Chat",
-  workflow: "Workflow",
-  experiment: "Experiment",
 }
 
 /** Distinct per ask, so the sheet keys its entrance on each new question. */
@@ -48,25 +46,7 @@ function pathFor(candidate: Candidate): string {
       return todoPath(candidate.id)
     case "session":
       return chatPath({ sessionId: candidate.id })
-    case "workflow":
-      return workflowPath({ id: candidate.id })
-    case "experiment":
-      return experimentPath({ id: candidate.id })
   }
-}
-
-/** Workflows have no search route, so the list is walked whole — to its last
- *  page, because the one thing the operator meant is as likely to sit there as
- *  on the first. */
-async function workflowCandidates(): Promise<Candidate[]> {
-  const found: Candidate[] = []
-  let cursor: string | undefined
-  do {
-    const page = await api.listWorkflowDefinitionsV2(cursor)
-    found.push(...page.items.map((item) => ({ kind: "workflow" as const, id: item.id, title: item.title })))
-    cursor = page.nextCursor ?? undefined
-  } while (cursor)
-  return found
 }
 
 /** A word of a title reaches the same object as the word beside it does, and a
@@ -78,27 +58,21 @@ function distinct(candidates: readonly Candidate[]): Candidate[] {
 }
 
 /**
- * Everything the four surfaces can offer for the spoken terms, flattened.
+ * Everything the two surfaces can offer for the spoken terms, flattened.
  *
- * Todos and sessions are searched once per term; workflows and experiments
- * have no search route, so their lists come back whole and `rankCandidates`
- * does the narrowing. A source that fails takes the whole resolution down with
- * it rather than quietly shrinking the field: a "nothing matched" that really
- * meant "one search errored" would send the operator looking for something
- * that is there.
+ * Todos and sessions are searched once per term. A source that fails takes the
+ * whole resolution down with it rather than quietly shrinking the field: a
+ * "nothing matched" that really meant "one search errored" would send the
+ * operator looking for something that is there.
  */
 async function candidatesFor(terms: readonly string[]): Promise<Candidate[]> {
-  const [todos, sessions, workflows, experiments] = await Promise.all([
+  const [todos, sessions] = await Promise.all([
     Promise.all(terms.map((term) => api.searchWorkItems({ text: term, limit: SEARCH_LIMIT }))),
     Promise.all(terms.map((term) => api.searchSessions(term))),
-    workflowCandidates(),
-    api.listExperiments(),
   ])
   return distinct([
     ...todos.flatMap((page) => page.workItems).map((item) => ({ kind: "todo" as const, id: item.id, title: item.title, detail: item.status })),
     ...sessions.flat().map((row) => ({ kind: "session" as const, id: text(row.id), title: text(row.title), detail: text(row.employee) })),
-    ...workflows,
-    ...experiments.experiments.map((item) => ({ kind: "experiment" as const, id: item.id, title: item.name, detail: item.status })),
   ])
 }
 
@@ -143,7 +117,7 @@ async function openByDescription(what: string): Promise<ToolResult> {
 const resolveAndOpen: TalkTool = {
   name: "resolve_and_open",
   description:
-    'Open whatever the operator just named — a Todo, a chat session, a workflow, or an experiment. Takes an id ("ABC-59"), a bare number ("59", meaning the namespace on screen), or their own words ("the talk orb one"). Asks which they meant when the words fit several things.',
+    'Open whatever the operator just named — a Todo or a chat session. Takes an id ("ABC-59"), a bare number ("59", meaning the namespace on screen), or their own words ("the talk orb one"). Asks which they meant when the words fit several things.',
   parameters: params(
     { what: str("Exactly what the operator called it: the id, the bare number, or their own description.") },
     ["what"],

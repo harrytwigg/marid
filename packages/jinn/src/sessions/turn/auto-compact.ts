@@ -26,6 +26,7 @@ import { settleTurn } from "./completion.js";
 import { preflightTurn } from "./preflight.js";
 import { clearSupersededTurnMeta, isTurnSuperseded, retainUnseenInterruptedPrompt } from "./superseded.js";
 import type { TurnPlan, TurnRun, TurnSurface } from "./types.js";
+import { reportedSessionStatus } from "../background-work.js";
 
 /**
  * Runs auto-compaction (see `../auto-compaction.ts`) INSIDE the turn
@@ -72,7 +73,10 @@ function compactionSurface(surface: TurnSurface): TurnSurface {
 
 function childrenInFlight(sessionId: string): Session[] {
   try {
-    return listChildSessions(sessionId).filter((child) => child.status === "running" || child.status === "waiting");
+    return listChildSessions(sessionId).filter((child) => {
+      const status = reportedSessionStatus(child);
+      return status === "running" || status === "waiting";
+    });
   } catch (err) {
     logger.warn(`[auto-compact] ${sessionId}: could not list child sessions: ${err instanceof Error ? err.message : String(err)}`);
     return [];

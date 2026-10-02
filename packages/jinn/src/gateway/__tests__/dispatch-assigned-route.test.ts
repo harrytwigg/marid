@@ -12,11 +12,12 @@ import {
 } from "./dispatch-assigned-harness.js";
 
 /**
- * Dispatch on a Todo somebody already owns.
+ * Dispatch on a Todo somebody already owns: a backlog Todo with an assignee,
+ * which is all "assigned" means now.
  *
  * The Dispatcher routes for the operator who pressed the button. On an
  * unassigned Todo its own link made it the owner, so delegation passed the
- * owner rule by accident; on an assigned one the owner is the assignee, and
+ * owner rule by accident; on an owned one the owner is the assignee, and
  * the Dispatcher's one job ended in a 403 inside its session. These tests pin
  * the sanctioned path (a Dispatcher may hand on the Todo it was started for,
  * once, and nothing else) and the guard it must not weaken.
@@ -25,10 +26,10 @@ import {
 beforeAll(startDispatchHarness);
 afterAll(stopDispatchHarness);
 
-describe("Dispatch on an assigned Todo", () => {
+describe("Dispatch on a backlog Todo that has an assignee", () => {
   // The regression: this delegation used to be refused with "does not own
   // Todo ... and is not its authorized manager/root".
-  it("lets the Dispatcher re-route an assigned Todo to the employee it picked", async () => {
+  it("lets the Dispatcher re-route an owned Todo to the employee it picked", async () => {
     const item = assignedTodo("Assigned by the operator, re-routed by Dispatch");
 
     const dispatched = await dispatch(item.id);
@@ -66,7 +67,7 @@ describe("Dispatch on an assigned Todo", () => {
     const dispatched = await dispatch(item.id);
 
     const prompt = registry.getMessages(dispatched.body.sessionId).find((message) => message.role === "user")?.content;
-    expect(prompt).toContain("Status: assigned");
+    expect(prompt).toContain("Status: backlog");
     expect(prompt).toContain("Assignee: first-worker");
   });
 });
@@ -80,7 +81,7 @@ describe("delegate_task ownership guard", () => {
 
     expect(delegated.status).toBe(403);
     expect(delegated.body.error).toMatch(/employee "second-worker" does not own Todo .* cannot delegate/);
-    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker", status: "assigned" });
+    expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker", status: "backlog" });
   });
 
   it("binds a Dispatcher to the Todo it was started for and no other", async () => {

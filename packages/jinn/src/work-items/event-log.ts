@@ -33,6 +33,7 @@ export type WorkItemEventKind =
   | 'status_change'
   | 'note'
   | 'session_linked'
+  // History only: Todo approvals are gone, but an older gateway's rows remain.
   | 'approval_requested'
   | 'approval_decided'
   | 'verify_result'
@@ -124,8 +125,10 @@ const EVIDENCE_FLOOR_ACTORS: readonly string[] = [HUMAN_ACTOR, PARK_EXPIRY_ACTOR
 /**
  * When this Todo was last put somewhere by a decision the attempt receipts must
  * not overrule, or undefined if it never was. Two kinds count: the operator
- * moving it himself (PLA-98), and an expired park putting it back in the queue
- *. Any event carrying a `to_status` counts — a status change and an
+ * moving it himself (PLA-98) — on his own surface, or through a session that
+ * carries his lane (the remote connector), whose event is marked
+ * `detail.operatorLane` because its actor stays that session — and an expired
+ * park putting it back in the queue. Any event carrying a `to_status` counts — a status change and an
  * escalation are both a decision about where the item belongs.
  *
  * The reconciler reads this as an evidence floor: attempt receipts older than
@@ -139,7 +142,8 @@ export function latestEvidenceFloorAt(workItemId: string): string | undefined {
   const row = db
     .prepare(
       `SELECT created_at FROM work_item_events
-       WHERE work_item_id = ? AND actor IN (${EVIDENCE_FLOOR_ACTORS.map(() => '?').join(', ')}) AND to_status IS NOT NULL
+       WHERE work_item_id = ? AND to_status IS NOT NULL
+         AND (actor IN (${EVIDENCE_FLOOR_ACTORS.map(() => '?').join(', ')}) OR CASE WHEN json_valid(detail) THEN json_extract(detail, '$.operatorLane') END = 1)
        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     )
     .get(id, ...EVIDENCE_FLOOR_ACTORS) as { created_at: string } | undefined;

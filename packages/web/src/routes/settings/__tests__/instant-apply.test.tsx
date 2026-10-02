@@ -84,16 +84,26 @@ describe('a setting turned off', () => {
 })
 
 describe('one edit, one write', () => {
-  it('writes a toggle once, inside a second', async () => {
+  it('writes a toggle once, as soon as the debounce window closes', async () => {
     const toggle = await renderSettings()
 
-    const started = Date.now()
-    fireEvent.click(toggle)
-    await waitFor(() => expect(apiMocks.updateConfig).toHaveBeenCalledTimes(1))
+    // The page is up; from here the clock is ours, so the bound is the code's
+    // own debounce rather than how fast this host happens to be.
+    vi.useFakeTimers()
+    try {
+      fireEvent.click(toggle)
 
-    expect(Date.now() - started).toBeLessThan(1000)
-    await afterTheWindow()
-    expect(apiMocks.updateConfig).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(CONFIG_COMMIT_DEBOUNCE_MS - 1)
+      expect(apiMocks.updateConfig).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(apiMocks.updateConfig).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(CONFIG_COMMIT_DEBOUNCE_MS * 2)
+      expect(apiMocks.updateConfig).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('writes ten keystrokes once, not once each', async () => {

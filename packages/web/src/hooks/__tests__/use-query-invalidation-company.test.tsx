@@ -54,13 +54,6 @@ describe('company + session:created invalidation', () => {
     expect(calledWithKey(invalidate, queryKeys.pins)).toBe(true)
   })
 
-  it('refreshes the experiment list and changed experiment immediately', () => {
-    const { invalidate } = setup()
-    act(() => listener?.('experiments:changed', { id: 'experiment-7', action: 'reading-recorded' }))
-    expect(calledWithKey(invalidate, ['experiments'])).toBe(true)
-    expect(calledWithKey(invalidate, ['experiments', 'experiment-7'])).toBe(true)
-  })
-
   it('refreshes parent summaries when a delegated child changes runtime activity', async () => {
     const { client, invalidate } = setup()
     client.setQueryData(queryKeys.sessions.all, {
@@ -123,26 +116,6 @@ describe('company + session:created invalidation', () => {
     await act(async () => vi.advanceTimersByTimeAsync(1_000))
     expect(calledWithKey(invalidate, ['work-items'])).toBe(true)
     expect(calledWithKey(invalidate, ['work-item', 'wi_gone'])).toBe(true)
-  })
-
-  it('invalidates workflow list + definition on a definition change', async () => {
-    const { invalidate } = setup()
-    act(() => listener?.('company:changed', {
-      entity: 'workflow-definition', id: 'release-review', revision: 4,
-    }))
-    await act(async () => vi.advanceTimersByTimeAsync(1_000))
-    expect(calledWithKey(invalidate, queryKeys.workflows.all)).toBe(true)
-    expect(calledWithKey(invalidate, queryKeys.workflows.definition('release-review'))).toBe(true)
-  })
-
-  it('invalidates run list + detail on a run change', async () => {
-    const { invalidate } = setup()
-    act(() => listener?.('company:changed', {
-      entity: 'workflow-run', workflowId: 'release-review', runId: 'run-1',
-    }))
-    await act(async () => vi.advanceTimersByTimeAsync(1_000))
-    expect(calledWithKey(invalidate, queryKeys.workflows.runs('release-review'))).toBe(true)
-    expect(calledWithKey(invalidate, queryKeys.workflows.run('release-review', 'run-1'))).toBe(true)
   })
 
   it('invalidates the invoking session detail + transcript when sessionId is present', async () => {

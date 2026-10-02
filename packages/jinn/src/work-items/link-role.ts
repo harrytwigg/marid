@@ -1,4 +1,5 @@
 import type { Session, WorkItemLinkRole } from '../shared/types.js';
+import { isLegacyWorkflowPhaseSession } from '../sessions/legacy-workflow-phase.js';
 
 /**
  * Why a session is linked to a Todo.
@@ -15,27 +16,30 @@ import type { Session, WorkItemLinkRole } from '../shared/types.js';
  */
 export type { WorkItemLinkRole };
 
+/** The roles a delegation may ask for. `consult` is not one: only a mention
+ *  links a session that way. */
 export const WORK_ITEM_LINK_ROLES: readonly WorkItemLinkRole[] = ['execute', 'review'];
 
 /** Parse a role off the wire or out of a column. Anything unrecognised —
  *  including NULL — is an execution attempt, the pre-existing meaning. */
 export function toWorkItemLinkRole(value: unknown): WorkItemLinkRole {
-  return value === 'review' ? 'review' : 'execute';
+  return value === 'review' || value === 'consult' ? value : 'execute';
 }
 
 /**
  * Whether a linked session counts as having EXECUTED the Todo.
  *
- * The two exclusions are the same rule seen from different angles: a Workflow
- * phase session is linked so the run's spend rolls up to the Todo it is bound
- * to, and a review session is linked so a review round is attributed and
- * steerable. Neither produced the work, so neither may be treated as its
- * producer — by the self-review ban, or by the status derivation that reads
- * attempt receipts.
+ * The exclusions are the same rule seen from different angles: a phase
+ * session left by the removed Workflow runtime (source `workflow`) was linked
+ * so a run's spend rolled up to the Todo it was bound to, a review session is
+ * linked so a review round is attributed and steerable, and a consulted
+ * session was tagged in a comment and asked for an answer. None produced the
+ * work, so none may be treated as its producer — by the self-review ban, by
+ * the status derivation that reads attempt receipts, or by Dispatch.
  */
 export function isExecutionAttempt(session: Session): boolean {
-  return session.workflowProvenance?.kind !== 'phase'
-    && toWorkItemLinkRole(session.workItemRole) !== 'review';
+  return !isLegacyWorkflowPhaseSession(session)
+    && toWorkItemLinkRole(session.workItemRole) === 'execute';
 }
 
 /**

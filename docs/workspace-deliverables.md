@@ -20,19 +20,11 @@ Two mechanisms close the gap without moving the boundary an inch.
 
 ## 1. Declare the route
 
-A Todo says where its product lands, as one key inside the verify policy it
-already carries:
-
-```json
-{ "mode": "verify", "deliverable": "workspace" }
-```
-
-`deliverable` is `repo` or `workspace`. Absent means `repo`, so every Todo
-written before the field existed keeps its exact meaning and persists
-unchanged. The key is accepted by `create_work_item` and `update_work_item`, is
-returned by `get_work_item`, and is validated identically at the MCP and gateway
-boundaries — both call `validateVerifyPolicy` in
-`packages/jinn/src/work-items/verify-policy.ts`.
+Todos no longer record the route. It used to be a `deliverable` key inside a
+Todo's verify policy, and that policy was removed from Todos. Nothing in Marid
+stores or forwards the declaration now: whoever runs the pipeline passes it
+explicitly, as `--declared workspace` (or `repo`, the default) to the `route`
+command below.
 
 Declaring `workspace` routes the acceptance check to an actor that already has
 workspace access — the operator, at the land approval. The verifier's verdict
@@ -40,19 +32,7 @@ then covers exactly what it legitimately sees: the diff, the gates, and the
 evidence below. A workspace deliverable becomes a first-class outcome instead of
 an error.
 
-The field records a route. It grants no access to anything.
-
-### Who may declare it
-
-The Todo's own **assignee or creator**, and only this one key. `mode`, `verifier`
-and `maxRounds` decide who reviews the work and stay the operator's, so a
-declaration can never carry a review mode in with it: the submitted policy has to
-match the stored one in every other key, and on a Todo with no stored policy the
-submitted `mode` has to be the one provenance already gave it.
-
-It has to be the lane's to set. Every bound MCP call arrives as a session, so an
-operator-only field would mean no lane could ever declare its own route, and the
-false blocks would continue.
+The declaration records a route. It grants no access to anything.
 
 ### The declaration is a hint, not an instruction
 

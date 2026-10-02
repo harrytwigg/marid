@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { createSplitLayout, focusSession, groupOfSession, groupsOf, placeTab, workingSetFromLayout } from '../split-layout'
+import { act } from '@testing-library/react'
+import { fileTabId } from '../file-tab'
+import { createSplitLayout, focusSession, groupOfSession, groupsOf, materializeLayout, openFileTab, placeTab, splitGroup, workingSetFromLayout } from '../split-layout'
 import { SPLIT_LAYOUT_STORAGE_KEY, serializeSplitLayout } from '../split-layout-storage'
 import { WORKING_SET_STORAGE_KEY, serializeWorkingSet } from '../../working-set'
 import { deletedWhileClosed, useSplitWorkingSet } from '../use-split-working-set'
@@ -62,5 +64,42 @@ describe('a chat deleted while the page was closed', () => {
     rerender({ id: 'x' })
 
     expect(groupsOf(result.current.split.layout).flatMap((group) => group.tabs)).toContain('x')
+  })
+})
+
+describe('a file-only pane', () => {
+  const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
+
+  /** a | b arranged with the report split out to its own pane, as the page leaves it. */
+  function storeFilePane() {
+    const arranged = materializeLayout(createSplitLayout(['a', 'b'], 'a'), 2)
+    const withFile = openFileTab(arranged, 'a', report)
+    const layout = splitGroup(withFile, groupOfSession(withFile, 'a')!.id, 'right', report)
+    window.localStorage.setItem(SPLIT_LAYOUT_STORAGE_KEY, serializeSplitLayout(layout))
+    window.localStorage.setItem(WORKING_SET_STORAGE_KEY, serializeWorkingSet(workingSetFromLayout(layout)))
+  }
+
+  it('survives a reload, and the working set the URL syncs from holds chats only', () => {
+    storeFilePane()
+    const { result } = renderHook(() => useSplitWorkingSet('a', [{ id: 'a' }, { id: 'b' }]))
+
+    expect(groupsOf(result.current.split.layout).map((group) => group.tabs)).toEqual([['a'], [report], ['b']])
+    expect(result.current.state.sessionIds).toEqual(['a', 'b'])
+    expect(JSON.parse(window.localStorage.getItem(WORKING_SET_STORAGE_KEY)!).sessionIds).toEqual(['a', 'b'])
+  })
+
+  it('keeps focus while the URL names a chat already in the layout, and gives it up when the URL moves', () => {
+    storeFilePane()
+    const sessions = [{ id: 'a' }, { id: 'b' }]
+    const { result, rerender } = renderHook(({ id }) => useSplitWorkingSet(id, sessions), { initialProps: { id: 'a' as string | null } })
+
+    act(() => result.current.split.show(report))
+    const fileGroup = groupOfSession(result.current.split.layout, report)!
+    expect(result.current.split.layout.focusedGroupId).toBe(fileGroup.id)
+    // The route is still a chat: the most recent one stands in for the file pane.
+    expect(result.current.state.focusedId).not.toBe(report)
+
+    rerender({ id: 'b' })
+    expect(result.current.split.layout.focusedGroupId).toBe(groupOfSession(result.current.split.layout, 'b')!.id)
   })
 })

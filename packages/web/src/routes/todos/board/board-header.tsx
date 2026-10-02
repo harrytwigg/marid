@@ -9,7 +9,6 @@ type BoardCounts = {
   attentionCount: number
   openCount: number
   blockedTotal: number
-  escalatedTotal: number
 }
 
 type BoardHeaderProps = BoardCounts & {
@@ -47,17 +46,14 @@ function QuickCaptureButton({ onClick }: { onClick: () => void }) {
 }
 
 function BoardSubtitle({
-  isHome,
   deptPrefix,
   isAttention,
   attentionCount,
   openCount,
   blockedTotal,
-  escalatedTotal,
-}: BoardCounts & { isHome: boolean; deptPrefix: string | undefined }) {
+}: BoardCounts & { deptPrefix: string | undefined }) {
   return (
     <>
-      {isHome && <p>The Todos you created or pinned.</p>}
       <div className="flex items-center gap-2">
         {deptPrefix && (
           <>
@@ -78,12 +74,6 @@ function BoardSubtitle({
                 <span>{blockedTotal} blocked</span>
               </>
             )}
-            {escalatedTotal > 0 && (
-              <>
-                <Dot />
-                <span>{escalatedTotal} escalated</span>
-              </>
-            )}
           </>
         )}
       </div>
@@ -95,7 +85,7 @@ export function BoardHeader({ board, title, departments, deptPrefix, onQuickCapt
   return (
     <LargeTitleHeader
       title={<BoardSwitcher board={board} title={title} departments={departments} attentionCount={counts.attentionCount} />}
-      subtitle={<BoardSubtitle isHome={board.kind === "home"} deptPrefix={deptPrefix} {...counts} />}
+      subtitle={<BoardSubtitle deptPrefix={deptPrefix} {...counts} />}
       trailing={<QuickCaptureButton onClick={onQuickCapture} />}
     />
   )

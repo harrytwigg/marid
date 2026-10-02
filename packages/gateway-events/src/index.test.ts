@@ -22,16 +22,31 @@ describe("decodeGatewayEvent", () => {
     })).toBeNull()
   })
 
-  it("accepts experiment lifecycle events", () => {
-    for (const action of ["created", "updated", "reading-recorded", "concluded"]) {
-      expect(decodeGatewayEvent({
-        event: "experiments:changed",
-        payload: { id: "experiment-1", action },
-      })).toEqual({
-        event: "experiments:changed",
-        payload: { id: "experiment-1", action },
-      })
+  it("accepts the status a session reports while its background sub-agents work", () => {
+    const payload = {
+      sessionId: "s-1",
+      transportState: "running",
+      status: "running",
+      backgroundActivity: {
+        activeStreams: 0,
+        activeAgents: 0,
+        backgroundAgents: 2,
+        backgroundRerun: false,
+        lastActivityAt: "2026-10-01T20:00:00.000Z",
+      },
     }
+    expect(decodeGatewayEvent({ event: "session:background", payload })).toEqual({ event: "session:background", payload })
+    expect(decodeGatewayEvent({
+      event: "session:background",
+      payload: { ...payload, backgroundActivity: { ...payload.backgroundActivity, backgroundRerun: "yes" } },
+    })).toBeNull()
+  })
+
+  it("no longer decodes the removed experiments:changed event", () => {
+    expect(decodeGatewayEvent({
+      event: "experiments:changed",
+      payload: { id: "experiment-1", action: "created" },
+    })).toBeNull()
   })
 
   it("accepts video media in session attachment events", () => {

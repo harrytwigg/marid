@@ -96,51 +96,6 @@ function selectedTodo(id: string): SemanticObject | null {
   }
 }
 
-function selectedWorkflowRun(snapshot: PageSnapshot, definition: Record<string, unknown> | null): SemanticObject | null {
-  const workflowId = snapshot.params.workflow
-  const runId = snapshot.selection?.id
-  if (!workflowId || !runId) return null
-  const run = record(queryClient.getQueryData(["workflows", "runs", workflowId, runId]))
-  if (!run) return null
-  const current = record(run.currentOrFailingNode)
-  const titles = [text(run.workflowTitle), text(definition?.title), runId]
-  return {
-    kind: "workflow run",
-    id: runId,
-    title: titles.find(Boolean) ?? runId,
-    status: text(run.status),
-    fields: { workflowId, currentNode: text(current?.nodeId), revision: number(run.revision) },
-    relations: [],
-    retrievalAnchor: { kind: "workflow-run", id: runId, workflowId },
-  }
-}
-
-function selectedWorkflowDefinition(workflowId: string, definition: Record<string, unknown>): SemanticObject {
-  const revision = number(definition.revision)
-  return {
-    kind: "workflow",
-    id: workflowId,
-    title: text(definition.title) || workflowId,
-    status: definition.enabled === true ? "enabled" : definition.enabled === false ? "disabled" : undefined,
-    fields: {
-      description: safeText(definition.description),
-      nodeCount: Array.isArray(definition.nodes) ? definition.nodes.length : 0,
-      edgeCount: Array.isArray(definition.edges) ? definition.edges.length : 0,
-    },
-    relations: [],
-    retrievalAnchor: { kind: "workflow", id: workflowId, ...(revision ? { revision } : {}) },
-  }
-}
-
-function selectedWorkflow(snapshot: PageSnapshot): SemanticObject | null {
-  const workflowId = snapshot.params.workflow ?? (snapshot.kind === "workflow" ? snapshot.selection?.id : undefined)
-  if (!workflowId) return null
-  const definition = record(queryClient.getQueryData(["workflows", "definition", workflowId]))
-  if (snapshot.kind === "workflow-run") return selectedWorkflowRun(snapshot, definition)
-  if (!definition) return null
-  return selectedWorkflowDefinition(workflowId, definition)
-}
-
 function envelope(key: readonly unknown[], field: string): Record<string, unknown> | null {
   const value = record(queryClient.getQueryData(key))
   return record(value?.[field]) ?? value
@@ -150,7 +105,6 @@ type GenericSourceReader = (id: string) => Record<string, unknown> | null
 
 const GENERIC_SOURCE_READERS: Partial<Record<PageSnapshot["kind"], GenericSourceReader>> = {
   chat: (id) => envelope(["sessions", id], "session"),
-  experiment: (id) => envelope(["experiments", id], "experiment"),
   notes: (id) => envelope(["note", id], "note"),
   skill: (id) => envelope(["skill", id], "skill"),
   org: (id) => {
@@ -191,7 +145,6 @@ function resolveSelected(snapshot: PageSnapshot, capturedAt: string): SemanticOb
     return liveChatObject(snapshot.selection.id, capturedAt)
   }
   if (snapshot.kind === "todo") return selectedTodo(snapshot.selection.id)
-  if (snapshot.kind === "workflow" || snapshot.kind === "workflow-run") return selectedWorkflow(snapshot)
   return genericSelected(snapshot)
 }
 

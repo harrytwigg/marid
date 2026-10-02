@@ -1,5 +1,6 @@
 import type { EngineResult } from "./types.js";
 import { classifyEngineFailureText, hasEngineFailureClass } from "./engine-failure.js";
+import { isProcessStartFailure } from "./process-start.js";
 
 /** Whether error text reads as a quota window rather than a fault. Engine
  *  results are one caller; a settled attempt's stored error is the other, and
@@ -51,11 +52,17 @@ const DEAD_SESSION_PATTERNS = [
 export function isDeadSessionError(result: EngineResult): boolean {
   if (!result.error) return false;
 
+  // A process that never started its session did no work for a reason of its
+  // own (an exec refusal, a dropped ssh connection, a crash on boot), and its
+  // resume id is as good as it was. Only Claude Code saying the conversation
+  // is gone makes the session dead.
+  if (isProcessStartFailure(result.error)) return /no conversation found/i.test(result.error);
+
   // If rate limit info is present, this is a rate limit, not a dead session
   if (result.rateLimit?.status) return false;
 
-  const zeroCost = result.cost === undefined || result.cost === 0;
-  const zeroTurns = result.numTurns === undefined || result.numTurns === 0;
+  const zeroCost = !result.cost;
+  const zeroTurns = !result.numTurns;
 
   // Primary: error with zero work done and no rate limit
   if (zeroCost && zeroTurns) return true;

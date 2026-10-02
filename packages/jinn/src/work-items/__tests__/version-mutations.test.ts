@@ -9,20 +9,17 @@ process.env.JINN_HOME = tmp;
 type Store = typeof import("../store.js");
 type Registry = typeof import("../../sessions/registry.js");
 type Transitions = typeof import("../transitions.js");
-type Approvals = typeof import("../approvals.js");
 type Reconcile = typeof import("../reconcile.js");
 
 let store: Store;
 let registry: Registry;
 let transitions: Transitions;
-let approvals: Approvals;
 let reconcile: Reconcile;
 
 beforeAll(async () => {
   store = await import("../store.js");
   registry = await import("../../sessions/registry.js");
   transitions = await import("../transitions.js");
-  approvals = await import("../approvals.js");
   reconcile = await import("../reconcile.js");
   (await import("../../shared/db.js")).initDb();
 });
@@ -72,23 +69,6 @@ describe("Todo version mutation sensitivity", () => {
     const eventCount = store.listWorkItemEvents(assigned.id).length;
     expect(transitions.assignWorkItem(assigned.id, "worker", "platform", "operator")?.version).toBe(2);
     expect(store.listWorkItemEvents(assigned.id)).toHaveLength(eventCount);
-  });
-
-  it("increments approval request, escalation, and decision while keeping exact retries silent", async () => {
-    const item = store.createWorkItem({ title: "approval" });
-    expect(approvals.requestApproval(item.id, { request: "approve", target: "reviewer" }).version).toBe(2);
-    expect(approvals.requestApproval(item.id, { request: "approve", target: "reviewer" }).version).toBe(2);
-    expect(approvals.escalateApproval(item.id, "reviewer", "needs operator").version).toBe(3);
-    const eventCount = store.listWorkItemEvents(item.id).length;
-    expect(approvals.escalateApproval(item.id, "reviewer", "needs operator").version).toBe(3);
-    expect(store.listWorkItemEvents(item.id)).toHaveLength(eventCount);
-
-    const decided = await approvals.decideWorkItemApproval({
-      id: item.id,
-      decision: "approve",
-      decidedBy: "reviewer",
-    });
-    expect(decided.ok && decided.item.version).toBe(4);
   });
 
   it("increments reconciler-derived lifecycle state and leaves a settled repeat silent", () => {

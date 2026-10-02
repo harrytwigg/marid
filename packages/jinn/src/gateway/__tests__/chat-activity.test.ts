@@ -7,9 +7,8 @@ describe("todoActivityBlock", () => {
     const item = {
       id: "ACM-43",
       title: "Verify the release",
-      status: "assigned",
+      status: "backlog",
       assignee: "release-engineer",
-      approvalState: null,
       parentId: "ACM-42",
       rootId: "ACM-42",
       depth: 1,

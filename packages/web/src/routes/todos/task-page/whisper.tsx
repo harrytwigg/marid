@@ -1,7 +1,7 @@
-import { Bell, ChevronRight, CornerDownRight, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
+import { ChevronRight, CornerDownRight, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
-import { displayNameOf, formatRelativeTime } from "../util"
+import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
 import { SessionActor } from "./session-ref"
 
 /* One audit event read back as a sentence: who did it, and what it was. The
@@ -18,6 +18,11 @@ interface Whisper {
  *  readable mapping instead of one branch. */
 type WhisperRule = Whisper | ((detail: Record<string, unknown>, event: WorkItemEventWire) => Whisper)
 
+/** History keeps the two retired statuses: events written before the boot
+ *  migration moved `assigned` and `escalated` Todos still name them. */
+const RETIRED_STATUS_LABEL: Record<string, string> = { assigned: "Assigned", escalated: "Escalated" }
+const statusLabel = (status: string): string => STATUS_LABEL[status as keyof typeof STATUS_LABEL] ?? RETIRED_STATUS_LABEL[status] ?? status
+
 const WHISPERS: Record<string, WhisperRule> = {
   created: { Icon: Plus, text: "created this todo" },
   child_created: (detail) => ({
@@ -28,8 +33,9 @@ const WHISPERS: Record<string, WhisperRule> = {
     if (detail.bounce === true) {
       return { Icon: CornerDownRight, text: `sent it back · round ${typeof detail.rounds === "number" ? detail.rounds : "?"}` }
     }
-    return { Icon: ChevronRight, text: `moved it to ${event.toStatus ? STATUS_LABEL[event.toStatus] : "?"}` }
+    return { Icon: ChevronRight, text: `moved it to ${event.toStatus ? statusLabel(event.toStatus) : "?"}` }
   },
+  // `max-rounds-exhausted` is retired with the round ceiling; older events still carry it.
   escalated: (detail) => ({
     Icon: CornerDownRight,
     text: detail.reason === "max-rounds-exhausted" ? "escalated it — review rounds exhausted" : "escalated it",
@@ -55,16 +61,11 @@ const WHISPERS: Record<string, WhisperRule> = {
       typeof detail.source === "string" ? `, ${detail.source}` : ""}`,
   }),
   note: (detail) => {
+    if (detail.assignee === OPERATOR_ASSIGNEE) return { Icon: Pencil, text: "assigned it to the operator" }
     if (typeof detail.assignee === "string") return { Icon: Pencil, text: `assigned ${detail.assignee}` }
-    if (detail.approvalEscalated === true) return { Icon: Bell, text: "escalated the approval" }
     return { Icon: Pencil, text: "added a note" }
   },
   metadata_edited: { Icon: Pencil, text: "edited the details" },
-  approval_requested: { Icon: Bell, text: "asked for approval" },
-  approval_decided: (detail) => ({
-    Icon: Bell,
-    text: detail.decision === "approve" ? "approved it" : "sent the approval back",
-  }),
   attachment_added: (detail) => ({
     Icon: Paperclip,
     text: `attached ${typeof detail.filename === "string" ? detail.filename : "a file"}`,

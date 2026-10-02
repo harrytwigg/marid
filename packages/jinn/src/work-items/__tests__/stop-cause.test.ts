@@ -16,23 +16,23 @@ process.env.JINN_HOME = tmp;
 type Store = typeof import("../store.js");
 type Transitions = typeof import("../transitions.js");
 type StopCause = typeof import("../stop-cause.js");
-type Approvals = typeof import("../approvals.js");
+type RecoveryRows = typeof import("../recovery-rows.js");
 
 let store: Store;
 let tr: Transitions;
 let sc: StopCause;
-let approvals: Approvals;
+let recoveryRows: RecoveryRows;
 let db: import("better-sqlite3").Database;
 
 beforeAll(async () => {
   store = await import("../store.js");
   tr = await import("../transitions.js");
   sc = await import("../stop-cause.js");
-  approvals = await import("../approvals.js");
+  recoveryRows = await import("../recovery-rows.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
-const mk = (status: "backlog" | "assigned" | "executing", extra: Record<string, unknown> = {}) =>
+const mk = (status: "backlog" | "executing", extra: Record<string, unknown> = {}) =>
   store.createWorkItem({ title: `t-${Math.random().toString(36).slice(2, 8)}`, status, ...extra });
 
 const AGENT = "session:agent-1";
@@ -117,7 +117,7 @@ describe("the cause belongs to the stop", () => {
   });
 
   // `backlog` matters as much as the rest: it is what keeps a parked Todo out of
-  // the idle-capacity backlog scan, which lists only `backlog`.
+  // the board walk's starts, which take only `backlog` Todos.
   it.each(["executing", "in_review", "done", "backlog"] as const)("is gone once the Todo moves to %s", (to) => {
     const item = mk("executing");
     tr.transition(item.id, "blocked", AGENT, { agent: true, stopCause: { unblockHint: hint } });
@@ -125,13 +125,6 @@ describe("the cause belongs to the stop", () => {
 
     tr.transition(item.id, to, AGENT, { agent: true });
     expect(sc.readStopCause(db, item.id)).toBeUndefined();
-  });
-
-  it("survives a move from blocked to escalated, which is still a stop", () => {
-    const item = mk("executing");
-    tr.transition(item.id, "blocked", AGENT, { agent: true, stopCause: { unblockHint: hint } });
-    tr.transition(item.id, "escalated", AGENT, { agent: true });
-    expect(sc.readStopCause(db, item.id)).toEqual({ unblockHint: hint });
   });
 
   it("goes with the Todo when the Todo goes", () => {
@@ -163,14 +156,16 @@ describe("the needs-attention set counts people, not clocks", () => {
     expect(ids).not.toContain(parked.id);
   });
 
-  it("leaves out a parked Todo even when it is holding a gate — the park is what decides", () => {
+  it("keeps a parked Todo that recovery has routed to a manager — the routed lane outranks the park", () => {
     const owner = `owner-${Math.random().toString(36).slice(2, 8)}`;
     const item = mk("executing", { assignee: owner });
-    approvals.requestApproval(item.id, { request: "decide?", target: owner });
+    recoveryRows.upsertWorkItemRecovery({
+      workItemId: item.id, incidentId: "incident-1", class: "operator", lane: "manager", reason: "routed to a manager",
+    });
     expect(queue(owner)).toContain(item.id);
 
     tr.transition(item.id, "blocked", AGENT, { agent: true, stopCause: { parkedUntil: new Date(Date.now() + HOUR).toISOString() } });
-    expect(queue(owner)).not.toContain(item.id);
+    expect(queue(owner)).toContain(item.id);
   });
 
   it("keeps a Todo whose park will not parse — a field that hides work must fail open", () => {

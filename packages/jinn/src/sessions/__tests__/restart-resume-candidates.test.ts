@@ -137,8 +137,8 @@ describe("restart interruption marking", () => {
 
     restartResume.interruptRunningSessionsForShutdown(GATEWAY);
     registry.recoverStaleSessions();
-    // Workflow attempts have their own restart recovery; this is the one that owns them.
-    expect(registry.recoverStaleWorkflowAttemptSessions()).toBe(1);
+    // Phase rows left by the removed Workflow runtime are settled by their own boot sweep.
+    expect(registry.settleLegacyWorkflowPhaseSessions()).toBe(1);
 
     expect(registry.getSession(attempt.id)?.status).toBe("interrupted");
     expect(restartResume.consumeRestartResumeCandidates()).toEqual(NONE);
@@ -422,6 +422,18 @@ describe("backgroundWorkAtShutdown", () => {
       { sessionId: "monitors", detail: "2 background tasks" },
       { sessionId: "agents", detail: "1 background agent request" },
       { sessionId: "unclassified", detail: "1 background agent request" },
+    ]);
+  });
+
+  it("counts background sub-agents and a re-run between model requests, which have none in flight", () => {
+    const activity = new Map([
+      ["subagent", { activeStreams: 0, activeAgents: 0, activeMonitors: 0, backgroundAgents: 2, lastActivityAt: 0 }],
+      ["rerun", { activeStreams: 0, activeAgents: 0, activeMonitors: 0, backgroundRerun: true, lastActivityAt: 0 }],
+    ]);
+
+    expect(restartResume.backgroundWorkAtShutdown(activity)).toEqual([
+      { sessionId: "subagent", detail: "2 background sub-agents" },
+      { sessionId: "rerun", detail: "a background re-run" },
     ]);
   });
 });

@@ -4,7 +4,7 @@ import type { BlockKind } from "./blocks.js";
 /** PLA-157: why a stopped Todo stopped, and what ends the wait.
  *
  *  A Todo held by a quota window and a Todo held by a human decision both sit in
- *  `blocked`/`escalated`, so the board cannot tell a clock-wait from a you-wait
+ *  `blocked`, so the board cannot tell a clock-wait from a you-wait
  *  and its "N waiting" count is a lie. `parked_until` names the moment a
  *  clock-wait is over; `unblock_what`/`unblock_who` name the person and the act
  *  that ends a human-wait.
@@ -46,16 +46,15 @@ export const UNBLOCK_HINT_ERROR =
 export const PARKED_UNTIL_ERROR = "parkedUntil must be an ISO-8601 timestamp";
 
 /** a park lives on a stop, so any move that does not land in `blocked`
- *  or `escalated` deletes it on the same write. Accepting one there reported
+ *  deletes it on the same write. Accepting one there reported
  *  success for a park that never existed — the Todo stayed in the queue, and
- *  idle-capacity could start it the next minute. */
+ *  the board walk could start it on its next tick. */
 export const PARKED_UNTIL_NEEDS_STOP =
-  "parkedUntil parks a Todo in blocked (or escalated) and is deleted by any other move — send status: blocked without blockKind dependency, which re-queues instead of parking";
+  "parkedUntil parks a Todo in blocked and is deleted by any other move — send status: blocked without blockKind dependency, which re-queues instead of parking";
 
 /** Whether a move to `target` keeps a park: it has to stop the Todo, and a
  *  `dependency` block does not — it re-queues. */
 export function moveCanHoldPark(target: string, blockKind: BlockKind | undefined): boolean {
-  if (target === "escalated") return true;
   return target === "blocked" && blockKind !== "dependency";
 }
 
@@ -67,9 +66,6 @@ export function parkRefusal(value: unknown, target: string, blockKind: BlockKind
   if (parkedUntil === null) return PARKED_UNTIL_ERROR;
   return parkedUntil && !moveCanHoldPark(target, blockKind) ? PARKED_UNTIL_NEEDS_STOP : undefined;
 }
-
-export const UNBLOCK_HINT_REQUIRED =
-  "unblockHint {what, who} is required when escalating a Todo — an escalation nobody can act on is not an escalation";
 
 const UNBLOCK_HINT_KEYS = ["what", "who"] as const;
 

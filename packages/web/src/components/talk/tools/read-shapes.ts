@@ -1,5 +1,4 @@
-import type { ExperimentResponse } from "@/routes/experiments/types"
-import type { WorkItemDetailWire, WorkItemFullWire, WorkflowRunSummaryWire } from "@/lib/api"
+import type { WorkItemDetailWire } from "@/lib/api"
 
 /**
  * Wire shapes trimmed to what a voice model can hold and say back.
@@ -15,7 +14,6 @@ const COMMENT_CHARS = 280
 const MESSAGE_CHARS = 400
 const RECENT_COMMENTS = 5
 const RECENT_MESSAGES = 6
-const RECENT_READINGS = 12
 
 /** Collapse whitespace and cap length. Truncation is marked, never silent: a
  *  model that reads a cut-off sentence as the whole answer misreports it. */
@@ -44,17 +42,6 @@ function trimComments(detail: WorkItemDetailWire): Record<string, unknown> {
   }
 }
 
-/** The gate on a Todo, so the orb can narrate a decision before it offers to
- *  make one — including whether the answer wanted is a yes/no or a pick. */
-function trimApproval(item: WorkItemFullWire): Record<string, unknown> {
-  return {
-    approvalState: item.approvalState ?? null,
-    approvalRequest: item.approvalRequest ? clip(item.approvalRequest, COMMENT_CHARS) : null,
-    approvalOptions: item.approvalOptions ?? null,
-    approvalOperatorOnly: item.approvalOperatorOnly ?? false,
-  }
-}
-
 export function trimTodo(detail: WorkItemDetailWire, includeComments: boolean): Record<string, unknown> {
   const item = detail.workItem
   const trimmed: Record<string, unknown> = {
@@ -68,7 +55,6 @@ export function trimTodo(detail: WorkItemDetailWire, includeComments: boolean): 
     updatedAt: item.updatedAt,
     labels: (detail.labels ?? []).map((label) => label.name),
     body: clip(item.body, BODY_CHARS),
-    ...trimApproval(item),
   }
   return includeComments ? { ...trimmed, ...trimComments(detail) } : trimmed
 }
@@ -92,39 +78,3 @@ export function trimSession(raw: Record<string, unknown>, id: string): Record<st
   }
 }
 
-export function trimWorkflowRuns(runs: readonly WorkflowRunSummaryWire[], limit: number): Record<string, unknown>[] {
-  return runs.slice(0, limit).map((run) => ({
-    runId: run.id,
-    status: run.status,
-    trigger: run.trigger.kind,
-    startedAt: run.startedAt,
-    endedAt: run.endedAt,
-    // What it is doing now, or what stopped it — the one thing worth saying
-    // out loud about a run that is not simply "completed".
-    node: run.currentOrFailingNode ? `${run.currentOrFailingNode.label} (${run.currentOrFailingNode.state})` : null,
-  }))
-}
-
-export function trimExperiment(response: ExperimentResponse): Record<string, unknown> {
-  const experiment = response.experiment
-  const readings = experiment.readings ?? []
-  return {
-    id: experiment.id,
-    name: experiment.name,
-    hypothesis: clip(experiment.hypothesis, BODY_CHARS),
-    status: experiment.status,
-    startedAt: experiment.startedAt,
-    horizonDays: experiment.horizonDays,
-    baseline: experiment.baseline,
-    metrics: (experiment.metrics ?? []).map((metric) => ({ name: metric.name, unit: metric.unit ?? null })),
-    readingCount: readings.length,
-    readings: readings.slice(-RECENT_READINGS).map((reading) => ({
-      at: reading.at,
-      metric: reading.metric,
-      value: reading.value,
-    })),
-    verdict: experiment.verdict
-      ? { outcome: experiment.verdict.outcome, note: clip(experiment.verdict.note, COMMENT_CHARS) }
-      : null,
-  }
-}

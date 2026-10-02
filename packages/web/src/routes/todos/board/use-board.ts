@@ -16,11 +16,8 @@ import { BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isColumnInStat
 
 /* Todos v2 slice 6 — the board data layer (design-doc §11 queries).
  * One infinite query per status column, scoped per board:
- *   Home          → home=true + rootsOnly
  *   department    → department=<slug> + rootsOnly
  *   Everything    → rootsOnly (no board-scope filter)
- * Home is a union in one scope (PLA-230): pinned OR operator-created — sending
- * `kept` and `createdBy` would be the intersection. Creating writes no pin row.
  * True per-column counts come from each query's `total` (the gateway counts the
  * whole filtered set before LIMIT/OFFSET — never a capped page length). */
 
@@ -30,8 +27,7 @@ export const BOARD_PAGE_SIZE = 20
 
 /** Server params for a board scope (pure — unit-tested). Boards show roots
  *  only (§4): children live in the in-place tree tray, not as cards. */
-export function boardScopeParams(board: BoardId): { home?: true; department?: string; rootsOnly: true } {
-  if (board.kind === "home") return { home: true, rootsOnly: true }
+export function boardScopeParams(board: BoardId): { department?: string; rootsOnly: true } {
   if (board.kind === "department") return { department: board.slug, rootsOnly: true }
   return { rootsOnly: true }
 }
@@ -101,7 +97,7 @@ function useBoardColumn(board: BoardId, status: WorkItemStatusWire, filters: Tod
 
 type BoardColumnQuery = ReturnType<typeof useBoardColumn>
 
-/** The eight columns, assembled from their queries. A disabled column keeps
+/** The six columns, assembled from their queries. A disabled column keeps
  *  whatever it last loaded (keepPreviousData), so the status filter gates the
  *  read too — otherwise ?status=executing still shows the backlog cards it
  *  fetched on the way in. */
@@ -133,8 +129,8 @@ export interface BoardData {
   isLoading: boolean
   isError: boolean
   error: unknown
-  /** Sum of the four PIPELINE totals — the header's "N open". Blocked and
-   *  escalated read out separately (the mock's "11 open · 1 blocked"). */
+  /** Sum of the three PIPELINE totals — the header's "N open". Blocked
+   *  reads out separately (the mock's "11 open · 1 blocked"). */
   openTotal: number
   closedTotal: number
 }
@@ -144,14 +140,12 @@ export function useBoardData(board: BoardId, filters: TodoFilters, now: number, 
   // filter leaves only its own column's query on.
   const on = (status: WorkItemStatusWire) => enabled && isColumnInStatusFilter(filters.status, status)
   const backlog = useBoardColumn(board, "backlog", filters, now, on("backlog"))
-  const assigned = useBoardColumn(board, "assigned", filters, now, on("assigned"))
   const executing = useBoardColumn(board, "executing", filters, now, on("executing"))
   const inReview = useBoardColumn(board, "in_review", filters, now, on("in_review"))
   const blocked = useBoardColumn(board, "blocked", filters, now, on("blocked"))
-  const escalated = useBoardColumn(board, "escalated", filters, now, on("escalated"))
   const done = useBoardColumn(board, "done", filters, now, on("done"))
   const cancelled = useBoardColumn(board, "cancelled", filters, now, on("cancelled"))
-  const queries = [backlog, assigned, executing, inReview, blocked, escalated, done, cancelled]
+  const queries = [backlog, executing, inReview, blocked, done, cancelled]
 
   return useMemo((): BoardData => {
     const inScope = BOARD_STATUS_ORDER.map((status) => isColumnInStatusFilter(filters.status, status))
@@ -170,17 +164,17 @@ export function useBoardData(board: BoardId, filters: TodoFilters, now: number, 
       openTotal,
       closedTotal,
     }
-    // the 8 query results are the dependencies
+    // the 6 query results are the dependencies
   }, [filters.status,
-      backlog.data, assigned.data, executing.data, inReview.data, blocked.data, escalated.data, done.data, cancelled.data,
-      backlog.isFetchingNextPage, assigned.isFetchingNextPage, executing.isFetchingNextPage, inReview.isFetchingNextPage,
-      blocked.isFetchingNextPage, escalated.isFetchingNextPage, done.isFetchingNextPage, cancelled.isFetchingNextPage,
+      backlog.data, executing.data, inReview.data, blocked.data, done.data, cancelled.data,
+      backlog.isFetchingNextPage, executing.isFetchingNextPage, inReview.isFetchingNextPage,
+      blocked.isFetchingNextPage, done.isFetchingNextPage, cancelled.isFetchingNextPage,
       // Error/pending flips carry no data change — the states surfaces
       // (skeleton, calm error card) need them as dependencies too.
-      backlog.isError, assigned.isError, executing.isError, inReview.isError,
-      blocked.isError, escalated.isError, done.isError, cancelled.isError,
-      backlog.isPending, assigned.isPending, executing.isPending, inReview.isPending,
-      blocked.isPending, escalated.isPending, done.isPending, cancelled.isPending])
+      backlog.isError, executing.isError, inReview.isError,
+      blocked.isError, done.isError, cancelled.isError,
+      backlog.isPending, executing.isPending, inReview.isPending,
+      blocked.isPending, done.isPending, cancelled.isPending])
 }
 
 // ── Switcher data ───────────────────────────────────────────────────────────
@@ -193,11 +187,10 @@ export function useBoardMenuCounts(departments: DepartmentSummaryWire[] | undefi
     queryKey: ["work-items", "board-menu-counts", slugs.join(",")],
     enabled: enabled && departments !== undefined,
     ...TODO_QUERY_FRESHNESS,
-    queryFn: async (): Promise<{ home: number; everything: number; byDepartment: Record<string, number> }> => {
+    queryFn: async (): Promise<{ everything: number; byDepartment: Record<string, number> }> => {
       const openOf = (totals: Partial<Record<WorkItemStatusWire, number>> | undefined): number =>
         OPEN_STATUSES.reduce((sum, s) => sum + (totals?.[s] ?? 0), 0)
-      const [home, everything, ...perDept] = await Promise.all([
-        api.listWorkItems({ home: true, rootsOnly: true, limit: 1 }),
+      const [everything, ...perDept] = await Promise.all([
         api.listWorkItems({ rootsOnly: true, limit: 1 }),
         ...slugs.map((slug) => api.listWorkItems({ department: slug, rootsOnly: true, limit: 1 })),
       ])
@@ -205,7 +198,7 @@ export function useBoardMenuCounts(departments: DepartmentSummaryWire[] | undefi
       slugs.forEach((slug, i) => {
         byDepartment[slug] = openOf(perDept[i].totals)
       })
-      return { home: openOf(home.totals), everything: openOf(everything.totals), byDepartment }
+      return { everything: openOf(everything.totals), byDepartment }
     },
   })
 }

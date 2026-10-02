@@ -112,6 +112,18 @@ describe("handleRateLimit — Codex fallback guard (#40)", () => {
     expect(outcome.kind).toBe("timeout");
   });
 
+  it("never hands a board walk turn to a fallback engine, which would bring its own tools", async () => {
+    engineAvailableMock.mockReturnValue(true);
+    const fallbackRun = vi.fn(async () => ({ result: "from-codex", sessionId: "codex-1" }) as EngineResult);
+    const opts = makeOpts(fallbackRun);
+    const walkTurn = makeSession({ sessionKey: "board-walk:2026-10-02T09:00:00.000Z", sourceRef: "board-walk:2026-10-02T09:00:00.000Z", source: "cron" });
+
+    const outcome = await handleRateLimit({ ...opts, session: walkTurn });
+
+    expect(fallbackRun).not.toHaveBeenCalled();
+    expect(outcome.kind).toBe("timeout");
+  });
+
   it("uses the Codex fallback when the fallback engine IS installed", async () => {
     engineAvailableMock.mockReturnValue(true);
     const fallbackRun = vi.fn(async () => ({ result: "from-codex", sessionId: "codex-1" }) as EngineResult);

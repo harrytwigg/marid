@@ -9,7 +9,6 @@
   },
   "include": [
     "e2e/**/*.ts",
-    "playwright.config.ts",
-    "playwright.workflow-layout.config.ts"
+    "playwright.config.ts"
   ]
 }

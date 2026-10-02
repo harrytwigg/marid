@@ -3,7 +3,7 @@ import { parseSearchQuery, type SearchVocabulary } from "../query-grammar.js";
 
 /** A vocabulary small enough to reason about, real enough to be representative. */
 const VOCABULARY: SearchVocabulary = {
-  statuses: ["backlog", "assigned", "executing", "in_review", "done", "blocked", "escalated", "cancelled"],
+  statuses: ["backlog", "executing", "in_review", "done", "blocked", "cancelled"],
   assignees: ["jinn-dev", "seo-specialist"],
   departments: ["platform", "marketing"],
   labels: ["build", "urgent"],

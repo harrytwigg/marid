@@ -23,7 +23,7 @@ beforeAll(async () => {
   db = (await import("../../shared/db.js")).initDb();
 });
 
-const mk = (status: "backlog" | "assigned" | "executing", extra: Record<string, unknown> = {}) =>
+const mk = (status: "backlog" | "executing", extra: Record<string, unknown> = {}) =>
   store.createWorkItem({ title: `t-${Math.random().toString(36).slice(2, 8)}`, status, ...extra });
 
 const AGENT = "session:agent-1";
@@ -38,8 +38,9 @@ const record = (id: string) => blocks.readBlockRecord(db, id);
 
 describe("typed block kinds — routing", () => {
   it("routes a dependency block back to the queue, not in front of a human", () => {
-    const assigned = mk("executing", { assignee: "platform-worker" });
-    expect(block(assigned.id, "dependency").item.status).toBe("assigned");
+    // Always the backlog, owned or not: an owned Todo waits there with its assignee.
+    const owned = mk("executing", { assignee: "platform-worker" });
+    expect(block(owned.id, "dependency").item).toMatchObject({ status: "backlog", assignee: "platform-worker" });
 
     const unassigned = mk("executing");
     expect(block(unassigned.id, "dependency").item.status).toBe("backlog");
@@ -83,12 +84,13 @@ describe("the unblock-loop breaker", () => {
     unblock(wi.id);
     const third = block(wi.id, "capability");
 
-    expect(third.item.status).toBe("escalated");
+    expect(third.item.status).toBe("blocked");
     expect(third.escalated).toBe(true);
     const escalations = store.listWorkItemEvents(wi.id).filter((e) => e.kind === "escalated");
     expect(escalations).toHaveLength(1);
-    expect(escalations[0]).toMatchObject({ toStatus: "escalated" });
+    expect(escalations[0]).toMatchObject({ toStatus: "blocked" });
     expect(escalations[0].detail).toMatchObject({
+      declared: true,
       reason: "block_loop_detected",
       blockKind: "capability",
       recurrences: 2,
@@ -113,7 +115,7 @@ describe("the unblock-loop breaker", () => {
 
   // transition()'s same-status shortcut returns before writing anything, and it
   // compares the REQUESTED status. A dependency block on an already-blocked Todo
-  // requests `blocked` while routing to `assigned`, so the shortcut would swallow
+  // requests `blocked` while routing to `backlog`, so the shortcut would swallow
   // both the move and the count — the breaker installed, and silent.
   it("does not let the same-status shortcut swallow a dependency block", () => {
     const wi = mk("executing", { assignee: "platform-worker" });
@@ -122,29 +124,30 @@ describe("the unblock-loop breaker", () => {
 
     const routed = tr.transition(wi.id, "blocked", AGENT, { agent: true, blockKind: "dependency" });
 
-    expect(routed.item.status).toBe("assigned");
+    expect(routed.item.status).toBe("backlog");
     expect(store.listWorkItemEvents(wi.id)).toHaveLength(events + 1);
     expect(record(wi.id)).toMatchObject({ kind: "dependency", recurrences: 0 });
   });
 
   it("counts a block whose routed target is the status the Todo is already in", () => {
-    const wi = mk("assigned", { assignee: "platform-worker" });
+    const wi = mk("backlog", { assignee: "platform-worker" });
 
     const first = block(wi.id, "dependency");
-    expect(first.item.status).toBe("assigned");
+    expect(first.item.status).toBe("backlog");
     expect(record(wi.id)).toMatchObject({ kind: "dependency", recurrences: 0 });
     expect(store.listWorkItemEvents(wi.id).at(-1)).toMatchObject({
       kind: "status_change",
-      fromStatus: "assigned",
-      toStatus: "assigned",
+      fromStatus: "backlog",
+      toStatus: "backlog",
       actor: AGENT,
     });
 
-    expect(block(wi.id, "dependency").item.status).toBe("assigned");
+    expect(block(wi.id, "dependency").item.status).toBe("backlog");
     expect(record(wi.id)).toMatchObject({ kind: "dependency", recurrences: 1 });
 
     const third = block(wi.id, "dependency");
-    expect(third.item.status).toBe("escalated");
+    expect(third.item.status).toBe("blocked");
+    expect(third.escalated).toBe(true);
     expect(record(wi.id)).toMatchObject({ recurrences: 2 });
   });
 });

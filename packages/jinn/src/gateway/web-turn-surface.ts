@@ -49,6 +49,7 @@ export function createWebTurnSurface(options: WebTurnSurfaceOptions): TurnSurfac
           toolId: delta.toolId,
           activityReceiptId: delta.activityReceiptId,
           input: delta.input,
+          ...(delta.sidechain ? { sidechain: true } : {}),
           block: delta.block,
         });
       } catch (err) {

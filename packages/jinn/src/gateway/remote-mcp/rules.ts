@@ -29,19 +29,18 @@ const ALLOWED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ["GET", "/api/sessions"], ["GET", "/api/sessions/:id/children"], ["GET", "/api/search/sessions"],
   ["GET", "/api/org"], ["GET", "/api/org/employees/:name"],
   ["GET", "/api/notes"], ["GET", "/api/notes/read"], ["GET", "/api/knowledge/search"],
-  ["GET", "/api/workflows"], ["GET", "/api/workflows/:id"], ["GET", "/api/workflows/:id/runs"],
-  ["GET", "/api/workflows/:id/runs/:runId"],
   ["GET", "/api/cron"], ["GET", "/api/cron/:id/runs"], ["GET", "/api/cost/report"],
-  ["GET", "/api/experiments"], ["GET", "/api/experiments/:id"], ["GET", "/api/heartbeats"],
+  ["GET", "/api/heartbeats"],
   ["GET", "/api/files"], ["GET", "/api/files/read"],
   // Class L writes.
   ["POST", "/api/work-items"], ["PATCH", "/api/work-items/:id"], ["POST", "/api/work-items/:id/comments"],
   ["PUT", "/api/work-items/:id/labels"], ["POST", "/api/work-items/:id/relations"],
   ["DELETE", "/api/work-items/:id/relations"], ["POST", "/api/notes"], ["PUT", "/api/notes"],
-  ["POST", "/api/experiments/:id/readings"], ["POST", "/api/experiments/:id/conclude"],
   // Session control.
   ["GET", "/api/sessions/:id"], ["POST", "/api/sessions/:id/message"], ["POST", "/api/delegations"],
   ["POST", "/api/work-items/:id/assign"],
+  // The operator lane: close, cancel, reopen and archive.
+  ["POST", "/api/work-items/:id/status"], ["POST", "/api/work-items/:id/archive"],
 ];
 
 export function remoteMcpRouteAllowed(method: string, pathname: string): boolean {
@@ -66,8 +65,7 @@ export function refuseRemoteMcpRoute(res: ServerResponse, method: string, pathna
  * the connector is the operator's own door, so on a Todo it stands where
  * the operator stands — it may assign, label or unlink any Todo, not only the ones
  * it created. What guards it is the bridge (Access JWT, allow-list, cut-off) and
- * the route list above, not a narrower ledger standing. Approval authority is
- * deliberately not part of this: those gates stay the operator surface's.
+ * the route list above, not a narrower ledger standing.
  */
 export function remoteMcpHasOperatorStanding(caller: WorkItemCaller): boolean {
   return caller.kind === "session" && isRemoteMcpSession(caller.session);

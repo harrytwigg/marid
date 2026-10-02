@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "version": "0.34.0",
+  "baseVersion": "0.33.3",
+  "generatedFrom": {
+    "baseRef": "v0.33.3",
+    "headRef": "WORKTREE"
+  },
+  "files": [
+    {
+      "path": "CLAUDE.md",
+      "operation": "modify",
+      "baseSha256": "92e89f2320a11c89f5fbae41c28df1920467d53d7e6e6308c83a42e758d0425a",
+      "targetSha256": "616e01dd5bd4f99b17673c39d6c88644da12503c61010fa23967547b67c1ebdf",
+      "basePayload": "files/base/CLAUDE.md",
+      "targetPayload": "files/target/CLAUDE.md"
+    },
+    {
+      "path": "board-walk.md",
+      "operation": "add",
+      "baseSha256": null,
+      "targetSha256": "c2cc4f71a3e13db2b08e43d865b8e26474456728b3d70a391f5095244cf2bdd5",
+      "basePayload": null,
+      "targetPayload": "files/target/board-walk.md"
+    },
+    {
+      "path": "docs/architecture.md",
+      "operation": "modify",
+      "baseSha256": "28643e780ed43adba88d85f6c21521be223b22de28d49d1e5488f32c451ba313",
+      "targetSha256": "c09a3a0412629e11096f3516c713367ab10b394027cef4577a12af0fd22c1e07",
+      "basePayload": "files/base/docs/architecture.md",
+      "targetPayload": "files/target/docs/architecture.md"
+    },
+    {
+      "path": "docs/company-doctrine.md",
+      "operation": "modify",
+      "baseSha256": "7e7c6c9da3639492ba9b9ca5914546fdc9fa081cc0613d065698d130a6c25159",
+      "targetSha256": "4692e7ea6c98b216d73ff2be4d414e77e59e84d693e730353f8efa2efe87de23",
+      "basePayload": "files/base/docs/company-doctrine.md",
+      "targetPayload": "files/target/docs/company-doctrine.md"
+    },
+    {
+      "path": "docs/connectors.md",
+      "operation": "modify",
+      "baseSha256": "632140211f00005696014728d6ae163957aba136e625f29c101496f61eaa925c",
+      "targetSha256": "a5c6fed6b3e8add7fd94d1d58f5028e0b8e105c97c83820ec51c2fbd7cf32258",
+      "basePayload": "files/base/docs/connectors.md",
+      "targetPayload": "files/target/docs/connectors.md"
+    },
+    {
+      "path": "docs/cron.md",
+      "operation": "modify",
+      "baseSha256": "ce940ef58008ed347d6b4beb40a55ffedf5d24f7922b4d46fc6f607f61a84973",
+      "targetSha256": "6d1a85cd7a4210a70f48a1d847d6980b355a770af0f8835ab3b726a5e61b3bde",
+      "basePayload": "files/base/docs/cron.md",
+      "targetPayload": "files/target/docs/cron.md"
+    },
+    {
+      "path": "docs/mcp.md",
+      "operation": "modify",
+      "baseSha256": "e28e1beb9a6838624e72526ae4f81ed27d2d96d6efc554bcb262b02cf836760f",
+      "targetSha256": "3511cf64cab1b78e4076decb95a1e5051abb2c2fa98fa0da692e302cb96215fc",
+      "basePayload": "files/base/docs/mcp.md",
+      "targetPayload": "files/target/docs/mcp.md"
+    },
+    {
+      "path": "docs/org.md",
+      "operation": "modify",
+      "baseSha256": "3ed3540abb2997cde6ef0d8cecf61281f4e96c0909807d51040fba1709f3a968",
+      "targetSha256": "b03a886d2d7876bea627aca27f79aa74f1d4881a3910b14a540fa35cf9a4a5e4",
+      "basePayload": "files/base/docs/org.md",
+      "targetPayload": "files/target/docs/org.md"
+    },
+    {
+      "path": "docs/overview.md",
+      "operation": "modify",
+      "baseSha256": "2acc5ce272b65b9eb60fea217881de97c82d102de809781fddf9e5188ec47b4c",
+      "targetSha256": "69e4ba37cf76587c40060a00b98fa4fff9165d99aa6b9c9a5a42ee54f6d26e8e",
+      "basePayload": "files/base/docs/overview.md",
+      "targetPayload": "files/target/docs/overview.md"
+    },
+    {
+      "path": "docs/self-modification.md",
+      "operation": "modify",
+      "baseSha256": "32d2b824efa17188fb9ebae4e7ed3b05b95f8e6434440ef461459aae7e7e4e63",
+      "targetSha256": "65fc95ef8c61d6886f2c6fa85d3cd5eadd391e71397631dd7a65d723d01d3692",
+      "basePayload": "files/base/docs/self-modification.md",
+      "targetPayload": "files/target/docs/self-modification.md"
+    },
+    {
+      "path": "docs/skills.md",
+      "operation": "modify",
+      "baseSha256": "f5e252061ff70903a284ac085e34ce2372c40eb5f4058d456c3b3acaf2b62296",
+      "targetSha256": "940c1cb3f74b5e32b29cd5ad3753096855b7c5619125d63b761f8a3c7f40928b",
+      "basePayload": "files/base/docs/skills.md",
+      "targetPayload": "files/target/docs/skills.md"
+    },
+    {
+      "path": "scripts/workflow-triggers/README.md",
+      "operation": "remove",
+      "baseSha256": "e1ef99ab22d710cd9f94391be0759d169b17d895098de8e12a24d532d6ef7376",
+      "targetSha256": null,
+      "basePayload": "files/base/scripts/workflow-triggers/README.md",
+      "targetPayload": null
+    },
+    {
+      "path": "skills/cron-manager/SKILL.md",
+      "operation": "modify",
+      "baseSha256": "954338dee3ba4cafbe7a31a17f5f2fbbf300e89437dd67ed53db1deb49ba3550",
+      "targetSha256": "7bfc174825dac60298ea0dbed03f4121dfec95ecc7ecce87f5992ec12a3219a0",
+      "basePayload": "files/base/skills/cron-manager/SKILL.md",
+      "targetPayload": "files/target/skills/cron-manager/SKILL.md"
+    },
+    {
+      "path": "skills/delegation/SKILL.md",
+      "operation": "modify",
+      "baseSha256": "99a8c9e13f7fe70297244186dde3786f5dc4c0c94ccb45a287eaf80813d1d453",
+      "targetSha256": "8c5c18a6f55079b1f102970b283be40b17f53f027026cb6d20fea48a66fe5a82",
+      "basePayload": "files/base/skills/delegation/SKILL.md",
+      "targetPayload": "files/target/skills/delegation/SKILL.md"
+    },
+    {
+      "path": "skills/experiments/SKILL.md",
+      "operation": "remove",
+      "baseSha256": "bdcac32428219bc08580ecfa26a4b3aaade3ac01c6741c8650018e973f6d57b5",
+      "targetSha256": null,
+      "basePayload": "files/base/skills/experiments/SKILL.md",
+      "targetPayload": null
+    },
+    {
+      "path": "skills/management/SKILL.md",
+      "operation": "modify",
+      "baseSha256": "a7ab4f21e35a12c4cd26d1620f1651323e887284579b29b6967a156670cd0de8",
+      "targetSha256": "1f70b6888868beec518d2f8f941240d54f208082534c787db43a9637fe8c3b92",
+      "basePayload": "files/base/skills/management/SKILL.md",
+      "targetPayload": "files/target/skills/management/SKILL.md"
+    },
+    {
+      "path": "skills/self-heal/SKILL.md",
+      "operation": "modify",
+      "baseSha256": "33b6f6b1f3eb5990837640409a20f9f13bd79c771e5a25ecb850902afa223f96",
+      "targetSha256": "2b786391bc85c9fcecfc434238146a1ac2b6371e1a6bf60a25ecc987b0329dca",
+      "basePayload": "files/base/skills/self-heal/SKILL.md",
+      "targetPayload": "files/target/skills/self-heal/SKILL.md"
+    },
+    {
+      "path": "skills/todo-handling/SKILL.md",
+      "operation": "modify",
+      "baseSha256": "07f721103523c7a5cf33489338ccb0afd4756d44905ba575119f575612b59456",
+      "targetSha256": "c210a80c1dd3a2486f8653e636a0036d47083ca51540f7f686e488067fb0eb47",
+      "basePayload": "files/base/skills/todo-handling/SKILL.md",
+      "targetPayload": "files/target/skills/todo-handling/SKILL.md"
+    },
+    {
+      "path": "skills/workflow/SKILL.md",
+      "operation": "remove",
+      "baseSha256": "efacaf13a7766e3ff4fb5f50595f5cca71d9d492eb80fa6c9c336996cad6fcdd",
+      "targetSha256": null,
+      "basePayload": "files/base/skills/workflow/SKILL.md",
+      "targetPayload": null
+    }
+  ]
+}

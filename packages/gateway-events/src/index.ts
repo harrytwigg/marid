@@ -32,6 +32,8 @@ export interface GatewayEventMap {
     toolId?: string
     activityReceiptId?: string
     input?: string
+    /** A tool call made inside a sub-agent rather than by the main agent. */
+    sidechain?: boolean
     block?: JsonValue
   }
   "session:notification": { sessionId: string; message: string; meta?: JsonObject }
@@ -39,10 +41,14 @@ export interface GatewayEventMap {
   "session:background": {
     sessionId: string
     transportState: string
+    /** The session's status as reported, background work included. */
+    status?: string
     backgroundActivity: {
       activeStreams: number
       activeAgents?: number
       activeMonitors?: number
+      backgroundAgents?: number
+      backgroundRerun?: boolean
       lastActivityAt: string
     } | null
   }
@@ -50,10 +56,6 @@ export interface GatewayEventMap {
   "company:changed": CompanyChangedEvent
   "pins:changed": Record<string, never>
   "notes:changed": { path: string; revision: string; action: "created" | "updated" }
-  "experiments:changed": {
-    id: string
-    action: "created" | "updated" | "reading-recorded" | "concluded"
-  }
   /** A quick capture moved. The payload is a nudge, not the truth: the browser
    *  re-reads GET /api/todo-captures/:id, which DERIVES the stage from real
    *  state, so a reload recovers and no stage can be shown before its fact. */
@@ -104,7 +106,6 @@ export const GATEWAY_EVENTS = {
   companyChanged: "company:changed",
   pinsChanged: "pins:changed",
   notesChanged: "notes:changed",
-  experimentsChanged: "experiments:changed",
   todoCaptureStage: "todo-capture:stage",
   orgChanged: "org:changed",
   configReloaded: "config:reloaded",

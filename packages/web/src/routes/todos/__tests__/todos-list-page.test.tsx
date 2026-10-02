@@ -31,8 +31,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       assignWorkItem: vi.fn(),
       setWorkItemStatus: vi.fn(),
       updateWorkItem: vi.fn(),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -47,11 +45,6 @@ function compact(id: string, status: WorkItemStatusWire): WorkItemCompactWire {
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: id,
@@ -71,12 +64,9 @@ function tree(item: WorkItemCompactWire): WorkItemTreeWire {
       rank: item.rank ?? null,
       body: null,
       priority: 2,
-      acceptance: null,
-      verifyPolicy: null,
+
       rounds: 0,
       budgetUsd: null,
-      approvalDecidedBy: null,
-      approvalDecidedAt: null,
       createdAt: item.updatedAt,
       closedAt: null,
       children: [],
@@ -200,7 +190,6 @@ describe("the viewport-driven Todos surface", () => {
     expect(screen.getByTestId("todo-list-group-needs-you")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-executing")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-in-review")).toBeTruthy()
-    expect(screen.getByTestId("todo-list-group-assigned")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-backlog")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-closed")).toBeTruthy()
     expect(screen.queryByTestId("todo-list-row-PLA-2")).toBeNull()

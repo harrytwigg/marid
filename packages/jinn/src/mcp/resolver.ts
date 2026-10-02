@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { McpGlobalConfig, McpServerConfig, McpServerStdioConfig, McpServerUrlConfig, Employee, ResolvedMcpConfig } from "../shared/types.js";
+import type { McpGlobalConfig, McpServerConfig, McpServerStdioConfig, McpServerUrlConfig, Employee, JinnToolset, ResolvedMcpConfig } from "../shared/types.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { logger } from "../shared/logger.js";
 import { resolveEnvVar } from "../shared/env-ref.js";
 import { wrapServersWithScrub } from "./env-scrub.js";
 import { decideJinnAttachment } from "./attachment.js";
+import { MCP_TOOLSET_ARG } from "./identity.js";
 
 export type { ResolvedMcpConfig } from "../shared/types.js";
 
@@ -96,9 +97,9 @@ export function resolveMcpServers(
  *   - JINN_SESSION_ID joins this set per session via attachSessionIdentity
  *     (mcp/identity.ts), not here — the resolver output is session-agnostic.
  */
-function buildJinnServerSpec(): McpServerStdioConfig {
+export function buildJinnServerSpec(toolset?: JinnToolset): McpServerStdioConfig {
   const entry = fileURLToPath(new URL("./server-entry.js", import.meta.url));
-  const server: McpServerStdioConfig = { command: process.execPath, args: [entry] };
+  const server: McpServerStdioConfig = { command: process.execPath, args: toolset ? [entry, MCP_TOOLSET_ARG, toolset] : [entry] };
   const url = process.env.JINN_GATEWAY_URL;
   server.env = { ...(url ? { JINN_GATEWAY_URL: url } : {}), JINN_HOME };
   return server;

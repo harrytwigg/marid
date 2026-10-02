@@ -78,8 +78,6 @@ export type {
   HostTodoDraft,
   HostTodoFilter,
   HostTodoStatus,
-  HostWorkflow,
-  HostWorkflowRun,
   PluginHostConnectors,
   PluginHostCron,
   PluginHostEmployees,
@@ -87,7 +85,6 @@ export type {
   PluginHostNotes,
   PluginHostSessions,
   PluginHostTodos,
-  PluginHostWorkflows,
 } from './host-verbs'
 export type { HostEvent, HostEventHandler } from './host-events'
 export type { GatewayStatus, HostState } from './host-state'

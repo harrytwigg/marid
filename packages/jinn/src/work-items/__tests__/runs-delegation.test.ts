@@ -30,7 +30,7 @@ function settledSession(id: string, workItemId: string, outcome: AttemptOutcome)
   ).run(id, `delegation:${id}`, status, outcome, workItemId);
 }
 
-/** A Workflow phase session: linked to the run's bound Todo, but the run owns it. */
+/** A settled phase session left by the removed Workflow runtime, linked to its Todo. */
 function settledPhaseSession(id: string, workItemId: string): void {
   db.prepare(
     `INSERT INTO sessions (id, engine, source, source_ref, status, attempt_outcome, work_item_id,
@@ -91,7 +91,7 @@ describe("the reconciler settles the run ledger from attempt receipts (ICI-728)"
     expect(runs.listWorkItemRuns(item.id)).toEqual(first);
   });
 
-  it("leaves a Workflow phase session's run open — the run settles its own attempts", () => {
+  it("leaves a legacy Workflow phase session's run to the startup sweep — its receipt is not this Todo's evidence", () => {
     const item = store.createWorkItem({ title: "phase-bound", status: "executing", source: "human" });
     settledPhaseSession("s-phase-run", item.id);
     runs.openWorkItemRun({ workItemId: item.id, sessionId: "s-phase-run" });
@@ -155,9 +155,9 @@ describe("both sweeps close a run the status sweep will never reach (ICI-728)", 
     expect(runs.listWorkItemRuns(item.id)[0]).toMatchObject({ id: item.runId, outcome: "blocked" });
   });
 
-  // The cancelled row is the control: without it, "the phase row is still open"
-  // is equally true of a sweep that skipped phase rows and one that never ran.
-  it("leaves a running Workflow phase's run open in the same sweep that closes a delegated one", () => {
+  // Nothing runs a phase any more, so nothing else would close its run: an open
+  // one would read as an attempt still going on that Todo forever.
+  it("closes a settled legacy Workflow phase's run in the same sweep that closes a delegated one", () => {
     const delegated = cancelledMidFlight("cancelled alongside a phase", "s-cancelled-beside-phase");
     const phase = store.createWorkItem({ title: "phase-bound, swept", status: "executing", source: "human" });
     settledPhaseSession("s-phase-sweep", phase.id);
@@ -166,6 +166,6 @@ describe("both sweeps close a run the status sweep will never reach (ICI-728)", 
     reconcile.reconcileWorkItemsOnStartup();
 
     expect(runs.listWorkItemRuns(delegated.id)[0]).toMatchObject({ id: delegated.runId, outcome: "blocked" });
-    expect(runs.listWorkItemRuns(phase.id)[0]).toMatchObject({ id: phaseRun.id, endedAt: null, outcome: null });
+    expect(runs.listWorkItemRuns(phase.id)[0]).toMatchObject({ id: phaseRun.id, endedAt: expect.any(String) });
   });
 });

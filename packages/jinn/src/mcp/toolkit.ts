@@ -12,8 +12,8 @@ import type { z } from "zod";
 /**
  * Shared plumbing for jinn MCP tools (GRS-015): the tool/context contracts and the
  * thin gateway HTTP client every tool group builds on. Extracted from `server.ts`
- * so tool groups (`workflow-tools.ts`, later org/session groups) and the protocol
- * server can share them without an import cycle. `server.ts` re-exports everything
+ * so tool groups (`work-item-tools.ts`, `org-tools.ts`, …) and the protocol server
+ * can share them without an import cycle. `server.ts` re-exports everything
  * here, so existing importers are unaffected.
  *
  * The KISS guardrail stands: tools are deterministic HTTP wrappers over gateway

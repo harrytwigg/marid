@@ -3,13 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemDetailWire, WorkItemFullWire } from "@/lib/api"
-import { AcceptanceChecklist, parseAcceptance, serializeAcceptance } from "../task-page/acceptance"
 import TaskPage from "../task-page/task-page"
 
-/* Todos v2 slice 6 — the body editor + acceptance checklist + inline title
- * (design-doc §7.4, §7.2.3/6). The stored body stays plain markdown (the
- * editor is a view, never a storage format); acceptance checks are audited
- * PATCH edits in `- [x]` grammar, never status magic. */
+/* Todos v2 slice 6 — the body editor + inline title (design-doc §7.4,
+ * §7.2.3/6). The stored body stays plain markdown (the editor is a view, never
+ * a storage format). */
 
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings: { employeeOverrides: {} } }) }))
@@ -39,10 +37,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
 function full(id: string, overrides: Partial<WorkItemFullWire> = {}): WorkItemFullWire {
   return {
     id, version: 3, title: `Item ${id}`, body: null, status: "executing", department: null,
-    assignee: null, priority: 2, rank: null, source: "human", sourceRef: null, acceptance: null,
-    verifyPolicy: null, rounds: 1, budgetUsd: null, approvalState: null, approvalRequest: null,
-    approvalRef: null, approvalTarget: null, approvalEscalatedAt: null, approvalDecidedBy: null,
-    approvalDecidedAt: null, createdBy: "operator", parentId: null, rootId: id, depth: 0,
+    assignee: null, priority: 2, rank: null, source: "human", sourceRef: null,
+    rounds: 1, budgetUsd: null,
+    createdBy: "operator", parentId: null, rootId: id, depth: 0,
     dueAt: null, createdAt: "2026-07-20T08:00:00.000Z", updatedAt: "2026-07-23T08:00:00.000Z",
     closedAt: null, ...overrides,
   }
@@ -67,51 +64,6 @@ function renderTask() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-})
-
-describe("acceptance grammar", () => {
-  it("parses checkbox, bullet, and bare lines; round-trips through - [x] markers", () => {
-    const parsed = parseAcceptance("- [x] Checkout completes\n- [ ] Orders appear\n- bare bullet\nplain line\n")
-    expect(parsed).toEqual([
-      { text: "Checkout completes", checked: true },
-      { text: "Orders appear", checked: false },
-      { text: "bare bullet", checked: false },
-      { text: "plain line", checked: false },
-    ])
-    expect(serializeAcceptance(parsed)).toBe(
-      "- [x] Checkout completes\n- [ ] Orders appear\n- [ ] bare bullet\n- [ ] plain line",
-    )
-  })
-
-  it("toggling a line commits the re-serialized text; unchecking works too", () => {
-    const onCommit = vi.fn()
-    render(<AcceptanceChecklist acceptance={"- [ ] A\n- [x] B"} editable onCommit={onCommit} />)
-    fireEvent.click(screen.getByTestId("acceptance-check-0"))
-    expect(onCommit).toHaveBeenCalledWith("- [x] A\n- [x] B")
-    fireEvent.click(screen.getByTestId("acceptance-check-1"))
-    expect(onCommit).toHaveBeenCalledWith("- [ ] A\n- [ ] B")
-  })
-
-  it("adds a line through the quiet add row and clears to null when the last line is removed", () => {
-    const onCommit = vi.fn()
-    render(<AcceptanceChecklist acceptance={"- [ ] Only"} editable onCommit={onCommit} />)
-    fireEvent.click(screen.getByTestId("acceptance-add"))
-    const input = screen.getByTestId("acceptance-add-input")
-    fireEvent.change(input, { target: { value: "Receipt within a minute" } })
-    fireEvent.keyDown(input, { key: "Enter" })
-    expect(onCommit).toHaveBeenCalledWith("- [ ] Only\n- [ ] Receipt within a minute")
-
-    fireEvent.click(screen.getByLabelText('Remove "Only"'))
-    expect(onCommit).toHaveBeenCalledWith(null)
-  })
-
-  it("read-only renders checks without toggling", () => {
-    const onCommit = vi.fn()
-    render(<AcceptanceChecklist acceptance={"- [x] Done line"} editable={false} onCommit={onCommit} />)
-    const box = screen.getByTestId("acceptance-check-0")
-    fireEvent.click(box)
-    expect(onCommit).not.toHaveBeenCalled()
-  })
 })
 
 describe("inline title + body editor on the page", () => {

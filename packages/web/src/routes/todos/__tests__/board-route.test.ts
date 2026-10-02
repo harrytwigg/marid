@@ -11,16 +11,16 @@ import {
 } from "../board/board-route"
 
 describe("parseBoardParam", () => {
-  it("maps the three reserved keywords", () => {
-    expect(parseBoardParam("home")).toEqual({ kind: "home" })
+  it("maps the two reserved keywords", () => {
     expect(parseBoardParam("attention")).toEqual({ kind: "attention" })
     expect(parseBoardParam("everything")).toEqual({ kind: "everything" })
   })
 
-  // ICI-1357 renamed the board; every link written before that still resolves.
-  it("keeps the retired `my` param pointing at Home", () => {
-    expect(parseBoardParam("my")).toEqual({ kind: "home" })
-    expect(parseBoardParam("my")).toEqual(parseBoardParam("home"))
+  // The Home board is gone; links and bookmarks written for it (or for its
+  // earlier name, `my`) must still land somewhere real.
+  it("keeps the retired `home` and `my` params pointing at Everything", () => {
+    expect(parseBoardParam("home")).toEqual({ kind: "everything" })
+    expect(parseBoardParam("my")).toEqual({ kind: "everything" })
   })
 
   it("treats any other slug as a department board", () => {
@@ -28,43 +28,44 @@ describe("parseBoardParam", () => {
     expect(parseBoardParam("customer-success")).toEqual({ kind: "department", slug: "customer-success" })
   })
 
-  it("falls back to Home for empty or malformed params", () => {
-    expect(parseBoardParam(undefined)).toEqual({ kind: "home" })
-    expect(parseBoardParam("")).toEqual({ kind: "home" })
-    expect(parseBoardParam("   ")).toEqual({ kind: "home" })
-    expect(parseBoardParam("-bad")).toEqual({ kind: "home" })
-    expect(parseBoardParam("has space")).toEqual({ kind: "home" })
+  it("falls back to Everything for empty or malformed params", () => {
+    expect(parseBoardParam(undefined)).toEqual({ kind: "everything" })
+    expect(parseBoardParam("")).toEqual({ kind: "everything" })
+    expect(parseBoardParam("   ")).toEqual({ kind: "everything" })
+    expect(parseBoardParam("-bad")).toEqual({ kind: "everything" })
+    expect(parseBoardParam("has space")).toEqual({ kind: "everything" })
   })
 
   it("normalizes case", () => {
     expect(parseBoardParam("Platform")).toEqual({ kind: "department", slug: "platform" })
-    expect(parseBoardParam("HOME")).toEqual({ kind: "home" })
-    expect(parseBoardParam("MY")).toEqual({ kind: "home" })
+    expect(parseBoardParam("HOME")).toEqual({ kind: "everything" })
+    expect(parseBoardParam("MY")).toEqual({ kind: "everything" })
   })
 })
 
 describe("boardKey / boardPath / isSameBoard", () => {
   it("serializes keywords and department slugs", () => {
-    expect(boardKey({ kind: "home" })).toBe("home")
+    expect(boardKey({ kind: "everything" })).toBe("everything")
     expect(boardKey({ kind: "department", slug: "platform" })).toBe("platform")
     expect(boardPath({ kind: "attention" })).toBe("/todos/b/attention")
     expect(boardPath({ kind: "department", slug: "platform" })).toBe("/todos/b/platform")
-    expect(DEFAULT_BOARD_PATH).toBe("/todos/b/home")
+    expect(DEFAULT_BOARD_PATH).toBe("/todos/b/everything")
   })
 
-  it("normalizes a legacy /todos/b/my link onto the Home path", () => {
-    expect(boardPath(parseBoardParam("my"))).toBe("/todos/b/home")
+  it("normalizes legacy /todos/b/home and /todos/b/my links onto the Everything path", () => {
+    expect(boardPath(parseBoardParam("home"))).toBe("/todos/b/everything")
+    expect(boardPath(parseBoardParam("my"))).toBe("/todos/b/everything")
   })
 
   it("round-trips parse ⇄ path", () => {
-    for (const raw of ["home", "attention", "everything", "platform"]) {
+    for (const raw of ["attention", "everything", "platform"]) {
       const id = parseBoardParam(raw)
       expect(parseBoardParam(boardPath(id).split("/").pop()!)).toEqual(id)
     }
   })
 
   it("compares by key", () => {
-    expect(isSameBoard({ kind: "home" }, parseBoardParam("my"))).toBe(true)
+    expect(isSameBoard({ kind: "everything" }, parseBoardParam("my"))).toBe(true)
     expect(isSameBoard({ kind: "department", slug: "a" }, { kind: "department", slug: "b" })).toBe(false)
   })
 })
@@ -74,18 +75,18 @@ describe("board scroll cache", () => {
 
   it("remembers and recalls per board key", () => {
     rememberBoardScroll("platform", 420)
-    rememberBoardScroll("home", 12)
+    rememberBoardScroll("everything", 12)
     expect(recallBoardScroll("platform")).toBe(420)
-    expect(recallBoardScroll("home")).toBe(12)
+    expect(recallBoardScroll("everything")).toBe(12)
   })
 
   it("returns 0 for boards never scrolled", () => {
-    expect(recallBoardScroll("everything")).toBe(0)
+    expect(recallBoardScroll("attention")).toBe(0)
   })
 
   it("ignores invalid values", () => {
-    rememberBoardScroll("home", Number.NaN)
-    rememberBoardScroll("home", -5)
-    expect(recallBoardScroll("home")).toBe(0)
+    rememberBoardScroll("everything", Number.NaN)
+    rememberBoardScroll("everything", -5)
+    expect(recallBoardScroll("everything")).toBe(0)
   })
 })

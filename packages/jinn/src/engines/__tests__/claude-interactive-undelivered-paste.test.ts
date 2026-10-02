@@ -218,6 +218,23 @@ describe("InteractiveClaudeEngine — a paste the TUI never took (JIN-3)", () =>
     expect(engine.hasWarmPty("s-swallowed")).toBe(true);
   });
 
+  it("a respawned process that dies before its session starts fails the turn with what it printed", async () => {
+    vi.useFakeTimers();
+    const warm = await warmSession("s-respawn-dies");
+    const turn = engine.run({ sessionId: "s-respawn-dies", prompt: "second", cwd: "/tmp", resumeSessionId: "c1" } as any);
+    await vi.advanceTimersByTimeAsync(PAST_SUBMIT_RETRIES_MS);
+    expect(ptys).toHaveLength(2);
+    warm.fireExit();
+
+    // The first process's SessionStart says nothing about this one: it dies on boot.
+    const respawned = ptys[1];
+    respawned.emit("error: unknown option '--bogus'\r\n");
+    respawned._exitCode = 1;
+    respawned._exitCb?.({ exitCode: 1 });
+    const r = await turn;
+    expect(r.error).toBe("claude did not start: its process exited (code 1, signal unknown) before its session began. Its last output: error: unknown option '--bogus'");
+  });
+
   it("a live Rewind menu is not pasted into — the turn respawns at once, emitting no CR", async () => {
     vi.useFakeTimers();
     const warm = await warmSession("s-rewind");

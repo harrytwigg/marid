@@ -5,6 +5,7 @@ import { useTheme } from "@/routes/providers";
 import { buildFileReadRequest } from "@/lib/file-read-request";
 import { authFetch } from "@/lib/auth";
 import { EXT_TO_LANG, MARKDOWN_EXTS, getExt } from "@/lib/file-language";
+import { BinaryFilePreview, FileErrorNotice, formatSize } from "./file-view-notices";
 /** What the scoped knowledge and managed-file readers return. */
 interface FileReadResponse {
   content?: string;
@@ -14,17 +15,14 @@ interface FileReadResponse {
   resolvedPath?: string;
   binary?: boolean;
   tooLarge?: boolean;
+  /** Session reads only: the build host the file was read on, and whether the
+   *  image can be fetched raw for an inline preview. */
+  host?: string;
+  previewable?: boolean;
   /** Knowledge reads only: this is a capped slice, and how big a slice of what. */
   truncated?: boolean;
   totalChars?: number;
   returnedChars?: number;
-}
-
-/** Human-readable byte size. */
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**
@@ -40,10 +38,13 @@ function formatSize(bytes: number): string {
  */
 export function FileView({
   path,
+  sessionId,
   embedded,
   onBack,
 }: {
   path: string;
+  /** The chat session that linked the path; lets non-root paths be read on its host. */
+  sessionId?: string | null;
   embedded?: boolean;
   /** Mobile-only "back to chat" handler. When set, the embedded view shows a
    *  back button (hidden on desktop, which has the tab bar instead). */
@@ -55,10 +56,10 @@ export function FileView({
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
-  const request = useMemo(() => buildFileReadRequest(path), [path]);
+  const request = useMemo(() => buildFileReadRequest(path, sessionId), [path, sessionId]);
   // The request preflight already exercises the same URI encoding. Only offer
   // a pop-out after it succeeds, so malformed Unicode cannot crash rendering.
-  const popOutUrl = request.ok ? `/file?path=${encodeURIComponent(path)}` : null;
+  const popOutUrl = request.ok ? `/file?path=${encodeURIComponent(path)}${sessionId ? `&session=${encodeURIComponent(sessionId)}` : ""}` : null;
 
   // Resolve whether to use a dark or light highlighter theme. ThemeProvider
   // sets data-theme on <html>; "light" is the only light variant.
@@ -140,33 +141,9 @@ export function FileView({
         </p>
       )}
 
-      {!loading && notFound && (
-        <div
-          className="rounded-[var(--radius-md,12px)] py-[var(--space-4)] px-[var(--space-4)] text-[length:var(--text-body)] text-[var(--system-red)]"
-          style={{
-            background:
-              "color-mix(in srgb, var(--system-red) 10%, transparent)",
-            border:
-              "1px solid color-mix(in srgb, var(--system-red) 30%, transparent)",
-          }}
-        >
-          File not found: {path}
-        </div>
-      )}
+      {!loading && notFound && <FileErrorNotice>File not found: {path}</FileErrorNotice>}
 
-      {!loading && error && !notFound && (
-        <div
-          className="rounded-[var(--radius-md,12px)] py-[var(--space-4)] px-[var(--space-4)] text-[length:var(--text-body)] text-[var(--system-red)]"
-          style={{
-            background:
-              "color-mix(in srgb, var(--system-red) 10%, transparent)",
-            border:
-              "1px solid color-mix(in srgb, var(--system-red) 30%, transparent)",
-          }}
-        >
-          {error}
-        </div>
-      )}
+      {!loading && error && !notFound && <FileErrorNotice>{error}</FileErrorNotice>}
 
       {!loading && data && data.tooLarge && (
         <div className="text-[length:var(--text-body)] text-[var(--text-secondary)]">
@@ -176,15 +153,12 @@ export function FileView({
       )}
 
       {!loading && data && !data.tooLarge && data.binary && (
-        <div className="text-[length:var(--text-body)] text-[var(--text-secondary)]">
-          <p>
-            Binary file
-            {data.mime || typeof data.size === "number"
-              ? ` (${[data.mime, typeof data.size === "number" ? formatSize(data.size) : ""].filter(Boolean).join(", ")})`
-              : ""}
-            : cannot preview.
-          </p>
-        </div>
+        <BinaryFilePreview
+          path={path}
+          mime={data.mime}
+          size={data.size}
+          rawUrl={data.previewable && request.ok ? request.rawUrl : undefined}
+        />
       )}
 
       {!loading &&
@@ -306,7 +280,7 @@ export function FileView({
         </h1>
         {data && data.mime && typeof data.size === "number" && (
           <p className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] mt-[var(--space-1)]">
-            {data.mime} · {formatSize(data.size)}
+            {data.mime} · {formatSize(data.size)}{data.host ? ` · on ${data.host}` : ""}
           </p>
         )}
       </header>

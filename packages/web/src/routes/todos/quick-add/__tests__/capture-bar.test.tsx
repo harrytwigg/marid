@@ -174,21 +174,6 @@ describe("QuickCaptureBar — the text path", () => {
     ])
   })
 
-  it("names the workflow on the terminal line when the capture was routed to one", async () => {
-    renderBar()
-    const input = await type("a capture a workflow covers")
-    await act(async () => { fireEvent.keyDown(input, { key: "Enter" }) })
-
-    getTodoCapture.mockResolvedValue(wire({
-      stage: "routed",
-      workItemId: "PLA-9",
-      routedTo: { kind: "workflow", workflowId: "jinn-build", workflowName: "Jinn Build", runId: "run_7" },
-    }))
-    await act(async () => { listener?.("todo-capture:stage", { captureId: "cap-1", stage: "routed", workItemId: "PLA-9" }) })
-
-    await waitFor(() => expect(screen.getByTestId("capture-step-routed").textContent).toContain("Running workflow Jinn Build"))
-  })
-
   it("names the employee on the terminal line when nothing covered it", async () => {
     renderBar()
     const input = await type("a capture nothing covers")

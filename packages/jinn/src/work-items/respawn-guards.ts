@@ -3,7 +3,7 @@ import { classifyEngineFailureText } from '../shared/engine-failure.js';
 import { isRateLimitMessage } from '../shared/rateLimit.js';
 import { HUMAN_ACTOR, listWorkItemEvents } from './event-log.js';
 import { parseTodoId } from './id.js';
-import { listWorkItemRuns, type TodoRun } from './runs.js';
+import { listWorkItemAttemptRuns, type TodoRun } from './runs.js';
 import { appendWorkItemEvent } from './store.js';
 
 /**
@@ -96,7 +96,7 @@ export function checkRespawnGuard(
   opts: RespawnGuardOptions = {},
 ): RespawnGuardVerdict {
   const id = parseTodoId(workItemId);
-  const lastSettled = lastSettledRun(listWorkItemRuns(id));
+  const lastSettled = lastSettledRun(listWorkItemAttemptRuns(id));
   return (opts.quotaWindowDecided ? undefined : rateLimitCooldown(lastSettled, now))
     ?? blockerAuth(lastSettled)
     ?? recentSuccess(id, lastSettled, now)
@@ -187,8 +187,8 @@ function humanLookedAfter(workItemId: string, anchor: string): boolean {
   const commented = liveCommentsSince(workItemId, anchor).some((comment) => comment.authorKind === 'operator');
   if (commented) return true;
   // Any event that MOVED the status counts, not only the `status_change` kind:
-  // the operator's own max-rounds decision is recorded as `escalated`, and that
-  // is the most deliberate look there is. Reading `toStatus` rather than listing
+  // an operator move that trips the block-loop breaker is recorded as an
+  // `escalated` event, and that is still a look. Reading `toStatus` rather than listing
   // kinds keeps the next status-bearing kind from silently dropping out again.
   return listWorkItemEvents(workItemId).some(
     (event) => event.toStatus !== null && event.actor === HUMAN_ACTOR && event.createdAt > anchor,

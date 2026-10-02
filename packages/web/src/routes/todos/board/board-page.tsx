@@ -20,7 +20,6 @@ import {
 import { todoPath } from "@/lib/todo-id"
 import { useDepartments } from "@/hooks/use-departments"
 import {
-  useDecideApproval,
   useEmployeesByName,
   useNeedsAttentionItems,
   useOpenDetails,
@@ -34,7 +33,7 @@ import { QuickCaptureBar } from "../quick-add/capture-bar"
 import { BoardHeader } from "./board-header"
 import { TodoList } from "../list/todo-list"
 import { BoardCard, cardLayoutKey, rollupOf, type CardEnrichment } from "./card"
-import { FilteredEmptyCard, HomeEmptyCard } from "./board-empty"
+import { FilteredEmptyCard } from "./board-empty"
 import { BoardColumn, DragSlot } from "./column"
 import { ClosedColumnGroup, ClosedColumnHeader, ClosedRail } from "./closed-rail"
 import { departmentTitle } from "./board-switcher"
@@ -198,7 +197,7 @@ export default function TodoBoardPage() {
   const trees = useBoardTrees(detailIds)
   const reasonIds = useMemo(
     () =>
-      (data.isLoading ? [] : (["executing", "blocked", "escalated"] as const).flatMap((status) =>
+      (data.isLoading ? [] : (["executing", "blocked"] as const).flatMap((status) =>
         (data.columns[status]?.items ?? []).map((item) => item.id),
       )).slice(0, 60),
     [data.columns, data.isLoading],
@@ -275,11 +274,11 @@ export default function TodoBoardPage() {
         { id: item.id, status: to },
         {
           onSuccess: (result) => {
-            // A drop into Blocked/Escalated commits immediately, then opens the
+            // A drop into Blocked commits immediately, then opens the
             // task page with the banner's reason field focused (design-doc §5 —
             // the reason is asked for, never demanded by a modal). Review F6:
             // an exception item must never silently sit reason-less.
-            if (to === "blocked" || to === "escalated") {
+            if (to === "blocked") {
               navigate(todoPath(item.id), { state: { fromBoard: key, focusBannerReason: true } })
             }
             const version = result.workItem?.version
@@ -375,7 +374,7 @@ export default function TodoBoardPage() {
     useBoardScroll(key, navigationType, { dragging: drag !== null, attention: isAttention })
 
   // ── Page chrome state ───────────────────────────────────────────────────────
-  const [creating, setCreating] = useState<null | { department?: string; askAssignee?: boolean }>(null)
+  const [creating, setCreating] = useState<null | { department?: string }>(null)
   const [capturing, setCapturing] = useState(false)
   // A URL naming a closed status asked for closed work — never one tap short.
   const closedFilter = CLOSED_STATUSES.some((status) => status === filters.status)
@@ -400,45 +399,19 @@ export default function TodoBoardPage() {
         state: {
           fromBoard: key,
           bannerExpected: item
-            ? item.status === "blocked" || item.status === "escalated" || item.approvalState === "pending"
+            ? item.status === "blocked"
             : undefined,
         },
       }),
     [navigate, key],
   )
 
-  // ── Attention board actions (reuses the shipped decision surface). The
-  // approval cluster is Approve · Reject…, and a rejection carries its own
-  // note — that note is what decides between another round and a stop, so it
-  // cannot be a separate action. Approval escalation stays an agent/MCP
-  // affordance, not an inbox button. ────────────────────────────────────────
-  const decide = useDecideApproval()
-  const [resolving, setResolving] = useState<Set<string>>(new Set())
-  const runDecision = useCallback(
-    (id: string, decision: "approve" | "reject", note?: string) => {
-      setResolving((prev) => new Set(prev).add(id))
-      decide.mutate(
-        { id, decision, note },
-        {
-          onSettled: () =>
-            setResolving((prev) => {
-              const next = new Set(prev)
-              next.delete(id)
-              return next
-            }),
-        },
-      )
-    },
-    [decide],
-  )
-
   // ── Derived chrome ──────────────────────────────────────────────────────────
   const deptSummary = board.kind === "department" ? departments.data?.find((d) => d.slug === board.slug) : undefined
   const title = board.kind === "department" ? departmentTitle(board.slug)
     : board.kind === "attention" ? "Attention"
-    : board.kind === "everything" ? "Everything" : "Home"
+    : "Everything"
   const blockedTotal = countByStatus.blocked ?? 0
-  const escalatedTotal = countByStatus.escalated ?? 0
   const closedTotal = CLOSED_STATUSES.reduce((sum, status) => sum + (countByStatus[status] ?? 0), 0)
   const visibleStatuses: WorkItemStatusWire[] = useMemo(() => {
     const exceptions = EXCEPTION_STATUSES.filter(
@@ -454,13 +427,10 @@ export default function TodoBoardPage() {
 
   // Filtered-empty (states mock §6): zero visible items with filters/search
   // set always offers the way back. An unfiltered empty board celebrates
-  // quietly — the columns and their quick-adds ARE the empty state — except
-  // Home, which is empty until the operator creates or pins something and so
-  // has to name those gestures rather than look broken (PLA-230).
+  // quietly — the columns and their quick-adds ARE the empty state.
   const filterCount = activeFilterCount(filters) + (filters.q ? 1 : 0)
   const boardEmpty = !data.isLoading && visibleItemCount(filters.status, itemsByStatus) === 0
   const filteredEmpty = boardEmpty && filterCount > 0
-  const homeEmpty = boardEmpty && filterCount === 0 && board.kind === "home"
   const listStatusInScope = useCallback((s: WorkItemStatusWire) => isColumnInStatusFilter(filters.status, s), [filters.status])
   const listColumns = useMemo(() => {
     const columns = {} as typeof data.columns
@@ -516,9 +486,7 @@ export default function TodoBoardPage() {
     const quickAdd =
       status === "backlog"
         ? () => setCreating({ department: board.kind === "department" ? board.slug : undefined })
-        : status === "assigned"
-          ? () => setCreating({ department: board.kind === "department" ? board.slug : undefined, askAssignee: true })
-          : undefined
+        : undefined
     return (
       <BoardColumn
         key={status}
@@ -556,7 +524,6 @@ export default function TodoBoardPage() {
                 : data.openTotal
             }
             blockedTotal={blockedTotal}
-            escalatedTotal={escalatedTotal}
             onQuickCapture={() => setCapturing(true)}
           />
         }
@@ -576,7 +543,7 @@ export default function TodoBoardPage() {
               filters={filters}
               onChange={setFilters}
               employees={org.data?.employees ?? []}
-              departments={board.kind === "everything" || board.kind === "home" ? org.data?.departments ?? [] : []}
+              departments={board.kind === "everything" ? org.data?.departments ?? [] : []}
               byName={byName}
               hideStatus
               hideDepartment={board.kind === "department"}
@@ -627,9 +594,6 @@ export default function TodoBoardPage() {
                 <NeedsYouView
                   items={needsYou}
                   byName={byName}
-                  resolvingIds={resolving}
-                  onApprove={(id) => runDecision(id, "approve")}
-                  onReject={(id, note) => runDecision(id, "reject", note || undefined)}
                   onOpen={onOpen}
                 />
               )}
@@ -659,8 +623,6 @@ export default function TodoBoardPage() {
                 testId="todo-list-filtered-empty"
                 clearTestId="todo-list-clear-filters"
               />
-            ) : homeEmpty ? (
-              <HomeEmptyCard testId="todo-list-home-empty" />
             ) : (
               <TodoList
                 columns={listColumns}
@@ -673,7 +635,7 @@ export default function TodoBoardPage() {
                 now={now}
                 onOpen={onOpen}
                 onKeep={keep.mutate}
-                onQuickAdd={(askAssignee) => setCreating({ department: board.kind === "department" ? board.slug : undefined, askAssignee: askAssignee || undefined })}
+                onQuickAdd={() => setCreating({ department: board.kind === "department" ? board.slug : undefined })}
               />
             )}
           </div>
@@ -691,8 +653,6 @@ export default function TodoBoardPage() {
               <BoardSkeleton />
             ) : filteredEmpty ? (
               <FilteredEmptyCard count={filterCount} onClear={clearAllFilters} />
-            ) : homeEmpty ? (
-              <HomeEmptyCard />
             ) : (
             <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5">
               {visibleStatuses.map((status) => columnFor(status))}
@@ -770,7 +730,6 @@ export default function TodoBoardPage() {
           onCreated={() => setCreating(null)}
           defaults={{
             department: creating.department,
-            askAssignee: creating.askAssignee,
             employees: org.data?.employees ?? [],
             departments: departments.data ?? [],
           }}
@@ -784,7 +743,7 @@ export default function TodoBoardPage() {
           filters={filters}
           onChange={setFilters}
           employees={org.data?.employees ?? []}
-          departments={board.kind === "everything" || board.kind === "home" ? org.data?.departments ?? [] : []}
+          departments={board.kind === "everything" ? org.data?.departments ?? [] : []}
           byName={byName}
           onClose={() => setMobileFilterOpen(false)}
           hideStatus

@@ -6,18 +6,14 @@ import {
   TOOL_CALL_HEADER_VALUE,
   ensureSessionCapability,
 } from "../../mcp/identity.js";
-import { call, startRouteHarness, stopRouteHarness, type Registry, type WorkItems } from "./todo-route-harness.js";
+import { call, startRouteHarness, stopRouteHarness, type Registry } from "./todo-route-harness.js";
 
 /**
- * the two facts a `todo-status` auto-start binding reads so it does not
- * spawn a second session on a Todo that already has one — the employee behind
- * the move (`actorEmployee`, stamped from the session's own identity) and the
- * Todo's explicit opt-out (`autoStart` on its dispatch config) — as the routes
- * write them.
+ * The Todo's explicit auto-start opt-out (`autoStart` on its dispatch config),
+ * as the routes write and validate it.
  */
 
 let registry: Registry;
-let workItems: WorkItems;
 
 function callerHeaders(sessionId: string): Record<string, string> {
   return {
@@ -33,41 +29,8 @@ function workerSession(sourceRef: string) {
   });
 }
 
-async function pendingEvent(workItemId: string) {
-  const feed = await import("../../work-items/workflow-event-feed.js");
-  return feed.createWorkflowTodoEventFeed({ ownerId: `test-${workItemId}` }).listPendingEvents()
-    .find((event) => event.workItemId === workItemId && event.toStatus === "assigned");
-}
-
-beforeAll(async () => { ({ registry, workItems } = await startRouteHarness()); });
+beforeAll(async () => { ({ registry } = await startRouteHarness()); });
 afterAll(stopRouteHarness);
-
-describe("actorEmployee on the assignment event", () => {
-  it("names the session's employee when an employee claims a Todo for themself, and nobody for the operator", async () => {
-    const session = workerSession("gen67-self-claim");
-    const created = await call("POST", "/api/work-items", { title: "self-claimed" }, callerHeaders(session.id));
-    expect(created.status).toBe(201);
-    const id = created.body.workItem.id as string;
-
-    const assigned = await call("POST", `/api/work-items/${id}/assign`, { assignee: "route-worker" }, callerHeaders(session.id));
-    expect(assigned.status).toBe(200);
-    expect(await pendingEvent(id)).toMatchObject({
-      actor: `session:${session.id}`, actorEmployee: "route-worker", item: { assignee: "route-worker", autoStart: true },
-    });
-
-    const handed = workItems.createWorkItem({ title: "operator assigned", source: "human" });
-    expect((await call("POST", `/api/work-items/${handed.id}/assign`, { assignee: "route-worker" })).status).toBe(200);
-    expect(await pendingEvent(handed.id)).toMatchObject({ actor: "operator", actorEmployee: null });
-  });
-
-  it("stamps a session's plain status move to assigned the same way", async () => {
-    const session = workerSession("gen67-status-move");
-    const item = workItems.createWorkItem({ title: "status move", source: "human", assignee: "route-worker" });
-    const moved = await call("POST", `/api/work-items/${item.id}/status`, { status: "assigned" }, callerHeaders(session.id));
-    expect(moved.status).toBe(200);
-    expect(await pendingEvent(item.id)).toMatchObject({ actor: `session:${session.id}`, actorEmployee: "route-worker" });
-  });
-});
 
 describe("autoStart on the Todo's dispatch config", () => {
   it("is written at creation, read on the Todo and on the assignment event, and refuses a non-boolean", async () => {
@@ -82,7 +45,6 @@ describe("autoStart on the Todo's dispatch config", () => {
     expect((await call("GET", `/api/work-items/${id}`)).body.dispatchConfig).toMatchObject({ autoStart: false, skills: [] });
 
     expect((await call("POST", `/api/work-items/${id}/assign`, { assignee: "route-worker" })).status).toBe(200);
-    expect(await pendingEvent(id)).toMatchObject({ actorEmployee: null, item: { autoStart: false } });
   });
 
   it("stores nothing for autoStart: true at creation, and is settable afterwards through dispatch-config", async () => {

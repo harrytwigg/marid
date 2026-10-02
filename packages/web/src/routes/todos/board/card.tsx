@@ -4,7 +4,7 @@ import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemTre
 import { stateKeyOf } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
-import { escalationReasonLabel } from "../util"
+import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
@@ -14,7 +14,7 @@ import { KeepToggle } from "./keep-control"
  *
  * Every row is unconditional, so a card's height is settled by its title alone
  * and enrichment landing later cannot push the column around. The price, taken
- * knowingly: the escalation reason, the approval bell and the "Working · 21m"
+ * knowingly: the escalation reason and the "Working · 21m"
  * line have no row of their own any more and live on the task page and in the
  * Needs-you view. The status the column used to carry alone is now also on the
  * card, as the glyph — it is what the lost red line escalated through. */
@@ -40,21 +40,11 @@ export function rollupOf(tree: WorkItemTreeWire | undefined, rootStatus: string)
   return { closed, total }
 }
 
-/** The one-line why on blocked/escalated cards: the latest transition note. The
+/** The one-line why on blocked cards: the latest transition note. The
  *  card face has no row for it since Variant A; the Needs-you view still does. */
 export function reasonOf(item: WorkItemCompactWire, detail: WorkItemOpenDetailWire | undefined): string | null {
-  if (item.status !== "blocked" && item.status !== "escalated") return null
-  const events = detail?.events ?? []
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]
-    if (e.toStatus === item.status) {
-      const note = typeof e.detail?.note === "string" ? e.detail.note.trim() : ""
-      if (note) return note
-      if (e.kind === "escalated") return escalationReasonLabel(e.detail?.reason)
-      return null
-    }
-  }
-  return null
+  if (item.status !== "blocked") return null
+  return stopReasonOf(detail?.events ?? [], item.status).note
 }
 
 /** Vertical anatomy used by the column FLIP dependency. Variant A's four rows

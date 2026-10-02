@@ -82,10 +82,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
 function full(id: string, overrides: Partial<WorkItemFullWire> = {}): WorkItemFullWire {
   return {
     id, version: 3, title: `Item ${id}`, body: null, status: "executing", department: null,
-    assignee: null, priority: 2, rank: null, source: "human", sourceRef: null, acceptance: null,
-    verifyPolicy: null, rounds: 1, budgetUsd: null, approvalState: null, approvalRequest: null,
-    approvalRef: null, approvalTarget: null, approvalEscalatedAt: null, approvalDecidedBy: null,
-    approvalDecidedAt: null, createdBy: "operator", parentId: null, rootId: id, depth: 0,
+    assignee: null, priority: 2, rank: null, source: "human", sourceRef: null,
+    rounds: 1, budgetUsd: null,
+    createdBy: "operator", parentId: null, rootId: id, depth: 0,
     dueAt: null, createdAt: "2026-07-20T08:00:00.000Z", updatedAt: "2026-07-23T08:00:00.000Z",
     closedAt: null, ...overrides,
   }

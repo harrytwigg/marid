@@ -1,7 +1,7 @@
 import type { Database } from 'better-sqlite3';
 import { initDb } from '../shared/db.js';
 import type { WorkItem, WorkItemStatus } from './store.js';
-import { transition, TransitionError } from './transitions.js';
+import { transition } from './transitions.js';
 
 /**
  * Closing a Todo TREE — the half of a cascade that is the same whichever
@@ -50,24 +50,9 @@ export function openDescendantsDeepestFirst(db: Database, item: WorkItem): Casca
     .sort((a, b) => b.depth - a.depth);
 }
 
-/**
- * Close every open descendant of `item` as `done`, deepest first.
- *
- * Where this parts company with cascade-cancel: cancel may bury an `escalated`
- * descendant, because "abandoned" is a truthful thing to say about a question
- * nobody answered. `done` claims it WAS answered, so this refuses by name until
- * the caller says otherwise.
- */
-export function cascadeCloseDescendants(db: Database, item: WorkItem, actor: string, acknowledgeEscalated: boolean): void {
-  const descendants = openDescendantsDeepestFirst(db, item);
-  const escalated = acknowledgeEscalated ? undefined : descendants.find((row) => row.status === 'escalated');
-  if (escalated) {
-    throw new TransitionError(
-      'escalated-descendant',
-      `work item ${item.id} cannot be closed over escalated descendant ${escalated.id} — answer that escalation first, or acknowledge it to close the tree anyway`,
-    );
-  }
-  for (const descendant of descendants) {
+/** Close every open descendant of `item` as `done`, deepest first. */
+export function cascadeCloseDescendants(db: Database, item: WorkItem, actor: string): void {
+  for (const descendant of openDescendantsDeepestFirst(db, item)) {
     transition(descendant.id, 'done', actor, { human: true, detail: { cascadeFrom: item.id } });
   }
 }

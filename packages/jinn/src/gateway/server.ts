@@ -9,13 +9,14 @@ import type { GatewayEmit } from "../shared/gateway-events.js";
 import type { JinnConfig, Connector, Engine, SlackConnectorConfig, TelegramConnectorConfig, WhatsAppConnectorConfig } from "../shared/types.js";
 import { loadConfig, normalizeClaudeEngineConfig } from "../shared/config.js";
 import {
-  getModelRegistry,
   invalidateModelRegistry,
-  type EngineName, type PtyViewEngineName,
+  type PtyViewEngineName,
 } from "../shared/models.js";
 import { configureLogger, logger } from "../shared/logger.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
-import { scheduleFtsBackfill, recoverStaleSessions, recoverStaleWorkflowAttemptSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, getMessages, getSessionSpend, listAllSessionIds, listPendingQueueItemIdsForSession } from "../sessions/registry.js";
+import { scheduleFtsBackfill, recoverStaleSessions, settleLegacyWorkflowPhaseSessions, recoverStaleQueueItems, clearAllPartialMessages, getInterruptedSessions, listSessions, getSession, listAllSessionIds, listPendingQueueItemIdsForSession, getSessionBySessionKey, updateSession } from "../sessions/registry.js";
+import { runtimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
+import { createRuntimeActivityHandler } from "./runtime-activity.js";
 import { getPackageVersion } from "../shared/version.js";
 import { PRODUCT_NAME, productBanner } from "../shared/brand.js";
 import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunningSessionsForShutdown, recordSessionsRunningAtBoot, resumeRestartInterruptedSessions } from "../sessions/restart-resume.js";
@@ -38,25 +39,23 @@ import { HermesAcpEngine } from "../engines/hermes-acp.js";
 import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
-import { startIdleCapacityAutoStart } from "./idle-capacity.js";
+import { startBoardWalk } from "../board-walk/walk.js";
+import { boardWalkCronHandler } from "../board-walk/job.js";
+import { setCronActionHandler } from "../cron/actions.js";
+import { describeSeed, seedBoardWalk } from "../board-walk/seed.js";
+import { installTodoCommentRouting } from "./todo-comment-routing.js";
 import { HookRegistry } from "./hook-registry.js";
-import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, startupGatewayPids, gatewayBaseUrl } from "./gateway-info.js";
+import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
 import { reconcileWorkItemsOnStartup, startWorkItemReconciler } from "../work-items/reconcile.js";
-import { setTodoLabelsChangeListener, setTodoLiveEmitter } from "../work-items/live-events.js";
-import { setTodoStatusChangeListener } from "../work-items/transitions.js";
-import { firstOperatorCommentAfter } from "../work-items/comments.js";
-import { watchTodoReplies } from "./todo-reply-sweep.js";
-import { requestApproval, setTodoApprovalDecisionListener } from "../work-items/approvals.js";
-import { parseTodoApprovalRef } from "../workflows/todo-approval-ref.js";
-import { deciderAuthority } from "./workflow-decider-authority.js";
-import { workflowTodoDispatch, workflowTodoSessions } from "./workflow-todo-runs.js";
-import { workflowTodoApprovals, workflowTodoLifecycle } from "./workflow-todo-surface.js";
+import { setTodoLiveEmitter } from "../work-items/live-events.js";
 import { seedTrust, cleanupSessionSettings } from "../shared/claude-settings.js";
 import { claudeJsonPath } from "../shared/home.js";
-import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
+import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
+import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
+import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
-import { isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
+import { emitTodoProjectionEvent, interruptSessionTurn, isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
 import { createGatewayRequestHandler } from "./request-handler.js";
 import { sessionCommGuards, LATERAL_MAX_HOPS } from "./session-comm-guards.js";
@@ -72,11 +71,6 @@ import { MIME_TYPES } from "./static-mime.js";
 import { attachPtyWebSocket } from "./pty-ws.js";
 import { createShellTerminalEngine } from "../terminals/shell-engine.js";
 import { isTerminalSession } from "../terminals/session.js";
-import { openWorkflowDatabase } from "../workflows/repository-migrations.js";
-import { importLegacyWorkflowDefinitions } from "../workflows/import-v1.js";
-import { WorkflowRepository } from "../workflows/repository.js";
-import { WorkflowSessionExecutor } from "../workflows/session-executor.js";
-import { WorkflowService } from "../workflows/service.js";
 import { createTalkProactiveGatewayEmit } from "./talk-proactive-events.js";
 
 import { startWsHeartbeat, trackHeartbeat } from "./ws-heartbeat.js";
@@ -91,6 +85,7 @@ import { DiscordConnector, type DiscordConnectorConfig } from "../connectors/dis
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
 import { TelegramConnector } from "../connectors/telegram/index.js";
 import { loadJobs } from "../cron/jobs.js";
+import { removeRetiredExperimentCheckInJobs } from "../cron/retired-jobs.js";
 import { startScheduler, stopScheduler } from "../cron/scheduler.js";
 import { orgRegistry, refreshOrg } from "./org-registry.js";
 
@@ -136,12 +131,6 @@ export function isAllowedCorsOrigin(origin: string | undefined, requestHost?: st
   return false;
 }
 
-type RuntimeActivityInfo = {
-  activeStreams: number;
-  activeAgents?: number;
-  activeMonitors?: number;
-  lastActivityAt: number;
-};
 type RuntimeActivitySource = {
   onRuntimeActivity?: (cb: (sessionId: string, info: RuntimeActivityInfo | null) => void) => void;
 };
@@ -442,10 +431,8 @@ export async function startGateway(
   if (recovered > 0) {
     logger.info(`Recovered ${recovered} stale session(s) — marked as "interrupted" for resume`);
   }
-  const recoveredWorkflowAttempts = recoverStaleWorkflowAttemptSessions();
-  if (recoveredWorkflowAttempts > 0) {
-    logger.info(`Recovered ${recoveredWorkflowAttempts} stale workflow attempt session(s) after gateway restart`);
-  }
+  const settledPhases = settleLegacyWorkflowPhaseSessions();
+  if (settledPhases > 0) logger.info(`Settled ${settledPhases} Workflow phase session(s) left running by a previous version`);
   // GRS-003a split-brain fix: the sessions just flipped running→interrupted above, so any
   // work item still marked `executing` on the strength of one of those sessions is now stale.
   // Re-derive work-item status from linked-session evidence. Best-effort and idempotent, and
@@ -522,29 +509,33 @@ export async function startGateway(
   // host as-is, so the URL is always reachable from the child.
   process.env.JINN_GATEWAY_TOKEN = gatewayAuthToken;
   process.env.JINN_GATEWAY_URL = gatewayBaseUrl({ port, host });
+  // Name the home that binding belongs to, so a command a session points at another
+  // home (JINN_HOME=<sandbox> jinn start) can tell the binding it inherited is not its own.
+  process.env[JINN_BINDING_HOME_ENV] = JINN_HOME_IDENTITY; // footgun: ok exported to spawned sessions beside JINN_GATEWAY_URL above, which every engine reads from process.env
 
   // Normalize claude engine config (idempotent — loadConfig already normalized it)
   const claudeCfg = normalizeClaudeEngineConfig(config.engines.claude);
 
   // Reap any orphaned PTYs from a prior crashed run before writing the fresh gateway.json.
   const oldInfo = readGatewayInfo(GATEWAY_INFO_FILE);
-  if (oldInfo) {
-    for (const pid of startupGatewayPids(oldInfo)) {
-      try {
-        process.kill(pid, "SIGTERM");
-        logger.info(`Reaping stale pid ${pid} from prior gateway`);
-      } catch (err: unknown) {
-        // ESRCH = no such process — already gone, which is the normal case.
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code !== "ESRCH") {
-          logger.warn(`Unexpected error reaping stale pid ${pid}: ${err instanceof Error ? err.message : err}`);
-        }
+  if (recordedByAnotherHome(oldInfo, JINN_HOME_IDENTITY)) {
+    logger.warn(`gateway.json was written by the instance at ${oldInfo!.home}; not reaping its pids`);
+  }
+  for (const pid of reapableGatewayPids(oldInfo)) {
+    try {
+      process.kill(pid, "SIGTERM");
+      logger.info(`Reaping stale pid ${pid} from prior gateway`);
+    } catch (err: unknown) {
+      // ESRCH = no such process — already gone, which is the normal case.
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "ESRCH") {
+        logger.warn(`Unexpected error reaping stale pid ${pid}: ${err instanceof Error ? err.message : err}`);
       }
     }
   }
 
   // Write gateway connection info (port + hook secret + pid) for hook-relay discovery.
-  const gatewayInfo = writeGatewayInfo(GATEWAY_INFO_FILE, { port, host, pid: process.pid, token: gatewayAuthToken });
+  const gatewayInfo = writeGatewayInfo(GATEWAY_INFO_FILE, { port, host, pid: process.pid, token: gatewayAuthToken, home: JINN_HOME_IDENTITY });
 
   // Hook registry — shared by the interactive engine and the internal hook route.
   const hookRegistry = new HookRegistry();
@@ -746,7 +737,7 @@ export async function startGateway(
   // Build employee registry
   let employeeRegistry = orgRegistry(config);
   logger.info(`Loaded ${employeeRegistry.size} employee(s) from org directory`);
-  const sessionManager = new SessionManager(config, engines, bootId, (id) => employeeRegistry.get(id));
+  const sessionManager = new SessionManager(config, engines, bootId);
 
   // Start connectors — one normalized list covers both config forms.
   const connectorMap = new Map<string, Connector>();
@@ -814,28 +805,6 @@ export async function startGateway(
   // ICI-570: in-process Todo writes (cron mints, session-lifecycle reconciles)
   // reach the dashboard through the same company:changed lane the routes use.
   setTodoLiveEmitter((event) => emit("company:changed", event));
-  const workflowDatabase = openWorkflowDatabase();
-  importLegacyWorkflowDefinitions(workflowDatabase);
-  const workflowRepository = new WorkflowRepository(workflowDatabase);
-  const workflowService = new WorkflowService({ repository: workflowRepository,
-    executor: new WorkflowSessionExecutor(sessionManager, (id) => { const session = getSession(id); if (!session) return null;
-      const finalText = [...getMessages(id)].reverse().find((message) => message.role === "assistant")?.content; return { session, ...(finalText ? { finalText } : {}) }; }),
-    employees: () => employeeRegistry, models: () => getModelRegistry(currentConfig),
-    // A parked gate on a Todo-bound run is mirrored onto that Todo; whichever
-    // door decides it settles both. Employee-routed gates wake that employee.
-    todoApprovals: workflowTodoApprovals(({ todoId, request, ref, options, approver }) => {
-      requestApproval(todoId, { request, ref, ...(options ? { options } : {}), ...(approver ? { target: approver } : {}), actor: "workflow" });
-    }),
-    todoSessions: workflowTodoSessions(), todoDispatch: workflowTodoDispatch(), engineFallback: { chainFor: (engine: string) => currentConfig.engines[engine as EngineName]?.fallback ?? [] },
-    // A parked Wait node listens for the operator's reply on the bound Todo.
-    todoComments: { firstOperatorCommentAfter },
-    sessionSpend: getSessionSpend, activeEngineSessions: () => sessionsHoldingEngineCapacity(listSessions(), apiContext).length,
-    // A Todo-bound run reflects its own lifecycle onto that Todo — no phase
-    // prompt has to say so, and a dead run leaves its reason behind.
-    todoLifecycle: workflowTodoLifecycle,
-    readTranscript: (id) => getMessages(id).map(({ id: messageId, role, content, timestamp }) => ({ id: messageId, role, content, timestamp })),
-    onChange: ({ workflowId, runId }) => emit("company:changed", { entity: "workflow-run", workflowId, runId }),
-    onDefinitionChange: ({ workflowId, revision }) => emit("company:changed", { entity: "workflow-definition", id: workflowId, revision }) });
 
   const backgroundRefreshes = startBackgroundRefreshes(() => currentConfig, emit);
 
@@ -860,30 +829,14 @@ export async function startGateway(
   // Native CLI schedulers such as /loop wake inside the PTY without entering
   // Jinn's queue; engines can expose onRuntimeActivity so the UI stops showing
   // those sessions as transport-idle while the native work is awake.
-  const backgroundActivity = new Map<string, RuntimeActivityInfo>();
-  const handleRuntimeActivity = (sessionId: string, info: RuntimeActivityInfo | null): void => {
-    if (info) backgroundActivity.set(sessionId, info);
-    else backgroundActivity.delete(sessionId);
-    const session = getSession(sessionId);
-    const baseTransportState = session
-      ? sessionManager.getQueue().getTransportState(session.sessionKey || session.sourceRef, session.status)
-      : "idle";
-    const transportState = info && info.activeStreams > 0 && baseTransportState !== "error" && baseTransportState !== "interrupted"
-      ? "running"
-      : baseTransportState;
-    emit("session:background", {
-      sessionId,
-      transportState,
-      backgroundActivity: info
-        ? {
-            activeStreams: info.activeStreams,
-            ...(info.activeAgents !== undefined ? { activeAgents: info.activeAgents } : {}),
-            ...(info.activeMonitors !== undefined ? { activeMonitors: info.activeMonitors } : {}),
-            lastActivityAt: new Date(info.lastActivityAt).toISOString(),
-          }
-        : null,
-    });
-  };
+  const backgroundActivity = runtimeActivity;
+  const handleRuntimeActivity = createRuntimeActivityHandler({
+    activity: backgroundActivity,
+    getSession,
+    transportState: (session) => sessionManager.getQueue().getTransportState(session.sessionKey || session.sourceRef, session.status),
+    setLastActivity: (sessionId, iso) => updateSession(sessionId, { lastActivity: iso }),
+    emit,
+  });
   for (const engine of new Set(Object.values(ptyViewEngines))) {
     (engine as RuntimeActivitySource).onRuntimeActivity?.(handleRuntimeActivity);
   }
@@ -916,13 +869,32 @@ export async function startGateway(
     reloadOrg,
     backgroundActivity,
     gatewayAuthToken,
-    workflowService,
   };
-  await workflowService.recover(new Date().toISOString()); // never above apiContext: a recovered fan-out reads its ceiling through it
-  // Idle-capacity auto-start: below apiContext because a start goes
-  // through the same Dispatcher spawn the dispatch route uses, which reads it.
-  const idleCapacity = startIdleCapacityAutoStart({ getConfig: () => currentConfig, context: apiContext });
-  apiContext.idleCapacity = idleCapacity;
+  // The board walk: below apiContext because a start goes through the same
+  // Dispatcher spawn the dispatch route uses, which reads it. Seeding first
+  // gives a fresh install its rules file and its cron job, and retires an old
+  // idleCapacity block; it runs before the cron scheduler loads jobs.json.
+  const seedLine = describeSeed(seedBoardWalk());
+  if (seedLine) logger.info(seedLine);
+  const boardWalk = startBoardWalk({
+    getConfig: () => currentConfig,
+    context: apiContext,
+    holdingCapacity: (sessions) => sessionsHoldingEngineCapacity(sessions, apiContext),
+    emitProjectionEvent: (id, action) => emitTodoProjectionEvent(apiContext, id, action),
+    stopTurn: (sessionKey) => {
+      const session = getSessionBySessionKey(sessionKey);
+      if (session) interruptSessionTurn(apiContext, session, "Interrupted: board walk turn timed out", "Board walk turn timed out");
+    },
+  });
+  apiContext.boardWalk = boardWalk;
+  // The walk's schedule is the `board-walk` cron job: the cron scheduler, below,
+  // fires this handler, as do the cron run-now controls.
+  // Left registered through shutdown: the scheduler is stopped later, and a fire
+  // landing in between must still find the walk, not record a failed run.
+  setCronActionHandler("board-walk", boardWalkCronHandler(boardWalk));
+  // Comment routing wakes a mentioned employee; like the walk, it starts
+  // sessions through apiContext.
+  const stopCommentRouting = installTodoCommentRouting(apiContext);
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)
   // and by API handlers that write config.yaml and need getConfig() to reflect
@@ -974,29 +946,9 @@ export async function startGateway(
 
   // Todos ledger truth-keeping: derive status from linked-session evidence so a mid-process settle lands without a boot (GRS-021a), and resume a Todo parked on a provider window that has since reopened (PLA-153).
   const stopWorkItemReconciler = startWorkItemReconciler();
-  const stopTodoSweeps = startTodoSweeps(workflowRepository);
+  const stopTodoSweeps = startTodoSweeps(apiContext);
 
-  // A todo-status trigger's label filter reads the Todo when its event DRAINS rather than when it moved, so a label landing after the move re-opens the drain too.
-  const drainTodoTriggers = (): void => { void workflowService.recover(new Date().toISOString())
-    .catch((error) => logger.warn(`Workflow Todo trigger recovery failed: ${error instanceof Error ? error.message : String(error)}`)); };
-  setTodoStatusChangeListener(drainTodoTriggers);
-  setTodoLabelsChangeListener(drainTodoTriggers);
-
-  const stopReplyWatch = watchTodoReplies(() => workflowService.recover(new Date().toISOString()));
-
-  // The other half of the Todo-first approval loop: a gate decided on the Todo resolves the workflow node that mirrored it, carrying the picked option and the authority the run's own reserved gates check.
-  setTodoApprovalDecisionListener(({ approval, decision, decidedBy }) => {
-    const origin = parseTodoApprovalRef(approval.ref);
-    if (!origin) return;
-    const run = workflowRepository.getRun(origin.workflowId, origin.runId);
-    if (!run) return;
-    void workflowService.decideApproval({ ...origin, decision, decidedBy, expectedRevision: run.revision,
-      decidedByAuthority: deciderAuthority(decidedBy), ...(approval.choice ? { choice: approval.choice } : {}),
-      ...(approval.note ? { reason: approval.note } : {}) }).catch((error) => {
-      logger.warn(`Workflow approval mirror-back failed: ${error instanceof Error ? error.message : String(error)}`);
-    });
-  });
-
+  removeRetiredExperimentCheckInJobs();
   const cronJobs = loadJobs();
   startScheduler(cronJobs, { sessionManager, getConfig: () => currentConfig, connectors: connectorMap, emit });
   logger.info(`Loaded ${cronJobs.length} cron job(s)`);
@@ -1292,8 +1244,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop(); idleCapacity.stop();
-    workflowService.dispose(); workflowDatabase.close();
+    backgroundRefreshes.stop(); stopCommentRouting();
 
     // Stop caffeinate
     if (caffeinate && caffeinate.exitCode === null) {
@@ -1357,9 +1308,6 @@ export async function startGateway(
 
     // Stop cron scheduler
     stopScheduler();
-    setTodoStatusChangeListener(null); setTodoLabelsChangeListener(null);
-    stopReplyWatch();
-    setTodoApprovalDecisionListener(null);
 
     // Stop connectors
     for (const connector of connectorMap.values()) {

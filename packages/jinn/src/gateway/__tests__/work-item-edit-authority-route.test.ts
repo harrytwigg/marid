@@ -9,8 +9,8 @@ import { CALLER_SESSION_CAPABILITY_HEADER, CALLER_SESSION_HEADER, TOOL_CALL_HEAD
 
 /**
  * PATCH /api/work-items/:id splits on content versus ownership: title, body,
- * acceptance, priority and dueAt are open to every authenticated session (like
- * status), while assignee, department, rank and verifyPolicy stay operator-only.
+ * priority and dueAt are open to every authenticated session (like status),
+ * while assignee, department and rank stay operator-only.
  * Same expectedVersion/idempotencyKey contract throughout.
  */
 
@@ -124,17 +124,14 @@ describe("PATCH /api/work-items/:id — content is open, ownership is the operat
     const cap = await call("PATCH", `/api/work-items/${item.id}`, patchBody(item.version, {
       title: "op edited",
       body: "op body",
-      acceptance: "op acceptance",
       priority: 1,
       rank: 5,
       dueAt: "2026-08-01",
-      verifyPolicy: { mode: "verify" },
     }), operatorHeaders);
     expect(cap.status).toBe(200);
     expect(cap.body.workItem).toMatchObject({
       title: "op edited",
       body: "op body",
-      acceptance: "op acceptance",
       priority: 1,
       rank: 5,
       dueAt: "2026-08-01T00:00:00.000Z", // normalized like the create route
@@ -147,7 +144,6 @@ describe("PATCH /api/work-items/:id — content is open, ownership is the operat
     const cap = await call("PATCH", `/api/work-items/${item.id}`, patchBody(item.version, {
       title: "refined title",
       body: "refined by the assignee",
-      acceptance: "criteria v2",
       priority: 0,
       dueAt: "2026-08-15T12:00:00Z",
     }), toolHeaders(session.id));
@@ -155,14 +151,13 @@ describe("PATCH /api/work-items/:id — content is open, ownership is the operat
     expect(cap.body.workItem).toMatchObject({
       title: "refined title",
       body: "refined by the assignee",
-      acceptance: "criteria v2",
       priority: 0,
       dueAt: "2026-08-15T12:00:00.000Z",
     });
     const events = store.listWorkItemEvents(item.id);
     const edit = events.filter((e) => e.kind === "metadata_edited").at(-1)!;
     expect(edit.actor).toBe("platform-worker");
-    expect((edit.detail!.updatedFields as string[]).sort()).toEqual(["acceptance", "body", "dueAt", "priority", "title"]);
+    expect((edit.detail!.updatedFields as string[]).sort()).toEqual(["body", "dueAt", "priority", "title"]);
   });
 
   it("a session with NO relation to the Todo edits its content too — that is the point", async () => {
@@ -192,49 +187,18 @@ describe("PATCH /api/work-items/:id — content is open, ownership is the operat
     expect(store.getWorkItem(item.id)!.body).toBe("bare edit");
   });
 
-  it("ownership stays the operator's: assignee, department, rank and verifyPolicy are refused BY NAME", async () => {
+  it("ownership stays the operator's: assignee, department and rank are refused BY NAME", async () => {
     const item = store.createWorkItem({ title: "ownership fenced", assignee: "platform-worker" });
     // The assignee's own manager is refused too — this is not a hierarchy rule.
     const manager = reg.createSession({ engine: "codex", source: "web", sourceRef: "edit-manager", employee: "platform-lead" });
 
-    for (const patch of [{ assignee: null }, { department: "marketing" }, { rank: 1 }, { verifyPolicy: { mode: "verify" } }]) {
+    for (const patch of [{ assignee: null }, { department: "marketing" }, { rank: 1 }]) {
       const cap = await call("PATCH", `/api/work-items/${item.id}`, patchBody(item.version, patch), toolHeaders(manager.id));
       expect(cap.status).toBe(403);
       expect(cap.body.error).toContain(`"${Object.keys(patch)[0]}"`);
-      // verifyPolicy is refused for a reason of its own: one key inside it is
-      // the Todo's assignee's or creator's to set, and this caller is neither.
-      expect(cap.body.error).toContain("verifyPolicy" in patch ? "assignee or creator" : "operator-only");
+      expect(cap.body.error).toContain("operator-only");
     }
     expect(store.getWorkItem(item.id)).toMatchObject({ assignee: "platform-worker", rank: null });
-  });
-
-  it("a workflow phase edits the Todo it runs for without any run/Todo binding to consult", async () => {
-    const item = store.createWorkItem({ title: "pipeline status block" });
-    const phase = reg.createSession({
-      engine: "codex",
-      source: "web",
-      sourceRef: "wf-phase",
-      employee: "solo-worker",
-      workflowProvenance: {
-        kind: "phase",
-        workflowId: "build-pipeline",
-        workflowName: "Build Pipeline",
-        runId: "run-1",
-        triggerSource: "todo-status",
-        phase: { nodeId: "implement", name: "Implement", index: 1, round: 1, attempt: 1 },
-      },
-    });
-
-    const cap = await call("PATCH", `/api/work-items/${item.id}`, patchBody(item.version, {
-      body: "<!-- pipeline-status -->\nIMPLEMENT: done",
-      acceptance: "gates green",
-    }), toolHeaders(phase.id));
-
-    expect(cap.status).toBe(200);
-    expect(cap.body.workItem).toMatchObject({
-      body: "<!-- pipeline-status -->\nIMPLEMENT: done",
-      acceptance: "gates green",
-    });
   });
 
   it("expectedVersion conflicts and idempotency replay work through the open path", async () => {
@@ -266,7 +230,7 @@ describe("PATCH /api/work-items/:id — content is open, ownership is the operat
   });
 
   it("validates fields the same for a session as for the operator: bad dueAt 400, nulls clear", async () => {
-    const item = store.createWorkItem({ title: "field validation", acceptance: "old", dueAt: "2026-08-01T00:00:00.000Z" });
+    const item = store.createWorkItem({ title: "field validation", dueAt: "2026-08-01T00:00:00.000Z" });
     const session = reg.createSession({ engine: "codex", source: "web", sourceRef: "edit-validation", employee: "solo-worker" });
 
     const bad = await call("PATCH", `/api/work-items/${item.id}`, patchBody(item.version, { dueAt: "next tuesday" }), toolHeaders(session.id));
@@ -275,11 +239,10 @@ describe("PATCH /api/work-items/:id — content is open, ownership is the operat
     const cleared = await call(
       "PATCH",
       `/api/work-items/${item.id}`,
-      patchBody(item.version, { acceptance: null, dueAt: null }),
+      patchBody(item.version, { dueAt: null }),
       toolHeaders(session.id),
     );
     expect(cleared.status).toBe(200);
-    expect(cleared.body.workItem.acceptance).toBeNull();
     expect(cleared.body.workItem.dueAt).toBeNull();
   });
 });

@@ -40,6 +40,8 @@ function shapeCronJob(job: Record<string, unknown>): Record<string, unknown> {
     employee: job.employee ?? null,
     engine: job.engine ?? null,
     timezone: job.timezone ?? null,
+    // A built-in gateway action (e.g. "board-walk") runs instead of a prompt.
+    action: job.action ?? null,
     // Already scrubbed server-side by the gateway read tier (cron-api.ts).
     lastRun: job.lastRun ?? null,
   };

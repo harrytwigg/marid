@@ -54,7 +54,7 @@ function todoFilters(args: ToolArgs): TodoFilters {
 }
 
 export function todosPath(args: ToolArgs): string {
-  // parseBoardParam falls back to the home board for anything unusable, which is
+  // parseBoardParam falls back to the everything board for anything unusable, which is
   // the behaviour a stale department link already gets.
   const board = boardPath(parseBoardParam(text(args.board)))
   return `${board}${query([...filtersToSearchParams(todoFilters(args))])}`
@@ -88,21 +88,7 @@ export function todoPath(id: string): string {
   return `/todos/${encodeURIComponent(id)}`
 }
 
-// ── Workflows, Experiments, Chats, Org, Cron ────────────────────────────────
-
-export function workflowPath(args: ToolArgs): string {
-  const id = segment(args.id)
-  if (!id) return "/workflow"
-  // `editor` is the page's default lens and it writes an empty search string for
-  // it (routes/workflow/page.tsx), so naming it here would add a param the page
-  // immediately drops.
-  return `/workflow/${id}${text(args.lens) === "runs" ? "?lens=runs" : ""}`
-}
-
-export function experimentPath(args: ToolArgs): string {
-  const id = segment(args.id)
-  return id ? `/experiments/${id}` : "/experiments"
-}
+// ── Chats, Org, Cron ────────────────────────────────
 
 export function chatPath(args: ToolArgs): string {
   const sessionId = text(args.sessionId)

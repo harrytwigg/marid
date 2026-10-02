@@ -19,21 +19,18 @@ import { buildProbeScript, buildSpeakScript } from "../talk-driving-channel-prob
 
 const disposable = path.join(os.tmpdir(), ".jinn-talk-driving-fixture")
 
-test("declares twelve durable topics with stable unique identities", () => {
+test("declares nine durable topics with stable unique identities", () => {
   const topics = fixtureTopics({
     todoIds: {
       blocked: "PLA-1",
       blocker: "PLA-2",
       delegated: "PLA-3",
-      approval: "PLA-4",
     },
-    workflowId: "sandbox-approval-flow",
-    workflowRunId: "run_fixture",
   })
 
-  assert.equal(topics.length, 12)
-  assert.equal(new Set(topics.map(({ id }) => id)).size, 12)
-  assert.deepEqual(topics.map(({ ordinal }) => ordinal), Array.from({ length: 12 }, (_, index) => index + 1))
+  assert.equal(topics.length, 9)
+  assert.equal(new Set(topics.map(({ id }) => id)).size, 9)
+  assert.deepEqual(topics.map(({ ordinal }) => ordinal), Array.from({ length: 9 }, (_, index) => index + 1))
   assert.equal(topics[0].state, "active")
   assert.ok(topics.slice(1, 4).every(({ state }) => state === "warm"))
   assert.ok(topics.slice(4).every(({ state }) => state === "cool"))
@@ -45,13 +42,9 @@ test("declares twelve durable topics with stable unique identities", () => {
 test("uses a fixed fixture clock so cold-reload ordering is reproducible", () => {
   assert.equal(FIXTURE_CLOCK, Date.parse("2026-08-18T09:00:00.000Z"))
   assert.deepEqual(fixtureTopics({
-    todoIds: { blocked: "PLA-1", blocker: "PLA-2", delegated: "PLA-3", approval: "PLA-4" },
-    workflowId: "sandbox-approval-flow",
-    workflowRunId: "run_fixture",
+    todoIds: { blocked: "PLA-1", blocker: "PLA-2", delegated: "PLA-3" },
   }), fixtureTopics({
-    todoIds: { blocked: "PLA-1", blocker: "PLA-2", delegated: "PLA-3", approval: "PLA-4" },
-    workflowId: "sandbox-approval-flow",
-    workflowRunId: "run_fixture",
+    todoIds: { blocked: "PLA-1", blocker: "PLA-2", delegated: "PLA-3" },
   }))
 })
 
@@ -88,17 +81,12 @@ test("seeding the same stopped home twice reuses every durable identity", async 
   const requireFromJinn = createRequire(new URL("../../packages/jinn/package.json", import.meta.url))
   const Database = requireFromJinn("better-sqlite3")
   const sessions = new Database(path.join(home, "sessions", "registry.db"), { readonly: true })
-  assert.equal(sessions.prepare("SELECT COUNT(*) FROM work_items").pluck().get(), 4)
-  assert.equal(sessions.prepare("SELECT COUNT(*) FROM work_item_approvals WHERE state = 'pending'").pluck().get(), 1)
-  assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_topics").pluck().get(), 12)
+  assert.equal(sessions.prepare("SELECT COUNT(*) FROM work_items").pluck().get(), 3)
+  assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_topics").pluck().get(), 9)
   assert.equal(sessions.prepare("SELECT COUNT(*) FROM talk_proactive_receipts").pluck().get(), 2)
-  assert.equal(sessions.prepare("SELECT high_water FROM work_item_id_allocator WHERE prefix = 'PLA'").pluck().get(), 4)
+  assert.equal(sessions.prepare("SELECT high_water FROM work_item_id_allocator WHERE prefix = 'PLA'").pluck().get(), 3)
   sessions.close()
-
-  const workflows = new Database(path.join(home, "workflows", "workflows.db"), { readonly: true })
-  assert.equal(workflows.prepare("SELECT COUNT(*) FROM workflow_runs").pluck().get(), 1)
-  assert.equal(workflows.prepare("SELECT COUNT(*) FROM workflow_approvals WHERE status = 'pending'").pluck().get(), 1)
-  workflows.close()
+  assert.equal(fs.existsSync(path.join(home, "workflows")), false)
 })
 
 test("the driving audio catalog covers each spoken journey turn with reusable failure audio", () => {

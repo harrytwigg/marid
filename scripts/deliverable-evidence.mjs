@@ -15,8 +15,8 @@
 // it is handed, so ruling on a workspace deliverable costs no new read reach.
 //
 // `route` is the pipeline's half, and it rules on one thing: whether the
-// workspace route was declared honestly. A Todo declaring
-// `deliverable: "workspace"` is a hint this pipeline validates, never an
+// workspace route was declared honestly. A caller passing
+// `--declared workspace` gives a hint this pipeline validates, never an
 // instruction it obeys — taken on trust, a self-declared workspace route is a
 // way to route around code review: declare `workspace`, skip the code check. So
 // the route is honoured only when the product diff is empty or confined to
@@ -282,9 +282,9 @@ function route({ options, positional }) {
   const changed = changedPaths(fs.readFileSync(0, "utf8"))
   const shipping = changed.filter(isShipping)
   if (shipping.length > 0) {
-    console.error(`deliverable route FAILED — the Todo declares deliverable "workspace", but the diff changes ${shipping.length === 1 ? "a shipping file" : "shipping files"}:`)
+    console.error(`deliverable route FAILED — the route was declared "workspace", but the diff changes ${shipping.length === 1 ? "a shipping file" : "shipping files"}:`)
     for (const changed of shipping) console.error(`  ${changed}`)
-    console.error("a workspace declaration is a hint, never an instruction: a Todo carrying real source changes is verified on the normal route. Drop the declaration, or drop the source changes.")
+    console.error("a workspace declaration is a hint, never an instruction: work carrying real source changes is verified on the normal route. Drop the declaration, or drop the source changes.")
     process.exit(ROUTE_MISMATCH_EXIT)
   }
 

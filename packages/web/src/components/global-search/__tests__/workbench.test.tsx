@@ -127,21 +127,32 @@ describe("the search workbench", () => {
     await waitFor(() => expect(mocks.getWorkItem.mock.calls.length).toBeGreaterThan(1))
   })
 
+  it("inserts a picked @mention on Enter instead of posting", async () => {
+    await openOnTheTodo()
+
+    const field = screen.getByTestId("workbench-comment") as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: "ask @b-l" } })
+    fireEvent.keyDown(field, { key: "Enter" })
+
+    expect(field.value).toBe("ask @b-lead ")
+    expect(mocks.addWorkItemComment).not.toHaveBeenCalled()
+  })
+
   it("refuses a gated move with the very string the task page refuses it with", async () => {
-    // One open sub-task and one escalated below it: the close gate's live case.
-    const tree = treeOf(["executing", "escalated"])
+    // An open sub-task with a blocked one below it: cancel is gated while they stay open.
+    const tree = treeOf(["executing", "blocked"])
     mocks.getWorkItemTree.mockResolvedValue(tree)
     const detail = todoDetail()
 
     // 1. The module both surfaces consume, given the task page's own inputs.
     const counts = closeGateCounts(tree.tree.root)
-    const fromModule = legalTargets(detail.workItem.status, counts).find(target => target.status === "done")
+    const fromModule = legalTargets(detail.workItem.status, counts).find(target => target.status === "cancelled")
 
     // 2. The task page's status picker, rendered on those same inputs.
     const page = render(
       <StatusPickerContent detail={detail} {...counts} commit={vi.fn()} onDone={vi.fn()} />,
     )
-    const onThePage = screen.getByTestId("status-option-done")
+    const onThePage = screen.getByTestId("status-option-cancelled")
     const pageText = onThePage.textContent
     const pageDisabled = onThePage.getAttribute("aria-disabled")
     page.unmount()
@@ -149,9 +160,9 @@ describe("the search workbench", () => {
     // 3. The workbench, reached the way an operator reaches it.
     await openOnTheTodo()
     await openPicker("status")
-    const inTheOverlay = screen.getByTestId("status-option-done")
+    const inTheOverlay = screen.getByTestId("status-option-cancelled")
 
-    expect(fromModule?.reason).toBe("1 escalated sub-task needs an answer first")
+    expect(fromModule?.reason).toMatch(/sub-tasks? still open$/)
     expect(fromModule?.gated).toBe(true)
     expect(inTheOverlay.textContent).toBe(pageText)
     expect(inTheOverlay.textContent).toContain(fromModule?.reason)
@@ -234,6 +245,21 @@ describe("the search workbench", () => {
     // not get to fire on the same keypress that dismissed the picker.
     expect(searchField().value).toBe("match")
     expect(screen.getByTestId(`search-row-todo:${TODO_ID}`)).toBeTruthy()
+  })
+
+  it("lets Escape close the @mention list without closing the overlay or clearing the query", async () => {
+    await openOnTheTodo()
+
+    const field = screen.getByTestId("workbench-comment") as HTMLTextAreaElement
+    fireEvent.change(field, { target: { value: "ask @b" } })
+    expect(screen.getByTestId("mention-picker")).toBeTruthy()
+
+    fireEvent.keyDown(field, { key: "Escape" })
+
+    await waitFor(() => expect(screen.queryByTestId("mention-picker")).toBeNull())
+    expect(screen.getByTestId("search-workbench")).toBeTruthy()
+    expect(searchField().value).toBe("match")
+    expect(field.value).toBe("ask @b")
   })
 
   it("gives a row of any other kind no write control at all", async () => {

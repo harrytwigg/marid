@@ -18,6 +18,7 @@ const OPERATOR_ONLY_ROUTES: ReadonlyArray<readonly [method: string, route: strin
   ["DELETE", "/api/auth/devices/*", "auth device revoke"],
   ["POST", "/api/engines/refresh", "engine registry refresh"],
   ["POST", "/api/engine-limits/refresh", "engine limits refresh"],
+  ["POST", "/api/board-walk/tick", "board walk manual tick"],
   ["POST", "/api/connectors/reload", "connector reload"],
   ["POST", "/api/stt/download", "STT model download/config enable"],
   ["PUT", "/api/stt/config", "STT config update"],

@@ -16,6 +16,7 @@ import { STRUCTURED_MESSAGE_BODY_MAX_CHARS, type Session } from "../shared/types
 import type { ChatBlockEnvelope, JsonObject } from "../shared/types.js";
 import { enforceDelegationCompletionContract } from "./delegation-completion-contract.js";
 import { isRemoteMcpSession } from "./remote-mcp-session.js";
+import { withReportingParent } from "../work-items/employee-session-delegation.js";
 import type { SessionDeliveryPayload } from "../shared/types.js";
 
 export const CALLBACK_DELIVERY_RETRY_DELAYS_MS = [1_000, 5_000, 30_000] as const;
@@ -84,13 +85,10 @@ export function notifyManagerVisibility(
   });
 }
 
-/**
- * Notify the parent session that a child session has replied.
- * Sends an internal message to the parent via the local HTTP API.
- * Fire-and-forget compatibility wrapper. Turn settlement uses the awaited
- * variant below so a source-drain hold cannot release before the final durable
- * callback is accepted.
- */
+/** Tell the parent a child replied, fire-and-forget. Turn settlement awaits the
+ *  variant below, so a source-drain hold cannot release before the final
+ *  durable callback is accepted. "The parent" is the session the child reports
+ *  to: the delegator of the last delegation that landed in it, if one did. */
 export function notifyParentSession(
   childSession: Session,
   result: { result?: string | null; error?: string | null; cost?: number; durationMs?: number },
@@ -105,6 +103,7 @@ export async function notifyParentSessionAndWait(
   result: { result?: string | null; error?: string | null; cost?: number; durationMs?: number },
   options?: { alwaysNotify?: boolean },
 ): Promise<void> {
+  childSession = withReportingParent(childSession);
   if (!childSession.parentSessionId) return;
 
   // The marker is consumed by the settle that matches it whether or not a
@@ -141,6 +140,7 @@ export async function notifyParentOfExternalTurn(
   turnKey: string,
   options?: { alwaysNotify?: boolean },
 ): Promise<void> {
+  childSession = withReportingParent(childSession);
   if (!childSession.parentSessionId) return;
   const relayed = consumeExplicitRelay(childSession);
   if (!hasMeaningfulReply(text) || relayed) return;
@@ -182,7 +182,8 @@ function consumeExplicitRelay(childSession: Session): boolean {
  */
 export async function recoverOrphanedDelegationCompletionClaims(): Promise<number> {
   let recovered = 0;
-  for (const child of listDelegationCompletionNudgedSessions()) {
+  for (const nudged of listDelegationCompletionNudgedSessions()) {
+    const child = withReportingParent(nudged);
     if (!child.parentSessionId || !child.workItemId) continue;
     const parent = getSession(child.parentSessionId);
     if (!parent || parent.status === "error") continue;
@@ -246,14 +247,12 @@ export async function recoverSessionDeliveryStateOnStartup(): Promise<{
   return { pendingRecovered, orphanedRecovered };
 }
 
-/**
- * Notify the parent session that a child session has been rate-limited and will auto-resume.
- * Fire-and-forget — errors are logged but never rethrown.
- */
+/** Tell the parent a child is rate-limited and will auto-resume. Fire-and-forget. */
 export function notifyRateLimited(
   childSession: Session,
   estimatedResumeTime?: string, // ISO timestamp or human-readable
 ): void {
+  childSession = withReportingParent(childSession);
   if (!childSession.parentSessionId) return;
 
   _sendNotification(childSession, {
@@ -269,13 +268,11 @@ export function notifyRateLimited(
   });
 }
 
-/**
- * Notify the parent session that a rate-limited child session has successfully resumed.
- * Fire-and-forget — errors are logged but never rethrown.
- */
+/** Tell the parent a rate-limited child has resumed. Fire-and-forget. */
 export function notifyRateLimitResumed(
   childSession: Session,
 ): void {
+  childSession = withReportingParent(childSession);
   if (!childSession.parentSessionId) return;
 
   const employeeName = childSession.employee || "Unknown";

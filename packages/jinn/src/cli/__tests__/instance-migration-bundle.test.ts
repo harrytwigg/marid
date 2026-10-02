@@ -118,8 +118,19 @@ describe("instance migration bundle generator", () => {
     }
     const prompt = firstPrompt.toString("utf8")
     expect(prompt.match(/^## `.+`$/gm)).toHaveLength(manifest.files.length)
-    expect(prompt).toMatch(/materialized base payload.*materialized target payload/is)
-    expect(prompt).toMatch(/never.*raw.*placeholder/is)
+    // Every payload input the prompt tells the reader to open must exist in the
+    // bundle. It must not name the gateway-side materialized snapshot payloads the
+    // manual migration handoff used to create: that handoff was removed, so a
+    // reader could not find them and the instruction was unfollowable.
+    const namedPayloads = [...prompt.matchAll(/`(files\/(?:base|target)\/[^`]+)`/g)].map((match) => match[1])
+    expect(namedPayloads.length).toBeGreaterThan(0)
+    for (const payload of namedPayloads) {
+      expect(fs.existsSync(path.join(out, payload)), `${payload} is named but not shipped`).toBe(true)
+    }
+    expect(prompt).toMatch(/\{\{portalName\}\}.*\{\{portalSlug\}\}/s)
+    expect(prompt).toMatch(/merge Markdown by heading.*never append a second section with the same heading/is)
+    expect(prompt).not.toMatch(/instance migration snapshot/i)
+    expect(prompt).not.toMatch(/gateway creates/i)
   })
 
   it("checks committed output and detects drift", () => {
@@ -179,6 +190,33 @@ describe("instance migration bundle generator", () => {
 
     expect(run(root, "check", ...args).status).toBe(1)
     expect(run(root, "check", ...args, "--allow-unreleased").status).toBe(0)
+  })
+
+  it("refuses to regenerate a released bundle and points check at the next version", () => {
+    const root = fixture()
+    const args = ["--base-ref", "v0.25.0", "--version", "0.26.0"]
+    expect(run(root, "generate", ...args).status).toBe(0)
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "release 0.26.0")
+    git(root, "tag", "v0.26.0")
+    write(root, "CLAUDE.md", "edited after release\n")
+
+    const regenerated = run(root, "generate", ...args)
+    expect(regenerated.status).toBe(1)
+    expect(regenerated.stderr).toContain("bundle 0.26.0 was released as v0.26.0")
+    expect(git(root, "status", "--porcelain", "--", "packages/jinn/template/migrations")).toBe("")
+
+    const checked = run(root, "check", ...args)
+    expect(checked.status).toBe(1)
+    expect(checked.stderr).toContain("was released as v0.26.0; add a bundle for the next version")
+  })
+
+  // A same-named tag on another line of history (an upstream release fetched into
+  // a fork, say) is not this checkout's release.
+  it("still regenerates a bundle whose tag is on unrelated history", () => {
+    const root = fixture()
+    git(root, "tag", "v0.26.0", git(root, "commit-tree", "HEAD^{tree}", "-m", "unrelated release"))
+    expect(run(root, "generate", "--base-ref", "v0.25.0", "--version", "0.26.0").status).toBe(0)
   })
 
   it("rejects empty bundles, unsafe symlinks, and version mismatch", () => {

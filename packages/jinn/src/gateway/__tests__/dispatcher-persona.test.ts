@@ -3,42 +3,21 @@ import { SYSTEM_EMPLOYEES, TODO_DISPATCHER_NAME, TODO_SHAPER_NAME } from "../sys
 import { buildTools } from "../../mcp/server.js";
 
 /**
- * The Dispatcher's routing contract, pinned where it actually ships.
- *
- * This persona is the whole of the workflow-aware routing feature — there is no
- * backend half to test, because `start_workflow_run` already takes a `todoId`.
- * So what has to be guarded is that the shipped text still tells the Dispatcher
- * to look for a Workflow first, to monitor what it starts, to fall back to an
- * employee, and which way to lean when the two are close.
+ * The Dispatcher's routing contract, pinned where it actually ships: read the
+ * Todo, delegate it to the best-fitting employee (the assignee by default), and
+ * report a refused claim rather than work around it.
  */
 
 const persona = SYSTEM_EMPLOYEES.find((employee) => employee.name === TODO_DISPATCHER_NAME)!.persona;
 const shaper = SYSTEM_EMPLOYEES.find((employee) => employee.name === TODO_SHAPER_NAME)!.persona;
 
-describe("Todo Dispatcher persona — workflow-aware routing", () => {
-  it("has the four workflow verbs it is told to use on the belt it is given", () => {
-    const names = new Set(buildTools().map((tool) => tool.name));
-
-    for (const verb of ["list_workflows", "get_workflow", "start_workflow_run", "get_workflow_run"]) {
-      expect(names.has(verb)).toBe(true);
-    }
+describe("Todo Dispatcher persona — routing", () => {
+  it("never mentions Workflows, which no longer exist", () => {
+    expect(persona).not.toMatch(/workflow/i);
+    expect(shaper).not.toMatch(/workflow/i);
   });
 
-  // Binding the run to the Todo is what makes journey step 7 checkable at all:
-  // without it, GET /api/workflows/:id/runs has no trigger.todoId to show.
-  it("can bind the run it starts to the Todo, with no new backend", () => {
-    const start = buildTools().find((tool) => tool.name === "start_workflow_run")!;
-
-    expect(Object.keys(start.inputSchema.properties ?? {})).toContain("todoId");
-  });
-
-  it("looks for a Workflow before an employee, and says so in that order", () => {
-    expect(persona).toContain("list_workflows");
-    expect(persona).toContain("get_workflow");
-    expect(persona.indexOf("list_workflows")).toBeLessThan(persona.indexOf("list_employees"));
-  });
-
-  it("keeps the employee branch as the fallback", () => {
+  it("routes to an employee", () => {
     expect(persona).toContain("list_employees");
     expect(persona).toContain("get_employee");
     expect(persona).toContain("delegate_task");
@@ -50,22 +29,22 @@ describe("Todo Dispatcher persona — workflow-aware routing", () => {
     expect(persona).not.toContain("find_employees");
   });
 
-  // Fire-and-forget was the specific failure mode this rewrite exists to stop.
-  it("tells it to monitor the run it started rather than firing and forgetting", () => {
-    expect(persona).toContain("start_workflow_run");
-    expect(persona).toContain("get_workflow_run");
-    expect(persona).toMatch(/walking away is not dispatching/i);
-  });
-
-  it("states the bias, so a close call falls back instead of guessing", () => {
-    expect(persona).toMatch(/a wrong Workflow is worse than falling back/i);
-  });
-
-  // A Todo a todo-status trigger already claimed is already moving. Retrying
+  // A Todo a live session already claimed is already moving. Retrying
   // around that refusal would start the same work twice.
   it("tells it to report a refused claim rather than work around it", () => {
     expect(persona).toMatch(/409/);
     expect(persona).toMatch(/never retry around it/i);
+  });
+
+  // An unowned Todo, or one the operator kept for themselves, has no employee
+  // somebody chose; the Dispatcher picks one, and never picks itself or the Shaper.
+  it("tells it to choose an employee when the assignee is unset or is @operator", () => {
+    expect(persona).toMatch(/assignee is unset/);
+    expect(persona).toMatch(/@operator/);
+  });
+
+  it("forbids choosing a system employee", () => {
+    expect(persona).toMatch(/Never choose a system employee/);
   });
 
   it("still forbids doing the Todo itself", () => {
@@ -74,51 +53,54 @@ describe("Todo Dispatcher persona — workflow-aware routing", () => {
 });
 
 /**
- * ICI-1420 — the way out of a dead end, pinned in both system personas.
+ * The way out of a dead end, pinned in both system personas.
  *
- * A system employee that can place nobody used to stop at a comment, leaving the
- * Todo holding nothing. It now hands the work up the approval lane and wakes the
- * COO, so the same text has to keep naming verbs that are actually reachable.
+ * A system employee that can place nobody must not leave the Todo holding
+ * nothing. With approvals gone it stops the Todo for the operator instead:
+ * blocked, with a comment saying what is needed and offering options, and the
+ * assignee left as it was. The Blocked column is what surfaces it.
  */
-describe("System employee personas — handing a Todo up instead of dead-ending", () => {
-  it("has the escalation verbs on the belt it is given", () => {
+describe("System employee personas — blocking a dead end for the operator", () => {
+  it("has the blocking verbs on the belt it is given", () => {
     const names = new Set(buildTools().map((tool) => tool.name));
 
-    for (const verb of ["request_work_item_approval", "list_sessions", "send_to_session"]) {
+    for (const verb of ["update_work_item", "comment_work_item"]) {
       expect(names.has(verb)).toBe(true);
     }
   });
 
-  it("sends the Dispatcher up the approval lane rather than stopping at a comment", () => {
-    expect(persona).toContain("request_work_item_approval");
-    expect(persona).not.toMatch(/explain the missing role in a Todo comment/i);
+  it("names no approval tool, which no longer exist", () => {
+    expect(persona).not.toMatch(/approval/i);
+    expect(shaper).not.toMatch(/approval/i);
+  });
+
+  it("sends the Dispatcher's dead end to blocked, with options for the operator", () => {
+    expect(persona).toMatch(/update_work_item \{ id, status: "blocked"/);
+    expect(persona).toMatch(/offering the operator concrete options/);
+    expect(persona).toMatch(/Leave the assignee as it is/);
   });
 
   it("routes the Dispatcher's root-identity 403 into that same lane", () => {
     expect(persona).toMatch(/403/);
     expect(persona).toMatch(/root-identity child/i);
+    expect(persona).toMatch(/block the Todo the same way/);
   });
 
-  // A gate nobody polls is not a hand-off, so the wake ships with it — and it is
-  // best-effort, because losing the wake must not lose the Todo.
-  it("pairs the Dispatcher's gate with a best-effort wake", () => {
-    expect(persona).toContain("send_to_session");
-    expect(persona).toMatch(/best-effort/i);
-  });
-
-  it("keeps the Shaper's 409 stop and routes every other refusal up", () => {
+  it("keeps the Shaper's 409 stop and blocks on every other refusal", () => {
     expect(shaper).toMatch(/409/);
     expect(shaper).toMatch(/verbatim/i);
-    expect(shaper).toContain("request_work_item_approval");
-    expect(shaper).toContain("send_to_session");
+    expect(shaper).toMatch(/update_work_item \{ id, status: "blocked"/);
+    expect(shaper).toMatch(/concrete options/);
+    expect(shaper).toMatch(/Leave the assignee unset/);
   });
 
-  // escalate_work_item_approval is the routed approver's lever and 403s the
-  // requester, so naming it as the hand-off would send both employees into a
-  // guaranteed refusal.
-  it("names neither employee's hand-off as the approver's own lever", () => {
-    expect(persona).not.toContain("escalate_work_item_approval");
-    expect(shaper).not.toContain("escalate_work_item_approval");
+  // Moving the Todo to the operator would need assign standing neither system
+  // employee has, and a wake to another session is no substitute for the column.
+  it("hands the dead end to neither the operator's assignee slot nor another session", () => {
+    for (const text of [persona, shaper]) {
+      expect(text).not.toContain("assign_work_item");
+      expect(text).not.toContain("send_to_session");
+    }
   });
 });
 
@@ -154,7 +136,7 @@ describe.each(SYSTEM_EMPLOYEES.map((employee) => [employee.name, employee.person
 
 it("spells out the call shape of every tool the Dispatcher's routing depends on", () => {
   const shaped = new Set(callShapes(persona).map((shape) => shape.tool));
-  for (const tool of ["get_work_item", "delegate_task", "comment_work_item", "request_work_item_approval", "start_workflow_run", "get_employee"]) {
+  for (const tool of ["get_work_item", "delegate_task", "comment_work_item", "update_work_item", "get_employee"]) {
     expect(shaped).toContain(tool);
   }
 });

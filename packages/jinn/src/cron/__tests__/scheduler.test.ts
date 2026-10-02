@@ -40,7 +40,7 @@ vi.mock("../../shared/logger.js", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { reloadScheduler, startScheduler, stopScheduler, triggerCronJob } from "../scheduler.js";
+import { armedActionJob, reloadScheduler, startScheduler, stopScheduler, triggerCronJob } from "../scheduler.js";
 import { runCronJob } from "../runner.js";
 
 const sessionManager = {} as any;
@@ -106,4 +106,47 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
     expect(scheduledTasks).toHaveLength(2); // boot task + valid replacement
   });
 
+});
+
+describe("scheduler — a job that runs a built-in action", () => {
+  const walk: CronJob = { id: "board-walk", name: "Board walk", enabled: true, schedule: "0 * * * *", prompt: "", action: "board-walk" };
+
+  it("a scheduled fire tells the runner it is a scheduled fire", () => {
+    startScheduler([walk], deps);
+    scheduledCallback!();
+    const call = (runCronJob as any).mock.calls[0];
+    expect(call[0]).toBe(walk);
+    expect(call[4]).toMatchObject({ trigger: "schedule" });
+  });
+
+  it("schedules one job per action, so a hand-edited copy cannot tick it twice", () => {
+    const copy = { ...walk, id: "board-walk-copy", name: "Board walk copy" };
+    const off = { ...walk, id: "board-walk-off", enabled: false };
+    expect(reloadScheduler([off, walk, copy, job])).toEqual({ scheduled: 2, skipped: 1 });
+    expect(scheduledTasks).toHaveLength(2);
+  });
+
+  it("an empty name does not let a second job slip past the one-per-action guard", () => {
+    const nameless = { ...walk, name: "" };
+    const copy = { ...walk, id: "board-walk-copy", name: "copy" };
+    expect(reloadScheduler([nameless, copy])).toEqual({ scheduled: 1, skipped: 1 });
+    expect(armedActionJob("board-walk")).toBe(nameless);
+  });
+
+  it("reports the job it armed, skipping one that does not validate, and none once stopped", () => {
+    throwExpression = "61 * * * *";
+    const broken = { ...walk, id: "broken", schedule: throwExpression };
+    const second = { ...walk, id: "second" };
+    expect(reloadScheduler([broken, second])).toEqual({ scheduled: 1, skipped: 1 });
+    expect(armedActionJob("board-walk")).toBe(second);
+    reloadScheduler([{ ...walk, enabled: false }]);
+    expect(armedActionJob("board-walk")).toBeUndefined();
+    reloadScheduler([walk]);
+    stopScheduler();
+    expect(armedActionJob("board-walk")).toBeUndefined();
+  });
+
+  it("skips a job naming an action the gateway does not have", () => {
+    expect(reloadScheduler([{ ...walk, action: "launch" as never }])).toEqual({ scheduled: 0, skipped: 1 });
+  });
 });

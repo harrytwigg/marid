@@ -110,6 +110,19 @@ describe('patchSessionBackgroundActivity', () => {
     expect(data.sessions.find((s) => s.id === 'a')?.transportState).toBe('running')
   })
 
+  it('follows the status the gateway reports while background sub-agents work, and after', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(queryKeys.sessions.all, resp([session('a', { status: 'idle', transportState: 'idle' })]))
+    const subagents = { activeStreams: 0, activeAgents: 0, backgroundAgents: 1, lastActivityAt: '2026-06-10T00:00:00Z' }
+
+    patchSessionBackgroundActivity(qc, 'a', subagents, 'running', 'running')
+    const row = () => qc.getQueryData<SessionsResponse>(queryKeys.sessions.all)!.sessions.find((s) => s.id === 'a')
+    expect(row()).toMatchObject({ status: 'running', transportState: 'running' })
+
+    patchSessionBackgroundActivity(qc, 'a', { ...subagents, backgroundAgents: 0 }, 'idle', 'idle')
+    expect(row()).toMatchObject({ status: 'idle', transportState: 'idle' })
+  })
+
   it('is a no-op (same object) when the session is not in the cache', () => {
     const qc = new QueryClient()
     const initial = resp([session('a')])

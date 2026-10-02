@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { IdleCapacityStart, UsageSample } from "@/lib/api-idle-capacity"
+import type { StartedSession, UsageSample } from "@/lib/api-auto-dispatch"
 import { buildChartModel, fiveHourResets } from "../usage-chart-model"
 
 const NOW = Date.parse("2026-09-21T12:00:00Z")
@@ -10,6 +10,10 @@ const sample = (minutesAgo: number, windows: UsageSample["windows"]): UsageSampl
 const fiveHour = (used: number, resetsAt: number) => ({ name: "5h", usedPercent: used, resetsAt })
 const RESET_A = Math.floor((NOW - 2 * H) / 1000)
 const RESET_B = Math.floor((NOW + 3 * H) / 1000)
+const session = (at: number): StartedSession => ({
+  id: `s-${at}`, engine: "claude", model: null, employee: "todo-dispatcher", title: "Dispatch PLA-1", source: "web",
+  status: "idle", createdAt: new Date(at).toISOString(), startedBy: "board-walk-dispatch",
+})
 
 describe("fiveHourResets", () => {
   it("finds the roll between consecutive readings that carry the window, across a no-reset gap", () => {
@@ -43,11 +47,10 @@ describe("buildChartModel", () => {
       sample(60, [fiveHour(5, RESET_B), { name: "7d", usedPercent: 51, resetsAt: RESET_B }]),
       sample(0, [fiveHour(12, RESET_B), { name: "7d", usedPercent: 52, resetsAt: RESET_B }]),
     ]
-    const start = { workItemId: "PLA-1", commentId: "c", startedAt: new Date(NOW - 30 * 60_000).toISOString(), title: "t", status: "done", partial: false, weekly: [], fiveHour: { name: "5h", usedPercent: 8, minutesToReset: 200 } } as IdleCapacityStart
+    const start = session(NOW - 30 * 60_000)
     const model = buildChartModel({
       samples, starts: [start], now: NOW, frame,
-      projection: { kind: "projected", ratePerHour: 7, basisMs: H, from: { at: NOW, usedPercent: 12 }, resetAt: RESET_B * 1000, atReset: 33, aboveGate: false },
-      ceiling: 50,
+      projection: { kind: "projected", ratePerHour: 7, basisMs: H, from: { at: NOW, usedPercent: 12 }, resetAt: RESET_B * 1000, atReset: 33 },
     })
     expect(model.state).toBe("ready")
     expect(model.domain).toEqual({ start: NOW - 12 * H, end: RESET_B * 1000 })
@@ -55,16 +58,16 @@ describe("buildChartModel", () => {
     expect(model.series[0].segments.map((segment) => segment.length)).toEqual([1, 2])
     expect(model.series[1].name).toBe("7d")
     expect(model.starts).toHaveLength(1)
-    expect(model.starts[0].y).toBe(model.y(8))
+    // Placed on the five-hour line as the last reading before the start showed it.
+    expect(model.starts[0].y).toBe(model.y(5))
     expect(model.projection?.to.y).toBe(model.y(33))
-    expect(model.ceiling).toEqual({ y: model.y(50), percent: 50 })
     expect(model.nowX).toBeLessThan(model.projection!.to.x)
     expect(model.x(model.domain.start)).toBe(frame.inset.left)
     expect(model.y(0)).toBe(frame.height - frame.inset.bottom)
   })
 
   it("leaves a start outside the tail off the chart", () => {
-    const start = { workItemId: "PLA-1", commentId: "c", startedAt: new Date(NOW - 13 * H).toISOString(), title: "t", status: "done", partial: false, weekly: [] } as IdleCapacityStart
+    const start = session(NOW - 13 * H)
     const model = buildChartModel({ samples: [sample(60, [fiveHour(5, RESET_B)]), sample(0, [fiveHour(12, RESET_B)])], starts: [start], now: NOW, frame })
     expect(model.starts).toEqual([])
     expect(model.ticks.length).toBeGreaterThan(0)

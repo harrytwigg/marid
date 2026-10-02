@@ -77,13 +77,8 @@ function refuseDeadClaudeLogin(input: TurnInput): string | undefined {
   return refuseClaudeLaunch(input.employee);
 }
 
-/**
- * A workflow phase runs at the effort the workflow declared — the employee's
- * own default must not quietly re-rank a step the author sized deliberately.
- */
 function resolveTurnEffort(input: TurnInput, engineConfig: EngineConfig): string | undefined {
   const session = input.session;
-  if (session.workflowProvenance?.kind === "phase") return session.effortLevel ?? undefined;
   return resolveEffort(
     engineConfig,
     session,
@@ -140,7 +135,6 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
     employee: input.employee,
     engine: engineName,
     sessionId: session.id,
-    workflowAttempt: session.workflowProvenance?.kind === "phase",
   });
 
   // Per-engine config keyed by engine name; unconfigured optional engines

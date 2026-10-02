@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo, startTransiti
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
-import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, ListTree, Pin, Plus, Search, SquarePen, Trash2, Workflow as WorkflowIcon, X } from "lucide-react"
+import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, ListTree, Pin, Plus, Search, SquarePen, Trash2, X } from "lucide-react"
 import { api, type Employee, type SessionsResponse } from "@/lib/api"
 import { useOrg } from "@/hooks/use-employees"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
@@ -69,7 +69,6 @@ import {
   SESSION_MENU_SEPARATOR_CLASS,
   SessionRowMenu,
   SessionSelectCheckbox,
-  workflowRunPath,
 } from "@/components/chat/session-row-menu"
 import { chatSessionDragProps } from "@/routes/chat/chat-session-dnd"
 import { TreeCollapsedCount, TreeLead, TreeMarker, treeRowPadding, type HiddenTreeSignal, type TreeRowMeta } from "@/components/chat/session-tree-row"
@@ -154,13 +153,11 @@ const DISPATCHED_SOURCE_REF = /^(todo-dispatcher|todo-shaper|delegation):/
 
 /** A top-level session the operator did not start by typing into it: a system
  *  employee's run, a gateway-dispatched session, or any source the Focused
- *  filter already treats as automated. Workflow runs are left out because
- *  their own chip already says so. Tree view only; Focused is unchanged. */
+ *  filter already treats as automated. Tree view only; Focused is unchanged. */
 export function isDispatchedRoot(
   s: Pick<Session, "source" | "sourceRef" | "employee" | "parentSessionId">,
   employeeData: Map<string, Employee>,
 ): boolean {
-  if (s.source === "workflow") return false
   if (!isFocusedSession(s)) return true
   if (s.employee && employeeData.get(s.employee)?.system) return true
   return DISPATCHED_SOURCE_REF.test(String(s.sourceRef ?? ""))
@@ -220,37 +217,6 @@ export function isDirectSession(
 // Sources the sidebar renders (others, e.g. slack/telegram, are shown elsewhere).
 export function isVisibleSource(s: Pick<Session, "source">): boolean {
   return s.source === "web" || s.source === "terminal" || s.source === "talk" || s.source === "cron" || s.source === "workflow" || s.source === "plugin" || s.source === "whatsapp" || s.source === "discord" || !s.source
-}
-
-export function WorkflowSessionChip({
-  session,
-}: {
-  session: Pick<Session, "source" | "sourceRef">
-}) {
-  if (session.source !== "workflow") return null
-  const path = workflowRunPath(session.sourceRef)
-  if (!path) {
-    return (
-      <span
-        role="img"
-        aria-label="Workflow session"
-        className="flex size-[18px] shrink-0 items-center justify-center text-[var(--system-indigo)]"
-      >
-        <WorkflowIcon aria-hidden className="size-3.5" />
-      </span>
-    )
-  }
-  return (
-    <Link
-      to={path}
-      onClick={(event) => event.stopPropagation()}
-      aria-label="Open workflow run"
-      className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--system-indigo)_12%,transparent)] text-[var(--system-indigo)] transition-colors hover:bg-[color-mix(in_srgb,var(--system-indigo)_20%,transparent)]"
-      title="Open workflow run"
-    >
-      <WorkflowIcon aria-hidden className="size-3.5" />
-    </Link>
-  )
 }
 
 export { pickDeleteFallbackId, pickNeighborSessionId } from "@/components/chat/session-delete-fallback"
@@ -423,7 +389,6 @@ const SessionRow = React.memo(function SessionRow({
               {cleanPreview(sessionTitle) || "Untitled"}
             </span>
           )}
-          <WorkflowSessionChip session={session} />
           {isPinned ? (
             <Pin className="size-3 shrink-0 text-[var(--text-tertiary)] transition-opacity group-hover/session:lg:opacity-0 group-has-[[data-state=open]]/session:lg:opacity-0" />
           ) : null}
@@ -634,7 +599,6 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
           {isArchived ? (
             <span className="shrink-0 text-caption2 font-medium text-[var(--text-tertiary)]">Archived</span>
           ) : null}
-          <WorkflowSessionChip session={session} />
           {isPinned && !hidePin ? (
             <Pin className="size-3 shrink-0 text-[var(--text-tertiary)] transition-opacity group-hover/flat:lg:opacity-0 group-has-[[data-state=open]]/flat:lg:opacity-0" />
           ) : null}
@@ -844,7 +808,6 @@ const EmployeeRow = React.memo(function EmployeeRow({
                 <span className="shrink-0 tabular-nums">
                   {sessionCount === 1 ? "1 chat" : `${sessionCount} chats`}
                 </span>
-                <WorkflowSessionChip session={latestSession} />
                 {isPinned ? (
                   <Pin className="size-3 shrink-0 text-[var(--text-tertiary)]" />
                 ) : null}
@@ -1262,7 +1225,7 @@ export function ChatSidebar({
     // ---- Default mode. In Focused, the recency buckets (Today / Yesterday /
     // Older) hold only the operator's own top-level chats (isFocusedSession) —
     // delegated and automated sessions never flood the switcher. "All" shows
-    // every visible session as flat rows (children, workflow runs, the lot)
+    // every visible session as flat rows (children, automated runs, the lot)
     // and reveals the per-employee Team directory (every employee's full
     // session history, grouped, with true counts).
     // Cron sessions are excluded entirely: Scheduled lives on the Cron page,
@@ -1314,8 +1277,8 @@ export function ChatSidebar({
       }
       if (focusMode === "tree") continue
       // All means all: every visible non-cron session is a flat recency row —
-      // delegated children, workflow runs (badged by the indigo
-      // WorkflowSessionChip), the lot. Focused stays strictly the operator's
+      // delegated children, automated runs, the
+      // lot. Focused stays strictly the operator's
       // own chats; the Team directory keeps the grouped per-employee view.
       if (focusMode !== "all" && !isFocusedSession(s)) {
         hiddenAutomated += 1

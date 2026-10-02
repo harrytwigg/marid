@@ -73,7 +73,6 @@ function Phone({ ignoreSelect = false, lateTitleFor }: PhoneProps) {
         onRemove={noop}
         onMeta={noop}
         onNewMeta={noop}
-        onOpenFile={noop}
         onPeek={noop}
         onNewChat={noop}
         onRefresh={noop}

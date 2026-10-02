@@ -102,8 +102,8 @@ describe("PageScaffold", () => {
 
     const { container } = render(
       <PageScaffold
-        header={<LargeTitleHeader title="Workflows" />}
-        primaryAction={<PrimaryAction aria-label="New workflow" label="New workflow" onClick={() => {}} />}
+        header={<LargeTitleHeader title="Todos" />}
+        primaryAction={<PrimaryAction aria-label="New todo" label="New todo" onClick={() => {}} />}
       >
         <p>list</p>
       </PageScaffold>,

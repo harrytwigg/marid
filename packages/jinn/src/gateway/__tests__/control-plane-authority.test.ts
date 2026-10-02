@@ -15,7 +15,6 @@ import {
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-control-plane-"));
 process.env.JINN_HOME = tmpHome;
-process.env.JINN_WORKFLOW_EVIDENCE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-control-plane-wf-"));
 
 const safePortalName = "Portal COO";
 const collidingPortalName = "platform-worker";
@@ -65,15 +64,13 @@ fs.writeFileSync(path.join(cronDir, "jobs.json"), JSON.stringify([{ id: "existin
 type Api = typeof import("../api.js");
 type Registry = typeof import("../../sessions/registry.js");
 type Store = typeof import("../../work-items/store.js");
-type Approvals = typeof import("../../work-items/approvals.js");
-type ApprovalAuthority = typeof import("../approval-authority.js");
+type OrgRoot = typeof import("../work-item-owner.js");
 type Auth = typeof import("../auth.js");
 
 let api: Api;
 let registry: Registry;
 let store: Store;
-let approvals: Approvals;
-let approvalAuthority: ApprovalAuthority;
+let owner: OrgRoot;
 let auth: Auth;
 let worker: import("../../shared/types.js").Session;
 let peer: import("../../shared/types.js").Session;
@@ -169,8 +166,7 @@ beforeAll(async () => {
   api = await import("../api.js");
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
-  approvals = await import("../../work-items/approvals.js");
-  approvalAuthority = await import("../approval-authority.js");
+  owner = await import("../work-item-owner.js");
   auth = await import("../auth.js");
   (await import("../../shared/db.js")).initDb();
   worker = registry.createSession({ engine: "codex", source: "web", sourceRef: "worker", title: "worker", employee: "platform-worker" });
@@ -250,17 +246,17 @@ describe("control-plane writes require operator authority", () => {
     expect(registry.getSessionDelivery(accepted.id)).toMatchObject({ status: "accepted" });
   });
   it("fails anonymous Todo writes closed while bearer, cookie, and session capabilities keep their exact authority", async () => {
-    const anonymousAssign = store.createWorkItem({ title: "Anonymous assign target", status: "assigned", assignee: "platform-worker", source: "human" });
-    const anonymousArchive = store.createWorkItem({ title: "Anonymous archive target", status: "assigned", assignee: "platform-worker", source: "human" });
+    const anonymousAssign = store.createWorkItem({ title: "Anonymous assign target", status: "backlog", assignee: "platform-worker", source: "human" });
+    const anonymousArchive = store.createWorkItem({ title: "Anonymous archive target", status: "backlog", assignee: "platform-worker", source: "human" });
 
     expect((await call("POST", `/api/work-items/${anonymousAssign.id}/assign`, { assignee: "platform-peer" })).status).toBe(403);
     expect((await call("POST", `/api/work-items/${anonymousArchive.id}/archive`, { note: "anonymous" })).status).toBe(403);
-    expect(store.getWorkItem(anonymousAssign.id)).toMatchObject({ assignee: "platform-worker", status: "assigned" });
-    expect(store.getWorkItem(anonymousArchive.id)?.status).toBe("assigned");
+    expect(store.getWorkItem(anonymousAssign.id)).toMatchObject({ assignee: "platform-worker", status: "backlog" });
+    expect(store.getWorkItem(anonymousArchive.id)?.status).toBe("backlog");
 
     const bearerHeaders = { authorization: "Bearer test-token" };
-    const bearerAssign = store.createWorkItem({ title: "Bearer assign target", status: "assigned", assignee: "platform-worker", source: "human" });
-    const bearerArchive = store.createWorkItem({ title: "Bearer archive target", status: "assigned", assignee: "platform-worker", source: "human" });
+    const bearerAssign = store.createWorkItem({ title: "Bearer assign target", status: "backlog", assignee: "platform-worker", source: "human" });
+    const bearerArchive = store.createWorkItem({ title: "Bearer archive target", status: "backlog", assignee: "platform-worker", source: "human" });
     expect((await call("POST", `/api/work-items/${bearerAssign.id}/assign`, { assignee: "platform-peer" }, bearerHeaders)).status).toBe(200);
     expect((await call("POST", `/api/work-items/${bearerArchive.id}/archive`, {}, bearerHeaders)).status).toBe(200);
 
@@ -270,17 +266,17 @@ describe("control-plane writes require operator authority", () => {
     expect(bootstrap.status).toBe(200);
     const rawCookies = Array.isArray(bootstrap.header("set-cookie")) ? bootstrap.header("set-cookie") : [bootstrap.header("set-cookie")];
     const cookie = (rawCookies as string[]).map((part) => part.split(";")[0]).join("; ");
-    const cookieAssign = store.createWorkItem({ title: "Cookie assign target", status: "assigned", assignee: "platform-worker", source: "human" });
-    const cookieArchive = store.createWorkItem({ title: "Cookie archive target", status: "assigned", assignee: "platform-worker", source: "human" });
+    const cookieAssign = store.createWorkItem({ title: "Cookie assign target", status: "backlog", assignee: "platform-worker", source: "human" });
+    const cookieArchive = store.createWorkItem({ title: "Cookie archive target", status: "backlog", assignee: "platform-worker", source: "human" });
     expect((await call("POST", `/api/work-items/${cookieAssign.id}/assign`, { assignee: "platform-peer" }, { cookie })).status).toBe(200);
     expect((await call("POST", `/api/work-items/${cookieArchive.id}/archive`, {}, { cookie })).status).toBe(200);
 
-    const scopedTarget = store.createWorkItem({ title: "Scoped authority target", status: "assigned", assignee: "platform-worker", source: "human" });
+    const scopedTarget = store.createWorkItem({ title: "Scoped authority target", status: "backlog", assignee: "platform-worker", source: "human" });
     expect((await call("POST", `/api/work-items/${scopedTarget.id}/assign`, { assignee: "platform-peer" }, toolHeaders(peer))).status).toBe(403);
     expect(store.getWorkItem(scopedTarget.id)?.assignee).toBe("platform-worker");
     const claimable = store.createWorkItem({ title: "Scoped self claim", status: "backlog", assignee: null, source: "human" });
     expect((await call("POST", `/api/work-items/${claimable.id}/assign`, { assignee: "platform-peer" }, toolHeaders(peer))).status).toBe(200);
-    expect(store.getWorkItem(claimable.id)).toMatchObject({ assignee: "platform-peer", status: "assigned" });
+    expect(store.getWorkItem(claimable.id)).toMatchObject({ assignee: "platform-peer", status: "backlog" });
   });
 
   it("rejects a capability-bound worker PUT /api/config and leaves portalName unchanged", async () => {
@@ -471,86 +467,26 @@ describe("control-plane writes require operator authority", () => {
 });
 
 describe("portal fallback is a virtual root, not employee authority", () => {
-  it("breaks the config-spoof-to-self-approve chain at both the config write and virtual-root decision check", async () => {
+  it("breaks the config-spoof-to-root-standing chain at both the config write and the virtual root", async () => {
     writeConfig();
     const blockedConfig = await call("PUT", "/api/config", { portal: { portalName: collidingPortalName } }, toolHeaders(worker));
     expect(blockedConfig.status).toBe(403);
 
     writeConfig(collidingPortalName);
-    const root = approvalAuthority.resolveRootApprovalTarget() as { name: string; department: string | null; kind?: string } | null;
+    const root = owner.resolveOrgRoot();
     expect(root).toBeTruthy();
     expect(root?.kind).toBe("virtual");
     expect(root?.name).not.toBe(collidingPortalName);
 
-    const item = store.createWorkItem({ title: "collision-root approval", source: "human", status: "backlog" });
-    const approval = approvals.requestApproval(item.id, { request: "Approve collision root", actor: "test" });
-    expect(approval.approvalTarget).toBe(root?.name);
-    expect(approval.approvalTarget).not.toBe(collidingPortalName);
+    const item = store.createWorkItem({ title: "collision-root assignment", source: "human", status: "backlog" });
+    const workerAssign = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "platform-peer" }, toolHeaders(worker));
+    expect(workerAssign.status).toBe(403);
 
-    const workerDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, toolHeaders(worker));
-    expect(workerDecision.status).toBe(403);
+    const peerAssign = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "platform-worker" }, toolHeaders(peer));
+    expect(peerAssign.status).toBe(403);
 
-    const peerDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, toolHeaders(peer));
-    expect(peerDecision.status).toBe(403);
-
-    const operatorDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, { authorization: "Bearer test-token" });
-    expect(operatorDecision.status).toBe(200);
-    expect(operatorDecision.body.workItem).toMatchObject({ approvalState: "approved", approvalDecidedBy: "operator", approvalTarget: root?.name });
-  });
-
-  it("keeps a persisted virtual-root target virtual after an org employee later claims the same name", async () => {
-    const driftRoot = "Drift Root";
-    const driftFile = path.join(orgDir, "drift-root.yaml");
-    fs.rmSync(driftFile, { force: true });
-    writeConfig(driftRoot);
-
-    const item = store.createWorkItem({ title: "org-drift virtual root", source: "human", status: "backlog" });
-    const approval = approvals.requestApproval(item.id, { request: "Approve before drift", actor: "test" });
-    expect(approval.approvalTarget).toBe(driftRoot);
-    expect(approval.approvalTargetKind).toBe("virtual");
-
-    fs.writeFileSync(
-      driftFile,
-      "name: Drift Root\ndisplayName: Drift Root\ndepartment: platform\nrank: employee\nreportsTo: platform-manager\nengine: codex\nmodel: gpt-5.5\npersona: Attempts to claim the persisted virtual root.\n",
-    );
-    const driftSession = registry.createSession({ engine: "codex", source: "web", sourceRef: "drift", title: "drift", employee: driftRoot });
-
-    const employeeDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, toolHeaders(driftSession));
-    expect(employeeDecision.status).toBe(403);
-
-    const operatorDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, { authorization: "Bearer test-token" });
-    expect(operatorDecision.status).toBe(200);
-    expect(operatorDecision.body.workItem).toMatchObject({ approvalState: "approved", approvalDecidedBy: "operator", approvalTarget: driftRoot });
-
-    fs.rmSync(driftFile, { force: true });
-    writeConfig();
-  });
-
-  it("treats legacy NULL target-kind rows as non-employee-decidable after org drift", async () => {
-    const legacyRoot = "Legacy Root";
-    const legacyFile = path.join(orgDir, "legacy-root.yaml");
-    fs.rmSync(legacyFile, { force: true });
-    writeConfig(legacyRoot);
-
-    const item = store.createWorkItem({ title: "legacy virtual root", source: "human", status: "backlog" });
-    const approval = approvals.requestApproval(item.id, { request: "Approve before kind column existed", actor: "test" });
-    expect(approval.approvalTarget).toBe(legacyRoot);
-    expect(approval.approvalTargetKind).toBe("virtual");
-
-    (await import("../../shared/db.js")).initDb().prepare("UPDATE work_item_approvals SET target_kind = NULL WHERE work_item_id = ?").run(approval.id);
-    fs.writeFileSync(
-      legacyFile,
-      "name: Legacy Root\ndisplayName: Legacy Root\ndepartment: platform\nrank: employee\nreportsTo: platform-manager\nengine: codex\nmodel: gpt-5.5\npersona: Attempts to claim a legacy persisted approval target.\n",
-    );
-    const legacySession = registry.createSession({ engine: "codex", source: "web", sourceRef: "legacy-root", title: "legacy root", employee: legacyRoot });
-
-    const employeeDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, toolHeaders(legacySession));
-    expect(employeeDecision.status).toBe(403);
-
-    const operatorDecision = await call("POST", `/api/work-items/${approval.id}/approval`, { decision: "approve" }, { authorization: "Bearer test-token" });
-    expect(operatorDecision.status).toBe(200);
-
-    fs.rmSync(legacyFile, { force: true });
-    writeConfig();
+    const operatorAssign = await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "platform-peer" }, { authorization: "Bearer test-token" });
+    expect(operatorAssign.status).toBe(200);
+    expect(operatorAssign.body.workItem).toMatchObject({ assignee: "platform-peer" });
   });
 });

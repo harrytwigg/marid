@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { initDb } from '../shared/db.js';
+import { recordCommentMeta, withCommentMeta } from './comment-meta.js';
 import { parseTodoId } from './id.js';
 import { appendWorkItemEvent } from './store.js';
 import {
@@ -25,7 +26,7 @@ function rowToComment(row: Record<string, unknown>): WorkItemComment {
 
 function getComment(db: ReturnType<typeof initDb>, id: string): WorkItemComment | undefined {
   const row = db.prepare('SELECT * FROM work_item_comments WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return row ? rowToComment(row) : undefined;
+  return row ? withCommentMeta(db, [rowToComment(row)])[0] : undefined;
 }
 
 function operationCommentId(key: string): string {
@@ -96,6 +97,7 @@ function insertComment(
     `INSERT INTO work_item_comments (id, work_item_id, parent_comment_id, author_kind, author, body, created_at, edited_at, deleted_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
   ).run(comment.id, comment.workItemId, comment.parentCommentId, comment.authorKind, comment.author, comment.body, comment.createdAt);
+  recordCommentMeta(db, comment.id, { sessionId: comment.sessionId, repliedToId: comment.repliedToId });
   appendWorkItemEvent({
     workItemId: comment.workItemId,
     kind: 'comment_added',
@@ -131,6 +133,9 @@ export function addComment(input: AddCommentInput): WorkItemComment {
       throw new Error(`Todo ${workItemId} not found`);
     }
     comment.parentCommentId = resolvedParentId(db, input, workItemId);
+    // The comment a reply answered, before flattening re-parents it to the root.
+    if (input.parentCommentId) comment.repliedToId = input.parentCommentId;
+    if (input.sessionId) comment.sessionId = input.sessionId;
     const fingerprint = operationId ? commentFingerprint(input, workItemId, comment.parentCommentId) : null;
     const existing = replayedComment(db, comment, fingerprint);
     if (existing) return { comment: existing, replayed: true };

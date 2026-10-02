@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { paneTabHandlers, paneTabItems, tabsOfGroup, type PaneTabOps } from '../pane-tab-ops'
+import { paneTabHandlers, paneTabItems, selectTab, tabsOfGroup, type PaneTabOps } from '../pane-tab-ops'
+import { fileTabId } from '../file-tab'
 import {
-  closeSession, createSplitLayout, findGroup, focusSession, groupsOf, openInFocusedGroup, pinTab, placeTab, splitGroup, type SplitLayout,
+  closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, openFileTab, openInFocusedGroup, pinTab, placeTab, showTab, splitGroup, type SplitLayout,
 } from '../split-layout'
 
 const lookup = (id: string) => ({ a: { title: 'Alpha', employee: 'op', status: 'running' as const } })[id as 'a']
@@ -11,6 +12,7 @@ function drive(start: SplitLayout) {
   let layout = start
   const select = vi.fn((id: string) => { layout = focusSession(layout, id) })
   const ops: PaneTabOps = {
+    get layout() { return layout },
     place: (groupId, id, index) => { layout = placeTab(layout, groupId, id, index) },
     close: (id) => { layout = closeSession(layout, id) },
     select,
@@ -53,7 +55,7 @@ describe('paneTabHandlers', () => {
     const run = drive(layout)
     paneTabHandlers(groupId, run.ops).onReorder(before[0], before.length - 1)
     expect(findGroup(run.layout, groupId)!.tabs).toEqual([...before.slice(1), before[0]])
-    expect(run.select).toHaveBeenCalledWith(before[0])
+    expect(run.select).toHaveBeenCalledWith(before[0], expect.anything())
   })
 
   it('moves a tab in from another group, closing the group it leaves when that empties', () => {
@@ -73,7 +75,7 @@ describe('paneTabHandlers', () => {
     const group = findGroup(run.layout, groupId)!
     expect(group.tabs[1]).toBe('z')
     expect(group.activeTab).toBe('z')
-    expect(run.select).toHaveBeenCalledWith('z')
+    expect(run.select).toHaveBeenCalledWith('z', expect.anything())
   })
 
   it('closes a tab by session id, whether or not it is the shown one', () => {
@@ -102,5 +104,39 @@ describe('paneTabHandlers', () => {
     const split = splitGroup(layout, groupId, 'right', 'b')
     expect(groupsOf(split)).toHaveLength(2)
     expect(findGroup(split, groupId)!.tabs).not.toContain('b')
+  })
+})
+
+describe('paneTabHandlers routing (selectTab, as the provider wires it)', () => {
+  /** Edits commit only when the test says so, as React state does: select sees the strip's layout. */
+  function wired(start: SplitLayout) {
+    let layout = start
+    const route = vi.fn()
+    const ops: PaneTabOps = {
+      layout: start,
+      place: (groupId, id, index) => { layout = placeTab(layout, groupId, id, index) },
+      close: (id) => { layout = closeSession(layout, id) },
+      select: (id, after = start) => selectTab(after, id, (tabId) => { layout = showTab(layout, tabId) }, route),
+      pin: (id) => { layout = pinTab(layout, id) },
+    }
+    return { get layout() { return layout }, ops, route }
+  }
+  const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
+
+  it('routes to a sidebar chat dropped into a strip, though it was not in the layout yet', () => {
+    const start = openFileTab(createSplitLayout(['a'], 'a'), 'a', report)
+    const run = wired(start)
+    paneTabHandlers(groupsOf(start)[0].id, run.ops).onDropSession!('n', 3)
+    expect(run.route).toHaveBeenCalledWith('n')
+    expect(groupOfSession(run.layout, 'n')!.activeTab).toBe('n')
+  })
+
+  it('routes a file moved into another strip to the chat of the pane it landed in', () => {
+    const start = focusSession(openFileTab(createSplitLayout(['a', 'b'], 'a'), 'a', report), 'b')
+    const target = groupOfSession(start, 'b')!
+    const run = wired(start)
+    paneTabHandlers(target.id, run.ops).onMoveIn(groupOfSession(start, 'a')!.id, report, 1)
+    expect(run.route).toHaveBeenCalledWith('b')
+    expect(findGroup(run.layout, target.id)).toMatchObject({ tabs: ['b', report], activeTab: report })
   })
 })

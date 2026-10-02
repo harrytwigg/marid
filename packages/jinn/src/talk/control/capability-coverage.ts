@@ -48,21 +48,6 @@ export const TALK_COMPANY_CAPABILITY_COVERAGE = {
     operations: ["talk_delegate_todo"],
     evidence: "Todo-to-session link, child session, and dispatch rereads",
   },
-  "workflow-core": {
-    status: "supported",
-    operations: ["talk_start_workflow_run", "read_workflow_runs", "read_workflow_run"],
-    evidence: "workflow-run repository rereads",
-  },
-  "workflow-authoring-and-gates": {
-    status: "explicit-gap",
-    reason: "workflow-command-adapter-missing",
-    plannedAdapter: "reuse definition edits, run cancellation, input gates, and workflow approval commands",
-  },
-  "voice-approval": {
-    status: "supported",
-    operations: ["prepare_voice_approval", "commit_voice_approval"],
-    evidence: "operator-bound challenge, provider transcript identity, target revision, and durable decision audit",
-  },
   "topic-memory": {
     status: "supported",
     operations: ["talk_recall_topic", "talk_remember_topic"],
@@ -87,11 +72,6 @@ export const TALK_COMPANY_CAPABILITY_COVERAGE = {
     status: "explicit-gap",
     reason: "notes-command-adapter-missing",
     plannedAdapter: "reuse managed note list, read, create, and update commands",
-  },
-  experiments: {
-    status: "explicit-gap",
-    reason: "experiments-command-adapter-missing",
-    plannedAdapter: "reuse experiment create, reading, conclude, and reopen commands",
   },
   cron: {
     status: "explicit-gap",
@@ -131,7 +111,7 @@ export const TALK_COMPANY_CAPABILITY_COVERAGE = {
   "company-read-lanes": {
     status: "explicit-gap",
     reason: "company-read-lanes-adapter-missing",
-    plannedAdapter: "reuse knowledge, search, cost, connector, heartbeat, and managed approval reads",
+    plannedAdapter: "reuse knowledge, search, cost, connector, and heartbeat reads",
   },
 } as const satisfies Readonly<Record<string, TalkCompanyCapabilityCoverage>>;
 

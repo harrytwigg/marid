@@ -3,12 +3,10 @@ import { queryKeys } from "@/lib/query-keys"
 import {
   chatPath,
   cronPath,
-  experimentPath,
   orgPath,
   resolveTodoId,
   todoPath,
   todosPath,
-  workflowPath,
 } from "./nav-paths"
 import { talkNavigator } from "./router-handle"
 import { params, str, type TalkTool, type ToolArgs, type ToolResult } from "./tool-spec"
@@ -41,16 +39,16 @@ export function companyTodoPrefix(): string | null {
 }
 
 const BOARD = str(
-  'Which board: "home" for what the operator asked for or kept, "attention" for what needs them, "everything", or a department slug.',
+  'Which board: "everything" (the default), "attention" for what needs them, or a department slug.',
 )
 const STATUS = str("Restrict the board to one status.", [
-  "all", "backlog", "assigned", "executing", "blocked", "in_review", "escalated", "done", "cancelled",
+  "all", "backlog", "executing", "blocked", "in_review", "done", "cancelled",
 ])
 
 const openTodos: TalkTool = {
   name: "open_todos",
   description:
-    'Open the Todo board, optionally scoped and filtered. Use board "home" for anything the operator describes as theirs — "todos I started", "my requests", "what I am following".',
+    'Open the Todo board, optionally scoped and filtered. For "todos I started" or "my requests" use the source filter on the everything board.',
   parameters: params({
     board: BOARD,
     status: STATUS,
@@ -75,23 +73,6 @@ const openTodo: TalkTool = {
     if ("error" in resolved) return { ok: false, error: resolved.error }
     return go(todoPath(resolved.id))
   },
-}
-
-const openWorkflows: TalkTool = {
-  name: "open_workflows",
-  description: "Open the Workflow list, or one workflow by id. Ask for the runs lens to see its run history instead of its editor.",
-  parameters: params({
-    id: str("The workflow id, which is a slug such as \"nightly-digest\"."),
-    lens: str("Which lens to open the workflow in.", ["editor", "runs"]),
-  }),
-  execute: (args: ToolArgs) => go(workflowPath(args)),
-}
-
-const openExperiments: TalkTool = {
-  name: "open_experiments",
-  description: "Open the Experiments list, or one experiment by id.",
-  parameters: params({ id: str("The experiment id.") }),
-  execute: (args: ToolArgs) => go(experimentPath(args)),
 }
 
 const openChats: TalkTool = {
@@ -122,8 +103,6 @@ const openCron: TalkTool = {
 export const NAVIGATE_TOOLS: readonly TalkTool[] = [
   openTodos,
   openTodo,
-  openWorkflows,
-  openExperiments,
   openChats,
   openOrg,
   openCron,

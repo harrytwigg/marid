@@ -3,24 +3,24 @@ import { filtersFromSearchParams } from "@/lib/todos"
 import {
   chatPath,
   cronPath,
-  experimentPath,
   orgPath,
   resolveTodoId,
   todoPath,
   todosPath,
-  workflowPath,
 } from "../nav-paths"
 
 describe("todosPath", () => {
-  it("resolves \"executing todos I started\" to the home board filtered by status", () => {
-    // The done-when for this child: board `home` IS kept + roots only
-    // (boardScopeParams), so the whole request is one URL.
-    expect(todosPath({ board: "home", status: "executing" })).toBe("/todos/b/home?status=executing")
+  it("resolves \"executing todos\" to the everything board filtered by status", () => {
+    expect(todosPath({ board: "everything", status: "executing" })).toBe("/todos/b/everything?status=executing")
   })
 
-  it("defaults to the home board", () => {
-    expect(todosPath({})).toBe("/todos/b/home")
-    expect(todosPath({ status: "executing" })).toBe("/todos/b/home?status=executing")
+  it("defaults to the everything board", () => {
+    expect(todosPath({})).toBe("/todos/b/everything")
+    expect(todosPath({ status: "executing" })).toBe("/todos/b/everything?status=executing")
+  })
+
+  it("sends the retired home board to everything", () => {
+    expect(todosPath({ board: "home", status: "executing" })).toBe("/todos/b/everything?status=executing")
   })
 
   it("keeps the default status out of the URL", () => {
@@ -31,9 +31,9 @@ describe("todosPath", () => {
     expect(todosPath({ board: "platform" })).toBe("/todos/b/platform")
   })
 
-  it("falls back to the home board rather than a dead page for an unusable board", () => {
-    expect(todosPath({ board: "  " })).toBe("/todos/b/home")
-    expect(todosPath({ board: "../etc" })).toBe("/todos/b/home")
+  it("falls back to the everything board rather than a dead page for an unusable board", () => {
+    expect(todosPath({ board: "  " })).toBe("/todos/b/everything")
+    expect(todosPath({ board: "../etc" })).toBe("/todos/b/everything")
   })
 
   it("round-trips its filters back through the board's own parser", () => {
@@ -85,25 +85,7 @@ describe("todoPath", () => {
   })
 })
 
-describe("the remaining five domains", () => {
-  it("opens the workflow list, one workflow, and its runs lens", () => {
-    expect(workflowPath({})).toBe("/workflow")
-    expect(workflowPath({ id: "jinn-build" })).toBe("/workflow/jinn-build")
-    expect(workflowPath({ id: "jinn-build", lens: "runs" })).toBe("/workflow/jinn-build?lens=runs")
-    // `editor` is the page's default and stays out of the URL, matching how the
-    // page's own lens control writes it.
-    expect(workflowPath({ id: "jinn-build", lens: "editor" })).toBe("/workflow/jinn-build")
-  })
-
-  it("ignores a lens with no workflow to apply it to", () => {
-    expect(workflowPath({ lens: "runs" })).toBe("/workflow")
-  })
-
-  it("opens the experiment list and one experiment", () => {
-    expect(experimentPath({})).toBe("/experiments")
-    expect(experimentPath({ id: "exp_a1b2c3" })).toBe("/experiments/exp_a1b2c3")
-  })
-
+describe("the remaining three domains", () => {
   it("opens chats and one session", () => {
     expect(chatPath({})).toBe("/")
     expect(chatPath({ sessionId: "abc-123" })).toBe("/?session=abc-123")
@@ -128,7 +110,7 @@ describe("the remaining five domains", () => {
   })
 
   it("escapes an id that would otherwise change the route", () => {
-    expect(workflowPath({ id: "a/b" })).toBe("/workflow/a%2Fb")
+    expect(cronPath({ id: "a/b" })).toBe("/cron/a%2Fb")
     expect(cronPath({ id: "a b" })).toBe("/cron/a%20b")
   })
 })

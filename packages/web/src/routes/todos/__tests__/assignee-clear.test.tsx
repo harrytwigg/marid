@@ -17,6 +17,7 @@ vi.mock("@/routes/providers", () => ({ useTheme: () => ({ theme: "dark" }) }))
 const getWorkItem = vi.fn()
 const getWorkItemTree = vi.fn()
 const updateWorkItem = vi.fn()
+const assignWorkItem = vi.fn().mockResolvedValue({ workItem: {} })
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>()
@@ -26,6 +27,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getWorkItem: (...args: unknown[]) => getWorkItem(...args),
       getWorkItemTree: (...args: unknown[]) => getWorkItemTree(...args),
       updateWorkItem: (...args: unknown[]) => updateWorkItem(...args),
+      assignWorkItem: (...args: unknown[]) => assignWorkItem(...args),
       setWorkItemStatus: vi.fn(),
       setWorkItemLabels: vi.fn(),
       listLabels: vi.fn().mockResolvedValue({ labels: [] }),
@@ -38,6 +40,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
         employees: [
           { name: "mason", displayName: "Mason", department: "platform", rank: "senior", engine: "codex", model: "m", persona: "p" },
           { name: "scout", displayName: "Scout", department: "marketing", rank: "employee", engine: "codex", model: "m", persona: "p" },
+          // A system employee is on the roster but never offered as an assignee.
+          { name: "todo-dispatcher", displayName: "Todo Dispatcher", department: "system", rank: "senior", engine: "claude", model: "m", persona: "p", system: true },
         ],
         hierarchy: { root: null, sorted: [], warnings: [] },
       }),
@@ -49,10 +53,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
 function full(id: string, overrides: Partial<WorkItemFullWire> = {}): WorkItemFullWire {
   return {
     id, version: 3, title: `Item ${id}`, body: null, status: "executing", department: "platform",
-    assignee: null, priority: 2, rank: null, source: "human", sourceRef: null, acceptance: null,
-    verifyPolicy: null, rounds: 1, budgetUsd: null, approvalState: null, approvalRequest: null,
-    approvalRef: null, approvalTarget: null, approvalEscalatedAt: null, approvalDecidedBy: null,
-    approvalDecidedAt: null, createdBy: "operator", parentId: null, rootId: id, depth: 0,
+    assignee: null, priority: 2, rank: null, source: "human", sourceRef: null,
+    rounds: 1, budgetUsd: null,
+    createdBy: "operator", parentId: null, rootId: id, depth: 0,
     dueAt: null, createdAt: "2026-07-20T08:00:00.000Z", updatedAt: "2026-07-23T08:00:00.000Z",
     closedAt: null, ...overrides,
   }
@@ -96,6 +99,7 @@ describe("the assignee picker's Unassign row", () => {
     const rows = [...picker.querySelectorAll<HTMLElement>('[data-testid^="assignee-option-"]')]
     expect(rows.map((row) => row.dataset.testid)).toEqual([
       "assignee-option-unassign",
+      "assignee-option-@operator",
       "assignee-option-mason",
       "assignee-option-scout",
     ])
@@ -163,5 +167,23 @@ describe("clearing the assignee without opening a picker", () => {
     await screen.findByTestId("rail-assignee")
     expect(screen.queryByTestId("rail-assignee-clear")).toBeNull()
     expect(screen.queryByTestId("chip-assignee-clear")).toBeNull()
+  })
+})
+
+describe("the operator as an assignee", () => {
+  it("offers 'You (operator)' and posts the reserved value", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
+    renderTask()
+    fireEvent.click(await screen.findByTestId("rail-assignee"))
+    const option = await screen.findByTestId("assignee-option-@operator")
+    expect(option.textContent).toContain("You (operator)")
+    fireEvent.click(option)
+    await waitFor(() => expect(assignWorkItem).toHaveBeenCalledWith("PLA-12", "@operator"))
+  })
+
+  it("shows the reserved value as You", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { assignee: "@operator" })))
+    renderTask()
+    expect((await screen.findByTestId("rail-assignee")).textContent).toContain("You")
   })
 })

@@ -1,8 +1,8 @@
 name: Migration bundle
 
-# publish-npm.yml verifies the same bundle, but at release time — when a stale
-# bundle is a scramble against an already-pushed tag instead of one more commit
-# on a PR. The bundle is derived from a diff of packages/jinn/template/, so any
+# The release skill runs the same check before tagging; catching a stale bundle
+# here makes it one more commit on a PR instead of a scramble at release time.
+# The bundle is derived from a diff of packages/jinn/template/, so any
 # edit under it can stale the bundle, not only edits to template/migrations/.
 #
 # Path-filtered workflows report nothing on PRs that miss their paths, so this
@@ -43,13 +43,20 @@ jobs:
           if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
             echo "Checking unreleased migration $VERSION while package remains at $PACKAGE_VERSION"
           fi
-          # Same derivation and same command as the release job, so a PR can never
-          # pass a gate the release then fails. The branch matters: --base-ref is
+          # Same derivation and command as the release skill's step 4, so a PR
+          # cannot pass a check the release then fails. The branch matters: --base-ref is
           # validated as a version tag, and once v$VERSION is tagged, passing it
           # would diff the version against itself and always report current.
+          # Only plain release tags count: any other tag (a deploy marker or a
+          # prerelease, say) would be picked as the base and then rejected by
+          # --base-ref validation.
           if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
-            BASE="$(git describe --tags --abbrev=0 "v$VERSION^")"
+            BASE="$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' "v$VERSION^" 2>/dev/null || true)"
           else
-            BASE="$(git describe --tags --abbrev=0)"
+            BASE="$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' 2>/dev/null || true)"
+          fi
+          if [ -z "$BASE" ]; then
+            echo "::error::No release tag (v*) is reachable from this commit, so there is no base to diff the template against. The release tags must be present in this repository for the check to run."
+            exit 1
           fi
           pnpm --filter jinn-cli migration:check -- --base-ref "$BASE" --version "$VERSION" --allow-unreleased

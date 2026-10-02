@@ -6,7 +6,6 @@ import { Readable, Writable } from "node:stream";
 import type { ServerResponse } from "node:http";
 
 process.env.JINN_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-read-guard-home-"));
-process.env.JINN_WORKFLOW_EVIDENCE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-read-guard-wf-"));
 
 type Api = typeof import("../api.js");
 type Registry = typeof import("../../sessions/registry.js");
@@ -177,7 +176,6 @@ beforeAll(async () => {
     path.join(process.env.JINN_HOME!, "skills", "sample-skill", "SKILL.md"),
     "---\nname: sample-skill\ndescription: Generic sample skill.\n---\n\n# Sample\n",
   );
-  fs.mkdirSync(path.join(process.env.JINN_WORKFLOW_EVIDENCE_ROOT!, "workflows"), { recursive: true });
 
   api = await import("../api.js");
   registry = await import("../../sessions/registry.js");

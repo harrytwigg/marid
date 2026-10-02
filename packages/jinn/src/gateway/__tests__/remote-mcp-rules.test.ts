@@ -23,7 +23,6 @@ import {
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-remote-mcp-rules-"));
 process.env.JINN_HOME = tmpHome;
-process.env.JINN_WORKFLOW_EVIDENCE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-remote-mcp-rules-wf-"));
 fs.writeFileSync(path.join(tmpHome, "config.yaml"), yaml.dump({
   gateway: { notesEnabled: true },
   engines: { default: "codex", claude: {}, codex: { bin: "codex", model: "gpt-5.5" } },
@@ -36,8 +35,6 @@ fs.writeFileSync(path.join(tmpHome, "knowledge", "state.md"), "# State\n");
 type Session = import("../../shared/types.js").Session;
 let api: typeof import("../api.js");
 let registry: typeof import("../../sessions/registry.js");
-let approvalAuthority: typeof import("../approval-authority.js");
-let deciders: typeof import("../workflow-decider-authority.js");
 let dispatchConfig: typeof import("../../work-items/dispatch-config.js");
 let labels: typeof import("../../work-items/labels.js");
 let preflight: typeof import("../../sessions/turn/preflight.js");
@@ -88,8 +85,6 @@ const operator = { authorization: "Bearer test-token" };
 beforeAll(async () => {
   api = await import("../api.js");
   registry = await import("../../sessions/registry.js");
-  approvalAuthority = await import("../approval-authority.js");
-  deciders = await import("../workflow-decider-authority.js");
   dispatchConfig = await import("../../work-items/dispatch-config.js");
   labels = await import("../../work-items/labels.js");
   preflight = await import("../../sessions/turn/preflight.js");
@@ -104,17 +99,6 @@ describe("the connector anchor is not the COO portal (D2, SC-007)", () => {
     expect(registry.isPortalAgentSession({ ...connector, source: "web" })).toBe(true);
   });
 
-  it("cannot decide a COO-decidable or an operator-only approval", () => {
-    const item = { id: operatorTodo } as never;
-    for (const opts of [{ cooDecidable: true }, { operatorOnly: true }]) {
-      expect(approvalAuthority.resolveApprovalDecisionAuthority(connectorHeaders(), item, opts).ok).toBe(false);
-    }
-  });
-
-  it("decides Workflow gates as an employee, never as the COO", () => {
-    expect(deciders.deciderAuthority(`session:${connector.id}`)).toBe("employee");
-  });
-
   it("never runs an engine turn (D3)", () => {
     const result = preflight.preflightTurn({ session: connector, engines: new Map(), config: {} } as never);
     expect(result).toMatchObject({ ok: false });
@@ -124,13 +108,12 @@ describe("the connector anchor is not the COO portal (D2, SC-007)", () => {
 
 describe("the gateway admits only the connector's profile routes (D4)", () => {
   it.each([
-    ["POST", () => `/api/work-items/${operatorTodo}/status`, { status: "executing" }],
     ["POST", () => "/api/sessions", { prompt: "hi" }],
     ["POST", () => `/api/sessions/${connector.id}/stop`, {}],
     ["GET", () => "/api/knowledge/read?path=config.yaml", undefined],
     ["POST", () => `/api/work-items/${operatorTodo}/attachments`, { path: "/etc/hostname" }],
-    ["POST", () => "/api/experiments", { name: "x" }],
-    ["GET", () => "/api/workflows/abc/runs/xyz/approval", undefined],
+    ["GET", () => "/api/experiments", undefined],
+    ["GET", () => "/api/workflows", undefined],
   ])("refuses %s %s", async (method, url, body) => {
     const r = await call(method, url(), body);
     expect(r.status).toBe(403);
@@ -185,6 +168,31 @@ describe("connector writes stand where the operator's do (FR-013a lifted)", () =
     const operatorNote = await call("POST", "/api/notes", { title: "Operator runbook", folder: "runbooks" }, operator);
     const updated = await call("PUT", "/api/notes", { path: operatorNote.body.note.path, expectedRevision: operatorNote.body.note.revision, body: "rewritten by voice" });
     expect(updated.status).toBe(200);
+  });
+
+  it("closes, cancels and archives a Todo, where an ordinary employee session cannot", async () => {
+    const employee = registry.createSession({ engine: "codex", source: "web", sourceRef: "web:remote-rules-employee", employee: "platform-worker" });
+    const employeeHeaders = {
+      [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
+      [CALLER_SESSION_HEADER]: employee.id,
+      [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(employee.id),
+    };
+    const fresh = async (title: string) => (await call("POST", "/api/work-items", { title }, operator)).body.workItem.id as string;
+    const statusOf = async (id: string) => (await call("GET", `/api/work-items/${id}`, undefined, operator)).body.workItem.status;
+
+    const toClose = await fresh("Close from claude.ai");
+    const toCancel = await fresh("Cancel from claude.ai");
+    const toArchive = await fresh("Archive from claude.ai");
+    const refused = await fresh("Refused for an employee");
+
+    expect((await call("POST", `/api/work-items/${toClose}/status`, { status: "done" })).status).toBe(200);
+    expect((await call("POST", `/api/work-items/${toCancel}/status`, { status: "cancelled" })).status).toBe(200);
+    expect((await call("POST", `/api/work-items/${toArchive}/archive`, {})).status).toBe(200);
+    expect([await statusOf(toClose), await statusOf(toCancel), await statusOf(toArchive)]).toEqual(["done", "cancelled", "cancelled"]);
+
+    expect((await call("POST", `/api/work-items/${refused}/status`, { status: "done" }, employeeHeaders)).status).toBe(403);
+    expect((await call("POST", `/api/work-items/${refused}/archive`, {}, employeeHeaders)).status).toBe(403);
+    expect(await statusOf(refused)).toBe("backlog");
   });
 
   it("still records a comment, and still has no attachment route", async () => {

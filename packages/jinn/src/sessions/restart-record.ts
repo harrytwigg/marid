@@ -40,9 +40,7 @@ export type RestartResumeOwner =
   | "restart-resume"
   /** It asked for the restart itself: the next boot posts the restart notice in it and stamps it
    *  for a `requested` nudge, unless a requester guard holds the nudge back. */
-  | "restart-notice"
-  /** A workflow attempt: the workflow runtime replaces the attempt (workflows/restart-redispatch.ts). */
-  | "workflow-runtime";
+  | "restart-notice";
 
 export type RestartResumeOutcome =
   /** The nudge was claimed and handed to the delivery outbox. */
@@ -62,14 +60,15 @@ export type RestartResumeOutcome =
   /** A restart requester that asked again too soon after its last requester nudge: notice only. */
   | "loop-guard"
   /** A restart acknowledgement older than this restart (a request whose restart never ran): notice only. */
-  | "stale";
+  | "stale"
+  /** One of the board walk's own turns: the next tick replaces it, so it is not resumed. */
+  | "board-walk-turn";
 
 interface RestartRecordSession {
   sessionId: string;
   employee: string | null;
   engine: string;
   workItemId: string | null;
-  workflowKind: string | null;
   title: string | null;
 }
 
@@ -135,7 +134,6 @@ function sessionFields(session: Session): RestartRecordSession {
     employee: session.employee ?? null,
     engine: session.engine,
     workItemId: session.workItemId ?? null,
-    workflowKind: session.workflowProvenance?.kind ?? null,
     title: session.title ?? null,
   };
 }

@@ -19,9 +19,6 @@
       "@jinn/plugin-sdk": [
         "./src/plugins/sdk/index.ts"
       ],
-      "@jinn/workflow-wire": [
-        "../jinn/src/workflows/wire.ts"
-      ],
       "@jinn/fallback-map-wire": [
         "../jinn/src/shared/fallback-map-wire.ts"
       ],

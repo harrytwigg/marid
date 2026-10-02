@@ -80,7 +80,7 @@ export function StopCauseLead({ item, className = "" }: { item: WorkItemCompactW
         <span className="flex min-w-0 max-w-full flex-col text-[12px] leading-[1.35]">
           <span
             className="truncate font-medium"
-            style={{ color: item.status === "escalated" ? "var(--system-red)" : "var(--system-orange)" }}
+            style={{ color: "var(--system-orange)" }}
           >
             {hint.what}
           </span>

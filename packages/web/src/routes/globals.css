@@ -1315,19 +1315,15 @@ h1, h2, h3, h4, h5, h6 {
 .react-flow__controls-button:hover { background: var(--material-thin) !important; color: var(--text-primary) !important; }
 /* Edge stroke/width/opacity are set per-edge inline by the layout seam. */
 .react-flow__node { transition: transform 200ms var(--ease-spring); }
-/* GRS-019: React Flow stamps inline pointer-events:none on nodes that are not
-   selectable/draggable/connectable — which silently killed tap-to-inspect on
-   the read-only workflow canvas (selection is OURS, via the card button).
-   Re-enable hit-testing on the node wrapper; the pane still pans/zooms. */
+/* React Flow stamps inline pointer-events:none on nodes that are not
+   selectable/draggable/connectable, which silently kills taps on a node whose
+   selection is handled by the node's own content. Re-enable hit-testing on the
+   node wrapper; the pane still pans/zooms. */
 .react-flow__node { pointer-events: all !important; }
-/* A draggable workflow card owns the active finger until drop. Without this,
-   the global mobile pan gesture can cancel React Flow's touch drag before its
-   stop event persists geometry. Empty canvas space still pans and pinches. */
+/* A draggable node owns the active finger until drop. Without this, the global
+   mobile pan gesture can cancel React Flow's touch drag before its stop event
+   fires. Empty canvas space still pans and pinches. */
 .react-flow__node.draggable { touch-action: none; }
-/* Workflow canvas ports: a 24px touch hit-area around every 8px dot (inert
-   until connect-by-drag lands; the dot + halo are inline on the handle). */
-.jinn-port { position: absolute; }
-.jinn-port::after { content: ""; position: absolute; inset: -8px; border-radius: 999px; }
 /* Reduced motion on the canvas: no marching dash, no pulse/spin, instant tidy. */
 @media (prefers-reduced-motion: reduce) {
   .react-flow__edge.animated .react-flow__edge-path { animation: none !important; stroke-dasharray: none !important; }

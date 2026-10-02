@@ -4,6 +4,10 @@ import path from "node:path";
 import type { ResolvedMcpConfig, McpServerStdioConfig } from "../shared/types.js";
 import { resolveJinnHome, resolveMcpSessionCapabilityKeyFile } from "../shared/home.js";
 
+/** Names the toolset a jinn server serves in place of the company belt
+ *  (toolsets.ts `toolsFor`). The gateway puts it on the server's spec; nothing
+ *  the model can reach sets it. */
+export const MCP_TOOLSET_ARG = "--jinn-toolset";
 export const MCP_SESSION_ID_ARG = "--jinn-session-id";
 export const MCP_HOME_ARG = "--jinn-home";
 export const MCP_GATEWAY_URL_ARG = "--jinn-gateway-url";
@@ -57,9 +61,6 @@ export const JINN_SESSION_ID_ENV = "JINN_SESSION_ID";
 
 /** Env var carrying the per-session capability into that session's jinn MCP server. */
 export const JINN_SESSION_CAPABILITY_ENV = "JINN_SESSION_CAPABILITY";
-
-/** Non-authoritative visibility hint for attempt-only tools; routes still verify the caller session. */
-export const JINN_WORKFLOW_ATTEMPT_ENV = "JINN_WORKFLOW_ATTEMPT";
 
 /** Header carrying the calling session's id on gateway requests. */
 export const CALLER_SESSION_HEADER = "x-jinn-caller-session";
@@ -182,7 +183,6 @@ export function verifySessionCapability(sessionId: string, capability: string, k
 export function attachSessionIdentity(
   resolved: ResolvedMcpConfig,
   sessionId: string,
-  options?: { workflowAttempt?: boolean },
 ): ResolvedMcpConfig {
   const jinn = resolved.mcpServers["jinn"];
   if (!jinn || !("command" in jinn)) return resolved;
@@ -205,7 +205,6 @@ export function attachSessionIdentity(
           ...(stdio.env ?? {}),
           [JINN_SESSION_ID_ENV]: sessionId,
           [JINN_SESSION_CAPABILITY_ENV]: capability,
-          ...(options?.workflowAttempt ? { [JINN_WORKFLOW_ATTEMPT_ENV]: "1" } : {}),
         },
       },
     },

@@ -26,7 +26,6 @@ export type TodoActivityPayload = JsonObject & {
   status: string
   assignee?: string | null
   actor?: string | null
-  approvalState?: string | null
   parentId?: string | null
   rootId?: string
   depth?: number

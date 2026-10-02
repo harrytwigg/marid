@@ -1,7 +1,7 @@
 import { initDb } from '../shared/db.js';
 import { logger } from '../shared/logger.js';
 import { PARK_EXPIRY_ACTOR } from './event-log.js';
-import { getWorkItem, type WorkItemStatus } from './store.js';
+import { getWorkItem } from './store.js';
 import { transition } from './transitions.js';
 
 /**
@@ -16,14 +16,10 @@ import { transition } from './transitions.js';
  *
  * So the sweep does the move the park promised: once `parkedUntil` has passed,
  * the Todo goes back to the work queue the same way a `dependency` block does
- * (`blocks.ts`) — `assigned` if it has an owner, whose auto-start then picks it
- * up, and `backlog` if it has none, where the idle-capacity loop and the
- * operator can see it. The transition deletes the stop cause, as leaving
- * `blocked` always does, so a released park cannot be released twice.
- *
- * `escalated` is deliberately out of scope. It is sticky — a question put to
- * the operator — and a clock does not answer it; an expired park there only
- * stops hiding it, which is the right outcome.
+ * (`blocks.ts`): `backlog`, keeping its assignee, where a dispatch, the
+ * board walk and the operator can see it. The transition deletes the
+ * stop cause, as leaving `blocked` always does, so a released park cannot be
+ * released twice.
  */
 
 interface ParkedRow {
@@ -31,17 +27,13 @@ interface ParkedRow {
   parkedUntil: string;
 }
 
-/** Where an expired park resumes: the same queue a `dependency` block re-queues to. */
-function resumeTarget(assignee: string | null): WorkItemStatus {
-  return assignee ? 'assigned' : 'backlog';
-}
 
 /** Put one expired park back in the queue. False when it moved first, or the move was refused. */
 function releaseOne(row: ParkedRow): boolean {
   const item = getWorkItem(row.id);
   if (!item || item.status !== 'blocked') return false;
   try {
-    transition(row.id, resumeTarget(item.assignee), PARK_EXPIRY_ACTOR, {
+    transition(row.id, 'backlog', PARK_EXPIRY_ACTOR, {
       detail: { reason: 'park-expired', parkedUntil: row.parkedUntil },
     });
     return true;
