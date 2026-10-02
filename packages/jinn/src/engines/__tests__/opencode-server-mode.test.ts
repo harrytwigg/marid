@@ -104,6 +104,7 @@ beforeEach(() => {
   delete process.env.FAKE_OPENCODE_BOOTSTRAP_MS;
   SERVER_TURN_TIMING.statusPollMs = 30_000;
   SERVER_TURN_TIMING.connectMs = 15_000;
+  SERVER_TURN_TIMING.closeWaitMs = 2_000;
 });
 
 afterEach(async () => {
@@ -811,6 +812,34 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     const h = harness();
     const result = await h.engine.run(runOpts({ prompt: "FAIL now" }));
     expect(result.error).toBe("APIError: upstream exploded");
+  });
+
+  describe("a provider error partway through the turn, after a step that said something", () => {
+    // A step's text ("Let me verify x before y.") is narration, not the answer:
+    // when the next step's request fails, the turn failed. Real opencode
+    // (1.18.32 and 1.18.34, a pre-stream 400 on step 2) ends it with
+    // session.error, idle, then the failed reply's message.updated, then idle
+    // again; the other orders are what the stream does not promise.
+    const PROVIDER_ERROR = 'APIError: Bad Request: {"model":"mock-model"}';
+    it.each([
+      "err,idle,msg,idle",
+      "msg,idle,err",
+      "err,msg,idle",
+      "msg,err,idle",
+      "idle,err,msg",
+      "idle,msg,err",
+    ])("fails with the provider's error when the turn ends %s", async (order) => {
+      const h = harness();
+      const deltas: Array<{ type: string; content: string }> = [];
+      const result = await h.engine.run(runOpts({ prompt: `MIDFAIL ORDER=${order}`, onStream: (d) => deltas.push(d) }));
+      expect(result.error).toBe(PROVIDER_ERROR);
+      expect(result.result).toBe("");
+      // The narration still reached the chat as it streamed, and the step
+      // that did finish is still accounted for.
+      expect(deltas.filter((d) => d.type === "text").map((d) => d.content)).toEqual(["Let me verify x before y."]);
+      expect(result.numTurns).toBe(1);
+      expect(h.pool.unsupportedReason("local")).toBeUndefined();
+    });
   });
 
   it("a resume id the server does not know fails as a dead session, so the next turn starts fresh", async () => {

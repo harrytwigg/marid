@@ -28,6 +28,10 @@ export class OpencodeTurn {
   /** The answer: the last non-empty text part wins. */
   private resultText = "";
   private turnError: string | null = null;
+  /** The turn's last word was an error: no text came after it. */
+  private endedInError = false;
+  /** The model said something or ran a tool: the session is alive. */
+  private producedOutput = false;
   /** Model round trips. A turn that called tools has more than one. */
   private steps = 0;
   private cost = 0;
@@ -63,6 +67,7 @@ export class OpencodeTurn {
         break;
       case "error":
         this.turnError = opencodeErrorText(event) ?? "opencode reported an error with no message";
+        this.endedInError = true;
         break;
     }
   }
@@ -73,10 +78,13 @@ export class OpencodeTurn {
     // A turn that called tools emits one text part per step, and the answer is
     // the one after the last tool round trip.
     this.resultText = text;
+    this.endedInError = false;
+    this.producedOutput = true;
     if (onStream) onStream({ type: "text", content: text });
   }
 
   private readToolUse(part: Record<string, unknown>, onStream: ((delta: StreamDelta) => void) | null): void {
+    this.producedOutput = true;
     if (!onStream) return;
     const identity = toolIdentity(part);
     const state = asRecord(part.state) ?? {};
@@ -111,20 +119,27 @@ export class OpencodeTurn {
     if (context !== undefined) this.contextTokens = context;
   }
 
-  /** What this turn became, once the process is gone. */
-  result(outcome: { code: number | null; terminationReason: string | null; stderr: string }): EngineResult {
-    const accounting = {
+  /** The turn's step accounting, as far as it went. */
+  private accounting(): Pick<EngineResult, "numTurns" | "cost" | "contextTokens"> {
+    return {
       ...(this.steps > 0 ? { numTurns: this.steps } : {}),
       ...(this.cost > 0 ? { cost: this.cost } : {}),
       ...(this.contextTokens === undefined ? {} : { contextTokens: this.contextTokens }),
     };
+  }
+
+  /** What this turn became, once the process is gone. */
+  result(outcome: { code: number | null; terminationReason: string | null; stderr: string }): EngineResult {
+    const accounting = this.accounting();
 
     if (outcome.terminationReason) {
       return { sessionId: this.sessionId, result: "", error: outcome.terminationReason, ...accounting };
     }
-    // A non-empty answer means the turn succeeded even if a benign error item
-    // also appeared — don't surface it as a failure.
-    if (this.resultText.trim()) {
+    // A non-empty answer means the turn succeeded even if an error also
+    // appeared — unless the error came after the last text. Then the turn
+    // stopped partway: the text was an earlier step's narration ("Let me check
+    // X first"), and a provider refusing the next step is the turn's outcome.
+    if (this.resultText.trim() && !this.endedInError) {
       return { sessionId: this.sessionId, result: this.resultText, ...accounting };
     }
 
@@ -137,6 +152,11 @@ export class OpencodeTurn {
       result: "",
       error,
       ...accounting,
+      // A turn that said something or ran a tool before it failed ran in a live
+      // session, even if no step finished (an error, or an Esc, mid-step). Zero
+      // turns and zero cost is what `isDeadSessionError` reads as a stale resume
+      // id, and the next turn would lose the conversation.
+      ...(this.producedOutput && this.steps === 0 ? { numTurns: 1 } : {}),
       // Said outright rather than left to be inferred from the text. A usage
       // limit that lands before the first step leaves zero cost and zero turns,
       // which is exactly the shape `isDeadSessionError` reads as a stale resume
