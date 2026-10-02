@@ -154,13 +154,16 @@ function flaggedSet(state: ReturnType<typeof readState>): Set<string> {
   return flagged;
 }
 
+/** Counted by what the gateway did, not by what the model judged: a stuck
+ *  verdict left alone, or a release of a Todo already queued, is not an act. */
 function summarise(entries: TickEntry[]): string {
-  const count = (kind: TickEntry["kind"]) => entries.filter((entry) => entry.kind === kind && !entry.outcome?.startsWith("already")).length;
-  const parts = [
-    [count("release"), "released"], [count("park"), "parked"], [count("stuck"), "flagged stuck"],
-    [entries.filter((entry) => entry.kind === "dispatch").length, "started"], [count("refused"), "refused"],
-  ].filter(([n]) => (n as number) > 0).map(([n, label]) => `${n} ${label}`);
-  return parts.length > 0 ? parts.join(", ") : "nothing to do";
+  const did = (kind: TickEntry["kind"], outcome: string) => entries.filter((entry) => entry.kind === kind && entry.outcome?.startsWith(outcome)).length;
+  const parts: Array<[number, string]> = [
+    [did("release", "moved"), "released"], [did("park", "parked"), "parked"], [did("stuck", "flagged"), "flagged stuck"],
+    [did("dispatch", "started"), "started"], [entries.filter((entry) => entry.kind === "refused").length, "refused"],
+  ];
+  const text = parts.filter(([n]) => n > 0).map(([n, label]) => `${n} ${label}`);
+  return text.length > 0 ? text.join(", ") : "nothing to do";
 }
 
 /** Every dependency, defaulted. */

@@ -215,9 +215,12 @@ const ATTESTED = {
   // `acknowledgeEscalated` left, the asOperator description grew: net 38 off
   // every total), then for the three Todo approval tools (net of the `note`
   // description: 199 off Pi). The ceiling follows each time; Pi sits ON it.
-  rpc: { tokens: 3824, sha256: "6d61983ae7ca2d170891b2c40dd059840f99b221449134b21ec91f70fd28ccc0" },
-  pi: { tokens: 4159, sha256: "b19fdc443771b335a1a1ec410e4b6af6a56593a4bd3006ea8d8c1f8690407a69" },
-  openai: { tokens: 3963, sha256: "bb3bc790e97b042822f1ee17902e88a31ce4ad2eb6794cf5d5421912de38d021" },
+  // Reattested for create_work_item's `autoStart` prose, which now names the
+  // board walk instead of the retired idle-capacity auto-start. One token
+  // cheaper on every wrapper; Pi sits one under the unchanged ceiling.
+  rpc: { tokens: 3823, sha256: "ddce2b6edb08e3d94a255b9dd04f2630c5cd3063c8e743b0b126cb991bdb7d6b" },
+  pi: { tokens: 4158, sha256: "f5ba8d482d3e76863881fb815f43de30c98024e55b6a3a8ea5f7e1cd6cbd1b33" },
+  openai: { tokens: 3962, sha256: "ca7c743b030cd3cdf477e076d96bb2e6a394c7df3d443059f5efa32dc1cb96fe" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

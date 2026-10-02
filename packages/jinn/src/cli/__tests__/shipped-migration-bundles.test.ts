@@ -103,10 +103,13 @@ describe("0.34.0 bundle: self-compaction doctrine", () => {
   }
 
   // An instance that wrote its own version of the section where the stock one
-  // goes: a three-way merge must stop on the wording, not stack two sections.
-  // A same-named section added somewhere else is invisible to a textual merge,
-  // which is why the bundle's MIGRATION.md asks for a merge by heading.
-  it("conflicts instead of duplicating a section the instance already added", () => {
+  // goes. A textual three-way merge cannot be trusted to stop on it: against
+  // the current template the stock section's insertion and the instance's sit
+  // in neighbouring hunks, and `git merge-file` stacks the two without a
+  // conflict. What stops the duplicate is the bundle's instruction to merge
+  // Markdown by heading, so that is what this pins — beside the hazard it
+  // exists for, so the test fails loudly if either side changes.
+  it("tells the migrator to merge by heading, because a textual merge would stack the section twice", () => {
     const base = payload("base")
     const anchor = "## Durable knowledge\n"
     expect(base).toContain(anchor)
@@ -125,10 +128,14 @@ describe("0.34.0 bundle: self-compaction doctrine", () => {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     })
-
-    expect(merged.status).toBe(1)
-    expect(merged.stdout.match(/^<<<<<<< /gm)).toHaveLength(1)
-    expect(merged.stdout.split("\n").filter((line) => line === heading)).toHaveLength(1)
+    const headings = merged.stdout.split("\n").filter((line) => line === heading).length
+    const conflicted = merged.status === 1
+    // Either git stops on it, or it stacks two copies; it never silently keeps one.
+    expect(conflicted || headings === 2).toBe(true)
     expect(merged.stdout).toContain("Our own note")
+
+    const guide = fs.readFileSync(path.join(migrationsRoot, "0.34.0", "MIGRATION.md"), "utf8")
+    expect(guide).toContain("Merge Markdown by heading.")
+    expect(guide).toContain("never append a second section with the same heading")
   })
 })
