@@ -215,6 +215,40 @@ describe("a self-started Todo handed to somebody else", () => {
     expect(dispatched.body.code).toBeUndefined();
   });
 
+  it.each([
+    ["to nobody", null],
+    ["to another employee", "platform-worker"],
+  ] as const)("takes the old chat off it when the operator's edit gives it %s", async (_label, assignee) => {
+    const { sessionId, id } = await selfStarted();
+    const expectedVersion = store.getWorkItem(id)!.version;
+    const edited = await call("PATCH", `/api/work-items/${id}`, { assignee, expectedVersion }, operatorHeaders);
+    expect([edited.status, store.getWorkItem(id)?.assignee]).toEqual([200, assignee]);
+    expect(reg.getSession(sessionId)?.workItemId ?? null).toBeNull();
+    const event = listWorkItemEvents(id).filter((entry) => entry.kind === "metadata_edited").at(-1);
+    expect(event?.detail).toMatchObject({ updatedFields: ["assignee"], releasedSessions: [sessionId] });
+
+    expect(reg.getSession(sessionId)?.status).toBe("running");
+    const dispatched = await call("POST", `/api/work-items/${id}/dispatch`, {}, operatorHeaders);
+    expect(dispatched.body.code).toBeUndefined();
+  });
+
+  it("takes the old chat off it when a trusted internal write changes the assignee", async () => {
+    const { sessionId, id } = await selfStarted();
+    store.updateWorkItem(id, { assignee: "platform-worker" }, "operator");
+    expect(reg.getSession(sessionId)?.workItemId ?? null).toBeNull();
+    const event = listWorkItemEvents(id).filter((entry) => entry.kind === "note").at(-1);
+    expect(event?.detail).toMatchObject({ releasedSessions: [sessionId] });
+  });
+
+  it("keeps a dispatched attempt's link through the operator's edit, as before", async () => {
+    const session = workerSession();
+    const item = store.createWorkItem({ title: `Dispatched ${++n}`, status: "executing", assignee: "solo-worker" });
+    store.linkSession(item.id, session.id, null, "execute");
+    const expectedVersion = store.getWorkItem(item.id)!.version;
+    expect((await call("PATCH", `/api/work-items/${item.id}`, { assignee: null, expectedVersion }, operatorHeaders)).status).toBe(200);
+    expect(reg.getSession(session.id)?.workItemId).toBe(item.id);
+  });
+
   it("keeps a dispatched attempt's link through a reassignment, as before", async () => {
     const session = workerSession();
     const item = store.createWorkItem({ title: `Dispatched ${++n}`, status: "executing", assignee: "solo-worker" });

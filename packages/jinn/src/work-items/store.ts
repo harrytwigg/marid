@@ -782,11 +782,16 @@ export function updateWorkItemConditional(
         if (!latest) return undefined;
         throw new WorkItemVersionConflictError(latest.version);
       }
+      const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
       appendWorkItemEvent({
         workItemId: id,
         kind: 'metadata_edited',
         actor: opts.actor ?? null,
-        detail: { updatedFields: fields.map((field) => field.name), ...(opts.origin ? { origin: opts.origin } : {}) },
+        detail: {
+          updatedFields: fields.map((field) => field.name),
+          ...(opts.origin ? { origin: opts.origin } : {}),
+          ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
+        },
         versionEffect: 'companion',
       });
       item = getWorkItem(id)!;
@@ -830,11 +835,12 @@ export function updateWorkItem(id: string, input: UpdateWorkItemInput, actor?: s
       .prepare(`UPDATE work_items SET ${changedFields.map((field) => `${field.column} = ?`).join(', ')}, updated_at = ?, version = version + 1 WHERE id = ?`)
       .run(...changedFields.map((field) => field.value), now, id);
     if (result.changes === 0) return undefined;
+    const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
     appendWorkItemEvent({
       workItemId: id,
       kind: 'note',
       actor: actor ?? null,
-      detail: { updatedFields: changedFields.map((field) => field.name) },
+      detail: { updatedFields: changedFields.map((field) => field.name), ...(releasedSessions.length > 0 ? { releasedSessions } : {}) },
       versionEffect: 'companion',
     });
     return getWorkItem(id);
@@ -938,4 +944,13 @@ export function releaseSelfStartedLinks(
   );
   for (const row of rows) release.run(row.id);
   return rows.map((row) => row.id);
+}
+
+/** The self-started links an assignee write releases: none unless it changed
+ *  the assignee. Every writer of `assignee` calls this, in its own transaction,
+ *  so a Todo given to someone else — or to nobody — never keeps the old owner's
+ *  chat as its executor. */
+function releaseOnOwnerChange(db: ReturnType<typeof initDb>, current: WorkItem, assignee: string | null | undefined): string[] {
+  if (assignee === undefined || assignee === current.assignee) return [];
+  return releaseSelfStartedLinks(db, current.id, { exceptEmployee: assignee ?? undefined });
 }
