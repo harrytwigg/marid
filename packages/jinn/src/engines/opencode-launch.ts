@@ -1,3 +1,4 @@
+import { withRemoteAttachments } from "../shared/remote-attachments.js";
 import type { EngineRunOpts } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { resolveBin } from "../shared/resolve-bin.js";
@@ -54,12 +55,6 @@ export interface OpencodeLaunchPlan {
    *  kill can terminate IT rather than only the local ssh client. */
   remote?: RemoteEngineHandle;
 }
-
-/** Why a remote turn refuses attachments: the paths would be the GATEWAY's, and
- *  they name nothing on the other machine — the same call the Pi and interactive
- *  Claude engines make. */
-export const REMOTE_ATTACHMENT_REFUSAL =
-  "Attachments are not supported for remote employees — the file paths are local to the gateway";
 
 /**
  * Variables the REMOTE login environment must not carry into `opencode`.
@@ -221,7 +216,8 @@ export async function remoteOpencodeLaunch(
     // The ssh client's own cwd, irrelevant to the session: the remote command
     // opens with a `cd` into remoteCwd.
     cwd: JINN_HOME,
-    prompt: buildOpencodePrompt(opts),
+    // Attachments named as the remote session's staged home sees them.
+    prompt: buildOpencodePrompt(withRemoteAttachments(opts, staging.sessionHome, trackingId)),
     sessionIdOut: opts.resumeSessionId || "",
     remote,
   };
