@@ -1,3 +1,4 @@
+import { withRemoteAttachments } from "../shared/remote-attachments.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import readline from "node:readline";
 import type { InterruptibleEngine, EngineRunOpts, EngineResult, StreamDelta } from "../shared/types.js";
@@ -10,7 +11,6 @@ import { RemoteKills, type RemoteRun } from "./remote-stage.js";
 import {
   localOpencodeLaunch,
   remoteOpencodeLaunch,
-  REMOTE_ATTACHMENT_REFUSAL,
   type OpencodeLaunchPlan,
 } from "./opencode-launch.js";
 import type { OpencodeMode } from "../shared/config-types.js";
@@ -177,9 +177,6 @@ export class OpencodeEngine implements InterruptibleEngine {
     if (!isRemoteTarget(opts)) {
       return await this.launch(localOpencodeLaunch(opts, trackingId), trackingId, onStream);
     }
-    if (opts.attachments?.length) {
-      return { sessionId: opts.resumeSessionId || "", result: "", error: REMOTE_ATTACHMENT_REFUSAL };
-    }
     const plan = await remoteOpencodeLaunch(opts, trackingId, {
       remote: this.readRemoteConfig(),
       gatewayPort: this.readGatewayPort(),
@@ -202,9 +199,6 @@ export class OpencodeEngine implements InterruptibleEngine {
     trackingId: string,
     onStream: ((delta: StreamDelta) => void) | null,
   ): Promise<EngineResult> {
-    if (isRemoteTarget(opts) && opts.attachments?.length) {
-      return { sessionId: opts.resumeSessionId || "", result: "", error: REMOTE_ATTACHMENT_REFUSAL };
-    }
     const slot: ServerTurnSlot = {};
     this.serverTurns.set(trackingId, slot);
     try {
@@ -268,7 +262,10 @@ export class OpencodeEngine implements InterruptibleEngine {
     // operator may type it.
     if (isCompactCommand(opts.prompt)) return await this.runServerCompaction(server, slot, opts, trackingId);
     let drifted = false;
-    const turn = new OpencodeServerTurn(server, opts, onStream, {
+    // A remote server's session sees the gateway's files through its staged
+    // home, so the turn names them there rather than by their gateway paths.
+    const turnOpts = server.remote ? withRemoteAttachments(opts, server.remote.staging.sessionHome, trackingId) : opts;
+    const turn = new OpencodeServerTurn(server, turnOpts, onStream, {
       abort: (target) => servers.abortTurn(trackingId, target),
       onSessionId: (id) => servers.noteEngineSession(trackingId, id),
       onProtocolDrift: (reason) => {

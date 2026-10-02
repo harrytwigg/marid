@@ -1,3 +1,4 @@
+import { withRemoteAttachments } from "../shared/remote-attachments.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -266,18 +267,6 @@ export class PiEngine implements InterruptibleEngine {
    * command, so `kill()` still ends the turn on the other host.
    */
   private async runRemote(opts: EngineRunOpts, trackingId: string, piSessionId: string): Promise<EngineResult> {
-    if (opts.attachments?.length) {
-      // The paths buildPiPrompt would append are the GATEWAY's, and they name
-      // nothing on the other machine. A turn that silently references files the
-      // model cannot open is worse than one that refuses — same call the
-      // interactive engine makes for a remote Claude session.
-      return {
-        sessionId: piSessionId,
-        result: "",
-        error: "Attachments are not supported for remote employees — the file paths are local to the gateway",
-      };
-    }
-
     const remote = this.readRemoteConfig();
     assertRemoteTarget(opts, remote);
     // Without a real gateway port the reverse forward would be built as
@@ -366,7 +355,8 @@ export class PiEngine implements InterruptibleEngine {
       // The ssh client's own cwd, irrelevant to the session: the remote command
       // opens with a `cd` into remoteCwd.
       cwd: JINN_HOME,
-      prompt: buildPiPrompt(opts),
+      // Attachments named as the remote session's staged home sees them.
+      prompt: buildPiPrompt(withRemoteAttachments(opts, staging.sessionHome, trackingId)),
       onStream: opts.onStream || null,
       remote: agent,
     });

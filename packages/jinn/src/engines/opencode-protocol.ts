@@ -18,9 +18,9 @@ import { logger } from "../shared/logger.js";
  *  turn cannot drift into being prompted differently from a local one.
  *
  *  Attachments are named in the text rather than passed to opencode's own `-f`,
- *  which is the same shape the Pi engine uses. Wiring `-f` is a later change;
- *  the remote path refuses attachments outright (see runRemote), because there
- *  the paths are the gateway's and name nothing on the other machine. */
+ *  which is the same shape the Pi engine uses. A remote turn is handed the paths
+ *  as its own staged home names them (see mapAttachmentsForRemote), because the
+ *  gateway's paths name nothing on the other machine. */
 export function buildOpencodePrompt(opts: EngineRunOpts): string {
   let prompt = opts.prompt;
   if (opts.systemPrompt && !opts.resumeSessionId) {

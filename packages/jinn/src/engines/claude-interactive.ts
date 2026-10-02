@@ -22,14 +22,17 @@ import { writeMcpConfigFile } from "../mcp/resolver.js";
 import { parsePermissionPrompt, chooseApproval, keystrokesToSelect } from "./claude-permission-prompt.js";
 import { resolveClaudeConfigDir } from "../shared/home.js";
 import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
-import { assertRemoteTarget, isRemoteTarget, resolveRemoteClaudeConfigDir } from "../shared/remote-target.js";
+import { assertRemoteTarget, isRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination } from "../shared/remote-target.js";
+import { mapAttachmentsForRemote, withRemoteAttachments } from "../shared/remote-attachments.js";
 import type { RemoteTarget, ResolvedMcpConfig } from "../shared/types.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import {
   buildSshSpawnArgs,
   remoteSessionBinDir,
+  cachedRemoteFacts,
   ensureRemoteReady,
   remoteNodeDir,
+  remoteSessionHome,
   prepareRemoteSession,
   requireRemoteEngineBin,
   type RemoteFacts,
@@ -2147,20 +2150,6 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       return { sessionId: opts.resumeSessionId ?? "", result: "", error: "Interactive engine: a turn is already running for this session" };
     }
 
-    // Attachments are gateway-local file paths (buildAttachmentSuffix), so they
-    // name nothing on another host. Refused HERE rather than in spawnRemote,
-    // because only the COLD path goes through spawn(): a remote session with a
-    // warm ssh PTY takes injectPrompt instead, which appends the same suffix
-    // unconditionally and would paste gateway paths into a session running
-    // elsewhere — the exact thing the guard exists to stop.
-    if (isRemoteTarget(opts) && opts.attachments?.length) {
-      return {
-        sessionId: opts.resumeSessionId ?? "",
-        result: "",
-        error: "Attachments are not supported for remote employees — the file paths are local to the gateway",
-      };
-    }
-
     // A previous turn may have left a late-recovery listener armed; this new
     // turn owns the session (and the hook registration) now.
     this.cancelLateRecovery(jinnSessionId);
@@ -2372,7 +2361,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // the confirmation loop on its first tick rather than re-sending CRs
           // at a prompt that already did its work — the exclusion the lost-Stop
           // recovery below makes, for the same reason.
-          entry.cancelSubmitConfirm = resolver.isSettled ? undefined : this.injectPrompt(warm, opts, {
+          entry.cancelSubmitConfirm = resolver.isSettled ? undefined : this.injectPrompt(warm, opts, jinnSessionId, {
             // A settled turn is no longer ours to submit — stop either way. Without
             // this the loop would outlive an early interrupt until run()'s finally.
             submitted: () => nativeCommand || entry.promptSubmitted || resolver.isSettled,
@@ -2836,12 +2825,6 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts): Promise<PtyHandle>;
   private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts, standDown: () => boolean): Promise<PtyHandle | undefined>;
   private async spawnRemote(jinnSessionId: string, opts: EngineRunOpts, standDown?: () => boolean): Promise<PtyHandle | undefined> {
-    if (opts.attachments?.length) {
-      // buildAttachmentSuffix appends GATEWAY filesystem paths into the prompt.
-      // On another host they name nothing, and a turn that silently references
-      // files the model cannot open is worse than one that refuses.
-      throw new Error("attachments are not supported for remote employees — the file paths are local to the gateway");
-    }
     // A turn's own spawn passes no `standDown`: it owns the session by the time
     // it reaches here and never stands down, so staging always happens. A
     // redelivery respawn (JIN-3) can outlive its turn — stopped during the
@@ -2857,6 +2840,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
     const args = buildInteractiveArgs({
       prompt: buildPromptWithPlatformContext(opts),
+      // The attachments as the remote session's staged home names them: the
+      // gateway's own paths open nothing on another host.
+      ...(opts.attachments?.length ? { attachments: withRemoteAttachments(opts, staging.sessionHome, jinnSessionId).attachments } : {}),
       // The REMOTE staged paths, not the gateway's.
       settingsPath: staging.settingsPath,
       ...(staging.mcpConfigPath ? { mcpConfigPath: staging.mcpConfigPath } : {}),
@@ -3073,13 +3059,27 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     })();
   }
 
+  /** The turn's attachment paths as the session can open them. A remote
+   *  session's warm PTY was staged by an earlier spawn, so its home is recomputed
+   *  from the host's cached facts rather than asked of the host again. */
+  private attachmentsForSession(jinnSessionId: string, opts: EngineRunOpts): string[] {
+    const attachments = opts.attachments ?? [];
+    if (!isRemoteTarget(opts) || attachments.length === 0) return attachments;
+    const facts = cachedRemoteFacts(sshDestination(opts));
+    if (!facts) throw new Error("cannot give attachments to the remote session: the host has not been staged this gateway boot");
+    return mapAttachmentsForRemote(attachments, {
+      sessionHome: remoteSessionHome(facts, jinnSessionId, "claude"),
+      sessionId: jinnSessionId,
+    });
+  }
+
   /** Inject a follow-up prompt into a warm PTY via bracketed-paste + CR. */
-  private injectPrompt(handle: PtyHandle, opts: EngineRunOpts, confirm?: SubmitConfirmation): (() => void) | undefined {
+  private injectPrompt(handle: PtyHandle, opts: EngineRunOpts, jinnSessionId: string, confirm?: SubmitConfirmation): (() => void) | undefined {
     const proc = (handle as any)._proc as pty.IPty | undefined;
     if (!proc) return undefined;
     let text = buildPromptWithPlatformContext(opts);
     if (opts.attachments?.length) {
-      text += buildAttachmentSuffix(opts.attachments);
+      text += buildAttachmentSuffix(this.attachmentsForSession(jinnSessionId, opts));
     }
     return pasteAndSubmit(proc, neutralizeImagePathsForPaste(text), confirm);
   }
