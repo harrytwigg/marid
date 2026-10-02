@@ -21,14 +21,24 @@ export function hasPaneTabDrag(dataTransfer: DataTransfer): boolean {
  * A chat tab's drag is also a chat-session drag (the tab's id is its session id), so the split layout's
  * pane drop surface takes it with no knowledge of tabs: the middle of a pane adds the tab there, an edge
  * splits the pane. The tab MIME rides along for the strips, which need to know where it came from.
- * A file tab's drag is a tab drag only: it is no session, so the pane surface (which would split it into
- * a pane of its own, or route to it) never sees it, and it moves between strips alone.
+ * A file tab's drag is a tab drag only: it is no session, and the chat-session MIME is what every
+ * other chat-drag consumer routes by, so it must not carry that. The pane drop surface reads it
+ * from this MIME instead (fileTabDragId), where an edge splits it out as a file-only pane.
  */
 export function writePaneTabDrag(dataTransfer: DataTransfer, payload: PaneTabDragPayload): void {
   if (!isFileTabId(payload.tabId)) writeChatSessionDrag(dataTransfer, payload.tabId)
   activeDrag = payload
   dataTransfer.setData(PANE_TAB_DND_MIME, JSON.stringify(payload))
   dataTransfer.effectAllowed = 'copyMove'
+}
+
+/**
+ * The file tab being dragged, if the drag in flight is one. The pane surface asks on dragenter and
+ * dragover, where the payload is unreadable, so this is read from the in-flight copy.
+ */
+export function fileTabDragId(dataTransfer: DataTransfer): string | null {
+  const tabId = hasPaneTabDrag(dataTransfer) ? activeDrag?.tabId : undefined
+  return tabId !== undefined && isFileTabId(tabId) ? tabId : null
 }
 
 export function activePaneTabDrag(): PaneTabDragPayload | null {

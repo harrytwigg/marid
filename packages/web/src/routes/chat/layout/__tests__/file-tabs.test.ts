@@ -19,7 +19,7 @@ import {
 import { hydrateSplitLayout } from '../use-split-working-set'
 import { persistSplitLayout } from '../split-layout-storage'
 import { applySplitDrop } from '../split-drop'
-import { clearPaneTabDrag, hasPaneTabDrag, writePaneTabDrag } from '../pane-tab-dnd'
+import { clearPaneTabDrag, fileTabDragId, hasPaneTabDrag, writePaneTabDrag } from '../pane-tab-dnd'
 import { activeChatSessionDrag, hasChatSessionDrag, readChatSessionDrop } from '../../chat-session-dnd'
 
 const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
@@ -88,10 +88,8 @@ describe('openFileTab', () => {
 })
 
 describe('file tabs in the layout', () => {
-  it('never make a pane of their own', () => {
+  it('are never opened as a chat: appending or opening one by id does nothing', () => {
     const layout = openFileTab(twoPanes(), 'a', report)
-    const target = groupOfSession(layout, 'b')!
-    expect(splitGroup(layout, target.id, 'right', report)).toBe(layout)
     expect(appendSession(layout, notes)).toBe(layout)
     expect(openInFocusedGroup(layout, notes)).toBe(layout)
   })
@@ -133,17 +131,21 @@ describe('dragging a file tab', () => {
     } as unknown as DataTransfer
   }
 
-  it('is a tab drag only, never a chat-session drag the pane surface would take', () => {
+  it('is a tab drag only, never a chat-session drag other chat-drag consumers would route by', () => {
     const file = transfer()
     writePaneTabDrag(file, { groupId: 'g1', tabId: report })
     expect(hasPaneTabDrag(file)).toBe(true)
     expect(hasChatSessionDrag(file)).toBe(false)
     expect(activeChatSessionDrag()).toBeNull()
+    // The pane surface finds it through the tab MIME instead, for a file and for nothing else.
+    expect(fileTabDragId(file)).toBe(report)
     clearPaneTabDrag()
+    expect(fileTabDragId(file)).toBeNull()
 
     const chat = transfer()
     writePaneTabDrag(chat, { groupId: 'g1', tabId: 'a' })
     expect(readChatSessionDrop(chat)).toBe('a')
+    expect(fileTabDragId(chat)).toBeNull()
     clearPaneTabDrag()
   })
 
@@ -155,8 +157,8 @@ describe('dragging a file tab', () => {
     expect(dropped.focusedGroupId).toBe(own.id)
   })
 
-  it('cannot be dropped onto the pane surface, so it is never lost or routed to', () => {
-    const layout = openFileTab(twoPanes(), 'a', report)
+  it('is only a drop when it is a tab of the layout: a stale or unknown file changes nothing', () => {
+    const layout = twoPanes()
     const context = { columns: 2, cap: 4 }
     expect(applySplitDrop(layout, report, { region: 'end', key: null, groupId: null }, context)).toBe(layout)
     expect(applySplitDrop(layout, report, { region: 'right', key: 'b', groupId: groupOfSession(layout, 'b')!.id }, context)).toBe(layout)

@@ -1,9 +1,9 @@
 import { useReducer } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { PaneTabsContext, usePaneTabsKeep, usePaneTabsStrip } from '@/components/chat/pane-tabs-context'
+import { PaneTabsContext, usePaneTabsFilePane, usePaneTabsKeep, usePaneTabsStrip } from '@/components/chat/pane-tabs-context'
 import { PaneTabsProvider } from '../pane-tabs-provider'
-import { closeSession, createSplitLayout, findGroup, focusSession, groupsOf, openFileTab, openInFocusedGroup, pinTab, placeTab, showTab, type SplitLayout } from '../split-layout'
+import { closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openFileTab, openInFocusedGroup, pinTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
 import { fileTabId } from '../file-tab'
 import { CHAT_SESSION_DND_MIME } from '../../chat-session-dnd'
 import { PANE_TAB_DND_MIME } from '../pane-tab-dnd'
@@ -17,6 +17,10 @@ function dropOn(target: Element, data: Record<string, string>) {
 }
 import { usePaneShownFile } from '@/components/chat/pane-tabs-context'
 import type { SplitLayoutControls } from '../use-split-working-set'
+
+vi.mock('@/components/chat/file-view', () => ({
+  FileView: ({ path }: { path: string }) => <div data-testid="file-view">{path}</div>,
+}))
 
 vi.mock('@/hooks/use-sessions', () => ({
   useSessions: () => ({
@@ -190,6 +194,73 @@ describe('PaneTabsProvider', () => {
     dropOn(screen.getByTestId('pane-tab-strip'), { [PANE_TAB_DND_MIME]: JSON.stringify({ groupId: source.id, tabId: report }) })
     expect(findGroup(h.layout, target.id)).toMatchObject({ activeTab: report })
     expect(h.onSelect).toHaveBeenLastCalledWith('b')
+  })
+
+  describe('a file-only pane', () => {
+    const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
+
+    /** a | x arranged, the report split out between them. */
+    function splitOut() {
+      const arranged = openFileTab(materializeLayout(createSplitLayout(['a', 'x'], 'a'), 2), 'a', report)
+      return splitGroup(arranged, groupOfSession(arranged, 'a')!.id, 'right', report)
+    }
+
+    function FilePaneProbe({ paneKey }: { paneKey: string }) {
+      return <div>{usePaneTabsFilePane()(paneKey)}</div>
+    }
+
+    function MountFile({ h, paneKey }: { h: ReturnType<typeof harness>; paneKey: string }) {
+      const [, force] = useReducer((n: number) => n + 1, 0)
+      h.bind(force)
+      return (
+        <PaneTabsProvider split={h.controls()} onSelect={h.onSelect}>
+          <FilePaneProbe paneKey={paneKey} />
+        </PaneTabsProvider>
+      )
+    }
+
+    it('renders the file under a strip of its own, even for a lone file tab', async () => {
+      const h = harness(splitOut())
+      render(<MountFile h={h} paneKey={report} />)
+      expect((await screen.findByTestId('file-view')).textContent).toBe('docs/report.md')
+      const strip = screen.getByTestId('pane-tab-strip')
+      expect(strip.querySelectorAll('[role="tab"]')).toHaveLength(1)
+      expect(strip.querySelector('[data-pane-tab-kind="file"]')).not.toBeNull()
+    })
+
+    it('renders nothing for a pane key that is no file-only pane', () => {
+      const h = harness(splitOut())
+      render(<MountFile h={h} paneKey="a" />)
+      expect(screen.queryByTestId('file-pane')).toBeNull()
+    })
+
+    it('closing its tab closes the pane and leaves the route where it was', () => {
+      const h = harness(splitOut())
+      render(<MountFile h={h} paneKey={report} />)
+      fireEvent.click(screen.getByLabelText('Close tab report.md'))
+      expect(groupOfSession(h.layout, report)).toBeNull()
+      expect(h.onSelect).not.toHaveBeenCalledWith(report)
+    })
+
+    it('closing the route\'s chat tab while the file pane holds focus still moves the route on', () => {
+      const tabbed = openInFocusedGroup(createSplitLayout(['a'], 'a'), 'x')
+      const withFile = openFileTab(tabbed, 'x', report)
+      const h = harness(splitGroup(materializeLayout(withFile, 1), groupOfSession(withFile, 'x')!.id, 'right', report))
+      expect(h.layout.focusedGroupId).toBe(groupOfSession(h.layout, report)!.id)
+      render(<Mount h={h} sessionId="x" />)
+      fireEvent.click(screen.getByLabelText('Close tab Xray'))
+      expect(groupOfSession(h.layout, 'x')).toBeNull()
+      expect(h.onSelect).toHaveBeenLastCalledWith('a')
+    })
+
+    it('dragged into a chat\'s strip, goes back to that chat and the route follows it', () => {
+      const h = harness(placeTab(splitOut(), groupOfSession(splitOut(), 'x')!.id, 'b'))
+      const fileGroup = groupOfSession(h.layout, report)!
+      render(<Mount h={h} sessionId="b" />)
+      dropOn(screen.getByTestId('pane-tab-strip'), { [PANE_TAB_DND_MIME]: JSON.stringify({ groupId: fileGroup.id, tabId: report }) })
+      expect(groupOfSession(h.layout, report)!.tabs).toContain('b')
+      expect(h.onSelect).toHaveBeenLastCalledWith('b')
+    })
   })
 
   it('has no effect outside a provider', () => {

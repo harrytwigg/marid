@@ -1,13 +1,14 @@
 import { cellRectForIndex } from '../grid-cells'
 import { layoutFor } from '../grid-layout'
 import {
-  groupIdsByPaneSession,
+  groupIdsByPaneKey,
   groupsOf,
   materializeLayout,
   type LayoutNode,
   type SplitDirection,
   type SplitLayout,
 } from './split-layout'
+import { isFileTabId } from './file-tab'
 
 /**
  * Where every pane and splitter sits, as one pure function of the layout and the grid's box.
@@ -166,10 +167,11 @@ function autoColumns(count: number, viewport: GeometryInput['viewport']): { colu
 
 /** Keys in render order, each with the group it shows (null when the layout holds none). */
 function resolveKeys(input: GeometryInput): Array<{ key: string; groupId: string | null }> {
-  const groupBySession = groupIdsByPaneSession(input.layout)
+  const groupByPaneKey = groupIdsByPaneKey(input.layout)
   return input.keys.map((key) => {
-    const sessionId = input.sessionForKey(key)
-    return { key, groupId: sessionId ? groupBySession.get(sessionId) ?? null : null }
+    // A file-only pane's key is its file tab id, which sessionForKey (chats and the composer) never maps.
+    const paneKey = isFileTabId(key) ? key : input.sessionForKey(key)
+    return { key, groupId: paneKey ? groupByPaneKey.get(paneKey) ?? null : null }
   })
 }
 

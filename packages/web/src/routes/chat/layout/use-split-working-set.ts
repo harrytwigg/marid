@@ -13,6 +13,7 @@ import {
   emptySplitLayout,
   equalizeSplit,
   evictToCap,
+  focusedGroup,
   focusSession,
   groupOfSession,
   groupsOf,
@@ -76,6 +77,11 @@ export function hydrateSplitLayout(storage: Pick<Storage, 'getItem'>, liveIds: R
 
 const NO_IDS: ReadonlySet<string> = new Set()
 
+function fileOnlyFocused(layout: SplitLayout): boolean {
+  const focused = focusedGroup(layout)
+  return focused !== null && focused.tabs.every(isFileTabId)
+}
+
 /** The chats the stored layout holds that the session list no longer does: deleted while the page
  * was closed, which is what hydration prunes them for. */
 export function deletedWhileClosed(storage: Pick<Storage, 'getItem'>, liveIds: ReadonlySet<string>): ReadonlySet<string> {
@@ -96,6 +102,18 @@ export interface SplitLayoutControls {
   pin: (sessionId: string) => void
   /** Shows a tab in its group, file or chat; focusing a chat would keep a file shown over it. */
   show: (tabId: string) => void
+}
+
+/**
+ * The layout as shown: the URL's chat opened in it, ahead of the effect that commits that. A focused
+ * file-only pane has no chat, so the route stays on the last one while the pane holds focus: the
+ * chat the URL names is already in the layout, and is not focused over it.
+ */
+function useProjection(committedId: string | null, hydratedRef: { current: boolean }, deadRef: { current: ReadonlySet<string> }) {
+  return useCallback((current: SplitLayout) => {
+    if (!hydratedRef.current || !committedId || deadRef.current.has(committedId)) return current
+    return fileOnlyFocused(current) && groupOfSession(current, committedId) ? current : openInFocusedGroup(current, committedId)
+  }, [committedId, deadRef, hydratedRef])
 }
 
 /** Hydrates once the session list is known, then lets the URL drive the focused pane, exactly
@@ -138,9 +156,7 @@ function useLayoutSync(
   // The URL selection lands in the layout from an effect, a commit after the grid already
   // shows it (use-chat-grid-state.ts substitutes it synchronously). Rendering from the
   // projected layout keeps that one commit from laying the newcomer out as a stray column.
-  const project = useCallback((current: SplitLayout) => (
-    hydratedRef.current && committedId && !deadRef.current.has(committedId) ? openInFocusedGroup(current, committedId) : current
-  ), [committedId])
+  const project = useProjection(committedId, hydratedRef, deadRef)
   const shown = useMemo(() => project(layout), [layout, project])
   const state = useMemo(() => workingSetFromLayout(shown), [shown])
   useEffect(() => {

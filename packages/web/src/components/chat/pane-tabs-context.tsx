@@ -15,6 +15,8 @@ export interface PaneTabsBinding {
   shownFile: (sessionId: string) => FileTabRef | null
   /** False for the layout's only chat when file tabs sit beside it: they would have nowhere to go. */
   closable: (sessionId: string) => boolean
+  /** The body of a file-only pane (a file tab dragged out to a pane of its own), by its pane key. */
+  renderFilePane?: (paneKey: string) => ReactNode | null
 }
 
 export const PaneTabsContext = createContext<PaneTabsBinding | null>(null)
@@ -42,3 +44,9 @@ export function usePaneShownFile(sessionId: string | null): FileTabRef | null {
 export function usePaneTabsKeep(): (sessionId: string) => void {
   return useContext(PaneTabsContext)?.keep ?? NO_KEEP
 }
+
+export function usePaneTabsFilePane(): (paneKey: string) => ReactNode | null {
+  return useContext(PaneTabsContext)?.renderFilePane ?? NO_FILE_PANE
+}
+
+const NO_FILE_PANE = () => null
