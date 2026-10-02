@@ -268,6 +268,20 @@ describe("the operator resuming a blocked Todo", () => {
     expect(store.getWorkItem(id)?.status).toBe("executing");
   });
 
+  it("answers it the same when the operator resumes through a session carrying his lane", () => {
+    const { id } = parked("connector resumes", "the build step exited with code 1");
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
+    expect(rows.getWorkItemRecovery(id)).toMatchObject({ lane: "manager" });
+
+    transitions.transition(id, "executing", "session:remote-connector", { human: true, manual: true, detail: { operatorLane: true } });
+    expect(rows.getWorkItemRecovery(id)).toBeUndefined();
+
+    const rearm: string[] = [];
+    controller.sweepTodoRecovery({ mode: "auto", rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; } });
+    expect(rearm).not.toContain(id);
+    expect(rows.getWorkItemRecovery(id)).not.toMatchObject({ lane: "manager" });
+  });
+
   it("still reads a run that ended after the operator's move", () => {
     const { id } = parked("fails again after resume", "the build step exited with code 1");
     transitions.transition(id, "executing", "operator", { human: true, manual: true });
