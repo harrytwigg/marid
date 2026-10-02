@@ -76,4 +76,44 @@ describe("streamed block persistence", () => {
       ],
     })]).toEqual(["first", "tool", "final"]);
   });
+
+  describe("a turn that does not complete still keeps the tool calls that ran", () => {
+    const streamed = [
+      { id: "prose", content: "Looking into it." },
+      { id: "ran", content: "Used Read", toolCall: "Read" },
+      { id: "running", content: "Using Bash", toolCall: "Bash" },
+      { id: "media", content: "", media: [{ type: "image" }] },
+      { id: "ran-too", content: "Used Grep", toolCall: "Grep" },
+    ];
+
+    it("when preempted by a stop or a newer message", () => {
+      expect([...completedStreamedBlockIds({
+        quietPreempted: true,
+        rateLimited: false,
+        result: "",
+        error: "Interrupted: new message received",
+        streamedBlocks: streamed,
+      })]).toEqual(["ran", "ran-too"]);
+    });
+
+    it("when refused by a usage limit", () => {
+      expect([...completedStreamedBlockIds({
+        quietPreempted: false,
+        rateLimited: true,
+        result: "",
+        error: "usage limit reached",
+        streamedBlocks: streamed,
+      })]).toEqual(["ran", "ran-too"]);
+    });
+
+    it("when it ends with no answer", () => {
+      expect([...completedStreamedBlockIds({
+        quietPreempted: false,
+        rateLimited: false,
+        result: "",
+        error: null,
+        streamedBlocks: streamed,
+      })]).toEqual(["ran", "ran-too"]);
+    });
+  });
 });

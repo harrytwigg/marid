@@ -113,6 +113,7 @@ export function createPartialStreamWriter(sessionId: string): PartialStreamWrite
           partialSeq++,
           tool,
           delta.toolId,
+          delta.sidechain ? { sidechain: true } : undefined,
         );
         openPartialTools.push({
           messageId,

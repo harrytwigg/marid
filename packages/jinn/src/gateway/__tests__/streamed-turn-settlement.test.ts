@@ -280,6 +280,70 @@ describe("completed streamed-turn settlement", () => {
     ]);
   });
 
+  it("an interrupted turn keeps the tool rows that completed and drops the rest", async () => {
+    const queue = new (await import("../../sessions/queue.js")).SessionQueue();
+    const started = deferred<void>();
+    const killed = deferred<string>();
+    let runs = 0;
+    const engine = {
+      name: "codex",
+      run: async (opts: EngineRunOpts): Promise<EngineResult> => {
+        runs += 1;
+        if (runs > 1) return { sessionId: "engine-next", result: "Second answer." };
+        opts.onStream?.({ type: "text", content: "Checking three things." });
+        opts.onStream?.({ type: "tool_use", content: "Read", toolName: "Read", toolId: "call-1" });
+        opts.onStream?.({ type: "tool_result", content: "ok", toolName: "Read", toolId: "call-1" });
+        opts.onStream?.({ type: "tool_use", content: "Search", toolName: "Search", toolId: "call-2" });
+        opts.onStream?.({ type: "tool_result", content: "ok", toolName: "Search", toolId: "call-2" });
+        opts.onStream?.({ type: "tool_use", content: "Bash", toolName: "Bash", toolId: "call-3" });
+        started.resolve();
+        return { sessionId: "engine-interrupted", result: "", error: await killed.promise };
+      },
+      kill: (_sessionId: string, reason?: string) => killed.resolve(reason ?? "Interrupted"),
+      isAlive: () => runs === 1,
+      killAll: () => {},
+      killIdle: () => {},
+    };
+    const context = {
+      getConfig: () => ({
+        gateway: {},
+        engines: { default: "codex", codex: { bin: "codex", model: "gpt-test" } },
+        models: { codex: { default: "gpt-test", models: [{ id: "gpt-test", label: "Test" }] } },
+        sessions: {},
+        mcp: { gateway: { enabled: false }, browser: { enabled: false } },
+      }),
+      connectors: new Map(),
+      startTime: Date.now(),
+      gatewayAuthToken: "test-token",
+      emit: () => {},
+      sessionManager: {
+        getEngine: () => engine,
+        getEngines: () => new Map([["codex", engine]]),
+        getQueue: () => queue,
+      },
+    } as unknown as import("../api.js").ApiContext;
+
+    const created = await request(context, "POST", "/api/sessions", { prompt: "first request", engine: "codex" });
+    const sessionId = created.body.id as string;
+    await started.promise;
+    const sent = await request(context, "POST", `/api/sessions/${sessionId}/message`, { message: "actually, do this instead" });
+    expect(sent.status).toBeLessThan(300);
+    for (let i = 0; i < 2000 && (runs < 2 || registry.getSession(sessionId)?.status === "running"); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    const rows = registry.getMessages(sessionId);
+    expect(rows.filter((message) => message.toolCall).map((message) => [message.toolCall, message.content, message.partial ?? false]))
+      .toEqual([["Read", "Used Read", false], ["Search", "Used Search", false]]);
+    expect(rows.map((message) => message.content)).toEqual([
+      "first request",
+      "Used Read",
+      "Used Search",
+      "actually, do this instead",
+      "Second answer.",
+    ]);
+  });
+
   it("drops partials and the late result after an explicit stop", async () => {
     const result = deferred<EngineResult>();
     const started = deferred<void>();

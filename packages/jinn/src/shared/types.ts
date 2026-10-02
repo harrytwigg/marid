@@ -94,6 +94,9 @@ export interface StreamDelta {
    *  `tool_use` deltas (fired just before the tool runs, full input assembled).
    *  Absent on the SSE-proxy `content_block_start` delta (input not yet known). */
   input?: string;
+  /** Set on a `tool_use` made inside a sub-agent (a sidechain) rather than by
+   *  the session's main agent. Persisted on the tool row's meta. */
+  sidechain?: boolean;
   /** Structured chat-view UI update. CLI and connector transports may ignore it. */
   block?: ChatBlockEnvelope;
 }

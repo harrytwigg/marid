@@ -22,12 +22,13 @@ export function completedStreamedBlockIds(args: {
   streamedBlocks: StreamedBlockForPersistence[];
 }): Set<string> {
   const hasTerminalResponse = Boolean(args.result?.trim() || args.error?.trim());
-  if (
-    !hasTerminalResponse
-    || args.rateLimited
-    || !shouldPreserveStreamedBlocks(args)
-  ) {
-    return new Set();
+  if (!hasTerminalResponse || args.rateLimited || !shouldPreserveStreamedBlocks(args)) {
+    // A turn cut off (by a stop or a newer message), refused by a usage limit,
+    // or ending without an answer keeps none of its prose. A tool call that
+    // already ran is a fact about the session whatever happened to the turn:
+    // dropping it would make the transcript read as if it never happened.
+    return new Set(args.streamedBlocks.flatMap((message) =>
+      message.id && isCompletedToolRow(message) ? [message.id] : []));
   }
 
   const exactResult = args.result?.trim() ?? "";
@@ -50,4 +51,9 @@ export function completedStreamedBlockIds(args: {
       || plainInterimProse;
     return preserve ? [message.id] : [];
   }));
+}
+
+/** A tool row whose result arrived: the writer settles it to "Used <tool>". */
+function isCompletedToolRow(message: StreamedBlockForPersistence): boolean {
+  return Boolean(message.toolCall) && message.content.startsWith("Used ");
 }

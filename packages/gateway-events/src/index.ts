@@ -32,6 +32,8 @@ export interface GatewayEventMap {
     toolId?: string
     activityReceiptId?: string
     input?: string
+    /** A tool call made inside a sub-agent rather than by the main agent. */
+    sidechain?: boolean
     block?: JsonValue
   }
   "session:notification": { sessionId: string; message: string; meta?: JsonObject }

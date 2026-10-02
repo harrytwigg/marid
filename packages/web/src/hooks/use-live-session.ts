@@ -737,6 +737,7 @@ export function useLiveSession(
                 timestamp: Date.now(),
                 toolCall: toolName,
                 ...(toolId ? { toolId } : {}),
+                ...(p.sidechain === true ? { meta: { sidechain: true } } : {}),
               },
             ]
             return updated
