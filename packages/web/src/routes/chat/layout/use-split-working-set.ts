@@ -138,16 +138,17 @@ function useLayoutSync(
   // The URL selection lands in the layout from an effect, a commit after the grid already
   // shows it (use-chat-grid-state.ts substitutes it synchronously). Rendering from the
   // projected layout keeps that one commit from laying the newcomer out as a stray column.
-  const shown = useMemo(() => (
-    hydratedRef.current && committedId && !deadRef.current.has(committedId) ? openInFocusedGroup(layout, committedId) : layout
-  ), [committedId, layout])
+  const project = useCallback((current: SplitLayout) => (
+    hydratedRef.current && committedId && !deadRef.current.has(committedId) ? openInFocusedGroup(current, committedId) : current
+  ), [committedId])
+  const shown = useMemo(() => project(layout), [layout, project])
   const state = useMemo(() => workingSetFromLayout(shown), [shown])
   useEffect(() => {
     if (!hydratedRef.current || typeof window === 'undefined') return
     persistSplitLayout(window.localStorage, layout)
     persistWorkingSet(window.localStorage, workingSetFromLayout(layout))
   }, [layout])
-  return { shown, state }
+  return { shown, state, project, hydrated: hydratedRef.current }
 }
 
 function useSplitControls(layout: SplitLayout, setLayout: Dispatch<SetStateAction<SplitLayout>>): SplitLayoutControls {
@@ -178,7 +179,7 @@ export function useSplitWorkingSet(
   const [layout, setLayout] = useState<SplitLayout>(() => (
     committedId ? createPreviewLayout(committedId) : emptySplitLayout()
   ))
-  const { shown, state } = useLayoutSync(committedId, sessions, layout, setLayout)
+  const { shown, state, project, hydrated } = useLayoutSync(committedId, sessions, layout, setLayout)
   const split = useSplitControls(shown, setLayout)
 
   const add = useCallback((sessionId: string) => {
@@ -197,14 +198,15 @@ export function useSplitWorkingSet(
    * prediction (removeWorkingSetSession on `state`) cannot see a group's hidden tabs, which is
    * what the pane falls back to. */
   const afterRemove = useCallback((sessionId: string) => workingSetFromLayout(closeSession(shown, sessionId)), [shown])
-  /** Opens a file preview as a tab beside `ownerSessionId`'s chat (else the focused one). False
-   *  when there is no chat on screen to open it beside, so the caller can fall back. */
+  /** Opens a file preview as a tab beside `ownerSessionId`'s chat (else the focused one), on the
+   *  layout as shown (the URL's chat in it). False when there is no chat on screen to open it
+   *  beside, or the stored layout has yet to load over this one, so the caller can fall back. */
   const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => {
     const tabId = fileTabId(file)
-    if (openFileTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId)) return false
-    setLayout((current) => openFileTab(current, ownerSessionId, tabId))
+    if (!hydrated || (openFileTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId))) return false
+    setLayout((current) => openFileTab(project(current), ownerSessionId, tabId))
     return true
-  }, [shown])
+  }, [hydrated, project, shown])
 
   return { state, add, focus, remove, drop, split, afterRemove, openFile }
 }

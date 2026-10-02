@@ -1,5 +1,5 @@
 import type { PaneTabItem, PaneTabStripProps } from './pane-tab-strip'
-import { findGroup, type LayoutGroup, type SplitLayout } from './split-layout'
+import { findGroup, paneSessionForTab, placeTab, type LayoutGroup, type SplitLayout } from './split-layout'
 import { fileTabTitle, parseFileTabId } from './file-tab'
 
 /** What the strip shows for one session; supplied by whoever knows the session list. */
@@ -27,14 +27,28 @@ export function tabsOfGroup(layout: SplitLayout, groupId: string, lookup: PaneTa
   return group ? paneTabItems(group, lookup) : []
 }
 
+/**
+ * Shows a tab, then moves the route to its pane's chat: the tab itself for a chat, the chat it sits
+ * beside for a file. The chat is resolved on `after`, the layout once the tab is where it is going,
+ * so a tab placed a moment ago (not yet committed) is found where it landed. Showing comes first for
+ * both kinds: focusing a chat whose pane shows a file over it would keep the file.
+ */
+export function selectTab(after: SplitLayout, tabId: string, show: (tabId: string) => void, route: (sessionId: string) => void): void {
+  const chat = paneSessionForTab(after, tabId)
+  show(tabId)
+  if (chat) route(chat)
+}
+
 /** The layout edits a strip can ask for, and the route move that follows a tab becoming the shown one. */
 export interface PaneTabOps {
+  /** The layout the strip was drawn from, which a placement is applied to. */
+  layout: SplitLayout
   /** Puts a tab in a group at a slot: adds a new one, moves one between groups, or re-orders. */
   place: (groupId: string, sessionId: string, index: number) => void
   /** Closes a tab; when it was the shown one, the route moves to the chat that takes its place. */
   close: (sessionId: string) => void
-  /** Makes a tab the shown one, and its group's chat the route's. */
-  select: (sessionId: string) => void
+  /** Makes a tab the shown one, and its group's chat the route's (resolved on `after`, if given). */
+  select: (sessionId: string, after?: SplitLayout) => void
   pin: (sessionId: string) => void
 }
 
@@ -46,11 +60,12 @@ type StripHandlers = Pick<PaneTabStripProps, 'onActivate' | 'onClose' | 'onReord
  */
 export function paneTabHandlers(groupId: string, ops: PaneTabOps): StripHandlers {
   const place = (sessionId: string, index: number) => {
+    const after = placeTab(ops.layout, groupId, sessionId, index)
     ops.place(groupId, sessionId, index)
-    ops.select(sessionId)
+    ops.select(sessionId, after)
   }
   return {
-    onActivate: ops.select,
+    onActivate: (tabId) => ops.select(tabId),
     onClose: ops.close,
     onReorder: place,
     onMoveIn: (_fromGroupId, sessionId, index) => place(sessionId, index),

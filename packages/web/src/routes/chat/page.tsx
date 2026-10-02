@@ -28,7 +28,7 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, isFileTabId, paneSessionForTab, useSplitGridAdd, useSplitGridWorkspace } from './layout'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, isFileTabId, isOnlyChat, selectTab, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
@@ -432,19 +432,30 @@ function ChatPage() {
     return true
   }, [chatTabs, viewport.mobile, workingSet])
 
-  // Mobile-only: return from a file tab to the chat it was opened from, if its
-  // tab is still open; otherwise (or for a file tab restored from an earlier
-  // visit) to the chat list.
+  // Mobile-only: close the file tab and return to the chat it was opened from, if
+  // its tab is still open; otherwise (or for a file tab restored from an earlier
+  // visit) to the chat list. Closing it keeps file tabs from piling up into the
+  // open-chats cap, whose eviction could take the very chat Back returns to.
   const handleFileBack = useCallback(() => {
     const backId = fileBackTargetRef.current
+    const fileIndex = chatTabs.activeTab?.kind === 'file' ? chatTabs.activeIndex : -1
     const index = backId ? chatTabs.tabs.findIndex((t) => t.kind === 'session' && t.sessionId === backId) : -1
+    if (fileIndex >= 0) chatTabs.closeTab(fileIndex)
     if (index >= 0) {
-      chatTabs.switchTab(index)
+      chatTabs.switchTab(fileIndex >= 0 && index > fileIndex ? index - 1 : index)
       setMobileView('chat')
       return
     }
     setMobileView('sidebar')
   }, [chatTabs])
+
+  // A chat chosen from the list is the operator asking for that chat: shown even
+  // where a file tab covers it, which focusing its pane or the URL landing on it
+  // would keep in view.
+  const handleOpenChat = useCallback((id: string) => {
+    workingSet.split.show(id)
+    handleSelect(id)
+  }, [handleSelect, workingSet.split])
 
   const handleSessionsLoaded = useCallback(
     (sessions: { id: string }[]) => {
@@ -695,12 +706,9 @@ function ChatPage() {
   const groupShownTab = useCallback((tabs: string[], active: string) => (
     isFileTabId(active) ? active : [pendingNavRef.current, selectedIdRef.current].find((id): id is string => typeof id === 'string' && tabs.includes(id)) ?? active
   ), [])
-  // A strip tab chosen by shortcut is shown in its group first (focusing a chat whose pane shows a
-  // file keeps the file), then the route follows that pane's chat.
+  // A strip tab chosen by shortcut: shown, then the route follows its pane's chat (selectTab).
   const selectGroupTab = useCallback((tabId: string) => {
-    const chat = paneSessionForTab(workingSet.split.layout, tabId)
-    workingSet.split.show(tabId)
-    if (chat) handleSelect(chat)
+    selectTab(workingSet.split.layout, tabId, workingSet.split.show, handleSelect)
   }, [handleSelect, workingSet.split])
   const activateTab = useCallback((index: number) => {
     if (groupTabs) {
@@ -712,7 +720,7 @@ function ChatPage() {
     if (!target) return
     if (target.kind === 'session') handleSelect(target.sessionId)
     else chatTabs.switchTab(index)
-  }, [chatTabs, groupTabs, handleSelect])
+  }, [chatTabs, groupTabs, handleSelect, selectGroupTab])
 
   const cycleTab = useCallback((direction: 1 | -1) => {
     if (groupTabs) {
@@ -741,7 +749,8 @@ function ChatPage() {
       'focus-chat': { action: () => document.querySelector<HTMLElement>('[data-chat-pane-active="true"] [data-chat-textarea]')?.focus() },
       'keyboard-shortcuts': { action: () => setShowShortcutOverlay(v => !v) },
       'close-tab': { action: () => {
-        if (groupTabs) handleRemovePane(groupShownTab(groupTabs.tabs, groupTabs.active))
+        const shown = groupTabs ? groupShownTab(groupTabs.tabs, groupTabs.active) : null
+        if (shown) { if (!isOnlyChat(workingSet.split.layout, shown)) handleRemovePane(shown) }
         else if (chatTabs.activeIndex >= 0) chatTabs.closeTab(chatTabs.activeIndex)
       } },
       'prev-tab': { action: () => cycleTab(-1) },
@@ -758,7 +767,7 @@ function ChatPage() {
       'tab-8': { action: () => activateTab(7) },
       'tab-9': { action: () => activateTab(8) },
     })
-  }, [handleNewChat, navigateSession, cycleEmployee, copyChat, focusedSessionId, handleDeleteSession, showShortcutOverlay, showMoreMenu, chatTabs, toggleList, activateTab, cycleTab, groupTabs, groupShownTab, handleRemovePane])
+  }, [handleNewChat, navigateSession, cycleEmployee, copyChat, focusedSessionId, handleDeleteSession, showShortcutOverlay, showMoreMenu, chatTabs, toggleList, activateTab, cycleTab, groupTabs, groupShownTab, handleRemovePane, workingSet.split.layout])
 
   useKeyboardShortcuts(shortcuts)
 
@@ -858,7 +867,7 @@ function ChatPage() {
           <SidebarColumn open={listOpen} viewport={viewport}>
             <ChatSidebar
               selectedId={selectedId}
-              onSelect={handleSelect}
+              onSelect={handleOpenChat}
               onNewChat={handleNewChat}
               onDelete={handleDeleteSession}
               onArchive={handleArchiveSession}
@@ -909,7 +918,7 @@ function ChatPage() {
             <ChatSidebar
               variant="mobile"
               selectedId={selectedId}
-              onSelect={handleSelect}
+              onSelect={handleOpenChat}
               onNewChat={handleNewChat}
               onDelete={handleDeleteSession}
               onArchive={handleArchiveSession}

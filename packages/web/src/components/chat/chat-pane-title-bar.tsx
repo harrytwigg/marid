@@ -83,7 +83,8 @@ interface ChatPaneTitleBarProps {
   employee: string
   session: Session
   backTo?: { label: string; onClick: () => void }
-  onClose: () => void
+  /** Closes the pane's chat; without it the pane offers no close button. */
+  onClose?: () => void
   sessionActions?: PaneSessionActions
   viewMode?: ViewMode
   cliModeAvailable?: boolean
@@ -111,7 +112,7 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
       <span className="grid size-[26px] place-items-center transition-opacity duration-[var(--duration-fast)] group-hover/chat-pane:opacity-0 group-focus-within/title-actions:opacity-0">
         {status ? <StatusDot data-testid="chat-pane-status-dot" color={status.color} pulse={status.pulse} title={status.label} className="size-2" /> : null}
       </span>
-      <button
+      {onClose ? <button
         type="button"
         data-pane-focus-preserving
         aria-label={`Close ${title}`}
@@ -122,13 +123,10 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
         className="absolute right-0 grid size-[26px] place-items-center rounded-[var(--radius-sm)] border-0 bg-[var(--bg)] text-[var(--text-secondary)] opacity-0 transition-[color,opacity] duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] focus-visible:opacity-100 group-hover/chat-pane:opacity-100 group-focus-within/title-actions:opacity-100"
       >
         <X size={14} aria-hidden />
-      </button>
+      </button> : null}
     </span>
   )
 }
-
-/** The title bar's height in px (its h-[34px]); a file shown in the pane sits just below it. */
-export const PANE_TITLE_BAR_HEIGHT = 34
 
 export function ChatPaneTitleBar({ active, title, employee, session, backTo, onClose, sessionActions, viewMode, cliModeAvailable, viewSwitchLocked, cliTitle }: ChatPaneTitleBarProps) {
   const [renamedTitle, setRenamedTitle] = useState<string>()

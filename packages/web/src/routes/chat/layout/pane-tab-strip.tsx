@@ -25,6 +25,8 @@ export interface PaneTabItem {
   preview?: boolean
   /** Set on a file preview tab: the path it shows, in full. */
   filePath?: string
+  /** False for a tab that cannot be closed: no close button, and middle-click and Delete do nothing. */
+  closable?: boolean
 }
 
 export interface PaneTabStripProps {
@@ -198,7 +200,7 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate,
     if (event.button !== 1) return
     event.preventDefault()
     event.stopPropagation()
-    onClose()
+    if (tab.closable !== false) onClose()
   }
   return (
     <div
@@ -220,7 +222,7 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate,
     >
       {active && focused ? <span aria-hidden data-pane-tab-marker className="absolute inset-x-0 top-0 h-[2px] bg-[var(--text-primary)]" /> : null}
       {tab.filePath !== undefined ? <PaneFileTabLabel title={tab.title} active={active} /> : <PaneTabLabel tab={tab} active={active} />}
-      <TabCloseButton title={tab.title} active={active} onClose={onClose} />
+      {tab.closable === false ? null : <TabCloseButton title={tab.title} active={active} onClose={onClose} />}
     </div>
   )
 }
@@ -243,7 +245,7 @@ function handleTabKey(
   event.preventDefault()
   event.stopPropagation()
   const tab = tabs[index]
-  if (action.kind === 'close') return onClose(tab.id)
+  if (action.kind === 'close') return tab.closable === false ? undefined : onClose(tab.id)
   if (action.kind === 'reorder') { onReorder(tab.id, action.index); return setFocusId(tab.id) }
   onActivate(tabs[action.index].id)
   setFocusId(tabs[action.index].id)

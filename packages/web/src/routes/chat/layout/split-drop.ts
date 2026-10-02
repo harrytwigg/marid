@@ -1,6 +1,7 @@
 import { overflowForViewport } from '../grid-layout'
 import {
   appendSession,
+  keepingFiles,
   closeSession,
   evictToCap,
   findGroup,
@@ -25,7 +26,9 @@ export interface SplitDropContext {
 
 function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
   // The auto grid's trailing cell means "last", as it did in the flat grid: a member moves there.
-  if (layout.auto && groupOfSession(layout, sessionId)) return appendSession(closeSession(layout, sessionId), sessionId)
+  if (layout.auto && groupOfSession(layout, sessionId)) {
+    return keepingFiles(layout, sessionId, (current) => appendSession(closeSession(current, sessionId), sessionId))
+  }
   return appendSession(layout, sessionId)
 }
 

@@ -5,6 +5,16 @@ import { PaneTabsContext, usePaneTabsKeep, usePaneTabsStrip } from '@/components
 import { PaneTabsProvider } from '../pane-tabs-provider'
 import { closeSession, createSplitLayout, findGroup, focusSession, groupsOf, openFileTab, openInFocusedGroup, pinTab, placeTab, showTab, type SplitLayout } from '../split-layout'
 import { fileTabId } from '../file-tab'
+import { CHAT_SESSION_DND_MIME } from '../../chat-session-dnd'
+import { PANE_TAB_DND_MIME } from '../pane-tab-dnd'
+
+/** A drop on the strip as the browser delivers it: jsdom has no DragEvent, so build one. */
+function dropOn(target: Element, data: Record<string, string>) {
+  const dataTransfer = { types: Object.keys(data), getData: (type: string) => data[type] ?? '', dropEffect: 'none' }
+  const event = new Event('drop', { bubbles: true, cancelable: true })
+  Object.assign(event, { dataTransfer, clientX: 10_000 })
+  act(() => { target.dispatchEvent(event) })
+}
 import { usePaneShownFile } from '@/components/chat/pane-tabs-context'
 import type { SplitLayoutControls } from '../use-split-working-set'
 
@@ -160,6 +170,26 @@ describe('PaneTabsProvider', () => {
     fireEvent.click(screen.getByLabelText('Close tab Xray'))
     expect(groupsOf(h.layout)[0].tabs).toEqual(['a', report])
     expect(h.onSelect).toHaveBeenLastCalledWith('a')
+  })
+
+  it('a sidebar chat dropped into the strip is shown and becomes the route', () => {
+    const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
+    const h = harness(openFileTab(createSplitLayout(['a'], 'a'), 'a', report))
+    render(<Mount h={h} sessionId="a" />)
+    dropOn(screen.getByTestId('pane-tab-strip'), { [CHAT_SESSION_DND_MIME]: 'x' })
+    expect(groupsOf(h.layout)[0]).toMatchObject({ tabs: ['a', report, 'x'], activeTab: 'x' })
+    expect(h.onSelect).toHaveBeenLastCalledWith('x')
+  })
+
+  it('a file tab dragged into another pane routes to that pane\'s chat', () => {
+    const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
+    const start = focusSession(openFileTab(createSplitLayout(['a', 'x'], 'a'), 'a', report), 'x')
+    const h = harness(placeTab(start, groupsOf(start)[1].id, 'b'))
+    const [source, target] = groupsOf(h.layout)
+    render(<Mount h={h} sessionId="b" />)
+    dropOn(screen.getByTestId('pane-tab-strip'), { [PANE_TAB_DND_MIME]: JSON.stringify({ groupId: source.id, tabId: report }) })
+    expect(findGroup(h.layout, target.id)).toMatchObject({ activeTab: report })
+    expect(h.onSelect).toHaveBeenLastCalledWith('b')
   })
 
   it('has no effect outside a provider', () => {

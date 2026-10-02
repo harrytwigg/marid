@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { PaneTabsContext, type PaneTabsBinding } from '@/components/chat/pane-tabs-context'
 import { useSessions } from '@/hooks/use-sessions'
 import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
-import { paneTabHandlers, paneTabItems, type PaneTabSession } from './pane-tab-ops'
+import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
 import { PaneTabStrip } from './pane-tab-strip'
-import { closeSession, findGroup, focusedGroup, groupOfSession, hasTabbedGroup, paneSessionOf, paneSessionForTab } from './split-layout'
+import { closeSession, findGroup, focusedGroup, groupOfSession, hasTabbedGroup, isOnlyChat, paneSessionOf, type SplitLayout } from './split-layout'
 import { parseFileTabId } from './file-tab'
 import type { SplitLayoutControls } from './use-split-working-set'
 
@@ -62,6 +62,7 @@ function useKeepRequests(layout: SplitLayoutControls['layout'], pin: (sessionId:
 function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) => void) {
   const { layout } = split
   return useCallback((sessionId: string) => {
+    if (isOnlyChat(layout, sessionId)) return
     const owner = groupOfSession(layout, sessionId)
     // The route is the focused pane's chat, which a file tab shown over it does not change.
     const wasRoute = owner !== null && layout.focusedGroupId === owner.id
@@ -75,18 +76,10 @@ function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) =
   }, [layout, onSelect, split])
 }
 
-/**
- * Activating a tab shows it, then moves the route to its pane's chat: the tab itself for a chat,
- * the chat it sits beside for a file. Showing first matters for both kinds — focusing a chat whose
- * pane shows a file over it keeps the file.
- */
+/** Activating a tab, or placing one (resolved on the layout it lands in): selectTab. */
 function useSelectTab(split: SplitLayoutControls, onSelect: (sessionId: string) => void) {
   const { layout, show } = split
-  return useCallback((tabId: string) => {
-    const chat = paneSessionForTab(layout, tabId)
-    show(tabId)
-    if (chat) onSelect(chat)
-  }, [layout, onSelect, show])
+  return useCallback((tabId: string, after: SplitLayout = layout) => selectTab(after, tabId, show, onSelect), [layout, onSelect, show])
 }
 
 /** Mounts a PaneTabStrip in the title bar of every pane whose group holds more than one tab. */
@@ -97,11 +90,12 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
 
   const keep = useKeepRequests(layout, pin)
   const closeTab = useCloseTab(split, onSelect)
-  const selectTab = useSelectTab(split, onSelect)
+  const selectChosenTab = useSelectTab(split, onSelect)
 
   const binding = useMemo<PaneTabsBinding>(() => ({
     hasStrips: hasTabbedGroup(layout),
     keep,
+    closable: (sessionId) => !isOnlyChat(layout, sessionId),
     shownFile: (sessionId) => {
       const group = groupOfSession(layout, sessionId)
       if (!group || paneSessionOf(group, layout.focusHistory) !== sessionId) return null
@@ -110,18 +104,18 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
     renderStrip: (sessionId) => {
       const group = groupOfSession(layout, sessionId)
       if (!group || group.tabs.length < 2) return null
-      const ops = { place: split.place, close: closeTab, select: selectTab, pin }
+      const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, pin }
       return (
         <PaneTabStrip
           groupId={group.id}
-          tabs={paneTabItems(group, (id) => tabSession(byId.get(id)))}
+          tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isOnlyChat(layout, tab.id) ? { ...tab, closable: false } : tab))}
           activeId={group.activeTab}
           focused={layout.focusedGroupId === group.id}
           {...paneTabHandlers(group.id, ops)}
         />
       )
     },
-  }), [byId, closeTab, keep, layout, pin, selectTab, split.place])
+  }), [byId, closeTab, keep, layout, pin, selectChosenTab, split.place])
 
   return <PaneTabsContext.Provider value={binding}>{children}</PaneTabsContext.Provider>
 }

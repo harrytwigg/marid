@@ -17,8 +17,8 @@ import { useLiveSession } from '@/hooks/use-live-session'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
 import { useFileDrop } from '@/hooks/use-file-drop'
 import { FileDropOverlay } from '@/components/ui/file-drop-overlay'
-import { ChatPaneTitleBar, PANE_TITLE_BAR_HEIGHT, paneTitleBarState, paneViewControls } from '@/components/chat/chat-pane-title-bar'
-import { usePaneShownFile, usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
+import { ChatPaneTitleBar, paneTitleBarState, paneViewControls } from '@/components/chat/chat-pane-title-bar'
+import { usePaneClosable, usePaneShownFile, usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
 import { ChatCopyToast } from '@/components/chat/chat-copy-toast'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
@@ -438,6 +438,7 @@ export function ChatPane({
   // bar, whose tab strip is the way back; a phone shows no strip, so it shows the chat.
   const titleBar = multiPane && onClose
   const shownFile = usePaneShownFile(titleBar ? sessionId : null)
+  const closable = usePaneClosable(sessionId)
 
   return (
     <div
@@ -456,12 +457,13 @@ export function ChatPane({
     >
       {fileDrop.dragOver && <FileDropOverlay />}
       {titleBar ? (
-        <ChatPaneTitleBar {...titleBarState} {...titleBarViewControls} active={isActive} backTo={paneBackTo} onClose={onClose} sessionActions={sessionId ? sessionActions : undefined} viewMode={viewMode} />
+        <ChatPaneTitleBar {...titleBarState} {...titleBarViewControls} active={isActive} backTo={paneBackTo} onClose={closable ? onClose : undefined} sessionActions={sessionId ? sessionActions : undefined} viewMode={viewMode} />
       ) : null}
       {multiPane && copyNotice ? <ChatCopyToast placement="pane" /> : null}
       {showSessionHydration && !shownFile && <ChatHydrationOverlay />}
 
-      <div data-chat-pane-body inert={shownFile ? true : undefined} style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div style={PANE_REGION}>
+      <div data-chat-pane-body inert={shownFile ? true : undefined} style={PANE_REGION}>
 
       {/* Messages / CLI transcript — CliTerminal is display-only; ChatInput below
           sends. The transcript mounts on a blank composer too, with the employee
@@ -572,12 +574,16 @@ export function ChatPane({
       </>)}
       </div>
       {shownFile ? (
-        <div data-testid="pane-file-view" className="absolute inset-x-0 bottom-0 z-[6] flex flex-col" style={{ top: PANE_TITLE_BAR_HEIGHT }}>
+        <div data-testid="pane-file-view" className="absolute inset-0 z-[6] flex flex-col">
           <Suspense fallback={<div className="flex-1" />}>
             <FileView path={shownFile.path} sessionId={shownFile.sessionId} embedded />
           </Suspense>
         </div>
       ) : null}
+      </div>
     </div>
   )
 }
+
+/** The pane below its title bar, and the chat inside it: a file shown over the chat covers exactly this. */
+const PANE_REGION = { position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' } as const

@@ -153,3 +153,41 @@ describe('dragging a file tab', () => {
     expect(applySplitDrop(layout, report, { region: 'right', key: 'b', groupId: groupOfSession(layout, 'b')!.id }, context)).toBe(layout)
   })
 })
+
+describe('a group\'s only chat and its file tabs', () => {
+  const single = () => openFileTab(createSplitLayout(['a'], 'a'), 'a', report)
+
+  it('re-orders past its own file tabs', () => {
+    const layout = single()
+    const owner = groupsOf(layout)[0]
+    const moved = placeTab(layout, owner.id, 'a', 1)
+    expect(groupsOf(moved)[0]).toMatchObject({ tabs: [report, 'a'], activeTab: 'a' })
+    expect(groupsOf(placeTab(moved, owner.id, 'a', 0))[0].tabs).toEqual(['a', report])
+  })
+
+  it('takes them along when it moves to another strip, a split edge or the end of the grid', () => {
+    const layout = openFileTab(twoPanes(), 'a', report)
+    const target = groupOfSession(layout, 'b')!
+
+    const intoStrip = placeTab(layout, target.id, 'a', 0)
+    expect(groupsOf(intoStrip).map((group) => group.tabs)).toEqual([['a', report, 'b']])
+    expect(groupOfSession(intoStrip, 'a')!.activeTab).toBe('a')
+
+    const split = splitGroup(layout, target.id, 'bottom', 'a')
+    expect(groupOfSession(split, 'a')!.tabs).toEqual(['a', report])
+
+    const end = applySplitDrop(layout, 'a', { region: 'end', key: null, groupId: null }, { columns: 2, cap: 4 })
+    expect(groupsOf(end).map((group) => group.tabs)).toEqual([['b'], ['a', report]])
+  })
+
+  it('cannot split its own pane, which would leave its files nowhere', () => {
+    const layout = single()
+    expect(splitGroup(layout, groupsOf(layout)[0].id, 'right', 'a')).toBe(layout)
+  })
+
+  it('closing it closes them, and forgets them', () => {
+    const closed = closeSession(openFileTab(twoPanes(), 'a', report), 'a')
+    expect(groupsOf(closed).map((group) => group.tabs)).toEqual([['b']])
+    expect(closed.focusHistory).toEqual(['b'])
+  })
+})
