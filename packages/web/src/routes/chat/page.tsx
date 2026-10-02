@@ -28,7 +28,7 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, useSplitGridAdd, useSplitGridWorkspace } from './layout'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, isFileTabId, isLastChatWithFiles, selectTab, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
@@ -44,6 +44,8 @@ import { useSessionLifecycleActions } from './use-session-lifecycle-actions'
 const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
+import { FileOpenContext, type OpenFile } from '@/components/chat/file-open-context'
+import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
 import { useChatTabs, type ChatTab } from '@/hooks/use-chat-tabs'
 import { invalidateLiveSessionSnapshot, prefetchLiveSessionSnapshot } from '@/hooks/use-live-session'
@@ -415,9 +417,40 @@ function ChatPage() {
     setSearchParams(next, { replace: true })
   }, [searchParams, contactEmployee, setSearchParams])
 
-  // Mobile-only: leave a file tab (one restored from an earlier visit; chat file
-  // links now open in a new browser tab instead) for the chat list.
-  const handleFileBack = useCallback(() => setMobileView('sidebar'), [])
+  // Back target for the phone file view's "back" button: the chat a file link
+  // was clicked in. selectedIdRef is read at call time so the callback stays stable.
+  const fileBackTargetRef = useRef<string | null>(null)
+
+  // A chat file link, opened inside the app: on desktop as a tab beside the chat
+  // that linked it (use-split-working-set openFile), on a phone as the full-screen
+  // file view, whose back button returns to that chat. False sends the link to
+  // its href, a new browser tab.
+  const openFile = useCallback<OpenFile>((path, sessionId) => {
+    if (!viewport.mobile) return workingSet.openFile(sessionId, { path, sessionId })
+    fileBackTargetRef.current = selectedIdRef.current
+    chatTabs.openFileTab(path, sessionId)
+    setMobileView('chat')
+    return true
+  }, [chatTabs, viewport.mobile, workingSet])
+
+  // Mobile-only: back from the file view to the chat it was opened from (closing the
+  // file tab, so they do not pile up into the open-chats cap), or to the chat list
+  // when that chat's tab is gone. See fileBackPlan.
+  const handleFileBack = useCallback(() => {
+    const plan = fileBackPlan(chatTabs.tabs, chatTabs.activeIndex, fileBackTargetRef.current)
+    if (!plan) return setMobileView('sidebar')
+    if (plan.close !== null) chatTabs.closeTab(plan.close)
+    chatTabs.switchTab(plan.switchTo)
+    setMobileView('chat')
+  }, [chatTabs])
+
+  // A chat chosen from the list is the operator asking for that chat: shown even
+  // where a file tab covers it, which focusing its pane or the URL landing on it
+  // would keep in view.
+  const handleOpenChat = useCallback((id: string) => {
+    workingSet.split.show(id)
+    handleSelect(id)
+  }, [handleSelect, workingSet.split])
 
   const handleSessionsLoaded = useCallback(
     (sessions: { id: string }[]) => {
@@ -658,37 +691,42 @@ function ChatPage() {
 
   // Tab activation = session selection (pushes a history entry) for session
   // tabs; file tabs stay a pure tab-model switch (they live outside the URL).
-  // Beside a visible strip the tab shortcuts act on that strip's chats, not on the separate
+  // Beside a visible strip the tab shortcuts act on that strip's tabs, not on the separate
   // open-chats list (use-chat-tabs), which holds one preview and the chats made here.
   const groupTabs = useMemo(() => focusedGroupTabs(workingSet.split.layout), [workingSet.split.layout])
   // The strip's shown tab as the operator last chose it: the switch in flight, then the route. The
   // layout follows the URL a commit or more later, so a quick second key would otherwise act on the
   // tab the first one left.
+  // A file tab is shown by the layout directly, never through the route, so nothing is in flight.
   const groupShownTab = useCallback((tabs: string[], active: string) => (
-    [pendingNavRef.current, selectedIdRef.current].find((id): id is string => typeof id === 'string' && tabs.includes(id)) ?? active
+    isFileTabId(active) ? active : [pendingNavRef.current, selectedIdRef.current].find((id): id is string => typeof id === 'string' && tabs.includes(id)) ?? active
   ), [])
+  // A strip tab chosen by shortcut: shown, then the route follows its pane's chat (selectTab).
+  const selectGroupTab = useCallback((tabId: string) => {
+    selectTab(workingSet.split.layout, tabId, workingSet.split.show, handleSelect)
+  }, [handleSelect, workingSet.split])
   const activateTab = useCallback((index: number) => {
     if (groupTabs) {
-      const sessionId = groupTabs.tabs[index]
-      if (sessionId) handleSelect(sessionId)
+      const tabId = groupTabs.tabs[index]
+      if (tabId) selectGroupTab(tabId)
       return
     }
     const target = chatTabs.tabs[index]
     if (!target) return
     if (target.kind === 'session') handleSelect(target.sessionId)
     else chatTabs.switchTab(index)
-  }, [chatTabs, groupTabs, handleSelect])
+  }, [chatTabs, groupTabs, handleSelect, selectGroupTab])
 
   const cycleTab = useCallback((direction: 1 | -1) => {
     if (groupTabs) {
       const at = groupTabs.tabs.indexOf(groupShownTab(groupTabs.tabs, groupTabs.active))
-      handleSelect(groupTabs.tabs[(at + direction + groupTabs.tabs.length) % groupTabs.tabs.length])
+      selectGroupTab(groupTabs.tabs[(at + direction + groupTabs.tabs.length) % groupTabs.tabs.length])
       return
     }
     const count = chatTabs.tabs.length
     if (count === 0) return
     activateTab((chatTabs.activeIndex + direction + count) % count)
-  }, [chatTabs, groupTabs, groupShownTab, handleSelect, activateTab])
+  }, [chatTabs, groupTabs, groupShownTab, selectGroupTab, activateTab])
 
   // Centralized keyboard shortcut registry. SHORTCUT_CATALOG describes the keys
   // (and is what Settings lists); this map is the behaviour behind each one.
@@ -706,7 +744,8 @@ function ChatPage() {
       'focus-chat': { action: () => document.querySelector<HTMLElement>('[data-chat-pane-active="true"] [data-chat-textarea]')?.focus() },
       'keyboard-shortcuts': { action: () => setShowShortcutOverlay(v => !v) },
       'close-tab': { action: () => {
-        if (groupTabs) handleRemovePane(groupShownTab(groupTabs.tabs, groupTabs.active))
+        const shown = groupTabs ? groupShownTab(groupTabs.tabs, groupTabs.active) : null
+        if (shown) { if (!isLastChatWithFiles(workingSet.split.layout, shown)) handleRemovePane(shown) }
         else if (chatTabs.activeIndex >= 0) chatTabs.closeTab(chatTabs.activeIndex)
       } },
       'prev-tab': { action: () => cycleTab(-1) },
@@ -723,7 +762,7 @@ function ChatPage() {
       'tab-8': { action: () => activateTab(7) },
       'tab-9': { action: () => activateTab(8) },
     })
-  }, [handleNewChat, navigateSession, cycleEmployee, copyChat, focusedSessionId, handleDeleteSession, showShortcutOverlay, showMoreMenu, chatTabs, toggleList, activateTab, cycleTab, groupTabs, groupShownTab, handleRemovePane])
+  }, [handleNewChat, navigateSession, cycleEmployee, copyChat, focusedSessionId, handleDeleteSession, showShortcutOverlay, showMoreMenu, chatTabs, toggleList, activateTab, cycleTab, groupTabs, groupShownTab, handleRemovePane, workingSet.split.layout])
 
   useKeyboardShortcuts(shortcuts)
 
@@ -809,6 +848,7 @@ function ChatPage() {
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
   const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: mountedSessionIds, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
+    <FileOpenContext.Provider value={openFile}>
     <PeekProvider>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">
@@ -822,7 +862,7 @@ function ChatPage() {
           <SidebarColumn open={listOpen} viewport={viewport}>
             <ChatSidebar
               selectedId={selectedId}
-              onSelect={handleSelect}
+              onSelect={handleOpenChat}
               onNewChat={handleNewChat}
               onDelete={handleDeleteSession}
               onArchive={handleArchiveSession}
@@ -873,7 +913,7 @@ function ChatPage() {
             <ChatSidebar
               variant="mobile"
               selectedId={selectedId}
-              onSelect={handleSelect}
+              onSelect={handleOpenChat}
               onNewChat={handleNewChat}
               onDelete={handleDeleteSession}
               onArchive={handleArchiveSession}
@@ -903,7 +943,7 @@ function ChatPage() {
                 usePaneIdentity for what the key does and does not remount. */}
             {chatTabs.activeTab?.kind === 'file' ? (
               <Suspense fallback={<div className="flex-1" />}>
-                <FileView path={chatTabs.activeTab.path} embedded onBack={handleFileBack} />
+                <FileView path={chatTabs.activeTab.path} sessionId={chatTabs.activeTab.sessionId} embedded onBack={handleFileBack} />
               </Suspense>
             ) : awaitingOpen ? <div className="flex-1" /> : (
               <SplitGridContext.Provider value={{ split: workingSet.split, sessionForKey: gridAdd.sessionForKey }}>
@@ -996,5 +1036,6 @@ function ChatPage() {
       `}</style>
     </PageLayout>
     </PeekProvider>
+    </FileOpenContext.Provider>
   )
 }

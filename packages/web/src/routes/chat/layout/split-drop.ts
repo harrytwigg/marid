@@ -1,11 +1,13 @@
 import { overflowForViewport } from '../grid-layout'
 import {
   appendSession,
+  keepingFiles,
   closeSession,
   evictToCap,
   findGroup,
   groupOfSession,
   materializeLayout,
+  paneSessionOf,
   placeTab,
   focusSession,
   splitGroup,
@@ -15,6 +17,7 @@ import {
   type SplitSide,
 } from './split-layout'
 import { splitGeometry, type Rect, type SplitDropHit, type SplitMetrics } from './split-geometry'
+import { isFileTabId } from './file-tab'
 
 export interface SplitDropContext {
   /** Columns the auto grid is showing, so an edge drop materializes what the operator sees. */
@@ -24,7 +27,9 @@ export interface SplitDropContext {
 
 function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
   // The auto grid's trailing cell means "last", as it did in the flat grid: a member moves there.
-  if (layout.auto && groupOfSession(layout, sessionId)) return appendSession(closeSession(layout, sessionId), sessionId)
+  if (layout.auto && groupOfSession(layout, sessionId)) {
+    return keepingFiles(layout, sessionId, (current) => appendSession(closeSession(current, sessionId), sessionId))
+  }
   return appendSession(layout, sessionId)
 }
 
@@ -34,10 +39,14 @@ function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
  * grid appends. Capacity is spent afterwards, never on the group that was dropped onto.
  */
 export function applySplitDrop(layout: SplitLayout, sessionId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
+  // A file tab is never a pane drop (pane-tab-dnd.ts); were one to arrive, an append would close it.
+  if (isFileTabId(sessionId)) return layout
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
   if (!target || hit.region === 'end') return evictToCap(dropAtEnd(layout, sessionId), context.cap)
   if (hit.region === 'center') {
-    const next = target.activeTab === sessionId ? focusSession(layout, sessionId) : placeTab(layout, target.id, sessionId)
+    // A pane dropped back onto itself (its chat, though a file of its group may be shown) only focuses.
+    const own = target.activeTab === sessionId || paneSessionOf(target, layout.focusHistory) === sessionId
+    const next = own ? focusSession(layout, sessionId) : placeTab(layout, target.id, sessionId)
     return evictToCap(next, context.cap, target.tabs)
   }
   return splitAt(layout, target, hit.region, sessionId, context)
