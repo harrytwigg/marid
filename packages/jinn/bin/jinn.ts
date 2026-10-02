@@ -51,7 +51,12 @@ program.hook("preAction", (thisCommand, actionCommand) => {
   // commands that would start, stop, migrate or snapshot it from here.
   const commandPath: string[] = [];
   for (let c: Command | null = actionCommand; c && c !== program; c = c.parent) commandPath.unshift(c.name());
-  assertCommandAllowedInHome(commandPath, resolveJinnHome());
+  try {
+    assertCommandAllowedInHome(commandPath, resolveJinnHome());
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
 });
 
 program

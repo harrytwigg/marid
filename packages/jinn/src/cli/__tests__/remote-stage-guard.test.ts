@@ -11,22 +11,22 @@ describe("assertCommandAllowedInHome", () => {
   afterEach(() => { fs.rmSync(home, { recursive: true, force: true }); });
 
   it("allows every command in an ordinary home", () => {
-    for (const command of [...COMMANDS_REFUSED_IN_REMOTE_STAGE, "status", "limits"]) {
+    for (const command of [...COMMANDS_REFUSED_IN_REMOTE_STAGE, "limits"]) {
       expect(() => assertCommandAllowedInHome([command], home)).not.toThrow();
     }
   });
 
-  it("refuses start, stop, restart, setup, migrate, nuke and backup in a remote session's staged home", () => {
+  it("refuses start, stop, restart, status, setup, migrate, nuke and backup in a remote session's staged home", () => {
     fs.writeFileSync(path.join(home, REMOTE_STAGE_MARKER), "stage\n");
-    for (const command of ["start", "stop", "restart", "setup", "migrate", "nuke"]) {
+    for (const command of ["start", "stop", "restart", "status", "setup", "migrate", "nuke"]) {
       expect(() => assertCommandAllowedInHome([command], home)).toThrow(new RegExp(`jinn ${command}.*staged home`));
     }
     expect(() => assertCommandAllowedInHome(["backup", "run"], home)).toThrow(/jinn backup run/);
   });
 
-  it("leaves read-only commands available in a staged home", () => {
+  it("leaves commands that touch neither the gateway process nor the registry available", () => {
     fs.writeFileSync(path.join(home, REMOTE_STAGE_MARKER), "stage\n");
-    for (const command of [["status"], ["limits"], ["remote", "status"], ["skills", "list"], []]) {
+    for (const command of [["limits"], ["remote", "status"], ["skills", "list"], []]) {
       expect(() => assertCommandAllowedInHome(command, home)).not.toThrow();
     }
   });

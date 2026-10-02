@@ -8,14 +8,17 @@ import { assertNotRemoteStagedHome } from "../shared/local-db-guard.js";
  * this guard `jinn start` there launched a second gateway that migrated the live
  * registry over sshfs and wrote the real `gateway.pid` through the link, and
  * `jinn stop`/`restart` would signal a pid read from the gateway's file on a host
- * where it names some other process. Read-only commands (`status`, `limits`,
- * `remote status`, `--version`) stay available.
+ * where it names some other process. `status` is refused too: it reads the
+ * gateway's pid file as if the pid were on this host, and loading the gateway
+ * module opens the registry. Commands that touch neither (`limits`, `remote
+ * status`, `skills`, `--version`) stay available.
  */
 export const COMMANDS_REFUSED_IN_REMOTE_STAGE: ReadonlySet<string> = new Set([
   "setup",
   "start",
   "stop",
   "restart",
+  "status",
   "migrate",
   "nuke",
   "backup",

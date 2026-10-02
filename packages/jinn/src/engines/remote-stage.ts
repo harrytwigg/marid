@@ -1002,7 +1002,7 @@ done
 # shared/remote-farm.ts.
 for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
   [ -d "$mount/$dir" ] || continue
-  [ -d "$home/$dir" ] || mkdir "$home/$dir"
+  mkdir -p "$home/$dir"
   chmod 700 "$home/$dir"
   find "$home/$dir" -mindepth 1 -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
   find "$home/$dir" -mindepth 1 -maxdepth 1 -type f \\( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.db-journal' \\) -exec rm -f {} + 2>/dev/null || true
@@ -1017,7 +1017,7 @@ for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
   for db in "$mount/$dir"/*.db; do
     [ -e "$db" ] || continue
     name=$(basename "$db")
-    [ -d "$home/$dir/$name" ] || mkdir "$home/$dir/$name"
+    mkdir -p "$home/$dir/$name"
   done
 done
 # The company's operating rules, where the SESSION will actually look for them.

@@ -737,6 +737,19 @@ describe.skipIf(isWindows)("FARM_SCRIPT — run for real against a fixture mount
       expect(fs.existsSync(path.join(homeOf("sess-a"), "sessions"))).toBe(false);
     });
 
+    it("survives concurrent rebuilds of the same session (no mkdir race under set -eu)", async () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      const once = () => new Promise<number>((resolve) => {
+        const child = spawn("sh", ["-s", mount, root, home, "7"]);
+        child.stdin.end(FARM_SCRIPT);
+        child.on("close", (code) => resolve(code ?? 1));
+      });
+      const codes = await Promise.all(Array.from({ length: 40 }, once));
+      expect(codes.filter((code) => code !== 0)).toEqual([]);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+    }, 30000);
+
     it("marks the stage with a real marker file, never a link from the mount", () => {
       fs.writeFileSync(path.join(mount, REMOTE_STAGE_MARKER), "should not be linked");
       runFarm("sess-a");
