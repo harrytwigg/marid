@@ -5,6 +5,10 @@ Instance doctrine gains a "Long sessions: self-compaction" section in `CLAUDE.md
 
 An instance that already added its own self-compaction section by hand has the same heading as the stock section. Keep one copy: reconcile the wording into the existing section rather than appending a second. Treat a disagreement between the two as a conflict to review, not as new stock content.
 
+Experiments and Workflows are removed. `CLAUDE.md`, the reference docs and the shipped skills drop them; `skills/experiments`, `skills/workflow` and `scripts/workflow-triggers/README.md` are removed, and the gateway retires the two skills on its next template sync. An instance that customised either skill keeps a backup under `.migration-backups/`; it should not restore them, because the tools they describe no longer exist.
+
+The Todo model changes with them, and the docs and skills say so: the statuses `assigned` and `escalated` are gone, agents can no longer close, reopen or archive a Todo, approvals are gone (a decision that needs a person is a Todo stopped in `blocked` with a comment, and finished work is handed over in `in_review` with a summary), and comments are the record: an `@employee` mention wakes that employee on the Todo, a reply reaches the session whose comment it answers, and a comment that does neither wakes no one. An instance whose own `CLAUDE.md` tells employees to request approvals or to rely on Workflows should be reconciled to that model rather than keep the old wording; flag it as a conflict where its wording differs.
+
 Shipped skills are rewritten from the template on every gateway start, so the `skills/` records here are informational; `CLAUDE.md` and `docs/` are never rewritten automatically and need this merge.
 <!-- END RELEASE RATIONALE -->
 
@@ -27,6 +31,13 @@ Merge Markdown by heading. When the target adds a section whose heading the inst
 - Target payload: `files/target/docs/architecture.md`
 - Merge instruction: compare the audited materialized base with the current instance path `docs/architecture.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
 
+## `docs/company-doctrine.md`
+
+- Operation: `modify`
+- Base payload: `files/base/docs/company-doctrine.md`
+- Target payload: `files/target/docs/company-doctrine.md`
+- Merge instruction: compare the audited materialized base with the current instance path `docs/company-doctrine.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
+
 ## `docs/connectors.md`
 
 - Operation: `modify`
@@ -40,6 +51,13 @@ Merge Markdown by heading. When the target adds a section whose heading the inst
 - Base payload: `files/base/docs/cron.md`
 - Target payload: `files/target/docs/cron.md`
 - Merge instruction: compare the audited materialized base with the current instance path `docs/cron.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
+
+## `docs/mcp.md`
+
+- Operation: `modify`
+- Base payload: `files/base/docs/mcp.md`
+- Target payload: `files/target/docs/mcp.md`
+- Merge instruction: compare the audited materialized base with the current instance path `docs/mcp.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
 
 ## `docs/org.md`
 
@@ -62,12 +80,40 @@ Merge Markdown by heading. When the target adds a section whose heading the inst
 - Target payload: `files/target/docs/self-modification.md`
 - Merge instruction: compare the audited materialized base with the current instance path `docs/self-modification.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
 
+## `docs/skills.md`
+
+- Operation: `modify`
+- Base payload: `files/base/docs/skills.md`
+- Target payload: `files/target/docs/skills.md`
+- Merge instruction: compare the audited materialized base with the current instance path `docs/skills.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
+
+## `scripts/workflow-triggers/README.md`
+
+- Operation: `remove`
+- Base payload: `files/base/scripts/workflow-triggers/README.md`
+- Target payload: none (file is removed from stock)
+- Merge instruction: compare the audited materialized base with the current instance path `scripts/workflow-triggers/README.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
+
 ## `skills/cron-manager/SKILL.md`
 
 - Operation: `modify`
 - Base payload: `files/base/skills/cron-manager/SKILL.md`
 - Target payload: `files/target/skills/cron-manager/SKILL.md`
 - Merge instruction: compare the audited materialized base with the current instance path `skills/cron-manager/SKILL.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
+
+## `skills/delegation/SKILL.md`
+
+- Operation: `modify`
+- Base payload: `files/base/skills/delegation/SKILL.md`
+- Target payload: `files/target/skills/delegation/SKILL.md`
+- Merge instruction: compare the audited materialized base with the current instance path `skills/delegation/SKILL.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
+
+## `skills/experiments/SKILL.md`
+
+- Operation: `remove`
+- Base payload: `files/base/skills/experiments/SKILL.md`
+- Target payload: none (file is removed from stock)
+- Merge instruction: compare the audited materialized base with the current instance path `skills/experiments/SKILL.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.
 
 ## `skills/management/SKILL.md`
 
@@ -92,7 +138,7 @@ Merge Markdown by heading. When the target adds a section whose heading the inst
 
 ## `skills/workflow/SKILL.md`
 
-- Operation: `modify`
+- Operation: `remove`
 - Base payload: `files/base/skills/workflow/SKILL.md`
-- Target payload: `files/target/skills/workflow/SKILL.md`
+- Target payload: none (file is removed from stock)
 - Merge instruction: compare the audited materialized base with the current instance path `skills/workflow/SKILL.md` and the audited materialized target; preserve customized content, record unresolved placeholders as conflicts, and verify the result before completion.

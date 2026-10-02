@@ -28,8 +28,4 @@ interface CronJob {
 
 Analytical, reporting, or decision-informing output should target the COO. The COO delegates specialist work, reviews it, and produces the final deliverable. Direct employee delivery is reserved for simple output that does not need review.
 
-## Workflows versus cron
-
-Use cron for one scheduled prompt. Use a Workflow when the procedure needs multiple phases, conditions, approvals, reusable evidence, or non-schedule triggers. A schedule Trigger belongs to the Workflow definition; do not create a second cron job for the same wake-up.
-
 Use the cron read tools for current definitions and run evidence. Local run logs are implementation detail, not the normal operating surface.

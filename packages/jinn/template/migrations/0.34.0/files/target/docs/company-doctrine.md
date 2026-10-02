@@ -1,0 +1,35 @@
+# Company Doctrine
+
+This doctrine is the product contract for running a company through {{portalName}}. It keeps the surface simple while the gateway handles the machinery underneath.
+
+## 1. KISS/Minecraft
+
+The system should feel like placing simple blocks, not operating a framework. Prefer a small set of memorable company concepts over exposing implementation machinery.
+
+## 2. The Company Metaphor Is the API
+
+Employees, Todos, Chats, and Notes are the public model. Internal objects can be richer, but users and agents should think in company terms: who owns work, what is pending, where conversations happen, and which Markdown knowledge should persist.
+
+Notes are Markdown files below `knowledge/`; `docs/` remains read-only reference material.
+
+## 3. Anti-Bottleneck
+
+Fresh work should not ping the operator by default. Employees handle their lane, questions and decisions route up to managers and the COO, and the operator is reserved for explicit escalation: money, irreversible action, public action, legal/security risk, or COO request.
+
+## 4. One Interface (MCP)
+
+For company state, the Jinn MCP is the hands. Employees should use it to read and update org, sessions, Todos, Notes, cron, and reference material. Shell and filesystem access are for local implementation work or gaps the MCP does not cover.
+
+## 5. Uniform Contracts
+
+The same contract should hold everywhere: sources emit events, cron runs scheduled prompts, Todos are deliberately authored to record owned work, and Notes preserve Markdown knowledge. Avoid parallel concepts that do the same job in different shapes.
+
+Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), when idle capacity is enabled and its sweep picks the Todo from the backlog, or when a comment mentions an `@employee` who has no session on it yet. An employee has one session per Todo, so a later mention, dispatch or delegation lands in that same session. A human gate is a Todo stopped in blocked with a comment that says what is needed, or finished work waiting in in_review.
+
+## 6. Lean Identity Context
+
+Prompt identity should say only what the session needs: who the employee is, where they sit in the hierarchy, what their hands are, how Todos are used, and when to escalate. Everything else should be discovered on demand.
+
+## 7. Contextual Relevance / Progressive Disclosure
+
+The surface exposes the most relevant company state, not the firehose. Show what helps the current decision, then let employees drill into details through MCP, docs, or files when they need them.
