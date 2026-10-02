@@ -313,6 +313,15 @@ describe("InteractiveClaudeEngine — remote branch", () => {
       expect(hoisted.spawns).toHaveLength(0);
     });
 
+    it("fails the turn, spawning nothing, when the message and system prompt overflow one remote argument", async () => {
+      // Each fits on its own; the remote command line carries both, as ONE
+      // argument to ssh and to the remote shell.
+      await expect(engine.run({
+        sessionId: SID, prompt: "m".repeat(70_000), systemPrompt: "s".repeat(70_000), cwd: "/tmp", ...TARGET,
+      } as any)).rejects.toThrow(/the remote command line \(the message and the system prompt together\) is 140,\d{3} bytes, over the operating system's limit of 131,071 bytes/);
+      expect(hoisted.spawns).toHaveLength(0);
+    });
+
     it("refuses to spawn when the target escapes the configured remote.root", async () => {
       await expect(engine.run({
         sessionId: SID,

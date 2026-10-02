@@ -7,7 +7,8 @@ import { JINN_HOME, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT, CLAUDE_LIMITS_DIR } 
 import { cleanupSessionSettings, writeSessionSettings } from "../shared/claude-settings.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
-import { PtyLifecycleManager, isProcessExitInterruption, processExitInterruption, type PtyHandle } from "./pty-lifecycle.js";
+import { PtyLifecycleManager, isProcessExitInterruption, processExitInterruption, processStartFailure, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
+import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
 import type { HookRegistry, HookPayload } from "../gateway/hook-registry.js";
@@ -378,6 +379,27 @@ export function buildInteractiveArgs(o: InteractiveArgsOpts): string[] {
   if (o.mcpConfigPath) args.push("--mcp-config", o.mcpConfigPath);
   args.push("--", prompt);
   return args;
+}
+
+/**
+ * The message a spawn passes positionally. On a fresh session the system
+ * prompt is NOT folded in front of it, as buildPromptWithPlatformContext does
+ * for engines that have no system-prompt flag: here it already travels in
+ * `--append-system-prompt`. Folding it in as well sent the whole context twice
+ * on every session's first turn, and put up to the full context budget into
+ * the same argument as the message, against the exec's per-argument limit
+ * (argv-limit.ts). A resumed session still gets its platform-context refresh.
+ */
+export function spawnPrompt(opts: Pick<EngineRunOpts, "prompt" | "resumeSessionId" | "platformContextRefresh">): string {
+  return buildPromptWithPlatformContext({ prompt: opts.prompt, resumeSessionId: opts.resumeSessionId, platformContextRefresh: opts.platformContextRefresh });
+}
+
+/** What an argument of {@link buildInteractiveArgs}'s output is, for an error
+ *  that names the one that was too long. */
+export function describeInteractiveArgument(args: readonly string[], index: number): string {
+  if (index === args.length - 1 && args[index - 1] === "--") return "the message (with its attachment list)";
+  if (args[index - 1] === "--append-system-prompt") return "the system prompt";
+  return `command-line argument ${index + 1}`;
 }
 
 /**
@@ -862,6 +884,21 @@ export class TurnResolver {
     this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", error: reason });
   }
 
+  /**
+   * The turn's PTY process exited. Before SessionStart, Claude Code never ran
+   * this turn: that is a failed start, reported with what the process printed
+   * (processStartFailure), so it is not settled as a quiet interruption that
+   * loses the reason. After SessionStart it was cut off mid-run, as before.
+   */
+  processExited(exit: PtyExit | undefined, output?: string): void {
+    if (this.settled) return;
+    if (!this.gotSessionStart) {
+      this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", error: processStartFailure("claude", exit, output) });
+      return;
+    }
+    this.interrupt(processExitInterruption("claude", exit));
+  }
+
   completeNativeCommand(): void {
     this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", numTurns: 1 });
   }
@@ -919,6 +956,10 @@ export class TurnResolver {
  *  consecutive API requests with small gaps between them — a quiet window keeps
  *  the indicator from flapping null↔active on every inter-request beat. */
 const BACKGROUND_CLEAR_QUIET_MS = 10_000;
+
+/** How much of a PTY's newest raw output is kept, escape sequences and all,
+ *  so that a process dying before its session starts can say why. */
+const OUTPUT_TAIL_CHARS = 4096;
 
 /** How long a session's background sub-agents or re-run may go without a sign
  *  of life (a hook, an upstream request) before the engine stops counting them.
@@ -1466,6 +1507,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   /** Per-session PTY output streams (scrollback ring buffer + live subscribers).
    *  Survives PTY respawn. */
   private streams: PtyStreamManager;
+  /** Each PTY's newest raw output, kept for a start failure's message. */
+  private readonly outputTails = new WeakMap<pty.IPty, { text: string }>();
   /** Last terminal geometry reported by the client per session. Used to spawn
    *  follow-up PTYs at the correct dimensions when a turn comes in after the
    *  warm PTY was reaped — otherwise spawn() falls back to 120×40 and the TUI
@@ -2446,7 +2489,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       watchdog = setInterval(() => {
         const p = entry.boundProc as { _exitCode?: number | null } | undefined;
         if (p && p._exitCode != null) {
-          resolver.interrupt(processExitInterruption("claude", { exitCode: p._exitCode }));
+          resolver.processExited({ exitCode: p._exitCode }, this.outputTails.get(p as pty.IPty)?.text);
         }
       }, 5000);
       watchdog.unref?.();
@@ -2728,7 +2771,14 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  `proxy` (the per-PTY SSE forward proxy) is torn down when this PTY exits. */
   private wireProcToStream(jinnSessionId: string, proc: pty.IPty, proxy?: SsePtyProxy): PtyHandle {
     const handle = createPtyHandle(proc);
-    this.streams.attach(jinnSessionId, proc, () => this.lastOutputAt.set(jinnSessionId, Date.now()));
+    // The newest output, raw, for a process that dies before its session starts:
+    // what it printed is the only account of why (see processStartFailure).
+    const tail = { text: "" };
+    this.outputTails.set(proc, tail);
+    this.streams.attach(jinnSessionId, proc, (raw) => {
+      this.lastOutputAt.set(jinnSessionId, Date.now());
+      tail.text = (tail.text + raw).slice(-OUTPUT_TAIL_CHARS);
+    });
     proc.onExit((event) => {
       // Session-level cleanup MUST be identity-gated. In a kill->respawn race the
       // lifecycle/stream entries already point at the NEW PTY by the time THIS
@@ -2752,7 +2802,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       // poison it. Identity mismatch => benign cleanup, no interrupt.
       const e = this.active.get(jinnSessionId);
       if (e && e.boundProc === proc) {
-        e.resolver.interrupt(processExitInterruption("claude", event));
+        e.resolver.processExited(event, tail.text);
       }
     });
     return handle;
@@ -2885,7 +2935,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     const claudeConfigDir = resolveRemoteClaudeConfigDir(opts, remote);
 
     const args = buildInteractiveArgs({
-      prompt: buildPromptWithPlatformContext(opts),
+      prompt: spawnPrompt(opts),
       // The attachments as the remote session's staged home names them: the
       // gateway's own paths open nothing on another host.
       ...(opts.attachments?.length ? { attachments: withRemoteAttachments(opts, staging.sessionHome, jinnSessionId).attachments } : {}),
@@ -2918,6 +2968,11 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       bin: requireRemoteEngineBin(staging.destination, facts, "claude"),
       args,
     });
+    // The whole remote command line is one argument, to ssh here and to the
+    // remote shell there, so the message and the system prompt share one limit.
+    assertArgumentsFit("Claude Code", sshArgs, (index) => index === sshArgs.length - 1
+      ? "the remote command line (the message and the system prompt together)"
+      : `ssh argument ${index + 1}`);
 
     const geom = this.lastGeom.get(jinnSessionId);
     logger.info(
@@ -2952,7 +3007,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // closed on purpose; this is the last of them.
     if (isRemoteTarget(opts)) return standDown ? await this.spawnRemote(jinnSessionId, opts, standDown) : await this.spawnRemote(jinnSessionId, opts);
     const args = buildInteractiveArgs({
-      prompt: buildPromptWithPlatformContext(opts),
+      prompt: spawnPrompt(opts),
       settingsPath,
       resumeSessionId: opts.resumeSessionId,
       model: opts.model,
@@ -2967,6 +3022,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         ? `${opts.systemPrompt}\n\n${MAIN_AGENT_SENTINEL}`
         : MAIN_AGENT_SENTINEL,
     });
+    // Before anything is allocated: an argument the exec will refuse fails the
+    // turn here, with its size, instead of as a process that died at birth.
+    if (argumentLimitApplies(false)) assertArgumentsFit("Claude Code", args, (index) => describeInteractiveArgument(args, index));
     const { proxy, port } = await this.startProxy(jinnSessionId);
     if (standDown?.()) {
       proxy.stop();

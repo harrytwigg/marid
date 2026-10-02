@@ -50,7 +50,9 @@ describe("isProcessExitInterruption", () => {
  */
 describe("every process-exit interruption names its own engine", () => {
   const SITES: readonly [file: string, engine: string, sites: number][] = [
-    ["claude-interactive.ts", "claude", 2],
+    // One site: the turn resolver's processExited, which both the PTY's exit
+    // and the watchdog go through. Its other branch is the start failure below.
+    ["claude-interactive.ts", "claude", 1],
     ["codex-interactive.ts", "codex", 1],
     ["grok-interactive.ts", "grok", 1],
     ["antigravity.ts", "agy", 1],
@@ -62,5 +64,12 @@ describe("every process-exit interruption names its own engine", () => {
 
     expect(built).toBe(sites);
     expect(source).not.toContain(`"Interrupted: ${engine} process exited"`);
+  });
+});
+
+describe("a claude process that exits before its session starts", () => {
+  it("is reported as a failed start naming claude, not as an interruption", () => {
+    const source = fs.readFileSync(path.join(ENGINES_DIR, "claude-interactive.ts"), "utf-8");
+    expect(source.split('processStartFailure("claude"').length - 1).toBe(1);
   });
 });
