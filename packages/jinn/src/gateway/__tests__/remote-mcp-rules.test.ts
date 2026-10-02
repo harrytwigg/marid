@@ -134,7 +134,6 @@ describe("connector writes stand where the operator's do (FR-013a lifted)", () =
     expect(r.status).toBe(201);
     own = r.body.workItem.id;
     expect(dispatchConfig.getTodoDispatchConfig(own)?.autoStart ?? true).toBe(true);
-    expect(labels.getWorkItemLabels(own).map((label) => label.name)).not.toContain("no-auto-start");
     const optedOut = (await call("POST", "/api/work-items", { title: "Hold this", autoStart: false })).body.workItem.id;
     expect(dispatchConfig.getTodoDispatchConfig(optedOut)?.autoStart).toBe(false);
   });
@@ -147,13 +146,6 @@ describe("connector writes stand where the operator's do (FR-013a lifted)", () =
     expect((await call("PUT", `/api/work-items/${operatorTodo}/labels`, { add: ["voice"] })).status).toBe(200);
     expect((await call("POST", `/api/work-items/${operatorTodo}/relations`, { kind: "blocks", dstId: own })).status).toBe(201);
     expect((await call("POST", "/api/work-items", { title: "Child of the operator's", parentId: operatorTodo })).status).toBe(201);
-  });
-
-  it("removes no-auto-start like the operator can", async () => {
-    labels.createLabel({ name: "no-auto-start" });
-    const held = (await call("POST", "/api/work-items", { title: "Held", labels: ["no-auto-start"] }, operator)).body.workItem.id;
-    expect((await call("PUT", `/api/work-items/${held}/labels`, { remove: ["no-auto-start"] })).status).toBe(200);
-    expect(labels.getWorkItemLabels(held).map((label) => label.name)).not.toContain("no-auto-start");
   });
 
   it("unlinks a relation the operator made", async () => {

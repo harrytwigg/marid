@@ -5,8 +5,7 @@ import type { WorkItemDetailWire } from "@/lib/api"
 import { AutoStartRow } from "../task-page/auto-start-row"
 
 /* US5: the per-Todo auto-start switch writes `{ autoStart }` and
- * nothing else, reads "on" when the Todo has no dispatch config, and says when
- * the opt-out label makes the switch moot. */
+ * nothing else, and reads "on" when the Todo has no dispatch config. */
 
 const authFetch = vi.fn()
 vi.mock("@/lib/auth", () => ({ authFetch: (...args: unknown[]) => authFetch(...args) }))
@@ -47,11 +46,6 @@ describe("AutoStartRow", () => {
     expect(url).toBe("/api/work-items/PLA-7/dispatch-config")
     expect(init.method).toBe("PUT")
     expect(JSON.parse(init.body as string)).toEqual({ autoStart: false })
-  })
-
-  it("says when the opt-out label overrides the switch", () => {
-    renderRow(detail({ labels: [{ id: "lbl_1", name: "no-auto-start", color: null, createdAt: "" } as never] }))
-    expect(screen.getByTestId("rail-auto-start").textContent).toContain("Off by label")
   })
 
   it("surfaces a refused write instead of pretending it landed", async () => {

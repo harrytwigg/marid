@@ -28,6 +28,9 @@
     - `acknowledgeEscalated` is gone from `update_work_item` and the status route.
     - An employee file whose name starts with `@` is skipped.
   - **On upgrade:** existing `assigned` Todos move to `backlog` and `escalated` ones to `blocked`, keeping their assignee. Each moved Todo gets a `migration` status event and a version bump. A former escalation counts as a declared block, so recovery leaves it for the operator, and loses any park date (its unblock hint stays). The `work_items` CHECK constraint is unchanged.
+- **The `no-auto-start` label is retired; `autoStart: false` is the only per-Todo auto-start opt-out.** The board walk and the Todo page's **Auto-start** row no longer read the label. `create_work_item { autoStart: false }` and `set_work_item_dispatch` are unchanged.
+  - **On upgrade:** every boot sets `autoStart: false` on each Todo still carrying the label (overriding an `autoStart: true`, which the label used to beat), removes the label from it with a `migration` `label_changed` event and a version bump, and deletes the label. A Todo that was held back stays held back.
+  - **Breaking:** a script or prompt that adds the label to hold a Todo back must pass `autoStart: false` instead. Adding the label now fails as an unknown label until someone re-creates it, and a re-created one is carried and deleted again at the next boot.
 - **Todo approvals are removed; comments are the record.**
   - **Removed.** Requesting, deciding and escalating approvals on a Todo is gone, along with:
     - the MCP tools `request_work_item_approval`, `decide_work_item_approval` and `escalate_work_item_approval`;
@@ -86,7 +89,7 @@
     - It releases a `blocked` Todo whose gate is met, with a reason comment. **A release must cite its gates, and the gateway checks each one before the Todo moves:** a date the Todo itself names (quoted from its own text, and the quote must contain that date) that has passed; a blocker that is done and that the Todo names; a pull request linked from the Todo that has merged, or an issue that has closed. A Todo whose only gate is a person ("once the client replies") is never released by the walk; it is flagged instead, and the refusal is logged.
     - It parks a plain date gate.
     - It flags a stuck Todo once per stuck episode.
-    - It starts a ready backlog Todo through the Todo Dispatcher. A `no-auto-start` label, `autoStart: false` and an operator-assigned Todo are refused in code.
+    - It starts a ready backlog Todo through the Todo Dispatcher. A Todo with `autoStart: false` and an operator-assigned Todo are refused in code.
     - It never releases or parks a Todo assigned to the operator, stopped with the operator named as who must act, or holding an approval question carried over from the retired approvals; it may flag one. It never parks a Todo stopped for a person, since a park releases itself on its date.
     - Every decision and every "nothing to do" goes to `logs/board-walk.jsonl` with a reason.
   - **Off is certain.** Disabling the `board-walk` cron job stops everything. `actions.dispatch: false` keeps readiness running and starts nothing.

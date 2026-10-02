@@ -31,8 +31,8 @@ export interface TodoDispatchConfig {
   skills: string[];
   engine: string | null;
   model: string | null;
-  /** false when the Todo has opted out of being auto-started by a
-   *  `todo-status` Workflow trigger on assignment. Defaults to true. */
+  /** false when the Todo has opted out of being started by the board walk.
+   *  The only per-Todo opt-out. Defaults to true. */
   autoStart: boolean;
   updatedAt: string;
 }
