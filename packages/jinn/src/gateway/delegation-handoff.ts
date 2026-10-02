@@ -3,15 +3,18 @@ import { logger } from "../shared/logger.js";
 import type { ChatBlockEnvelope, Employee, JsonObject, Session, WorkItemLinkRole } from "../shared/types.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
-import { applyBlockEnvelope, claimSessionDelivery, updateSession } from "../sessions/registry.js";
+import { applyBlockEnvelope, claimSessionDelivery, getSession, updateSession } from "../sessions/registry.js";
 import { getWorkItemClaim } from "../work-items/claims.js";
 import { recordDelegation } from "../work-items/employee-sessions.js";
+import { toWorkItemLinkRole } from "../work-items/link-role.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { openWorkItemRun } from "../work-items/runs.js";
 import { getWorkItem, linkSession, type WorkItem } from "../work-items/store.js";
 import { persistAndEmitActivityBlock, type ChatActivityContext } from "./chat-activity.js";
+import { rehomeAttachmentsToSession } from "./files.js";
 import { surfaceManagerVisibility } from "./manager-visibility.js";
 import type { RouteTodoClaim } from "./todo-claim.js";
+import { resolveAttachmentPaths } from "./web-session-dispatch.js";
 import type { ApiContext } from "./api.js";
 
 /**
@@ -97,11 +100,13 @@ export function announceDelegation(input: DelegationAnnouncement): void {
   });
 }
 
-/** The claim a session already holds: nothing to take, and nothing to give
- *  back if the delegation fails, because the claim was never this call's. */
-export function claimHeldBy(workItemId: string, sessionId: string): RouteTodoClaim | undefined {
-  if (getWorkItemClaim(workItemId)?.sessionId !== sessionId) return undefined;
-  return { owner: `session:${sessionId}`, bind: () => undefined, release: () => undefined };
+/** The claim a running session already holds: nothing to take, and nothing
+ *  to give back if the delegation fails, because the claim was never this
+ *  call's. An idle holder's claim is free to anyone, so it is retaken instead. */
+export function claimHeldBy(workItemId: string, session: Session): RouteTodoClaim | undefined {
+  if (session.status !== "running" && session.status !== "waiting") return undefined;
+  if (getWorkItemClaim(workItemId)?.sessionId !== session.id) return undefined;
+  return { owner: `session:${session.id}`, bind: () => undefined, release: () => undefined };
 }
 
 export interface LandInLiveSessionInput {
@@ -117,13 +122,25 @@ export interface LandInLiveSessionInput {
   parentSessionId: string | undefined;
   brief: string;
   title: string;
+  /** The delegation's managed file ids. The outbox carries text, so they are
+   *  re-homed to the session and the brief names their paths. */
+  attachments: string[] | undefined;
   /** A retry with the same key delivers the brief once. */
   idempotencyDigest: string | undefined;
 }
 
 function delegatedBrief(input: LandInLiveSessionInput): string {
+  const paths = resolveAttachmentPaths(input.attachments);
+  const files = paths.length > 0 ? `\n\nAttached files:\n${paths.map((file) => `- ${file}`).join("\n")}` : "";
   return `📋 Todo ${input.workItem.id} has been delegated to you, in the session you already have on it. `
-    + `You now hold the Todo, and your report goes to whoever delegated it.\n\n${input.brief}`;
+    + `You now hold the Todo, and your report goes to whoever delegated it.\n\n${input.brief}${files}`;
+}
+
+/** A session that executed the Todo stays its executor: relinking it as a
+ *  reviewer would hide its attempts from the status derivation and lift the
+ *  self-review ban. A consultation or a review takes the delegation's role. */
+function relinkRole(session: Session, role: WorkItemLinkRole): WorkItemLinkRole {
+  return toWorkItemLinkRole(session.workItemRole) === "execute" ? "execute" : role;
 }
 
 /**
@@ -136,7 +153,8 @@ function delegatedBrief(input: LandInLiveSessionInput): string {
  */
 export function landInLiveSession(input: LandInLiveSessionInput): void {
   const { workItem, session } = input;
-  linkSession(workItem.id, session.id, input.actor, input.role);
+  rehomeAttachmentsToSession(input.attachments, session.id);
+  linkSession(workItem.id, session.id, input.actor, relinkRole(session, input.role));
   input.claim.bind(session.id);
   const cleared = clearDelegationCompletionContract(session);
   updateSession(session.id, {
@@ -162,6 +180,7 @@ export function landInLiveSession(input: LandInLiveSessionInput): void {
     deliveryKind: "todo-delegation",
     payload: { message: delegatedBrief(input), displayMessage: `📋 ${workItem.id} · delegated to you\n${input.title}` },
   });
+  logger.info(`Delegation ${workItem.id}: brief delivered into ${input.employeeName}'s live session ${session.id}`);
   if (delivery.status === "accepted") return;
   // The Todo's status follows the turn the brief starts, so derive it once the
   // session has accepted the brief rather than before it is running.
@@ -171,4 +190,13 @@ export function landInLiveSession(input: LandInLiveSessionInput): void {
       logger.warn(`Delegation ${workItem.id} could not deliver its brief to session ${session.id}: `
         + `${error instanceof Error ? error.message : String(error)}`);
     });
+}
+
+/** The route's answer for a delegation that landed in a live session. */
+export function reusedDelegationBody(workItemId: string, reused: Session, title: string): JsonObject {
+  const current = getSession(reused.id) ?? reused;
+  return {
+    workItemId, sessionId: reused.id, employee: current.employee ?? null, engine: current.engine,
+    model: current.model ?? null, effortLevel: current.effortLevel ?? null, status: current.status, title, reused: true,
+  };
 }

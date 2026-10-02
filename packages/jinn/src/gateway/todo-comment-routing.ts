@@ -44,8 +44,8 @@ function mentionPrompt(item: WorkItem, comment: WorkItemComment): string {
     + `${comment.author} wrote:\n${comment.body}\n\n`
     + `Read the Todo with get_work_item { id: "${item.id}" } and its thread with list_work_item_comments { id: "${item.id}" }. `
     + `${threadHint(comment)}\n\n`
-    + `You were consulted, not handed the work: whoever holds the Todo keeps it unless it is delegated to you. `
-    + `Decide what the comment needs from you, and answer on the thread.`;
+    + `Unless you are already working this Todo, you are being consulted, not handed the work: whoever holds it `
+    + `keeps it unless it is delegated to you. Decide what the comment needs from you, and answer on the thread.`;
 }
 
 function replyPrompt(item: WorkItem, comment: WorkItemComment): string {

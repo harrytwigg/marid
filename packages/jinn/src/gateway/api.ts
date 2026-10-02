@@ -259,7 +259,7 @@ import {
   readWorkItemQueryParams,
   SEARCH_QUERY_ROUTE_CHAR_CAP,
 } from "./work-item-query.js";
-import { announceDelegation, claimHeldBy, landInLiveSession } from "./delegation-handoff.js";
+import { announceDelegation, claimHeldBy, landInLiveSession, reusedDelegationBody } from "./delegation-handoff.js";
 import { liveEmployeeSession, recordNewDelegateSession, reportingParentSessionId } from "../work-items/employee-sessions.js";
 import { NOTE_FILE_MAX_BYTES, createNote, listNotes, readKnowledgeFile, readNote, searchKnowledge, updateNote, type NoteStoreResult } from "../notes/store.js";
 import { loadInstances, saveInstances, type Instance, type InstanceInput } from "../instances/directory.js";
@@ -3480,7 +3480,7 @@ export async function handleApiRequest(
       // session on it, the brief lands there and that session takes the claim
       // (or keeps the one it holds) instead of a second session being spawned.
       const reused = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
-      const claim = (reused && claimHeldBy(workItem.id, reused.id)) || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
+      const claim = (reused && claimHeldBy(workItem.id, reused)) || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
       if (!claim) return;
 
       // 2. SPAWN — the irreversible step. A failure here PRESERVES the minted
@@ -3515,20 +3515,15 @@ export async function handleApiRequest(
       if (reused && employeeName) {
         try {
           landInLiveSession({
-            workItem, session: reused, employeeName, delegateEmployee, claim, actor: delegationActor,
+            workItem, session: reused, employeeName, delegateEmployee, claim, actor: delegationActor, attachments,
             role: resolveDelegationLinkRole(intent, workItem.status), parentSessionId, brief, title, idempotencyDigest,
           });
         } catch (linkErr) {
           claim.release();
           return json(res, { error: `delegation into session ${reused.id} failed: ${linkErr instanceof Error ? linkErr.message : linkErr}`, workItemId: workItem.id }, 500);
         }
-        logger.info(`Delegation ${workItem.id}: brief delivered into ${employeeName}'s live session ${reused.id}`);
         announceDelegation({ ...announcement, session: reused, dispatchedAt: Date.now() });
-        const current = getSession(reused.id) ?? reused;
-        return json(res, {
-          workItemId: workItem.id, sessionId: reused.id, employee: employeeName, engine: current.engine,
-          model: current.model ?? null, effortLevel: current.effortLevel ?? null, status: current.status, title, reused: true,
-        });
+        return json(res, reusedDelegationBody(workItem.id, reused, title));
       }
       // The key is the session's turn lane: SessionQueue serializes turns per
       // key, so it must be unique per session. Keyed on the Todo alone, every
@@ -3786,7 +3781,7 @@ export async function handleApiRequest(
         body.message = plan.prompt;
         body.displayMessage = plan.displayMessage;
         body.meta = plan.meta;
-        if (session.parentSessionId === caller.id) {
+        if (reportingParentSessionId(session) === caller.id) {
           parentFollowUp = { caller, message: String(rawMessage) };
         } else if (reportingParentSessionId(caller) === session.id && caller.attemptToken) {
           // The child is reporting UP to its parent via send_to_session. The
