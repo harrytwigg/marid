@@ -115,6 +115,20 @@ describe("mentions", () => {
   });
 });
 
+describe("a mention that cannot wake anyone", () => {
+  it("says so on the thread, once", async () => {
+    const item = h.store.createWorkItem({ title: "nobody home" });
+    const asked = await h.comment(item.id, "@stale are you there?");
+
+    const { listComments } = await import("../../work-items/comments.js");
+    const replies = listComments(item.id).comments.filter((c) => c.parentCommentId === asked.id);
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toMatchObject({ authorKind: "system" });
+    expect(replies[0].body).toContain("@stale was not woken.");
+    expect(h.sessionsOf(item.id, "stale")).toEqual([]);
+  });
+});
+
 describe("replies", () => {
   it("reaches the session that wrote the comment answered, though it is stored under the operator's root", async () => {
     const item = h.store.createWorkItem({ title: "threaded" });

@@ -25,10 +25,12 @@ export function mentionTestHome(prefix: string): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   process.env.JINN_HOME = home;
   fs.mkdirSync(path.join(home, "org"), { recursive: true });
-  for (const [name, rank, reportsTo] of [["org-root", "executive", ""], ["alpha", "employee", "org-root"], ["bravo", "employee", "org-root"], ["worker", "employee", "org-root"]]) {
+  // `stale` is pinned to a model the gateway does not register, so it cannot be started.
+  for (const [name, rank, reportsTo, model] of [["org-root", "executive", "", "gpt-5.5"], ["alpha", "employee", "org-root", "gpt-5.5"],
+    ["bravo", "employee", "org-root", "gpt-5.5"], ["worker", "employee", "org-root", "gpt-5.5"], ["stale", "employee", "org-root", "legacy-model"]]) {
     fs.writeFileSync(path.join(home, "org", `${name}.yaml`), [
       `name: ${name}`, `displayName: ${name[0].toUpperCase()}${name.slice(1)}`, "department: platform", `rank: ${rank}`,
-      ...(reportsTo ? [`reportsTo: ${reportsTo}`] : []), "engine: codex", "model: gpt-5.5", `persona: ${name} for mention tests`, "",
+      ...(reportsTo ? [`reportsTo: ${reportsTo}`] : []), "engine: codex", `model: ${model}`, `persona: ${name} for mention tests`, "",
     ].join("\n"));
   }
   return home;

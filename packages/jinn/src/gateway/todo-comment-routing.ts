@@ -1,7 +1,7 @@
 import { logger } from "../shared/logger.js";
 import type { Session } from "../shared/types.js";
 import { getSession } from "../sessions/registry.js";
-import { getComment, setTodoCommentListener, type WorkItemComment } from "../work-items/comments.js";
+import { addComment, getComment, setTodoCommentListener, type WorkItemComment } from "../work-items/comments.js";
 import { canMessageSession } from "../work-items/employee-sessions.js";
 import { parseMentions } from "../work-items/mentions.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
@@ -63,6 +63,20 @@ function answeredSession(comment: WorkItemComment, authorEmployee: string | unde
 }
 
 
+/** Say on the thread that a mention woke nobody, so its author is not left
+ *  waiting on a reply that cannot come. A system reply is never routed. */
+function reportFailedWake(comment: WorkItemComment, name: string, error: string): void {
+  logger.warn(`Todo ${comment.workItemId}: could not wake @${name} for comment ${comment.id}: ${error}`);
+  addComment({
+    workItemId: comment.workItemId,
+    parentCommentId: comment.id,
+    author: "jinn",
+    authorKind: "system",
+    body: `**@${name} was not woken.** ${error}`,
+    idempotencyKey: `mention-failed:${comment.id}:${name}`,
+  });
+}
+
 function wakeMentioned(context: ApiContext, item: WorkItem, comment: WorkItemComment, authorEmployee: string | undefined): CommentWake[] {
   const roster = orgRegistry(context.getConfig());
   const wakes: CommentWake[] = [];
@@ -81,7 +95,7 @@ function wakeMentioned(context: ApiContext, item: WorkItem, comment: WorkItemCom
       displayMessage: `🏷️ ${item.id} · ${comment.author}\n${comment.body}`,
     });
     if (woke.ok) wakes.push({ employee: name, sessionId: woke.session.id, kind: "mention", started: woke.started });
-    else logger.warn(`Todo ${item.id}: could not wake @${name} for comment ${comment.id}: ${woke.error}`);
+    else reportFailedWake(comment, name, woke.error);
   }
   return wakes;
 }
