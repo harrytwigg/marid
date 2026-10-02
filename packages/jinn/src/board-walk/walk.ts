@@ -339,7 +339,8 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
   ];
   return finish(frame, {
     outcome: "ok",
-    summary: `${summarise(entries)}. ${parsed.decisions.summary} Dispatch: ${parsed.decisions.dispatch.reason}`,
+    summary: `${summarise(entries)}. Dispatch: ${parsed.decisions.dispatch.reason}`,
+    modelSummary: parsed.decisions.summary,
     ...session,
     entries,
   });

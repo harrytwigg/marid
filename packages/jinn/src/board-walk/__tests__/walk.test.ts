@@ -316,7 +316,8 @@ describe("board walk dispatch", () => {
     expect(h.dispatched).toEqual([item.id]);
     expect(tick.entries).toContainEqual({ kind: "dispatch", workItemId: item.id, reason: "daytime, the five-hour window lapses in 40 min at 15%", outcome: "started the Todo Dispatcher", sessionId: `dispatch-${item.id}` });
     expect(walkComments(item.id)[0].body).toMatch(/^Board walk: started the Todo Dispatcher \(session dispatch-/);
-    expect(tick.summary).toMatch(/^1 started\./);
+    expect(tick.summary).toMatch(/^1 started\. Dispatch: /);
+    expect(tick.modelSummary).toBeTruthy();
   });
 
   it.each([

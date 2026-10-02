@@ -72,8 +72,11 @@ export interface TickRecord {
   at: string;
   trigger: "schedule" | "manual";
   outcome: TickOutcome;
-  /** One sentence: what the tick came to. */
+  /** One sentence: what the tick came to, by the gateway's count. */
   summary: string;
+  /** The model's own summary of its answer. What it says it decided, which
+   *  the gateway may have refused: the entries say what happened. */
+  modelSummary?: string;
   sessionId?: string;
   durationMs?: number;
   entries: TickEntry[];

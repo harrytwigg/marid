@@ -64,6 +64,8 @@ export interface TickRecord {
   trigger: "schedule" | "manual"
   outcome: "ok" | "disabled" | "invalid-rules" | "failed" | "busy"
   summary: string
+  /** The model's own account of its answer; the entries say what happened. */
+  modelSummary?: string
   sessionId?: string
   durationMs?: number
   entries: TickEntry[]

@@ -46,6 +46,7 @@ function Tick({ tick, now }: { tick: TickRecord; now: number }) {
         {tick.sessionId && <Link to={`/chat/${tick.sessionId}`} className="focus-ring rounded text-[var(--accent)] outline-none">turn</Link>}
       </div>
       <p className="mt-[2px] text-[length:var(--text-footnote)] text-[var(--text-primary)]">{tick.summary}</p>
+      {tick.modelSummary && <p className="mt-[2px] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">Model: {tick.modelSummary}</p>}
       {acted.length > 0 && (
         <ul className="mt-[2px] grid gap-[2px]">
           {acted.map((entry, index) => (
