@@ -111,6 +111,9 @@ export function previewSplitDrop(input: SplitDropPreviewInput): { layout: SplitL
     viewport: input.viewport,
     metrics: input.metrics,
   })
+  // A file dropped on the middle of a chat's pane joins that group, whose pane is keyed by its chat.
+  const holder = groupOfSession(next, input.sessionId)
   const pane = geometry.panes.find((entry) => entry.key === input.sessionId)
+    ?? geometry.panes.find((entry) => holder !== null && entry.groupId === holder.id)
   return pane ? { layout: next, rect: pane.rect } : null
 }

@@ -287,6 +287,24 @@ describe('geometry and previews for a file-only pane', () => {
     expect(fileRect.left).toBeGreaterThan(placed.panes[0].rect.left)
   })
 
+  it('previews a centre drop as the pane whose group the file joins', () => {
+    const layout = chatsWithReport()
+    const target = groupId(layout, 'b')
+    const preview = previewSplitDrop({
+      layout,
+      sessionId: report,
+      hit: { region: 'center', key: 'b', groupId: target },
+      context,
+      gridRect: box,
+      viewport,
+      metrics,
+      pickerPaneKey: null,
+    })
+    expect(preview).not.toBeNull()
+    const placed = splitGeometry({ layout: preview!.layout, keys: ['a', 'b'], sessionForKey: (key) => key, box, viewport, metrics })
+    expect(preview!.rect).toEqual(placed.panes.find((pane) => pane.key === 'b')!.rect)
+  })
+
   it('previews the half of the target a dropped file will take, the pane that then lands', () => {
     const layout = chatsWithReport()
     const preview = previewSplitDrop({
