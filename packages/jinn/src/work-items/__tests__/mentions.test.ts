@@ -16,6 +16,7 @@ describe("parseMentions", () => {
     "see docs/@alpha or a.@alpha",
     "quoted `@alpha` inline",
     "```\n@alpha in a fence\n```",
+    "~~~\n@alpha in a tilde fence\n~~~",
     "an @ on its own, or @-",
   ])("finds none in %j", (body) => {
     expect(parseMentions(body)).toEqual([]);

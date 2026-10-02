@@ -1478,7 +1478,7 @@
       ]
     },
     "packages/web/src/routes/todos/task-page/activity.tsx": {
-      "lines": 555,
+      "lines": 542,
       "exempt": [
         "complexity",
         "max-lines-per-function"
