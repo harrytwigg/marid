@@ -24,8 +24,8 @@ import {
  * the portal session is refused like every other session.
  *
  * The last half is the boundary. Widening the lifecycle lane must not reach
- * the two decisions that were routed away from agents on purpose: a gate the
- * operator reserved, and closing work you produced yourself.
+ * the decision that was routed away from agents on purpose: closing work you
+ * produced yourself.
  */
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-coo-lane-authority-"));
@@ -187,32 +187,7 @@ describe("POST /api/delegations — the COO lane's standing", () => {
   });
 });
 
-describe("the two decisions the COO lane still does not reach", () => {
-  it("refuses it a gate the operator reserved, in the words the operator surface uses", async () => {
-    const item = store.createWorkItem({
-      title: "Reserved gate",
-      status: "in_review",
-      assignee: "platform-worker",
-      department: "platform",
-    });
-    const coo = portalSession("web:coo-decides");
-
-    const requested = await post(
-      `/api/work-items/${item.id}/approval/request`,
-      { request: "Ship it?", operatorOnly: true },
-      toolHeaders(coo),
-    );
-    expect(requested.status).toBe(200);
-
-    const decided = await post(`/api/work-items/${item.id}/approval`, { decision: "approve" }, toolHeaders(coo));
-
-    expect([decided.status, decided.body.error]).toEqual([
-      403,
-      `Todo ${item.id} has an operator-only approval; only the operator/aCEO may decide it`,
-    ]);
-    expect(store.getWorkItem(item.id)?.approvalState).toBe("pending");
-  });
-
+describe("the decision the COO lane still does not reach", () => {
   it("refuses it its own produced work, claim or no claim", async () => {
     const item = store.createWorkItem({ title: "The COO's own work", status: "in_review" });
     const coo = portalSession("web:coo-self-closes");

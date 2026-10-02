@@ -13,6 +13,7 @@ import { addComment, commentsTail } from "../../work-items/comments.js";
 import { createWorkItemIdempotent } from "../../work-items/create-idempotency.js";
 import { getWorkItemLabels } from "../../work-items/labels.js";
 import { writeDetail } from "../../work-items/origin.js";
+import { postReviewNote } from "../../work-items/review-handoff.js";
 import {
   getWorkItem,
   updateWorkItemConditional,
@@ -105,6 +106,8 @@ const setTodoStatus: DomainHandler = (_host, args) => {
   if (!getWorkItem(id)) throw new Error(`Todo ${id} not found`);
   const detail = writeDetail({ ...(note ? { note } : {}) }, "talk");
   transition(id, status, "operator", { manual: true, human: true, ...(detail ? { detail } : {}) });
+  // A note given with a move into or back out of review is posted, as it is from the board.
+  postReviewNote(id, { actor: "operator", author: "operator", authorKind: "operator", origin: "talk" });
   return { data: { todo: todoData(id) }, uiEffect: { invalidate: ["todos", `todo:${id}`], navigate: `/todos/${encodeURIComponent(id)}` } };
 };
 

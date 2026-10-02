@@ -16,10 +16,9 @@ export type BoundOperatorCall = TalkControlAdapterContext & {
  * for the live orb, and the provider item id of the operator's own final
  * transcript. A model that decided on its own to send cannot produce them.
  *
- * Voice approval established this contract. Sending into a named session is the
- * other write nobody can take back once it lands — whoever is on that session
- * may act on the message immediately — so it is gated the same way rather than
- * on a weaker rule of its own.
+ * Sending into a named session is a write nobody can take back once it lands —
+ * whoever is on that session may act on the message immediately — so it is
+ * gated on this evidence rather than on a weaker rule of its own.
  */
 export function requireBoundOperatorEvidence(
   call: TalkControlAdapterContext,

@@ -11,7 +11,6 @@ import { buildNoteTools } from "./note-tools.js";
 import { buildDelegationTools } from "./delegation-tools.js";
 import { buildOrgTools } from "./org-tools.js";
 import { buildWorkItemTools } from "./work-item-tools.js";
-import { buildApprovalTools } from "./approval-tools.js";
 import { buildCostTools } from "./cost-tools.js";
 import { buildCronTools } from "./cron-tools.js";
 import { buildFileTools } from "./file-tools.js";
@@ -100,7 +99,7 @@ export { gatewayGet, gatewayRequest, JinnMcpToolError, type JinnMcpContext, type
 /**
  * Build the full tool set, one group per company surface: org, sessions,
  * company-reference search, scoped knowledge, Notes, cost reads,
- * cron reads, the delegation transaction, Todos/work-items, approvals, managed
+ * cron reads, the delegation transaction, Todos/work-items, managed
  * files, connectors, and session-armed heartbeats.
  * Growth discipline: the belt budget lives in the GRS-017 design §7 and the
  * GRS-020 design §4 (net context diet positive — measured in
@@ -121,7 +120,6 @@ export function buildTools(opts?: { notesEnabled?: boolean; knowledge?: Knowledg
     ...buildCronTools(),
     ...buildDelegationTools(),
     ...buildWorkItemTools(),
-    ...buildApprovalTools(),
     ...buildFileTools(),
     ...buildConnectorTools(),
     ...buildHeartbeatTools(),

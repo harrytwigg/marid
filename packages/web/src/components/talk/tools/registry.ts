@@ -1,4 +1,3 @@
-import { APPROVAL_TOOLS } from "./approval-tools"
 import { CHAT_MESSAGE_SEARCH_TOOL } from "./chat-message-search"
 import { CHAT_COMPOSER_TOOLS } from "./chat-composer-tools"
 import { afterNextPaint, nowMs, recordToolTiming } from "./budget"
@@ -9,6 +8,7 @@ import { NAVIGATE_TOOLS } from "./navigate-tools"
 import { PAGE_TOOLS } from "./page-tools"
 import { READ_TOOLS } from "./read-tools"
 import { RESOLVE_TOOLS } from "./resolve-tools"
+import { UNBLOCK_TOOLS } from "./unblock-tools"
 import { toolDefinition, type TalkTool, type ToolDefinition, type ToolResult } from "./tool-spec"
 import { parseToolArgs } from "./validate-args"
 import { WRITE_TOOLS } from "./write-tools"
@@ -21,7 +21,7 @@ import { VISUAL_CAPTURE_TOOL } from "./visual-tools"
  * `tool_call` event verbatim. It answers with a value in every case, including
  * every kind of bad input — a throw would take a live voice session down with
  * it. Writes are resident like everything else — the gateway mints the whole
- * catalog when the session opens; `operatorOnly` and voice approval contain them.
+ * catalog when the session opens; `operatorOnly` and bound speech evidence contain them.
  */
 
 export const TALK_TOOLS: readonly TalkTool[] = [
@@ -32,7 +32,7 @@ export const TALK_TOOLS: readonly TalkTool[] = [
   ...CHAT_COMPOSER_TOOLS,
   ...WRITE_TOOLS,
   ...CONSENT_TOOLS,
-  ...APPROVAL_TOOLS,
+  ...UNBLOCK_TOOLS,
   ...PAGE_TOOLS,
   FOCUS_ELEMENT_TOOL,
   ESCAPE_HATCH_TOOL,

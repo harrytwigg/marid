@@ -53,51 +53,54 @@ describe("Todo Dispatcher persona — routing", () => {
 });
 
 /**
- * ICI-1420 — the way out of a dead end, pinned in both system personas.
+ * The way out of a dead end, pinned in both system personas.
  *
- * A system employee that can place nobody used to stop at a comment, leaving the
- * Todo holding nothing. It now hands the work up the approval lane and wakes the
- * COO, so the same text has to keep naming verbs that are actually reachable.
+ * A system employee that can place nobody must not leave the Todo holding
+ * nothing. With approvals gone it stops the Todo for the operator instead:
+ * blocked, with a comment saying what is needed and offering options, and the
+ * assignee left as it was. The Blocked column is what surfaces it.
  */
-describe("System employee personas — handing a Todo up instead of dead-ending", () => {
-  it("has the escalation verbs on the belt it is given", () => {
+describe("System employee personas — blocking a dead end for the operator", () => {
+  it("has the blocking verbs on the belt it is given", () => {
     const names = new Set(buildTools().map((tool) => tool.name));
 
-    for (const verb of ["request_work_item_approval", "list_sessions", "send_to_session"]) {
+    for (const verb of ["update_work_item", "comment_work_item"]) {
       expect(names.has(verb)).toBe(true);
     }
   });
 
-  it("sends the Dispatcher up the approval lane rather than stopping at a comment", () => {
-    expect(persona).toContain("request_work_item_approval");
-    expect(persona).not.toMatch(/explain the missing role in a Todo comment/i);
+  it("names no approval tool, which no longer exist", () => {
+    expect(persona).not.toMatch(/approval/i);
+    expect(shaper).not.toMatch(/approval/i);
+  });
+
+  it("sends the Dispatcher's dead end to blocked, with options for the operator", () => {
+    expect(persona).toMatch(/update_work_item \{ id, status: "blocked"/);
+    expect(persona).toMatch(/offering the operator concrete options/);
+    expect(persona).toMatch(/Leave the assignee as it is/);
   });
 
   it("routes the Dispatcher's root-identity 403 into that same lane", () => {
     expect(persona).toMatch(/403/);
     expect(persona).toMatch(/root-identity child/i);
+    expect(persona).toMatch(/block the Todo the same way/);
   });
 
-  // A gate nobody polls is not a hand-off, so the wake ships with it — and it is
-  // best-effort, because losing the wake must not lose the Todo.
-  it("pairs the Dispatcher's gate with a best-effort wake", () => {
-    expect(persona).toContain("send_to_session");
-    expect(persona).toMatch(/best-effort/i);
-  });
-
-  it("keeps the Shaper's 409 stop and routes every other refusal up", () => {
+  it("keeps the Shaper's 409 stop and blocks on every other refusal", () => {
     expect(shaper).toMatch(/409/);
     expect(shaper).toMatch(/verbatim/i);
-    expect(shaper).toContain("request_work_item_approval");
-    expect(shaper).toContain("send_to_session");
+    expect(shaper).toMatch(/update_work_item \{ id, status: "blocked"/);
+    expect(shaper).toMatch(/concrete options/);
+    expect(shaper).toMatch(/Leave the assignee unset/);
   });
 
-  // escalate_work_item_approval is the routed approver's lever and 403s the
-  // requester, so naming it as the hand-off would send both employees into a
-  // guaranteed refusal.
-  it("names neither employee's hand-off as the approver's own lever", () => {
-    expect(persona).not.toContain("escalate_work_item_approval");
-    expect(shaper).not.toContain("escalate_work_item_approval");
+  // Moving the Todo to the operator would need assign standing neither system
+  // employee has, and a wake to another session is no substitute for the column.
+  it("hands the dead end to neither the operator's assignee slot nor another session", () => {
+    for (const text of [persona, shaper]) {
+      expect(text).not.toContain("assign_work_item");
+      expect(text).not.toContain("send_to_session");
+    }
   });
 });
 
@@ -133,7 +136,7 @@ describe.each(SYSTEM_EMPLOYEES.map((employee) => [employee.name, employee.person
 
 it("spells out the call shape of every tool the Dispatcher's routing depends on", () => {
   const shaped = new Set(callShapes(persona).map((shape) => shape.tool));
-  for (const tool of ["get_work_item", "delegate_task", "comment_work_item", "request_work_item_approval", "get_employee"]) {
+  for (const tool of ["get_work_item", "delegate_task", "comment_work_item", "update_work_item", "get_employee"]) {
     expect(shaped).toContain(tool);
   }
 });

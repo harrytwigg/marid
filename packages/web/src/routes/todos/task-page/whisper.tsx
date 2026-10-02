@@ -1,4 +1,4 @@
-import { Bell, ChevronRight, CornerDownRight, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
+import { ChevronRight, CornerDownRight, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
 import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
@@ -62,15 +62,9 @@ const WHISPERS: Record<string, WhisperRule> = {
   note: (detail) => {
     if (detail.assignee === OPERATOR_ASSIGNEE) return { Icon: Pencil, text: "assigned it to the operator" }
     if (typeof detail.assignee === "string") return { Icon: Pencil, text: `assigned ${detail.assignee}` }
-    if (detail.approvalEscalated === true) return { Icon: Bell, text: "escalated the approval" }
     return { Icon: Pencil, text: "added a note" }
   },
   metadata_edited: { Icon: Pencil, text: "edited the details" },
-  approval_requested: { Icon: Bell, text: "asked for approval" },
-  approval_decided: (detail) => ({
-    Icon: Bell,
-    text: detail.decision === "approve" ? "approved it" : "sent the approval back",
-  }),
   attachment_added: (detail) => ({
     Icon: Paperclip,
     text: `attached ${typeof detail.filename === "string" ? detail.filename : "a file"}`,

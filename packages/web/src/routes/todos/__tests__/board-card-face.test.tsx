@@ -19,11 +19,6 @@ function compact(over: Partial<WorkItemCompactWire> & { id: string; status: Work
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: over.id,
@@ -55,13 +50,6 @@ function tree(id: string, over: Partial<WorkItemTreeWire> = {}): WorkItemTreeWir
       verifyPolicy: null,
       rounds: 0,
       budgetUsd: null,
-      approvalState: null,
-      approvalRequest: null,
-      approvalRef: null,
-      approvalTarget: null,
-      approvalEscalatedAt: null,
-      approvalDecidedBy: null,
-      approvalDecidedAt: null,
       createdAt: "2026-08-21T08:00:00.000Z",
       updatedAt: "2026-08-21T08:00:00.000Z",
       closedAt: null,
@@ -124,18 +112,16 @@ describe("the four rows, in order", () => {
     expect(rowsOf(card)[0].querySelectorAll('[data-testid^="avatar-"]')).toHaveLength(1)
   })
 
-  it("shows no body excerpt, no kept caption, no cause line, no working line and no approval bell", () => {
-    const pending = compact({
+  it("shows no body excerpt, no kept caption, no cause line, no working line", () => {
+    const card0 = compact({
       ...item,
       id: "PLA-2",
-      approvalState: "pending",
       kept: true,
       sessionRef: { ref: "session:abc", sessionId: "abc" },
     })
-    const { card } = renderCard(pending, { enrichment: { tree: tree("PLA-2") } })
+    const { card } = renderCard(card0, { enrichment: { tree: tree("PLA-2") } })
     expect(rowsOf(card)).toHaveLength(4)
     expect(card.textContent).not.toContain("A body the Variant A face does not show")
-    expect(card.textContent).not.toContain("Approval")
     expect(card.textContent).not.toContain("Working")
     expect(card.textContent).not.toContain("Kept")
     expect(screen.queryByTestId("kept-caption-PLA-2")).toBeNull()

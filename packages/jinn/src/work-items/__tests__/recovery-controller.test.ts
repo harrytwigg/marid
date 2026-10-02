@@ -132,9 +132,35 @@ describe("sweepTodoRecovery", () => {
     expect(hits).toContain(id);
   });
 
-  it("does not overwrite an approved-landed-open manager row with the operator fallback", () => {
+  it("does not overwrite an unresolved manager row with the operator fallback", () => {
     const item = store.createWorkItem({
-      title: "approved landing leftover", status: "in_review", assignee: "platform-worker",
+      title: "failed attempt still in review", status: "in_review", assignee: "platform-worker",
+    });
+    const sessionId = `s-mgr-${item.id}`;
+    db.prepare(
+      `INSERT INTO sessions (id, engine, source, source_ref, status, work_item_id, created_at, last_activity)
+       VALUES (?, 'claude', 'cron', ?, 'idle', ?, ?, ?)`,
+    ).run(sessionId, `cron:${sessionId}`, item.id, new Date().toISOString(), new Date().toISOString());
+    const run = runs.openWorkItemRun({ workItemId: item.id, sessionId });
+    runs.closeWorkItemRun(run.id, { outcome: "completed", endedAt: new Date().toISOString() });
+    rows.upsertWorkItemRecovery({
+      workItemId: item.id,
+      incidentId: run.id,
+      class: "operator",
+      lane: "manager",
+      reason: "the attempt failed in the work itself",
+    });
+
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
+
+    expect(rows.getWorkItemRecovery(item.id)).toMatchObject({ lane: "manager", incidentId: run.id });
+    expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).toContain(item.id);
+  });
+
+  it("clears a manager row whose verdict the classifier no longer gives", () => {
+    // An approval-era verdict: nothing will ever resolve it now.
+    const item = store.createWorkItem({
+      title: "left on manager attention by an approval", status: "in_review", assignee: "platform-worker",
     });
     const sessionId = `s-mgr-${item.id}`;
     db.prepare(
@@ -153,8 +179,23 @@ describe("sweepTodoRecovery", () => {
 
     controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
 
-    expect(rows.getWorkItemRecovery(item.id)).toMatchObject({ lane: "manager", incidentId: run.id });
-    expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).toContain(item.id);
+    expect(rows.getWorkItemRecovery(item.id)?.lane).toBe("operator");
+    expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).not.toContain(item.id);
+  });
+
+  // The row live instances actually carry: an unassigned Todo in review, once
+  // flagged as having no reviewer.
+  it("clears the unassigned in-review row in one sweep", () => {
+    const item = store.createWorkItem({ title: "handed in, nobody assigned", status: "in_review" });
+    rows.upsertWorkItemRecovery({
+      workItemId: item.id, incidentId: `stale-${item.id}`, class: "operator", lane: "manager",
+      reason: "in review with no assignee to answer for it",
+    });
+
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
+
+    expect(rows.getWorkItemRecovery(item.id)?.lane).toBe("operator");
+    expect(store.listWorkItems({ needsAttentionFor: "operator" }).map((row) => row.id)).not.toContain(item.id);
   });
 
   it("stops re-arming after MAX_RECOVERY_ATTEMPTS and records the exhaustion", () => {

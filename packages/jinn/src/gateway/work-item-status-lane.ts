@@ -13,7 +13,7 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
  *   closing, cancelling, reopening.
  * - The **agent lane** is every other session, review delegates included. It
  *   works inside the open statuses (`isAgentLaneMove`) and never closes,
- *   cancels or reopens.
+ *   cancels or reopens; a move into `in_review` carries a summary.
  * - The **coordinator lane** is the one exception: the operator's coordinator
  *   chat may close a Todo as `done` on the operator's behalf, with a reason
  *   the gateway posts on the Todo. Nothing else rides on it.
@@ -75,6 +75,12 @@ export function resolveStatusLane(
   if (hasOperatorLane(caller)) return { ok: true, lane: { kind: "operator" } };
   if (caller.kind !== "session") return refuse(403, "caller has no session identity");
   if (asOperator) return resolveCoordinatorLane(caller, item, target, note);
+  return resolveAgentLane(item, target, note);
+}
+
+/** Every other session: inside the open statuses, and a move into
+ *  `in_review` carries the summary the gateway posts. */
+function resolveAgentLane(item: WorkItem, target: WorkItemStatus, note: string): StatusLaneResult {
   const closed = STICKY_STATUSES.has(item.status);
   if (target === "done" || target === "cancelled") {
     return refuse(403, `${target === "done" ? "closing" : "cancelling"} Todo ${item.id} is the operator's decision: move it to in_review and the operator closes it`);
@@ -82,6 +88,11 @@ export function resolveStatusLane(
   if (closed) return refuse(403, `Todo ${item.id} is ${item.status}; reopening closed work is the operator's`);
   if (!isAgentLaneMove(item.status, target)) {
     return refuse(403, `${item.status} → ${target} is not an agent move on Todo ${item.id}: ${AGENT_LANE_SHAPE}`);
+  }
+  // Handing work to review is a handoff the operator reads: it carries a
+  // summary, which the gateway posts on the Todo as a comment.
+  if (target === "in_review" && item.status !== "in_review" && !note) {
+    return refuse(400, `moving Todo ${item.id} to in_review needs a summary in note: what was done and where the evidence is; it is posted on the Todo as a comment`);
   }
   return { ok: true, lane: { kind: "agent" } };
 }

@@ -44,7 +44,6 @@ export function isOpen(status: WorkItemStatusWire): boolean {
 
 const SAFE_TODO_ERROR_BY_CODE: Readonly<Record<string, string>> = {
   WORK_ITEM_ESCALATED: "This Todo is escalated. Use the human operator surface for this transition.",
-  WORK_ITEM_APPROVAL_PENDING: "This Todo is awaiting approval. Resolve the approval before changing its status.",
   WORK_ITEM_VERSION_CONFLICT: "This Todo changed elsewhere. Reload it before saving again.",
   TODO_VERSION_CONFLICT: "This Todo changed elsewhere. Reload it before saving again.",
   TODO_IDEMPOTENCY_CONFLICT: "This edit request conflicts with an earlier request. Reload remote to discard all local edits before starting a new edit.",
@@ -78,7 +77,7 @@ export function operatorSafeTodoError(error: unknown, fallback: string): string 
   if (code && SAFE_TODO_ERROR_BY_CODE[code]) return SAFE_TODO_ERROR_BY_CODE[code]
   if (isTodoVersionConflictError(error)) return SAFE_TODO_ERROR_BY_CODE.WORK_ITEM_VERSION_CONFLICT
   if (error.status === 404) return SAFE_TODO_ERROR_BY_CODE.WORK_ITEM_NOT_FOUND
-  if (error.status === 403 && /\b(?:escalated|approval (?:is )?pending|sticky terminal)\b/i.test(error.message)) {
+  if (error.status === 403 && /\b(?:escalated|sticky terminal)\b/i.test(error.message)) {
     return "This transition needs explicit operator authority. Use the human operator surface if it is intentional."
   }
   return fallback
@@ -114,7 +113,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 export type NeedsYouSet = WorkItemCompactWire[]
 
 export function needsAttention(item: WorkItemCompactWire, now = Date.now()): boolean {
-  return item.attentionLane === "recovering" || item.attentionLane === "manager" || (!isParked(item.parkedUntil, now) && (item.approvalState === "pending" || item.status === "blocked"))
+  return item.attentionLane === "recovering" || item.attentionLane === "manager" || (!isParked(item.parkedUntil, now) && item.status === "blocked")
 }
 
 export function deriveNeedsYou(items: WorkItemCompactWire[], now = Date.now()): NeedsYouSet {

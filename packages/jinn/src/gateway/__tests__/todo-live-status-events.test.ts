@@ -9,7 +9,7 @@ import type { ServerResponse } from "node:http";
  * ICI-749 — every status write reaches the dashboard live, exactly once.
  *
  * The board went stale because only the HTTP routes emitted `company:changed`;
- * the reconciler or an approval consequence committed silently.
+ * the reconciler committed silently.
  * The emit now belongs to `transition()`, so these tests wire BOTH ends the way
  * `startGateway` does (`setTodoLiveEmitter` + `ApiContext.emit`) and count the
  * todo events per write — one, never two, from either lane.
@@ -27,14 +27,12 @@ fs.writeFileSync(
 type Api = typeof import("../api.js");
 type Store = typeof import("../../work-items/store.js");
 type Registry = typeof import("../../sessions/registry.js");
-type Approvals = typeof import("../../work-items/approvals.js");
 type Reconcile = typeof import("../../work-items/reconcile.js");
 type LiveEvents = typeof import("../../work-items/live-events.js");
 
 let api: Api;
 let store: Store;
 let registry: Registry;
-let approvals: Approvals;
 let reconcile: Reconcile;
 
 const emittedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
@@ -88,7 +86,6 @@ beforeAll(async () => {
   api = await import("../api.js");
   store = await import("../../work-items/store.js");
   registry = await import("../../sessions/registry.js");
-  approvals = await import("../../work-items/approvals.js");
   reconcile = await import("../../work-items/reconcile.js");
   dbModule.initDb();
   // Exactly the wiring startGateway installs, so these counts are the ones a
@@ -103,7 +100,7 @@ beforeEach(() => {
   emittedEvents.length = 0;
 });
 
-describe("the reconciler and approval consequences reach the board", () => {
+describe("the reconciler reaches the board", () => {
   it("emits one todo event when the reconciler derives a new status", () => {
     const item = store.createWorkItem({ title: "reconciled item" });
     const session = registry.createSession({ engine: "claude", source: "cron", sourceRef: "cron:live:1" });
@@ -115,22 +112,6 @@ describe("the reconciler and approval consequences reach the board", () => {
     const events = todoEvents();
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ entity: "todo", id: item.id, version: store.getWorkItem(item.id)!.version });
-  });
-
-  it("emits one todo event for the transition an approval decision causes", async () => {
-    const item = store.createWorkItem({ title: "approve me", status: "in_review" });
-    approvals.requestApproval(item.id, { request: "ship it?", actor: "platform-worker" });
-    emittedEvents.length = 0;
-
-    const cap = makeRes();
-    await api.handleApiRequest(
-      makeReq("POST", `/api/work-items/${item.id}/approvals/decide`, { decision: "approve" }, operatorHeaders),
-      cap.res,
-      ctx,
-    );
-
-    expect([cap.status, cap.body.workItem.status]).toEqual([200, "done"]);
-    expect(todoEvents()).toHaveLength(1);
   });
 });
 

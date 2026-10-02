@@ -9,7 +9,6 @@ describe("todoActivityBlock", () => {
       title: "Verify the release",
       status: "backlog",
       assignee: "release-engineer",
-      approvalState: null,
       parentId: "ACM-42",
       rootId: "ACM-42",
       depth: 1,

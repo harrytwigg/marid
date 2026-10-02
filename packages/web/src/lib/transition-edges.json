@@ -8,7 +8,7 @@
     "done": ["backlog"],
     "cancelled": ["backlog"]
   },
-  "manualExecutingFrom": ["backlog"],
+  "manualExecutingFrom": ["backlog", "in_review"],
   "sticky": ["done", "cancelled"],
   "closeGated": ["done", "cancelled"]
 }

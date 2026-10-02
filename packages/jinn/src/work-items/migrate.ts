@@ -12,7 +12,7 @@ import { WORK_ITEM_BLOCKS_DDL } from "./blocks.js";
 import { WORK_ITEM_STOP_CAUSE_DDL } from "./stop-cause.js";
 import { WORK_ITEM_RECOVERY_TABLES } from "./recovery.js";
 import { clearAutoKeptOnce, WORK_ITEM_KEPT_DDL } from "./kept.js";
-import { migrateRetiredStatuses } from "./retired-statuses.js";
+import { migrateRetiredWorkItemData } from "./retired-approvals.js";
 import { hasFiveOutcomeRunTable, widenRunOutcomes } from "./runs-migrate.js";
 import { WORK_ITEM_RUNS_DDL, WORK_ITEM_RUNS_TABLE_DDL, workItemRunRowsAreSound } from "./runs-schema.js";
 import { currentTableSql, sqlShape } from "./sql-shape.js";
@@ -910,7 +910,7 @@ export function migrateWorkItemsSchema(
         db.prepare("DELETE FROM meta WHERE key IN ('todo_status_event_claims_migrated','todo_status_replay_watermark')").run();
       }
     } else if (liveShape === "current") {
-      migrateRetiredStatuses(db);
+      migrateRetiredWorkItemData(db);
       return { rebuilt: false, rows: 0 };
     }
     if (liveShape === "v1") {
@@ -964,7 +964,7 @@ export function migrateWorkItemsSchema(
       // Approvals come off the legacy row — read BEFORE the table is dropped.
       backfillWorkItemApprovals(db, "work_items_v1_legacy");
       reconcileDepartmentRegistry(db); // v1 rows carried departments with no registry
-      migrateRetiredStatuses(db);
+      migrateRetiredWorkItemData(db);
       const migratedRows = Number(db.prepare("SELECT COUNT(*) FROM work_items").pluck().get());
       db.exec("DROP TABLE work_items_v1_legacy");
       db.exec(WORK_ITEMS_INDEX_DDL);

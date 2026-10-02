@@ -1129,7 +1129,7 @@ describe("spawn/delegate as the employee-hierarchy root", () => {
 
     expect(resp.status).toBe(403);
     expect(String(resp.body.error)).toMatch(/cannot run work as "org-root", the employee-hierarchy root/);
-    expect(String(resp.body.error)).toMatch(/request an approval or escalate the Todo/);
+    expect(String(resp.body.error)).toMatch(/block the Todo for the operator instead of running as it/);
     expect(workItemCount()).toBe(before);
   });
 

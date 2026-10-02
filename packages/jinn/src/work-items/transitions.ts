@@ -21,7 +21,7 @@ import {
 /**
  * Guarded Todo transitions (GRS-021a design §1.2) — THE status write path.
  *
- * With 8 statuses + approvals + rounds, scattered `updateStatus` calls would be
+ * With 8 statuses + rounds, scattered `updateStatus` calls would be
  * the split-brain seed all over again. Every status change flows through
  * `transition()`: only declared edges are allowed (illegal edges THROW, never
  * silently write), every change appends a `work_item_events` audit row in the
@@ -73,12 +73,10 @@ export interface TransitionOptions {
    */
   agent?: boolean;
   /**
-   * Marks an `in_review → executing` transition as a review BOUNCE (rejection
-   * with critique): `rounds` increments, and when the incremented count reaches
-   * the policy's max rounds the item goes to `blocked` INSTEAD, recorded as an
-   * escalation (design §1.3 — bounded loops end in front of the operator, never
-   * spin).
-   */
+   * Marks an `in_review → executing` transition as a review BOUNCE (implied for
+   * a manual human one): `rounds` increments, and at the policy's max rounds the
+   * item goes to `blocked` INSTEAD, recorded as an escalation (design §1.3 —
+   * bounded loops end in front of the operator, never spin). */
   bounce?: boolean;
   /** Why this block is a block (ICI-730); read only when `to` is `blocked`, and
    *  `blocks.ts` owns what each kind does. Absent, a block means `needs_input`:
@@ -164,7 +162,9 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
         `work item ${id} is ${from} — leaving a sticky terminal is a human decision (operator surface only)`,
       );
     }
-    if (!opts.agent && opts.manual && to === 'executing' && from !== 'backlog') {
+    // The operator sending work back from review is the review bounce (below).
+    const bounce = opts.bounce || (opts.human === true && opts.manual === true && from === 'in_review' && to === 'executing');
+    if (!opts.agent && !bounce && opts.manual && to === 'executing' && from !== 'backlog') {
       throw new TransitionError('illegal-edge', `illegal manual transition ${from} → ${to} for work item ${id}`);
     }
     // A same-status request reaches here only as a `dependency` re-block, which
@@ -202,13 +202,12 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
       }
     }
 
-    // The bounce rule: a rejected review returns to executing — unless this
-    // rejection exhausts the policy's rounds, in which case the loop terminates
-    // at the operator (blocked, as an escalation), never spins.
+    // The bounce rule: work sent back returns to executing, unless that exhausts
+    // the policy's rounds; then it stops at the operator (blocked, escalated).
     let target = to;
     let escalatedByRounds = false;
     let rounds = item.rounds;
-    if (opts.bounce && from === 'in_review' && to === 'executing') {
+    if (bounce && from === 'in_review' && to === 'executing') {
       rounds += 1;
       if (rounds >= effectiveMaxRounds(item)) {
         target = 'blocked';
@@ -259,7 +258,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
       actor,
       detail: {
         ...(opts.detail ?? {}),
-        ...(opts.bounce ? { bounce: true, rounds } : {}),
+        ...(bounce ? { bounce: true, rounds } : {}),
         ...(escalatedByRounds ? { reason: 'max-rounds-exhausted', maxRounds: effectiveMaxRounds(item) } : {}),
         ...(block?.escalated ? { reason: 'block_loop_detected', blockKind, recurrences: block.recurrences } : {}),
         // An escalation stops the Todo for the operator: recovery must read it
@@ -273,11 +272,10 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
   });
   const result = holdLiveSignalsUntilCommit(txn);
   // ICI-749: the board's live signal belongs to the status write, not to the HTTP
-  // routes. A workflow reflecting its run, the reconciler, and an approval's
-  // consequence all commit here with no route to announce them, so the dashboard
-  // stayed stale until a reload. Emitted before the workflow bridge so a recovery
-  // failure can never swallow the update; the route lanes suppress their own
-  // duplicate (`persistTodoMutationActivity`).
+  // routes. The reconciler, a cascade and the recovery controller all commit
+  // here with no route to announce them, so the dashboard stayed stale until a
+  // reload. The route lanes suppress their own duplicate
+  // (`persistTodoMutationActivity`).
   if (result.event) notifyTodoChanged(result.item, 'status-transitioned', opts.callerSessionId);
   notifyTodoStatusChange(result.event, result.item);
   return result;

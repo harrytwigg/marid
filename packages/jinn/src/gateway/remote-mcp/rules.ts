@@ -65,8 +65,7 @@ export function refuseRemoteMcpRoute(res: ServerResponse, method: string, pathna
  * the connector is the operator's own door, so on a Todo it stands where
  * the operator stands — it may assign, label or unlink any Todo, not only the ones
  * it created. What guards it is the bridge (Access JWT, allow-list, cut-off) and
- * the route list above, not a narrower ledger standing. Approval authority is
- * deliberately not part of this: those gates stay the operator surface's.
+ * the route list above, not a narrower ledger standing.
  */
 export function remoteMcpHasOperatorStanding(caller: WorkItemCaller): boolean {
   return caller.kind === "session" && isRemoteMcpSession(caller.session);

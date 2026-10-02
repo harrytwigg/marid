@@ -198,7 +198,7 @@ describe("work-item store — raw status write door", () => {
 });
 
 describe("work-item store — GRS-021a Todo model fields", () => {
-  it("round-trips acceptance, verifyPolicy, and budgetUsd; a fresh item carries NO approval", () => {
+  it("round-trips acceptance, verifyPolicy, and budgetUsd", () => {
     const wi = store.createWorkItem({
       title: "elevated",
       acceptance: "- [ ] tests green",
@@ -210,9 +210,6 @@ describe("work-item store — GRS-021a Todo model fields", () => {
     expect(fetched.verifyPolicy).toEqual({ mode: "thorough", verifier: { engine: "codex" }, maxRounds: 5 });
     expect(fetched.budgetUsd).toBe(12.5);
     expect(fetched.rounds).toBe(0);
-    // The anti-bottleneck principle (design §1.3): approval is none, always, at create.
-    expect(fetched.approvalState).toBeNull();
-    expect(fetched.approvalRequest).toBeNull();
   });
 
   it("a corrupt stored verify_policy fails closed to VERIFY", () => {

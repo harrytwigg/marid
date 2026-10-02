@@ -18,8 +18,6 @@ export { TALK_COMPANY_CAPABILITY_COVERAGE, renderTalkCompanyCoverageMarkdown } f
 export type { TalkCompanyCapabilityCoverage } from "./capability-coverage.js";
 
 const GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
-  gateway("prepare_voice_approval", "Prepare a short-lived approval challenge for one Todo. This never decides it.", params({ id: string("The full Todo id.") }, ["id"]), "todos", { mutability: "write", verification: "approval-challenge-reread" }),
-  gateway("commit_voice_approval", "Commit a prepared challenge from the separately recorded final operator utterance. Arguments contain only the challenge id.", params({ challengeId: string("The prepared challenge id.") }, ["challengeId"]), "todos", { mutability: "write", verification: "approval-decision-reread" }),
   gateway("talk_delegate_todo", "Delegate an existing Todo to a named employee and open its resulting chat.", params({
     id: string("The full Todo id."),
     employee: string("The employee slug."),
@@ -38,7 +36,7 @@ const GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
     unresolvedQuestion: string("One open question."),
     resolvedQuestion: string("An exact open question that is now resolved."),
   }), "memory", { mutability: "write", verification: "topic-commitment-reread" }),
-  gateway("read_talk_capability", "Read whether a company capability is supported or return its exact named gap and planned adapter. Known lanes include todos, chats, notes, cron, org, skills, settings, logs, files, instances, approvals, topics, and screen navigation.", params({
+  gateway("read_talk_capability", "Read whether a company capability is supported or return its exact named gap and planned adapter. Known lanes include todos, chats, notes, cron, org, skills, settings, logs, files, instances, topics, and screen navigation.", params({
     capability: string("The exact capability key from the Talk company inventory."),
   }, ["capability"]), "capabilities", { mutability: "read", verification: "capability-inventory-reread" }),
 ];

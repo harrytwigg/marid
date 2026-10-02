@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { CALLER_SESSION_CAPABILITY_HEADER, CALLER_SESSION_HEADER, TOOL_CALL_HEADER, TOOL_CALL_HEADER_VALUE, ensureSessionCapability } from "../identity.js";
+import { CALLER_SESSION_HEADER, ensureSessionCapability } from "../identity.js";
 import type { JinnMcpContext, JinnMcpTool } from "../toolkit.js";
 import { inProcessGatewayFetch, seedPlatformOrg } from "./helpers/in-process-gateway.js";
 
@@ -60,7 +60,7 @@ function tool(name: string): JinnMcpTool {
 }
 
 describe("work-item tools — registry + schemas", () => {
-  it("exposes the generic Todo verbs separately from COO approval verbs", () => {
+  it("exposes the generic Todo verbs and no approval verbs", () => {
     expect(buildWorkItemTools().map((t) => t.name)).toEqual([
       "list_work_items",
       "get_work_item",
@@ -85,12 +85,10 @@ describe("work-item tools — registry + schemas", () => {
     const names = buildTools().map((t) => t.name).sort();
     expect(names).toContain("create_work_item");
     expect(names).toContain("assign_work_item");
-    expect(names).toContain("request_work_item_approval");
-    expect(names).toContain("decide_work_item_approval");
-    expect(names).toContain("escalate_work_item_approval");
+    expect(names.some((n) => /approval/.test(n))).toBe(false);
     expect(names).toContain("archive_work_item");
     expect(names.some((n) => /cancel/i.test(n) && /work_item/.test(n))).toBe(false);
-    expect(names).toHaveLength(54);
+    expect(names).toHaveLength(51);
   });
 
   it("positions list as recent/filter summaries and search as text/filter hits", () => {
@@ -107,12 +105,11 @@ describe("work-item tools — registry + schemas", () => {
     expect(tool("list_work_items").description).toMatch(/roots and sub-tasks/i);
   });
 
-  it("create schema has no approval fields and update schema allows manual start but leaves cancelling to archive", () => {
+  it("update schema allows manual start but leaves cancelling to archive", () => {
     const createProps = tool("create_work_item").inputSchema.properties;
     expect(Object.keys(createProps).sort()).toEqual(
       ["acceptance", "autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title", "verifyPolicy"].sort(),
     );
-    expect(JSON.stringify(createProps)).not.toMatch(/approval/i);
     const status = tool("update_work_item").inputSchema.properties.status as { enum: string[] };
     expect(status.enum).toEqual(["backlog", "executing", "in_review", "blocked", "done"]);
     expect(status.enum).not.toContain("cancelled");
@@ -234,8 +231,6 @@ describe("work-item tools — unit (stub gateway)", () => {
           acceptance: "- pass",
           verifyPolicy: { mode: "verify" },
           rounds: 1,
-          approvalState: "pending",
-          approvalRequest: "decide",
           budgetUsd: 5,
           source: "workflow",
         },
@@ -245,7 +240,7 @@ describe("work-item tools — unit (stub gateway)", () => {
     const out = (await tool("get_work_item").handler({ id: "JIN-2" }, ctx)) as Record<string, unknown>;
     expect(out).toMatchObject({ spendUsd: 1.25 });
     expect(out).not.toHaveProperty("workflowRun");
-    expect(out.workItem).toMatchObject({ acceptance: "- pass", approvalState: "pending", rounds: 1 });
+    expect(out.workItem).toMatchObject({ acceptance: "- pass", rounds: 1 });
   });
 
   it("get_work_item_tree hits the tree route and returns the subtree with a hint", async () => {
@@ -290,20 +285,16 @@ describe("work-item tools — unit (stub gateway)", () => {
     );
   });
 
-  it("create requires caller identity, posts session provenance, and structurally refuses approval fields", async () => {
+  it("create requires caller identity, and posts session provenance", async () => {
     const anon = stub(() => ({ status: 201, body: {} }), null);
     await expect(tool("create_work_item").handler({ title: "T" }, anon.ctx)).rejects.toThrow(/caller identity unavailable/i);
 
-    const { calls, ctx } = stub(() => ({ status: 201, body: { workItem: { id: "JIN-103", title: "T", status: "backlog", approvalState: null } } }), "sess-caller");
-    await expect(tool("create_work_item").handler({ title: "T", approvalRequest: "decide" }, ctx)).rejects.toThrow(
-      /approval.*authority surface/i,
-    );
+    const { calls, ctx } = stub(() => ({ status: 201, body: { workItem: { id: "JIN-103", title: "T", status: "backlog" } } }), "sess-caller");
     await tool("create_work_item").handler({ title: "T", body: "B", acceptance: "- ok", verifyPolicy: { mode: "verify" } }, ctx);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].url).toBe("http://127.0.0.1:7777/api/work-items");
     expect(calls[0].headers[CALLER_SESSION_HEADER]).toBe("sess-caller");
     expect(calls[0].body).toMatchObject({ title: "T", body: "B", acceptance: "- ok", verifyPolicy: { mode: "verify" } });
-    expect(calls[0].body).not.toHaveProperty("approvalRequest");
   });
 
   it("create refuses caller-supplied provenance instead of forwarding spoofable source/sourceRef", async () => {
@@ -312,28 +303,6 @@ describe("work-item tools — unit (stub gateway)", () => {
       tool("create_work_item").handler({ title: "Spoof", provenance: { source: "workflow", sourceRef: "workflow:wf:run" } }, ctx),
     ).rejects.toThrow(/cron and delegation create their own records.*source=workflow is historical audit provenance and is not currently minted/i);
     expect(calls).toHaveLength(0);
-  });
-
-  it("approval tools post to the separate request/decision/escalation routes", async () => {
-    const names = new Set(buildTools().map((t) => t.name));
-    expect(names.has("request_work_item_approval")).toBe(true);
-    expect(names.has("decide_work_item_approval")).toBe(true);
-    expect(names.has("escalate_work_item_approval")).toBe(true);
-
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const decideTool = buildTools().find((t) => t.name === "decide_work_item_approval")!;
-    const escalateTool = buildTools().find((t) => t.name === "escalate_work_item_approval")!;
-    const { calls, ctx } = stub((call) => ({ status: 200, body: { ok: true, route: new URL(call.url).pathname } }), "sess-coo");
-
-    await requestTool.handler({ id: "JIN-102", request: "Approve release", target: "platform-manager" }, ctx);
-    await decideTool.handler({ id: "JIN-102", decision: "approve", note: "ship" }, ctx);
-    await escalateTool.handler({ id: "JIN-102", reason: "operator needed" }, ctx);
-
-    expect(calls.map((c) => [c.method, new URL(c.url).pathname, c.body])).toEqual([
-      ["POST", "/api/work-items/JIN-102/approval/request", { request: "Approve release", target: "platform-manager" }],
-      ["POST", "/api/work-items/JIN-102/approval", { decision: "approve", note: "ship" }],
-      ["POST", "/api/work-items/JIN-102/approval/escalate", { reason: "operator needed" }],
-    ]);
   });
 
   it("update is identity-gated, leaves the lane to the gateway, and readable gateway refusals reach the caller", async () => {
@@ -398,11 +367,9 @@ describe("work-item tools — unit (stub gateway)", () => {
 type Api = typeof import("../../gateway/api.js");
 type Registry = typeof import("../../sessions/registry.js");
 type Store = typeof import("../../work-items/store.js");
-type Approvals = typeof import("../../work-items/approvals.js");
 let api: Api;
 let registry: Registry;
 let store: Store;
-let approvals: Approvals;
 
 function ctxFor(callerSessionId?: string, capability: "valid" | "none" | string = "valid"): JinnMcpContext {
   return {
@@ -422,7 +389,6 @@ beforeAll(async () => {
   api = await import("../../gateway/api.js");
   registry = await import("../../sessions/registry.js");
   store = await import("../../work-items/store.js");
-  approvals = await import("../../work-items/approvals.js");
   (await import("../../shared/db.js")).initDb();
 });
 
@@ -434,8 +400,8 @@ describe("work-item tools — integration against the real API + store", () => {
     const created = (await tool("create_work_item").handler(
       { title: "Polish narwhal queue", body: "Literal %_\\ body", acceptance: "- ship", verifyPolicy: { mode: "verify" } },
       ctx,
-    )) as { workItem: { id: string; approvalState: null } };
-    expect(created.workItem.approvalState).toBeNull();
+    )) as { workItem: { id: string } };
+    expect(created.workItem.id).toBeTruthy();
 
     const found = (await tool("search_work_items").handler({ text: "Literal %_\\", status: "backlog" }, ctx)) as {
       workItems: Array<{ id: string }>;
@@ -598,86 +564,12 @@ describe("work-item tools — integration against the real API + store", () => {
     expect(blocked.workItem.status).toBe("blocked");
   });
 
-  it("requests a default-routed approval idempotently", async () => {
-    const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-owner", title: "approval owner", employee: "platform-dev" });
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Request routed approval", status: "backlog", assignee: "platform-dev", source: "session" });
-    const first = (await requestTool.handler({ id: item.id, request: "Approve release" }, ctxFor(owner.id))) as {
-      workItem: { approvalState: string; approvalTarget: string };
-    };
-    const second = (await requestTool.handler({ id: item.id, request: "Approve release" }, ctxFor(owner.id))) as typeof first;
-
-    expect(second).toEqual(first);
-    expect(first.workItem).toMatchObject({ approvalState: "pending", approvalTarget: "platform-manager" });
-    expect(store.listWorkItemEvents(item.id).filter((event) => event.kind === "approval_requested")).toHaveLength(1);
-  });
-
-  it("permits linked executors and accepts a valid explicit approval target", async () => {
-    const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-explicit-owner", title: "approval explicit owner", employee: "platform-dev" });
-    const linkedExecutor = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-executor", title: "approval executor" });
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-
-    const explicitItem = store.createWorkItem({ title: "Explicit approval target", status: "backlog", assignee: "platform-dev", source: "session" });
-    const explicit = (await requestTool.handler({ id: explicitItem.id, request: "Root review", target: "coo" }, ctxFor(owner.id))) as {
-      workItem: { approvalState: string; approvalTarget: string };
-    };
-    expect(explicit.workItem).toMatchObject({ approvalState: "pending", approvalTarget: "coo" });
-
-    const linkedItem = store.createWorkItem({ title: "Linked executor request", status: "executing", source: "delegation" });
-    store.linkSession(linkedItem.id, linkedExecutor.id);
-    const linked = (await requestTool.handler({ id: linkedItem.id, request: "Review linked work" }, ctxFor(linkedExecutor.id))) as {
-      workItem: { approvalState: string; approvalTarget: string };
-    };
-    expect(linked.workItem).toMatchObject({ approvalState: "pending", approvalTarget: "coo" });
-  });
-
-  it("rejects missing, foreign, and invalid-target approval requests without writing events", async () => {
-    const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-reject-owner", title: "approval reject owner", employee: "platform-dev" });
-    const outsider = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-outsider", title: "approval outsider", employee: "outsider" });
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Reject unsafe approval requests", status: "backlog", assignee: "platform-dev", source: "session" });
-
-    await expect(requestTool.handler({ id: item.id, request: "Steal review" }, ctxFor(outsider.id))).rejects.toThrow(
-      /403.*does not own|403.*cannot request approval/i,
-    );
-    await expect(requestTool.handler({ id: "JIN-999", request: "Missing" }, ctxFor(owner.id))).rejects.toThrow(/404.*not found/i);
-    await expect(requestTool.handler({ id: item.id, request: "Bad route", target: "unknown-reviewer" }, ctxFor(owner.id))).rejects.toThrow(
-      /400.*not an org employee|400.*approval target/i,
-    );
-    expect(store.listWorkItemEvents(item.id).filter((event) => event.kind === "approval_requested")).toHaveLength(0);
-    expect(store.getWorkItem(item.id)?.approvalState).toBeNull();
-  });
-
-  it("keeps requested approvals compatible with decision and escalation", async () => {
-    const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-compat-owner", title: "approval compatibility owner", employee: "platform-dev" });
-    const manager = registry.createSession({ engine: "codex", source: "web", sourceRef: "approval-manager", title: "approval manager", employee: "platform-manager" });
-    const requestTool = buildTools().find((t) => t.name === "request_work_item_approval")!;
-    const decideTool = buildTools().find((t) => t.name === "decide_work_item_approval")!;
-    const escalateTool = buildTools().find((t) => t.name === "escalate_work_item_approval")!;
-    const item = store.createWorkItem({ title: "Decide requested approval", status: "backlog", assignee: "platform-dev", source: "session" });
-
-    await requestTool.handler({ id: item.id, request: "Approve release" }, ctxFor(owner.id));
-    const decided = (await decideTool.handler({ id: item.id, decision: "approve", note: "ship" }, ctxFor(manager.id))) as {
-      workItem: { approvalState: string };
-    };
-    expect(decided.workItem.approvalState).toBe("approved");
-
-    const escalationItem = store.createWorkItem({ title: "Escalate requested approval", status: "backlog", assignee: "platform-dev", source: "session" });
-    await requestTool.handler({ id: escalationItem.id, request: "Escalate release" }, ctxFor(owner.id));
-    const escalated = (await escalateTool.handler({ id: escalationItem.id, reason: "operator needed" }, ctxFor(manager.id))) as {
-      workItem: { approvalState: string; approvalEscalatedAt: string | null };
-    };
-    expect(escalated.workItem).toMatchObject({ approvalState: "pending" });
-    expect(escalated.workItem.approvalEscalatedAt).toBeTruthy();
-  });
-
-  it("refuses archive to every agent session, while the operator's connector archives and resolves pending approval without deleting evidence", async () => {
+  it("refuses archive to every agent session, while the operator's connector archives without deleting evidence", async () => {
     const owner = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-owner", title: "archive owner", employee: "platform-dev" });
     const outsider = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-outsider", title: "archive outsider", employee: "outsider" });
     const root = registry.createSession({ engine: "codex", source: "web", sourceRef: "archive-root", title: "archive root", employee: "coo" });
     const connector = registry.createSession({ engine: "codex", source: "remote-mcp", sourceRef: "remote-mcp:archive-op@example.com" });
     const item = store.createWorkItem({ title: "Archive, do not delete", status: "backlog", assignee: "platform-dev", source: "session" });
-    approvals.requestApproval(item.id, { request: "Approve release", target: "platform-manager" });
 
     // Archiving is the operator's: the Todo's owner and the portal/COO session are refused like anyone else.
     for (const session of [outsider, owner, root]) {
@@ -685,37 +577,28 @@ describe("work-item tools — integration against the real API + store", () => {
         /403.*operator's decision/i,
       );
     }
-    expect(store.getWorkItem(item.id)).toMatchObject({ status: "backlog", approvalState: "pending" });
+    expect(store.getWorkItem(item.id)).toMatchObject({ status: "backlog" });
 
     const archived = (await tool("archive_work_item").handler({ id: item.id, note: "obsolete" }, ctxFor(connector.id))) as {
       archived: boolean;
-      workItem: { id: string; status: string; closedAt: string | null; approvalState: string; approvalDecidedBy: string };
+      workItem: { id: string; status: string; closedAt: string | null };
     };
 
     expect(archived.archived).toBe(true);
     expect(archived.workItem).toMatchObject({
       id: item.id,
       status: "cancelled",
-      approvalState: "rejected",
-      approvalDecidedBy: `session:${connector.id}`,
     });
     expect(archived.workItem.closedAt).toBeTruthy();
     expect(store.getWorkItem(item.id)?.status).toBe("cancelled");
     const events = store.listWorkItemEvents(item.id);
-    expect(events.some((e) => e.kind === "approval_decided" && e.actor === `session:${connector.id}`)).toBe(true);
     expect(events.some((e) => e.kind === "status_change" && e.fromStatus === "backlog" && e.toStatus === "cancelled")).toBe(true);
   });
 
-  it("recursively rejects approval keys and validates exact verifyPolicy/provenance schemas", async () => {
+  it("validates exact verifyPolicy/provenance schemas", async () => {
     const caller = registry.createSession({ engine: "codex", source: "web", sourceRef: "schema-caller", title: "schema caller" });
     const ctx = ctxFor(caller.id);
 
-    await expect(
-      tool("create_work_item").handler({ title: "Nested approval", verifyPolicy: { mode: "verify", approvalState: "pending" } }, ctx),
-    ).rejects.toThrow(/approval.*authority surface/i);
-    await expect(
-      tool("create_work_item").handler({ title: "Deep approval", provenance: { source: "session", nested: { approvalAlias: true } } }, ctx),
-    ).rejects.toThrow(/approval.*authority surface/i);
     await expect(tool("create_work_item").handler({ title: "Unknown policy key", verifyPolicy: { mode: "verify", extra: true } }, ctx)).rejects.toThrow(
       /verifyPolicy.*unknown key|verifyPolicy.*only/i,
     );
@@ -728,26 +611,6 @@ describe("work-item tools — integration against the real API + store", () => {
     await expect(tool("create_work_item").handler({ title: "Bad provenance source", provenance: { source: "bogus" } }, ctx)).rejects.toThrow(
       /provenance.*dedicated bridge|cannot be supplied/i,
     );
-    await expect(tool("update_work_item").handler({ id: "JIN-9999", status: "blocked", note: "x", metadata: { approvalBypass: true } }, ctx)).rejects.toThrow(
-      /approval.*authority surface/i,
-    );
-
-    const assignTarget = store.createWorkItem({ title: "Assign approval reject", status: "backlog", source: "session" });
-    const { status, body } = await (async () => {
-      const res = await inProcessGatewayFetch(api)("http://gateway.test/api/work-items/" + encodeURIComponent(assignTarget.id) + "/assign", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
-          [CALLER_SESSION_HEADER]: caller.id,
-          [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(caller.id),
-        },
-        body: JSON.stringify({ assignee: "platform-dev", nested: { approvalState: "pending" } }),
-      });
-      return { status: res.status, body: JSON.parse(await res.text()) as { error: string } };
-    })();
-    expect(status).toBe(400);
-    expect(body.error).toMatch(/approval.*authority surface/i);
   });
 });
 
@@ -857,12 +720,11 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
     expect(silent.calls).toEqual([]);
   });
 
-  it("edit_work_item validates locally: at least one field, priority 0..3, no status, approval fields rejected", async () => {
+  it("edit_work_item validates locally: at least one field, priority 0..3, no status", async () => {
     const silent = stub(() => ({ status: 500, body: { error: "must not run" } }));
     await expect(tool("edit_work_item").handler({ id: "JIN-1" }, silent.ctx)).rejects.toThrow(/at least one/i);
     await expect(tool("edit_work_item").handler({ id: "JIN-1", priority: 9 }, silent.ctx)).rejects.toThrow(/priority/);
     await expect(tool("edit_work_item").handler({ id: "nope", body: "x" }, silent.ctx)).rejects.toThrow(/canonical Todo ID/);
-    await expect(tool("edit_work_item").handler({ id: "JIN-1", approvalState: "approved", body: "x" }, silent.ctx)).rejects.toThrow(/approval/i);
     await expect(tool("edit_work_item").handler({ id: "JIN-1", body: "a".repeat(64_001) }, silent.ctx)).rejects.toThrow(/too long/);
     await expect(tool("edit_work_item").handler({ id: "JIN-1", title: "a".repeat(201) }, silent.ctx)).rejects.toThrow(/too long/);
     // Review F2: stray non-editable args refuse LOUDLY instead of silently

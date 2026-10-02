@@ -37,7 +37,7 @@ describe("transition — manual start and the agent lane", () => {
     }
   });
 
-  it.each(["done", "cancelled", "in_review", "blocked"] as const)("rejects a manual start from %s", (status) => {
+  it.each(["done", "cancelled", "blocked"] as const)("rejects a manual start from %s", (status) => {
     const wi = mk(status);
 
     expect(() => tr.transition(wi.id, "executing", "operator", { human: true, manual: true })).toThrowError(
@@ -54,6 +54,26 @@ describe("transition — manual start and the agent lane", () => {
     const wi = mk(from);
 
     expect(tr.transition(wi.id, to, "session:agent-1", { manual: true, agent: true }).item.status).toBe(to);
+  });
+
+  // The operator sending work back from review is the review bounce: rounds
+  // go up, and the last round allowed stops the Todo for the operator.
+  it("treats the operator's in_review → executing as a review bounce", () => {
+    const wi = mk("in_review");
+
+    const sent = tr.transition(wi.id, "executing", "operator", { human: true, manual: true, detail: { note: "tighten the tests" } });
+    expect([sent.item.status, sent.item.rounds, sent.escalated]).toEqual(["executing", 1, false]);
+    expect(store.listWorkItemEvents(wi.id).at(-1)).toMatchObject({ fromStatus: "in_review", toStatus: "executing", detail: { bounce: true, rounds: 1 } });
+
+    tr.transition(wi.id, "in_review", "session:agent-1", { manual: true, agent: true });
+    const capped = tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
+    expect([capped.item.status, capped.item.rounds, capped.escalated]).toEqual(["blocked", 2, true]);
+  });
+
+  it("does not count the agent taking its own work back out of review as a round", () => {
+    const wi = mk("in_review");
+
+    expect(tr.transition(wi.id, "executing", "session:agent-1", { manual: true, agent: true }).item.rounds).toBe(0);
   });
 
   it("applies the edge map to the agent lane too: opts.agent skips only the manual-start rule", () => {

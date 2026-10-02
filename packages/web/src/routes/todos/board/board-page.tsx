@@ -20,7 +20,6 @@ import {
 import { todoPath } from "@/lib/todo-id"
 import { useDepartments } from "@/hooks/use-departments"
 import {
-  useDecideApproval,
   useEmployeesByName,
   useNeedsAttentionItems,
   useOpenDetails,
@@ -400,36 +399,11 @@ export default function TodoBoardPage() {
         state: {
           fromBoard: key,
           bannerExpected: item
-            ? item.status === "blocked" || item.approvalState === "pending"
+            ? item.status === "blocked"
             : undefined,
         },
       }),
     [navigate, key],
-  )
-
-  // ── Attention board actions (reuses the shipped decision surface). The
-  // approval cluster is Approve · Reject…, and a rejection carries its own
-  // note — that note is what decides between another round and a stop, so it
-  // cannot be a separate action. Approval escalation stays an agent/MCP
-  // affordance, not an inbox button. ────────────────────────────────────────
-  const decide = useDecideApproval()
-  const [resolving, setResolving] = useState<Set<string>>(new Set())
-  const runDecision = useCallback(
-    (id: string, decision: "approve" | "reject", note?: string) => {
-      setResolving((prev) => new Set(prev).add(id))
-      decide.mutate(
-        { id, decision, note },
-        {
-          onSettled: () =>
-            setResolving((prev) => {
-              const next = new Set(prev)
-              next.delete(id)
-              return next
-            }),
-        },
-      )
-    },
-    [decide],
   )
 
   // ── Derived chrome ──────────────────────────────────────────────────────────
@@ -623,9 +597,6 @@ export default function TodoBoardPage() {
                 <NeedsYouView
                   items={needsYou}
                   byName={byName}
-                  resolvingIds={resolving}
-                  onApprove={(id) => runDecision(id, "approve")}
-                  onReject={(id, note) => runDecision(id, "reject", note || undefined)}
                   onOpen={onOpen}
                 />
               )}

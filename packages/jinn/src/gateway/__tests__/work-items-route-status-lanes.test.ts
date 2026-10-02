@@ -208,7 +208,7 @@ describe("verify mode on create", () => {
     const created = await call("POST", "/api/work-items", { title: "Agent work" }, toolHeaders(session.id));
     const id = created.body.workItem.id as string;
     expect((await post(id, { status: "executing" }, toolHeaders(session.id))).status).toBe(200);
-    expect((await post(id, { status: "in_review" }, toolHeaders(session.id))).status).toBe(200);
+    expect((await post(id, { status: "in_review", note: "ready for the operator" }, toolHeaders(session.id))).status).toBe(200);
     reconcileActiveWorkItems();
     expect(store.getWorkItem(id)?.status).toBe("in_review");
   });
@@ -244,6 +244,19 @@ describe("assignment", () => {
       ((await call("GET", "/api/work-items?needsAttentionFor=me&limit=200", undefined, headers)).body.workItems as Array<{ id: string }>).map((row) => row.id);
     expect(await ids(operatorHeaders)).toContain(held.id);
     expect(await ids(toolHeaders(employeeSession().id))).not.toContain(held.id);
+  });
+
+  // A dead end the Dispatcher or Shaper stopped for the operator keeps its
+  // assignee, which for a shaped capture is nobody: it must still reach them.
+  it("puts a blocked Todo nobody holds in the operator's queue, and not a blocked one an employee holds", async () => {
+    const unheld = store.createWorkItem({ title: "Dead end, nobody holds it", status: "blocked" });
+    const employeeHeld = store.createWorkItem({ title: "Blocked on its worker", status: "blocked", assignee: "platform-worker" });
+    const ids = async (headers: Record<string, string>) =>
+      ((await call("GET", "/api/work-items?needsAttentionFor=me&limit=200", undefined, headers)).body.workItems as Array<{ id: string }>).map((row) => row.id);
+    const operatorQueue = await ids(operatorHeaders);
+    expect(operatorQueue).toContain(unheld.id);
+    expect(operatorQueue).not.toContain(employeeHeld.id);
+    expect(await ids(toolHeaders(employeeSession().id))).not.toContain(unheld.id);
   });
 
   it.each(["todo-dispatcher", "todo-shaper"])("never assigns the system employee %s, by assign or by delegation", async (name) => {

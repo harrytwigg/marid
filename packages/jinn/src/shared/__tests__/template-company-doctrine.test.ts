@@ -58,7 +58,7 @@ describe("template company doctrine", () => {
     const surfaces = [
       { rel: "docs/company-doctrine.md", required: ["Assigning a Todo, or changing its status, starts nothing."] },
       { rel: "docs/org.md", required: ["Assigning a Todo, or changing its status, starts nothing."] },
-      { rel: "skills/todo-handling/SKILL.md", required: ["Todo approvals affect only the Todo."] },
+      { rel: "skills/todo-handling/SKILL.md", required: ["A comment with no mention is recorded only and wakes no one."] },
     ];
     const staleCouplingGuidance = [
       "mirrored workflow",
@@ -285,9 +285,7 @@ describe("template company doctrine", () => {
           "assign_work_item",
           "update_work_item",
           "archive_work_item",
-          "request_work_item_approval",
-          "decide_work_item_approval",
-          "escalate_work_item_approval",
+          "comment_work_item",
           "in_review",
           "blocked",
         ],
@@ -346,20 +344,13 @@ describe("template company doctrine", () => {
     expect(todoSkill).toContain('"parentId": "ACM-42"');
     expect(todoSkill).toContain("get_work_item_tree");
     expect(todoSkill).toContain("rootsOnly");
-    expect(todoSkill).toContain("identical pending request");
-    expect(todoSkill).toContain("does not perform approval decisions");
-    expect(todoSkill).toContain("Todo approvals affect only the Todo");
+    // Approvals are gone: the review handoff is a summary posted as a comment.
+    expect(todoSkill).toContain("There is no separate approval step.");
+    expect(todoSkill).toContain("the gateway posts it on the Todo as a comment");
+    expect(todoSkill).not.toMatch(/(?:request|decide|escalate)_work_item_approval/);
     expect(todoSkill).not.toContain("Workflow gate");
     expect(todoSkill).not.toContain("cancel_workflow_run");
     expect(todoSkill).toContain("maxRounds");
-
-    for (const [name, skill] of [["todo-handling", todoSkill]] as const) {
-      expect(skill, name).toContain("resolved routed owner");
-      expect(skill, name).toContain("hierarchy root/COO is exempt");
-      expect(skill, name).toContain("avoid approving work they personally executed");
-      expect(skill, name).not.toContain("A worker or Todo owner cannot decide their own approval");
-      expect(skill, name).not.toContain("A worker who owns or executed the Todo cannot decide their own approval");
-    }
 
     const delegationSkill = readTemplate("skills/delegation/SKILL.md");
     expect(delegationSkill).toContain("never workspace or absolute paths");

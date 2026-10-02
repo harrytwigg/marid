@@ -1,4 +1,3 @@
-import { currentApproval } from "./approval-rows.js";
 import { listWorkItemEvents } from "./event-log.js";
 import { attemptActivity, classifyWorkItem, sessionInFlight } from "./recovery-controller.js";
 import { getWorkItemRecovery } from "./recovery-rows.js";
@@ -11,7 +10,6 @@ import { appendWorkItemEvent, getWorkItem, listWorkItems, type WorkItem } from "
 export const ANOMALY_KINDS = [
   "execution-timeout",
   "executing-unhanded",
-  "review-without-reviewer",
   "blocked-without-recovery",
 ] as const;
 export type AnomalyKind = (typeof ANOMALY_KINDS)[number];
@@ -36,23 +34,12 @@ function executionTimeout(item: WorkItem, now: Date): TodoAnomaly | undefined {
   if (item.status !== "executing") return undefined;
   const open = listWorkItemAttemptRuns(item.id).find((run) => run.endedAt === null);
   if (!open) {
-    // A pending approval is a question already on somebody's queue, not a stall.
-    if (currentApproval(item.id)?.state === "pending") return undefined;
     if (!executingUnhanded(item.status, attemptActivity(item.id), now.getTime())) return undefined;
     return { workItemId: item.id, kind: "executing-unhanded", lane: "manager", reason: EXECUTING_UNHANDED_REASON };
   }
   if (sessionInFlight(open.sessionId)) return undefined;
   if (!(now.getTime() - Date.parse(open.startedAt) > EXECUTION_TIMEOUT_MS)) return undefined;
   return { workItemId: item.id, kind: "execution-timeout", lane: "manager", reason: "execution has outlived the 4h timeout without an in-flight session to speak for it" };
-}
-
-function reviewAnomaly(item: WorkItem): TodoAnomaly | undefined {
-  if (item.status !== "in_review") return undefined;
-  const approval = currentApproval(item.id);
-  if (approval?.state !== "pending" && !item.assignee) {
-    return { workItemId: item.id, kind: "review-without-reviewer", lane: "manager", reason: "in review with no pending approval and no reviewer" };
-  }
-  return undefined;
 }
 
 function blockedWithoutRecovery(item: WorkItem): TodoAnomaly | undefined {
@@ -63,7 +50,7 @@ function blockedWithoutRecovery(item: WorkItem): TodoAnomaly | undefined {
 }
 
 function inspect(item: WorkItem, now: Date): TodoAnomaly | undefined {
-  return executionTimeout(item, now) ?? reviewAnomaly(item) ?? blockedWithoutRecovery(item);
+  return executionTimeout(item, now) ?? blockedWithoutRecovery(item);
 }
 
 export interface DetectTodoAnomaliesInput {

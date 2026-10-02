@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4358;
+const MAX_MANIFEST_TOKENS = 4159;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -211,14 +211,13 @@ const ATTESTED = {
   // Rebased DOWN for the removal of the six Experiments tools and the sixteen
   // Workflow tools (and the prose spent on them above): the ceiling, all three
   // totals and the tool count moved down, and nothing moved up.
-  // Rebased DOWN again for the reduced status set: `assigned` and `escalated`
-  // left update_work_item's enum and the list enums, and `acknowledgeEscalated`
-  // left the tool; the asOperator description grew to name the one move it now
-  // makes, and the removals paid for that. Net 38 tokens off every total; the
-  // ceiling follows them down and Pi sits ON it.
-  rpc: { tokens: 3996, sha256: "2e4ce16e3ab5d0bf26575b0e704d5a54df19cfb189c7fe0a48966a7bf3642c05" },
-  pi: { tokens: 4358, sha256: "a6ff0f491f9f579d5f0d94c0637a0f191c8b468739fb6751281541f8c71a7eb3" },
-  openai: { tokens: 4144, sha256: "47b9342896bbf95544f9adda1c3d5a7305f8140382a8cfd67c65981280da7b6e" },
+  // Rebased DOWN for the reduced status set (`assigned`, `escalated` and
+  // `acknowledgeEscalated` left, the asOperator description grew: net 38 off
+  // every total), then for the three Todo approval tools (net of the `note`
+  // description: 199 off Pi). The ceiling follows each time; Pi sits ON it.
+  rpc: { tokens: 3824, sha256: "6d61983ae7ca2d170891b2c40dd059840f99b221449134b21ec91f70fd28ccc0" },
+  pi: { tokens: 4159, sha256: "b19fdc443771b335a1a1ec410e4b6af6a56593a4bd3006ea8d8c1f8690407a69" },
+  openai: { tokens: 3963, sha256: "bb3bc790e97b042822f1ee17902e88a31ce4ad2eb6794cf5d5421912de38d021" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
@@ -285,7 +284,7 @@ describe("tool manifest budget", () => {
   it("keeps tool names, required arrays, and enum arrays stable", () => {
     const tools = buildTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
-    expect(tools).toHaveLength(54);
+    expect(tools).toHaveLength(51);
 
     const required = Object.fromEntries(tools.map((t) => [t.name, t.inputSchema.required ?? []]));
     expect(required).toEqual(EXPECTED_REQUIRED);

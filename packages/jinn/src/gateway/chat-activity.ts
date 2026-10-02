@@ -44,7 +44,6 @@ export function todoActivityBlock(item: WorkItem, action: string): ChatBlockEnve
         action,
         status: item.status,
         assignee: item.assignee,
-        approvalState: item.approvalState,
         parentId: item.parentId,
         rootId: item.rootId,
         depth: item.depth,

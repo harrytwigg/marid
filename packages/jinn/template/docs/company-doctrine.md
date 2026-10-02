@@ -14,7 +14,7 @@ Notes are Markdown files below `knowledge/`; `docs/` remains read-only reference
 
 ## 3. Anti-Bottleneck
 
-Fresh work should not ping the operator by default. Employees handle their lane, questions and approvals route up to managers and the COO, and the operator is reserved for explicit escalation: money, irreversible action, public action, legal/security risk, or COO request.
+Fresh work should not ping the operator by default. Employees handle their lane, questions and decisions route up to managers and the COO, and the operator is reserved for explicit escalation: money, irreversible action, public action, legal/security risk, or COO request.
 
 ## 4. One Interface (MCP)
 
@@ -24,7 +24,7 @@ For company state, the Jinn MCP is the hands. Employees should use it to read an
 
 The same contract should hold everywhere: sources emit events, cron runs scheduled prompts, Todos are deliberately authored to record owned work, and Notes preserve Markdown knowledge. Avoid parallel concepts that do the same job in different shapes.
 
-Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when idle capacity is enabled and its sweep picks the Todo from the backlog. Human gates use Todo approval.
+Assigning a Todo, or changing its status, starts nothing. A session starts when the Todo is dispatched (`dispatch_work_item`), or when idle capacity is enabled and its sweep picks the Todo from the backlog. A human gate is a Todo stopped in blocked with a comment that says what is needed, or finished work waiting in in_review.
 
 ## 6. Lean Identity Context
 

@@ -35,7 +35,7 @@ describe("POST /api/work-items/:id/status — open to any authenticated session"
     });
     store.linkSession(item.id, executor.id);
 
-    const handed = await post(item.id, { status: "in_review" }, toolHeaders(executor.id));
+    const handed = await post(item.id, { status: "in_review", note: "handing off for review" }, toolHeaders(executor.id));
     expect(handed.status).toBe(200);
 
     const selfClose = await post(item.id, { status: "done" }, toolHeaders(executor.id));

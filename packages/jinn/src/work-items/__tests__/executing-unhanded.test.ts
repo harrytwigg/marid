@@ -12,7 +12,6 @@ let reconcile: typeof import("../reconcile.js");
 let detect: typeof import("../anomaly-detect.js");
 let controller: typeof import("../recovery-controller.js");
 let rows: typeof import("../recovery-rows.js");
-let approvals: typeof import("../approvals.js");
 let transitions: typeof import("../transitions.js");
 let db: import("better-sqlite3").Database;
 
@@ -23,7 +22,6 @@ beforeAll(async () => {
   detect = await import("../anomaly-detect.js");
   controller = await import("../recovery-controller.js");
   rows = await import("../recovery-rows.js");
-  approvals = await import("../approvals.js");
   transitions = await import("../transitions.js");
   db = (await import("../../shared/db.js")).initDb();
 });
@@ -78,23 +76,13 @@ describe("a Todo left executing after its producer stopped", () => {
     expect(unhanded(id, later(48))).toBeUndefined();
   });
 
-  it("is not flagged while the producer waits on a pending approval", () => {
-    const id = abandonedMidWork("asked the operator");
-    approvals.requestApproval(id, { request: "A or B?", operatorOnly: true });
-    const now = later(48);
-    expect(unhanded(id, now)).toBeUndefined();
-    sweep(now);
-    expect(rows.getWorkItemRecovery(id)?.reason).not.toMatch(/not handed in/);
-  });
-
   // QA round 2: the clock also starts at the move into executing, so a Todo
   // re-entering it after a long quiet gets its own budget.
   it("gives a review bounce its own 4h, however long ago the producer last spoke", () => {
     const id = abandonedMidWork("bounced back");
     db.prepare("UPDATE sessions SET last_activity = ? WHERE id = ?").run(new Date(Date.now() - 5 * HOUR).toISOString(), `s-${id}`);
     transitions.transition(id, "in_review", "platform-worker");
-    approvals.requestApproval(id, { request: "Finished", operatorOnly: true });
-    expect(approvals.decideWorkItemApprovalSync({ id, decision: "reject", note: "not yet" })).toMatchObject({ ok: true });
+    transitions.transition(id, "executing", "operator");
     expect(store.getWorkItem(id)?.status).toBe("executing");
 
     expect(unhanded(id, new Date())).toBeUndefined();

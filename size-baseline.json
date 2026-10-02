@@ -255,7 +255,7 @@
       "lines": 517
     },
     "packages/jinn/src/gateway/__tests__/control-plane-authority.test.ts": {
-      "lines": 555
+      "lines": 492
     },
     "packages/jinn/src/gateway/__tests__/delegations-route.test.ts": {
       "lines": 1074
@@ -281,12 +281,6 @@
     "packages/jinn/src/gateway/__tests__/streamed-turn-settlement.test.ts": {
       "lines": 328
     },
-    "packages/jinn/src/gateway/__tests__/work-item-approval-parity.test.ts": {
-      "lines": 317
-    },
-    "packages/jinn/src/gateway/__tests__/work-item-approval-route.test.ts": {
-      "lines": 520
-    },
     "packages/jinn/src/gateway/__tests__/work-item-attachments-route.test.ts": {
       "lines": 329
     },
@@ -294,18 +288,12 @@
       "lines": 374
     },
     "packages/jinn/src/gateway/api.ts": {
-      "lines": 5042,
+      "lines": 4850,
       "exempt": [
         "complexity",
         "max-depth",
         "max-lines-per-function",
         "max-params"
-      ]
-    },
-    "packages/jinn/src/gateway/approval-authority.ts": {
-      "exempt": [
-        "complexity",
-        "max-lines-per-function"
       ]
     },
     "packages/jinn/src/gateway/auth.ts": {
@@ -465,18 +453,13 @@
       "lines": 622
     },
     "packages/jinn/src/mcp/__tests__/server.test.ts": {
-      "lines": 410
+      "lines": 407
     },
     "packages/jinn/src/mcp/__tests__/session-tools.test.ts": {
       "lines": 838
     },
     "packages/jinn/src/mcp/__tests__/work-item-tools.test.ts": {
-      "lines": 1192
-    },
-    "packages/jinn/src/mcp/approval-tools.ts": {
-      "exempt": [
-        "max-lines-per-function"
-      ]
+      "lines": 1054
     },
     "packages/jinn/src/mcp/attachment.ts": {
       "lines": 346,
@@ -554,7 +537,7 @@
       ]
     },
     "packages/jinn/src/mcp/work-item-tools.ts": {
-      "lines": 633,
+      "lines": 609,
       "exempt": [
         "complexity",
         "max-lines-per-function"
@@ -674,7 +657,7 @@
       "lines": 338
     },
     "packages/jinn/src/shared/__tests__/template-company-doctrine.test.ts": {
-      "lines": 382
+      "lines": 373
     },
     "packages/jinn/src/shared/activity-receipts.ts": {
       "exempt": [
@@ -785,9 +768,6 @@
         "max-lines-per-function"
       ]
     },
-    "packages/jinn/src/work-items/__tests__/approvals.test.ts": {
-      "lines": 335
-    },
     "packages/jinn/src/work-items/__tests__/attachments.test.ts": {
       "lines": 362
     },
@@ -801,14 +781,7 @@
       "lines": 334
     },
     "packages/jinn/src/work-items/__tests__/store.test.ts": {
-      "lines": 318
-    },
-    "packages/jinn/src/work-items/approvals.ts": {
-      "lines": 360,
-      "exempt": [
-        "complexity",
-        "max-lines-per-function"
-      ]
+      "lines": 315
     },
     "packages/jinn/src/work-items/attachments.ts": {
       "lines": 362,
@@ -830,14 +803,14 @@
       ]
     },
     "packages/jinn/src/work-items/store.ts": {
-      "lines": 990,
+      "lines": 950,
       "exempt": [
         "complexity",
         "max-lines-per-function"
       ]
     },
     "packages/jinn/src/work-items/transitions.ts": {
-      "lines": 296,
+      "lines": 294,
       "exempt": [
         "complexity",
         "max-lines-per-function"
@@ -1247,13 +1220,13 @@
       ]
     },
     "packages/web/src/lib/api.ts": {
-      "lines": 925,
+      "lines": 876,
       "exempt": [
         "complexity"
       ]
     },
     "packages/web/src/lib/blocks.ts": {
-      "lines": 370,
+      "lines": 369,
       "exempt": [
         "complexity",
         "max-lines-per-function"
@@ -1278,7 +1251,7 @@
       ]
     },
     "packages/web/src/lib/todos.ts": {
-      "lines": 364,
+      "lines": 363,
       "exempt": [
         "complexity"
       ]
@@ -1403,19 +1376,19 @@
       ]
     },
     "packages/web/src/routes/todos/__tests__/board-page.test.tsx": {
-      "lines": 866
+      "lines": 852
     },
     "packages/web/src/routes/todos/__tests__/filter-bar.test.tsx": {
       "lines": 307
     },
     "packages/web/src/routes/todos/__tests__/task-page.test.tsx": {
-      "lines": 581
+      "lines": 493
     },
     "packages/web/src/routes/todos/__tests__/task-sections.test.tsx": {
-      "lines": 652
+      "lines": 651
     },
     "packages/web/src/routes/todos/board/board-page.tsx": {
-      "lines": 886,
+      "lines": 857,
       "exempt": [
         "@typescript-eslint/no-floating-promises",
         "complexity",
@@ -1474,7 +1447,7 @@
       ]
     },
     "packages/web/src/routes/todos/needs-you-view.tsx": {
-      "lines": 469,
+      "lines": 348,
       "exempt": [
         "complexity",
         "max-lines-per-function"
@@ -1505,7 +1478,7 @@
       ]
     },
     "packages/web/src/routes/todos/task-page/activity.tsx": {
-      "lines": 556,
+      "lines": 555,
       "exempt": [
         "complexity",
         "max-lines-per-function"
@@ -1566,7 +1539,7 @@
       ]
     },
     "packages/web/src/routes/todos/task-page/task-page.tsx": {
-      "lines": 565,
+      "lines": 549,
       "exempt": [
         "@typescript-eslint/no-floating-promises",
         "complexity",
