@@ -189,7 +189,7 @@ describe("template company doctrine", () => {
     expect(delegation).toContain("explicit stop condition");
     expect(delegation).toContain("deadline/budget");
     expect(delegation).toContain("If an engine exposes a native goal loop");
-    expect(delegation).toContain("THOROUGH for architecture, security, breaking, or irreversible work");
+    expect(delegation).toContain("a thorough one for architecture, security, breaking, or irreversible work");
   });
 
   it("keeps shipped instruction surfaces lean and free of stale identifiers", () => {
@@ -350,7 +350,9 @@ describe("template company doctrine", () => {
     expect(todoSkill).not.toMatch(/(?:request|decide|escalate)_work_item_approval/);
     expect(todoSkill).not.toContain("Workflow gate");
     expect(todoSkill).not.toContain("cancel_workflow_run");
-    expect(todoSkill).toContain("maxRounds");
+    // Acceptance and the per-Todo review policy are retired: criteria live in the body.
+    expect(todoSkill).not.toMatch(/"acceptance"|verifyPolicy|maxRounds/);
+    expect(todoSkill).toContain("There is no separate acceptance field");
 
     const delegationSkill = readTemplate("skills/delegation/SKILL.md");
     expect(delegationSkill).toContain("never workspace or absolute paths");
