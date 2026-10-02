@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { PassThrough, Writable } from "node:stream";
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * The Pi engine's remote branch.
@@ -317,10 +319,24 @@ describe("PiEngine — a remote employee's turn runs on the other machine", () =
     );
   });
 
-  it("refuses attachments instead of naming gateway paths the model cannot open", async () => {
-    const result = await engine().run(runOpts({ attachments: ["/home/pi/.jinn/tmp/spec.pdf"] }));
+  it("names an attachment by the path the other machine sees it at, not the gateway's", async () => {
+    const file = path.join(JINN_HOME, "uploads", "2026-10-02", "sess-1", "spec.pdf");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "pdf");
 
-    expect(result.error).toContain("Attachments are not supported for remote employees");
+    await engine().run(runOpts({ attachments: [file] }));
+
+    const prompt = hoisted.stdinWrites.join("");
+    expect(prompt).toContain(`- ${REMOTE_HOME}/uploads/2026-10-02/sess-1/spec.pdf`);
+    expect(prompt).not.toContain(JINN_HOME);
+  });
+
+  it("fails the turn, spawning nothing, for an attachment the policy refuses", async () => {
+    const secret = path.join(JINN_HOME, "secrets", "api-keys.json");
+    fs.mkdirSync(path.dirname(secret), { recursive: true });
+    fs.writeFileSync(secret, "{}");
+
+    await expect(engine().run(runOpts({ attachments: [secret] }))).rejects.toThrow(/api-keys\.json.*secrets/i);
     expect(hoisted.spawns).toHaveLength(0);
   });
 

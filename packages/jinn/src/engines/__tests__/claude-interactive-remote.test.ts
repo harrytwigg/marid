@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
 import path from "node:path";
 
 /**
@@ -83,6 +84,16 @@ vi.mock("../remote-stage.js", async (importOriginal) => {
         },
       };
     }),
+    // The warm-PTY path recomputes the session home from the host's cached
+    // facts; the real cache is only filled by a real probe.
+    cachedRemoteFacts: vi.fn(() => ({
+      home: "/home/builder",
+      stageDir: REMOTE_STAGE,
+      nodeBin: "/usr/bin/node",
+      claudeBin: "/usr/local/bin/claude",
+      jinnVersion: "0.32.0",
+      entryDir: "/usr/lib/jinn/src/mcp",
+    })),
     prepareRemoteSession: vi.fn(async (opts: any) => {
       hoisted.prepareCalls.push(opts);
       return {
@@ -113,7 +124,7 @@ vi.mock("../sse-pty-proxy.js", () => ({
 
 import { InteractiveClaudeEngine } from "../claude-interactive.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
-import { CLAUDE_SETTINGS_DIR } from "../../shared/paths.js";
+import { CLAUDE_SETTINGS_DIR, JINN_HOME } from "../../shared/paths.js";
 import { cleanupSessionSettings } from "../../shared/claude-settings.js";
 
 const flush = () => new Promise((r) => setTimeout(r, 20));
@@ -249,44 +260,57 @@ describe("InteractiveClaudeEngine — remote branch", () => {
       expect(hoisted.ensureCalls[0].opts.allowWake).toBe(false);
     });
 
-    // Refused as a settled EngineResult carrying `error`, not as a rejection —
-    // the same contract the concurrent-turn guard beside it uses, so the turn
-    // settles through the normal path instead of settleThrownTurn.
-    it("refuses attachments rather than passing gateway paths through", async () => {
-      const result = await engine.run({
-        sessionId: SID,
-        prompt: "look at this",
-        cwd: "/tmp",
-        ...TARGET,
-        attachments: ["/mnt/jinn-home/tmp/uploads/a.png"],
-      } as any);
-      expect(result.error).toMatch(/attachments are not supported for remote employees/i);
-      // And nothing was spawned or staged on the way to that refusal.
-      expect(hoisted.spawns).toHaveLength(0);
+    /** A real file under the isolated gateway home, as a web upload would be. */
+    function uploadedFile(name: string): string {
+      const file = path.join(JINN_HOME, "uploads", "2026-10-02", SID, name);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, "bytes");
+      return file;
+    }
+
+    // The gateway's own path names nothing on another host. What a remote
+    // session CAN open is its staged home, a symlink farm over the mounted
+    // gateway home, so the prompt names the file there.
+    it("names an attachment at its staged-home path on a cold spawn, never the gateway path", async () => {
+      const file = uploadedFile("a.png");
+      void engine.run({ sessionId: SID, prompt: "look at this", cwd: "/tmp", ...TARGET, attachments: [file] } as any).catch(() => {});
+      await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(1));
+
+      const cmd = remoteCommandOf(hoisted.spawns[0].args);
+      expect(cmd).toContain(`${REMOTE_HOME}/uploads/2026-10-02/${SID}/a.png`);
+      expect(cmd).not.toContain(JINN_HOME);
     });
 
-    // The cold path is not the risky one: only a turn with NO warm PTY reaches
-    // spawn(). With one adopted, run() takes injectPrompt instead, which appends
-    // buildAttachmentSuffix unconditionally — so a guard living inside
-    // spawnRemote would let gateway paths reach a session on another host from
-    // the second turn onward. Assert against a genuinely warm PTY.
-    it("refuses attachments while a warm PTY is adopted, not just on a cold spawn", async () => {
+    // Only a turn with NO warm PTY reaches spawn(). With one adopted, run()
+    // takes injectPrompt instead, which has its own suffix, so it needs the same
+    // mapping. Assert against a genuinely warm PTY.
+    it("names an attachment at its staged-home path when a warm PTY is adopted too", async () => {
       engine.ensureIdleSpawn(SID, { engineSessionId: "eng-1", cols: 80, rows: 24, ...TARGET } as any);
       await vi.waitFor(() => expect(engine.hasWarmPty(SID)).toBe(true));
+      // An idle-spawned PTY has no persona yet, so the first real turn would
+      // cold-respawn it. Mark it as already carrying one — the state a PTY is in
+      // from the second turn on, which is the one that takes injectPrompt.
+      (engine as any).spawnParams.set(SID, { model: undefined, effortLevel: undefined, appendApplied: true });
       const spawnsBefore = hoisted.spawns.length;
+      const file = uploadedFile("b.png");
 
-      const result = await engine.run({
-        sessionId: SID,
-        prompt: "two",
-        cwd: "/tmp",
-        ...TARGET,
-        attachments: ["/mnt/jinn-home/tmp/uploads/a.png"],
-      } as any);
+      void engine.run({ sessionId: SID, prompt: "two", cwd: "/tmp", ...TARGET, attachments: [file] } as any).catch(() => {});
+      await vi.waitFor(() => expect(hoisted.writes.join("")).toContain("Attached files:"));
 
-      expect(result.error).toMatch(/attachments are not supported for remote employees/i);
-      // Nothing was pasted into the live PTY, and no new one was made.
+      const pasted = hoisted.writes.join("");
+      expect(pasted).toContain(`${REMOTE_STAGE}/sessions/${SID}__claude/uploads/2026-10-02/${SID}/b.png`);
+      expect(pasted).not.toContain(JINN_HOME);
       expect(hoisted.spawns).toHaveLength(spawnsBefore);
-      expect(hoisted.writes.join("")).not.toContain("Attached files:");
+    });
+
+    it("rejects the turn, spawning nothing, for an attachment the file-read policy refuses", async () => {
+      const secret = path.join(JINN_HOME, "secrets", "api-keys.json");
+      fs.mkdirSync(path.dirname(secret), { recursive: true });
+      fs.writeFileSync(secret, "{}");
+
+      await expect(engine.run({ sessionId: SID, prompt: "x", cwd: "/tmp", ...TARGET, attachments: [secret] } as any))
+        .rejects.toThrow(/api-keys\.json.*secrets/i);
+      expect(hoisted.spawns).toHaveLength(0);
     });
 
     it("refuses to spawn when the target escapes the configured remote.root", async () => {

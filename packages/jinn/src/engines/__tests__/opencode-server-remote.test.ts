@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 import { PassThrough, Writable } from "node:stream";
 
 /**
@@ -22,7 +24,7 @@ const SERVER_PORT = 47001;
 const hoisted = vi.hoisted(() => ({
   spawns: [] as { bin: string; args: string[]; kind: string }[],
   prepareCalls: [] as Record<string, unknown>[],
-  fetches: [] as { url: string; method: string; auth: string | undefined; at: number }[],
+  fetches: [] as { url: string; method: string; auth: string | undefined; at: number; body?: string }[],
   controls: [] as { script: string; args: string[]; at: number }[],
   /** opencode sessions the fake server reports busy. */
   busy: new Set<string>(),
@@ -161,7 +163,7 @@ beforeEach(() => {
   killSpy = vi.spyOn(process, "kill").mockImplementation((() => true) as typeof process.kill);
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit = {}) => {
     const headers = (init.headers ?? {}) as Record<string, string>;
-    hoisted.fetches.push({ url, method: init.method ?? "GET", auth: headers.authorization, at: ++hoisted.tick });
+    hoisted.fetches.push({ url, method: init.method ?? "GET", auth: headers.authorization, at: ++hoisted.tick, ...(typeof init.body === "string" ? { body: init.body } : {}) });
     const route = new URL(url).pathname;
     const json = (body: unknown, status = 200) => new Response(body === undefined ? null : JSON.stringify(body), { status });
     if (route === "/event") {
@@ -254,6 +256,20 @@ describe("opencode server mode on a remote host", () => {
       expect(f.auth).toBe(auth);
     }
     expect(pool.get("sess-1")?.hostKey).toBe("build-box");
+  });
+
+  it("names an attachment by the path the server's host sees it at, not the gateway's", async () => {
+    const file = path.join(JINN_HOME, "uploads", "2026-10-02", "sess-1", "diagram.png");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "png");
+
+    const { engine } = setup();
+    const result = await engine.run(runOpts({ attachments: [file] }));
+    expect(result.error).toBeUndefined();
+
+    const post = hoisted.fetches.find((f) => f.url.endsWith("/prompt_async"));
+    expect(post?.body).toContain(`${REMOTE_HOME}/uploads/2026-10-02/sess-1/diagram.png`);
+    expect(post?.body).not.toContain(JINN_HOME);
   });
 
   it("stages the password into the 0600 env file and never onto a command line", async () => {
