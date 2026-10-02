@@ -20,11 +20,11 @@ Two mechanisms close the gap without moving the boundary an inch.
 
 ## 1. Declare the route
 
-The route is declared to the pipeline when the build starts: `workspace` or
-`repo`, with `repo` the default. It used to be stored on the Todo, as a
-`deliverable` key inside its verify policy. That policy was removed from Todos,
-so nothing on the Todo records the route any more. The declaration now reaches
-the pipeline the same way the rest of the build brief does.
+Todos no longer record the route. It used to be a `deliverable` key inside a
+Todo's verify policy, and that policy was removed from Todos. Nothing in Marid
+stores or forwards the declaration now: whoever runs the pipeline passes it
+explicitly, as `--declared workspace` (or `repo`, the default) to the `route`
+command below.
 
 Declaring `workspace` routes the acceptance check to an actor that already has
 workspace access — the operator, at the land approval. The verifier's verdict

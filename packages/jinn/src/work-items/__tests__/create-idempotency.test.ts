@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-wi-create-idempotency-"));
 process.env.JINN_HOME = tmp;
@@ -102,6 +103,27 @@ describe("createWorkItemIdempotent", () => {
     const explicit = idempotency.createWorkItemIdempotent(input, key, { autoStart: true });
     expect(explicit.replayed).toBe(true);
     expect(explicit.item.id).toBe(first.item.id);
+  });
+
+  it("replays a receipt the HTTP route minted before acceptance and verifyPolicy were retired", () => {
+    // The old route always passed both fields, null when unset, so its receipts
+    // hashed them in their old key position (after sourceRef). Built by hand here
+    // so the test does not lean on the code under test to say what "old" was.
+    const input = { title: "pre-upgrade create", body: null, createdBy: "platform-worker", parentId: null, dueAt: null, source: "session" as const, sourceRef: "session:s1:idempotency:abc" };
+    const legacy = JSON.stringify({ title: input.title, body: null, createdBy: input.createdBy, parentId: null, dueAt: null, source: "session", sourceRef: input.sourceRef, acceptance: null, verifyPolicy: null });
+    const existing = store.createWorkItem(input);
+    const key = "pre-upgrade-key";
+    const digest = (value: string) => crypto.createHash("sha256").update(value).digest("hex");
+    db.prepare("INSERT INTO work_item_create_receipts (key_digest, work_item_id, fingerprint, created_at) VALUES (?, ?, ?, ?)")
+      .run(digest(key), existing.id, digest(legacy), new Date().toISOString());
+
+    const replay = idempotency.createWorkItemIdempotent(input, key);
+    expect(replay).toMatchObject({ replayed: true, item: { id: existing.id } });
+    expect(rowsTitled("pre-upgrade create")).toBe(1);
+
+    // The legacy form is a second accepted spelling of the SAME create, not a wildcard.
+    expect(() => idempotency.createWorkItemIdempotent({ ...input, title: "a different create" }, key))
+      .toThrow(idempotency.WorkItemCreateIdempotencyConflictError);
   });
 
   it("leaves keyless creates alone: two identical ones are two Todos", () => {
