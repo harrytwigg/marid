@@ -153,31 +153,7 @@ export function provenanceLabel(source: WorkItemSourceWire, sourceRef?: string |
   return suffix ? `${base} · ${suffix}` : base
 }
 
-// ── Verify policy + priority (mirror the gateway's provenance defaults so the
-// sheet shows the SAME effective tier the server will enforce) ───────────────
-export type VerifyMode = "trust" | "verify" | "thorough"
-export const DEFAULT_VERIFY_MODE_BY_SOURCE: Record<WorkItemSourceWire, VerifyMode> = {
-  cron: "trust",
-  workflow: "verify",
-  delegation: "verify",
-  human: "verify",
-  session: "verify",
-  connector: "verify",
-  goal: "verify",
-}
-export const DEFAULT_MAX_ROUNDS: Record<VerifyMode, number> = { trust: 2, verify: 2, thorough: 3 }
-
-interface VerifyShape {
-  source: WorkItemSourceWire
-  verifyPolicy: { mode: VerifyMode; maxRounds?: number } | null
-}
-export function effectiveVerifyMode(item: VerifyShape): VerifyMode {
-  return item.verifyPolicy?.mode ?? DEFAULT_VERIFY_MODE_BY_SOURCE[item.source]
-}
-export function effectiveMaxRounds(item: VerifyShape): number {
-  return item.verifyPolicy?.maxRounds ?? DEFAULT_MAX_ROUNDS[effectiveVerifyMode(item)]
-}
-
+// ── Priority ────────────────────────────────────────────────────────────────
 /** Priority int (0–3) → label. Higher int = higher priority; 2 is the default. */
 export function priorityLabel(priority: number): string {
   return priority >= 3 ? "High" : priority === 2 ? "Medium" : priority === 1 ? "Low" : "None"

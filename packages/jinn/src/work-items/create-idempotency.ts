@@ -37,10 +37,12 @@ export interface IdempotentCreateResult {
  *  absent: it records which surface performed the write, not what was asked
  *  for, and a retry over a different transport is still the same create. Key
  *  order is load-bearing — it feeds the canonical JSON, so entries are only
- *  ever appended. */
+ *  ever appended. (`acceptance` and `verifyPolicy` were removed from the
+ *  middle; absent fields are skipped, so receipts that never carried them
+ *  still fingerprint identically.) */
 const CREATE_FINGERPRINT_FIELDS: ReadonlyArray<keyof CreateWorkItemInput> = [
   'title', 'body', 'status', 'department', 'assignee', 'createdBy', 'parentId',
-  'dueAt', 'priority', 'source', 'sourceRef', 'acceptance', 'verifyPolicy', 'budgetUsd',
+  'dueAt', 'priority', 'source', 'sourceRef', 'budgetUsd',
 ];
 
 /** What a create asks for beyond the row itself: applied after the row rather

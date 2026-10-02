@@ -66,8 +66,7 @@ function full(id: string, overrides: Partial<WorkItemFullWire> = {}): WorkItemFu
     rank: null,
     source: "human",
     sourceRef: null,
-    acceptance: null,
-    verifyPolicy: null,
+
     rounds: 1,
     budgetUsd: null,
     createdBy: "operator",
@@ -312,7 +311,6 @@ describe("the task page", () => {
       priority: 3,
       budgetUsd: 10,
       body: "A short **markdown** body",
-      acceptance: "- [x] Works\n- [ ] Ships",
     })
     getWorkItemTree.mockResolvedValue({
       tree: {
@@ -486,8 +484,8 @@ describe("the task page", () => {
       "rail-department",
       "rail-due",
       "rail-created-by",
-      "rail-verify",
       "rail-spend",
     ]) expect(screen.getByTestId(testId)).toBeTruthy()
+    expect(screen.queryByTestId("rail-verify")).toBeNull()
   })
 })

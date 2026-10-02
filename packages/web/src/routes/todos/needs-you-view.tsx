@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { EmployeeChip } from "@/components/ui/employee-chip"
-import { STATUS_LABEL, effectiveMaxRounds, operatorSafeTodoError, provenanceLabel, publicWorkItemReference } from "@/lib/todos"
+import { STATUS_LABEL, operatorSafeTodoError, provenanceLabel, publicWorkItemReference } from "@/lib/todos"
 import { legalTargets } from "@/lib/legal-targets"
 import { ATTENTION_COPY, ATTENTION_GROUPS, attentionKind, stopCauseQuote, type AttentionKind } from "./needs-you-support"
 import { ProvenanceIcon, StatusCircle } from "./state-glyph"
@@ -57,8 +57,8 @@ function WorkRef({ item }: { item: WorkItemCompactWire }) {
   return <ProvChip source={item.source} sourceRef={item.sourceRef} />
 }
 
-/** The mock's mono ID line: `PLA-26 · In review`, `ACM-9 · was in review ·
- *  round 2 of 2`, `PLA-19 · blocked 1d`. Transport-only ids never render. */
+/** The mock's mono ID line: `PLA-26 · In review`, `ACM-9 · escalated 2h`,
+ *  `PLA-19 · blocked 1d`. Transport-only ids never render. */
 export function attentionIdLine(
   item: WorkItemCompactWire,
   kind: AttentionKind,
@@ -72,8 +72,6 @@ export function attentionIdLine(
     const at = stop?.event.createdAt ?? null
     const escalated = stop?.event.kind === "escalated" || stop?.entered === "escalated"
     parts.push(`${escalated ? "escalated" : "blocked"} ${formatRelativeTime(at ?? item.updatedAt).toLowerCase()}`)
-    const full = detail?.workItem
-    if (escalated && full) parts.push(`round ${full.rounds} of ${effectiveMaxRounds(full)}`)
   } else {
     parts.push(STATUS_LABEL[item.status])
   }

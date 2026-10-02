@@ -57,8 +57,8 @@ function tree(id: string): WorkItemTreeWire {
   return {
     root: {
       id, version: 3, title: `Item ${id}`, body: null, status: "executing", department: "platform",
-      assignee: null, priority: 2, rank: null, source: "human", sourceRef: null, acceptance: null,
-      verifyPolicy: null, rounds: 0, budgetUsd: null,
+      assignee: null, priority: 2, rank: null, source: "human", sourceRef: null,
+      rounds: 0, budgetUsd: null,
       createdAt: "2026-07-23T08:00:00.000Z",
       updatedAt: "2026-07-23T08:00:00.000Z", closedAt: null, children: [],
     },

@@ -1,12 +1,11 @@
 import {
-  effectiveVerifyMode,
+  autoClosesOnSuccess,
   getWorkItem,
   isBlockDeclared,
   isReviewBounceDeclared,
   listWorkItems,
   RECONCILER_ACTOR,
   STICKY_STATUSES,
-  type VerifyMode,
   type WorkItem,
   type WorkItemSource,
   type WorkItemStatus,
@@ -76,8 +75,9 @@ function trustCloseIsLicensed(attempts: readonly WorkItemAttemptEvidence[], deci
 export interface DeriveWorkItemOptions {
   blockDeclared?: boolean;
   reviewBounceDeclared?: boolean;
-  /** Only `trust` lets a clean settle derive `in_review`; absent means reviewed. */
-  verifyMode?: VerifyMode;
+  /** Only an auto-closing (cron) item lets a clean settle derive `in_review`;
+   *  absent means reviewed. */
+  autoClose?: boolean;
 }
 
 /**
@@ -111,7 +111,7 @@ export function deriveWorkItemStatus(
   const newest = attempts[0].outcome;
   // A clean settle is not a completion declaration: a backlog
   // Todo stays where somebody put it after that attempt ran.
-  if (newest === 'succeeded' && opts?.verifyMode === 'trust') return 'in_review';
+  if (newest === 'succeeded' && opts?.autoClose) return 'in_review';
   if (newest === 'succeeded') return current === 'blocked' ? 'executing' : current;
   if (newest === 'failed' || newest === 'interrupted') return 'blocked';
   return current;
@@ -143,20 +143,20 @@ export function reconcileWorkItem(id: string): ReconcileResult | undefined {
   // status nor the TRUST close, which would otherwise end a review he opened
   // himself on the strength of an older receipt.
   if (decisionFloorAt && attempts.length === 0) return { item, changed: false };
-  const verifyMode = effectiveVerifyMode(item);
-  let derived = deriveWorkItemStatus(item.status, attempts, item.source, { verifyMode });
+  const autoClose = autoClosesOnSuccess(item);
+  let derived = deriveWorkItemStatus(item.status, attempts, item.source, { autoClose });
   // Provenance is only needed when receipt derivation would overwrite the
   // current state. Since a Todo cannot be blocked and executing simultaneously,
   // this performs at most one indexed event-row lookup per reconcile.
   if (derived !== item.status) {
     if (item.status === 'blocked') {
       derived = deriveWorkItemStatus(item.status, attempts, item.source, {
-        verifyMode,
+        autoClose,
         blockDeclared: isBlockDeclared(id),
       });
     } else if (item.status === 'executing') {
       derived = deriveWorkItemStatus(item.status, attempts, item.source, {
-        verifyMode,
+        autoClose,
         reviewBounceDeclared: isReviewBounceDeclared(id),
       });
     }
@@ -180,10 +180,10 @@ export function reconcileWorkItem(id: string): ReconcileResult | undefined {
     }
   }
 
-  // TRUST policy hook (design §1.5): an item landing (or sitting) in `in_review`
-  // whose effective verify mode is `trust` auto-closes in the SAME pass —
+  // TRUST hook (design §1.5): an auto-closing (cron) item landing (or sitting)
+  // in `in_review` closes in the SAME pass —
   // settle → in_review → done reads as one truthful story in the event log.
-  if (current.status === 'in_review' && effectiveVerifyMode(current) === 'trust'
+  if (current.status === 'in_review' && autoClosesOnSuccess(current)
     && trustCloseIsLicensed(attempts, decisionFloorAt)) {
     const closed = transitionDerived(id, 'done', 'policy:trust', { policy: 'trust', auto: true });
     if (closed) {

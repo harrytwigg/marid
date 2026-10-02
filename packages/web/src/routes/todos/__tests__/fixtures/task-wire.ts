@@ -42,8 +42,7 @@ export function workItemNode(id: string, overrides: Partial<WorkItemTreeNodeWire
     rank: null,
     source: "human",
     sourceRef: null,
-    acceptance: null,
-    verifyPolicy: null,
+
     rounds: 0,
     budgetUsd: null,
     createdBy: "operator",

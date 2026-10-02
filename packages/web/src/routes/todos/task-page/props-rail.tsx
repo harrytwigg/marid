@@ -1,13 +1,13 @@
 import { ArrowUpRight, Calendar, LoaderCircle, Send, UserRound } from "lucide-react"
 import type { DepartmentSummaryWire, Employee, LinkedSessionWire, WorkItemDetailWire } from "@/lib/api"
-import { STATUS_LABEL, effectiveMaxRounds, effectiveVerifyMode, priorityLabel } from "@/lib/todos"
+import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
 import { sessionIdFromActor, type SessionTreeWire } from "@/lib/session-tree-api"
 import { SessionRef } from "./session-ref"
 import { SessionTreePanel } from "./session-tree"
 import { LabelChip, RemoveButton } from "./label-chip"
-import { RailKicker, RailRow, RailPriorityBars, VerifyPill, formatDueLong } from "./rail-rows"
+import { RailKicker, RailRow, RailPriorityBars, formatDueLong } from "./rail-rows"
 import { AutoStartRow } from "./auto-start-row"
 import { displayNameOf, formatRelativeTime } from "../util"
 
@@ -22,7 +22,7 @@ import { displayNameOf, formatRelativeTime } from "../util"
 export interface RailPickers {
   /** Task 6 mounts the picker surfaces here, keyed by row. Absent = read row. */
   status?: React.ReactNode
-  rowFor?: (row: "status" | "priority" | "assignee" | "labels" | "department" | "due" | "verify") => {
+  rowFor?: (row: "status" | "priority" | "assignee" | "labels" | "department" | "due") => {
     onOpen: () => void
     open: boolean
     picker: React.ReactNode
@@ -59,7 +59,6 @@ export function PropsRail({
 }) {
   const item = detail.workItem
   const labels = detail.labels ?? []
-  const mode = effectiveVerifyMode(item)
   const dept = item.department ? departments?.find((d) => d.slug === item.department) : undefined
   const deptTitle = item.department ? item.department.charAt(0).toUpperCase() + item.department.slice(1) : "No department"
   const createdBySession = sessionIdFromActor(item.createdBy)
@@ -75,7 +74,6 @@ export function PropsRail({
   const labelsPick = pick("labels")
   const deptPick = pick("department")
   const duePick = pick("due")
-  const verifyPick = pick("verify")
 
   return (
     <aside data-testid="task-props-rail" className="relative pt-2">
@@ -215,15 +213,6 @@ export function PropsRail({
         {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} /> : createdByLabel}
         <span className="text-[12px] font-normal text-[var(--text-quaternary)]">· created {formatRelativeTime(item.createdAt)}</span>
       </RailRow>
-      <div className="relative">
-        <RailRow testId="rail-verify" label="Review policy" onOpen={verifyPick?.onOpen} open={verifyPick?.open}>
-          <VerifyPill mode={mode} />
-          <span className="text-[12px] font-normal text-[var(--text-quaternary)]">
-            Round {item.rounds} of {effectiveMaxRounds(item)}
-          </span>
-        </RailRow>
-        {verifyPick?.picker}
-      </div>
       <RailRow quiet testId="rail-spend">
         <span className="text-[11px] font-normal text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${detail.spendUsd.toFixed(2)}

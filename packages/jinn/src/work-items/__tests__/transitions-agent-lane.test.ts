@@ -66,8 +66,8 @@ describe("transition — manual start and the agent lane", () => {
     expect(store.listWorkItemEvents(wi.id).at(-1)).toMatchObject({ fromStatus: "in_review", toStatus: "executing", detail: { bounce: true, rounds: 1 } });
 
     tr.transition(wi.id, "in_review", "session:agent-1", { manual: true, agent: true });
-    const capped = tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
-    expect([capped.item.status, capped.item.rounds, capped.escalated]).toEqual(["blocked", 2, true]);
+    const again = tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
+    expect([again.item.status, again.item.rounds, again.escalated]).toEqual(["executing", 2, false]);
   });
 
   it("does not count the agent taking its own work back out of review as a round", () => {

@@ -54,8 +54,7 @@ const ITEM = {
   rank: null,
   source: "human",
   sourceRef: null,
-  acceptance: null,
-  verifyPolicy: null,
+
   rounds: 1,
   budgetUsd: null,
   createdBy: "operator",

@@ -1,7 +1,7 @@
 import { JinnMcpToolError } from "./toolkit.js";
 import { parseTodoId } from "../work-items/id.js";
 import { TODO_SKILLS_MAX } from "../work-items/dispatch-config.js";
-import { validateVerifyPolicy, type VerifyPolicy } from "../work-items/verify-policy.js";
+import { retiredTodoFieldError } from "../work-items/retired-fields.js";
 
 /**
  * Argument validation for the Todo tools: the shape checks every handler runs
@@ -113,11 +113,9 @@ export function requireSkillNames(args: Record<string, unknown>): string[] {
   return (args.skills as string[]).map((entry) => entry.trim());
 }
 
-/** The declared verify policy, refused with the same named error the gateway
- *  route would give it, or undefined when the caller declared none. */
-export function validatedVerifyPolicy(args: Record<string, unknown>): VerifyPolicy | null | undefined {
-  if (args.verifyPolicy === undefined || args.verifyPolicy === null) return undefined;
-  const validated = validateVerifyPolicy(args.verifyPolicy);
-  if (!validated.ok) throw new JinnMcpToolError(validated.error);
-  return validated.value;
+/** Refuse a removed Todo field loudly: dropping it would report success while
+ *  losing what the caller meant to say. */
+export function rejectRetiredFields(args: Record<string, unknown>): void {
+  const refusal = retiredTodoFieldError(args, { ignoreNull: true });
+  if (refusal) throw new JinnMcpToolError(refusal);
 }
