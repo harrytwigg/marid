@@ -5,7 +5,7 @@ import { startTodoDispatcher } from "./todo-dispatch.js";
 
 /**
  * Restart a stalled Todo through the Todo Dispatcher, the same start the board's
- * Dispatch button and the idle-capacity loop use. The Dispatcher's own claim and
+ * Dispatch button and the board walk use. The Dispatcher's own claim and
  * live-attempt check keep this from starting a second run of work that is
  * already moving, so a sweep may call it as often as it likes.
  */

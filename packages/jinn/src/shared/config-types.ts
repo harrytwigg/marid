@@ -5,7 +5,6 @@
  * unaffected.
  */
 import type { TerminalConfig } from "./terminal-config.js";
-import type { IdleCapacityConfig } from "./idle-capacity-config.js";
 import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { AutoCompactConfig } from "./auto-compact-config.js";
@@ -60,11 +59,6 @@ export interface JinnConfig {
     todoRecovery?: { mode?: "off" | "classify-only" | "auto" };
     /** Closed Todo departments (JIN-1): unset = open; see shared/todo-departments-config.ts. */
     todoDepartments?: TodoDepartmentsConfig;
-    /** Idle-capacity auto-start: when the account's real Claude
-     *  five-hour / weekly windows are about to reset with capacity unused,
-     *  start eligible backlog Todos to use it. Off unless `enabled: true`;
-     *  the remaining keys tune the ceilings, see shared/idle-capacity.ts. */
-    idleCapacity?: IdleCapacityConfig;
     /** Remote MCP connector at `/mcp`: off unless enabled; see shared/remote-mcp-config.ts. */
     remoteMcp?: RemoteMcpConfig;
     /** Opt-in: when set, POST /api/sessions reads the forwarded SSO identity

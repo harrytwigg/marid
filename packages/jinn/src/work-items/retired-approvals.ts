@@ -113,8 +113,8 @@ function postComment(db: DatabaseType, row: PendingApprovalRow, now: string): vo
  * Carry each still-pending Todo approval over, once, as a stop and a comment.
  *
  * Nothing reads the approval tables any more, and their guards went with them:
- * a pending gate no longer withholds the trust-tier close, keeps idle capacity
- * off a backlog Todo, or puts the Todo in anyone's queue. So an open Todo with a
+ * a pending gate no longer withholds the trust-tier close, keeps the automatic
+ * starts off a backlog Todo, or puts the Todo in anyone's queue. So an open Todo with a
  * pending approval is stopped in `blocked` for whoever was asked, and the
  * question, its options and the asker are posted on it as a system comment.
  * The approval rows stay, inert.

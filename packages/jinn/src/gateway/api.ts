@@ -313,7 +313,7 @@ import { isRawEngineCommand } from "../shared/skill-commands.js";
 import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
 import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
-import { handleIdleCapacityApi } from "./idle-capacity-api.js";
+import { handleBoardWalkApi } from "./board-walk-api.js";
 
 /** Max bytes accepted on /api/internal/hook (loopback-only relay payloads are tiny). */
 const HOOK_BODY_MAX_BYTES = 64 * 1024;
@@ -380,9 +380,9 @@ export interface ApiContext {
   restartGateway?: (options: RestartDetachedOptions) => void;
   /** Immutable port actually bound by this gateway process, unaffected by config hot reload. */
   runtimePort?: number;
-  /** The idle-capacity auto-start loop, once server.ts has started it;
-   *  the read-only preview route reports through it. */
-  idleCapacity?: import("./idle-capacity.js").IdleCapacityAutoStart;
+  /** The board walk, once server.ts has started it; the board-walk routes
+   *  report through it and the manual tick runs through it. */
+  boardWalk?: import("../board-walk/walk.js").BoardWalk;
   /** Test seams for the host-level workspace directory and creation service. */
   loadWorkspaceInstances?: () => Instance[];
   saveWorkspaceInstances?: (instances: InstanceInput[]) => void;
@@ -4219,7 +4219,7 @@ export async function handleApiRequest(
       return json(res, await collectEngineLimits(context.getConfig(), { engine }));
     }
 
-    if (await handleIdleCapacityApi(req, res, { method, pathname, url }, context)) return;
+    if (await handleBoardWalkApi(req, res, { method, pathname, url }, context)) return;
 
     // POST /api/engine-limits/refresh — currently identical to GET for live
     // sources. Kept as a command-shaped endpoint so the UI/CLI can request a

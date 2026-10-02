@@ -73,7 +73,7 @@ describe("carrying pending approvals over", () => {
   });
 
   // The guards a pending gate used to hold went with approvals: without the
-  // stop, the trust tier would close it unanswered and idle capacity start it.
+  // stop, the trust tier would close it unanswered and the board walk start it.
   it("keeps a trust-tier Todo in review from closing over the question", async () => {
     const reconcile = await import("../reconcile.js");
     const gated = store.createWorkItem({ title: "land on main?", status: "in_review", source: "cron", sourceRef: "cron:gate:1" });
@@ -88,15 +88,13 @@ describe("carrying pending approvals over", () => {
     expect(store.getWorkItem(control.id)!.status).toBe("done");
   });
 
-  it("takes a backlog Todo out of idle capacity's reach", async () => {
-    const { eligibleBacklog } = await import("../../gateway/idle-capacity-backlog.js");
-    const { resolveIdleCapacityPolicy } = await import("../../shared/idle-capacity-config.js");
+  it("takes a backlog Todo out of the queue the board walk starts from", () => {
     const item = store.createWorkItem({ title: "who should own this?", assignee: "platform-worker" });
     legacyApproval(item.id);
 
     retired.postRetiredApprovals(db);
 
-    expect(eligibleBacklog(resolveIdleCapacityPolicy({ enabled: true })).eligible.map((row) => row.id)).not.toContain(item.id);
+    expect(store.getWorkItem(item.id)!.status).toBe("blocked");
   });
 
   it("names the routed employee as who it waits on, and keeps a blocked Todo's own hint but not its park", () => {

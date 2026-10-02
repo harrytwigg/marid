@@ -37,7 +37,8 @@ import { HermesAcpEngine } from "../engines/hermes-acp.js";
 import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
-import { startIdleCapacityAutoStart } from "./idle-capacity.js";
+import { startBoardWalk } from "../board-walk/walk.js";
+import { describeSeed, seedBoardWalk } from "../board-walk/seed.js";
 import { HookRegistry } from "./hook-registry.js";
 import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
@@ -888,10 +889,13 @@ export async function startGateway(
     backgroundActivity,
     gatewayAuthToken,
   };
-  // Idle-capacity auto-start: below apiContext because a start goes
-  // through the same Dispatcher spawn the dispatch route uses, which reads it.
-  const idleCapacity = startIdleCapacityAutoStart({ getConfig: () => currentConfig, context: apiContext });
-  apiContext.idleCapacity = idleCapacity;
+  // The board walk: below apiContext because a start goes through the same
+  // Dispatcher spawn the dispatch route uses, which reads it. Seeding first
+  // gives a fresh install its rules file and retires an old idleCapacity block.
+  const seedLine = describeSeed(seedBoardWalk());
+  if (seedLine) logger.info(seedLine);
+  const boardWalk = startBoardWalk({ getConfig: () => currentConfig, context: apiContext });
+  apiContext.boardWalk = boardWalk;
 
   // Re-read config.yaml into memory. Used by both the file-watcher (debounced)
   // and by API handlers that write config.yaml and need getConfig() to reflect
@@ -1241,7 +1245,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop(); idleCapacity.stop();
+    backgroundRefreshes.stop(); boardWalk.stop();
 
     // Stop caffeinate
     if (caffeinate && caffeinate.exitCode === null) {

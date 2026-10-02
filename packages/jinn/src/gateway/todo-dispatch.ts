@@ -18,8 +18,8 @@ import type { ApiContext } from "./api.js";
  * Starting the built-in Todo Dispatcher on a Todo, as one act with two callers.
  *
  * `POST /api/work-items/:id/dispatch` used to hold this recipe inline. The
- * idle-capacity auto-start needs to start the very same Dispatcher
- * from a timer, with no request or response in hand — and a second, subtly
+ * board walk needs to start the very same Dispatcher from a scheduled tick,
+ * with no request or response in hand — and a second, subtly
  * different spawn is how one of them rots. So the recipe lives here, answers in
  * the route's own shapes (status code plus body), and the route is the thin
  * HTTP face over it. Caller authority and the sticky-status check stay with the
@@ -42,9 +42,12 @@ export interface StartTodoDispatcherOptions {
    *  activity-block emitter, a non-HTTP caller may pass nothing. */
   emitProjectionEvent?: (workItemId: string, action: string) => void;
   /** A closing paragraph for the Dispatcher's prompt: what this start is for,
-   *  when that should steer the routing (the idle-capacity auto-start says
-   *  "this is Claude allowance being used, prefer a Claude employee"). */
+   *  when that should steer the routing (the board walk passes its reason and
+   *  any engine it prefers). */
   promptSuffix?: string;
+  /** Stamped on the Dispatcher's session, so the registry can say what started
+   *  it (the board walk marks its own starts this way). */
+  transportMeta?: Record<string, string>;
 }
 
 /** Everything a spawn needs, resolved and claimed, before a session exists. */
@@ -159,9 +162,10 @@ function planDispatcher(item: WorkItem, context: ApiContext, suffix: string | un
   };
 }
 
-function createDispatcherSession(item: WorkItem, plan: DispatcherPlan, context: ApiContext): Session {
+function createDispatcherSession(item: WorkItem, plan: DispatcherPlan, context: ApiContext, transportMeta?: Record<string, string>): Session {
   const sessionKey = todoDispatcherSessionKey(item.id);
   return createSession({
+    ...(transportMeta ? { transportMeta } : {}),
     engine: plan.engineName,
     source: "web",
     sourceRef: sessionKey,
@@ -202,7 +206,7 @@ export function startTodoDispatcher(
   if (!planned.ok) return planned.result;
   const { plan } = planned;
 
-  const session = createDispatcherSession(item, plan, context);
+  const session = createDispatcherSession(item, plan, context, opts.transportMeta);
   insertMessage(session.id, "user", plan.prompt);
   try {
     linkSession(item.id, session.id);

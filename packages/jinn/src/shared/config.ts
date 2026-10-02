@@ -7,7 +7,6 @@ import { autoCompactProblems } from "./auto-compact-config.js";
 import type { JinnConfig } from "./types.js";
 import { todoRecoveryProblems } from "./todo-recovery-config.js";
 import { todoDepartmentsProblems } from "./todo-departments-config.js";
-import { idleCapacityProblems } from "./idle-capacity-config.js";
 import { remoteMcpProblems } from "./remote-mcp-config.js";
 
 type ClaudeEngineConfig = JinnConfig["engines"]["claude"];
@@ -75,7 +74,6 @@ export function validateConfigShape(config: unknown): string[] {
       }
       problems.push(...todoRecoveryProblems(c.gateway.todoRecovery));
       problems.push(...todoDepartmentsProblems(c.gateway.todoDepartments));
-      problems.push(...idleCapacityProblems(c.gateway.idleCapacity));
       problems.push(...remoteMcpProblems(c.gateway.remoteMcp));
     }
   }

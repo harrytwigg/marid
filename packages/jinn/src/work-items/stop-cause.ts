@@ -48,7 +48,7 @@ export const PARKED_UNTIL_ERROR = "parkedUntil must be an ISO-8601 timestamp";
 /** a park lives on a stop, so any move that does not land in `blocked`
  *  deletes it on the same write. Accepting one there reported
  *  success for a park that never existed — the Todo stayed in the queue, and
- *  idle-capacity could start it the next minute. */
+ *  the board walk could start it on its next tick. */
 export const PARKED_UNTIL_NEEDS_STOP =
   "parkedUntil parks a Todo in blocked and is deleted by any other move — send status: blocked without blockKind dependency, which re-queues instead of parking";
 

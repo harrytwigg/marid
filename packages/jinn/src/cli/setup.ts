@@ -1,3 +1,4 @@
+import { seedBoardWalk } from "../board-walk/seed.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -630,6 +631,11 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
   created.push(...copyTemplateDir(path.join(TEMPLATE_DIR, "skills"), SKILLS_DIR, templateMaterialization));
   created.push(...copyTemplateDir(path.join(TEMPLATE_DIR, "org"), ORG_DIR, templateMaterialization));
   created.push(...copyTemplateDir(path.join(TEMPLATE_DIR, "scripts"), path.join(JINN_HOME, "scripts"), templateMaterialization));
+  // The board walk's rules file: seeded only when missing, so a re-run of
+  // setup (and every upgrade) leaves the operator's wording alone.
+  const boardWalkSeed = seedBoardWalk();
+  if (boardWalkSeed.seeded) created.push(path.join(JINN_HOME, "board-walk.md"));
+  if (boardWalkSeed.error) warn(`Could not seed board-walk.md: ${boardWalkSeed.error}`);
 
   // Copy skills.json manifest
   const templateSkillsJson = path.join(TEMPLATE_DIR, "skills.json");
