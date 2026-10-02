@@ -16,7 +16,7 @@ export type TodoAction = (typeof TODO_ACTIONS)[number];
 /** A gate the gateway can check for itself. A release must cite every gate
  *  it relies on, and each one is verified before the Todo moves. */
 export type Gate =
-  | { kind: "date"; date: string }
+  | { kind: "date"; date: string; quote: string }
   | { kind: "blocker"; id: string }
   | { kind: "pr" | "issue"; url: string };
 
@@ -100,7 +100,7 @@ const text = (value: unknown): string | undefined =>
 
 function gate(raw: unknown): Gate | undefined {
   if (!isRecord(raw)) return undefined;
-  if (raw.kind === "date" && text(raw.date)) return { kind: "date", date: text(raw.date)! };
+  if (raw.kind === "date" && text(raw.date) && text(raw.quote)) return { kind: "date", date: text(raw.date)!, quote: text(raw.quote)! };
   if (raw.kind === "blocker" && text(raw.id)) return { kind: "blocker", id: text(raw.id)! };
   if ((raw.kind === "pr" || raw.kind === "issue") && text(raw.url)) return { kind: raw.kind, url: text(raw.url)! };
   return undefined;
@@ -111,7 +111,7 @@ function gatesOf(raw: unknown, id: string, problems: string[]): Gate[] | undefin
   const list = Array.isArray(raw) ? raw : [];
   const gates = list.map(gate);
   if (!Array.isArray(raw) || gates.some((entry) => entry === undefined)) {
-    problems.push(`${id} has gates the gateway cannot read; each is {kind: date, date} | {kind: blocker, id} | {kind: pr|issue, url}`);
+    problems.push(`${id} has gates the gateway cannot read; each is {kind: date, date, quote} | {kind: blocker, id} | {kind: pr|issue, url}`);
   }
   return gates.filter((entry): entry is Gate => entry !== undefined);
 }

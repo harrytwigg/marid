@@ -83,15 +83,26 @@ export function operatorGate(item: WorkItem): string | undefined {
 }
 
 /** Everything a Todo says, where a gate can be named: title, body,
- *  acceptance and every comment. */
+ *  acceptance and every comment except the walk's own, which would let one
+ *  tick's words become the next tick's evidence. */
 function todoText(item: WorkItem): string[] {
-  return [item.title, item.body ?? "", item.acceptance ?? "", ...listComments(item.id, { limit: 500 }).comments.map((comment) => comment.body)];
+  const comments = listComments(item.id, { limit: 500 }).comments.filter((comment) => comment.author !== BOARD_WALK_ACTOR);
+  return [item.title, item.body ?? "", item.acceptance ?? "", ...comments.map((comment) => comment.body)];
 }
 
-function dateProblem(date: string, now: number): string | undefined {
-  const at = Date.parse(date);
-  if (!Number.isFinite(at)) return `the date ${date} does not parse`;
-  return at <= now ? undefined : `the date ${date} has not passed`;
+const normalised = (value: string): string => value.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** A date gate holds only when the Todo itself names it: the quote must be
+ *  the Todo's own words, found in its text, so a past date picked from
+ *  nowhere cannot release a Todo that is waiting on something else. */
+function dateProblem(gate: Extract<Gate, { kind: "date" }>, now: number, text: string[]): string | undefined {
+  const quote = normalised(gate.quote);
+  if (quote.length < 4 || !text.some((part) => normalised(part).includes(quote))) {
+    return `the quoted words "${gate.quote}" are not in this Todo, so the date gate is not its own`;
+  }
+  const at = Date.parse(gate.date);
+  if (!Number.isFinite(at)) return `the date ${gate.date} does not parse`;
+  return at <= now ? undefined : `the date ${gate.date} has not passed`;
 }
 
 function blockerProblem(item: WorkItem, id: string, text: string[]): string | undefined {
@@ -111,7 +122,7 @@ async function linkProblem(gate: Extract<Gate, { url: string }>, deps: ApplyDeps
 
 /** Why a cited gate is not met, or undefined when the gateway confirms it. */
 function gateProblem(item: WorkItem, gate: Gate, deps: ApplyDeps, text: string[]): Promise<string | undefined> | string | undefined {
-  if (gate.kind === "date") return dateProblem(gate.date, deps.now());
+  if (gate.kind === "date") return dateProblem(gate, deps.now(), text);
   if (gate.kind === "blocker") return blockerProblem(item, gate.id, text);
   return linkProblem(gate, deps, text);
 }

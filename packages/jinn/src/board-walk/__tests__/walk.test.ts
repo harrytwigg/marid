@@ -128,7 +128,7 @@ function fakeModel(prompt: string, opts: { startAll?: boolean } = {}): string {
     let gateMet: boolean | undefined;
     let reason = "";
     const gates: Array<Record<string, string>> = [];
-    if (date) { gateMet = Date.parse(date) <= now; reason = `not before ${date}`; gates.push({ kind: "date", date }); }
+    if (date) { gateMet = Date.parse(date) <= now; reason = `not before ${date}`; gates.push({ kind: "date", date, quote: `not before ${date}` }); }
     if (blocker) { gateMet = blocker.other.status === "done"; reason = `blocked by ${blocker.other.id} (${blocker.other.status})`; gates.push({ kind: "blocker", id: blocker.other.id }); }
     if (pr) { gateMet = pr.state === "MERGED"; reason = `${pr.url} is ${pr.state}`; gates.push({ kind: "pr", url: pr.url }); }
     if (/stuck/.test(item.title)) {
@@ -548,7 +548,9 @@ describe("a release is checked against the gates it cites", () => {
 
   it.each([
     ["no gate at all", undefined, "a release must cite the gates that are met"],
-    ["a date still ahead", [{ kind: "date", date: "2026-11-01" }], "the date 2026-11-01 has not passed"],
+    ["a date still ahead", [{ kind: "date", date: "2026-11-01", quote: "after https://github.com" }], "the date 2026-11-01 has not passed"],
+    ["a past date the Todo never names", [{ kind: "date", date: "2026-09-01", quote: "not before 1 September" }], "the quoted words \"not before 1 September\" are not in this Todo"],
+    ["a date with no quote", [{ kind: "date", date: "2026-09-01" }], "a release must cite the gates that are met"],
     ["a pull request the Todo does not link", [{ kind: "pr", url: "https://github.com/acme/widgets/pull/9" }], "https://github.com/acme/widgets/pull/9 is not linked from this Todo"],
     ["an open pull request", [{ kind: "pr", url: "https://github.com/acme/widgets/pull/18" }], "https://github.com/acme/widgets/pull/18 is OPEN"],
   ])("refuses a release citing %s", async (_label, gates, outcome) => {
@@ -556,7 +558,26 @@ describe("a release is checked against the gates it cites", () => {
     const h = open({ reply: releaseReply(item.id, gates), links: { "https://github.com/acme/widgets/pull/18": "OPEN" } });
     const tick = await h.walk.tick();
     expect(status(item.id)).toBe("blocked");
-    expect(tick.entries[0]).toMatchObject({ kind: "refused", workItemId: item.id, outcome: expect.stringContaining(outcome) });
+    expect(tick.entries.find((entry) => entry.workItemId === item.id)).toMatchObject({ kind: "refused", workItemId: item.id, outcome: expect.stringContaining(outcome) });
+  });
+
+  it("refuses a Todo whose only gate is a person's reply, and says so in the tick log", async () => {
+    const item = blocked("Ship the pricing page", { body: "Once Harry replies with the final copy." });
+    const tick = await open({ reply: releaseReply(item.id) }).walk.tick();
+    expect(status(item.id)).toBe("blocked");
+    expect(tick.entries[0]).toEqual({
+      kind: "refused", workItemId: item.id, reason: "met",
+      outcome: "gate not confirmed: a release must cite the gates that are met (a date, a blocker or a pull request), so the gateway can check them",
+    });
+    expect(m.boardStore.readTicks(1)[0].entries[0].outcome).toMatch(/^gate not confirmed/);
+  });
+
+  it("does not take the walk's own earlier comment as the Todo's words", async () => {
+    const item = blocked("Waiting on legal");
+    m.comments.addComment({ workItemId: item.id, body: "Board walk: this looks stuck. not before 2026-09-01", author: "board-walk", authorKind: "system" });
+    const tick = await open({ reply: releaseReply(item.id, [{ kind: "date", date: "2026-09-01", quote: "not before 2026-09-01" }]) }).walk.tick();
+    expect(status(item.id)).toBe("blocked");
+    expect(tick.entries[0].outcome).toMatch(/are not in this Todo/);
   });
 
   it("refuses a blocker the Todo does not name, and one that is not done", async () => {
@@ -572,10 +593,14 @@ describe("a release is checked against the gates it cites", () => {
   });
 
   it("never releases an approval question carried over from the retired approvals, even with a met gate", async () => {
-    const item = todo("Approve the spend", { body: "not before 2026-09-30" });
-    m.transitions.transition(item.id, "blocked", "migration", { detail: { reason: "retired-approval" }, stopCause: { unblockHint: { what: "approve the spend?", who: "senior-developer" } } });
-    const tick = await open({ reply: releaseReply(item.id, [{ kind: "date", date: "2026-09-30" }]) }).walk.tick();
+    // The exact shape the retired-approvals migration leaves: needs_input,
+    // the original (non-operator) assignee kept, no unblock hint.
+    const item = todo("Merge the fix or request changes", { body: "not before 2026-09-30", assignee: "senior-developer" });
+    m.transitions.transition(item.id, "blocked", "migration", { blockKind: "needs_input", detail: { reason: "retired-approval", declared: true, blockKind: "needs_input" } });
+    expect(m.stopCause.readStopCause(m.db, item.id, NOW)).toBeUndefined();
+    const tick = await open({ reply: releaseReply(item.id, [{ kind: "date", date: "2026-09-30", quote: "not before 2026-09-30" }]) }).walk.tick();
     expect(status(item.id)).toBe("blocked");
-    expect(tick.entries[0].outcome).toBe("only the operator releases it: it holds an unanswered approval question for senior-developer");
+    expect(m.store.getWorkItem(item.id)!.assignee).toBe("senior-developer");
+    expect(tick.entries[0].outcome).toBe("only the operator releases it: it holds an unanswered approval question");
   });
 });

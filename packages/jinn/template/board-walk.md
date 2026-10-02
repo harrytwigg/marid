@@ -57,6 +57,11 @@ keeping its assignee, with a comment giving the reason. Do not release a Todo
 that is blocked on a person's decision unless that decision is recorded in its
 comments. Leave a Todo that is still gated where it is.
 
+The gateway checks every release against the gates it cites, so cite each one:
+a date by quoting the Todo's own words that name it, a blocker by its id, and a
+pull request or issue by its link. A gate only a person can confirm, such as
+"once the client replies", cannot be cited; flag that Todo instead.
+
 ## Park plain date gates
 
 When a Todo's only open gate is a plain date or time, park it until then: it
