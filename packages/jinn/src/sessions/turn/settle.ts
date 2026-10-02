@@ -216,6 +216,12 @@ function holdPromptTheEngineNeverRead(run: TurnRun, verdict: TurnVerdict): void 
   retainUnseenInterruptedPrompt(run.input.session.id, run.input.prompt);
 }
 
+/** The engine's own account of an interruption, for the session's last error.
+ *  A turn preempted with no such account keeps the bare placeholder. */
+function interruptionOf(result: EngineResult, quietPreempted: boolean): { interruption?: string } {
+  return quietPreempted && result.error?.startsWith("Interrupted") ? { interruption: result.error } : {};
+}
+
 /** The receipt a turn that reached the engine writes, preempted or not. */
 function answeredReceipt(
   run: TurnRun,
@@ -234,9 +240,7 @@ function answeredReceipt(
     outcome: quietPreempted ? "interrupted" : (result.error ? "failed" : "succeeded"),
     result: quietPreempted ? null : result.result,
     error: quietPreempted ? null : (result.error ?? null),
-    // The engine's own account of an interruption, for the session's last
-    // error; a turn preempted with no such account keeps the bare placeholder.
-    ...(quietPreempted && result.error?.startsWith("Interrupted") ? { interruption: result.error } : {}),
+    ...interruptionOf(result, quietPreempted),
     cost: result.cost,
     durationMs: result.durationMs,
     accounting: { cost: result.cost, numTurns: result.numTurns, ...(model ? { model } : {}) },

@@ -50,9 +50,7 @@ export function isProcessExitInterruption(reason: string): boolean {
 export function plainOutputTail(output: string, max = 300): string {
   const plain = output
     // CSI and OSC sequences (colours, cursor moves, titles), then any other escape.
-    // eslint-disable-next-line no-control-regex
     .replace(/\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b./g, " ")
-    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1f\x7f]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

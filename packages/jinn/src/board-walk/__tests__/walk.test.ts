@@ -4,7 +4,6 @@ import path from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CronJob, EngineLimitEngineSnapshot, EngineLimitsResponse, JinnConfig, Session } from "../../shared/types.js";
 import type { StartTodoDispatcherResult } from "../../gateway/todo-dispatch.js";
-import type { BoardTodo } from "../board.js";
 import type { CapacitySnapshot } from "../snapshot.js";
 import type { WalkTurn, WalkTurnResult } from "../walk.js";
 import type { LinkState } from "../pr-state.js";
@@ -113,21 +112,59 @@ function section(prompt: string, heading: string): unknown {
   return JSON.parse(prompt.slice(fence, prompt.indexOf("\n```", fence)));
 }
 
+/** A Todo as a reader of the prompt sees it. */
+interface ShownTodo {
+  id: string;
+  title: string;
+  status: string;
+  body: string;
+  noAutoStart: boolean;
+  flaggedStuck: boolean;
+  relations: Array<{ verb: string; id: string; status: string; title: string }>;
+  links: Array<{ kind: "pull" | "issue"; url: string; state: string }>;
+}
+
+/** The board section of the prompt, read back the way a model reads it: one
+ *  `### <id>: <title>` block per Todo, a labelled line per fact, and the
+ *  Todo's own words indented under `body:`. */
+function readBoard(prompt: string): ShownTodo[] {
+  const start = prompt.indexOf("## The board");
+  const board = prompt.slice(start, prompt.indexOf("\n## Your answer", start));
+  return board.split(/\n(?=### )/).slice(1).map((block) => {
+    const lines = block.split("\n");
+    const [, id, title] = /^### (\S+): (.*)$/.exec(lines[0])!;
+    const body: string[] = [];
+    for (let i = lines.indexOf("body:") + 1; i > 0 && i < lines.length && lines[i].startsWith("  "); i++) body.push(lines[i]);
+    return {
+      id,
+      title,
+      status: /^status (\S+) since /m.exec(block)![1],
+      body: body.map((line) => line.slice(2)).join("\n"),
+      noAutoStart: /^no auto-start: /m.test(block),
+      flaggedStuck: /^already flagged stuck: yes/m.test(block),
+      relations: [...block.matchAll(/^relation: (blocked by|blocks|duplicated by|duplicates|relates to) (\S+) \((\w+)\): (.*)$/gm)]
+        .map(([, verb, other, status, otherTitle]) => ({ verb, id: other, status, title: otherTitle })),
+      links: [...block.matchAll(/^link: (pull request|issue) (\S+) is (\S+)/gm)]
+        .map(([, kind, url, state]) => ({ kind: kind === "pull request" ? "pull" as const : "issue" as const, url, state })),
+    };
+  });
+}
+
 /** The shipped rules, as a model would apply them, reading only the prompt. */
 function fakeModel(prompt: string, opts: { startAll?: boolean } = {}): string {
-  const todos = section(prompt, "## The board") as BoardTodo[];
+  const todos = readBoard(prompt);
   const snapshot = section(prompt, "## Capacity snapshot") as CapacitySnapshot;
   const now = Date.parse(snapshot.now);
   const decisions: Array<Record<string, unknown>> = [];
   for (const item of todos) {
     const date = /not before (\d{4}-\d{2}-\d{2})/.exec(item.body ?? "")?.[1];
-    const blocker = item.relations.find((relation) => relation.kind === "blocks" && relation.direction === "in");
+    const blocker = item.relations.find((relation) => relation.verb === "blocked by");
     const pr = item.links.find((link) => link.kind === "pull");
     let gateMet: boolean | undefined;
     let reason = "";
     const gates: Array<Record<string, string>> = [];
     if (date) { gateMet = Date.parse(date) <= now; reason = `not before ${date}`; gates.push({ kind: "date", date, quote: `not before ${date}` }); }
-    if (blocker) { gateMet = blocker.other.status === "done"; reason = `blocked by ${blocker.other.id} (${blocker.other.status})`; gates.push({ kind: "blocker", id: blocker.other.id }); }
+    if (blocker) { gateMet = blocker.status === "done"; reason = `blocked by ${blocker.id} (${blocker.status})`; gates.push({ kind: "blocker", id: blocker.id }); }
     if (pr) { gateMet = pr.state === "MERGED"; reason = `${pr.url} is ${pr.state}`; gates.push({ kind: "pr", url: pr.url }); }
     if (/stuck/.test(item.title)) {
       decisions.push({ id: item.id, verdict: "stuck", action: "flag", reason: "no change for days; the operator should decide" });
@@ -211,6 +248,13 @@ function open(opts: {
   return { walk, turns, dispatched };
 }
 
+/** One tick's prompt, from a fresh walk. */
+async function runOnce(): Promise<WalkTurn> {
+  const h = open();
+  await h.walk.tick();
+  return h.turns[0];
+}
+
 const status = (id: string) => m.store.getWorkItem(id)!.status;
 const walkComments = (id: string) => m.comments.listComments(id).comments.filter((comment) => comment.author === "board-walk");
 
@@ -242,9 +286,9 @@ describe("board walk readiness", () => {
 
     await h.walk.tick();
     expect(status(waiting.id)).toBe("blocked");
-    const prompt = section(h.turns[0].prompt, "## The board") as BoardTodo[];
+    const prompt = readBoard(h.turns[0].prompt);
     expect(prompt.find((item) => item.id === waiting.id)?.relations).toEqual([
-      { kind: "blocks", direction: "in", other: { id: blocker.id, title: "Migrate the database", status: "backlog" } },
+      { verb: "blocked by", id: blocker.id, status: "backlog", title: "Migrate the database" },
     ]);
 
     m.transitions.transition(blocker.id, "done", "operator", { human: true });
@@ -263,7 +307,7 @@ describe("board walk readiness", () => {
     state = "MERGED";
     await h.walk.tick();
     expect(status(gated.id)).toBe("backlog");
-    expect((section(h.turns[1].prompt, "## The board") as BoardTodo[])[0].links).toEqual([{ url, kind: "pull", state: "MERGED" }]);
+    expect(readBoard(h.turns[1].prompt)[0].links).toEqual([{ url, kind: "pull", state: "MERGED" }]);
   });
 
   it("flags a stuck Todo with exactly one comment across two ticks", async () => {
@@ -277,7 +321,7 @@ describe("board walk readiness", () => {
     expect(first.entries).toContainEqual(expect.objectContaining({ kind: "stuck", workItemId: stuck.id, outcome: "flagged with a comment" }));
     expect(second.entries).toContainEqual(expect.objectContaining({ kind: "stuck", workItemId: stuck.id, outcome: "already flagged; not raised again" }));
     // The second prompt tells the model it already raised this one.
-    expect((section(h.turns[1].prompt, "## The board") as BoardTodo[])[0].flaggedStuck).toBe(true);
+    expect(readBoard(h.turns[1].prompt)[0].flaggedStuck).toBe(true);
   });
 
   it("raises a stuck Todo again once it has moved and got stuck anew", async () => {
@@ -545,13 +589,33 @@ describe("board walk review round 2", () => {
     expect(h.turns[0].prompt).not.toContain("### Default: Release");
   });
 
-  it("keeps the board inside its share of the prompt and counts what it left out", async () => {
+  it("keeps the board inside the prompt's budget and counts what it left out", async () => {
     const { buildBoardDigest } = await import("../board.js");
+    const { buildPrompt } = await import("../prompt.js");
+    const { readRules } = await import("../settings.js");
     for (let i = 0; i < 5; i++) todo(`Long ${i}`, { body: "x".repeat(1500) });
-    const digest = await buildBoardDigest({ resolveLink: async (url, kind) => ({ url, kind, state: "unknown" }), maxChars: 4000 });
-    expect(digest.todos.length).toBeGreaterThan(0);
-    expect(digest.todos.length).toBeLessThan(5);
-    expect(digest.omitted).toBe(5 - digest.todos.length);
+    const board = await buildBoardDigest({ resolveLink: async (url, kind) => ({ url, kind, state: "unknown" }) });
+    expect(board.todos).toHaveLength(5);
+    const rules = readRules(RULES);
+    const snapshot = section((await runOnce()).prompt, "## Capacity snapshot") as CapacitySnapshot;
+    const small = buildPrompt({ settings: rules.settings, rules: rules.body, snapshot, board, budgetBytes: Buffer.byteLength(buildPrompt({ settings: rules.settings, rules: rules.body, snapshot, board: { ...board, todos: [] } })) + 4000 });
+    const shown = readBoard(small);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(5);
+    expect(small).toContain(`## The board (${shown.length} open Todo${shown.length === 1 ? "" : "s"}, ${5 - shown.length} more not shown; 0 in review`);
+  });
+
+  it("cuts a long Todo's text short, says so, and keeps only its newest comments", async () => {
+    const item = todo("A Todo with a long thread", { body: `not before 2026-09-30. ${"Detail. ".repeat(400)}` });
+    for (let i = 0; i < 9; i++) m.comments.addComment({ workItemId: item.id, body: `note ${i}: ${"words ".repeat(150)}`, author: "operator", authorKind: "operator" });
+    const { prompt } = await runOnce();
+    const block = prompt.slice(prompt.indexOf(`### ${item.id}:`));
+    expect(block).toContain("not before 2026-09-30.");
+    expect(block).toMatch(/… \[truncated, \d+ chars\]/);
+    expect(block).toContain("comments (newest 4 of 9, oldest first):");
+    expect(block).toContain("note 8:");
+    expect(block).not.toContain("note 4:");
+    expect(Buffer.byteLength(block.slice(0, block.indexOf("\n## Your answer")), "utf8")).toBeLessThan(4500);
   });
 
   it("starts through the real Dispatcher path with the board's dispatched event and the walk's mark", async () => {

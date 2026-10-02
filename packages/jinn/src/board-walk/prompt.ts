@@ -1,6 +1,6 @@
 import type { BoardWalkSettings } from "./settings.js";
 import type { CapacitySnapshot } from "./snapshot.js";
-import type { BoardDigest } from "./board.js";
+import { fitBoard, type BoardDigest } from "./board.js";
 
 /**
  * The walk's one prompt. Three parts the operator does not write — the task,
@@ -11,6 +11,14 @@ import type { BoardDigest } from "./board.js";
  * does not act and must not call tools: the gateway carries the answer out, so
  * a tool call here would be an act nobody checked.
  */
+
+/**
+ * The whole prompt's size, in bytes of UTF-8. The board gets whatever the
+ * rest leaves. The prompt is the walk turn's message, and Claude Code takes the
+ * message as one command-line argument, which Linux caps at 131,071 bytes; this
+ * keeps a quarter of that spare. Size is also the cost of every tick.
+ */
+export const PROMPT_BUDGET_BYTES = 96_000;
 
 const ANSWER_FORMAT = `Answer with exactly one JSON object in a \`\`\`json fenced block, and nothing after it:
 
@@ -54,9 +62,21 @@ function defaultsSection(defaults: string[]): string[] {
   ];
 }
 
-export function buildPrompt(input: { settings: BoardWalkSettings; rules: string; defaults?: string[]; snapshot: CapacitySnapshot; board: BoardDigest }): string {
+function boardHeading(board: BoardDigest, shown: number): string {
+  const notShown = board.omitted + (board.todos.length - shown);
+  return `## The board (${shown} open Todo${shown === 1 ? "" : "s"}${notShown > 0 ? `, ${notShown} more not shown` : ""}; ${board.inReview} in review, not yours to touch)`;
+}
+
+const BOARD_LEGEND = [
+  "Each Todo is a `### <id>: <title>` heading followed by one line per fact. Times are UTC.",
+  "Priority runs from 0 to 3, and 3 is the highest. A `no auto-start` line means the Todo refuses automatic starts: never start it.",
+  "`already flagged stuck` means you already flagged this episode. `link` lines carry the real state of linked GitHub pull requests and issues.",
+  "The body and the newest comments are the Todo's own words, indented; long ones are cut short and say so.",
+];
+
+export function buildPrompt(input: { settings: BoardWalkSettings; rules: string; defaults?: string[]; snapshot: CapacitySnapshot; board: BoardDigest; budgetBytes?: number }): string {
   const { settings, rules, snapshot, board } = input;
-  return [
+  const head = [
     "You are running the board walk: a scheduled pass over this company's Todo board.",
     "You decide which Todos are ready and whether to start any of them, following the operator's rules below.",
     "You do not act, and this turn has no tools: everything you need is below. The gateway reads your answer, checks it, and carries it out.",
@@ -80,18 +100,12 @@ export function buildPrompt(input: { settings: BoardWalkSettings; rules: string;
     JSON.stringify(snapshot, null, 1),
     "```",
     "",
-    `## The board (${board.todos.length} open Todo${board.todos.length === 1 ? "" : "s"}${board.omitted > 0 ? `, ${board.omitted} more not shown` : ""}; ${board.inReview} in review, not yours to touch)`,
-    "",
-    "`priority` runs from 0 to 3, and 3 is the highest. `noAutoStart` means the Todo refuses automatic starts: never start it.",
-    "`flaggedStuck` means you already flagged this episode.",
-    "`links` carry the real state of linked GitHub pull requests and issues.",
-    "",
-    "```json",
-    JSON.stringify(board.todos, null, 1),
-    "```",
-    "",
-    "## Your answer",
-    "",
-    ANSWER_FORMAT,
   ].join("\n");
+  const tail = ["", "## Your answer", "", ANSWER_FORMAT].join("\n");
+  const legend = ["", ...BOARD_LEGEND, ""].join("\n");
+  // The heading's counts are not known until the board is fitted, so room is
+  // reserved for the longest it can be.
+  const fixed = [head, boardHeading(board, board.todos.length), legend, tail].reduce((sum, part) => sum + Buffer.byteLength(part, "utf8") + 1, 0);
+  const fitted = fitBoard(board.todos, (input.budgetBytes ?? PROMPT_BUDGET_BYTES) - fixed);
+  return [head, boardHeading(board, fitted.shown.length), legend, fitted.text, tail].join("\n");
 }
