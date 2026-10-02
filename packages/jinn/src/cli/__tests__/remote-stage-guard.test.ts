@@ -16,9 +16,9 @@ describe("assertCommandAllowedInHome", () => {
     }
   });
 
-  it("refuses start, stop, restart, status, setup, migrate, nuke and backup in a remote session's staged home", () => {
+  it("refuses start, stop, restart, status, pair, unpair, setup, migrate, nuke and backup in a remote session's staged home", () => {
     fs.writeFileSync(path.join(home, REMOTE_STAGE_MARKER), "stage\n");
-    for (const command of ["start", "stop", "restart", "status", "setup", "migrate", "nuke"]) {
+    for (const command of ["start", "stop", "restart", "status", "pair", "unpair", "setup", "migrate", "nuke"]) {
       expect(() => assertCommandAllowedInHome([command], home)).toThrow(new RegExp(`jinn ${command}.*staged home`));
     }
     expect(() => assertCommandAllowedInHome(["backup", "run"], home)).toThrow(/jinn backup run/);

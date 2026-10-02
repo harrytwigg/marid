@@ -10,7 +10,8 @@ import { assertNotRemoteStagedHome } from "../shared/local-db-guard.js";
  * `jinn stop`/`restart` would signal a pid read from the gateway's file on a host
  * where it names some other process. `status` is refused too: it reads the
  * gateway's pid file as if the pid were on this host, and loading the gateway
- * module opens the registry. Commands that touch neither (`limits`, `remote
+ * module opens the registry. `pair`/`unpair` load the gateway server, which
+ * opens the registry at import. Commands that touch neither (`limits`, `remote
  * status`, `skills`, `--version`) stay available.
  */
 export const COMMANDS_REFUSED_IN_REMOTE_STAGE: ReadonlySet<string> = new Set([
@@ -19,6 +20,8 @@ export const COMMANDS_REFUSED_IN_REMOTE_STAGE: ReadonlySet<string> = new Set([
   "stop",
   "restart",
   "status",
+  "pair",
+  "unpair",
   "migrate",
   "nuke",
   "backup",

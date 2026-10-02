@@ -975,16 +975,34 @@ chmod 700 "$root" "$root/sessions" "$home"
 # Reap dead session stages. Every spawn rewrites its own session's gateway.json,
 # so a live session's directory is never older than its last turn.
 find "$root/sessions" -mindepth 1 -maxdepth 1 -type d -mtime +"$ttl" -exec rm -rf {} + 2>/dev/null || true
+# One rebuild of a session's home at a time. Two can be started together, and
+# the cleanup below deletes links while the other run's ln is creating them: a
+# run fails on EEXIST/ENOENT or leaves an entry unlinked. mkdir is the lock
+# because it is atomic everywhere (flock is not on every host). A lock older
+# than two minutes belongs to a run that died, so it is broken and retaken; two
+# waiters breaking the same stale lock at once can both proceed, which is no
+# worse than before the lock and needs a dead run to begin with.
+lock="$home.farm-lock"
+tries=0
+until mkdir "$lock" 2>/dev/null; do
+  if [ -n "$(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null)" ]; then
+    rmdir "$lock" 2>/dev/null || true
+    continue
+  fi
+  tries=$((tries + 1))
+  if [ "$tries" -ge 1200 ]; then
+    echo "remote stage: another rebuild of $home has held $lock for too long" >&2
+    exit 1
+  fi
+  sleep 0.05 2>/dev/null || sleep 1
+done
+trap 'rmdir "$lock" 2>/dev/null || true' EXIT
 # Drop every symlink first so an entry removed from the gateway's home does not
 # linger here as a dangling one. gateway.json, tmp/ and the filtered directories
 # below are real, not symlinks, so they are untouched by this. (A stage built
 # before the filtered directories existed linked sessions/ whole; that link goes
 # here, and the directory is rebuilt as a real one below.)
 find "$home" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
-# Two rebuilds of one session can run at once, and two "ln -sfn" on one name
-# race (EEXIST/ENOENT). Either way the link that results is the same, so accept
-# it when it already points where it should, and otherwise try once more.
-link() { ln -sfn "$1" "$2" 2>/dev/null || [ "$(readlink "$2" 2>/dev/null)" = "$1" ] || ln -sfn "$1" "$2"; }
 # Marks this as a remote session's stage, so Marid code started here refuses to
 # start a gateway or open a database (shared/local-db-guard.ts).
 printf 'remote session stage: linked entries lead to the gateway home\\n' > "$home/${REMOTE_STAGE_MARKER}"
@@ -994,7 +1012,7 @@ for entry in "$mount"/* "$mount"/.[!.]*; do
   case "$name" in
     gateway.json|tmp|${REMOTE_STAGE_MARKER}|${FARM_FILTERED_DIRS.join("|")}) continue ;;
   esac
-  link "$entry" "$home/$name"
+  ln -sfn "$entry" "$home/$name"
 done
 # The directories that hold the gateway's SQLite databases are real directories
 # here, linked entry by entry WITHOUT the database files. A WAL database opened
@@ -1025,7 +1043,7 @@ for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
     case "$name" in
       backups|*.db|*.db-wal|*.db-shm|*.db-journal) continue ;;
     esac
-    link "$entry" "$home/$dir/$name"
+    ln -sfn "$entry" "$home/$dir/$name"
   done
   for db in "$mount/$dir"/*.db; do
     [ -e "$db" ] || continue

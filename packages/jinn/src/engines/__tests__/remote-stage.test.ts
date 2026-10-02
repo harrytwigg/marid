@@ -765,6 +765,38 @@ describe.skipIf(isWindows)("FARM_SCRIPT — run for real against a fixture mount
       const codes = await Promise.all(Array.from({ length: 40 }, once));
       expect(codes.filter((code) => code !== 0)).toEqual([]);
       expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+      // Serialized, not merely tolerated: every entry ends up linked, and the
+      // lock is released.
+      for (const rel of ["knowledge", "org", "sessions/registry.db.version", "sessions/restart-interrupted.jsonl", "sessions/sess-x"]) {
+        expect(fs.lstatSync(path.join(home, rel)).isSymbolicLink()).toBe(true);
+      }
+      expect(fs.existsSync(`${home}.farm-lock`)).toBe(false);
+    }, 60000);
+
+    it("breaks a stale rebuild lock left by a run that died", () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(`${home}.farm-lock`, { recursive: true });
+      const old = new Date(Date.now() - 10 * 60 * 1000);
+      fs.utimesSync(`${home}.farm-lock`, old, old);
+      runFarm("sess-a");
+      expect(fs.existsSync(`${home}.farm-lock`)).toBe(false);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+    });
+
+    it("waits for a live rebuild lock instead of racing it", async () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(`${home}.farm-lock`, { recursive: true });
+      const child = spawn("sh", ["-s", mount, root, home, "7"]);
+      child.stdin.end(FARM_SCRIPT);
+      const done = new Promise<number>((resolve) => child.on("close", (code) => resolve(code ?? 1)));
+      await new Promise((r) => setTimeout(r, 400));
+      // Still waiting: it has not staged anything behind the holder's back.
+      expect(fs.existsSync(path.join(home, "sessions"))).toBe(false);
+      fs.rmdirSync(`${home}.farm-lock`);
+      expect(await done).toBe(0);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
     }, 30000);
 
     it("marks the stage with a real marker file, never a link from the mount", () => {
