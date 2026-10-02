@@ -39,13 +39,15 @@ import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
 import { startIdleCapacityAutoStart } from "./idle-capacity.js";
 import { HookRegistry } from "./hook-registry.js";
-import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, startupGatewayPids, gatewayBaseUrl } from "./gateway-info.js";
+import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
 import { reconcileWorkItemsOnStartup, startWorkItemReconciler } from "../work-items/reconcile.js";
 import { setTodoLiveEmitter } from "../work-items/live-events.js";
 import { seedTrust, cleanupSessionSettings } from "../shared/claude-settings.js";
 import { claudeJsonPath } from "../shared/home.js";
-import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
+import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
+import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
+import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
 import { isSameOriginBrowserRequest, resumePendingWebQueueItems, type ApiContext } from "./api.js";
 import { startTodoSweeps } from "./todo-sweeps.js";
@@ -509,29 +511,33 @@ export async function startGateway(
   // host as-is, so the URL is always reachable from the child.
   process.env.JINN_GATEWAY_TOKEN = gatewayAuthToken;
   process.env.JINN_GATEWAY_URL = gatewayBaseUrl({ port, host });
+  // Name the home that binding belongs to, so a command a session points at another
+  // home (JINN_HOME=<sandbox> jinn start) can tell the binding it inherited is not its own.
+  process.env[JINN_BINDING_HOME_ENV] = JINN_HOME_IDENTITY; // footgun: ok exported to spawned sessions beside JINN_GATEWAY_URL above, which every engine reads from process.env
 
   // Normalize claude engine config (idempotent — loadConfig already normalized it)
   const claudeCfg = normalizeClaudeEngineConfig(config.engines.claude);
 
   // Reap any orphaned PTYs from a prior crashed run before writing the fresh gateway.json.
   const oldInfo = readGatewayInfo(GATEWAY_INFO_FILE);
-  if (oldInfo) {
-    for (const pid of startupGatewayPids(oldInfo)) {
-      try {
-        process.kill(pid, "SIGTERM");
-        logger.info(`Reaping stale pid ${pid} from prior gateway`);
-      } catch (err: unknown) {
-        // ESRCH = no such process — already gone, which is the normal case.
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code !== "ESRCH") {
-          logger.warn(`Unexpected error reaping stale pid ${pid}: ${err instanceof Error ? err.message : err}`);
-        }
+  if (recordedByAnotherHome(oldInfo, JINN_HOME_IDENTITY)) {
+    logger.warn(`gateway.json was written by the instance at ${oldInfo!.home}; not reaping its pids`);
+  }
+  for (const pid of reapableGatewayPids(oldInfo)) {
+    try {
+      process.kill(pid, "SIGTERM");
+      logger.info(`Reaping stale pid ${pid} from prior gateway`);
+    } catch (err: unknown) {
+      // ESRCH = no such process — already gone, which is the normal case.
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "ESRCH") {
+        logger.warn(`Unexpected error reaping stale pid ${pid}: ${err instanceof Error ? err.message : err}`);
       }
     }
   }
 
   // Write gateway connection info (port + hook secret + pid) for hook-relay discovery.
-  const gatewayInfo = writeGatewayInfo(GATEWAY_INFO_FILE, { port, host, pid: process.pid, token: gatewayAuthToken });
+  const gatewayInfo = writeGatewayInfo(GATEWAY_INFO_FILE, { port, host, pid: process.pid, token: gatewayAuthToken, home: JINN_HOME_IDENTITY });
 
   // Hook registry — shared by the interactive engine and the internal hook route.
   const hookRegistry = new HookRegistry();

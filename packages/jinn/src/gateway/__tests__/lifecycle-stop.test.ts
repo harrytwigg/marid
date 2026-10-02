@@ -228,7 +228,7 @@ describe("stop / stopAndWait PID-file race", () => {
     await waitForSpawn(child);
     await waitForListening(port);
 
-    const expected = `port ${port} is owned by another jinn instance (JINN_HOME=${foreignHome}); change this instance's port in ${CONFIG_PATH}, or pass --take-port to override.`;
+    const expected = `port ${port} is owned by another jinn instance (JINN_HOME=${foreignHome}); give this instance its own port (jinn setup --port <port>, or edit ${CONFIG_PATH}). --take-port would stop that instance and take its port.`;
     try {
       stop(port);
       throw new Error("expected stop() to refuse the foreign owner");
@@ -468,12 +468,14 @@ describe("buildGatewayChildEnv", () => {
       ...process.env,
       JINN_HOME: "/wrong/home",
       JINN_HOME_IDENTITY: "/wrong/home",
+      JINN_BINDING_HOME: "/wrong/home",
       JINN_GATEWAY_URL: "http://127.0.0.1:7777",
       JINN_GATEWAY_TOKEN: "wrong-token",
     });
 
     expect(env.JINN_HOME).toBe(tmpHome);
     expect(env.JINN_HOME_IDENTITY).toBe(tmpHomeIdentity);
+    expect(env.JINN_BINDING_HOME).toBe(tmpHomeIdentity);
     expect(env.JINN_GATEWAY_URL).toBe("http://127.0.0.1:7789");
     expect(env.JINN_GATEWAY_TOKEN).not.toBe("wrong-token");
     expect(env.JINN_GATEWAY_TOKEN).toBeTruthy();
