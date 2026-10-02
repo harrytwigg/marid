@@ -155,6 +155,19 @@ describe("the board walk's turn through the session layer", () => {
     expect(Buffer.byteLength(run.prompt, "utf8")).toBeLessThan(20_000);
   });
 
+  it("takes a walk that ends without a closing word as done, its decisions all logged", async () => {
+    const item = m.store.createWorkItem({ title: "Anything", status: "backlog", source: "human" });
+    let walk: ReturnType<typeof walkWith> | undefined;
+    walk = walkWith(engine(async (opts) => {
+      await walk!.turnTool(opts.sessionId!, "walk_decide", { id: item.id, verdict: "ready", action: "leave", reason: "nothing to do" });
+      await walk!.turnTool(opts.sessionId!, "walk_finish", { summary: "done", dispatchReason: "none ready" });
+      return { sessionId: "native-1", result: "" };
+    }));
+    const tick = await walk.tick("manual");
+    expect(tick.outcome).toBe("ok");
+    expect(tick.entries).toContainEqual(expect.objectContaining({ kind: "ready", workItemId: item.id, outcome: "left alone" }));
+  });
+
   it("records a turn whose process never started as failed, with the process's own reason", async () => {
     m.store.createWorkItem({ title: "Anything", status: "backlog", source: "human" });
     const reason = "claude did not start: its process exited (code 1, signal 0) before its session began. Its last output: execvp(3) failed.: Argument list too long";

@@ -320,6 +320,8 @@ describe("InteractiveClaudeEngine — remote branch", () => {
         sessionId: SID, prompt: "m".repeat(70_000), systemPrompt: "s".repeat(70_000), cwd: "/tmp", ...TARGET,
       } as any)).rejects.toThrow(/the remote command line \(the message and the system prompt together\) is 140,\d{3} bytes, over the operating system's limit of 131,071 bytes/);
       expect(hoisted.spawns).toHaveLength(0);
+      // Refused before staging, which would repoint the session's hook relay.
+      expect(hoisted.prepareCalls).toHaveLength(0);
     });
 
     it("refuses to spawn when the target escapes the configured remote.root", async () => {

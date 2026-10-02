@@ -7,7 +7,8 @@ import { JINN_HOME, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT, CLAUDE_LIMITS_DIR } 
 import { cleanupSessionSettings, writeSessionSettings } from "../shared/claude-settings.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
-import { PtyLifecycleManager, isProcessExitInterruption, processExitInterruption, processStartFailure, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
+import { PtyLifecycleManager, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
+import { processStartFailure } from "../shared/process-start.js";
 import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
@@ -382,7 +383,7 @@ export function buildInteractiveArgs(o: InteractiveArgsOpts): string[] {
 }
 
 /**
- * The message a spawn passes positionally. On a fresh session the system
+ * The message a turn hands Claude Code, in argv or pasted. On a fresh session the system
  * prompt is NOT folded in front of it, as buildPromptWithPlatformContext does
  * for engines that have no system-prompt flag: here it already travels in
  * `--append-system-prompt`. Folding it in as well sent the whole context twice
@@ -689,6 +690,10 @@ export class TurnResolver {
   private settled = false;
   private claudeSessionId: string | undefined;
   private gotSessionStart = false;
+  /** Whether the process now serving this turn has reported SessionStart. A
+   *  turn can change process mid-way (redelivery by respawn), and each new one
+   *  has to start before a death can count as an interruption. */
+  private processStarted = false;
   private stopPayload: HookPayload | undefined;
   private stopFailurePayload: HookPayload | undefined;
   private graceTimer: NodeJS.Timeout | undefined;
@@ -707,6 +712,7 @@ export class TurnResolver {
     this.promise = new Promise((res) => { this.resolve = res; });
     if (opts.assumeStarted) {
       this.gotSessionStart = true;
+      this.processStarted = true;
       this.claudeSessionId = opts.fallbackSessionId;
     }
     this.rerunAhead = opts.backgroundRerunInProgress === true;
@@ -803,6 +809,7 @@ export class TurnResolver {
     }
     if (event === "SessionStart") {
       this.gotSessionStart = true;
+      this.processStarted = true;
       if (typeof h.session_id === "string") this.claudeSessionId = h.session_id;
       this.maybeComplete();
     } else if (h.hook_event_name === "Stop") {
@@ -884,6 +891,17 @@ export class TurnResolver {
     this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", error: reason });
   }
 
+  /** A new process is about to serve this turn (redelivery by respawn): until
+   *  it reports SessionStart, its death is a failed start. */
+  newProcess(): void {
+    this.processStarted = false;
+  }
+
+  /** Whether the process serving this turn has reported SessionStart. */
+  get started(): boolean {
+    return this.processStarted;
+  }
+
   /**
    * The turn's PTY process exited. Before SessionStart, Claude Code never ran
    * this turn: that is a failed start, reported with what the process printed
@@ -892,7 +910,7 @@ export class TurnResolver {
    */
   processExited(exit: PtyExit | undefined, output?: string): void {
     if (this.settled) return;
-    if (!this.gotSessionStart) {
+    if (!this.processStarted) {
       this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", error: processStartFailure("claude", exit, output) });
       return;
     }
@@ -960,6 +978,9 @@ const BACKGROUND_CLEAR_QUIET_MS = 10_000;
 /** How much of a PTY's newest raw output is kept, escape sequences and all,
  *  so that a process dying before its session starts can say why. */
 const OUTPUT_TAIL_CHARS = 4096;
+
+/** The one argument a remote spawn's message and system prompt travel in. */
+const REMOTE_COMMAND_LINE = "the remote command line (the message and the system prompt together)";
 
 /** How long a session's background sub-agents or re-run may go without a sign
  *  of life (a hook, an upstream request) before the engine stops counting them.
@@ -2050,6 +2071,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       // remote host, where staging repoints the session's hook relay at a
       // tunnel only this spawn would open (see prepareRemote). The lifecycle
       // may already hold the next turn's PTY.
+      // Before the spawn, so a SessionStart from the new process cannot land
+      // ahead of it: the old process's start says nothing about this one's.
+      resolver.newProcess();
       handle = await this.spawn(jinnSessionId, opts, settingsPath, () => resolver.isSettled);
     } catch (err) {
       // Not "Interrupted:" — that reads as a quiet stop downstream, and an
@@ -2779,7 +2803,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     this.outputTails.set(proc, tail);
     this.streams.attach(jinnSessionId, proc, (raw) => {
       this.lastOutputAt.set(jinnSessionId, Date.now());
-      tail.text = (tail.text + raw).slice(-OUTPUT_TAIL_CHARS);
+      // Read only for a process that dies before its session starts, so it
+      // stops growing once this process's turn has started.
+      const e = this.active.get(jinnSessionId);
+      if (!(e && e.boundProc === proc && e.resolver.started)) tail.text = (tail.text + raw).slice(-OUTPUT_TAIL_CHARS);
     });
     proc.onExit((event) => {
       // Session-level cleanup MUST be identity-gated. In a kill->respawn race the
@@ -2928,6 +2955,12 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // redelivery respawn (JIN-3) can outlive its turn — stopped during the
     // seconds staging takes — and must then write nothing: staging repoints
     // this session's gateway.json at a tunnel only this spawn would open.
+    // Staging repoints this session's hook relay at a fresh tunnel port, so a
+    // turn that cannot start is refused before it stages anything. The message
+    // and system prompt only grow once quoted into the command line, so if
+    // together they are already too long it surely is; the exact check below
+    // covers the rest, once the staged paths are known.
+    assertArgumentsFit("Claude Code", [spawnPrompt(opts) + (opts.systemPrompt ?? "")], () => REMOTE_COMMAND_LINE);
     const prepared = await this.prepareRemote(jinnSessionId, opts, opts.resolvedMcp, standDown);
     if (!prepared) return undefined;
     // Staged, but a stopped turn still must not attach to the session's stream
@@ -2972,9 +3005,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     });
     // The whole remote command line is one argument, to ssh here and to the
     // remote shell there, so the message and the system prompt share one limit.
-    assertArgumentsFit("Claude Code", sshArgs, (index) => index === sshArgs.length - 1
-      ? "the remote command line (the message and the system prompt together)"
-      : `ssh argument ${index + 1}`);
+    assertArgumentsFit("Claude Code", sshArgs, (index) => index === sshArgs.length - 1 ? REMOTE_COMMAND_LINE : `ssh argument ${index + 1}`);
 
     const geom = this.lastGeom.get(jinnSessionId);
     logger.info(
@@ -3183,7 +3214,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private injectPrompt(handle: PtyHandle, opts: EngineRunOpts, jinnSessionId: string, confirm?: SubmitConfirmation): (() => void) | undefined {
     const proc = (handle as any)._proc as pty.IPty | undefined;
     if (!proc) return undefined;
-    let text = buildPromptWithPlatformContext(opts);
+    let text = spawnPrompt(opts);
     if (opts.attachments?.length) {
       text += buildAttachmentSuffix(this.attachmentsForSession(jinnSessionId, opts));
     }

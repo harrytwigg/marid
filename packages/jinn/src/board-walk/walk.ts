@@ -291,6 +291,13 @@ function turnRecord(turn: WalkTurnResult, tools: WalkTools): Omit<TickRecord, "a
       entries: [...entries, { kind: "error", reason: turn.error }],
     };
   }
+  // A turn that decided nothing and never finished did not walk the board: the
+  // likeliest cause is that its tools never reached it. That must not read as
+  // a quiet, successful tick.
+  if (tools.carriedOut === 0 && !tools.finished) {
+    const reason = "the walk's turn decided nothing and did not finish the tick; its tools may not have reached it";
+    return { outcome: "failed", summary: reason, ...modelSummary, ...session, entries: [...entries, { kind: "error", reason }] };
+  }
   return {
     outcome: "ok",
     summary: `${summarise(entries)}. Dispatch: ${tools.dispatchReason ?? "the walk did not finish the tick, so gave no reason"}`,
@@ -316,6 +323,7 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
     flagged: flaggedSet(state),
     openIds,
     maxCalls,
+    persist: () => writeState(state),
   });
   const prompt = buildPrompt({
     settings, rules: rules.body, defaults: missingDefaultSections(rules.body, w.templateRules()), snapshot,

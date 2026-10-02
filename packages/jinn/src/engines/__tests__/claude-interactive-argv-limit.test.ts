@@ -35,7 +35,8 @@ vi.mock("../sse-pty-proxy.js", () => ({
 }));
 
 import { InteractiveClaudeEngine, buildInteractiveArgs, describeInteractiveArgument, spawnPrompt } from "../claude-interactive.js";
-import { PtyLifecycleManager, plainOutputTail, processStartFailure } from "../pty-lifecycle.js";
+import { PtyLifecycleManager } from "../pty-lifecycle.js";
+import { plainOutputTail, processStartFailure } from "../../shared/process-start.js";
 import { MAX_ARGUMENT_BYTES, argumentLimitApplies, assertArgumentsFit, findOversizedArgument } from "../argv-limit.js";
 import { cleanupSessionSettings } from "../../shared/claude-settings.js";
 import { CLAUDE_SETTINGS_DIR } from "../../shared/paths.js";

@@ -517,17 +517,54 @@ describe("board walk switches and the tick log", () => {
     expect(log[0].sessionId).toBe("walk-1");
   });
 
-  it("a turn that only talks changes nothing, and logs every Todo as not decided", async () => {
+  it("a turn that only talks changes nothing and fails the tick, every Todo logged as not decided", async () => {
     const past = blocked("Renew the cert", { body: "not before 2026-09-30" });
     const h = open({ reply: () => ({ sessionId: "s", reply: "I released it for you." }) });
     const tick = await h.walk.tick();
     expect(status(past.id)).toBe("blocked");
-    expect(tick.outcome).toBe("ok");
-    expect(tick.summary).toBe("1 not decided. Dispatch: the walk did not finish the tick, so gave no reason");
+    // Most likely its tools never reached it: that must not read as a quiet, green tick.
+    expect(tick.outcome).toBe("failed");
+    expect(tick.summary).toBe("the walk's turn decided nothing and did not finish the tick; its tools may not have reached it");
     expect(tick.entries).toEqual([
       { kind: "undecided", workItemId: past.id, reason: "no decision was made on it this tick", outcome: "left as it was" },
       { kind: "hold", reason: "the walk gave no reason: it did not finish the tick", outcome: "nothing started" },
+      { kind: "error", reason: "the walk's turn decided nothing and did not finish the tick; its tools may not have reached it" },
     ]);
+  });
+
+  it("a walk that decides some Todos and stops short is still an ok tick, the rest logged as not decided", async () => {
+    const one = blocked("Renew the cert", { body: "not before 2026-10-30" });
+    const two = blocked("Renew the domain", { body: "not before 2026-10-29" });
+    const h = open({ reply: async (turn) => { await turn.tools.call("walk_decide", { id: one.id, verdict: "gated", action: "leave", reason: "not yet" }); return { reply: "" }; } });
+    const tick = await h.walk.tick();
+    expect(tick.outcome).toBe("ok");
+    expect(tick.entries).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "undecided", workItemId: two.id })]));
+  });
+
+  it("saves a stuck flag as soon as it is raised, not when the turn ends", async () => {
+    const stuck = blocked("A stuck decision");
+    let savedMidTurn: Record<string, string> | undefined;
+    const h = open({ reply: async (turn) => {
+      await turn.tools.call("walk_decide", { id: stuck.id, verdict: "stuck", action: "flag", reason: "no change for days" });
+      savedMidTurn = m.boardStore.readState().stuckFlags;
+      return { reply: "" };
+    } });
+    await h.walk.tick();
+    expect(Object.keys(savedMidTurn ?? {})).toEqual([stuck.id]);
+  });
+
+  it("carries out one decision when two for the same Todo arrive at once", async () => {
+    const stuck = blocked("A stuck decision");
+    let answers: WalkToolResult[] = [];
+    const h = open({ reply: async (turn) => {
+      const flag = { id: stuck.id, verdict: "stuck", action: "flag", reason: "no change for days" };
+      answers = await Promise.all([turn.tools.call("walk_decide", flag), turn.tools.call("walk_decide", flag)]);
+      return { reply: "" };
+    } });
+    await h.walk.tick();
+    expect(answers.filter((answer) => answer.ok)).toHaveLength(1);
+    expect(answers.find((answer) => !answer.ok)?.text).toMatch(new RegExp(`^(a decision on ${stuck.id} is already being carried out|${stuck.id} is already decided this tick)`));
+    expect(walkComments(stuck.id)).toHaveLength(1);
   });
 
   it("refuses an unreadable decision for its Todo alone, and the other decisions still apply", async () => {

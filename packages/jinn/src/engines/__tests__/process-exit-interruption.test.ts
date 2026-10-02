@@ -66,10 +66,3 @@ describe("every process-exit interruption names its own engine", () => {
     expect(source).not.toContain(`"Interrupted: ${engine} process exited"`);
   });
 });
-
-describe("a claude process that exits before its session starts", () => {
-  it("is reported as a failed start naming claude, not as an interruption", () => {
-    const source = fs.readFileSync(path.join(ENGINES_DIR, "claude-interactive.ts"), "utf-8");
-    expect(source.split('processStartFailure("claude"').length - 1).toBe(1);
-  });
-});

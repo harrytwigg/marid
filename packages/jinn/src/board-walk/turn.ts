@@ -33,6 +33,9 @@ export interface WalkTurnOptions {
   /** The open Todos when the tick began: each is owed a decision. */
   openIds: readonly string[];
   maxCalls: number;
+  /** Saves the walk's state (stuck flags) as soon as a decision changes it,
+   *  so a turn cut off mid-tick never raises the same flag twice. */
+  persist: () => void;
 }
 
 const BOARD_PAGE = 50;
@@ -50,6 +53,9 @@ const integer = (value: unknown, fallback: number): number =>
 export class WalkTools {
   /** Per Todo: what the gateway did with its decision. */
   private readonly decided = new Map<string, TickEntry>();
+  /** Todos whose decision is being carried out: claimed before the await, so
+   *  two calls for one Todo in flight at once cannot both apply. */
+  private readonly applying = new Set<string>();
   private readonly refused: TickEntry[] = [];
   private readonly starts: TickEntry[] = [];
   private finish?: { summary: string; dispatchReason: string };
@@ -66,6 +72,11 @@ export class WalkTools {
   /** Decisions and starts the gateway carried out this tick. */
   get carriedOut(): number {
     return this.decided.size + this.starts.length;
+  }
+
+  /** The model called walk_finish. */
+  get finished(): boolean {
+    return this.finish !== undefined;
   }
 
   get modelSummary(): string | undefined {
@@ -116,9 +127,17 @@ export class WalkTools {
     const { decision } = read;
     const earlier = this.decided.get(decision.id);
     if (earlier) return { ok: false, text: `${decision.id} is already decided this tick: ${earlier.outcome}` };
-    const entry = await applyTodo(this.opts.apply, decision);
+    if (this.applying.has(decision.id)) return { ok: false, text: `a decision on ${decision.id} is already being carried out` };
+    this.applying.add(decision.id);
+    let entry: TickEntry;
+    try {
+      entry = await applyTodo(this.opts.apply, decision);
+    } finally {
+      this.applying.delete(decision.id);
+    }
     if (entry.kind === "refused") return this.refuse(entry);
     this.decided.set(decision.id, entry);
+    this.opts.persist();
     return { ok: true, text: `${decision.id}: ${entry.outcome}` };
   }
 

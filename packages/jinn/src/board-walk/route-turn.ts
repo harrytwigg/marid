@@ -93,11 +93,13 @@ function turnFailure(sessionId: string): string | undefined {
   return settled.lastError ?? `the walk's turn ${outcome ?? settled.status}`;
 }
 
-/** What a settled walk session came to: its reply, or why there is none. */
+/** What a settled walk session came to: why it failed, or its closing words if it has any. */
 function settledTurn(sessionId: string): WalkTurnResult {
   const failure = turnFailure(sessionId);
   if (failure) return { sessionId, error: failure };
+  // The walk's work is in its tool calls; a turn that ends without a closing
+  // word after walk_finish has done all of it.
   const reply = [...getMessages(sessionId)].reverse().find((message) => message.role === "assistant" && !message.partial)?.content;
-  return reply ? { sessionId, reply } : { sessionId, error: "the walk's turn produced no reply" };
+  return reply ? { sessionId, reply } : { sessionId };
 }
 
