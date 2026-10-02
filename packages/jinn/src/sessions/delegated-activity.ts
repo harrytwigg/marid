@@ -1,3 +1,4 @@
+import { reportingParentSessionId } from "../work-items/employee-session-delegation.js";
 import type { DelegatedActivity, Session } from "../shared/types.js";
 
 interface MutableDelegatedActivity {
@@ -22,7 +23,9 @@ export function buildDelegatedActivityIndex(
     if (!active) continue;
 
     const visited = new Set([active.id]);
-    let parentId = active.parentSessionId;
+    // The first hop is whoever the session reports to: a delegator whose
+    // delegation landed in a session somebody else started counts it as theirs.
+    let parentId = reportingParentSessionId(active);
     while (parentId && !visited.has(parentId)) {
       visited.add(parentId);
       const summary = mutable.get(parentId) ?? { activeSessions: 0, employees: new Set<string>() };

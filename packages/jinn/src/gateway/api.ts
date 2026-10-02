@@ -259,8 +259,9 @@ import {
   readWorkItemQueryParams,
   SEARCH_QUERY_ROUTE_CHAR_CAP,
 } from "./work-item-query.js";
-import { announceDelegation, claimHeldBy, landInLiveSession, reusedDelegationBody } from "./delegation-handoff.js";
-import { liveEmployeeSession, recordNewDelegateSession, reportingParentSessionId } from "../work-items/employee-sessions.js";
+import { announceDelegation, claimHeldBy, landInLiveSession, reusedDelegationBody, reusedDelegationReceipt, selfDelegationError } from "./delegation-handoff.js";
+import { liveEmployeeSession } from "../work-items/employee-sessions.js";
+import { recordNewDelegateSession, reportingParentSessionId } from "../work-items/employee-session-delegation.js";
 import { NOTE_FILE_MAX_BYTES, createNote, listNotes, readKnowledgeFile, readNote, searchKnowledge, updateNote, type NoteStoreResult } from "../notes/store.js";
 import { loadInstances, saveInstances, type Instance, type InstanceInput } from "../instances/directory.js";
 import { createInstance, type CreateInstanceInput, type CreateInstanceResult } from "../instances/create.js";
@@ -1961,10 +1962,10 @@ export async function handleApiRequest(
         res.end(JSON.stringify({ error: UNIDENTIFIED_TOOL_CALL_ERROR }));
         return;
       }
-      if (stopCaller.kind === "session" && !isDescendantOf(params.id, stopCaller.callerId, getSession)) {
+      if (stopCaller.kind === "session" && !isDescendantOf(params.id, stopCaller.callerId, getSession) && reportingParentSessionId(session) !== stopCaller.callerId) {
         res.writeHead(403, { "Content-Type": "application/json" });
         res.end(JSON.stringify({
-          error: `session ${params.id} is not a descendant of your session — agents may only stop sessions they spawned (directly or transitively). Ask the operator or the session's parent instead.`,
+          error: `session ${params.id} is not a descendant of your session — agents may only stop sessions they spawned (directly or transitively) or delegated to. Ask the operator or the session's parent instead.`,
         }));
         return;
       }
@@ -3315,7 +3316,7 @@ export async function handleApiRequest(
       // chosen key owns the result, and an ordinary retry returns the original
       // pair without effects.
       if (idempotencySessionKey) {
-        const replay = getSessionBySessionKey(idempotencySessionKey);
+        const replay = getSessionBySessionKey(idempotencySessionKey) ?? reusedDelegationReceipt(idempotencyDigest!);
         if (replay) {
           if (!replay.workItemId) {
             return json(res, { error: "delegation idempotency receipt exists without a linked Todo", sessionId: replay.id }, 409);
@@ -3480,6 +3481,7 @@ export async function handleApiRequest(
       // session on it, the brief lands there and that session takes the claim
       // (or keeps the one it holds) instead of a second session being spawned.
       const reused = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
+      if (reused && reused.id === parentSessionId) return json(res, { error: selfDelegationError(workItem.id, reused) }, 409);
       const claim = (reused && claimHeldBy(workItem.id, reused)) || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
       if (!claim) return;
 
@@ -3508,10 +3510,7 @@ export async function handleApiRequest(
           return json(res, { error: assignmentErr instanceof Error ? assignmentErr.message : String(assignmentErr) }, 409);
         }
       }
-      const announcement = {
-        context, activity: chatActivityContext(context), parentSessionId, delegatorSession, workItem,
-        employeeName, engineName, delegateEmployee, roster, title,
-      };
+      const announcement = { context, activity: chatActivityContext(context), parentSessionId, delegatorSession, workItem, employeeName, engineName, delegateEmployee, roster, title };
       if (reused && employeeName) {
         try {
           landInLiveSession({
@@ -3523,7 +3522,7 @@ export async function handleApiRequest(
           return json(res, { error: `delegation into session ${reused.id} failed: ${linkErr instanceof Error ? linkErr.message : linkErr}`, workItemId: workItem.id }, 500);
         }
         announceDelegation({ ...announcement, session: reused, dispatchedAt: Date.now() });
-        return json(res, reusedDelegationBody(workItem.id, reused, title));
+        return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel }));
       }
       // The key is the session's turn lane: SessionQueue serializes turns per
       // key, so it must be unique per session. Keyed on the Todo alone, every
@@ -3588,7 +3587,7 @@ export async function handleApiRequest(
       try {
         linkSession(workItem.id, session.id, delegationActor, resolveDelegationLinkRole(intent, workItem.status));
         claim.bind(session.id);
-        if (employeeName) recordNewDelegateSession(workItem.id, employeeName, session.id, parentSessionId);
+        if (employeeName) recordNewDelegateSession(workItem.id, employeeName, session, parentSessionId);
       } catch (linkErr) {
         claim.release();
         logger.warn(`Delegation ${workItem.id} link failed before dispatch: ${linkErr instanceof Error ? linkErr.message : linkErr}`);

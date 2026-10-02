@@ -4,6 +4,7 @@ import type { Session } from '../shared/types.js';
 import { getSession, listSessionsByWorkItem } from '../sessions/registry.js';
 import { isLegacyWorkflowPhaseSession } from '../sessions/legacy-workflow-phase.js';
 import { isTerminalSession } from '../terminals/session.js';
+import { toWorkItemLinkRole } from './link-role.js';
 
 /**
  * One session per employee per Todo, whatever started it.
@@ -18,8 +19,8 @@ import { isTerminalSession } from '../terminals/session.js';
  *
  * The row also says who the session reports to. A delegation that lands in a
  * session somebody else started makes its delegator the one that session
- * reports to from then on (`reportingParentSessionId`); the session's own
- * parent is left as it was, and is not woken.
+ * reports to from the turn the brief starts (`employee-session-delegation.ts`);
+ * the session's own parent is left as it was, and is not woken.
  *
  * A table of its own, created lazily and never in `REQUIRED_TABLE_SQL`, for the
  * same reason as the claims and comment-meta tables: the boot verifier compares
@@ -37,6 +38,12 @@ export interface EmployeeSessionRecord {
   /** Set once a delegation has landed in the session; until then the session
    *  reports to its own parent. */
   delegatedAt: string | null;
+  /** A delegation that has landed but whose turn has not started: it takes over
+   *  from `delegatorSessionId` once the session starts a turn other than
+   *  `pendingAfterAttempt`, the one it was running (or last ran) when it landed. */
+  pendingDelegatorSessionId: string | null;
+  pendingDelegatedAt: string | null;
+  pendingAfterAttempt: string | null;
 }
 
 interface RecordRow {
@@ -45,11 +52,15 @@ interface RecordRow {
   session_id: string;
   delegator_session_id: string | null;
   delegated_at: string | null;
+  pending_delegator_session_id: string | null;
+  pending_delegated_at: string | null;
+  pending_after_attempt: string | null;
 }
 
 const ready = new WeakSet<DatabaseType>();
 
-function table(): DatabaseType {
+/** The record's table, created on first use. */
+export function employeeSessionsTable(): DatabaseType {
   const db = initDb();
   if (ready.has(db)) return db;
   db.exec(`CREATE TABLE IF NOT EXISTS work_item_employee_sessions (
@@ -58,6 +69,9 @@ function table(): DatabaseType {
     session_id           TEXT NOT NULL,
     delegator_session_id TEXT,
     delegated_at         TEXT,
+    pending_delegator_session_id TEXT,
+    pending_delegated_at         TEXT,
+    pending_after_attempt        TEXT,
     updated_at           TEXT NOT NULL,
     PRIMARY KEY (work_item_id, employee)
   )`);
@@ -66,7 +80,7 @@ function table(): DatabaseType {
 }
 
 export function getEmployeeSessionRecord(workItemId: string, employee: string): EmployeeSessionRecord | undefined {
-  const row = table()
+  const row = employeeSessionsTable()
     .prepare('SELECT * FROM work_item_employee_sessions WHERE work_item_id = ? AND employee = ?')
     .get(workItemId, employee) as RecordRow | undefined;
   if (!row) return undefined;
@@ -76,6 +90,9 @@ export function getEmployeeSessionRecord(workItemId: string, employee: string): 
     sessionId: row.session_id,
     delegatorSessionId: row.delegator_session_id,
     delegatedAt: row.delegated_at,
+    pendingDelegatorSessionId: row.pending_delegator_session_id,
+    pendingDelegatedAt: row.pending_delegated_at,
+    pendingAfterAttempt: row.pending_after_attempt,
   };
 }
 
@@ -109,30 +126,50 @@ export function canMessageSession(session: Session): boolean {
  * new one has not been delegated anything yet.
  */
 export function swapEmployeeSession(workItemId: string, employee: string, expected: string | null, sessionId: string): boolean {
-  return table().prepare(
-    `INSERT INTO work_item_employee_sessions (work_item_id, employee, session_id, delegator_session_id, delegated_at, updated_at)
-     VALUES (:workItemId, :employee, :sessionId, NULL, NULL, :now)
+  return employeeSessionsTable().prepare(
+    `INSERT INTO work_item_employee_sessions (work_item_id, employee, session_id, updated_at)
+     VALUES (:workItemId, :employee, :sessionId, :now)
      ON CONFLICT(work_item_id, employee) DO UPDATE SET
-       session_id = excluded.session_id, delegator_session_id = NULL, delegated_at = NULL, updated_at = excluded.updated_at
+       session_id = excluded.session_id, delegator_session_id = NULL, delegated_at = NULL,
+       pending_delegator_session_id = NULL, pending_delegated_at = NULL, pending_after_attempt = NULL,
+       updated_at = excluded.updated_at
      WHERE work_item_employee_sessions.session_id = :expected`,
   ).run({ workItemId, employee, sessionId, expected, now: new Date().toISOString() }).changes === 1;
+}
+
+const isConsult = (session: Session): boolean => toWorkItemLinkRole(session.workItemRole) === 'consult';
+
+/** The live linked session to adopt: one working the Todo first, else the
+ *  recorded consultation, else the newest live one. */
+function adoptable(workItemId: string, employee: string, recordedLive: Session | undefined): Session | undefined {
+  const live = listSessionsByWorkItem(workItemId).filter((session) => isLiveEmployeeSession(session, workItemId, employee));
+  return live.find((session) => !isConsult(session)) ?? recordedLive ?? live[0];
 }
 
 /**
  * The employee's live session on the Todo, if it has one.
  *
- * The row is the answer when its session is still live. Otherwise the Todo's
- * linked sessions are searched, newest first, and a live one is adopted into the
- * row: a session started before this table existed, or by a path that links
- * without starting (cron, Talk), is still the employee's session on the Todo.
+ * The row is the answer when its session is still live, unless it only
+ * consulted while a live session of the same employee is working the Todo:
+ * that one is adopted instead, so a mention reaches the work. Otherwise the
+ * Todo's linked sessions are searched, newest first, and a live one is adopted
+ * into the row: a session started before this table existed, or by a path that
+ * links without consulting it, is still the employee's session on the Todo.
  */
 export function liveEmployeeSession(workItemId: string, employee: string): Session | undefined {
   const record = getEmployeeSessionRecord(workItemId, employee);
   const recorded = record ? getSession(record.sessionId) : undefined;
-  if (isLiveEmployeeSession(recorded, workItemId, employee)) return recorded;
-  const linked = listSessionsByWorkItem(workItemId).find((session) => isLiveEmployeeSession(session, workItemId, employee));
+  const recordedLive = isLiveEmployeeSession(recorded, workItemId, employee) ? recorded : undefined;
+  if (recordedLive && !isConsult(recordedLive)) return recordedLive;
+  const linked = adoptable(workItemId, employee, recordedLive);
   if (!linked) return undefined;
-  if (swapEmployeeSession(workItemId, employee, record?.sessionId ?? null, linked.id)) return linked;
+  if (linked === recordedLive) return recordedLive;
+  return adopt(workItemId, employee, record?.sessionId ?? null, linked);
+}
+
+/** Take the row for `linked`; if another start took it first, its session. */
+function adopt(workItemId: string, employee: string, expected: string | null, linked: Session): Session | undefined {
+  if (swapEmployeeSession(workItemId, employee, expected, linked.id)) return linked;
   const winner = getEmployeeSessionRecord(workItemId, employee);
   const current = winner ? getSession(winner.sessionId) : undefined;
   return isLiveEmployeeSession(current, workItemId, employee) ? current : undefined;
@@ -149,7 +186,7 @@ export function resolveEmployeeSession(
   employee: string,
   start: () => Session,
 ): { session: Session; started: boolean } {
-  return table().transaction(() => {
+  return employeeSessionsTable().transaction(() => {
     const live = liveEmployeeSession(workItemId, employee);
     if (live) return { session: live, started: false };
     const expected = getEmployeeSessionRecord(workItemId, employee)?.sessionId ?? null;
@@ -159,44 +196,4 @@ export function resolveEmployeeSession(
     }
     return { session, started: true };
   }).immediate();
-}
-
-/** A delegation landed in the employee's session: from now on it reports to
- *  `delegatorSessionId` (null for the operator, who has no session to wake). */
-export function recordDelegation(workItemId: string, employee: string, sessionId: string, delegatorSessionId: string | null): void {
-  const now = new Date().toISOString();
-  table().prepare(
-    `UPDATE work_item_employee_sessions SET delegator_session_id = ?, delegated_at = ?, updated_at = ?
-      WHERE work_item_id = ? AND employee = ? AND session_id = ?`,
-  ).run(delegatorSessionId, now, now, workItemId, employee, sessionId);
-}
-
-/**
- * The session a child's callbacks go to: the delegator of the last delegation
- * that landed in it, when it is the employee's session on its Todo and one has;
- * otherwise its own parent. Null means nobody is waiting on it.
- */
-export function reportingParentSessionId(
-  session: Pick<Session, 'id' | 'employee' | 'workItemId' | 'parentSessionId'>,
-): string | null {
-  if (session.workItemId && session.employee) {
-    const record = getEmployeeSessionRecord(session.workItemId, session.employee);
-    if (record?.sessionId === session.id && record.delegatedAt) return record.delegatorSessionId;
-  }
-  return session.parentSessionId ?? null;
-}
-
-/** The same session with its callbacks pointed where they now go. */
-export function withReportingParent<T extends Pick<Session, 'id' | 'employee' | 'workItemId' | 'parentSessionId'>>(session: T): T {
-  const parentSessionId = reportingParentSessionId(session);
-  return parentSessionId === (session.parentSessionId ?? null) ? session : { ...session, parentSessionId };
-}
-
-/** A delegation spawned a new session for the employee: it is now their
- *  session on the Todo, replacing a dead one, and reports to this delegator. */
-export function recordNewDelegateSession(workItemId: string, employee: string, sessionId: string, delegatorSessionId: string | undefined): void {
-  const expected = getEmployeeSessionRecord(workItemId, employee)?.sessionId ?? null;
-  if (swapEmployeeSession(workItemId, employee, expected, sessionId)) {
-    recordDelegation(workItemId, employee, sessionId, delegatorSessionId ?? null);
-  }
 }

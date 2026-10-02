@@ -13,6 +13,9 @@ import { assignWorkItem } from "../../work-items/assignment.js";
 import { reconcileWorkItem } from "../../work-items/reconcile.js";
 import { getWorkItem, linkSession } from "../../work-items/store.js";
 import { resolveDelegationLinkRole } from "../../work-items/link-role.js";
+import { liveEmployeeSession } from "../../work-items/employee-sessions.js";
+import { recordDelegation, recordNewDelegateSession } from "../../work-items/employee-session-delegation.js";
+import { relinkRole } from "../../gateway/delegation-handoff.js";
 import type { TalkControlAdapterContext, TalkControlExecution } from "./types.js";
 
 interface DelegateEmployee {
@@ -53,6 +56,35 @@ function validateReplay(session: Session, input: TalkDelegationInput): void {
 }
 
 /**
+ * The session the brief goes to, linked and recorded: the replayed one, else
+ * the employee's live session on the Todo (one session per employee per Todo,
+ * as for any delegation, reporting to the Talk session from its next turn),
+ * else a new one.
+ */
+function delegateSession(input: TalkDelegationInput, key: string, existing: Session | undefined, todoStatus: string): Session {
+  const reused = existing ? undefined : liveEmployeeSession(input.todoId, input.employee.name);
+  const session = existing ?? reused ?? createSession({
+    engine: input.employee.engine,
+    source: "web",
+    sourceRef: key,
+    connector: "web",
+    sessionKey: key,
+    replyContext: { source: "web" },
+    employee: input.employee.name,
+    model: input.employee.model,
+    effortLevel: input.employee.effortLevel,
+    parentSessionId: input.sourceSessionId,
+    prompt: input.prompt,
+    title: `Delegate ${input.todoId}`,
+  });
+  // Handing an `in_review` Todo to someone is handing it to a reviewer.
+  linkSession(input.todoId, session.id, null, relinkRole(session, resolveDelegationLinkRole(undefined, todoStatus)));
+  if (reused) recordDelegation(input.todoId, input.employee.name, reused, input.sourceSessionId);
+  else if (!existing) recordNewDelegateSession(input.todoId, input.employee.name, session, input.sourceSessionId);
+  return session;
+}
+
+/**
  * Claim the delegation's session, Todo link, visible prompt, and queued turn in
  * one SQLite transaction. A retry repairs a pre-existing incomplete session;
  * only the durable queue winner is dispatched after commit.
@@ -70,25 +102,10 @@ export function claimTalkDelegation(input: TalkDelegationInput): ClaimedDelegati
       { origin: "talk" },
     );
     if (!assigned) throw new Error(`Todo ${input.todoId} not found`);
-    const session = existing ?? createSession({
-      engine: input.employee.engine,
-      source: "web",
-      sourceRef: key,
-      connector: "web",
-      sessionKey: key,
-      replyContext: { source: "web" },
-      employee: input.employee.name,
-      model: input.employee.model,
-      effortLevel: input.employee.effortLevel,
-      parentSessionId: input.sourceSessionId,
-      prompt: input.prompt,
-      title: `Delegate ${input.todoId}`,
-    });
-    // Handing an `in_review` Todo to someone is handing it to a reviewer.
-    linkSession(input.todoId, session.id, null, resolveDelegationLinkRole(undefined, assigned.status));
+    const session = delegateSession(input, key, existing, assigned.status);
     const turn = claimIncomingTurn({
       sessionId: session.id,
-      sessionKey: key,
+      sessionKey: session.sessionKey ?? key,
       prompt: input.prompt,
       isNotification: true,
       queueVisibility: "visible",

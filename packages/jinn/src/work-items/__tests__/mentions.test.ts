@@ -7,6 +7,8 @@ describe("parseMentions", () => {
     ["(@alpha) and @Bravo.", ["alpha", "bravo"]],
     ["@alpha- then @alpha again", ["alpha"]],
     ["line one\n@gamma_ at the start of a line", ["gamma"]],
+    ["wrap it in ``` then @reviewer look", ["reviewer"]],
+    ["```js\n@alpha in code\n```\nthen @bravo after it", ["bravo"]],
   ])("finds the mentions in %j", (body, expected) => {
     expect(parseMentions(body)).toEqual(expected);
   });

@@ -1,5 +1,5 @@
 import { logger } from "../shared/logger.js";
-import type { Session } from "../shared/types.js";
+import type { Employee, Session } from "../shared/types.js";
 import { getSession } from "../sessions/registry.js";
 import { addComment, getComment, setTodoCommentListener, type WorkItemComment } from "../work-items/comments.js";
 import { canMessageSession } from "../work-items/employee-sessions.js";
@@ -50,16 +50,38 @@ function mentionPrompt(item: WorkItem, comment: WorkItemComment): string {
 
 function replyPrompt(item: WorkItem, comment: WorkItemComment): string {
   return `💬 ${comment.author} replied to your comment on Todo ${item.id}, "${item.title}".\n\n`
-    + `${comment.body}\n\n${threadHint(comment)}`;
+    + `${comment.body}\n\n${threadHint(comment)} Reply only when the thread needs something from you: `
+    + `an acknowledgement or thanks wakes the other side for nothing.`;
 }
+
+/** Replies between sessions on one Todo that are delivered before the thread
+ *  is told to move to a conversation. Two agents answering each other's
+ *  answers would otherwise wake each other for ever. The operator's replies are
+ *  not counted. */
+export const MAX_AGENT_REPLIES_PER_TODO = 20;
 
 /** The session the comment answers, if a session wrote that comment and it can
  *  still be messaged. Never the author's own session or employee. */
-function answeredSession(comment: WorkItemComment, authorEmployee: string | undefined): Session | undefined {
+/** The session the comment answers, if a session wrote that comment and it can
+ *  still be messaged. Never the author's own session or employee, and never a
+ *  system employee's, which a mention cannot wake either. */
+function answeredSession(comment: WorkItemComment, authorEmployee: string | undefined, roster: Roster): Session | undefined {
   const answered = comment.repliedToId ? getComment(comment.repliedToId) : undefined;
   const session = answered?.sessionId ? getSession(answered.sessionId) : undefined;
   if (!session || !canMessageSession(session) || session.id === comment.sessionId) return undefined;
-  return session.employee && session.employee === authorEmployee ? undefined : session;
+  return answersItself(session, authorEmployee, roster) ? undefined : session;
+}
+
+function answersItself(session: Session, authorEmployee: string | undefined, roster: Roster): boolean {
+  return !!session.employee && (session.employee === authorEmployee || !!roster.get(session.employee)?.system);
+}
+
+type Roster = Map<string, Employee>;
+
+/** The roster by lowercased name, so a mention matches whatever case the
+ *  employee's file gives its name. */
+function rosterByMention(context: ApiContext): Roster {
+  return new Map([...orgRegistry(context.getConfig()).values()].map((employee) => [employee.name.toLowerCase(), employee]));
 }
 
 
@@ -77,13 +99,10 @@ function reportFailedWake(comment: WorkItemComment, name: string, error: string)
   });
 }
 
-function wakeMentioned(context: ApiContext, item: WorkItem, comment: WorkItemComment, authorEmployee: string | undefined): CommentWake[] {
-  const roster = orgRegistry(context.getConfig());
-  const wakes: CommentWake[] = [];
-  for (const name of parseMentions(comment.body)) {
-    const employee = roster.get(name);
-    if (!employee || employee.system || name === authorEmployee) continue;
-    const woke = wakeEmployeeOnTodo(context, {
+function wakeOne(context: ApiContext, item: WorkItem, comment: WorkItemComment, employee: Employee): CommentWake | undefined {
+  let woke: ReturnType<typeof wakeEmployeeOnTodo>;
+  try {
+    woke = wakeEmployeeOnTodo(context, {
       workItemId: item.id,
       employee,
       role: "consult",
@@ -94,10 +113,47 @@ function wakeMentioned(context: ApiContext, item: WorkItem, comment: WorkItemCom
       message: mentionPrompt(item, comment),
       displayMessage: `🏷️ ${item.id} · ${comment.author}\n${comment.body}`,
     });
-    if (woke.ok) wakes.push({ employee: name, sessionId: woke.session.id, kind: "mention", started: woke.started });
-    else reportFailedWake(comment, name, woke.error);
+  } catch (error) {
+    woke = { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+  if (woke.ok) return { employee: employee.name, sessionId: woke.session.id, kind: "mention", started: woke.started };
+  reportFailedWake(comment, employee.name, woke.error);
+  return undefined;
+}
+
+function wakeMentioned(context: ApiContext, item: WorkItem, comment: WorkItemComment, authorEmployee: string | undefined, roster: Roster): CommentWake[] {
+  const wakes: CommentWake[] = [];
+  for (const name of parseMentions(comment.body)) {
+    const employee = roster.get(name);
+    if (!employee || employee.system || employee.name === authorEmployee) continue;
+    const wake = wakeOne(context, item, comment, employee);
+    if (wake) wakes.push(wake);
   }
   return wakes;
+}
+
+/** Deliver a reply into the session it answers. An agent's reply counts toward
+ *  the Todo's cap; past it the thread says so instead of waking anyone. */
+function deliverReply(item: WorkItem, comment: WorkItemComment, session: Session): boolean {
+  const delivered = deliverIntoSession(session, {
+    workItemId: item.id,
+    sourceAttempt: `reply:${comment.id}`,
+    deliveryKind: comment.authorKind === "employee" ? "todo-agent-reply" : "todo-reply",
+    message: replyPrompt(item, comment),
+    displayMessage: `💬 ${item.id} · ${comment.author}\n${comment.body}`,
+  }, comment.authorKind === "employee" ? MAX_AGENT_REPLIES_PER_TODO : undefined);
+  if (!delivered) {
+    addComment({
+      workItemId: item.id,
+      parentCommentId: comment.id,
+      author: "jinn",
+      authorKind: "system",
+      body: `**Reply not delivered.** Sessions on this Todo have already answered each other ${MAX_AGENT_REPLIES_PER_TODO} times, `
+        + `which is the cap. Mention the employee to reach them, or continue in their session.`,
+      idempotencyKey: `reply-capped:${comment.id}`,
+    });
+  }
+  return delivered;
 }
 
 export function routeTodoComment(context: ApiContext, comment: WorkItemComment): CommentWake[] {
@@ -105,16 +161,10 @@ export function routeTodoComment(context: ApiContext, comment: WorkItemComment):
   const item = getWorkItem(comment.workItemId);
   if (!item) return [];
   const authorEmployee = comment.authorKind === "employee" ? comment.author : undefined;
-  const wakes = wakeMentioned(context, item, comment, authorEmployee);
-  const answered = answeredSession(comment, authorEmployee);
-  if (answered && !wakes.some((wake) => wake.sessionId === answered.id)) {
-    deliverIntoSession(answered, {
-      workItemId: item.id,
-      sourceAttempt: `reply:${comment.id}`,
-      deliveryKind: "todo-reply",
-      message: replyPrompt(item, comment),
-      displayMessage: `💬 ${item.id} · ${comment.author}\n${comment.body}`,
-    });
+  const roster = rosterByMention(context);
+  const wakes = wakeMentioned(context, item, comment, authorEmployee, roster);
+  const answered = answeredSession(comment, authorEmployee, roster);
+  if (answered && !wakes.some((wake) => wake.sessionId === answered.id) && deliverReply(item, comment, answered)) {
     wakes.push({ employee: answered.employee ?? null, sessionId: answered.id, kind: "reply", started: false });
   }
   return wakes;

@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
+import { initDb } from "../shared/db.js";
 import { logger } from "../shared/logger.js";
 import type { ChatBlockEnvelope, Employee, JsonObject, Session, WorkItemLinkRole } from "../shared/types.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
 import { applyBlockEnvelope, claimSessionDelivery, getSession, updateSession } from "../sessions/registry.js";
 import { getWorkItemClaim } from "../work-items/claims.js";
-import { recordDelegation } from "../work-items/employee-sessions.js";
+import { recordDelegation } from "../work-items/employee-session-delegation.js";
 import { toWorkItemLinkRole } from "../work-items/link-role.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { openWorkItemRun } from "../work-items/runs.js";
@@ -139,7 +140,7 @@ function delegatedBrief(input: LandInLiveSessionInput): string {
 /** A session that executed the Todo stays its executor: relinking it as a
  *  reviewer would hide its attempts from the status derivation and lift the
  *  self-review ban. A consultation or a review takes the delegation's role. */
-function relinkRole(session: Session, role: WorkItemLinkRole): WorkItemLinkRole {
+export function relinkRole(session: Session, role: WorkItemLinkRole): WorkItemLinkRole {
   return toWorkItemLinkRole(session.workItemRole) === "execute" ? "execute" : role;
 }
 
@@ -164,7 +165,7 @@ export function landInLiveSession(input: LandInLiveSessionInput): void {
       ...(input.delegateEmployee?.displayName ? { delegationEmployeeDisplay: input.delegateEmployee.displayName } : {}),
     },
   });
-  recordDelegation(workItem.id, input.employeeName, session.id, input.parentSessionId ?? null);
+  recordDelegation(workItem.id, input.employeeName, session, input.parentSessionId ?? null);
   try {
     openWorkItemRun({ workItemId: workItem.id, sessionId: session.id });
   } catch (runErr) {
@@ -192,11 +193,43 @@ export function landInLiveSession(input: LandInLiveSessionInput): void {
     });
 }
 
-/** The route's answer for a delegation that landed in a live session. */
-export function reusedDelegationBody(workItemId: string, reused: Session, title: string): JsonObject {
+export interface DelegationSelection { engine: string; model?: string; effortLevel?: string }
+
+/**
+ * The route's answer for a delegation that landed in a live session. The
+ * session keeps the engine, model and effort it was started on, so a delegation
+ * that resolved to something else is told so (`selectionIgnored`, with what it
+ * asked for) rather than left to believe it got its way.
+ */
+function selectionOf(selection: { engine: string; model?: string | null; effortLevel?: string | null }): JsonObject {
+  return { engine: selection.engine, model: selection.model ?? null, effortLevel: selection.effortLevel ?? null };
+}
+
+export function reusedDelegationBody(workItemId: string, reused: Session, title: string, requested: DelegationSelection): JsonObject {
   const current = getSession(reused.id) ?? reused;
+  const kept = selectionOf(current);
+  const asked = selectionOf(requested);
+  const differs = JSON.stringify(kept) !== JSON.stringify(asked);
+  if (differs) logger.info(`Delegation ${workItemId}: session ${reused.id} keeps ${JSON.stringify(kept)}; the delegation resolved to ${JSON.stringify(asked)}`);
   return {
-    workItemId, sessionId: reused.id, employee: current.employee ?? null, engine: current.engine,
-    model: current.model ?? null, effortLevel: current.effortLevel ?? null, status: current.status, title, reused: true,
+    workItemId, sessionId: reused.id, employee: current.employee ?? null, ...kept, status: current.status, title, reused: true,
+    ...(differs ? { selectionIgnored: asked } : {}),
   };
+}
+
+/** The session an earlier delegation with this idempotency key landed in, if it
+ *  landed in a live session rather than spawning one: its brief delivery is the
+ *  receipt, keyed on the same digest. */
+export function reusedDelegationReceipt(idempotencyDigest: string): Session | undefined {
+  const row = initDb().prepare(
+    "SELECT target_session_id FROM callback_deliveries WHERE delivery_kind = 'todo-delegation' AND source_attempt = ? LIMIT 1",
+  ).get(`delegation:${idempotencyDigest}`) as { target_session_id: string } | undefined;
+  return row ? getSession(row.target_session_id) : undefined;
+}
+
+/** A session delegating its own Todo to its own employee would land in itself
+ *  and report to itself. It already has the work. */
+export function selfDelegationError(workItemId: string, session: Session): string {
+  return `session ${session.id} is already ${session.employee}'s session on Todo ${workItemId}, so delegating it to `
+    + `${session.employee} would land in this same session. Carry on with the work here instead.`;
 }

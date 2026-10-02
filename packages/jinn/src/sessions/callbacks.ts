@@ -16,7 +16,7 @@ import { STRUCTURED_MESSAGE_BODY_MAX_CHARS, type Session } from "../shared/types
 import type { ChatBlockEnvelope, JsonObject } from "../shared/types.js";
 import { enforceDelegationCompletionContract } from "./delegation-completion-contract.js";
 import { isRemoteMcpSession } from "./remote-mcp-session.js";
-import { withReportingParent } from "../work-items/employee-sessions.js";
+import { withReportingParent } from "../work-items/employee-session-delegation.js";
 import type { SessionDeliveryPayload } from "../shared/types.js";
 
 export const CALLBACK_DELIVERY_RETRY_DELAYS_MS = [1_000, 5_000, 30_000] as const;

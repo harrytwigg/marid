@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { logger } from "../shared/logger.js";
 import type { Employee, Session, WorkItemLinkRole } from "../shared/types.js";
 import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
-import { claimSessionDelivery, createSession, enqueueQueueItem, insertMessage, updateSession } from "../sessions/registry.js";
+import { claimSessionDelivery, claimSessionDeliveryWithinSourceLimit, createSession, enqueueQueueItem, insertMessage, updateSession } from "../sessions/registry.js";
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
 import { resolveTodoDispatch } from "../work-items/dispatch-config.js";
 import { liveEmployeeSession, resolveEmployeeSession } from "../work-items/employee-sessions.js";
@@ -32,23 +32,29 @@ export interface TodoSessionDelivery {
 }
 
 /** Deliver into a live session through the outbox. A repeat of the same
- *  `sourceAttempt` to the same session is accepted once and never re-sent. */
-export function deliverIntoSession(session: Session, delivery: TodoSessionDelivery): void {
-  const { delivery: claimed } = claimSessionDelivery({
+ *  `sourceAttempt` to the same session is accepted once and never re-sent.
+ *  With `cap`, at most that many deliveries of this kind leave this Todo; past
+ *  it nothing is sent and the answer is false. */
+export function deliverIntoSession(session: Session, delivery: TodoSessionDelivery, cap?: number): boolean {
+  const identity = {
     targetSessionId: session.id,
-    sourceKind: "work-item",
+    sourceKind: "work-item" as const,
     sourceId: delivery.workItemId,
     sourceAttempt: delivery.sourceAttempt,
     sourceOutcome: delivery.deliveryKind,
     sourceVersion: 1,
     deliveryKind: delivery.deliveryKind,
     payload: { message: delivery.message, displayMessage: delivery.displayMessage },
-  });
-  if (claimed.status === "accepted") return;
+  };
+  const claim = cap === undefined ? claimSessionDelivery(identity) : claimSessionDeliveryWithinSourceLimit(identity, cap);
+  const claimed = claim.delivery;
+  if (!claimed) return false;
+  if (claimed.status === "accepted") return true;
   deliverClaimedSessionDelivery(claimed.id).catch((error) => {
     logger.warn(`Todo ${delivery.workItemId} could not deliver ${delivery.deliveryKind} to session ${session.id}: `
       + `${error instanceof Error ? error.message : String(error)}`);
   });
+  return true;
 }
 
 export interface WakeEmployeeInput extends TodoSessionDelivery {
@@ -66,6 +72,10 @@ export type WakeEmployeeResult =
 
 interface Spawn { engineName: string; model?: string; effortLevel?: string; prompt: string }
 
+function employeeDefaults(employee: Employee): { engine: string; model: string; employee: string; effortLevel?: string } {
+  return { engine: employee.engine, model: employee.model, employee: employee.name, ...(employee.effortLevel ? { effortLevel: employee.effortLevel } : {}) };
+}
+
 /** The engine a new session runs on: the Todo's own override first, as for a
  *  delegation, then the employee's. The Todo's skills prefix the prompt. */
 function planSpawn(context: ApiContext, input: WakeEmployeeInput): { ok: true; spawn: Spawn } | { ok: false; error: string } {
@@ -73,18 +83,17 @@ function planSpawn(context: ApiContext, input: WakeEmployeeInput): { ok: true; s
   const dispatch = resolveTodoDispatch(input.workItemId);
   if (!dispatch.ok) return { ok: false, error: dispatch.error };
   const override = dispatch.preamble;
-  const employee = input.employee;
   const selection = validateNewSessionSelection(config, {
     engine: override.engine ?? undefined,
     model: override.engine ? override.model ?? undefined : undefined,
-  }, override.engine
-    ? { employee: employee.name }
-    : { engine: employee.engine, model: employee.model, employee: employee.name, ...(employee.effortLevel ? { effortLevel: employee.effortLevel } : {}) });
+  }, override.engine ? { employee: input.employee.name } : employeeDefaults(input.employee));
   if (!selection.ok) return { ok: false, error: selection.error || "invalid engine/model/effort" };
+  const engineName = selection.engine || config.engines.default;
+  if (!context.sessionManager.getEngine(engineName)) return { ok: false, error: `Engine "${engineName}" is not available on this gateway.` };
   return {
     ok: true,
     spawn: {
-      engineName: selection.engine || config.engines.default,
+      engineName,
       model: selection.model,
       effortLevel: selection.effortLevel,
       prompt: override.prefix + input.message,

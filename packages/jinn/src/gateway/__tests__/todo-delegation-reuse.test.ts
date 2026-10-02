@@ -59,7 +59,7 @@ describe("delegation onto a Todo where the employee already has a session", () =
     expect(res).toMatchObject({ status: 200, body: { sessionId: mentioned.id, reused: true } });
     expect(h.sessionsOf(item.id, "alpha")).toHaveLength(1);
     expect(h.claims.getWorkItemClaim(item.id)?.sessionId).toBe(mentioned.id);
-    expect(h.records.reportingParentSessionId(h.registry.getSession(mentioned.id)!)).toBe(dispatcher.id);
+    expect(h.delegation.reportingParentSessionId(h.startTurn(mentioned.id))).toBe(dispatcher.id);
   });
 
   it("keeps an executor an executor when a review delegation lands in its session", async () => {
@@ -115,9 +115,12 @@ describe("delegation onto a Todo where the employee already has a session", () =
     const second = await h.delegate(item.id, "alpha", sessionHeaders(delegator.id));
     expect(second).toMatchObject({ status: 200, body: { sessionId: first.body.sessionId, reused: true } });
 
+    // Until the brief's turn starts, the session's turn is still the first delegator's.
     const child = h.registry.getSession(first.body.sessionId)!;
     expect(child.parentSessionId).toBe(firstParent.id);
-    expect(h.records.reportingParentSessionId(child)).toBe(delegator.id);
+    expect(h.delegation.reportingParentSessionId(child)).toBe(firstParent.id);
+    h.startTurn(child.id);
+    expect(h.delegation.reportingParentSessionId(h.registry.getSession(child.id)!)).toBe(delegator.id);
     const settled = h.registry.updateSession(child.id, { attemptOutcome: "succeeded", attemptTerminalVersion: 1 })!;
     await h.callbacks.notifyParentSessionAndWait(settled, { result: "Done: took it over and finished." });
     expect(h.deliveriesTo(delegator.id, "parent-completion")).toHaveLength(1);
@@ -133,6 +136,6 @@ describe("delegation onto a Todo where the employee already has a session", () =
 
     expect((await h.delegate(item.id, "bravo")).body.reused).toBe(true);
 
-    expect(h.records.reportingParentSessionId(h.registry.getSession(first.body.sessionId)!)).toBeNull();
+    expect(h.delegation.reportingParentSessionId(h.startTurn(first.body.sessionId))).toBeNull();
   });
 });

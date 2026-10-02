@@ -25,12 +25,16 @@ export function mentionTestHome(prefix: string): string {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   process.env.JINN_HOME = home;
   fs.mkdirSync(path.join(home, "org"), { recursive: true });
-  // `stale` is pinned to a model the gateway does not register, so it cannot be started.
-  for (const [name, rank, reportsTo, model] of [["org-root", "executive", "", "gpt-5.5"], ["alpha", "employee", "org-root", "gpt-5.5"],
-    ["bravo", "employee", "org-root", "gpt-5.5"], ["worker", "employee", "org-root", "gpt-5.5"], ["stale", "employee", "org-root", "legacy-model"]]) {
+  // `stale` is pinned to a model the gateway does not register, and `offline`
+  // to an engine it has configured but cannot run, so neither can be started.
+  // `Casey-Ops` keeps the capitals its file gives it.
+  for (const [name, rank, reportsTo, engine, model] of [["org-root", "executive", "", "codex", "gpt-5.5"],
+    ["alpha", "employee", "org-root", "codex", "gpt-5.5"], ["bravo", "employee", "org-root", "codex", "gpt-5.5"],
+    ["worker", "employee", "org-root", "codex", "gpt-5.5"], ["stale", "employee", "org-root", "codex", "legacy-model"],
+    ["offline", "employee", "org-root", "claude", "opus"], ["Casey-Ops", "employee", "org-root", "codex", "gpt-5.5"]]) {
     fs.writeFileSync(path.join(home, "org", `${name}.yaml`), [
       `name: ${name}`, `displayName: ${name[0].toUpperCase()}${name.slice(1)}`, "department: platform", `rank: ${rank}`,
-      ...(reportsTo ? [`reportsTo: ${reportsTo}`] : []), "engine: codex", `model: ${model}`, `persona: ${name} for mention tests`, "",
+      ...(reportsTo ? [`reportsTo: ${reportsTo}`] : []), `engine: ${engine}`, `model: ${model}`, `persona: ${name} for mention tests`, "",
     ].join("\n"));
   }
   return home;
@@ -40,8 +44,8 @@ const engineStub = { name: "stub", run: async () => ({ result: "ok" }), isAlive:
 const context = {
   getConfig: () => ({
     gateway: {},
-    engines: { default: "codex", codex: { bin: "codex", model: "gpt-5.5" } },
-    models: { codex: { default: "gpt-5.5", models: [{ id: "gpt-5.5" }] } },
+    engines: { default: "codex", codex: { bin: "codex", model: "gpt-5.5" }, claude: { bin: "claude", model: "opus" } },
+    models: { codex: { default: "gpt-5.5", models: [{ id: "gpt-5.5" }] }, claude: { default: "opus", models: [{ id: "opus" }] } },
     sessions: {},
   }),
   connectors: new Map(),
@@ -50,7 +54,8 @@ const context = {
   emit: () => undefined,
   sessionManager: {
     getEngines: () => new Map(),
-    getEngine: () => engineStub,
+    // Only codex can run here: claude is configured but has no engine.
+    getEngine: (name: string) => (name === "codex" ? engineStub : undefined),
     // Turns are queued, never run: a started session stays `running`.
     getQueue: () => ({
       enqueue: async () => undefined,
@@ -79,6 +84,7 @@ export async function loadMentionHarness() {
   const registry = await import("../../sessions/registry.js");
   const store = await import("../../work-items/store.js");
   const records = await import("../../work-items/employee-sessions.js");
+  const delegation = await import("../../work-items/employee-session-delegation.js");
   const claims = await import("../../work-items/claims.js");
   const callbacks = await import("../../sessions/callbacks.js");
   const db = (await import("../../shared/db.js")).initDb();
@@ -135,5 +141,8 @@ export async function loadMentionHarness() {
   /** Put a Todo straight into a status, as an older gateway's row would hold it. */
   const forceStatus = (todoId: string, status: string) => { db.prepare("UPDATE work_items SET status = ? WHERE id = ?").run(status, todoId); };
 
-  return { registry, store, records, claims, callbacks, forceStatus, call, comment, delegate, sessionsOf, deliveriesTo, employeeSession, executing };
+  /** A new turn started in the session: it gets a fresh attempt token. */
+  const startTurn = (sessionId: string) => registry.updateSession(sessionId, { attemptToken: crypto.randomUUID() })!;
+
+  return { context, registry, store, records, delegation, claims, callbacks, forceStatus, startTurn, call, comment, delegate, sessionsOf, deliveriesTo, employeeSession, executing };
 }
