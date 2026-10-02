@@ -57,6 +57,12 @@ export function hasLiveBackgroundWork(sessionId: string): boolean {
   return isBackgroundWorkLive(runtimeActivity.get(sessionId));
 }
 
+/** Every session with live background work, for a query that has to judge
+ *  liveness in SQL and so cannot call hasLiveBackgroundWork per row. */
+export function liveBackgroundSessionIds(): string[] {
+  return [...runtimeActivity].filter(([, info]) => isBackgroundWorkLive(info)).map(([id]) => id);
+}
+
 /** effectiveSessionStatus for a session read from the registry, against the
  *  gateway's runtime activity. */
 export function reportedSessionStatus(session: Pick<Session, "id" | "status">): Session["status"] {
