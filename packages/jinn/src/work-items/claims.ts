@@ -1,4 +1,5 @@
 import { initDb } from '../shared/db.js';
+import { liveBackgroundSessionIds } from '../sessions/background-work.js';
 import { appendWorkItemEvent, type WorkItemStatus } from './store.js';
 
 /**
@@ -114,6 +115,11 @@ export function getWorkItemClaim(workItemId: string): WorkItemClaim | undefined 
  * insert selects from `work_items`, so an unknown Todo and a status the caller
  * refused both write nothing; the conflict clause is what a claim already on the
  * row has to survive.
+ *
+ * A holder whose turn ended with background sub-agents still working is stored
+ * `idle`, so the session lookup alone would free its claim. `:liveBackground` is
+ * the JSON array of such sessions (the gateway's in-memory overlay, which SQL
+ * cannot see), and a claim held by one of them is as live as a running session.
  */
 const CLAIM_CAS_SQL = `
 INSERT INTO ${CLAIMS_TABLE} (work_item_id, owner, session_id, claimed_at, claim_expires, last_heartbeat_at)
@@ -129,7 +135,8 @@ SELECT :workItemId, :owner, :sessionId, :now, :expires, :now FROM work_items
     WHERE ${CLAIMS_TABLE}.owner = excluded.owner
        OR ${CLAIMS_TABLE}.claim_expires <= excluded.claimed_at
        OR (${CLAIMS_TABLE}.session_id IS NOT NULL AND ${CLAIMS_TABLE}.session_id NOT IN (
-            SELECT id FROM sessions WHERE status IN ('running', 'waiting')))`;
+            SELECT id FROM sessions WHERE status IN ('running', 'waiting')
+          ) AND ${CLAIMS_TABLE}.session_id NOT IN (SELECT value FROM json_each(:liveBackground)))`;
 
 /**
  * Take the claim, or report who has it.
@@ -148,6 +155,7 @@ export function claimWorkItem(input: ClaimWorkItemInput): ClaimWorkItemResult {
     now: nowIso,
     expires: new Date(now.getTime() + TODO_CLAIM_LEASE_MS).toISOString(),
     expectStatus: input.expectStatus ?? null,
+    liveBackground: JSON.stringify(liveBackgroundSessionIds()),
   });
   if (written.changes === 1) {
     const taken = getWorkItemClaim(input.workItemId);
