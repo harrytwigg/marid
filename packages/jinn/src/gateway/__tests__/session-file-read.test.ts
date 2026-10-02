@@ -32,6 +32,9 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(outside, "diagram.svg"), "<svg onload=\"alert(1)\"/>");
   fs.writeFileSync(path.join(outside, "blob.txt"), Buffer.from([0x61, 0x00, 0x62]));
   fs.writeFileSync(path.join(tmp, "notes.txt"), "relative to home\n");
+  fs.writeFileSync(path.join(outside, "run.sh"), "#!/bin/sh\nexport API_TOKEN=abc123secret\necho ok\n");
+  fs.writeFileSync(path.join(outside, "Dockerfile"), "FROM node:24\n");
+  fs.writeFileSync(path.join(outside, "build.log"), "Authorization: Bearer abc.def.ghi\n");
   fs.mkdirSync(path.join(tmp, "secrets"), { recursive: true });
   fs.writeFileSync(path.join(tmp, "secrets", "api-keys.json"), "{\"k\":\"v\"}");
 });
@@ -110,6 +113,29 @@ describe("session file read — local employee", () => {
 
   it("answers 404 for a missing file", async () => {
     expect((await call("local-1", path.join(outside, "missing.md"))).status).toBe(404);
+  });
+
+  it.each(["run.sh", "Dockerfile", "build.log"])("previews %s (no known MIME) as text, judged by its content", async (name) => {
+    const r = await call("local-1", path.join(outside, name));
+    expect(r.status).toBe(200);
+    expect(r.json).toMatchObject({ binary: false, mime: "text/plain" });
+    expect(typeof r.json.content).toBe("string");
+  });
+
+  it("redacts secrets in text it returns, like the managed readers", async () => {
+    const sh = await call("local-1", path.join(outside, "run.sh"));
+    expect(sh.json.content).toContain("API_TOKEN=[REDACTED]");
+    expect(sh.json.content).not.toContain("abc123secret");
+    const log = await call("local-1", path.join(outside, "build.log"));
+    expect(log.json.content).not.toContain("abc.def.ghi");
+  });
+
+  it("redacts a remote file's text too", async () => {
+    remoteRead.mockImplementation(async ({ op }: { op: string }) => op === "vet"
+      ? { ok: true, realPath: "/srv/work/.env.example", size: 30 }
+      : { ok: true, realPath: "/srv/work/.env.example", size: 30, buffer: Buffer.from("GITHUB_TOKEN=ghp_abcdefghijklmnop\n") });
+    const r = await call("remote-1", ".env.example");
+    expect(r.json.content).not.toContain("ghp_abcdefghijklmnop");
   });
 
   it("marks a NUL-bearing text file binary without returning its bytes", async () => {

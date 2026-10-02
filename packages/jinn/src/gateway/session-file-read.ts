@@ -6,6 +6,7 @@ import { employeeRemoteTarget, isRemoteTarget } from "../shared/remote-target.js
 import { engineSupportsRemote } from "../shared/models.js";
 import { expandPath, readLocalFileForIngestion, vetLocalFileForIngestion } from "../shared/file-read-policy.js";
 import { hasControlBytes } from "../shared/sanitize.js";
+import { redactText } from "../shared/redact.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { readRemoteSessionFile, type RemoteFileOp, type RemoteFileResult } from "../engines/remote-file-read.js";
 import { handleSessionAttachment, isBinaryMime, MAX_READ_SIZE, mimeFromFilename } from "./files.js";
@@ -79,6 +80,10 @@ function requestedPathError(requested: string | null): string | null {
   return null;
 }
 
+/** The MIME a file's extension cannot vouch for: `.py`, `.sh`, `.log`,
+ *  `Dockerfile` and every other name outside the table. Its content decides. */
+const UNKNOWN_MIME = "application/octet-stream";
+
 function hasNulByte(buffer: Buffer): boolean {
   return buffer.subarray(0, NUL_SCAN_BYTES).includes(0);
 }
@@ -88,16 +93,24 @@ async function previewJson(read: HostRead, requested: string, host: string | und
   if (!vetted.ok) return { status: vetted.status, body: { error: vetted.error } };
   const mime = mimeFromFilename(vetted.realPath);
   const base = { path: requested, resolvedPath: vetted.realPath, ...(host ? { host } : {}), mime, size: vetted.size };
-  if (isBinaryMime(mime)) {
+  if (isBinaryMime(mime) && mime !== UNKNOWN_MIME) {
     const previewable = RAW_IMAGE_MIMES.has(mime) && vetted.size <= MAX_RAW_IMAGE_SIZE;
     return { status: 200, body: { ...base, tooLarge: false, binary: true, previewable } };
   }
   if (vetted.size > MAX_READ_SIZE) return { status: 200, body: { ...base, tooLarge: true, binary: false } };
   const opened = await read("read", MAX_READ_SIZE);
   if (!opened.ok) return { status: opened.status, body: { error: opened.error } };
-  const buffer = opened.buffer ?? Buffer.alloc(0);
-  if (hasNulByte(buffer)) return { status: 200, body: { ...base, size: opened.size, tooLarge: false, binary: true, previewable: false } };
-  return { status: 200, body: { ...base, size: opened.size, tooLarge: false, binary: false, content: buffer.toString("utf-8") } };
+  return { status: 200, body: textPreview(base, opened.buffer ?? Buffer.alloc(0)) };
+}
+
+/** A file small enough to show: binary if it has a NUL byte up front, else
+ *  text — redacted like every other text read the gateway serves (files.ts),
+ *  since an agent's log or script can carry a token it printed. */
+function textPreview(base: { mime: string; size: number }, buffer: Buffer): Record<string, unknown> {
+  const shown = { ...base, size: buffer.length, tooLarge: false };
+  if (hasNulByte(buffer)) return { ...shown, binary: true, previewable: false };
+  const mime = base.mime === UNKNOWN_MIME ? "text/plain" : base.mime;
+  return { ...shown, mime, binary: false, content: redactText(buffer.toString("utf-8")) };
 }
 
 async function sendRawImage(res: ServerResponse, read: HostRead): Promise<void> {
