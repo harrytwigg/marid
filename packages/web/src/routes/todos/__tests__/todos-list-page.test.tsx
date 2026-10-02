@@ -187,7 +187,7 @@ describe("the viewport-driven Todos surface", () => {
     expect(screen.queryByTestId("todos-view-board")).toBeNull()
     expect((screen.getByTestId("todo-list-scroll") as HTMLDivElement).hidden).toBe(false)
     expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(true)
-    expect(screen.getByTestId("todo-list-group-needs-you")).toBeTruthy()
+    expect(screen.queryByTestId("todo-list-group-needs-you")).toBeNull()
     expect(screen.getByTestId("todo-list-group-executing")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-in-review")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-backlog")).toBeTruthy()

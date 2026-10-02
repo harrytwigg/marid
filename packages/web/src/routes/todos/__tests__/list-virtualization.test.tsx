@@ -95,7 +95,6 @@ const ROW_IDS = BACKLOG.map((item) => `todo-list-row-${item.id}`)
  * collapsed to its header. Only Todo rows carry a test id; the rest are null.
  */
 const MODEL: Array<string | null> = [
-  null, null, // Needs you
   null, null, // Executing
   null, null, // In review
   null, // Backlog
@@ -175,7 +174,7 @@ describe("the windowed Todo list", () => {
     // The bound is the window, not the data: the groups the window covers keep
     // their sections and quick-adds. Closed sits 500 rows below, so it is out
     // of the window here and comes back on scroll (the collapse test below).
-    expect(screen.getByTestId("todo-list-group-needs-you")).toBeTruthy()
+    expect(screen.getByTestId("todo-list-group-executing")).toBeTruthy()
     expect(screen.getByTestId("todo-list-group-backlog")).toBeTruthy()
     expect(screen.getByTestId("todo-list-add-backlog")).toBeTruthy()
   })
