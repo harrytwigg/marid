@@ -165,13 +165,13 @@ Without a block, an upgrade seeds the stock file, **with dispatch on**. That is 
 
 The **Auto-Dispatch** page is read-only. It shows:
 
-- **The board walk:** whether its cron job is scheduled, switched off or missing, its schedule and zone with a link to the job, the employee and model, which switches are off, any retired keys left in the file, any problems with the rules file, and the last ten ticks with every Todo they touched and why.
+- **The board walk:** whether its cron job is scheduled (armed by the cron scheduler), switched off, not valid or missing, its schedule and zone with a link to the job, the employee and model, which switches are off, any retired keys left in the file, any problems with the rules file, and the last ten ticks with every Todo they touched and why.
 - **Where the Claude allowance is heading:** the weekly verdict leads, worst bucket first, with the five-hour projection and a twelve-hour graph beneath it. The graph marks window resets and every session started on Claude; the starts the board walk made are marked in green.
 - **Sessions started this week:** every session started on each engine, newest first, whatever started it (the board walk, the dispatch button, quick capture, cron, a delegation, a chat). It is read from the session registry, one engine at a time. A Dispatcher session the walk started carries `transportMeta.startedBy: board-walk`; that is how the registry tells it apart from a manual dispatch.
 
 The HTTP routes:
 
-- `GET /api/board-walk`: the rules file's settings, problems and retired keys, the cron job that schedules the walk (`job`, or `null`), whether it is scheduled or running, and the last tick.
+- `GET /api/board-walk`: the rules file's settings, problems and retired keys, the cron job that schedules the walk (`job`: the one the scheduler armed, else the one on file, or `null`), whether a job is armed (`scheduled`) or a tick is running, and the last tick.
 - `GET /api/board-walk/ticks?limit=`: the tick log, newest first.
 - `POST /api/board-walk/tick`: run a tick now. Operator only. `?wait=1` waits for the result; otherwise it answers 202 at once.
 - `GET /api/auto-dispatch/sessions?hours=&engine=`: sessions started, with what started each one.

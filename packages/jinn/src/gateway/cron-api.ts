@@ -38,12 +38,17 @@ function scheduleError(job: Pick<CronJob, "schedule" | "timezone">): string | nu
   return errors.length > 0 ? errors.map((entry) => entry.message).join("; ") : null;
 }
 
-/** Why `job` cannot be stored beside `others`, or null. A built-in action runs
- *  from one job only, so a second job naming it would tick it twice. */
-function jobError(job: CronJob, others: CronJob[]): string | null {
-  const invalid = scheduleError(job) ?? cronActionError(job);
-  if (invalid) return invalid;
-  const twin = job.action ? others.find((other) => other.action === job.action) : undefined;
+/** Why `job` cannot be stored, or null. */
+function jobError(job: CronJob): string | null {
+  return scheduleError(job) ?? cronActionError(job);
+}
+
+/** Why a new job cannot join `jobs`: a built-in action runs from one job
+ *  only, so a second job naming it would tick it twice. (An update cannot add
+ *  a twin, since a job's action never changes; and it must stay free to
+ *  switch off a hand-edited one.) */
+function twinError(job: CronJob, jobs: CronJob[]): string | null {
+  const twin = job.action ? jobs.find((other) => other.action === job.action) : undefined;
   return twin ? `the ${job.action} action already runs from cron job "${twin.id}"` : null;
 }
 
@@ -106,7 +111,7 @@ async function createJob(req: HttpRequest, res: ServerResponse): Promise<void> {
     return badRequest(res, `a cron job with id "${body.id}" already exists`);
   }
   const newJob = jobFromBody(body);
-  const invalid = jobError(newJob, jobs);
+  const invalid = jobError(newJob) ?? twinError(newJob, jobs);
   if (invalid) return badRequest(res, invalid);
   jobs.push(newJob);
   saveJobs(jobs);
@@ -127,7 +132,7 @@ async function updateJob(req: HttpRequest, res: ServerResponse, id: string): Pro
   if ((merged.action ?? null) !== (jobs[idx].action ?? null)) {
     return badRequest(res, "a cron job's action cannot be changed; create a new job instead");
   }
-  const invalid = jobError(merged, jobs.filter((_, i) => i !== idx));
+  const invalid = jobError(merged);
   if (invalid) return badRequest(res, invalid);
   jobs[idx] = merged;
   saveJobs(jobs);

@@ -174,6 +174,7 @@ function open(opts: {
   turnTimeoutMs?: number;
   stopped?: string[];
   job?: CronJob;
+  armed?: CronJob;
 } = {}): Harness {
   const turns: WalkTurn[] = [];
   const dispatched: string[] = [];
@@ -183,6 +184,7 @@ function open(opts: {
     rulesFile: RULES,
     now: () => NOW,
     scheduleJob: () => opts.job,
+    armedJob: () => opts.armed,
     runTurn: async (turn) => {
       turns.push(turn);
       return opts.reply ? opts.reply(turn) : { sessionId: `walk-${turns.length}`, reply: fakeModel(turn.prompt, { startAll: opts.startAll }) };
@@ -373,7 +375,11 @@ describe("board walk switches and the tick log", () => {
     expect(status(past.id)).toBe("backlog");
     // "Local time" is read in the job's zone.
     expect(h.turns[0].prompt).toContain("in Asia/Tokyo.");
-    expect(open({ job: { ...job, enabled: true } }).walk.status()).toMatchObject({ scheduled: true });
+    // Scheduled means armed by the cron scheduler, and the armed job is the one
+    // described: a job on file that the scheduler skipped is not "scheduled".
+    expect(open({ job: { ...job, enabled: true } }).walk.status()).toMatchObject({ scheduled: false });
+    const armed = { ...job, id: "walk-2", enabled: true, schedule: "45 * * * *" };
+    expect(open({ job, armed }).walk.status()).toMatchObject({ scheduled: true, job: { id: "walk-2", schedule: "45 * * * *" } });
     // A zone the scheduler would refuse still lets a run-now tick, in the host's zone.
     const odd = open({ job: { ...job, timezone: "Mars/Olympus" } });
     expect((await odd.walk.tick("manual")).outcome).toBe("ok");
@@ -552,7 +558,7 @@ describe("board walk review round 2", () => {
     const item = todo("Write the release notes", { priority: 3 });
     const events: string[] = [];
     const walk = m.walk.startBoardWalk({
-      getConfig: () => config, context: {} as never, rulesFile: RULES, now: () => NOW, scheduleJob: () => undefined,
+      getConfig: () => config, context: {} as never, rulesFile: RULES, now: () => NOW, scheduleJob: () => undefined, armedJob: () => undefined,
       runTurn: async (turn) => ({ reply: fakeModel(turn.prompt) }),
       resolveLink: async (url, kind) => ({ url, kind, state: "unknown" }),
       sessions: () => [], holdingCapacity: () => [], collectClaude: async () => claude(15),

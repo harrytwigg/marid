@@ -10,6 +10,7 @@ import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { startTodoDispatcher, type StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { ApiContext } from "../gateway/api.js";
 import { loadJobs } from "../cron/jobs.js";
+import { armedActionJob } from "../cron/scheduler.js";
 import { validateCronSchedule } from "../cron/validation.js";
 import { readRules, boardWalkPath, hostTimezone, missingDefaultSections, readTemplateRules, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
 import { findBoardWalkJob } from "./job.js";
@@ -72,8 +73,11 @@ export interface BoardWalkDeps {
   /** The Claude reading taken after the turn, for the next tick's usage delta. */
   collectClaude?: (config: JinnConfig) => Promise<EngineLimitEngineSnapshot>;
   snapshot?: Partial<Pick<SnapshotDeps, "collect" | "usageHistory" | "statuslineMtime" | "startedSince" | "exhausted">>;
-  /** The cron job that schedules the walk, read when needed. Defaults to the
-   *  one in cron/jobs.json. Its zone is the walk's "local time". */
+  /** The job the cron scheduler armed for the walk: the one that fires, whose
+   *  zone is the walk's "local time". Defaults to the live scheduler's. */
+  armedJob?: () => CronJob | undefined;
+  /** The walk's job when none is armed (switched off, or not valid), so the
+   *  status can still name it. Defaults to the one in cron/jobs.json. */
   scheduleJob?: () => CronJob | undefined;
   /** How long the model turn may take before the tick gives up on it. */
   turnTimeoutMs?: number;
@@ -107,9 +111,10 @@ export interface BoardWalkStatus {
   problems: string[];
   /** Retired schedule keys still in board-walk.md, which are not read. */
   retiredKeys: string[];
-  /** The job, or null when there is none and the walk runs only by hand. */
+  /** The job: the one the scheduler armed, else the one on file; null when
+   *  there is none and the walk runs only by hand. */
   job: BoardWalkJobStatus | null;
-  /** The job exists and is enabled, so the cron scheduler fires it. */
+  /** The cron scheduler has armed a job for the walk, so it fires. */
   scheduled: boolean;
   running: boolean;
   lastTick?: TickRecord;
@@ -255,6 +260,7 @@ interface Walker {
   turnTimeoutMs: number;
   stopTurn: (sessionKey: string) => void;
   templateRules: () => string;
+  armedJob: () => CronJob | undefined;
   scheduleJob: () => CronJob | undefined;
 }
 
@@ -287,15 +293,21 @@ function walker(deps: BoardWalkDeps): Walker {
     turnTimeoutMs: deps.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
     stopTurn: deps.stopTurn ?? (() => {}),
     templateRules: deps.templateRules ?? (() => readTemplateRules()),
+    armedJob: deps.armedJob ?? (() => armedActionJob("board-walk")),
     scheduleJob: deps.scheduleJob ?? (() => findBoardWalkJob(loadJobs())),
   };
+}
+
+/** The job the status describes: the armed one, else the one on file. */
+function walkJob(w: Walker): CronJob | undefined {
+  return w.armedJob() ?? w.scheduleJob();
 }
 
 /** The zone the walk reads "local time" in: its job's, else the host's. A
  *  hand-edited zone that is not valid (the scheduler skips that job) falls
  *  back to the host's too, so a run-now still works. */
 function walkTimezone(w: Walker): string {
-  const zone = w.scheduleJob()?.timezone?.trim();
+  const zone = walkJob(w)?.timezone?.trim();
   return zone && validateCronSchedule({ schedule: "0 * * * *", timezone: zone }).length === 0 ? zone : hostTimezone();
 }
 
@@ -434,10 +446,10 @@ export function startBoardWalk(deps: BoardWalkDeps): BoardWalk {
     status: () => {
       const rules = readRules(w.rulesFile);
       const last = readTicks(1)[0];
-      const job = jobStatus(w.scheduleJob());
+      const armed = w.armedJob();
       return {
         path: w.rulesFile, exists: rules.exists, settings: rules.settings, problems: rules.problems, retiredKeys: rules.retiredKeys,
-        job, scheduled: job?.enabled === true, running: inFlight !== null, ...(last ? { lastTick: last } : {}),
+        job: jobStatus(armed ?? w.scheduleJob()), scheduled: armed !== undefined, running: inFlight !== null, ...(last ? { lastTick: last } : {}),
       };
     },
   };

@@ -85,9 +85,10 @@ export interface BoardWalkStatus {
   problems: string[]
   /** Old schedule keys still in board-walk.md, which are not read. */
   retiredKeys: string[]
-  /** Null when there is no job, and the walk runs only when started by hand. */
+  /** The armed job, else the one on file; null when there is none, and the
+   *  walk runs only when started by hand. */
   job: BoardWalkJob | null
-  /** The job is enabled, so cron fires it. */
+  /** The cron scheduler has armed the job, so it fires. */
   scheduled: boolean
   running: boolean
   lastTick?: TickRecord

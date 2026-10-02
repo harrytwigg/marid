@@ -889,6 +889,8 @@ export async function startGateway(
   apiContext.boardWalk = boardWalk;
   // The walk's schedule is the `board-walk` cron job: the cron scheduler, below,
   // fires this handler, as do the cron run-now controls.
+  // Left registered through shutdown: the scheduler is stopped later, and a fire
+  // landing in between must still find the walk, not record a failed run.
   setCronActionHandler("board-walk", boardWalkCronHandler(boardWalk));
   // Comment routing wakes a mentioned employee; like the walk, it starts
   // sessions through apiContext.
@@ -1242,7 +1244,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop(); setCronActionHandler("board-walk", null); stopCommentRouting();
+    backgroundRefreshes.stop(); stopCommentRouting();
 
     // Stop caffeinate
     if (caffeinate && caffeinate.exitCode === null) {

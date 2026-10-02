@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import type {
+  CronAction,
   CronJob,
   JinnConfig,
   Connector,
@@ -21,6 +22,14 @@ type SchedulerDeps = {
 
 let tasks: cron.ScheduledTask[] = [];
 let deps: SchedulerDeps;
+/** The job each built-in action is armed from, as of the last reload. */
+let armedActions = new Map<CronAction, CronJob>();
+
+/** The job the scheduler armed for `action`, or undefined when none is armed
+ *  (no job, all disabled, or none valid). This is the job that fires. */
+export function armedActionJob(action: CronAction): CronJob | undefined {
+  return armedActions.get(action);
+}
 
 export function startScheduler(jobs: CronJob[], schedulerDeps: SchedulerDeps): void {
   deps = schedulerDeps;
@@ -32,20 +41,20 @@ export function reloadScheduler(jobs: CronJob[]): { scheduled: number; skipped: 
   let skipped = 0;
   // A built-in action is scheduled once: a second enabled job naming the same
   // action (a hand-edited copy) would tick it twice, so it is skipped.
-  const actionsScheduled = new Map<string, string>();
+  const armed = new Map<CronAction, CronJob>();
   for (const job of jobs) {
     if (!job.enabled) continue;
-    const firstForAction = job.action ? actionsScheduled.get(job.action) : undefined;
-    if (firstForAction) {
+    const first = job.action ? armed.get(job.action) : undefined;
+    if (first) {
       skipped += 1;
-      logger.warn(`Skipping cron job "${job.name}": the ${job.action} action is already scheduled by "${firstForAction}"`);
+      logger.warn(`Skipping cron job "${job.name}" (${job.id}): the ${job.action} action is already scheduled by "${first.id}"`);
       continue;
     }
     try {
       const task = createTask(job);
       task.start();
       started.push(task);
-      if (job.action) actionsScheduled.set(job.action, job.name);
+      if (job.action) armed.set(job.action, job);
       logger.info(`Scheduled cron job "${job.name}" (${job.schedule})`);
     } catch (err) {
       skipped += 1;
@@ -54,6 +63,7 @@ export function reloadScheduler(jobs: CronJob[]): { scheduled: number; skipped: 
   }
   for (const task of tasks) task.stop();
   tasks = started;
+  armedActions = armed;
   return { scheduled: started.length, skipped };
 }
 
@@ -62,6 +72,7 @@ export function stopScheduler(): void {
     task.stop();
   }
   tasks = [];
+  armedActions = new Map();
 }
 
 function createTask(job: CronJob): cron.ScheduledTask {

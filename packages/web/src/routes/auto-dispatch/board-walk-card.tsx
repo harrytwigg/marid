@@ -20,7 +20,9 @@ const OUTCOME_COLOR: Record<TickRecord["outcome"], string> = {
 function stateLabel(status: BoardWalkStatus): string {
   if (!status.exists) return "no rules file"
   if (!status.job) return "no cron job — runs only when started by hand"
-  return status.scheduled ? "scheduled" : "switched off"
+  if (status.scheduled) return "scheduled"
+  // Enabled but not armed: the scheduler refused its schedule or zone.
+  return status.job.enabled ? "not scheduled — the cron job's schedule or zone is not valid" : "switched off"
 }
 
 function Settings({ status }: { status: BoardWalkStatus }) {

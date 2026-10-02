@@ -92,6 +92,11 @@ describe("the Auto-Dispatch page", () => {
     expect(within(card).getByText(/enabled, schedule in board-walk.md are no longer read/)).toBeTruthy()
     unmount()
 
+    reads.getBoardWalkStatus.mockResolvedValue({ ...status, scheduled: false })
+    const invalid = render(<MemoryRouter><AutoDispatchPage /></MemoryRouter>)
+    expect(await within(await screen.findByTestId("board-walk")).findByText(/not scheduled — the cron job's schedule or zone is not valid/)).toBeTruthy()
+    invalid.unmount()
+
     reads.getBoardWalkStatus.mockResolvedValue({ ...status, scheduled: false, job: null })
     render(<MemoryRouter><AutoDispatchPage /></MemoryRouter>)
     expect(await within(await screen.findByTestId("board-walk")).findByText(/no cron job — runs only when started by hand/)).toBeTruthy()

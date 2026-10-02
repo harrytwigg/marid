@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import yaml from "js-yaml";
 import type { CronJob } from "../shared/types.js";
 import { validateCronSchedule } from "../cron/validation.js";
+import { canonicalCronJobId } from "../cron/jobs.js";
 import type { CronActionHandler, CronActionResult } from "../cron/actions.js";
 import { BOARD_WALK_FILE, RETIRED_SCHEDULE_KEYS, boardWalkPath, frontmatterMapping, frontmatterSpan } from "./settings.js";
 import type { TickRecord } from "./store.js";
@@ -34,6 +35,9 @@ export const BOARD_WALK_JOB_ID = "board-walk";
 export const BOARD_WALK_JOB_NAME = "Board walk";
 export const BOARD_WALK_DEFAULT_SCHEDULE = "0 * * * *";
 const MARKER_FILE = path.join("state", "board-walk-job.json");
+/** A converted idleCapacity block's zone, held until the job that carries it
+ *  is written: the block is gone from config.yaml by then. */
+const PENDING_ZONE_FILE = path.join("state", "board-walk-job-zone.json");
 
 /** The job that schedules the walk: the first enabled one with the action,
  *  which is the one the scheduler arms, or else the first one at all. */
@@ -68,8 +72,15 @@ export function tickRunResult(tick: TickRecord): CronActionResult {
   };
 }
 
-export function boardWalkCronHandler(walk: { tick: (trigger: TickRecord["trigger"]) => Promise<TickRecord> }): CronActionHandler {
-  return async (_job, trigger) => tickRunResult(await walk.tick(trigger));
+export function boardWalkCronHandler(walk: { tick: (trigger: TickRecord["trigger"]) => Promise<TickRecord> }, now: () => number = Date.now): CronActionHandler {
+  return async (_job, trigger) => {
+    const firedAt = now();
+    const tick = await walk.tick(trigger);
+    const result = tickRunResult(tick);
+    // A run-now while a tick is running joins it rather than starting another,
+    // so this run's record is that tick's: say so.
+    return Date.parse(tick.at) < firedAt ? { ...result, summary: `joined the tick already running: ${result.summary}` } : result;
+  };
 }
 
 // ── Seeding and the one-time move out of board-walk.md ──────────────────────
@@ -113,7 +124,9 @@ function writeAtomic(file: string, text: string): void {
 }
 
 /** The jobs on disk, or a reason not to touch the file. A jobs.json that does
- *  not parse is never rewritten: that would drop every job in it. */
+ *  not parse is never rewritten: that would drop every job in it. Not
+ *  cron/jobs.ts's `loadJobs`, which reads a corrupt file as no jobs (right for
+ *  the scheduler, fatal for a writer), and paths here follow `opts.home`. */
 function readJobsFile(file: string): { jobs: CronJob[] } | { error: string } {
   let raw: string;
   try {
@@ -204,7 +217,12 @@ const STOCK_COMMENTS: Record<string, string> = {
   timezone: "# IANA zone for the schedule and for \"local time\" below. Empty = the gateway host's zone.",
 };
 
-const POINTER = `# When the walk runs is the cron job "${BOARD_WALK_JOB_ID}" (Cron, or cron/jobs.json): run it now, change its schedule or switch it off there.`;
+/** What takes the moved keys' place: the shipped file's own words for it. */
+const POINTER = [
+  `# When the walk runs is the cron job "${BOARD_WALK_JOB_ID}" (Cron, or cron/jobs.json):`,
+  "# run it now, change its schedule or switch it off there. Its timezone is the",
+  "# one \"local time\" below is read in (none = the gateway host's zone).",
+];
 
 /**
  * `text` with the retired keys taken out of its frontmatter, or null when the
@@ -262,8 +280,23 @@ function cutRetiredLines(lines: string[]): { lines: string[]; removed: string[] 
     if (pointerAt === -1) pointerAt = keep.length;
     i = lastContinuation(lines, i);
   }
-  if (pointerAt !== -1) keep.splice(pointerAt, 0, POINTER + (lines[0]?.endsWith("\r") ? "\r" : ""));
-  return { lines: keep, removed };
+  if (pointerAt !== -1) keep.splice(pointerAt, 0, ...POINTER);
+  return { lines: withLineEndings(keep, lines), removed };
+}
+
+/**
+ * `lines` with the original file's line endings. In a CRLF file every line of
+ * the frontmatter but the last carries a `\r` (the last one's goes with the
+ * closing fence), so once lines are moved or added, each is re-ended by where
+ * it now sits, not by where it came from.
+ */
+function withLineEndings(lines: string[], original: string[]): string[] {
+  const crlf = original.length > 1 && original.slice(0, -1).every((line) => line.endsWith("\r"));
+  if (!crlf) return lines;
+  return lines.map((line, i) => {
+    const bare = line.endsWith("\r") ? line.slice(0, -1) : line;
+    return i < lines.length - 1 ? `${bare}\r` : bare;
+  });
 }
 
 function moveKeysOutOfRules(rulesFile: string, text: string, now: Date, result: JobSeedResult, keys: string[]): void {
@@ -293,12 +326,29 @@ function readRulesText(rulesFile: string): string | undefined {
  */
 export function seedBoardWalkJob(opts: JobSeedOptions): JobSeedResult {
   const result: JobSeedResult = { created: false, fromFrontmatter: false, notes: [], movedKeys: [], ignoredKeys: [], deleted: false };
+  const pendingFile = path.join(opts.home, PENDING_ZONE_FILE);
+  const legacyTimezone = opts.legacyTimezone ?? readPendingZone(pendingFile);
   try {
-    seedJob(opts, result);
+    seedJob({ ...opts, ...(legacyTimezone ? { legacyTimezone } : {}) }, result);
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
   }
+  try {
+    if (result.error && legacyTimezone) writeAtomic(pendingFile, JSON.stringify({ timezone: legacyTimezone }) + "\n");
+    else fs.rmSync(pendingFile, { force: true });
+  } catch {
+    // Best effort: the zone is also in the config.yaml backup.
+  }
   return result;
+}
+
+function readPendingZone(file: string): string | undefined {
+  try {
+    const zone = (JSON.parse(fs.readFileSync(file, "utf-8")) as { timezone?: unknown }).timezone;
+    return typeof zone === "string" && zone.trim() ? zone : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function writeMarker(markerFile: string, now: Date, jobId: string, by: string): void {
@@ -336,7 +386,7 @@ function needsJob(jobs: CronJob[], markerFile: string, now: Date, present: strin
     result.ignoredKeys = present;
     return false;
   }
-  if (jobs.some((job) => job.id.trim().toLowerCase() === BOARD_WALK_JOB_ID)) {
+  if (jobs.some((job) => canonicalCronJobId(job.id) === BOARD_WALK_JOB_ID)) {
     result.error = `a cron job with id "${BOARD_WALK_JOB_ID}" already exists and is not the board walk; rename it to let the walk have its job`;
     result.ignoredKeys = present;
     return false;

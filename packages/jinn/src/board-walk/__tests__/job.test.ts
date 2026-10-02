@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { CronJob } from "../../shared/types.js";
 import { parseRules } from "../settings.js";
 import { describeSeed, seedBoardWalk } from "../seed.js";
-import { BOARD_WALK_JOB_ID, findBoardWalkJob, seedBoardWalkJob, stripRetiredKeys, tickRunResult } from "../job.js";
+import { BOARD_WALK_JOB_ID, boardWalkCronHandler, findBoardWalkJob, seedBoardWalkJob, stripRetiredKeys, tickRunResult } from "../job.js";
 
 /**
  * The walk's schedule is the `board-walk` cron job. These tests hold the two
@@ -110,6 +110,9 @@ describe("an upgrade from a file that carried the schedule", () => {
     expect(now).not.toContain("# Cron expression.");
     expect(now).not.toContain("# IANA zone for the schedule");
     expect(now).toContain('# When the walk runs is the cron job "board-walk"');
+    // The same words as the shipped file, including where "local time" comes from.
+    expect(now).toContain('# one "local time" below is read in (none = the gateway host\'s zone).');
+    expect(TEMPLATE).toContain('# one "local time" below is read in (none = the gateway host\'s zone).');
     expect(now).toContain("# Who the walk's one turn per tick runs as.");
     expect(fs.readFileSync(result.job!.rulesBackupPath!, "utf-8")).toBe(old);
     expect(describeSeed(result)).toMatch(/added the "board-walk" cron job from board-walk.md: \*\/30 9-17 \* \* 1-5 \(Europe\/London\), switched off; moved enabled, schedule, timezone out of board-walk.md \(old file: .*board-walk.md.pre-cron-/);
@@ -148,6 +151,16 @@ describe("an upgrade from a file that carried the schedule", () => {
     expect(parseRules(rulesIn(dir)).retiredKeys).toEqual([]);
   });
 
+  it("keeps a converted block's zone for the next boot when the job cannot be written on this one", () => {
+    const dir = home({ config: "gateway:\n  idleCapacity:\n    enabled: true\n    timezone: America/New_York\n", jobs: "{ broken" });
+    expect(seed(dir)).toMatchObject({ converted: true, removedBlock: true, job: { error: expect.stringMatching(/not valid JSON/) } });
+    fs.writeFileSync(path.join(dir, "cron", "jobs.json"), "[]");
+    // The block is gone from config.yaml now; the zone still reaches the job.
+    expect(seed(dir).job).toMatchObject({ created: true });
+    expect(findBoardWalkJob(jobsIn(dir))).toMatchObject({ timezone: "America/New_York" });
+    expect(fs.existsSync(path.join(dir, "state", "board-walk-job-zone.json"))).toBe(false);
+  });
+
   it("leaves the keys in place, unread, when the rewrite cannot be shown to be the same file", () => {
     const old = "---\ntimezone: &zone UTC\nemployee: assistant\nnote: *zone\n---\n# Mine\n";
     expect(stripRetiredKeys(old)).toBeNull();
@@ -156,6 +169,22 @@ describe("an upgrade from a file that carried the schedule", () => {
     expect(rulesIn(dir)).toBe(old);
     expect(findBoardWalkJob(jobsIn(dir))).toMatchObject({ timezone: "UTC" });
     expect(describeSeed(result)).toMatch(/timezone in board-walk.md is no longer read/);
+  });
+});
+
+describe("line endings", () => {
+  it("keeps a CRLF file CRLF, wherever the moved keys sat", () => {
+    for (const text of [
+      "---\r\nemployee: a\r\ntimezone: \"\"\r\n---\r\nbody\r\n",
+      "---\r\nenabled: true\r\nemployee: a\r\nschedule: \"0 * * * *\"\r\n---\r\nbody\r\n",
+      OLD_FILE.replace(/\n/g, "\r\n"),
+    ]) {
+      const stripped = stripRetiredKeys(text)!.text;
+      expect(stripped).not.toMatch(/\r\r/);
+      expect(stripped.replace(/\r\n/g, "")).not.toContain("\n");
+      expect(parseRules(stripped).retiredKeys).toEqual([]);
+      expect(stripped.endsWith(text.slice(text.lastIndexOf("\r\n---\r\n")))).toBe(true);
+    }
   });
 });
 
@@ -205,6 +234,14 @@ describe("a tick as a cron run", () => {
     expect(tickRunResult({ ...tick, outcome: "busy", summary: "skipped" }).status).toBe("success");
     expect(tickRunResult({ ...tick, outcome: "failed", summary: "the model turn failed: x" })).toMatchObject({ status: "error", error: "the model turn failed: x" });
     expect(tickRunResult({ ...tick, outcome: "invalid-rules", summary: "bad" }).status).toBe("error");
+  });
+
+  it("a run-now that joins a running tick says so in its run", async () => {
+    const running = { ...tick, outcome: "ok" as const, summary: "nothing to do", at: new Date(Date.parse(tick.at) - 5_000).toISOString() };
+    const joined = await boardWalkCronHandler({ tick: async () => running }, () => Date.parse(tick.at))({} as CronJob, "manual");
+    expect(joined.summary).toBe("joined the tick already running: ok: nothing to do");
+    const fresh = await boardWalkCronHandler({ tick: async () => ({ ...running, at: tick.at }) }, () => Date.parse(tick.at))({} as CronJob, "manual");
+    expect(fresh.summary).toBe("ok: nothing to do");
   });
 
   it("the scheduler's job is the first enabled one with the action", () => {

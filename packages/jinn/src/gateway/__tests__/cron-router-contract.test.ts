@@ -135,6 +135,17 @@ describe("a cron job that runs a built-in action", () => {
     expect(turned.status).toBe(400);
   });
 
+  it("a hand-edited second job for the action can still be switched off and rescheduled", async () => {
+    const { home } = await import("./domain-router-home.js");
+    const fs = await import("node:fs");
+    const twins = [{ ...WALK, enabled: true, prompt: "" }, { ...WALK, id: "board-walk-copy", enabled: true, prompt: "" }];
+    fs.writeFileSync(home.cronJobs, JSON.stringify(twins));
+    const off = await call("PUT", "/api/cron/board-walk-copy", { enabled: false });
+    expect(off.status).toBe(200);
+    expect(off.body).toMatchObject({ id: "board-walk-copy", enabled: false });
+    expect((await call("PUT", "/api/cron/board-walk", { schedule: "15 * * * *" })).status).toBe(200);
+  });
+
   it("can be rescheduled and switched off, but not turned into a prompt job", async () => {
     await call("POST", "/api/cron", WALK);
     const moved = await call("PUT", "/api/cron/board-walk", { schedule: "*/30 * * * *", timezone: "Europe/London", enabled: false });

@@ -1,4 +1,5 @@
 import { seedBoardWalk } from "../board-walk/seed.js";
+import { describeJobSeed } from "../board-walk/job.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -637,7 +638,11 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
   const boardWalkSeed = seedBoardWalk();
   if (boardWalkSeed.seeded) created.push(path.join(JINN_HOME, "board-walk.md"));
   if (boardWalkSeed.error) warn(`Could not seed board-walk.md: ${boardWalkSeed.error}`);
-  if (boardWalkSeed.job?.error) warn(`Could not add the board-walk cron job: ${boardWalkSeed.job.error}`);
+  // What happened to its cron job, in the boot log's words: added, keys moved
+  // out of board-walk.md, a deleted job, keys no longer read, or why not.
+  if (boardWalkSeed.job) {
+    for (const line of describeJobSeed(boardWalkSeed.job)) (boardWalkSeed.job.error && line.startsWith("could not") ? warn : info)(`Board walk: ${line}`);
+  }
 
   // Copy skills.json manifest
   const templateSkillsJson = path.join(TEMPLATE_DIR, "skills.json");
