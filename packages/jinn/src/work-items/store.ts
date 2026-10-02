@@ -782,11 +782,16 @@ export function updateWorkItemConditional(
         if (!latest) return undefined;
         throw new WorkItemVersionConflictError(latest.version);
       }
+      const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
       appendWorkItemEvent({
         workItemId: id,
         kind: 'metadata_edited',
         actor: opts.actor ?? null,
-        detail: { updatedFields: fields.map((field) => field.name), ...(opts.origin ? { origin: opts.origin } : {}) },
+        detail: {
+          updatedFields: fields.map((field) => field.name),
+          ...(opts.origin ? { origin: opts.origin } : {}),
+          ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
+        },
         versionEffect: 'companion',
       });
       item = getWorkItem(id)!;
@@ -830,11 +835,12 @@ export function updateWorkItem(id: string, input: UpdateWorkItemInput, actor?: s
       .prepare(`UPDATE work_items SET ${changedFields.map((field) => `${field.column} = ?`).join(', ')}, updated_at = ?, version = version + 1 WHERE id = ?`)
       .run(...changedFields.map((field) => field.value), now, id);
     if (result.changes === 0) return undefined;
+    const releasedSessions = releaseOnOwnerChange(db, current, input.assignee);
     appendWorkItemEvent({
       workItemId: id,
       kind: 'note',
       actor: actor ?? null,
-      detail: { updatedFields: changedFields.map((field) => field.name) },
+      detail: { updatedFields: changedFields.map((field) => field.name), ...(releasedSessions.length > 0 ? { releasedSessions } : {}) },
       versionEffect: 'companion',
     });
     return getWorkItem(id);
@@ -866,8 +872,19 @@ export function getWorkItemSpend(id: string): number {
  * the call verifies both rows exist and then returns WITHOUT writing — so a
  * redundant re-link (e.g. a cron re-fire re-linking the same item to the same session)
  * does not churn `work_items.updated_at` or the event log.
+ *
+ * `selfStarted` marks the link as one a session made by starting its own Todo
+ * with no dispatch (`gateway/todo-self-start.ts`); any other link clears the
+ * mark. A marked link holds only while the Todo is being worked: the move that
+ * puts the Todo back in the backlog releases it ({@link releaseSelfStartedLinks}).
  */
-export function linkSession(workItemId: string, sessionId: string, actor?: string | null, role: WorkItemLinkRole = 'execute'): void {
+export function linkSession(
+  workItemId: string,
+  sessionId: string,
+  actor?: string | null,
+  role: WorkItemLinkRole = 'execute',
+  opts: { selfStarted?: boolean } = {},
+): void {
   const db = initDb();
   const todoId = parseTodoId(workItemId);
   const now = new Date().toISOString();
@@ -882,9 +899,58 @@ export function linkSession(workItemId: string, sessionId: string, actor?: strin
     // `updated_at` bump. A re-link that CHANGES the role still writes: the role
     // is what the self-review ban reads, and a stale one is not a detail.
     if (session.work_item_id === todoId && toWorkItemLinkRole(session.work_item_role) === role) return;
-    db.prepare('UPDATE sessions SET work_item_id = ?, work_item_role = ? WHERE id = ?').run(todoId, role, sessionId);
+    const meta = opts.selfStarted
+      ? `json_set(COALESCE(transport_meta, '{}'), '$.${SELF_STARTED_META_KEY}', ?)`
+      : `json_remove(transport_meta, '$.${SELF_STARTED_META_KEY}')`;
+    db.prepare(`UPDATE sessions SET work_item_id = ?, work_item_role = ?, transport_meta = ${meta} WHERE id = ?`)
+      .run(todoId, role, ...(opts.selfStarted ? [todoId] : []), sessionId);
     db.prepare('UPDATE work_items SET updated_at = ?, version = version + 1 WHERE id = ?').run(now, todoId);
-    appendWorkItemEvent({ workItemId: todoId, kind: 'session_linked', actor, detail: { sessionId, role } });
+    appendWorkItemEvent({
+      workItemId: todoId,
+      kind: 'session_linked',
+      actor,
+      detail: { sessionId, role, ...(opts.selfStarted ? { selfStarted: true } : {}) },
+    });
   });
   txn();
+}
+
+/** The session meta key naming the Todo a session linked itself to by starting it. */
+export const SELF_STARTED_META_KEY = 'selfStartedTodo';
+
+/**
+ * Release the self-started links on a Todo that is going back to the backlog
+ * or to another owner, and return the sessions released. Called inside the
+ * status or assignment write's own transaction; `exceptEmployee` keeps the
+ * links of the employee the Todo now belongs to.
+ *
+ * A chat session that started its own Todo keeps running turns after the Todo
+ * is put down, by the agent or by the operator, and a linked session in flight
+ * derives `executing`: left linked, every later turn would pull a parked Todo
+ * back to work. A dispatched attempt's link is not marked and is left alone.
+ * The session's run stays on the Todo's ledger and settles with the session.
+ */
+export function releaseSelfStartedLinks(
+  db: ReturnType<typeof initDb>,
+  workItemId: string,
+  { exceptEmployee }: { exceptEmployee?: string } = {},
+): string[] {
+  const rows = db
+    .prepare(`SELECT id FROM sessions WHERE work_item_id = ? AND json_extract(transport_meta, '$.${SELF_STARTED_META_KEY}') = ?
+      AND (? IS NULL OR employee IS NULL OR employee <> ?)`)
+    .all(workItemId, workItemId, exceptEmployee ?? null, exceptEmployee ?? null) as { id: string }[];
+  const release = db.prepare(
+    `UPDATE sessions SET work_item_id = NULL, work_item_role = NULL, transport_meta = json_remove(transport_meta, '$.${SELF_STARTED_META_KEY}') WHERE id = ?`,
+  );
+  for (const row of rows) release.run(row.id);
+  return rows.map((row) => row.id);
+}
+
+/** The self-started links an assignee write releases: none unless it changed
+ *  the assignee. Every writer of `assignee` calls this, in its own transaction,
+ *  so a Todo given to someone else — or to nobody — never keeps the old owner's
+ *  chat as its executor. */
+function releaseOnOwnerChange(db: ReturnType<typeof initDb>, current: WorkItem, assignee: string | null | undefined): string[] {
+  if (assignee === undefined || assignee === current.assignee) return [];
+  return releaseSelfStartedLinks(db, current.id, { exceptEmployee: assignee ?? undefined });
 }
