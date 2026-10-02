@@ -32,6 +32,7 @@ import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, ha
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
+import { inFileLinkSession } from '@/components/chat/file-link-session-context'
 import { chatHeaderTitle } from './header-title'
 import { useMobileSessionTabs } from './use-mobile-session-tabs'
 import { adjacentSessionId } from './session-navigation'
@@ -954,7 +955,7 @@ function ChatPage() {
             onClose={closeThreadPreview}
             onOpenFullChat={threadPreview?.sessionId ? openPreviewFullChat : undefined}
             onExited={handlePreviewExited}
-            renderContent={formatMessage}
+            renderContent={(text) => inFileLinkSession(threadPreview?.sessionId, formatMessage(text))}
           />
         </div>
 

@@ -6,12 +6,11 @@ export type FileReadRequest =
   | { ok: true; url: string; rawUrl?: string }
   | { ok: false; error: string };
 
-const SUPPORTED_ROOT_RE = /^(?:knowledge|docs|files|uploads)\//;
-
 /**
- * A path outside the instance's own roots is read where the SESSION that named
- * it runs (absolute, `~/`, or relative to its working directory; local or on a
- * build host). Only a link that knows its session can be opened this way.
+ * A path a chat linked is read where the SESSION that named it runs: absolute,
+ * `~/`, or relative to its working directory, on the gateway or a build host.
+ * That includes `docs/…`-shaped paths: for a remote session sitting in a repo
+ * they name the repo's docs, not the instance's.
  */
 function sessionFileRequest(path: string, sessionId: string): FileReadRequest {
   const base = `/api/sessions/${encodeURIComponent(sessionId)}/files`;
@@ -33,7 +32,7 @@ export function buildFileReadRequest(path: string, sessionId?: string | null): F
   if (CONTROL_BYTES.test(path)) {
     return { ok: false, error: "File path contains control bytes" };
   }
-  if (sessionId && !SUPPORTED_ROOT_RE.test(path)) return sessionFileRequest(path, sessionId);
+  if (sessionId) return sessionFileRequest(path, sessionId);
   if (path.startsWith("/") || path.startsWith("~/") || /^[A-Za-z]:[\\/]/.test(path)) {
     return { ok: false, error: "File path must be relative to a supported root" };
   }

@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 
 /**
  * The session whose messages are being rendered. A chat file link names a path
@@ -10,4 +10,10 @@ export const FileLinkSessionContext = createContext<string | null>(null)
 
 export function useFileLinkSession() {
   return useContext(FileLinkSessionContext)
+}
+
+/** `node` with its file links bound to `sessionId`, for message text rendered
+ *  outside a chat pane (the thread peek). */
+export function inFileLinkSession(sessionId: string | null | undefined, node: ReactNode): ReactNode {
+  return <FileLinkSessionContext.Provider value={sessionId ?? null}>{node}</FileLinkSessionContext.Provider>
 }

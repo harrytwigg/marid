@@ -60,6 +60,9 @@ function localHostRead(requested: string): HostRead {
 function hostReadFor(sessionId: string, requested: string, context: ApiContext): { read: HostRead; host?: string } | { status: number; error: string } {
   const session = getSession(sessionId);
   if (!session) return { status: 404, error: "Session not found" };
+  // The host comes from the employee's CURRENT config, not from where this
+  // session last ran: an employee moved between hosts reads old links from the
+  // new one. Sessions record no host of their own to prefer.
   const employee = session.employee ? orgRegistry(context.getConfig()).get(session.employee) : undefined;
   const target = employeeRemoteTarget(employee);
   if (!isRemoteTarget(target)) return { read: localHostRead(requested) };
@@ -114,6 +117,12 @@ function textPreview(base: { mime: string; size: number }, buffer: Buffer): Reco
 }
 
 async function sendRawImage(res: ServerResponse, read: HostRead): Promise<void> {
+  // Judge the type before moving any bytes: a 415 should not cost a 20MB
+  // transfer (base64 over ssh for a remote host). The read re-checks it on the
+  // file it actually opened, in case the name was swapped in between.
+  const vetted = await read("vet", Number.MAX_SAFE_INTEGER);
+  if (!vetted.ok) return json(res, { error: vetted.error }, vetted.status);
+  if (!RAW_IMAGE_MIMES.has(mimeFromFilename(vetted.realPath))) return json(res, { error: "Only PNG, JPEG, GIF and WebP images are served raw" }, 415);
   const opened = await read("read", MAX_RAW_IMAGE_SIZE);
   if (!opened.ok) return json(res, { error: opened.error }, opened.status);
   const mime = mimeFromFilename(opened.realPath);

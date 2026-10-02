@@ -87,7 +87,7 @@ const literalPercentChatPaths = [
   ["files/%2e", "/api/files/read?path=files/%252e"],
 ] as const;
 
-function ChatFileHarness({ path, sessionId = "session-1" }: { path: string; sessionId?: string | null }) {
+function ChatFileHarness({ path, sessionId = null }: { path: string; sessionId?: string | null }) {
   const messages: Message[] = [{
     id: `message-${path}`,
     role: "assistant",
@@ -158,8 +158,10 @@ describe("FileView requests opened from chat", () => {
     ["/srv/work/evidence/report.md", "/api/sessions/session-1/files/read?path=%2Fsrv%2Fwork%2Fevidence%2Freport.md"],
     ["~/notes/plan.md", "/api/sessions/session-1/files/read?path=~%2Fnotes%2Fplan.md"],
     ["src/app/main.ts", "/api/sessions/session-1/files/read?path=src%2Fapp%2Fmain.ts"],
+    // An instance-root-shaped path from a session is still the session's: a remote agent's docs/ is its repo's.
+    ["docs/README.md", "/api/sessions/session-1/files/read?path=docs%2FREADME.md"],
   ] as const)("opens session path %s on the session's host in a new tab", async (path, expectedUrl) => {
-    render(<ChatFileHarness path={path} />);
+    render(<ChatFileHarness path={path} sessionId="session-1" />);
 
     const link = screen.getByTitle(`Open ${path} in a new tab`);
     expect(link.getAttribute("href")).toBe(`/file?path=${encodeURIComponent(path)}&session=session-1`);
@@ -172,7 +174,7 @@ describe("FileView requests opened from chat", () => {
   });
 
   it("leaves a non-root path unlinked when no session is known", () => {
-    render(<ChatFileHarness path="/srv/work/evidence/report.md" sessionId={null} />);
+    render(<ChatFileHarness path="/srv/work/evidence/report.md" />);
 
     expect(screen.getByText(/\/srv\/work\/evidence\/report\.md/)).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();

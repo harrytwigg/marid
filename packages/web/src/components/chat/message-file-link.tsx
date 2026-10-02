@@ -11,16 +11,15 @@ const FILE_PATH_RE = new RegExp(`^${FILE_PATH_CORE}$`)
 const SUPPORTED_VIEWER_ROOT_RE = /^(?:knowledge|docs|files|uploads)\//
 
 /** The `/file` viewer URL for a chat path, or null when it cannot be opened.
- *  Instance-root paths open on their own; any other path is read where its
- *  session runs, so without a session it is left as plain text. */
+ *  With a session, every path is read where that session runs (a remote
+ *  agent's `docs/x.md` is its repo's, not the instance's). Without one, only
+ *  instance-root paths can be opened, so anything else stays plain text. */
 function buildChatFileLink(path: string, sessionId: string | null): { trimmed: string; href: string } | null {
   const trimmed = path.trim()
-  if (SUPPORTED_VIEWER_ROOT_RE.test(trimmed)) {
-    if (!buildFileReadRequest(trimmed).ok) return null
-    return { trimmed, href: `/file?path=${encodeURIComponent(trimmed)}` }
-  }
-  if (!sessionId || !FILE_PATH_RE.test(trimmed)) return null
-  return { trimmed, href: `/file?path=${encodeURIComponent(trimmed)}&session=${encodeURIComponent(sessionId)}` }
+  if (!isFilePath(trimmed)) return null
+  const href = `/file?path=${encodeURIComponent(trimmed)}`
+  if (sessionId) return { trimmed, href: `${href}&session=${encodeURIComponent(sessionId)}` }
+  return SUPPORTED_VIEWER_ROOT_RE.test(trimmed) ? { trimmed, href } : null
 }
 
 /** Whether `s` is shaped like a linkable file path (session-independent). */

@@ -34,6 +34,8 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(tmp, "notes.txt"), "relative to home\n");
   fs.writeFileSync(path.join(outside, "run.sh"), "#!/bin/sh\nexport API_TOKEN=abc123secret\necho ok\n");
   fs.writeFileSync(path.join(outside, "Dockerfile"), "FROM node:24\n");
+  fs.writeFileSync(path.join(outside, "main.py"), "print('hi')\n");
+  fs.writeFileSync(path.join(outside, "fix.patch"), "--- a/x\n+++ b/x\n");
   fs.writeFileSync(path.join(outside, "build.log"), "Authorization: Bearer abc.def.ghi\n");
   fs.mkdirSync(path.join(tmp, "secrets"), { recursive: true });
   fs.writeFileSync(path.join(tmp, "secrets", "api-keys.json"), "{\"k\":\"v\"}");
@@ -115,7 +117,7 @@ describe("session file read — local employee", () => {
     expect((await call("local-1", path.join(outside, "missing.md"))).status).toBe(404);
   });
 
-  it.each(["run.sh", "Dockerfile", "build.log"])("previews %s (no known MIME) as text, judged by its content", async (name) => {
+  it.each(["main.py", "run.sh", "fix.patch", "Dockerfile", "build.log"])("previews %s (no known MIME) as text, judged by its content", async (name) => {
     const r = await call("local-1", path.join(outside, name));
     expect(r.status).toBe(200);
     expect(r.json).toMatchObject({ binary: false, mime: "text/plain" });
@@ -159,6 +161,13 @@ describe("session file read — local employee", () => {
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
     });
+  });
+
+  it("refuses a non-image raw request before reading its bytes", async () => {
+    remoteRead.mockResolvedValue({ ok: true, realPath: "/srv/work/big.log", size: 15_000_000 });
+    expect((await call("remote-1", "big.log", "raw")).status).toBe(415);
+    expect(remoteRead).toHaveBeenCalledTimes(1);
+    expect(remoteRead).toHaveBeenCalledWith(expect.objectContaining({ op: "vet" }));
   });
 
   it("refuses to serve SVG or text raw", async () => {
