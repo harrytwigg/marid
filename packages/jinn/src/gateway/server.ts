@@ -40,6 +40,8 @@ import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
 import { startBoardWalk } from "../board-walk/walk.js";
+import { boardWalkCronHandler } from "../board-walk/job.js";
+import { setCronActionHandler } from "../cron/actions.js";
 import { describeSeed, seedBoardWalk } from "../board-walk/seed.js";
 import { installTodoCommentRouting } from "./todo-comment-routing.js";
 import { HookRegistry } from "./hook-registry.js";
@@ -870,7 +872,8 @@ export async function startGateway(
   };
   // The board walk: below apiContext because a start goes through the same
   // Dispatcher spawn the dispatch route uses, which reads it. Seeding first
-  // gives a fresh install its rules file and retires an old idleCapacity block.
+  // gives a fresh install its rules file and its cron job, and retires an old
+  // idleCapacity block; it runs before the cron scheduler loads jobs.json.
   const seedLine = describeSeed(seedBoardWalk());
   if (seedLine) logger.info(seedLine);
   const boardWalk = startBoardWalk({
@@ -884,6 +887,9 @@ export async function startGateway(
     },
   });
   apiContext.boardWalk = boardWalk;
+  // The walk's schedule is the `board-walk` cron job: the cron scheduler, below,
+  // fires this handler, as do the cron run-now controls.
+  setCronActionHandler("board-walk", boardWalkCronHandler(boardWalk));
   // Comment routing wakes a mentioned employee; like the walk, it starts
   // sessions through apiContext.
   const stopCommentRouting = installTodoCommentRouting(apiContext);
@@ -1236,7 +1242,7 @@ export async function startGateway(
 
     // Stop the periodic sweeps before we start marking sessions interrupted below — a mid-shutdown sweep must not race the teardown.
     stopStatusReconciler(); stopWorkItemReconciler(); stopTodoSweeps(); stopSessionSchedulers();
-    backgroundRefreshes.stop(); boardWalk.stop(); stopCommentRouting();
+    backgroundRefreshes.stop(); setCronActionHandler("board-walk", null); stopCommentRouting();
 
     // Stop caffeinate
     if (caffeinate && caffeinate.exitCode === null) {

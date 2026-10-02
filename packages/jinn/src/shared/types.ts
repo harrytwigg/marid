@@ -493,10 +493,18 @@ export interface CronJob {
   model?: string;
   effortLevel?: string;
   employee?: string;
-  /** The prompt a fire routes to an engine session. */
+  /** The prompt a fire routes to an engine session. Not used by an `action`
+   *  job, whose prompt is empty. */
   prompt: string;
   delivery?: CronDelivery;
+  /** A built-in gateway action the job runs instead of an engine session (see
+   *  cron/actions.ts). Such a job has no prompt, and its engine, model,
+   *  employee and delivery fields are not used. */
+  action?: CronAction;
 }
+
+/** The built-in actions a cron job can run. */
+export type CronAction = "board-walk";
 
 export interface CronDelivery {
   /** Connector instance id, matching the gateway registry key. */

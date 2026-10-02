@@ -5,12 +5,14 @@ import { CONFIG_PATH, JINN_HOME, TEMPLATE_DIR } from "../shared/paths.js";
 import { saveConfigAtomic } from "../shared/config.js";
 import { BOARD_WALK_FILE, boardWalkPath } from "./settings.js";
 import { convertLegacyBlock } from "./legacy-idle-capacity.js";
+import { describeJobSeed, seedBoardWalkJob, type JobSeedResult } from "./job.js";
 
 /**
- * Seed `$JINN_HOME/board-walk.md` from the template, and retire the old
- * `gateway.idleCapacity` block. Runs on `jinn setup` and on every gateway boot,
- * so a fresh install and an upgrade both end with exactly one source of dispatch
- * rules and no idle-capacity config.
+ * Seed `$JINN_HOME/board-walk.md` from the template, retire the old
+ * `gateway.idleCapacity` block, and give the walk its `board-walk` cron job
+ * (job.ts). Runs on `jinn setup` and on every gateway boot, so a fresh install
+ * and an upgrade both end with exactly one source of dispatch rules, one
+ * schedule, and no idle-capacity config.
  *
  *   - The file is written only when it is missing. An operator's edits are never
  *     overwritten, by an upgrade or by anything else.
@@ -38,6 +40,10 @@ export interface SeedResult {
   blockDiscarded: boolean;
   /** Where the pre-removal config.yaml was copied. */
   backupPath?: string;
+  /** The zone a converted block carried, handed to the job. */
+  legacyTimezone?: string;
+  /** The walk's cron job. Absent only when seeding the file failed first. */
+  job?: JobSeedResult;
   error?: string;
 }
 
@@ -102,6 +108,7 @@ function seedFile(home: string, templateDir: string, legacy: { present: boolean;
   result.seeded = true;
   result.converted = converted !== undefined;
   result.notes = converted?.notes ?? [];
+  if (converted) result.legacyTimezone = converted.timezone;
   return false;
 }
 
@@ -126,12 +133,16 @@ export function seedBoardWalk(opts: SeedOptions = {}): SeedResult {
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
   }
+  // The job does not depend on the file having been written: without a file
+  // it is seeded with the defaults, and the walk reports the missing file.
+  result.job = seedBoardWalkJob({ home, now, ...(result.legacyTimezone ? { legacyTimezone: result.legacyTimezone } : {}) });
   return result;
 }
 
 /** One line for the boot log, or undefined when nothing happened. */
 export function describeSeed(result: SeedResult): string | undefined {
-  if (result.error) return `Board walk: could not seed ${BOARD_WALK_FILE}: ${result.error}`;
+  const job = result.job ? describeJobSeed(result.job) : [];
+  if (result.error) return [`Board walk: could not seed ${BOARD_WALK_FILE}: ${result.error}`, ...job].join("; ");
   const parts: string[] = [];
   if (result.seeded) {
     parts.push(result.converted
@@ -143,5 +154,6 @@ export function describeSeed(result: SeedResult): string | undefined {
       ? `removed gateway.idleCapacity from config.yaml WITHOUT merging it, because ${BOARD_WALK_FILE} already exists — copy any settings you still want into its Dispatch section (old file: ${result.backupPath})`
       : `removed gateway.idleCapacity from config.yaml (old file: ${result.backupPath})`);
   }
+  parts.push(...job);
   return parts.length > 0 ? `Board walk: ${parts.join("; ")}` : undefined;
 }

@@ -107,3 +107,26 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
   });
 
 });
+
+describe("scheduler — a job that runs a built-in action", () => {
+  const walk: CronJob = { id: "board-walk", name: "Board walk", enabled: true, schedule: "0 * * * *", prompt: "", action: "board-walk" };
+
+  it("a scheduled fire tells the runner it is a scheduled fire", () => {
+    startScheduler([walk], deps);
+    scheduledCallback!();
+    const call = (runCronJob as any).mock.calls[0];
+    expect(call[0]).toBe(walk);
+    expect(call[4]).toMatchObject({ trigger: "schedule" });
+  });
+
+  it("schedules one job per action, so a hand-edited copy cannot tick it twice", () => {
+    const copy = { ...walk, id: "board-walk-copy", name: "Board walk copy" };
+    const off = { ...walk, id: "board-walk-off", enabled: false };
+    expect(reloadScheduler([off, walk, copy, job])).toEqual({ scheduled: 2, skipped: 1 });
+    expect(scheduledTasks).toHaveLength(2);
+  });
+
+  it("skips a job naming an action the gateway does not have", () => {
+    expect(reloadScheduler([{ ...walk, action: "launch" as never }])).toEqual({ scheduled: 0, skipped: 1 });
+  });
+});

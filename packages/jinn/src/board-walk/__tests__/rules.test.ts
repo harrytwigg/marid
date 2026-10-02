@@ -26,12 +26,12 @@ describe("board-walk.md settings", () => {
   it("the shipped template parses with no problems and the stock settings", () => {
     const rules = parseRules(TEMPLATE);
     expect(rules.problems).toEqual([]);
-    expect(rules.settings).toMatchObject({
-      enabled: true, schedule: "0 * * * *", employee: "assistant", model: "sonnet",
+    expect(rules.settings).toEqual({
+      employee: "assistant", model: "sonnet",
       actions: { release: true, park: true, flagStuck: true, dispatch: true, comment: true },
     });
-    // An empty timezone is the host's zone, never an invalid one.
-    expect(rules.settings.timezone).toBeTruthy();
+    // The schedule is the cron job's: the shipped file carries none of it.
+    expect(rules.retiredKeys).toEqual([]);
     expect(rules.body.startsWith("# Board walk")).toBe(true);
   });
 
@@ -42,14 +42,19 @@ describe("board-walk.md settings", () => {
   });
 
   it("reports what is wrong instead of guessing", () => {
-    const rules = parseRules("---\nenabled: maybe\nschedule: every hour\ntimezone: Mars/Olympus\nactions:\n  dispatch: no-thanks\n  launch: true\n---\n");
-    expect(rules.problems).toEqual(expect.arrayContaining([
-      "enabled must be true or false",
-      "schedule: schedule must be a valid cron expression",
-      expect.stringContaining("timezone"),
+    const rules = parseRules("---\nemployee: 7\nactions:\n  dispatch: no-thanks\n  launch: true\n---\n");
+    expect(rules.problems).toEqual([
+      "employee must be a string (got number)",
       "actions.dispatch must be true or false",
       expect.stringContaining("actions.launch is not an action"),
-    ]));
+    ]);
+  });
+
+  it("reads the retired schedule keys as nothing, not as a problem", () => {
+    const rules = parseRules("---\nenabled: maybe\nschedule: every hour\ntimezone: Mars/Olympus\n---\n");
+    expect(rules.problems).toEqual([]);
+    expect(rules.retiredKeys).toEqual(["enabled", "schedule", "timezone"]);
+    expect(rules.settings).toEqual(BOARD_WALK_DEFAULTS);
   });
 
   it("refuses frontmatter that is not YAML, and a missing file", () => {
@@ -88,11 +93,13 @@ describe("converting gateway.idleCapacity into prose", () => {
       tiers: { daytime: { fiveHour: { maxUsedPercent: 40, lookaheadMinutes: 90 }, maxDispatchesPerWindow: 4 }, interactive: { enabled: false } },
       requireLabel: "auto-ok",
     };
-    const { text, notes } = convertLegacyBlock(TEMPLATE, block);
+    const { text, notes, timezone } = convertLegacyBlock(TEMPLATE, block);
+    // The zone goes to the walk's cron job, not the file.
+    expect(timezone).toBe("America/New_York");
     const rules = parseRules(text);
     expect(rules.problems).toEqual([]);
     // The old loop's interval is not a model schedule: every tick is a turn now.
-    expect(rules.settings).toMatchObject({ timezone: "America/New_York", schedule: "0 * * * *" });
+    expect(rules.retiredKeys).toEqual([]);
     expect(rules.settings.actions.dispatch).toBe(false);
     const section = dispatchSection(text);
     expect(section).toContain("within the last 45 minutes");
@@ -103,15 +110,14 @@ describe("converting gateway.idleCapacity into prose", () => {
     expect(section).toContain("Never start anything in these situations: operator live.");
     expect(section).toContain("Only Todos labelled `auto-ok`.");
     // Every other section is the template's, untouched.
-    expect(text.replace(section, "")).toBe(TEMPLATE.replace(dispatchSection(TEMPLATE), "").replace('timezone: ""', 'timezone: "America/New_York"').replace(/^(\s+dispatch:) true$/m, "$1 false"));
+    expect(text.replace(section, "")).toBe(TEMPLATE.replace(dispatchSection(TEMPLATE), "").replace(/^(\s+dispatch:) true$/m, "$1 false"));
     expect(notes).toEqual(expect.arrayContaining([expect.stringContaining("schedule left hourly (the old loop ticked every 15 min"), "dispatch off (the auto-start was not enabled)"]));
   });
 
-  it("an enabled block keeps dispatch on, and an absent interval keeps the hourly default", () => {
-    const rules = parseRules(convertLegacyBlock(TEMPLATE, { enabled: true }).text);
-    expect(rules.settings.actions.dispatch).toBe(true);
-    expect(rules.settings.schedule).toBe("0 * * * *");
-    expect(rules.settings.timezone).toBe("Europe/London");
+  it("an enabled block keeps dispatch on, and an absent zone is the old default", () => {
+    const converted = convertLegacyBlock(TEMPLATE, { enabled: true });
+    expect(parseRules(converted.text).settings.actions.dispatch).toBe(true);
+    expect(converted.timezone).toBe("Europe/London");
   });
 
   it("states different concurrency per situation when the tiers differ", () => {
@@ -141,12 +147,12 @@ describe("seeding board-walk.md", () => {
     expect(result).toMatchObject({ seeded: true, converted: false, removedBlock: false });
     expect(fs.readFileSync(path.join(home, "board-walk.md"), "utf-8")).toBe(TEMPLATE);
     expect(readConfig(home).gateway.idleCapacity).toBeUndefined();
-    expect(describeSeed(result)).toBe("Board walk: created board-walk.md from the template");
+    expect(describeSeed(result)).toBe('Board walk: created board-walk.md from the template; added the "board-walk" cron job with the default schedule: 0 * * * *, enabled');
   });
 
   it("an upgrade leaves an edited file untouched, and a second run does nothing", () => {
     const home = fresh("gateway:\n  port: 7777\n");
-    const edited = "---\nenabled: false\n---\n# Mine\n";
+    const edited = "---\nemployee: cvo\n---\n# Mine\n";
     fs.writeFileSync(path.join(home, "board-walk.md"), edited);
     expect(seedBoardWalk(opts(home))).toMatchObject({ seeded: false, removedBlock: false });
     expect(fs.readFileSync(path.join(home, "board-walk.md"), "utf-8")).toBe(edited);

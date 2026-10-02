@@ -2,23 +2,26 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { JINN_HOME, TEMPLATE_DIR } from "../shared/paths.js";
-import { validateCronSchedule } from "../cron/validation.js";
 
 /**
  * The board walk's rules file: `$JINN_HOME/board-walk.md`.
  *
- * The YAML frontmatter holds the mechanical settings — whether the walk runs,
- * when, as whom, on which model, and a hard switch per action. The Markdown body
- * is the operator's prose: what counts as a gate, what the walk may do, and when
- * and what to dispatch. The gateway reads the frontmatter; only the model reads
- * the body.
+ * The YAML frontmatter holds the mechanical settings — as whom the walk runs,
+ * on which model, and a hard switch per action. The Markdown body is the
+ * operator's prose: what counts as a gate, what the walk may do, and when and
+ * what to dispatch. The gateway reads the frontmatter; only the model reads the
+ * body.
+ *
+ * When the walk runs is not here: it is the `board-walk` cron job (job.ts), so
+ * it is listed, run, rescheduled and switched off like any other job. The
+ * frontmatter keys that used to hold it (`enabled`, `schedule`, `timezone`) are
+ * moved into that job once, on upgrade, and are not read after that.
  *
  * The switches exist so that "off" never depends on a model following prose.
  * `actions.dispatch: false` means the gateway refuses every start the walk asks
  * for, whatever the body says; the body can only narrow what a switch allows.
  *
- * The file is re-read on every tick and by the scheduler's poll, so an edit takes
- * effect without a restart. A file that cannot be read or parsed is reported as a
+ * The file is re-read on every tick, so an edit takes effect without a restart. A file that cannot be read or parsed is reported as a
  * problem and the walk does nothing: a broken rules file is never a reason to act.
  */
 
@@ -32,11 +35,6 @@ export const BOARD_WALK_ACTIONS = ["release", "park", "flagStuck", "dispatch", "
 export type BoardWalkAction = (typeof BOARD_WALK_ACTIONS)[number];
 
 export interface BoardWalkSettings {
-  enabled: boolean;
-  /** Five-field cron expression. */
-  schedule: string;
-  /** IANA zone the schedule and the walk's "local time" are read in. */
-  timezone: string;
   /** The employee whose engine runs the walk's turn. */
   employee: string;
   /** Model for the walk's turn; undefined means the employee's own. */
@@ -52,7 +50,12 @@ export interface BoardWalkRules {
   problems: string[];
   /** False when there is no file at all. */
   exists: boolean;
+  /** Retired schedule keys still in the frontmatter. They are not read. */
+  retiredKeys: string[];
 }
+
+/** The frontmatter keys the cron job took over. */
+export const RETIRED_SCHEDULE_KEYS = ["enabled", "schedule", "timezone"] as const;
 
 export function hostTimezone(): string {
   try {
@@ -63,15 +66,21 @@ export function hostTimezone(): string {
 }
 
 export const BOARD_WALK_DEFAULTS: BoardWalkSettings = {
-  enabled: true,
-  schedule: "0 * * * *",
-  timezone: "",
   employee: "assistant",
   model: "sonnet",
   actions: { release: true, park: true, flagStuck: true, dispatch: true, comment: true },
 };
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+
+/** Where the frontmatter's own text sits in `text` (between the fences), or
+ *  null when the file has none. */
+export function frontmatterSpan(text: string): { start: number; end: number } | null {
+  const match = FRONTMATTER.exec(text);
+  if (!match) return null;
+  const start = text.startsWith("---\r\n") ? 5 : 4;
+  return { start, end: start + match[1].length };
+}
 
 export function splitFrontmatter(text: string): { frontmatter: string | null; body: string } {
   const match = FRONTMATTER.exec(text);
@@ -114,13 +123,6 @@ function actionSettings(raw: unknown, problems: string[]): Record<BoardWalkActio
   return actions;
 }
 
-function enabledSetting(raw: unknown, problems: string[]): boolean {
-  if (raw === undefined) return BOARD_WALK_DEFAULTS.enabled;
-  if (typeof raw === "boolean") return raw;
-  problems.push("enabled must be true or false");
-  return BOARD_WALK_DEFAULTS.enabled;
-}
-
 /** An explicit empty model means "the employee's own"; absent means the default. */
 function modelSetting(mapping: Record<string, unknown>, problems: string[]): string | undefined {
   if (mapping.model === undefined) return BOARD_WALK_DEFAULTS.model;
@@ -128,20 +130,31 @@ function modelSetting(mapping: Record<string, unknown>, problems: string[]): str
 }
 
 /** Resolve a parsed frontmatter mapping onto the defaults, collecting problems. */
-export function resolveSettings(raw: unknown): { settings: BoardWalkSettings; problems: string[] } {
+export function resolveSettings(raw: unknown): { settings: BoardWalkSettings; problems: string[]; retiredKeys: string[] } {
   const problems: string[] = [];
   const mapping = raw ?? {};
   if (!isMapping(mapping)) {
-    return { settings: { ...BOARD_WALK_DEFAULTS, timezone: hostTimezone() }, problems: ["the frontmatter must be a YAML mapping"] };
+    return { settings: { ...BOARD_WALK_DEFAULTS }, problems: ["the frontmatter must be a YAML mapping"], retiredKeys: [] };
   }
-  const enabled = enabledSetting(mapping.enabled, problems);
-  const schedule = stringSetting(mapping, "schedule", problems) || BOARD_WALK_DEFAULTS.schedule;
-  const timezone = stringSetting(mapping, "timezone", problems) || hostTimezone();
-  for (const error of validateCronSchedule({ schedule, timezone })) problems.push(`${error.field}: ${error.message}`);
   const employee = stringSetting(mapping, "employee", problems) || BOARD_WALK_DEFAULTS.employee;
   const model = modelSetting(mapping, problems);
   const actions = actionSettings(mapping.actions, problems);
-  return { settings: { enabled, schedule, timezone, employee, ...(model ? { model } : {}), actions }, problems };
+  // Not a problem: a retired key changes nothing, so it is no reason to hold.
+  const retiredKeys = RETIRED_SCHEDULE_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(mapping, key));
+  return { settings: { employee, ...(model ? { model } : {}), actions }, problems, retiredKeys };
+}
+
+/** The parsed frontmatter mapping, or undefined when there is none or it is not
+ *  a YAML mapping. */
+export function frontmatterMapping(text: string): Record<string, unknown> | undefined {
+  const { frontmatter } = splitFrontmatter(text);
+  if (frontmatter === null) return undefined;
+  try {
+    const raw = yaml.load(frontmatter);
+    return isMapping(raw) ? raw : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function parseRules(text: string): Omit<BoardWalkRules, "exists"> {
@@ -157,7 +170,7 @@ export function parseRules(text: string): Omit<BoardWalkRules, "exists"> {
     }
   }
   const resolved = resolveSettings(raw);
-  return { settings: resolved.settings, body: body.trim(), problems: [...problems, ...resolved.problems] };
+  return { settings: resolved.settings, body: body.trim(), problems: [...problems, ...resolved.problems], retiredKeys: resolved.retiredKeys };
 }
 
 export function readRules(file: string = boardWalkPath()): BoardWalkRules {
@@ -167,10 +180,11 @@ export function readRules(file: string = boardWalkPath()): BoardWalkRules {
   } catch (error) {
     const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
     return {
-      settings: { ...BOARD_WALK_DEFAULTS, timezone: hostTimezone() },
+      settings: { ...BOARD_WALK_DEFAULTS },
       body: "",
       problems: [missing ? `${BOARD_WALK_FILE} does not exist` : `${BOARD_WALK_FILE} could not be read: ${error instanceof Error ? error.message : String(error)}`],
       exists: false,
+      retiredKeys: [],
     };
   }
   return { ...parseRules(text), exists: true };

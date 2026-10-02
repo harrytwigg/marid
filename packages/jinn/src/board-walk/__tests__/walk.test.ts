@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { EngineLimitEngineSnapshot, EngineLimitsResponse, JinnConfig, Session } from "../../shared/types.js";
+import type { CronJob, EngineLimitEngineSnapshot, EngineLimitsResponse, JinnConfig, Session } from "../../shared/types.js";
 import type { StartTodoDispatcherResult } from "../../gateway/todo-dispatch.js";
 import type { BoardTodo } from "../board.js";
 import type { CapacitySnapshot } from "../snapshot.js";
@@ -62,9 +62,7 @@ beforeAll(async () => {
   fs.writeFileSync(RULES, TEMPLATE);
 });
 
-const walks: Array<{ stop: () => void }> = [];
 afterEach(() => {
-  for (const walk of walks.splice(0)) walk.stop();
   const present = new Set(m.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").pluck().all() as string[]);
   for (const table of ["work_item_claims", "work_item_comments", "work_item_labels", "work_item_dispatch", "work_item_auto_start",
     "work_item_stop_cause", "work_item_blocks", "work_item_relations", "work_item_events", "work_items"]) {
@@ -175,6 +173,7 @@ function open(opts: {
   startAll?: boolean;
   turnTimeoutMs?: number;
   stopped?: string[];
+  job?: CronJob;
 } = {}): Harness {
   const turns: WalkTurn[] = [];
   const dispatched: string[] = [];
@@ -183,7 +182,7 @@ function open(opts: {
     context: {} as never,
     rulesFile: RULES,
     now: () => NOW,
-    pollMs: 3_600_000,
+    scheduleJob: () => opts.job,
     runTurn: async (turn) => {
       turns.push(turn);
       return opts.reply ? opts.reply(turn) : { sessionId: `walk-${turns.length}`, reply: fakeModel(turn.prompt, { startAll: opts.startAll }) };
@@ -207,7 +206,6 @@ function open(opts: {
       exhausted: () => false,
     },
   });
-  walks.push(walk);
   return { walk, turns, dispatched };
 }
 
@@ -364,17 +362,43 @@ describe("board walk dispatch", () => {
 // ── Switches and logging ─────────────────────────────────────────────────────
 
 describe("board walk switches and the tick log", () => {
-  it("enabled: false stops everything: no model turn, no move, a logged reason", async () => {
-    fs.writeFileSync(RULES, TEMPLATE.replace("enabled: true", "enabled: false"));
+  it("has no switch of its own: the cron job is what runs it, and the status says which", async () => {
     const past = blocked("Renew the cert", { body: "not before 2026-09-30" });
-    todo("Ready work");
+    const job: CronJob = { id: "board-walk", name: "Board walk", enabled: false, schedule: "30 * * * *", timezone: "Asia/Tokyo", prompt: "", action: "board-walk" };
+    const h = open({ job });
+    // A disabled job is not fired by the scheduler; a run-now still ticks.
+    expect(h.walk.status()).toMatchObject({ scheduled: false, job: { id: "board-walk", enabled: false, schedule: "30 * * * *", timezone: "Asia/Tokyo" } });
+    const tick = await h.walk.tick("manual");
+    expect(tick.outcome).toBe("ok");
+    expect(status(past.id)).toBe("backlog");
+    // "Local time" is read in the job's zone.
+    expect(h.turns[0].prompt).toContain("in Asia/Tokyo.");
+    expect(open({ job: { ...job, enabled: true } }).walk.status()).toMatchObject({ scheduled: true });
+    expect(open().walk.status()).toMatchObject({ scheduled: false, job: null });
+  });
+
+  it("a retired enabled: false in the file switches nothing off, and the status names the stale key", async () => {
+    fs.writeFileSync(RULES, TEMPLATE.replace("employee: assistant", "enabled: false\nemployee: assistant"));
+    const past = blocked("Renew the cert", { body: "not before 2026-09-30" });
     const h = open();
-    const tick = await h.walk.tick();
-    expect(tick.outcome).toBe("disabled");
-    expect(h.turns).toEqual([]);
-    expect(h.dispatched).toEqual([]);
-    expect(status(past.id)).toBe("blocked");
-    expect(h.walk.status()).toMatchObject({ scheduled: false, settings: { enabled: false } });
+    expect((await h.walk.tick()).outcome).toBe("ok");
+    expect(status(past.id)).toBe("backlog");
+    expect(h.walk.status().retiredKeys).toEqual(["enabled"]);
+  });
+
+  it("a scheduled fire landing on a running tick is skipped with its own record, never stacked", async () => {
+    todo("Ready work");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const h = open({ reply: async (turn) => { await gate; return { sessionId: "slow", reply: fakeModel(turn.prompt) }; } });
+    const first = h.walk.tick("schedule");
+    const second = await h.walk.tick("schedule");
+    expect(second).toMatchObject({ outcome: "busy", trigger: "schedule" });
+    const joined = h.walk.tick("manual");
+    release();
+    expect((await first).outcome).toBe("ok");
+    expect(await joined).toBe(await first);
+    expect(h.turns).toHaveLength(1);
   });
 
   it("turning off just dispatch keeps readiness running and starts nothing", async () => {
@@ -525,14 +549,13 @@ describe("board walk review round 2", () => {
     const item = todo("Write the release notes", { priority: 3 });
     const events: string[] = [];
     const walk = m.walk.startBoardWalk({
-      getConfig: () => config, context: {} as never, rulesFile: RULES, now: () => NOW, pollMs: 3_600_000,
+      getConfig: () => config, context: {} as never, rulesFile: RULES, now: () => NOW, scheduleJob: () => undefined,
       runTurn: async (turn) => ({ reply: fakeModel(turn.prompt) }),
       resolveLink: async (url, kind) => ({ url, kind, state: "unknown" }),
       sessions: () => [], holdingCapacity: () => [], collectClaude: async () => claude(15),
       emitProjectionEvent: (id, action) => events.push(`${id}:${action}`),
       snapshot: { collect: async () => limits(15), usageHistory: () => [], statuslineMtime: () => undefined, startedSince: () => [], exhausted: () => false },
     });
-    walks.push(walk);
     dispatcherStarts.length = 0;
     await walk.tick();
     expect(dispatcherStarts.map((start) => start.id)).toEqual([item.id]);
@@ -633,3 +656,47 @@ describe("a release is checked against the gates it cites", () => {
     expect(tick.entries[0].outcome).toBe("only the operator releases it: it holds an unanswered approval question");
   });
 });
+
+describe("the board walk as a cron job", () => {
+  const job: CronJob = { id: "board-walk", name: "Board walk", enabled: true, schedule: "0 * * * *", prompt: "", action: "board-walk" };
+  const runs = async () => {
+    const { CRON_RUNS } = await import("../../shared/paths.js");
+    const file = path.join(CRON_RUNS, "board-walk.jsonl");
+    return fs.existsSync(file) ? fs.readFileSync(file, "utf-8").trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>) : [];
+  };
+
+  it("a fire of the job runs one tick and records it as a run, with no engine session or Todo of its own", async () => {
+    const { runCronJob } = await import("../../cron/runner.js");
+    const { setCronActionHandler } = await import("../../cron/actions.js");
+    const { boardWalkCronHandler } = await import("../job.js");
+    const past = blocked("Renew the cert", { body: "not before 2026-09-30" });
+    const h = open({ job });
+    setCronActionHandler("board-walk", boardWalkCronHandler(h.walk));
+    const route = vi.fn();
+    const todos = () => m.db.prepare("SELECT COUNT(*) FROM work_items").pluck().get() as number;
+    const before = todos();
+    try {
+      await runCronJob(job, { route } as never, config, new Map(), { trigger: "schedule", fireIso: "2026-10-02T12:00:00.000Z" });
+      await runCronJob(job, { route } as never, config, new Map());
+    } finally {
+      setCronActionHandler("board-walk", null);
+    }
+    expect(h.turns).toHaveLength(2);
+    expect(status(past.id)).toBe("backlog");
+    expect(route).not.toHaveBeenCalled();
+    expect(todos()).toBe(before);
+    expect(m.boardStore.readTicks(10).map((tick) => tick.trigger)).toEqual(["manual", "schedule"]);
+    const logged = (await runs()).slice(-2);
+    expect(logged).toEqual([
+      expect.objectContaining({ status: "success", trigger: "schedule", sessionId: "walk-1", error: null }),
+      expect.objectContaining({ status: "success", trigger: "manual", sessionId: "walk-2", error: null }),
+    ]);
+  });
+
+  it("a fire with no walk to run is a failed run, not a silent one", async () => {
+    const { runCronJob } = await import("../../cron/runner.js");
+    await runCronJob(job, {} as never, config, new Map(), { trigger: "schedule" });
+    expect((await runs()).at(-1)).toMatchObject({ status: "error", error: "the board-walk action is not available in this gateway" });
+  });
+});
+

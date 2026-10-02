@@ -10,6 +10,7 @@ import type { SessionManager } from "../sessions/manager.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
 import { loadJobs, saveJobs } from "./jobs.js";
 import { validateCronSchedule } from "./validation.js";
+import { cronActionError } from "./actions.js";
 
 type SchedulerDeps = {
   sessionManager: SessionManager;
@@ -29,12 +30,22 @@ export function startScheduler(jobs: CronJob[], schedulerDeps: SchedulerDeps): v
 export function reloadScheduler(jobs: CronJob[]): { scheduled: number; skipped: number } {
   const started: cron.ScheduledTask[] = [];
   let skipped = 0;
+  // A built-in action is scheduled once: a second enabled job naming the same
+  // action (a hand-edited copy) would tick it twice, so it is skipped.
+  const actionsScheduled = new Map<string, string>();
   for (const job of jobs) {
     if (!job.enabled) continue;
+    const firstForAction = job.action ? actionsScheduled.get(job.action) : undefined;
+    if (firstForAction) {
+      skipped += 1;
+      logger.warn(`Skipping cron job "${job.name}": the ${job.action} action is already scheduled by "${firstForAction}"`);
+      continue;
+    }
     try {
       const task = createTask(job);
       task.start();
       started.push(task);
+      if (job.action) actionsScheduled.set(job.action, job.name);
       logger.info(`Scheduled cron job "${job.name}" (${job.schedule})`);
     } catch (err) {
       skipped += 1;
@@ -58,6 +69,8 @@ function createTask(job: CronJob): cron.ScheduledTask {
   if (validation.length > 0) {
     throw new Error(validation.map((entry) => entry.message).join('; '));
   }
+  const actionError = cronActionError(job);
+  if (actionError) throw new Error(actionError);
   return cron.schedule(
     job.schedule,
     () => {
@@ -65,7 +78,7 @@ function createTask(job: CronJob): cron.ScheduledTask {
       // (not recomputed inside runCronJob) and names the same session/work-item/link
       // on any re-invocation of this fire (GRS-003b-1).
       const fireIso = new Date().toISOString();
-      runCronJob(job, deps.sessionManager, deps.getConfig(), deps.connectors, { fireIso, emit: deps.emit }).catch((err) => {
+      runCronJob(job, deps.sessionManager, deps.getConfig(), deps.connectors, { fireIso, emit: deps.emit, trigger: "schedule" }).catch((err) => {
         logger.error(`Cron job "${job.name}" crashed: ${err instanceof Error ? err.message : err}`);
       });
     },
