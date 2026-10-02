@@ -9,7 +9,6 @@ import {
   type WorkItemDetailWire,
 } from "@/lib/api"
 import { commentAuthorLabel, operatorSafeTodoError } from "@/lib/todos"
-import { stripMarkdown } from "@/lib/strip-markdown"
 import { MarkdownView } from "@/components/markdown-view"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { useMentionPicker } from "@/components/mention-picker"
@@ -23,9 +22,10 @@ import { buildFeed, stripCommentMarkers } from "./activity-feed"
 import { RunEndLine, RunStartLine } from "./runs"
 
 /* The merged activity feed keeps audit events quiet and comment voices
- * prominent. Long comments collapse independently to syntax-free previews;
- * full bodies share MarkdownView with the rest of Jinn. The same multiline
- * composer docks at the thread edge on desktop and mobile. */
+ * prominent. Long comments collapse independently to a clamped preview; the
+ * preview renders the same Markdown as the expanded body so links stay
+ * clickable while collapsed. The same multiline composer docks at the thread
+ * edge on desktop and mobile. */
 
 export const COMMENT_COLLAPSE_THRESHOLD = 320
 
@@ -38,10 +38,6 @@ function commentAuthor(comment: WorkItemCommentWire, byName: Map<string, Employe
   if (comment.authorKind === "operator") return "You"
   const label = comment.authorKind === "employee" ? displayNameOf(comment.author, byName) : commentAuthorLabel(comment.author, comment.authorKind)
   return <SessionActor actor={comment.author} byName={byName}>{label}</SessionActor>
-}
-
-function commentPreview(body: string): string {
-  return stripMarkdown(stripCommentMarkers(body)).replace(/\s*\n+\s*/g, " ")
 }
 
 function CommentBlock({
@@ -137,9 +133,12 @@ function CommentBlock({
           {tombstoned ? (
             <span className="italic text-[var(--text-quaternary)]">[deleted]</span>
           ) : collapsible && !expanded ? (
-            <p className="line-clamp-3 break-words text-[var(--text-tertiary)]">
-              {commentPreview(comment.body)}
-            </p>
+            <div
+              data-testid={`activity-preview-${comment.id}`}
+              className="line-clamp-3 break-words text-[var(--text-tertiary)] [&_.jinn-markdown]:text-[var(--text-tertiary)] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+            >
+              <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={byName} />
+            </div>
           ) : (
             <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={byName} />
           )}
