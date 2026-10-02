@@ -188,6 +188,25 @@ describe("OpencodeEngine — reading opencode's event stream", () => {
     expect(result.numTurns).toBe(1);
   });
 
+  it.each([
+    ["text", text("Let me verify x before y.")],
+    ["a tool call", { type: "tool_use", sessionID: SESSION, part: { type: "tool", tool: "bash", callID: "c1", state: { status: "completed", input: { command: "ls" }, output: "a" } } }],
+  ])("a turn that failed mid-step after %s keeps its session: it is not read as a dead resume id", async (_what, line) => {
+    // No step finished (the error, or an Esc, came mid-step), so there is no
+    // step accounting — but the model ran in this session, which is alive.
+    hoisted.exitCode = 1;
+    hoisted.lines = [
+      { type: "step_start", sessionID: SESSION, part: { type: "step-start" } },
+      line,
+      { type: "error", sessionID: SESSION, error: { name: "MessageAbortedError", data: { message: "aborted" } } },
+    ];
+
+    const result = await new OpencodeEngine().run(runOpts());
+
+    expect(result.error).toBe("MessageAbortedError: aborted");
+    expect(isDeadSessionError(result)).toBe(false);
+  });
+
   it("still answers with text that came after an error: the turn went on and finished", async () => {
     hoisted.lines = [
       { type: "error", sessionID: SESSION, error: { name: "UnknownError", data: { message: "blip" } } },
