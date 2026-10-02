@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import type { WorkItemStatusWire } from "@/lib/api"
+import type { Employee, WorkItemStatusWire } from "@/lib/api"
 import { useAddTodoComment } from "@/routes/todos/use-todo-comment"
 import { useEmployeesByName, useOrg, useTodoById } from "@/routes/todos/use-todos"
 import { displayNameOf } from "@/routes/todos/util"
@@ -21,6 +21,9 @@ import type { SearchRow } from "./rows"
 /** Names this surface's anchors and pickers (see `useTodoQuickPickers`). */
 export const WORKBENCH_PREFIX = "workbench"
 
+const NO_EMPLOYEES: Employee[] = []
+const employeesOf = (org: { employees: Employee[] } | undefined): Employee[] => org?.employees ?? NO_EMPLOYEES
+
 export interface TodoWorkbench {
   id: string
   /** Read from the same `["work-item"]` cache the status lane patches
@@ -34,6 +37,8 @@ export interface TodoWorkbench {
   loading: boolean
   /** The gateway has answered, and there is no such Todo any more. */
   missing: boolean
+  /** The org's employees, for the composer's @mention picker. */
+  employees: Employee[]
   rowFor: (key: TodoQuickPickerKey) => TodoQuickPickerRow
   /** The one refusal line — a picker's or the composer's, whichever spoke last. */
   error: string | null
@@ -87,10 +92,11 @@ export function useTodoWorkbench(
   const detailQuery = useTodoById(id)
   const detail = detailQuery.data ?? undefined
   const org = useOrg()
-  const byName = useEmployeesByName(org.data?.employees)
+  const employees = employeesOf(org.data)
+  const byName = useEmployeesByName(employees)
   const pickers = useTodoQuickPickers({
     detail,
-    employees: org.data?.employees ?? [],
+    employees,
     shell: "inline",
     prefix: WORKBENCH_PREFIX,
     onOpenChange: onPickerOpenChange,
@@ -105,6 +111,7 @@ export function useTodoWorkbench(
     assignee: assignee ? displayNameOf(assignee, byName) : assignee,
     loading: detailQuery.isPending,
     missing: !detailQuery.isPending && !detail,
+    employees,
     rowFor: pickers.rowFor,
     error: pickers.refusal.message,
     comment,
