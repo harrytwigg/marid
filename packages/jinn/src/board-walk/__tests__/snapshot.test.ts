@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { EngineLimitsResponse, JinnConfig, Session } from "../../shared/types.js";
 import type { UsageSample } from "../../shared/claude-usage-history.js";
-import { buildCapacitySnapshot } from "../snapshot.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { buildCapacitySnapshot, newestOperatorStatuslineMtime } from "../snapshot.js";
 import { projectWindow } from "../projection.js";
 import { countStarts, startedBy, toStartedSession } from "../started-sessions.js";
 import { cachedResolver, findLinks, type LinkState } from "../pr-state.js";
@@ -62,7 +65,11 @@ describe("capacity snapshot", () => {
       usageHistory: () => samples([[60, 10], [40, 14], [20, 18], [0, 22]]),
       statuslineMtime: () => NOW - 3 * 60_000,
       startedSince: (_since, engine) => engine === "claude"
-        ? [toStartedSession(session({ transportMeta: { startedBy: "board-walk" } })), toStartedSession(session({ employee: "todo-dispatcher" }))]
+        ? [
+          toStartedSession(session({ transportMeta: { startedBy: "board-walk" } })),
+          toStartedSession(session({ employee: "todo-dispatcher" })),
+          toStartedSession(session({ source: "cron", sessionKey: "board-walk:2026-10-02T11:00:00.000Z" })),
+        ]
         : [],
       exhausted: () => false,
     });
@@ -88,6 +95,27 @@ describe("capacity snapshot", () => {
     });
     expect(snapshot.operator).toEqual({});
     expect(snapshot.engines[0].exhausted).toBe(true);
+  });
+});
+
+describe("the interactive-CLI operator signal", () => {
+  it("counts a statusline snapshot only when its session is one the operator drives", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-statusline-"));
+    const write = (id: string, at: number) => {
+      fs.writeFileSync(path.join(dir, `${id}.json`), "{}");
+      fs.utimesSync(path.join(dir, `${id}.json`), at / 1000, at / 1000);
+    };
+    write("operator-chat", NOW - 40 * 60_000);
+    write("walk-turn", NOW - 60_000);
+    write("delegated", NOW - 30_000);
+    write("unknown", NOW - 10_000);
+    const sessions = [
+      session({ id: "operator-chat" }),
+      session({ id: "walk-turn", source: "cron", sessionKey: "board-walk:x" }),
+      session({ id: "delegated", parentSessionId: "operator-chat" }),
+    ];
+    expect(newestOperatorStatuslineMtime(sessions, dir)).toBe(NOW - 40 * 60_000);
+    expect(newestOperatorStatuslineMtime([], dir)).toBeUndefined();
   });
 });
 

@@ -98,7 +98,7 @@ The prompt carries one structure with readings and predictions, and no verdict:
 - **Predictions for the Claude windows.** These come from the retained readings (`tmp/engine-limits/claude-usage-history.json`): the rate, the share expected at the reset, the share expected to lapse unused, and the exhaustion time if it comes before the reset. A prediction needs three readings, over half an hour for the five-hour window and six hours for a weekly one. Otherwise it says why it has none.
 - **The operator-activity signals.** These are given as times and deltas, not as a verdict:
   - when the newest activity was on a session the operator drives (top-level, not cron, not a system employee);
-  - when a Jinn interactive Claude session last wrote its statusline;
+  - when a Jinn Claude session the operator drives last wrote its statusline. Every Jinn Claude session writes one, including the walk's own turn and delegated work, so only the operator's own sessions count;
   - how much the Claude five-hour usage has risen since the previous tick's reading, and whether any Jinn session ran in between.
 
   The previous reading is taken after the walk's own turn, so the walk's own spend is not counted as the operator's. Whether all of this means "the operator is live" is the rules file's call.

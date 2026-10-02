@@ -45,14 +45,15 @@ export interface SnapshotEngine {
   windows: SnapshotWindow[];
   holdingCapacityNow: number;
   /** Sessions started on this engine since its five-hour window opened, when
-   *  the engine reports one; otherwise over the last five hours. */
+   *  the engine reports one; otherwise over the last five hours. The walk's
+   *  own turns are left out. */
   startedThisWindow: StartCounts & { since: string };
 }
 
 export interface OperatorSignals {
   /** Newest activity on a session the operator drives (top-level, not cron, not a system employee). */
   lastOperatorSessionActivity?: { at: string; minutesAgo: number };
-  /** Newest turn in a Jinn interactive Claude session (the dashboard's CLI mode). */
+  /** Newest turn in a Jinn Claude session the operator drives (its statusline snapshot). */
   lastInteractiveCliTurn?: { at: string; minutesAgo: number };
   /** The Claude five-hour usage since the previous tick's reading of the same window. */
   claudeUsageSincePreviousTick?: {
@@ -111,12 +112,17 @@ export function newestOperatorSessionActivity(sessions: readonly Session[]): num
   return stamps.length > 0 ? Math.max(...stamps) : undefined;
 }
 
-/** The newest `*.json` under the Claude limits dir, by mtime: the statusline
- *  recorder in a Jinn interactive Claude session writes one every turn. */
-export function newestStatuslineMtime(dir = CLAUDE_LIMITS_DIR): number | undefined {
+/** The newest statusline snapshot written by a session the operator drives.
+ *  Every Jinn Claude session installs the recorder and writes
+ *  `<session id>.json` on each turn — the walk's own turn, cron and delegated
+ *  work included — so a snapshot only says "the operator" when its session is
+ *  one they drive. A file whose session the registry does not list is not
+ *  counted. */
+export function newestOperatorStatuslineMtime(sessions: readonly Session[], dir = CLAUDE_LIMITS_DIR): number | undefined {
+  const driven = new Set(sessions.filter(operatorDrivenSession).map((session) => session.id));
   try {
     const stamps = fs.readdirSync(dir)
-      .filter((name) => name.endsWith(".json"))
+      .filter((name) => name.endsWith(".json") && driven.has(name.slice(0, -".json".length)))
       .map((name) => fs.statSync(path.join(dir, name)).mtimeMs);
     return stamps.length > 0 ? Math.max(...stamps) : undefined;
   } catch {
@@ -199,7 +205,12 @@ function snapshotEngine(engine: EngineLimitEngineSnapshot, ctx: EngineContext): 
     exhausted: ctx.exhausted(engine.name, ctx.now),
     windows: snapshotWindows(engine, ctx.now, ctx.history),
     holdingCapacityNow: ctx.holding.filter((session) => session.engine === engine.name).length,
-    startedThisWindow: { ...countStarts(ctx.startedSince(since, engine.name)), since: new Date(since).toISOString() },
+    // The walk's own turns are not starts of work; counting them would read
+    // as the walk having already spent its starts for the window.
+    startedThisWindow: {
+      ...countStarts(ctx.startedSince(since, engine.name).filter((session) => session.startedBy !== "board-walk")),
+      since: new Date(since).toISOString(),
+    },
   };
 }
 
@@ -208,7 +219,7 @@ function operatorSignals(deps: SnapshotDeps, claude: EngineLimitEngineSnapshot |
   const operator: OperatorSignals = {};
   const operatorAt = sighting(newestOperatorSessionActivity(sessions), now);
   if (operatorAt) operator.lastOperatorSessionActivity = operatorAt;
-  const cliAt = sighting((deps.statuslineMtime ?? newestStatuslineMtime)(), now);
+  const cliAt = sighting(deps.statuslineMtime ? deps.statuslineMtime() : newestOperatorStatuslineMtime(sessions), now);
   if (cliAt) operator.lastInteractiveCliTurn = cliAt;
   const fiveHour = claudeFiveHour(claude, now);
   if (fiveHour && prior && prior.resetsAt === fiveHour.resetsAt) {
