@@ -8,7 +8,11 @@ import { transition } from "../work-items/transitions.js";
 import { addComment } from "../work-items/comment-add.js";
 import type { StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { BoardWalkSettings } from "./settings.js";
-import type { StartDecision, TodoDecision, WalkDecisions } from "./decisions.js";
+import type { Gate, StartDecision, TodoDecision, WalkDecisions } from "./decisions.js";
+import { findLinks, type LinkResolver } from "./pr-state.js";
+import { listComments } from "../work-items/comments.js";
+import { listRelations } from "../work-items/relations.js";
+import { listWorkItemEvents } from "../work-items/event-log.js";
 import { OPEN_STATUSES, noAutoStartReason, statusSince } from "./board.js";
 import type { BoardWalkState, TickEntry } from "./store.js";
 
@@ -33,6 +37,8 @@ export interface ApplyDeps {
   state: BoardWalkState;
   dispatch: (item: WorkItem, decision: StartDecision) => StartTodoDispatcherResult;
   now: () => number;
+  /** Re-checks a cited pull request or issue at release time. */
+  resolveLink: LinkResolver;
 }
 
 const OPEN = new Set<string>(OPEN_STATUSES);
@@ -52,13 +58,73 @@ function comment(settings: BoardWalkSettings, item: WorkItem, body: string): voi
   }
 }
 
+/** Whether the Todo's current stop is an approval carried over from the
+ *  retired approvals feature: a question a person was asked and has not
+ *  answered (work-items/retired-approvals.ts). */
+function heldByRetiredApproval(item: WorkItem): boolean {
+  const events = listWorkItemEvents(item.id);
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].kind !== "status_change") continue;
+    return events[i].toStatus === item.status && events[i].detail?.reason === "retired-approval";
+  }
+  return false;
+}
+
 /** Why a Todo is the operator's to move, or undefined. A Todo assigned to the
- *  operator, or stopped with the operator named as who must act, is waiting on
- *  a person's decision: the walk may flag it, never release or park it. */
+ *  operator, stopped with the operator named as who must act, or holding an
+ *  approval question carried over from the retired approvals, is waiting on a
+ *  person's decision: the walk may flag it, never release or park it. */
 export function operatorGate(item: WorkItem): string | undefined {
   if (item.assignee === OPERATOR_ASSIGNEE) return "it is assigned to the operator";
   const hint = readStopCause(initDb(), item.id)?.unblockHint;
   if (hint && /\boperator\b/i.test(hint.who)) return `it waits on ${hint.who} (${hint.what})`;
+  if (item.status === "blocked" && heldByRetiredApproval(item)) return `it holds an unanswered approval question${hint ? ` for ${hint.who}` : ""}`;
+  return undefined;
+}
+
+/** Everything a Todo says, where a gate can be named: title, body,
+ *  acceptance and every comment. */
+function todoText(item: WorkItem): string[] {
+  return [item.title, item.body ?? "", item.acceptance ?? "", ...listComments(item.id, { limit: 500 }).comments.map((comment) => comment.body)];
+}
+
+function dateProblem(date: string, now: number): string | undefined {
+  const at = Date.parse(date);
+  if (!Number.isFinite(at)) return `the date ${date} does not parse`;
+  return at <= now ? undefined : `the date ${date} has not passed`;
+}
+
+function blockerProblem(item: WorkItem, id: string, text: string[]): string | undefined {
+  const blocker = getWorkItem(id);
+  if (!blocker) return `blocker ${id} does not exist`;
+  const related = listRelations(item.id).some((relation) => relation.kind === "blocks" && relation.direction === "in" && relation.other.id === blocker.id);
+  if (!related && !text.some((part) => part.includes(blocker.id))) return `${blocker.id} is not a blocker this Todo names`;
+  return blocker.status === "done" ? undefined : `blocker ${blocker.id} is ${blocker.status}, not done`;
+}
+
+async function linkProblem(gate: Extract<Gate, { url: string }>, deps: ApplyDeps, text: string[]): Promise<string | undefined> {
+  if (!findLinks(text, 100).some((link) => link.url === gate.url)) return `${gate.url} is not linked from this Todo`;
+  const state = await deps.resolveLink(gate.url, gate.kind === "pr" ? "pull" : "issue");
+  const met = gate.kind === "pr" ? state.state === "MERGED" : state.state === "CLOSED" || state.state === "MERGED";
+  return met ? undefined : `${gate.url} is ${state.state}${state.error ? ` (${state.error})` : ""}`;
+}
+
+/** Why a cited gate is not met, or undefined when the gateway confirms it. */
+function gateProblem(item: WorkItem, gate: Gate, deps: ApplyDeps, text: string[]): Promise<string | undefined> | string | undefined {
+  if (gate.kind === "date") return dateProblem(gate.date, deps.now());
+  if (gate.kind === "blocker") return blockerProblem(item, gate.id, text);
+  return linkProblem(gate, deps, text);
+}
+
+/** Every cited gate checked by the gateway itself; the model's word is not
+ *  enough to move a Todo out of `blocked`. */
+async function unmetGate(item: WorkItem, gates: Gate[] | undefined, deps: ApplyDeps): Promise<string | undefined> {
+  if (!gates || gates.length === 0) return "a release must cite the gates that are met (a date, a blocker or a pull request), so the gateway can check them";
+  const text = todoText(item);
+  for (const gate of gates) {
+    const problem = await gateProblem(item, gate, deps, text);
+    if (problem) return problem;
+  }
   return undefined;
 }
 
@@ -66,12 +132,14 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function release(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): TickEntry {
+async function release(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): Promise<TickEntry> {
   const entry: TickEntry = { kind: "release", workItemId: item.id, reason: decision.reason };
   if (!deps.settings.actions.release) return { ...entry, kind: "refused", outcome: "release is switched off" };
   if (item.status === "backlog") return { ...entry, outcome: "already in the queue" };
   const gate = operatorGate(item);
   if (gate) return { ...entry, kind: "refused", outcome: `only the operator releases it: ${gate}` };
+  const unmet = await unmetGate(item, decision.gates, deps);
+  if (unmet) return { ...entry, kind: "refused", outcome: `gate not confirmed: ${unmet}` };
   if (item.status !== "blocked") return { ...entry, kind: "refused", outcome: `only a blocked Todo is released; this one is ${item.status}` };
   try {
     transition(item.id, "backlog", BOARD_WALK_ACTOR, { detail: { reason: "board-walk-release", note: decision.reason } });
@@ -143,7 +211,7 @@ function flag(deps: ApplyDeps, item: WorkItem, decision: TodoDecision): TickEntr
   return { ...entry, outcome: deps.settings.actions.comment ? "flagged with a comment" : "flagged (comments are switched off)" };
 }
 
-function applyTodo(deps: ApplyDeps, decision: TodoDecision): TickEntry {
+async function applyTodo(deps: ApplyDeps, decision: TodoDecision): Promise<TickEntry> {
   const item = getWorkItem(decision.id);
   if (!item) return { kind: "refused", workItemId: decision.id, reason: decision.reason, outcome: "no such Todo" };
   if (!OPEN.has(item.status)) {
@@ -184,9 +252,9 @@ function pruneFlags(state: BoardWalkState): void {
   }
 }
 
-export function applyDecisions(deps: ApplyDeps, decisions: WalkDecisions): TickEntry[] {
+export async function applyDecisions(deps: ApplyDeps, decisions: WalkDecisions): Promise<TickEntry[]> {
   const entries: TickEntry[] = [];
-  for (const decision of decisions.todos) entries.push(applyTodo(deps, decision));
+  for (const decision of decisions.todos) entries.push(await applyTodo(deps, decision));
 
   const { start: starts, reason } = decisions.dispatch;
   if (!deps.settings.actions.dispatch) {

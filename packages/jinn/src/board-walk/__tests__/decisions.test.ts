@@ -37,17 +37,16 @@ describe("reading the walk's answer", () => {
 });
 
 describe("the walk's turn has no tools", () => {
-  const employee = { name: "assistant", engine: "claude", model: "sonnet", cliFlags: ["--chrome", "--verbose"], mcp: true } as unknown as Employee;
-
-  it("detaches every MCP server and, on Claude, switches off the built-in tools and pins the engine", () => {
-    expect(lockedDownEmployee(employee)).toEqual({
-      employee: { ...employee, mcp: false, jinnMcp: false, cliFlags: ["--verbose", "--tools", "", "--strict-mcp-config"] },
-      engine: "claude",
+  it("runs as the employee on Claude, on the gateway, with no MCP, no built-in tools and none of its own flags", () => {
+    const employee = {
+      name: "assistant", engine: "opencode", model: "x", cliFlags: ["--agent", "build"], mcp: true,
+      remoteHost: "box", remoteUser: "u", remoteCwd: "/w",
+    } as unknown as Employee;
+    expect(lockedDownEmployee(employee, "sonnet")).toEqual({
+      name: "assistant", engine: "claude", model: "sonnet", mcp: false, jinnMcp: false,
+      cliFlags: ["--tools", "", "--strict-mcp-config"],
     });
-  });
-
-  it("passes no Claude flags to another engine", () => {
-    const opencode = { ...employee, engine: "opencode", cliFlags: undefined } as unknown as Employee;
-    expect(lockedDownEmployee(opencode)).toEqual({ employee: { ...opencode, mcp: false, jinnMcp: false } });
+    const onClaude = { name: "assistant", engine: "claude", model: "opus", cliFlags: ["--chrome"] } as unknown as Employee;
+    expect(lockedDownEmployee(onClaude, "sonnet")).toMatchObject({ engine: "claude", model: "opus", cliFlags: ["--tools", "", "--strict-mcp-config"] });
   });
 });

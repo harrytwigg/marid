@@ -7,9 +7,10 @@ enabled: true
 schedule: "0 * * * *"
 # IANA zone for the schedule and for "local time" below. Empty = the gateway host's zone.
 timezone: ""
-# The employee whose engine runs the walk's one turn per tick.
+# Who the walk's one turn per tick runs as. It always runs on Claude, on the
+# gateway, with no tools: the walk decides and the gateway acts.
 employee: assistant
-# Model for that turn. Empty = the employee's own model.
+# Claude model for that turn. Empty = the employee's own, or Claude's default.
 model: sonnet
 # Hard switches. false means the gateway refuses that action whatever the prose
 # below says. The prose can narrow what a switch allows; it cannot widen it.

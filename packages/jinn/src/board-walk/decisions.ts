@@ -13,6 +13,13 @@ export type Verdict = (typeof VERDICTS)[number];
 export const TODO_ACTIONS = ["release", "park", "flag", "none"] as const;
 export type TodoAction = (typeof TODO_ACTIONS)[number];
 
+/** A gate the gateway can check for itself. A release must cite every gate
+ *  it relies on, and each one is verified before the Todo moves. */
+export type Gate =
+  | { kind: "date"; date: string }
+  | { kind: "blocker"; id: string }
+  | { kind: "pr" | "issue"; url: string };
+
 export interface TodoDecision {
   id: string;
   verdict: Verdict;
@@ -20,6 +27,8 @@ export interface TodoDecision {
   reason: string;
   /** For `park`: when the gate opens (ISO-8601). */
   until?: string;
+  /** For `release`: the gates that are now met. */
+  gates?: Gate[];
 }
 
 export interface StartDecision {
@@ -89,6 +98,24 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim() : undefined;
 
+function gate(raw: unknown): Gate | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (raw.kind === "date" && text(raw.date)) return { kind: "date", date: text(raw.date)! };
+  if (raw.kind === "blocker" && text(raw.id)) return { kind: "blocker", id: text(raw.id)! };
+  if ((raw.kind === "pr" || raw.kind === "issue") && text(raw.url)) return { kind: raw.kind, url: text(raw.url)! };
+  return undefined;
+}
+
+function gatesOf(raw: unknown, id: string, problems: string[]): Gate[] | undefined {
+  if (raw === undefined) return undefined;
+  const list = Array.isArray(raw) ? raw : [];
+  const gates = list.map(gate);
+  if (!Array.isArray(raw) || gates.some((entry) => entry === undefined)) {
+    problems.push(`${id} has gates the gateway cannot read; each is {kind: date, date} | {kind: blocker, id} | {kind: pr|issue, url}`);
+  }
+  return gates.filter((entry): entry is Gate => entry !== undefined);
+}
+
 function todoDecision(raw: unknown, index: number, problems: string[]): TodoDecision | undefined {
   if (!isRecord(raw)) { problems.push(`todos[${index}] is not an object`); return undefined; }
   const id = text(raw.id);
@@ -100,7 +127,8 @@ function todoDecision(raw: unknown, index: number, problems: string[]): TodoDeci
   if (!TODO_ACTIONS.includes(action)) { problems.push(`todos[${index}] (${id}) has action ${JSON.stringify(raw.action)}; expected ${TODO_ACTIONS.join(", ")}`); return undefined; }
   if (!reason) { problems.push(`todos[${index}] (${id}) gives no reason`); return undefined; }
   const until = text(raw.until);
-  return { id, verdict, action, reason, ...(until ? { until } : {}) };
+  const gates = gatesOf(raw.gates, id, problems);
+  return { id, verdict, action, reason, ...(until ? { until } : {}), ...(gates ? { gates } : {}) };
 }
 
 function startDecision(raw: unknown, index: number, problems: string[]): StartDecision | undefined {

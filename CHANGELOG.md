@@ -66,13 +66,13 @@
 ### ✨ Features
 - **A default board walk releases ready Todos and starts work on spare capacity.**
   - **One rules file.** `$JINN_HOME/board-walk.md` is seeded from the template and never overwritten. Its frontmatter holds `enabled`, `schedule` (hourly), `timezone`, `employee` (the Assistant), `model` (Sonnet) and one hard switch per action. The prose body says what counts as a gate, what the walk may do, and when and what to start; the shipped Dispatch section restates the old numeric policy in plain English.
-  - **One turn per tick.** Each tick builds a capacity snapshot: every engine's readings, reset times, Claude predictions, sessions holding capacity, starts this window by what started them, and the operator-activity signals. It reads every open Todo with its comments, relations and linked GitHub PR or issue state. It then asks the configured employee's engine for one structured answer, in a turn with no tools: every MCP server is detached and, on Claude, the built-in tools are switched off. A turn that has not answered in 10 minutes fails the tick, and a walk turn cut off by a restart is not resumed.
+  - **One turn per tick.** Each tick builds a capacity snapshot: every engine's readings, reset times, Claude predictions, sessions holding capacity, starts this window by what started them, and the operator-activity signals. It reads every open Todo with its comments, relations and linked GitHub PR or issue state. It then asks the configured employee's engine for one structured answer, in a turn with no tools: it always runs on Claude, on the gateway, with every MCP server detached and the built-in tools switched off, and it is never handed to a fallback engine. A turn that has not answered in 10 minutes fails the tick, and a walk turn cut off by a restart is not resumed.
   - **The gateway carries the answer out.**
-    - It releases a `blocked` Todo whose gate is met, with a reason comment.
+    - It releases a `blocked` Todo whose gate is met, with a reason comment. The release must cite its gates (a date, a blocker, a pull request or issue), and the gateway checks each one before the Todo moves.
     - It parks a plain date gate.
     - It flags a stuck Todo once per stuck episode.
     - It starts a ready backlog Todo through the Todo Dispatcher. A `no-auto-start` label, `autoStart: false` and an operator-assigned Todo are refused in code.
-    - It never releases or parks a Todo assigned to the operator, or stopped with the operator named as who must act; it may flag one.
+    - It never releases or parks a Todo assigned to the operator, stopped with the operator named as who must act, or holding an approval question carried over from the retired approvals; it may flag one. It never parks a Todo stopped for a person, since a park releases itself on its date.
     - Every decision and every "nothing to do" goes to `logs/board-walk.jsonl` with a reason.
   - **Off is certain.** `enabled: false` stops everything. `actions.dispatch: false` keeps readiness running and starts nothing.
   - **The Auto-Dispatch page is read-only.** It shows the walk's settings and recent ticks, the usage graph, and every session started per engine, read from the session registry whatever started it.

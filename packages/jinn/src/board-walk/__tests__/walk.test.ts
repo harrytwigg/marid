@@ -127,15 +127,16 @@ function fakeModel(prompt: string, opts: { startAll?: boolean } = {}): string {
     const pr = item.links.find((link) => link.kind === "pull");
     let gateMet: boolean | undefined;
     let reason = "";
-    if (date) { gateMet = Date.parse(date) <= now; reason = `not before ${date}`; }
-    if (blocker) { gateMet = blocker.other.status === "done"; reason = `blocked by ${blocker.other.id} (${blocker.other.status})`; }
-    if (pr) { gateMet = pr.state === "MERGED"; reason = `${pr.url} is ${pr.state}`; }
+    const gates: Array<Record<string, string>> = [];
+    if (date) { gateMet = Date.parse(date) <= now; reason = `not before ${date}`; gates.push({ kind: "date", date }); }
+    if (blocker) { gateMet = blocker.other.status === "done"; reason = `blocked by ${blocker.other.id} (${blocker.other.status})`; gates.push({ kind: "blocker", id: blocker.other.id }); }
+    if (pr) { gateMet = pr.state === "MERGED"; reason = `${pr.url} is ${pr.state}`; gates.push({ kind: "pr", url: pr.url }); }
     if (/stuck/.test(item.title)) {
       decisions.push({ id: item.id, verdict: "stuck", action: "flag", reason: "no change for days; the operator should decide" });
     } else if (gateMet === undefined) {
       continue;
     } else if (item.status === "blocked" && gateMet) {
-      decisions.push({ id: item.id, verdict: "ready", action: "release", reason: `gate met: ${reason}` });
+      decisions.push({ id: item.id, verdict: "ready", action: "release", reason: `gate met: ${reason}`, gates });
     } else if (!gateMet && date && /park/.test(item.title)) {
       decisions.push({ id: item.id, verdict: "gated", action: "park", until: `${date}T00:00:00Z`, reason: `gate open: ${reason}` });
     } else if (!gateMet) {
@@ -539,5 +540,42 @@ describe("board walk review round 2", () => {
     expect(opts.promptSuffix).toMatch(/^The board walk started this Todo\. Its reason: /);
     opts.emitProjectionEvent(item.id, "dispatched");
     expect(events).toEqual([`${item.id}:dispatched`]);
+  });
+});
+
+describe("a release is checked against the gates it cites", () => {
+  const releaseReply = (id: string, gates?: unknown) => () => ({ reply: JSON.stringify({ todos: [{ id, verdict: "ready", action: "release", reason: "met", ...(gates ? { gates } : {}) }], dispatch: { start: [], reason: "nothing" } }) });
+
+  it.each([
+    ["no gate at all", undefined, "a release must cite the gates that are met"],
+    ["a date still ahead", [{ kind: "date", date: "2026-11-01" }], "the date 2026-11-01 has not passed"],
+    ["a pull request the Todo does not link", [{ kind: "pr", url: "https://github.com/acme/widgets/pull/9" }], "https://github.com/acme/widgets/pull/9 is not linked from this Todo"],
+    ["an open pull request", [{ kind: "pr", url: "https://github.com/acme/widgets/pull/18" }], "https://github.com/acme/widgets/pull/18 is OPEN"],
+  ])("refuses a release citing %s", async (_label, gates, outcome) => {
+    const item = blocked("Waiting", { body: "after https://github.com/acme/widgets/pull/18 merges" });
+    const h = open({ reply: releaseReply(item.id, gates), links: { "https://github.com/acme/widgets/pull/18": "OPEN" } });
+    const tick = await h.walk.tick();
+    expect(status(item.id)).toBe("blocked");
+    expect(tick.entries[0]).toMatchObject({ kind: "refused", workItemId: item.id, outcome: expect.stringContaining(outcome) });
+  });
+
+  it("refuses a blocker the Todo does not name, and one that is not done", async () => {
+    const stranger = todo("Unrelated");
+    m.transitions.transition(stranger.id, "done", "operator", { human: true });
+    const open1 = todo("Still going");
+    const item = blocked("Waiting", { body: `after ${open1.id}` });
+    const first = await open({ reply: releaseReply(item.id, [{ kind: "blocker", id: stranger.id }]) }).walk.tick();
+    expect(first.entries[0].outcome).toBe(`gate not confirmed: ${stranger.id} is not a blocker this Todo names`);
+    const second = await open({ reply: releaseReply(item.id, [{ kind: "blocker", id: open1.id }]) }).walk.tick();
+    expect(second.entries[0].outcome).toBe(`gate not confirmed: blocker ${open1.id} is backlog, not done`);
+    expect(status(item.id)).toBe("blocked");
+  });
+
+  it("never releases an approval question carried over from the retired approvals, even with a met gate", async () => {
+    const item = todo("Approve the spend", { body: "not before 2026-09-30" });
+    m.transitions.transition(item.id, "blocked", "migration", { detail: { reason: "retired-approval" }, stopCause: { unblockHint: { what: "approve the spend?", who: "senior-developer" } } });
+    const tick = await open({ reply: releaseReply(item.id, [{ kind: "date", date: "2026-09-30" }]) }).walk.tick();
+    expect(status(item.id)).toBe("blocked");
+    expect(tick.entries[0].outcome).toBe("only the operator releases it: it holds an unanswered approval question for senior-developer");
   });
 });

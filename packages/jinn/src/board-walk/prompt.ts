@@ -18,7 +18,8 @@ const ANSWER_FORMAT = `Answer with exactly one JSON object in a \`\`\`json fence
 {
   "todos": [
     { "id": "<Todo id>", "verdict": "ready | gated | stuck | unclear", "action": "release | park | flag | none",
-      "reason": "<one or two plain sentences>", "until": "<ISO-8601, only for park>" }
+      "reason": "<one or two plain sentences>", "until": "<ISO-8601, only for park>",
+      "gates": [ { "kind": "date", "date": "<YYYY-MM-DD>" } | { "kind": "blocker", "id": "<Todo id>" } | { "kind": "pr" | "issue", "url": "<GitHub URL>" } ] }
   ],
   "dispatch": {
     "start": [ { "id": "<backlog Todo id>", "reason": "<why this one, now>", "engine": "<optional preference>", "model": "<optional preference>" } ],
@@ -29,7 +30,7 @@ const ANSWER_FORMAT = `Answer with exactly one JSON object in a \`\`\`json fence
 \`\`\`
 
 - List every Todo you release, park or flag, and every Todo you judge gated, stuck or unclear (action "none" when you leave it). A backlog Todo with no gate and nothing to say may be left out.
-- "release" moves a blocked Todo back to backlog. "park" moves a backlog or blocked Todo to blocked until "until", after which the gateway re-queues it by itself. "flag" comments once that the Todo looks stuck.
+- "release" moves a blocked Todo back to backlog. It must list in "gates" every gate that is now met, and the gateway checks each one itself (the date has passed; the blocker is done and is named by this Todo; the pull request linked from this Todo has merged, or the issue has closed). A release whose gates cannot be checked is refused, so a Todo waiting on a person's decision is flagged, not released. "park" moves a backlog or blocked Todo to blocked until "until", after which the gateway re-queues it by itself. "flag" comments once that the Todo looks stuck.
 - Only use ids from the board below. Never invent a Todo, a date or a pull request state.
 - If a gate depends on something the board does not show, the verdict is "unclear": leave the Todo alone and say what is missing.
 - dispatch.start may be empty; dispatch.reason is required either way.`;
