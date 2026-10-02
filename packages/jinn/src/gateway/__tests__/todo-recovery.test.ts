@@ -110,9 +110,7 @@ describe("the classifier", () => {
     });
     store.appendWorkItemEvent({
       workItemId: item.id, kind: "status_change", fromStatus: "backlog", toStatus: "executing",
-      // A dispatched start is the reconciler's move; an operator's own move after
-      // the failure would answer it (recovery-controller.test.ts).
-      actor: "reconciler", detail: { runId: attempt.id }, versionEffect: "audit",
+      actor: "operator", detail: { runId: attempt.id }, versionEffect: "audit",
     });
     expect(detect.detectAnomalyFor(item.id)).toBeUndefined();
 

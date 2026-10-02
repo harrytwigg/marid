@@ -283,4 +283,22 @@ describe("the operator resuming a blocked Todo", () => {
     controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
     expect(rows.getWorkItemRecovery(id)).toMatchObject({ class: "code", lane: "manager", lastRunId: run.id });
   });
+
+  // Only the resume answers the run: anything else the operator or an agent
+  // records on the stop leaves recovery reading it, auto-repair included.
+  it.each([
+    ["the operator annotating the stop", { kind: "note", toStatus: "blocked", actor: "operator" }],
+    ["the operator re-blocking it", { kind: "status_change", fromStatus: "blocked", toStatus: "blocked", actor: "operator" }],
+    ["an agent's own unblock", { kind: "status_change", fromStatus: "blocked", toStatus: "executing", actor: "platform-worker" }],
+  ] as const)("keeps reading the failed run across %s", (_label, event) => {
+    const { id, runId } = parked(`no answer: ${_label}`, "the build step exited with code 1");
+    store.appendWorkItemEvent({ workItemId: id, ...event, detail: { note: "waiting on the vendor" }, versionEffect: "audit" });
+    const rearm: string[] = [];
+    controller.sweepTodoRecovery({
+      mode: "auto",
+      rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; },
+    });
+    expect(rearm).toContain(id);
+    expect(rows.getWorkItemRecovery(id)).toMatchObject({ class: "code", lane: "manager", lastRunId: runId });
+  });
 });
