@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mapAttachmentsForRemote, remoteAttachmentsDir } from "../remote-attachments.js";
+import { mapAttachmentsForRemote, REMOTE_COPY_MAX_BYTES, remoteAttachmentsDir } from "../remote-attachments.js";
 
 const SESSION_HOME = "/home/builder/.jinn-remote-stage/sessions/sess-1__claude";
 
@@ -73,14 +73,47 @@ describe("mapAttachmentsForRemote", () => {
     expect(mapped).toContain(`/${remoteAttachmentsDir("sess-1")}/`);
   });
 
-  it("refuses credential and session-config files, and a missing file, naming the file", () => {
+  // The farm links every home entry for every session, so the remote can already
+  // open these by path. Refusing them would only drop the operator's message.
+  it("does not refuse a file under a linked entry that the policy would hide, because the remote can already open it", () => {
+    const pem = write(home, "uploads/2026-10-02/sess-1/server-cert.pem", "pem");
     const secret = write(home, "secrets/api-keys.json", "{}");
-    expect(() => mapAttachmentsForRemote([secret], opts())).toThrow(/api-keys\.json.*secrets/i);
-    const config = write(home, "config.yaml", "x: 1");
-    expect(() => mapAttachmentsForRemote([config], opts())).toThrow(/config\.yaml/);
+    expect(mapAttachmentsForRemote([pem, secret], opts())).toEqual([
+      `${SESSION_HOME}/uploads/2026-10-02/sess-1/server-cert.pem`,
+      `${SESSION_HOME}/secrets/api-keys.json`,
+    ]);
+    // Mapping a linked file reads and copies nothing.
+    expect(fs.readdirSync(path.join(home, "uploads/2026-10-02/sess-1")).sort()).toEqual(["server-cert.pem"]);
+  });
+
+  it("refuses to COPY a file the policy hides, and copies nothing", () => {
+    const sessionConfig = write(home, "tmp/mcp/sess-1.json", "{}");
+    const env = write(elsewhere, ".env", "KEY=1");
+    expect(() => mapAttachmentsForRemote([sessionConfig], opts())).toThrow(/sess-1\.json.*credential or session-config/i);
+    expect(() => mapAttachmentsForRemote([env], opts())).toThrow(/\.env.*environment secret/i);
+    expect(fs.existsSync(path.join(home, remoteAttachmentsDir("sess-1")))).toBe(false);
+  });
+
+  // A link BELOW a protected entry is refused by the name it is asked for, even
+  // though its target is benign and outside the home.
+  it("refuses to copy a symlink below a protected entry whose target is benign", () => {
+    const target = write(elsewhere, "benign.txt", "hello");
+    const link = path.join(home, "tmp", "mcp", "sess-1.json");
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    fs.symlinkSync(target, link);
+    expect(() => mapAttachmentsForRemote([link], opts())).toThrow(/credential or session-config/i);
+    expect(fs.existsSync(path.join(home, remoteAttachmentsDir("sess-1")))).toBe(false);
+  });
+
+  it("refuses a missing file and a directory, naming the file", () => {
     expect(() => mapAttachmentsForRemote([path.join(home, "uploads/nope.png")], opts())).toThrow(/nope\.png.*does not exist/);
     expect(() => mapAttachmentsForRemote([home], opts())).toThrow(/not a regular file/);
-    // Nothing was copied for a refused file.
+  });
+
+  it("refuses to copy more than the cap, and leaves no partial file", () => {
+    const big = path.join(elsewhere, "big.bin");
+    fs.writeFileSync(big, Buffer.alloc(REMOTE_COPY_MAX_BYTES + 1));
+    expect(() => mapAttachmentsForRemote([big], opts())).toThrow(/big\.bin.*25 MB per-file limit/);
     expect(fs.existsSync(path.join(home, remoteAttachmentsDir("sess-1")))).toBe(false);
   });
 

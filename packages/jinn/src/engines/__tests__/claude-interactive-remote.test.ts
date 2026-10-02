@@ -303,13 +303,13 @@ describe("InteractiveClaudeEngine — remote branch", () => {
       expect(hoisted.spawns).toHaveLength(spawnsBefore);
     });
 
-    it("rejects the turn, spawning nothing, for an attachment the file-read policy refuses", async () => {
-      const secret = path.join(JINN_HOME, "secrets", "api-keys.json");
+    it("rejects the turn, spawning nothing, for a copied attachment the file-read policy refuses", async () => {
+      const secret = path.join(JINN_HOME, "tmp", "mcp", "sess-1.json");
       fs.mkdirSync(path.dirname(secret), { recursive: true });
       fs.writeFileSync(secret, "{}");
 
       await expect(engine.run({ sessionId: SID, prompt: "x", cwd: "/tmp", ...TARGET, attachments: [secret] } as any))
-        .rejects.toThrow(/api-keys\.json.*secrets/i);
+        .rejects.toThrow(/sess-1\.json.*credential or session-config/i);
       expect(hoisted.spawns).toHaveLength(0);
     });
 

@@ -361,12 +361,12 @@ describe("OpencodeEngine — a remote employee's turn runs on the other machine"
     expect(prompt).not.toContain(JINN_HOME);
   });
 
-  it("fails the turn, spawning nothing, for an attachment the policy refuses", async () => {
-    const secret = path.join(JINN_HOME, "secrets", "api-keys.json");
+  it("fails the turn, spawning nothing, for a copied attachment the policy refuses", async () => {
+    const secret = path.join(JINN_HOME, "tmp", "mcp", "sess-1.json");
     fs.mkdirSync(path.dirname(secret), { recursive: true });
     fs.writeFileSync(secret, "{}");
 
-    await expect(engine().run(runOpts({ attachments: [secret] }))).rejects.toThrow(/api-keys\.json.*secrets/i);
+    await expect(engine().run(runOpts({ attachments: [secret] }))).rejects.toThrow(/sess-1\.json.*credential or session-config/i);
     expect(hoisted.spawns).toHaveLength(0);
   });
 });
