@@ -3,11 +3,28 @@ const KNOWLEDGE_ROOTS = new Set(["knowledge", "docs"]);
 const MANAGED_ROOTS = new Set(["files", "uploads"]);
 
 export type FileReadRequest =
-  | { ok: true; url: string }
+  | { ok: true; url: string; rawUrl?: string }
   | { ok: false; error: string };
 
-/** Build the scoped gateway request for a path already decoded once by the UI. */
-export function buildFileReadRequest(path: string): FileReadRequest {
+/**
+ * A path a chat linked is read where the SESSION that named it runs: absolute,
+ * `~/`, or relative to its working directory, on the gateway or a build host.
+ * That includes `docs/…`-shaped paths: for a remote session sitting in a repo
+ * they name the repo's docs, not the instance's.
+ */
+function sessionFileRequest(path: string, sessionId: string): FileReadRequest {
+  const base = `/api/sessions/${encodeURIComponent(sessionId)}/files`;
+  try {
+    const query = `?path=${encodeURIComponent(path)}`;
+    return { ok: true, url: `${base}/read${query}`, rawUrl: `${base}/raw${query}` };
+  } catch {
+    return { ok: false, error: "File path contains invalid Unicode" };
+  }
+}
+
+/** Build the scoped gateway request for a path already decoded once by the UI.
+ *  `sessionId` is the chat the path was linked from, when there is one. */
+export function buildFileReadRequest(path: string, sessionId?: string | null): FileReadRequest {
   if (!path) return { ok: false, error: "No file path provided" };
   if (path !== path.trim()) {
     return { ok: false, error: "File path must not have leading or trailing whitespace" };
@@ -15,6 +32,7 @@ export function buildFileReadRequest(path: string): FileReadRequest {
   if (CONTROL_BYTES.test(path)) {
     return { ok: false, error: "File path contains control bytes" };
   }
+  if (sessionId) return sessionFileRequest(path, sessionId);
   if (path.startsWith("/") || path.startsWith("~/") || /^[A-Za-z]:[\\/]/.test(path)) {
     return { ok: false, error: "File path must be relative to a supported root" };
   }

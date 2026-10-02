@@ -2,7 +2,7 @@ import type { ComponentProps, ComponentType, ReactNode } from 'react'
 import { ChatPane } from '@/components/chat/chat-pane'
 import { resolvePaneTitle, safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { usePaneTabsShown } from '@/components/chat/pane-tabs-context'
-import { FileOpenContext } from '@/components/chat/file-open-context'
+import { FileLinkSessionContext } from '@/components/chat/file-link-session-context'
 import type { CommsPeekData } from '@/components/chat/thread-peek'
 import type { DelegatedActivity } from '@/lib/api'
 import type { ViewMode } from '@/lib/view-mode'
@@ -50,7 +50,6 @@ interface MultiChatGridProps {
   onRemove: (sessionId: string) => void
   onMeta: (sessionId: string, meta: PaneMetaUpdate) => void
   onNewMeta: (meta: PaneMetaUpdate) => void
-  onOpenFile: (sessionId: string, path: string) => void
   onPeek: (sessionId: string, peek: CommsPeekData) => void
   onNewChat: PaneProps['onNewChat']
   onRefresh: PaneProps['onRefresh']
@@ -184,9 +183,9 @@ function GridChatPane({
     />
   )
   return (
-    <FileOpenContext.Provider value={(path) => { if (sessionId) owner.onOpenFile(sessionId, path) }}>
+    <FileLinkSessionContext.Provider value={sessionId}>
       {pane}
-    </FileOpenContext.Provider>
+    </FileLinkSessionContext.Provider>
   )
 }
 

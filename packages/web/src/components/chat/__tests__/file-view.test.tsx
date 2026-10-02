@@ -1,8 +1,7 @@
-import { useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Message } from "@/lib/conversations";
-import { FileOpenContext } from "../file-open-context";
+import { FileLinkSessionContext } from "../file-link-session-context";
 import { FileView } from "../file-view";
 import { ChatMessages } from "../chat-messages";
 import { createBrowserGatewayTransport, installGatewayTransport } from "@/lib/gateway-transport";
@@ -88,8 +87,7 @@ const literalPercentChatPaths = [
   ["files/%2e", "/api/files/read?path=files/%252e"],
 ] as const;
 
-function ChatFileHarness({ path }: { path: string }) {
-  const [openedPath, setOpenedPath] = useState<string | null>(null);
+function ChatFileHarness({ path, sessionId = null }: { path: string; sessionId?: string | null }) {
   const messages: Message[] = [{
     id: `message-${path}`,
     role: "assistant",
@@ -98,20 +96,31 @@ function ChatFileHarness({ path }: { path: string }) {
   }];
 
   return (
-    <FileOpenContext.Provider value={setOpenedPath}>
+    <FileLinkSessionContext.Provider value={sessionId}>
       <ChatMessages messages={messages} loading={false} />
-      {openedPath ? <FileView path={openedPath} embedded /> : null}
-    </FileOpenContext.Provider>
+    </FileLinkSessionContext.Provider>
   );
+}
+
+/** A chat file link is a plain new-tab link: the click is never intercepted
+ *  in-page, and the tab it opens is the standalone /file route. */
+function openInNewTab(link: HTMLElement) {
+  expect(link.getAttribute("target")).toBe("_blank");
+  expect(link.getAttribute("rel")).toContain("noopener");
+  expect(fireEvent.click(link)).toBe(true);
+  expect(fetchMock).not.toHaveBeenCalled();
+  const url = new URL(link.getAttribute("href") ?? "", "http://ui.test");
+  expect(url.pathname).toBe("/file");
+  render(<FileView path={url.searchParams.get("path") ?? ""} sessionId={url.searchParams.get("session")} />);
 }
 
 describe("FileView requests opened from chat", () => {
   it.each(supportedPaths)("routes %s to its scoped read endpoint", async (path, expectedUrl) => {
     render(<ChatFileHarness path={path} />);
 
-    const link = screen.getByTitle(`Open ${path} in viewer`);
+    const link = screen.getByTitle(`Open ${path} in a new tab`);
     expect(link.getAttribute("href")).toBe(`/file?path=${encodeURIComponent(path)}`);
-    fireEvent.click(link);
+    openInNewTab(link);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       `${GATEWAY_ORIGIN}${expectedUrl}`,
@@ -122,9 +131,9 @@ describe("FileView requests opened from chat", () => {
   it.each(specialChatPaths)("linkifies and opens special chat path %s", async (path, expectedUrl) => {
     render(<ChatFileHarness path={path} />);
 
-    const link = screen.getByTitle(`Open ${path} in viewer`);
+    const link = screen.getByTitle(`Open ${path} in a new tab`);
     expect(link.getAttribute("href")).toBe(`/file?path=${encodeURIComponent(path)}`);
-    fireEvent.click(link);
+    openInNewTab(link);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       `${GATEWAY_ORIGIN}${expectedUrl}`,
@@ -135,9 +144,9 @@ describe("FileView requests opened from chat", () => {
   it.each(literalPercentChatPaths)("round-trips literal percent-like chat path %s", async (path, expectedUrl) => {
     render(<ChatFileHarness path={path} />);
 
-    const link = screen.getByTitle(`Open ${path} in viewer`);
+    const link = screen.getByTitle(`Open ${path} in a new tab`);
     expect(link.getAttribute("href")).toBe(`/file?path=${encodeURIComponent(path)}`);
-    fireEvent.click(link);
+    openInNewTab(link);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       `${GATEWAY_ORIGIN}${expectedUrl}`,
@@ -145,12 +154,71 @@ describe("FileView requests opened from chat", () => {
     ));
   });
 
+  it.each([
+    ["/srv/work/evidence/report.md", "/api/sessions/session-1/files/read?path=%2Fsrv%2Fwork%2Fevidence%2Freport.md"],
+    ["~/notes/plan.md", "/api/sessions/session-1/files/read?path=~%2Fnotes%2Fplan.md"],
+    ["src/app/main.ts", "/api/sessions/session-1/files/read?path=src%2Fapp%2Fmain.ts"],
+    // An instance-root-shaped path from a session is still the session's: a remote agent's docs/ is its repo's.
+    ["docs/README.md", "/api/sessions/session-1/files/read?path=docs%2FREADME.md"],
+  ] as const)("opens session path %s on the session's host in a new tab", async (path, expectedUrl) => {
+    render(<ChatFileHarness path={path} sessionId="session-1" />);
+
+    const link = screen.getByTitle(`Open ${path} in a new tab`);
+    expect(link.getAttribute("href")).toBe(`/file?path=${encodeURIComponent(path)}&session=session-1`);
+    openInNewTab(link);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      `${GATEWAY_ORIGIN}${expectedUrl}`,
+      expect.objectContaining({ credentials: "include" }),
+    ));
+  });
+
+  it("leaves a non-root path unlinked when no session is known", () => {
+    render(<ChatFileHarness path="/srv/work/evidence/report.md" />);
+
+    expect(screen.getByText(/\/srv\/work\/evidence\/report\.md/)).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("previews a session image inline from the raw route and names its host", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ path: "/srv/work/shot.png", host: "build-box", mime: "image/png", size: 2048, binary: true, tooLarge: false, previewable: true }),
+    } as Response);
+
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, blob: async () => new Blob(["png"]) } as Response);
+    const createObjectURL = vi.fn(() => "blob:shot");
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() }));
+
+    render(<FileView path="/srv/work/shot.png" sessionId="session-1" />);
+
+    // The image goes through authFetch (credentials included), not a bare <img src>.
+    const image = await screen.findByRole("img", { name: "shot.png" });
+    expect(image.getAttribute("src")).toBe("blob:shot");
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `${GATEWAY_ORIGIN}/api/sessions/session-1/files/raw?path=%2Fsrv%2Fwork%2Fshot.png`,
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(screen.getByText(/on build-box/)).toBeTruthy();
+  });
+
+  it("describes a binary session file the gateway will not serve raw", async () => {
+    const svg = { path: "/srv/work/a.svg", mime: "image/svg+xml", size: 10, binary: true, tooLarge: false, previewable: false };
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => svg } as Response);
+
+    render(<FileView path="/srv/work/a.svg" sessionId="session-1" embedded />);
+
+    expect(await screen.findByText(/Binary file/)).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
   it("keeps a lone-surrogate supported-root path as inline code", () => {
     const path = `files/bad${String.fromCharCode(0xd800)}.txt`;
 
     expect(() => render(<ChatFileHarness path={path} />)).not.toThrow();
     expect(screen.getByText(path, { selector: "code" })).toBeTruthy();
-    expect(screen.queryByTitle(`Open ${path} in viewer`)).toBeNull();
+    expect(screen.queryByTitle(`Open ${path} in a new tab`)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -165,7 +233,7 @@ describe("FileView requests opened from chat", () => {
     render(<ChatFileHarness path={path} />);
 
     expect(screen.getByText(path, { selector: "code" })).toBeTruthy();
-    expect(screen.queryByTitle(`Open ${path} in viewer`)).toBeNull();
+    expect(screen.queryByTitle(`Open ${path} in a new tab`)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
