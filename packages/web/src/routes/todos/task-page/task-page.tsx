@@ -14,7 +14,7 @@ import { copyText } from "@/platform"
 import { useDepartments } from "@/hooks/use-departments"
 import { PageLayout } from "@/components/page-layout"
 import { useTheme } from "@/routes/providers"
-import { useDecideApproval, useEmployeesByName, useOrg, useSetWorkItemStatus, useTodoById } from "../use-todos"
+import { useEmployeesByName, useOrg, useSetWorkItemStatus, useTodoById } from "../use-todos"
 import { useKeepWorkItem } from "../board/use-board"
 import { parseBoardParam, boardPath, boardKey } from "../board/board-route"
 import { departmentTitle } from "../board/board-switcher"
@@ -160,7 +160,6 @@ export default function TaskPage() {
   }, [id, announce])
 
   const setStatus = useSetWorkItemStatus()
-  const decide = useDecideApproval()
 
   // ── Pickers (one open at a time; §7.3) ────────────────────────────────────
   const itemNode = useMemo(() => (id ? nodeOf(rootNode, id) : undefined), [rootNode, id])
@@ -207,19 +206,6 @@ export default function TaskPage() {
     },
     [item, setStatus, announce],
   )
-  const runDecision = useCallback(
-    (decision: "approve" | "reject", note?: string, choice?: string) => {
-      if (!item) return
-      decide.mutate(
-        { id: item.id, decision, note, choice },
-        {
-          onError: (error) => announce(operatorSafeTodoError(error, "Couldn't record the decision")),
-        },
-      )
-    },
-    [item, decide, announce],
-  )
-
   // ── Board context (the crumb's back affordance) ───────────────────────────
   const keep = useKeepWorkItem(announce)
   const boardKeyRaw = routeState.fromBoard ?? item?.department ?? "home"
@@ -350,10 +336,8 @@ export default function TaskPage() {
                     detail={detail}
                     byName={byName}
                     focusReason={!!routeState.focusBannerReason}
-                    busy={setStatus.isPending || decide.isPending}
+                    busy={setStatus.isPending}
                     onCommitReason={commitBannerReason}
-                    onApprove={(choice) => runDecision("approve", undefined, choice)}
-                    onReject={(note) => runDecision("reject", note || undefined)}
                     actions={
                       detail.workItem.status === "blocked" ? (
                         <button
@@ -364,25 +348,6 @@ export default function TaskPage() {
                         >
                           Unblock…
                         </button>
-                      ) : detail.workItem.status === "escalated" ? (
-                        <>
-                          <button
-                            type="button"
-                            data-testid="task-banner-route"
-                            onClick={() => pickers.setOpenPicker("status")}
-                            className="focus-ring min-h-8 rounded-full bg-[var(--fill-tertiary)] px-3 text-[12.5px] font-semibold text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-secondary)]"
-                          >
-                            Route…
-                          </button>
-                          <button
-                            type="button"
-                            data-testid="task-banner-reassign"
-                            onClick={() => pickers.setOpenPicker("assignee")}
-                            className="focus-ring min-h-8 rounded-full px-3 text-[12.5px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)]"
-                          >
-                            Reassign…
-                          </button>
-                        </>
                       ) : undefined
                     }
                   />

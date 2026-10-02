@@ -19,7 +19,15 @@ export const JINN_INSTANCE_IDENTITY_ENV_KEYS = [
   "JINN_SESSION_ID",
   "JINN_SESSION_CAPABILITY",
   "JINN_TAKE_PORT",
+  "JINN_BINDING_HOME",
 ] as const;
+
+/**
+ * Names the home whose binding JINN_HOST/JINN_PORT describe. A gateway sets it on its
+ * own environment, so every session it spawns — and every command run from one —
+ * carries it beside the binding it inherited.
+ */
+export const JINN_BINDING_HOME_ENV = "JINN_BINDING_HOME";
 
 /** Ports a live gateway owns: the default instance, and the demo instance beside it. */
 export const PRODUCTION_GATEWAY_PORTS: readonly number[] = [7777, 7788]; // footgun: ok this list is the refusal set itself — naming the live ports is what it is for
@@ -76,6 +84,42 @@ export function retargetInstanceEnv(
   }
   env.JINN_HOME = home;
   if (target.instance) env.JINN_INSTANCE = target.instance;
+}
+
+/**
+ * Drop instance identity this process inherited from a DIFFERENT instance, in place.
+ *
+ * A session inherits its gateway's JINN_HOST/JINN_PORT and credentials. Running
+ * `JINN_HOME=<sandbox> jinn start` from one keeps them, and JINN_PORT then outranks the
+ * sandbox's own config.yaml: the command acts on the live gateway's port. JINN_HOME was
+ * pointed at the sandbox on purpose, so it stays; everything that described the instance
+ * it was pointed away from goes. A JINN_PORT that differs from that instance's own port
+ * (the one its JINN_GATEWAY_URL names) was set for this command, and stays too.
+ * Returns the keys it removed.
+ */
+export function dropForeignInstanceEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  const bindingHome = env[JINN_BINDING_HOME_ENV]?.trim();
+  if (!bindingHome) return [];
+  const home = resolveJinnHome(env);
+  if (resolveHomeIdentity(bindingHome) === resolveHomeIdentity(home)) return [];
+  const kept = new Set<string>(["JINN_HOME", ...(portSetForThisCommand(env) ? ["JINN_PORT"] : [])]);
+  const dropped = JINN_INSTANCE_IDENTITY_ENV_KEYS.filter((key) => env[key] !== undefined && !kept.has(key));
+  for (const key of dropped) delete env[key];
+  env.JINN_HOME = home;
+  return dropped;
+}
+
+/** JINN_PORT differs from the port of the gateway that spawned this process, as its
+ *  JINN_GATEWAY_URL records it. With no URL to compare against, it cannot be told apart. */
+function portSetForThisCommand(env: NodeJS.ProcessEnv): boolean {
+  const port = env.JINN_PORT?.trim();
+  if (!port) return false;
+  try {
+    const spawner = new URL(env.JINN_GATEWAY_URL ?? "").port;
+    return spawner !== "" && spawner !== port;
+  } catch {
+    return false;
+  }
 }
 
 /**

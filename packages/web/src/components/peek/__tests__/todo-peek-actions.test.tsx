@@ -159,7 +159,7 @@ describe("peek status quick action", () => {
     fireEvent.click(screen.getByTestId("status-option-in_review"))
 
     await waitFor(() => expect(screen.getByTestId("peek-action-error").textContent).toBe(refusal))
-    expect(statusRowText()).toContain("Executing")
+    expect(statusRowText()).toContain("In progress")
   })
 })
 

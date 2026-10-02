@@ -134,13 +134,9 @@ export default defineConfig(() => {
         // need its own build and its own React peer, and the singleton the SDK
         // exists to guarantee is exactly what a second React copy would break.
         '@jinn/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
-        // Types only, and only ever imported with `import type`, so this alias
-        // never resolves at build time — it exists so `tsc` and Vite agree on
-        // what the specifier means.
-        '@jinn/workflow-wire': path.resolve(__dirname, '../jinn/src/workflows/wire.ts'),
-        // Unlike the line above, this one does resolve at build time: the module
-        // is runtime code the bundle really carries. It is a pure leaf with an
-        // empty import list, which is what keeps that safe with no polyfills.
+        // This one resolves at build time: the module is runtime code the bundle
+        // really carries. It is a pure leaf with an empty import list, which is
+        // what keeps that safe with no polyfills.
         '@jinn/fallback-map-wire': path.resolve(__dirname, '../jinn/src/shared/fallback-map-wire.ts'),
         // The same leaf treatment as the line above, and for the same reason: the
         // editor has to judge a model id by the rule the config loader judges it

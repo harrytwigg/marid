@@ -41,8 +41,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       assignWorkItem: vi.fn(),
       setWorkItemStatus: vi.fn(),
       updateWorkItem: vi.fn(),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -71,11 +69,6 @@ function compact(id: string, status: WorkItemStatusWire, rank: number): WorkItem
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: id,
@@ -97,7 +90,7 @@ const ROW_IDS = BACKLOG.map((item) => `todo-list-row-${item.id}`)
 /**
  * The flat row model the page draws for the default fixture, spelled out here
  * from the fixture instead of read back from the render — an expectation taken
- * from the DOM cannot catch the DOM being wrong. Four groups arrive empty
+ * from the DOM cannot catch the DOM being wrong. Three groups arrive empty
  * (header, then their caption), then Backlog's header and its rows, then Closed,
  * collapsed to its header. Only Todo rows carry a test id; the rest are null.
  */
@@ -105,7 +98,6 @@ const MODEL: Array<string | null> = [
   null, null, // Needs you
   null, null, // Executing
   null, null, // In review
-  null, null, // Assigned
   null, // Backlog
   ...ROW_IDS,
   null, // Closed

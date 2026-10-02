@@ -156,9 +156,6 @@ Sixteen verbs, spelled identically on both halves — `PLUGIN_HOST_VERBS` in `pa
 | `sessions.spawn` | W | `(request: HostSessionSpawn) → HostSession` |
 | `employees.list` | R | `() → HostEmployee[]` |
 | `notify` | W | `(message, level?) → void` or `(notice: HostNotice) → void` |
-| `workflows.list` | R | `() → HostWorkflow[]` (one page, at the gateway's default size) |
-| `workflows.get` | R | `(workflowId) → HostWorkflow` |
-| `workflows.start` | W | `(workflowId, input?) → HostWorkflowRun` |
 | `notes.list` | R | `(query?) → HostNote[]` |
 | `notes.read` | R | `(notePath) → HostNoteContent` |
 | `notes.create` | W | `(draft: HostNoteDraft) → HostNoteContent` |

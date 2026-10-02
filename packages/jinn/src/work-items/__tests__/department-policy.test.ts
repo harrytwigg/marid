@@ -104,7 +104,7 @@ describe("closed departments (gateway.todoDepartments)", () => {
     const assigned = transitions.assignWorkItem(item.id, "worker", "general", "operator");
     expect(assigned?.department).toBe("jinn");
     expect(assigned?.assignee).toBe("worker");
-    expect(assigned?.status).toBe("assigned");
+    expect(assigned?.status).toBe("backlog");
   });
 
   it("assignment fills an unclassified Todo with the default, never the assignee's org department", () => {

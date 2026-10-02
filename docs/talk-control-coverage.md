@@ -13,8 +13,6 @@
 | todo-detail | `/todos/:todoId` | semantic | selected Todo, status, relations, comments, and runs; controls: edit, comment, assign, delegate, state |
 | notes-list | `/notes` | semantic | note list and search; controls: open, create |
 | notes | `/notes/*` | semantic | selected note and folder; controls: open, create, update |
-| experiments-list | `/experiments` | semantic | experiment filters and summaries; controls: open, create |
-| experiment-detail | `/experiments/:id` | semantic | selected hypothesis, metrics, readings, and verdict; controls: record, conclude, reopen |
 | kanban-redirect | `/kanban` | semantic | redirect destination; controls: navigate |
 | logs | `/logs` | semantic | bounded redacted activity summary; controls: refresh |
 | limits | `/limits` | semantic | engine limit windows and freshness; controls: refresh |
@@ -26,9 +24,6 @@
 | skill-detail | `/skills/:name` | semantic | selected skill metadata and content; controls: update |
 | file | `/file` | semantic | published file metadata and preview; controls: open, attach |
 | more | `/more` | semantic | available destinations; controls: navigate |
-| workflow-list | `/workflow` | semantic | workflow definitions and status; controls: open, start |
-| workflow-detail | `/workflow/:id` | semantic | definition, revision, graph, and runs; controls: edit, start, enable, disable |
-| workflow-run | `/workflow/:id/runs/:runId` | semantic | selected run, node, attempts, gates, and output; controls: cancel, input, decide |
 | talk-orb | `/talk-orb` | semantic | development orb bench state; controls: none |
 | redesign | `/redesign` | semantic | development-only design bench; controls: none |
 | plugin-contributed | `/*` | explicit gap | plugin-context-unavailable; plugin host SDK publishes route, selected object, controls, and freshness |
@@ -46,14 +41,10 @@ A normal question uses semantic context. One bounded image is permitted only whe
 | chat-core | supported | read_session, talk_search_chat_messages, talk_draft_reply, talk_replace_draft, talk_send_draft, talk_draft_and_send, talk_send_to_session | bounded current-chat excerpts, visible-composer receipts, and a durable named-session message re-read bound to the operator's own utterance |
 | chat-lifecycle | explicit gap | — | chat-lifecycle-command-adapter-missing; reuse create, rename, archive, duplicate, delete, queue, stop, and reset commands |
 | delegation | supported | talk_delegate_todo | Todo-to-session link, child session, and dispatch rereads |
-| workflow-core | supported | talk_start_workflow_run, read_workflow_runs, read_workflow_run | workflow-run repository rereads |
-| workflow-authoring-and-gates | explicit gap | — | workflow-command-adapter-missing; reuse definition edits, run cancellation, input gates, and workflow approval commands |
-| voice-approval | supported | prepare_voice_approval, commit_voice_approval | operator-bound challenge, provider transcript identity, target revision, and durable decision audit |
 | topic-memory | supported | talk_recall_topic, talk_remember_topic | durable topic commitments, candidates, navigation, and source rehydration |
-| screen-navigation-and-visual | supported | open_todos, open_todo, open_chats, open_workflows, focus_element, resolve_and_open, capture_current_view | browser receipt, awaited UI effect, or bounded sanitized visual receipt |
+| screen-navigation-and-visual | supported | open_todos, open_todo, open_chats, focus_element, resolve_and_open, capture_current_view | browser receipt, awaited UI effect, or bounded sanitized visual receipt |
 | capability-inventory | supported | read_talk_capability | typed manifest-backed supported operation or exact gap id and planned adapter |
 | notes | explicit gap | — | notes-command-adapter-missing; reuse managed note list, read, create, and update commands |
-| experiments | explicit gap | — | experiments-command-adapter-missing; reuse experiment create, reading, conclude, and reopen commands |
 | cron | explicit gap | — | cron-command-adapter-missing; reuse cron update, enable, disable, trigger, and run-inspection commands |
 | org | explicit gap | — | org-command-adapter-missing; reuse employee read, editable-field update, delegation, and session commands |
 | skills | explicit gap | — | skills-command-adapter-missing; reuse managed skill read and update commands with exact content confirmation |
@@ -61,7 +52,7 @@ A normal question uses semantic context. One bounded image is permitted only whe
 | logs-and-limits | explicit gap | — | logs-limits-command-adapter-missing; reuse bounded redacted log queries and engine-limit refresh commands |
 | managed-files | explicit gap | — | managed-files-command-adapter-missing; reuse allowed-home list, read, publish, and attach commands |
 | instances-and-onboarding | explicit gap | — | instance-onboarding-command-adapter-missing; reuse guarded instance and onboarding commands with exact scope confirmation |
-| company-read-lanes | explicit gap | — | company-read-lanes-adapter-missing; reuse knowledge, search, cost, connector, heartbeat, and managed approval reads |
+| company-read-lanes | explicit gap | — | company-read-lanes-adapter-missing; reuse knowledge, search, cost, connector, and heartbeat reads |
 
 ## Reading this report
 

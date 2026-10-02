@@ -38,7 +38,7 @@ if (typeof localStorage === "undefined" || typeof localStorage.clear !== "functi
   });
 }
 
-/* @xyflow/react (workflow canvas GRS-013, org map) needs DOM measurement APIs
+/* @xyflow/react (the org map) needs DOM measurement APIs
  * jsdom doesn't implement. Standard mocks from the xyflow testing guide,
  * defined only when missing so tests that stub their own (e.g. the captured
  * ResizeObserver in use-stick-to-bottom.dom.test) keep full control. */

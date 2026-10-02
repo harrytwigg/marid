@@ -33,10 +33,10 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     expect(row).toMatchObject({ id: item.id, status: "blocked", attentionLane: "recovering" });
   });
 
-  it("returns a manager-lane in_review leftover that is not a pending approval", async () => {
+  it("returns a manager-lane in_review leftover", async () => {
     const coo = reg.createSession({ engine: "codex", source: "web", sourceRef: "coo-mgr", title: "coo", employee: "coo" });
     const item = store.createWorkItem({
-      title: "approved landing leftover", status: "in_review", assignee: "platform-worker",
+      title: "landing leftover", status: "in_review", assignee: "platform-worker",
     });
     const rows = await import("../../work-items/recovery-rows.js");
     rows.upsertWorkItemRecovery({
@@ -44,7 +44,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
       incidentId: "run_landed",
       class: "operator",
       lane: "manager",
-      reason: "approved landing is still open",
+      reason: "the landing is still open",
     });
 
     const res = makeRes();
@@ -65,7 +65,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
   function dashboardGroups(feed: Array<Record<string, unknown>>) {
     const kept = feed.filter((item) =>
       item.attentionLane === "recovering" || item.attentionLane === "manager"
-      || item.approvalState === "pending" || item.status === "escalated" || item.status === "blocked");
+      || item.status === "blocked");
     return {
       recovering: kept.filter((item) => item.attentionLane === "recovering").map((item) => item.id),
       manager: kept.filter((item) => item.attentionLane === "manager").map((item) => item.id),
@@ -85,21 +85,20 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     return res.body.workItems as Array<Record<string, unknown>>;
   }
 
-  it("QPR-4: refused-complete leftover survives the recovery tick into Manager attention", async () => {
+  it("QPR-4: a failed in_review leftover survives the recovery tick into Manager attention", async () => {
     const detect = await import("../../work-items/anomaly-detect.js");
     const controller = await import("../../work-items/recovery-controller.js");
     const runs = await import("../../work-items/runs.js");
-    const approvals = await import("../../work-items/approvals.js");
     const transitions = await import("../../work-items/transitions.js");
     const rows = await import("../../work-items/recovery-rows.js");
     const db = dbModule.initDb();
 
     const item = store.createWorkItem({
-      title: "QPR-4 refused landing", status: "assigned", assignee: "platform-worker",
+      title: "QPR-4 failed landing", status: "backlog",
     });
     transitions.transition(item.id, "in_review", "session:worker", { agent: true });
     store.createWorkItem({
-      title: "open child leftover", parentId: item.id, status: "assigned", assignee: "platform-worker",
+      title: "open child leftover", parentId: item.id, status: "backlog", assignee: "platform-worker",
     });
     const sessionId = `s-qpr4-${item.id}`;
     db.prepare(
@@ -107,17 +106,11 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
        VALUES (?, 'claude', 'cron', ?, 'idle', ?, ?, ?)`,
     ).run(sessionId, `cron:${sessionId}`, item.id, new Date().toISOString(), new Date().toISOString());
     const run = runs.openWorkItemRun({ workItemId: item.id, sessionId });
-    runs.closeWorkItemRun(run.id, { outcome: "completed", endedAt: new Date().toISOString() });
-    approvals.requestApproval(item.id, {
-      request: "Land?", ref: `workflow:pipeline:${run.id}:gate`, target: "operator",
-    });
-    approvals.decideWorkItemApprovalSync({ id: item.id, decision: "approve", decidedBy: "operator" });
+    runs.closeWorkItemRun(run.id, { outcome: "crashed", error: "the build step exited with code 1", endedAt: new Date().toISOString() });
     expect(store.getWorkItem(item.id)!.status).toBe("in_review");
 
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
-    detect.detectTodoAnomalies({ persist: true,
-      approvedLandingComplete: (todoId) => todoId === item.id,
-      closeApprovedLanded: () => false });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "backlog" }) });
+    detect.detectTodoAnomalies({ persist: true });
     expect(rows.getWorkItemRecovery(item.id)?.lane).toBe("manager");
 
     const feed = await attentionFeed();
@@ -147,11 +140,11 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
       error: "Usage limit exceeded; try again at 2026-08-27T12:00:00.000Z",
     });
     store.appendWorkItemEvent({
-      workItemId: item.id, kind: "status_change", fromStatus: "assigned", toStatus: "blocked",
+      workItemId: item.id, kind: "status_change", fromStatus: "backlog", toStatus: "blocked",
       actor: "workflow:run", detail: { workflowId: "pipeline", runId: run.id }, versionEffect: "audit",
     });
 
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "backlog" }) });
     const feed = await attentionFeed();
     const compact = feed.find((entry) => entry.id === item.id);
     expect(compact).toMatchObject({ id: item.id, attentionLane: "recovering" });
@@ -182,7 +175,7 @@ describe("GET /api/work-items?needsAttentionFor=me attention lanes", () => {
     const rows = await import("../../work-items/recovery-rows.js");
 
     const item = store.createWorkItem({ title: "re-check re-queued to backlog", status: "blocked" });
-    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "assigned" }) });
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "backlog" }) });
     expect(rows.getWorkItemRecovery(item.id)).toMatchObject({ class: "operator", lane: "operator" });
 
     const before = (await compactRows()).find((entry) => entry.id === item.id);

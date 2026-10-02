@@ -112,6 +112,29 @@ describe("who may declare where a Todo's product lands", () => {
     expect(store.getWorkItem(item.id)?.verifyPolicy).toBeNull();
   });
 
+  it("holds a session's create to the provenance default review mode, and lets the operator set anything", async () => {
+    const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "create-declaration", employee: "platform-worker" });
+    const create = async (verifyPolicy: Record<string, unknown>, headers: Record<string, string>) => {
+      const res = makeRes();
+      await api.handleApiRequest(makeReq("POST", "/api/work-items", { title: "Declared at create", verifyPolicy }, headers), res.res, ctx);
+      return res;
+    };
+
+    for (const verifyPolicy of [
+      { mode: "trust" },
+      { mode: "verify", maxRounds: 9 },
+      { mode: "verify", verifier: { employee: "solo-worker" } },
+    ]) {
+      expect((await create(verifyPolicy, toolHeaders(caller.id))).status).toBe(403);
+    }
+    // A deliverable-only declaration changes where the product lands, not who reviews it.
+    expect((await create({ mode: "verify", deliverable: "workspace" }, toolHeaders(caller.id))).status).toBe(201);
+
+    const operatorCreated = await create({ mode: "thorough", maxRounds: 4 }, operatorHeaders);
+    expect(operatorCreated.status).toBe(201);
+    expect(operatorCreated.body.workItem.verifyPolicy).toEqual({ mode: "thorough", maxRounds: 4 });
+  });
+
   it("refuses that caller every key that decides who reviews the work", async () => {
     const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "review-keys", employee: "platform-worker" });
     const item = await workerTodo(caller.id, { mode: "verify" });
@@ -132,7 +155,12 @@ describe("who may declare where a Todo's product lands", () => {
 
   it("refuses that caller a null policy, which would drop the review mode entirely", async () => {
     const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "cleared-policy", employee: "platform-worker" });
-    const item = await workerTodo(caller.id, { mode: "thorough" });
+    // A session cannot create a Todo under a non-default mode, so the operator
+    // sets the `thorough` policy after the fact.
+    const created = await workerTodo(caller.id, { mode: "verify" });
+    const set = await patchPolicy(caller.id, created, { mode: "thorough" }, operatorHeaders);
+    expect(set.status).toBe(200);
+    const item = { id: created.id, version: set.body.workItem.version as number };
 
     const refused = await patchPolicy(caller.id, item, null);
     expect(refused.status).toBe(403);

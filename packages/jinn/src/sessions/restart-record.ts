@@ -40,9 +40,7 @@ export type RestartResumeOwner =
   | "restart-resume"
   /** It asked for the restart itself: the next boot posts the restart notice in it and stamps it
    *  for a `requested` nudge, unless a requester guard holds the nudge back. */
-  | "restart-notice"
-  /** A workflow attempt: the workflow runtime replaces the attempt (workflows/restart-redispatch.ts). */
-  | "workflow-runtime";
+  | "restart-notice";
 
 export type RestartResumeOutcome =
   /** The nudge was claimed and handed to the delivery outbox. */
@@ -69,7 +67,6 @@ interface RestartRecordSession {
   employee: string | null;
   engine: string;
   workItemId: string | null;
-  workflowKind: string | null;
   title: string | null;
 }
 
@@ -135,7 +132,6 @@ function sessionFields(session: Session): RestartRecordSession {
     employee: session.employee ?? null,
     engine: session.engine,
     workItemId: session.workItemId ?? null,
-    workflowKind: session.workflowProvenance?.kind ?? null,
     title: session.title ?? null,
   };
 }

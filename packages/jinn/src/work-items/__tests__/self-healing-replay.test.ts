@@ -64,45 +64,12 @@ describe("historical incident replay — classifier", () => {
     expect(verdict).toMatchObject({ class: "security", lane: "manager" });
   });
 
-  it("operator-only pending approval is Needs you", () => {
-    const verdict = classifyRecovery({
-      todo: { id: "PLA-5", status: "in_review", assignee: "platform-worker", source: "session" },
-      approval: { state: "pending", operatorOnly: true },
-    });
-    expect(verdict).toMatchObject({ class: "operator", lane: "operator" });
-  });
-
   it("ordinary backlog never classifies as recovering", () => {
     const verdict = classifyRecovery({
       todo: { id: "PLA-6", status: "backlog", assignee: null, source: "human" },
     });
     expect(verdict.lane).not.toBe("recovering");
     expect(verdict.class).toBe("operator");
-  });
-
-  it("an approved completed leftover still in_review is Manager attention, not Needs you", () => {
-    const verdict = classifyRecovery({
-      todo: { id: "PLA-15", status: "in_review", assignee: "platform-worker", source: "workflow" },
-      lastRun: {
-        id: "run_landed",
-        outcome: "completed",
-        error: null,
-        endedAt: "2026-08-20T12:00:00.000Z",
-      },
-      approval: { state: "approved", operatorOnly: false },
-    });
-    expect(verdict).toMatchObject({ lane: "manager" });
-    expect(verdict.lane).not.toBe("operator");
-  });
-
-  it("a pipeline Todo assigned with no run and no fresh attempt is recovering", () => {
-    const verdict = classifyRecovery({
-      todo: { id: "PLA-16", status: "assigned", assignee: "platform-worker", source: "workflow" },
-      lastRun: { id: "run_old", outcome: "completed", error: null, endedAt: "2026-08-20T12:00:00.000Z" },
-      owningWorkflowId: "pipeline",
-      now: new Date("2026-08-20T12:30:00.000Z"),
-    });
-    expect(verdict).toMatchObject({ class: "transient", lane: "recovering", reason: "assigned to a pipeline with no active run" });
   });
 
   it("execution past the 4h timeout with a dead session is manager, and the same run keeps it there while the session lives", () => {
@@ -115,16 +82,18 @@ describe("historical incident replay — classifier", () => {
     expect(classifyRecovery({ ...stalled, openRun: { ...stalled.openRun, sessionInFlight: true } }).lane).toBe("operator");
   });
 
-  it("an in_review Todo with no pending approval and no reviewer is manager, not Needs you", () => {
+  // in_review is the operator's desk: an unassigned Todo there waits on the
+  // operator, so it is no manager's leftover.
+  it("an in_review Todo with no assignee is not put on Manager attention", () => {
     const verdict = classifyRecovery({ todo: { id: "PLA-18", status: "in_review", assignee: null, source: "workflow" } });
-    expect(verdict).toMatchObject({ lane: "manager", reason: "in review with no pending approval and no reviewer" });
+    expect(verdict).toMatchObject({ lane: "operator", reason: GENERIC_OPERATOR_REASON });
   });
 });
 
 describe("mayReplaceRecoveryLane", () => {
   const generic = { class: "operator" as const, lane: "operator" as const, reason: GENERIC_OPERATOR_REASON };
-  const leftover = { class: "operator" as const, lane: "manager" as const, reason: "approved landing is still open" };
-  const operatorOnly = { class: "operator" as const, lane: "operator" as const, reason: "operator-only approval is a genuine authority decision" };
+  const leftover = { class: "code" as const, lane: "manager" as const, reason: "the attempt failed in the work itself" };
+  const operatorOnly = { class: "operator" as const, lane: "operator" as const, reason: "a specific decision only the operator can make" };
 
   it("a generic fallback cannot downgrade an unresolved manager lane", () => {
     expect(mayReplaceRecoveryLane({ lane: "manager" }, generic, "in_review")).toBe(false);
@@ -137,6 +106,13 @@ describe("mayReplaceRecoveryLane", () => {
 
   it("operator-only authority may replace manager (Needs you)", () => {
     expect(mayReplaceRecoveryLane({ lane: "manager" }, operatorOnly, "in_review")).toBe(true);
+  });
+
+  it("a generic fallback may replace a manager row whose verdict is no longer given", () => {
+    for (const reason of ["approved landing is still open", "in review with no assignee to answer for it"]) {
+      expect(mayReplaceRecoveryLane({ lane: "manager", reason }, generic, "in_review")).toBe(true);
+    }
+    expect(mayReplaceRecoveryLane({ lane: "manager", reason: "the attempt failed in the work itself" }, generic, "in_review")).toBe(false);
   });
 
   it("a resolved Todo may drop a stale manager row", () => {

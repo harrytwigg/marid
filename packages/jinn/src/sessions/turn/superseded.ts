@@ -22,10 +22,6 @@ export function supersedeRunningTurn(session: Session): void {
     transportMeta: withTransportMeta(session, {
       [SUPERSEDED_TURN_META_KEY]: new Date().toISOString(),
     }),
-    ...(session.workflowProvenance?.kind === "phase" ? {
-      attemptInterruptionCause: "user-message",
-      attemptInterruptionTurn: (session.attemptTurn ?? 0) + 1,
-    } : {}),
   });
 }
 

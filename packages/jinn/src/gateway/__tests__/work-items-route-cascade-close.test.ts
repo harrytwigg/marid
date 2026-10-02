@@ -6,7 +6,7 @@ import { api, ctx, makeReq, makeRes, operatorHeaders, reg, store, toolHeaders } 
  * caller never opened, so it is the human surface's move alone. */
 
 /** The operator's real case: an `in_review` root over two open generations. */
-function openTree(label: string, leafStatus?: "escalated") {
+function openTree(label: string, leafStatus?: "blocked") {
   const parent = store.createWorkItem({ title: `${label} parent`, status: "in_review" });
   const mid = store.createWorkItem({ title: `${label} mid`, parentId: parent.id });
   const leaf = store.createWorkItem({ title: `${label} leaf`, parentId: mid.id, ...(leafStatus ? { status: leafStatus } : {}) });
@@ -80,33 +80,17 @@ describe("PUT|POST /api/work-items/:id/status — cascade close", () => {
     expect(cap.body.error).toBe("cascade must be a boolean");
   });
 
-  it("answers 409 over an escalated descendant, then closes the tree once it is acknowledged", async () => {
-    const { parent, mid, leaf } = openTree("Escalated", "escalated");
-    const refused = makeRes();
+  it("closes the tree over a blocked descendant in one call, with no acknowledgement step", async () => {
+    const { parent, mid, leaf } = openTree("Blocked leaf", "blocked");
+    const cap = makeRes();
 
     await api.handleApiRequest(
       makeReq("PUT", `/api/work-items/${parent.id}/status`, { status: "done", cascade: true }, operatorHeaders),
-      refused.res,
+      cap.res,
       ctx,
     );
 
-    expect(refused.status).toBe(409);
-    expect(refused.body.error).toContain(leaf.id);
-    expect(statusesOf([parent.id, mid.id, leaf.id])).toEqual(["in_review", "backlog", "escalated"]);
-
-    const acknowledged = makeRes();
-    await api.handleApiRequest(
-      makeReq(
-        "PUT",
-        `/api/work-items/${parent.id}/status`,
-        { status: "done", cascade: true, acknowledgeEscalated: true },
-        operatorHeaders,
-      ),
-      acknowledged.res,
-      ctx,
-    );
-
-    expect(acknowledged.status).toBe(200);
+    expect(cap.status).toBe(200);
     expect(statusesOf([parent.id, mid.id, leaf.id])).toEqual(["done", "done", "done"]);
   });
 });

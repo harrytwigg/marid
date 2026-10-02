@@ -9,6 +9,8 @@ export interface GatewayInfo {
   pid: number;
   token?: string;
   ptyPids?: number[];
+  /** Identity of the home whose gateway wrote this record. A copy of the home keeps it. */
+  home?: string;
 }
 
 /** Current-main host behavior: runtime PID records are candidates for orphan cleanup. */
@@ -36,9 +38,18 @@ export function startupGatewayPids(
   return env.JINN_CONTAINER === "1" ? [] : staleGatewayPids(info, currentPid);
 }
 
+/**
+ * The record names a different home than `identity`: it was copied along with that
+ * home, and its pids, port and token are the other instance's. A record written before
+ * homes were recorded cannot be told apart and is not reported.
+ */
+export function recordedByAnotherHome(info: Partial<GatewayInfo> | null | undefined, identity: string): boolean {
+  return typeof info?.home === "string" && info.home !== identity;
+}
+
 export function writeGatewayInfo(
   file: string,
-  opts: { port: number; host?: string; pid: number; secret?: string; token?: string },
+  opts: { port: number; host?: string; pid: number; secret?: string; token?: string; home?: string },
 ): GatewayInfo {
   const previous = readGatewayInfo(file);
   const host = opts.host ?? previous?.host;
@@ -52,6 +63,7 @@ export function writeGatewayInfo(
     secret: opts.secret ?? previous?.secret ?? crypto.randomBytes(24).toString("hex"),
     token: opts.token ?? previous?.token,
     ptyPids: [],
+    ...(opts.home ? { home: opts.home } : {}),
   };
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(info, null, 2), { mode: 0o600 });

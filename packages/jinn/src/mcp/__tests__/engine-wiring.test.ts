@@ -26,7 +26,6 @@ import { resolveMcpServers, writeMcpConfigFile, cleanupMcpConfigFile, MCP_CAPABL
 import { setJinnAttachGate } from "../attachment.js";
 import {
   JINN_SESSION_CAPABILITY_ENV,
-  JINN_WORKFLOW_ATTEMPT_ENV,
   attachSessionIdentity,
 } from "../identity.js";
 import { resolveMcpServerBootstrap } from "../server-bootstrap.js";
@@ -175,16 +174,6 @@ describe("per-engine jinn-server wiring (GRS-018 seam for GRS-017 default-on)", 
       }
     });
 
-    it("carries the workflow-attempt tool hint through per-session engine channels", () => {
-      const resolved = attachSessionIdentity(resolveMcpServers(ON, undefined), SID, { workflowAttempt: true });
-      const spec = resolved.mcpServers.jinn as { env?: Record<string, string> };
-      expect(spec.env?.[JINN_WORKFLOW_ATTEMPT_ENV]).toBe("1");
-      expect(grokJinnSessionEnv(resolved)[JINN_WORKFLOW_ATTEMPT_ENV]).toBe("1");
-      expect(piJinnSessionEnv(resolved)[JINN_WORKFLOW_ATTEMPT_ENV]).toBe("1");
-      expect(antigravityJinnSessionEnv(resolved)[JINN_WORKFLOW_ATTEMPT_ENV]).toBe("1");
-      expect(buildAcpMcpServers(resolved).find((server) => server.name === "jinn")?.env)
-        .toContainEqual({ name: JINN_WORKFLOW_ATTEMPT_ENV, value: "1" });
-    });
     it("codex: argv never carries the capability; the per-session CODEX_HOME config.toml (0600) carries the bound jinn env", () => {
       const resolved = stamped();
       const capability = capabilityOf(resolved);

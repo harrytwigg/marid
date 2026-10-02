@@ -47,11 +47,9 @@ export function piJinnSessionEnv(resolvedMcp: ResolvedMcpConfig | undefined): Re
   const spec = jinnServer(resolvedMcp);
   const sessionId = spec?.env?.JINN_SESSION_ID;
   const capability = spec?.env?.JINN_SESSION_CAPABILITY;
-  const workflowAttempt = spec?.env?.JINN_WORKFLOW_ATTEMPT;
   return sessionId && capability ? {
     JINN_SESSION_ID: sessionId,
     JINN_SESSION_CAPABILITY: capability,
-    ...(workflowAttempt === "1" ? { JINN_WORKFLOW_ATTEMPT: workflowAttempt } : {}),
   } : {};
 }
 
@@ -138,7 +136,6 @@ export default function jinnMcpExtension(pi: ExtensionAPI): void {
   for (const tool of buildTools({
     notesEnabled: notesEnabledFromConfig(),
     knowledge: knowledgeWordingFromConfig(),
-    workflowAttempt: process.env.JINN_WORKFLOW_ATTEMPT === "1",
   })) {
     pi.registerTool({
       ...projectPiTool(tool),

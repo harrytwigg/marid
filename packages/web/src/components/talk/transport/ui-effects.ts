@@ -18,8 +18,6 @@ const KEY_BUILDERS: Record<string, (parts: string[]) => readonly unknown[] | nul
   "todo-comments": ([id]) => ["work-item-comments", id],
   "todo-sessions": ([id]) => ["work-item-sessions", id],
   session: ([id]) => queryKeys.sessions.detail(id!),
-  "workflow-runs": ([id]) => queryKeys.workflows.runs(id!),
-  "workflow-run": ([id, runId]) => id && runId ? queryKeys.workflows.run(id, runId) : null,
 }
 
 function queryKey(effect: string): readonly unknown[] | null {

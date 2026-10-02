@@ -49,28 +49,6 @@ describe("describing the operator's location", () => {
     })
   })
 
-  it("reads a workflow run as the run it is on, under the workflow that owns it", () => {
-    expect(describeLocation("/workflow/nightly-build/runs/run_0f21c7", "")).toEqual({
-      kind: "workflow-run",
-      path: "/workflow/nightly-build/runs/run_0f21c7",
-      params: { workflow: "nightly-build" },
-      filters: {},
-      selection: { kind: "workflow run", id: "run_0f21c7" },
-    })
-  })
-
-  it("reads the workflow editor and its runs lens apart", () => {
-    expect(describeLocation("/workflow/nightly-build", "")).toMatchObject({
-      kind: "workflow",
-      filters: {},
-      selection: { kind: "workflow", id: "nightly-build" },
-    })
-    expect(describeLocation("/workflow/nightly-build", "?lens=runs")).toMatchObject({
-      kind: "workflow",
-      filters: { lens: "runs" },
-    })
-  })
-
   it("reads chat's selected session from the query, where chat keeps it", () => {
     expect(describeLocation("/", "?session=sess-4821")).toEqual({
       kind: "chat",
@@ -110,9 +88,8 @@ describe("describing the operator's location", () => {
       ["/todos/ABC-744/extra", "?x=1"],
       ["/todos/b", ""],
       ["/todos/b/platform/extra", ""],
-      ["/workflow/nightly-build/garbage", ""],
-      ["/workflow/nightly-build/runs/run_0f21c7/extra", ""],
-      ["/experiments/exp-1/readings", ""],
+      ["/experiments", ""],
+      ["/experiments/exp-1", ""],
       ["/cron/nightly-sync/history", ""],
       ["/org/a-lead", ""],
     ] as const) {
@@ -132,7 +109,7 @@ describe("describing the operator's location", () => {
       ["/", "?session="],
       ["/todos/b/%", ""],
       ["/todos/%E0%A4%A", ""],
-      ["/workflow/%/runs/%", "?lens=%"],
+      ["/cron/%", "?lens=%"],
       ["/notes/f/%2Fetc%2Fpasswd/n/%", ""],
       ["///", "?&&=="],
     ] as const) {
@@ -154,10 +131,6 @@ describe("describing the operator's location", () => {
       kind: "cron",
       filters: { lens: "week", filter: "enabled" },
       selection: null,
-    })
-    expect(describeLocation("/experiments/exp-1", "")).toMatchObject({
-      kind: "experiment",
-      selection: { kind: "experiment", id: "exp-1" },
     })
     // Folder and open note are carried independently, so the note's own path is
     // the whole knowledge-relative one, not one relative to the folder chip.

@@ -1,5 +1,3 @@
-import { currentApproval } from "./approval-rows.js";
-import { claimWorkItem, releaseWorkItemClaim, type ClaimWorkItemResult } from "./claims.js";
 import { getWorkItemRecovery, upsertWorkItemRecovery } from "./recovery-rows.js";
 import {
   classifyRecovery,
@@ -11,10 +9,9 @@ import {
   type RecoveryClassification,
 } from "./recovery.js";
 import { isExecutionAttempt } from "./link-role.js";
-import { listWorkItemRuns } from "./runs.js";
+import { listWorkItemAttemptRuns } from "./runs.js";
 import { listWorkItemEvents } from "./event-log.js";
 import { appendWorkItemEvent, listWorkItems, type WorkItem } from "./store.js";
-import { owningWorkflowId } from "./workflow-ownership.js";
 import { initDb } from "../shared/db.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
 import type { AvailabilityRearmResult } from "./availability-resume.js";
@@ -24,9 +21,9 @@ export type TodoRecoveryMode = "off" | "classify-only" | "auto";
 export interface RecoveryApplyDeps {
   mode: TodoRecoveryMode;
   now?: () => Date;
+  /** Restart the Todo's work. The restart takes the Todo's claim itself, so
+   *  the sweep must not hold one around the call. */
   rearm(todoId: string): AvailabilityRearmResult;
-  claim?(todoId: string, owner: string): ClaimWorkItemResult;
-  release?(todoId: string, owner: string): void;
 }
 
 export interface RecoverySweepResult {
@@ -48,7 +45,7 @@ export function sessionInFlight(sessionId: string): boolean {
   return row?.status === "running" || row?.status === "waiting";
 }
 
-/** Newest-first, as the registry lists them; review and phase links never count. */
+/** Newest-first, as the registry lists them; review links never count. */
 export function attemptActivity(workItemId: string): AttemptActivity {
   const attempts = listSessionsByWorkItem(workItemId).filter(isExecutionAttempt);
   return {
@@ -60,10 +57,9 @@ export function attemptActivity(workItemId: string): AttemptActivity {
 }
 
 export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClassification {
-  const runs = listWorkItemRuns(item.id);
+  const runs = listWorkItemAttemptRuns(item.id);
   const last = [...runs].reverse().find((run) => run.endedAt !== null);
   const open = runs.find((run) => run.endedAt === null);
-  const approval = currentApproval(item.id);
   return classifyRecovery({
     todo: { id: item.id, status: item.status, assignee: item.assignee, source: item.source },
     lastRun: last
@@ -71,11 +67,7 @@ export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClas
       : undefined,
     openRun: open ? { startedAt: open.startedAt, sessionInFlight: sessionInFlight(open.sessionId) } : undefined,
     attempts: item.status === "executing" ? attemptActivity(item.id) : undefined,
-    approval: approval
-      ? { state: approval.state, operatorOnly: approval.operatorOnly }
-      : undefined,
     verifyMode: item.verifyPolicy?.mode,
-    owningWorkflowId: owningWorkflowId(item.id),
     now,
   });
 }
@@ -121,16 +113,12 @@ function applyCodeRepair(item: WorkItem, deps: RecoveryApplyDeps, lastRunId: str
     });
     return false;
   }
-  if (listWorkItemRuns(item.id).some((run) => run.endedAt === null)) return false;
-  const owner = `${TODO_RECOVERY_ACTOR}:${id}`;
-  const claim = (deps.claim ?? ((todoId, claimOwner) => claimWorkItem({ workItemId: todoId, owner: claimOwner })))(item.id, owner);
-  if (claim.state !== "acquired") return false;
+  if (listWorkItemAttemptRuns(item.id).some((run) => run.endedAt === null)) return false;
   const landed = deps.rearm(item.id);
-  (deps.release ?? releaseWorkItemClaim)(item.id, owner);
   if ("unavailable" in landed) return false;
   upsertWorkItemRecovery({
     workItemId: item.id, incidentId: id, class: "code", lane: "manager",
-    reason: "scoped repair re-armed the owning workflow", lastRunId, attempted: true, now,
+    reason: "scoped repair re-dispatched the Todo", lastRunId, attempted: true, now,
   });
   appendWorkItemEvent({
     workItemId: item.id, kind: "recovery_attempted", actor: TODO_RECOVERY_ACTOR,
@@ -146,7 +134,7 @@ function applyCodeRepair(item: WorkItem, deps: RecoveryApplyDeps, lastRunId: str
  */
 function recoverOne(item: WorkItem, deps: RecoveryApplyDeps, now: Date): { classified: boolean; applied: boolean } {
   const verdict = classifyWorkItem(item, now);
-  const lastRunId = [...listWorkItemRuns(item.id)].reverse().find((run) => run.endedAt !== null)?.id;
+  const lastRunId = [...listWorkItemAttemptRuns(item.id)].reverse().find((run) => run.endedAt !== null)?.id;
   const before = getWorkItemRecovery(item.id);
   recordClassified(item, verdict, lastRunId, now);
   const classified = !before || before.incidentId !== incidentId(item, lastRunId) || before.lane !== verdict.lane;

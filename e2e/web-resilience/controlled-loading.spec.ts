@@ -50,7 +50,7 @@ test('controlled mobile loading and transcript interaction', async ({ browser, b
     const costs = Object.fromEntries(['LayoutDuration', 'RecalcStyleDuration', 'ScriptDuration', 'TaskDuration'].map(name => [name, 1000 * ((afterInteraction.metrics.find(m => m.name === name)?.value ?? 0) - (beforeInteraction.metrics.find(m => m.name === name)?.value ?? 0))]))
     await page.getByRole('button', { name: 'Back to chats', exact: true }).click()
     const tabs = []
-    for (const name of ['Todos', 'Workflows', 'More']) {
+    for (const name of ['Todos', 'More']) {
       const start = await page.evaluate(() => performance.now())
       await page.getByRole('link', { name, exact: true }).click()
       await expect(page.getByRole('heading', { name: name === 'Todos' ? 'Home' : name, exact: true }).first()).toBeVisible()

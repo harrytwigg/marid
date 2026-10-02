@@ -9,7 +9,6 @@ type BoardCounts = {
   attentionCount: number
   openCount: number
   blockedTotal: number
-  escalatedTotal: number
 }
 
 type BoardHeaderProps = BoardCounts & {
@@ -53,7 +52,6 @@ function BoardSubtitle({
   attentionCount,
   openCount,
   blockedTotal,
-  escalatedTotal,
 }: BoardCounts & { isHome: boolean; deptPrefix: string | undefined }) {
   return (
     <>
@@ -76,12 +74,6 @@ function BoardSubtitle({
               <>
                 <Dot />
                 <span>{blockedTotal} blocked</span>
-              </>
-            )}
-            {escalatedTotal > 0 && (
-              <>
-                <Dot />
-                <span>{escalatedTotal} escalated</span>
               </>
             )}
           </>

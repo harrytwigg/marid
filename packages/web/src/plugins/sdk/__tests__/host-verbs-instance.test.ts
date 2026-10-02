@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { host } from '../host'
 import { requestOf, respond, stubFetch } from './host-verbs-harness'
 
-/** The instance verbs: Workflows, notes, connectors, cron reads, knowledge
+/** The instance verbs: notes, connectors, cron reads, knowledge
  *  search. Each one names its method, its path spelling, and what it unwraps. */
 let fetchMock: ReturnType<typeof vi.fn>
 
@@ -16,76 +16,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
-})
-
-describe('host.workflows', () => {
-  const wire = {
-    id: 'nightly',
-    title: 'Nightly digest',
-    revision: 3,
-    enabled: true,
-    updatedAt: '2026-01-02T00:00:00.000Z',
-  }
-  const narrowed = { ...wire, description: null }
-
-  it('lists over GET /api/workflows and unwraps the page', async () => {
-    fetchMock.mockResolvedValue(respond({ items: [wire], nextCursor: null }))
-
-    await expect(host.workflows.list()).resolves.toEqual([narrowed])
-
-    const { path, init } = onlyRequest()
-    expect(path).toBe('/api/workflows')
-    expect(init.method ?? 'GET').toBe('GET')
-  })
-
-  /* The route answers the whole definition, node graph included. A plugin gets
-   * the six fields the contract names and nothing it did not ask for. */
-  it('gets one over GET /api/workflows/:id and narrows the definition', async () => {
-    fetchMock.mockResolvedValue(respond({ ...wire, nodes: [{ id: 'n1' }], edges: [] }))
-
-    await expect(host.workflows.get('nightly')).resolves.toEqual(narrowed)
-
-    expect(onlyRequest().path).toBe('/api/workflows/nightly')
-  })
-
-  it('starts a run over POST /api/workflows/:id/runs and keeps only the run', async () => {
-    fetchMock.mockResolvedValue(
-      respond({
-        id: 'run-1',
-        workflowId: 'nightly',
-        status: 'running',
-        startedAt: '2026-01-03T00:00:00.000Z',
-        definition: wire,
-      }),
-    )
-
-    await expect(host.workflows.start('nightly', { since: 'yesterday' })).resolves.toEqual({
-      id: 'run-1',
-      workflowId: 'nightly',
-      status: 'running',
-      startedAt: '2026-01-03T00:00:00.000Z',
-    })
-
-    const { path, init } = onlyRequest()
-    expect(path).toBe('/api/workflows/nightly/runs')
-    expect(init.method).toBe('POST')
-    expect(JSON.parse(String(init.body))).toEqual({ input: { since: 'yesterday' } })
-  })
-
-  /* The Workflow API says `{ code, message }` where the rest of the gateway says
-   * `{ error }`, so reading only the latter would lose every Workflow reason. */
-  it('raises the Workflow API’s own message, in its own envelope', async () => {
-    fetchMock.mockResolvedValue(
-      respond(
-        { code: 'bad-input', message: 'Workflow does not have an enabled manual trigger.' },
-        { ok: false, status: 422 },
-      ),
-    )
-
-    await expect(host.workflows.start('nightly')).rejects.toThrow(
-      /host\.workflows\.start failed: Workflow does not have an enabled manual trigger\./,
-    )
-  })
 })
 
 describe('host.notes', () => {

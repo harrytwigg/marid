@@ -417,44 +417,6 @@ test("candidate state probing uses the v2 Workflow repository and import report"
   assert.match(probe, /legacy-v1-import-report\.json/)
 })
 
-test("state probing seeds and reads a v2 Workflow baseline", external, () => {
-  const root = createLabRoot()
-  try {
-    const layout = assertIsolatedLayout(root)
-    fs.mkdirSync(path.join(layout.home, "org", "lab"), { recursive: true })
-    fs.writeFileSync(
-      path.join(layout.home, "org", "lab", "operator.yaml"),
-      "name: lab-operator\ndisplayName: Lab Operator\ndepartment: lab\nrank: employee\nengine: codex\npersona: Disposable fixture.\n",
-    )
-    const env = buildMinimalEnvironment(layout, { PATH: process.env.PATH ?? "" })
-    const probe = path.resolve("scripts/upgrade-lab/state-probe.mjs")
-    const packageRoot = path.resolve("packages/jinn")
-    const evidenceRoot = path.join(layout.home, "workflow-evidence")
-    const seeded = spawnSync(process.execPath, [probe, "seed-old", packageRoot, evidenceRoot], {
-      env, encoding: "utf8", timeout: EXTERNAL_WAIT_CEILING_MS,
-    })
-    assert.equal(seeded.status, 0, seeded.stderr)
-    const before = JSON.parse(seeded.stdout)
-    assert.deepEqual(before.workflow, {
-      count: 1,
-      id: "upgrade-lab-workflow",
-      title: "Upgrade lab representative workflow",
-      revision: 1,
-      enabled: false,
-      storage: "v2",
-    })
-
-    const queried = spawnSync(process.execPath, [probe, "query-candidate", packageRoot, evidenceRoot], {
-      env, encoding: "utf8", timeout: EXTERNAL_WAIT_CEILING_MS,
-    })
-    assert.equal(queried.status, 0, queried.stderr)
-    assert.deepEqual(JSON.parse(queried.stdout).workflow, before.workflow)
-    assert.doesNotThrow(() => assertRepresentativeStateSurvived(before, JSON.parse(queried.stdout)))
-  } finally {
-    removeLabRoot(root)
-  }
-})
-
 test("lab API requests always carry the disposable gateway bearer token", () => {
   assert.equal(typeof upgradeLab.buildLabRequestOptions, "function")
   assert.deepEqual(

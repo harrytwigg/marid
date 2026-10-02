@@ -156,22 +156,14 @@ describe("the Talk driving journey", () => {
     expect(root.querySelector("h1")?.textContent).toBe("Release lane discussion")
   })
 
-  it("admits exactly one bounded visual fallback for a declared Workflow graph gap", async () => {
-    queryClient.setQueryData(["workflows", "definition", "release-train"], {
-      id: "release-train",
-      title: "Release train",
-      revision: 5,
-      enabled: true,
-      nodes: [{ id: "build" }, { id: "verify" }],
-      edges: [{ source: "build", target: "verify" }],
-    })
+  it("admits exactly one bounded visual fallback for a declared org chart gap", async () => {
     const root = page(`
-      <h1>Release train</h1>
-      <div data-talk-visual-gap="workflow-graph-spatial-layout">Build is left of verify.</div>
+      <h1>Organization</h1>
+      <div data-talk-visual-gap="org-chart-spatial-layout">Build is left of verify.</div>
       <section data-talk-orb-overlay>Private Aurora chrome</section>
     `)
     const context = buildScreenContext({
-      location: describeLocation("/workflow/release-train", ""),
+      location: describeLocation("/org", ""),
       browserInstanceId: "browser-acceptance",
       root,
       revision: 9,
@@ -185,7 +177,7 @@ describe("the Talk driving journey", () => {
     const visual = createVisualCapture({ render: renderVisual, now: () => 25 })
     const request = {
       context,
-      reason: "workflow-graph-spatial-layout",
+      reason: "org-chart-spatial-layout",
       requestKey: "utterance-leftmost-node",
       root,
     }

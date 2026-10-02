@@ -31,17 +31,18 @@ export async function runRestart(opts: RestartOptions = {}): Promise<void> {
   }
 
   const config = loadConfig();
+  const port = config.gateway.port || 7777; // footgun: ok the CLI's pre-existing fallback for a config.yaml with no port, hoisted unchanged
   try {
-    assertPortTakeoverAllowed(config.gateway.port || 7777, { takePort: opts.takePort });
+    assertPortTakeoverAllowed(port, { takePort: opts.takePort });
   } catch (err) {
     exitOnPortOwnershipError(err);
   }
 
-  if (await requestRestartFromGateway()) {
+  if (await requestRestartFromGateway(fetch, { port })) {
     console.log("Gateway restart requested from the running gateway. It will be back in a few seconds.");
     return;
   }
 
-  restartDetached({ takePort: opts.takePort, port: config.gateway.port || 7777 });
+  restartDetached({ takePort: opts.takePort, port });
   console.log("Gateway restarting in the background (detached). It will be back in a few seconds.");
 }

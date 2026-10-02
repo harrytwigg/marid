@@ -54,6 +54,24 @@ function git(repoRoot, args, encoding = "utf8") {
   return execFileSync("git", args, { cwd: repoRoot, encoding })
 }
 
+/** A lookup that is expected to miss, so git's complaint must not reach the terminal. */
+function gitQuiet(repoRoot, args) {
+  return execFileSync("git", args, { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
+}
+
+/**
+ * Whether bundle `version` has shipped from this line of history. A same-named tag
+ * HEAD cannot reach (an upstream release fetched into a fork, say) is not ours.
+ */
+function isReleased(repoRoot, version) {
+  try {
+    gitQuiet(repoRoot, ["merge-base", "--is-ancestor", `refs/tags/v${version}`, "HEAD"])
+    return true
+  } catch {
+    return false
+  }
+}
+
 function sha(bytes) {
   return crypto.createHash("sha256").update(bytes).digest("hex")
 }
@@ -152,6 +170,7 @@ function markdown(manifest, rationale) {
     "Each record names only inputs that ship in this bundle or exist in the instance: the base payload under `files/base/` is the generic template before this release, the target payload under `files/target/` is the template after it, both relative to this bundle directory, and the current user-owned file is the instance path shown on the record.",
     "Materialize those payloads before comparing: in `.md`, `.yaml` and `.yml` files replace `{{portalName}}` with the instance's `portal.portalName` from `config.yaml` (default `Jinn`) and `{{portalSlug}}` with that name lowercased with runs of whitespace replaced by single hyphens, and leave every other file byte-for-byte unchanged.",
     "Then three-way merge the materialized base, the current instance file and the materialized target; preserve user customizations, record unresolved placeholders as conflicts, and never delete user content without explicit review and a snapshot.",
+    "Merge Markdown by heading. When the target adds a section whose heading the instance file already has, reconcile it into that existing section and record a conflict where the wording differs; never append a second section with the same heading.",
     "",
   ]
   for (const entry of manifest.files) {
@@ -236,12 +255,15 @@ function main() {
   const { repoRoot, packageRoot } = roots()
   const pkg = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"))
   if (pkg.version !== args.version && (!args.allowUnreleased || !isNewerVersion(args.version, pkg.version))) throw new Error(`package version ${pkg.version} does not match requested bundle ${args.version}`)
+  if (args.mode === "generate" && isReleased(repoRoot, args.version)) {
+    throw new Error(`bundle ${args.version} was released as v${args.version}; add a bundle for the next version instead of regenerating it`)
+  }
   git(repoRoot, ["rev-parse", "--verify", `${args.baseRef}^{commit}`])
   const outputDir = path.join(packageRoot, "template", "migrations", args.version)
   let committedFallback = ""
   try {
     const repoPath = path.relative(repoRoot, path.join(outputDir, "MIGRATION.md")).split(path.sep).join("/")
-    committedFallback = git(repoRoot, ["show", `HEAD:${repoPath}`]).trim()
+    committedFallback = gitQuiet(repoRoot, ["show", `HEAD:${repoPath}`]).trim()
   } catch { /* a new migration has no committed rationale yet */ }
   const rationale = readRationale(outputDir, committedFallback)
   assertReleaseReadyRationale(rationale)
@@ -254,7 +276,11 @@ function main() {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-migration-check-"))
   try {
     createBundle({ repoRoot, packageRoot, outputDir: temp, rationale, ...args, allowEmpty: true })
-    if (!equalDirectories(outputDir, temp)) throw new Error(`bundle ${args.version} is out of date; run migration:generate`)
+    if (!equalDirectories(outputDir, temp)) {
+      throw new Error(isReleased(repoRoot, args.version)
+        ? `bundle ${args.version} is out of date, but it was released as v${args.version}; add a bundle for the next version`
+        : `bundle ${args.version} is out of date; run migration:generate`)
+    }
     process.stdout.write(`migration bundle ${args.version} is current\n`)
   } finally {
     fs.rmSync(temp, { recursive: true, force: true })

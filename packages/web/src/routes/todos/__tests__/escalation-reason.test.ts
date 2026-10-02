@@ -11,12 +11,12 @@ import { event } from "./fixtures/task-wire"
 
 const escalation = (reason: string) =>
   event("e1", "escalated", "2026-08-13T08:00:00.000Z", {
-    toStatus: "escalated",
+    toStatus: "blocked",
     detail: { reason, blockKind: "dependency", recurrences: 2 },
   })
 
 const detail = (reason: string): WorkItemDetailWire => ({
-  workItem: { id: "PLA-12", status: "escalated" } as WorkItemFullWire,
+  workItem: { id: "PLA-12", status: "blocked" } as WorkItemFullWire,
   spendUsd: 0,
   events: [escalation(reason)],
 })
@@ -28,7 +28,7 @@ describe("the escalation why-line", () => {
   ])("reads %s on the task-page banner and the board card", (reason, expected) => {
     expect(exceptionReasonOf(detail(reason))).toMatchObject({ note: expected })
 
-    const item = { id: "PLA-12", status: "escalated" } as WorkItemCompactWire
+    const item = { id: "PLA-12", status: "blocked" } as WorkItemCompactWire
     expect(reasonOf(item, { events: [escalation(reason)] } as WorkItemOpenDetailWire)).toBe(expected)
   })
 
@@ -37,11 +37,23 @@ describe("the escalation why-line", () => {
       ...detail("block_loop_detected"),
       events: [
         event("e1", "escalated", "2026-08-13T08:00:00.000Z", {
-          toStatus: "escalated",
+          toStatus: "blocked",
           detail: { reason: "block_loop_detected", note: "the upstream API is still down" },
         }),
       ],
     }
     expect(exceptionReasonOf(withNote).note).toBe("the upstream API is still down")
+  })
+
+  it("reads a migrated escalation's reason from the move into escalated", () => {
+    const migrated: WorkItemDetailWire = {
+      ...detail("block_loop_detected"),
+      events: [
+        event("e1", "status_change", "2026-08-13T08:00:00.000Z", { toStatus: "escalated" as never, detail: { note: "which vendor?" } }),
+        event("e2", "status_change", "2026-10-01T20:53:00.000Z", { fromStatus: "escalated" as never, toStatus: "blocked", actor: "migration", detail: { reason: "retired-status", declared: true } }),
+      ],
+    }
+    expect(exceptionReasonOf(migrated).note).toBe("which vendor?")
+    expect(reasonOf({ id: "PLA-12", status: "blocked" } as WorkItemCompactWire, { events: migrated.events } as WorkItemOpenDetailWire)).toBe("which vendor?")
   })
 })

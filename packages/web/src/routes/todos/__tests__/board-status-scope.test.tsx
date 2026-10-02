@@ -39,8 +39,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       updateWorkItem: vi.fn(),
       createWorkItem: vi.fn(),
       assignWorkItem: vi.fn(),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -48,8 +46,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
 function compact(id: string, status: WorkItemStatusWire): WorkItemCompactWire {
   return {
     id, status, version: 3, title: `Item ${id}`, assignee: null, department: "platform",
-    source: "human", sourceRef: null, approvalState: null, approvalRequest: null,
-    approvalRef: null, approvalTarget: null, approvalEscalatedAt: null, createdBy: "operator",
+    source: "human", sourceRef: null,
+    createdBy: "operator",
     parentId: null, rootId: id, depth: 0, dueAt: null, labels: [], blocked: false,
     updatedAt: "2026-07-23T08:00:00.000Z", rank: null,
   }
@@ -60,9 +58,8 @@ function tree(id: string): WorkItemTreeWire {
     root: {
       id, version: 3, title: `Item ${id}`, body: null, status: "executing", department: "platform",
       assignee: null, priority: 2, rank: null, source: "human", sourceRef: null, acceptance: null,
-      verifyPolicy: null, rounds: 0, budgetUsd: null, approvalState: null, approvalRequest: null,
-      approvalRef: null, approvalTarget: null, approvalEscalatedAt: null, approvalDecidedBy: null,
-      approvalDecidedAt: null, createdAt: "2026-07-23T08:00:00.000Z",
+      verifyPolicy: null, rounds: 0, budgetUsd: null,
+      createdAt: "2026-07-23T08:00:00.000Z",
       updatedAt: "2026-07-23T08:00:00.000Z", closedAt: null, children: [],
     },
     totals: { executing: 1 },
@@ -135,7 +132,7 @@ describe("isColumnInStatusFilter", () => {
 
   it("keeps only the named column when the URL names one status", () => {
     expect(isColumnInStatusFilter("executing", "executing")).toBe(true)
-    for (const status of ["backlog", "assigned", "in_review", "blocked", "escalated", "done", "cancelled"] as const) {
+    for (const status of ["backlog", "in_review", "blocked", "done", "cancelled"] as const) {
       expect(isColumnInStatusFilter("executing", status)).toBe(false)
     }
   })

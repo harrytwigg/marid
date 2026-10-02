@@ -90,10 +90,6 @@ function isCompanyChangedEvent(value: unknown): value is CompanyChangedEvent {
   switch (value.entity) {
     case "todo":
       return isTodoChange(value)
-    case "workflow-definition":
-      return isString(value.id) && isNumber(value.revision)
-    case "workflow-run":
-      return isString(value.workflowId) && isString(value.runId)
     default:
       return false
   }
@@ -208,13 +204,6 @@ export const payloadGuards: Record<GatewayEventName, PayloadGuard> = {
       && isString(value.path)
       && isString(value.revision)
       && (value.action === "created" || value.action === "updated"),
-  "experiments:changed": (value) =>
-    isRecord(value)
-      && isString(value.id)
-      && (value.action === "created"
-        || value.action === "updated"
-        || value.action === "reading-recorded"
-        || value.action === "concluded"),
   "todo-capture:stage": (value) =>
     isRecord(value)
       && isString(value.captureId)

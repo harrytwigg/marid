@@ -9,6 +9,7 @@ import { loadInstances } from "../src/instances/directory.js";
 import { resolveInstanceHome } from "../src/instances/create.js";
 import { assertContainerPrimaryCommand } from "../src/cli/container-contract.js";
 import { retargetInstanceEnv } from "../src/shared/sandbox-env.js";
+import { dropInheritedBinding, parsePortOption } from "../src/cli/instance-env.js";
 import { PRODUCT_NAME, productBanner } from "../src/shared/brand.js";
 
 const program = new Command();
@@ -37,6 +38,7 @@ program.hook("preAction", (thisCommand, actionCommand) => {
   // Restore node-pty's spawn-helper exec bit if an --ignore-scripts install
   // (Homebrew's default) left it at 0644. No-op on a healthy install.
   repairNodePtySpawnHelper();
+  dropInheritedBinding(process.env);
   if (opts.instance) {
     retargetInstanceEnv({
       home: resolveInstanceHome(opts.instance, loadInstances(), os.homedir()),
@@ -49,6 +51,7 @@ program
   .command("setup")
   .description(`Initialize ${PRODUCT_NAME} and install dependencies`)
   .option("--force", "Delete existing home dir and reinitialize from scratch")
+  .option("-p, --port <port>", "Gateway port to record in this home's config.yaml", parsePortOption)
   .action(async (opts) => {
     const { runSetup } = await import("../src/cli/setup.js");
     await runSetup(opts);
@@ -162,24 +165,6 @@ program
     await runMigrate();
   });
 
-const workflowAction = (name: string) => async (...received: unknown[]) => {
-  const command = received.pop() as Command;
-  const handlers = await import("../src/cli/workflow.js") as unknown as Record<string, (...args: unknown[]) => Promise<void>>;
-  await handlers[name]!(...received, command.opts());
-};
-const withJson = (command: Command) => command.option("--json", "Print raw JSON");
-const workflow = program.command("workflow").description("Operate workflow definitions and runs");
-withJson(workflow.command("list").option("--cursor <cursor>").option("--limit <number>")).action(workflowAction("listWorkflows")); withJson(workflow.command("get <workflowId>")).action(workflowAction("getWorkflow"));
-withJson(workflow.command("create").requiredOption("--file <jsonFile>")).action(workflowAction("createWorkflow")); withJson(workflow.command("update <workflowId>").requiredOption("--file <jsonFile>").requiredOption("--expected-revision <number>")).action(workflowAction("updateWorkflow"));
-withJson(workflow.command("duplicate <sourceId>").requiredOption("--id <targetId>").requiredOption("--title <title>")).action(workflowAction("duplicateWorkflow"));
-for (const [name, handler] of [["retire", "retireWorkflow"], ["enable", "enableWorkflow"], ["disable", "disableWorkflow"]] as const)
-  withJson(workflow.command(`${name} <workflowId>`).requiredOption("--expected-revision <number>")).action(workflowAction(handler));
-withJson(workflow.command("run <workflowId>").option("--input <json>").option("--idempotency-key <key>").option("--todo-id <todoId>")).action(workflowAction("startWorkflowRun")); withJson(workflow.command("runs <workflowId>").option("--cursor <cursor>").option("--limit <number>").option("--status <status>")).action(workflowAction("listWorkflowRuns"));
-withJson(workflow.command("show-run <workflowId> <runId>").option("--full", "Include the definition snapshot and attempt prompts")).action(workflowAction("showWorkflowRun")); withJson(workflow.command("cancel <workflowId> <runId>").option("--reason <reason>")).action(workflowAction("cancelWorkflowRun"));
-withJson(workflow.command("rerun <workflowId> <runId>").requiredOption("--definition <original|current>").requiredOption("--idempotency-key <key>")).action(workflowAction("rerunWorkflowRun"));
-for (const [name, handler] of [["approve", "approveWorkflowApproval"], ["reject", "rejectWorkflowApproval"]] as const)
-  withJson(workflow.command(`${name} <workflowId> <runId> <nodeId>`).requiredOption("--expected-revision <number>").option("--reason <reason>")).action(workflowAction(handler));
-withJson(workflow.command("retry <workflowId> <runId> <nodeId>").requiredOption("--idempotency-key <key>")).action(workflowAction("retryWorkflowNode")); withJson(workflow.command("event <eventName>").requiredOption("--fire-id <id>").requiredOption("--payload <json>")).action(workflowAction("fireWorkflowEvent"));
 
 // Remote-execution subcommands (jinn remote status|wake).
 // An operator affordance only — a turn wakes and verifies its own remote host,
@@ -262,6 +247,7 @@ withJson(workflow.command("retry <workflowId> <runId> <nodeId>").requiredOption(
 }
 
 // Backup subcommands (jinn backup run|list|verify|restore)
+const withJson = (command: Command) => command.option("--json", "Print raw JSON");
 const backupAction = (name: string) => async (...received: unknown[]) => {
   const command = received.pop() as Command;
   const handlers = await import("../src/cli/backup.js") as unknown as Record<string, (...args: unknown[]) => unknown>;

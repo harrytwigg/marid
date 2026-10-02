@@ -1,11 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { WorkflowService } from "../../workflows/service.js";
 
 /**
  * The fixture behind `backend-host-context.test.ts`: a real plugin directory on
- * disk, the home it reads through the host verbs, and the one gateway member
- * those verbs cannot reach without a running gateway.
+ * disk and the home it reads through the host verbs.
  *
  * It lives beside the test rather than inside it because the test is about what
  * the verbs answer, and forty lines of `writeFileSync` in front of that buries
@@ -38,9 +36,6 @@ async function callVerbs(host) {
   await record("notes.read", () => host.notes.read(created ? created.path : "knowledge/missing.md"));
   await record("notes.list", () => host.notes.list());
   await record("knowledge.search", () => host.knowledge.search("kestrel"));
-  await record("workflows.list", () => host.workflows.list());
-  await record("workflows.get", () => host.workflows.get("nightly"));
-  await record("workflows.start", () => host.workflows.start("nightly", { since: "yesterday" }));
   await record("connectors.send", () => host.connectors.send("slack", { channel: "C1", text: "hello" }));
   await record("cron.jobs", () => host.cron.jobs());
   await record("cron.runs", () => host.cron.runs("digest"));
@@ -99,33 +94,4 @@ export function seedProbeHome(home: string): void {
     path.join(home, "cron", "runs", "digest.jsonl"),
     `${JSON.stringify({ id: "run-9", jobId: "digest", status: "success", durationMs: 1200, prompt: "summarise yesterday" })}\n`,
   );
-}
-
-export const PROBE_WORKFLOW = {
-  id: "nightly",
-  title: "Nightly digest",
-  description: null,
-  revision: 3,
-  enabled: true,
-  retiredAt: null,
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-02T00:00:00.000Z",
-};
-
-export const PROBE_WORKFLOW_RUN = {
-  id: "run-1",
-  workflowId: "nightly",
-  status: "running",
-  startedAt: "2026-01-03T00:00:00.000Z",
-};
-
-/** The three service methods the Workflow verbs reach, and nothing else. Both
- *  answers carry more than the contract names, so the verbs have to narrow. */
-export function workflowServiceStub(): WorkflowService {
-  return {
-    listDefinitions: () => ({ items: [PROBE_WORKFLOW], nextCursor: null }),
-    getDefinition: (id: string) =>
-      id === PROBE_WORKFLOW.id ? { ...PROBE_WORKFLOW, nodes: [], edges: [] } : null,
-    startManual: async () => ({ ...PROBE_WORKFLOW_RUN, definition: PROBE_WORKFLOW }),
-  } as unknown as WorkflowService;
 }

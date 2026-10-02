@@ -9,7 +9,7 @@ import type { ServerResponse } from "node:http";
  * ICI-749 — every status write reaches the dashboard live, exactly once.
  *
  * The board went stale because only the HTTP routes emitted `company:changed`;
- * a workflow, the reconciler, or an approval consequence committed silently.
+ * the reconciler committed silently.
  * The emit now belongs to `transition()`, so these tests wire BOTH ends the way
  * `startGateway` does (`setTodoLiveEmitter` + `ApiContext.emit`) and count the
  * todo events per write — one, never two, from either lane.
@@ -27,17 +27,13 @@ fs.writeFileSync(
 type Api = typeof import("../api.js");
 type Store = typeof import("../../work-items/store.js");
 type Registry = typeof import("../../sessions/registry.js");
-type Approvals = typeof import("../../work-items/approvals.js");
 type Reconcile = typeof import("../../work-items/reconcile.js");
-type Surface = typeof import("../workflow-todo-surface.js");
 type LiveEvents = typeof import("../../work-items/live-events.js");
 
 let api: Api;
 let store: Store;
 let registry: Registry;
-let approvals: Approvals;
 let reconcile: Reconcile;
-let surface: Surface;
 
 const emittedEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
 
@@ -90,9 +86,7 @@ beforeAll(async () => {
   api = await import("../api.js");
   store = await import("../../work-items/store.js");
   registry = await import("../../sessions/registry.js");
-  approvals = await import("../../work-items/approvals.js");
   reconcile = await import("../../work-items/reconcile.js");
-  surface = await import("../workflow-todo-surface.js");
   dbModule.initDb();
   // Exactly the wiring startGateway installs, so these counts are the ones a
   // running gateway produces rather than an artefact of a half-wired harness.
@@ -106,36 +100,7 @@ beforeEach(() => {
   emittedEvents.length = 0;
 });
 
-describe("a workflow's own status write reaches the board", () => {
-  it("emits exactly one todo event carrying the new status, post-write version, and full item", () => {
-    const item = store.createWorkItem({ title: "workflow picks this up", status: "assigned" });
-
-    surface.workflowTodoLifecycle.reflect({
-      todoId: item.id, status: "executing", workflowId: "pipeline", runId: "run_1", nodeId: "plan",
-    });
-
-    const written = store.getWorkItem(item.id)!;
-    expect(written.status).toBe("executing");
-    const events = todoEvents();
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ entity: "todo", id: item.id, version: written.version });
-    // The client merges `value` synchronously; a partial payload would leave the
-    // merged card missing fields, so this is the whole item, not a subset of it.
-    expect(events[0]!.value).toEqual(written);
-  });
-
-  it("emits nothing when the reflection is refused", () => {
-    const item = store.createWorkItem({ title: "already executing", status: "executing" });
-
-    surface.workflowTodoLifecycle.reflect({
-      todoId: item.id, status: "executing", workflowId: "pipeline", runId: "run_2", nodeId: "plan",
-    });
-
-    expect(todoEvents()).toEqual([]);
-  });
-});
-
-describe("the reconciler and approval consequences reach the board", () => {
+describe("the reconciler reaches the board", () => {
   it("emits one todo event when the reconciler derives a new status", () => {
     const item = store.createWorkItem({ title: "reconciled item" });
     const session = registry.createSession({ engine: "claude", source: "cron", sourceRef: "cron:live:1" });
@@ -147,22 +112,6 @@ describe("the reconciler and approval consequences reach the board", () => {
     const events = todoEvents();
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ entity: "todo", id: item.id, version: store.getWorkItem(item.id)!.version });
-  });
-
-  it("emits one todo event for the transition an approval decision causes", async () => {
-    const item = store.createWorkItem({ title: "approve me", status: "in_review" });
-    approvals.requestApproval(item.id, { request: "ship it?", actor: "platform-worker" });
-    emittedEvents.length = 0;
-
-    const cap = makeRes();
-    await api.handleApiRequest(
-      makeReq("POST", `/api/work-items/${item.id}/approvals/decide`, { decision: "approve" }, operatorHeaders),
-      cap.res,
-      ctx,
-    );
-
-    expect([cap.status, cap.body.workItem.status]).toEqual([200, "done"]);
-    expect(todoEvents()).toHaveLength(1);
   });
 });
 
@@ -200,8 +149,8 @@ describe("the operator surface still emits once, not twice", () => {
     expect(todoEvents()).toHaveLength(1);
   });
 
-  it("POST /assign emits one todo event when the assignment starts the work", async () => {
-    const item = store.createWorkItem({ title: "assign starts it", status: "backlog" });
+  it("POST /assign emits one todo event when the assignment leaves the Todo in backlog", async () => {
+    const item = store.createWorkItem({ title: "assign keeps it queued", status: "backlog" });
 
     const cap = makeRes();
     await api.handleApiRequest(
@@ -210,7 +159,7 @@ describe("the operator surface still emits once, not twice", () => {
       ctx,
     );
 
-    expect([cap.status, cap.body.workItem.status]).toEqual([200, "assigned"]);
+    expect([cap.status, cap.body.workItem.status]).toEqual([200, "backlog"]);
     expect(todoEvents()).toHaveLength(1);
   });
 

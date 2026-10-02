@@ -73,7 +73,7 @@ export function MarkdownView({
   isDark: boolean;
   density?: "comfortable" | "compact";
   /** Rewrite bare Todo ids into mentions. Off unless the document is about the
-   *  board: a skill, a note, a file and a workflow's output mean the string. */
+   *  board: a skill, a note and a file mean the string. */
   mentions?: boolean;
 }) {
   const codeTheme = isDark ? oneDark : oneLight;

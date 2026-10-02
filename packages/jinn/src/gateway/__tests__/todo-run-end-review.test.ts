@@ -70,48 +70,27 @@ describe("a producer's run ending never moves a reviewed Todo to in_review", () 
     expect(statusMoves(item.id)).toEqual([]);
   });
 
-  it("an approval requested mid-work is a question, not a hand-in: the Todo stays executing", async () => {
-    const { item, producer } = producerOn("Needs a choice from the operator", "sys2-mid-work-approval");
-
-    const asked = await call("POST", `/api/work-items/${item.id}/approval/request`, {
-      request: "A or B?",
-      options: ["A", "B"],
-      operatorOnly: true,
-    }, toolHeaders(producer.id));
-    expect(asked.status).toBe(200);
-    runEnds(producer.id);
-    reconcile.reconcileActiveWorkItems();
-
-    expect(store.getWorkItem(item.id)).toMatchObject({ status: "executing", approvalState: "pending" });
-    expect(statusMoves(item.id)).toEqual([]);
-  });
-
   it("still reaches in_review, and then done, when the producer hands it in explicitly", async () => {
     const { item, producer } = producerOn("Finished and QA'd", "sys2-normal-path");
     runEnds(producer.id);
     reconcile.reconcileActiveWorkItems();
     expect(store.getWorkItem(item.id)?.status).toBe("executing");
 
-    // The documented hand-in: update_work_item → in_review, then request_work_item_approval.
+    // The documented hand-in: update_work_item → in_review, with a summary.
     const handed = await call("POST", `/api/work-items/${item.id}/status`, {
       status: "in_review",
       note: "Draft PR open, QA passed.",
     }, toolHeaders(producer.id));
     expect([handed.status, handed.body.workItem?.status]).toEqual([200, "in_review"]);
-    const asked = await call("POST", `/api/work-items/${item.id}/approval/request`, {
-      request: "Finished: please review the draft PR.",
-      operatorOnly: true,
-    }, toolHeaders(producer.id));
-    expect(asked.status).toBe(200);
 
     // A follow-up turn on the producer (answering a comment) does not pull it back.
     reg.updateSession(producer.id, { status: "running", attemptOutcome: null, lastActivity: new Date().toISOString() });
     reconcile.reconcileActiveWorkItems();
     runEnds(producer.id);
     reconcile.reconcileActiveWorkItems();
-    expect(store.getWorkItem(item.id)).toMatchObject({ status: "in_review", approvalState: "pending" });
+    expect(store.getWorkItem(item.id)).toMatchObject({ status: "in_review" });
 
-    const decided = await call("POST", `/api/work-items/${item.id}/approval`, { decision: "approve", note: "ship" }, operatorHeaders);
+    const decided = await call("POST", `/api/work-items/${item.id}/status`, { status: "done", note: "ship" }, operatorHeaders);
     expect(decided.status).toBe(200);
     expect(store.getWorkItem(item.id)?.status).toBe("done");
     expect(statusMoves(item.id)).toEqual([

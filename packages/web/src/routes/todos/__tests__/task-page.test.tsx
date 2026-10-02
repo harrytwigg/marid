@@ -7,7 +7,7 @@ import TaskPage, { ancestorsOf, nodeOf } from "../task-page/task-page"
 
 /* Todos v2 slice 6 stage B — the task page (design-doc §7, task-detail.html).
  * Anatomy: breadcrumb trail from the root tree, banner precedence
- * (escalated > approval > blocked, ONE at a time), the banner's asked-for-after
+ * (blocked only), the banner's asked-for-after
  * reason field (review F6), and the chrome-free rail's read rows. Stage C adds
  * the §8 full-screen push: on mobile the tab bar yields the bottom edge to the
  * fixed comment bar. */
@@ -23,7 +23,6 @@ vi.mock("@/routes/providers", () => ({ useTheme: () => ({ theme: "dark" }) }))
 const getWorkItem = vi.fn()
 const getWorkItemTree = vi.fn()
 const setWorkItemStatus = vi.fn()
-const decideWorkItemApproval = vi.fn()
 const listWorkItemAttachments = vi.fn()
 const listWorkItemComments = vi.fn()
 const listWorkItemSessions = vi.fn()
@@ -39,7 +38,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getWorkItem: (...args: unknown[]) => getWorkItem(...args),
       getWorkItemTree: (...args: unknown[]) => getWorkItemTree(...args),
       setWorkItemStatus: (...args: unknown[]) => setWorkItemStatus(...args),
-      decideWorkItemApproval: (...args: unknown[]) => decideWorkItemApproval(...args),
       listWorkItemAttachments: (...args: unknown[]) => listWorkItemAttachments(...args),
       listWorkItemComments: (...args: unknown[]) => listWorkItemComments(...args),
       workItemAttachmentUrl: (id: string, attachmentId: string) =>
@@ -72,13 +70,6 @@ function full(id: string, overrides: Partial<WorkItemFullWire> = {}): WorkItemFu
     verifyPolicy: null,
     rounds: 1,
     budgetUsd: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
-    approvalDecidedBy: null,
-    approvalDecidedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: id,
@@ -352,7 +343,7 @@ describe("the task page", () => {
     renderTask()
 
     const chips = await screen.findByTestId("task-chip-cluster")
-    expect(chips.textContent).toContain("Executing")
+    expect(chips.textContent).toContain("In progress")
     expect(chips.textContent).toContain("High")
     expect(chips.textContent).toContain("mason")
     expect(chips.textContent).toContain("build")
@@ -382,95 +373,15 @@ describe("the task page", () => {
     expect(screen.queryByTestId("rail-dispatch")).toBeNull()
   })
 
-  it("banner precedence: escalated wins over a pending approval", async () => {
-    const item = full("PLA-12", {
-      status: "escalated",
-      approvalState: "pending",
-      approvalRequest: "OK to go live?",
-    })
-    getWorkItem.mockResolvedValue(detailOf(item, {
-      events: [{
-        id: "e1", workItemId: "PLA-12", kind: "status_change", fromStatus: "in_review",
-        toStatus: "escalated", actor: "reviewer", detail: { note: "Rounds exhausted, your call" },
-        createdAt: "2026-07-23T07:00:00.000Z",
-      }],
-    }))
+  it("an in_review Todo shows no banner and no approval controls", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { status: "in_review" })))
     renderTask()
 
-    expect((await screen.findByTestId("task-banner-escalated")).textContent).toContain("Rounds exhausted, your call")
-    expect(screen.queryByTestId("task-banner-approval")).toBeNull()
+    await screen.findByTestId("task-page-grid")
     expect(screen.queryByTestId("task-banner-blocked")).toBeNull()
-  })
-
-  it("approval banner decides through the approval surface", async () => {
-    const item = full("PLA-12", { status: "in_review", approvalState: "pending", approvalRequest: "OK to go live?" })
-    getWorkItem.mockResolvedValue(detailOf(item))
-    decideWorkItemApproval.mockResolvedValue({ workItem: full("PLA-12", { status: "in_review" }), escalated: false })
-    renderTask()
-
-    const banner = await screen.findByTestId("task-banner-approval")
-    expect((banner).textContent).toContain("OK to go live?")
-    fireEvent.click(screen.getByTestId("task-banner-approve"))
-    // No offered options on this gate → no choice argument.
-    await waitFor(() => expect(decideWorkItemApproval).toHaveBeenCalledWith("PLA-12", "approve", undefined, undefined))
-  })
-
-  it("Reject… decides nothing on its own — the note and the decision submit together", async () => {
-    const item = full("PLA-12", { status: "in_review", approvalState: "pending", approvalRequest: "OK to go live?" })
-    getWorkItem.mockResolvedValue(detailOf(item))
-    decideWorkItemApproval.mockResolvedValue({ workItem: item, escalated: false })
-    renderTask()
-
-    await screen.findByTestId("task-banner-approval")
-    fireEvent.click(screen.getByTestId("task-banner-reject"))
-    expect(decideWorkItemApproval).not.toHaveBeenCalled()
-
-    const note = screen.getByTestId("task-banner-reject-note")
-    fireEvent.change(note, { target: { value: "Cite the source first" } })
-    // Leaving the field is not a decision, and it must not lose the words.
-    fireEvent.blur(note)
-    expect(decideWorkItemApproval).not.toHaveBeenCalled()
-    expect(screen.getByTestId("task-banner-reject-consequence").textContent).toContain("another round")
-
-    fireEvent.click(screen.getByTestId("task-banner-reject-confirm"))
-    await waitFor(() =>
-      expect(decideWorkItemApproval).toHaveBeenCalledWith("PLA-12", "reject", "Cite the source first", undefined),
-    )
-    expect(decideWorkItemApproval).toHaveBeenCalledTimes(1)
-  })
-
-  it("an empty rejection is submitted as the stop it is, and says so first", async () => {
-    const item = full("PLA-12", { status: "in_review", approvalState: "pending", approvalRequest: "OK to go live?" })
-    getWorkItem.mockResolvedValue(detailOf(item))
-    decideWorkItemApproval.mockResolvedValue({ workItem: item, escalated: false })
-    renderTask()
-
-    await screen.findByTestId("task-banner-approval")
-    fireEvent.click(screen.getByTestId("task-banner-reject"))
-    expect(screen.getByTestId("task-banner-reject-consequence").textContent).toContain("Ends the work")
-    fireEvent.click(screen.getByTestId("task-banner-reject-confirm"))
-    await waitFor(() => expect(decideWorkItemApproval).toHaveBeenCalledWith("PLA-12", "reject", undefined, undefined))
-  })
-
-  it("a choice gate holds Approve until an option is picked, then sends the pick", async () => {
-    const item = full("PLA-12", { status: "in_review", approvalState: "pending", approvalRequest: "Which variant ships?" })
-    getWorkItem.mockResolvedValue(detailOf(item, {
-      approvals: [{
-        id: "wap_1", workItemId: "PLA-12", state: "pending", request: "Which variant ships?", ref: null,
-        options: ["variant-a", "variant-b"], choice: null, target: null, targetKind: null,
-        requestedBy: "workflow", requestedAt: "2026-07-23T07:00:00.000Z", escalatedAt: null,
-        decidedBy: null, decidedAt: null, note: null,
-      }],
-    }))
-    decideWorkItemApproval.mockResolvedValue({ workItem: item, escalated: false })
-    renderTask()
-
-    await screen.findByTestId("task-banner-approval")
-    // Approving without a pick is structurally impossible, not merely refused.
-    expect((screen.getByTestId("task-banner-approve") as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole("radio", { name: "variant-b" }))
-    fireEvent.click(screen.getByTestId("task-banner-approve"))
-    await waitFor(() => expect(decideWorkItemApproval).toHaveBeenCalledWith("PLA-12", "approve", undefined, "variant-b"))
+    expect(screen.queryByTestId("task-banner-approval")).toBeNull()
+    expect(screen.queryByTestId("task-banner-approve")).toBeNull()
+    expect(screen.queryByTestId("task-banner-reject")).toBeNull()
   })
 
   it("a reason-less blocked item grows the banner reason field; Save PUTs the same status with the note (F6)", async () => {

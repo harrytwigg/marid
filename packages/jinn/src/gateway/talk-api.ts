@@ -3,8 +3,8 @@
  *
  * The gateway mints a short-lived provider credential and does the accounting;
  * the browser opens its own connection to the provider and carries the audio.
- * Nothing here touches a media stream. Modelled on workflow-api.ts: one exported
- * handler the main dispatcher tries before its own routes.
+ * Nothing here touches a media stream. One exported handler the main dispatcher
+ * tries before its own routes.
  *
  * docs/talk-session-runtime.md is the contract this file implements.
  */

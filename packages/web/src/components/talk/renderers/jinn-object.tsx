@@ -71,21 +71,6 @@ function useSessionState(id: string, enabled: boolean): ObjectState {
   })
 }
 
-function useRunState(workflowId: string, runId: string, enabled: boolean): ObjectState {
-  const run = useQuery({
-    queryKey: queryKeys.workflows.run(workflowId, runId),
-    enabled,
-    queryFn: () => api.getWorkflowRunV2(workflowId, runId),
-  })
-  if (run.isPending) return LOADING
-  if (run.error) return failed(run.error)
-  return loaded({
-    kindLabel: "Workflow run",
-    title: run.data?.workflowTitle ?? workflowId,
-    detail: [run.data?.status, runId].filter(Boolean).join(" · "),
-  })
-}
-
 /**
  * Every query runs as a hook on every render — only the one matching the ref is
  * enabled, because hooks cannot be called conditionally.
@@ -93,14 +78,7 @@ function useRunState(workflowId: string, runId: string, enabled: boolean): Objec
 function useJinnObject(ref: JinnObjectRef): ObjectState {
   const todo = useTodoState(ref.type === "todo" ? ref.id : null)
   const session = useSessionState(ref.type === "session" ? ref.id : "", ref.type === "session")
-  const run = useRunState(
-    ref.type === "workflowRun" ? ref.workflowId : "",
-    ref.type === "workflowRun" ? ref.id : "",
-    ref.type === "workflowRun",
-  )
-  if (ref.type === "todo") return todo
-  if (ref.type === "session") return session
-  return run
+  return ref.type === "todo" ? todo : session
 }
 
 export function ObjectSituation({
@@ -154,7 +132,6 @@ export function ObjectSituation({
 const SPOKEN_KIND: Record<JinnObjectRef["type"], string> = {
   todo: "Todo",
   session: "session",
-  workflowRun: "workflow run",
 }
 
 export function objectSpeech(payload: ObjectPayload): string {

@@ -7,6 +7,7 @@ import path from "node:path"
 import { spawn, spawnSync } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { buildLabProcessScanPipeline, listLabHomeProcessIds } from "./process-scan.mjs"
+import { assertWorkflowSkillRetired, assertWorkflowStateSurvived } from "./workflow-state.mjs"
 
 const NONCE = ".jinn-upgrade-lab-nonce"
 const SCENARIOS = new Set(["stock", "customized", "heavily-customized", "interrupted", "no-instance-change"])
@@ -373,26 +374,7 @@ export function assertRepresentativeStateSurvived(before, after) {
       throw new Error(`Representative ${kind} state changed across the package swap`)
     }
   }
-  const oldWorkflow = before?.workflow
-  const newWorkflow = after?.workflow
-  if (oldWorkflow?.storage === "v2") {
-    if (JSON.stringify(oldWorkflow) !== JSON.stringify(newWorkflow)) {
-      throw new Error("Representative workflow state changed across the package swap")
-    }
-    return
-  }
-  if (
-    oldWorkflow?.count !== 1
-    || newWorkflow?.count !== 1
-    || oldWorkflow.id !== newWorkflow.id
-    || oldWorkflow.title !== newWorkflow.title
-    || oldWorkflow.sourceSha256 !== newWorkflow.sourceSha256
-    || newWorkflow.enabled !== false
-    || newWorkflow.legacySourcePreserved !== true
-    || newWorkflow.importOutcome !== "imported"
-  ) {
-    throw new Error("Representative workflow state changed across the package swap")
-  }
+  assertWorkflowStateSurvived(before, after)
 }
 
 export { buildLabProcessScanPipeline, listLabHomeProcessIds }
@@ -1057,13 +1039,15 @@ async function executeScenario({ scenario, candidateTarball, baselineTarball, ro
     assertRepresentativeStateSurvived(representativeBefore, representativeAfter)
     summary.representativeState.after = representativeAfter
     summary.checks.registryBackedStateSurvived = "PASS"
+    assertWorkflowSkillRetired({ home: layout.home, baselineTree: baseline, finalTree })
+    summary.checks.workflowSkillRetired = "PASS"
     if (["customized", "heavily-customized", "interrupted"].includes(scenario)) {
       const contents = Object.keys(finalTree).filter((key) => /CLAUDE\.md|local-helper\/SKILL\.md|local-runbook|local-operator/.test(key)).map((key) => fs.lstatSync(path.join(layout.home, key)).isFile() ? fs.readFileSync(path.join(layout.home, key), "utf8") : "").join("\n")
       if (!contents.includes("CUSTOM-CLAUDE-SURVIVES") || !contents.includes("CUSTOM-SKILL-SURVIVES")) throw new Error("custom sentinels did not survive")
       summary.checks.customSentinelsSurvived = "PASS"
     }
     if (scenario === "customized") {
-      for (const required of ["docs/company-doctrine.md", "skills/delegation/SKILL.md", "skills/todo-handling/SKILL.md", "skills/workflow/SKILL.md"]) {
+      for (const required of ["docs/company-doctrine.md", "skills/delegation/SKILL.md", "skills/todo-handling/SKILL.md"]) {
         if (!fs.existsSync(path.join(layout.home, required))) throw new Error(`target instance surface is missing: ${required}`)
       }
       if (!fs.readFileSync(path.join(layout.home, "config.yaml"), "utf8").includes("CUSTOM-CONFIG-SURVIVES")) throw new Error("custom config sentinel did not survive")

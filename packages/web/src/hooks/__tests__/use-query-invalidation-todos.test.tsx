@@ -190,16 +190,11 @@ describe("Todo live reconciliation (ICI-570)", () => {
     expect(calledWithKey(invalidate, ["work-items"])).toBe(true)
   })
 
-  it("invalidates Workflow list/detail/run and session detail caches after reconnect", async () => {
+  it("invalidates session list and detail caches after reconnect", async () => {
     const { client, rerender } = setup()
-    const workflowId = "release-review"
-    const runId = "run-7"
-    const sessionId = "session-workflow-7"
+    const sessionId = "session-7"
     const keys = [
-      queryKeys.workflows.all,
-      queryKeys.workflows.definition(workflowId),
-      queryKeys.workflows.runs(workflowId),
-      queryKeys.workflows.run(workflowId, runId),
+      queryKeys.sessions.all,
       queryKeys.sessions.detail(sessionId),
     ] as const
     for (const key of keys) client.setQueryData(key, { cached: true })

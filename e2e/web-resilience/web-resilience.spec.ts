@@ -11,7 +11,7 @@ test('an offline cold launch recovers without re-pairing or cached API data', as
     }
   })
   await context.setOffline(true)
-  await page.goto('/experiments')
+  await page.goto('/cron')
   await expect(page.getByRole('heading', { name: "You're offline" })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Refresh' })).toBeDisabled()
   expect(await page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith('jinn:chunk-retry:')))).toEqual([])
@@ -23,7 +23,7 @@ test('an offline cold launch recovers without re-pairing or cached API data', as
   await context.setOffline(false)
   await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled()
   await page.getByRole('button', { name: 'Refresh' }).click()
-  await expect(page.getByRole('heading', { name: 'Experiments', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Cron', exact: true })).toBeVisible()
 })
 
 test('an uncached tab shows offline recovery inside an already paired app', async ({ page, context }) => {

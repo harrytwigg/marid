@@ -65,8 +65,6 @@ export const CONFIG_PATH = path.join(JINN_HOME, "config.yaml");
 export const SESSIONS_DB = path.join(JINN_HOME, "sessions", "registry.db");
 /** Append-only record of the sessions each gateway restart interrupted and what the next boot did about them (sessions/restart-record.ts). */
 export const RESTART_RECORD_FILE = path.join(JINN_HOME, "sessions", "restart-interrupted.jsonl");
-export const WORKFLOWS_DIR = path.join(JINN_HOME, "workflows");
-export const WORKFLOWS_DB_PATH = path.join(WORKFLOWS_DIR, "workflows.db");
 export const CRON_JOBS = path.join(JINN_HOME, "cron", "jobs.json");
 export const CRON_RUNS = path.join(JINN_HOME, "cron", "runs");
 export const ORG_DIR = path.join(JINN_HOME, "org");

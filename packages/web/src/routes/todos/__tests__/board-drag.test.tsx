@@ -34,8 +34,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
       getOrg: vi.fn().mockResolvedValue({ departments: [], employees: [] }),
       createWorkItem: vi.fn(),
       assignWorkItem: vi.fn(),
-      decideWorkItemApproval: vi.fn(),
-      escalateWorkItemApproval: vi.fn(),
     },
   }
 })
@@ -50,11 +48,6 @@ function compact(id: string, status: WorkItemStatusWire): WorkItemCompactWire {
     department: "platform",
     source: "human",
     sourceRef: null,
-    approvalState: null,
-    approvalRequest: null,
-    approvalRef: null,
-    approvalTarget: null,
-    approvalEscalatedAt: null,
     createdBy: "operator",
     parentId: null,
     rootId: id,
@@ -132,7 +125,7 @@ beforeEach(() => {
 describe("board drag legality", () => {
   it("dims illegal columns at 38% on lift and renders no slot in them", async () => {
     renderBoard()
-    const card = await screen.findByTestId("board-card-PLA-3") // executing
+    const card = await screen.findByTestId("board-card-PLA-4") // in_review
     stubColumnGeometry()
 
     fireEvent.pointerDown(card, { button: 0, clientX: 210, clientY: 40, pointerType: "mouse" })
@@ -140,11 +133,10 @@ describe("board drag legality", () => {
       window.dispatchEvent(pointer("pointermove", 220, 50)) // beyond threshold → lift
     })
 
-    // From executing: backlog/assigned are illegal manual targets — they recede.
+    // From in_review: backlog is an illegal manual target, so it recedes;
+    // In progress stays live, since sending the work back is the review bounce.
     expect(screen.getByTestId("board-column-backlog").style.opacity).toBe("0.38")
-    expect(screen.getByTestId("board-column-assigned").style.opacity).toBe("0.38")
-    // in_review stays live.
-    expect(screen.getByTestId("board-column-in_review").style.opacity).toBe("")
+    expect(screen.getByTestId("board-column-executing").style.opacity).not.toBe("0.38")
 
     await act(async () => {
       window.dispatchEvent(pointer("pointerup", 220, 50))
@@ -252,7 +244,7 @@ describe("board drag legality", () => {
   })
 
   it("a legal-but-empty exception column materializes on lift (states mock §6) and folds back after", async () => {
-    renderBoard() // no blocked/escalated rows anywhere
+    renderBoard() // no blocked rows anywhere
     const card = await screen.findByTestId("board-card-PLA-3") // executing
     vi.spyOn(card, "getBoundingClientRect").mockReturnValue({
       x: 200, y: 0, left: 200, top: 0, right: 300, bottom: 72, width: 100, height: 72,
@@ -265,9 +257,8 @@ describe("board drag legality", () => {
     await act(async () => {
       window.dispatchEvent(pointer("pointermove", 220, 50)) // lift
     })
-    // Blocked and Escalated are legal drops from executing — they appear.
+    // Blocked is a legal drop from executing — it appears.
     expect(screen.getByTestId("board-column-blocked")).toBeTruthy()
-    expect(screen.getByTestId("board-column-escalated")).toBeTruthy()
     for (const column of document.querySelectorAll<HTMLElement>("[data-board-column]")) {
       expect(column.style.flex).toBe("0 0 100px")
     }

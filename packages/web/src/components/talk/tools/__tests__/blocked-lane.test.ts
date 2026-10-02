@@ -8,8 +8,8 @@ import { executeToolCall } from "../registry"
  * `talk_set_todo_status` leaving `blocked`.
  *
  * Apart from the rest of the write lane's suite because it is the one move whose
- * lane the edge map gets wrong: `blocked → assigned` is reversible, so the fast
- * lane would take "move it to assigned" on the model's word — and that sentence
+ * lane the edge map gets wrong: `blocked → backlog` is reversible, so the fast
+ * lane would take "move it to backlog" on the model's word — and that sentence
  * is an unblock, which releases the work to whoever picks it up.
  */
 
@@ -24,7 +24,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   forgetUndo()
   mocked.getWorkItem.mockResolvedValue({ workItem: { id: "ABC-59", status: "blocked", version: 4 } } as never)
-  mocked.setWorkItemStatus.mockResolvedValue({ workItem: { id: "ABC-59", status: "assigned" } } as never)
+  mocked.setWorkItemStatus.mockResolvedValue({ workItem: { id: "ABC-59", status: "backlog" } } as never)
 })
 
 afterEach(() => {
@@ -34,14 +34,14 @@ afterEach(() => {
 
 describe("leaving blocked is an unblock, whatever the edge map says", () => {
   it("asks even though the board would take the move back", async () => {
-    const pending = executeToolCall("talk_set_todo_status", '{"id":"ABC-59","status":"assigned"}')
+    const pending = executeToolCall("talk_set_todo_status", '{"id":"ABC-59","status":"backlog"}')
     await vi.waitFor(() => expect(currentSituation()).not.toBeNull())
 
     expect(mocked.setWorkItemStatus).not.toHaveBeenCalled()
     answerSituation("go")
     const result = await pending
 
-    expect(mocked.setWorkItemStatus).toHaveBeenCalledWith("ABC-59", "assigned", undefined, "talk")
+    expect(mocked.setWorkItemStatus).toHaveBeenCalledWith("ABC-59", "backlog", undefined, "talk")
     if (!result.ok) throw new Error("expected success")
     // No undo: a fifteen-second window does not reach the agent that started.
     expect(result.data.undo).toBeUndefined()
@@ -58,7 +58,7 @@ describe("leaving blocked is an unblock, whatever the edge map says", () => {
   })
 
   it("still takes the fast lane for a reversible move that is not out of blocked", async () => {
-    mocked.getWorkItem.mockResolvedValue({ workItem: { id: "ABC-59", status: "assigned", version: 4 } } as never)
+    mocked.getWorkItem.mockResolvedValue({ workItem: { id: "ABC-59", status: "backlog", version: 4 } } as never)
 
     const result = await executeToolCall("talk_set_todo_status", '{"id":"ABC-59","status":"blocked"}')
 

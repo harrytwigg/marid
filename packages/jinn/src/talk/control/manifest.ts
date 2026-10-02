@@ -6,7 +6,7 @@
  * assembly, the parity check that keeps the inventory honest, and the lookup.
  */
 import { BROWSER_CONTROL_OPERATIONS } from "./browser-tools.js";
-import { gateway, integer, params, string } from "./operation-builders.js";
+import { gateway, params, string } from "./operation-builders.js";
 import { TODO_GATEWAY_OPERATIONS } from "./todo-operations.js";
 import {
   TALK_COMPANY_CAPABILITY_COVERAGE,
@@ -18,8 +18,6 @@ export { TALK_COMPANY_CAPABILITY_COVERAGE, renderTalkCompanyCoverageMarkdown } f
 export type { TalkCompanyCapabilityCoverage } from "./capability-coverage.js";
 
 const GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
-  gateway("prepare_voice_approval", "Prepare a short-lived approval challenge for one Todo. This never decides it.", params({ id: string("The full Todo id.") }, ["id"]), "todos", { mutability: "write", verification: "approval-challenge-reread" }),
-  gateway("commit_voice_approval", "Commit a prepared challenge from the separately recorded final operator utterance. Arguments contain only the challenge id.", params({ challengeId: string("The prepared challenge id.") }, ["challengeId"]), "todos", { mutability: "write", verification: "approval-decision-reread" }),
   gateway("talk_delegate_todo", "Delegate an existing Todo to a named employee and open its resulting chat.", params({
     id: string("The full Todo id."),
     employee: string("The employee slug."),
@@ -30,9 +28,6 @@ const GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
     id: string("The session id, copied from the 'Selected session id' line of the page context when the operator means the chat on screen."),
     message: string("The operator message."),
   }, ["id", "message"]), "sessions", { mutability: "write", verification: "session-message-reread" }),
-  gateway("talk_start_workflow_run", "Start one enabled manual Workflow run.", params({ id: string("The workflow id."), input: string("Optional JSON object input.") }, ["id"]), "workflows", { mutability: "write", verification: "workflow-run-reread" }),
-  gateway("read_workflow_runs", "Read recent runs of one Workflow.", params({ id: string("The workflow id."), limit: integer("Maximum runs to return.") }, ["id"]), "workflows", { mutability: "read", verification: "workflow-runs-reread" }),
-  gateway("read_workflow_run", "Read one exact Workflow run.", params({ id: string("The workflow id."), runId: string("The run id.") }, ["id", "runId"]), "workflows", { mutability: "read", verification: "workflow-run-reread" }),
   gateway("talk_recall_topic", "Resolve a vague reference to an earlier Talk topic. Returns candidates instead of guessing when ambiguous.", params({ reference: string("The operator's reference, such as 'the first one' or 'the release workflow'.") }, ["reference"]), "memory", { mutability: "read", verification: "topic-resolution-reread" }),
   gateway("talk_remember_topic", "Save an explicit goal, decision, or unresolved question on the current Talk topic.", params({
     topicId: string("Optional exact topic id; omit to use the current topic."),
@@ -41,7 +36,7 @@ const GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
     unresolvedQuestion: string("One open question."),
     resolvedQuestion: string("An exact open question that is now resolved."),
   }), "memory", { mutability: "write", verification: "topic-commitment-reread" }),
-  gateway("read_talk_capability", "Read whether a company capability is supported or return its exact named gap and planned adapter. Known lanes include todos, chats, workflows, notes, experiments, cron, org, skills, settings, logs, files, instances, approvals, topics, and screen navigation.", params({
+  gateway("read_talk_capability", "Read whether a company capability is supported or return its exact named gap and planned adapter. Known lanes include todos, chats, notes, cron, org, skills, settings, logs, files, instances, topics, and screen navigation.", params({
     capability: string("The exact capability key from the Talk company inventory."),
   }, ["capability"]), "capabilities", { mutability: "read", verification: "capability-inventory-reread" }),
 ];

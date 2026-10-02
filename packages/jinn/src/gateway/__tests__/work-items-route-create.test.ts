@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { CALLER_SESSION_CAPABILITY_HEADER, CALLER_SESSION_HEADER, TOOL_CALL_HEADER, TOOL_CALL_HEADER_VALUE } from "../../mcp/identity.js";
 import { api, ctx, dbModule, makeReq, makeRes, operatorHeaders, reg, store, toolHeaders } from "./helpers/work-items-route-harness.js";
 
-describe("POST /api/work-items — provenance and approval routing fields", () => {
+describe("POST /api/work-items — provenance and attention routing", () => {
   it("rejects caller-supplied provenance and assigns normal tool-created Todos to the session source", async () => {
     const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "caller", title: "caller", employee: "platform-worker" });
 
@@ -20,46 +20,23 @@ describe("POST /api/work-items — provenance and approval routing fields", () =
     const ok = makeRes();
     await api.handleApiRequest(makeReq("POST", "/api/work-items", { title: "Normal" }, toolHeaders(caller.id)), ok.res, ctx);
     expect(ok.status).toBe(201);
-    expect(ok.body.workItem).toMatchObject({ source: "session", approvalTarget: null, approvalEscalatedAt: null });
+    expect(ok.body.workItem).toMatchObject({ source: "session" });
     expect(ok.body.workItem.sourceRef).toMatch(new RegExp(`^session:${caller.id}:`));
-  });
-
-  it("returns approvalTarget in compact and full API records", async () => {
-    const wi = store.createWorkItem({ title: "Approval target row", source: "human" });
-    const approvals = await import("../../work-items/approvals.js");
-    approvals.requestApproval(wi.id, { request: "decide", target: "coo" });
-
-    const list = makeRes();
-    await api.handleApiRequest(makeReq("GET", "/api/work-items?limit=20"), list.res, ctx);
-    expect(list.status).toBe(200);
-    expect((list.body.workItems as Array<Record<string, unknown>>).find((item) => item.id === wi.id)).toMatchObject({
-      approvalTarget: "coo",
-      approvalState: "pending",
-    });
-
-    const full = makeRes();
-    await api.handleApiRequest(makeReq("GET", `/api/work-items/${wi.id}`), full.res, ctx);
-    expect(full.status).toBe(200);
-    expect(full.body.workItem).toMatchObject({ approvalTarget: "coo", approvalEscalatedAt: null });
   });
 
   it("returns a capability-scoped needs-attention queue ordered by updatedAt with compact run/session refs", async () => {
     const coo = reg.createSession({ engine: "codex", source: "web", sourceRef: "coo-attn", title: "coo", employee: "coo" });
     const worker = reg.createSession({ engine: "codex", source: "web", sourceRef: "worker-attn", title: "worker", employee: "platform-worker" });
 
-    const cooApproval = store.createWorkItem({ title: "COO approval", source: "workflow", sourceRef: "workflow:wf-coo:run-1", status: "in_review" });
-    const workerApproval = store.createWorkItem({ title: "Worker approval", source: "workflow", sourceRef: "workflow:wf-worker:run-2", status: "in_review" });
+    const cooOlderBlocked = store.createWorkItem({ title: "COO older blocked", source: "workflow", sourceRef: "workflow:wf-coo:run-1", assignee: "coo", status: "blocked" });
+    const workerBlocked = store.createWorkItem({ title: "Worker blocked", source: "workflow", sourceRef: "workflow:wf-worker:run-2", assignee: "platform-worker", status: "blocked" });
     const cooBlocked = store.createWorkItem({ title: "COO blocked", source: "session", sourceRef: `session:${coo.id}:abc123`, assignee: "coo", status: "blocked" });
-    const cooNormal = store.createWorkItem({ title: "COO normal", assignee: "coo", status: "assigned" });
-
-    const approvals = await import("../../work-items/approvals.js");
-    approvals.requestApproval(cooApproval.id, { request: "approve coo", target: "coo" });
-    approvals.requestApproval(workerApproval.id, { request: "approve worker", target: "platform-worker" });
+    const cooNormal = store.createWorkItem({ title: "COO normal", assignee: "coo", status: "backlog" });
 
     const db = dbModule.initDb();
-    db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-07-06T10:00:00.000Z", cooApproval.id);
+    db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-07-06T10:00:00.000Z", cooOlderBlocked.id);
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-07-06T12:00:00.000Z", cooBlocked.id);
-    db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-07-06T13:00:00.000Z", workerApproval.id);
+    db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-07-06T13:00:00.000Z", workerBlocked.id);
     db.prepare("UPDATE work_items SET updated_at = ? WHERE id = ?").run("2030-07-06T14:00:00.000Z", cooNormal.id);
 
     const cooQueue = makeRes();
@@ -69,18 +46,14 @@ describe("POST /api/work-items — provenance and approval routing fields", () =
       ctx,
     );
     expect(cooQueue.status).toBe(200);
-    expect((cooQueue.body.workItems as Array<{ id: string }>).map((item) => item.id)).toEqual([cooBlocked.id, cooApproval.id]);
+    expect((cooQueue.body.workItems as Array<{ id: string }>).map((item) => item.id)).toEqual([cooBlocked.id, cooOlderBlocked.id]);
     expect(cooQueue.body.workItems[0]).toMatchObject({
       id: cooBlocked.id,
       sessionRef: { sessionId: coo.id },
-      approvalState: null,
-      approvalTarget: null,
     });
     expect(cooQueue.body.workItems[1]).toMatchObject({
-      id: cooApproval.id,
+      id: cooOlderBlocked.id,
       sessionRef: null,
-      approvalState: "pending",
-      approvalTarget: "coo",
     });
     expect(cooQueue.body.workItems[0]).not.toHaveProperty("workflowRun");
     expect(cooQueue.body.workItems[1]).not.toHaveProperty("workflowRun");
@@ -92,7 +65,7 @@ describe("POST /api/work-items — provenance and approval routing fields", () =
       ctx,
     );
     expect(workerQueue.status).toBe(200);
-    expect((workerQueue.body.workItems as Array<{ id: string }>).map((item) => item.id)).toEqual([workerApproval.id]);
+    expect((workerQueue.body.workItems as Array<{ id: string }>).map((item) => item.id)).toEqual([workerBlocked.id]);
 
     const spoof = makeRes();
     await api.handleApiRequest(
