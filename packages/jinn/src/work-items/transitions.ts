@@ -11,6 +11,7 @@ import { EDGES } from './transition-edges.js';
 import {
   appendWorkItemEvent,
   getWorkItem,
+  releaseSelfStartedLinks,
   STICKY_STATUSES,
   type WorkItem,
   type WorkItemEvent,
@@ -227,6 +228,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
       throw new TransitionError('conflict', `work item ${id} changed concurrently (expected status ${from})`);
     }
 
+    const releasedSessions = target === 'backlog' ? releaseSelfStartedLinks(db, id) : [];
     if (block) recordBlock(db, id, block, now);
     // Only a successful completion resets the block history; `cancelled` keeps
     // it, because abandoning work is not evidence its blocks were resolved.
@@ -251,6 +253,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
       detail: {
         ...(opts.detail ?? {}),
         ...(bounce ? { bounce: true, rounds } : {}),
+        ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
         ...(block?.escalated ? { reason: 'block_loop_detected', blockKind, recurrences: block.recurrences } : {}),
         // An escalation stops the Todo for the operator: recovery must read it
         // as a declared block, whoever the actor was.

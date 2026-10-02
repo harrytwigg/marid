@@ -866,8 +866,19 @@ export function getWorkItemSpend(id: string): number {
  * the call verifies both rows exist and then returns WITHOUT writing — so a
  * redundant re-link (e.g. a cron re-fire re-linking the same item to the same session)
  * does not churn `work_items.updated_at` or the event log.
+ *
+ * `selfStarted` marks the link as one a session made by starting its own Todo
+ * with no dispatch (`gateway/todo-self-start.ts`); any other link clears the
+ * mark. A marked link holds only while the Todo is being worked: the move that
+ * puts the Todo back in the backlog releases it ({@link releaseSelfStartedLinks}).
  */
-export function linkSession(workItemId: string, sessionId: string, actor?: string | null, role: WorkItemLinkRole = 'execute'): void {
+export function linkSession(
+  workItemId: string,
+  sessionId: string,
+  actor?: string | null,
+  role: WorkItemLinkRole = 'execute',
+  opts: { selfStarted?: boolean } = {},
+): void {
   const db = initDb();
   const todoId = parseTodoId(workItemId);
   const now = new Date().toISOString();
@@ -882,9 +893,43 @@ export function linkSession(workItemId: string, sessionId: string, actor?: strin
     // `updated_at` bump. A re-link that CHANGES the role still writes: the role
     // is what the self-review ban reads, and a stale one is not a detail.
     if (session.work_item_id === todoId && toWorkItemLinkRole(session.work_item_role) === role) return;
-    db.prepare('UPDATE sessions SET work_item_id = ?, work_item_role = ? WHERE id = ?').run(todoId, role, sessionId);
+    const meta = opts.selfStarted
+      ? `json_set(COALESCE(transport_meta, '{}'), '$.${SELF_STARTED_META_KEY}', ?)`
+      : `json_remove(transport_meta, '$.${SELF_STARTED_META_KEY}')`;
+    db.prepare(`UPDATE sessions SET work_item_id = ?, work_item_role = ?, transport_meta = ${meta} WHERE id = ?`)
+      .run(todoId, role, ...(opts.selfStarted ? [todoId] : []), sessionId);
     db.prepare('UPDATE work_items SET updated_at = ?, version = version + 1 WHERE id = ?').run(now, todoId);
-    appendWorkItemEvent({ workItemId: todoId, kind: 'session_linked', actor, detail: { sessionId, role } });
+    appendWorkItemEvent({
+      workItemId: todoId,
+      kind: 'session_linked',
+      actor,
+      detail: { sessionId, role, ...(opts.selfStarted ? { selfStarted: true } : {}) },
+    });
   });
   txn();
+}
+
+/** The session meta key naming the Todo a session linked itself to by starting it. */
+export const SELF_STARTED_META_KEY = 'selfStartedTodo';
+
+/**
+ * Release the self-started links on a Todo that is going back to the backlog,
+ * and return the sessions released. Called inside the status write's own
+ * transaction.
+ *
+ * A chat session that started its own Todo keeps running turns after the Todo
+ * is put down, by the agent or by the operator, and a linked session in flight
+ * derives `executing`: left linked, every later turn would pull a parked Todo
+ * back to work. A dispatched attempt's link is not marked and is left alone.
+ * The session's run stays on the Todo's ledger and settles with the session.
+ */
+export function releaseSelfStartedLinks(db: ReturnType<typeof initDb>, workItemId: string): string[] {
+  const rows = db
+    .prepare(`SELECT id FROM sessions WHERE work_item_id = ? AND json_extract(transport_meta, '$.${SELF_STARTED_META_KEY}') = ?`)
+    .all(workItemId, workItemId) as { id: string }[];
+  const release = db.prepare(
+    `UPDATE sessions SET work_item_id = NULL, work_item_role = NULL, transport_meta = json_remove(transport_meta, '$.${SELF_STARTED_META_KEY}') WHERE id = ?`,
+  );
+  for (const row of rows) release.run(row.id);
+  return rows.map((row) => row.id);
 }

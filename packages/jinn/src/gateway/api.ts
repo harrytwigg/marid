@@ -2563,7 +2563,7 @@ export async function handleApiRequest(
         if (actingAsOperator && result.item.status === "done") {
           addComment({ workItemId: params.id, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), body: `Closed as done for the operator. Reason: ${note}`, origin: caller.origin });
         }
-        result.item = linkSelfStartedTodo(caller, result.item, actor);
+        if (result.item.status !== item.status) result.item = linkSelfStartedTodo(caller, result.item, actor);
         // A review handoff or send-back note is a comment under whoever moved it; a retried move posts it too.
         if (target === "in_review" || target === "executing") postReviewNote(params.id, { actor, ...workItemCommentAuthor(caller), ...workItemCommentSession(caller), origin: caller.origin });
         const activityReceiptId = persistTodoMutationActivity(
@@ -2628,7 +2628,7 @@ export async function handleApiRequest(
         const assigned = assignWorkItem(params.id, assignee, employee?.department ?? null, workItemActor(caller),
           { origin: caller.origin, actorEmployee: workItemActorEmployee(caller) });
         if (!assigned) return notFound(res);
-        const item = linkSelfStartedTodo(caller, assigned, workItemActor(caller));
+        const item = assigned.assignee !== current.assignee ? linkSelfStartedTodo(caller, assigned, workItemActor(caller)) : assigned;
         const activityReceiptId = persistTodoMutationActivity(req, context, item, "assigned", item.version !== current.version);
         return json(res, withActivityReceipt({ workItem: item }, activityReceiptId));
       } catch (err) {

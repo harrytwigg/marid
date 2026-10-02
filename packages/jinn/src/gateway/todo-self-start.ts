@@ -23,6 +23,15 @@ import type { WorkItemCaller } from "./work-item-arming.js";
  * been handed to review or closed is the producer's finished attempt, and its
  * run stays on that Todo's ledger, so the session moves on to the new one.
  *
+ * The link is marked self-started, and it holds while the Todo is worked: a
+ * chat keeps running turns after its Todo is put down, so the move back to the
+ * backlog releases it (`releaseSelfStartedLinks`) rather than letting the next
+ * turn pull the Todo back to `executing`.
+ *
+ * Callers make this call only for a move that actually started the Todo or
+ * actually gave it to the caller's employee. A repeated no-op call from another
+ * session of the same employee must not pull that session onto the Todo.
+ *
  * Returns the Todo as it stands afterwards: a link bumps its version, and the
  * caller hands that version back to the agent for its next write.
  */
@@ -31,7 +40,7 @@ export function linkSelfStartedTodo(caller: WorkItemCaller, item: WorkItem, acto
   const session = getSession(caller.callerId);
   if (!session?.employee || session.employee !== item.assignee || !mayLinkAsExecutor(session, item)) return item;
   try {
-    linkSession(item.id, session.id, actor, "execute");
+    linkSession(item.id, session.id, actor, "execute", { selfStarted: true });
     openWorkItemRun({ workItemId: item.id, sessionId: session.id });
   } catch (error) {
     logger.warn(`Todo ${item.id}: linking self-started session ${session.id} failed: ${error instanceof Error ? error.message : String(error)}`);

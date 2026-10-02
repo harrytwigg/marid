@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { api, ctx, makeReq, makeRes, reg, store, toolHeaders } from "./helpers/work-items-route-harness.js";
+import { api, ctx, makeReq, makeRes, operatorHeaders, reg, store, toolHeaders } from "./helpers/work-items-route-harness.js";
 import { listWorkItemEvents } from "../../work-items/event-log.js";
+import { reconcileWorkItem } from "../../work-items/reconcile.js";
 import { listWorkItemRuns, openWorkItemRun } from "../../work-items/runs.js";
 
 /* A session that creates a Todo, assigns it to its own employee and starts it
@@ -47,7 +48,7 @@ describe("a Todo its own session starts", () => {
     expect(started.body.workItem.version).toBe(store.getWorkItem(id)?.version);
 
     expect(reg.getSession(session.id)).toMatchObject({ workItemId: id, workItemRole: "execute" });
-    expect(linkEvents(id).map((event) => event.detail)).toEqual([{ sessionId: session.id, role: "execute" }]);
+    expect(linkEvents(id).map((event) => event.detail)).toEqual([{ sessionId: session.id, role: "execute", selfStarted: true }]);
     expect(listWorkItemRuns(id)).toMatchObject([{ sessionId: session.id, endedAt: null, outcome: null }]);
 
     const read = await call("GET", `/api/work-items/${id}`, undefined, toolHeaders(session.id));
@@ -119,5 +120,92 @@ describe("a Todo its own session starts", () => {
     expect((await move(item.id, "executing", session.id)).status).toBe(200);
     expect(reg.getSession(session.id)?.workItemRole).toBe("review");
     expect(listWorkItemRuns(item.id)).toEqual([]);
+  });
+
+  it("opens a new run when the producer takes its Todo back from review to rework it", async () => {
+    const session = workerSession();
+    const id = await createOwnTodo(session.id);
+    await assign(id, "solo-worker", session.id);
+    await move(id, "executing", session.id);
+    settleTurn(session.id);
+    reconcileWorkItem(id);
+    expect((await move(id, "in_review", session.id, "done")).status).toBe(200);
+    turnStarts(session.id);
+    expect((await move(id, "executing", session.id)).status).toBe(200);
+    expect(listWorkItemRuns(id).map((run) => [run.sessionId, run.outcome])).toEqual([[session.id, "completed"], [session.id, null]]);
+    expect(linkEvents(id)).toHaveLength(1);
+  });
+});
+
+/** A chat turn ends cleanly, and a later one starts. */
+function settleTurn(sessionId: string) {
+  reg.updateSession(sessionId, { status: "idle", attemptOutcome: "succeeded", lastActivity: new Date().toISOString() });
+}
+function turnStarts(sessionId: string) {
+  reg.updateSession(sessionId, { status: "running", lastActivity: new Date(Date.now() + 1000).toISOString() });
+}
+
+async function selfStarted(): Promise<{ sessionId: string; id: string }> {
+  const session = workerSession();
+  turnStarts(session.id);
+  const id = await createOwnTodo(session.id);
+  await assign(id, "solo-worker", session.id);
+  expect((await move(id, "executing", session.id)).status).toBe(200);
+  expect(reg.getSession(session.id)?.workItemId).toBe(id);
+  return { sessionId: session.id, id };
+}
+
+describe("a self-started Todo put back in the backlog", () => {
+  it("stays parked when the operator parks it and the chat goes on to an unrelated turn", async () => {
+    const { sessionId, id } = await selfStarted();
+    settleTurn(sessionId);
+    const parked = await call("PUT", `/api/work-items/${id}/status`, { status: "backlog" }, operatorHeaders);
+    expect([parked.status, parked.body.workItem?.status]).toEqual([200, "backlog"]);
+    expect(reg.getSession(sessionId)?.workItemId ?? null).toBeNull();
+    const event = listWorkItemEvents(id).filter((entry) => entry.kind === "status_change").at(-1);
+    expect(event?.detail).toMatchObject({ releasedSessions: [sessionId] });
+
+    turnStarts(sessionId);
+    reconcileWorkItem(id);
+    expect(store.getWorkItem(id)?.status).toBe("backlog");
+    // The attempt it made stays on the ledger.
+    expect(listWorkItemRuns(id).map((run) => run.sessionId)).toEqual([sessionId]);
+  });
+
+  it("stays parked when the agent parks it itself in the middle of a turn", async () => {
+    const { sessionId, id } = await selfStarted();
+    expect((await move(id, "backlog", sessionId)).status).toBe(200);
+    reconcileWorkItem(id);
+    expect(store.getWorkItem(id)?.status).toBe("backlog");
+    // Starting it again links it again.
+    expect((await move(id, "executing", sessionId)).status).toBe(200);
+    expect(reg.getSession(sessionId)?.workItemId).toBe(id);
+  });
+
+  it("keeps a dispatched attempt's link, which was never self-started", async () => {
+    const session = workerSession();
+    const item = store.createWorkItem({ title: `Dispatched ${++n}`, status: "executing", assignee: "solo-worker" });
+    store.linkSession(item.id, session.id, null, "execute");
+    settleTurn(session.id);
+    expect((await call("PUT", `/api/work-items/${item.id}/status`, { status: "backlog" }, operatorHeaders)).status).toBe(200);
+    expect(reg.getSession(session.id)?.workItemId).toBe(item.id);
+  });
+});
+
+describe("calls that start nothing", () => {
+  it("do not pull a second session of the same employee onto a Todo already being worked", async () => {
+    const { sessionId, id } = await selfStarted();
+    const other = workerSession();
+    expect((await move(id, "executing", other.id)).status).toBe(200);
+    expect((await assign(id, "solo-worker", other.id)).status).toBe(200);
+    expect(reg.getSession(other.id)?.workItemId ?? null).toBeNull();
+    expect(listWorkItemRuns(id).map((run) => run.sessionId)).toEqual([sessionId]);
+  });
+
+  it("link no session that carries no employee, such as the coordinator's", async () => {
+    const coordinator = reg.createSession({ engine: "codex", source: "web", sourceRef: `web:self-start-coo-${++n}`, prompt: "coordinate" });
+    const item = store.createWorkItem({ title: `Coordinated ${++n}`, status: "backlog", assignee: "solo-worker" });
+    expect((await move(item.id, "executing", coordinator.id)).status).toBe(200);
+    expect(reg.getSession(coordinator.id)?.workItemId ?? null).toBeNull();
   });
 });
