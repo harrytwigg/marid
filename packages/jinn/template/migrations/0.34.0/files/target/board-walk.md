@@ -2,11 +2,9 @@
 # The board walk: a scheduled pass over the board that releases Todos whose
 # gate is met and decides what to start on spare capacity. Edits take effect
 # at the next tick; no restart is needed. Upgrades never overwrite this file.
-enabled: true
-# Cron expression. Hourly, on the hour.
-schedule: "0 * * * *"
-# IANA zone for the schedule and for "local time" below. Empty = the gateway host's zone.
-timezone: ""
+# When the walk runs is the cron job "board-walk" (Cron, or cron/jobs.json):
+# run it now, change its schedule or switch it off there. Its timezone is the
+# one "local time" below is read in (none = the gateway host's zone).
 # Who the walk's one turn per tick runs as. It always runs on Claude, on the
 # gateway, with no tools: the walk decides and the gateway acts.
 employee: assistant

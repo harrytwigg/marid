@@ -112,7 +112,9 @@ describe("template company doctrine", () => {
     ];
     for (const rel of currentTemplateFiles) {
       const content = readTemplate(rel);
-      expect(content, rel).not.toMatch(/\bboards?\b/i);
+      // The board walk is a live feature (its cron job is `board-walk`); any
+      // other "board" is legacy task-board wording.
+      expect(content, rel).not.toMatch(/\bboards?\b(?![- ]walk)/i);
       expect(content, rel).not.toContain("board.json");
       expect(content, rel).not.toContain("in_progress");
     }

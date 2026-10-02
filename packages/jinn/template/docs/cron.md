@@ -17,10 +17,13 @@ interface CronJob {
   employee?: string;
   prompt: string;
   delivery?: { connector: string; channel: string };
+  action?: "board-walk";
 }
 ```
 
 `delivery.connector` is a connector instance id, for example `slack` or `slack-support`.
+
+`action` makes the job run a built-in gateway action instead of a prompt. The shipped `board-walk` job (`"action": "board-walk"`) is when the board walk runs: run it now, reschedule it or disable it like any job; its rules stay in `board-walk.md`. An action job has an empty `prompt`, ignores `engine`, `model`, `employee` and `delivery`, mints no Todo per fire, and records each fire in its run history. Only one job may carry an action. Deleting the `board-walk` job is permanent (it is not re-created), so disable it to stop the walk.
 
 `schedule` uses standard five-field cron syntax. `timezone` is an IANA timezone; when omitted, the system timezone applies. Engine values are claude, codex, antigravity, grok, pi, hermes, opencode. A model override must be supported by its engine.
 

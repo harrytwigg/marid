@@ -632,10 +632,12 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
   created.push(...copyTemplateDir(path.join(TEMPLATE_DIR, "org"), ORG_DIR, templateMaterialization));
   created.push(...copyTemplateDir(path.join(TEMPLATE_DIR, "scripts"), path.join(JINN_HOME, "scripts"), templateMaterialization));
   // The board walk's rules file: seeded only when missing, so a re-run of
-  // setup (and every upgrade) leaves the operator's wording alone.
+  // setup (and every upgrade) leaves the operator's wording alone. Its
+  // schedule, the `board-walk` cron job, is added to jobs.json once.
   const boardWalkSeed = seedBoardWalk();
   if (boardWalkSeed.seeded) created.push(path.join(JINN_HOME, "board-walk.md"));
   if (boardWalkSeed.error) warn(`Could not seed board-walk.md: ${boardWalkSeed.error}`);
+  if (boardWalkSeed.job?.error) warn(`Could not add the board-walk cron job: ${boardWalkSeed.job.error}`);
 
   // Copy skills.json manifest
   const templateSkillsJson = path.join(TEMPLATE_DIR, "skills.json");

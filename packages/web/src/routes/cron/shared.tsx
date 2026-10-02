@@ -23,6 +23,8 @@ export interface CronJobWire {
   employee?: string | null
   engine?: string | null
   timezone?: string | null
+  /** A built-in gateway action the job runs instead of a prompt. */
+  action?: string | null
   lastRun?: CronRunWire | null
   [key: string]: unknown
 }
@@ -101,6 +103,11 @@ export function ToggleSwitch({
       />
     </button>
   )
+}
+
+/** What a built-in action is called where a job would name its employee. */
+export function actionLabel(action: string): string {
+  return action === "board-walk" ? "Board walk (built in)" : `${action} (built in)`
 }
 
 export function displayNameOf(name: string | null | undefined, byName: Map<string, Employee>): string {

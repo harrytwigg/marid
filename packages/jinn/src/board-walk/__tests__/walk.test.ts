@@ -374,6 +374,9 @@ describe("board walk switches and the tick log", () => {
     // "Local time" is read in the job's zone.
     expect(h.turns[0].prompt).toContain("in Asia/Tokyo.");
     expect(open({ job: { ...job, enabled: true } }).walk.status()).toMatchObject({ scheduled: true });
+    // A zone the scheduler would refuse still lets a run-now tick, in the host's zone.
+    const odd = open({ job: { ...job, timezone: "Mars/Olympus" } });
+    expect((await odd.walk.tick("manual")).outcome).toBe("ok");
     expect(open().walk.status()).toMatchObject({ scheduled: false, job: null });
   });
 

@@ -10,6 +10,7 @@ import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { startTodoDispatcher, type StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { ApiContext } from "../gateway/api.js";
 import { loadJobs } from "../cron/jobs.js";
+import { validateCronSchedule } from "../cron/validation.js";
 import { readRules, boardWalkPath, hostTimezone, missingDefaultSections, readTemplateRules, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
 import { findBoardWalkJob } from "./job.js";
 import { buildCapacitySnapshot, claudeFiveHour, type SnapshotDeps } from "./snapshot.js";
@@ -290,9 +291,12 @@ function walker(deps: BoardWalkDeps): Walker {
   };
 }
 
-/** The zone the walk reads "local time" in: its job's, else the host's. */
+/** The zone the walk reads "local time" in: its job's, else the host's. A
+ *  hand-edited zone that is not valid (the scheduler skips that job) falls
+ *  back to the host's too, so a run-now still works. */
 function walkTimezone(w: Walker): string {
-  return w.scheduleJob()?.timezone?.trim() || hostTimezone();
+  const zone = w.scheduleJob()?.timezone?.trim();
+  return zone && validateCronSchedule({ schedule: "0 * * * *", timezone: zone }).length === 0 ? zone : hostTimezone();
 }
 
 /** The turn, or a failure once `ms` has passed — when the turn is also
