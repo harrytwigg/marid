@@ -40,7 +40,7 @@ Version lives in **one place**: `packages/jinn/package.json`.
 4. **Generate and review the instance migration gate.** Resolve the previous
    release tag, then run:
    ```bash
-   PREVIOUS_TAG="$(git describe --tags --abbrev=0 HEAD^)"
+   PREVIOUS_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' HEAD^)"
    VERSION="$(node -p "require('./packages/jinn/package.json').version")"
    pnpm --filter jinn-cli migration:generate -- --base-ref "$PREVIOUS_TAG" --version "$VERSION"
    pnpm --filter jinn-cli migration:check -- --base-ref "$PREVIOUS_TAG" --version "$VERSION"
