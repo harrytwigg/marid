@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { api, ctx, makeReq, makeRes, operatorHeaders, reg, store, toolHeaders } from "./helpers/work-items-route-harness.js";
 import { listWorkItemEvents } from "../../work-items/event-log.js";
 import { reconcileWorkItem } from "../../work-items/reconcile.js";
+import { setJinnAttachGate } from "../../mcp/attachment.js";
 import { listWorkItemRuns, openWorkItemRun } from "../../work-items/runs.js";
 
 /* A session that creates a Todo, assigns it to its own employee and starts it
@@ -188,6 +189,37 @@ describe("a self-started Todo put back in the backlog", () => {
     store.linkSession(item.id, session.id, null, "execute");
     settleTurn(session.id);
     expect((await call("PUT", `/api/work-items/${item.id}/status`, { status: "backlog" }, operatorHeaders)).status).toBe(200);
+    expect(reg.getSession(session.id)?.workItemId).toBe(item.id);
+  });
+});
+
+describe("a self-started Todo handed to somebody else", () => {
+  // The Dispatcher refuses to start until the gateway's toolset is verified;
+  // this harness has no engines, so past that it stops at the engine lookup.
+  // What matters is that it no longer finds an attempt already executing.
+  beforeAll(() => setJinnAttachGate({ ok: true }));
+  afterAll(() => setJinnAttachGate(null));
+
+  it("takes the old chat off it, so the new owner can be dispatched while that chat runs", async () => {
+    const { sessionId, id } = await selfStarted();
+    const reassigned = await call("POST", `/api/work-items/${id}/assign`, { assignee: "platform-worker" }, operatorHeaders);
+    expect([reassigned.status, reassigned.body.workItem?.assignee]).toEqual([200, "platform-worker"]);
+    expect(reg.getSession(sessionId)?.workItemId ?? null).toBeNull();
+    expect(reg.listSessionsByWorkItem(id)).toEqual([]);
+    const event = listWorkItemEvents(id).filter((entry) => entry.kind === "note").at(-1);
+    expect(event?.detail).toMatchObject({ assignee: "platform-worker", releasedSessions: [sessionId] });
+
+    expect(reg.getSession(sessionId)?.status).toBe("running");
+    const dispatched = await call("POST", `/api/work-items/${id}/dispatch`, {}, operatorHeaders);
+    expect([dispatched.status, dispatched.body.code]).not.toEqual([409, "TODO_ALREADY_EXECUTING"]);
+    expect(dispatched.body.code).toBeUndefined();
+  });
+
+  it("keeps a dispatched attempt's link through a reassignment, as before", async () => {
+    const session = workerSession();
+    const item = store.createWorkItem({ title: `Dispatched ${++n}`, status: "executing", assignee: "solo-worker" });
+    store.linkSession(item.id, session.id, null, "execute");
+    expect((await call("POST", `/api/work-items/${item.id}/assign`, { assignee: "platform-worker" }, operatorHeaders)).status).toBe(200);
     expect(reg.getSession(session.id)?.workItemId).toBe(item.id);
   });
 });

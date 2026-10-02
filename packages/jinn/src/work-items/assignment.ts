@@ -4,6 +4,7 @@ import {
   appendWorkItemEvent,
   ensureDepartmentRegistered,
   getWorkItem,
+  releaseSelfStartedLinks,
   resolveTodoDepartments,
   STICKY_STATUSES,
   type AppendWorkItemEventInput,
@@ -28,13 +29,15 @@ interface Assignment {
   /** The employee behind a `session:` actor, when the caller knows it. */
   actorEmployee?: string;
   origin?: WriteOrigin;
+  /** Self-started sessions the reassignment took off the Todo. */
+  releasedSessions?: string[];
 }
 
 /** Assignment leaves the Todo where it sits, so its audit row is a `note`, not
  *  a status change. */
 function assignmentEvent(
   item: WorkItem,
-  { assignee, department, actor, actorEmployee, origin }: Assignment,
+  { assignee, department, actor, actorEmployee, origin, releasedSessions = [] }: Assignment,
 ): AppendWorkItemEventInput {
   return {
     workItemId: item.id,
@@ -47,6 +50,7 @@ function assignmentEvent(
       department,
       ...(actorEmployee ? { actorEmployee } : {}),
       ...(origin ? { origin } : {}),
+      ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
       todoProvenance: todoProvenanceSnapshot({ source: item.source, department, assignee }),
     },
     versionEffect: 'companion',
@@ -96,7 +100,11 @@ export function assignWorkItem(
     if (result.changes === 0) {
       throw new TransitionError('conflict', `work item ${id} changed concurrently (expected status ${item.status})`);
     }
-    const event = appendWorkItemEvent(assignmentEvent(item, { assignee, department, actor, actorEmployee, origin }));
+    // A chat that started this Todo for its own employee stops being its
+    // executor once the Todo is somebody else's: left linked, its turns would
+    // keep the new owner's dispatch refused and keep deriving the Todo's status.
+    const releasedSessions = releaseSelfStartedLinks(db, id, { exceptEmployee: assignee });
+    const event = appendWorkItemEvent(assignmentEvent(item, { assignee, department, actor, actorEmployee, origin, releasedSessions }));
     return { item: getWorkItem(id)!, escalated: false, event };
   });
   return txn()?.item;

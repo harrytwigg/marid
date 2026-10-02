@@ -913,9 +913,10 @@ export function linkSession(
 export const SELF_STARTED_META_KEY = 'selfStartedTodo';
 
 /**
- * Release the self-started links on a Todo that is going back to the backlog,
- * and return the sessions released. Called inside the status write's own
- * transaction.
+ * Release the self-started links on a Todo that is going back to the backlog
+ * or to another owner, and return the sessions released. Called inside the
+ * status or assignment write's own transaction; `exceptEmployee` keeps the
+ * links of the employee the Todo now belongs to.
  *
  * A chat session that started its own Todo keeps running turns after the Todo
  * is put down, by the agent or by the operator, and a linked session in flight
@@ -923,10 +924,15 @@ export const SELF_STARTED_META_KEY = 'selfStartedTodo';
  * back to work. A dispatched attempt's link is not marked and is left alone.
  * The session's run stays on the Todo's ledger and settles with the session.
  */
-export function releaseSelfStartedLinks(db: ReturnType<typeof initDb>, workItemId: string): string[] {
+export function releaseSelfStartedLinks(
+  db: ReturnType<typeof initDb>,
+  workItemId: string,
+  { exceptEmployee }: { exceptEmployee?: string } = {},
+): string[] {
   const rows = db
-    .prepare(`SELECT id FROM sessions WHERE work_item_id = ? AND json_extract(transport_meta, '$.${SELF_STARTED_META_KEY}') = ?`)
-    .all(workItemId, workItemId) as { id: string }[];
+    .prepare(`SELECT id FROM sessions WHERE work_item_id = ? AND json_extract(transport_meta, '$.${SELF_STARTED_META_KEY}') = ?
+      AND (? IS NULL OR employee IS NULL OR employee <> ?)`)
+    .all(workItemId, workItemId, exceptEmployee ?? null, exceptEmployee ?? null) as { id: string }[];
   const release = db.prepare(
     `UPDATE sessions SET work_item_id = NULL, work_item_role = NULL, transport_meta = json_remove(transport_meta, '$.${SELF_STARTED_META_KEY}') WHERE id = ?`,
   );
