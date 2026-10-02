@@ -95,7 +95,7 @@ export function displayNameOf(assignee: string | null, byName: Map<string, Emplo
   return byName.get(assignee)?.displayName ?? assignee
 }
 
-/** What the Assignee filter reads when set: the person's name, "Me" for the
+/** What the Assignee filter reads when set: the person's name, "Assigned to me" for the
  *  operator, "Unassigned" for the no-assignee sentinel; null when unset. */
 export function assigneeFilterLabel(assignee: string | undefined, byName: Map<string, Employee>): string | null {
   if (!assignee) return null
