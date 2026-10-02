@@ -17,6 +17,9 @@ import {
 } from '../split-layout'
 import { hydrateSplitLayout } from '../use-split-working-set'
 import { persistSplitLayout } from '../split-layout-storage'
+import { applySplitDrop } from '../split-drop'
+import { clearPaneTabDrag, hasPaneTabDrag, writePaneTabDrag } from '../pane-tab-dnd'
+import { activeChatSessionDrag, hasChatSessionDrag, readChatSessionDrop } from '../../chat-session-dnd'
 
 const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
 const notes = fileTabId({ path: '/srv/work/notes.txt', sessionId: 'b' })
@@ -115,5 +118,38 @@ describe('file tabs in the layout', () => {
 
     const chatDeleted = hydrateSplitLayout(storage, new Set(['b']), 4)
     expect(groupsOf(chatDeleted).map((group) => group.tabs)).toEqual([['b']])
+  })
+})
+
+describe('dragging a file tab', () => {
+  const transfer = () => {
+    const data = new Map<string, string>()
+    return {
+      get types() { return [...data.keys()] },
+      setData: (type: string, value: string) => { data.set(type, value) },
+      getData: (type: string) => data.get(type) ?? '',
+      effectAllowed: 'none',
+    } as unknown as DataTransfer
+  }
+
+  it('is a tab drag only, never a chat-session drag the pane surface would take', () => {
+    const file = transfer()
+    writePaneTabDrag(file, { groupId: 'g1', tabId: report })
+    expect(hasPaneTabDrag(file)).toBe(true)
+    expect(hasChatSessionDrag(file)).toBe(false)
+    expect(activeChatSessionDrag()).toBeNull()
+    clearPaneTabDrag()
+
+    const chat = transfer()
+    writePaneTabDrag(chat, { groupId: 'g1', tabId: 'a' })
+    expect(readChatSessionDrop(chat)).toBe('a')
+    clearPaneTabDrag()
+  })
+
+  it('cannot be dropped onto the pane surface, so it is never lost or routed to', () => {
+    const layout = openFileTab(twoPanes(), 'a', report)
+    const context = { columns: 2, cap: 4 }
+    expect(applySplitDrop(layout, report, { region: 'end', key: null, groupId: null }, context)).toBe(layout)
+    expect(applySplitDrop(layout, report, { region: 'right', key: 'b', groupId: groupOfSession(layout, 'b')!.id }, context)).toBe(layout)
   })
 })

@@ -15,6 +15,7 @@ import {
   type SplitSide,
 } from './split-layout'
 import { splitGeometry, type Rect, type SplitDropHit, type SplitMetrics } from './split-geometry'
+import { isFileTabId } from './file-tab'
 
 export interface SplitDropContext {
   /** Columns the auto grid is showing, so an edge drop materializes what the operator sees. */
@@ -34,6 +35,8 @@ function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
  * grid appends. Capacity is spent afterwards, never on the group that was dropped onto.
  */
 export function applySplitDrop(layout: SplitLayout, sessionId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
+  // A file tab is never a pane drop (pane-tab-dnd.ts); were one to arrive, an append would close it.
+  if (isFileTabId(sessionId)) return layout
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
   if (!target || hit.region === 'end') return evictToCap(dropAtEnd(layout, sessionId), context.cap)
   if (hit.region === 'center') {
