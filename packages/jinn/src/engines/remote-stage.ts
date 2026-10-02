@@ -1002,7 +1002,16 @@ done
 # shared/remote-farm.ts.
 for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
   [ -d "$mount/$dir" ] || continue
+  # Never work THROUGH a link here: if a leftover link to the gateway's own
+  # directory survived the cleanup above, chmod and ln would land on the
+  # gateway. Remove it, and refuse outright if a real directory is not what
+  # we end up with.
+  [ ! -L "$home/$dir" ] || rm -f "$home/$dir"
   mkdir -p "$home/$dir"
+  if [ -L "$home/$dir" ] || [ ! -d "$home/$dir" ]; then
+    echo "remote stage: $home/$dir is not a real directory; refusing to stage it" >&2
+    exit 1
+  fi
   chmod 700 "$home/$dir"
   find "$home/$dir" -mindepth 1 -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
   find "$home/$dir" -mindepth 1 -maxdepth 1 -type f \\( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.db-journal' \\) -exec rm -f {} + 2>/dev/null || true

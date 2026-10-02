@@ -707,6 +707,23 @@ describe.skipIf(isWindows)("FARM_SCRIPT — run for real against a fixture mount
       expect(fs.lstatSync(path.join(mount, "sessions", "registry.db")).isFile()).toBe(true);
     });
 
+    it("refuses a leftover link even when the generic cleanup did not remove it", () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(home, { recursive: true });
+      fs.symlinkSync(path.join(mount, "sessions"), path.join(home, "sessions"));
+      const modeBefore = fs.statSync(path.join(mount, "sessions")).mode;
+      // The same script with its top-level link cleanup removed.
+      const withoutCleanup = FARM_SCRIPT.replace(/^find "\$home" -maxdepth 1 -type l .*$/m, ":");
+      expect(withoutCleanup).not.toBe(FARM_SCRIPT);
+      execFileSync("sh", ["-s", mount, root, home, "7"], { input: withoutCleanup, encoding: "utf8" });
+      expect(fs.lstatSync(path.join(home, "sessions")).isSymbolicLink()).toBe(false);
+      expect(fs.statSync(path.join(mount, "sessions")).mode).toBe(modeBefore);
+      for (const name of fs.readdirSync(path.join(mount, "sessions"))) {
+        expect(fs.lstatSync(path.join(mount, "sessions", name)).isSymbolicLink()).toBe(false);
+      }
+    });
+
     it("prunes child links the gateway no longer has, and clears real database files left in the stage", () => {
       seedDatabases();
       runFarm("sess-a");
