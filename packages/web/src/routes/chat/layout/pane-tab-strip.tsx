@@ -5,6 +5,7 @@ import { StatusDot } from '@/components/chat/session-signals'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { emojiForName } from '@/lib/emoji-pool'
 import { activeChatSessionDrag, hasChatSessionDrag, readChatSessionDrop } from '../chat-session-dnd'
+import { PaneFileTabLabel } from './pane-file-tab-label'
 import {
   activePaneTabDrag,
   clearPaneTabDrag,
@@ -22,6 +23,8 @@ export interface PaneTabItem {
   status?: 'running' | 'error'
   /** VS Code preview tab: italic, replaced by the next preview open until pinned. */
   preview?: boolean
+  /** Set on a file preview tab: the path it shows, in full. */
+  filePath?: string
 }
 
 export interface PaneTabStripProps {
@@ -205,8 +208,9 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate,
       tabIndex={tabStop ? 0 : -1}
       draggable
       data-pane-tab-id={tab.id}
+      data-pane-tab-kind={tab.filePath !== undefined ? 'file' : undefined}
       {...tabFlags(tab, active, dropEdge)}
-      title={tab.title}
+      title={tab.filePath ?? tab.title}
       {...paneTabDragProps({ groupId, tabId: tab.id })}
       onClick={onActivate}
       onDoubleClick={tab.preview ? onPin : undefined}
@@ -215,7 +219,7 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate,
       className={`${TAB_CLASS} ${active ? 'bg-[var(--fill-tertiary)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]'}`}
     >
       {active && focused ? <span aria-hidden data-pane-tab-marker className="absolute inset-x-0 top-0 h-[2px] bg-[var(--text-primary)]" /> : null}
-      <PaneTabLabel tab={tab} active={active} />
+      {tab.filePath !== undefined ? <PaneFileTabLabel title={tab.title} active={active} /> : <PaneTabLabel tab={tab} active={active} />}
       <TabCloseButton title={tab.title} active={active} onClose={onClose} />
     </div>
   )

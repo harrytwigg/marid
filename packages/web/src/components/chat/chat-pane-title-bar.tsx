@@ -127,6 +127,9 @@ function PaneTitleActions({ title, session, onClose, sessionActions, onRenamed, 
   )
 }
 
+/** The title bar's height in px (its h-[34px]); a file shown in the pane sits just below it. */
+export const PANE_TITLE_BAR_HEIGHT = 34
+
 export function ChatPaneTitleBar({ active, title, employee, session, backTo, onClose, sessionActions, viewMode, cliModeAvailable, viewSwitchLocked, cliTitle }: ChatPaneTitleBarProps) {
   const [renamedTitle, setRenamedTitle] = useState<string>()
   useEffect(() => setRenamedTitle(undefined), [session.id, title])

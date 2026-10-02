@@ -1,6 +1,7 @@
 import React from 'react'
 import { buildFileReadRequest } from '@/lib/file-read-request'
 import { useFileLinkSession } from '@/components/chat/file-link-session-context'
+import { useOpenFile } from '@/components/chat/file-open-context'
 
 // Bare paths stay deliberately narrow: optional ~/ or / prefix, ≥1
 // slash-separated segment, and a short extension. Backticked paths may use the
@@ -28,11 +29,14 @@ export function isFilePath(s: string): boolean {
   return SUPPORTED_VIEWER_ROOT_RE.test(trimmed) ? buildFileReadRequest(trimmed).ok : FILE_PATH_RE.test(trimmed)
 }
 
-// Render a file path as a clean clickable link that opens the file viewer in a
-// NEW browser tab, so the chat it was clicked from stays where it is.
+// Render a file path as a clean clickable link. A plain click opens the file
+// inside the app — a tab beside the chat it was clicked in — when the chat page
+// provides an opener; modified and middle clicks, and links rendered with no
+// opener, take the href to a new browser tab, so the chat stays where it is.
 // Monospace + blue underline (no code-box background — that looked like an empty highlight).
 function FileLink({ path }: { path: string }) {
   const sessionId = useFileLinkSession()
+  const openFile = useOpenFile()
   const link = buildChatFileLink(path, sessionId)
   if (!link) return path
   const { trimmed, href } = link
@@ -41,7 +45,11 @@ function FileLink({ path }: { path: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title={`Open ${trimmed} in a new tab`}
+      title={openFile ? `Open ${trimmed}` : `Open ${trimmed} in a new tab`}
+      onClick={(event) => {
+        if (!openFile || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+        if (openFile(trimmed, sessionId)) event.preventDefault()
+      }}
       className="text-[var(--system-blue)] underline decoration-[var(--system-blue)]/40 hover:decoration-[var(--system-blue)] underline-offset-2 font-[family-name:var(--font-code)] text-[0.88em]"
     >
       {path}

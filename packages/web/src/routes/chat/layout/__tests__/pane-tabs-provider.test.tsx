@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { PaneTabsContext, usePaneTabsKeep, usePaneTabsStrip } from '@/components/chat/pane-tabs-context'
 import { PaneTabsProvider } from '../pane-tabs-provider'
-import { closeSession, createSplitLayout, findGroup, focusSession, groupsOf, openInFocusedGroup, pinTab, placeTab, type SplitLayout } from '../split-layout'
+import { closeSession, createSplitLayout, findGroup, focusSession, groupsOf, openFileTab, openInFocusedGroup, pinTab, placeTab, showTab, type SplitLayout } from '../split-layout'
+import { fileTabId } from '../file-tab'
+import { usePaneShownFile } from '@/components/chat/pane-tabs-context'
 import type { SplitLayoutControls } from '../use-split-working-set'
 
 vi.mock('@/hooks/use-sessions', () => ({
@@ -28,6 +30,7 @@ function harness(start: SplitLayout) {
     place: (groupId, id, index) => set(placeTab(layout, groupId, id, index)),
     close: (id) => set(closeSession(layout, id)),
     pin: (id) => { if (pinTab(layout, id) !== layout) set(pinTab(layout, id)) },
+    show: (id) => { if (showTab(layout, id) !== layout) set(showTab(layout, id)) },
   } as SplitLayoutControls)
   return { onSelect, controls, set, get layout() { return layout }, bind: (fn: () => void) => { rerender = fn } }
 }
@@ -35,9 +38,11 @@ function harness(start: SplitLayout) {
 function Probe({ sessionId, keepId }: { sessionId: string; keepId?: string }) {
   const strip = usePaneTabsStrip(sessionId)
   const keep = usePaneTabsKeep()
+  const file = usePaneShownFile(sessionId)
   return (
     <div>
       {strip}
+      {file ? <output data-testid="shown-file">{file.path}</output> : null}
       <button type="button" onClick={() => keepId && keep(keepId)}>work</button>
     </div>
   )
@@ -117,6 +122,44 @@ describe('PaneTabsProvider', () => {
     fireEvent.click(screen.getByLabelText('Close tab Xray'))
     expect(groupsOf(h.layout)[0].tabs).toEqual(['a'])
     expect(h.onSelect).not.toHaveBeenCalled()
+  })
+
+  it('shows a file tab beside its chat, the chat staying the route', () => {
+    const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
+    // Opened from chat a, which is shown beside the file even though x was the shown tab.
+    const h = harness(openFileTab(twoTabs(), 'a', report))
+    expect(groupsOf(h.layout)[0].tabs).toEqual(['a', report, 'x'])
+    render(<Mount h={h} sessionId="a" />)
+
+    const fileTab = screen.getByRole('tab', { name: /report\.md/ })
+    expect(fileTab.getAttribute('data-pane-tab-kind')).toBe('file')
+    expect(fileTab.getAttribute('title')).toBe('docs/report.md')
+    expect(fileTab.getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByTestId('shown-file').textContent).toBe('docs/report.md')
+
+    // Back to the chat: shown in the group, not merely focused (which would keep the file).
+    fireEvent.click(screen.getByRole('tab', { name: /Alpha/ }))
+    expect(findGroup(h.layout, groupsOf(h.layout)[0].id)!.activeTab).toBe('a')
+    expect(h.onSelect).toHaveBeenLastCalledWith('a')
+    expect(screen.queryByTestId('shown-file')).toBeNull()
+
+    // And to the file again: the route stays on the chat it sits beside.
+    fireEvent.click(screen.getByRole('tab', { name: /report\.md/ }))
+    expect(screen.getByTestId('shown-file').textContent).toBe('docs/report.md')
+    expect(h.onSelect).toHaveBeenLastCalledWith('a')
+
+    fireEvent.click(screen.getByLabelText('Close tab report.md'))
+    expect(groupsOf(h.layout)[0].tabs).toEqual(['a', 'x'])
+    expect(h.onSelect).toHaveBeenLastCalledWith('a')
+  })
+
+  it('closing the chat a file is shown over moves the route to the chat left in the pane', () => {
+    const report = fileTabId({ path: 'docs/report.md', sessionId: 'x' })
+    const h = harness(openFileTab(twoTabs(), 'x', report))
+    render(<Mount h={h} sessionId="x" />)
+    fireEvent.click(screen.getByLabelText('Close tab Xray'))
+    expect(groupsOf(h.layout)[0].tabs).toEqual(['a', report])
+    expect(h.onSelect).toHaveBeenLastCalledWith('a')
   })
 
   it('has no effect outside a provider', () => {

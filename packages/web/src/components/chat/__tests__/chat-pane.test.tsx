@@ -4,6 +4,7 @@ import type React from 'react'
 import { ChatPane } from '../chat-pane'
 import type { GatewayEvent } from '@jinn/gateway-events'
 import { CHAT_SESSION_DND_MIME } from '@/routes/chat/chat-session-dnd'
+import { PaneTabsContext, type PaneTabsBinding } from '@/components/chat/pane-tabs-context'
 
 let featuresState = {
   notesEnabled: false,
@@ -117,6 +118,10 @@ vi.mock('@/components/chat/cli-keybar', () => ({
   CliKeybar: () => null,
 }))
 
+vi.mock('@/components/chat/file-view', () => ({
+  FileView: ({ path, sessionId }: { path: string; sessionId?: string | null }) => <div data-testid="file-view">{path}@{sessionId}</div>,
+}))
+
 function renderPane(props: Partial<React.ComponentProps<typeof ChatPane>> = {}) {
   return render(
     <ChatPane
@@ -195,6 +200,31 @@ describe('ChatPane', () => {
       />,
     )
     expect(screen.queryByTestId('chat-pane-title-bar')).toBeNull()
+  })
+
+  it('covers the chat with the file tab its pane shows, keeping the chat mounted but inert', async () => {
+    const binding: PaneTabsBinding = {
+      renderStrip: () => null,
+      hasStrips: true,
+      keep: () => undefined,
+      shownFile: (sessionId) => (sessionId === 's1' ? { path: 'docs/report.md', sessionId: 's1' } : null),
+    }
+    const pane = (multiPane: boolean) => (
+      <PaneTabsContext.Provider value={binding}>
+        <ChatPane sessionId="s1" isActive onFocus={() => {}} subscribe={() => () => {}} events={[]} multiPane={multiPane} onClose={vi.fn()} />
+      </PaneTabsContext.Provider>
+    )
+    const { container, rerender } = render(pane(true))
+
+    expect((await screen.findByTestId('file-view')).textContent).toBe('docs/report.md@s1')
+    expect(screen.getByTestId('chat-pane-title-bar')).toBeTruthy()
+    expect(screen.getByTestId('messages')).toBeTruthy()
+    expect(container.querySelector('[data-chat-pane-body]')!.hasAttribute('inert')).toBe(true)
+
+    // With no title bar (a phone) there is no strip to switch back with, so the chat shows.
+    rerender(pane(false))
+    expect(screen.queryByTestId('pane-file-view')).toBeNull()
+    expect(container.querySelector('[data-chat-pane-body]')!.hasAttribute('inert')).toBe(false)
   })
 
   it('lets session drags bubble to the grid while retaining file drops', () => {

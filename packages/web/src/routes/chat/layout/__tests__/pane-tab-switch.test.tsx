@@ -64,7 +64,7 @@ type GridProps = ComponentProps<typeof SplitChatGrid>
 
 /** The grid the page mounts, driven by a layout the test owns and re-renders. */
 function Grid({ layout, sessionIds }: { layout: SplitLayout; sessionIds: string[] }) {
-  const split = { layout, resize: vi.fn(), equalize: vi.fn(), place: vi.fn(), close: vi.fn(), pin: vi.fn() } as SplitLayoutControls
+  const split = { layout, resize: vi.fn(), equalize: vi.fn(), place: vi.fn(), close: vi.fn(), pin: vi.fn(), show: vi.fn() } as SplitLayoutControls
   const props: GridProps = {
     sessionIds,
     focusedId: sessionIds[0],

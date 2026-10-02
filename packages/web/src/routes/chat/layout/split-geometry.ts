@@ -1,6 +1,7 @@
 import { cellRectForIndex } from '../grid-cells'
 import { layoutFor } from '../grid-layout'
 import {
+  groupIdsByPaneSession,
   groupsOf,
   materializeLayout,
   type LayoutNode,
@@ -165,7 +166,7 @@ function autoColumns(count: number, viewport: GeometryInput['viewport']): { colu
 
 /** Keys in render order, each with the group it shows (null when the layout holds none). */
 function resolveKeys(input: GeometryInput): Array<{ key: string; groupId: string | null }> {
-  const groupBySession = new Map(groupsOf(input.layout).map((g) => [g.activeTab, g.id]))
+  const groupBySession = groupIdsByPaneSession(input.layout)
   return input.keys.map((key) => {
     const sessionId = input.sessionForKey(key)
     return { key, groupId: sessionId ? groupBySession.get(sessionId) ?? null : null }

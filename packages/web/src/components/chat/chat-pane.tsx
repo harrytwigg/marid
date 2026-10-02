@@ -17,13 +17,14 @@ import { useLiveSession } from '@/hooks/use-live-session'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
 import { useFileDrop } from '@/hooks/use-file-drop'
 import { FileDropOverlay } from '@/components/ui/file-drop-overlay'
-import { ChatPaneTitleBar, paneTitleBarState, paneViewControls } from '@/components/chat/chat-pane-title-bar'
-import { usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
+import { ChatPaneTitleBar, PANE_TITLE_BAR_HEIGHT, paneTitleBarState, paneViewControls } from '@/components/chat/chat-pane-title-bar'
+import { usePaneShownFile, usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
 import { ChatCopyToast } from '@/components/chat/chat-copy-toast'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
 
 const CliTerminal = lazy(() => import('@/components/cli-terminal').then(m => ({ default: m.CliTerminal })))
+const FileView = lazy(() => import('@/components/chat/file-view').then(m => ({ default: m.FileView })))
 import type { CliTerminalHandle } from '@/components/cli-terminal'
 import { buildNewSessionParams, resolveNewSessionSelector, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
 import { readNewSessionSelector, writeNewSessionSelector } from '@/components/chat/new-session-selector'
@@ -432,6 +433,11 @@ export function ChatPane({
   const titleBarViewControls = paneViewControls(titleBarState.session, engineRegistry)
   // A terminal session is its shell and nothing else: no transcript, no composer.
   const terminalPane = sessionId && (terminal || isTerminalSession(currentSession)) ? sessionId : null
+  // A file tab of this pane's group is showing: it covers the chat, which stays mounted (scroll,
+  // draft and stream intact) but inert until its own tab is shown again. Only beside the title
+  // bar, whose tab strip is the way back; a phone shows no strip, so it shows the chat.
+  const titleBar = multiPane && onClose
+  const shownFile = usePaneShownFile(titleBar ? sessionId : null)
 
   return (
     <div
@@ -449,11 +455,13 @@ export function ChatPane({
       {...fileDrop.handlers}
     >
       {fileDrop.dragOver && <FileDropOverlay />}
-      {multiPane && onClose ? (
+      {titleBar ? (
         <ChatPaneTitleBar {...titleBarState} {...titleBarViewControls} active={isActive} backTo={paneBackTo} onClose={onClose} sessionActions={sessionId ? sessionActions : undefined} viewMode={viewMode} />
       ) : null}
       {multiPane && copyNotice ? <ChatCopyToast placement="pane" /> : null}
-      {showSessionHydration && <ChatHydrationOverlay />}
+      {showSessionHydration && !shownFile && <ChatHydrationOverlay />}
+
+      <div data-chat-pane-body inert={shownFile ? true : undefined} style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
       {/* Messages / CLI transcript — CliTerminal is display-only; ChatInput below
           sends. The transcript mounts on a blank composer too, with the employee
@@ -562,6 +570,14 @@ export function ChatPane({
         }
       />
       </>)}
+      </div>
+      {shownFile ? (
+        <div data-testid="pane-file-view" className="absolute inset-x-0 bottom-0 z-[6] flex flex-col" style={{ top: PANE_TITLE_BAR_HEIGHT }}>
+          <Suspense fallback={<div className="flex-1" />}>
+            <FileView path={shownFile.path} sessionId={shownFile.sessionId} embedded />
+          </Suspense>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -14,18 +14,22 @@ import {
   equalizeSplit,
   evictToCap,
   focusSession,
+  groupOfSession,
   groupsOf,
   materializeLayout,
+  openFileTab,
   openInFocusedGroup,
   pinTab,
   placeTab,
   pruneSessions,
   replaceSession,
   setVisibleSplitSizes,
+  showTab,
   workingSetFromLayout,
   type SplitLayout,
 } from './split-layout'
 import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
+import { fileTabId, isFileTabId, type FileTabRef } from './file-tab'
 import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
 import { applySplitDrop, type SplitDropContext } from './split-drop'
 import type { SplitDropHit } from './split-geometry'
@@ -45,11 +49,12 @@ function sameOrder(a: readonly string[], b: readonly string[]): boolean {
  * upstream grid, a test seeding it — and then that list is the newer truth and the layout is
  * rebuilt from it, unarranged. An absent key is not a disagreement (cleared site data, a first
  * run): the layout stands, and neither is a session deleted since. The cap is left to
- * evictToCap so a window that shrank since does not count as disagreement either.
+ * evictToCap so a window that shrank since does not count as disagreement either. File tabs are
+ * not sessions and are kept; they go with their group if every chat in it was deleted.
  */
 export function hydrateSplitLayout(storage: Pick<Storage, 'getItem'>, liveIds: ReadonlySet<string>, cap: number): SplitLayout {
   const unpruned = loadSplitLayout(storage)
-  const stored = pruneSessions(unpruned, (id) => liveIds.has(id))
+  const stored = pruneSessions(unpruned, (id) => isFileTabId(id) || liveIds.has(id))
   let raw: string | null = null
   try {
     raw = storage.getItem(WORKING_SET_STORAGE_KEY)
@@ -74,7 +79,7 @@ const NO_IDS: ReadonlySet<string> = new Set()
 /** The chats the stored layout holds that the session list no longer does: deleted while the page
  * was closed, which is what hydration prunes them for. */
 export function deletedWhileClosed(storage: Pick<Storage, 'getItem'>, liveIds: ReadonlySet<string>): ReadonlySet<string> {
-  const dead = groupsOf(loadSplitLayout(storage)).flatMap((group) => group.tabs).filter((id) => !liveIds.has(id))
+  const dead = groupsOf(loadSplitLayout(storage)).flatMap((group) => group.tabs).filter((id) => !isFileTabId(id) && !liveIds.has(id))
   return dead.length ? new Set(dead) : NO_IDS
 }
 
@@ -85,10 +90,12 @@ export interface SplitLayoutControls {
    * handles were drawn from. */
   resize: (columns: number, splitId: string, childIds: string[], sizes: number[]) => void
   equalize: (columns: number, splitId: string) => void
-  /** Tab-strip edits: put a session in a group at a slot (adds, moves or re-orders), close a tab, keep a preview tab. */
+  /** Tab-strip edits: put a tab in a group at a slot (adds, moves or re-orders), close a tab, keep a preview tab. */
   place: (groupId: string, sessionId: string, index: number) => void
   close: (sessionId: string) => void
   pin: (sessionId: string) => void
+  /** Shows a tab in its group, file or chat; focusing a chat would keep a file shown over it. */
+  show: (tabId: string) => void
 }
 
 /** Hydrates once the session list is known, then lets the URL drive the focused pane, exactly
@@ -155,7 +162,8 @@ function useSplitControls(layout: SplitLayout, setLayout: Dispatch<SetStateActio
   }, [setLayout])
   const close = useCallback((sessionId: string) => setLayout((current) => closeSession(current, sessionId)), [setLayout])
   const pin = useCallback((sessionId: string) => setLayout((current) => pinTab(current, sessionId)), [setLayout])
-  return useMemo(() => ({ layout, resize, equalize, place, close, pin }), [close, equalize, layout, pin, place, resize])
+  const show = useCallback((tabId: string) => setLayout((current) => showTab(current, tabId)), [setLayout])
+  return useMemo(() => ({ layout, resize, equalize, place, close, pin, show }), [close, equalize, layout, pin, place, resize, show])
 }
 
 /**
@@ -189,6 +197,14 @@ export function useSplitWorkingSet(
    * prediction (removeWorkingSetSession on `state`) cannot see a group's hidden tabs, which is
    * what the pane falls back to. */
   const afterRemove = useCallback((sessionId: string) => workingSetFromLayout(closeSession(shown, sessionId)), [shown])
+  /** Opens a file preview as a tab beside `ownerSessionId`'s chat (else the focused one). False
+   *  when there is no chat on screen to open it beside, so the caller can fall back. */
+  const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => {
+    const tabId = fileTabId(file)
+    if (openFileTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId)) return false
+    setLayout((current) => openFileTab(current, ownerSessionId, tabId))
+    return true
+  }, [shown])
 
-  return { state, add, focus, remove, drop, split, afterRemove }
+  return { state, add, focus, remove, drop, split, afterRemove, openFile }
 }
