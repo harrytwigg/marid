@@ -981,6 +981,10 @@ find "$root/sessions" -mindepth 1 -maxdepth 1 -type d -mtime +"$ttl" -exec rm -r
 # before the filtered directories existed linked sessions/ whole; that link goes
 # here, and the directory is rebuilt as a real one below.)
 find "$home" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
+# Two rebuilds of one session can run at once, and two "ln -sfn" on one name
+# race (EEXIST/ENOENT). Either way the link that results is the same, so accept
+# it when it already points where it should, and otherwise try once more.
+link() { ln -sfn "$1" "$2" 2>/dev/null || [ "$(readlink "$2" 2>/dev/null)" = "$1" ] || ln -sfn "$1" "$2"; }
 # Marks this as a remote session's stage, so Marid code started here refuses to
 # start a gateway or open a database (shared/local-db-guard.ts).
 printf 'remote session stage: linked entries lead to the gateway home\\n' > "$home/${REMOTE_STAGE_MARKER}"
@@ -990,7 +994,7 @@ for entry in "$mount"/* "$mount"/.[!.]*; do
   case "$name" in
     gateway.json|tmp|${REMOTE_STAGE_MARKER}|${FARM_FILTERED_DIRS.join("|")}) continue ;;
   esac
-  ln -sfn "$entry" "$home/$name"
+  link "$entry" "$home/$name"
 done
 # The directories that hold the gateway's SQLite databases are real directories
 # here, linked entry by entry WITHOUT the database files. A WAL database opened
@@ -1021,7 +1025,7 @@ for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
     case "$name" in
       backups|*.db|*.db-wal|*.db-shm|*.db-journal) continue ;;
     esac
-    ln -sfn "$entry" "$home/$dir/$name"
+    link "$entry" "$home/$dir/$name"
   done
   for db in "$mount/$dir"/*.db; do
     [ -e "$db" ] || continue
