@@ -4,9 +4,9 @@ import { logger } from "../shared/logger.js";
 import type { ChatBlockEnvelope, Employee, JsonObject, Session, WorkItemLinkRole } from "../shared/types.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
-import { applyBlockEnvelope, claimSessionDelivery, getSession, updateSession } from "../sessions/registry.js";
+import { applyBlockEnvelope, claimSessionDelivery, getSession, getSessionDeliveryByQueueItemId, updateSession } from "../sessions/registry.js";
 import { getWorkItemClaim } from "../work-items/claims.js";
-import { recordDelegation } from "../work-items/employee-session-delegation.js";
+import { recordLandedBrief, reportsUpTo, startBriefTurn } from "../work-items/employee-session-delegation.js";
 import { toWorkItemLinkRole } from "../work-items/link-role.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
 import { openWorkItemRun } from "../work-items/runs.js";
@@ -148,24 +148,19 @@ export function relinkRole(session: Session, role: WorkItemLinkRole): WorkItemLi
  * Land a delegation in the delegate's live session on the Todo.
  *
  * The session takes the claim through the same claim the route already took
- * (or keeps the one it holds), is relinked under the delegation's role, starts
- * a fresh completion contract, and reports to this delegator from now on. The
- * brief goes in through the outbox, behind any turn already running.
+ * (or keeps the one it holds) and is relinked under the delegation's role. The
+ * brief goes in through the outbox, behind any turn already running, and is
+ * recorded under its delivery's key: the delegator takes over, and the
+ * completion contract starts afresh, when the turn that runs it starts
+ * (`startDelegatedTurn`), not before.
  */
 export function landInLiveSession(input: LandInLiveSessionInput): void {
   const { workItem, session } = input;
   rehomeAttachmentsToSession(input.attachments, session.id);
   linkSession(workItem.id, session.id, input.actor, relinkRole(session, input.role));
   input.claim.bind(session.id);
-  const cleared = clearDelegationCompletionContract(session);
-  updateSession(session.id, {
-    transportMeta: {
-      ...(cleared.transportMeta ?? {}),
-      [DELEGATION_COMPLETION_TRACKED_META_KEY]: true,
-      ...(input.delegateEmployee?.displayName ? { delegationEmployeeDisplay: input.delegateEmployee.displayName } : {}),
-    },
-  });
-  recordDelegation(workItem.id, input.employeeName, session, input.parentSessionId ?? null);
+  const briefKey = `delegation:${input.idempotencyDigest ?? crypto.randomUUID()}`;
+  recordLandedBrief({ briefKey, workItemId: workItem.id, employee: input.employeeName, sessionId: session.id, delegatorSessionId: input.parentSessionId ?? null });
   try {
     openWorkItemRun({ workItemId: workItem.id, sessionId: session.id });
   } catch (runErr) {
@@ -175,7 +170,7 @@ export function landInLiveSession(input: LandInLiveSessionInput): void {
     targetSessionId: session.id,
     sourceKind: "work-item",
     sourceId: workItem.id,
-    sourceAttempt: `delegation:${input.idempotencyDigest ?? crypto.randomUUID()}`,
+    sourceAttempt: briefKey,
     sourceOutcome: "todo-delegation",
     sourceVersion: 1,
     deliveryKind: "todo-delegation",
@@ -183,14 +178,59 @@ export function landInLiveSession(input: LandInLiveSessionInput): void {
   });
   logger.info(`Delegation ${workItem.id}: brief delivered into ${input.employeeName}'s live session ${session.id}`);
   if (delivery.status === "accepted") return;
-  // The Todo's status follows the turn the brief starts, so derive it once the
-  // session has accepted the brief rather than before it is running.
-  deliverClaimedSessionDelivery(delivery.id)
-    .then(() => reconcileWorkItem(workItem.id))
-    .catch((error) => {
-      logger.warn(`Delegation ${workItem.id} could not deliver its brief to session ${session.id}: `
-        + `${error instanceof Error ? error.message : String(error)}`);
-    });
+  deliverClaimedSessionDelivery(delivery.id).catch((error) => {
+    logger.warn(`Delegation ${workItem.id} could not deliver its brief to session ${session.id}: `
+      + `${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
+/**
+ * A turn is starting in `session` for queue item `queueItemId`. If it runs a
+ * delegation brief that landed in a live session, the brief's delegator takes
+ * over as the one the session reports to, the completion contract starts
+ * afresh for this turn, and the Todo's status follows the turn now running.
+ */
+export function startDelegatedTurn(session: Session, queueItemId: string | undefined): void {
+  if (!queueItemId) return;
+  const delivery = getSessionDeliveryByQueueItemId(queueItemId);
+  const keys = [`queue:${queueItemId}`, ...(delivery?.deliveryKind === "todo-delegation" ? [delivery.sourceAttempt] : [])];
+  const brief = startBriefTurn(session.id, keys);
+  if (!brief) return;
+  const cleared = clearDelegationCompletionContract(getSession(session.id) ?? session);
+  updateSession(session.id, { transportMeta: { ...(cleared.transportMeta ?? {}), [DELEGATION_COMPLETION_TRACKED_META_KEY]: true } });
+  try {
+    reconcileWorkItem(brief.workItemId);
+  } catch (error) {
+    logger.warn(`Delegation ${brief.workItemId} reconcile at brief start failed: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+/** Why a delegation that would land in `reused` is refused: its delegator
+ *  reports up to `reused` already, so the two would report to each other. */
+export function delegationLoopError(workItemId: string, reused: Session, delegatorSessionId: string | undefined): string | undefined {
+  if (!delegatorSessionId || !reportsUpTo(delegatorSessionId, reused.id)) return undefined;
+  return delegatorSessionId === reused.id
+    ? `session ${reused.id} is already ${reused.employee}'s session on Todo ${workItemId}, so delegating it to `
+      + `${reused.employee} would land in this same session. Carry on with the work here instead.`
+    : `${reused.employee}'s session on Todo ${workItemId} (${reused.id}) is one your session reports to, so landing `
+      + `this delegation there would make the two report to each other. Ask that session, or the operator, instead.`;
+}
+
+/** The route's answer for a retry whose key a first call already used. */
+export function delegationReplayBody(replay: Session, reused: boolean): JsonObject {
+  const replayItem = replay.workItemId ? getWorkItem(replay.workItemId) : undefined;
+  return {
+    workItemId: replay.workItemId ?? null,
+    sessionId: replay.id,
+    employee: replay.employee ?? null,
+    engine: replay.engine,
+    model: replay.model ?? null,
+    effortLevel: replay.effortLevel ?? null,
+    status: replay.status,
+    title: replayItem?.title ?? replay.title ?? null,
+    replayed: true,
+    ...(reused ? { reused: true } : {}),
+  };
 }
 
 export interface DelegationSelection { engine: string; model?: string; effortLevel?: string }
@@ -225,11 +265,4 @@ export function reusedDelegationReceipt(idempotencyDigest: string): Session | un
     "SELECT target_session_id FROM callback_deliveries WHERE delivery_kind = 'todo-delegation' AND source_attempt = ? LIMIT 1",
   ).get(`delegation:${idempotencyDigest}`) as { target_session_id: string } | undefined;
   return row ? getSession(row.target_session_id) : undefined;
-}
-
-/** A session delegating its own Todo to its own employee would land in itself
- *  and report to itself. It already has the work. */
-export function selfDelegationError(workItemId: string, session: Session): string {
-  return `session ${session.id} is already ${session.employee}'s session on Todo ${workItemId}, so delegating it to `
-    + `${session.employee} would land in this same session. Carry on with the work here instead.`;
 }

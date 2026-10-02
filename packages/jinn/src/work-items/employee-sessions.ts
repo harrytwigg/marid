@@ -19,7 +19,7 @@ import { toWorkItemLinkRole } from './link-role.js';
  *
  * The row also says who the session reports to. A delegation that lands in a
  * session somebody else started makes its delegator the one that session
- * reports to from the turn the brief starts (`employee-session-delegation.ts`);
+ * reports to from the turn that runs its brief (`employee-session-delegation.ts`);
  * the session's own parent is left as it was, and is not woken.
  *
  * A table of its own, created lazily and never in `REQUIRED_TABLE_SQL`, for the
@@ -38,12 +38,6 @@ export interface EmployeeSessionRecord {
   /** Set once a delegation has landed in the session; until then the session
    *  reports to its own parent. */
   delegatedAt: string | null;
-  /** A delegation that has landed but whose turn has not started: it takes over
-   *  from `delegatorSessionId` once the session starts a turn other than
-   *  `pendingAfterAttempt`, the one it was running (or last ran) when it landed. */
-  pendingDelegatorSessionId: string | null;
-  pendingDelegatedAt: string | null;
-  pendingAfterAttempt: string | null;
 }
 
 interface RecordRow {
@@ -52,9 +46,6 @@ interface RecordRow {
   session_id: string;
   delegator_session_id: string | null;
   delegated_at: string | null;
-  pending_delegator_session_id: string | null;
-  pending_delegated_at: string | null;
-  pending_after_attempt: string | null;
 }
 
 const ready = new WeakSet<DatabaseType>();
@@ -69,9 +60,6 @@ export function employeeSessionsTable(): DatabaseType {
     session_id           TEXT NOT NULL,
     delegator_session_id TEXT,
     delegated_at         TEXT,
-    pending_delegator_session_id TEXT,
-    pending_delegated_at         TEXT,
-    pending_after_attempt        TEXT,
     updated_at           TEXT NOT NULL,
     PRIMARY KEY (work_item_id, employee)
   )`);
@@ -90,9 +78,6 @@ export function getEmployeeSessionRecord(workItemId: string, employee: string): 
     sessionId: row.session_id,
     delegatorSessionId: row.delegator_session_id,
     delegatedAt: row.delegated_at,
-    pendingDelegatorSessionId: row.pending_delegator_session_id,
-    pendingDelegatedAt: row.pending_delegated_at,
-    pendingAfterAttempt: row.pending_after_attempt,
   };
 }
 
@@ -130,9 +115,7 @@ export function swapEmployeeSession(workItemId: string, employee: string, expect
     `INSERT INTO work_item_employee_sessions (work_item_id, employee, session_id, updated_at)
      VALUES (:workItemId, :employee, :sessionId, :now)
      ON CONFLICT(work_item_id, employee) DO UPDATE SET
-       session_id = excluded.session_id, delegator_session_id = NULL, delegated_at = NULL,
-       pending_delegator_session_id = NULL, pending_delegated_at = NULL, pending_after_attempt = NULL,
-       updated_at = excluded.updated_at
+       session_id = excluded.session_id, delegator_session_id = NULL, delegated_at = NULL, updated_at = excluded.updated_at
      WHERE work_item_employee_sessions.session_id = :expected`,
   ).run({ workItemId, employee, sessionId, expected, now: new Date().toISOString() }).changes === 1;
 }

@@ -55,13 +55,11 @@ function replyPrompt(item: WorkItem, comment: WorkItemComment): string {
 }
 
 /** Replies between sessions on one Todo that are delivered before the thread
- *  is told to move to a conversation. Two agents answering each other's
- *  answers would otherwise wake each other for ever. The operator's replies are
- *  not counted. */
+ *  stops passing them on. Two agents answering each other's answers would
+ *  otherwise wake each other for ever. The operator's replies are not counted,
+ *  and the cap holds for the life of the Todo. */
 export const MAX_AGENT_REPLIES_PER_TODO = 20;
 
-/** The session the comment answers, if a session wrote that comment and it can
- *  still be messaged. Never the author's own session or employee. */
 /** The session the comment answers, if a session wrote that comment and it can
  *  still be messaged. Never the author's own session or employee, and never a
  *  system employee's, which a mention cannot wake either. */
@@ -73,7 +71,7 @@ function answeredSession(comment: WorkItemComment, authorEmployee: string | unde
 }
 
 function answersItself(session: Session, authorEmployee: string | undefined, roster: Roster): boolean {
-  return !!session.employee && (session.employee === authorEmployee || !!roster.get(session.employee)?.system);
+  return !!session.employee && (session.employee === authorEmployee || !!roster.get(session.employee.toLowerCase())?.system);
 }
 
 type Roster = Map<string, Employee>;
@@ -149,7 +147,7 @@ function deliverReply(item: WorkItem, comment: WorkItemComment, session: Session
       author: "jinn",
       authorKind: "system",
       body: `**Reply not delivered.** Sessions on this Todo have already answered each other ${MAX_AGENT_REPLIES_PER_TODO} times, `
-        + `which is the cap. Mention the employee to reach them, or continue in their session.`,
+        + `which is the cap. Continue the conversation in their session, or ask the operator to step in.`,
       idempotencyKey: `reply-capped:${comment.id}`,
     });
   }

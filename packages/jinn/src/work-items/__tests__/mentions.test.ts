@@ -9,6 +9,9 @@ describe("parseMentions", () => {
     ["line one\n@gamma_ at the start of a line", ["gamma"]],
     ["wrap it in ``` then @reviewer look", ["reviewer"]],
     ["```js\n@alpha in code\n```\nthen @bravo after it", ["bravo"]],
+    ["```@alpha```\n@bravo", ["bravo"]],
+    ["````\n```\n@alpha still fenced\n````\n@bravo", ["bravo"]],
+    ["```\n```js\n@alpha still fenced\n```\n@bravo", ["bravo"]],
   ])("finds the mentions in %j", (body, expected) => {
     expect(parseMentions(body)).toEqual(expected);
   });

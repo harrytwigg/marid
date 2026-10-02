@@ -14,9 +14,14 @@
  */
 const MENTION = /(^|[^A-Za-z0-9_.@/-])@([A-Za-z0-9][A-Za-z0-9_-]*)/g;
 
+/** A fenced code block, as CommonMark reads one: three or more backticks or
+ *  tildes opening a line (a backtick fence's info string has no backticks),
+ *  closed by a line of at least as many of the same character and nothing else,
+ *  or by the end of the body. */
+const FENCE = /^[ \t]*(`{3,}(?=[^`\n]*$)|~{3,})[^\n]*(?:\n[\s\S]*?)??(?:\n[ \t]*\1[`~]*[ \t]*(?=\n|$)|(?![\s\S]))/gm;
+
 function withoutCode(body: string): string {
-  // A fence opens only at the start of a line, and runs to its closing fence or the end.
-  return body.replace(/^[ \t]*(```|~~~)[\s\S]*?(^[ \t]*\1|(?![\s\S]))/gm, ' ').replace(/`[^`\n]*`/g, ' ');
+  return body.replace(FENCE, ' ').replace(/`[^`\n]*`/g, ' ');
 }
 
 export function parseMentions(body: string): string[] {

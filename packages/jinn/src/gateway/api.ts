@@ -259,7 +259,7 @@ import {
   readWorkItemQueryParams,
   SEARCH_QUERY_ROUTE_CHAR_CAP,
 } from "./work-item-query.js";
-import { announceDelegation, claimHeldBy, landInLiveSession, reusedDelegationBody, reusedDelegationReceipt, selfDelegationError } from "./delegation-handoff.js";
+import { announceDelegation, claimHeldBy, landInLiveSession, reusedDelegationBody, reusedDelegationReceipt, delegationLoopError, delegationReplayBody } from "./delegation-handoff.js";
 import { liveEmployeeSession } from "../work-items/employee-sessions.js";
 import { recordNewDelegateSession, reportingParentSessionId } from "../work-items/employee-session-delegation.js";
 import { NOTE_FILE_MAX_BYTES, createNote, listNotes, readKnowledgeFile, readNote, searchKnowledge, updateNote, type NoteStoreResult } from "../notes/store.js";
@@ -3316,23 +3316,13 @@ export async function handleApiRequest(
       // chosen key owns the result, and an ordinary retry returns the original
       // pair without effects.
       if (idempotencySessionKey) {
-        const replay = getSessionBySessionKey(idempotencySessionKey) ?? reusedDelegationReceipt(idempotencyDigest!);
+        const spawned = getSessionBySessionKey(idempotencySessionKey);
+        const replay = spawned ?? reusedDelegationReceipt(idempotencyDigest!);
         if (replay) {
           if (!replay.workItemId) {
             return json(res, { error: "delegation idempotency receipt exists without a linked Todo", sessionId: replay.id }, 409);
           }
-          const replayItem = getWorkItem(replay.workItemId);
-          return json(res, {
-            workItemId: replay.workItemId,
-            sessionId: replay.id,
-            employee: replay.employee ?? null,
-            engine: replay.engine,
-            model: replay.model ?? null,
-            effortLevel: replay.effortLevel ?? null,
-            status: replay.status,
-            title: replayItem?.title ?? replay.title ?? null,
-            replayed: true,
-          });
+          return json(res, delegationReplayBody(replay, !spawned));
         }
       }
 
@@ -3481,7 +3471,8 @@ export async function handleApiRequest(
       // session on it, the brief lands there and that session takes the claim
       // (or keeps the one it holds) instead of a second session being spawned.
       const reused = requestedWorkItemId && employeeName ? liveEmployeeSession(workItem.id, employeeName) : undefined;
-      if (reused && reused.id === parentSessionId) return json(res, { error: selfDelegationError(workItem.id, reused) }, 409);
+      const loop = reused && delegationLoopError(workItem.id, reused, parentSessionId);
+      if (loop) return json(res, { error: loop }, 409);
       const claim = (reused && claimHeldBy(workItem.id, reused)) || claimTodoForDelegation(res, workItem.id, dispatcherHandoffFrom);
       if (!claim) return;
 
@@ -3587,7 +3578,7 @@ export async function handleApiRequest(
       try {
         linkSession(workItem.id, session.id, delegationActor, resolveDelegationLinkRole(intent, workItem.status));
         claim.bind(session.id);
-        if (employeeName) recordNewDelegateSession(workItem.id, employeeName, session, parentSessionId);
+        if (employeeName) recordNewDelegateSession(workItem.id, employeeName, session.id, parentSessionId);
       } catch (linkErr) {
         claim.release();
         logger.warn(`Delegation ${workItem.id} link failed before dispatch: ${linkErr instanceof Error ? linkErr.message : linkErr}`);

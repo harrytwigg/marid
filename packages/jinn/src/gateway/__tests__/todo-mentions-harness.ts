@@ -85,6 +85,7 @@ export async function loadMentionHarness() {
   const store = await import("../../work-items/store.js");
   const records = await import("../../work-items/employee-sessions.js");
   const delegation = await import("../../work-items/employee-session-delegation.js");
+  const handoff = await import("../delegation-handoff.js");
   const claims = await import("../../work-items/claims.js");
   const callbacks = await import("../../sessions/callbacks.js");
   const db = (await import("../../shared/db.js")).initDb();
@@ -144,5 +145,18 @@ export async function loadMentionHarness() {
   /** A new turn started in the session: it gets a fresh attempt token. */
   const startTurn = (sessionId: string) => registry.updateSession(sessionId, { attemptToken: crypto.randomUUID() })!;
 
-  return { context, registry, store, records, delegation, claims, callbacks, forceStatus, startTurn, call, comment, delegate, sessionsOf, deliveriesTo, employeeSession, executing };
+  /** The turn that runs the newest delegation brief delivered into the session
+   *  starts, as the queue would start it: the delivery is accepted onto a queue
+   *  item, and the turn for that item begins. */
+  function runBriefTurn(sessionId: string) {
+    const row = db.prepare("SELECT id FROM callback_deliveries WHERE target_session_id = ? AND delivery_kind = 'todo-delegation' ORDER BY created_at DESC LIMIT 1")
+      .get(sessionId) as { id: string };
+    const queueItemId = `queue-${crypto.randomUUID()}`;
+    db.prepare("UPDATE callback_deliveries SET status = 'accepted', message_id = ?, queue_item_id = ?, accepted_at = ? WHERE id = ?")
+      .run(`message-${queueItemId}`, queueItemId, new Date().toISOString(), row.id);
+    handoff.startDelegatedTurn(startTurn(sessionId), queueItemId);
+    return registry.getSession(sessionId)!;
+  }
+
+  return { context, registry, store, records, delegation, handoff, claims, callbacks, forceStatus, startTurn, runBriefTurn, call, comment, delegate, sessionsOf, deliveriesTo, employeeSession, executing };
 }

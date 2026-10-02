@@ -23,8 +23,8 @@ export function buildDelegatedActivityIndex(
     if (!active) continue;
 
     const visited = new Set([active.id]);
-    // The first hop is whoever the session reports to: a delegator whose
-    // delegation landed in a session somebody else started counts it as theirs.
+    // Each hop is whoever the session reports to: a delegator whose delegation
+    // landed in a session somebody else started counts it as theirs.
     let parentId = reportingParentSessionId(active);
     while (parentId && !visited.has(parentId)) {
       visited.add(parentId);
@@ -32,7 +32,8 @@ export function buildDelegatedActivityIndex(
       summary.activeSessions += 1;
       if (active.employee) summary.employees.add(active.employee);
       mutable.set(parentId, summary);
-      parentId = byId.get(parentId)?.parentSessionId ?? null;
+      const parent = byId.get(parentId);
+      parentId = parent ? reportingParentSessionId(parent) : null;
     }
   }
 

@@ -30,10 +30,12 @@ describe("the (Todo, employee) record", () => {
     expect(records.swapEmployeeSession(item.id, "alpha", null, "s1")).toBe(true);
     expect(records.swapEmployeeSession(item.id, "alpha", null, "s2")).toBe(false);
     expect(records.swapEmployeeSession(item.id, "alpha", "s0", "s2")).toBe(false);
-    delegation.recordDelegation(item.id, "alpha", { id: "s1", attemptToken: null }, "delegator", { immediate: true });
+    delegation.recordLandedBrief({ briefKey: "b1", workItemId: item.id, employee: "alpha", sessionId: "s1", delegatorSessionId: "delegator" });
+    delegation.startBriefTurn("s1", ["b1"]);
+    expect(records.getEmployeeSessionRecord(item.id, "alpha")?.delegatorSessionId).toBe("delegator");
 
     expect(records.swapEmployeeSession(item.id, "alpha", "s1", "s2")).toBe(true);
-    expect(records.getEmployeeSessionRecord(item.id, "alpha")).toMatchObject({ sessionId: "s2", delegatorSessionId: null, delegatedAt: null, pendingDelegatedAt: null });
+    expect(records.getEmployeeSessionRecord(item.id, "alpha")).toMatchObject({ sessionId: "s2", delegatorSessionId: null, delegatedAt: null });
   });
 
   it("adopts a live linked session it has no row for, and passes over dead and reset ones", () => {
@@ -74,31 +76,37 @@ describe("the (Todo, employee) record", () => {
     })).toThrow(/changed while a new one was being started/);
   });
 
-  it("reports to a landed delegator from the session's next turn, to nobody for the operator, else to the parent", () => {
+  it("reports to a landed brief's delegator only once that brief's turn starts", () => {
     const item = store.createWorkItem({ title: "who hears back" });
-    const live = registry.updateSession(linked(item.id, "alpha").id, { attemptToken: "turn-1" })!;
-    const session = { ...live, parentSessionId: "first-parent" };
+    const session = { ...linked(item.id, "alpha"), parentSessionId: "first-parent" };
     records.swapEmployeeSession(item.id, "alpha", records.getEmployeeSessionRecord(item.id, "alpha")?.sessionId ?? null, session.id);
     expect(delegation.reportingParentSessionId(session)).toBe("first-parent");
 
-    delegation.recordDelegation(item.id, "alpha", session, "second");
+    delegation.recordLandedBrief({ briefKey: "brief-2", workItemId: item.id, employee: "alpha", sessionId: session.id, delegatorSessionId: "second" });
+    expect(delegation.startBriefTurn(session.id, ["queue:other-turn"])).toBeUndefined();
     expect(delegation.reportingParentSessionId(session)).toBe("first-parent");
-    expect(delegation.withReportingParent({ ...session, attemptToken: "turn-2" }).parentSessionId).toBe("second");
 
-    // A third lands on turn 2: the second has taken over, and the third waits for turn 3.
-    delegation.recordDelegation(item.id, "alpha", { ...session, attemptToken: "turn-2" }, null);
-    expect(delegation.reportingParentSessionId({ ...session, attemptToken: "turn-2" })).toBe("second");
-    expect(delegation.reportingParentSessionId({ ...session, attemptToken: "turn-3" })).toBeNull();
+    expect(delegation.startBriefTurn(session.id, ["queue:x", "brief-2"])?.delegatorSessionId).toBe("second");
+    expect(delegation.withReportingParent(session).parentSessionId).toBe("second");
+    expect(delegation.startBriefTurn(session.id, ["brief-2"])).toBeUndefined();
+
+    delegation.recordLandedBrief({ briefKey: "brief-3", workItemId: item.id, employee: "alpha", sessionId: session.id, delegatorSessionId: null });
+    delegation.startBriefTurn(session.id, ["brief-3"]);
+    expect(delegation.reportingParentSessionId(session)).toBeNull();
   });
 
-  it("never names a session as its own reporting parent", () => {
-    const item = store.createWorkItem({ title: "self" });
-    const session = registry.updateSession(linked(item.id, "alpha").id, { attemptToken: "t1" })!;
-    records.swapEmployeeSession(item.id, "alpha", records.getEmployeeSessionRecord(item.id, "alpha")?.sessionId ?? null, session.id);
-    delegation.recordDelegation(item.id, "alpha", session, session.id, { immediate: true });
+  it("never names a session, or a loop back to it, as its reporting parent", () => {
+    const item = store.createWorkItem({ title: "loops" });
+    const a = linked(item.id, "alpha");
+    const b = linked(item.id, "bravo");
+    records.swapEmployeeSession(item.id, "alpha", null, a.id);
+    records.swapEmployeeSession(item.id, "bravo", null, b.id);
+    delegation.recordNewDelegateSession(item.id, "alpha", a.id, b.id);
+    delegation.recordNewDelegateSession(item.id, "bravo", b.id, a.id);
 
-    expect(delegation.reportingParentSessionId({ ...session, parentSessionId: "parent" })).toBe("parent");
-    expect(delegation.reportingParentSessionId({ ...session, parentSessionId: session.id })).toBeNull();
+    expect(delegation.reportsUpTo(b.id, a.id)).toBe(true);
+    expect(delegation.reportingParentSessionId({ ...a, parentSessionId: "a-parent" })).toBe("a-parent");
+    expect(delegation.reportingParentSessionId({ ...b, parentSessionId: b.id })).toBeNull();
   });
 
   it("prefers the employee's working session over a consultation it recorded earlier", () => {

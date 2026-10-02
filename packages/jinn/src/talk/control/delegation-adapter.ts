@@ -14,8 +14,8 @@ import { reconcileWorkItem } from "../../work-items/reconcile.js";
 import { getWorkItem, linkSession } from "../../work-items/store.js";
 import { resolveDelegationLinkRole } from "../../work-items/link-role.js";
 import { liveEmployeeSession } from "../../work-items/employee-sessions.js";
-import { recordDelegation, recordNewDelegateSession } from "../../work-items/employee-session-delegation.js";
-import { relinkRole } from "../../gateway/delegation-handoff.js";
+import { recordLandedBrief, recordNewDelegateSession } from "../../work-items/employee-session-delegation.js";
+import { delegationLoopError, relinkRole } from "../../gateway/delegation-handoff.js";
 import type { TalkControlAdapterContext, TalkControlExecution } from "./types.js";
 
 interface DelegateEmployee {
@@ -77,11 +77,21 @@ function delegateSession(input: TalkDelegationInput, key: string, existing: Sess
     prompt: input.prompt,
     title: `Delegate ${input.todoId}`,
   });
+  if (reused) {
+    const loop = delegationLoopError(input.todoId, reused, input.sourceSessionId);
+    if (loop) throw new Error(loop);
+  }
   // Handing an `in_review` Todo to someone is handing it to a reviewer.
   linkSession(input.todoId, session.id, null, relinkRole(session, resolveDelegationLinkRole(undefined, todoStatus)));
-  if (reused) recordDelegation(input.todoId, input.employee.name, reused, input.sourceSessionId);
-  else if (!existing) recordNewDelegateSession(input.todoId, input.employee.name, session, input.sourceSessionId);
+  if (!existing && !reused) recordNewDelegateSession(input.todoId, input.employee.name, session.id, input.sourceSessionId);
   return session;
+}
+
+/** A brief into a session somebody else started: its delegator takes over
+ *  when the turn for this queue item starts, not before. */
+function recordReusedBrief(input: TalkDelegationInput, key: string, session: Session, queueItemId: string): void {
+  if (session.sessionKey === key) return;
+  recordLandedBrief({ briefKey: `queue:${queueItemId}`, workItemId: input.todoId, employee: input.employee.name, sessionId: session.id, delegatorSessionId: input.sourceSessionId });
 }
 
 /**
@@ -121,6 +131,7 @@ export function claimTalkDelegation(input: TalkDelegationInput): ClaimedDelegati
       ? updateSession(session.id, { status: "running", lastActivity: new Date().toISOString() }) ?? session
       : session;
     if (!turn.queueItemId) throw new Error("delegation turn lost its durable queue anchor");
+    if (!existing) recordReusedBrief(input, key, session, turn.queueItemId);
     return { session: current, queueItemId: turn.queueItemId, replayed: turn.deduplicated };
   }).immediate();
 }
