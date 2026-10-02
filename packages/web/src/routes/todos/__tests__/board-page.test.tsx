@@ -114,8 +114,7 @@ function emptyTree(id: string, status: WorkItemStatusWire = "backlog", priority 
       rank: null,
       source: "human",
       sourceRef: null,
-      acceptance: null,
-      verifyPolicy: null,
+
       rounds: 0,
       budgetUsd: null,
       createdAt: "2026-07-23T08:00:00.000Z",

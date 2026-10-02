@@ -62,8 +62,7 @@ function full(id: string, overrides: Partial<WorkItemFullWire> = {}): WorkItemFu
     rank: null,
     source: "human",
     sourceRef: null,
-    acceptance: null,
-    verifyPolicy: null,
+
     rounds: 1,
     budgetUsd: null,
     createdBy: "operator",

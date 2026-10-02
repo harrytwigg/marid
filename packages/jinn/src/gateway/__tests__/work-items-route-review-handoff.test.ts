@@ -178,12 +178,12 @@ describe("the operator sending work back from review", () => {
     expect(listComments(item.id).comments.map((c) => [c.body, c.authorKind])).toEqual([["The edge case at midnight still fails.", "operator"]]);
   });
 
-  it("stops it in blocked for the operator on the last round allowed", async () => {
+  it("sends it back to executing however many rounds it has had", async () => {
     const item = todo("in_review");
     await put(item.id, { status: "executing" });
     await post(item.id, { status: "in_review", note: "second pass" }, toolHeaders(employeeSession().id));
-    const capped = await put(item.id, { status: "executing", note: "still wrong" });
-    expect([capped.status, capped.body.workItem?.status, capped.body.workItem?.rounds, capped.body.escalated]).toEqual([200, "blocked", 2, true]);
+    const again = await put(item.id, { status: "executing", note: "still wrong" });
+    expect([again.status, again.body.workItem?.status, again.body.workItem?.rounds, again.body.escalated]).toEqual([200, "executing", 2, false]);
     expect(listComments(item.id).comments.map((c) => c.body)).toContain("still wrong");
   });
 

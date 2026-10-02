@@ -58,8 +58,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
 function full(id: string, overrides: Partial<WorkItemFullWire> = {}): WorkItemFullWire {
   return {
     id, version: 3, title: `Item ${id}`, body: null, status: "executing", department: "platform",
-    assignee: null, priority: 2, rank: null, source: "human", sourceRef: null, acceptance: null,
-    verifyPolicy: null, rounds: 1, budgetUsd: null,
+    assignee: null, priority: 2, rank: null, source: "human", sourceRef: null,
+    rounds: 1, budgetUsd: null,
     createdBy: "operator", parentId: null, rootId: id, depth: 0,
     dueAt: null, createdAt: "2026-07-20T08:00:00.000Z", updatedAt: "2026-07-23T08:00:00.000Z",
     closedAt: null, ...overrides,
@@ -236,26 +236,12 @@ describe("the other pickers", () => {
     )
   })
 
-  it("the verify picker PATCHes an explicit policy and can clear back to the default", async () => {
-    const item = full("PLA-12", { verifyPolicy: { mode: "verify", maxRounds: 2 } })
-    getWorkItem.mockResolvedValue(detailOf(item))
-    updateWorkItem.mockResolvedValue({ workItem: { ...item, version: 4 }, replayed: false })
+  it("the rail has no review-policy row to open", async () => {
+    getWorkItem.mockResolvedValue(detailOf(full("PLA-12", { rounds: 2 })))
     renderTask()
-    fireEvent.click(await screen.findByTestId("rail-verify"))
-
-    fireEvent.click(await screen.findByTestId("verify-option-thorough"))
-    await waitFor(() =>
-      expect(updateWorkItem).toHaveBeenCalledWith("PLA-12", expect.objectContaining({
-        patch: { verifyPolicy: { mode: "thorough", maxRounds: 2 } },
-      })),
-    )
-
-    fireEvent.click(screen.getByTestId("verify-clear"))
-    await waitFor(() =>
-      expect(updateWorkItem).toHaveBeenCalledWith("PLA-12", expect.objectContaining({
-        patch: { verifyPolicy: null },
-      })),
-    )
+    await screen.findByTestId("rail-due")
+    expect(screen.queryByTestId("rail-verify")).toBeNull()
+    expect(screen.getByTestId("task-props-rail").textContent).not.toMatch(/Review policy|Round \d+ of/)
   })
 
   it("the due picker commits an ISO day and can clear", async () => {

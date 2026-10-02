@@ -33,8 +33,6 @@ export function createDetail({
       rank: null,
       source: "human",
       sourceRef: null,
-      acceptance: null,
-      verifyPolicy: null,
       rounds: 0,
       budgetUsd: null,
       dueAt,

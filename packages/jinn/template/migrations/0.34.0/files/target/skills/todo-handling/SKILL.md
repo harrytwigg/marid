@@ -12,7 +12,7 @@ Use this skill for deliberately authored, durable work ownership and status trac
 - Use `list_work_items` for recent work or structured filters such as `status`, `source`, `assignee`, `department`, and `needsAttentionFor`.
 - Use `list_work_items` with `rootsOnly: true` for an objective-level view, `parentId` for one Todo's direct children, or `rootId` for a whole Todo family.
 - Use `search_work_items` when you have text or several filters. It requires at least one real filter.
-- Use `get_work_item` before changing a Todo so you understand its acceptance criteria, assignee, source/provenance, verification policy, and current status.
+- Use `get_work_item` before changing a Todo so you understand what it asks for, its assignee, source/provenance, and current status.
 - Use `get_work_item_tree` when the work has child Todos; it returns the nested breakdown and roll-up.
 
 The statuses are backlog, executing, in_review, done, blocked, and cancelled. A Todo with an owner that has not started sits in backlog with its assignee set. Assigning a Todo, or moving it on the board, starts nothing: a dispatch does.
@@ -33,7 +33,7 @@ Only independently assignable or independently reviewable deliverables become ch
 {
   "title": "Verify release artifacts",
   "parentId": "ACM-42",
-  "acceptance": "Checks pass and evidence is attached."
+  "body": "Check the release artifacts.\n\nDone when: checks pass and evidence is attached."
 }
 ```
 
@@ -46,19 +46,13 @@ Create a Todo only for durable work that needs an owner or review trail:
 ```json
 {
   "title": "Verify release candidate",
-  "body": "Run the release checks and attach the evidence.",
-  "acceptance": "Typecheck, tests, lint, and build pass with command output.",
-  "department": "engineering",
-  "verifyPolicy": {
-    "mode": "verify",
-    "verifier": { "employee": "a-lead" },
-    "maxRounds": 4
-  }
+  "body": "Run the release checks and attach the evidence.\n\nDone when: typecheck, tests, lint, and build pass with command output.",
+  "department": "engineering"
 }
 ```
 
 1. Search for an existing item covering the same outcome.
-2. Call `create_work_item` with a concise title, enough context to act, and testable acceptance criteria.
+2. Call `create_work_item` with a concise title and a body that gives enough context to act and says, testably, what done looks like. There is no separate acceptance field: the criteria belong in the body.
 3. Call `assign_work_item` next: creation never carries an assignee, so assignment is always its own second call. Verify the employee with `get_employee` or `find_employees` first.
 4. Use `delegate_task` instead when the assignee should start immediately; it can use an existing `workItemId` or create and link a new Todo atomically.
 

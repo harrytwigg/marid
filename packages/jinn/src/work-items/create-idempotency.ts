@@ -37,10 +37,11 @@ export interface IdempotentCreateResult {
  *  absent: it records which surface performed the write, not what was asked
  *  for, and a retry over a different transport is still the same create. Key
  *  order is load-bearing — it feeds the canonical JSON, so entries are only
- *  ever appended. */
+ *  ever appended. `acceptance` and `verifyPolicy` were removed from between
+ *  `sourceRef` and `budgetUsd`; see legacyRetiredFieldsFingerprint. */
 const CREATE_FINGERPRINT_FIELDS: ReadonlyArray<keyof CreateWorkItemInput> = [
   'title', 'body', 'status', 'department', 'assignee', 'createdBy', 'parentId',
-  'dueAt', 'priority', 'source', 'sourceRef', 'acceptance', 'verifyPolicy', 'budgetUsd',
+  'dueAt', 'priority', 'source', 'sourceRef', 'budgetUsd',
 ];
 
 /** What a create asks for beyond the row itself: applied after the row rather
@@ -53,10 +54,18 @@ export interface CreateWorkItemExtras {
   autoStart?: boolean;
 }
 
-function canonicalCreateFingerprint(input: CreateWorkItemInput, { labels, autoStart }: CreateWorkItemExtras): string {
+function canonicalCreateFingerprint(
+  input: CreateWorkItemInput,
+  { labels, autoStart }: CreateWorkItemExtras,
+  legacyRetiredFields = false,
+): string {
   const payload: Record<string, unknown> = {};
   for (const key of CREATE_FINGERPRINT_FIELDS) {
     if (input[key] !== undefined) payload[key] = input[key];
+    if (legacyRetiredFields && key === 'sourceRef') {
+      payload.acceptance = null;
+      payload.verifyPolicy = null;
+    }
   }
   // Labels are applied after the row rather than through `CreateWorkItemInput`,
   // but they are part of what the caller asked to create, and a replay keeps the
@@ -66,6 +75,19 @@ function canonicalCreateFingerprint(input: CreateWorkItemInput, { labels, autoSt
   if (labels !== undefined) payload.labels = [...labels].sort();
   if (autoStart === false) payload.autoStart = false;
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+/**
+ * The fingerprint the HTTP create route minted before `acceptance` and
+ * `verifyPolicy` were retired. That route always set both, to null when the
+ * caller sent neither, so its receipts hashed `"acceptance":null,
+ * "verifyPolicy":null` in their old key position. A key replayed across the
+ * upgrade asks for the same create, so this form matches too. A receipt whose
+ * create carried a real value for either field cannot be asked for again, and
+ * stays a conflict.
+ */
+function legacyRetiredFieldsFingerprint(input: CreateWorkItemInput, extras: CreateWorkItemExtras): string {
+  return canonicalCreateFingerprint(input, extras, true);
 }
 
 /**
@@ -88,7 +110,9 @@ export function createWorkItemIdempotent(
       .prepare('SELECT work_item_id, fingerprint FROM work_item_create_receipts WHERE key_digest = ?')
       .get(keyDigest) as { work_item_id: string; fingerprint: string } | undefined;
     if (receipt) {
-      if (receipt.fingerprint !== fingerprint) throw new WorkItemCreateIdempotencyConflictError(receipt.work_item_id);
+      if (receipt.fingerprint !== fingerprint && receipt.fingerprint !== legacyRetiredFieldsFingerprint(input, extras)) {
+        throw new WorkItemCreateIdempotencyConflictError(receipt.work_item_id);
+      }
       const existing = getWorkItem(receipt.work_item_id);
       // The boot verifier proves every receipt still points at a live Todo, so
       // this is unreachable through the supported paths — and a replay that

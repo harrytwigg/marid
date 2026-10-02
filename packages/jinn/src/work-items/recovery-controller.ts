@@ -71,7 +71,6 @@ export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClas
       : undefined,
     openRun: open ? { startedAt: open.startedAt, sessionInFlight: sessionInFlight(open.sessionId) } : undefined,
     attempts: item.status === "executing" ? attemptActivity(item.id) : undefined,
-    verifyMode: item.verifyPolicy?.mode,
     now,
   });
 }

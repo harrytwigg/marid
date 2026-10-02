@@ -121,20 +121,14 @@ export interface RecoveryIncidentInput {
   openRun?: { startedAt: string; sessionInFlight: boolean };
   /** The Todo's linked execution attempts (review and phase links excluded). */
   attempts?: AttemptActivity;
-  verifyMode?: "trust" | "verify" | "thorough";
   now?: Date;
 }
 
 const AVAILABILITY_CLASSES = ["quota", "rate-limit", "provider-outage", "network"] as const;
-const VERIFY_FAILURE = /independent review|verifier rejected|verification failed|review rejected the diff/i;
 
 function isAvailability(input: RecoveryIncidentInput, error: string): boolean {
   return input.lastRun?.outcome === "rate_limited"
     || hasEngineFailureClass(classifyEngineFailureText(error), ...AVAILABILITY_CLASSES);
-}
-
-function isVerificationFailure(input: RecoveryIncidentInput, error: string): boolean {
-  return (input.verifyMode === "verify" || input.verifyMode === "thorough") && VERIFY_FAILURE.test(error);
 }
 
 function classifyFromFailure(input: RecoveryIncidentInput): RecoveryClassification | undefined {
@@ -144,9 +138,6 @@ function classifyFromFailure(input: RecoveryIncidentInput): RecoveryClassificati
   }
   if (isAvailability(input, error)) {
     return { class: "transient", lane: "recovering", reason: "provider availability; re-dispatch when the window reopens" };
-  }
-  if (isVerificationFailure(input, error)) {
-    return { class: "verification", lane: "manager", reason: "independent verification rejected the work" };
   }
   if (input.lastRun && ["crashed", "failed", "blocked", "timed_out", "abandoned"].includes(input.lastRun.outcome)) {
     return { class: "code", lane: "manager", reason: "the attempt failed in the work itself" };

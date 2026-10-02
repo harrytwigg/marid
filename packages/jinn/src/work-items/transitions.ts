@@ -10,7 +10,6 @@ export { changedStopCause } from './stop-cause-restate.js';
 import { EDGES } from './transition-edges.js';
 import {
   appendWorkItemEvent,
-  effectiveMaxRounds,
   getWorkItem,
   STICKY_STATUSES,
   type WorkItem,
@@ -27,9 +26,9 @@ import {
  * silently write), every change appends a `work_item_events` audit row in the
  * SAME transaction, sticky terminals (`done`/`cancelled`) are left
  * only under explicit human authority, the self-review ban is structural, and
- * the bounce rule (`in_review → executing` with `rounds++`) auto-escalates at
- * the policy's max rounds instead of looping. The GRS-003a reconciler and the
- * (phase-2) dispatcher are consumers of this module, not competitors to it.
+ * the bounce rule (`in_review → executing`) counts `rounds`. The GRS-003a
+ * reconciler and the (phase-2) dispatcher are consumers of this module, not
+ * competitors to it.
  */
 
 export type TransitionErrorCode =
@@ -202,25 +201,18 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
       }
     }
 
-    // The bounce rule: work sent back returns to executing, unless that exhausts
-    // the policy's rounds; then it stops at the operator (blocked, escalated).
+    // The bounce rule: work sent back always returns to executing; `rounds`
+    // only counts how many times that has happened.
     let target = to;
-    let escalatedByRounds = false;
     let rounds = item.rounds;
-    if (bounce && from === 'in_review' && to === 'executing') {
-      rounds += 1;
-      if (rounds >= effectiveMaxRounds(item)) {
-        target = 'blocked';
-        escalatedByRounds = true;
-      }
-    }
+    if (bounce && from === 'in_review' && to === 'executing') rounds += 1;
 
     // The block-loop breaker: the same bounded-loop shape one level down, so a
     // block that keeps coming back for the same reason ends at the operator
     // instead of cycling between a cron that unblocks and an agent that re-blocks.
     const block = blockKind ? resolveBlock(db, item, blockKind) : null;
     if (block) target = block.target;
-    const escalated = escalatedByRounds || block?.escalated === true;
+    const escalated = block?.escalated === true;
 
     // Optimistic write: 0 rows changed = someone moved it between our read and
     // this write (cross-process only — better-sqlite3 calls are synchronous).
@@ -259,7 +251,6 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
       detail: {
         ...(opts.detail ?? {}),
         ...(bounce ? { bounce: true, rounds } : {}),
-        ...(escalatedByRounds ? { reason: 'max-rounds-exhausted', maxRounds: effectiveMaxRounds(item) } : {}),
         ...(block?.escalated ? { reason: 'block_loop_detected', blockKind, recurrences: block.recurrences } : {}),
         // An escalation stops the Todo for the operator: recovery must read it
         // as a declared block, whoever the actor was.

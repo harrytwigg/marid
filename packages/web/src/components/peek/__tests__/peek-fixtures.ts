@@ -37,8 +37,7 @@ export function detailOf(
       rank: null,
       source: "human",
       sourceRef: null,
-      acceptance: null,
-      verifyPolicy: null,
+
       rounds: 0,
       budgetUsd: null,
       // Only ICI-1 has a parent, so following it does not loop back on itself.

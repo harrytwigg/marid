@@ -250,16 +250,17 @@ describe("reconcileWorkItem — integration against real store + registry", () =
     expect(kinds).toContain("in_review→done:policy:trust");
   });
 
-  it("an explicit verify policy OVERRIDES the trust provenance default (cron item held for review)", () => {
-    const wi = store.createWorkItem({
-      title: "reviewed cron",
-      status: "executing",
-      source: "cron",
-      sourceRef: "cron:j3b:1",
-      verifyPolicy: { mode: "verify" },
-    });
+  it("ignores a legacy verify_policy left in the column: a cron item still auto-closes", () => {
+    const wi = store.createWorkItem({ title: "legacy reviewed cron", status: "executing", source: "cron", sourceRef: "cron:j3b:1" });
+    db.prepare("UPDATE work_items SET verify_policy = ? WHERE id = ?").run('{"mode":"verify"}', wi.id);
     linkedSession("s-ok-3b", wi.id, "idle", "2026-07-01T01:00:00.000Z");
-    // Reviewed like any other: no auto-close, and no auto-review either.
+    expect(reconcile.reconcileWorkItem(wi.id)?.item.status).toBe("done");
+  });
+
+  it("ignores a legacy trust verify_policy on a non-cron item: it stays with its producer", () => {
+    const wi = store.createWorkItem({ title: "legacy trusted human", status: "executing", source: "delegation", sourceRef: "delegate:j3d:1" });
+    db.prepare("UPDATE work_items SET verify_policy = ? WHERE id = ?").run('{"mode":"trust"}', wi.id);
+    linkedSession("s-ok-3d", wi.id, "idle", "2026-07-01T01:00:00.000Z");
     expect(reconcile.reconcileWorkItem(wi.id)?.item.status).toBe("executing");
   });
 
