@@ -12,10 +12,12 @@ import { isFileTabId } from './file-tab'
  * was never split looks and drops exactly as it did before this model existed. The first split
  * or resize materializes it into real rows and columns and clears the flag.
  *
- * A tab is a session id or a file tab id (file-tab.ts): a file preview opened beside a chat. A
- * file tab never stands alone — a group always holds at least one chat, which is the pane's chat
- * whichever tab it shows (paneSessionOf), so the working set, the URL and the pane keys only
- * ever see sessions.
+ * A tab is a session id or a file tab id (file-tab.ts): a file preview. A group usually holds a
+ * chat, which is the pane's chat whichever tab it shows (paneSessionOf), and the file tabs opened
+ * beside it. A file tab dragged out to its own pane makes a file-only group, whose pane key is its
+ * shown file tab (paneKeyOf). The layout as a whole must hold at least one chat — the route needs
+ * one — so it empties when its last chat goes, taking every file pane with it. The working set and
+ * the URL only ever see chats (workingSetFromLayout); the grid sees every pane (paneKeysFromLayout).
  */
 
 export type SplitDirection = 'row' | 'column'
@@ -107,7 +109,8 @@ export function focusedGroup(layout: SplitLayout): LayoutGroup | null {
 
 /**
  * The chat a group's pane belongs to: its shown tab when that is a chat, else (a file tab is shown)
- * its most recently focused chat. Empty only for a group with no chat, which normalization removes.
+ * its most recently focused chat. Empty for a file-only group, which has no chat: ask paneKeyOf
+ * for what identifies its pane.
  */
 export function paneSessionOf(target: LayoutGroup, focusHistory: readonly string[]): string {
   if (!isFileTabId(target.activeTab)) return target.activeTab
@@ -116,18 +119,34 @@ export function paneSessionOf(target: LayoutGroup, focusHistory: readonly string
 }
 
 /**
- * Whether `tabId` is the layout's only chat and has file tabs beside it: one group, holding that
- * chat and files alone. Closing it would take the files with it and leave the route on a chat no
- * pane holds, so it stays. A lone chat with no files closes as it always has (beside a new-chat
- * picker, which is a pane the layout does not hold).
+ * What identifies a group's pane in the grid: its chat for a group that holds one, else its shown
+ * file tab (a file-only group). A file tab id never collides with a session id, and it is the id
+ * the drag that made the pane carried.
  */
-export function isLastChatWithFiles(layout: SplitLayout, tabId: string): boolean {
-  return groupsOf(layout).length === 1 && strandedFiles(layout, tabId).length > 0
+export function paneKeyOf(target: LayoutGroup, focusHistory: readonly string[]): string {
+  return paneSessionOf(target, focusHistory) || target.activeTab
 }
 
-/** Each group's id by its pane's chat: how a pane key (a session id) finds its group. */
-export function groupIdsByPaneSession(layout: SplitLayout): Map<string, string> {
-  return new Map(groupsOf(layout).map((group) => [paneSessionOf(group, layout.focusHistory), group.id]))
+/** Every pane's key, in tree order: the working set's chats plus the file-only panes. */
+export function paneKeysFromLayout(layout: SplitLayout): string[] {
+  return groupsOf(layout).map((group) => paneKeyOf(group, layout.focusHistory))
+}
+
+/**
+ * Whether `tabId` is the layout's only chat while a file tab is open anywhere in it. Closing it
+ * would take every file with it and leave the route on a chat no pane holds, so it stays. A lone
+ * chat with no files closes as it always has (beside a new-chat picker, which is a pane the layout
+ * does not hold).
+ */
+export function isLastChatWithFiles(layout: SplitLayout, tabId: string): boolean {
+  const tabs = groupsOf(layout).flatMap((group) => group.tabs)
+  const chats = tabs.filter((id) => !isFileTabId(id))
+  return chats.length === 1 && chats[0] === tabId && tabs.some(isFileTabId)
+}
+
+/** Each group's id by its pane's key: how a pane key (a session id, or a file tab id) finds its group. */
+export function groupIdsByPaneKey(layout: SplitLayout): Map<string, string> {
+  return new Map(groupsOf(layout).map((group) => [paneKeyOf(group, layout.focusHistory), group.id]))
 }
 
 /** The chat whose pane shows `tabId` once that tab is shown: the tab itself for a chat, the chat
@@ -139,19 +158,31 @@ export function paneSessionForTab(layout: SplitLayout, tabId: string): string | 
   return owner ? paneSessionOf(owner, shown.focusHistory) || null : null
 }
 
-/** The flat working set the upstream surfaces consume: each group's chat, in tree order. */
+/** The flat working set the upstream surfaces consume: each chat group's chat, in tree order. A
+ * file-only pane has no chat and is not in it, so the URL and the persisted set never see a file. */
 export function workingSetFromLayout(layout: SplitLayout): ChatWorkingSet {
-  const sessionIds = groupsOf(layout).map((group) => paneSessionOf(group, layout.focusHistory))
-  const members = new Set(sessionIds)
-  const known = layout.focusHistory.filter((id) => members.has(id))
-  const history = [...sessionIds.filter((id) => !known.includes(id)), ...known]
+  const sessionIds = groupsOf(layout).map((group) => paneSessionOf(group, layout.focusHistory)).filter(Boolean)
   const focused = focusedGroup(layout)
-  const focusedId = (focused ? paneSessionOf(focused, layout.focusHistory) : null) || history.at(-1) || null
+  return setOf(layout, sessionIds, focused ? paneSessionOf(focused, layout.focusHistory) : null)
+}
+
+/** workingSetFromLayout over every pane, file-only ones included: the keys the grid mounts, and the
+ * set its capacity and overflow are worked out on. */
+export function paneSetFromLayout(layout: SplitLayout): ChatWorkingSet {
+  const focused = focusedGroup(layout)
+  return setOf(layout, paneKeysFromLayout(layout), focused ? paneKeyOf(focused, layout.focusHistory) : null)
+}
+
+function setOf(layout: SplitLayout, ids: string[], focusedKey: string | null): ChatWorkingSet {
+  const members = new Set(ids)
+  const known = layout.focusHistory.filter((id) => members.has(id))
+  const history = [...ids.filter((id) => !known.includes(id)), ...known]
+  const focusedId = focusedKey || history.at(-1) || null
   if (focusedId) {
     history.splice(history.indexOf(focusedId), 1)
     history.push(focusedId)
   }
-  return { sessionIds, focusedId, focusHistory: history }
+  return { sessionIds: ids, focusedId, focusHistory: history }
 }
 
 function allocate(layout: SplitLayout, prefix: 'g' | 's'): [string, SplitLayout] {
@@ -169,12 +200,11 @@ export function normalizeSizes(sizes: readonly number[], count: number): number[
   return sizes.map((size) => size / total)
 }
 
-/** Restores the structural invariants after any edit: no empty groups (nor groups of file tabs
- * alone, whose chat has gone), no single-child or same-direction-nested splits, sizes that sum
- * to 1. */
+/** Restores the structural invariants after any edit: no empty groups, no single-child or
+ * same-direction-nested splits, sizes that sum to 1. (That the layout holds a chat is withRoot's.) */
 function normalizeNode(node: LayoutNode): LayoutNode | null {
   if (node.type === 'group') {
-    if (node.tabs.every(isFileTabId)) return null
+    if (node.tabs.length === 0) return null
     const activeTab = node.tabs.includes(node.activeTab) ? node.activeTab : node.tabs[0]
     const { previewTab, ...rest } = node
     const keptPreview = previewTab !== undefined && node.tabs.includes(previewTab)
@@ -211,8 +241,14 @@ function mapNodes(node: LayoutNode, fn: (node: LayoutNode) => LayoutNode): Layou
     : { ...mapped, children }
 }
 
+function holdsChat(root: LayoutNode): boolean {
+  return groupsOf({ ...emptySplitLayout(), root }).some((group) => group.tabs.some((id) => !isFileTabId(id)))
+}
+
 function withRoot(layout: SplitLayout, root: LayoutNode | null): SplitLayout {
-  const normalized = root ? normalizeNode(root) : null
+  // The route needs a chat: without one no pane is worth keeping, file panes included.
+  const kept = root ? normalizeNode(root) : null
+  const normalized = kept && holdsChat(kept) ? kept : null
   const groupCount = normalized ? countGroups(normalized) : 0
   const focusedStillThere = normalized && layout.focusedGroupId
     && groupsOf({ ...layout, root: normalized }).some((g) => g.id === layout.focusedGroupId)
@@ -393,7 +429,7 @@ function placeOnly(layout: SplitLayout, groupId: string, sessionId: string, inde
 
 /**
  * The file tabs a chat would strand by leaving its group: all of the group's when it is the group's
- * only chat (a group of file tabs alone closes). A move carries them along instead.
+ * only chat (they belong to it, so closing it closes them). A move carries them along instead.
  */
 function strandedFiles(layout: SplitLayout, sessionId: string): string[] {
   const owner = isFileTabId(sessionId) ? null : groupOfSession(layout, sessionId)
@@ -405,9 +441,12 @@ function strandedFiles(layout: SplitLayout, sessionId: string): string[] {
  * where it lands, the chat shown. A move that does not happen changes nothing. */
 export function keepingFiles(layout: SplitLayout, sessionId: string, move: (layout: SplitLayout) => SplitLayout): SplitLayout {
   const files = strandedFiles(layout, sessionId)
-  const moved = move(layout)
+  const afterMove = move(layout)
+  if (afterMove === layout || files.length === 0) return afterMove
+  // Wherever the move left the files (their old group outlives the chat now), they leave it.
+  const moved = files.reduce((current, id) => detach(current, id), afterMove)
   const owner = groupOfSession(moved, sessionId)
-  if (moved === layout || files.length === 0 || !owner || !moved.root) return moved
+  if (!owner || !moved.root) return afterMove
   const tabs = owner.tabs.filter((id) => !files.includes(id))
   tabs.splice(tabs.indexOf(sessionId) + 1, 0, ...files)
   return showTab({ ...moved, root: mapNodes(moved.root, (node) => (node === owner ? { ...owner, tabs } : node)) }, sessionId)
@@ -437,11 +476,13 @@ function detachForMove(layout: SplitLayout, sessionId: string, destinationGroupI
   return detach(closesFocused ? { ...layout, focusedGroupId: destinationGroupId } : layout, sessionId)
 }
 
-/** Closes one tab. Its group closes with its last tab, and focus falls back by recency. */
+/** Closes one tab. Its group closes with its last tab, and focus falls back by recency. A group's
+ * only chat takes the file tabs beside it along (a file-only group has no chat to outlive). */
 export function closeSession(layout: SplitLayout, sessionId: string): SplitLayout {
   if (!groupOfSession(layout, sessionId)) return layout
-  const detached = detach(layout, sessionId)
-  return refocus({ ...detached, focusHistory: detached.focusHistory.filter((id) => id !== sessionId) })
+  const closing = [sessionId, ...strandedFiles(layout, sessionId)]
+  const detached = closing.reduce((current, id) => detach(current, id), layout)
+  return refocus({ ...detached, focusHistory: detached.focusHistory.filter((id) => !closing.includes(id)) })
 }
 
 /** Closes a whole group, every tab in it. */
@@ -522,6 +563,11 @@ export function appendSession(layout: SplitLayout, rawSessionId: string): SplitL
   const sessionId = rawSessionId.trim()
   if (!sessionId || isFileTabId(sessionId)) return layout
   if (groupOfSession(layout, sessionId)) return focusSession(layout, sessionId)
+  return appendGroup(layout, sessionId)
+}
+
+/** `sessionId` (a chat, or a file tab) as a new group at the end of the layout, focused. */
+function appendGroup(layout: SplitLayout, sessionId: string): SplitLayout {
   const [groupId, allocated] = allocate(layout, 'g')
   const added = group(groupId, [sessionId])
   if (!allocated.root) return focusSession(withRoot(allocated, added), sessionId)
@@ -535,6 +581,17 @@ export function appendSession(layout: SplitLayout, rawSessionId: string): SplitL
   }
   const [splitId, withSplit] = allocate(allocated, 's')
   return focusSession(withRoot(withSplit, { type: 'split', id: splitId, direction: 'row', children: [root, added], sizes: [0.5, 0.5] }), sessionId)
+}
+
+/**
+ * Moves a file tab of the layout out to a group of its own at the end ("the empty end of the grid"),
+ * as appendSession does for a chat. A file already alone in its group is only shown.
+ */
+export function appendFileTab(layout: SplitLayout, fileTabId: string): SplitLayout {
+  const owner = isFileTabId(fileTabId) ? groupOfSession(layout, fileTabId) : null
+  if (!owner) return layout
+  if (owner.tabs.length === 1) return showTab(layout, fileTabId)
+  return appendGroup(detach(layout, fileTabId), fileTabId)
 }
 
 function parentOf(node: LayoutNode, childId: string): { parent: LayoutSplit; index: number } | null {
@@ -554,9 +611,8 @@ function parentOf(node: LayoutNode, childId: string): { parent: LayoutSplit; ind
  * gives up only its part of the new gutter). Along the parent's
  * own axis the new group becomes a sibling; across it, the target becomes a two-way split.
  * A session already in the layout moves here, taking along any file tabs it would strand (a group's
- * only chat); splitting a group with its own only chat is a no-op, as is splitting with a file
- * tab, which cannot make a pane of its own. Materialize an auto layout first, or its flat row is
- * split as a row.
+ * only chat); splitting a group with its own only tab is a no-op. A file tab in the layout splits
+ * out as a file-only group. Materialize an auto layout first, or its flat row is split as a row.
  */
 export function splitGroup(layout: SplitLayout, targetGroupId: string, side: SplitSide, rawSessionId: string): SplitLayout {
   const sessionId = rawSessionId.trim()
@@ -575,14 +631,15 @@ function splitOnly(layout: SplitLayout, targetGroupId: string, side: SplitSide, 
   const [next, root] = found && found.parent.direction === direction
     ? [allocated, insertSibling(detached.root, found, added, before)]
     : wrapTarget(allocated, targetGroupId, added, direction, before)
-  return focusSession({ ...withRoot(next, root), auto: false }, sessionId)
+  const arranged = { ...withRoot(next, root), auto: false }
+  return isFileTabId(sessionId) ? showTab(arranged, sessionId) : focusSession(arranged, sessionId)
 }
 
 /** The layout with the session taken out of wherever it was, or null when the split cannot
  * happen: no such group, or a single-tab group split with its own tab. */
 function detachForSplit(layout: SplitLayout, targetGroupId: string, sessionId: string): SplitLayout | null {
   const target = findGroup(layout, targetGroupId)
-  if (!sessionId || isFileTabId(sessionId) || !target || (target.tabs.length === 1 && target.activeTab === sessionId)) return null
+  if (!sessionId || !target || (target.tabs.length === 1 && target.activeTab === sessionId)) return null
   const detached = detach(layout, sessionId)
   return findGroup(detached, targetGroupId) ? detached : null
 }
@@ -662,11 +719,12 @@ export function moveHandle(sizes: readonly number[], index: number, delta: numbe
   return next
 }
 
-/** Keeps only the sessions `keep` accepts (hydration against the live session list). */
+/** Keeps only the sessions `keep` accepts (hydration against the live session list). File tabs are
+ * not sessions and always stay, unless the chat they sat beside is pruned. */
 export function pruneSessions(layout: SplitLayout, keep: (sessionId: string) => boolean): SplitLayout {
-  const doomed = groupsOf(layout).flatMap((g) => g.tabs).filter((id) => !keep(id))
+  const doomed = groupsOf(layout).flatMap((g) => g.tabs).filter((id) => !isFileTabId(id) && !keep(id))
   const pruned = doomed.reduce(closeSession, layout)
-  return { ...pruned, focusHistory: pruned.focusHistory.filter(keep) }
+  return { ...pruned, focusHistory: pruned.focusHistory.filter((id) => isFileTabId(id) || keep(id)) }
 }
 
 /**
@@ -680,10 +738,13 @@ export function evictToCap(layout: SplitLayout, cap: number, protectedIds: reado
   let next = layout
   const recency = (g: LayoutGroup) => Math.max(...g.tabs.map((id) => next.focusHistory.indexOf(id)))
   while (groupsOf(next).length > limit) {
-    const candidates = groupsOf(next)
+    // The layout's last chat group stays: closing it would close every file pane with it (withRoot).
+    const chatGroups = groupsOf(next).filter((g) => g.tabs.some((id) => !isFileTabId(id)))
+    const evictable = groupsOf(next).filter((g) => chatGroups.length > 1 || g !== chatGroups[0])
+    const candidates = evictable
       .filter((g) => g.id !== next.focusedGroupId && !g.tabs.some((id) => protectedIds.includes(id)))
       .sort((a, b) => recency(a) - recency(b))
-    const fallback = groupsOf(next).filter((g) => g.id !== next.focusedGroupId).sort((a, b) => recency(a) - recency(b))
+    const fallback = evictable.filter((g) => g.id !== next.focusedGroupId).sort((a, b) => recency(a) - recency(b))
     const victim = candidates[0] ?? fallback[0] ?? (limit === 0 ? groupsOf(next)[0] : undefined)
     if (!victim) break
     next = closeGroup(next, victim.id)

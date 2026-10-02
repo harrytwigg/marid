@@ -10,6 +10,7 @@ import { ChatGrid } from './chat-grid'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { isTerminalSession } from '@/lib/terminal-session'
 import { deriveChatGridIds } from './grid-placement'
+import { isFileTabId } from './layout/file-tab'
 import { useArrivedByTabSwitch } from '@/components/chat/tab-switch-mark'
 import { SessionPicker } from './session-picker'
 import type { SessionMeta } from './use-chat-pane-state'
@@ -66,6 +67,8 @@ interface MultiChatGridProps {
 }
 
 function sessionForGridId(props: MultiChatGridProps, gridId: string): string | null {
+  // A file-only pane's key is a file tab id: no session. The split grid handles those panes itself.
+  if (isFileTabId(gridId)) return null
   if (gridId === props.primary.paneKey) return props.primary.sessionId
   return gridId === props.pickerPane?.paneKey ? null : gridId
 }

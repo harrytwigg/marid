@@ -4,8 +4,9 @@ import { useSessions } from '@/hooks/use-sessions'
 import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
 import { PaneTabStrip } from './pane-tab-strip'
-import { closeSession, findGroup, focusedGroup, groupOfSession, hasTabbedGroup, isLastChatWithFiles, paneSessionOf, type SplitLayout } from './split-layout'
+import { closeSession, findGroup, focusedGroup, groupIdsByPaneKey, groupOfSession, hasTabbedGroup, isLastChatWithFiles, paneSessionOf, type LayoutGroup, type SplitLayout } from './split-layout'
 import { parseFileTabId } from './file-tab'
+import { FilePane } from './file-pane'
 import type { SplitLayoutControls } from './use-split-working-set'
 
 interface SessionRow {
@@ -92,30 +93,37 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
   const closeTab = useCloseTab(split, onSelect)
   const selectChosenTab = useSelectTab(split, onSelect)
 
-  const binding = useMemo<PaneTabsBinding>(() => ({
-    hasStrips: hasTabbedGroup(layout),
-    keep,
-    closable: (sessionId) => !isLastChatWithFiles(layout, sessionId),
-    shownFile: (sessionId) => {
-      const group = groupOfSession(layout, sessionId)
-      if (!group || paneSessionOf(group, layout.focusHistory) !== sessionId) return null
-      return parseFileTabId(group.activeTab)
-    },
-    renderStrip: (sessionId) => {
-      const group = groupOfSession(layout, sessionId)
-      if (!group || group.tabs.length < 2) return null
-      const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, pin }
-      return (
-        <PaneTabStrip
-          groupId={group.id}
-          tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isLastChatWithFiles(layout, tab.id) ? { ...tab, closable: false } : tab))}
-          activeId={group.activeTab}
-          focused={layout.focusedGroupId === group.id}
-          {...paneTabHandlers(group.id, ops)}
-        />
-      )
-    },
-  }), [byId, closeTab, keep, layout, pin, selectChosenTab, split.place])
+  const binding = useMemo<PaneTabsBinding>(() => {
+    const ops = { layout, place: split.place, close: closeTab, select: selectChosenTab, pin }
+    const groupStrip = (group: LayoutGroup) => (
+      <PaneTabStrip
+        groupId={group.id}
+        tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isLastChatWithFiles(layout, tab.id) ? { ...tab, closable: false } : tab))}
+        activeId={group.activeTab}
+        focused={layout.focusedGroupId === group.id}
+        {...paneTabHandlers(group.id, ops)}
+      />
+    )
+    return {
+      hasStrips: hasTabbedGroup(layout),
+      keep,
+      closable: (sessionId) => !isLastChatWithFiles(layout, sessionId),
+      shownFile: (sessionId) => {
+        const group = groupOfSession(layout, sessionId)
+        if (!group || paneSessionOf(group, layout.focusHistory) !== sessionId) return null
+        return parseFileTabId(group.activeTab)
+      },
+      renderStrip: (sessionId) => {
+        const group = groupOfSession(layout, sessionId)
+        return group && group.tabs.length >= 2 ? groupStrip(group) : null
+      },
+      renderFilePane: (paneKey) => {
+        const group = findGroup(layout, groupIdsByPaneKey(layout).get(paneKey) ?? '')
+        const file = group ? parseFileTabId(group.activeTab) : null
+        return group && file ? <FilePane file={file} strip={groupStrip(group)} active={layout.focusedGroupId === group.id} /> : null
+      },
+    }
+  }, [byId, closeTab, keep, layout, pin, selectChosenTab, split.place])
 
   return <PaneTabsContext.Provider value={binding}>{children}</PaneTabsContext.Provider>
 }

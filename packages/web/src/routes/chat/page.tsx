@@ -128,7 +128,7 @@ function ChatPage() {
   const handleSessionsRemoved = useCallback((ids: string[]) => {
     for (const id of ids) removeWorkingSetPane(id)
   }, [removeWorkingSetPane])
-  const { viewport, focusedSessionId, mountedSessionIds } = gridState
+  const { viewport, focusedSessionId, gridPaneKeys } = gridState
   const paneState = useChatPaneState(committedId, focusedSessionId)
   const sessionMeta = paneState.meta
   // Show-both: the slim nav ribbon is always mounted (desktop); only the chat
@@ -846,7 +846,7 @@ function ChatPage() {
   })
   const onMobileList = mobileView === 'sidebar'
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
-  const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: mountedSessionIds, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
+  const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
     <FileOpenContext.Provider value={openFile}>
     <PeekProvider>
@@ -949,7 +949,7 @@ function ChatPage() {
               <SplitGridContext.Provider value={{ split: workingSet.split, sessionForKey: gridAdd.sessionForKey }}>
               <MultiChatGrid
                 grid={SplitChatGrid}
-                sessionIds={mountedSessionIds}
+                sessionIds={gridPaneKeys}
                 focusedId={focusedSessionId}
                 primary={{
                   paneKey,

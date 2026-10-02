@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode, type RefCallback } from 'react'
 import type { ChatGrid } from '../chat-grid'
 import { useChatGridMotion } from '../use-chat-grid-motion'
-import { setVisibleSplitSizes } from './split-layout'
+import { focusedGroup, paneKeyOf, setVisibleSplitSizes } from './split-layout'
+import { isFileTabId } from './file-tab'
+import { usePaneTabsFilePane } from '@/components/chat/pane-tabs-context'
 import { splitGeometry, type Rect, type SplitHandle } from './split-geometry'
 import { PaneTabsProvider } from './pane-tabs-provider'
 import { useTabSwitchedIn } from './pane-tab-switch'
@@ -105,6 +107,24 @@ export function SplitChatGrid(props: ChatGridProps) {
   )
 }
 
+/**
+ * The grid's props with the file-only panes handled here: a file pane's key is a file tab id, no
+ * session, so the page's chat renderer and focus handler never see one. Focusing it shows its tab
+ * and focuses its group (the route stays on the last chat), and while it holds focus it is the
+ * active pane, which the page's focused chat is not.
+ */
+function useFilePaneProps(props: ChatGridProps, split: SplitLayoutControls): Pick<ChatGridProps, 'focusedId' | 'onFocus' | 'renderPane'> {
+  const renderFilePane = usePaneTabsFilePane()
+  const focused = focusedGroup(split.layout)
+  const focusedPaneKey = focused ? paneKeyOf(focused, split.layout.focusHistory) : null
+  const { onFocus, renderPane } = props
+  return {
+    focusedId: focusedPaneKey && isFileTabId(focusedPaneKey) ? focusedPaneKey : props.focusedId,
+    onFocus: (key) => (isFileTabId(key) ? split.show(key) : onFocus(key)),
+    renderPane: (key, active) => (isFileTabId(key) ? renderFilePane(key) : renderPane(key, active)),
+  }
+}
+
 /** The grid element, measured, and the motion hook's ref on it. */
 function useGridNode(gridRef: { current: HTMLDivElement | null }) {
   const [node, setNode] = useState<HTMLDivElement | null>(null)
@@ -160,7 +180,8 @@ function SplitHandles({ handles, columns, split, setDrag }: {
   ))
 }
 
-function SplitLayoutGrid(props: ChatGridProps & SplitGridBinding) {
+function SplitLayoutGrid(binding: ChatGridProps & SplitGridBinding) {
+  const props = { ...binding, ...useFilePaneProps(binding, binding.split) }
   const { sessionIds, focusedId, onFocus, renderPane, split } = props
   const motion = useChatGridMotion(sessionIds)
   const grid = useGridNode(motion.gridRef)
