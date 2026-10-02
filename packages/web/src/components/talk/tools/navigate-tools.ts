@@ -7,7 +7,6 @@ import {
   resolveTodoId,
   todoPath,
   todosPath,
-  workflowPath,
 } from "./nav-paths"
 import { talkNavigator } from "./router-handle"
 import { params, str, type TalkTool, type ToolArgs, type ToolResult } from "./tool-spec"
@@ -76,16 +75,6 @@ const openTodo: TalkTool = {
   },
 }
 
-const openWorkflows: TalkTool = {
-  name: "open_workflows",
-  description: "Open the Workflow list, or one workflow by id. Ask for the runs lens to see its run history instead of its editor.",
-  parameters: params({
-    id: str("The workflow id, which is a slug such as \"nightly-digest\"."),
-    lens: str("Which lens to open the workflow in.", ["editor", "runs"]),
-  }),
-  execute: (args: ToolArgs) => go(workflowPath(args)),
-}
-
 const openChats: TalkTool = {
   name: "open_chats",
   description: "Open chat, or one session by id.",
@@ -114,7 +103,6 @@ const openCron: TalkTool = {
 export const NAVIGATE_TOOLS: readonly TalkTool[] = [
   openTodos,
   openTodo,
-  openWorkflows,
   openChats,
   openOrg,
   openCron,

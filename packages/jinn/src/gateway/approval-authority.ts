@@ -1,7 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { UNIDENTIFIED_TOOL_CALL_ERROR } from "../mcp/identity.js";
 import { verifySessionCapability } from "../mcp/identity.js";
-import { getSession, isPortalAgentSession, listSessionsByWorkItem } from "../sessions/registry.js";
+import { getSession, listSessionsByWorkItem } from "../sessions/registry.js";
 import { loadConfig } from "../shared/config.js";
 import { logger } from "../shared/logger.js";
 import type { Employee, Session } from "../shared/types.js";
@@ -43,13 +43,9 @@ export interface ApprovalDecisionAuthorityOptions {
   /** Set only after gateway bearer/cookie verification at the HTTP boundary. */
   operatorAuthenticated?: boolean;
   /** Gate reserved for the human operator: no employee may decide it, not even
-   *  the COO, and not via escalation. Resolved by the caller from the workflow
-   *  node that parked the gate. */
+   *  the COO, and not via escalation. Resolved by the caller from the approval
+   *  request's `operatorOnly` flag. */
   operatorOnly?: boolean;
-  /** Gate the workflow node handed to the COO's own lane: the portal session
-   *  decides it, and every employee — including the employee-less child a
-   *  session can spawn — still cannot. */
-  cooDecidable?: boolean;
 }
 
 function employeeDepartment(registry: Map<string, Employee>, employee: string | null): string | null {
@@ -241,19 +237,6 @@ export function resolveApprovalDecisionAuthority(
   // operator-only gate must not be reachable by escalating it to the COO.
   if (opts.operatorOnly) {
     return { ok: false, status: 403, error: `Todo ${item.id} has an operator-only approval; only the operator/aCEO may decide it` };
-  }
-
-  // The COO's own lane, ahead of the employee-identity refusal below: that
-  // refusal reads an employee-less session as no identity at all, which is
-  // exactly what the portal session is. Keyed on the whole portal shape and not
-  // on the missing employee, or the child anyone can spawn would inherit it.
-  // Admitted only for the portal — a routed manager falling through to ordinary
-  // org rules would decide the Todo while the workflow gate stayed pending.
-  if (opts.cooDecidable) {
-    if (isPortalAgentSession(caller.session)) {
-      return { ok: true, authority: { ...route, kind: "operator", actor: `session:${caller.session.id}` } };
-    }
-    return { ok: false, status: 403, error: `Todo ${item.id} has a COO-decidable approval; only the COO portal session may decide it` };
   }
 
   const employee = caller.session.employee;

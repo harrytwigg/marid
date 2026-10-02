@@ -2,8 +2,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { WorkflowRepositoryError } from "../../workflows/repository.js";
-import type { WorkflowService } from "../../workflows/service.js";
 import { seedProbeHome } from "./probe-plugin.js";
 
 // JINN_HOME before anything reaches paths.js, which reads it once. Both the
@@ -178,7 +176,7 @@ describe("host.employees.list", () => {
  * The two below are the ones with somewhere else to go. `notes.read` could have
  * handed back the store's `{ ok: false, reason }` as a *successful* return, and
  * a plugin that forgot to narrow it would have carried on with a non-note.
- * `workflows.start` could have thrown whatever the missing gateway threw, which
+ * `connectors.send` could have thrown whatever the missing gateway threw, which
  * names no verb at all.
  */
 describe("a backend verb that cannot do the thing", () => {
@@ -196,48 +194,13 @@ describe("a backend verb that cannot do the thing", () => {
     }
   });
 
-  it("names the verb when no gateway is registered to start a run on", async () => {
-    await expect(host.createPluginHost("mailbox").workflows.start("nightly")).rejects.toMatchObject({
+  it("names the verb when no gateway is registered to send through", async () => {
+    await expect(
+      host.createPluginHost("mailbox").connectors.send("slack", { channel: "C1", text: "hi" }),
+    ).rejects.toMatchObject({
       name: "PluginHostError",
-      verb: "workflows.start",
+      verb: "connectors.send",
       reason: "no-gateway",
-    });
-  });
-
-  /* `list` reads in-process and returns its rows, so it throws where `start`
-   *  rejects. Both carry the same verb, which is the part a caller reads. */
-  it("names the verb when the gateway runs without the Workflow engine", () => {
-    linkGateway({});
-
-    try {
-      host.createPluginHost("mailbox").workflows.list();
-      expect.unreachable("workflows.list resolved without a Workflow engine");
-    } catch (error) {
-      expect(error).toMatchObject({
-        name: "PluginHostError",
-        verb: "workflows.list",
-        reason: "no-workflow-service",
-      });
-    }
-  });
-
-  /* With a Workflow engine registered, the commonest way `start` fails is the
-   * engine refusing the id — missing, retired, or with no manual trigger — in
-   * the engine's own `WorkflowRepositoryError`. A plugin catching this door's
-   * error would miss every one of those unless they arrive as this door's. */
-  it("names the verb when the Workflow engine refuses the id", async () => {
-    linkGateway({
-      workflowService: {
-        startManual: async () => {
-          throw new WorkflowRepositoryError("bad-input", "Workflow does not have an enabled manual trigger.");
-        },
-      } as unknown as WorkflowService,
-    });
-
-    await expect(host.createPluginHost("mailbox").workflows.start("missing-flow")).rejects.toMatchObject({
-      name: "PluginHostError",
-      verb: "workflows.start",
-      reason: "bad-input",
     });
   });
 

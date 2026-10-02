@@ -14,22 +14,22 @@ vi.mock("@/lib/auth", async (importOriginal) => {
 
 function screen(): TalkScreenContext {
   return {
-    ...describeLocation("/workflow/release", ""),
+    ...describeLocation("/org", ""),
     version: 1,
     revision: 11,
-    routeId: "workflow-detail",
+    routeId: "org",
     capturedAt: "2026-08-18T08:00:00.000Z",
     freshness: "partial",
-    missing: ["workflow-graph-spatial-layout"],
-    title: "Release train",
+    missing: ["org-chart-spatial-layout"],
+    title: "Org chart",
     selectedObject: null,
     visibleItems: [],
     controls: [],
-    meaningfulText: "Release train",
+    meaningfulText: "Org chart",
     browserInstanceId: "browser-1",
     focus: null,
     hidden: false,
-    visualGaps: ["workflow-graph-spatial-layout"],
+    visualGaps: ["org-chart-spatial-layout"],
   }
 }
 
@@ -78,7 +78,7 @@ describe("session visual fallback", () => {
       item_id: `item-${callId}`,
       call_id: callId,
       name: "capture_current_view",
-      arguments: JSON.stringify({ reason: "workflow-graph-spatial-layout" }),
+      arguments: JSON.stringify({ reason: "org-chart-spatial-layout" }),
     }))
     call("call-1")
     call("call-2")

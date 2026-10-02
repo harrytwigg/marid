@@ -23,7 +23,6 @@ export default defineConfig({
       // Kept in step with vite.config.ts: a suite that resolved the SDK by a
       // different route would prove nothing about what the app ships.
       '@jinn/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
-      '@jinn/workflow-wire': path.resolve(__dirname, '../jinn/src/workflows/wire.ts'),
       '@jinn/fallback-map-wire': path.resolve(__dirname, '../jinn/src/shared/fallback-map-wire.ts'),
       '@jinn/model-id': path.resolve(__dirname, '../jinn/src/shared/model-id.ts'),
     },

@@ -166,7 +166,7 @@ describe("following the operator around the app", () => {
 describe("carrying the standing brief the gateway built", () => {
   /** Stands in for whatever `talk/session/brief.ts` produced: the driver treats
    *  it as opaque text and only decides where it goes. */
-  const BRIEF = "This instance is Northwind Freight. A Workflow is the reusable how."
+  const BRIEF = "This instance is Northwind Freight. A Todo is the unit of work."
 
   it("leads with the brief and keeps the page context after it, in one update", () => {
     go("/todos/b/platform")

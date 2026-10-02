@@ -14,5 +14,4 @@ name, `~/.jinn` and `JINN_*` environment variables) is retained so that the
 fork stays compatible with, and mergeable from, upstream.
 
 Third-party components keep their own licenses; see the NOTICE.md files in
-the directories that vendor them (for example
-packages/web/src/routes/workflow/editor/NOTICE.md).
+the directories that vendor them.

@@ -4,7 +4,7 @@
 
 <p align="center">
   Marid turns the agent CLIs you already use - Claude Code, Codex, Grok, Hermes, opencode - into a persistent AI company:
-  named employees, a durable Todo ledger, and reusable Workflows,
+  named employees and a durable Todo ledger,
   all operated from a chat and web dashboard.<br/>
   It doesn't replace your agents. <b>It gives them an org to work in.</b>
 </p>
@@ -20,7 +20,7 @@
 
 ## Built on Jinn
 
-Marid is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors (MIT). Most of the code here is theirs: the gateway, the org, Todos, Workflows, the web dashboard and the engine adapters. Marid keeps tracking upstream and adds features on top of it - see [What Marid adds](#what-marid-adds). The original copyright is preserved in [LICENSE](LICENSE) and the credit is repeated in [NOTICE](NOTICE).
+Marid is a fork of [Jinn](https://github.com/hristo2612/jinn) by hristo2612 and contributors (MIT). Most of the code here is theirs: the gateway, the org, Todos, the web dashboard and the engine adapters. Marid keeps tracking upstream and adds features on top of it - see [What Marid adds](#what-marid-adds). The original copyright is preserved in [LICENSE](LICENSE) and the credit is repeated in [NOTICE](NOTICE).
 
 Internally the codename stays "Jinn": the `jinn` command, the `jinn-cli` package name, `~/.jinn` and the `JINN_*` variables are unchanged, so an existing Jinn install keeps working and upstream fixes merge cleanly.
 
@@ -35,8 +35,7 @@ Agent CLIs are powerful alone. Marid gives them shared structure, ownership, and
 - **🎼 Bus, not brain.** Marid conducts the agent CLIs on your `PATH` and adds no AI logic. Better engines make Marid better automatically.
 - **🏢 A real org.** Define named employees, ranks, departments, and reporting lines in YAML. Your COO delegates through the hierarchy.
 - **📋 Durable work.** Todos preserve ownership and review beyond a session; the built-in MCP gives employees typed company tools.
-- **🔁 Reusable automation.** Workflows combine sequential, conditional, parallel, and switch paths with per-phase models, approvals, triggers, and run history.
-- **⏰ Work with receipts.** Cron, delegation, callbacks, and Workflows keep running and leave structured activity in Chat.
+- **⏰ Work with receipts.** Cron, delegation, and callbacks keep running and leave structured activity in Chat.
 
 > Marid is **beta**. It works today and moves fast; read the upgrade notes when you bump versions.
 
@@ -148,13 +147,7 @@ Marid exposes a small set of building blocks and handles the machinery underneat
   <img src="assets/todos.png" alt="The Todos ledger - tickets assigned to AI employees across backlog, in-progress, review, and done" width="880" />
 </div>
 
-**Workflows** are reusable graph procedures with sequential, conditional, parallel, and switch paths. Phases can choose engines and models, require approval, and preserve evidence and run history. Triggers start them from schedules, webhooks, polls, or Todo changes.
-
-<div align="center">
-  <img src="assets/workflows.png" alt="Visual Workflow editor - a graph canvas of phases with sequential, parallel, and conditional paths" width="880" />
-</div>
-
-**Chat** operates the company. Delegations, callbacks, Todo changes, and Workflow operations appear beside the conversation as durable activity receipts.
+**Chat** operates the company. Delegations, callbacks, and Todo changes appear beside the conversation as durable activity receipts.
 
 <div align="center">
   <img src="assets/chat.png" alt="Chat (upstream Jinn UI) - an engineering employee diagnosing and fixing a flaky test, with company activity receipts" width="880" />
@@ -194,8 +187,8 @@ Marid is a local gateway daemon plus a web dashboard. It dispatches work to inst
       +-------+---------+ +-----+------+  +-------+-------+
               |                                   |
       +-------v-------+   +-----------+   +--------v-------+
-      |  Todos ·      |   |   Cron    |   |  MCP server    |
-      |  Workflows    |   | Scheduler |   |  company hands |
+      |     Todos     |   |   Cron    |   |  MCP server    |
+      |               |   | Scheduler |   |  company hands |
       +---------------+   +-----------+   +----------------+
 ```
 
@@ -265,7 +258,7 @@ The Chat and CLI views share one PTY. Terminal snapshots survive reconnects and 
 - **Content pipelines** that research, draft, review, and publish on schedule.
 - **Support desks** that require human approval before sending replies.
 - **Research orgs** where managers fan out questions and synthesize the results.
-- **Ops runbooks** encoded as triggered Workflows with approvals and durable history.
+- **Ops runbooks** encoded as scheduled cron jobs and Todos with approvals and durable history.
 
 ---
 
@@ -317,7 +310,6 @@ logging:
 - **Models** form an extensible per-engine capability registry. CLI discovery can replace fallback entries at runtime.
 - **MCP servers** are optional; enable `mcp.gateway` for the built-in company tools.
 - **Cron, employees, and skills** live in `~/.jinn/cron/jobs.json`, `~/.jinn/org/`, and `~/.jinn/skills/`.
-- **Workflow evidence** defaults to `<JINN_HOME>/workflow-evidence`; `JINN_WORKFLOW_EVIDENCE_ROOT` relocates it.
 - **Plugins** live in `~/.jinn/plugins/` and only run when `plugins.enabled` names them; see [`docs/plugins.md`](docs/plugins.md) for the anatomy, lifecycle, and security posture.
 - **Behind a reverse proxy or tunnel**, the proxy must preserve `Host`, or pass the host the browser dialled in `X-Forwarded-Host`. The gateway's WebSockets (the live event stream `/ws`, plugin event sockets and terminals) refuse a browser whose `Origin` is not the gateway's own host, so a proxy that rewrites `Host` and forwards neither leaves the dashboard without live updates. A Cloudflare tunnel's default ingress preserves `Host`; don't set `httpHostHeader` on it.
 
@@ -329,7 +321,6 @@ Everything is human-readable and yours to edit. After upgrading, the gateway re-
 
 Marid is in active beta. Shipped recently in upstream Jinn:
 
-- **Workflow completion contracts** with validated output, bounded extensions, reminders, and an observable run canvas.
 - **Collaborative Todo hierarchy** with sub-tasks, roll-up gates, labels, comments, links, attachments, provenance, and approval history.
 - **Isolated workspaces** with separate homes, ports, access settings, and authentication.
 - **Grouped Todo receipts**, model-scoped Claude limits, instance-wide MCP file reads, and authentication required by default.

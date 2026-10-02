@@ -90,10 +90,6 @@ function isCompanyChangedEvent(value: unknown): value is CompanyChangedEvent {
   switch (value.entity) {
     case "todo":
       return isTodoChange(value)
-    case "workflow-definition":
-      return isString(value.id) && isNumber(value.revision)
-    case "workflow-run":
-      return isString(value.workflowId) && isString(value.runId)
     default:
       return false
   }

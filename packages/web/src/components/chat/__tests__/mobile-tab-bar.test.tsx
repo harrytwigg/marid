@@ -12,13 +12,13 @@ function renderAt(path: string) {
 }
 
 describe('MobileTabBar', () => {
-  // Notes is feature-gated; the default mobile nav has four icon-only tabs. No visible labels, so the
+  // Notes is feature-gated; the default mobile nav has three icon-only tabs. No visible labels, so the
   // accessible name comes from each tab's aria-label.
-  it('renders exactly 4 tabs with accessible names while Notes is disabled', () => {
+  it('renders exactly 3 tabs with accessible names while Notes is disabled', () => {
     renderAt('/')
     const tabs = screen.getAllByRole('link')
-    expect(tabs).toHaveLength(4)
-    for (const label of ['Chat', 'Todos', 'Workflows', 'More']) {
+    expect(tabs).toHaveLength(3)
+    for (const label of ['Chat', 'Todos', 'More']) {
       expect(screen.getByRole('link', { name: label })).toBeDefined()
     }
   })
@@ -28,17 +28,17 @@ describe('MobileTabBar', () => {
     expect(
       screen.getByRole('link', { name: 'Chat' }).getAttribute('aria-current')
     ).toBe('page')
-    for (const label of ['Todos', 'Workflows', 'More']) {
+    for (const label of ['Todos', 'More']) {
       expect(
         screen.getByRole('link', { name: label }).getAttribute('aria-current')
       ).toBeNull()
     }
   })
 
-  it('marks the Workflows tab current on "/workflow"', () => {
-    renderAt('/workflow')
+  it('marks the Todos tab current on "/todos"', () => {
+    renderAt('/todos')
     expect(
-      screen.getByRole('link', { name: 'Workflows' }).getAttribute('aria-current')
+      screen.getByRole('link', { name: 'Todos' }).getAttribute('aria-current')
     ).toBe('page')
     expect(
       screen.getByRole('link', { name: 'Chat' }).getAttribute('aria-current')
@@ -58,7 +58,7 @@ describe('MobileTabBar', () => {
       screen.getByRole('link', { name: 'More' }).getAttribute('aria-current')
     ).toBe('page')
     // ...and no primary tab steals the cue.
-    for (const label of ['Chat', 'Todos', 'Workflows']) {
+    for (const label of ['Chat', 'Todos']) {
       expect(
         screen.getByRole('link', { name: label }).getAttribute('aria-current')
       ).toBeNull()
@@ -88,7 +88,7 @@ describe('MobileTabBar', () => {
     ;(list as unknown as { scrollTo: typeof scrollTo }).scrollTo = scrollTo
     document.body.appendChild(list)
 
-    renderAt('/workflow')
+    renderAt('/todos')
     fireEvent.click(screen.getByRole('link', { name: 'Chat' }))
     expect(scrollTo).not.toHaveBeenCalled()
 

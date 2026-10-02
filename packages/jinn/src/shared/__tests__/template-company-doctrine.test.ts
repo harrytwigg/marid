@@ -54,49 +54,11 @@ describe("template company doctrine", () => {
     for (const heading of headings) expect(doctrine).toContain(heading);
   });
 
-  it("enforces the Workflow/Todo contract on each active template surface", () => {
+  it("starts assigned Todos through the Dispatcher on each active template surface", () => {
     const surfaces = [
-      {
-        rel: "CLAUDE.md",
-        required: [
-          "A Workflow invocation never creates, links, transitions, approves, or mutates a Todo.",
-          "A Todo-status trigger is a one-way input; the resulting Workflow run is independent.",
-          "Workflow runs are durable records, not Sessions.",
-        ],
-      },
-      {
-        rel: "docs/company-doctrine.md",
-        required: [
-          "A Workflow invocation never creates, links, transitions, approves, or mutates a Todo.",
-          "A Todo-status trigger is a one-way input; the resulting Workflow run is independent.",
-          "Workflow runs are durable records, not Sessions.",
-        ],
-      },
-      {
-        rel: "docs/org.md",
-        required: [
-          "A Workflow invocation never creates, links, transitions, approves, or mutates a Todo.",
-          "A Todo-status trigger is a one-way input; the resulting Workflow run is independent.",
-          "Workflow runs are durable records, not Sessions.",
-        ],
-      },
-      {
-        rel: "skills/todo-handling/SKILL.md",
-        required: [
-          "A Workflow invocation never creates, links, transitions, approves, or mutates a Todo.",
-          "Todo approvals affect only the Todo.",
-          "Workflow operations never mutate Todos.",
-        ],
-      },
-      {
-        rel: "skills/workflow/SKILL.md",
-        required: [
-          "A Workflow invocation never creates, links, transitions, approves, or mutates a Todo.",
-          "Workflow runs are durable records, not Sessions.",
-          "cancel_workflow_run",
-          "decide_workflow_approval",
-        ],
-      },
+      { rel: "docs/company-doctrine.md", required: ["Assigning a Todo, or changing its status, starts nothing."] },
+      { rel: "docs/org.md", required: ["Assigning a Todo, or changing its status, starts nothing."] },
+      { rel: "skills/todo-handling/SKILL.md", required: ["Todo approvals affect only the Todo."] },
     ];
     const staleCouplingGuidance = [
       "mirrored workflow",
@@ -113,6 +75,10 @@ describe("template company doctrine", () => {
         expect(content.toLowerCase(), `${surface.rel}: ${stale}`).not.toContain(stale.toLowerCase());
       }
     }
+    for (const rel of ["CLAUDE.md", "docs/company-doctrine.md", "docs/org.md", "skills/todo-handling/SKILL.md"]) {
+      expect(readTemplate(rel), rel).not.toMatch(/\bWorkflows?\b/);
+    }
+    expect(fs.existsSync(path.join(process.cwd(), "template", "skills", "workflow"))).toBe(false);
   });
 
   it("keeps active API and MCP provenance guidance on current producers, not Workflow bridges", () => {
@@ -180,7 +146,6 @@ describe("template company doctrine", () => {
     const template = readTemplate("CLAUDE.md");
     const owners = [
       ["Todos", "skills/todo-handling/SKILL.md"],
-      ["Workflows", "skills/workflow/SKILL.md"],
       ["Delegation", "skills/delegation/SKILL.md"],
       ["Cron", "skills/cron-manager/SKILL.md"],
       ["Organization", "skills/management/SKILL.md"],
@@ -197,17 +162,11 @@ describe("template company doctrine", () => {
     expect(template).not.toContain("provides:");
   });
 
-  it("ships exactly five public blocks and keeps Triggers a Workflow detail", () => {
+  it("ships exactly four public blocks", () => {
     for (const rel of ["CLAUDE.md", "docs/company-doctrine.md", "docs/overview.md"]) {
-      const content = readTemplate(rel);
-      expect(content, rel).toContain("Employees, Todos, Workflows, Chats, and Notes");
-      expect(content, rel).not.toContain("Employees, Todos, Workflows, Triggers, and Notes");
+      expect(readTemplate(rel), rel).toContain("Employees, Todos, Chats, and Notes");
     }
-    const template = readTemplate("CLAUDE.md");
-    const doctrine = readTemplate("docs/company-doctrine.md");
     const notesSkill = readTemplate("skills/notes/SKILL.md");
-    expect(template).toContain("Triggers are a Workflow detail");
-    expect(doctrine).toContain("Triggers are a Workflow detail");
     expect(notesSkill).toContain("read it before updating and pass its returned revision as expectedRevision");
     expect(notesSkill).toContain("`docs/` remains read-only");
   });
@@ -260,9 +219,6 @@ describe("template company doctrine", () => {
     expect(lineCount(readTemplate("CLAUDE.md"))).toBeLessThanOrEqual(150);
     expect(lineCount(readTemplate("skills/management/SKILL.md"))).toBeLessThanOrEqual(120);
     expect(lineCount(readTemplate("skills/cron-manager/SKILL.md"))).toBeLessThanOrEqual(70);
-
-    const workflow = readTemplate("skills/workflow/SKILL.md");
-    expect(workflow).not.toMatch(/legacy-v1-import-report\.json|v1 import|active v1 runs|drain active v1/i);
   });
 
   it("lists every shipped skill exactly once on both discovery surfaces", () => {
@@ -319,26 +275,6 @@ describe("template company doctrine", () => {
 
   it("ships discoverable MCP-first playbooks for core company operations", () => {
     const shipped = [
-      {
-        directory: "workflow",
-        tools: [
-          "list_workflows",
-          "get_workflow",
-          "create_workflow",
-          "update_workflow",
-          "enable_workflow",
-          "start_workflow_run",
-          "list_workflow_runs",
-          "get_workflow_run",
-          "decide_workflow_approval",
-          "fire_workflow_event",
-          "idempotencyKey",
-          "PLAN",
-          "IMPLEMENT",
-          "VERIFY",
-          "todo-status",
-        ],
-      },
       {
         directory: "todo-handling",
         tools: [
@@ -404,10 +340,6 @@ describe("template company doctrine", () => {
       for (const expected of tools) expect(content, `${rel}: ${expected}`).toContain(expected);
     }
 
-    const workflowSkill = readTemplate("skills/workflow/SKILL.md");
-    expect(workflowSkill).toContain("Route unclear authority to the manager/COO");
-    expect(workflowSkill).toContain("native pending approval on the run");
-
     const todoSkill = readTemplate("skills/todo-handling/SKILL.md");
     expect(todoSkill).toContain("One operator outcome should normally map to one root Todo.");
     expect(todoSkill).toContain("A checklist does not imply one Todo per item.");
@@ -418,12 +350,11 @@ describe("template company doctrine", () => {
     expect(todoSkill).toContain("identical pending request");
     expect(todoSkill).toContain("does not perform approval decisions");
     expect(todoSkill).toContain("Todo approvals affect only the Todo");
-    expect(todoSkill).toContain("Workflow operations never mutate Todos");
     expect(todoSkill).not.toContain("Workflow gate");
     expect(todoSkill).not.toContain("cancel_workflow_run");
     expect(todoSkill).toContain("maxRounds");
 
-    for (const [name, skill] of [["workflow", workflowSkill], ["todo-handling", todoSkill]] as const) {
+    for (const [name, skill] of [["todo-handling", todoSkill]] as const) {
       expect(skill, name).toContain("resolved routed owner");
       expect(skill, name).toContain("hierarchy root/COO is exempt");
       expect(skill, name).toContain("avoid approving work they personally executed");

@@ -27,7 +27,7 @@ afterAll(async () => {
  * they need the unfiltered set or they reap live sessions' state.
  */
 describe('listAllSessionIds', () => {
-  it('returns archived and workflow-phase ids that listSessions omits', () => {
+  it('returns archived and workflow-phase ids that listSessions omits', async () => {
     const plain = registry.createSession({ engine: 'codex', source: 'web', sourceRef: 'chat:plain' });
     const archived = registry.createSession({ engine: 'codex', source: 'web', sourceRef: 'chat:archived' });
     registry.archiveSession(archived.id);
@@ -36,15 +36,10 @@ describe('listAllSessionIds', () => {
       source: 'web',
       sourceRef: 'workflow-run:run-ids-1:build:1',
       sessionKey: 'workflow-run:run-ids-1:build:1',
-      workflowProvenance: {
-        kind: 'phase',
-        workflowId: 'wf-ids',
-        workflowName: 'ids-check',
-        runId: 'run-ids-1',
-        triggerSource: 'manual',
-        phase: { nodeId: 'build', name: 'BUILD', index: 1, round: 1, attempt: 1 },
-      },
     });
+    // A phase row a previous version left behind: only the raw column marks it.
+    (await import('../../shared/db.js')).initDb()
+      .prepare("UPDATE sessions SET workflow_kind = 'phase' WHERE id = ?").run(phase.id);
 
     const listed = registry.listSessions().map((session) => session.id);
     expect(listed).toContain(plain.id);

@@ -1,7 +1,7 @@
 /**
  * What the orb knows before anyone speaks.
  *
- * A voice session that has to be told what a Workflow is spends its first turn
+ * A voice session that has to be told what a Todo is spends its first turn
  * on a question the gateway can already answer, so the brief goes out with the
  * session rather than being asked for. Everything specific to the instance —
  * the company, its Todo prefix, who works here — is read at runtime; nothing
@@ -12,7 +12,7 @@
  * TALK_BRIEF_BUDGET_CHARS} bounds it, and the roster is the only part allowed to
  * give ground. A large org loses employee rows before it loses the glossary,
  * because an orb that can name three hundred people but cannot say what a
- * Workflow is has kept the wrong half.
+ * Todo is has kept the wrong half.
  */
 import { resolveOrgHierarchy } from "../../gateway/org-hierarchy.js";
 import type { Employee, JinnConfig, OrgHierarchy } from "../../shared/types.js";
@@ -50,12 +50,11 @@ const POSTURE =
 
 const WHAT_JINN_IS =
   "Jinn is a self-hosted gateway that runs a company of AI employees. One process holds the org, "
-  + "routes work to engine sessions, runs scheduled jobs and workflows, and serves the web UI the operator is looking at.";
+  + "routes work to engine sessions, runs scheduled jobs, and serves the web UI the operator is looking at.";
 
 const BLOCKS = [
   "The blocks the company is built from:",
   "- Todo — one tracked outcome, and the company's live work ledger. It has an owner, a status and a history, and it is done once.",
-  "- Workflow — a reusable procedure: the saved HOW for work that repeats. It is not a Todo. Running one creates Todos of its own; the Workflow itself is never finished.",
   "- Employee — a persona with a department, a rank and a manager. Work is delegated to employees, who run as sessions.",
   "- Chat — one conversation with an employee.",
   "- Note — durable Markdown knowledge the company keeps.",

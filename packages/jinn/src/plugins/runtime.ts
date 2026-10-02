@@ -21,9 +21,6 @@ export function startPluginRuntime(
   setPluginHostGateway({
     spawnSession: (input) => spawnSession(context, input),
     emitNotice: (pluginId, message, level) => context.emit("plugin:notice", { pluginId, message, level }),
-    // Read off the context rather than captured at boot: `server.ts` mutates the
-    // same object in place across a config reload, so a copy would go stale.
-    ...(context.workflowService ? { workflowService: context.workflowService } : {}),
     sendConnectorMessage: async (connector, message) => {
       const target = context.connectors.get(connector);
       if (!target) return { ok: false, error: `no connector "${connector}" is configured` };

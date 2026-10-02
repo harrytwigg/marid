@@ -10,7 +10,6 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   api: {
     searchWorkItems: vi.fn(),
     searchSessions: vi.fn(),
-    listWorkflowDefinitionsV2: vi.fn(),
   },
 }))
 
@@ -22,7 +21,6 @@ const visited: string[] = []
 function findNothing() {
   mocked.searchWorkItems.mockResolvedValue({ workItems: [] } as never)
   mocked.searchSessions.mockResolvedValue([] as never)
-  mocked.listWorkflowDefinitionsV2.mockResolvedValue({ items: [], nextCursor: null } as never)
 }
 
 function searchCalls(): number {
@@ -84,7 +82,6 @@ describe("an id costs nothing to resolve", () => {
 const KINDS = [
   { kind: "todo", path: "/todos/ABC-744", fill: () => mocked.searchWorkItems.mockResolvedValue({ workItems: [{ id: "ABC-744", title: "Talk orb resolution", status: "executing" }] } as never) },
   { kind: "session", path: "/?session=s-1", fill: () => mocked.searchSessions.mockResolvedValue([{ id: "s-1", title: "Talk orb resolution", employee: "a-lead" }] as never) },
-  { kind: "workflow", path: "/workflow/orb-check", fill: () => mocked.listWorkflowDefinitionsV2.mockResolvedValue({ items: [{ id: "orb-check", title: "Talk orb resolution" }], nextCursor: null } as never) },
 ]
 
 describe("a description opens the one thing it fits", () => {
@@ -131,19 +128,6 @@ describe("a description is looked for by every word it holds", () => {
     } as never)
     expect(await open("talk orb resolution")).toEqual({ ok: true, data: { path: "/todos/ABC-744" } })
     expect(visited).toEqual(["/todos/ABC-744"])
-  })
-
-  it("reads the workflow list past its first page", async () => {
-    const fillers = Array.from({ length: 50 }, (_, index) => ({ id: `w-${index}`, title: `Nightly digest ${index}` }))
-    mocked.listWorkflowDefinitionsV2.mockImplementation((cursor) =>
-      Promise.resolve(
-        cursor
-          ? { items: [{ id: "ancient-target", title: "Ancient target" }], nextCursor: null }
-          : { items: fillers, nextCursor: "page-2" },
-      ) as never)
-
-    expect(await open("ancient target")).toEqual({ ok: true, data: { path: "/workflow/ancient-target" } })
-    expect(visited).toEqual(["/workflow/ancient-target"])
   })
 })
 

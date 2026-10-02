@@ -68,6 +68,11 @@ describe("gateway auth", () => {
     expect(authRequiredForRequest("GET", "/api/auth/pairing-codes")).toBe(true);
   });
 
+  it("requires generic auth for the removed workflow-events path like any other /api path", () => {
+    expect(authRequiredForRequest("POST", "/api/workflow-events")).toBe(true);
+    expect(authRequiredForRequest("GET", "/api/workflow-events")).toBe(true);
+  });
+
   it("requires auth for remote/network exposure but not default loopback unless explicitly enabled", () => {
     expect(isLoopbackHost("localhost:7777")).toBe(true);
     expect(isLoopbackHost("127.0.0.1:7777")).toBe(true);

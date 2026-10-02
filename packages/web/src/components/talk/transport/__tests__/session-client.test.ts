@@ -217,7 +217,7 @@ describe("the rest of the lifecycle", () => {
     const receipt = {
       requestKey: "item-user-1",
       contextRevision: 9,
-      reason: "workflow-graph-spatial-layout",
+      reason: "org-chart-spatial-layout",
       bytes: 3,
       width: 900,
       height: 600,

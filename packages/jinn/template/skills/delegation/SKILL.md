@@ -40,7 +40,7 @@ Use `spawn_session` for a quick, untracked question or short consultation:
 }
 ```
 
-If the work is repeatable, scheduled, or a reusable multi-phase procedure, use or propose a Workflow instead of carrying the whole process in a delegation prompt.
+If the work is scheduled, use a cron job; if it is a multi-phase procedure, split it into child Todos instead of carrying the whole process in one delegation prompt.
 
 ## The child-session protocol
 

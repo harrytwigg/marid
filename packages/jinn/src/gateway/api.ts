@@ -78,7 +78,7 @@ import {
 } from "../sessions/registry.js";
 import { claimIncomingTurn, lateralSendDedupeKey } from "../sessions/incoming-turn.js";
 import { blockFallbackText, validateBlockEnvelope } from "../shared/blocks.js";
-import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/workflow-interruptions.js";
+import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 export {
   foldPartialText,
   normalizeBlockDeltaForTurn,
@@ -144,7 +144,7 @@ import { readJsonBody, readBodyRaw } from "./http-helpers.js";
 import { applyLabelChange, parseLabelChange } from "./work-item-label-change.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
 import { isJsonMediaType } from "./media-type.js";
-import { forwardWorkflowTodoComment } from "./workflow-todo-surface.js";
+import { forwardTodoComment } from "./todo-comment-steering.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { clipSessionMessage, sessionCommGuards, prepareLateralSend, isDescendantOf, resolveCallerIdentity, type CallerIdentity } from "./session-comm-guards.js";
@@ -224,7 +224,7 @@ import {
   type AttachmentActor,
 } from "../work-items/attachments.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
-import { authorizeActingAsOperator, resolveArmingDelegate, workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
+import { authorizeActingAsOperator, workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
 import { authorizeAgentWorkItemStatus, authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot, ownsWorkItem } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { listDepartmentsWithCounts } from "../work-items/departments.js";
@@ -242,7 +242,6 @@ import {
   requestApproval,
 } from "../work-items/approvals.js";
 import { resolveApprovalDecisionAuthority, resolveRootApprovalTarget, type ApprovalDecisionAuthorityOptions } from "./approval-authority.js";
-import { approvalGateClass } from "./workflow-todo-binding.js";
 import { orgRegistry } from "./org-registry.js";
 import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
 import { cachedRemoteFacts } from "../engines/remote-stage.js";
@@ -309,8 +308,6 @@ import {
   restartDetached,
   type RestartDetachedOptions,
 } from "./lifecycle.js";
-import type { WorkflowService } from "../workflows/service.js";
-import { handleWorkflowApi } from "./workflow-api.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
 import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
@@ -397,7 +394,6 @@ export interface ApiContext {
   createWorkspaceInstance?: (input: CreateInstanceInput) => Promise<CreateInstanceResult>;
   startWorkspaceInstance?: (input: StartInstanceInput) => Promise<StartInstanceResult>;
   issueWorkspacePairingCode?: (home: string) => string;
-  workflowService?: WorkflowService;
 }
 
 function killSessionEngines(context: ApiContext, session: Session, reason: string): void {
@@ -509,7 +505,6 @@ function compactSessionSummary(session: Session): Record<string, unknown> {
     status: session.status,
     lastActivity: session.lastActivity ?? null,
     parentSessionId: session.parentSessionId ?? null,
-    ...(session.workflowProvenance ? { workflowProvenance: session.workflowProvenance } : {}),
   };
 }
 
@@ -855,12 +850,11 @@ function rejectUnverifiedIdentifiedApiCaller(req: HttpRequest, res: ServerRespon
   return true;
 }
 
-/** Who this Todo's pending gate is reserved for: the human operator (the Todo asked for it, or the
- *  workflow node it mirrors declared it), or the COO's own lane. Both decision surfaces read this
- *  one answer, so escalating cannot open a path that deciding refuses. */
-function approvalReservation(item: WorkItem, service: WorkflowService | undefined): Pick<ApprovalDecisionAuthorityOptions, "operatorOnly" | "cooDecidable"> {
-  const gate = approvalGateClass(item, service);
-  return { operatorOnly: currentApproval(item.id)?.operatorOnly === true || gate === "operator", cooDecidable: gate === "coo" };
+/** Who this Todo's pending gate is reserved for: the human operator when the Todo asked for it.
+ *  Both decision surfaces read this one answer, so escalating cannot open a path that deciding
+ *  refuses. */
+function approvalReservation(item: WorkItem): Pick<ApprovalDecisionAuthorityOptions, "operatorOnly"> {
+  return { operatorOnly: currentApproval(item.id)?.operatorOnly === true };
 }
 
 function requireOperatorControlPlaneAuthority(req: HttpRequest, res: ServerResponse, action: string, context: ApiContext): boolean {
@@ -1215,10 +1209,8 @@ export async function handleApiRequest(
     if (identifiedCaller && rejectUnverifiedIdentifiedApiCaller(req, res, method, pathname, context)) {
       return;
     }
-    // D4: ahead of every handler, the Workflow API included, a connector anchor reaches only its tool profile's routes.
+    // D4: ahead of every handler, a connector anchor reaches only its tool profile's routes.
     if (identifiedCaller && refuseRemoteMcpRoute(res, method, pathname, resolveScopedWriteCallerIdentity(req, context))) return;
-    if (context.workflowService && await handleWorkflowApi(req, res, { method, pathname, url }, { service: context.workflowService,
-      authenticated: authenticateGatewayRequest(req, context.gatewayAuthToken, jinnHome).ok })) return;
     if (await handleTalkApi(req, res, { method, pathname, url }, {
       getConfig: context.getConfig, caller: resolveScopedWriteCallerIdentity(req, context),
       context,
@@ -2592,14 +2584,10 @@ export async function handleApiRequest(
       // parseStatusUpdateFields keeps that on the operator's own surface.
       const humanAuthority = isOperatorPut || actingAsOperator !== undefined;
       const actor = fields.asOperator ? "operator" : workItemActor(caller);
-      // Read the list per request, so adding or removing a delegate takes effect
-      // on the next move rather than at the next restart.
-      const armedAsDelegate = resolveArmingDelegate(caller, target, context.getConfig());
       const actorEmployee = fields.asOperator ? undefined : workItemActorEmployee(caller);
       const detail = writeDetail({
         ...(note ? { note } : {}),
         ...(actingAsOperator ? { asOperator: actingAsOperator } : {}),
-        ...(armedAsDelegate ? { armedAsDelegate } : {}),
         ...(actorEmployee ? { actorEmployee } : {}),
       }, caller.origin);
       // The banner's asked-for-after reason (design-doc §5): a same-status
@@ -2871,7 +2859,7 @@ export async function handleApiRequest(
           parentCommentId,
           origin: caller.origin,
         });
-        forwardWorkflowTodoComment(comment);
+        forwardTodoComment(comment);
         emitTodoProjectionEvent(context, params.id, "commented");
         return json(res, { comment }, 201);
       } catch (err) {
@@ -3401,7 +3389,7 @@ export async function handleApiRequest(
       const authority = resolveApprovalDecisionAuthority(req.headers, item, {
         operatorCanActOnRootTarget: true,
         operatorAuthenticated: scopedOperatorAuthenticated(req, context),
-        ...approvalReservation(item, context.workflowService),
+        ...approvalReservation(item),
       });
       if (!authority.ok) return json(res, { error: authority.error }, authority.status);
 
@@ -3440,7 +3428,7 @@ export async function handleApiRequest(
       const authority = resolveApprovalDecisionAuthority(req.headers, item, {
         operatorCanActOnRootTarget: true,
         operatorAuthenticated: scopedOperatorAuthenticated(req, context),
-        ...approvalReservation(item, context.workflowService),
+        ...approvalReservation(item),
       });
       if (!authority.ok) return json(res, { error: authority.error }, authority.status);
       const body = (parsed.body ?? {}) as { reason?: unknown };

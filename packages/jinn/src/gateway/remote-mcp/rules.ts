@@ -29,8 +29,6 @@ const ALLOWED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ["GET", "/api/sessions"], ["GET", "/api/sessions/:id/children"], ["GET", "/api/search/sessions"],
   ["GET", "/api/org"], ["GET", "/api/org/employees/:name"],
   ["GET", "/api/notes"], ["GET", "/api/notes/read"], ["GET", "/api/knowledge/search"],
-  ["GET", "/api/workflows"], ["GET", "/api/workflows/:id"], ["GET", "/api/workflows/:id/runs"],
-  ["GET", "/api/workflows/:id/runs/:runId"],
   ["GET", "/api/cron"], ["GET", "/api/cron/:id/runs"], ["GET", "/api/cost/report"],
   ["GET", "/api/heartbeats"],
   ["GET", "/api/files"], ["GET", "/api/files/read"],

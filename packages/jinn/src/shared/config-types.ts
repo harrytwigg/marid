@@ -188,26 +188,11 @@ export interface JinnConfig {
     connector?: string;  // defaults to "discord"
     channel?: string;    // Discord channel ID for admin notifications
   };
-  workflows?: {
-    /** Local Git branch a code Workflow must prove delivery to before its Todo
-     * may close. Defaults to `main`. */
-    delivery?: {
-      /** @deprecated Remote publication is not part of Workflow delivery. */
-      remote?: string;
-      branch?: string;
-    };
-    /**
-     * Employees whose OWN move of a Todo to `assigned` may satisfy a
-     * `todo-status` trigger's `actor: operator` filter, so an autonomous
-     * continuation can arm a pipeline without impersonating the operator.
-     *
-     * It grants arming and nothing else: the transition is still recorded
-     * against the session that made it, `asOperator` stays refused, and
-     * approvals, cancellation, and every other status are untouched. Absent or
-     * empty is the default and behaves exactly as if the key did not exist.
-     */
-    armingDelegates?: string[];
-  };
+  /**
+   * @deprecated Workflows were removed. The key is still accepted so an older
+   * config.yaml loads and saves unchanged; nothing reads it.
+   */
+  workflows?: unknown;
   portal?: PortalConfig;
   context?: {
     /** Max characters for the built system prompt. Defaults to 100000. */

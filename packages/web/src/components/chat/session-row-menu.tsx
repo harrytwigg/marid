@@ -1,6 +1,5 @@
 import type { ReactNode } from "react"
-import { Archive, ArchiveRestore, Check, Copy, ExternalLink, Pencil, Pin, PinOff, Square, Trash2 } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Archive, ArchiveRestore, Check, Copy, Pencil, Pin, PinOff, Square, Trash2 } from "lucide-react"
 import { copyText } from "@/platform"
 import { cn } from "@/lib/utils"
 import {
@@ -21,28 +20,12 @@ export const SESSION_MENU_SEPARATOR_CLASS = "mx-2 my-1 bg-[var(--separator)]"
 export interface SessionMenuSession {
   id: string
   status?: string
-  source?: string
-  sourceRef?: string
-}
-
-export function workflowRunPath(sourceRef: string | undefined): string | null {
-  if (!sourceRef) return null
-  const parts = sourceRef.split(":")
-  if (
-    parts.length !== 5 ||
-    parts[0] !== "workflow" ||
-    parts.slice(1).some((part) => part.length === 0) ||
-    !/^\d+$/.test(parts[4]!)
-  ) return null
-  return `/workflow/${encodeURIComponent(parts[1]!)}/runs/${encodeURIComponent(parts[2]!)}`
 }
 
 export function sessionMenuCapabilities(session: SessionMenuSession): {
-  workflowRunPath: string | null
   canStop: boolean
 } {
   return {
-    workflowRunPath: session.source === "workflow" ? workflowRunPath(session.sourceRef) : null,
     canStop: session.status === "running",
   }
 }
@@ -131,14 +114,6 @@ export function SessionRowMenu({
         {isArchived ? "Unarchive chat" : "Archive chat"}
       </Item>
       <Separator className={SESSION_MENU_SEPARATOR_CLASS} />
-      {capabilities.workflowRunPath ? (
-        <Item asChild className={SESSION_MENU_ITEM_CLASS}>
-          <Link to={capabilities.workflowRunPath}>
-            <ExternalLink aria-hidden />
-            Open workflow run
-          </Link>
-        </Item>
-      ) : null}
       {capabilities.canStop ? (
         <Item className={SESSION_MENU_ITEM_CLASS} onClick={onStop}>
           <Square aria-hidden />

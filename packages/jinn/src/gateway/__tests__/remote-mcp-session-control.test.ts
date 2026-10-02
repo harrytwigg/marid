@@ -22,7 +22,6 @@ import {
 
 const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-remote-mcp-session-control-"));
 process.env.JINN_HOME = tmpHome;
-process.env.JINN_WORKFLOW_EVIDENCE_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-remote-mcp-session-control-wf-"));
 fs.mkdirSync(path.join(tmpHome, "org"), { recursive: true });
 for (const [name, rank, reportsTo] of [["qa-emp", "employee", "org-root"], ["org-root", "executive", ""]] as const) {
   fs.writeFileSync(path.join(tmpHome, "org", `${name}.yaml`), [

@@ -3,6 +3,7 @@ import { initDb } from '../shared/db.js';
 import { isRateLimitMessage } from '../shared/rateLimit.js';
 import type { SessionAttemptOutcome } from '../shared/types.js';
 import { TODO_RUN_OUTCOMES, type TodoRunOutcome } from './runs-schema.js';
+import { LEGACY_WORKFLOW_PHASE_SQL } from '../sessions/legacy-workflow-phase.js';
 
 /**
  * The Todo run ledger — one row per work attempt (ICI-728).
@@ -195,6 +196,24 @@ export function listWorkItemRuns(workItemId: string): TodoRun[] {
   return rows.map(toRun);
 }
 
+/**
+ * A Todo's runs, oldest first, without those of a legacy Workflow phase
+ * session: a phase was linked only so its spend rolled up here, so its run says
+ * nothing about the Todo's own attempts. Recovery, the respawn guards and the
+ * availability sweep judge the Todo by these.
+ */
+export function listWorkItemAttemptRuns(workItemId: string): TodoRun[] {
+  const rows = initDb()
+    .prepare(
+      `SELECT * FROM work_item_runs
+        WHERE work_item_id = ?
+          AND session_id NOT IN (SELECT id FROM sessions WHERE ${LEGACY_WORKFLOW_PHASE_SQL})
+        ORDER BY started_at, rowid`,
+    )
+    .all(workItemId) as WorkItemRunRow[];
+  return rows.map(toRun);
+}
+
 /** The still-running attempt on this session, if the ledger has one. */
 export function findOpenWorkItemRunBySession(sessionId: string): TodoRun | undefined {
   const row = initDb()
@@ -253,8 +272,6 @@ export function runOutcomeForReceipt(receipt: SessionAttemptOutcome, error: stri
  * covers `done` and `escalated` on the same terms, instead of re-deriving every
  * closed Todo in history on each tick.
  *
- * Workflow PHASE sessions are excluded — the workflow run settles those rows
- * itself, and closing one here would settle an attempt it is still retrying.
  * Returns how many runs were settled.
  */
 export function closeRunsForSettledSessions(endedAt: string = new Date().toISOString()): number {
@@ -262,8 +279,7 @@ export function closeRunsForSettledSessions(endedAt: string = new Date().toISOSt
     .prepare(
       `SELECT runs.id AS id, sessions.attempt_outcome AS outcome, sessions.last_error AS error
          FROM work_item_runs AS runs JOIN sessions ON sessions.id = runs.session_id
-        WHERE runs.ended_at IS NULL AND sessions.attempt_outcome IS NOT NULL
-          AND (sessions.workflow_kind IS NULL OR sessions.workflow_kind <> 'phase')`,
+        WHERE runs.ended_at IS NULL AND sessions.attempt_outcome IS NOT NULL`,
     )
     .all() as { id: string; outcome: SessionAttemptOutcome; error: string | null }[];
   for (const run of settled) {

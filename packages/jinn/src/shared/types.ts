@@ -337,40 +337,12 @@ export interface EngineSessionRef {
 
 export type EngineSessionRefs = Record<string, EngineSessionRef>;
 export type SessionAttemptOutcome = "succeeded" | "failed" | "interrupted";
-export type WorkflowAttemptInterruptionCause = "user-message" | "attempt-stop" | "gateway-restart";
-export interface WorkflowAttemptContinuation { engine: string; engineSessionId: string; sourceSessionId: string }
-export interface WorkflowAttemptCommand { owner: { workflowId: string; runId: string; nodeId: string; attempt: number }; employeeId: string; engine: string; model?: string; effort?: "low" | "medium" | "high" | "xhigh"; prompt: string; continueFrom?: WorkflowAttemptContinuation }
-export interface WorkflowAttemptCompletion { sessionId: string; owner: { workflowId: string; runId: string; nodeId: string; attempt: number }; turn: number; terminalVersion: number; outcome: "succeeded" | "failed" | "interrupted"; interruptionCause?: WorkflowAttemptInterruptionCause; finalText?: string; error?: string; completedAt: string }
-export type WorkflowAttemptCompletionListener = (event: WorkflowAttemptCompletion) => void | Promise<void>;
-export interface WorkflowSessionExecutor {
-  startAttempt(command: WorkflowAttemptCommand): Promise<{ sessionId: string }>;
-  stopAttempt(input: { sessionId: string; reason: string }): Promise<void>;
-  remind(input: { sessionId: string; text: string }): Promise<void>;
-  attemptState(sessionId: string): { idle: boolean; runningChildren: number } | null;
-}
+/** Why the latest turn was interrupted, recorded before the engine is killed. */
+export type SessionAttemptInterruptionCause = "user-message" | "attempt-stop" | "gateway-restart";
 
-/** Durable attribution for a workflow-owned employee attempt session. */
 /** Why a session is linked to a Todo: it executed it, or it was delegated its
  *  review. The predicates that read it live in work-items/link-role.ts. */
 export type WorkItemLinkRole = "execute" | "review";
-
-export interface WorkflowSessionProvenance {
-  kind: "phase";
-  workflowId: string;
-  /** Canonical agent-facing workflow name (definition.name, falling back to id). */
-  workflowName: string;
-  runId: string;
-  /** Uniform workflow trigger source: manual, schedule, event-webhook, etc. */
-  triggerSource: string;
-  phase: {
-    nodeId: string;
-    name: string;
-    /** One-based position in the run's frozen execution order. */
-    index: number;
-    round: number;
-    attempt: number;
-  };
-}
 
 export interface Session {
   id: string;
@@ -400,8 +372,6 @@ export interface Session {
    *  attempt) or `review` (it was delegated the review of one). Null/undefined
    *  reads as `execute`. See work-items/link-role.ts. */
   workItemRole?: WorkItemLinkRole | null;
-  /** Explicit workflow/run/phase attribution for grouping and filtered reads. */
-  workflowProvenance?: WorkflowSessionProvenance | null;
   /** Forwarded SSO identity captured from an auth proxy (opt-in via
    *  `gateway.userHeader`). Null/undefined for single-user installs. */
   userId?: string | null;
@@ -416,12 +386,12 @@ export interface Session {
   /** Monotonic terminal-receipt version within the current attempt generation.
    * Reset to zero on dispatch and incremented for every accepted terminal state. */
   attemptTerminalVersion?: number;
-  /** Monotonic count of completed turns in a workflow attempt session. Unlike
+  /** Monotonic count of completed turns in an attempt session. Unlike
    * attemptTerminalVersion, this is not reset when the next turn begins. */
   attemptTurn?: number;
   /** Durable interruption classification recorded before an engine is killed.
    * The paired turn fence prevents an older cause from leaking into a later turn. */
-  attemptInterruptionCause?: WorkflowAttemptInterruptionCause | null;
+  attemptInterruptionCause?: SessionAttemptInterruptionCause | null;
   attemptInterruptionTurn?: number | null;
   effortLevel: string | null;
   totalCost: number;

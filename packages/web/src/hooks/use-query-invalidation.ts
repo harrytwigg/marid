@@ -9,7 +9,7 @@ import { mergeTodoIntoCaches } from '@/routes/todos/todo-edit-request'
 import type { BackgroundActivity, SessionsResponse } from '@/lib/api'
 import { GATEWAY_EVENTS, type GatewayEvent } from '@jinn/gateway-events'
 
-/** The one company mutation event (Todo, Workflow definition, run). */
+/** The one company mutation event (Todo). */
 function handleCompanyChanged(
   qc: ReturnType<typeof useQueryClient>,
   p: Record<string, unknown>,
@@ -28,16 +28,6 @@ function handleCompanyChanged(
     }
     pending.add('todos')
     if (id) pending.add(`todo:${id}`)
-  } else if (entity === 'workflow-definition') {
-    qc.invalidateQueries({ queryKey: queryKeys.workflows.all })
-    if (id) qc.invalidateQueries({ queryKey: queryKeys.workflows.definition(id) })
-  } else if (entity === 'workflow-run') {
-    const workflowId = typeof p.workflowId === 'string' ? p.workflowId : ''
-    const runId = typeof p.runId === 'string' ? p.runId : ''
-    if (workflowId) {
-      qc.invalidateQueries({ queryKey: queryKeys.workflows.runs(workflowId) })
-      if (runId) qc.invalidateQueries({ queryKey: queryKeys.workflows.run(workflowId, runId) })
-    }
   }
   // Loss recovery for the invoking transcript; normal session:delta stays the
   // surgical live path when the session is streaming.
@@ -261,7 +251,6 @@ export function useQueryInvalidation() {
     if (connectionSeq === previousConnectionSeqRef.current) return
     previousConnectionSeqRef.current = connectionSeq
     pendingRef.current.add('todos')
-    qc.invalidateQueries({ queryKey: queryKeys.workflows.all })
     qc.invalidateQueries({ queryKey: queryKeys.sessions.all })
     scheduleFlushRef.current()
   }, [connectionSeq, qc])

@@ -10,9 +10,8 @@ export type CronLens = "jobs" | "week"
  * state, so the view is shareable and can be reached by a link — which is what
  * lets the Talk orb open "the disabled jobs" without reaching into the page.
  *
- * Both defaults are the absent param, matching how the workflow page writes its
- * own lens, and both setters replace rather than push so the back button behaves
- * exactly as it did when these were `useState`.
+ * Both defaults are the absent param, and both setters replace rather than push
+ * so the back button behaves exactly as it did when these were `useState`.
  */
 export function useCronViewParams() {
   const [params, setParams] = useSearchParams()

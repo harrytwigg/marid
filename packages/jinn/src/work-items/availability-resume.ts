@@ -2,7 +2,7 @@ import { initDb } from '../shared/db.js';
 import { classifyEngineFailureText, hasEngineFailureClass } from '../shared/engine-failure.js';
 import { readEngineHealth } from '../shared/engine-health.js';
 import { logger } from '../shared/logger.js';
-import { listWorkItemEvents } from './event-log.js';
+import { isBlockDeclared, listWorkItemEvents } from './event-log.js';
 import {
   appendRespawnGuardHold,
   checkRespawnGuard,
@@ -11,8 +11,8 @@ import {
   type RespawnGuardHold,
   type SettledRun,
 } from './respawn-guards.js';
-import { listWorkItemRuns } from './runs.js';
-import { appendWorkItemEvent, listWorkItems, type WorkItemStatus } from './store.js';
+import { listWorkItemAttemptRuns } from './runs.js';
+import { appendWorkItemEvent, listWorkItems, type WorkItem, type WorkItemStatus } from './store.js';
 
 /**
  * The clock-driven counterpart to the respawn guards (PLA-153).
@@ -29,18 +29,28 @@ import { appendWorkItemEvent, listWorkItems, type WorkItemStatus } from './store
  * that keeps one failure from being resumed twice.
  */
 
-/** The actor a resume records when the workflow's trigger asks for nobody in
- *  particular. A clock decided this, and the trail should say so. */
+/** The actor a resume records. A clock decided this, and the trail should say so. */
 export const AVAILABILITY_RESUME_ACTOR = 'availability-resume';
 
 /** Classes that describe the PROVIDER rather than the work — the same four
  *  `availabilityReason` names, and the only ones a wait can fix. */
 const AVAILABILITY_CLASSES = ['quota', 'rate-limit', 'provider-outage', 'network'] as const;
 
-/** Statuses a parked attempt actually leaves a Todo in. `backlog` is absent
- *  because nothing has attempted it yet, and the sticky terminals are absent
- *  because a close and an escalation are decisions a clock does not revisit. */
-const RESUMABLE_STATUSES: readonly WorkItemStatus[] = ['assigned', 'executing', 'in_review', 'blocked'];
+/** Statuses a parked attempt can leave mid-flight work in. `backlog` is absent
+ *  because nothing has attempted it yet; `in_review` is the operator's desk;
+ *  the sticky terminals are decisions. */
+const CANDIDATE_STATUSES: readonly WorkItemStatus[] = ['assigned', 'executing', 'blocked'];
+
+/**
+ * Whether a clock may restart this Todo. A failed or interrupted attempt is
+ * exactly what the reconciler turns into `blocked`, so a block it derived is
+ * still mid-flight work; a block someone declared waits on a person, and only
+ * that person moves it.
+ */
+export function isClockRestartable(item: Pick<WorkItem, 'id' | 'status'>): boolean {
+  if (item.status === 'assigned' || item.status === 'executing') return true;
+  return item.status === 'blocked' && !isBlockDeclared(item.id);
+}
 
 /** Past this, a stalled Todo stopped being a clock problem: re-arming a day-old
  *  failure is resurrecting history rather than resuming it. Measured from
@@ -55,22 +65,18 @@ const DEFAULT_RESUME_INTERVAL_MS = 5 * 60_000;
  *  the wrong moment says which of the three answers it believed. */
 export type ResetSource = 'stated' | 'engine-health' | 'cooldown';
 
-/** Where the Todo landed, as the re-arm port reports it back. */
+/** Where the Todo stands after the restart, as the re-arm port reports it back. */
 export interface AvailabilityRearmed {
   status: string;
-  /** The trigger's label filter, when one had to be restored or confirmed. */
-  label?: string;
 }
 
 export type AvailabilityRearmResult = AvailabilityRearmed | { unavailable: string };
 
 export interface AvailabilityResumeDeps {
   /**
-   * Put the Todo back where its own Workflow trigger fires — restoring the
-   * arming label if it has gone missing — or say why nothing can fire.
-   *
-   * Injected because resolving that target means reading a Workflow definition,
-   * and `work-items/` does not import `workflows/`.
+   * Restart the Todo's work, or say why nothing was started. Injected because
+   * starting a session is the gateway's job, and `work-items/` does not import
+   * `gateway/`.
    */
   rearm(workItemId: string): AvailabilityRearmResult;
   /** Test seam. */
@@ -96,7 +102,8 @@ interface DueResume {
 export function sweepAvailabilityResumes(deps: AvailabilityResumeDeps): number {
   const now = deps.now?.() ?? new Date();
   let resumed = 0;
-  for (const item of RESUMABLE_STATUSES.flatMap((status) => listWorkItems({ status }))) {
+  for (const item of CANDIDATE_STATUSES.flatMap((status) => listWorkItems({ status }))) {
+    if (!isClockRestartable(item)) continue;
     const due = dueForResume(item.id, now);
     if (due === undefined) continue;
     // The sweep has already answered the question `rate_limit_cooldown` asks, and
@@ -116,7 +123,7 @@ export function sweepAvailabilityResumes(deps: AvailabilityResumeDeps): number {
  *  word that was decided. Undefined for every Todo this sweep has no business
  *  touching, which is nearly all of them. */
 function dueForResume(workItemId: string, now: Date): DueResume | undefined {
-  const attempts = listWorkItemRuns(workItemId);
+  const attempts = listWorkItemAttemptRuns(workItemId);
   // An attempt is still going: whatever it is doing outranks a clock.
   if (attempts.some((attempt) => attempt.endedAt === null)) return undefined;
   const run = lastSettledRun(attempts);
@@ -129,14 +136,24 @@ function dueForResume(workItemId: string, now: Date): DueResume | undefined {
   return reset.at > now.getTime() ? undefined : { run, reset };
 }
 
+/** Runs whose restart was declined and already reported, so the warning is not
+ *  repeated on every pass; a run leaves once it is resumed. Process-local: a
+ *  gateway restart reports it once more. */
+const declinedRuns = new Set<string>();
+
 /** Hand the Todo to the port and, if it landed, write the resume down. */
 function resumeOne(workItemId: string, due: DueResume, deps: AvailabilityResumeDeps): boolean {
   const engine = engineOf(due.run);
   const landed = deps.rearm(workItemId);
   if ('unavailable' in landed) {
-    logger.warn(`Todo ${workItemId} waited out its ${describe(due.run)} but could not be re-armed: ${landed.unavailable}`);
+    // The sweep asks again every interval for up to a day; say so once per run.
+    if (!declinedRuns.has(due.run.id)) {
+      declinedRuns.add(due.run.id);
+      logger.warn(`Todo ${workItemId} waited out its ${describe(due.run)} but could not be restarted: ${landed.unavailable}`);
+    }
     return false;
   }
+  declinedRuns.delete(due.run.id);
   appendWorkItemEvent({
     workItemId,
     kind: 'availability_resumed',
@@ -146,7 +163,6 @@ function resumeOne(workItemId: string, due: DueResume, deps: AvailabilityResumeD
       resetAt: new Date(due.reset.at).toISOString(),
       source: due.reset.source,
       status: landed.status,
-      ...(landed.label === undefined ? {} : { label: landed.label }),
       ...(engine === undefined ? {} : { engine }),
     },
     versionEffect: 'audit',

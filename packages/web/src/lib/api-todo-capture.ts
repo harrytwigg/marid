@@ -15,9 +15,7 @@ export type TodoCaptureStageWire =
   | "landed"
   | "failed"
 
-export type TodoCaptureRouteWire =
-  | { kind: "workflow"; workflowId: string; workflowName: string | null; runId: string | null }
-  | { kind: "employee"; employee: string; sessionId: string }
+export type TodoCaptureRouteWire = { kind: "employee"; employee: string; sessionId: string }
 
 export interface TodoCaptureWire {
   captureId: string

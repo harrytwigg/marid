@@ -54,6 +54,29 @@ describe("receiptless retirement: experiments skill", () => {
   })
 })
 
+describe("receiptless retirement: workflow skill", () => {
+  const shipped = (version: string) =>
+    fs.readFileSync(path.join(here, "../../../template/migrations", version, "files/target/skills/workflow/SKILL.md"), "utf8")
+  const versions = [
+    ["0.26.0", () => shipped("0.26.0")],
+    ["0.31.0", () => shipped("0.31.0")],
+    ["0.33.3", () => fixture("v0.33.3/workflow/SKILL.md")],
+  ] as const
+
+  it("is registered", () => {
+    expect(receiptlessRetiredSkillNames()).toContain("workflow")
+  })
+
+  it.each(versions)("matches the unmodified %s skill", (_label, content) => {
+    expect(matchesReceiptlessRetiredSkill(installSkill("workflow", content()), "workflow", inputs)).toBe(true)
+  })
+
+  it("rejects a modified copy", () => {
+    const dir = installSkill("workflow", `${fixture("v0.33.3/workflow/SKILL.md")}\nOperator customization.\n`)
+    expect(matchesReceiptlessRetiredSkill(dir, "workflow", inputs)).toBe(false)
+  })
+})
+
 describe("receiptless retirement: existing single-version skills", () => {
   const migrate = fixture("v0.32.0/migrate/SKILL.md")
 

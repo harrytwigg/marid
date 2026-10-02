@@ -24,15 +24,6 @@ export const queryKeys = {
     jobs: ['cron-jobs'] as const,
     runs: (id: string) => ['cron', id, 'runs'] as const,
   },
-  workflows: {
-    all: ['workflows'] as const,
-    list: (retired: boolean) => ['workflows', 'list', retired] as const,
-    definition: (id: string) => ['workflows', 'definition', id] as const,
-    runs: (id: string) => ['workflows', 'runs', id] as const,
-    run: (id: string, runId: string) => ['workflows', 'runs', id, runId] as const,
-    runPrompt: (id: string, runId: string, attemptKey: string) =>
-      ['workflows', 'runs', id, runId, 'prompt', attemptKey] as const,
-  },
   skills: {
     all: ['skills'] as const,
     detail: (name: string) => ['skills', name] as const,

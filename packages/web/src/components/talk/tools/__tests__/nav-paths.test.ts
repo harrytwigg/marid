@@ -7,7 +7,6 @@ import {
   resolveTodoId,
   todoPath,
   todosPath,
-  workflowPath,
 } from "../nav-paths"
 
 describe("todosPath", () => {
@@ -84,20 +83,7 @@ describe("todoPath", () => {
   })
 })
 
-describe("the remaining five domains", () => {
-  it("opens the workflow list, one workflow, and its runs lens", () => {
-    expect(workflowPath({})).toBe("/workflow")
-    expect(workflowPath({ id: "jinn-build" })).toBe("/workflow/jinn-build")
-    expect(workflowPath({ id: "jinn-build", lens: "runs" })).toBe("/workflow/jinn-build?lens=runs")
-    // `editor` is the page's default and stays out of the URL, matching how the
-    // page's own lens control writes it.
-    expect(workflowPath({ id: "jinn-build", lens: "editor" })).toBe("/workflow/jinn-build")
-  })
-
-  it("ignores a lens with no workflow to apply it to", () => {
-    expect(workflowPath({ lens: "runs" })).toBe("/workflow")
-  })
-
+describe("the remaining three domains", () => {
   it("opens chats and one session", () => {
     expect(chatPath({})).toBe("/")
     expect(chatPath({ sessionId: "abc-123" })).toBe("/?session=abc-123")
@@ -122,7 +108,7 @@ describe("the remaining five domains", () => {
   })
 
   it("escapes an id that would otherwise change the route", () => {
-    expect(workflowPath({ id: "a/b" })).toBe("/workflow/a%2Fb")
+    expect(cronPath({ id: "a/b" })).toBe("/cron/a%2Fb")
     expect(cronPath({ id: "a b" })).toBe("/cron/a%20b")
   })
 })

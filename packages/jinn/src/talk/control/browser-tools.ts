@@ -44,12 +44,8 @@ export const BROWSER_CONTROL_OPERATIONS: readonly TalkControlOperation[] = [
   }), "todos"),
   browser("open_todo", "Open one Todo by id.", params({ id: string("The full Todo id.") }, ["id"]), "todos"),
   browser("open_chats", "Open chat or a specific session.", params({ sessionId: string("The session id.") }), "sessions"),
-  browser("open_workflows", "Open Workflows or one workflow and lens.", params({
-    id: string("The workflow id."),
-    lens: string("The editor or runs lens.", ["editor", "runs"]),
-  }), "workflows"),
   browser("focus_element", "Focus and reveal a safe visible control.", params({ target: string("The semantic control target.") }, ["target"]), "page"),
-  browser("resolve_and_open", "Resolve a spoken Todo, chat, or Workflow reference and open it.", params({ what: string("The spoken reference.") }, ["what"]), "navigation"),
+  browser("resolve_and_open", "Resolve a spoken Todo or chat reference and open it.", params({ what: string("The spoken reference.") }, ["what"]), "navigation"),
   browser("talk_search_chat_messages", "Search earlier messages in the chat currently on screen. Use this for questions about what was said or decided earlier. Returns matching excerpts only; speak excerpts and relative time, never identifiers.", params({
     query: string("All words to match in the current chat, at most 512 characters."),
   }, ["query"]), "sessions", "read"),

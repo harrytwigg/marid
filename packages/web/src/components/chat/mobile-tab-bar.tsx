@@ -7,7 +7,7 @@ import { useFeatures } from "@/hooks/use-features"
 
 // ---------------------------------------------------------------------------
 // MobileTabBar — GRS-022. The SOLE mobile nav: an icon-only iOS-style bottom tab
-// bar carrying the 4 primary destinations (Chat · Todos · Workflows · More).
+// bar carrying the 4 primary destinations (Chat · Todos · Notes · More).
 // Mobile only (lg:hidden); the parent decides when to mount it. --material-thick
 // over content with the single 0.5px top hairline iOS tab bars are allowed (the
 // one sanctioned exception to "no hairlines at rest"). Frosted on pointer:fine;

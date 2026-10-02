@@ -77,9 +77,6 @@ function factsFor(captureId: string, dispatcherEmployee: string, shaperEmployee:
       linked: listSessionsByWorkItem(item.id).map((linked) => ({
         id: linked.id,
         employee: linked.employee,
-        workflowId: linked.workflowProvenance?.workflowId ?? null,
-        workflowName: linked.workflowProvenance?.workflowName ?? null,
-        workflowRunId: linked.workflowProvenance?.runId ?? null,
       })),
     })),
     dispatcherEmployee,

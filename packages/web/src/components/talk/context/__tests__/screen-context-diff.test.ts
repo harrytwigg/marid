@@ -3,11 +3,11 @@ import { describeLocation } from "../page-snapshot"
 import { semanticScreenChanged } from "../screen-context-diff"
 import { buildScreenContext } from "../surface-adapters"
 
-function context(capturedAt: string, text = "Release train") {
+function context(capturedAt: string, text = "Org chart") {
   const root = document.createElement("main")
   root.innerHTML = `<h1>${text}</h1>`
   return buildScreenContext({
-    location: describeLocation("/workflow/release", ""),
+    location: describeLocation("/org", ""),
     browserInstanceId: "browser-1",
     root,
     capturedAt,

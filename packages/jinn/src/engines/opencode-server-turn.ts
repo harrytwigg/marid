@@ -3,7 +3,7 @@ import { logger } from "../shared/logger.js";
 import { OpencodeTurn } from "./opencode-turn.js";
 import { buildOpencodePrompt } from "./opencode-protocol.js";
 import { basicAuthHeader, type OpencodeServer } from "./opencode-server.js";
-import { USER_STOP_INTERRUPTION_REASON } from "../sessions/workflow-interruptions.js";
+import { USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 
 /**
  * One Jinn turn, sent straight to the session's opencode server over HTTP.

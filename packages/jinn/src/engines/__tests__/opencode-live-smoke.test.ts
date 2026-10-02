@@ -45,7 +45,7 @@ import { OpencodeServerPool, basicAuthHeader } from "../opencode-server.js";
 import { OpencodeInteractiveEngine } from "../opencode-interactive.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME, GATEWAY_INFO_FILE } from "../../shared/paths.js";
-import { USER_STOP_INTERRUPTION_REASON } from "../../sessions/workflow-interruptions.js";
+import { USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
 import type { EngineRunOpts, RemoteTarget } from "../../shared/types.js";
 import type { PtyControlEvent } from "../pty-view-engine.js";
 import headlessXterm from "@xterm/headless";

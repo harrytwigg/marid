@@ -82,8 +82,7 @@ at 1280x1280 and encoded bytes at 180 KB. The provider receives one
 reason, request key, context revision, dimensions, bytes, estimated image
 tokens, and latency. The image itself is not persisted.
 
-Workflow editor and run canvases currently declare
-`workflow-graph-spatial-layout`; no other core route declares a visual gap.
+No core route currently declares a visual gap.
 
 ## Company control and recovery
 
@@ -94,7 +93,7 @@ before invoking a domain adapter.
 
 Writes propagate the stable idempotency key
 `talk:<talkSessionId>:<providerCallId>` into the canonical command. Todo edits,
-comments, assignments, delegations, chat messages, and Workflow starts reread
+comments, assignments, delegations, and chat messages reread
 their source of truth and return a typed UI effect. Domain writes that can be
 retried have their own stable operation identity, so a lost HTTP response or a
 gateway restart does not create a second comment, message, dispatch, or run.

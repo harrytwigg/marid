@@ -61,7 +61,7 @@ describe("the undo strip", () => {
 
     // jsdom runs no cascade, so the class is the only handle on the offset. The
     // strip takes pointer events: sitting on the bar would swallow taps meant
-    // for Chat, Todos or Workflows.
+    // for Chat or Todos.
     expect(strip()!.className).toContain("bottom-[calc(49px+max(var(--safe-bottom),6px)+var(--space-3))]")
     expect(strip()!.className).toContain("lg:bottom-[calc(var(--space-3)+var(--safe-bottom))]")
   })

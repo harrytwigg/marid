@@ -7,11 +7,10 @@ import { writeFailed } from "./write-lane"
 /**
  * The decisions, spoken.
  *
- * Approving a gate, deciding a workflow's land approval and unblocking a Todo
- * are the three verbs the board has that reach past this browser the moment they
- * land: an approval releases whatever was waiting on it, a land approval merges
- * a branch, and an unblock puts an agent back on the work. None of the three has
- * a reversal, so all three are situation-first — the sheet is what stands in for
+ * Approving a gate and unblocking a Todo are the two verbs the board has that
+ * reach past this browser the moment they land: an approval releases whatever
+ * was waiting on it, and an unblock puts an agent back on the work. Neither has
+ * a reversal, so both are situation-first — the sheet is what stands in for
  * the undo the fast lane would have offered.
  *
  * Each reads the thing it is about to decide BEFORE it asks, so the sheet quotes
@@ -102,68 +101,6 @@ const decideApproval: TalkTool = {
   },
 }
 
-const decideWorkflowApproval: TalkTool = {
-  name: "talk_decide_workflow_approval",
-  description:
-    "Approve or reject the node a workflow run is waiting on. Asks first: an approved gate lets the run carry on immediately, and what it then does cannot be undone.",
-  parameters: params(
-    {
-      id: str("The workflow id."),
-      runId: str("The id of the run that is waiting."),
-      decision: str("Approve the waiting node, or reject it.", DECISIONS),
-      reason: str("Why, in the operator's words."),
-    },
-    ["id", "runId", "decision"],
-  ),
-  execute: async (args: ToolArgs): Promise<ToolResult> => {
-    const id = String(args.id)
-    const runId = String(args.runId)
-    const decision = String(args.decision) as Decision
-    const reason = optional(args.reason)
-
-    let run
-    try {
-      run = await api.getWorkflowRunV2(id, runId)
-    } catch (error) {
-      return writeFailed(`read run ${runId} before deciding its approval`, error)
-    }
-    const waiting = run.approvals.find((approval) => approval.status === "pending")
-    if (!waiting) {
-      return {
-        ok: false,
-        error: `Run ${runId} has nothing waiting for an approval — it is ${run.status}. Say so, and nothing was written.`,
-      }
-    }
-
-    const verb = decision === "approve" ? "Approve" : "Reject"
-    return withConsent(
-      {
-        tool: "talk_decide_workflow_approval",
-        title: `${verb} "${waiting.nodeId}" on run ${runId}?`,
-        hint: decision === "approve"
-          ? "The run carries straight on from here, and what it does next cannot be taken back."
-          : "The run stops at this node.",
-        confirm: `${verb} it`,
-        subject: runId,
-      },
-      async () => {
-        try {
-          // The revision comes from the run just read, never from anything
-          // remembered: it is the fence that makes this decision the one made
-          // about the state the operator was shown.
-          await api.decideWorkflowApprovalV2(id, runId, waiting.nodeId, {
-            decision,
-            expectedRevision: run.revision,
-            ...(reason ? { reason } : {}),
-          })
-          return { ok: true, data: { performed: `${decision === "approve" ? "Approved" : "Rejected"} "${waiting.nodeId}" on run ${runId}.`, subject: runId, nodeId: waiting.nodeId } }
-        } catch (error) {
-          return writeFailed(`decide the approval on run ${runId}`, error)
-        }
-      },
-    )
-  },
-}
 
 /** The close gate's pre-check, read the way the Todo peek reads it: a failed
  *  read is reported rather than counted as zero, because defaulting to zero
@@ -257,4 +194,4 @@ const unblockTodo: TalkTool = {
   },
 }
 
-export const APPROVAL_TOOLS: readonly TalkTool[] = [decideApproval, decideWorkflowApproval, unblockTodo]
+export const APPROVAL_TOOLS: readonly TalkTool[] = [decideApproval, unblockTodo]

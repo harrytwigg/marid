@@ -16,7 +16,7 @@ export interface TreeRowMeta {
   descendantCount: number
   /** Roots only: why this row is top-level. */
   rootKind?: TreeRootKind
-  /** A root nobody typed into: a workflow, connector or plugin started it. */
+  /** A root nobody typed into: a connector or plugin started it. */
   dispatchedRoot?: boolean
   /** What a folded parent is hiding, so an errored, busy or unread child is not lost. */
   hiddenSignal?: HiddenTreeSignal

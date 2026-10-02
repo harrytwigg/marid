@@ -93,7 +93,10 @@ describe('company activity block parity', () => {
 
     renderRouted(messages)
     expect(screen.getByText(/Completed/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Open Release review workflow run' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Preview Release review workflow run' })).toBeTruthy()
+    // A legacy receipt is history: it carries no route to follow.
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Open / })).toBeNull()
   })
 
   it('shows identical text and accessible names for a live patch and an API reload', () => {
@@ -116,13 +119,13 @@ describe('company activity block parity', () => {
     }]
 
     const liveRender = renderRouted(live)
-    const liveOpen = liveRender.getByRole('button', { name: 'Open Release review workflow run' })
-    expect(liveOpen).toBeTruthy()
+    const livePreview = liveRender.getByRole('button', { name: 'Preview Release review workflow run' })
+    expect(livePreview).toBeTruthy()
     const liveState = liveRender.getByText(/Completed/).textContent
     liveRender.unmount()
 
     const reloadRender = renderRouted(reload)
-    expect(reloadRender.getByRole('button', { name: 'Open Release review workflow run' })).toBeTruthy()
+    expect(reloadRender.getByRole('button', { name: 'Preview Release review workflow run' })).toBeTruthy()
     expect(reloadRender.getByText(/Completed/).textContent).toBe(liveState)
   })
 })

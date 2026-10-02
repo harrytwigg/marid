@@ -11,8 +11,8 @@ It is a gateway loop, not a cron job. A cron job is a prompt run by an engine,
 so it would spend Claude capacity — on the very window it is measuring — to
 answer a question that is a handful of numeric comparisons. The loop decides in
 code and starts the same built-in Todo Dispatcher the board's dispatch button
-starts; that one Sonnet turn is where judgement is needed (which employee or
-Workflow should own the Todo).
+starts; that one Sonnet turn is where judgement is needed (which employee should own
+the Todo).
 
 ## Three tiers
 
@@ -35,7 +35,7 @@ switched off outright (`tiers.interactive.enabled: false`).
 
 1. An **operator-driven session** had activity. That is a session whose turns
    the operator initiates: top-level (no parent session — a delegated or
-   spawned child has one), not started by cron or a Workflow, and not a system
+   spawned child has one), not started by cron, and not a system
    employee's (the Todo Dispatcher and Shaper are started by the gateway on the
    operator's behalf). A dashboard chat with the COO, a Telegram conversation
    with the PA, a direct chat with any employee: the operator reading the reply

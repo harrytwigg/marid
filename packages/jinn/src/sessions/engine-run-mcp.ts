@@ -12,16 +12,13 @@ export function resolveEngineRunMcp(opts: {
   employee?: Employee;
   engine: string;
   sessionId: string;
-  workflowAttempt?: boolean;
 }): EngineRunMcp {
   if (!isMcpCapableEngine(opts.engine)) return {};
 
   const mcpConfig = resolveMcpServers(opts.config.mcp, opts.employee, opts.engine);
   if (Object.keys(mcpConfig.mcpServers).length === 0) return {};
 
-  const resolvedMcp = attachSessionIdentity(mcpConfig, opts.sessionId, {
-    workflowAttempt: opts.workflowAttempt,
-  });
+  const resolvedMcp = attachSessionIdentity(mcpConfig, opts.sessionId);
   return {
     resolvedMcp,
     ...(opts.engine === "claude" ? { mcpConfigPath: writeMcpConfigFile(resolvedMcp, opts.sessionId) } : {}),
@@ -34,11 +31,11 @@ export function resolveEngineRunMcp(opts: {
  * For the opencode terminal view, which may start the session's server before
  * any turn has: that server has to carry exactly the MCP set the next turn
  * will ask for, or the turn replaces it (and the view with it). So this makes
- * the same call `preflightTurn` makes, including its Workflow-attempt rule.
+ * the same call `preflightTurn` makes.
  */
 export function resolveSessionEngineMcp(opts: {
   config: JinnConfig;
-  session: Pick<Session, "id" | "workflowProvenance">;
+  session: Pick<Session, "id">;
   employee?: Employee;
   engine: string;
 }): EngineRunMcp {
@@ -47,6 +44,5 @@ export function resolveSessionEngineMcp(opts: {
     employee: opts.employee,
     engine: opts.engine,
     sessionId: opts.session.id,
-    workflowAttempt: opts.session.workflowProvenance?.kind === "phase",
   });
 }

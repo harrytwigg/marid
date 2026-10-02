@@ -1,9 +1,9 @@
 import { isPortalAgentSession } from "../sessions/registry.js";
-import type { JinnConfig, Session } from "../shared/types.js";
+import type { Session } from "../shared/types.js";
 import type { WriteOrigin } from "../work-items/origin.js";
 
 /**
- * Who may reach a `todo-status` Workflow trigger filtered on the operator.
+ * Who may have a Todo transition recorded as the operator's.
  *
  * Two roads lead there and they are deliberately different widths, so they are
  * read side by side rather than a page apart in the route file.
@@ -30,12 +30,12 @@ export function workItemActorEmployee(caller: WorkItemCaller): string | undefine
 }
 
 /**
- * `asOperator` stamps the transition's recorded actor as `operator`, so a
- * `todo-status` Workflow trigger filtered on the operator fires for work the
- * COO arms on the operator's behalf.
+ * `asOperator` stamps the transition's recorded actor as `operator`, so work
+ * the COO arms on the operator's behalf reads as the operator's in the audit
+ * trail.
  *
- * That actor string is an authority boundary — filtering on it is what keeps an
- * arbitrary employee from starting a pipeline nobody asked for — so exactly two
+ * That actor string is an authority boundary — it is what keeps an arbitrary
+ * employee from claiming the operator's standing — so exactly two
  * callers may claim it: the authenticated operator surface, for which it is a
  * no-op, and the gateway's own top-level agent session, the COO the operator is
  * talking to.
@@ -54,12 +54,6 @@ export function workItemActorEmployee(caller: WorkItemCaller): string | undefine
  * A granted claim carries the operator's AUTHORITY too, not only their name:
  * the status route passes `human` into `transition()` for it, which is what
  * lets the COO release a sticky terminal on the operator's instruction.
- *
- * `resolveArmingDelegate()` below reaches the same trigger by a deliberately
- * narrower road: it rewrites no actor, applies only to `assigned`, and is
- * granted per employee by config rather than inferred from session shape. An
- * employee refused here can still be a delegate there, and that is the point —
- * arming a pipeline is a fraction of what claiming the operator buys.
  */
 export function authorizeActingAsOperator(caller: WorkItemCaller): { ok: true; actingAs?: string } | { ok: false; error: string } {
   if (caller.kind === 'operator') return { ok: true };
@@ -71,23 +65,4 @@ export function authorizeActingAsOperator(caller: WorkItemCaller): { ok: true; a
     };
   }
   return { ok: true, actingAs: workItemActor(caller) };
-}
-
-/**
- * The employee this transition is armed on behalf of, or undefined when nothing
- * is delegated. Only a session moving a Todo to `assigned` can produce one, and
- * only when `workflows.armingDelegates` names its employee.
- *
- * The name comes from the session's own identity, never from the request, so
- * the stamp is a fact the gateway asserts rather than a claim a caller makes.
- * The list is user-authored YAML, so entries that are not names are skipped
- * rather than trusted into a comparison.
- */
-export function resolveArmingDelegate(caller: WorkItemCaller, target: string, config: JinnConfig): string | undefined {
-  if (target !== "assigned" || caller.kind !== "session") return undefined;
-  const employee = caller.session.employee;
-  if (!employee) return undefined;
-  const delegates = config.workflows?.armingDelegates;
-  if (!Array.isArray(delegates)) return undefined;
-  return delegates.some((name) => typeof name === "string" && name.trim() === employee) ? employee : undefined;
 }

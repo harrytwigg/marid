@@ -9,11 +9,11 @@ describe("PrimaryAction", () => {
   it("renders a mobile FAB and a labelled desktop trailing control from one call site", () => {
     render(
       <PageScaffold
-        header={<LargeTitleHeader title="Workflows" />}
+        header={<LargeTitleHeader title="Todos" />}
         primaryAction={
           <PrimaryAction
-            aria-label="New workflow"
-            label="New workflow"
+            aria-label="New todo"
+            label="New todo"
             icon={<Plus />}
             onClick={() => {}}
           />
@@ -32,8 +32,8 @@ describe("PrimaryAction", () => {
     expect(fab?.className).toContain("lg:hidden")
     expect(trailing?.className).toContain("hidden")
     expect(trailing?.className).toContain("lg:inline-flex")
-    expect(fab?.getAttribute("aria-label")).toBe("New workflow")
-    expect(trailing?.textContent).toContain("New workflow")
+    expect(fab?.getAttribute("aria-label")).toBe("New todo")
+    expect(trailing?.textContent).toContain("New todo")
   })
 
   // `StatusBar` holds the whole column clear of the fixed tab bar, so the FAB's

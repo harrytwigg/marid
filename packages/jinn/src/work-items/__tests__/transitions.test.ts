@@ -139,14 +139,6 @@ describe("transition — the guarded edge map", () => {
       engine: "codex",
       source: "workflow",
       sourceRef: "workflow:review-flow:run-1:verify:1",
-      workflowProvenance: {
-        kind: "phase",
-        workflowId: "review-flow",
-        workflowName: "Review flow",
-        runId: "run-1",
-        triggerSource: "todo-status",
-        phase: { nodeId: "verify", name: "Verify", index: 2, round: 1, attempt: 1 },
-      },
     });
     store.linkSession(phaseItem.id, phase.id);
 

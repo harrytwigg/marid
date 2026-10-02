@@ -18,7 +18,6 @@ Read the relevant playbook before acting. Keep durable procedure in the skill, s
 - **status**: Report current session and system status.
 - **sync**: Catch up on an employee conversation.
 - **todo-handling**: Create, assign, update, review, and archive Todos.
-- **workflow**: Create, invoke, observe, and maintain Workflows.
 
 ## Creating or installing
 

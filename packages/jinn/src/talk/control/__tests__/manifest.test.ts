@@ -29,8 +29,6 @@ describe("the authoritative Talk control manifest", () => {
       "talk_assign_todo",
       "talk_delegate_todo",
       "read_session",
-      "talk_start_workflow_run",
-      "read_workflow_runs",
     ]) {
       expect(byName.get(name), name).toMatchObject({ target: "gateway" });
     }

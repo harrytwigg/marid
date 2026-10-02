@@ -58,20 +58,17 @@ function largeOrg(count: number, departments: number): Employee[] {
 function expectDoctrineIntact(text: string): void {
   expect(text).toContain("COO-grade");
   expect(text).toContain("gateway");
-  expect(text).toContain("Workflow");
   expect(text).toContain("Todo");
   expect(text).toContain("in_review");
 }
 
 describe("what the brief tells the orb before anyone speaks", () => {
-  it("distinguishes a Workflow from a Todo and names everyone, with no tool call", () => {
+  it("explains the Todo and names everyone, with no tool call", () => {
     const brief = buildStandingBrief(configOf(), registryOf(SMALL_ORG));
 
     expect(brief.rosterLevel).toBe("full");
-    expect(brief.text).toMatch(/Workflow — .*reusable/);
     expect(brief.text).toMatch(/Todo — /);
-    // The two are told apart, not just both mentioned.
-    expect(brief.text).toContain("It is not a Todo");
+    expect(brief.text).not.toContain("Workflow");
     for (const one of SMALL_ORG) expect(brief.text).toContain(one.name);
   });
 

@@ -1,4 +1,4 @@
-import type { WorkItemDetailWire, WorkItemFullWire, WorkflowRunSummaryWire } from "@/lib/api"
+import type { WorkItemDetailWire, WorkItemFullWire } from "@/lib/api"
 
 /**
  * Wire shapes trimmed to what a voice model can hold and say back.
@@ -90,15 +90,3 @@ export function trimSession(raw: Record<string, unknown>, id: string): Record<st
   }
 }
 
-export function trimWorkflowRuns(runs: readonly WorkflowRunSummaryWire[], limit: number): Record<string, unknown>[] {
-  return runs.slice(0, limit).map((run) => ({
-    runId: run.id,
-    status: run.status,
-    trigger: run.trigger.kind,
-    startedAt: run.startedAt,
-    endedAt: run.endedAt,
-    // What it is doing now, or what stopped it — the one thing worth saying
-    // out loud about a run that is not simply "completed".
-    node: run.currentOrFailingNode ? `${run.currentOrFailingNode.label} (${run.currentOrFailingNode.state})` : null,
-  }))
-}

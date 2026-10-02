@@ -112,7 +112,7 @@ function sessionSearchFilter(url: URL): ReadResult<SearchSessionsFilter> {
     }
     filter.status = status as Session["status"];
   }
-  for (const name of ["employee", "engine", "source", "parentSessionId", "workflowId", "workflowRunId", "workflowPhaseName"] as const) {
+  for (const name of ["employee", "engine", "source", "parentSessionId"] as const) {
     const value = readCleanSearchParam(url, name);
     if (value) filter[name] = value;
   }
@@ -135,7 +135,7 @@ function searchSessionsRoute(res: ServerResponse, url: URL, options: SearchApiOp
   const filter = sessionSearchFilter(url);
   if (!filter.ok) return badRequest(res, filter.error);
   if (Object.keys(filter.value).length === 0) {
-    return badRequest(res, "at least one filter is required (text, employee, engine, status, source, parentSessionId, workflowId, workflowRunId, workflowPhaseName, activeSince, activeBefore, needsAttention)");
+    return badRequest(res, "at least one filter is required (text, employee, engine, status, source, parentSessionId, activeSince, activeBefore, needsAttention)");
   }
   const limit = Math.max(1, Math.min(parseInt(url.searchParams.get("limit") || "20", 10) || 20, 50));
   const sessions = searchSessionsFiltered(filter.value, limit);

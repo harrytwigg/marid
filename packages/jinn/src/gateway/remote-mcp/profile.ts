@@ -12,9 +12,8 @@ import type { JinnMcpTool } from "../../mcp/toolkit.js";
 export const REMOTE_MCP_READ_TOOLS = [
   "list_work_items", "get_work_item", "search_work_items", "get_work_item_tree", "list_work_item_comments",
   "list_work_item_attachments", "list_sessions", "search_sessions", "list_employees", "get_employee",
-  "find_employees", "list_departments", "list_notes", "read_note", "search_knowledge", "list_workflows",
-  "get_workflow", "list_workflow_runs", "get_workflow_run", "list_cron_jobs", "get_cron_run_history",
-  "cost_report", "list_labels", "list_heartbeats", "list_files", "read_file",
+  "find_employees", "list_departments", "list_notes", "read_note", "search_knowledge", "list_cron_jobs",
+  "get_cron_run_history", "cost_report", "list_labels", "list_heartbeats", "list_files", "read_file",
 ] as const;
 
 export const REMOTE_MCP_LEDGER_TOOLS = [
@@ -74,5 +73,5 @@ function forRemoteDoor(tool: JinnMcpTool): JinnMcpTool {
 
 /** The profile's tools, in `buildTools` order. Note tools appear only when Notes are enabled. */
 export function buildRemoteMcpTools(notesEnabled: boolean, knowledge?: KnowledgeSearchWording): JinnMcpTool[] {
-  return buildTools({ notesEnabled, workflowAttempt: false, knowledge }).filter((tool) => PROFILE.has(tool.name)).map(forRemoteDoor);
+  return buildTools({ notesEnabled, knowledge }).filter((tool) => PROFILE.has(tool.name)).map(forRemoteDoor);
 }

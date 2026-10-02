@@ -1,6 +1,5 @@
 import {
   MessageSquare,
-  Workflow,
   Users,
   Clock,
   ListChecks,
@@ -52,7 +51,6 @@ function contributedNavItems(): NavItem[] {
 const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Chat", icon: MessageSquare },
   { href: "/todos", label: "Todos", icon: ListChecks },
-  { href: "/workflow", label: "Workflows", icon: Workflow },
   { href: "/org", label: "Organization", icon: Users },
   { href: "/cron", label: "Cron", icon: Clock },
   { href: "/limits", label: "Limits", icon: Gauge },
@@ -67,7 +65,7 @@ const NOTES_NAV_ITEM: NavItem = { href: "/notes", label: "Notes", icon: Notebook
 // GRS-022 — the mobile bottom tab bar is the SOLE mobile nav (the top-left
 // hamburger is gone). HIG caps a tab bar at ~4–5 self-explanatory items, so we
 // carry the 4 primary destinations and hand everything else to a "More" tab that
-// opens the grouped overflow screen (/more). Chat + Todos + Workflows are the
+// opens the grouped overflow screen (/more). Chat + Todos are the
 // day-to-day phone surfaces; Organization/Cron/Skills/Activity/
 // Limits/Settings live one tap deep under More. The bar is icon-only (see
 // mobile-tab-bar.tsx).
@@ -88,7 +86,7 @@ export function navigationFor(notesEnabled: boolean): {
   // is the operator's mental model of their company, and a plugin does not get
   // to insert itself into the middle of it.
   const items = [...base, ...contributedNavItems()]
-  const primaryHrefs = notesEnabled ? ["/", "/todos", "/notes", "/workflow"] : ["/", "/todos", "/workflow"]
+  const primaryHrefs = notesEnabled ? ["/", "/todos", "/notes"] : ["/", "/todos"]
   const mobileItems = [
     ...primaryHrefs.map((href) => items.find((item) => item.href === href)!),
     MORE_NAV_ITEM,

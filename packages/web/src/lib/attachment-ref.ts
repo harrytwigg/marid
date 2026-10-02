@@ -1,9 +1,6 @@
-// The client half of the workflow attachment-ref grammar. The canonical module
-// is packages/jinn/src/workflows/attachment-ref.ts; the two must agree, and the
-// rejections are what matter — a ref is an employee-authored string, so a lax
-// parser here would let a path or a whitespace-smuggled token reach an <img>
-// src. Kept as a copy rather than a shared package for the same reason the rest
-// of this directory is: the web bundle takes no gateway source.
+// The attachment-ref grammar: `attachment:<todo>:<id>:<mime>`. The rejections
+// are what matter — a ref is an employee-authored string, so a lax parser here
+// would let a path or a whitespace-smuggled token reach an <img> src.
 
 /** One `type/subtype` token: dot, plus and dash may join runs, never repeat. */
 const MIME_TOKEN = String.raw`[a-z0-9]+(?:[.+-][a-z0-9]+)*`

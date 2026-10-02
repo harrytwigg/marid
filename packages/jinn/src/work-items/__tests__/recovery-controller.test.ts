@@ -73,7 +73,7 @@ describe("sweepTodoRecovery", () => {
     expect(rows.getWorkItemRecovery(item.id)).toBeUndefined();
   });
 
-  it("auto rearms a code failure once and refuses a second concurrent claim", () => {
+  it("auto rearms a code failure once", () => {
     const { id } = parked("build failed", "the build step exited with code 1");
     const rearm: string[] = [];
     const first = controller.sweepTodoRecovery({
@@ -82,15 +82,23 @@ describe("sweepTodoRecovery", () => {
     });
     expect(first.applied).toBeGreaterThanOrEqual(1);
     expect(rearm).toContain(id);
-    expect(rows.getWorkItemRecovery(id)?.attempts).toBe(1);
+    expect(rows.getWorkItemRecovery(id)).toMatchObject({ attempts: 1, reason: "scoped repair re-dispatched the Todo" });
+  });
 
-    claims.claimWorkItem({ workItemId: id, owner: "someone-else" });
-    rearm.length = 0;
+  it("holds no claim around the restart, and records no attempt when the restart port declines", () => {
+    const { id } = parked("build failed again", "the build step exited with code 1");
+    let claimedDuringRestart: boolean | undefined;
     controller.sweepTodoRecovery({
       mode: "auto",
-      rearm: (todoId) => { rearm.push(todoId); return { status: "assigned" }; },
+      rearm: (todoId) => {
+        // The restart takes its own claim, so the sweep must not be holding one.
+        claimedDuringRestart = claims.claimWorkItem({ workItemId: todoId, owner: "restart-port" }).state === "acquired";
+        claims.releaseWorkItemClaim(todoId, "restart-port");
+        return { unavailable: "a Dispatcher is already running for it" };
+      },
     });
-    expect(rearm).not.toContain(id);
+    expect(claimedDuringRestart).toBe(true);
+    expect(rows.getWorkItemRecovery(id)?.attempts ?? 0).toBe(0);
   });
 
   it("todoRecoveryMode defaults to classify-only", () => {

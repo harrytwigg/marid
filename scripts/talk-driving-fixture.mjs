@@ -9,9 +9,7 @@ import {
   FIXTURE_CLOCK,
   TALK_SESSION_ID,
   TOPIC_SPECS,
-  WORKFLOW_ID,
   assertDisposableHome,
-  buildWorkflowDefinition,
   fixtureTopics,
   mergeById,
   topicSessionId,
@@ -60,14 +58,13 @@ async function loadRuntime(home) {
   process.env.JINN_HOME = home
   process.env.JINN_INSTANCE = path.basename(home).replace(/^\./, "")
   const moduleAt = (relative) => import(pathToFileURL(path.join(repoRoot, "packages/jinn/dist/src", relative)).href)
-  const [db, todos, comments, relations, approvals, sessions, workflowRepo, workflowDb, talkSessions, topics, proactive, policy, tools] = await Promise.all([
+  const [db, todos, comments, relations, sessions, talkSessions, topics, proactive, policy, tools] = await Promise.all([
     moduleAt("shared/db.js"), moduleAt("work-items/store.js"), moduleAt("work-items/comments.js"),
-    moduleAt("work-items/relations.js"), moduleAt("work-items/approvals.js"), moduleAt("sessions/registry.js"),
-    moduleAt("workflows/repository.js"), moduleAt("workflows/repository-migrations.js"),
+    moduleAt("work-items/relations.js"), moduleAt("sessions/registry.js"),
     moduleAt("talk/session/repository.js"), moduleAt("talk/topics/repository.js"),
     moduleAt("talk/proactive/repository.js"), moduleAt("talk/proactive/policy.js"), moduleAt("talk/session/tools.js"),
   ])
-  return { db, todos, comments, relations, approvals, sessions, workflowRepo, workflowDb, talkSessions, topics, proactive, policy, tools }
+  return { db, todos, comments, relations, sessions, talkSessions, topics, proactive, policy, tools }
 }
 
 /** @param {string} home @param {Record<string, any>} config @param {string} configPath */
@@ -116,7 +113,7 @@ function seedCron(home) {
 function seedNote(home) {
   const file = path.join(home, "knowledge", "talk-driving-journey.md")
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, `---\nname: Talk driving journey\ndescription: Generic constraints for the local Talk fixture\ntype: project\n---\n\n# Talk driving journey\n\n- Every action stays inside this disposable sandbox.\n- The workflow approval remains pending until the exact operator decision.\n- Visual fallback is bounded to the workflow canvas and excludes the Talk orb.\n- Quiet cues stay silent; urgent active-topic cues may speak once.\n`)
+  fs.writeFileSync(file, `---\nname: Talk driving journey\ndescription: Generic constraints for the local Talk fixture\ntype: project\n---\n\n# Talk driving journey\n\n- Every action stays inside this disposable sandbox.\n- Quiet cues stay silent; urgent active-topic cues may speak once.\n`)
 }
 
 /** @param {ReturnType<typeof loadRuntime> extends Promise<infer T> ? T : never} runtime */
@@ -125,15 +122,12 @@ function seedTodos(runtime) {
   const blocker = create({ title: "Confirm sandbox access window", body: "Confirm the local-only window before the checklist can resume.", status: "assigned", assignee: "sandbox-coordinator", sourceRef: "pla-116-fixture:access-window", acceptance: "A visible comment names the confirmed sandbox window." })
   const blocked = create({ title: "Publish sandbox release checklist", body: "Blocked by the access-window dependency; no external release is allowed.", status: "blocked", assignee: "sandbox-builder", sourceRef: "pla-116-fixture:blocked-release", acceptance: "The blocker, linked chat, and verification result are visible." })
   const delegated = create({ title: "Collect responsive Talk evidence", body: "Capture desktop/mobile and light/dark evidence in the sandbox.", status: "executing", assignee: "sandbox-builder", sourceRef: "pla-116-fixture:delegated-qa", acceptance: "Four UI states are recorded without private data." })
-  const approval = create({ title: "Approve one sandbox-only workflow run", body: "One exact operator decision may advance the local workflow; all ambiguous input fails closed.", status: "in_review", assignee: "sandbox-reviewer", sourceRef: "pla-116-fixture:approval", acceptance: "One approval is audited and every invalid variant leaves state unchanged." })
   runtime.relations.addRelation(blocker.id, blocked.id, "blocks", "operator")
   runtime.comments.addComment({ workItemId: blocked.id, author: "sandbox-builder", authorKind: "employee",
     body: "Waiting for the confirmed sandbox access window; the linked chat contains the verification plan.", idempotencyKey: "pla-116-fixture:blocked-comment" })
   runtime.comments.addComment({ workItemId: delegated.id, author: "operator", authorKind: "operator",
     body: "Show each successful voice action in the real sandbox UI.", idempotencyKey: "pla-116-fixture:delegated-comment" })
-  runtime.approvals.requestApproval(approval.id, { request: "Approve exactly one sandbox-only workflow run.",
-    ref: "pla-116-fixture:operator-approval", operatorOnly: true, actor: "sandbox-reviewer" })
-  return { blocked: blocked.id, blocker: blocker.id, delegated: delegated.id, approval: approval.id }
+  return { blocked: blocked.id, blocker: blocker.id, delegated: delegated.id }
 }
 
 /** @param {any} runtime @param {Record<string, any>} input */
@@ -153,7 +147,7 @@ function seedChats(database, todoIds) {
       last_activity=excluded.last_activity, work_item_id=excluded.work_item_id`)
   const insertMessage = database.prepare(`INSERT INTO messages (id, session_id, role, content, timestamp)
     VALUES (?, ?, ?, ?, ?)`)
-  const workItems = [todoIds.blocked, todoIds.blocker, todoIds.delegated, null, todoIds.approval, ...Array(6).fill(null)]
+  const workItems = [todoIds.blocked, todoIds.blocker, todoIds.delegated, ...Array(6).fill(null)]
   database.transaction(() => TOPIC_SPECS.forEach((topic, index) => {
     const id = topicSessionId(index + 1)
     const at = FIXTURE_CLOCK + index * 60_000
@@ -166,41 +160,7 @@ function seedChats(database, todoIds) {
   }))()
 }
 
-/** @param {any} runtime @param {string} home @param {string} approvalTodoId */
-function seedWorkflow(runtime, home, approvalTodoId) {
-  fs.mkdirSync(path.join(home, "workflows"), { recursive: true })
-  const db = runtime.workflowDb.openWorkflowDatabase(path.join(home, "workflows", "workflows.db"))
-  const repository = new runtime.workflowRepo.WorkflowRepository(db, () => new Date(FIXTURE_CLOCK).toISOString())
-  let definition = repository.getDefinition(WORKFLOW_ID)
-  if (!definition) {
-    const created = repository.createDefinition({ id: WORKFLOW_ID, title: "Sandbox approval flow", description: "A local graph with one exact operator gate." })
-    definition = repository.saveDefinition(buildWorkflowDefinition(created), created.revision)
-    definition = repository.setEnabled(definition.id, true, definition.revision)
-  }
-  let run = repository.findRunByIdempotency(WORKFLOW_ID, "pla-116-fixture:approval-run")
-  if (!run) {
-    run = repository.createRun({ workflowId: WORKFLOW_ID, input: { scope: "sandbox-only" },
-      trigger: { nodeId: "start", kind: "manual", payload: { source: "fixture" }, todoId: approvalTodoId },
-      idempotencyKey: "pla-116-fixture:approval-run" })
-    repository.mutateRun(run.id, run.revision, (tx) => parkWorkflowAtApproval(tx))
-    run = repository.getRun(WORKFLOW_ID, run.id)
-  }
-  db.close()
-  return { workflowId: WORKFLOW_ID, runId: run.id }
-}
-
-/** @param {any} tx */
-function parkWorkflowAtApproval(tx) {
-  const stamp = new Date(FIXTURE_CLOCK).toISOString()
-  tx.setRunStatus("waiting")
-  tx.setNodeStatus("start", "completed", { activated: true, startedAt: stamp, endedAt: stamp })
-  tx.setNodeStatus("prepare", "completed", { activated: true, startedAt: stamp, endedAt: stamp,
-    output: { text: "Local evidence is ready.", fields: { scope: "sandbox-only" } } })
-  tx.setNodeStatus("approval", "waiting", { activated: true, startedAt: stamp })
-  tx.putApproval({ nodeId: "approval", status: "pending", requestedAt: stamp, approverRef: "operator" })
-}
-
-/** @param {any} runtime @param {any} database @param {{ todoIds: Record<string, string>, workflowId: string, workflowRunId: string }} refs */
+/** @param {any} runtime @param {any} database @param {{ todoIds: Record<string, string> }} refs */
 function seedTalk(runtime, database, refs) {
   const talk = new runtime.talkSessions.TalkSessionRepository(database)
   talk.save({ id: TALK_SESSION_ID, browserInstanceId: "talk-fixture-browser", credentialGeneration: 2,
@@ -212,7 +172,7 @@ function seedTalk(runtime, database, refs) {
   const topics = new runtime.topics.TalkTopicRepository(database)
   topics.replaceSession(TALK_SESSION_ID, fixtureTopics(refs))
   topics.saveNavigation({ talkSessionId: TALK_SESSION_ID, currentTopicId: "talk-topic-01-blocked-release",
-    history: fixtureTopics(refs).map(({ id }) => id), lastCandidateIds: ["talk-topic-03-delegated-qa", "talk-topic-10-proactive"],
+    history: fixtureTopics(refs).map(({ id }) => id), lastCandidateIds: ["talk-topic-03-delegated-qa", "talk-topic-08-proactive"],
     credentialGeneration: 2, screenRevision: 12, updatedAt: FIXTURE_CLOCK + 30_000 })
   seedProactive(runtime, database)
 }
@@ -232,7 +192,7 @@ function seedProactive(runtime, database) {
   for (const [index, signal] of signals.entries()) {
     const now = FIXTURE_CLOCK + 60_000 + index * 10_000
     const decision = runtime.policy.decideProactiveDisposition(signal, { activeTopicId: "talk-topic-01-blocked-release",
-      knownTopicIds: fixtureTopics({ todoIds: { blocked: "x", blocker: "y", delegated: "z", approval: "a" }, workflowId: WORKFLOW_ID, workflowRunId: "run" }).map(({ id }) => id),
+      knownTopicIds: fixtureTopics({ todoIds: { blocked: "x", blocker: "y", delegated: "z" } }).map(({ id }) => id),
       lastSpokenAt: spokenAt, now })
     const claim = repository.claim(signal, decision, now, 5_000, 3)
     if (claim.kind === "deliver") {
@@ -258,10 +218,9 @@ export async function prepareSandbox(home) {
   const todoIds = seedTodos(runtime)
   seedChats(database, todoIds)
   runtime.todos.linkSession(todoIds.blocked, topicSessionId(1))
-  const workflow = seedWorkflow(runtime, home, todoIds.approval)
-  seedTalk(runtime, database, { todoIds, workflowId: workflow.workflowId, workflowRunId: workflow.runId })
+  seedTalk(runtime, database, { todoIds })
   const manifest = { fixture: "PLA-116", clock: new Date(FIXTURE_CLOCK).toISOString(), talkSessionId: TALK_SESSION_ID,
-    topicSessionIds: TOPIC_SPECS.map((_, index) => topicSessionId(index + 1)), todoIds, workflow,
+    topicSessionIds: TOPIC_SPECS.map((_, index) => topicSessionId(index + 1)), todoIds,
     notePath: "knowledge/talk-driving-journey.md", cronIds: ["sandbox-quiet-review", "sandbox-urgent-drill"] }
   writeManifest(home, manifest)
   runtime.db.__closeDbForTest()

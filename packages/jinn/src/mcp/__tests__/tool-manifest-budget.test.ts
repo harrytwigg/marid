@@ -5,8 +5,10 @@ import { projectPiToolManifest } from "../../engines/pi-mcp.js";
 import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-manifest-expectations.js";
 
 // Fixed provider budget. ~Zero headroom discipline: new tool prose must stay
-// concise rather than growing into this ceiling.
-const MAX_MANIFEST_TOKENS = 5608;
+// concise rather than growing into this ceiling. Rebased down when the
+// Experiments and Workflow tools were removed, so the ceiling again sits ON
+// the largest wrapper (Pi).
+const MAX_MANIFEST_TOKENS = 4396;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -206,13 +208,12 @@ const ATTESTED = {
   // wording was then made precise (5 more): "main agent only" read as barring
   // Jinn child sessions — a Todo-dispatched session among them — which can and
   // should compact themselves. The bar is on a Task sub-agent, so it says that.
-  // Rebased DOWN for the removal of the six Experiments tools (list/get/create/
-  // update_experiment, record_reading, conclude_experiment): the ceiling drops
-  // from 6226 to the new Pi measurement, 5608, so the freed room is not left as
-  // headroom for later growth. Pi sits ON the ceiling again.
-  rpc: { tokens: 5124, sha256: "249d582c2995c0715f3b7567fa58a701c63ccc02729d1fc549c894c8c8e9dc5a" },
-  pi: { tokens: 5608, sha256: "753670813b4b492b3974e15877e21d3c4f5836e7f37915eb0d9d31d636c51ad4" },
-  openai: { tokens: 5320, sha256: "5a29f36ded0abcb8bcb65aac253429536740de7a70737fd03def2fb100de6605" },
+  // Rebased DOWN for the removal of the six Experiments tools and the sixteen
+  // Workflow tools (and the prose spent on them above): the ceiling, all three
+  // totals and the tool count moved down, and nothing moved up.
+  rpc: { tokens: 4034, sha256: "03199fbc5876e97dbf14537858028781b4ed87a0bfa396557bea88e7dc94e42f" },
+  pi: { tokens: 4396, sha256: "31a8dd9f926ebe4dcc9b8c63d27d477e60f479c55839b58a1ccac1f901bf8ae8" },
+  openai: { tokens: 4182, sha256: "ac98377496dc1b60ceb4c3a0d8a213869b2b84c0350c2db855328facdcd67796" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
@@ -279,7 +280,7 @@ describe("tool manifest budget", () => {
   it("keeps tool names, required arrays, and enum arrays stable", () => {
     const tools = buildTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
-    expect(tools).toHaveLength(70);
+    expect(tools).toHaveLength(54);
 
     const required = Object.fromEntries(tools.map((t) => [t.name, t.inputSchema.required ?? []]));
     expect(required).toEqual(EXPECTED_REQUIRED);

@@ -1,7 +1,6 @@
 import { orgRegistry } from "../../gateway/org-registry.js";
 import { getMessages, getSession } from "../../sessions/registry.js";
 import { getWorkItem } from "../../work-items/store.js";
-import type { JsonValue } from "../../workflows/model.js";
 import { TalkControlRuntime } from "./runtime.js";
 import { initDb } from "../../shared/db.js";
 import { TalkTopicLifecycle } from "../topics/lifecycle.js";
@@ -35,14 +34,6 @@ function sessionData(id: string): Record<string, unknown> {
   };
 }
 
-function workflowInput(raw: unknown): Record<string, JsonValue> {
-  if (raw === undefined || raw === "") return {};
-  if (typeof raw !== "string") throw new Error("input must be a JSON object string");
-  const parsed = JSON.parse(raw) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("input must be a JSON object string");
-  return parsed as Record<string, JsonValue>;
-}
-
 function delegateTodo(host: TalkControlHost, args: Record<string, unknown>, call: TalkControlAdapterContext): TalkControlExecution {
   const id = requiredText(args, "id");
   const employeeName = requiredText(args, "employee");
@@ -73,29 +64,6 @@ const sendToSession: DomainHandler = (host, args, call) => {
   const id = requiredText(args, "id");
   const sent = dispatchTalkSessionMessage(host.context, id, requiredText(args, "message"), call);
   return { data: { sessionId: id, ...sent }, uiEffect: { invalidate: ["sessions", `session:${id}`], navigate: `/?session=${encodeURIComponent(id)}` } };
-};
-
-const startWorkflow: DomainHandler = async (host, args, call) => {
-  const id = requiredText(args, "id");
-  if (!host.context.workflowService) throw new Error("Workflows are unavailable");
-  const run = await host.context.workflowService.startManual({ workflowId: id, input: workflowInput(args.input), idempotencyKey: call.idempotencyKey });
-  return { data: { workflowId: id, runId: run.id, status: run.status }, uiEffect: { invalidate: [`workflow-runs:${id}`, `workflow-run:${id}:${run.id}`], navigate: `/workflow/${encodeURIComponent(id)}/runs/${encodeURIComponent(run.id)}` } };
-};
-
-const readWorkflowRuns: DomainHandler = (host, args) => {
-  const id = requiredText(args, "id");
-  if (!host.context.workflowService) throw new Error("Workflows are unavailable");
-  const limit = Number.isInteger(args.limit) ? Math.min(Math.max(Number(args.limit), 1), 20) : 5;
-  const page = host.context.workflowService.listRuns(id, { limit });
-  return { data: { workflowId: id, runs: page.items }, uiEffect: null };
-};
-
-const readWorkflowRun: DomainHandler = (host, args) => {
-  const id = requiredText(args, "id");
-  const runId = requiredText(args, "runId");
-  const run = host.context.workflowService?.getRun(id, runId);
-  if (!run) throw new Error(`Workflow run ${runId} not found`);
-  return { data: { workflowId: id, run }, uiEffect: null };
 };
 
 const recallTopic: DomainHandler = (_host, args, call) => {
@@ -148,9 +116,6 @@ const DOMAIN_HANDLERS: Record<string, DomainHandler> = {
   talk_delegate_todo: delegateTodo,
   read_session: (_host, args) => ({ data: sessionData(requiredText(args, "id")), uiEffect: null }),
   talk_send_to_session: sendToSession,
-  talk_start_workflow_run: startWorkflow,
-  read_workflow_runs: readWorkflowRuns,
-  read_workflow_run: readWorkflowRun,
   talk_recall_topic: recallTopic,
   talk_remember_topic: rememberTopic,
   read_talk_capability: readCapability,
@@ -170,7 +135,7 @@ export function createTalkDomainRuntime(manifest: TalkControlManifest, host: Tal
   return new TalkControlRuntime({
     manifest,
     execute: (operation, args, call) => execute(host, operation, args, call),
-    verify: (operation, args, execution) => verifyTalkDomainOperation(operation, args, execution, host.context),
+    verify: (operation, args, execution) => verifyTalkDomainOperation(operation, args, execution),
     ...(host.receipts ? { receipts: host.receipts } : {}),
   });
 }

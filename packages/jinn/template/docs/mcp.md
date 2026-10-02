@@ -10,7 +10,7 @@
 4. It passes the resolved servers through the selected engine's supported MCP integration.
 5. Any temporary integration files live under `$JINN_HOME/tmp/mcp/` and are cleaned after use.
 
-The built-in server is named `jinn`. It exposes the company operating surface for employees, sessions, delegation, Todos, Workflows, cron reads, Notes, approvals, reference data, and managed files.
+The built-in server is named `jinn`. It exposes the company operating surface for employees, sessions, delegation, Todos, cron reads, Notes, approvals, reference data, and managed files.
 
 ## Built-in company tools
 

@@ -7,10 +7,9 @@ import { noteVerbs, type PluginHostNotes } from "./notes.js";
 import { assertVerbAllowed } from "./permissions.js";
 import { sessionVerbs, type PluginHostSessions } from "./sessions.js";
 import { todoVerbs, type PluginHostTodos } from "./todos.js";
-import { workflowVerbs, type PluginHostWorkflows } from "./workflows.js";
 
 /**
- * The typed verb tier as a plugin's *backend* sees it — the same sixteen verbs
+ * The typed verb tier as a plugin's *backend* sees it — the same thirteen verbs
  * the browser SDK offers, over the gateway's own in-process functions rather
  * than over HTTP.
  *
@@ -25,7 +24,6 @@ import { workflowVerbs, type PluginHostWorkflows } from "./workflows.js";
 
 export type { PluginTodoDraft } from "./todos.js";
 export type { PluginSpawnRequest } from "./sessions.js";
-export type { PluginWorkflow, PluginWorkflowRun } from "./workflows.js";
 export type { PluginNoteDraft } from "./notes.js";
 export type { PluginConnectorMessage } from "./connectors.js";
 export type { PluginCronJob } from "./cron.js";
@@ -34,7 +32,6 @@ export interface PluginHost {
   todos: PluginHostTodos;
   sessions: PluginHostSessions;
   employees: PluginHostEmployees;
-  workflows: PluginHostWorkflows;
   notes: PluginHostNotes;
   connectors: PluginHostConnectors;
   cron: PluginHostCron;
@@ -51,7 +48,6 @@ export function createPluginHost(pluginId: string): PluginHost {
     todos: todoVerbs(pluginId, author),
     sessions: sessionVerbs(pluginId),
     employees: employeeVerbs(pluginId),
-    workflows: workflowVerbs(pluginId),
     notes: noteVerbs(pluginId),
     connectors: connectorVerbs(pluginId),
     cron: cronVerbs(pluginId),
