@@ -306,17 +306,33 @@ function turnRecord(turn: WalkTurnResult, tools: WalkTools): Omit<TickRecord, "a
   };
 }
 
-/** Run the walk's turn: the model goes through the board with its tools, and
- *  the gateway carries out each decision as it is made. */
-async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWalkState, openIds: string[]): Promise<TickRecord> {
-  const { w, at, startedAt } = frame;
+/**
+ * A turn that carried out nothing and never finished: the signature of the
+ * walk's tools not reaching it. The likeliest cause is the engine's MCP server
+ * not being connected when the turn ran — a per-process startup race in the
+ * Claude Code CLI, whose `tools/list` is answered once and never re-queried, so
+ * a turn that starts before its MCP server is ready runs with no tools at all.
+ * The model is told about the five tools in the prompt, so with none attached it
+ * emits text that looks like calls. A fresh turn is a fresh engine process and
+ * re-rolls the race, so the tick retries once rather than losing the hour. Only
+ * this signature retries: a turn that failed with an engine error, or that
+ * carried out decisions before stopping, is not the tools-never-arrived case.
+ */
+function toolsNeverArrived(turn: WalkTurnResult, tools: WalkTools): boolean {
+  return !turn.error && tools.carriedOut === 0 && !tools.finished;
+}
+
+/** One attempt at the walk's turn: a fresh session (a fresh engine process,
+ *  which is what re-rolls the MCP startup race) with its own tools. */
+async function runAttempt(
+  frame: TickFrame,
+  rules: BoardWalkRules,
+  state: BoardWalkState,
+  attempt: { openIds: string[]; prompt: string; suffix: string },
+): Promise<{ turn: WalkTurnResult; tools: WalkTools }> {
+  const { w, at } = frame;
   const { settings } = rules;
-  const config = w.getConfig();
-  const snapshot = await buildCapacitySnapshot({
-    config, timezone: walkTimezone(w), now: startedAt, sessions: w.sessions(), holdingCapacity: w.holding,
-    ...(state.priorFiveHour ? { prior: state.priorFiveHour } : {}),
-    ...w.snapshot,
-  });
+  const { openIds, prompt, suffix } = attempt;
   const maxCalls = walkCallBudget(openIds.length);
   const tools = new WalkTools({
     apply: { settings, state, dispatch: w.dispatch, now: w.now, resolveLink: w.resolveLink },
@@ -325,11 +341,7 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
     maxCalls,
     persist: () => writeState(state),
   });
-  const prompt = buildPrompt({
-    settings, rules: rules.body, defaults: missingDefaultSections(rules.body, w.templateRules()), snapshot,
-    board: { open: openIds.length, inReview: listWorkItems({ status: "in_review" }).length }, maxCalls,
-  });
-  const sessionKey = `${BOARD_WALK_SESSION_KEY_PREFIX}${at}`;
+  const sessionKey = `${BOARD_WALK_SESSION_KEY_PREFIX}${at}${suffix}`;
   w.active = { sessionKey, tools };
   let turn: WalkTurnResult;
   try {
@@ -343,8 +355,32 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
     tools.close();
     w.active = null;
   }
+  return { turn, tools };
+}
+
+/** Run the walk's turn: the model goes through the board with its tools, and
+ *  the gateway carries out each decision as it is made. */
+async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWalkState, openIds: string[]): Promise<TickRecord> {
+  const { w, startedAt } = frame;
+  const { settings } = rules;
+  const config = w.getConfig();
+  const snapshot = await buildCapacitySnapshot({
+    config, timezone: walkTimezone(w), now: startedAt, sessions: w.sessions(), holdingCapacity: w.holding,
+    ...(state.priorFiveHour ? { prior: state.priorFiveHour } : {}),
+    ...w.snapshot,
+  });
+  const maxCalls = walkCallBudget(openIds.length);
+  const prompt = buildPrompt({
+    settings, rules: rules.body, defaults: missingDefaultSections(rules.body, w.templateRules()), snapshot,
+    board: { open: openIds.length, inReview: listWorkItems({ status: "in_review" }).length }, maxCalls,
+  });
+  let attempt = await runAttempt(frame, rules, state, { openIds, prompt, suffix: "" });
+  if (toolsNeverArrived(attempt.turn, attempt.tools)) {
+    logger.warn(`Board walk: the turn carried out nothing and never finished (the walk's tools may not have reached it); retrying once on a fresh turn`);
+    attempt = await runAttempt(frame, rules, state, { openIds, prompt, suffix: ":retry" });
+  }
   await recordClaudeReading(w, config, state);
-  return finish(frame, turnRecord(turn, tools));
+  return finish(frame, turnRecord(attempt.turn, attempt.tools));
 }
 
 async function evaluate(w: Walker, trigger: TickRecord["trigger"]): Promise<TickRecord> {

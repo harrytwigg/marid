@@ -538,10 +538,35 @@ describe("board walk switches and the tick log", () => {
     expect(log[0].sessionId).toBe("walk-1");
   });
 
-  it("a turn that only talks changes nothing and fails the tick, every Todo logged as not decided", async () => {
+  it("a turn whose tools never reached it is retried once, and the retry finishes the tick", async () => {
     const past = blocked("Renew the cert", { body: "not before 2026-09-30" });
-    const h = open({ reply: () => ({ sessionId: "s", reply: "I released it for you." }) });
+    // First turn carries out nothing and never finishes (the tools-never-arrived
+    // signature); the retry is a fresh turn that does the work.
+    let attempts = 0;
+    const h = open({ reply: async (turn) => {
+      attempts += 1;
+      if (attempts === 1) return { sessionId: "s1", reply: "I released it for you." };
+      await turn.tools.call("walk_decide", { id: past.id, verdict: "ready", action: "release", reason: "date passed", gates: [{ kind: "date", date: "2026-09-30", quote: "not before 2026-09-30" }] });
+      await turn.tools.call("walk_finish", { summary: "released the cert", dispatchReason: "nothing to start" });
+      return { sessionId: "s2", reply: "Done." };
+    } });
     const tick = await h.walk.tick();
+    expect(attempts).toBe(2);
+    expect(h.turns.map((turn) => turn.sessionKey)).toEqual([
+      expect.stringContaining("board-walk:"),
+      expect.stringMatching(/:retry$/),
+    ]);
+    expect(status(past.id)).toBe("backlog");
+    expect(tick.outcome).toBe("ok");
+    expect(tick.sessionId).toBe("s2");
+  });
+
+  it("a turn that only talks fails the tick, and is retried exactly once before it gives up", async () => {
+    const past = blocked("Renew the cert", { body: "not before 2026-09-30" });
+    let attempts = 0;
+    const h = open({ reply: () => { attempts += 1; return { sessionId: "s", reply: "I released it for you." }; } });
+    const tick = await h.walk.tick();
+    expect(attempts).toBe(2);
     expect(status(past.id)).toBe("blocked");
     // Most likely its tools never reached it: that must not read as a quiet, green tick.
     expect(tick.outcome).toBe("failed");
@@ -731,15 +756,19 @@ describe("board walk review round 2", () => {
     todo("Only one");
     let late: WalkTurn | undefined;
     const answers: WalkToolResult[] = [];
+    // A turn that only pages the board and never decides or finishes is the
+    // tools-never-arrived signature, so the tick retries it once: each attempt
+    // spends its own budget (23 calls for one open Todo), and the last turn is
+    // the retry's.
     const h = open({ reply: async (turn) => {
       late = turn;
       for (let i = 0; i < 24; i++) answers.push(await turn.tools.call("walk_board", {}));
       return { reply: "done" };
     } });
     await h.walk.tick();
-    // One open Todo: three calls for it and twenty to spare.
-    expect(answers.filter((answer) => answer.ok)).toHaveLength(23);
+    expect(answers.filter((answer) => answer.ok)).toHaveLength(46);
     expect(answers[23]).toEqual({ ok: false, text: "this tick's budget of 23 tool calls is spent: call nothing more. Anything not decided waits for the next tick." });
+    expect(late!.sessionKey).toMatch(/:retry$/);
     expect(await late!.tools.call("walk_board", {})).toEqual({ ok: false, text: "this tick is over; nothing more is taken from this turn" });
   });
 
