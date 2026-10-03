@@ -26,7 +26,7 @@ const NOW = Date.parse("2026-10-02T12:00:00Z");
 
 const config = {
   gateway: {},
-  engines: { default: "claude", claude: { bin: process.execPath, model: "sonnet" } },
+  engines: { default: "claude", claude: { bin: process.execPath, model: "sonnet" }, opencode: { bin: process.execPath, model: "opencode-go/deepseek-v4.1-flash" } },
   sessions: {},
   connectors: {},
   logging: {},
@@ -56,11 +56,11 @@ beforeEach(() => {
 });
 
 /** The engine the walk's turn reaches, recording what it was handed. */
-function engine(answer: (opts: EngineRunOpts) => EngineResult | Promise<EngineResult>) {
+function engine(answer: (opts: EngineRunOpts) => EngineResult | Promise<EngineResult>, name = "claude") {
   const runs: EngineRunOpts[] = [];
   return {
     runs,
-    name: "claude",
+    name,
     async run(opts: EngineRunOpts): Promise<EngineResult> {
       runs.push(opts);
       return await answer(opts);
@@ -72,7 +72,7 @@ function engine(answer: (opts: EngineRunOpts) => EngineResult | Promise<EngineRe
 }
 
 function walkWith(fake: ReturnType<typeof engine>) {
-  const manager = new m.manager.SessionManager(config, new Map([["claude", fake]]) as never, "walk-route-boot");
+  const manager = new m.manager.SessionManager(config, new Map([[fake.name, fake]]) as never, "walk-route-boot");
   return m.walk.startBoardWalk({
     getConfig: () => config,
     context: { sessionManager: manager } as never,
@@ -184,5 +184,28 @@ describe("the board walk's turn through the session layer", () => {
 
     expect(tick.outcome).toBe("failed");
     expect(tick.summary).toBe(`the model turn failed: ${reason}`);
+  });
+
+  it("runs the turn on a configured non-Claude engine (opencode), confined to its agent and the walk's own tools", async () => {
+    m.store.createWorkItem({ title: "Anything", status: "backlog", source: "human" });
+    // The runner fields on the walk's cron job override the file's default
+    // Claude runner; only an engine that can be clamped may be named.
+    fs.writeFileSync(RULES, TEMPLATE.replace("engine: claude", "engine: opencode").replace(/^model: sonnet$/m, "model: opencode-go/deepseek-v4.1-flash"));
+    let walk: ReturnType<typeof walkWith> | undefined;
+    const fake = engine(async (opts) => {
+      await walk!.turnTool(opts.sessionId!, "walk_decide", { id: m.store.listWorkItems({ status: "backlog" })[0]!.id, verdict: "ready", action: "leave", reason: "nothing to do" });
+      await walk!.turnTool(opts.sessionId!, "walk_finish", { summary: "left", dispatchReason: "none ready" });
+      return { sessionId: "oc-1", result: "" };
+    }, "opencode");
+    walk = walkWith(fake);
+    const tick = await walk.tick("manual");
+
+    expect(tick.outcome).toBe("ok");
+    const [run] = fake.runs;
+    // Routed on opencode, as the confined agent: no built-ins, only the jinn
+    // server's toolset, and none of the employee's own flags.
+    expect(run.cliFlags).toEqual(["--agent", "jinn-walk"]);
+    expect(run.model).toBe("opencode-go/deepseek-v4.1-flash");
+    expect(run.resolvedMcp).toBeDefined();
   });
 });

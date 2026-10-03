@@ -1,8 +1,9 @@
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import path from "node:path";
-import type { CronJob } from "../shared/types.js";
+import type { CronJob, JinnConfig } from "../shared/types.js";
 import { CRON_RUNS } from "../shared/paths.js";
+import { ENGINE_NAMES, getModelRegistry, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
 import { logger } from "../shared/logger.js";
 import { canonicalCronJobId, loadJobs, saveJobs } from "../cron/jobs.js";
 import { summarizeCronRun } from "../cron/run-summary.js";
@@ -38,9 +39,35 @@ function scheduleError(job: Pick<CronJob, "schedule" | "timezone">): string | nu
   return errors.length > 0 ? errors.map((entry) => entry.message).join("; ") : null;
 }
 
+/** Why a board-walk job's model cannot be stored, or null: it must belong to the
+ *  engine it is named with, the same rule a session's engine/model pair follows
+ *  (shared/models.ts). An engine with a dynamic catalog (opencode, pi) cannot
+ *  judge an id offline and is allowed through, as it is everywhere else. */
+function boardWalkModelError(engine: string, model: string, config: JinnConfig): string | null {
+  if (hasDynamicModelCatalog(engine)) return null;
+  const models = getModelRegistry(config)[engine]?.models ?? [];
+  return models.length > 0 && !models.some((entry) => entry.id === model)
+    ? `model "${model}" is not supported by engine "${engine}"`
+    : null;
+}
+
+/**
+ * Why a board-walk job's runner fields cannot be stored, or null. The walk's
+ * `engine`/`model`/`employee`/`effortLevel` are honoured for this action (the
+ * ordinary action job ignores them), so its engine must be known and its model
+ * must belong to the engine it is named with.
+ */
+function boardWalkRunnerError(job: CronJob, config: JinnConfig): string | null {
+  if (job.action !== "board-walk") return null;
+  const engine = job.engine?.trim();
+  if (engine && !isKnownEngine(engine)) return `engine must be one of ${ENGINE_NAMES.join(", ")}`;
+  const model = job.model?.trim();
+  return model ? boardWalkModelError(engine || "claude", model, config) : null;
+}
+
 /** Why `job` cannot be stored, or null. */
-function jobError(job: CronJob): string | null {
-  return scheduleError(job) ?? cronActionError(job);
+function jobError(job: CronJob, config: JinnConfig): string | null {
+  return scheduleError(job) ?? cronActionError(job) ?? boardWalkRunnerError(job, config);
 }
 
 /** Why a new job cannot join `jobs`: a built-in action runs from one job
@@ -92,7 +119,7 @@ function jobFromBody(body: any): CronJob {
   };
 }
 
-async function createJob(req: HttpRequest, res: ServerResponse): Promise<void> {
+async function createJob(req: HttpRequest, res: ServerResponse, config: JinnConfig): Promise<void> {
   const _parsed = await readJsonBody(req, res);
   if (!_parsed.ok) return;
   const body = _parsed.body as any;
@@ -111,7 +138,7 @@ async function createJob(req: HttpRequest, res: ServerResponse): Promise<void> {
     return badRequest(res, `a cron job with id "${body.id}" already exists`);
   }
   const newJob = jobFromBody(body);
-  const invalid = jobError(newJob) ?? twinError(newJob, jobs);
+  const invalid = jobError(newJob, config) ?? twinError(newJob, jobs);
   if (invalid) return badRequest(res, invalid);
   jobs.push(newJob);
   saveJobs(jobs);
@@ -119,7 +146,7 @@ async function createJob(req: HttpRequest, res: ServerResponse): Promise<void> {
   json(res, newJob, 201);
 }
 
-async function updateJob(req: HttpRequest, res: ServerResponse, id: string): Promise<void> {
+async function updateJob(req: HttpRequest, res: ServerResponse, id: string, config: JinnConfig): Promise<void> {
   const jobs = loadJobs();
   const idx = jobs.findIndex((j) => j.id === id);
   if (idx === -1) return notFound(res);
@@ -132,7 +159,7 @@ async function updateJob(req: HttpRequest, res: ServerResponse, id: string): Pro
   if ((merged.action ?? null) !== (jobs[idx].action ?? null)) {
     return badRequest(res, "a cron job's action cannot be changed; create a new job instead");
   }
-  const invalid = jobError(merged);
+  const invalid = jobError(merged, config);
   if (invalid) return badRequest(res, invalid);
   jobs[idx] = merged;
   saveJobs(jobs);
@@ -194,12 +221,12 @@ async function handleCronWrites(
 ): Promise<boolean> {
   const { method, pathname } = route;
   if (method === "POST" && pathname === "/api/cron") {
-    await createJob(req, res);
+    await createJob(req, res, context.getConfig());
     return true;
   }
   const job = matchRoute("/api/cron/:id", pathname);
   if (method === "PUT" && job) {
-    await updateJob(req, res, job.id);
+    await updateJob(req, res, job.id, context.getConfig());
     return true;
   }
   if (method === "DELETE" && job) {

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { BOARD_WALK_DEFAULTS, missingDefaultSections, parseRules, readRules, splitFrontmatter } from "../settings.js";
+import { BOARD_WALK_DEFAULTS, missingDefaultSections, parseRules, readRules, resolveSettings, splitFrontmatter, withRunnerOverrides } from "../settings.js";
 import {
   convertLegacyBlock,
   renderDispatchSection,
@@ -27,7 +27,7 @@ describe("board-walk.md settings", () => {
     const rules = parseRules(TEMPLATE);
     expect(rules.problems).toEqual([]);
     expect(rules.settings).toEqual({
-      employee: "assistant", model: "sonnet",
+      employee: "assistant", engine: "claude", model: "sonnet",
       actions: { release: true, park: true, flagStuck: true, dispatch: true, comment: true },
     });
     // The schedule is the cron job's: the shipped file carries none of it.
@@ -67,6 +67,30 @@ describe("board-walk.md settings", () => {
   it("an empty model means the employee's own", () => {
     expect(parseRules("---\nmodel: \"\"\n---\n").settings.model).toBeUndefined();
     expect(splitFrontmatter("no frontmatter here").frontmatter).toBeNull();
+  });
+});
+
+describe("the walk's runner settings", () => {
+  it("defaults to the stock Claude runner, so an install that names none is unchanged", () => {
+    expect(resolveSettings({}).settings).toEqual(BOARD_WALK_DEFAULTS);
+    // A named engine with no model gets that engine's own default, not Claude's.
+    expect(resolveSettings({ engine: "opencode" }).settings).toEqual({ ...BOARD_WALK_DEFAULTS, engine: "opencode", model: undefined });
+    expect(resolveSettings({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" }).settings)
+      .toMatchObject({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" });
+    expect(resolveSettings({ engine: "claude", effortLevel: "high" }).settings.effortLevel).toBe("high");
+  });
+
+  it("refuses an engine this build does not know, rather than falling back", () => {
+    expect(resolveSettings({ engine: "nonsense" }).problems).toEqual(['engine "nonsense" is not one of claude, codex, antigravity, grok, pi, hermes, opencode']);
+  });
+
+  it("reads the job's own runner fields over the file's, and leaves the file's where the job is silent", () => {
+    const base = resolveSettings({ employee: "assistant", engine: "claude", model: "sonnet" }).settings;
+    expect(withRunnerOverrides(base, undefined)).toEqual(base);
+    expect(withRunnerOverrides(base, { employee: "coo", engine: "opencode", model: "m", effortLevel: "low" }))
+      .toEqual({ ...base, employee: "coo", engine: "opencode", model: "m", effortLevel: "low" });
+    // A field the job leaves empty does not blank the file's value.
+    expect(withRunnerOverrides(base, { employee: "assistant", engine: "   ", model: undefined, effortLevel: "  " })).toEqual(base);
   });
 });
 

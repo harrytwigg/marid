@@ -25,7 +25,7 @@ Every installation has a cron job in `$JINN_HOME/cron/jobs.json`:
 { "id": "board-walk", "name": "Board walk", "enabled": true, "schedule": "0 * * * *", "prompt": "", "action": "board-walk" }
 ```
 
-`action: "board-walk"` makes the job run a walk tick in the gateway instead of sending a prompt to an engine. Its `prompt` is empty, and `engine`, `model`, `employee` and `delivery` are not used: who the walk's turn runs as is in `board-walk.md`.
+`action: "board-walk"` makes the job run a walk tick in the gateway instead of sending a prompt to an engine. Its `prompt` is empty and `delivery` is not used; its `employee`, `engine`, `model` and `effortLevel` are the walk's runner fields, overriding `board-walk.md` where set (see below).
 
 - **Run it now** from the Cron page, `POST /api/cron/board-walk/trigger` or `/cron run board-walk`. A run-now ticks even while the job is disabled, as for any job. `POST /api/board-walk/tick` still works too.
 - **Change when it runs** by editing the job's `schedule` (and `timezone`) the way any job's is changed: in `jobs.json` (the gateway reloads it) or with `PUT /api/cron/board-walk`. The job's timezone is also the zone the walk reads "local time" in; with none, the gateway host's.
@@ -42,8 +42,10 @@ The job is added on `jinn setup` and at gateway boot when it has never been seed
 The **frontmatter** holds the mechanical settings:
 
 ```yaml
-employee: assistant      # who the walk's turn runs as (always on Claude, with only the walk's tools)
-model: sonnet            # Claude model for that turn; empty = the employee's own, or Claude's default
+employee: assistant      # who the walk's turn runs as
+engine: claude           # the engine for that turn: claude or opencode
+model: sonnet            # model for that turn; empty = the employee's own, or the engine's default
+effortLevel: ""          # effort level for that turn; empty = the employee's own
 actions:                 # hard switches, enforced by the gateway
   release: true
   park: true
@@ -51,6 +53,8 @@ actions:                 # hard switches, enforced by the gateway
   dispatch: true
   comment: true
 ```
+
+The `board-walk` cron job may set the same four runner fields (`employee`, `engine`, `model`, `effortLevel`); where it does, its value wins over the file. Unset on both, the defaults above stand.
 
 The **body** is prose, one section per default behaviour:
 
@@ -90,7 +94,7 @@ Before the cron job, the frontmatter carried `enabled`, `schedule` and `timezone
 
 1. **Read** `board-walk.md`. Stop if it is switched off or broken.
 2. **Build the capacity snapshot** (below).
-3. **Run the walk's turn.** One turn, routed as a session to the configured employee, **always on Claude, on the gateway, with the walk's tools and nothing else**. Its only MCP server is the jinn server serving the `board-walk` toolset, in place of the company toolset and every custom server; Claude's built-in tools are switched off (`--tools ""`, `--strict-mcp-config`, and `--no-chrome`, without which the engine's Chrome integration brings its browser tools back). The employee's own engine, host and flags are set aside: Claude is the one engine whose tools can be switched off from the command line (opencode in server mode ignores those flags), and a rate-limited walk turn is never handed to a fallback engine. If Claude is not installed, or is recorded as exhausted, the whole tick is skipped without a turn, readiness included: nothing is released, parked or flagged until Claude is back, and the reason is logged. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
+3. **Run the walk's turn.** One turn, routed as a session to the configured employee on the configured engine, **on the gateway, with the walk's tools and nothing else**. Its only MCP server is the jinn server serving the `board-walk` toolset, in place of the company toolset and every custom server. The surface is clamped per engine: on Claude the built-ins are switched off (`--tools ""`, `--strict-mcp-config`, and `--no-chrome`, without which the engine's Chrome integration brings its browser tools back); on opencode, whose server mode ignores those flags, the turn runs as a purpose-built agent that denies every tool but the jinn server's (`--agent`). Only those two engines can be clamped, so only they may be named. The employee's own engine, host and flags are set aside, and a rate-limited walk turn is never handed to a fallback engine. If the walk's engine is not installed, or is recorded as exhausted, the whole tick is skipped without a turn, readiness included: nothing is released, parked or flagged until it is back, and the reason is logged. The session's key starts with `board-walk:`, and it is visible in Chats like any other session. A walk turn cut off by a gateway restart is not resumed; the next tick replaces it.
 
    The prompt carries the rules, the snapshot and how to use the tools. The board is not in it: the model reads it, one Todo at a time, through its tools.
    - `walk_board` lists the open Todos, one line each, highest priority first, with what this tick has already decided.

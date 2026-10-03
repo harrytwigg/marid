@@ -156,4 +156,21 @@ describe("a cron job that runs a built-in action", () => {
     expect(stripped.status).toBe(400);
     expect(stripped.body).toEqual({ error: "a cron job's action cannot be changed; create a new job instead" });
   });
+
+  it("honours and validates the walk's runner fields, where an ordinary action job's are not used", async () => {
+    // The runner fields are stored on the walk's job; the accepted one answers
+    // with them, and an unknown engine or a model that is not the engine's is
+    // refused on save, the same rule a session's engine/model pair follows.
+    const valid = await call("POST", "/api/cron", { ...WALK, id: "walk-codex", engine: "codex", model: "gpt-5.6-sol" });
+    expect(valid.status).toBe(201);
+    expect(valid.body).toMatchObject({ engine: "codex", model: "gpt-5.6-sol" });
+
+    const badEngine = await call("POST", "/api/cron", { ...WALK, id: "walk-2", engine: "self-destruct" });
+    expect(badEngine.status).toBe(400);
+    expect(badEngine.body).toEqual({ error: "engine must be one of claude, codex, antigravity, grok, pi, hermes, opencode" });
+
+    const badModel = await call("PUT", "/api/cron/walk-codex", { model: "not-a-codex-model" });
+    expect(badModel.status).toBe(400);
+    expect(badModel.body).toEqual({ error: 'model "not-a-codex-model" is not supported by engine "codex"' });
+  });
 });

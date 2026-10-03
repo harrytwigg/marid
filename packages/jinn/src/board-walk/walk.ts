@@ -8,7 +8,7 @@ import type { ApiContext } from "../gateway/api.js";
 import { loadJobs } from "../cron/jobs.js";
 import { armedActionJob } from "../cron/scheduler.js";
 import { validateCronSchedule } from "../cron/validation.js";
-import { readRules, boardWalkPath, hostTimezone, missingDefaultSections, readTemplateRules, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
+import { readRules, boardWalkPath, hostTimezone, missingDefaultSections, readTemplateRules, withRunnerOverrides, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
 import { findBoardWalkJob } from "./job.js";
 import { buildCapacitySnapshot, claudeFiveHour, type SnapshotDeps } from "./snapshot.js";
 import { listOpenTodos } from "./board.js";
@@ -386,7 +386,7 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
 async function evaluate(w: Walker, trigger: TickRecord["trigger"]): Promise<TickRecord> {
   const startedAt = w.now();
   const frame: TickFrame = { w, trigger, startedAt, at: new Date(startedAt).toISOString() };
-  const rules = readRules(w.rulesFile);
+  const rules = resolvedRules(w);
   if (!rules.exists || rules.problems.length > 0) {
     const reason = rules.problems.join("; ");
     return finish(frame, { outcome: "invalid-rules", summary: reason, entries: [{ kind: "error", reason }] });
@@ -406,6 +406,14 @@ async function evaluate(w: Walker, trigger: TickRecord["trigger"]): Promise<Tick
 function jobStatus(job: CronJob | undefined): BoardWalkJobStatus | null {
   if (!job) return null;
   return { id: job.id, name: job.name, enabled: job.enabled, schedule: job.schedule, timezone: job.timezone?.trim() || hostTimezone() };
+}
+
+/** The rules file's settings with the cron job's runner fields on top: the job
+ *  (`walkJob`) is the object the cron controls edit, so where it sets one it
+ *  wins over the file; absent on both, the shipped defaults stand. */
+function resolvedRules(w: Walker): BoardWalkRules {
+  const base = readRules(w.rulesFile);
+  return { ...base, settings: withRunnerOverrides(base.settings, walkJob(w)) };
 }
 
 export function startBoardWalk(deps: BoardWalkDeps): BoardWalk {
@@ -448,7 +456,7 @@ export function startBoardWalk(deps: BoardWalkDeps): BoardWalk {
     tick,
     turnTool,
     status: () => {
-      const rules = readRules(w.rulesFile);
+      const rules = resolvedRules(w);
       const last = readTicks(1)[0];
       const armed = w.armedJob();
       return {

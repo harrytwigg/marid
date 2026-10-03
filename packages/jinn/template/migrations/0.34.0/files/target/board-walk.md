@@ -5,11 +5,22 @@
 # When the walk runs is the cron job "board-walk" (Cron, or cron/jobs.json):
 # run it now, change its schedule or switch it off there. Its timezone is the
 # one "local time" below is read in (none = the gateway host's zone).
-# Who the walk's one turn per tick runs as. It always runs on Claude, on the
-# gateway, with only the walk's own tools: the walk decides and the gateway acts.
+# Who the walk's one turn per tick runs as, and on what: the employee, the
+# engine, the model and (optionally) the effort level. It runs on the gateway
+# with only the walk's own tools — the walk decides and the gateway acts — so
+# only an engine whose tools the gateway can clamp to the walk's own may be
+# named (claude or opencode). The engine here is just the runner: the Dispatch
+# rules below still measure Claude's allowance, which is what a start spends.
+# The cron job "board-walk" (Cron, or cron/jobs.json) may set any of these four
+# fields; where it does, its value wins over this file.
 employee: assistant
-# Claude model for that turn. Empty = the employee's own, or Claude's default.
+# The engine for that turn: claude or opencode.
+engine: claude
+# Model for that turn. Empty = the employee's own, or the engine's default. It
+# must belong to the engine above.
 model: sonnet
+# Effort level for that turn. Empty = the employee's own.
+effortLevel: ""
 # Hard switches. false means the gateway refuses that action whatever the prose
 # below says. The prose can narrow what a switch allows; it cannot widen it.
 actions:
