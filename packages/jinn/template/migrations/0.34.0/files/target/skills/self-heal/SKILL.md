@@ -43,7 +43,7 @@ If the engine command is not found, inform the user that the engine is not insta
 ### 4. Check Session Database
 
 Look at the session registry for stuck sessions:
-- Read the session registry at `~/.jinn/sessions/registry.db` (SQLite)
+- Read the session registry at `~/.jinn/sessions/registry.db` (SQLite) **on the gateway host only**, or through the gateway API. Never open it from another host through a mounted copy of the home (sshfs, NFS, SMB) or from a remote session's staged home: the registry runs in WAL mode, and a remote open corrupts the live database even when it is read-only.
 - Look for sessions with status `running` that have not been updated recently (more than 30 minutes old)
 - These may be stuck and need to be reset
 

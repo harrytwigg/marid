@@ -47,6 +47,16 @@ describe("mapAttachmentsForRemote", () => {
     expect(fs.statSync(onGateway).mode & 0o777).toBe(0o600);
   });
 
+  it("names a linked entry of sessions/ by its path, but copies a database file the farm leaves out", () => {
+    const record = write(home, "sessions/restart-interrupted.jsonl", "{}");
+    expect(mapAttachmentsForRemote([record], opts())).toEqual([`${SESSION_HOME}/sessions/restart-interrupted.jsonl`]);
+    for (const rel of ["sessions/registry.db", "sessions/backups/registry.db.pre-x", "workflows/workflows.db-wal"]) {
+      const file = write(home, rel, `bytes of ${rel}`);
+      const [mapped] = mapAttachmentsForRemote([file], opts());
+      expect(mapped.startsWith(`${SESSION_HOME}/${remoteAttachmentsDir("sess-1")}/`)).toBe(true);
+    }
+  });
+
   it("copies a file outside the gateway home, and does so once for identical bytes", () => {
     const file = write(elsewhere, "report.pdf", "pdf");
     const first = mapAttachmentsForRemote([file], opts());

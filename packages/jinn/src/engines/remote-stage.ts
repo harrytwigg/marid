@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "../shared/logger.js";
 import { JINN_HOME } from "../shared/paths.js";
+import { FARM_FILTERED_DIRS, REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
 import { parseVersionOutput } from "../shared/brand.js";
 import { getPackageVersion } from "../shared/version.js";
 import { buildSessionSettings } from "../shared/claude-settings.js";
@@ -974,17 +975,90 @@ chmod 700 "$root" "$root/sessions" "$home"
 # Reap dead session stages. Every spawn rewrites its own session's gateway.json,
 # so a live session's directory is never older than its last turn.
 find "$root/sessions" -mindepth 1 -maxdepth 1 -type d -mtime +"$ttl" -exec rm -rf {} + 2>/dev/null || true
+# One rebuild of a session's home at a time. Two can be started together, and
+# the cleanup below deletes links while the other run's ln is creating them: a
+# run fails on EEXIST/ENOENT or leaves an entry unlinked. mkdir is the lock
+# because it is atomic everywhere (flock is not on every host); the holder
+# records when it took it. A rebuild takes well under a second, so a lock held
+# for 20s belongs to a run that died and is broken (a lock with no time yet is
+# judged by the directory's age instead). Waiters give up after about 40s,
+# inside the gateway's 60s control timeout, so the error is seen. Two waiters
+# breaking the same stale lock at once can both proceed: no worse than before
+# the lock, and it needs a dead run to begin with.
+lock="$home.farm-lock"
+tries=0
+until mkdir "$lock" 2>/dev/null; do
+  took=$(cat "$lock/taken" 2>/dev/null || true)
+  case "$took" in ''|*[!0-9]*) took= ;; esac
+  if { [ -n "$took" ] && [ $(( $(date +%s) - took )) -gt 20 ]; } \\
+    || [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+    rm -f "$lock/taken"
+    rmdir "$lock" 2>/dev/null || true
+    continue
+  fi
+  tries=$((tries + 1))
+  if [ "$tries" -ge 800 ]; then
+    echo "remote stage: another rebuild of $home has held $lock for too long" >&2
+    exit 1
+  fi
+  sleep 0.05 2>/dev/null || sleep 1
+done
+date +%s > "$lock/taken"
+trap 'rm -f "$lock/taken"; rmdir "$lock" 2>/dev/null || true' EXIT
+trap 'exit 1' HUP INT TERM
 # Drop every symlink first so an entry removed from the gateway's home does not
-# linger here as a dangling one. gateway.json and tmp/ are real, not symlinks,
-# so they are untouched by this.
+# linger here as a dangling one. gateway.json, tmp/ and the filtered directories
+# below are real, not symlinks, so they are untouched by this. (A stage built
+# before the filtered directories existed linked sessions/ whole; that link goes
+# here, and the directory is rebuilt as a real one below.)
 find "$home" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
+# Marks this as a remote session's stage, so Marid code started here refuses to
+# start a gateway or open a database (shared/local-db-guard.ts).
+printf 'remote session stage: linked entries lead to the gateway home\\n' > "$home/${REMOTE_STAGE_MARKER}"
 for entry in "$mount"/* "$mount"/.[!.]*; do
   [ -e "$entry" ] || continue
   name=$(basename "$entry")
   case "$name" in
-    gateway.json|tmp) continue ;;
+    gateway.json|tmp|${REMOTE_STAGE_MARKER}|${FARM_FILTERED_DIRS.join("|")}) continue ;;
   esac
   ln -sfn "$entry" "$home/$name"
+done
+# The directories that hold the gateway's SQLite databases are real directories
+# here, linked entry by entry WITHOUT the database files. A WAL database opened
+# from this host through sshfs is corrupted by the open itself, read-only or
+# not: this host's locks are invisible to the gateway. Each database the gateway
+# has is a DIRECTORY here, so a stray open fails instead of creating an empty
+# local database that remote code would read as real. backups/ holds database
+# snapshots and is left out too. Keep the patterns in step with
+# shared/remote-farm.ts.
+for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
+  [ -d "$mount/$dir" ] || continue
+  # Never work THROUGH a link here: if a leftover link to the gateway's own
+  # directory survived the cleanup above, chmod and ln would land on the
+  # gateway. Remove it, and refuse outright if a real directory is not what
+  # we end up with.
+  [ ! -L "$home/$dir" ] || rm -f "$home/$dir"
+  mkdir -p "$home/$dir"
+  if [ -L "$home/$dir" ] || [ ! -d "$home/$dir" ]; then
+    echo "remote stage: $home/$dir is not a real directory; refusing to stage it" >&2
+    exit 1
+  fi
+  chmod 700 "$home/$dir"
+  find "$home/$dir" -mindepth 1 -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
+  find "$home/$dir" -mindepth 1 -maxdepth 1 -type f \\( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.db-journal' \\) -exec rm -f {} + 2>/dev/null || true
+  for entry in "$mount/$dir"/* "$mount/$dir"/.[!.]*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    name=$(basename "$entry")
+    case "$name" in
+      backups|*.db|*.db-wal|*.db-shm|*.db-journal) continue ;;
+    esac
+    ln -sfn "$entry" "$home/$dir/$name"
+  done
+  for db in "$mount/$dir"/*.db; do
+    [ -e "$db" ] || continue
+    name=$(basename "$db")
+    mkdir -p "$home/$dir/$name"
+  done
 done
 # The company's operating rules, where the SESSION will actually look for them.
 # A local employee gets these free: its cwd IS the gateway home, so Claude Code
@@ -999,7 +1073,11 @@ done
 if [ -n "$cwd" ] && [ -d "$mount" ] && [ -f "$mount/CLAUDE.md" ]; then
   mkdir -p "$cwd"
   if [ ! -e "$cwd/.git" ] && { [ ! -e "$cwd/CLAUDE.md" ] || [ -L "$cwd/CLAUDE.md" ]; }; then
-    ln -sfn "$mount/CLAUDE.md" "$cwd/CLAUDE.md"
+    # Sessions sharing this cwd hold different locks, so their links can race;
+    # the result is the same link either way.
+    ln -sfn "$mount/CLAUDE.md" "$cwd/CLAUDE.md" 2>/dev/null \\
+      || [ "$(readlink "$cwd/CLAUDE.md" 2>/dev/null)" = "$mount/CLAUDE.md" ] \\
+      || ln -sfn "$mount/CLAUDE.md" "$cwd/CLAUDE.md"
     printf 'claudemd=linked\n'
   else
     printf 'claudemd=skipped\n'
@@ -1019,11 +1097,19 @@ done
  * skills rather than copies. Also reaps dead session stages and reports which
  * per-host assets are genuinely present.
  *
- * Two entries are deliberately excluded and staged for real instead:
+ * Some entries are deliberately excluded and staged for real instead:
  *  - `gateway.json`, because the mounted one names the gateway's own port,
  *    which on this host would point the hook relay at the wrong process.
  *  - `tmp/`, because per-session settings and MCP configs churn there and a
  *    network filesystem is the wrong place for it.
+ *  - `sessions/` and `workflows/` (FARM_FILTERED_DIRS), which are real
+ *    directories linking every entry except the SQLite databases, their
+ *    sidecars and `backups/`. A WAL database opened from this host through
+ *    the mount is corrupted by the open, so each database is a directory
+ *    here and any open of it fails (shared/remote-farm.ts).
+ *  - `.jinn-remote-stage` (REMOTE_STAGE_MARKER), a real file that tells Marid
+ *    code started inside the session that this home is not one to start a
+ *    gateway or open a database from.
  *
  * Rebuilt every spawn rather than once: that is what keeps the farm honest when
  * the gateway's home gains a new top-level directory.

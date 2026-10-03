@@ -139,7 +139,7 @@
       "path": "skills/self-heal/SKILL.md",
       "operation": "modify",
       "baseSha256": "33b6f6b1f3eb5990837640409a20f9f13bd79c771e5a25ecb850902afa223f96",
-      "targetSha256": "2b786391bc85c9fcecfc434238146a1ac2b6371e1a6bf60a25ecc987b0329dca",
+      "targetSha256": "3ffea880c3c8ea70015a48444c24505805ec95ddeaeacffba0c335f60ad996a4",
       "basePayload": "files/base/skills/self-heal/SKILL.md",
       "targetPayload": "files/target/skills/self-heal/SKILL.md"
     },

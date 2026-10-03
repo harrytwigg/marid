@@ -41,6 +41,9 @@ vi.mock("node:dgram", () => {
 });
 
 import { REMOTE_ENGINE_NAMES } from "../../shared/models.js";
+import Database from "better-sqlite3";
+import { REMOTE_STAGE_MARKER } from "../../shared/remote-farm.js";
+import { isRemoteStagedHome } from "../../shared/local-db-guard.js";
 import { shq, buildSshSpawnArgs, sendWakeOnLan, FACTS_SCRIPT, FARM_SCRIPT, REMOTE_KILL_SCRIPT, buildTrustSeedCommand, trustSeedKey, runLocalWakeCommand, requireRemoteEngineBin, assertRemoteVersion, remoteSessionHome, remoteSessionBinDir, remoteEnginePidFile, buildSessionEnvFile } from "../remote-stage.js";
 import { spawn } from "node:child_process";
 import { remotePiExtensionSource } from "../pi-mcp.js";
@@ -630,6 +633,193 @@ describe.skipIf(isWindows)("FARM_SCRIPT — run for real against a fixture mount
     runFarm("sess-a");
     expect(fs.existsSync(path.join(home, "org"))).toBe(false);
     expect(fs.lstatSync(path.join(home, "knowledge")).isSymbolicLink()).toBe(true);
+  });
+
+  describe("the gateway's SQLite databases", () => {
+    /** The gateway's sessions/ and workflows/, as the mount exposes them. */
+    function seedDatabases(): void {
+      const sessions = path.join(mount, "sessions");
+      fs.mkdirSync(path.join(sessions, "backups"), { recursive: true });
+      fs.mkdirSync(path.join(sessions, "sess-x", "pi-session"), { recursive: true });
+      const live = new Database(path.join(sessions, "registry.db"));
+      live.pragma("journal_mode = WAL");
+      live.exec("create table t(x); insert into t values (1)");
+      live.close();
+      fs.writeFileSync(path.join(sessions, "registry.db-wal"), "");
+      fs.writeFileSync(path.join(sessions, "registry.db-shm"), "");
+      fs.writeFileSync(path.join(sessions, "registry.db.version"), "0.33.3\n");
+      fs.writeFileSync(path.join(sessions, "restart-interrupted.jsonl"), "{}\n");
+      fs.writeFileSync(path.join(sessions, "backups", "registry.db.pre-x"), "snapshot");
+      fs.mkdirSync(path.join(mount, "workflows"));
+      fs.writeFileSync(path.join(mount, "workflows", "workflows.db"), "");
+      fs.writeFileSync(path.join(mount, "workflows", "workflows.db-wal"), "");
+    }
+    const homeOf = (id: string) => path.join(root, "sessions", id);
+
+    it("stages sessions/ as a real directory that links everything except the databases", () => {
+      seedDatabases();
+      runFarm("sess-a");
+      const sessions = path.join(homeOf("sess-a"), "sessions");
+      expect(fs.lstatSync(sessions).isDirectory()).toBe(true);
+      expect(fs.lstatSync(sessions).isSymbolicLink()).toBe(false);
+      for (const name of ["registry.db.version", "restart-interrupted.jsonl", "sess-x"]) {
+        expect(fs.lstatSync(path.join(sessions, name)).isSymbolicLink()).toBe(true);
+      }
+      for (const name of ["registry.db-wal", "registry.db-shm", "backups"]) {
+        expect(fs.existsSync(path.join(sessions, name))).toBe(false);
+      }
+      // Each database is a directory, so it cannot be opened from here.
+      expect(fs.lstatSync(path.join(sessions, "registry.db")).isDirectory()).toBe(true);
+      const workflows = path.join(homeOf("sess-a"), "workflows");
+      expect(fs.lstatSync(workflows).isSymbolicLink()).toBe(false);
+      expect(fs.lstatSync(path.join(workflows, "workflows.db")).isDirectory()).toBe(true);
+      expect(fs.existsSync(path.join(workflows, "workflows.db-wal"))).toBe(false);
+    });
+
+    it("writes to linked entries still reach the gateway", () => {
+      seedDatabases();
+      runFarm("sess-a");
+      fs.appendFileSync(path.join(homeOf("sess-a"), "sessions", "restart-interrupted.jsonl"), "{\"x\":1}\n");
+      expect(fs.readFileSync(path.join(mount, "sessions", "restart-interrupted.jsonl"), "utf8")).toContain("\"x\":1");
+    });
+
+    it("makes a stray open fail instead of creating an empty local database, and touches nothing on the gateway", () => {
+      seedDatabases();
+      runFarm("sess-a");
+      const staged = path.join(homeOf("sess-a"), "sessions", "registry.db");
+      const before = fs.readdirSync(path.join(mount, "sessions")).sort();
+      expect(() => new Database(staged)).toThrow();
+      expect(() => new Database(staged, { readonly: true })).toThrow();
+      expect(fs.lstatSync(staged).isDirectory()).toBe(true);
+      expect(fs.readdirSync(staged)).toEqual([]);
+      expect(fs.readdirSync(path.join(mount, "sessions")).sort()).toEqual(before);
+    });
+
+    it("migrates a stage that linked sessions/ whole", () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(home, { recursive: true });
+      fs.symlinkSync(path.join(mount, "sessions"), path.join(home, "sessions"));
+      runFarm("sess-a");
+      expect(fs.lstatSync(path.join(home, "sessions")).isSymbolicLink()).toBe(false);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+      // The gateway's real directory was not touched through the old link.
+      expect(fs.lstatSync(path.join(mount, "sessions", "registry.db")).isFile()).toBe(true);
+    });
+
+    it("refuses a leftover link even when the generic cleanup did not remove it", () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(home, { recursive: true });
+      fs.symlinkSync(path.join(mount, "sessions"), path.join(home, "sessions"));
+      const modeBefore = fs.statSync(path.join(mount, "sessions")).mode;
+      // The same script with its top-level link cleanup removed.
+      const withoutCleanup = FARM_SCRIPT.replace(/^find "\$home" -maxdepth 1 -type l .*$/m, ":");
+      expect(withoutCleanup).not.toBe(FARM_SCRIPT);
+      execFileSync("sh", ["-s", mount, root, home, "7"], { input: withoutCleanup, encoding: "utf8" });
+      expect(fs.lstatSync(path.join(home, "sessions")).isSymbolicLink()).toBe(false);
+      expect(fs.statSync(path.join(mount, "sessions")).mode).toBe(modeBefore);
+      for (const name of fs.readdirSync(path.join(mount, "sessions"))) {
+        expect(fs.lstatSync(path.join(mount, "sessions", name)).isSymbolicLink()).toBe(false);
+      }
+    });
+
+    it("prunes child links the gateway no longer has, and clears real database files left in the stage", () => {
+      seedDatabases();
+      runFarm("sess-a");
+      const sessions = path.join(homeOf("sess-a"), "sessions");
+      fs.rmSync(path.join(mount, "sessions", "sess-x"), { recursive: true });
+      fs.writeFileSync(path.join(sessions, "registry.db-wal"), "stray");
+      fs.writeFileSync(path.join(sessions, "other.db"), "stray");
+      runFarm("sess-a");
+      expect(fs.existsSync(path.join(sessions, "sess-x"))).toBe(false);
+      expect(fs.existsSync(path.join(sessions, "registry.db-wal"))).toBe(false);
+      expect(fs.existsSync(path.join(sessions, "other.db"))).toBe(false);
+      expect(fs.lstatSync(path.join(sessions, "restart-interrupted.jsonl")).isSymbolicLink()).toBe(true);
+    });
+
+    it("replaces a real database file left at a database name with the directory sentinel", () => {
+      seedDatabases();
+      runFarm("sess-a");
+      const staged = path.join(homeOf("sess-a"), "sessions", "registry.db");
+      fs.rmdirSync(staged);
+      fs.writeFileSync(staged, "");
+      runFarm("sess-a");
+      expect(fs.lstatSync(staged).isDirectory()).toBe(true);
+    });
+
+    it("does not invent a workflows/ the gateway does not have", () => {
+      runFarm("sess-a");
+      expect(fs.existsSync(path.join(homeOf("sess-a"), "workflows"))).toBe(false);
+      expect(fs.existsSync(path.join(homeOf("sess-a"), "sessions"))).toBe(false);
+    });
+
+    it("survives concurrent rebuilds of the same session (no mkdir race under set -eu)", async () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      const once = () => new Promise<number>((resolve) => {
+        const child = spawn("sh", ["-s", mount, root, home, "7"]);
+        child.stdin.end(FARM_SCRIPT);
+        child.on("close", (code) => resolve(code ?? 1));
+      });
+      const codes = await Promise.all(Array.from({ length: 40 }, once));
+      expect(codes.filter((code) => code !== 0)).toEqual([]);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+      // Serialized, not merely tolerated: every entry ends up linked, and the
+      // lock is released.
+      for (const rel of ["knowledge", "org", "sessions/registry.db.version", "sessions/restart-interrupted.jsonl", "sessions/sess-x"]) {
+        expect(fs.lstatSync(path.join(home, rel)).isSymbolicLink()).toBe(true);
+      }
+      expect(fs.existsSync(`${home}.farm-lock`)).toBe(false);
+    }, 60000);
+
+    it("breaks a stale rebuild lock left by a run that died", () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(`${home}.farm-lock`, { recursive: true });
+      const old = new Date(Date.now() - 10 * 60 * 1000);
+      fs.utimesSync(`${home}.farm-lock`, old, old);
+      runFarm("sess-a");
+      expect(fs.existsSync(`${home}.farm-lock`)).toBe(false);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+    });
+
+    it("breaks a lock whose holder took it more than 20 seconds ago, well inside the wait budget", () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(`${home}.farm-lock`, { recursive: true });
+      fs.writeFileSync(path.join(`${home}.farm-lock`, "taken"), `${Math.floor(Date.now() / 1000) - 30}\n`);
+      const started = Date.now();
+      runFarm("sess-a");
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(fs.existsSync(`${home}.farm-lock`)).toBe(false);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+    });
+
+    it("waits for a live rebuild lock instead of racing it", async () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(`${home}.farm-lock`, { recursive: true });
+      fs.writeFileSync(path.join(`${home}.farm-lock`, "taken"), `${Math.floor(Date.now() / 1000)}\n`);
+      const child = spawn("sh", ["-s", mount, root, home, "7"]);
+      child.stdin.end(FARM_SCRIPT);
+      const done = new Promise<number>((resolve) => child.on("close", (code) => resolve(code ?? 1)));
+      await new Promise((r) => setTimeout(r, 400));
+      // Still waiting: it has not staged anything behind the holder's back.
+      expect(fs.existsSync(path.join(home, "sessions"))).toBe(false);
+      fs.rmSync(`${home}.farm-lock`, { recursive: true });
+      expect(await done).toBe(0);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+    }, 30000);
+
+    it("marks the stage with a real marker file, never a link from the mount", () => {
+      fs.writeFileSync(path.join(mount, REMOTE_STAGE_MARKER), "should not be linked");
+      runFarm("sess-a");
+      const marker = path.join(homeOf("sess-a"), REMOTE_STAGE_MARKER);
+      expect(fs.lstatSync(marker).isFile()).toBe(true);
+      expect(fs.readFileSync(marker, "utf8")).toContain("remote session stage");
+      expect(isRemoteStagedHome(homeOf("sess-a"))).toBe(true);
+    });
   });
 
   it("reaps dead session stages but never the one being prepared", () => {

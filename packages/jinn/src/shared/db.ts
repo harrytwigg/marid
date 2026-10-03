@@ -4,7 +4,8 @@
 import path from 'node:path';
 import { mkdirSync, existsSync, statSync, statfsSync, copyFileSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import Database from 'better-sqlite3';
-import { SESSIONS_DB } from './paths.js';
+import { JINN_HOME, SESSIONS_DB } from './paths.js';
+import { assertLocalDatabasePath } from './local-db-guard.js';
 import { getPackageVersion } from './version.js';
 import { logger } from './logger.js';
 import { migrateWorkItemsSchema, preflightWorkItemsDatabase, UNSUPPORTED_PRERELEASE_TODO_DATA, WORK_ITEMS_BACKUP_SUFFIX } from '../work-items/migrate.js';
@@ -198,6 +199,10 @@ function dropExperimentsSchema(database: Database.Database): void {
 
 export function initDb(): Database.Database {
   if (db) return db;
+  // Before anything touches the file: never open the registry from a remote
+  // session's staged home or across a FUSE/network mount. A WAL database opened
+  // from another host is corrupted by the open itself (shared/local-db-guard.ts).
+  assertLocalDatabasePath(SESSIONS_DB, { home: JINN_HOME });
   // Fail fast on a near-full disk before any write — running out of space during
   // a migration is the classic corruption trigger.
   preflightSessionDiskSpace();
