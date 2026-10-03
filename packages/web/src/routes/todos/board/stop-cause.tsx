@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Pause } from "lucide-react"
 import type { WorkItemCompactWire } from "@/lib/api"
-import { isParked } from "@/lib/parked"
+import { isParked, type TodoStopCauseWire } from "@/lib/parked"
 import { formatCountdown } from "../util"
 
 /* PLA-157 — how a stopped card says why it stopped.
@@ -52,8 +52,10 @@ function useCountdown(parkedUntil: string | undefined): string {
 
 /** Above the title, on desktop and on the phone: what this card is waiting for.
  *  The caller supplies its own placement, because the board card wants this
- *  hoisted out of its wrapped phone row and a list row does not. */
-export function StopCauseLead({ item, className = "" }: { item: WorkItemCompactWire; className?: string }) {
+ *  hoisted out of its wrapped phone row and a list row does not. The task page's
+ *  banner reads the same lead from the detail payload, so it takes only the
+ *  fields it renders. */
+export function StopCauseLead({ item, className = "" }: { item: TodoStopCauseWire & { id: string }; className?: string }) {
   const left = useCountdown(item.parkedUntil)
   const hint = item.unblockHint
   if (!left && !hint) return null

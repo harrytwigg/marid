@@ -119,6 +119,10 @@ export function fullWorkItemPayload(item: WorkItem): Record<string, unknown> {
     labels: getWorkItemLabels(item.id),
     // ICI-1357 (additive): whether this Todo sits on the operator's Home board.
     kept: isWorkItemKept(initDb(), item.id),
+    // Additive: the same stop cause and attention lane the compact row carries,
+    // so the task page can say why a blocked Todo stopped as the card does.
+    attentionLane: attentionLaneOf(item),
+    ...stopCause(item),
     // ICI-728 (additive): the attempt ledger, oldest first. Status says where the
     // Todo is; runs say what each attempt at it actually did.
     runs: listWorkItemRuns(item.id),

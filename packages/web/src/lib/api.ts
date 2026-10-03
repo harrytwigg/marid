@@ -499,8 +499,10 @@ export interface DepartmentSummaryWire {
   selectable?: boolean
 }
 
-/** The GET /api/work-items/:id payload: full row + live-derived spend + audit. */
-export interface WorkItemDetailWire {
+/** The GET /api/work-items/:id payload: full row + live-derived spend + audit.
+ *  The stop cause and attention lane sit beside the row, as `kept` does, and
+ *  match what the compact row carries for the same Todo. */
+export interface WorkItemDetailWire extends TodoStopCauseWire {
   workItem: WorkItemFullWire
   kept?: boolean
   spendUsd: number
