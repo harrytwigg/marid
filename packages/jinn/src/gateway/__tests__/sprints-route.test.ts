@@ -138,6 +138,9 @@ describe("sprint registry routes", () => {
     expect(duplicate.status).toBe(409);
     const noName = await call("POST", "/api/sprints", { goal: "x" }, operatorHeaders);
     expect(noName.status).toBe(400);
+    const impossible = await call("POST", "/api/sprints", { name: "Impossible", startsAt: "2026-13-45" }, operatorHeaders);
+    expect(impossible.status).toBe(400);
+    expect(impossible.body.error).toMatch(/calendar date/);
 
     const listed = await call("GET", "/api/sprints");
     expect(listed.status).toBe(200);
@@ -177,6 +180,8 @@ describe("moving Todos between sprints", () => {
     expect(into.status).toBe(200);
     expect(into.body.sprint).toMatchObject({ id: one.id, name: "Board Sprint 1" });
     expect(emittedEvents.some((e) => e.event === "company:changed" && e.payload.id === todo.id && e.payload.action === "sprint-updated")).toBe(true);
+    // Rows embed their sprint, so a move also tells other tabs a sprint changed.
+    expect(emittedEvents.some((e) => e.event === "company:changed" && e.payload.entity === "sprint" && e.payload.action === "moved")).toBe(true);
 
     const inOne = await call("GET", `/api/work-items?sprint=${one.id}&rootsOnly=true`);
     expect((inOne.body.workItems as Array<{ id: string; sprint: unknown }>).map((w) => w.id)).toEqual([todo.id]);
@@ -231,6 +236,7 @@ describe("moving Todos between sprints", () => {
     emittedEvents.length = 0;
     const result = await call("POST", `/api/sprints/${current.id}/complete`, { carryTo: next.id, startNext: true }, operatorHeaders);
     expect(result.status).toBe(200);
+    expect(emittedEvents.some((e) => e.payload.entity === "sprint" && e.payload.action === "completed" && e.payload.id === current.id)).toBe(true);
     expect(result.body).toMatchObject({ carried: [open.id], carriedTo: { id: next.id, status: "active" } });
     expect(emittedEvents.filter((e) => e.payload.action === "sprint-updated").map((e) => e.payload.id)).toEqual([open.id]);
 

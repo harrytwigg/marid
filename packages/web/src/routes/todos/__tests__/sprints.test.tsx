@@ -125,6 +125,19 @@ describe("the sprint planner", () => {
     await waitFor(() => expect(sprintApi.completeSprint).toHaveBeenCalledWith(ACTIVE.id, { carryTo: "spr_ffffffffffff", startNext: false }))
   })
 
+  it("reuses a planned sprint of that name when a new-sprint carry is retried", async () => {
+    const created = sprint({ id: "spr_ffffffffffff", name: "Hotfix week" })
+    sprintApi.listSprints.mockResolvedValue({ sprints: [ACTIVE, created] })
+    sprintApi.completeSprint.mockResolvedValue({ sprint: { ...ACTIVE, status: "closed" }, carried: [], carriedTo: { ...created, status: "active" } })
+    renderDialog({ completing: ACTIVE.id })
+    await screen.findByTestId("sprint-complete-panel")
+    fireEvent.click(screen.getByRole("radio", { name: /A new sprint/ }))
+    fireEvent.change(screen.getByTestId("sprint-carry-new-name"), { target: { value: "hotfix WEEK" } })
+    fireEvent.click(screen.getByTestId("sprint-complete-confirm"))
+    await waitFor(() => expect(sprintApi.completeSprint).toHaveBeenCalledWith(ACTIVE.id, { carryTo: created.id, startNext: true }))
+    expect(sprintApi.createSprint).not.toHaveBeenCalled()
+  })
+
   it("shows the gateway's refusal instead of closing", async () => {
     sprintApi.completeSprint.mockRejectedValue(new Error("only the active sprint can be completed"))
     renderDialog({ completing: ACTIVE.id })

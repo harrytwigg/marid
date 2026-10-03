@@ -46,6 +46,8 @@ function todoFilters(args: ToolArgs): TodoFilters {
   if (source) filters.source = source as TodoFilters["source"]
   const label = text(args.label)
   if (label) filters.label = label
+  const sprint = text(args.sprint)
+  if (sprint) filters.sprint = sprint
   const due = text(args.due)
   if (due) filters.due = due as TodoFilters["due"]
   const q = text(args.q)

@@ -85,6 +85,11 @@ describe("creating and moving between sprints", () => {
     expect(() => sprints.createSprint({ name: "   " })).toThrow(/must not be empty/);
     expect(() => sprints.createSprint({ name: "Bad dates", startsAt: "2026-10-10", endsAt: "2026-10-01" })).toThrow(/on or before/);
     expect(() => sprints.createSprint({ name: "Bad day", startsAt: "2026-02-30" })).toThrow(/calendar date/);
+    // Shape-valid but impossible: an Invalid Date, refused as a SprintError (a 400), never a RangeError.
+    expect(() => sprints.createSprint({ name: "Bad month", startsAt: "2026-13-45" })).toThrow(sprints.SprintError);
+    expect(() => sprints.createSprint({ name: "Bad month", endsAt: "2026-13-45" })).toThrow(/calendar date/);
+    // A name shaped like an id would match two sprints in the filter.
+    expect(() => sprints.createSprint({ name: "spr_0123456789ab" })).toThrow(/looks like a sprint id/);
   });
 
   it("keeps sub-tasks with their root: the filter follows the root and a sub-task cannot be moved alone", () => {
@@ -172,6 +177,40 @@ describe("the sprint lifecycle", () => {
     expect(result).toMatchObject({ carried: [todo.id], carriedTo: null });
     expect(sprints.getWorkItemSprint(todo.id)).toBeNull();
     expect(() => sprints.completeSprint(running.id, { carryTo: null }, "operator")).toThrow(/only the active sprint/);
+  });
+
+  it("keeps a closed sprint's finished Todos, and lets a reopened one leave", () => {
+    closeActive();
+    const old = sprints.createSprint({ name: "Record Keeper" });
+    const next = sprints.createSprint({ name: "Record Next" });
+    sprints.startSprint(old.id);
+    const shipped = store.createWorkItem({ title: "shipped" });
+    const dropped = store.createWorkItem({ title: "dropped" });
+    const reopened = store.createWorkItem({ title: "reopened later" });
+    for (const t of [shipped, dropped, reopened]) sprints.setWorkItemSprint(t.id, old.id, "operator");
+    setStatus(shipped.id, "done");
+    setStatus(dropped.id, "cancelled");
+    setStatus(reopened.id, "done");
+    sprints.completeSprint(old.id, { carryTo: null }, "operator");
+
+    expect(() => sprints.setWorkItemSprint(shipped.id, next.id, "operator")).toThrow(/closed sprint "Record Keeper", which keeps it/);
+    expect(() => sprints.setWorkItemSprint(dropped.id, null, "operator")).toThrow(/keeps it/);
+    expect(sprints.listSprints().find((s) => s.id === old.id)?.total).toBe(3);
+
+    // Reopened after the close: never carried, so it may still move on.
+    setStatus(reopened.id, "backlog");
+    expect(sprints.setWorkItemSprint(reopened.id, next.id, "operator").changed).toBe(true);
+    expect(ids(old.id)).toEqual([shipped.id, dropped.id].sort());
+  });
+
+  it("moves to the running sprint by the word active, and out by none", () => {
+    closeActive();
+    const todo = store.createWorkItem({ title: "by keyword" });
+    expect(() => sprints.setWorkItemSprint(todo.id, "active", "operator")).toThrow(/no sprint is active/);
+    const running = sprints.createSprint({ name: "Keyword Sprint" });
+    sprints.startSprint(running.id);
+    expect(sprints.setWorkItemSprint(todo.id, "ACTIVE", "operator").sprint?.id).toBe(running.id);
+    expect(sprints.setWorkItemSprint(todo.id, "none", "operator").sprint).toBeNull();
   });
 
   it("deletes a planned sprint, returning its Todos to no sprint", () => {

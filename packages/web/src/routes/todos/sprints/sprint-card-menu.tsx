@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react"
-import { Check } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { WorkItemCompactWire } from "@/lib/api"
 import type { SprintWire } from "@/lib/sprint-api"
+import { MenuCheck } from "../filter-chips"
 import { useSetWorkItemSprint } from "./use-sprints"
 
 /* Right-click a board card to move it into a sprint, between sprints, or out of
@@ -92,13 +92,13 @@ function SprintCardMenu({ target, sprints, onClose, onMove }: {
           <DropdownMenuItem key={sprint.id} className={ITEM_CLASS} data-testid={`sprint-card-move-${sprint.id}`} onSelect={() => onMove(sprint.id)}>
             <span className="min-w-0 truncate">{sprint.name}</span>
             <span className="text-[11px] text-[var(--text-quaternary)]">{sprint.status}</span>
-            <CheckMark on={current === sprint.id} />
+            <MenuCheck on={current === sprint.id} />
           </DropdownMenuItem>
         ))}
         {sprints.length > 0 && <DropdownMenuSeparator />}
         <DropdownMenuItem className={ITEM_CLASS} data-testid="sprint-card-move-none" onSelect={() => onMove(null)}>
           No sprint
-          <CheckMark on={current === null} />
+          <MenuCheck on={current === null} />
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -107,8 +107,4 @@ function SprintCardMenu({ target, sprints, onClose, onMove }: {
 
 function currentSprintOf(target: MenuTarget | null): string | null {
   return target?.item.sprint?.id ?? null
-}
-
-function CheckMark({ on }: { on: boolean }) {
-  return <Check size={14} aria-hidden className={`ml-auto ${on ? "text-[var(--accent)]" : "opacity-0"}`} />
 }

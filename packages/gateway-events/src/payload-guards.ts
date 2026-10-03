@@ -90,6 +90,8 @@ function isCompanyChangedEvent(value: unknown): value is CompanyChangedEvent {
   switch (value.entity) {
     case "todo":
       return isTodoChange(value)
+    case "sprint":
+      return isString(value.action) && isString(value.id)
     default:
       return false
   }

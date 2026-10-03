@@ -39,6 +39,7 @@ export const BROWSER_CONTROL_OPERATIONS: readonly TalkControlOperation[] = [
     department: string("Department filter."),
     source: string("Source filter."),
     label: string("Label filter."),
+    sprint: string("Sprint filter: a name, active, or none."),
     due: string("Due window filter."),
     q: string("Title search."),
   }), "todos"),

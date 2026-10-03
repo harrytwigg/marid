@@ -56,6 +56,7 @@ const openTodos: TalkTool = {
     department: str("Only Todos in this department slug."),
     source: str("Only Todos created this way.", ["human", "delegation", "cron", "workflow", "session", "connector", "goal"]),
     label: str("Only Todos carrying this label."),
+    sprint: str("Only Todos in this sprint: its name, active for the running one, or none."),
     due: str("Only Todos due within this window.", ["overdue", "today", "week", "month"]),
     q: str("Free-text search over titles."),
   }),

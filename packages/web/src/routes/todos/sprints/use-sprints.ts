@@ -87,3 +87,10 @@ export function sprintFilterLabel(value: string | undefined, sprints: SprintWire
   if (value === "active") return sprint ? `${sprint.name} (active)` : "Active sprint"
   return sprint?.name ?? "Sprint"
 }
+
+/** The sprints a filter offers: every open one, then the five most recently
+ *  closed (the registry lists closed sprints newest first). */
+export function sprintChoices(sprints: SprintWire[] | undefined): SprintWire[] {
+  const all = sprints ?? []
+  return [...all.filter((s) => s.status !== "closed"), ...all.filter((s) => s.status === "closed").slice(0, 5)]
+}

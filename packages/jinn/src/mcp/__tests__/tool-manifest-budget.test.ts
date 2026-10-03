@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4257;
+const MAX_MANIFEST_TOKENS = 4149;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -222,13 +222,17 @@ const ATTESTED = {
   // Reattested for create_work_item's `autoStart` prose, which now names the
   // board walk instead of the retired idle-capacity auto-start. One token
   // cheaper on every wrapper; Pi sits one under the unchanged ceiling.
-  // Rebased for sprints: `set_work_item_sprint`, `list_sprints` and `sprint`
-  // on list_work_items. A new public capability, not prose growth; the two
-  // descriptions were cut to one clause each first (9 back), and the remaining
-  // 126 on Pi are its honest cost. Pi stays one under the ceiling.
-  rpc: { tokens: 3905, sha256: "3f3206c31c856307930ce3a661af697ba00ce2973fe730d3430e05199b0c74de" },
-  pi: { tokens: 4256, sha256: "7f98ae6a4daf9d88ee6def209bec2c2fff005ead4b334657ff948001b39a00d6" },
-  openai: { tokens: 4050, sha256: "6f566cf51271106115d253de582240f331dcf6f501d6e00468ae740a75c362cb" },
+  // Rebased for sprints at rung 1: `sprint` on list_work_items (the filter) and
+  // on edit_work_item (the move, null clears), 18 tokens on every wrapper. Two
+  // new core tools (list_sprints, set_work_item_sprint) were built first and
+  // cost 126 on Pi; they were dropped because rung 1 covers both jobs: list rows
+  // and detail already carry the sprint, the move is a new branch in an
+  // existing handler, and an unknown sprint is refused with the open sprints
+  // named, so a model can recover without a registry read. Planning a sprint
+  // stays on the board and the HTTP routes. Pi stays one under the ceiling.
+  rpc: { tokens: 3813, sha256: "c78db7335dd30ecb3e4c7d78c19fff5554b3b53d46b548245102aec70b972133" },
+  pi: { tokens: 4148, sha256: "16bf3bf2d610812f48c3b6888b9c6cddd55b10caad1bf1e265eee98f7918cd10" },
+  openai: { tokens: 3952, sha256: "37a8905d4be734fef07ffc61ae32bdc2a541bd7ff5cb1786d04992767d0ecbb1" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
@@ -295,7 +299,7 @@ describe("tool manifest budget", () => {
   it("keeps tool names, required arrays, and enum arrays stable", () => {
     const tools = buildTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
-    expect(tools).toHaveLength(53);
+    expect(tools).toHaveLength(51);
 
     const required = Object.fromEntries(tools.map((t) => [t.name, t.inputSchema.required ?? []]));
     expect(required).toEqual(EXPECTED_REQUIRED);

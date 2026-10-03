@@ -1,15 +1,11 @@
-import { Check } from "lucide-react"
 import { DropdownMenuItem, DropdownMenuLabel } from "@/components/ui/dropdown-menu"
 import type { SprintWire } from "@/lib/sprint-api"
+import { MenuCheck } from "../filter-chips"
 
 /* The board's Sprint chip menu: any sprint, the running one (which follows
  * the sprint as sprints roll over, so it is the one to bookmark), Todos in no
  * sprint, each open sprint, the last few closed ones, and the way into the
  * planner. */
-
-function MenuCheck({ on }: { on: boolean }) {
-  return <Check size={14} strokeWidth={2.6} className={`ml-auto ${on ? "text-[var(--accent)]" : "opacity-0"}`} aria-hidden />
-}
 
 export function SprintFilterItems({ value, sprints, onChoose, onManage, itemClassName }: {
   value: string | undefined

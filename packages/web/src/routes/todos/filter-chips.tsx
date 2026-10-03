@@ -1,9 +1,14 @@
-import { ChevronDown, X } from "lucide-react"
+import { Check, ChevronDown, X } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 /* The filter row's chips, split out of filter-bar.tsx: the list view's removable
  * active chip, and the board row's value chip (a dimension that opens its own
  * menu) and removable active chip. */
+
+/** The accent tick a menu row wears when it is the current choice. */
+export function MenuCheck({ on }: { on: boolean }) {
+  return <Check size={14} strokeWidth={2.6} className={`ml-auto ${on ? "text-[var(--accent)]" : "opacity-0"}`} aria-hidden />
+}
 
 export const SUBMENU_CLASS =
   "max-h-[min(420px,70vh)] min-w-[220px] overflow-y-auto rounded-[var(--radius-lg)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"

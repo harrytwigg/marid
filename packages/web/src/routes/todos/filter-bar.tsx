@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, Filter, MoreHorizontal } from "lucide-react"
+import { Filter, MoreHorizontal } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,16 +21,12 @@ import { SprintFilterItems } from "./sprints/sprint-filter-items"
 import { SearchLauncher } from "./search-launcher"
 import { TodoFilterSheet } from "./todo-filter-sheet"
 import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
-import { ActiveChip, BoardActiveChip, SUBMENU_CLASS, ValueChip } from "./filter-chips"
+import { ActiveChip, BoardActiveChip, MenuCheck, SUBMENU_CLASS, ValueChip } from "./filter-chips"
 
 const MENU_CLASS =
   "w-[min(320px,calc(100vw-24px))] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-2 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
 const ITEM_CLASS =
   "min-h-11 cursor-pointer rounded-[10px] px-3 text-[length:var(--text-subheadline)] text-[var(--text-primary)] focus:bg-[var(--fill-secondary)]"
-
-function MenuCheck({ on }: { on: boolean }) {
-  return <Check size={14} strokeWidth={2.6} className={`ml-auto ${on ? "text-[var(--accent)]" : "opacity-0"}`} aria-hidden />
-}
 
 const MOBILE_QUERY = "(max-width: 767px)"
 

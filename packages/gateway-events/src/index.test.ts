@@ -62,6 +62,11 @@ describe("decodeGatewayEvent", () => {
     })).not.toBeNull()
   })
 
+  it("accepts a sprint change and rejects one without an id", () => {
+    expect(decodeGatewayEvent({ event: "company:changed", payload: { entity: "sprint", action: "started", id: "spr_0123456789ab" } })).not.toBeNull()
+    expect(decodeGatewayEvent({ event: "company:changed", payload: { entity: "sprint", action: "started" } })).toBeNull()
+  })
+
   it("rejects non-JSON values nested in company Todo snapshots", () => {
     expect(decodeGatewayEvent({
       event: "company:changed",

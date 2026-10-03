@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, Flag } from "lucide-react"
+import { Flag } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,7 @@ import type { WorkItemDetailWire } from "@/lib/api"
 import type { SprintWire, WorkItemSprintRefWire } from "@/lib/sprint-api"
 import { operatorSafeTodoError } from "@/lib/todos"
 import { RailRow } from "../task-page/rail-rows"
+import { MenuCheck } from "../filter-chips"
 import { useSetWorkItemSprint, useSprints } from "./use-sprints"
 
 /* The task rail's Sprint row: which sprint the Todo is in, and the menu that
@@ -86,17 +87,16 @@ function SprintMoveMenu({ current, sprints, onMove }: {
   sprints: SprintWire[] | undefined
   onMove: (sprint: string | null) => void
 }) {
-  const check = (on: boolean) => <Check size={14} aria-hidden className={`ml-auto ${on ? "text-[var(--accent)]" : "opacity-0"}`} />
   return (
     <DropdownMenuContent align="start" className={MENU_CLASS}>
       <DropdownMenuItem className={ITEM_CLASS} onClick={() => onMove(null)}>
-        No sprint{check(current === null)}
+        No sprint<MenuCheck on={current === null} />
       </DropdownMenuItem>
       {(sprints ?? []).map((sprint) => (
         <DropdownMenuItem key={sprint.id} className={ITEM_CLASS} data-testid={`rail-sprint-${sprint.id}`} onClick={() => onMove(sprint.id)}>
           <span className="min-w-0 truncate">{sprint.name}</span>
           <span className="text-[11px] text-[var(--text-quaternary)]">{sprint.status}</span>
-          {check(current?.id === sprint.id)}
+          <MenuCheck on={current?.id === sprint.id} />
         </DropdownMenuItem>
       ))}
       {sprints?.length === 0 && (

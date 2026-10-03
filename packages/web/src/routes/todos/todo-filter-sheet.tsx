@@ -6,7 +6,7 @@ import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { TodoDialog } from "./todo-dialog"
 import { DATE_OPTIONS, DUE_OPTIONS, SOURCE_OPTIONS, STATUS_OPTIONS } from "./filter-options"
 import { useLabelRegistry } from "./use-todos"
-import { sprintFilterLabel, useSprints } from "./sprints/use-sprints"
+import { sprintChoices, sprintFilterLabel, useSprints } from "./sprints/use-sprints"
 import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
 
 type FilterPanel = "root" | "status" | "person" | "department" | "source" | "date" | "label" | "sprint" | "due"
@@ -190,7 +190,8 @@ export function TodoFilterSheet({
             <button type="button" onClick={() => choose({ ...filters, sprint: "none" })} className={ROW_CLASS}>
               Not in a sprint<Selection selected={filters.sprint === "none"} />
             </button>
-            {(sprints.data ?? []).filter((sprint) => sprint.status !== "closed").map((sprint) => (
+            {/* Open sprints, then the last five closed, as the desktop chip lists them. */}
+            {sprintChoices(sprints.data).map((sprint) => (
               <button key={sprint.id} type="button" onClick={() => choose({ ...filters, sprint: sprint.id })} className={ROW_CLASS}>
                 <span className="min-w-0 truncate">{sprint.name}</span>
                 <span className="flex-none text-[12px] text-[var(--text-quaternary)]">{sprint.status}</span>

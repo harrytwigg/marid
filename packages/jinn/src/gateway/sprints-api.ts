@@ -3,10 +3,9 @@ import { readJsonBody } from "./http-helpers.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
 import { isTodoId } from "../work-items/id.js";
-import { getWorkItem, type WorkItem } from "../work-items/store.js";
+import { getWorkItem } from "../work-items/store.js";
 import type { JinnConfig } from "../shared/types.js";
-import { orgRegistry } from "./org-registry.js";
-import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
+import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
 import {
   completeSprint,
   createSprint,
@@ -30,9 +29,9 @@ import {
  *   DELETE /api/sprints/:id             delete a planned sprint
  *   PUT    /api/work-items/:id/sprint   move a top-level Todo into a sprint, or out
  *
- * Planning — every sprint write — is the operator's or a manager's, the same
- * standing that creates labels. Moving one Todo is open to whoever may label it:
- * the operator, its creator, or its assignee.
+ * Planning — every sprint write — takes the standing that creates labels, and
+ * moving one Todo the standing that changes its labels: both live in
+ * work-item-standing.ts, shared with the label routes.
  *
  * `:id` takes a sprint id or its name. Caller resolution, the manager check and
  * the projection signal arrive as options because api.ts keeps them
@@ -46,26 +45,9 @@ export interface SprintsApiOptions {
   getConfig: () => JinnConfig;
   /** Tell the live surfaces these Todos' projections changed. */
   emitProjection: (id: string) => void;
-}
-
-/** Planning standing: the operator (or the operator's connector), or a manager —
- *  an employee with direct reports. The same standing that creates labels. */
-async function canPlan(caller: WorkItemCaller, options: SprintsApiOptions): Promise<boolean> {
-  if (caller.kind === "operator" || remoteMcpHasOperatorStanding(caller)) return true;
-  const employee = caller.session.employee;
-  if (!employee) return false;
-  const { resolveOrgHierarchy } = await import("./org-hierarchy.js");
-  const node = resolveOrgHierarchy(orgRegistry(options.getConfig())).nodes[employee];
-  return (node?.directReports.length ?? 0) > 0;
-}
-
-/** Move standing: whoever may change the Todo's labels — the operator, its
- *  creator, or its assignee. */
-function canMove(caller: WorkItemCaller, item: WorkItem): boolean {
-  if (caller.kind === "operator" || remoteMcpHasOperatorStanding(caller)) return true;
-  if (item.createdBy === workItemActor(caller)) return true;
-  const employee = caller.session.employee ?? null;
-  return employee !== null && (item.assignee === employee || item.createdBy === employee);
+  /** Tell them a sprint changed: rows embed their sprint's name and status, so
+   *  every write here — lifecycle or move — has to reach other open tabs. */
+  emitSprintChange: (action: string, id: string) => void;
 }
 
 const SPRINT_FIELDS = ["name", "goal", "startsAt", "endsAt"] as const;
@@ -108,7 +90,7 @@ function readSprintFields(body: Record<string, unknown>): { ok: true; value: Rec
 async function plannerOrAnswer(res: ServerResponse, options: SprintsApiOptions): Promise<WorkItemCaller | undefined> {
   const caller = options.resolveCaller();
   if (!caller) return undefined;
-  if (!(await canPlan(caller, options))) {
+  if (!(await mayOrganiseTags(caller, options.getConfig()))) {
     json(res, { error: "planning sprints requires the operator or a manager (an employee with direct reports)" }, 403);
     return undefined;
   }
@@ -139,24 +121,32 @@ const getRoute: Handler = async (_req, res, params) => {
   return json(res, { sprint: listSprints().find((s) => s.id === sprint.id) ?? sprint });
 };
 
-const createRoute = plannerWrite(async (req, res) => {
+const createRoute = plannerWrite(async (req, res, _params, _caller, options) => {
   const body = await readObject(req, res);
   if (!body) return;
   const fields = readSprintFields(body);
   if (!fields.ok) return badRequest(res, fields.error);
   if (typeof fields.value.name !== "string") return badRequest(res, "name is required");
-  json(res, { sprint: createSprint({ ...fields.value, name: fields.value.name }) }, 201);
+  const sprint = createSprint({ ...fields.value, name: fields.value.name });
+  options.emitSprintChange("created", sprint.id);
+  json(res, { sprint }, 201);
 });
 
-const updateRoute = plannerWrite(async (req, res, params) => {
+const updateRoute = plannerWrite(async (req, res, params, _caller, options) => {
   const body = await readObject(req, res);
   if (!body) return;
   const fields = readSprintFields(body);
   if (!fields.ok) return badRequest(res, fields.error);
-  json(res, { sprint: updateSprint(params.id, fields.value) });
+  const sprint = updateSprint(params.id, fields.value);
+  options.emitSprintChange("updated", sprint.id);
+  json(res, { sprint });
 });
 
-const startRoute = plannerWrite(async (_req, res, params) => json(res, { sprint: startSprint(params.id) }));
+const startRoute = plannerWrite(async (_req, res, params, _caller, options) => {
+  const sprint = startSprint(params.id);
+  options.emitSprintChange("started", sprint.id);
+  json(res, { sprint });
+});
 
 const completeRoute = plannerWrite(async (req, res, params, caller, options) => {
   const body = await readObject(req, res);
@@ -168,12 +158,14 @@ const completeRoute = plannerWrite(async (req, res, params, caller, options) => 
   if (body.startNext !== undefined && typeof body.startNext !== "boolean") return badRequest(res, "startNext must be a boolean");
   const result = completeSprint(params.id, { carryTo, startNext: body.startNext === true }, workItemActor(caller), caller.origin);
   for (const id of result.carried) options.emitProjection(id);
+  options.emitSprintChange("completed", result.sprint.id);
   json(res, result);
 });
 
 const deleteRoute = plannerWrite(async (_req, res, params, caller, options) => {
   const moved = deleteSprint(params.id, workItemActor(caller), caller.origin);
   for (const id of moved) options.emitProjection(id);
+  options.emitSprintChange("deleted", params.id);
   json(res, { deleted: true, moved });
 });
 
@@ -188,7 +180,7 @@ function movableTodo(res: ServerResponse, id: string, caller: WorkItemCaller) {
     notFound(res);
     return undefined;
   }
-  if (!canMove(caller, item)) {
+  if (!mayRetagTodo(caller, item)) {
     json(res, { error: "moving a Todo between sprints requires the operator, the item creator, or the assignee" }, 403);
     return undefined;
   }
@@ -208,7 +200,10 @@ const moveRoute: Handler = async (req, res, params, options) => {
   }
   try {
     const result = setWorkItemSprint(item.id, sprint, workItemActor(caller), caller.origin);
-    if (result.changed) options.emitProjection(item.id);
+    if (result.changed) {
+      options.emitProjection(item.id);
+      options.emitSprintChange("moved", item.id); // its sub-tasks' rows changed too
+    }
     json(res, { sprint: result.sprint });
   } catch (err) {
     sprintFailure(res, err);

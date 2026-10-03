@@ -79,8 +79,7 @@ describe("work-item tools — registry + schemas", () => {
       "unlink_work_items",
       "label_work_item",
       "create_label",
-      "list_labels", "set_work_item_sprint", "list_sprints",
-      "set_work_item_dispatch",
+      "list_labels", "set_work_item_dispatch",
       "list_departments",
     ]);
     const names = buildTools().map((t) => t.name).sort();
@@ -89,7 +88,7 @@ describe("work-item tools — registry + schemas", () => {
     expect(names.some((n) => /approval/.test(n))).toBe(false);
     expect(names).toContain("archive_work_item");
     expect(names.some((n) => /cancel/i.test(n) && /work_item/.test(n))).toBe(false);
-    expect(names).toHaveLength(53);
+    expect(names).toHaveLength(51);
   });
 
   it("positions list as recent/filter summaries and search as text/filter hits", () => {
@@ -730,7 +729,7 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
     await expect(tool("edit_work_item").handler({ id: "JIN-1", body: "x", rank: 3 }, silent.ctx)).rejects.toThrow(/operator/);
     expect(silent.calls).toEqual([]);
     const props = Object.keys(tool("edit_work_item").inputSchema.properties);
-    expect(props.sort()).toEqual(["body", "dueAt", "id", "priority", "title"]);
+    expect(props.sort()).toEqual(["body", "dueAt", "id", "priority", "sprint", "title"]);
   });
 
   it("edit_work_item reads a fresh version and PATCHes with it", async () => {
