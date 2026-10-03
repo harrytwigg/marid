@@ -86,3 +86,16 @@ describe("an opencode server-mode turn stopped partway by a provider error", { t
     expect(await settle("MULTISTEP work")).toMatchObject({ status: "idle", attemptOutcome: "succeeded", lastError: null });
   });
 });
+
+describe("an opencode server-mode turn whose transport was lost mid-turn", { timeout: 20_000 }, () => {
+  it("is settled failed, not completed, so the work is not silently dropped", async () => {
+    // The host dropped after a step had narrated. The stream loss is the
+    // turn's outcome: settling it completed with lastError null is what let a
+    // stopped turn pass for a finished one and lose its work unnoticed.
+    expect(await settle("DROPSTREAM work")).toMatchObject({
+      status: "error",
+      attemptOutcome: "failed",
+      lastError: "the opencode server closed the event stream mid-turn",
+    });
+  });
+});

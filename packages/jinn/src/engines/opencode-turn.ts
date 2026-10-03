@@ -128,25 +128,33 @@ export class OpencodeTurn {
     };
   }
 
-  /** What this turn became, once the process is gone. */
-  result(outcome: { code: number | null; terminationReason: string | null; stderr: string }): EngineResult {
+  /**
+   * What this turn became, once the process is gone.
+   *
+   * `failure` is a transport that went away mid-turn — the opencode server's
+   * event stream closing or erroring, which `OpencodeServerTurn` records —
+   * rather than an error the engine reported itself. It settles the turn as a
+   * failure even when a step had already spoken: that text is earlier-steps
+   * narration, and a lost turn must not pass for an answer, or the session
+   * settles `completed` with no error and nothing resumes the work.
+   */
+  result(outcome: { code: number | null; terminationReason: string | null; stderr: string; failure?: string }): EngineResult {
     const accounting = this.accounting();
 
     if (outcome.terminationReason) {
       return { sessionId: this.sessionId, result: "", error: outcome.terminationReason, ...accounting };
     }
     // A non-empty answer means the turn succeeded even if an error also
-    // appeared — unless the error came after the last text. Then the turn
-    // stopped partway: the text was an earlier step's narration ("Let me check
-    // X first"), and a provider refusing the next step is the turn's outcome.
-    if (this.resultText.trim() && !this.endedInError) {
+    // appeared — unless the error came after the last text, or the transport
+    // carrying the turn failed outright. Then the turn stopped partway: the
+    // text was an earlier step's narration ("Let me check X first"), and a
+    // provider refusing the next step, or a stream that went away, is the
+    // turn's outcome.
+    if (!outcome.failure && this.resultText.trim() && !this.endedInError) {
       return { sessionId: this.sessionId, result: this.resultText, ...accounting };
     }
 
-    const error = this.turnError
-      || (outcome.code === 0
-        ? "opencode exited successfully without a final assistant response"
-        : `opencode exited with code ${outcome.code}: ${outcome.stderr.slice(0, 500)}`);
+    const error = outcome.failure || this.outcomeError(outcome);
     return {
       sessionId: this.sessionId,
       result: "",
@@ -164,5 +172,16 @@ export class OpencodeTurn {
       // session id would be wiped and the engine chain never walked.
       ...(isRateLimitMessage(error) ? { rateLimit: { status: "rejected" } } : {}),
     };
+  }
+
+  /** Why a turn that produced no accepted answer failed: whatever opencode
+   *  reported, or — having reported nothing — why ending without one is still a
+   *  failure. A transport `failure` is passed in separately; it is not
+   *  something opencode reported. */
+  private outcomeError(outcome: { code: number | null; stderr: string }): string {
+    return this.turnError
+      || (outcome.code === 0
+        ? "opencode exited successfully without a final assistant response"
+        : `opencode exited with code ${outcome.code}: ${outcome.stderr.slice(0, 500)}`);
   }
 }

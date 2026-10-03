@@ -560,6 +560,9 @@ export class OpencodeServerTurn {
       code: this.failure ? 1 : 0,
       terminationReason: this.terminationReason,
       stderr: this.failure ?? "",
+      // The stream went away mid-turn: settle it failed even if a step had
+      // already spoken, rather than let the narration pass for an answer.
+      failure: this.failure ?? undefined,
     });
   }
 
