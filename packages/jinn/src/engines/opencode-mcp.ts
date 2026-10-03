@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { McpServerStdioConfig, McpServerUrlConfig, ResolvedMcpConfig } from "../shared/types.js";
 import { MCP_TOOLSET_ARG } from "../mcp/identity.js";
+import { buildBoardWalkTools } from "../mcp/board-walk-tools.js";
 import { JINN_HOME } from "../shared/paths.js";
 
 /**
@@ -24,17 +25,43 @@ import { JINN_HOME } from "../shared/paths.js";
  * A purpose-built toolset session (the board walk's turn) is the exception. Its
  * whole point is that its tools are the only ones it has, and opencode — unlike
  * Claude — has no command-line switch to turn its built-ins off. So this file
- * adds a `jinn-walk` agent that denies every tool but the jinn server's
- * (`permission: { "*": "deny", "jinn_*": "allow" }`), and the turn selects it
- * with `--agent jinn-walk`. An agent's permissions beat the operator's own
- * (verified with `opencode debug agent`), and the clamp only ever denies,
- * never allows, so it cannot widen a surface the operator narrowed.
+ * adds a `jinn-walk` agent that allows exactly the toolset's own tools and
+ * denies everything else (`permission` default deny, one allow per name), and
+ * the turn selects it with `--agent jinn-walk`. Two things make the allowlist
+ * exact rather than a `jinn_*` wildcard:
+ *
+ *   - the toolset server is named `jinn`, so its tools surface as
+ *     `jinn_walk_board` … `jinn_walk_finish` — generated here from the toolset
+ *     itself, so the two cannot drift;
+ *   - `jinn_*` would also match any OTHER server whose name starts with `jinn`
+ *     (the operator's own, say), and a project `opencode.json` in the turn's cwd
+ *     loads after this staged file and can replace `mcp.jinn` outright. Naming
+ *     each tool closes both routes.
+ *
+ * An agent's permissions beat the operator's own (verified with
+ * `opencode debug agent`), and the clamp only ever denies, never allows, so it
+ * cannot widen a surface the operator narrowed.
  */
 
-/** The opencode agent a purpose-built toolset session runs as: every tool
- *  denied but the jinn MCP server's. The name the board walk's turn passes to
- *  `--agent` (board-walk/route-turn.ts). */
+/** The opencode agent a purpose-built toolset session runs as: the toolset's
+ *  own tools allowed and every other denied. The name the board walk's turn
+ *  passes to `--agent` (board-walk/route-turn.ts). */
 export const OPENCODE_WALK_AGENT = "jinn-walk";
+
+/** The opencode tool names the board-walk toolset exposes: the `jinn` server
+ *  prefix joined to each tool the toolset serves. Read from the toolset, never
+ *  hand-typed, so a new walk tool joins the allowlist on its own. */
+export function boardWalkOpencodeTools(): string[] {
+  return buildBoardWalkTools().map((tool) => `jinn_${tool.name}`);
+}
+
+/** The confined agent's permission map: deny by default, then allow each of the
+ *  board-walk toolset's own tool names exactly. */
+export function boardWalkAgentPermission(): Record<string, string> {
+  const permission: Record<string, string> = { "*": "deny" };
+  for (const name of boardWalkOpencodeTools()) permission[name] = "allow";
+  return permission;
+}
 
 /** A stdio server, as opencode's config names it: one argv array where jinn's
  *  resolved shape has `command` + `args`, and `environment` where jinn has `env`. */
@@ -147,7 +174,7 @@ export function buildOpencodeSessionConfig(resolvedMcp: ResolvedMcpConfig | unde
     $schema: OPENCODE_CONFIG_SCHEMA,
     mcp,
     ...(hasPurposeBuiltToolset(resolvedMcp)
-      ? { agent: { [OPENCODE_WALK_AGENT]: { mode: "primary" as const, permission: { "*": "deny", "jinn_*": "allow" } } } }
+      ? { agent: { [OPENCODE_WALK_AGENT]: { mode: "primary" as const, permission: boardWalkAgentPermission() } } }
       : {}),
   };
 }

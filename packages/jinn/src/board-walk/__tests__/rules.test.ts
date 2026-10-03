@@ -80,8 +80,9 @@ describe("the walk's runner settings", () => {
     expect(resolveSettings({ engine: "claude", effortLevel: "high" }).settings.effortLevel).toBe("high");
   });
 
-  it("refuses an engine this build does not know, rather than falling back", () => {
+  it("refuses an engine this build does not know, and one the walk cannot be confined on", () => {
     expect(resolveSettings({ engine: "nonsense" }).problems).toEqual(['engine "nonsense" is not one of claude, codex, antigravity, grok, pi, hermes, opencode']);
+    expect(resolveSettings({ engine: "codex" }).problems).toEqual(['the board walk can only run on claude or opencode, so that its turn has only the walk\'s tools; "codex" cannot be confined to them']);
   });
 
   it("reads the job's own runner fields over the file's, and leaves the file's where the job is silent", () => {
@@ -91,6 +92,18 @@ describe("the walk's runner settings", () => {
       .toEqual({ ...base, employee: "coo", engine: "opencode", model: "m", effortLevel: "low" });
     // A field the job leaves empty does not blank the file's value.
     expect(withRunnerOverrides(base, { employee: "assistant", engine: "   ", model: undefined, effortLevel: "  " })).toEqual(base);
+  });
+
+  it("moves the model with the engine: a job changing the engine drops the file's model", () => {
+    const onClaude = resolveSettings({ engine: "claude", model: "sonnet" }).settings;
+    // The job names opencode but no model: keeping `sonnet` would run opencode
+    // with a Claude id — the exact setup this feature exists to allow.
+    expect(withRunnerOverrides(onClaude, { engine: "opencode" })).toEqual({ ...onClaude, engine: "opencode", model: undefined });
+    // A job that names a model but the same engine keeps the pair matching.
+    expect(withRunnerOverrides(onClaude, { engine: "claude", model: "opus" })).toMatchObject({ engine: "claude", model: "opus" });
+    // A job that names only a model inherits the engine in force, so the pair
+    // still matches.
+    expect(withRunnerOverrides(onClaude, { model: "opus" })).toMatchObject({ engine: "claude", model: "opus" });
   });
 });
 

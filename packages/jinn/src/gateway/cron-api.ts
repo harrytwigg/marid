@@ -3,7 +3,8 @@ import crypto from "node:crypto";
 import path from "node:path";
 import type { CronJob, JinnConfig } from "../shared/types.js";
 import { CRON_RUNS } from "../shared/paths.js";
-import { ENGINE_NAMES, getModelRegistry, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
+import { ENGINE_NAMES, isKnownEngine } from "../shared/models.js";
+import { isWalkEngine, runnerModelMatches, WALK_ENGINES } from "../board-walk/settings.js";
 import { logger } from "../shared/logger.js";
 import { canonicalCronJobId, loadJobs, saveJobs } from "../cron/jobs.js";
 import { summarizeCronRun } from "../cron/run-summary.js";
@@ -39,30 +40,34 @@ function scheduleError(job: Pick<CronJob, "schedule" | "timezone">): string | nu
   return errors.length > 0 ? errors.map((entry) => entry.message).join("; ") : null;
 }
 
-/** Why a board-walk job's model cannot be stored, or null: it must belong to the
- *  engine it is named with, the same rule a session's engine/model pair follows
- *  (shared/models.ts). An engine with a dynamic catalog (opencode, pi) cannot
- *  judge an id offline and is allowed through, as it is everywhere else. */
-function boardWalkModelError(engine: string, model: string, config: JinnConfig): string | null {
-  if (hasDynamicModelCatalog(engine)) return null;
-  const models = getModelRegistry(config)[engine]?.models ?? [];
-  return models.length > 0 && !models.some((entry) => entry.id === model)
-    ? `model "${model}" is not supported by engine "${engine}"`
-    : null;
+/** Why an engine written on a board-walk job cannot be used, or null. Only an
+ *  engine the walk can be confined on may be named; anything else would run the
+ *  walk with an unbounded tool surface. */
+function boardWalkEngineError(engine: string): string | null {
+  if (!isKnownEngine(engine)) return `engine must be one of ${ENGINE_NAMES.join(", ")}`;
+  if (!isWalkEngine(engine)) {
+    return `the board walk can only run on ${WALK_ENGINES.join(" or ")}, so that its turn has only the walk's tools; "${engine}" cannot be confined to them`;
+  }
+  return null;
 }
 
 /**
  * Why a board-walk job's runner fields cannot be stored, or null. The walk's
  * `engine`/`model`/`employee`/`effortLevel` are honoured for this action (the
- * ordinary action job ignores them), so its engine must be known and its model
- * must belong to the engine it is named with.
+ * ordinary action job ignores them), so the engine must be one the walk can be
+ * confined on, and the engine/model pair must match.
  */
 function boardWalkRunnerError(job: CronJob, config: JinnConfig): string | null {
   if (job.action !== "board-walk") return null;
   const engine = job.engine?.trim();
-  if (engine && !isKnownEngine(engine)) return `engine must be one of ${ENGINE_NAMES.join(", ")}`;
+  if (engine) {
+    const problem = boardWalkEngineError(engine);
+    if (problem) return problem;
+  }
   const model = job.model?.trim();
-  return model ? boardWalkModelError(engine || "claude", model, config) : null;
+  if (!model) return null;
+  const target = engine || "claude";
+  return runnerModelMatches(config, target, model) ? null : `model "${model}" is not supported by engine "${target}"`;
 }
 
 /** Why `job` cannot be stored, or null. */

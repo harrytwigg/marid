@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
-import type { CronJob } from "../shared/types.js";
-import { ENGINE_NAMES, isKnownEngine } from "../shared/models.js";
+import type { CronJob, JinnConfig } from "../shared/types.js";
+import { ENGINE_NAMES, getModelRegistry, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
 import { JINN_HOME, TEMPLATE_DIR } from "../shared/paths.js";
 
 /**
@@ -80,6 +80,20 @@ export const BOARD_WALK_DEFAULTS: BoardWalkSettings = {
   actions: { release: true, park: true, flagStuck: true, dispatch: true, comment: true },
 };
 
+/**
+ * The engines the walk's turn may run on. The walk decides and the gateway acts,
+ * so its turn must keep only the walk's own tools, and only these engines can be
+ * clamped to them (route-turn.ts: Claude's CLI flags, opencode's confined
+ * agent). Any other engine would run with an unbounded surface, so it is
+ * refused rather than run.
+ */
+export const WALK_ENGINES = ["claude", "opencode"] as const;
+export type WalkEngine = (typeof WALK_ENGINES)[number];
+
+export function isWalkEngine(engine: string): engine is WalkEngine {
+  return (WALK_ENGINES as readonly string[]).includes(engine);
+}
+
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
 /** Where the frontmatter's own text sits in `text` (between the fences), or
@@ -133,11 +147,13 @@ function actionSettings(raw: unknown, problems: string[]): Record<BoardWalkActio
 }
 
 /** The engine for the turn: the named one, or the default. A named engine this
- *  build does not know is a problem, not a silent fallback. */
+ *  build does not know, or one the walk can never be clamped on, is a problem,
+ *  not a silent fallback. */
 function engineSetting(mapping: Record<string, unknown>, problems: string[]): string {
   const engine = stringSetting(mapping, "engine", problems) || BOARD_WALK_DEFAULTS.engine;
-  if (Object.prototype.hasOwnProperty.call(mapping, "engine") && !isKnownEngine(engine)) {
-    problems.push(`engine ${JSON.stringify(mapping.engine)} is not one of ${ENGINE_NAMES.join(", ")}`);
+  if (Object.prototype.hasOwnProperty.call(mapping, "engine")) {
+    if (!isKnownEngine(engine)) problems.push(`engine ${JSON.stringify(mapping.engine)} is not one of ${ENGINE_NAMES.join(", ")}`);
+    else if (!isWalkEngine(engine)) problems.push(`the board walk can only run on ${WALK_ENGINES.join(" or ")}, so that its turn has only the walk's tools; ${JSON.stringify(engine)} cannot be confined to them`);
   }
   return engine;
 }
@@ -170,24 +186,68 @@ export function resolveSettings(raw: unknown): { settings: BoardWalkSettings; pr
   return { settings: { employee, engine, ...(model ? { model } : {}), ...(effortLevel ? { effortLevel } : {}), actions }, problems, retiredKeys };
 }
 
+/** The engine and model a job that names an engine resolves to. The job's model
+ *  wins when it has one; otherwise the file's model is kept only when the job
+ *  did not move the engine (a job setting `engine: opencode` over a file on
+ *  `model: sonnet` would otherwise run opencode with a Claude id). */
+function enginePair(
+  settings: BoardWalkSettings,
+  engine: string,
+  model: string | undefined,
+): Pick<BoardWalkSettings, "engine" | "model"> {
+  if (model) return { engine, model };
+  return engine === settings.engine ? { engine, model: settings.model } : { engine, model: undefined };
+}
+
+/** The engine, model and effort a job's own fields resolve to, or null when the
+ *  job names none of them. The engine and model move together (enginePair); a
+ *  job naming only a model inherits the engine already in force. */
+function jobRunnerOverrides(
+  settings: BoardWalkSettings,
+  job: Pick<CronJob, "employee" | "engine" | "model" | "effortLevel">,
+): Partial<BoardWalkSettings> | null {
+  const override: Partial<BoardWalkSettings> = {};
+  const employee = job.employee?.trim();
+  if (employee) override.employee = employee;
+  const engine = job.engine?.trim();
+  const model = job.model?.trim();
+  if (engine) Object.assign(override, enginePair(settings, engine, model));
+  else if (model) override.model = model;
+  const effort = job.effortLevel?.trim();
+  if (effort) override.effortLevel = effort;
+  return Object.keys(override).length > 0 ? override : null;
+}
+
 /**
  * The runner settings in force: the rules file's, with the `board-walk` cron
  * job's own `employee`, `engine`, `model` and `effortLevel` overriding them
  * when it sets them. One source of truth per value, with the job (the object
  * the cron controls edit) beating the file. Absent on both, the shipped
  * defaults stand, so an install that named neither behaves exactly as before.
+ *
+ * The engine and the model are a pair, so they move together (enginePair): a
+ * job that names an engine but no model does not keep the file's model, which
+ * belonged to the other engine.
  */
 export function withRunnerOverrides(
   settings: BoardWalkSettings,
   job: Pick<CronJob, "employee" | "engine" | "model" | "effortLevel"> | undefined,
 ): BoardWalkSettings {
   if (!job) return settings;
-  const override: Partial<BoardWalkSettings> = {};
-  if (job.employee?.trim()) override.employee = job.employee.trim();
-  if (job.engine?.trim()) override.engine = job.engine.trim();
-  if (job.model?.trim()) override.model = job.model.trim();
-  if (job.effortLevel?.trim()) override.effortLevel = job.effortLevel.trim();
-  return { ...settings, ...override };
+  const override = jobRunnerOverrides(settings, job);
+  return override ? { ...settings, ...override } : settings;
+}
+
+/**
+ * Whether `model` belongs to `engine` for the runner pair. The same rule a
+ * session's engine/model pair follows (shared/models.ts): a known id for a
+ * catalogued engine, and anything for an engine whose catalog is discovered at
+ * runtime (opencode, pi), which cannot be judged offline.
+ */
+export function runnerModelMatches(config: JinnConfig, engine: string, model: string): boolean {
+  if (hasDynamicModelCatalog(engine)) return true;
+  const models = getModelRegistry(config)[engine]?.models ?? [];
+  return models.length === 0 || models.some((entry) => entry.id === model);
 }
 
 /** The parsed frontmatter mapping, or undefined when there is none or it is not

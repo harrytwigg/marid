@@ -5,7 +5,7 @@ import { getMessages, getSession } from "../sessions/registry.js";
 import { orgRegistry } from "../gateway/org-registry.js";
 import { CronConnector } from "../connectors/cron/index.js";
 import { OPENCODE_WALK_AGENT } from "../engines/opencode-mcp.js";
-import type { BoardWalkSettings } from "./settings.js";
+import { isWalkEngine, WALK_ENGINES, type BoardWalkSettings } from "./settings.js";
 import type { BoardWalkDeps, WalkTurn, WalkTurnResult } from "./walk.js";
 
 /**
@@ -17,15 +17,20 @@ import type { BoardWalkDeps, WalkTurn, WalkTurnResult } from "./walk.js";
  * other tool would be an act nobody checked and the surface is clamped per
  * engine:
  *   - its only MCP server is the jinn server serving the board-walk toolset
- *     (`toolset`), in place of the company belt and every custom server;
+ *     (`toolset`), in place of the company belt and every resolved custom
+ *     server. On Claude that is the whole MCP surface. On opencode the operator's
+ *     own servers still load (opencode reads its config, and this staged one
+ *     only merges into it), but each of their tools is denied by the agent
+ *     below, so none is reachable;
  *   - on Claude the built-ins are switched off from the command line
  *     (`--tools ""`), no other MCP configuration is read
  *     (`--strict-mcp-config`), and the Chrome integration the engine always
  *     enables is switched off again (`--no-chrome`) — Claude is the one engine
  *     whose tools can be switched off from the command line;
  *   - on opencode, whose server mode ignores those flags, the turn runs as a
- *     purpose-built agent that denies every tool but the jinn server's (`agent`
- *     in the staged config, opencode-mcp.ts), selected with `--agent`;
+ *     purpose-built agent that allows exactly the board-walk tool names and
+ *     denies everything else (`agent` in the staged config, opencode-mcp.ts),
+ *     selected with `--agent`;
  *   - the employee's own flags are dropped for the same reason: they were
  *     written for its own engine.
  * Only the engines that can be clamped this way are allowed (`WALK_ENGINES`);
@@ -34,8 +39,8 @@ import type { BoardWalkDeps, WalkTurn, WalkTurnResult } from "./walk.js";
  * either (rate-limit-handler.ts); a limited walk waits, and the walk's timeout
  * stops it.
  */
-export const WALK_ENGINES = ["claude", "opencode"] as const;
-export type WalkEngine = (typeof WALK_ENGINES)[number];
+export { WALK_ENGINES, isWalkEngine } from "./settings.js";
+export type { WalkEngine } from "./settings.js";
 
 /** Claude's own clamps. `--no-chrome` must come after the engine's own
  *  `--chrome` (it does: employee flags are appended), or the browser tools
@@ -43,12 +48,8 @@ export type WalkEngine = (typeof WALK_ENGINES)[number];
 export const CLAUDE_WALK_FLAGS = ["--no-chrome", "--tools", "", "--strict-mcp-config"];
 
 /** opencode's clamp: the confined agent the staged config carries, whose
- *  permissions deny every tool but `jinn_*`. */
+ *  permissions allow exactly the board-walk tool names and deny the rest. */
 export const OPENCODE_WALK_FLAGS = ["--agent", OPENCODE_WALK_AGENT];
-
-export function isWalkEngine(engine: string): engine is WalkEngine {
-  return (WALK_ENGINES as readonly string[]).includes(engine);
-}
 
 /** The employee's own model when it belongs to the runner's engine; else the
  *  engine's configured model. A model named in the settings is passed to the

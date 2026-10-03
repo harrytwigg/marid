@@ -8,7 +8,7 @@ import type { ApiContext } from "../gateway/api.js";
 import { loadJobs } from "../cron/jobs.js";
 import { armedActionJob } from "../cron/scheduler.js";
 import { validateCronSchedule } from "../cron/validation.js";
-import { readRules, boardWalkPath, hostTimezone, missingDefaultSections, readTemplateRules, withRunnerOverrides, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
+import { readRules, boardWalkPath, hostTimezone, missingDefaultSections, readTemplateRules, runnerModelMatches, withRunnerOverrides, type BoardWalkRules, type BoardWalkSettings } from "./settings.js";
 import { findBoardWalkJob } from "./job.js";
 import { buildCapacitySnapshot, claudeFiveHour, type SnapshotDeps } from "./snapshot.js";
 import { listOpenTodos } from "./board.js";
@@ -410,10 +410,17 @@ function jobStatus(job: CronJob | undefined): BoardWalkJobStatus | null {
 
 /** The rules file's settings with the cron job's runner fields on top: the job
  *  (`walkJob`) is the object the cron controls edit, so where it sets one it
- *  wins over the file; absent on both, the shipped defaults stand. */
+ *  wins over the file; absent on both, the shipped defaults stand. The pair the
+ *  job+file resolve to is checked here too, so a job that points a file's model
+ *  at another engine holds the tick rather than running the wrong model. */
 function resolvedRules(w: Walker): BoardWalkRules {
   const base = readRules(w.rulesFile);
-  return { ...base, settings: withRunnerOverrides(base.settings, walkJob(w)) };
+  const settings = withRunnerOverrides(base.settings, walkJob(w));
+  const problems = [...base.problems];
+  if (settings.model && !runnerModelMatches(w.getConfig(), settings.engine, settings.model) && problems.length === 0) {
+    problems.push(`model ${JSON.stringify(settings.model)} is not supported by engine ${JSON.stringify(settings.engine)}, which the board-walk cron job selects`);
+  }
+  return { ...base, settings, problems };
 }
 
 export function startBoardWalk(deps: BoardWalkDeps): BoardWalk {
