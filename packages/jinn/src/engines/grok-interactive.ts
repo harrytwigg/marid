@@ -7,7 +7,7 @@ import { JINN_HOME } from "../shared/paths.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { neutralizeForPaste } from "../shared/skill-commands.js";
-import { PtyLifecycleManager, processExitInterruption, type PtyHandle } from "./pty-lifecycle.js";
+import { PtyLifecycleManager, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import { tailTranscriptLines, type TranscriptTailer } from "./transcript-tailer.js";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
@@ -17,6 +17,8 @@ import {
   parseGrokJsonLine,
   type GrokParsedLine,
 } from "./grok.js";
+import { processStartFailure } from "../shared/process-start.js";
+import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
 const DONE_DEBOUNCE_MS = 60_000;
@@ -26,9 +28,16 @@ const DISCOVER_TIMEOUT_MS = 90 * 1000;
 const PROMPT_READY_SUBMIT_DELAY_MS = 100;
 const PROMPT_SUBMIT_FALLBACK_MS = 2500;
 const CURSOR_POSITION_RESPONSE = "\x1b[1;1R";
+/** How much of a process's newest output is kept, for a process that dies before its session starts. */
+const OUTPUT_TAIL_CHARS = 4096;
 
 interface ActiveTurn {
   interrupt: (reason: string) => void;
+  /** The turn's process went away: a failed start until {@link started}, else an interruption. */
+  processExited: (exit: PtyExit | undefined, output: string) => void;
+  /** Whether the process serving this turn is up: a warm process is; a fresh
+   *  one once its TUI is ready (or asks which project) or its transcript moves. */
+  started: boolean;
   tailer?: TranscriptTailer;
   discover?: { stop: () => void };
   tuiOutput?: { dispose: () => void };
@@ -138,6 +147,16 @@ export function buildGrokInteractiveArgs(
   return args;
 }
 
+/**
+ * The argument at `index` of a grok command line, named for the person
+ * reading an error about it. The message is pasted into the TUI, never put on
+ * the command line; the system prompt travels in its own flag.
+ */
+export function describeGrokArgument(args: readonly string[], index: number): string {
+  if (index > 0 && args[index - 1] === "--system-prompt-override") return "the system prompt";
+  return `command-line argument ${index + 1}`;
+}
+
 export function grokTranscriptLineToDeltas(line: string): GrokParsedLine {
   return parseGrokJsonLine(line) ?? { deltas: [] };
 }
@@ -166,6 +185,15 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     const systemPromptOverride = opts.systemPrompt && !opts.resumeSessionId ? opts.systemPrompt : undefined;
     if (opts.attachments?.length) prompt += "\n\nAttached files:\n" + opts.attachments.map((a) => `- ${a}`).join("\n");
 
+    // A warm PTY already holds its session; a cold one takes the system prompt
+    // on its command line, which the exec may refuse. That fails the turn here,
+    // with its size, before any of the turn's state exists.
+    const reuseWarm = !!this.lifecycle.getWarm(jinnSessionId) && !this.spawnParamsChanged(jinnSessionId, opts, grokSessionId);
+    if (!reuseWarm && argumentLimitApplies(false)) {
+      const args = buildGrokInteractiveArgs(opts, grokSessionId, systemPromptOverride);
+      assertArgumentsFit("Grok", args, (index) => describeGrokArgument(args, index));
+    }
+
     let latestAnswer = "";
     let lastContextTokens: number | undefined;
     let settled = false;
@@ -173,7 +201,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     let promptSubmitTimer: NodeJS.Timeout | undefined;
     let resolveFn!: (r: EngineResult) => void;
     const promise = new Promise<EngineResult>((res) => { resolveFn = res; });
-    const turn: ActiveTurn = { interrupt: () => {} };
+    const turn: ActiveTurn = { interrupt: () => {}, processExited: () => {}, started: reuseWarm };
 
     const cleanup = () => {
       if (promptSubmitTimer) clearTimeout(promptSubmitTimer);
@@ -205,8 +233,12 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
       let acceptedProjectPicker = false;
       turn.tuiOutput = proc.onData((data) => {
         buffer = (buffer + data).slice(-5000);
-        if (!promptSubmitted && isGrokTuiReady(buffer)) schedulePromptSubmit(PROMPT_READY_SUBMIT_DELAY_MS);
+        if (isGrokTuiReady(buffer)) {
+          turn.started = true;
+          if (!promptSubmitted) schedulePromptSubmit(PROMPT_READY_SUBMIT_DELAY_MS);
+        }
         if (!acceptedProjectPicker && isGrokProjectPicker(buffer)) {
+          turn.started = true;
           acceptedProjectPicker = true;
           const t = setTimeout(() => proc.write("\r"), 100);
           t.unref?.();
@@ -221,9 +253,19 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     };
     turn.interrupt = (reason: string) =>
       finish({ sessionId: grokSessionId ?? opts.resumeSessionId ?? "", result: latestAnswer, error: reason });
+    // Before grok is up it never ran this turn (an exec refusal, an unknown
+    // flag, a crash on boot): a failed start, carrying what the process
+    // printed, not a quiet interruption that loses the reason.
+    turn.processExited = (exit, output) => {
+      if (!turn.started) {
+        finish({ sessionId: grokSessionId ?? opts.resumeSessionId ?? "", result: "", error: processStartFailure("grok", exit, output) });
+        return;
+      }
+      turn.interrupt(processExitInterruption("grok", exit));
+    };
 
     let warm = this.lifecycle.getWarm(jinnSessionId);
-    if (warm && this.spawnParamsChanged(jinnSessionId, opts, grokSessionId)) {
+    if (warm && !reuseWarm) {
       this.lifecycle.releaseSession(jinnSessionId);
       warm = undefined;
     }
@@ -240,6 +282,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
 
     const onParsed = (parsed: GrokParsedLine) => {
       if (settled) return;
+      turn.started = true;
       if (parsed.sessionId && !grokSessionId) {
         grokSessionId = parsed.sessionId;
         this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, sessionId: grokSessionId });
@@ -387,7 +430,14 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     proc.onData((data) => {
       if (data.includes("\x1b[6n")) proc.write(CURSOR_POSITION_RESPONSE);
     });
-    this.streams.attach(jinnSessionId, proc);
+    // The newest output, for a process that dies before its turn starts: what it
+    // printed is the only account of why (see processStartFailure). It stops
+    // growing once that turn has started.
+    let tail = "";
+    this.streams.attach(jinnSessionId, proc, (raw) => {
+      const e = this.active.get(jinnSessionId);
+      if (!(e && e.boundProc === proc && e.started)) tail = (tail + raw).slice(-OUTPUT_TAIL_CHARS);
+    });
     proc.onExit((event) => {
       const isCurrent = this.lifecycle.getWarm(jinnSessionId) === handle;
       if (isCurrent) {
@@ -395,7 +445,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
         this.lifecycle.releaseSession(jinnSessionId);
       }
       const e = this.active.get(jinnSessionId);
-      if (e && e.boundProc === proc) e.interrupt(processExitInterruption("grok", event));
+      if (e && e.boundProc === proc) e.processExited(event, tail);
     });
     return handle;
   }
