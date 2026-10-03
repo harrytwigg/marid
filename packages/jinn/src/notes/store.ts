@@ -610,7 +610,7 @@ export const KNOWLEDGE_SNIPPET_CHAR_CAP = 300;
 export { KNOWLEDGE_FILE_CHAR_CAP };
 const SNIPPET_WORDS_EACH_SIDE = 6;
 /** The allowlisted search roots — the ONLY directories search will ever touch. */
-const SEARCH_ROOTS = ["knowledge", "docs"] as const;
+export const SEARCH_ROOTS = ["knowledge", "docs"] as const;
 
 export interface KnowledgeSearchHit {
   /** Relative path, e.g. `knowledge/pricing-strategy.md` — feed to readKnowledgeFile. */
