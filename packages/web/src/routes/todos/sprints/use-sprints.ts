@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { sprintApi as api, type SprintWire } from "@/lib/sprint-api"
+import { ApiError } from "@/lib/api"
 import { TODO_QUERY_FRESHNESS, TODO_WRITE_KEY } from "@/lib/query-keys"
+import { operatorSafeTodoError } from "@/lib/todos"
 
 /* Sprints on the web: the registry query and every write against it.
  *
@@ -93,4 +95,13 @@ export function sprintFilterLabel(value: string | undefined, sprints: SprintWire
 export function sprintChoices(sprints: SprintWire[] | undefined): SprintWire[] {
   const all = sprints ?? []
   return [...all.filter((s) => s.status !== "closed"), ...all.filter((s) => s.status === "closed").slice(0, 5)]
+}
+
+/** A sprint refusal in the gateway's own words. Every 4xx the sprint routes
+ *  send is written for the operator — "a sprint named X already exists", "X is
+ *  done in closed sprint Y, which keeps it" — so it says more than a generic
+ *  fallback could. Anything else goes through the Todo-safe mapping. */
+export function sprintErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.message.trim()) return error.message
+  return operatorSafeTodoError(error, fallback)
 }

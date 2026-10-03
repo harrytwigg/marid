@@ -1,7 +1,6 @@
 import { CalendarRange } from "lucide-react"
 import type { SprintWire } from "@/lib/sprint-api"
-import { operatorSafeTodoError } from "@/lib/todos"
-import { resolveSprintFilter, sprintDates, useSprints, useStartSprint } from "./use-sprints"
+import { resolveSprintFilter, sprintDates, useSprints, useStartSprint, sprintErrorMessage } from "./use-sprints"
 
 /* The line under the filter row while the board is scoped to a sprint: which
  * sprint, its dates and goal, how much of it is still open, and the one
@@ -71,7 +70,7 @@ function SprintLifecycleButton({ sprint, running, onComplete }: {
       </button>
       {start.isError && (
         <span role="alert" className="basis-full text-[var(--system-red)]">
-          {operatorSafeTodoError(start.error, "Couldn't start the sprint")}
+          {sprintErrorMessage(start.error, "Couldn't start the sprint")}
         </span>
       )}
     </>

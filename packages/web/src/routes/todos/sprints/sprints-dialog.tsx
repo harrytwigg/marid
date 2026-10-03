@@ -2,10 +2,9 @@ import { useEffect, useState } from "react"
 import { Play, Trash2 } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import type { SprintWire } from "@/lib/sprint-api"
-import { operatorSafeTodoError } from "@/lib/todos"
 import { CompletePanel } from "./sprint-complete-panel"
 import { CreateSprintForm } from "./sprint-create-form"
-import { sprintDates, useDeleteSprint, useSprints, useStartSprint } from "./use-sprints"
+import { sprintDates, useDeleteSprint, useSprints, useStartSprint, sprintErrorMessage } from "./use-sprints"
 
 /* The sprint planner: one dialog that creates sprints, starts the next one,
  * and completes the running one. Completing is the step with consequences, so
@@ -104,7 +103,7 @@ function usePlannerState(open: boolean, completingOnOpen: string | null) {
 /** Loading and failure lines for the registry query; nothing once it has loaded. */
 function SprintsState({ query }: { query: ReturnType<typeof useSprints> }) {
   if (query.isLoading) return <div className={QUIET_TEXT_CLASS}>Loading sprints…</div>
-  if (query.isError) return <ErrorNote message={operatorSafeTodoError(query.error, "Couldn't load sprints")} />
+  if (query.isError) return <ErrorNote message={sprintErrorMessage(query.error, "Couldn't load sprints")} />
   return null
 }
 
@@ -166,7 +165,7 @@ function PlannedActions({ sprint, running, onError }: {
 }) {
   const start = useStartSprint()
   const remove = useDeleteSprint()
-  const fail = (fallback: string) => (err: unknown) => onError(operatorSafeTodoError(err, fallback))
+  const fail = (fallback: string) => (err: unknown) => onError(sprintErrorMessage(err, fallback))
   return (
     <>
       <button

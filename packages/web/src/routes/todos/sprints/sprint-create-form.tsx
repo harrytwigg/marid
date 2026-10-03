@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { DIALOG_ACTION_CLASS } from "@/components/ui/dialog-actions"
-import { operatorSafeTodoError } from "@/lib/todos"
-import { useCreateSprint } from "./use-sprints"
+import { useCreateSprint, sprintErrorMessage } from "./use-sprints"
 
 /* The planner's new-sprint row: a name (required), optional start and end
  * days, and an optional goal. */
@@ -25,7 +24,7 @@ export function CreateSprintForm({ onError }: { onError: (message: string | null
       { name: form.name.trim(), goal: form.goal.trim() || null, startsAt: form.startsAt || null, endsAt: form.endsAt || null },
       {
         onSuccess: () => setForm(EMPTY_SPRINT_FORM),
-        onError: (err) => onError(operatorSafeTodoError(err, "Couldn't create the sprint")),
+        onError: (err) => onError(sprintErrorMessage(err, "Couldn't create the sprint")),
       },
     )
   }

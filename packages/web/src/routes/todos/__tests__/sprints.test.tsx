@@ -177,6 +177,15 @@ describe("the Todo page's Sprint row", () => {
     expect(screen.queryByTestId(`rail-sprint-${OLD.id}`)).toBeNull()
   })
 
+  it("shows the gateway's own refusal when a move is refused", async () => {
+    const { ApiError } = await import("@/lib/api")
+    sprintApi.setWorkItemSprint.mockRejectedValue(new ApiError(400, 'PLA-7 is done in closed sprint "Sprint 0", which keeps it as its record'))
+    renderRow({ detail: detail({ sprint: OLD }), editable: true })
+    fireEvent.pointerDown(screen.getByTestId("rail-sprint"), { button: 0, ctrlKey: false, pointerType: "mouse" })
+    fireEvent.click(await screen.findByTestId(`rail-sprint-${NEXT.id}`))
+    expect((await screen.findByRole("alert")).textContent).toContain("which keeps it as its record")
+  })
+
   it("reads a sub-task's sprint from its root and offers no move", () => {
     renderRow({ detail: detail({ parentId: "PLA-3", rootId: "PLA-3", sprint: ACTIVE }), editable: true })
     const row = screen.getByTestId("rail-sprint")

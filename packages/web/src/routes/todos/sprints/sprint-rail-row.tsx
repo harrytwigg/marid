@@ -8,10 +8,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { WorkItemDetailWire } from "@/lib/api"
 import type { SprintWire, WorkItemSprintRefWire } from "@/lib/sprint-api"
-import { operatorSafeTodoError } from "@/lib/todos"
 import { RailRow } from "../task-page/rail-rows"
 import { MenuCheck } from "../filter-chips"
-import { useSetWorkItemSprint, useSprints } from "./use-sprints"
+import { useSetWorkItemSprint, useSprints, sprintErrorMessage } from "./use-sprints"
 
 /* The task rail's Sprint row: which sprint the Todo is in, and the menu that
  * moves it to another one or out of any. A sub-task has no sprint of its own —
@@ -55,7 +54,7 @@ export function SprintRailRow({ detail, editable }: { detail: WorkItemDetailWire
       </DropdownMenu>
       {move.isError && (
         <div role="alert" className="pt-1 text-[length:var(--text-caption1)] text-[var(--system-red)]">
-          {operatorSafeTodoError(move.error, "Couldn't move the Todo")}
+          {sprintErrorMessage(move.error, "Couldn't move the Todo")}
         </div>
       )}
     </div>

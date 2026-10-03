@@ -1,8 +1,7 @@
 import { useState } from "react"
 import { DIALOG_ACTION_CLASS, DIALOG_CANCEL_CLASS } from "@/components/ui/dialog-actions"
 import type { SprintWire } from "@/lib/sprint-api"
-import { operatorSafeTodoError } from "@/lib/todos"
-import { sprintDates, useCompleteSprint, useCreateSprint } from "./use-sprints"
+import { sprintDates, useCompleteSprint, useCreateSprint, sprintErrorMessage } from "./use-sprints"
 
 /* Completing the running sprint: how many Todos are unfinished, where they go
  * (a planned sprint, a new one, or out of any sprint), and whether that sprint
@@ -45,7 +44,7 @@ export function CompletePanel({ sprint, planned, onCancel, onDone, onError }: {
       const result = await complete.mutateAsync({ id: sprint.id, carryTo, startNext: carryTo !== null && startNext })
       onDone(result.carriedTo && startNext ? result.carriedTo.id : null)
     } catch (err) {
-      onError(operatorSafeTodoError(err, "Couldn't complete the sprint"))
+      onError(sprintErrorMessage(err, "Couldn't complete the sprint"))
     }
   }
 
