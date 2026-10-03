@@ -8,6 +8,7 @@ import type { CapacitySnapshot } from "../snapshot.js";
 import type { WalkTurn, WalkTurnResult } from "../walk.js";
 import type { WalkToolResult } from "../turn.js";
 import type { LinkState } from "../pr-state.js";
+import { writeAutoStartRow } from "../../work-items/auto-start.js";
 
 /**
  * The board walk end to end on a throwaway instance: a real Todo store, a real
@@ -41,6 +42,8 @@ const m = {} as {
   transitions: typeof import("../../work-items/transitions.js");
   relations: typeof import("../../work-items/relations.js");
   labels: typeof import("../../work-items/labels.js");
+  dispatchConfig: typeof import("../../work-items/dispatch-config.js");
+  migrate: typeof import("../../work-items/migrate.js");
   comments: typeof import("../../work-items/comments.js");
   stopCause: typeof import("../../work-items/stop-cause.js");
   parkExpiry: typeof import("../../work-items/park-expiry.js");
@@ -55,6 +58,8 @@ beforeAll(async () => {
   m.transitions = await import("../../work-items/transitions.js");
   m.relations = await import("../../work-items/relations.js");
   m.labels = await import("../../work-items/labels.js");
+  m.dispatchConfig = await import("../../work-items/dispatch-config.js");
+  m.migrate = await import("../../work-items/migrate.js");
   m.comments = await import("../../work-items/comments.js");
   m.stopCause = await import("../../work-items/stop-cause.js");
   m.parkExpiry = await import("../../work-items/park-expiry.js");
@@ -412,16 +417,32 @@ describe("board walk dispatch", () => {
   });
 
   it("refuses to start a Todo that opted out or belongs to the operator, whatever the model asks", async () => {
-    const labelled = todo("Labelled out");
-    if (!m.labels.listLabels().some((label) => label.name === "no-auto-start")) m.labels.createLabel({ name: "no-auto-start" });
-    m.labels.addWorkItemLabels(labelled.id, ["no-auto-start"], "operator");
+    const optedOut = todo("Opted out");
+    writeAutoStartRow(m.db, optedOut.id, false, new Date(NOW).toISOString());
     const mine = todo("Mine", { assignee: "@operator" });
     const h = open({ startAll: true });
     const tick = await h.walk.tick();
     expect(h.dispatched).toEqual([]);
     expect(tick.entries).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: "refused", workItemId: labelled.id, outcome: "it refuses automatic starts (label no-auto-start)" }),
+      expect.objectContaining({ kind: "refused", workItemId: optedOut.id, outcome: "it refuses automatic starts (autoStart is false)" }),
       expect.objectContaining({ kind: "refused", workItemId: mine.id, outcome: "it refuses automatic starts (assigned to the operator)" }),
+    ]));
+  });
+
+  it("carries a Todo still labelled no-auto-start into autoStart: false at boot, and still refuses it", async () => {
+    const labelled = todo("Labelled out");
+    m.labels.createLabel({ name: "keep-me" });
+    if (!m.labels.listLabels().some((label) => label.name === "no-auto-start")) m.labels.createLabel({ name: "no-auto-start" });
+    m.labels.addWorkItemLabels(labelled.id, ["keep-me", "no-auto-start"], "operator");
+    m.migrate.migrateWorkItemsSchema(m.db);
+    expect(m.dispatchConfig.getTodoDispatchConfig(labelled.id)?.autoStart).toBe(false);
+    expect(m.labels.getWorkItemLabels(labelled.id).map((label) => label.name)).toEqual(["keep-me"]);
+    expect(m.labels.listLabels().map((label) => label.name)).not.toContain("no-auto-start");
+    const h = open({ startAll: true });
+    const tick = await h.walk.tick();
+    expect(h.dispatched).toEqual([]);
+    expect(tick.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "refused", workItemId: labelled.id, outcome: "it refuses automatic starts (autoStart is false)" }),
     ]));
   });
 

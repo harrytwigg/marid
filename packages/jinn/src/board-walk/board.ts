@@ -28,8 +28,6 @@ import { findLinks, type LinkResolver, type LinkState } from "./pr-state.js";
  */
 
 export const OPEN_STATUSES: readonly WorkItemStatus[] = ["backlog", "blocked", "executing"];
-/** The opt-out label every automatic start honours. */
-export const NO_AUTO_START_LABEL = "no-auto-start";
 
 const TITLE_CHARS = 200;
 const BODY_CHARS = 1200;
@@ -80,10 +78,10 @@ export function statusSince(item: WorkItem): string {
   return item.createdAt;
 }
 
-/** Why a Todo refuses every automatic start, or undefined. */
-export function noAutoStartReason(item: WorkItem, labels?: string[]): string | undefined {
-  const names = labels ?? getWorkItemLabels(item.id).map((label) => label.name);
-  if (names.includes(NO_AUTO_START_LABEL)) return `label ${NO_AUTO_START_LABEL}`;
+/** Why a Todo refuses every automatic start, or undefined. The dispatch
+ *  config's `autoStart` is the one per-Todo opt-out; the `no-auto-start` label
+ *  that once did the same is carried into it at boot (retired-opt-out-label.ts). */
+export function noAutoStartReason(item: WorkItem): string | undefined {
   if (getTodoDispatchConfig(item.id)?.autoStart === false) return "autoStart is false";
   if (item.assignee === OPERATOR_ASSIGNEE) return "assigned to the operator";
   return undefined;
@@ -151,7 +149,7 @@ export async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<B
     ...optional<Pick<BoardTodo, "body" | "stop" | "noAutoStart" | "dispatchEngine" | "flaggedStuck">>({
       body: truncate(item.body, BODY_CHARS),
       stop: stopOf(item),
-      noAutoStart: noAutoStartReason(item, labels),
+      noAutoStart: noAutoStartReason(item),
       dispatchEngine: getTodoDispatchConfig(item.id)?.engine,
       flaggedStuck: opts.flagged?.has(item.id) === true,
     }),

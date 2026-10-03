@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Database as DatabaseType } from "better-sqlite3";
 import { migrateRetiredStatuses } from "./retired-statuses.js";
+import { migrateRetiredOptOutLabel } from "./retired-opt-out-label.js";
 
 /** The actor every row written by this migration carries. */
 export const RETIRED_APPROVAL_AUTHOR = "migration";
@@ -139,8 +140,9 @@ export function postRetiredApprovals(db: DatabaseType): number {
 }
 
 /** The boot step for what retired Todo features left in the data: the retired
- *  statuses' rows, then the approvals still pending. */
+ *  statuses' rows, the approvals still pending, then the retired opt-out label. */
 export function migrateRetiredWorkItemData(db: DatabaseType): void {
   migrateRetiredStatuses(db);
   postRetiredApprovals(db);
+  migrateRetiredOptOutLabel(db);
 }

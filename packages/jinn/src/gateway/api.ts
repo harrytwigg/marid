@@ -2213,7 +2213,7 @@ export async function handleApiRequest(
       const labelRefs = body.labels === undefined ? undefined : (body.labels as string[]).map((entry) => entry.trim());
       // the auto-start opt-out at creation, so a Todo an employee mints
       // from a session that is already working it never has a window between
-      // create and assign in which a `todo-status` trigger could spawn a second
+      // create and assign in which the board walk could start a second
       // session. Only `false` is worth storing; `true` is what absence means.
       if (body.autoStart !== undefined && typeof body.autoStart !== "boolean") {
         return badRequest(res, "autoStart must be a boolean");
