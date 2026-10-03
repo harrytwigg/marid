@@ -60,10 +60,10 @@ export function attemptActivity(workItemId: string): AttemptActivity {
   };
 }
 
-/** The runs the operator's resume out of `blocked` has not already answered.
- *  `transition()` deletes the row on that move; without this floor the sweep
- *  would classify the failed run straight back and, in auto, re-arm from it.
- *  An open run is current by definition. */
+/** The runs the operator's resume out of `blocked`, or his review bounce, has
+ *  not already answered. `transition()` deletes the row on that move; without
+ *  this floor the sweep would classify the failed run straight back and, in
+ *  auto, re-arm from it. An open run is current by definition. */
 function runsSinceOperatorResume(workItemId: string) {
   const floor = latestOperatorResumeAt(workItemId);
   const runs = listWorkItemAttemptRuns(workItemId);
