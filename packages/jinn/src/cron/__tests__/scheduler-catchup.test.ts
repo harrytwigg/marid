@@ -55,6 +55,22 @@ describe("scheduler — missed-execution recovery and coalescing", () => {
     expect(opts).toMatchObject({ scheduled: false, recoverMissedExecutions: true });
   });
 
+  it("fires an ordinary on-time schedule exactly once, with no same-second re-emit", async () => {
+    // Recovery makes node-cron re-test the previous second on every tick; an
+    // untruncated ms on `now - 1000` re-matches the second that just fired. The
+    // ticker must run the slot once even as later ticks pass over it.
+    vi.setSystemTime(new Date("2026-01-01T11:59:58.500Z"));
+    startScheduler([job("0 * * * *")], deps);
+
+    for (let i = 0; i < 5; i += 1) {
+      vi.advanceTimersByTime(1000);
+      await flushFire();
+    }
+
+    expect(runCronJob).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it("recovers a :00 fire the delayed ticker skipped, exactly once", async () => {
     // node-cron ticks every ~1000ms from its own phase. A tick that lands at :01
     // instead of :00 tests only the current second and drops an hourly fire. Model
@@ -66,6 +82,11 @@ describe("scheduler — missed-execution recovery and coalescing", () => {
 
     vi.advanceTimersByTime(1100);
     await flushFire();
+    // Later ticks must not re-fire the recovered slot.
+    for (let i = 0; i < 3; i += 1) {
+      vi.advanceTimersByTime(1000);
+      await flushFire();
+    }
 
     expect(runCronJob).toHaveBeenCalledTimes(1);
     expect(logger.warn).not.toHaveBeenCalled();
@@ -78,12 +99,13 @@ describe("scheduler — missed-execution recovery and coalescing", () => {
     vi.setSystemTime(new Date("2026-01-01T12:00:30.000Z"));
     const scheduleSpy = vi.spyOn(cron, "schedule");
     startScheduler([job("* * * * *")], deps);
-    const fire = scheduleSpy.mock.calls[0]?.[1] as (() => void) | undefined;
+    const fire = scheduleSpy.mock.calls[0]?.[1] as ((now: Date) => void) | undefined;
     scheduleSpy.mockRestore();
 
-    fire!();
-    fire!();
-    fire!();
+    // Distinct missed slots, emitted synchronously in one catch-up loop.
+    fire!(new Date("2026-01-01T11:58:00.000Z"));
+    fire!(new Date("2026-01-01T11:59:00.000Z"));
+    fire!(new Date("2026-01-01T12:00:00.000Z"));
     await flushFire();
 
     expect(runCronJob).toHaveBeenCalledTimes(1);

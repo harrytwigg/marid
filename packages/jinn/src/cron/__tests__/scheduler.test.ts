@@ -3,13 +3,13 @@ import type { CronJob, JinnConfig, Connector } from "../../shared/types.js";
 
 // Capture the callback node-cron would invoke on a scheduled tick so we can fire it
 // manually. cron.schedule/validate are stubbed; stopScheduler needs a `.stop()`.
-let scheduledCallback: (() => void) | undefined;
+let scheduledCallback: ((now: Date) => void) | undefined;
 let throwExpression: string | undefined;
 type ScheduleOpts = { timezone?: string; recoverMissedExecutions?: boolean; scheduled?: boolean };
 const scheduledTasks: Array<{ expression: string; opts?: ScheduleOpts; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
 vi.mock("node-cron", () => ({
   default: {
-    schedule: vi.fn((expr: string, cb: () => void, opts?: ScheduleOpts) => {
+    schedule: vi.fn((expr: string, cb: (now: Date) => void, opts?: ScheduleOpts) => {
       if (opts?.timezone === "Mars/Olympus" || expr === throwExpression) throw new RangeError("Invalid time zone specified");
       scheduledCallback = cb;
       const task = { expression: expr, opts, start: vi.fn(), stop: vi.fn() };
@@ -90,7 +90,7 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
     const swapped = { engines: { default: "codex" } } as unknown as JinnConfig;
     config = swapped;
 
-    scheduledCallback!(); // simulate node-cron firing the tick
+    scheduledCallback!(new Date()); // simulate node-cron firing the tick
     await flushScheduledFire();
 
     expect(runCronJob).toHaveBeenCalledTimes(1);
@@ -121,7 +121,7 @@ describe("scheduler — a job that runs a built-in action", () => {
 
   it("a scheduled fire tells the runner it is a scheduled fire", async () => {
     startScheduler([walk], deps);
-    scheduledCallback!();
+    scheduledCallback!(new Date());
     await flushScheduledFire();
     const call = (runCronJob as any).mock.calls[0];
     expect(call[0]).toBe(walk);

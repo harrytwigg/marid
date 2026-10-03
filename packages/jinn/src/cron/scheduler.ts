@@ -24,6 +24,9 @@ let tasks: cron.ScheduledTask[] = [];
 let deps: SchedulerDeps;
 /** The job each built-in action is armed from, as of the last reload. */
 let armedActions = new Map<CronAction, CronJob>();
+/** Highest scheduled slot (unix seconds) each job has already fired. Kept across
+ *  reloads so a re-armed task cannot re-fire the second the previous one just did. */
+const firedSlots = new Map<string, number>();
 
 /** The job the scheduler armed for `action`, or undefined when none is armed
  *  (no job, all disabled, or none valid). This is the job that fires. */
@@ -73,6 +76,7 @@ export function stopScheduler(): void {
   }
   tasks = [];
   armedActions = new Map();
+  firedSlots.clear();
 }
 
 function createTask(job: CronJob): cron.ScheduledTask {
@@ -82,45 +86,52 @@ function createTask(job: CronJob): cron.ScheduledTask {
   }
   const actionError = cronActionError(job);
   if (actionError) throw new Error(actionError);
-  // node-cron tests only the current second unless recoverMissedExecutions is set,
-  // so a scheduled second the ticker missed — a minute-boundary check the event
-  // loop delayed, or a tick whose phase drifted past the scheduled second — was
-  // dropped silently, with no run-log entry. Recover it. Recovery re-emits every
-  // matching second synchronously inside one matchTime loop, which for a sub-minute
-  // schedule would burst N runs at once, so coalesce: the first emission schedules
-  // the fire on the next loop turn, and any later emission while it is pending
-  // collapses into that same fire. The catch-up only spans time the gateway was
-  // running: node-cron seeds `lastExecution` at start(), so a fire missed while the
-  // process was down is not replayed.
+  return cron.schedule(job.schedule, scheduledFire(job), { timezone: job.timezone, scheduled: false, recoverMissedExecutions: true });
+}
+
+/** A node-cron tick handler that recovers and coalesces missed fires.
+ *
+ *  node-cron tests only the current second unless `recoverMissedExecutions` is set,
+ *  so a scheduled second the ticker missed — a minute-boundary check the event loop
+ *  delayed, or a tick whose phase drifted past it — was dropped silently. Recover it,
+ *  but dedupe on the scheduled slot: recovery re-tests the previous second on every
+ *  tick, and `lastExecution` is stored with its milliseconds truncated, so
+ *  `now - 1000` re-matches the second that just fired. The slot is tracked per job id
+ *  across reloads, so a task re-armed in the same second cannot re-fire it. A burst
+ *  of distinct missed slots inside one matchTime loop coalesces into a single fire,
+ *  which warns. Fires missed while the process was down are not replayed: node-cron
+ *  seeds `lastExecution` at start(). */
+function scheduledFire(job: CronJob): (now: Date | "manual" | "init") => void {
   let pending = false;
   let coalesced = 0;
-
-  return cron.schedule(
-    job.schedule,
-    () => {
-      if (pending) {
-        coalesced += 1;
-        return;
+  return (scheduledFor) => {
+    if (scheduledFor instanceof Date) {
+      const slot = Math.floor(scheduledFor.getTime() / 1000);
+      const lastSlot = firedSlots.get(job.id);
+      if (lastSlot !== undefined && slot <= lastSlot) return;
+      firedSlots.set(job.id, slot);
+    }
+    if (pending) {
+      coalesced += 1;
+      return;
+    }
+    pending = true;
+    setImmediate(() => {
+      pending = false;
+      const absorbed = coalesced;
+      coalesced = 0;
+      if (absorbed > 0) {
+        logger.warn(`Cron job "${job.name}" coalesced ${absorbed + 1} missed executions into one fire`);
       }
-      pending = true;
-      setImmediate(() => {
-        pending = false;
-        const absorbed = coalesced;
-        coalesced = 0;
-        if (absorbed > 0) {
-          logger.warn(`Cron job "${job.name}" coalesced ${absorbed + 1} missed executions into one fire`);
-        }
-        // Capture the fire identity once, at fire time, so it's owned by this fire
-        // (not recomputed inside runCronJob) and names the same session/work-item/link
-        // on any re-invocation of this fire (GRS-003b-1).
-        const fireIso = new Date().toISOString();
-        runCronJob(job, deps.sessionManager, deps.getConfig(), deps.connectors, { fireIso, emit: deps.emit, trigger: "schedule" }).catch((err) => {
-          logger.error(`Cron job "${job.name}" crashed: ${err instanceof Error ? err.message : err}`);
-        });
+      // Capture the fire identity once, at fire time, so it's owned by this fire
+      // (not recomputed inside runCronJob) and names the same session/work-item/link
+      // on any re-invocation of this fire (GRS-003b-1).
+      const fireIso = new Date().toISOString();
+      runCronJob(job, deps.sessionManager, deps.getConfig(), deps.connectors, { fireIso, emit: deps.emit, trigger: "schedule" }).catch((err) => {
+        logger.error(`Cron job "${job.name}" crashed: ${err instanceof Error ? err.message : err}`);
       });
-    },
-    { timezone: job.timezone, scheduled: false, recoverMissedExecutions: true },
-  );
+    });
+  };
 }
 
 export async function triggerCronJob(idOrName: string): Promise<CronJob | undefined> {
