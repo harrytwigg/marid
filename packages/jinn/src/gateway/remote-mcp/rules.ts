@@ -34,7 +34,7 @@ const ALLOWED_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ["GET", "/api/files"], ["GET", "/api/files/read"],
   // Class L writes.
   ["POST", "/api/work-items"], ["PATCH", "/api/work-items/:id"], ["POST", "/api/work-items/:id/comments"],
-  ["PUT", "/api/work-items/:id/labels"], ["POST", "/api/work-items/:id/relations"],
+  ["PUT", "/api/work-items/:id/labels"], ["PUT", "/api/work-items/:id/sprint"], ["POST", "/api/work-items/:id/relations"],
   ["DELETE", "/api/work-items/:id/relations"], ["POST", "/api/notes"], ["PUT", "/api/notes"],
   // Session control.
   ["GET", "/api/sessions/:id"], ["POST", "/api/sessions/:id/message"], ["POST", "/api/delegations"],
