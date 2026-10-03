@@ -37,10 +37,14 @@ export function SprintRailRow({ detail, editable }: { detail: WorkItemDetailWire
   return (
     <div className="relative">
       <DropdownMenu open={open} onOpenChange={setOpen}>
+        {/* RailRow passes on no props of its own, so the trigger's handlers ride a
+            wrapper: pointer and key events on the row bubble to it. */}
         <DropdownMenuTrigger asChild>
-          <RailRow quiet testId="rail-sprint" label="Sprint" onOpen={() => {}} open={open}>
-            {value}
-          </RailRow>
+          <div>
+            <RailRow quiet testId="rail-sprint" label="Sprint" onOpen={() => {}} open={open}>
+              {value}
+            </RailRow>
+          </div>
         </DropdownMenuTrigger>
         <SprintMoveMenu
           current={current}

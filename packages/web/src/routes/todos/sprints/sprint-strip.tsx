@@ -89,8 +89,10 @@ function SprintSummary({ sprint }: { sprint: SprintWire }) {
         {STATE_LABEL[sprint.status]}
       </span>
       {dates && <span className="flex-none tabular-nums">{dates}</span>}
+      {/* Done of total, not "open": the header's open count leaves blocked out,
+          and two different "open" numbers on one screen read as a bug. */}
       <span className="flex-none tabular-nums text-[var(--text-tertiary)]">
-        {sprint.open} open of {sprint.total}
+        {sprint.total - sprint.open} of {sprint.total} done
       </span>
       {sprint.goal && <span className="min-w-0 truncate text-[var(--text-tertiary)]" title={sprint.goal}>{sprint.goal}</span>}
     </span>

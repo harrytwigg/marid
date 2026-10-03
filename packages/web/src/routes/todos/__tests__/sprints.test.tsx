@@ -13,6 +13,7 @@ const sprintApi = vi.hoisted(() => ({
   completeSprint: vi.fn(),
   startSprint: vi.fn(),
   deleteSprint: vi.fn(),
+  setWorkItemSprint: vi.fn(),
 }))
 
 vi.mock("@/lib/sprint-api", async (importOriginal) => {
@@ -22,6 +23,7 @@ vi.mock("@/lib/sprint-api", async (importOriginal) => {
 
 const { SprintsDialog } = await import("../sprints/sprints-dialog")
 const { resolveSprintFilter, sprintFilterLabel } = await import("../sprints/use-sprints")
+const { SprintRailRow } = await import("../sprints/sprint-rail-row")
 
 function sprint(over: Partial<SprintWire> & { id: string; name: string }): SprintWire {
   return {
@@ -132,5 +134,40 @@ describe("the sprint planner", () => {
     await waitFor(() => expect(sprintApi.completeSprint).toHaveBeenCalledWith(ACTIVE.id, { carryTo: null, startNext: false }))
     expect(await screen.findByTestId("sprints-error")).toBeTruthy()
     expect(screen.getByTestId("sprint-complete-panel")).toBeTruthy()
+  })
+})
+
+describe("the Todo page's Sprint row", () => {
+  function detail(over: { parentId?: string | null; rootId?: string; sprint?: SprintWire | null }) {
+    const sprint = over.sprint === undefined ? null : over.sprint
+    return {
+      workItem: { id: "PLA-7", parentId: over.parentId ?? null, rootId: over.rootId ?? "PLA-7" },
+      sprint: sprint && { id: sprint.id, name: sprint.name, status: sprint.status },
+    } as unknown as React.ComponentProps<typeof SprintRailRow>["detail"]
+  }
+
+  function renderRow(props: React.ComponentProps<typeof SprintRailRow>) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={qc}><SprintRailRow {...props} /></QueryClientProvider>)
+  }
+
+  // The row is a RailRow, which passes on no props of its own: the menu
+  // trigger has to sit on a wrapper or a press on the row never reaches it.
+  it("opens the move menu from a press on the row and moves the Todo", async () => {
+    sprintApi.setWorkItemSprint.mockResolvedValue({ sprint: { id: NEXT.id, name: NEXT.name, status: "planned" } })
+    renderRow({ detail: detail({ sprint: ACTIVE }), editable: true })
+    expect(screen.getByTestId("rail-sprint").textContent).toContain("Sprint 1")
+    fireEvent.pointerDown(screen.getByTestId("rail-sprint"), { button: 0, ctrlKey: false, pointerType: "mouse" })
+    fireEvent.click(await screen.findByTestId(`rail-sprint-${NEXT.id}`))
+    await waitFor(() => expect(sprintApi.setWorkItemSprint).toHaveBeenCalledWith("PLA-7", NEXT.id))
+    // Closed sprints are history, never a destination.
+    expect(screen.queryByTestId(`rail-sprint-${OLD.id}`)).toBeNull()
+  })
+
+  it("reads a sub-task's sprint from its root and offers no move", () => {
+    renderRow({ detail: detail({ parentId: "PLA-3", rootId: "PLA-3", sprint: ACTIVE }), editable: true })
+    const row = screen.getByTestId("rail-sprint")
+    expect(row.tagName).toBe("DIV")
+    expect(row.textContent).toContain("follows PLA-3")
   })
 })

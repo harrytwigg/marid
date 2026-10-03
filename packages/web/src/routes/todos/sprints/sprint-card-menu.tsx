@@ -31,6 +31,9 @@ interface MenuTarget {
   item: WorkItemCompactWire
   x: number
   y: number
+  /** Bumped per right-click: each open mounts a fresh menu, measured at its own
+   *  pointer, rather than reusing the one still anchored where the last one was. */
+  seq: number
 }
 
 /** `onContextMenu` goes on the element holding the cards; `menu` renders anywhere. */
@@ -51,7 +54,7 @@ export function useSprintCardMenu({ itemById, sprints, enabled, onError }: {
     // Anywhere but a card keeps the browser's own menu.
     if (!item) return
     event.preventDefault()
-    setTarget({ item, x: event.clientX, y: event.clientY })
+    setTarget((last) => ({ item, x: event.clientX, y: event.clientY, seq: (last?.seq ?? 0) + 1 }))
   }, [enabled, itemById])
 
   const moveTo = (sprint: string | null) => {
@@ -59,29 +62,31 @@ export function useSprintCardMenu({ itemById, sprints, enabled, onError }: {
     move.mutate({ id: target.item.id, sprint }, { onError })
   }
 
-  const menu = <SprintCardMenu target={target} sprints={sprints} onClose={() => setTarget(null)} onMove={moveTo} />
+  const menu = target
+    ? <SprintCardMenu key={target.seq} target={target} sprints={sprints} onClose={() => setTarget(null)} onMove={moveTo} />
+    : null
   return { onContextMenu, menu }
 }
 
 function SprintCardMenu({ target, sprints, onClose, onMove }: {
-  target: MenuTarget | null
+  target: MenuTarget
   sprints: SprintWire[]
   onClose: () => void
   onMove: (sprint: string | null) => void
 }) {
   const current = currentSprintOf(target)
   return (
-    <DropdownMenu open={target !== null} onOpenChange={(open) => { if (!open) onClose() }} modal={false}>
+    <DropdownMenu open onOpenChange={(open) => { if (!open) onClose() }}>
       <DropdownMenuTrigger asChild>
         <span
           aria-hidden
           className="pointer-events-none fixed size-0"
-          style={target ? { left: target.x, top: target.y } : undefined}
+          style={{ left: target.x, top: target.y }}
         />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className={MENU_CLASS} data-testid="sprint-card-menu">
         <DropdownMenuLabel className="px-2.5 pb-1 pt-1.5 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
-          Move {target?.item.id} to sprint
+          Move {target.item.id} to sprint
         </DropdownMenuLabel>
         {sprints.map((sprint) => (
           <DropdownMenuItem key={sprint.id} className={ITEM_CLASS} data-testid={`sprint-card-move-${sprint.id}`} onSelect={() => onMove(sprint.id)}>

@@ -253,11 +253,11 @@ function CreateSprintForm({ onError }: { onError: (message: string | null) => vo
           Create
         </button>
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_2fr]">
+      <div className="grid grid-cols-2 gap-2">
         <input aria-label="Start date" type="date" className={FIELD_CLASS} {...field("startsAt")} />
         <input aria-label="End date" type="date" className={FIELD_CLASS} {...field("endsAt")} />
-        <input aria-label="Sprint goal" className={FIELD_CLASS} placeholder="Goal (optional)" maxLength={2000} {...field("goal")} />
       </div>
+      <input aria-label="Sprint goal" className={FIELD_CLASS} placeholder="Goal (optional)" maxLength={2000} {...field("goal")} />
     </form>
   )
 }
