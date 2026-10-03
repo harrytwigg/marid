@@ -978,25 +978,34 @@ find "$root/sessions" -mindepth 1 -maxdepth 1 -type d -mtime +"$ttl" -exec rm -r
 # One rebuild of a session's home at a time. Two can be started together, and
 # the cleanup below deletes links while the other run's ln is creating them: a
 # run fails on EEXIST/ENOENT or leaves an entry unlinked. mkdir is the lock
-# because it is atomic everywhere (flock is not on every host). A lock older
-# than two minutes belongs to a run that died, so it is broken and retaken; two
-# waiters breaking the same stale lock at once can both proceed, which is no
-# worse than before the lock and needs a dead run to begin with.
+# because it is atomic everywhere (flock is not on every host); the holder
+# records when it took it. A rebuild takes well under a second, so a lock held
+# for 20s belongs to a run that died and is broken (a lock with no time yet is
+# judged by the directory's age instead). Waiters give up after about 40s,
+# inside the gateway's 60s control timeout, so the error is seen. Two waiters
+# breaking the same stale lock at once can both proceed: no worse than before
+# the lock, and it needs a dead run to begin with.
 lock="$home.farm-lock"
 tries=0
 until mkdir "$lock" 2>/dev/null; do
-  if [ -n "$(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null)" ]; then
+  took=$(cat "$lock/taken" 2>/dev/null || true)
+  case "$took" in ''|*[!0-9]*) took= ;; esac
+  if { [ -n "$took" ] && [ $(( $(date +%s) - took )) -gt 20 ]; } \\
+    || [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+    rm -f "$lock/taken"
     rmdir "$lock" 2>/dev/null || true
     continue
   fi
   tries=$((tries + 1))
-  if [ "$tries" -ge 1200 ]; then
+  if [ "$tries" -ge 800 ]; then
     echo "remote stage: another rebuild of $home has held $lock for too long" >&2
     exit 1
   fi
   sleep 0.05 2>/dev/null || sleep 1
 done
-trap 'rmdir "$lock" 2>/dev/null || true' EXIT
+date +%s > "$lock/taken"
+trap 'rm -f "$lock/taken"; rmdir "$lock" 2>/dev/null || true' EXIT
+trap 'exit 1' HUP INT TERM
 # Drop every symlink first so an entry removed from the gateway's home does not
 # linger here as a dangling one. gateway.json, tmp/ and the filtered directories
 # below are real, not symlinks, so they are untouched by this. (A stage built
@@ -1064,7 +1073,11 @@ done
 if [ -n "$cwd" ] && [ -d "$mount" ] && [ -f "$mount/CLAUDE.md" ]; then
   mkdir -p "$cwd"
   if [ ! -e "$cwd/.git" ] && { [ ! -e "$cwd/CLAUDE.md" ] || [ -L "$cwd/CLAUDE.md" ]; }; then
-    ln -sfn "$mount/CLAUDE.md" "$cwd/CLAUDE.md"
+    # Sessions sharing this cwd hold different locks, so their links can race;
+    # the result is the same link either way.
+    ln -sfn "$mount/CLAUDE.md" "$cwd/CLAUDE.md" 2>/dev/null \\
+      || [ "$(readlink "$cwd/CLAUDE.md" 2>/dev/null)" = "$mount/CLAUDE.md" ] \\
+      || ln -sfn "$mount/CLAUDE.md" "$cwd/CLAUDE.md"
     printf 'claudemd=linked\n'
   else
     printf 'claudemd=skipped\n'

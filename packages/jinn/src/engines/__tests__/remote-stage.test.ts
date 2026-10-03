@@ -784,17 +784,30 @@ describe.skipIf(isWindows)("FARM_SCRIPT — run for real against a fixture mount
       expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
     });
 
+    it("breaks a lock whose holder took it more than 20 seconds ago, well inside the wait budget", () => {
+      seedDatabases();
+      const home = homeOf("sess-a");
+      fs.mkdirSync(`${home}.farm-lock`, { recursive: true });
+      fs.writeFileSync(path.join(`${home}.farm-lock`, "taken"), `${Math.floor(Date.now() / 1000) - 30}\n`);
+      const started = Date.now();
+      runFarm("sess-a");
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(fs.existsSync(`${home}.farm-lock`)).toBe(false);
+      expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
+    });
+
     it("waits for a live rebuild lock instead of racing it", async () => {
       seedDatabases();
       const home = homeOf("sess-a");
       fs.mkdirSync(`${home}.farm-lock`, { recursive: true });
+      fs.writeFileSync(path.join(`${home}.farm-lock`, "taken"), `${Math.floor(Date.now() / 1000)}\n`);
       const child = spawn("sh", ["-s", mount, root, home, "7"]);
       child.stdin.end(FARM_SCRIPT);
       const done = new Promise<number>((resolve) => child.on("close", (code) => resolve(code ?? 1)));
       await new Promise((r) => setTimeout(r, 400));
       // Still waiting: it has not staged anything behind the holder's back.
       expect(fs.existsSync(path.join(home, "sessions"))).toBe(false);
-      fs.rmdirSync(`${home}.farm-lock`);
+      fs.rmSync(`${home}.farm-lock`, { recursive: true });
       expect(await done).toBe(0);
       expect(fs.lstatSync(path.join(home, "sessions", "registry.db")).isDirectory()).toBe(true);
     }, 30000);
