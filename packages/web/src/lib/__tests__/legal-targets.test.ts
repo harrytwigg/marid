@@ -16,8 +16,8 @@ describe("legalTargets — manual operator moves, ungated", () => {
     executing: ["backlog", "in_review", "blocked", "done", "cancelled"],
     // Sending the work back is the review bounce.
     in_review: ["executing", "done", "blocked", "cancelled"],
-    // Unblock resumes through backlog; executing absent (manual rule).
-    blocked: ["backlog", "in_review", "done", "cancelled"],
+    // Unblock resumes through backlog, or straight back to executing.
+    blocked: ["backlog", "executing", "in_review", "done", "cancelled"],
     // Sticky terminals exit on the human surface only — which this is.
     done: ["backlog"],
     cancelled: ["backlog"],
@@ -37,7 +37,7 @@ describe("legalTargets — manual operator moves, ungated", () => {
       expect(offered).not.toContain(from)
     }
     expect(statuses(legalTargets("in_review"))).not.toContain("backlog")
-    expect(statuses(legalTargets("blocked"))).not.toContain("executing")
+    expect(statuses(legalTargets("done"))).not.toContain("executing")
   })
 })
 
@@ -108,10 +108,11 @@ describe("canDropOn — drag legality", () => {
   it("legal ungated edges are live targets", () => {
     expect(canDropOn("backlog", "executing")).toBe(true)
     expect(canDropOn("in_review", "executing")).toBe(true)
+    expect(canDropOn("blocked", "executing")).toBe(true)
     expect(canDropOn("done", "backlog")).toBe(true)
   })
   it("illegal edges are not targets", () => {
-    expect(canDropOn("blocked", "executing")).toBe(false)
+    expect(canDropOn("done", "executing")).toBe(false)
     expect(canDropOn("in_review", "backlog")).toBe(false)
     expect(canDropOn("done", "done")).toBe(false)
   })

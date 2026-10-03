@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll } from "vitest";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
+import { initDb } from "../../shared/db.js";
+import { readStopCause, writeStopCause } from "../stop-cause.js";
 
 // Throwaway registry (SESSIONS_DB resolves from JINN_HOME at module load).
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-wi-transitions-agent-lane-"));
@@ -37,7 +39,7 @@ describe("transition — manual start and the agent lane", () => {
     }
   });
 
-  it.each(["done", "cancelled", "blocked"] as const)("rejects a manual start from %s", (status) => {
+  it.each(["done", "cancelled"] as const)("rejects a manual start from %s", (status) => {
     const wi = mk(status);
 
     expect(() => tr.transition(wi.id, "executing", "operator", { human: true, manual: true })).toThrowError(
@@ -86,13 +88,18 @@ describe("transition — manual start and the agent lane", () => {
     expect(store.getWorkItem(wi.id)?.status).toBe("in_review");
   });
 
-  it("refuses a manual start from blocked unless the caller is the agent lane", () => {
+  it("lets the operator resume blocked work, not as a review bounce, and clears the stop", () => {
     const wi = mk("blocked");
+    const db = initDb();
+    writeStopCause(db, wi.id, { unblockHint: { what: "the vendor's answer", who: "vendor" } }, new Date().toISOString());
+    expect(readStopCause(db, wi.id)).toBeDefined();
 
-    expect(() => tr.transition(wi.id, "executing", "operator", { human: true, manual: true })).toThrowError(
-      /illegal manual transition blocked → executing/,
-    );
-    expect(tr.transition(wi.id, "executing", "session:agent-1", { manual: true, agent: true }).item.status).toBe("executing");
+    const { item, event } = tr.transition(wi.id, "executing", "operator", { human: true, manual: true });
+    expect(readStopCause(db, wi.id)).toBeUndefined();
+    expect(item.status).toBe("executing");
+    expect(item.rounds).toBe(wi.rounds);
+    expect(event).toMatchObject({ kind: "status_change", fromStatus: "blocked", toStatus: "executing", actor: "operator" });
+    expect(event?.detail).not.toHaveProperty("bounce");
   });
 
   it.each(["done", "cancelled"] as const)("still refuses the agent lane an exit from %s", (status) => {

@@ -1,6 +1,7 @@
 import { listSessionsByWorkItem } from '../sessions/registry.js';
 import { isExecutionAttempt } from './link-role.js';
 import { initDb } from '../shared/db.js';
+import { clearWorkItemRecovery } from './recovery-rows.js';
 import { clearBlockRecord, DEFAULT_BLOCK_KIND, recordBlock, resolveBlock, type BlockKind } from './blocks.js';
 import { cascadeCloseDescendants } from './cascade.js';
 import { holdLiveSignalsUntilCommit, notifyTodoChanged, notifyTodoStatusChange } from './live-events.js';
@@ -54,7 +55,8 @@ export interface TransitionOptions {
    *  terminal (`done`/`cancelled`). Agent/system callers never set it. */
   human?: boolean;
   /** Explicit status update from a human/tool surface. A manual move INTO
-   *  `executing` is a start action and is legal only from backlog;
+   *  `executing` is a start action and is legal only from backlog and, for
+   *  the operator resuming stopped work, blocked;
    *  reconciler derivation and review bounces deliberately leave this unset. */
   manual?: boolean;
   /**
@@ -164,7 +166,7 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     }
     // The operator sending work back from review is the review bounce (below).
     const bounce = opts.bounce || (opts.human === true && opts.manual === true && from === 'in_review' && to === 'executing');
-    if (!opts.agent && !bounce && opts.manual && to === 'executing' && from !== 'backlog') {
+    if (!opts.agent && !bounce && opts.manual && to === 'executing' && from !== 'backlog' && from !== 'blocked') {
       throw new TransitionError('illegal-edge', `illegal manual transition ${from} → ${to} for work item ${id}`);
     }
     // A same-status request reaches here only as a `dependency` re-block, which
@@ -229,6 +231,11 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     }
 
     const releasedSessions = target === 'backlog' ? releaseSelfStartedLinks(db, id) : [];
+    // The operator resuming stopped work answers the incident the recovery
+    // sweep classified while it was stopped (the sweep reads only runs that
+    // ended after this move, `latestOperatorResumeAt`, so it will not write it back).
+    if (from === 'blocked' && target === 'executing' && opts.human && opts.manual) clearWorkItemRecovery(id);
+
     if (block) recordBlock(db, id, block, now);
     // Only a successful completion resets the block history; `cancelled` keeps
     // it, because abandoning work is not evidence its blocks were resolved.

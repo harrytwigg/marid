@@ -15,6 +15,8 @@ describe("PUT /api/work-items/:id/status — the operator human-surface lane (To
     ["cancelled", "backlog", { status: "backlog", closedAt: null }],
     ["blocked", "backlog", { status: "backlog" }],
     ["blocked", "in_review", { status: "in_review" }],
+    // Resuming stopped work: a manual start from blocked is the operator's.
+    ["blocked", "executing", { status: "executing" }],
     // No note: the reason is asked for in the banner after the drop commits.
     ["executing", "blocked", { status: "blocked" }],
   ] as const)("moves %s → %s on the human-only edges", async (from, target, expectedItem) => {
@@ -46,8 +48,8 @@ describe("PUT /api/work-items/:id/status — the operator human-surface lane (To
 
   it.each([
     ["a truly illegal edge", "in_review", "backlog", [/illegal transition in_review → backlog/]],
-    // A declared edge, but a manual start is only ever from backlog.
-    ["a manual start from blocked", "blocked", "executing", [/illegal manual transition blocked → executing/]],
+    // A declared edge, but a manual start is never from a closed Todo.
+    ["a manual start from done", "done", "executing", [/illegal/]],
     // The refusal names every status, so the operator can see what was allowed.
     ["an unknown status", "backlog", "paused", [/status must be one of/, /backlog/]],
   ] as const)("still refuses an operator PUT along %s", async (_name, from, target, messages) => {

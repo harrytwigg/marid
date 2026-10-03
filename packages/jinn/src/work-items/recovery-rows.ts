@@ -47,6 +47,12 @@ export function recoveryByItem(workItemIds: readonly string[]): Map<string, Work
   return map;
 }
 
+/** The operator's own decision ends an incident: a row classified from an
+ *  attempt he has since moved the Todo past describes nothing current. */
+export function clearWorkItemRecovery(workItemId: string): void {
+  initDb().prepare("DELETE FROM work_item_recovery WHERE work_item_id = ?").run(workItemId);
+}
+
 function nextAttempts(existing: WorkItemRecovery | undefined, incidentId: string, attempted: boolean | undefined, now: string) {
   const sameIncident = existing !== undefined && existing.incidentId === incidentId;
   return {
