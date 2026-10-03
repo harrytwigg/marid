@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -72,7 +72,14 @@ import { MemoryRouter } from 'react-router-dom'
 import { ChatSidebar, PINNED_VISIBLE, hiddenTreeSignal, isDispatchedRoot } from '../chat-sidebar'
 import { CHAT_SESSION_DND_MIME } from '@/routes/chat/chat-session-dnd'
 
-const NOW = new Date().toISOString()
+// Every fixture is dated relative to this anchor and the component reads the
+// same pinned clock, so the Today/Yesterday buckets never depend on the time of
+// day the suite runs — "ten minutes ago" is still today just after midnight.
+const PINNED_NOW = new Date()
+PINNED_NOW.setHours(12, 0, 0, 0)
+const NOW = PINNED_NOW.toISOString()
+const minutesAgo = (m: number) => new Date(PINNED_NOW.getTime() - m * 60_000).toISOString()
+const daysAgo = (d: number) => new Date(PINNED_NOW.getTime() - d * 86_400_000).toISOString()
 
 function webSession(id: string, title: string, extra: Record<string, unknown> = {}) {
   return { id, title, source: 'web', lastActivity: NOW, ...extra }
@@ -87,6 +94,8 @@ function renderSidebar(variant: 'desktop' | 'mobile' = 'desktop') {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(PINNED_NOW)
   localStorage.clear()
   sidebarData.sessions = []
   sidebarData.counts = {}
@@ -96,6 +105,10 @@ beforeEach(() => {
   sidebarData.removedSpy.mockClear()
   sidebarData.archiveSpy.mockImplementation(async (_id: string) => ({}))
   sidebarData.bulkDeleteSpy.mockImplementation(async (_ids: string[]) => ({ status: 'deleted', count: 0 }))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('pinned section cap', () => {
@@ -252,7 +265,6 @@ describe('multi-select', () => {
   // pin them inside today — newest first — and the ordered range is the same on
   // every run date.
   function recencyRows() {
-    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
     return [
       webSession('sel-a', 'Alpha chat', { lastActivity: minutesAgo(1) }),
       webSession('sel-b', 'Beta chat', { lastActivity: minutesAgo(2) }),
@@ -505,7 +517,6 @@ describe('multi-select', () => {
 })
 
 describe('Tree view', () => {
-  const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
   // COO chat → developer it delegated to → QA the developer consulted.
   const COO = webSession('coo', 'Plan the release', { lastActivity: minutesAgo(3) })
   const DEV = webSession('dev', 'Build the release', { employee: 'builder', parentSessionId: 'coo', lastActivity: minutesAgo(2) })
@@ -679,9 +690,6 @@ describe('Tree view', () => {
 })
 
 describe('Tree view: selection over a twice-rendered pinned parent', () => {
-  const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
-  const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString()
-
   it('ranges from the copy that was clicked, not the Pinned copy above it', () => {
     localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
     localStorage.setItem('jinn-sidebar-older-expanded', 'true')
@@ -725,8 +733,6 @@ describe('Tree view: selection over a twice-rendered pinned parent', () => {
 })
 
 describe('Tree view: which roots were started automatically', () => {
-  const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
-
   it('marks a gateway-dispatched root, which the gateway records with source "web"', () => {
     localStorage.setItem('jinn-sidebar-focus-mode', 'tree')
     sidebarData.sessions = [
@@ -756,7 +762,7 @@ describe('Tree view: which roots were started automatically', () => {
 
 describe('hiddenTreeSignal', () => {
   const read = new Set(['a', 'b', 'c'])
-  const recent = new Date().toISOString()
+  const recent = NOW
 
   it('ranks a fresh error above live work, and live work above unread', () => {
     expect(hiddenTreeSignal([
@@ -774,7 +780,7 @@ describe('hiddenTreeSignal', () => {
   })
 
   it('stays quiet when every hidden session is read and idle, or an old error', () => {
-    const old = new Date(Date.now() - 3 * 86_400_000).toISOString()
+    const old = daysAgo(3)
     expect(hiddenTreeSignal([{ id: 'a', status: 'idle', lastActivity: recent }, { id: 'c', status: 'error', lastActivity: old }], read)).toBeNull()
   })
 })
