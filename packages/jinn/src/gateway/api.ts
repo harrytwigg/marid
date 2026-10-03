@@ -316,6 +316,8 @@ import { isRawEngineCommand } from "../shared/skill-commands.js";
 import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
 import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
+import { handleSprintsApi } from "./sprints-api.js";
+import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
 import { handleBoardWalkApi } from "./board-walk-api.js";
 
 /** Max bytes accepted on /api/internal/hook (loopback-only relay payloads are tiny). */
@@ -3129,6 +3131,14 @@ export async function handleApiRequest(
       return json(res, { dispatchConfig: result.config });
     }
 
+    // Sprints: the registry, its lifecycle, and moving a Todo between sprints.
+    if (await handleSprintsApi(req, res, { method, pathname, url }, {
+      resolveCaller: () => resolveWorkItemCaller(req, res, context),
+      getConfig: context.getConfig,
+      emitProjection: (id) => emitTodoProjectionEvent(context, id, "sprint-updated"),
+      emitSprintChange: (action, id) => context.emit("company:changed", { entity: "sprint", action, id }),
+    })) return;
+
     // PUT /api/work-items/:id/labels — `labels` replaces the whole set, `add`/`remove`
     // touch only what they name (operator, item creator, or assignee — the pre-slice-4
     // subset of edit authority). Only EXISTING labels are accepted, none created implicitly.
@@ -3139,13 +3149,7 @@ export async function handleApiRequest(
       if (!requireTodoRouteId(res, params.id)) return;
       const item = getWorkItem(params.id);
       if (!item) return notFound(res);
-      const employee = caller.kind === "session" ? caller.session.employee ?? null : null;
-      const allowed =
-        caller.kind === "operator" ||
-        remoteMcpHasOperatorStanding(caller) ||
-        item.createdBy === workItemActor(caller) ||
-        (employee !== null && (item.assignee === employee || item.createdBy === employee));
-      if (!allowed) {
+      if (!mayRetagTodo(caller, item)) {
         return json(res, { error: "changing a Todo's labels requires the operator, the item creator, or the assignee" }, 403);
       }
       const parsed = await readJsonBody(req, res);
@@ -3184,17 +3188,8 @@ export async function handleApiRequest(
     if (method === "POST" && pathname === "/api/labels") {
       const caller = resolveWorkItemCaller(req, res, context);
       if (!caller) return;
-      if (caller.kind !== "operator") {
-        const employee = caller.session.employee;
-        let manager = false;
-        if (employee) {
-          const { resolveOrgHierarchy } = await import("./org-hierarchy.js");
-          const node = resolveOrgHierarchy(orgRegistry(context.getConfig())).nodes[employee];
-          manager = (node?.directReports.length ?? 0) > 0;
-        }
-        if (!manager) {
-          return json(res, { error: "creating labels requires the operator or a manager (an employee with direct reports)" }, 403);
-        }
+      if (!(await mayOrganiseTags(caller, context.getConfig()))) {
+        return json(res, { error: "creating labels requires the operator or a manager (an employee with direct reports)" }, 403);
       }
       const parsed = await readJsonBody(req, res);
       if (!parsed.ok) return;

@@ -1,4 +1,4 @@
-import { ChevronRight, CornerDownRight, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
+import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
 import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
@@ -72,6 +72,13 @@ const WHISPERS: Record<string, WhisperRule> = {
   }),
   attachment_removed: { Icon: Paperclip, text: "removed an attachment" },
   label_changed: { Icon: Tags, text: "changed the labels" },
+  sprint_changed: (detail) => {
+    const to = typeof detail.sprint === "string" ? detail.sprint : null
+    const from = typeof detail.from === "string" ? detail.from : null
+    if (detail.reason === "carried" && to) return { Icon: Flag, text: `carried it over to ${to}` }
+    if (to) return { Icon: Flag, text: `moved it to ${to}` }
+    return { Icon: Flag, text: from ? `took it out of ${from}` : "took it out of its sprint" }
+  },
   relation_added: { Icon: Link2, text: "linked a related todo" },
   relation_removed: { Icon: Link2, text: "removed a relation" },
   session_linked: { Icon: Link2, text: "linked a session" },

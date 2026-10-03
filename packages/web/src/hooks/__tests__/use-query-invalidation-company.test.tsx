@@ -48,6 +48,15 @@ describe('company + session:created invalidation', () => {
     expect(calledWithKey(invalidate, ['work-item-sessions'])).toBe(true)
   })
 
+  it('refetches Todo lists, trees and every open detail when a sprint changes', async () => {
+    const { invalidate } = setup()
+    act(() => listener?.('company:changed', { entity: 'sprint', action: 'started', id: 'spr_0123456789ab' }))
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    expect(calledWithKey(invalidate, ['work-items'])).toBe(true)
+    expect(calledWithKey(invalidate, ['work-item-tree'])).toBe(true)
+    expect(calledWithKey(invalidate, ['work-item'])).toBe(true)
+  })
+
   it('refreshes pins immediately when another browser changes them', () => {
     const { invalidate } = setup()
     act(() => listener?.('pins:changed', {}))

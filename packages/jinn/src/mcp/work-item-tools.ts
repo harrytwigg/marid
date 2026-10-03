@@ -23,6 +23,7 @@ import {
   requireLabelRefs,
   requireRelationKind,
   requireString,
+  optionalSprintRef,
   requireTodoId,
   requireTodoIdField,
   rejectRetiredFields,
@@ -118,6 +119,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         rootId: TODO_ID_SCHEMA,
         rootsOnly: { type: "boolean" },
         label: { type: "string" },
+        sprint: { type: "string" },
         text: { type: "string" },
         since: { type: "string" },
         until: { type: "string" },
@@ -138,6 +140,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         root: optionalTodoIdField(args, "rootId"),
         rootsOnly: args.rootsOnly === true ? "true" : undefined,
         label: optionalString(args, "label"),
+        sprint: optionalString(args, "sprint"),
         text: optionalString(args, "text", WORK_ITEM_QUERY_CHAR_CAP),
         since: optionalString(args, "since", 64),
         until: optionalString(args, "until", 64),
@@ -320,6 +323,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         body: { type: "string" },
         priority: { type: "number", enum: [0, 1, 2, 3] },
         dueAt: { type: ["string", "null"] },
+        sprint: { type: ["string", "null"] },
       },
       required: ["id"],
     },
@@ -361,10 +365,18 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         const dueAt = optionalString(args, "dueAt", 64);
         if (dueAt !== undefined) patch.dueAt = dueAt;
       }
-      if (Object.keys(patch).length === 0) {
-        throw new JinnMcpToolError("pass at least one editable field (title, body, priority, dueAt)");
+      const sprint = optionalSprintRef(args);
+      if (Object.keys(patch).length === 0 && sprint === undefined) {
+        throw new JinnMcpToolError("pass at least one editable field (title, body, priority, dueAt, sprint)");
       }
-      return mutationResult(await patchWorkItem(ctx, id, patch, `editing work item "${id}"`), "Todo metadata edited.");
+      const edited = Object.keys(patch).length > 0 ? await patchWorkItem(ctx, id, patch, `editing work item "${id}"`) : undefined;
+      if (sprint === undefined) return mutationResult(edited, "Todo metadata edited.");
+      // A sprint is not a metadata column: it moves through its own route, after
+      // any content edit, and a sub-task is refused there, naming its root.
+      const moved = await gatewayRequest(ctx, "PUT", `/api/work-items/${encodeURIComponent(id)}/sprint`, { sprint });
+      if (moved.status >= 400) throw gatewayFailure(`moving work item "${id}" to a sprint`, moved.status, moved.body);
+      return mutationResult({ ...((edited ?? {}) as Record<string, unknown>), ...(moved.body as Record<string, unknown>) },
+        "Todo edited; its sub-tasks follow its sprint.");
     },
   };
 

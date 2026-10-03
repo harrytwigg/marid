@@ -36,3 +36,8 @@ export interface TalkProactiveCuePayload {
 
 export type CompanyChangedEvent =
   | { entity: "todo"; action: string; id: string; sessionId?: string; version: number; value?: JsonObject }
+  /** A sprint changed: created, renamed, started, completed or deleted, or a
+   *  Todo moved in or out of it. Rows embed their sprint, so a listener refetches
+   *  Todo lists and details rather than patching one row. `id` is the sprint's,
+   *  or the Todo's for a move. */
+  | { entity: "sprint"; action: string; id: string }

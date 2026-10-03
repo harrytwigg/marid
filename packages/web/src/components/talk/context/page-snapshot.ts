@@ -77,6 +77,7 @@ function todosView(rest: string[], params: URLSearchParams): View {
       ["source", filters.source],
       ["date", filters.date],
       ["label", filters.label],
+      ["sprint", filters.sprint],
       ["due", filters.due],
       ["q", filters.q],
     ]),
