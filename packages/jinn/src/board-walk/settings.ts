@@ -239,13 +239,19 @@ export function withRunnerOverrides(
 }
 
 /**
- * Whether `model` belongs to `engine` for the runner pair. The same rule a
- * session's engine/model pair follows (shared/models.ts): a known id for a
- * catalogued engine, and anything for an engine whose catalog is discovered at
- * runtime (opencode, pi), which cannot be judged offline.
+ * Whether `model` belongs to `engine` for the runner pair. For a catalogued
+ * engine it must be a known id (the same rule a session's pair follows,
+ * shared/models.ts). For an engine whose catalog is discovered at runtime
+ * (opencode, pi) the id cannot be checked against a list, but it still has a
+ * required shape: `provider/model`, the form every engine that takes one
+ * expects — a bare id like `opus` is dropped by the engine and silently falls
+ * back to its own default, which is not the model the operator asked for.
  */
 export function runnerModelMatches(config: JinnConfig, engine: string, model: string): boolean {
-  if (hasDynamicModelCatalog(engine)) return true;
+  if (hasDynamicModelCatalog(engine)) {
+    const slash = model.indexOf("/");
+    return slash > 0 && slash < model.length - 1;
+  }
   const models = getModelRegistry(config)[engine]?.models ?? [];
   return models.length === 0 || models.some((entry) => entry.id === model);
 }

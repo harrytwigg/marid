@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { BOARD_WALK_DEFAULTS, missingDefaultSections, parseRules, readRules, resolveSettings, splitFrontmatter, withRunnerOverrides } from "../settings.js";
+import { BOARD_WALK_DEFAULTS, missingDefaultSections, parseRules, readRules, resolveSettings, runnerModelMatches, splitFrontmatter, withRunnerOverrides } from "../settings.js";
+import type { JinnConfig } from "../../shared/types.js";
 import {
   convertLegacyBlock,
   renderDispatchSection,
@@ -107,6 +108,16 @@ describe("the walk's runner settings", () => {
     expect(withRunnerOverrides(onClaude, { model: "opus" })).toMatchObject({ engine: "claude", model: "opus" });
     const onOpencode = resolveSettings({ engine: "opencode" }).settings;
     expect(withRunnerOverrides(onOpencode, { model: "opencode-go/deepseek-v4.1-flash" })).toMatchObject({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" });
+  });
+
+  it("requires a provider/model shape on an engine whose catalog is dynamic", () => {
+    const config = { engines: {}, gateway: {}, sessions: {}, connectors: {}, logging: {} } as unknown as JinnConfig;
+    // opencode takes `provider/model`; a bare id would be dropped and fall back
+    // to opencode's own default, silently ignoring the operator.
+    expect(runnerModelMatches(config, "opencode", "opencode-go/deepseek-v4.1-flash")).toBe(true);
+    expect(runnerModelMatches(config, "opencode", "opus")).toBe(false);
+    expect(runnerModelMatches(config, "opencode", "opencode-go/")).toBe(false);
+    expect(runnerModelMatches(config, "opencode", "/x")).toBe(false);
   });
 });
 

@@ -195,6 +195,10 @@ describe("a cron job that runs a built-in action", () => {
       // A model-only update is checked against opencode, the engine in force.
       const ok = await call("PUT", "/api/cron/board-walk", { model: "opencode-go/deepseek-v4.1-flash" });
       expect(ok.status).toBe(200);
+      // And a bare id that opencode would silently drop is refused.
+      const bad = await call("PUT", "/api/cron/board-walk", { model: "opus" });
+      expect(bad.status).toBe(400);
+      expect(bad.body).toEqual({ error: 'model "opus" is not supported by engine "opencode"' });
     } finally {
       if (prior === undefined) fs.rmSync(rules, { force: true });
       else fs.writeFileSync(rules, prior);

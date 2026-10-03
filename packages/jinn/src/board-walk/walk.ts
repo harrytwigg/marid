@@ -418,7 +418,7 @@ function resolvedRules(w: Walker): BoardWalkRules {
   const settings = withRunnerOverrides(base.settings, walkJob(w));
   const problems = [...base.problems];
   if (settings.model && !runnerModelMatches(w.getConfig(), settings.engine, settings.model) && problems.length === 0) {
-    problems.push(`model ${JSON.stringify(settings.model)} is not supported by engine ${JSON.stringify(settings.engine)}, which the board-walk cron job selects`);
+    problems.push(`model ${JSON.stringify(settings.model)} is not supported by the board walk's engine ${JSON.stringify(settings.engine)}`);
   }
   return { ...base, settings, problems };
 }
