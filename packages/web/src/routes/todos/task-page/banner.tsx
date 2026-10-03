@@ -92,6 +92,7 @@ export function TaskBanner({
       <StopCauseLead
         item={{ id: detail.workItem.id, parkedUntil: detail.parkedUntil, unblockHint: detail.unblockHint }}
         className="ml-[25px] mt-2"
+        wrapHint
       />
 
       {note ? (

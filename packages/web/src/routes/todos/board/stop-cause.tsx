@@ -54,11 +54,21 @@ function useCountdown(parkedUntil: string | undefined): string {
  *  The caller supplies its own placement, because the board card wants this
  *  hoisted out of its wrapped phone row and a list row does not. The task page's
  *  banner reads the same lead from the detail payload, so it takes only the
- *  fields it renders. */
-export function StopCauseLead({ item, className = "" }: { item: TodoStopCauseWire & { id: string }; className?: string }) {
+ *  fields it renders, and `wrapHint` lets it show a long hint whole: a card has
+ *  a fixed height and the full text a click away, the task page is that click. */
+export function StopCauseLead({
+  item,
+  className = "",
+  wrapHint = false,
+}: {
+  item: TodoStopCauseWire & { id: string }
+  className?: string
+  wrapHint?: boolean
+}) {
   const left = useCountdown(item.parkedUntil)
   const hint = item.unblockHint
   if (!left && !hint) return null
+  const line = wrapHint ? "whitespace-pre-wrap [overflow-wrap:anywhere]" : "truncate"
   return (
     // Stacked, not side by side: the board's columns are ~200px, and a card
     // carrying both a chip and a hint had the hint's `who` clipped off its edge.
@@ -81,12 +91,13 @@ export function StopCauseLead({ item, className = "" }: { item: TodoStopCauseWir
         // it on after `what` meant the column's width decided whether it survived.
         <span className="flex min-w-0 max-w-full flex-col text-[12px] leading-[1.35]">
           <span
-            className="truncate font-medium"
+            data-testid={`stop-hint-what-${item.id}`}
+            className={`${line} font-medium`}
             style={{ color: "var(--system-orange)" }}
           >
             {hint.what}
           </span>
-          <span className="truncate text-[var(--text-tertiary)]">{hint.who}</span>
+          <span data-testid={`stop-hint-who-${item.id}`} className={`${line} text-[var(--text-tertiary)]`}>{hint.who}</span>
         </span>
       )}
     </div>

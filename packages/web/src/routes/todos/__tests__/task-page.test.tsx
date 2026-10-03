@@ -457,6 +457,20 @@ describe("the task page", () => {
       expect(banner.textContent).toContain("Provider quota")
     })
 
+    it("shows a long hint whole instead of clipping it to one line as the card does", async () => {
+      const long = { what: "approve the vendor invoice for the Q4 hosting renewal before the provider suspends the account", who: "the operator, via the finance portal" }
+      getWorkItem.mockResolvedValue(blockedWithNote({ unblockHint: long }))
+      renderTask()
+
+      await screen.findByTestId("task-banner-blocked")
+      for (const part of ["what", "who"]) {
+        const line = screen.getByTestId(`stop-hint-${part}-PLA-12`)
+        expect(line.className).not.toMatch(/\btruncate\b/)
+        expect(line.className).toContain("whitespace-pre-wrap")
+      }
+      expect(screen.getByTestId("stop-hint-what-PLA-12").textContent).toBe(long.what)
+    })
+
     it("drops the countdown on its own once the park has passed, and keeps the hint", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true })
       getWorkItem.mockResolvedValue(blockedWithNote({
