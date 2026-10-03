@@ -79,7 +79,8 @@ describe("work-item tools — registry + schemas", () => {
       "unlink_work_items",
       "label_work_item",
       "create_label",
-      "list_labels", "set_work_item_dispatch",
+      "list_labels", "set_work_item_sprint", "list_sprints",
+      "set_work_item_dispatch",
       "list_departments",
     ]);
     const names = buildTools().map((t) => t.name).sort();
@@ -88,7 +89,7 @@ describe("work-item tools — registry + schemas", () => {
     expect(names.some((n) => /approval/.test(n))).toBe(false);
     expect(names).toContain("archive_work_item");
     expect(names.some((n) => /cancel/i.test(n) && /work_item/.test(n))).toBe(false);
-    expect(names).toHaveLength(51);
+    expect(names).toHaveLength(53);
   });
 
   it("positions list as recent/filter summaries and search as text/filter hits", () => {

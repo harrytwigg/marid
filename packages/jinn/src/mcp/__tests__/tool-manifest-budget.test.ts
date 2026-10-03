@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4131;
+const MAX_MANIFEST_TOKENS = 4257;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -222,9 +222,13 @@ const ATTESTED = {
   // Reattested for create_work_item's `autoStart` prose, which now names the
   // board walk instead of the retired idle-capacity auto-start. One token
   // cheaper on every wrapper; Pi sits one under the unchanged ceiling.
-  rpc: { tokens: 3795, sha256: "8540470912b189834d333658d353d3c6ddce89994e0e6924c5ad738dde92b49a" },
-  pi: { tokens: 4130, sha256: "c2d5eb470ad7e77d07f8122d07eaadda1f8905f885bf0c20e801f812cab441ca" },
-  openai: { tokens: 3934, sha256: "dd321e9684b89656c45355ced912cf65a77c1ba686d781bb95cdfa1de53bfd70" },
+  // Rebased for sprints: `set_work_item_sprint`, `list_sprints` and `sprint`
+  // on list_work_items. A new public capability, not prose growth; the two
+  // descriptions were cut to one clause each first (9 back), and the remaining
+  // 126 on Pi are its honest cost. Pi stays one under the ceiling.
+  rpc: { tokens: 3905, sha256: "3f3206c31c856307930ce3a661af697ba00ce2973fe730d3430e05199b0c74de" },
+  pi: { tokens: 4256, sha256: "7f98ae6a4daf9d88ee6def209bec2c2fff005ead4b334657ff948001b39a00d6" },
+  openai: { tokens: 4050, sha256: "6f566cf51271106115d253de582240f331dcf6f501d6e00468ae740a75c362cb" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
@@ -291,7 +295,7 @@ describe("tool manifest budget", () => {
   it("keeps tool names, required arrays, and enum arrays stable", () => {
     const tools = buildTools();
     expect(tools.map((t) => t.name).sort()).toEqual([...EXPECTED_TOOL_NAMES].sort());
-    expect(tools).toHaveLength(51);
+    expect(tools).toHaveLength(53);
 
     const required = Object.fromEntries(tools.map((t) => [t.name, t.inputSchema.required ?? []]));
     expect(required).toEqual(EXPECTED_REQUIRED);

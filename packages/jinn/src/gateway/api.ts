@@ -316,6 +316,7 @@ import { isRawEngineCommand } from "../shared/skill-commands.js";
 import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
 import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
+import { handleSprintsApi } from "./sprints-api.js";
 import { handleBoardWalkApi } from "./board-walk-api.js";
 
 /** Max bytes accepted on /api/internal/hook (loopback-only relay payloads are tiny). */
@@ -3128,6 +3129,29 @@ export async function handleApiRequest(
       emitTodoProjectionEvent(context, params.id, "dispatch-config-updated");
       return json(res, { dispatchConfig: result.config });
     }
+
+    // Sprints: the registry, its lifecycle, and moving a Todo between sprints
+    // (sprints-api.ts). Planning takes the label-creation standing; a move takes
+    // the label-change standing below.
+    if (await handleSprintsApi(req, res, { method, pathname, url }, {
+      resolveCaller: () => resolveWorkItemCaller(req, res, context),
+      canPlan: async (caller) => {
+        if (caller.kind === "operator" || remoteMcpHasOperatorStanding(caller)) return true;
+        const employee = caller.session.employee;
+        if (!employee) return false;
+        const { resolveOrgHierarchy } = await import("./org-hierarchy.js");
+        const node = resolveOrgHierarchy(orgRegistry(context.getConfig())).nodes[employee];
+        return (node?.directReports.length ?? 0) > 0;
+      },
+      canMove: (caller, item) => {
+        const employee = caller.kind === "session" ? caller.session.employee ?? null : null;
+        return caller.kind === "operator" ||
+          remoteMcpHasOperatorStanding(caller) ||
+          item.createdBy === workItemActor(caller) ||
+          (employee !== null && (item.assignee === employee || item.createdBy === employee));
+      },
+      emitProjection: (id) => emitTodoProjectionEvent(context, id, "sprint-updated"),
+    })) return;
 
     // PUT /api/work-items/:id/labels — `labels` replaces the whole set, `add`/`remove`
     // touch only what they name (operator, item creator, or assignee — the pre-slice-4

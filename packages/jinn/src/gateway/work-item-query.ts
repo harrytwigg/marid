@@ -164,6 +164,17 @@ const readLabelFilter: FilterReader = (url, filter) => {
   return undefined;
 };
 
+/** `sprint` is a sprint id, a sprint name, `active` (the running sprint) or
+ *  `none` (in no sprint). Names are matched case-insensitively at the query. */
+const readSprintFilter: FilterReader = (url, filter) => {
+  const sprint = readCleanSearchParam(url, 'sprint');
+  if (!sprint) return undefined;
+  if (sprint.length > 200) return 'sprint must be a sprint ID, a sprint name, active or none';
+  const word = sprint.toLowerCase();
+  filter.sprint = word === 'active' || word === 'none' ? word : sprint;
+  return undefined;
+};
+
 const readWindowFilters: FilterReader = (url, filter) => {
   for (const name of ['since', 'until'] as const) {
     const bound = readWorkItemDateParam(url, name);
@@ -177,7 +188,7 @@ const readWindowFilters: FilterReader = (url, filter) => {
 };
 
 const FILTER_READERS: readonly FilterReader[] = [
-  readEnumFilters, readNameFilters, readTextFilter, readTreeFilters, readBoardScopeFilters, readLabelFilter, readWindowFilters,
+  readEnumFilters, readNameFilters, readTextFilter, readTreeFilters, readBoardScopeFilters, readLabelFilter, readSprintFilter, readWindowFilters,
 ];
 
 export function readWorkItemQueryParams(url: URL): { ok: true; value: WorkItemQueryParams } | { ok: false; error: string } {

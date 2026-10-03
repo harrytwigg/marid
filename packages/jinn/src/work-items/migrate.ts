@@ -179,6 +179,41 @@ CREATE TABLE IF NOT EXISTS work_item_labels (
 
 export const WORK_ITEM_LABELS_DDL = `${WORK_ITEM_LABELS_TABLE_DDL};`;
 
+/** Sprints: named, time-boxed groups of top-level Todos (see sprints.ts). The
+ *  name is unique case-insensitively, and the partial unique index allows at
+ *  most one `active` sprint. */
+export const SPRINTS_TABLE_DDL = `
+CREATE TABLE IF NOT EXISTS sprints (
+  id         TEXT PRIMARY KEY CHECK (id GLOB 'spr_[0-9a-f]*' AND length(id) = 16),
+  name       TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  goal       TEXT,
+  status     TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','active','closed')),
+  starts_at  TEXT,
+  ends_at    TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  closed_at  TEXT
+)`;
+
+export const SPRINTS_DDL = `
+${SPRINTS_TABLE_DDL};
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sprints_one_active ON sprints(status) WHERE status = 'active';
+`;
+
+/** A Todo's sprint: at most one per Todo, held by top-level Todos only (the
+ *  write path refuses a sub-task; its root's row is the one every filter reads). */
+export const WORK_ITEM_SPRINTS_TABLE_DDL = `
+CREATE TABLE IF NOT EXISTS work_item_sprints (
+  work_item_id TEXT PRIMARY KEY REFERENCES work_items(id),
+  sprint_id    TEXT NOT NULL REFERENCES sprints(id),
+  added_at     TEXT NOT NULL
+)`;
+
+export const WORK_ITEM_SPRINTS_DDL = `
+${WORK_ITEM_SPRINTS_TABLE_DDL};
+CREATE INDEX IF NOT EXISTS idx_wi_sprints_sprint ON work_item_sprints(sprint_id);
+`;
+
 /** Todos v2 slice 5: content-addressed file attachments on Todos and comments.
  *  Bytes live at `<instance>/attachments/<sha256[0:2]>/<sha256>` (dedup by
  *  content); `storage_path` stores the RELATIVE form. `comment_id` NULL =
@@ -491,6 +526,8 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ["work_item_relations", WORK_ITEM_RELATIONS_TABLE_DDL],
   ["labels", LABELS_TABLE_DDL],
   ["work_item_labels", WORK_ITEM_LABELS_TABLE_DDL],
+  ["sprints", SPRINTS_TABLE_DDL],
+  ["work_item_sprints", WORK_ITEM_SPRINTS_TABLE_DDL],
   ["work_item_approvals", WORK_ITEM_APPROVALS_TABLE_DDL],
   ["work_item_approval_choices", WORK_ITEM_APPROVAL_CHOICES_DDL],
   ["work_item_approval_operator_only", WORK_ITEM_APPROVAL_OPERATOR_ONLY_DDL],
@@ -530,6 +567,10 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "work_item_stop_cause", ddl: WORK_ITEM_STOP_CAUSE_DDL },
   { name: "work_item_kept", ddl: WORK_ITEM_KEPT_DDL },
   { name: "work_item_auto_start", ddl: WORK_ITEM_AUTO_START_DDL },
+  // Sprints shipped after the recovery tables, but neither references the
+  // other; the order here only has to put `sprints` before its membership.
+  { name: "sprints", ddl: SPRINTS_DDL },
+  { name: "work_item_sprints", ddl: WORK_ITEM_SPRINTS_DDL },
 ].concat(WORK_ITEM_RECOVERY_TABLES);
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,
@@ -758,6 +799,18 @@ export function verifyCurrentWorkItemSchema(db: DatabaseType): void {
   }>;
   for (const pair of labelPairs) {
     if (!byId.has(pair.work_item_id) || !labelIds.has(pair.label_id)) refusal();
+  }
+  // Sprints: every membership names a live Todo and an existing sprint, and at
+  // most one sprint is active (the partial unique index, re-proven here).
+  const sprintIds = new Set(db.prepare("SELECT id FROM sprints").pluck().all() as string[]);
+  const activeSprints = Number(db.prepare("SELECT COUNT(*) FROM sprints WHERE status = 'active'").pluck().get());
+  if (activeSprints > 1) refusal();
+  const sprintPairs = db.prepare("SELECT work_item_id, sprint_id FROM work_item_sprints").all() as Array<{
+    work_item_id: string;
+    sprint_id: string;
+  }>;
+  for (const pair of sprintPairs) {
+    if (!byId.has(pair.work_item_id) || !sprintIds.has(pair.sprint_id)) refusal();
   }
   // Approvals: every row references a live item, and at most one PENDING row per
   // item. The partial unique index makes the latter unforgeable through SQL, but

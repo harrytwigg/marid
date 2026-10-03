@@ -140,6 +140,10 @@ export interface ListWorkItemsFilter {
   /** Items carrying this label, matched by exact label id (`lbl_…`) or stored
    *  (normalized kebab-case) name — callers normalize display names first. */
   label?: string;
+  /** Items in this sprint — a sub-task reads its root's — matched by sprint id
+   *  (`spr_…`) or name; `active` means the running sprint and `none` means in
+   *  no sprint. */
+  sprint?: string;
   /** Free text, matched by the FTS5 indexes over title, body and comments. Relevance-ordered, exact Todo id first. */
   text?: string;
   /** Inclusive ISO timestamp bounds over `updated_at`. */
@@ -504,6 +508,21 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
       'EXISTS (SELECT 1 FROM work_item_labels wil JOIN labels l ON l.id = wil.label_id WHERE wil.work_item_id = work_items.id AND (l.id = ? OR l.name = ?))',
     );
     values.push(filter.label, filter.label);
+  }
+  if (filter.sprint) {
+    // Membership is held by the root, so a sub-task is in its root's sprint.
+    if (filter.sprint === 'none') {
+      conditions.push('NOT EXISTS (SELECT 1 FROM work_item_sprints ws WHERE ws.work_item_id = work_items.root_id)');
+    } else if (filter.sprint === 'active') {
+      conditions.push(
+        "EXISTS (SELECT 1 FROM work_item_sprints ws JOIN sprints s ON s.id = ws.sprint_id WHERE ws.work_item_id = work_items.root_id AND s.status = 'active')",
+      );
+    } else {
+      conditions.push(
+        'EXISTS (SELECT 1 FROM work_item_sprints ws JOIN sprints s ON s.id = ws.sprint_id WHERE ws.work_item_id = work_items.root_id AND (s.id = ? OR s.name = ? COLLATE NOCASE))',
+      );
+      values.push(filter.sprint, filter.sprint);
+    }
   }
   if (filter.needsAttentionFor) {
     // A blocked Todo held by the caller, or one recovery routed to a human; the operator's own queue

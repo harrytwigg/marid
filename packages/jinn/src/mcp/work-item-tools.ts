@@ -1,5 +1,6 @@
 import { gatewayRequest, JinnMcpToolError, type JinnMcpTool } from "./toolkit.js";
 import { labelTools } from "./label-tools.js";
+import { sprintTools } from "./sprint-tools.js";
 import {
   uploadCommentAttachments,
   uploadWorkItemAttachment,
@@ -118,6 +119,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         rootId: TODO_ID_SCHEMA,
         rootsOnly: { type: "boolean" },
         label: { type: "string" },
+        sprint: { type: "string" },
         text: { type: "string" },
         since: { type: "string" },
         until: { type: "string" },
@@ -138,6 +140,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         root: optionalTodoIdField(args, "rootId"),
         rootsOnly: args.rootsOnly === true ? "true" : undefined,
         label: optionalString(args, "label"),
+        sprint: optionalString(args, "sprint"),
         text: optionalString(args, "text", WORK_ITEM_QUERY_CHAR_CAP),
         since: optionalString(args, "since", 64),
         until: optionalString(args, "until", 64),
@@ -591,5 +594,5 @@ export function buildWorkItemTools(): JinnMcpTool[] {
   };
 
   const { dispatch, dispatchConfig, landOn } = workItemDispatchTools();
-  return [list, get, tree, search, create, update, edit, assign, archive, dispatch, landOn, comment, listComments, attach, listAttachments, link, unlink, ...labelTools(), dispatchConfig, departments];
+  return [list, get, tree, search, create, update, edit, assign, archive, dispatch, landOn, comment, listComments, attach, listAttachments, link, unlink, ...labelTools(), ...sprintTools(), dispatchConfig, departments];
 }
