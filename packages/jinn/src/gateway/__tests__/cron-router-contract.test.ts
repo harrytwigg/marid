@@ -181,4 +181,23 @@ describe("a cron job that runs a built-in action", () => {
     expect(badModel.status).toBe(400);
     expect(badModel.body).toEqual({ error: 'model "opencode-go/deepseek-v4.1-flash" is not supported by engine "claude"' });
   });
+
+  it("validates a model-only job against the engine board-walk.md is on, not a hardcoded default", async () => {
+    // The file is on opencode; a job that names only an opencode model must not
+    // be checked against claude (which would reject a valid opencode id).
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const rules = path.join(process.env.JINN_HOME!, "board-walk.md");
+    const prior = fs.existsSync(rules) ? fs.readFileSync(rules, "utf-8") : undefined;
+    fs.writeFileSync(rules, "---\nengine: opencode\n---\n");
+    try {
+      await call("POST", "/api/cron", WALK);
+      // A model-only update is checked against opencode, the engine in force.
+      const ok = await call("PUT", "/api/cron/board-walk", { model: "opencode-go/deepseek-v4.1-flash" });
+      expect(ok.status).toBe(200);
+    } finally {
+      if (prior === undefined) fs.rmSync(rules, { force: true });
+      else fs.writeFileSync(rules, prior);
+    }
+  });
 });

@@ -102,8 +102,11 @@ describe("the walk's runner settings", () => {
     // A job that names a model but the same engine keeps the pair matching.
     expect(withRunnerOverrides(onClaude, { engine: "claude", model: "opus" })).toMatchObject({ engine: "claude", model: "opus" });
     // A job that names only a model inherits the engine in force, so the pair
-    // still matches.
+    // still matches — including a file on opencode, whose model a Claude check
+    // would wrongly reject.
     expect(withRunnerOverrides(onClaude, { model: "opus" })).toMatchObject({ engine: "claude", model: "opus" });
+    const onOpencode = resolveSettings({ engine: "opencode" }).settings;
+    expect(withRunnerOverrides(onOpencode, { model: "opencode-go/deepseek-v4.1-flash" })).toMatchObject({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" });
   });
 });
 

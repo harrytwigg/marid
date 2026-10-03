@@ -4,7 +4,7 @@ import path from "node:path";
 import type { CronJob, JinnConfig } from "../shared/types.js";
 import { CRON_RUNS } from "../shared/paths.js";
 import { ENGINE_NAMES, isKnownEngine } from "../shared/models.js";
-import { isWalkEngine, runnerModelMatches, WALK_ENGINES } from "../board-walk/settings.js";
+import { isWalkEngine, readRules, runnerModelMatches, withRunnerOverrides, WALK_ENGINES } from "../board-walk/settings.js";
 import { logger } from "../shared/logger.js";
 import { canonicalCronJobId, loadJobs, saveJobs } from "../cron/jobs.js";
 import { summarizeCronRun } from "../cron/run-summary.js";
@@ -55,7 +55,10 @@ function boardWalkEngineError(engine: string): string | null {
  * Why a board-walk job's runner fields cannot be stored, or null. The walk's
  * `engine`/`model`/`employee`/`effortLevel` are honoured for this action (the
  * ordinary action job ignores them), so the engine must be one the walk can be
- * confined on, and the engine/model pair must match.
+ * confined on, and the engine/model pair the job resolves to — the job's fields
+ * over board-walk.md's, the same resolution the tick uses — must match. A job
+ * that sets only a model therefore validates against the engine in force from
+ * the file, not a hardcoded default.
  */
 function boardWalkRunnerError(job: CronJob, config: JinnConfig): string | null {
   if (job.action !== "board-walk") return null;
@@ -66,8 +69,10 @@ function boardWalkRunnerError(job: CronJob, config: JinnConfig): string | null {
   }
   const model = job.model?.trim();
   if (!model) return null;
-  const target = engine || "claude";
-  return runnerModelMatches(config, target, model) ? null : `model "${model}" is not supported by engine "${target}"`;
+  const effective = withRunnerOverrides(readRules().settings, { engine, model });
+  return runnerModelMatches(config, effective.engine, effective.model ?? model)
+    ? null
+    : `model ${JSON.stringify(model)} is not supported by engine ${JSON.stringify(effective.engine)}`;
 }
 
 /** Why `job` cannot be stored, or null. */
