@@ -224,16 +224,7 @@ export function updateSprint(
   const db = initDb();
   const txn = db.transaction((): Sprint => {
     const current = requireSprint(db, ref);
-    const next = { ...current };
-    if (patch.name !== undefined) next.name = normalizeSprintName(patch.name);
-    if (patch.goal !== undefined) next.goal = normalizeGoal(patch.goal);
-    if (patch.startsAt !== undefined) next.startsAt = normalizeDay(patch.startsAt, 'startsAt');
-    if (patch.endsAt !== undefined) next.endsAt = normalizeDay(patch.endsAt, 'endsAt');
-    assertDayOrder(next.startsAt, next.endsAt);
-    if (current.status === 'closed'
-      && (next.name !== current.name || next.startsAt !== current.startsAt || next.endsAt !== current.endsAt)) {
-      throw new SprintError(`sprint "${current.name}" is closed; only its goal can change`, 'invalid');
-    }
+    const next = patchedSprint(current, patch);
     try {
       db.prepare('UPDATE sprints SET name = ?, goal = ?, starts_at = ?, ends_at = ? WHERE id = ?')
         .run(next.name, next.goal, next.startsAt, next.endsAt, current.id);
@@ -244,6 +235,24 @@ export function updateSprint(
     return next;
   });
   return txn.immediate();
+}
+
+/** The sprint a patch leaves behind, validated; a closed sprint's name and dates are frozen. */
+function patchedSprint(
+  current: Sprint,
+  patch: { name?: string; goal?: string | null; startsAt?: string | null; endsAt?: string | null },
+): Sprint {
+  const next = { ...current };
+  if (patch.name !== undefined) next.name = normalizeSprintName(patch.name);
+  if (patch.goal !== undefined) next.goal = normalizeGoal(patch.goal);
+  if (patch.startsAt !== undefined) next.startsAt = normalizeDay(patch.startsAt, 'startsAt');
+  if (patch.endsAt !== undefined) next.endsAt = normalizeDay(patch.endsAt, 'endsAt');
+  assertDayOrder(next.startsAt, next.endsAt);
+  const frozenChanged = next.name !== current.name || next.startsAt !== current.startsAt || next.endsAt !== current.endsAt;
+  if (current.status === 'closed' && frozenChanged) {
+    throw new SprintError(`sprint "${current.name}" is closed; only its goal can change`, 'invalid');
+  }
+  return next;
 }
 
 function startInTxn(db: Db, sprint: Sprint): Sprint {
@@ -290,12 +299,7 @@ export function completeSprint(
     if (sprint.status !== 'active') {
       throw new SprintError(`only the active sprint can be completed; "${sprint.name}" is ${sprint.status}`, 'invalid');
     }
-    const target = options.carryTo === null ? null : requireSprint(db, options.carryTo);
-    if (target && target.id === sprint.id) throw new SprintError('cannot carry a sprint\'s work into itself', 'invalid');
-    if (target && target.status !== 'planned') {
-      throw new SprintError(`unfinished work can only be carried to a planned sprint; "${target.name}" is ${target.status}`, 'invalid');
-    }
-    if (options.startNext && !target) throw new SprintError('startNext needs a sprint to carry the work to', 'invalid');
+    const target = carryTarget(db, sprint, options);
     const closedAt = new Date().toISOString();
     db.prepare("UPDATE sprints SET status = 'closed', closed_at = ? WHERE id = ?").run(closedAt, sprint.id);
     const carried = db.prepare(
@@ -303,11 +307,25 @@ export function completeSprint(
        WHERE ws.sprint_id = ? AND w.parent_id IS NULL AND w.status NOT IN ${FINISHED_STATUSES}
        ORDER BY w.id`,
     ).pluck().all(sprint.id) as string[];
-    for (const id of carried) moveInTxn(db, id, sprint, target, actor, origin, 'carried');
+    for (const id of carried) moveInTxn(db, { id, from: sprint, to: target, actor, origin, reason: 'carried' });
     const carriedTo = target && options.startNext ? startInTxn(db, target) : target;
     return { sprint: { ...sprint, status: 'closed', closedAt }, carried, carriedTo };
   });
   return holdLiveSignalsUntilCommit(() => txn.immediate());
+}
+
+/** Where a completing sprint's unfinished work goes: a planned sprint, or null for none. */
+function carryTarget(db: Db, sprint: Sprint, options: { carryTo: string | null; startNext?: boolean }): Sprint | null {
+  if (options.carryTo === null) {
+    if (options.startNext) throw new SprintError('startNext needs a sprint to carry the work to', 'invalid');
+    return null;
+  }
+  const target = requireSprint(db, options.carryTo);
+  if (target.id === sprint.id) throw new SprintError('cannot carry a sprint\'s work into itself', 'invalid');
+  if (target.status !== 'planned') {
+    throw new SprintError(`unfinished work can only be carried to a planned sprint; "${target.name}" is ${target.status}`, 'invalid');
+  }
+  return target;
 }
 
 /** Delete a planned sprint. Its Todos return to no sprint, each with its own
@@ -321,7 +339,7 @@ export function deleteSprint(ref: string, actor: string, origin?: WriteOrigin): 
     }
     const members = db.prepare('SELECT work_item_id FROM work_item_sprints WHERE sprint_id = ? ORDER BY work_item_id')
       .pluck().all(sprint.id) as string[];
-    for (const id of members) moveInTxn(db, id, sprint, null, actor, origin);
+    for (const id of members) moveInTxn(db, { id, from: sprint, to: null, actor, origin });
     db.prepare('DELETE FROM sprints WHERE id = ?').run(sprint.id);
     return members;
   });
@@ -335,8 +353,16 @@ function currentSprintOf(db: Db, workItemId: string): Sprint | null {
   return row ? rowToSprint(row) : null;
 }
 
-function moveInTxn(db: Db, id: string, from: Sprint | null, to: Sprint | null, actor: string,
-  origin: WriteOrigin | undefined, reason?: 'carried'): void {
+interface SprintMove {
+  id: string;
+  from: Sprint | null;
+  to: Sprint | null;
+  actor: string;
+  origin?: WriteOrigin;
+  reason?: 'carried';
+}
+
+function moveInTxn(db: Db, { id, from, to, actor, origin, reason }: SprintMove): void {
   if (to) {
     db.prepare(
       `INSERT INTO work_item_sprints (work_item_id, sprint_id, added_at) VALUES (?, ?, ?)
@@ -359,6 +385,27 @@ function moveInTxn(db: Db, id: string, from: Sprint | null, to: Sprint | null, a
   });
 }
 
+/** Refuse an unknown Todo, and a sub-task, naming the root that holds its sprint. */
+function assertTopLevel(db: Db, id: string): void {
+  const item = db.prepare('SELECT parent_id, root_id FROM work_items WHERE id = ?').get(id) as
+    | { parent_id: string | null; root_id: string }
+    | undefined;
+  if (!item) throw new SprintError(`Todo ${id} not found`, 'not_found');
+  if (item.parent_id !== null) {
+    throw new SprintError(`${id} is a sub-task; sub-tasks follow their top-level Todo, so set the sprint on ${item.root_id}`, 'invalid');
+  }
+}
+
+/** The sprint a move goes to — never a closed one — or null for none. */
+function openSprintOrNull(db: Db, sprintRef: string | null): Sprint | null {
+  if (sprintRef === null) return null;
+  const target = requireSprint(db, sprintRef);
+  if (target.status === 'closed') {
+    throw new SprintError(`sprint "${target.name}" is closed; move the Todo to a planned or active sprint`, 'invalid');
+  }
+  return target;
+}
+
 /**
  * Put a top-level Todo in a sprint (by id or name), or take it out with null.
  * A sub-task is refused, naming its root, and so is a closed sprint. Returns
@@ -369,20 +416,11 @@ export function setWorkItemSprint(workItemId: string, sprintRef: string | null, 
   const db = initDb();
   const id = parseTodoId(workItemId);
   const txn = db.transaction((): { sprint: Sprint | null; changed: boolean } => {
-    const item = db.prepare('SELECT parent_id, root_id FROM work_items WHERE id = ?').get(id) as
-      | { parent_id: string | null; root_id: string }
-      | undefined;
-    if (!item) throw new SprintError(`Todo ${id} not found`, 'not_found');
-    if (item.parent_id !== null) {
-      throw new SprintError(`${id} is a sub-task; sub-tasks follow their top-level Todo, so set the sprint on ${item.root_id}`, 'invalid');
-    }
-    const target = sprintRef === null ? null : requireSprint(db, sprintRef);
-    if (target?.status === 'closed') {
-      throw new SprintError(`sprint "${target.name}" is closed; move the Todo to a planned or active sprint`, 'invalid');
-    }
+    assertTopLevel(db, id);
+    const target = openSprintOrNull(db, sprintRef);
     const current = currentSprintOf(db, id);
     if ((current?.id ?? null) === (target?.id ?? null)) return { sprint: current, changed: false };
-    moveInTxn(db, id, current, target, actor, origin);
+    moveInTxn(db, { id, from: current, to: target, actor, origin });
     return { sprint: target, changed: true };
   });
   return holdLiveSignalsUntilCommit(() => txn.immediate());

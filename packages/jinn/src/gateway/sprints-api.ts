@@ -3,7 +3,10 @@ import { readJsonBody } from "./http-helpers.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
 import { isTodoId } from "../work-items/id.js";
-import { getWorkItem } from "../work-items/store.js";
+import { getWorkItem, type WorkItem } from "../work-items/store.js";
+import type { JinnConfig } from "../shared/types.js";
+import { orgRegistry } from "./org-registry.js";
+import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import {
   completeSprint,
   createSprint,
@@ -39,12 +42,30 @@ import {
 export interface SprintsApiOptions {
   /** api.ts's work-item caller resolution; undefined once it has answered. */
   resolveCaller: () => WorkItemCaller | undefined;
-  /** Whether this caller may plan sprints: the operator, or a manager. */
-  canPlan: (caller: WorkItemCaller) => Promise<boolean>;
-  /** Whether this caller may move this Todo: the label standing. */
-  canMove: (caller: WorkItemCaller, item: NonNullable<ReturnType<typeof getWorkItem>>) => boolean;
+  /** The live config, for the org hierarchy behind the manager check. */
+  getConfig: () => JinnConfig;
   /** Tell the live surfaces these Todos' projections changed. */
   emitProjection: (id: string) => void;
+}
+
+/** Planning standing: the operator (or the operator's connector), or a manager —
+ *  an employee with direct reports. The same standing that creates labels. */
+async function canPlan(caller: WorkItemCaller, options: SprintsApiOptions): Promise<boolean> {
+  if (caller.kind === "operator" || remoteMcpHasOperatorStanding(caller)) return true;
+  const employee = caller.session.employee;
+  if (!employee) return false;
+  const { resolveOrgHierarchy } = await import("./org-hierarchy.js");
+  const node = resolveOrgHierarchy(orgRegistry(options.getConfig())).nodes[employee];
+  return (node?.directReports.length ?? 0) > 0;
+}
+
+/** Move standing: whoever may change the Todo's labels — the operator, its
+ *  creator, or its assignee. */
+function canMove(caller: WorkItemCaller, item: WorkItem): boolean {
+  if (caller.kind === "operator" || remoteMcpHasOperatorStanding(caller)) return true;
+  if (item.createdBy === workItemActor(caller)) return true;
+  const employee = caller.session.employee ?? null;
+  return employee !== null && (item.assignee === employee || item.createdBy === employee);
 }
 
 const SPRINT_FIELDS = ["name", "goal", "startsAt", "endsAt"] as const;
@@ -87,75 +108,98 @@ function readSprintFields(body: Record<string, unknown>): { ok: true; value: Rec
 async function plannerOrAnswer(res: ServerResponse, options: SprintsApiOptions): Promise<WorkItemCaller | undefined> {
   const caller = options.resolveCaller();
   if (!caller) return undefined;
-  if (!(await options.canPlan(caller))) {
+  if (!(await canPlan(caller, options))) {
     json(res, { error: "planning sprints requires the operator or a manager (an employee with direct reports)" }, 403);
     return undefined;
   }
   return caller;
 }
 
-async function handleRegistry(req: HttpRequest, res: ServerResponse, method: string, options: SprintsApiOptions): Promise<void> {
-  if (method === "GET") return json(res, { sprints: listSprints() });
-  const caller = await plannerOrAnswer(res, options);
-  if (!caller) return;
+type Handler = (req: HttpRequest, res: ServerResponse, params: Record<string, string>, options: SprintsApiOptions) => Promise<void>;
+
+/** Run a planning write: answer 403 for a non-planner, map a refusal to its 4xx. */
+function plannerWrite(write: (req: HttpRequest, res: ServerResponse, params: Record<string, string>, caller: WorkItemCaller,
+  options: SprintsApiOptions) => Promise<void>): Handler {
+  return async (req, res, params, options) => {
+    const caller = await plannerOrAnswer(res, options);
+    if (!caller) return;
+    try {
+      await write(req, res, params, caller, options);
+    } catch (err) {
+      sprintFailure(res, err);
+    }
+  };
+}
+
+const listRoute: Handler = async (_req, res) => json(res, { sprints: listSprints() });
+
+const getRoute: Handler = async (_req, res, params) => {
+  const sprint = getSprint(params.id);
+  if (!sprint) return notFound(res);
+  return json(res, { sprint: listSprints().find((s) => s.id === sprint.id) ?? sprint });
+};
+
+const createRoute = plannerWrite(async (req, res) => {
   const body = await readObject(req, res);
   if (!body) return;
   const fields = readSprintFields(body);
   if (!fields.ok) return badRequest(res, fields.error);
   if (typeof fields.value.name !== "string") return badRequest(res, "name is required");
-  try {
-    const sprint = createSprint({ ...fields.value, name: fields.value.name });
-    return json(res, { sprint }, 201);
-  } catch (err) {
-    return sprintFailure(res, err);
+  json(res, { sprint: createSprint({ ...fields.value, name: fields.value.name }) }, 201);
+});
+
+const updateRoute = plannerWrite(async (req, res, params) => {
+  const body = await readObject(req, res);
+  if (!body) return;
+  const fields = readSprintFields(body);
+  if (!fields.ok) return badRequest(res, fields.error);
+  json(res, { sprint: updateSprint(params.id, fields.value) });
+});
+
+const startRoute = plannerWrite(async (_req, res, params) => json(res, { sprint: startSprint(params.id) }));
+
+const completeRoute = plannerWrite(async (req, res, params, caller, options) => {
+  const body = await readObject(req, res);
+  if (!body) return;
+  const carryTo = body.carryTo;
+  if (carryTo !== null && (typeof carryTo !== "string" || !carryTo.trim())) {
+    return badRequest(res, "carryTo is required: a planned sprint's id or name, or null to take unfinished Todos out of any sprint");
   }
+  if (body.startNext !== undefined && typeof body.startNext !== "boolean") return badRequest(res, "startNext must be a boolean");
+  const result = completeSprint(params.id, { carryTo, startNext: body.startNext === true }, workItemActor(caller), caller.origin);
+  for (const id of result.carried) options.emitProjection(id);
+  json(res, result);
+});
+
+const deleteRoute = plannerWrite(async (_req, res, params, caller, options) => {
+  const moved = deleteSprint(params.id, workItemActor(caller), caller.origin);
+  for (const id of moved) options.emitProjection(id);
+  json(res, { deleted: true, moved });
+});
+
+/** The Todo a move acts on, or undefined once the route has answered. */
+function movableTodo(res: ServerResponse, id: string, caller: WorkItemCaller) {
+  if (!isTodoId(id)) {
+    badRequest(res, "Invalid Todo ID; expected <AAA>-N with a positive safe-integer suffix");
+    return undefined;
+  }
+  const item = getWorkItem(id);
+  if (!item) {
+    notFound(res);
+    return undefined;
+  }
+  if (!canMove(caller, item)) {
+    json(res, { error: "moving a Todo between sprints requires the operator, the item creator, or the assignee" }, 403);
+    return undefined;
+  }
+  return item;
 }
 
-async function handleOne(req: HttpRequest, res: ServerResponse, method: string, ref: string, action: string | undefined,
-  options: SprintsApiOptions): Promise<void> {
-  const caller = await plannerOrAnswer(res, options);
-  if (!caller) return;
-  try {
-    if (method === "PATCH" && !action) {
-      const body = await readObject(req, res);
-      if (!body) return;
-      const fields = readSprintFields(body);
-      if (!fields.ok) return badRequest(res, fields.error);
-      return json(res, { sprint: updateSprint(ref, fields.value) });
-    }
-    if (method === "POST" && action === "start") return json(res, { sprint: startSprint(ref) });
-    if (method === "POST" && action === "complete") {
-      const body = await readObject(req, res);
-      if (!body) return;
-      const carryTo = body.carryTo;
-      if (carryTo !== null && (typeof carryTo !== "string" || !carryTo.trim())) {
-        return badRequest(res, "carryTo is required: a planned sprint's id or name, or null to take unfinished Todos out of any sprint");
-      }
-      if (body.startNext !== undefined && typeof body.startNext !== "boolean") return badRequest(res, "startNext must be a boolean");
-      const result = completeSprint(ref, { carryTo, startNext: body.startNext === true }, workItemActor(caller), caller.origin);
-      for (const id of result.carried) options.emitProjection(id);
-      return json(res, result);
-    }
-    if (method === "DELETE" && !action) {
-      const moved = deleteSprint(ref, workItemActor(caller), caller.origin);
-      for (const id of moved) options.emitProjection(id);
-      return json(res, { deleted: true, moved });
-    }
-    return notFound(res);
-  } catch (err) {
-    return sprintFailure(res, err);
-  }
-}
-
-async function handleMove(req: HttpRequest, res: ServerResponse, id: string, options: SprintsApiOptions): Promise<void> {
+const moveRoute: Handler = async (req, res, params, options) => {
   const caller = options.resolveCaller();
   if (!caller) return;
-  if (!isTodoId(id)) return badRequest(res, "Invalid Todo ID; expected <AAA>-N with a positive safe-integer suffix");
-  const item = getWorkItem(id);
-  if (!item) return notFound(res);
-  if (!options.canMove(caller, item)) {
-    return json(res, { error: "moving a Todo between sprints requires the operator, the item creator, or the assignee" }, 403);
-  }
+  const item = movableTodo(res, params.id, caller);
+  if (!item) return;
   const body = await readObject(req, res);
   if (!body) return;
   const sprint = body.sprint;
@@ -163,13 +207,25 @@ async function handleMove(req: HttpRequest, res: ServerResponse, id: string, opt
     return badRequest(res, "sprint is required: a sprint id or name, or null for no sprint");
   }
   try {
-    const result = setWorkItemSprint(id, sprint, workItemActor(caller), caller.origin);
+    const result = setWorkItemSprint(item.id, sprint, workItemActor(caller), caller.origin);
     if (result.changed) options.emitProjection(item.id);
-    return json(res, { sprint: result.sprint });
+    json(res, { sprint: result.sprint });
   } catch (err) {
-    return sprintFailure(res, err);
+    sprintFailure(res, err);
   }
-}
+};
+
+/** Most specific first: `/api/sprints/:id/:action` before `/api/sprints/:id`. */
+const ROUTES: ReadonlyArray<readonly [string, string, Handler]> = [
+  ["GET", "/api/sprints", listRoute],
+  ["POST", "/api/sprints", createRoute],
+  ["PUT", "/api/work-items/:id/sprint", moveRoute],
+  ["POST", "/api/sprints/:id/start", startRoute],
+  ["POST", "/api/sprints/:id/complete", completeRoute],
+  ["GET", "/api/sprints/:id", getRoute],
+  ["PATCH", "/api/sprints/:id", updateRoute],
+  ["DELETE", "/api/sprints/:id", deleteRoute],
+];
 
 export async function handleSprintsApi(
   req: HttpRequest,
@@ -177,32 +233,12 @@ export async function handleSprintsApi(
   route: ParsedRoute,
   options: SprintsApiOptions,
 ): Promise<boolean> {
-  const { method, pathname } = route;
-  if (pathname === "/api/sprints") {
-    if (method !== "GET" && method !== "POST") return false;
-    await handleRegistry(req, res, method, options);
+  for (const [method, pattern, handler] of ROUTES) {
+    if (method !== route.method) continue;
+    const params = matchRoute(pattern, route.pathname);
+    if (!params) continue;
+    await handler(req, res, params, options);
     return true;
   }
-  const move = matchRoute("/api/work-items/:id/sprint", pathname);
-  if (move) {
-    if (method !== "PUT") return false;
-    await handleMove(req, res, move.id, options);
-    return true;
-  }
-  const withAction = matchRoute("/api/sprints/:id/:action", pathname);
-  const bare = withAction ? null : matchRoute("/api/sprints/:id", pathname);
-  const params = withAction ?? bare;
-  if (!params) return false;
-  const action = withAction?.action;
-  if (action !== undefined && action !== "start" && action !== "complete") return false;
-  if (action === undefined && method !== "PATCH" && method !== "DELETE" && method !== "GET") return false;
-  if (action !== undefined && method !== "POST") return false;
-  if (method === "GET") {
-    const sprint = getSprint(params.id);
-    if (!sprint) notFound(res);
-    else json(res, { sprint: listSprints().find((s) => s.id === sprint.id) ?? sprint });
-    return true;
-  }
-  await handleOne(req, res, method, params.id, action, options);
-  return true;
+  return false;
 }

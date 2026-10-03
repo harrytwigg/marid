@@ -6,9 +6,10 @@ import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { TodoDialog } from "./todo-dialog"
 import { DATE_OPTIONS, DUE_OPTIONS, SOURCE_OPTIONS, STATUS_OPTIONS } from "./filter-options"
 import { useLabelRegistry } from "./use-todos"
+import { sprintFilterLabel, useSprints } from "./sprints/use-sprints"
 import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
 
-type FilterPanel = "root" | "status" | "person" | "department" | "source" | "date" | "label" | "due"
+type FilterPanel = "root" | "status" | "person" | "department" | "source" | "date" | "label" | "sprint" | "due"
 
 const ROW_CLASS =
   "flex min-h-11 w-full min-w-0 items-center gap-3 rounded-[12px] px-3 text-left text-[length:var(--text-subheadline)] text-[var(--text-primary)] transition-[background-color,transform] active:scale-[0.96] hover:bg-[var(--fill-tertiary)]"
@@ -27,6 +28,7 @@ export function TodoFilterSheet({
   hideStatus,
   hideDepartment,
   showLabelDue,
+  onManageSprints,
 }: {
   filters: TodoFilters
   onChange: (next: TodoFilters) => void
@@ -40,6 +42,8 @@ export function TodoFilterSheet({
   hideDepartment?: boolean
   /** Board contexts add the Label + Due dimensions (stage-A review F1/F5). */
   showLabelDue?: boolean
+  /** Opens the sprint planner from the Sprint panel. */
+  onManageSprints?: () => void
 }) {
   const [panel, setPanel] = useState<FilterPanel>("root")
   // Every way out runs through the sheet's own exit first; the board is told to
@@ -47,6 +51,7 @@ export function TodoFilterSheet({
   const [leaving, setLeaving] = useState(false)
   const leave = useCallback(() => setLeaving(true), [])
   const labelRegistry = useLabelRegistry(!!showLabelDue)
+  const sprints = useSprints(!!showLabelDue)
   const title = panel === "root" ? "Filter" : panel.charAt(0).toUpperCase() + panel.slice(1)
   const choose = (next: TodoFilters) => {
     onChange(next)
@@ -84,6 +89,7 @@ export function TodoFilterSheet({
               ["status", "Status", STATUS_OPTIONS.find((option) => option.value === filters.status)?.label ?? "Open"],
               ["person", "Person", assigneeFilterLabel(filters.assignee, byName) ?? "Anyone"],
               ["label", "Label", filters.label ?? "Any"],
+              ["sprint", "Sprint", sprintFilterLabel(filters.sprint, sprints.data) ?? "Any"],
               ["due", "Due", DUE_OPTIONS.find((option) => option.value === filters.due)?.label ?? "Any"],
               ["department", "Department", filters.department ? filters.department.charAt(0).toUpperCase() + filters.department.slice(1) : "Any"],
               ["source", "Source", SOURCE_OPTIONS.find((option) => option.value === filters.source)?.label ?? "Any"],
@@ -91,7 +97,7 @@ export function TodoFilterSheet({
             ] as const).filter(([value]) =>
               !(hideStatus && value === "status")
               && !(hideDepartment && value === "department")
-              && !(!showLabelDue && (value === "label" || value === "due")),
+              && !(!showLabelDue && (value === "label" || value === "sprint" || value === "due")),
             ).map(([value, label, current]) => (
               <button key={value} type="button" aria-label={label} onClick={() => setPanel(value)} className={ROW_CLASS}>
                 <span>{label}</span>
@@ -171,6 +177,31 @@ export function TodoFilterSheet({
                 {label.name}<Selection selected={filters.label === label.name || filters.label === label.id} />
               </button>
             ))}
+          </>
+        )}
+        {panel === "sprint" && (
+          <>
+            <button type="button" onClick={() => choose({ ...filters, sprint: undefined })} className={ROW_CLASS}>
+              Any sprint<Selection selected={!filters.sprint} />
+            </button>
+            <button type="button" onClick={() => choose({ ...filters, sprint: "active" })} className={ROW_CLASS}>
+              Active sprint<Selection selected={filters.sprint === "active"} />
+            </button>
+            <button type="button" onClick={() => choose({ ...filters, sprint: "none" })} className={ROW_CLASS}>
+              Not in a sprint<Selection selected={filters.sprint === "none"} />
+            </button>
+            {(sprints.data ?? []).filter((sprint) => sprint.status !== "closed").map((sprint) => (
+              <button key={sprint.id} type="button" onClick={() => choose({ ...filters, sprint: sprint.id })} className={ROW_CLASS}>
+                <span className="min-w-0 truncate">{sprint.name}</span>
+                <span className="flex-none text-[12px] text-[var(--text-quaternary)]">{sprint.status}</span>
+                <Selection selected={filters.sprint === sprint.id} />
+              </button>
+            ))}
+            {onManageSprints && (
+              <button type="button" onClick={() => { leave(); onManageSprints() }} className={`${ROW_CLASS} text-[var(--accent)]`}>
+                Manage sprints…
+              </button>
+            )}
           </>
         )}
         {panel === "due" && DUE_OPTIONS.map((option) => (

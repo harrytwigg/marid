@@ -3130,26 +3130,10 @@ export async function handleApiRequest(
       return json(res, { dispatchConfig: result.config });
     }
 
-    // Sprints: the registry, its lifecycle, and moving a Todo between sprints
-    // (sprints-api.ts). Planning takes the label-creation standing; a move takes
-    // the label-change standing below.
+    // Sprints: the registry, its lifecycle, and moving a Todo between sprints.
     if (await handleSprintsApi(req, res, { method, pathname, url }, {
       resolveCaller: () => resolveWorkItemCaller(req, res, context),
-      canPlan: async (caller) => {
-        if (caller.kind === "operator" || remoteMcpHasOperatorStanding(caller)) return true;
-        const employee = caller.session.employee;
-        if (!employee) return false;
-        const { resolveOrgHierarchy } = await import("./org-hierarchy.js");
-        const node = resolveOrgHierarchy(orgRegistry(context.getConfig())).nodes[employee];
-        return (node?.directReports.length ?? 0) > 0;
-      },
-      canMove: (caller, item) => {
-        const employee = caller.kind === "session" ? caller.session.employee ?? null : null;
-        return caller.kind === "operator" ||
-          remoteMcpHasOperatorStanding(caller) ||
-          item.createdBy === workItemActor(caller) ||
-          (employee !== null && (item.assignee === employee || item.createdBy === employee));
-      },
+      getConfig: context.getConfig,
       emitProjection: (id) => emitTodoProjectionEvent(context, id, "sprint-updated"),
     })) return;
 
