@@ -34,7 +34,7 @@ Use `list_cron_jobs` for current definitions and `get_cron_run_history` for exec
 
 ## Built-in action jobs
 
-A job with `"action": "board-walk"` runs the board walk in the gateway instead of sending a prompt. Every installation ships one, `board-walk`, which is when the walk runs; its rules stay in `$JINN_HOME/board-walk.md`. Its `prompt` is empty and its `engine`, `model`, `employee` and `delivery` are not used.
+A job with `"action": "board-walk"` runs the board walk in the gateway instead of sending a prompt. Every installation ships one, `board-walk`, which is when the walk runs; its rules stay in `$JINN_HOME/board-walk.md`. Its `prompt` is empty. It is the one action that reads its runner fields: `engine`, `model`, `employee` and `effortLevel`, where set, override the same keys in `board-walk.md` and are validated on save — the engine must be one whose tools the gateway can clamp to the walk's own (`claude` or `opencode`), and a `model` must belong to its engine (plus `claude`'s and `codex`'s own configured model). `delivery` is not used.
 
 - Run it now, change its `schedule` or `timezone`, or toggle `enabled` like any job. The timezone is also the zone the walk reads "local time" in.
 - To stop the walk, disable the job. Deleting it is permanent: the gateway does not re-create it, and the walk then runs only when started by hand.

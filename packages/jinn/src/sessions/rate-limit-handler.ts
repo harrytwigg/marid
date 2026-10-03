@@ -132,8 +132,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const isUsable = (candidate: EngineName) => engines.has(candidate) && (remote
     ? engineSupportsRemote(candidate) && remoteEngineAvailable(sshDestination(remote), candidate) !== false
     : engineAvailable(config, candidate));
-  // A board walk turn never changes engine: it runs on Claude because that is
-  // where its tools can be switched off, and a substitute would bring its own.
+  // A board walk turn never changes engine: it runs on the engine it is
+  // configured for because that is where its tools can be clamped to the walk's
+  // own, and a substitute would bring its own surface with it.
   const substituteName = isBoardWalkTurn(session) ? undefined : resolveHealthyFallbackEngine(
     config,
     session.engine,

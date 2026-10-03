@@ -1,51 +1,91 @@
-import type { Employee } from "../shared/types.js";
+import type { Employee, JinnConfig } from "../shared/types.js";
 import { isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
 import { engineAvailable } from "../shared/models.js";
 import { getMessages, getSession } from "../sessions/registry.js";
 import { orgRegistry } from "../gateway/org-registry.js";
 import { CronConnector } from "../connectors/cron/index.js";
+import { OPENCODE_WALK_AGENT } from "../engines/opencode-mcp.js";
+import { isWalkEngine, WALK_ENGINES, type BoardWalkSettings } from "./settings.js";
 import type { BoardWalkDeps, WalkTurn, WalkTurnResult } from "./walk.js";
 
 /**
  * The walk's turn as a session: who it runs as, with which tools, and how its
  * outcome is read back from the session registry once it settles.
- */
-
-/**
- * The employee the walk's turn runs as: the configured one, on Claude, with
- * the walk's own tools and nothing else. The walk decides; the gateway acts.
- * Any other tool would be an act nobody checked, so:
+ *
+ * The turn runs as the configured employee on the configured engine, with the
+ * walk's own tools and nothing else. The walk decides; the gateway acts, so any
+ * other tool would be an act nobody checked and the surface is clamped per
+ * engine:
  *   - its only MCP server is the jinn server serving the board-walk toolset
- *     (`toolset`), in place of the company belt and every custom server;
- *   - Claude's built-in tools are switched off (`--tools ""`), no other MCP
- *     configuration is read (`--strict-mcp-config`), and the Chrome
- *     integration the engine always enables is switched off again
- *     (`--no-chrome`), which otherwise brings its browser tools back;
- *   - the turn always runs on Claude, on the gateway, whatever engine or host
- *     the employee normally uses. Claude is the one engine whose tools can be
- *     switched off from the command line; opencode in server mode ignores those
- *     flags, so a walk on it would keep its shell. The employee's own flags are
- *     dropped for the same reason: they were written for its own engine.
- * The rate-limit handler never hands a walk turn to a fallback engine either
- * (rate-limit-handler.ts); a limited walk waits, and the walk's timeout stops it.
+ *     (`toolset`), in place of the company belt and every resolved custom
+ *     server. On Claude that is the whole MCP surface. On opencode the operator's
+ *     own servers still load (opencode reads its config, and this staged one
+ *     only merges into it), but each of their tools is denied by the agent
+ *     below, so none is reachable;
+ *   - on Claude the built-ins are switched off from the command line
+ *     (`--tools ""`), no other MCP configuration is read
+ *     (`--strict-mcp-config`), and the Chrome integration the engine always
+ *     enables is switched off again (`--no-chrome`) — Claude is the one engine
+ *     whose tools can be switched off from the command line;
+ *   - on opencode, whose server mode ignores those flags, the turn runs as a
+ *     purpose-built agent that allows exactly the board-walk tool names and
+ *     denies everything else (`agent` in the staged config, opencode-mcp.ts),
+ *     selected with `--agent`;
+ *   - the employee's own flags are dropped for the same reason: they were
+ *     written for its own engine.
+ * Only the engines that can be clamped this way are allowed (`WALK_ENGINES`);
+ * any other is refused with that reason rather than run with an unbounded
+ * surface. The rate-limit handler never hands a walk turn to a fallback engine
+ * either (rate-limit-handler.ts); a limited walk waits, and the walk's timeout
+ * stops it.
  */
-export const WALK_ENGINE = "claude";
+export { WALK_ENGINES, isWalkEngine } from "./settings.js";
+export type { WalkEngine } from "./settings.js";
 
-/** `claudeModel` stands in for the employee's own model when that model
- *  belongs to another engine. */
-export function lockedDownEmployee(employee: Employee, claudeModel: string): Employee {
+/** Claude's own clamps. `--no-chrome` must come after the engine's own
+ *  `--chrome` (it does: employee flags are appended), or the browser tools
+ *  come back. */
+export const CLAUDE_WALK_FLAGS = ["--no-chrome", "--tools", "", "--strict-mcp-config"];
+
+/** opencode's clamp: the confined agent the staged config carries, whose
+ *  permissions allow exactly the board-walk tool names and deny the rest. */
+export const OPENCODE_WALK_FLAGS = ["--agent", OPENCODE_WALK_AGENT];
+
+/** The employee's own model when it belongs to the runner's engine; else the
+ *  engine's configured model. A model named in the settings is passed to the
+ *  session directly (routeTurn), so it needs no place here. */
+function walkModel(employee: Employee, settings: BoardWalkSettings, config: JinnConfig): string {
+  if (employee.engine === settings.engine) return employee.model;
+  const engineConfig = (config.engines as unknown as Record<string, { model?: string } | undefined>)[settings.engine];
+  return engineConfig?.model ?? "";
+}
+
+/** The employee the walk's turn runs as, clamped to the walk's own tools. */
+export function lockedDownEmployee(employee: Employee, settings: BoardWalkSettings, config: JinnConfig): Employee {
   const { remoteHost: _host, remoteUser: _user, remoteCwd: _cwd, ...local } = employee;
   return {
     ...local,
-    engine: WALK_ENGINE,
-    model: employee.engine === WALK_ENGINE ? employee.model : claudeModel,
+    engine: settings.engine,
+    model: walkModel(employee, settings, config),
     mcp: false,
     jinnMcp: false,
     toolset: "board-walk",
-    // `--no-chrome` must come after the engine's own `--chrome` (it does:
-    // employee flags are appended), or the browser tools come back.
-    cliFlags: ["--no-chrome", "--tools", "", "--strict-mcp-config"],
+    cliFlags: settings.engine === "claude" ? [...CLAUDE_WALK_FLAGS] : [...OPENCODE_WALK_FLAGS],
   };
+}
+
+/** Why the walk cannot run as configured, or null when it can. */
+function runnerRefusal(settings: BoardWalkSettings, config: JinnConfig): string | null {
+  if (!isWalkEngine(settings.engine)) {
+    return `the board walk can only run on ${WALK_ENGINES.join(" or ")}, so that its turn has only the walk's tools; "${settings.engine}" cannot be confined to them`;
+  }
+  if (!engineAvailable(config, settings.engine)) {
+    return `the board walk runs on ${settings.engine}, and it is not installed`;
+  }
+  if (isEngineExhausted(readEngineHealth(), settings.engine)) {
+    return `${settings.engine} is recorded as exhausted; this tick is skipped`;
+  }
+  return null;
 }
 
 /** The default turn: a session routed to the rules file's employee, read back
@@ -53,13 +93,12 @@ export function lockedDownEmployee(employee: Employee, claudeModel: string): Emp
 export function routeTurn(deps: Pick<BoardWalkDeps, "getConfig" | "context">): (turn: WalkTurn) => Promise<WalkTurnResult> {
   return async (turn) => {
     const config = deps.getConfig();
-    const configured = orgRegistry(config).get(turn.settings.employee);
-    if (!configured) return { error: `employee ${turn.settings.employee} named in board-walk.md does not exist` };
-    const employee = lockedDownEmployee(configured, config.engines.claude?.model ?? "sonnet");
-    // The pinned engine and named model skip the session layer's healthy-engine
-    // choice, so check here rather than walk into a spent window and wait.
-    if (!engineAvailable(config, WALK_ENGINE)) return { error: "the board walk runs on Claude so that its turn has only the walk's tools, and Claude is not installed" };
-    if (isEngineExhausted(readEngineHealth(), WALK_ENGINE)) return { error: "Claude is recorded as exhausted; this tick is skipped" };
+    const { settings } = turn;
+    const refusal = runnerRefusal(settings, config);
+    if (refusal) return { error: refusal };
+    const configured = orgRegistry(config).get(settings.employee);
+    if (!configured) return { error: `employee ${settings.employee} named in board-walk.md does not exist` };
+    const employee = lockedDownEmployee(configured, settings, config);
     const connector = new CronConnector(new Map());
     const routed = await deps.context.sessionManager.route(
       {
@@ -78,7 +117,15 @@ export function routeTurn(deps: Pick<BoardWalkDeps, "getConfig" | "context">): (
         transportMeta: { boardWalk: true },
       },
       connector,
-      { employee, engine: WALK_ENGINE, ...(turn.settings.model ? { model: turn.settings.model } : {}), title: turn.title },
+      {
+        employee,
+        engine: settings.engine,
+        // A pinned engine and named model skip the session layer's healthy-engine
+        // choice, so the runner is checked here before routing (runnerRefusal).
+        ...(settings.model ? { model: settings.model } : {}),
+        ...(settings.effortLevel ? { effortLevel: settings.effortLevel } : {}),
+        title: turn.title,
+      },
     );
     return routed?.sessionId ? settledTurn(routed.sessionId) : { error: "the walk's session was not started" };
   };
@@ -102,4 +149,3 @@ function settledTurn(sessionId: string): WalkTurnResult {
   const reply = [...getMessages(sessionId)].reverse().find((message) => message.role === "assistant" && !message.partial)?.content;
   return reply ? { sessionId, reply } : { sessionId };
 }
-

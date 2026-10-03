@@ -1,8 +1,10 @@
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import path from "node:path";
-import type { CronJob } from "../shared/types.js";
+import type { CronJob, JinnConfig } from "../shared/types.js";
 import { CRON_RUNS } from "../shared/paths.js";
+import { ENGINE_NAMES, isKnownEngine } from "../shared/models.js";
+import { isWalkEngine, readRules, runnerModelMatches, withRunnerOverrides, WALK_ENGINES } from "../board-walk/settings.js";
 import { logger } from "../shared/logger.js";
 import { canonicalCronJobId, loadJobs, saveJobs } from "../cron/jobs.js";
 import { summarizeCronRun } from "../cron/run-summary.js";
@@ -38,9 +40,44 @@ function scheduleError(job: Pick<CronJob, "schedule" | "timezone">): string | nu
   return errors.length > 0 ? errors.map((entry) => entry.message).join("; ") : null;
 }
 
+/** Why an engine written on a board-walk job cannot be used, or null. Only an
+ *  engine the walk can be confined on may be named; anything else would run the
+ *  walk with an unbounded tool surface. */
+function boardWalkEngineError(engine: string): string | null {
+  if (!isKnownEngine(engine)) return `engine must be one of ${ENGINE_NAMES.join(", ")}`;
+  if (!isWalkEngine(engine)) {
+    return `the board walk can only run on ${WALK_ENGINES.join(" or ")}, so that its turn has only the walk's tools; "${engine}" cannot be confined to them`;
+  }
+  return null;
+}
+
+/**
+ * Why a board-walk job's runner fields cannot be stored, or null. The walk's
+ * `engine`/`model`/`employee`/`effortLevel` are honoured for this action (the
+ * ordinary action job ignores them), so the engine must be one the walk can be
+ * confined on, and the engine/model pair the job resolves to — the job's fields
+ * over board-walk.md's, the same resolution the tick uses — must match. A job
+ * that sets only a model therefore validates against the engine in force from
+ * the file, not a hardcoded default.
+ */
+function boardWalkRunnerError(job: CronJob, config: JinnConfig): string | null {
+  if (job.action !== "board-walk") return null;
+  const engine = job.engine?.trim();
+  if (engine) {
+    const problem = boardWalkEngineError(engine);
+    if (problem) return problem;
+  }
+  const model = job.model?.trim();
+  if (!model) return null;
+  const effective = withRunnerOverrides(readRules().settings, { engine, model });
+  return runnerModelMatches(config, effective.engine, effective.model ?? model)
+    ? null
+    : `model ${JSON.stringify(model)} is not supported by engine ${JSON.stringify(effective.engine)}`;
+}
+
 /** Why `job` cannot be stored, or null. */
-function jobError(job: CronJob): string | null {
-  return scheduleError(job) ?? cronActionError(job);
+function jobError(job: CronJob, config: JinnConfig): string | null {
+  return scheduleError(job) ?? cronActionError(job) ?? boardWalkRunnerError(job, config);
 }
 
 /** Why a new job cannot join `jobs`: a built-in action runs from one job
@@ -92,7 +129,7 @@ function jobFromBody(body: any): CronJob {
   };
 }
 
-async function createJob(req: HttpRequest, res: ServerResponse): Promise<void> {
+async function createJob(req: HttpRequest, res: ServerResponse, config: JinnConfig): Promise<void> {
   const _parsed = await readJsonBody(req, res);
   if (!_parsed.ok) return;
   const body = _parsed.body as any;
@@ -111,7 +148,7 @@ async function createJob(req: HttpRequest, res: ServerResponse): Promise<void> {
     return badRequest(res, `a cron job with id "${body.id}" already exists`);
   }
   const newJob = jobFromBody(body);
-  const invalid = jobError(newJob) ?? twinError(newJob, jobs);
+  const invalid = jobError(newJob, config) ?? twinError(newJob, jobs);
   if (invalid) return badRequest(res, invalid);
   jobs.push(newJob);
   saveJobs(jobs);
@@ -119,7 +156,7 @@ async function createJob(req: HttpRequest, res: ServerResponse): Promise<void> {
   json(res, newJob, 201);
 }
 
-async function updateJob(req: HttpRequest, res: ServerResponse, id: string): Promise<void> {
+async function updateJob(req: HttpRequest, res: ServerResponse, id: string, config: JinnConfig): Promise<void> {
   const jobs = loadJobs();
   const idx = jobs.findIndex((j) => j.id === id);
   if (idx === -1) return notFound(res);
@@ -132,7 +169,7 @@ async function updateJob(req: HttpRequest, res: ServerResponse, id: string): Pro
   if ((merged.action ?? null) !== (jobs[idx].action ?? null)) {
     return badRequest(res, "a cron job's action cannot be changed; create a new job instead");
   }
-  const invalid = jobError(merged);
+  const invalid = jobError(merged, config);
   if (invalid) return badRequest(res, invalid);
   jobs[idx] = merged;
   saveJobs(jobs);
@@ -194,12 +231,12 @@ async function handleCronWrites(
 ): Promise<boolean> {
   const { method, pathname } = route;
   if (method === "POST" && pathname === "/api/cron") {
-    await createJob(req, res);
+    await createJob(req, res, context.getConfig());
     return true;
   }
   const job = matchRoute("/api/cron/:id", pathname);
   if (method === "PUT" && job) {
-    await updateJob(req, res, job.id);
+    await updateJob(req, res, job.id, context.getConfig());
     return true;
   }
   if (method === "DELETE" && job) {
