@@ -814,6 +814,24 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     expect(result.error).toBe("APIError: upstream exploded");
   });
 
+  it("fails a turn whose server event stream was lost mid-turn, after it had narrated", async () => {
+    // A remote host dropped while the turn ran: the stream ended with a step's
+    // narration already on it. That text is not the answer — before this, any
+    // text made the lost turn a success, so the session settled idle with
+    // lastError null and the parent got a completion callback.
+    const h = harness();
+    const deltas: Array<{ type: string; content: string }> = [];
+    const result = await h.engine.run(runOpts({ prompt: "DROPSTREAM work", onStream: (d) => deltas.push(d) }));
+    expect(result.error).toBe("the opencode server closed the event stream mid-turn");
+    expect(result.result).toBe("");
+    // The step that ran is still accounted for, and numTurns keeps the resume id.
+    expect(result.numTurns).toBe(1);
+    expect(result.sessionId).toMatch(/^ses_fake/);
+    // The narration still reached the chat as it streamed.
+    expect(deltas.filter((d) => d.type === "text").map((d) => d.content))
+      .toEqual(["Creating the worktree and inspecting the cron code and tests."]);
+  });
+
   describe("a provider error partway through the turn, after a step that said something", () => {
     // A step's text ("Let me verify x before y.") is narration, not the answer:
     // when the next step's request fails, the turn failed. Real opencode
