@@ -74,6 +74,57 @@ describe("POST /api/work-items/:id/status — stop cause", () => {
     expect(row?.parkedUntil).toBe(parkedUntil);
   });
 
+  describe("the detail route carries the same stop cause as the compact row", () => {
+    async function get(path: string) {
+      const cap = makeRes();
+      await api.handleApiRequest(makeReq("GET", path, undefined, operatorHeaders), cap.res, ctx);
+      return cap;
+    }
+
+    async function compactRow(id: string) {
+      const list = await get(`/api/work-items?status=blocked`);
+      return (list.body.workItems as Array<Record<string, unknown>>).find((r) => r.id === id);
+    }
+
+    it("returns parkedUntil, unblockHint and attentionLane matching the list row", async () => {
+      const wi = item("parked with hint");
+      const parkedUntil = new Date(Date.now() + 3_600_000).toISOString();
+      await post(wi.id, { status: "blocked", note: "quota", parkedUntil, unblockHint: hint });
+
+      const detail = await get(`/api/work-items/${wi.id}`);
+      const row = await compactRow(wi.id);
+
+      expect(detail.status).toBe(200);
+      expect(detail.body).toMatchObject({ parkedUntil, unblockHint: hint, attentionLane: "recovering" });
+      expect({
+        parkedUntil: detail.body.parkedUntil,
+        unblockHint: detail.body.unblockHint,
+        attentionLane: detail.body.attentionLane,
+      }).toEqual({ parkedUntil: row?.parkedUntil, unblockHint: row?.unblockHint, attentionLane: row?.attentionLane });
+    });
+
+    it("drops the park once it has passed and keeps the hint, as the list row does", async () => {
+      const wi = item("park passed");
+      await post(wi.id, { status: "blocked", note: "quota", parkedUntil: new Date(Date.now() + 3_600_000).toISOString(), unblockHint: hint });
+      initDb()
+        .prepare("UPDATE work_item_stop_cause SET parked_until = ? WHERE work_item_id = ?")
+        .run(new Date(Date.now() - 3_600_000).toISOString(), wi.id);
+
+      const detail = await get(`/api/work-items/${wi.id}`);
+      expect(detail.body).not.toHaveProperty("parkedUntil");
+      expect(detail.body).toMatchObject({ unblockHint: hint, attentionLane: "operator" });
+      expect((await compactRow(wi.id))?.attentionLane).toBe("operator");
+    });
+
+    it("carries no stop cause for a Todo that is not stopped", async () => {
+      const wi = item("working");
+      const detail = await get(`/api/work-items/${wi.id}`);
+      expect(detail.body.attentionLane).toBeNull();
+      expect(detail.body).not.toHaveProperty("parkedUntil");
+      expect(detail.body).not.toHaveProperty("unblockHint");
+    });
+  });
+
   it("refuses a parkedUntil that is not a timestamp", async () => {
     const wi = item("bad park");
     const cap = await post(wi.id, { status: "blocked", note: "quota", parkedUntil: "when the quota resets" });

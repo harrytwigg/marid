@@ -425,6 +425,76 @@ describe("the task page", () => {
     expect(screen.queryByTestId("task-banner-reason")).toBeNull()
   })
 
+  describe("a blocked item says why it stopped, as its card does", () => {
+    const hint = { what: "approve the vendor invoice", who: "the operator" }
+    const blockedWithNote = (extra: Partial<WorkItemDetailWire>) =>
+      detailOf(full("PLA-12", { status: "blocked" }), {
+        events: [{
+          id: "e1", workItemId: "PLA-12", kind: "status_change", fromStatus: "executing",
+          toStatus: "blocked", actor: "mason", detail: { note: "Provider quota" },
+          createdAt: "2026-07-23T07:00:00.000Z",
+        }],
+        ...extra,
+      })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("renders the parked-until countdown and the unblock hint in the banner, beside the note", async () => {
+      getWorkItem.mockResolvedValue(blockedWithNote({
+        parkedUntil: new Date(Date.now() + 2 * 3_600_000 + 14 * 60_000).toISOString(),
+        unblockHint: hint,
+      }))
+      renderTask()
+
+      const banner = await screen.findByTestId("task-banner-blocked")
+      expect(screen.getByTestId("park-chip-PLA-12").textContent).toContain("2h 14m")
+      const lead = screen.getByTestId("stop-lead-PLA-12")
+      expect(lead.textContent).toContain(hint.what)
+      expect(lead.textContent).toContain(hint.who)
+      expect(banner.contains(lead)).toBe(true)
+      expect(banner.textContent).toContain("Provider quota")
+    })
+
+    it("shows a long hint whole instead of clipping it to one line as the card does", async () => {
+      const long = { what: "approve the vendor invoice for the Q4 hosting renewal before the provider suspends the account", who: "the operator, via the finance portal" }
+      getWorkItem.mockResolvedValue(blockedWithNote({ unblockHint: long }))
+      renderTask()
+
+      await screen.findByTestId("task-banner-blocked")
+      for (const part of ["what", "who"]) {
+        const line = screen.getByTestId(`stop-hint-${part}-PLA-12`)
+        expect(line.className).not.toMatch(/\btruncate\b/)
+        expect(line.className).toContain("whitespace-pre-wrap")
+      }
+      expect(screen.getByTestId("stop-hint-what-PLA-12").textContent).toBe(long.what)
+    })
+
+    it("drops the countdown on its own once the park has passed, and keeps the hint", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      getWorkItem.mockResolvedValue(blockedWithNote({
+        parkedUntil: new Date(Date.now() + 5_000).toISOString(),
+        unblockHint: hint,
+      }))
+      renderTask()
+
+      expect(await screen.findByTestId("park-chip-PLA-12")).toBeTruthy()
+      act(() => { vi.advanceTimersByTime(6_000) })
+      expect(screen.queryByTestId("park-chip-PLA-12")).toBeNull()
+      expect(screen.getByTestId("stop-lead-PLA-12").textContent).toContain(hint.what)
+    })
+
+    it("shows no lead for a park that has already passed and no hint", async () => {
+      getWorkItem.mockResolvedValue(blockedWithNote({ parkedUntil: new Date(Date.now() - 3_600_000).toISOString() }))
+      renderTask()
+
+      expect((await screen.findByTestId("task-banner-blocked")).textContent).toContain("Provider quota")
+      expect(screen.queryByTestId("stop-lead-PLA-12")).toBeNull()
+      expect(screen.queryByTestId("park-chip-PLA-12")).toBeNull()
+    })
+  })
+
   it("rejects a malformed route identifier before any item lookup (isTodoId guard)", async () => {
     renderTask("/todos/not-a-todo")
     expect(await screen.findByText("That's not a Todo ID.")).toBeTruthy()
