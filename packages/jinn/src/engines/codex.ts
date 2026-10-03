@@ -11,6 +11,7 @@ import { CODEX_HOMES_DIR } from "../shared/paths.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { costOfUsage } from "../shared/model-pricing.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
+import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 import { CodexNativeAgents } from "./codex-native-agents.js";
 import {
   CODEX_SESSIONS_DIR,
@@ -516,6 +517,9 @@ export class CodexEngine implements InterruptibleEngine {
     if (opts.attachments?.length) {
       prompt += "\n\nAttached files:\n" + opts.attachments.map((a) => `- ${a}`).join("\n");
     }
+    // The prompt is one command-line argument. One the exec would refuse fails
+    // the turn here, naming its size and the limit, before anything is staged.
+    if (argumentLimitApplies(false)) assertArgumentsFit("Codex", [prompt], () => "the message (with its system prompt and attachment list)");
 
     const bin = resolveBin("codex", opts.bin);
     const sessionId = opts.sessionId || `codex-${Date.now()}`;
