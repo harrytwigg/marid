@@ -231,10 +231,11 @@ export function transition(id: string, to: WorkItemStatus, actor: string, opts: 
     }
 
     const releasedSessions = target === 'backlog' ? releaseSelfStartedLinks(db, id) : [];
-    // The operator resuming stopped work answers the incident the recovery
-    // sweep classified while it was stopped (the sweep reads only runs that
-    // ended after this move, `latestOperatorResumeAt`, so it will not write it back).
-    if (from === 'blocked' && target === 'executing' && opts.human && opts.manual) clearWorkItemRecovery(id);
+    // The operator resuming stopped work, or sending it back from review,
+    // answers the incident the recovery sweep classified before it (the sweep
+    // reads only runs that ended after this move, `latestOperatorResumeAt`, so
+    // it will not write it back).
+    if ((from === 'blocked' || from === 'in_review') && target === 'executing' && opts.human && opts.manual) clearWorkItemRecovery(id);
 
     if (block) recordBlock(db, id, block, now);
     // Only a successful completion resets the block history; `cancelled` keeps

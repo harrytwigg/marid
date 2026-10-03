@@ -151,10 +151,11 @@ export function latestEvidenceFloorAt(workItemId: string): string | undefined {
 }
 
 /**
- * When the operator last resumed this Todo out of `blocked` himself, or
- * undefined if he never has. Only that move counts: it is his answer to the
- * stop, so a run that ended before it cannot speak for the work after it. A
- * note on the stop, a block, or an agent's own unblock is no such answer, and
+ * When the operator last put this Todo back to work himself, or undefined if he
+ * never has: resuming it out of `blocked`, or sending it back from review (the
+ * bounce). Only those moves count: each is his answer to what came before, so a
+ * run that ended before it cannot speak for the work after it. A note on the
+ * stop, a block, or an agent's own unblock or take-back is no such answer, and
  * recovery keeps reading the runs across it. Same operator test as the floor
  * above: his actor, or a session carrying his lane.
  */
@@ -164,7 +165,7 @@ export function latestOperatorResumeAt(workItemId: string): string | undefined {
   const row = db
     .prepare(
       `SELECT created_at FROM work_item_events
-       WHERE work_item_id = ? AND kind = 'status_change' AND from_status = 'blocked' AND to_status = 'executing'
+       WHERE work_item_id = ? AND kind = 'status_change' AND from_status IN ('blocked', 'in_review') AND to_status = 'executing'
          AND (actor = ? OR CASE WHEN json_valid(detail) THEN json_extract(detail, '$.operatorLane') END = 1)
        ORDER BY created_at DESC, rowid DESC LIMIT 1`,
     )
