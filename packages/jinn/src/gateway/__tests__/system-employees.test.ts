@@ -22,6 +22,7 @@ vi.mock("../../shared/logger.js", () => ({
 }));
 
 import { scanOrg } from "../org.js";
+import { SEARCH_ROOTS } from "../../notes/store.js";
 
 const config = {
   engines: {
@@ -88,6 +89,22 @@ describe("scanOrg system employees", () => {
     expect(persona).toContain("dispatch_work_item");
     expect(persona).toMatch(/exactly one/i);
     expect(persona).toMatch(/do not set an assignee/i);
+  });
+
+  // search_knowledge only walks SEARCH_ROOTS. If the Shaper prompt claims it
+  // covers a root outside that list (it once said "skills"), an agent can
+  // conclude a skill does not exist from an empty search.
+  it("only claims search_knowledge covers roots it actually searches", () => {
+    const persona = scanOrg(config).get("todo-shaper")!.persona;
+    const claim = /search_knowledge for ([^;]*?) the capture assumes/.exec(persona)?.[1] ?? "";
+
+    expect(claim).not.toBe("");
+    expect(claim).not.toMatch(/skills?/i);
+
+    // The roots the persona says are searched must be exactly SEARCH_ROOTS.
+    const searched = /searches only ([a-z]+)\/ and ([a-z]+)\//.exec(persona)?.slice(1);
+    expect(searched).toEqual([...SEARCH_ROOTS]);
+    expect(SEARCH_ROOTS).not.toContain("skills");
   });
 
   it("never trusts system: true from an ordinary employee YAML", () => {
