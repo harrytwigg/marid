@@ -2679,12 +2679,6 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       }
 
       result = await resolver.promise;
-      // Still inside the turn: a stop reaches it, and the PTY is not handed to
-      // the next one, while the answer it reported is flushed.
-      const answeredIn = resolver.transcriptPath;
-      if (answeredIn && !result.error && !nativeCommand && result.result?.trim()) {
-        await awaitTurnAnswerInTranscript(answeredIn, turnTranscriptStart(promptWrittenAt, resolver), result.result);
-      }
     } finally {
       if (watchdog) clearInterval(watchdog);
       if (nativeCommandTimer) clearInterval(nativeCommandTimer);
@@ -2711,6 +2705,14 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     const transcriptPath = resolver.transcriptPath;
     const turnTranscriptFrom = turnTranscriptStart(promptWrittenAt, resolver);
     if (transcriptPath && !result.error) {
+      // After the teardown, not before it: the turn has already settled, so a
+      // hook arriving while it waited would be taken as its own and lost — and
+      // Claude Code starts a background re-run right after a Stop. A turn typed
+      // into the terminal meanwhile may add to this cost; the wait ends as soon
+      // as the answer is on disk, usually within a poll or two.
+      if (!nativeCommand && result.result?.trim()) {
+        await awaitTurnAnswerInTranscript(transcriptPath, turnTranscriptFrom, result.result);
+      }
       // Scope to THIS turn: the transcript is cumulative and the caller adds
       // result.cost to the session total, so an unscoped sum over-counts.
       const cost = computeInteractiveCost(transcriptPath, opts.model, turnTranscriptFrom);
