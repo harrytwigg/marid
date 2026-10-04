@@ -73,7 +73,7 @@ import { PTY_BOOT_GRACE_MS } from "../pty-stream.js";
 import { processStartFailure } from "../../shared/process-start.js";
 
 const flush = () => new Promise((r) => setTimeout(r, 20));
-const sessionMeta = (id: string) => JSON.stringify({ type: "session_meta", payload: { id } }) + "\n";
+const sessionMeta = (id: string, cwd = "/tmp") => JSON.stringify({ type: "session_meta", payload: { id, cwd } }) + "\n";
 
 let lifecycle: PtyLifecycleManager;
 let sessionsDir: string;
@@ -112,6 +112,23 @@ describe("CodexInteractiveEngine — a process that dies right after writing its
     fs.appendFileSync(transcript, JSON.stringify({ type: "event_msg", payload: { type: "task_started", turn_id: "t1" } }) + "\n");
     ptySpawns[0].proc._exit(1);
     expect((await run).error).toBe("Interrupted: codex process exited (code 1, signal 0)");
+  });
+
+  it("is still a failed start when the new rollout is another process's: a different working directory", async () => {
+    const run = engine.run({ sessionId: "cx-other-cwd", prompt: "hello", cwd: "/tmp" } as any);
+    await flush();
+    fs.writeFileSync(path.join(sessionsDir, `rollout-start-${++fileSeq}.jsonl`), sessionMeta("thread-other", "/somewhere/else"));
+    ptySpawns[0].proc._exit(1);
+    expect((await run).error).toBe(processStartFailure("codex", { exitCode: 1, signal: 0 }, ""));
+  });
+
+  it("is still a failed start when more than one new rollout appeared, so none is known to be its own", async () => {
+    const run = engine.run({ sessionId: "cx-two-fresh", prompt: "hello", cwd: "/tmp" } as any);
+    await flush();
+    fs.writeFileSync(path.join(sessionsDir, `rollout-start-${++fileSeq}.jsonl`), sessionMeta("thread-a"));
+    fs.writeFileSync(path.join(sessionsDir, `rollout-start-${++fileSeq}.jsonl`), sessionMeta("thread-b"));
+    ptySpawns[0].proc._exit(1);
+    expect((await run).error).toMatch(/^codex did not start: /);
   });
 
   it("is still a failed start, with the output, when no transcript was written", async () => {
@@ -169,13 +186,14 @@ describe("GrokInteractiveEngine — a warm PTY that dies during boot", () => {
     expect((await run).error).toBe("Interrupted: grok process exited (code 1, signal 0)");
   });
 
-  it("is an interruption once the PTY has outlived its boot", async () => {
+  it("has no boot window of its own: its TUI is the only sign it is up", async () => {
     const now = Date.now();
     engine.ensureIdleSpawn("gk-warm-old", { cwd: "/tmp" });
+    ptySpawns[0].proc._emit("error: stuck on login\r\n");
     const run = engine.run({ sessionId: "gk-warm-old", prompt: "hi", cwd: "/tmp" } as any);
     await flush();
     vi.spyOn(Date, "now").mockReturnValue(now + PTY_BOOT_GRACE_MS + 1_000);
     ptySpawns[0].proc._exit(1);
-    expect((await run).error).toBe("Interrupted: grok process exited (code 1, signal 0)");
+    expect((await run).error).toBe(processStartFailure("grok", { exitCode: 1, signal: 0 }, "error: stuck on login"));
   });
 });

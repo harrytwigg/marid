@@ -40,8 +40,11 @@ export const CODEX_MISSING_ROLLOUT = /no rollout found|code -32600|thread\/resum
 /** What each CLI prints when the conversation it was asked to resume is gone. */
 const MISSING_CONVERSATION: readonly RegExp[] = [
   /no conversation found/i, // Claude Code
-  CODEX_MISSING_ROLLOUT,
-  /unknown session id|session not found|no session found/i, // grok
+  // codex's narrowest wording: CODEX_MISSING_ROLLOUT's other alternatives
+  // (`code -32600`, `thread/resume failed`) also cover failures that leave the
+  // thread intact, which a destructive clear cannot afford.
+  /no rollout found/i,
+  /unknown session id/i, // grok; the one wording seen in its release notes
 ];
 
 /** Whether CLI output says the conversation it was asked to resume no longer exists. */

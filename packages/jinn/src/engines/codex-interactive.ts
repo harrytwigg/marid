@@ -99,6 +99,17 @@ function listTranscriptFiles(root = CODEX_SESSIONS_DIR): Map<string, TranscriptF
   return files;
 }
 
+/** The working directory codex recorded in a transcript's session_meta, if it is readable yet. */
+function parseCwdFromFile(filePath: string): string | undefined {
+  try {
+    const first = fs.readFileSync(filePath, "utf-8").split("\n", 1)[0];
+    const cwd = JSON.parse(first)?.payload?.cwd;
+    return typeof cwd === "string" && cwd ? cwd : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function parseSessionIdFromFile(filePath: string): string | undefined {
   try {
     const first = fs.readFileSync(filePath, "utf-8").split("\n", 1)[0];
@@ -295,8 +306,11 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
         try { return fs.statSync(tailed.file).size > tailed.offset; } catch { return false; }
       }
       if (!transcriptsBefore) return false;
-      for (const file of listTranscriptFiles().keys()) if (!transcriptsBefore.has(file)) return true;
-      return false;
+      // Discovery's own rule: only a unique fresh rollout can be this process's,
+      // and here also one recorded for its working directory. Another codex
+      // writing a rollout at the same time must not make this death look started.
+      const fresh = [...listTranscriptFiles().keys()].filter((file) => !transcriptsBefore!.has(file));
+      return fresh.length === 1 && parseCwdFromFile(fresh[0]) === (opts.cwd || JINN_HOME);
     };
     // Before codex writes to its transcript it never ran this turn (an exec
     // refusal, an unknown flag, a crash on boot): a failed start, carrying what

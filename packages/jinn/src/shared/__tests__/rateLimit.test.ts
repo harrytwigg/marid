@@ -116,17 +116,21 @@ describe("isDeadSessionError", () => {
 
     it("is dead when codex says the rollout is gone", () => {
       expect(isDeadSessionError(failure("codex", "Error: thread/resume failed: no rollout found for thread id abc"))).toBe(true);
-      expect(isDeadSessionError(failure("codex", "Error: code -32600 invalid request"))).toBe(true);
     });
 
     it("is dead when grok says the session is gone", () => {
       expect(isDeadSessionError(failure("grok", "Error: unknown session id abc"))).toBe(true);
-      expect(isDeadSessionError(failure("grok", "session not found: abc"))).toBe(true);
     });
 
     it("keeps the resume id for any other reason the process did not start", () => {
       expect(isDeadSessionError(failure("codex", "execvp(3) failed.: Argument list too long"))).toBe(false);
       expect(isDeadSessionError(failure("grok", "error: unexpected argument '--bogus' found"))).toBe(false);
+    });
+
+    it("keeps the resume id when the wording is generic enough to describe other failures", () => {
+      expect(isDeadSessionError(failure("codex", "Error: code -32600 invalid request"))).toBe(false);
+      expect(isDeadSessionError(failure("codex", "Error: thread/resume failed: connection reset"))).toBe(false);
+      expect(isDeadSessionError(failure("grok", "mcp: session not found"))).toBe(false);
     });
   });
 

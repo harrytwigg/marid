@@ -35,7 +35,7 @@ interface ActiveTurn {
   processExited: (exit: PtyExit | undefined, output: string) => void;
   /** Whether the process serving this turn is up: once its TUI is ready (or asks
    *  which project) or its transcript moves. A warm process that has shown
-   *  either, or outlived its boot, is up too, per {@link PtyBootTracker}. */
+   *  either is up too, per {@link PtyBootTracker}. */
   started: boolean;
   tailer?: TranscriptTailer;
   discover?: { stop: () => void };
@@ -257,7 +257,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     // flag, a crash on boot): a failed start, carrying what the process
     // printed, not a quiet interruption that loses the reason.
     turn.processExited = (exit, output) => {
-      const up = turn.started || (reuseWarm && !!turn.boundProc && this.boot.isUp(turn.boundProc));
+      const up = turn.started || (reuseWarm && !!turn.boundProc && this.boot.isUp(turn.boundProc, false));
       if (!up) {
         finish({ sessionId: grokSessionId ?? opts.resumeSessionId ?? "", result: "", error: processStartFailure("grok", exit, output) });
         return;
@@ -423,8 +423,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
       cwd: opts.cwd || JINN_HOME,
       env: this.buildEnv(jinnSessionId),
     });
-    this.boot.spawned(proc);
-    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, sessionId: grokSessionId });
+        this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, sessionId: grokSessionId });
     return this.wireProcToStream(jinnSessionId, proc);
   }
 
@@ -433,10 +432,15 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     // Whether this process ever got as far as a TUI, so a warm one that dies
     // later is told apart from one that died booting (see PtyBootTracker).
     let screen = "";
+    let up = false;
     proc.onData((data) => {
       if (data.includes("\x1b[6n")) proc.write(CURSOR_POSITION_RESPONSE);
+      if (up) return;
       screen = (screen + data).slice(-5000);
-      if (isGrokTuiReady(screen) || isGrokProjectPicker(screen)) this.boot.markUp(proc);
+      if (isGrokTuiReady(screen) || isGrokProjectPicker(screen)) {
+        up = true;
+        this.boot.markUp(proc);
+      }
     });
     const tail = this.streams.attachWithOutputTail(jinnSessionId, proc, () => {
       const e = this.active.get(jinnSessionId);
