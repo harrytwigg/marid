@@ -156,4 +156,52 @@ describe("a cron job that runs a built-in action", () => {
     expect(stripped.status).toBe(400);
     expect(stripped.body).toEqual({ error: "a cron job's action cannot be changed; create a new job instead" });
   });
+
+  it("honours and validates the walk's runner fields, where an ordinary action job's are not used", async () => {
+    // The runner fields are stored on the walk's job; the accepted one answers
+    // with them. Only an engine the walk can be confined on is accepted, and a
+    // model must belong to the engine it is named with — the same rule a
+    // session's engine/model pair follows.
+    const valid = await call("POST", "/api/cron", { ...WALK, id: "walk-oc", engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" });
+    expect(valid.status).toBe(201);
+    expect(valid.body).toMatchObject({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" });
+
+    // codex is a real engine, but the walk's tools cannot be clamped on it.
+    const unclampable = await call("POST", "/api/cron", { ...WALK, id: "walk-codex", engine: "codex", model: "gpt-5.6-sol" });
+    expect(unclampable.status).toBe(400);
+    expect(unclampable.body).toEqual({ error: 'the board walk can only run on claude or opencode, so that its turn has only the walk\'s tools; "codex" cannot be confined to them' });
+
+    const badEngine = await call("POST", "/api/cron", { ...WALK, id: "walk-2", engine: "self-destruct" });
+    expect(badEngine.status).toBe(400);
+    expect(badEngine.body).toEqual({ error: "engine must be one of claude, codex, antigravity, grok, pi, hermes, opencode" });
+
+    // claude is clampable, and the harness's claude catalog has no sonnet, so a
+    // model that is not Claude's is refused against the effective engine.
+    const badModel = await call("PUT", "/api/cron/walk-oc", { engine: "claude", model: "opencode-go/deepseek-v4.1-flash" });
+    expect(badModel.status).toBe(400);
+    expect(badModel.body).toEqual({ error: 'model "opencode-go/deepseek-v4.1-flash" is not supported by engine "claude"' });
+  });
+
+  it("validates a model-only job against the engine board-walk.md is on, not a hardcoded default", async () => {
+    // The file is on opencode; a job that names only an opencode model must not
+    // be checked against claude (which would reject a valid opencode id).
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const rules = path.join(process.env.JINN_HOME!, "board-walk.md");
+    const prior = fs.existsSync(rules) ? fs.readFileSync(rules, "utf-8") : undefined;
+    fs.writeFileSync(rules, "---\nengine: opencode\n---\n");
+    try {
+      await call("POST", "/api/cron", WALK);
+      // A model-only update is checked against opencode, the engine in force.
+      const ok = await call("PUT", "/api/cron/board-walk", { model: "opencode-go/deepseek-v4.1-flash" });
+      expect(ok.status).toBe(200);
+      // And a bare id that opencode would silently drop is refused.
+      const bad = await call("PUT", "/api/cron/board-walk", { model: "opus" });
+      expect(bad.status).toBe(400);
+      expect(bad.body).toEqual({ error: 'model "opus" is not supported by engine "opencode"' });
+    } finally {
+      if (prior === undefined) fs.rmSync(rules, { force: true });
+      else fs.writeFileSync(rules, prior);
+    }
+  });
 });

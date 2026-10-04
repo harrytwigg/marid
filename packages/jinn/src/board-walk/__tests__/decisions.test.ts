@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readStartDecision, readTodoDecision } from "../decisions.js";
-import { lockedDownEmployee } from "../route-turn.js";
-import type { Employee } from "../../shared/types.js";
+import { BOARD_WALK_DEFAULTS, type BoardWalkSettings } from "../settings.js";
+import { CLAUDE_WALK_FLAGS, OPENCODE_WALK_FLAGS, lockedDownEmployee } from "../route-turn.js";
+import type { Employee, JinnConfig } from "../../shared/types.js";
 
 describe("reading one decision", () => {
   it("reads a decision with its gates", () => {
@@ -31,17 +32,34 @@ describe("reading one decision", () => {
   });
 });
 
+const CONFIG = {
+  gateway: {}, sessions: {}, connectors: {}, logging: {},
+  engines: { default: "claude", claude: { model: "sonnet" }, opencode: { model: "opencode-go/deepseek-v4.1-flash" } },
+} as unknown as JinnConfig;
+
+function settings(over: Partial<BoardWalkSettings> = {}): BoardWalkSettings {
+  return { employee: "assistant", engine: "claude", model: "sonnet", actions: { ...BOARD_WALK_DEFAULTS.actions }, ...over };
+}
+
 describe("the walk's turn has only the walk's tools", () => {
   it("runs as the employee on Claude, on the gateway, with the board-walk toolset alone, no built-in tools and none of its own flags", () => {
     const employee = {
       name: "assistant", engine: "opencode", model: "x", cliFlags: ["--agent", "build"], mcp: true,
       remoteHost: "box", remoteUser: "u", remoteCwd: "/w",
     } as unknown as Employee;
-    expect(lockedDownEmployee(employee, "sonnet")).toEqual({
+    expect(lockedDownEmployee(employee, settings(), CONFIG)).toEqual({
       name: "assistant", engine: "claude", model: "sonnet", mcp: false, jinnMcp: false, toolset: "board-walk",
-      cliFlags: ["--no-chrome", "--tools", "", "--strict-mcp-config"],
+      cliFlags: CLAUDE_WALK_FLAGS,
     });
     const onClaude = { name: "assistant", engine: "claude", model: "opus", cliFlags: ["--chrome"] } as unknown as Employee;
-    expect(lockedDownEmployee(onClaude, "sonnet")).toMatchObject({ engine: "claude", model: "opus", cliFlags: ["--no-chrome", "--tools", "", "--strict-mcp-config"] });
+    expect(lockedDownEmployee(onClaude, settings(), CONFIG)).toMatchObject({ engine: "claude", model: "opus", cliFlags: CLAUDE_WALK_FLAGS });
+  });
+
+  it("runs on opencode as the confined agent, so its built-ins are off and only the jinn tools remain", () => {
+    const employee = { name: "assistant", engine: "claude", model: "opus", cliFlags: ["--chrome"] } as unknown as Employee;
+    expect(lockedDownEmployee(employee, settings({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" }), CONFIG)).toMatchObject({
+      engine: "opencode", model: "opencode-go/deepseek-v4.1-flash", mcp: false, jinnMcp: false, toolset: "board-walk",
+      cliFlags: OPENCODE_WALK_FLAGS,
+    });
   });
 });

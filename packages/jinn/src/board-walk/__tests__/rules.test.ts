@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { BOARD_WALK_DEFAULTS, missingDefaultSections, parseRules, readRules, splitFrontmatter } from "../settings.js";
+import { BOARD_WALK_DEFAULTS, missingDefaultSections, parseRules, readRules, resolveSettings, runnerModelMatches, splitFrontmatter, withRunnerOverrides } from "../settings.js";
+import type { JinnConfig } from "../../shared/types.js";
 import {
   convertLegacyBlock,
   renderDispatchSection,
@@ -27,7 +28,7 @@ describe("board-walk.md settings", () => {
     const rules = parseRules(TEMPLATE);
     expect(rules.problems).toEqual([]);
     expect(rules.settings).toEqual({
-      employee: "assistant", model: "sonnet",
+      employee: "assistant", engine: "claude", model: "sonnet",
       actions: { release: true, park: true, flagStuck: true, dispatch: true, comment: true },
     });
     // The schedule is the cron job's: the shipped file carries none of it.
@@ -67,6 +68,56 @@ describe("board-walk.md settings", () => {
   it("an empty model means the employee's own", () => {
     expect(parseRules("---\nmodel: \"\"\n---\n").settings.model).toBeUndefined();
     expect(splitFrontmatter("no frontmatter here").frontmatter).toBeNull();
+  });
+});
+
+describe("the walk's runner settings", () => {
+  it("defaults to the stock Claude runner, so an install that names none is unchanged", () => {
+    expect(resolveSettings({}).settings).toEqual(BOARD_WALK_DEFAULTS);
+    // A named engine with no model gets that engine's own default, not Claude's.
+    expect(resolveSettings({ engine: "opencode" }).settings).toEqual({ ...BOARD_WALK_DEFAULTS, engine: "opencode", model: undefined });
+    expect(resolveSettings({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" }).settings)
+      .toMatchObject({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" });
+    expect(resolveSettings({ engine: "claude", effortLevel: "high" }).settings.effortLevel).toBe("high");
+  });
+
+  it("refuses an engine this build does not know, and one the walk cannot be confined on", () => {
+    expect(resolveSettings({ engine: "nonsense" }).problems).toEqual(['engine "nonsense" is not one of claude, codex, antigravity, grok, pi, hermes, opencode']);
+    expect(resolveSettings({ engine: "codex" }).problems).toEqual(['the board walk can only run on claude or opencode, so that its turn has only the walk\'s tools; "codex" cannot be confined to them']);
+  });
+
+  it("reads the job's own runner fields over the file's, and leaves the file's where the job is silent", () => {
+    const base = resolveSettings({ employee: "assistant", engine: "claude", model: "sonnet" }).settings;
+    expect(withRunnerOverrides(base, undefined)).toEqual(base);
+    expect(withRunnerOverrides(base, { employee: "coo", engine: "opencode", model: "m", effortLevel: "low" }))
+      .toEqual({ ...base, employee: "coo", engine: "opencode", model: "m", effortLevel: "low" });
+    // A field the job leaves empty does not blank the file's value.
+    expect(withRunnerOverrides(base, { employee: "assistant", engine: "   ", model: undefined, effortLevel: "  " })).toEqual(base);
+  });
+
+  it("moves the model with the engine: a job changing the engine drops the file's model", () => {
+    const onClaude = resolveSettings({ engine: "claude", model: "sonnet" }).settings;
+    // The job names opencode but no model: keeping `sonnet` would run opencode
+    // with a Claude id — the exact setup this feature exists to allow.
+    expect(withRunnerOverrides(onClaude, { engine: "opencode" })).toEqual({ ...onClaude, engine: "opencode", model: undefined });
+    // A job that names a model but the same engine keeps the pair matching.
+    expect(withRunnerOverrides(onClaude, { engine: "claude", model: "opus" })).toMatchObject({ engine: "claude", model: "opus" });
+    // A job that names only a model inherits the engine in force, so the pair
+    // still matches — including a file on opencode, whose model a Claude check
+    // would wrongly reject.
+    expect(withRunnerOverrides(onClaude, { model: "opus" })).toMatchObject({ engine: "claude", model: "opus" });
+    const onOpencode = resolveSettings({ engine: "opencode" }).settings;
+    expect(withRunnerOverrides(onOpencode, { model: "opencode-go/deepseek-v4.1-flash" })).toMatchObject({ engine: "opencode", model: "opencode-go/deepseek-v4.1-flash" });
+  });
+
+  it("requires a provider/model shape on an engine whose catalog is dynamic", () => {
+    const config = { engines: {}, gateway: {}, sessions: {}, connectors: {}, logging: {} } as unknown as JinnConfig;
+    // opencode takes `provider/model`; a bare id would be dropped and fall back
+    // to opencode's own default, silently ignoring the operator.
+    expect(runnerModelMatches(config, "opencode", "opencode-go/deepseek-v4.1-flash")).toBe(true);
+    expect(runnerModelMatches(config, "opencode", "opus")).toBe(false);
+    expect(runnerModelMatches(config, "opencode", "opencode-go/")).toBe(false);
+    expect(runnerModelMatches(config, "opencode", "/x")).toBe(false);
   });
 });
 

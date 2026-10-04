@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import {
+  OPENCODE_WALK_AGENT,
+  boardWalkAgentPermission,
+  boardWalkOpencodeTools,
   buildOpencodeSessionConfig,
   cleanupOpencodeSessionConfig,
   projectMcpForOpencode,
@@ -102,6 +105,49 @@ describe("buildOpencodeSessionConfig", () => {
     expect(buildOpencodeSessionConfig(undefined)).toBeUndefined();
     expect(buildOpencodeSessionConfig({ mcpServers: {} })).toBeUndefined();
     expect(buildOpencodeSessionConfig({ mcpServers: { broken: {} as never } })).toBeUndefined();
+  });
+
+  it("adds the confined agent for a purpose-built toolset session, so its built-ins are off", () => {
+    // A toolset session (the board walk's turn) has no command-line switch in
+    // opencode to turn its built-ins off, so the staged config carries an agent
+    // that allows exactly the walk's own tools and denies everything else. The
+    // normal session keeps no agent, so the operator's own config is unaffected.
+    const toolset = buildOpencodeSessionConfig({
+      mcpServers: { jinn: { command: "/usr/bin/node", args: ["server-entry.js", "--jinn-toolset", "board-walk"] } },
+    });
+    expect(toolset?.agent?.[OPENCODE_WALK_AGENT]).toEqual({
+      mode: "primary",
+      permission: boardWalkAgentPermission(),
+    });
+
+    const normal = buildOpencodeSessionConfig({ mcpServers: { jinn: { command: "/usr/bin/node", args: ["server-entry.js"] } } });
+    expect(normal).not.toHaveProperty("agent");
+  });
+
+  it("names every walk tool exactly and no other, so a jinn_-prefixed server's tools stay denied", () => {
+    // `jinn_*` would also match another server whose name starts with `jinn`
+    // (the operator's, or a project config that replaced the toolset server),
+    // and every one of its tools would be allowed. The allowlist is the walk's
+    // own tool names and nothing else.
+    const permission = boardWalkAgentPermission();
+    expect(permission["*"]).toBe("deny");
+    expect(boardWalkOpencodeTools()).toEqual(["jinn_walk_board", "jinn_walk_todo", "jinn_walk_decide", "jinn_walk_start", "jinn_walk_finish"]);
+    for (const tool of boardWalkOpencodeTools()) expect(permission[tool]).toBe("allow");
+    expect(permission).not.toHaveProperty("jinn_*");
+    expect(permission["jinn_x_exfil_shell"]).toBeUndefined();
+  });
+
+  it("stages the confined agent into a toolset session's file", () => {
+    const resolved = {
+      mcpServers: { jinn: { command: "/usr/bin/node", args: ["/opt/jinn/server-entry.js", "--jinn-toolset", "board-walk"] } },
+    };
+    const handle = writeOpencodeSessionConfig(resolved, "sess-toolset");
+    try {
+      if (!handle.staged) throw new Error("expected the opencode config to be staged");
+      expect(JSON.parse(fs.readFileSync(handle.configPath, "utf-8")).agent[OPENCODE_WALK_AGENT].permission).toEqual(boardWalkAgentPermission());
+    } finally {
+      cleanupOpencodeSessionConfig(handle);
+    }
   });
 });
 
