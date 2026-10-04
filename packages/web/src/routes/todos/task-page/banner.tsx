@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Pause } from "lucide-react"
 import { AttachmentRefText } from "@/components/attachment-ref-preview"
 import type { Employee, WorkItemDetailWire, WorkItemEventWire } from "@/lib/api"
+import { StopCauseLead } from "../board/stop-cause"
 import { displayNameOf, formatRelativeTime, stopReasonOf } from "../util"
 
 /* Todos v2 slice 6 — the task page's banner zone (design-doc §7.2, states mock
@@ -85,6 +86,14 @@ export function TaskBanner({
         Blocked
         {when && <span className="ml-auto text-[11px] font-normal text-[var(--text-quaternary)]">{when}</span>}
       </div>
+
+      {/* The card's lead, read from the detail payload: what ends the wait and
+          whose move it is. It renders nothing once the park has passed. */}
+      <StopCauseLead
+        item={{ id: detail.workItem.id, parkedUntil: detail.parkedUntil, unblockHint: detail.unblockHint }}
+        className="ml-[25px] mt-2"
+        wrapHint
+      />
 
       {note ? (
         <div className="relative ml-[25px] mt-2 py-0.5 pl-3 text-[14px] leading-[1.5] text-[var(--text-secondary)]">
