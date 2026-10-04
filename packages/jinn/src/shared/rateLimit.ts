@@ -54,9 +54,9 @@ export function isDeadSessionError(result: EngineResult): boolean {
 
   // A process that never started its session did no work for a reason of its
   // own (an exec refusal, a dropped ssh connection, a crash on boot), and its
-  // resume id is as good as it was. Only the CLI saying the conversation is
-  // gone (Claude Code, codex, grok) makes the session dead.
-  if (isProcessStartFailure(result.error)) return isMissingConversationOutput(result.error);
+  // resume id is as good as it was. Only the CLI saying that this very
+  // conversation is gone (Claude Code, codex) makes the session dead.
+  if (isProcessStartFailure(result.error)) return isMissingConversationOutput(result.error, result.sessionId);
 
   // If rate limit info is present, this is a rate limit, not a dead session
   if (result.rateLimit?.status) return false;

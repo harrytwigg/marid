@@ -34,20 +34,26 @@ export function isProcessStartFailure(error: string): boolean {
   return /^\S+ did not start: its process exited\b/.test(error);
 }
 
-/** How codex says the thread it was asked to resume has no rollout on disk. */
-export const CODEX_MISSING_ROLLOUT = /no rollout found|code -32600|thread\/resume failed/i;
+/** What each CLI prints when the conversation `id` it was asked to resume is gone. */
+function missingConversation(id: string): RegExp[] {
+  const quoted = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const end = "(?![\\w-])";
+  return [
+    // Claude Code: "No conversation found with session ID: <id>"
+    new RegExp(`no conversation found with session id:?\\s*${quoted}${end}`, "i"),
+    // codex's TUI (`codex resume <id>`, codex-rs/tui/src/lib.rs):
+    // "No saved session found with ID <id>. Run `codex resume` without an ID ..."
+    new RegExp(`no saved session found with id\\s+${quoted}${end}`, "i"),
+  ];
+}
 
-/** What each CLI prints when the conversation it was asked to resume is gone. */
-const MISSING_CONVERSATION: readonly RegExp[] = [
-  /no conversation found/i, // Claude Code
-  // codex's narrowest wording: CODEX_MISSING_ROLLOUT's other alternatives
-  // (`code -32600`, `thread/resume failed`) also cover failures that leave the
-  // thread intact, which a destructive clear cannot afford.
-  /no rollout found/i,
-  /unknown session id/i, // grok; the one wording seen in its release notes
-];
-
-/** Whether CLI output says the conversation it was asked to resume no longer exists. */
-export function isMissingConversationOutput(text: string): boolean {
-  return MISSING_CONVERSATION.some((pattern) => pattern.test(text));
+/**
+ * Whether CLI output says the conversation it was asked to resume, `id`, no
+ * longer exists. The id must be in the sentence: what is cleared on a match is
+ * that conversation, and a resumed TUI can replay earlier messages, phrase and
+ * all, before it dies. grok has no verified wording, so it is never matched.
+ */
+export function isMissingConversationOutput(text: string, id: string | undefined): boolean {
+  if (!id) return false;
+  return missingConversation(id).some((pattern) => pattern.test(text));
 }

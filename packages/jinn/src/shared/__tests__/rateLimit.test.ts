@@ -107,19 +107,24 @@ describe("isDeadSessionError", () => {
   });
 
   describe("a process that never started its session", () => {
-    const failure = (engine: string, output: string) =>
-      makeResult({ error: processStartFailure(engine, { exitCode: 1, signal: 0 }, output) });
+    const failure = (engine: string, output: string, sessionId = "abc-123") =>
+      makeResult({ sessionId, error: processStartFailure(engine, { exitCode: 1, signal: 0 }, output) });
+    const codexMissing = (id: string) =>
+      `ERROR: No saved session found with ID ${id}. Run \`codex resume\` without an ID to choose from existing sessions.`;
 
-    it("is dead when Claude Code says the conversation is gone", () => {
-      expect(isDeadSessionError(failure("claude", "No conversation found with session ID: abc"))).toBe(true);
+    it("is dead when Claude Code says the conversation it resumed is gone", () => {
+      expect(isDeadSessionError(failure("claude", "No conversation found with session ID: abc-123"))).toBe(true);
     });
 
-    it("is dead when codex says the rollout is gone", () => {
-      expect(isDeadSessionError(failure("codex", "Error: thread/resume failed: no rollout found for thread id abc"))).toBe(true);
+    it("is dead when codex's TUI says the session it resumed is gone", () => {
+      expect(isDeadSessionError(failure("codex", codexMissing("abc-123")))).toBe(true);
     });
 
-    it("is dead when grok says the session is gone", () => {
-      expect(isDeadSessionError(failure("grok", "Error: unknown session id abc"))).toBe(true);
+    it("keeps the resume id when the missing conversation named is another one", () => {
+      // A resumed TUI replays earlier messages, which can quote the sentence.
+      expect(isDeadSessionError(failure("codex", `${codexMissing("old-thread")} ...replayed history... boom`))).toBe(false);
+      expect(isDeadSessionError(failure("claude", "No conversation found with session ID: abc-1234"))).toBe(false);
+      expect(isDeadSessionError(failure("codex", codexMissing("abc-123"), ""))).toBe(false);
     });
 
     it("keeps the resume id for any other reason the process did not start", () => {
@@ -127,10 +132,11 @@ describe("isDeadSessionError", () => {
       expect(isDeadSessionError(failure("grok", "error: unexpected argument '--bogus' found"))).toBe(false);
     });
 
-    it("keeps the resume id when the wording is generic enough to describe other failures", () => {
-      expect(isDeadSessionError(failure("codex", "Error: code -32600 invalid request"))).toBe(false);
-      expect(isDeadSessionError(failure("codex", "Error: thread/resume failed: connection reset"))).toBe(false);
-      expect(isDeadSessionError(failure("grok", "mcp: session not found"))).toBe(false);
+    it("keeps the resume id on wording that is not a verified missing-conversation message", () => {
+      // Headless codex's wording: the PTY engine never runs `codex exec`.
+      expect(isDeadSessionError(failure("codex", "Error: thread/resume failed: no rollout found for thread id abc-123"))).toBe(false);
+      // grok's only published "unknown session id" was a bug with the session intact.
+      expect(isDeadSessionError(failure("grok", "Error: unknown session id abc-123"))).toBe(false);
     });
   });
 

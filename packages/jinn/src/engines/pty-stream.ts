@@ -33,34 +33,6 @@ export function setCapped<V>(map: Map<string, V>, key: string, value: V, cap = S
 /** How much of a process's newest output is kept, for a process that dies before its session starts. */
 export const OUTPUT_TAIL_CHARS = 4096;
 
-/**
- * How long after it was spawned a PTY's process is still "booting" when no
- * other sign says its session is up. A warm PTY is spawned ahead of any turn,
- * so a turn that binds to it cannot tell a process that died on boot (a bad
- * flag, a failed login) from one that was serving the session and died.
- */
-export const PTY_BOOT_GRACE_MS = 10_000;
-
-/**
- * Which PTY processes are past their boot: ones that have shown a sign that
- * their session is up or, for an engine with no readiness signal, have simply
- * outlived {@link PTY_BOOT_GRACE_MS}.
- */
-export class PtyBootTracker {
-  private readonly spawnedAt = new WeakMap<object, number>();
-  private readonly up = new WeakSet<object>();
-
-  spawned(proc: object): void { this.spawnedAt.set(proc, Date.now()); }
-  markUp(proc: object): void { this.up.add(proc); }
-  /** `byAge` false for an engine with a real readiness signal, which has no use for the guess. */
-  isUp(proc: object, byAge = true): boolean {
-    if (this.up.has(proc)) return true;
-    if (!byAge) return false;
-    const at = this.spawnedAt.get(proc);
-    return at !== undefined && Date.now() - at >= PTY_BOOT_GRACE_MS;
-  }
-}
-
 type QueuedSubscriberEvent =
   | { kind: "data"; data: Buffer }
   | { kind: "control"; event: PtyControlEvent };

@@ -8,7 +8,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { neutralizeForPaste } from "../shared/skill-commands.js";
 import { PtyLifecycleManager, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
-import { PtyBootTracker, PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
+import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import { tailTranscriptLines, type TranscriptTailer } from "./transcript-tailer.js";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
 import {
@@ -34,8 +34,9 @@ interface ActiveTurn {
   /** The turn's process went away: a failed start until {@link started}, else an interruption. */
   processExited: (exit: PtyExit | undefined, output: string) => void;
   /** Whether the process serving this turn is up: once its TUI is ready (or asks
-   *  which project) or its transcript moves. A warm process that has shown
-   *  either is up too, per {@link PtyBootTracker}. */
+   *  which project) or its transcript moves. A warm process that showed its TUI
+   *  before the turn bound to it is up too (see
+   *  {@link GrokInteractiveEngine.bootedProcs}). */
   started: boolean;
   tailer?: TranscriptTailer;
   discover?: { stop: () => void };
@@ -166,7 +167,9 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
   private streams: PtyStreamManager;
   private lastGeom = new Map<string, { cols: number; rows: number }>();
   private spawnParams = new Map<string, { model?: string; effortLevel?: string; sessionId?: string }>();
-  private boot = new PtyBootTracker();
+  /** Processes whose TUI came up. A warm PTY is spawned ahead of any turn, so
+   *  being reused says nothing about whether it got past its boot. */
+  private readonly bootedProcs = new WeakSet<pty.IPty>();
 
   constructor(private lifecycle: PtyLifecycleManager) {
     this.streams = new PtyStreamManager("Grok PTY", (id) => this.lifecycle.getWarm(id) !== undefined);
@@ -257,7 +260,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     // flag, a crash on boot): a failed start, carrying what the process
     // printed, not a quiet interruption that loses the reason.
     turn.processExited = (exit, output) => {
-      const up = turn.started || (reuseWarm && !!turn.boundProc && this.boot.isUp(turn.boundProc, false));
+      const up = turn.started || (!!turn.boundProc && this.bootedProcs.has(turn.boundProc));
       if (!up) {
         finish({ sessionId: grokSessionId ?? opts.resumeSessionId ?? "", result: "", error: processStartFailure("grok", exit, output) });
         return;
@@ -284,7 +287,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     const onParsed = (parsed: GrokParsedLine) => {
       if (settled) return;
       turn.started = true;
-      if (turn.boundProc) this.boot.markUp(turn.boundProc);
+      if (turn.boundProc) this.bootedProcs.add(turn.boundProc);
       if (parsed.sessionId && !grokSessionId) {
         grokSessionId = parsed.sessionId;
         this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, sessionId: grokSessionId });
@@ -423,14 +426,14 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
       cwd: opts.cwd || JINN_HOME,
       env: this.buildEnv(jinnSessionId),
     });
-        this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, sessionId: grokSessionId });
+    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, sessionId: grokSessionId });
     return this.wireProcToStream(jinnSessionId, proc);
   }
 
   private wireProcToStream(jinnSessionId: string, proc: pty.IPty): PtyHandle {
     const handle = createPtyHandle(proc);
     // Whether this process ever got as far as a TUI, so a warm one that dies
-    // later is told apart from one that died booting (see PtyBootTracker).
+    // later is told apart from one that died booting (see bootedProcs).
     let screen = "";
     let up = false;
     proc.onData((data) => {
@@ -439,7 +442,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
       screen = (screen + data).slice(-5000);
       if (isGrokTuiReady(screen) || isGrokProjectPicker(screen)) {
         up = true;
-        this.boot.markUp(proc);
+        this.bootedProcs.add(proc);
       }
     });
     const tail = this.streams.attachWithOutputTail(jinnSessionId, proc, () => {
