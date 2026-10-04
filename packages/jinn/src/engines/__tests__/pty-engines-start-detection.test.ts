@@ -184,6 +184,7 @@ describe("CodexInteractiveEngine — a warm PTY that dies during boot", () => {
   it("is a failed start however long it was warm, while no turn on it has started", async () => {
     const now = Date.now();
     engine.ensureIdleSpawn("cx-warm-old", { cwd: "/tmp", model: "gpt-5.5" });
+    // An hour on, so an age rule for "past its boot" would show up here.
     vi.spyOn(Date, "now").mockReturnValue(now + 60 * 60 * 1000);
     const run = engine.run({ sessionId: "cx-warm-old", prompt: "hello", cwd: "/tmp", model: "gpt-5.5" } as any);
     await flush();
