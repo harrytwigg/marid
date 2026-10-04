@@ -33,3 +33,18 @@ export function processStartFailure(engine: string, exit?: { exitCode?: number |
 export function isProcessStartFailure(error: string): boolean {
   return /^\S+ did not start: its process exited\b/.test(error);
 }
+
+/** How codex says the thread it was asked to resume has no rollout on disk. */
+export const CODEX_MISSING_ROLLOUT = /no rollout found|code -32600|thread\/resume failed/i;
+
+/** What each CLI prints when the conversation it was asked to resume is gone. */
+const MISSING_CONVERSATION: readonly RegExp[] = [
+  /no conversation found/i, // Claude Code
+  CODEX_MISSING_ROLLOUT,
+  /unknown session id|session not found|no session found/i, // grok
+];
+
+/** Whether CLI output says the conversation it was asked to resume no longer exists. */
+export function isMissingConversationOutput(text: string): boolean {
+  return MISSING_CONVERSATION.some((pattern) => pattern.test(text));
+}

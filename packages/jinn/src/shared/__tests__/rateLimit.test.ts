@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EngineResult } from "../types.js";
+import { processStartFailure } from "../process-start.js";
 import {
   computeNextRetryDelayMs, detectRateLimit, isDeadSessionError, nextUnstatedParkDelayMs,
   MAX_UNSTATED_PARK_ATTEMPTS, MAX_UNSTATED_PARK_DELAY_MS,
@@ -103,6 +104,30 @@ describe("isDeadSessionError", () => {
       cost: 0,
     });
     expect(isDeadSessionError(result)).toBe(true);
+  });
+
+  describe("a process that never started its session", () => {
+    const failure = (engine: string, output: string) =>
+      makeResult({ error: processStartFailure(engine, { exitCode: 1, signal: 0 }, output) });
+
+    it("is dead when Claude Code says the conversation is gone", () => {
+      expect(isDeadSessionError(failure("claude", "No conversation found with session ID: abc"))).toBe(true);
+    });
+
+    it("is dead when codex says the rollout is gone", () => {
+      expect(isDeadSessionError(failure("codex", "Error: thread/resume failed: no rollout found for thread id abc"))).toBe(true);
+      expect(isDeadSessionError(failure("codex", "Error: code -32600 invalid request"))).toBe(true);
+    });
+
+    it("is dead when grok says the session is gone", () => {
+      expect(isDeadSessionError(failure("grok", "Error: unknown session id abc"))).toBe(true);
+      expect(isDeadSessionError(failure("grok", "session not found: abc"))).toBe(true);
+    });
+
+    it("keeps the resume id for any other reason the process did not start", () => {
+      expect(isDeadSessionError(failure("codex", "execvp(3) failed.: Argument list too long"))).toBe(false);
+      expect(isDeadSessionError(failure("grok", "error: unexpected argument '--bogus' found"))).toBe(false);
+    });
   });
 
   it("does not false-positive on rate limit errors with no cost", () => {

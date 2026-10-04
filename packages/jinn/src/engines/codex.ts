@@ -12,6 +12,7 @@ import { buildEngineChildEnv } from "../shared/child-env.js";
 import { costOfUsage } from "../shared/model-pricing.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
 import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
+import { CODEX_MISSING_ROLLOUT } from "../shared/process-start.js";
 import { CodexNativeAgents } from "./codex-native-agents.js";
 import {
   CODEX_SESSIONS_DIR,
@@ -451,7 +452,7 @@ export function buildCodexResumeArgs(opts: EngineRunOpts, prompt: string, homeAc
 
 function missingRolloutThreadId(message: string, resumeSessionId: string | undefined): string | undefined {
   if (!resumeSessionId) return undefined;
-  if (!/no rollout found|code -32600|thread\/resume failed/i.test(message)) return undefined;
+  if (!CODEX_MISSING_ROLLOUT.test(message)) return undefined;
   const match = message.match(/thread id\s+"?([A-Za-z0-9_.:-]+)"?/i);
   return match?.[1] || resumeSessionId;
 }
