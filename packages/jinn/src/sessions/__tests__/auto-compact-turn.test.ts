@@ -73,6 +73,25 @@ describe("auto-compaction through runTurn", () => {
     expect(isAutoCompacting(sessionId)).toBe(false);
   });
 
+  // A wake reaches the engine as a notification: a Todo mention, a child's
+  // callback, another session's message. Each is a turn like any other.
+  it.each([
+    ["a Todo mention", "🏷️ You were tagged in this comment on Todo JIN-1, \"cold wake\" (/todos/JIN-1).\n\noperator wrote:\n@sleeper any news?"],
+    ["a child's callback", "📩 Employee \"worker\" replied in child session child-1.\n\nReply:\nshipped\n\nTo read the reply in context: read_session { sessionId: \"child-1\", last: N }"],
+    ["another session's message", "📨 Message from session peer-1 (web) [hop 1/12]:\n\nare you free?\n\nTo reply: send_to_session { sessionId: \"peer-1\" }."],
+  ])("compacts a long cold session first when it is woken by %s", async (_wake, prompt) => {
+    const sessionId = coldSession("claude", `web:ac-wake-${prompt.length}`, 180_000, 30 * MINUTE);
+    const { engine, calls } = recordingEngine("claude", async (_opts, call) => call === 1
+      ? { sessionId: "claude-thread-1", result: "", compaction: { preTokens: 180_000, postTokens: 9_000 }, contextTokens: 9_000 }
+      : answered("claude-thread-1"));
+    const { surface, seen } = recordingSurface();
+
+    await runOne(engine, sessionId, prompt, surface, configWith(ENABLED));
+
+    expect(calls.map((c) => c.prompt)).toEqual([expect.stringMatching(/^\/compact /), prompt]);
+    expect(seen.notices).toEqual([expect.stringContaining("Auto-compacted this cold session")]);
+  });
+
   it("on opencode, compacts the same way (summarize via /compact)", async () => {
     const sessionId = coldSession("opencode", "web:ac-opencode", 120_000, 10 * MINUTE);
     const { engine, calls } = recordingEngine("opencode", async (_opts, call) => call === 1

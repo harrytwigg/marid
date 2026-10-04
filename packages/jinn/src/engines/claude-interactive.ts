@@ -194,6 +194,41 @@ export async function awaitCompactionStats(
   }
 }
 
+/** How long to wait for a turn's answer to reach the transcript after its Stop. */
+const TURN_ANSWER_WAIT_MS = 2_000;
+const TURN_ANSWER_POLL_MS = 50;
+
+/** Whether the transcript holds the answer the Stop hook reported, written at or
+ *  after `afterMs`. */
+export function transcriptHasTurnAnswer(transcriptPath: string, afterMs: number, answer: string): boolean {
+  const written = lastAssistantTextFromTranscript(transcriptPath, afterMs);
+  return written !== undefined && promptFingerprint(sanitizeAssistantText(written)) === promptFingerprint(answer);
+}
+
+/**
+ * Wait for the turn's answer to be on disk before the transcript is read for
+ * its cost and the context meter. Claude Code fires Stop before it has flushed
+ * the turn's last assistant entries, so a single read at settle time can miss
+ * the whole of a short turn: the cost comes out empty and the meter keeps the
+ * PREVIOUS turn's size. A meter left under the auto-compaction floor while the
+ * real context is over it makes the next cold turn skip its compaction as
+ * "context-small" — short turns, such as answering a notification, hit this
+ * most. Bounded; a transcript that cannot be read (on another host) is not
+ * waited on. Exported for tests.
+ */
+export async function awaitTurnAnswerInTranscript(
+  transcriptPath: string,
+  afterMs: number,
+  answer: string,
+  waitMs = TURN_ANSWER_WAIT_MS,
+): Promise<void> {
+  if (!fs.existsSync(transcriptPath)) return;
+  const deadline = Date.now() + waitMs;
+  while (!transcriptHasTurnAnswer(transcriptPath, afterMs, answer) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, TURN_ANSWER_POLL_MS));
+  }
+}
+
 /** Claude Code stores per-project transcripts at
  *  ~/.claude/projects/<cwd-slug>/<claudeSessionId>.jsonl, where the slug is the
  *  cwd with every "/" and "." replaced by "-". Derive that path; fall back to a
@@ -2628,6 +2663,11 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // prompt waited behind or was queued behind, not to this turn.
     const turnTranscriptFrom = Math.max(promptWrittenAt, resolver.backgroundRerunEndedAt ?? 0);
     if (transcriptPath && !result.error) {
+      // A native command writes no answer of its own; anything else that
+      // answered has to be on disk before it can be counted.
+      if (!nativeCommand && result.result?.trim()) {
+        await awaitTurnAnswerInTranscript(transcriptPath, turnTranscriptFrom, result.result);
+      }
       // Scope to THIS turn: the transcript is cumulative and the caller adds
       // result.cost to the session total, so an unscoped sum over-counts.
       const cost = computeInteractiveCost(transcriptPath, opts.model, turnTranscriptFrom);
