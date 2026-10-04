@@ -64,6 +64,7 @@ export function mergeTransportMeta(
     "engineSyncTarget",
     "engineSyncSince",
     "transcriptSyncedThrough",
+    "transcriptActivityAt",
     "delegationCompletionTracked",
     "delegationCompletionContract",
   ]) {

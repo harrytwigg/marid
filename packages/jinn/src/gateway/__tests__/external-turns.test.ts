@@ -492,6 +492,33 @@ describe("syncExternalTurn", () => {
     expect((reg.getSession(id)!.transportMeta as any)?.[ext.TRANSCRIPT_SYNC_META_KEY]).toBe(latest);
   });
 
+  it("does not count a gateway-owned sync as terminal activity, since a failed turn syncs too", () => {
+    const engineSessionId = `eng-${++seq}`;
+    const id = makeSession({ engineSessionId });
+    const file = path.join(tmp, `${engineSessionId}.jsonl`);
+    const stamp = iso(1_000);
+    fs.writeFileSync(file, JSON.stringify({
+      type: "assistant", timestamp: stamp, isApiErrorMessage: true,
+      message: { role: "assistant", model: "<synthetic>", content: [{ type: "text", text: "Login expired · Please run /login" }] },
+    }) + "\n");
+    ext.markTranscriptSyncedThrough(id, engineSessionId, file);
+    const meta = reg.getSession(id)!.transportMeta as any;
+    expect(meta[ext.TRANSCRIPT_SYNC_META_KEY]).toBe(stamp);
+    expect(meta[ext.TRANSCRIPT_ACTIVITY_META_KEY]).toBeUndefined();
+  });
+
+  it("counts a turn typed into the terminal as terminal activity", () => {
+    const id = makeSession();
+    const future = (ms: number) => new Date(Date.now() + ms).toISOString();
+    const newestIso = future(2_000);
+    const file = writeTranscript([
+      { type: "user", text: "typed prompt", ts: future(1_000) },
+      { type: "assistant", text: "typed answer", ts: newestIso },
+    ]);
+    expect(ext.syncExternalTurn(id, emit, { hook_event_name: "Stop", transcript_path: file, last_assistant_message: "typed answer" })).toBe(2);
+    expect((reg.getSession(id)!.transportMeta as any)[ext.TRANSCRIPT_ACTIVITY_META_KEY]).toBe(newestIso);
+  });
+
   it("does not mistake a genuinely new CLI turn for an already-persisted one (different content → normal insert)", () => {
     const id = makeSession();
     reg.insertMessage(id, "user", "first prompt");

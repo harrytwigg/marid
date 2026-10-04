@@ -74,6 +74,8 @@ Because it runs inside the turn:
 
 An error, a usage limit, an engine that never confirmed the compaction, or an exception is logged and shown as the notice above. The message then runs on the full context as planned. A usage limit is left to the message's own turn, which takes the normal rate-limit path.
 
+A failed compaction is not remembered: nothing is recorded against the session, so the next turn decides again from the same facts and tries once more. That includes a failed message after it. A turn that failed, for example on an expired login, leaves no mark of activity, so once the session can run again the next message still finds it cold and compacts it first.
+
 The one exception is preemption. If the operator presses Stop, or something else interrupts the session, while it is compacting, the turn ends there, as it would have ended the engine run it was about to start.
 
 A new operator message does **not** interrupt an auto-compaction in progress, even with `sessions.interruptOnNewMessage` on. It waits, as it waits for an operator's `/compact`: cutting the compaction off would waste it, and the next turn, still cold, would only start it again.
