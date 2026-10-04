@@ -412,8 +412,9 @@ export default function TodoBoardPage() {
   // Keep the URL and the remembered set in step: a URL that names filters
   // becomes the remembered set, and a bare URL is resolved once per entry:
   // filled in place from the remembered set (so the address bar stays
-  // shareable) or, with nothing remembered, marked as bare. Resolving per entry keeps Back meaningful: returning to an
-  // entry shows what it showed, not whatever was remembered since.
+  // shareable) or, with nothing remembered, marked as bare. Resolving per
+  // entry keeps Back meaningful: returning to an entry shows what it showed,
+  // not whatever was remembered since.
   useEffect(() => {
     if (isAttention) return
     if (hasFilterParams(searchParams)) {
