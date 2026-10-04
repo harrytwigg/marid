@@ -15,7 +15,7 @@ import type { EngineResult } from "../../shared/types.js";
  * hop that drops, a crash on boot, an exec refusal) fails, and says why. It
  * must not also cost the session its conversation: the resume id is as good
  * as it was, so the next message picks the same conversation back up. Only
- * Claude Code saying the conversation is gone clears it.
+ * the CLI saying the conversation is gone (Claude Code, codex, grok) clears it.
  */
 
 createTestHome("jinn-start-failure-resume-");
@@ -63,6 +63,16 @@ describe("a resumed turn whose process never started its session", () => {
 
   it("drops the conversation when Claude Code says it no longer has it", async () => {
     const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
+    const { session } = await twoTurns(engineResult({ error }));
+
+    expect(registry.getEngineSessionRef(session, "claude").id).toBeUndefined();
+  });
+
+  it.each([
+    ["codex", "Error: thread/resume failed: no rollout found for thread id native-1"],
+    ["grok", "Error: unknown session id native-1"],
+  ])("drops the conversation when %s says it no longer has it", async (engine, output) => {
+    const error = processStartFailure(engine, { exitCode: 1, signal: 0 }, output);
     const { session } = await twoTurns(engineResult({ error }));
 
     expect(registry.getEngineSessionRef(session, "claude").id).toBeUndefined();
