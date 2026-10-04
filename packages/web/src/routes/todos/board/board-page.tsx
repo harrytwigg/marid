@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate, useNavigationType, useParams, useSearchParams } from "react-router-dom"
+import { useLocation, useNavigate, useNavigationType, useParams, useSearchParams, type NavigationType } from "react-router-dom"
 import { ListFilter, Plus } from "lucide-react"
 import { PageLayout } from "@/components/page-layout"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -26,7 +26,7 @@ import {
   useOrg,
 } from "../use-todos"
 import { FilterBar } from "../filter-bar"
-import { hasFilterParams, resolveBoardFilterParams, savePersistedFilters } from "@/lib/todo-filter-store"
+import { hasFilterParams, isBareEntry, markBareEntry, resolveBoardFilterParams, savePersistedFilters } from "@/lib/todo-filter-store"
 import { TodoFilterSheet } from "../todo-filter-sheet"
 import { NeedsYouView } from "../needs-you-view"
 import { NewTodoDialog } from "../new-todo-dialog"
@@ -74,6 +74,12 @@ function useIsBoardMobile(): boolean {
   return mobile
 }
 
+/** Carried by the entry the fill effect rewrites, so the replace is not read
+ *  as the way the entry was reached (see TodoBoardPage). */
+interface BoardEntryState {
+  filterEntryNav?: NavigationType
+}
+
 const TREE_OPEN_KEY = "jinn-board-tree-open"
 
 function loadExpandedTrees(): Set<string> {
@@ -97,7 +103,13 @@ export default function TodoBoardPage() {
   const { board: boardParam } = useParams()
   const board = parseBoardParam(boardParam)
   const key = boardKey(board)
-  const navigationType = useNavigationType()
+  const rawNavigationType = useNavigationType()
+  const location = useLocation()
+  const entryState = (location.state ?? null) as BoardEntryState | null
+  // The fill below replaces the entry, which would read as a REPLACE and drop
+  // the recalled scroll; the entry remembers how it was first reached. Only the
+  // replace itself is mapped back: a later Back is a real POP.
+  const navigationType = rawNavigationType === "REPLACE" ? entryState?.filterEntryNav ?? rawNavigationType : rawNavigationType
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   // Columns are the status dimension, so `status` narrows WHICH columns exist
@@ -105,9 +117,12 @@ export default function TodoBoardPage() {
   // The URL wins when it names a filter; otherwise the operator's last
   // selection is the fallback (never on Attention, which has no filter bar).
   const isAttention = board.kind === "attention"
+  // An entry already resolved to "no filters" stays bare: Back to it must not
+  // pick up a set remembered after it was left (see todo-filter-store).
+  const entryResolvedBare = isBareEntry(location.key)
   const effectiveParams = useMemo(
-    () => (isAttention ? searchParams : resolveBoardFilterParams(searchParams)),
-    [searchParams, isAttention],
+    () => (isAttention || entryResolvedBare ? searchParams : resolveBoardFilterParams(searchParams)),
+    [searchParams, isAttention, entryResolvedBare],
   )
   const filters = useMemo(() => filtersFromSearchParams(effectiveParams), [effectiveParams])
   const now = useMemo(() => Date.now(), [filters.date, filters.due])
@@ -395,16 +410,19 @@ export default function TodoBoardPage() {
   }, [key, closedFilter])
 
   // Keep the URL and the remembered set in step: a URL that names filters
-  // becomes the remembered set, and a bare URL is filled in from it so the
-  // address bar stays shareable.
+  // becomes the remembered set, and a bare URL is resolved once per entry:
+  // filled in place from the remembered set (so the address bar stays
+  // shareable) or, with nothing remembered, marked as bare. Resolving per entry keeps Back meaningful: returning to an
+  // entry shows what it showed, not whatever was remembered since.
   useEffect(() => {
     if (isAttention) return
     if (hasFilterParams(searchParams)) {
       savePersistedFilters(filtersFromSearchParams(searchParams))
-    } else if (effectiveParams !== searchParams) {
-      setSearchParams(effectiveParams, { replace: true })
+    } else if (!entryResolvedBare) {
+      if (effectiveParams === searchParams) markBareEntry(location.key)
+      else setSearchParams(effectiveParams, { replace: true, state: { filterEntryNav: rawNavigationType } })
     }
-  }, [isAttention, searchParams, effectiveParams, setSearchParams])
+  }, [isAttention, searchParams, effectiveParams, entryResolvedBare, location.key, rawNavigationType, setSearchParams])
 
   const setFilters = useCallback(
     (next: TodoFilters) => {

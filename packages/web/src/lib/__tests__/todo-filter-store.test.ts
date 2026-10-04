@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import {
   BOARD_FILTERS_KEY,
+  forgetBareEntries,
+  isBareEntry,
+  markBareEntry,
   hasFilterParams,
   loadPersistedFilterParams,
   resolveBoardFilterParams,
   savePersistedFilters,
 } from "../todo-filter-store"
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  forgetBareEntries()
+})
 
 describe("todo filter store", () => {
   it("round-trips a filter set through storage", () => {
@@ -40,5 +46,14 @@ describe("todo filter store", () => {
     expect(resolveBoardFilterParams(url)).toBe(url)
     expect(resolveBoardFilterParams(new URLSearchParams("view=x")).toString()).toBe("view=x&sprint=s-1")
     expect(resolveBoardFilterParams(new URLSearchParams()).toString()).toBe("sprint=s-1")
+  })
+
+  it("remembers which history entries resolved to no filters", () => {
+    expect(isBareEntry("k1")).toBe(false)
+    markBareEntry("k1")
+    expect(isBareEntry("k1")).toBe(true)
+    expect(isBareEntry("k2")).toBe(false)
+    forgetBareEntries()
+    expect(isBareEntry("k1")).toBe(false)
   })
 })

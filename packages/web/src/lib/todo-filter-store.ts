@@ -48,3 +48,22 @@ export function resolveBoardFilterParams(urlParams: URLSearchParams): URLSearchP
   persisted.forEach((value, name) => merged.set(name, value))
   return merged
 }
+
+// Bare board entries that were resolved to "no filters". Returning to one (Back)
+// must show what it showed, not whatever was remembered since, so the board
+// marks the entry the first time it sees it. Keyed by history entry key and
+// kept in memory: a full page load starts fresh, like the history it belongs to.
+const bareEntries = new Set<string>()
+
+export function markBareEntry(entryKey: string): void {
+  bareEntries.add(entryKey)
+}
+
+export function isBareEntry(entryKey: string): boolean {
+  return bareEntries.has(entryKey)
+}
+
+/** Test-only: reset the module state between cases. */
+export function forgetBareEntries(): void {
+  bareEntries.clear()
+}

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCompactWire, WorkItemListWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
 import TodoBoardPage from "../board/board-page"
 import { isColumnInStatusFilter } from "../board/status-scope"
+import { forgetBareEntries } from "@/lib/todo-filter-store"
 import { clearBoardScrollCache } from "../board/board-route"
 
 /* A board URL that names one status is a board of that one column. This is the
@@ -87,6 +88,7 @@ beforeEach(() => {
   clearBoardScrollCache()
   sessionStorage.clear()
   localStorage.clear()
+  forgetBareEntries()
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
   getWorkItemTrees.mockImplementation((ids: string[]) =>
     Promise.resolve({ trees: Object.fromEntries(ids.map((id) => [id, tree(id)])) }),

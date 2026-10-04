@@ -6,8 +6,8 @@ import type { WorkItemCompactWire, WorkItemListWire, WorkItemStatusWire, WorkIte
 import { useQueryInvalidation } from "@/hooks/use-query-invalidation"
 import TodoBoardPage from "../board/board-page"
 import { boardColumnQueryKey, boardScopeParams } from "../board/use-board"
-import { clearBoardScrollCache } from "../board/board-route"
-import { BOARD_FILTERS_KEY } from "@/lib/todo-filter-store"
+import { clearBoardScrollCache, rememberBoardScroll } from "../board/board-route"
+import { BOARD_FILTERS_KEY, forgetBareEntries } from "@/lib/todo-filter-store"
 import { useSetWorkItemStatus } from "../use-todos"
 import type { GatewayEvent, GatewayEventListener } from "@jinn/gateway-events"
 
@@ -259,6 +259,7 @@ beforeEach(() => {
   clearBoardScrollCache()
   sessionStorage.clear()
   localStorage.clear()
+  forgetBareEntries()
   rows = {}
   totals = {}
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
@@ -848,18 +849,20 @@ function FilterRoundTripProbe() {
       <button type="button" data-testid="go-detail" onClick={() => navigate("/todos/PLA-1")}>Detail</button>
       <button type="button" data-testid="go-everything" onClick={() => navigate("/todos/b/everything")}>Everything</button>
       <button type="button" data-testid="go-platform" onClick={() => navigate("/todos/b/platform")}>Platform</button>
+      <button type="button" data-testid="go-back" onClick={() => navigate(-1)}>Back</button>
+      <button type="button" data-testid="go-platform-label" onClick={() => navigate("/todos/b/platform?label=infra")}>Filter</button>
       <button type="button" data-testid="go-attention" onClick={() => navigate("/todos/b/attention")}>Attention</button>
     </>
   )
 }
 
-function renderFilterRoundTrip(path: string) {
+function renderFilterRoundTrip(path: string, entries?: string[]) {
   rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
   totals.backlog = 1
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={entries ?? [path]} initialIndex={entries ? entries.length - 1 : undefined}>
         <FilterRoundTripProbe />
         <Routes>
           <Route path="/todos/b/:board" element={<TodoBoardPage />} />
@@ -948,6 +951,59 @@ describe("board filters persist across navigation and new tabs", () => {
     fireEvent.click(screen.getByTestId("go-platform"))
     await screen.findByTestId("board-column-backlog")
     expect(searchOf().toString()).toBe("")
+  })
+
+  it("Back undoes the first filter instead of resolving to the set just remembered", async () => {
+    renderFilterRoundTrip("/todos/b/platform", ["/todos/b/everything", "/todos/b/platform"])
+    await screen.findByTestId("board-column-backlog")
+    expect(searchOf().toString()).toBe("")
+
+    fireEvent.click(screen.getByTestId("go-platform-label"))
+    await waitFor(() => expect(localStorage.getItem(BOARD_FILTERS_KEY)).toBe("label=infra"))
+    expect(searchOf().get("label")).toBe("infra")
+
+    fireEvent.click(screen.getByTestId("go-back"))
+    await waitFor(() => expect(screen.getByTestId("board-search").textContent).toBe(""))
+    // the bare entry stays bare: it is not re-filled from the set remembered since
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(screen.getByTestId("board-search").textContent).toBe("")
+  })
+
+  it("Back to an entry that was filled in returns to that entry's own filters", async () => {
+    localStorage.setItem(BOARD_FILTERS_KEY, "label=infra")
+    renderFilterRoundTrip("/todos/b/platform")
+    await waitFor(() => expect(searchOf().get("label")).toBe("infra"))
+
+    fireEvent.click(screen.getByTestId("go-everything"))
+    await screen.findByTestId("board-column-backlog")
+    localStorage.setItem(BOARD_FILTERS_KEY, "label=ops")
+    fireEvent.click(screen.getByTestId("go-back"))
+    await waitFor(() => expect(searchOf().get("label")).toBe("infra"))
+  })
+
+  it("keeps the recalled scroll when Back lands on a bare entry that gets filled in", async () => {
+    // jsdom lays nothing out, so record what the board assigns to scrollTop.
+    const assigned: number[] = []
+    Object.defineProperty(HTMLElement.prototype, "scrollTop", {
+      configurable: true,
+      get: () => 0,
+      set(this: HTMLElement, value: number) { if (this.dataset.testid === "todo-board-scroll") assigned.push(value) },
+    })
+    try {
+      localStorage.setItem(BOARD_FILTERS_KEY, "label=infra")
+      rememberBoardScroll("platform", 120)
+      renderFilterRoundTrip("/todos/PLA-1", ["/todos/b/platform", "/todos/PLA-1"])
+      await screen.findByTestId("detail")
+
+      fireEvent.click(screen.getByTestId("go-back"))
+      await waitFor(() => expect(searchOf().get("label")).toBe("infra"))
+      await screen.findByTestId("board-column-backlog")
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      expect(assigned.length).toBeGreaterThan(0)
+      expect(assigned.every((value) => value === 120)).toBe(true)
+    } finally {
+      delete (HTMLElement.prototype as { scrollTop?: unknown }).scrollTop
+    }
   })
 
   it("ignores a corrupt remembered value and leaves Attention unfiltered", async () => {
