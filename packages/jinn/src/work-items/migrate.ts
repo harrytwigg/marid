@@ -38,6 +38,7 @@ import {
   V2_APPROVAL_WORK_ITEMS_TABLE_DDL,
 } from "./frozen-schemas.js";
 import { resolveDepartmentPrefix } from "./departments.js";
+import { SPRINTS_DDL, SPRINTS_TABLE_DDL, sprintRowsAreSound, WORK_ITEM_SPRINTS_DDL, WORK_ITEM_SPRINTS_TABLE_DDL } from "./sprints-schema.js";
 import { CORRUPT_SESSIONS_DATABASE, isSqliteCorruption, UNSUPPORTED_PRERELEASE_TODO_DATA } from "./migrate-refusals.js";
 import { loadConfig } from "../shared/config.js";
 import { CONFIG_PATH } from "../shared/paths.js";
@@ -491,6 +492,8 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ["work_item_relations", WORK_ITEM_RELATIONS_TABLE_DDL],
   ["labels", LABELS_TABLE_DDL],
   ["work_item_labels", WORK_ITEM_LABELS_TABLE_DDL],
+  ["sprints", SPRINTS_TABLE_DDL],
+  ["work_item_sprints", WORK_ITEM_SPRINTS_TABLE_DDL],
   ["work_item_approvals", WORK_ITEM_APPROVALS_TABLE_DDL],
   ["work_item_approval_choices", WORK_ITEM_APPROVAL_CHOICES_DDL],
   ["work_item_approval_operator_only", WORK_ITEM_APPROVAL_OPERATOR_ONLY_DDL],
@@ -530,6 +533,8 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "work_item_stop_cause", ddl: WORK_ITEM_STOP_CAUSE_DDL },
   { name: "work_item_kept", ddl: WORK_ITEM_KEPT_DDL },
   { name: "work_item_auto_start", ddl: WORK_ITEM_AUTO_START_DDL },
+  { name: "sprints", ddl: SPRINTS_DDL }, // before its membership, which references it
+  { name: "work_item_sprints", ddl: WORK_ITEM_SPRINTS_DDL },
 ].concat(WORK_ITEM_RECOVERY_TABLES);
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,
@@ -759,6 +764,7 @@ export function verifyCurrentWorkItemSchema(db: DatabaseType): void {
   for (const pair of labelPairs) {
     if (!byId.has(pair.work_item_id) || !labelIds.has(pair.label_id)) refusal();
   }
+  if (!sprintRowsAreSound(db, (id) => byId.has(id))) refusal();
   // Approvals: every row references a live item, and at most one PENDING row per
   // item. The partial unique index makes the latter unforgeable through SQL, but
   // the data is re-proven here anyway (belt and suspenders, house style).

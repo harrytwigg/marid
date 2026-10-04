@@ -179,6 +179,8 @@ export interface TodoFilters {
   date?: DateFilter
   /** Label name (or id) — the gateway's `label` list param accepts either. */
   label?: string
+  /** Sprint id, `active` (the running sprint) or `none` (in no sprint). */
+  sprint?: string
   due?: DueFilter
   q?: string
 }
@@ -199,6 +201,7 @@ export function activeFilterCount(f: TodoFilters): number {
   if (f.source) n++
   if (f.date) n++
   if (f.label) n++
+  if (f.sprint) n++
   if (f.due) n++
   return n
 }
@@ -223,7 +226,7 @@ export function dateBounds(date: DateFilter | undefined, now: number): { since?:
 
 // NOTE: there is deliberately NO client-side re-filter of server results for
 // dimensions the gateway owns. The gateway owns `q` (escaped-LIKE over
-// title+body), `since`/`until`, and `label` — a title-only client pass would
+// title+body), `since`/`until`, `label` and `sprint` — a title-only client pass would
 // silently discard body-only matches (shipped bug, QA 2026-07-10). The ONE
 // sanctioned client-side dimension is the due WINDOW below: the wire has no
 // due param and must not grow one (stage-A review F1 disposition), so it
@@ -256,6 +259,7 @@ export function filtersToSearchParams(f: TodoFilters): URLSearchParams {
   if (f.source) p.set("source", f.source)
   if (f.date) p.set("date", f.date)
   if (f.label) p.set("label", f.label)
+  if (f.sprint) p.set("sprint", f.sprint)
   if (f.due) p.set("due", f.due)
   const safeQuery = publicWorkItemReference(f.q)
   if (safeQuery) p.set("q", safeQuery)
@@ -283,6 +287,8 @@ export function filtersFromSearchParams(p: URLSearchParams): TodoFilters {
   if (date && DATE_VALUES.has(date)) f.date = date as DateFilter
   const label = p.get("label")?.trim()
   if (label) f.label = label
+  const sprint = p.get("sprint")?.trim()
+  if (sprint) f.sprint = sprint
   const due = p.get("due")
   if (due && DUE_VALUES.has(due)) f.due = due as DueFilter
   const q = publicWorkItemReference(p.get("q"))

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, ChevronDown, Filter, MoreHorizontal, X } from "lucide-react"
+import { Filter, MoreHorizontal } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,97 +16,17 @@ import type { Employee } from "@/lib/api"
 import { activeFilterCount, type TodoFilters } from "@/lib/todos"
 import { DATE_OPTIONS, DUE_OPTIONS, SOURCE_OPTIONS, STATUS_OPTIONS } from "./filter-options"
 import { useLabelRegistry } from "./use-todos"
+import { sprintFilterLabel, useSprints } from "./sprints/use-sprints"
+import { SprintFilterItems } from "./sprints/sprint-filter-items"
 import { SearchLauncher } from "./search-launcher"
 import { TodoFilterSheet } from "./todo-filter-sheet"
 import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
+import { ActiveChip, BoardActiveChip, MenuCheck, SUBMENU_CLASS, ValueChip } from "./filter-chips"
 
 const MENU_CLASS =
   "w-[min(320px,calc(100vw-24px))] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-2 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
-const SUBMENU_CLASS =
-  "max-h-[min(420px,70vh)] min-w-[220px] overflow-y-auto rounded-[var(--radius-lg)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
 const ITEM_CLASS =
   "min-h-11 cursor-pointer rounded-[10px] px-3 text-[length:var(--text-subheadline)] text-[var(--text-primary)] focus:bg-[var(--fill-secondary)]"
-
-function MenuCheck({ on }: { on: boolean }) {
-  return <Check size={14} strokeWidth={2.6} className={`ml-auto ${on ? "text-[var(--accent)]" : "opacity-0"}`} aria-hidden />
-}
-
-function ActiveChip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={`Remove ${label}`}
-      onClick={onRemove}
-      className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--accent-fill)] px-3 text-[length:var(--text-footnote)] font-medium text-[var(--accent)] transition-colors hover:bg-[var(--fill-secondary)]"
-    >
-      {label}
-      <X size={12} strokeWidth={2.4} aria-hidden />
-    </button>
-  )
-}
-
-/* ── Board filter row (mock board.html .filters — stage-A review F1) ────────
- * Quiet value-carrying chips left (Assignee · Label · Due), a ⋯ menu for the
- * remaining grammar (Source, Date, Department where scoped in), compact
- * right-aligned search. A SET chip turns accent (the mock's .chip.set) — the
- * chip itself is the active state for its dimension. */
-
-function ValueChip({
-  label,
-  display,
-  set,
-  testId,
-  children,
-}: {
-  label: string
-  /** What the chip reads when set; falls back to the dimension name. */
-  display?: React.ReactNode
-  set: boolean
-  testId: string
-  children: React.ReactNode
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          data-testid={testId}
-          className={`focus-ring flex h-[30px] flex-none items-center gap-1.5 rounded-[15px] px-3 text-[13px] font-medium outline-none transition-colors ${
-            set
-              ? "bg-[var(--accent-fill)] text-[var(--accent)]"
-              : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
-          }`}
-        >
-          {set && display != null ? display : label}
-          <ChevronDown
-            size={10}
-            strokeWidth={2.4}
-            className={set ? "opacity-70" : "text-[var(--text-quaternary)]"}
-            aria-hidden
-          />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className={SUBMENU_CLASS}>
-        {children}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function BoardActiveChip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={`Remove ${label}`}
-      onClick={onRemove}
-      className="focus-ring flex h-[30px] flex-none items-center gap-1.5 rounded-[15px] bg-[var(--accent-fill)] px-3 text-[13px] font-medium text-[var(--accent)] outline-none transition-colors hover:bg-[var(--fill-secondary)]"
-    >
-      {label}
-      <X size={11} strokeWidth={2.4} aria-hidden />
-    </button>
-  )
-}
 
 const MOBILE_QUERY = "(max-width: 767px)"
 
@@ -131,6 +51,7 @@ export function FilterBar({
   hideStatus,
   hideDepartment,
   board,
+  onManageSprints,
 }: {
   filters: TodoFilters
   onChange: (next: TodoFilters) => void
@@ -145,9 +66,12 @@ export function FilterBar({
    *  right search — stage-A review F1); the legacy list keeps the search-led
    *  row until the stage-C cutover retires it. */
   board?: boolean
+  /** Opens the sprint planner; the Sprint chip's last row. */
+  onManageSprints?: () => void
 }) {
   const mobile = useIsTodoMobile()
   const labelRegistry = useLabelRegistry(!!board)
+  const sprints = useSprints(!!board)
   const [mobileOpen, setMobileOpen] = useState(false)
   const filterTriggerRef = useRef<HTMLButtonElement>(null)
   const wasMobileRef = useRef(mobile)
@@ -210,6 +134,8 @@ export function FilterBar({
     ? (labelRegistry.data ?? []).find((l) => l.name === filters.label || l.id === filters.label) ?? { name: filters.label, color: null }
     : null
 
+  const sprintLabel = sprintFilterLabel(filters.sprint, sprints.data)
+
   if (board && !mobile) {
     return (
       <div className="flex flex-wrap items-center gap-2" data-testid="todos-filters">
@@ -256,6 +182,16 @@ export function FilterBar({
           {(labelRegistry.data ?? []).length === 0 && (
             <div className="px-3 py-2 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">No labels yet.</div>
           )}
+        </ValueChip>
+
+        <ValueChip label="Sprint" set={!!filters.sprint} display={sprintLabel} testId="filter-chip-sprint">
+          <SprintFilterItems
+            value={filters.sprint}
+            sprints={sprints.data}
+            onChoose={(sprint) => onChange({ ...filters, sprint })}
+            onManage={onManageSprints}
+            itemClassName={ITEM_CLASS}
+          />
         </ValueChip>
 
         <ValueChip label="Due" set={!!filters.due} display={dueLabel} testId="filter-chip-due">
@@ -515,3 +451,4 @@ export function FilterBar({
     </div>
   )
 }
+

@@ -119,3 +119,11 @@ export function rejectRetiredFields(args: Record<string, unknown>): void {
   const refusal = retiredTodoFieldError(args, { ignoreNull: true });
   if (refusal) throw new JinnMcpToolError(refusal);
 }
+
+/** `sprint` on edit_work_item: a sprint id or name, `active` for the running one,
+ *  or null to take the Todo out of any sprint. Undefined when not passed. */
+export function optionalSprintRef(args: Record<string, unknown>): string | null | undefined {
+  if (args.sprint === undefined) return undefined;
+  if (args.sprint === null) return null;
+  return requireString(args, "sprint", 200);
+}

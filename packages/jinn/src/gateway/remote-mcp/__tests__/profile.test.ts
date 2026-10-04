@@ -177,6 +177,13 @@ describe("remote MCP tool profile", () => {
     expect(silent).toEqual([]);
   });
 
+  // edit_work_item { sprint } moves through its own route, after any content
+  // edit; the sweep above stops at the content edit, so the move is pinned here.
+  it("admits the sprint move edit_work_item makes", () => {
+    expect(remoteMcpRouteAllowed("PUT", "/api/work-items/TST-1/sprint")).toBe(true);
+    expect(remoteMcpRouteAllowed("POST", "/api/sprints")).toBe(false);
+  });
+
   it("refuses the routes behind excluded tools", () => {
     for (const [method, path] of [
       ["GET", "/api/sessions/abc/transcript"], ["GET", "/api/knowledge/read"],

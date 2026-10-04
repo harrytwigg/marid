@@ -9,7 +9,7 @@ import { mergeTodoIntoCaches } from '@/routes/todos/todo-edit-request'
 import type { BackgroundActivity, SessionsResponse } from '@/lib/api'
 import { GATEWAY_EVENTS, type GatewayEvent } from '@jinn/gateway-events'
 
-/** The one company mutation event (Todo). */
+/** The company mutation event: a Todo, or a sprint the Todos embed. */
 function handleCompanyChanged(
   qc: ReturnType<typeof useQueryClient>,
   p: Record<string, unknown>,
@@ -28,6 +28,12 @@ function handleCompanyChanged(
     }
     pending.add('todos')
     if (id) pending.add(`todo:${id}`)
+  }
+  if (entity === 'sprint') {
+    // Every Todo row and detail embeds its sprint's name and status, and a move
+    // changes a whole tree's rows: refetch the lists and every open detail.
+    pending.add('todos')
+    pending.add('todo-details')
   }
   // Loss recovery for the invoking transcript; normal session:delta stays the
   // surgical live path when the session is streaming.
@@ -67,13 +73,15 @@ export function useQueryInvalidation() {
       const deferTodos = qc.isMutating({ mutationKey: TODO_WRITE_KEY }) > 0
       const kept = new Set<string>()
       for (const key of pendingRef.current) {
-        if (key === 'todos' || key.startsWith('todo:')) {
+        if (key === 'todos' || key === 'todo-details' || key.startsWith('todo:')) {
           if (deferTodos) {
             kept.add(key)
           } else if (key === 'todos') {
             qc.invalidateQueries({ queryKey: ['work-items'] })
             qc.invalidateQueries({ queryKey: ['work-item-tree'] })
             qc.invalidateQueries({ queryKey: ['departments'] })
+          } else if (key === 'todo-details') {
+            qc.invalidateQueries({ queryKey: ['work-item'] })
           } else {
             const id = key.slice('todo:'.length)
             qc.invalidateQueries({ queryKey: ['work-item', id] })

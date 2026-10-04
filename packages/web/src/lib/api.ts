@@ -20,6 +20,7 @@ import {
 } from "@/lib/work-item-edit-wire"
 import type { WorkItemCommentPageWire, WorkItemCommentWire } from "@/lib/work-item-comment-wire"
 import type { WorkItemRunWire } from "@/lib/work-item-runs-wire"
+import type { WorkItemSprintRefWire } from "./sprint-api"
 
 export interface TranscriptContentBlock {
   type: 'text' | 'tool_use' | 'tool_result' | 'thinking'
@@ -190,7 +191,7 @@ export async function post<T>(path: string, body?: unknown, origin?: WriteOrigin
   return res.json();
 }
 
-async function del<T>(path: string, origin?: WriteOriginWire): Promise<T> {
+export async function del<T>(path: string, origin?: WriteOriginWire): Promise<T> {
   const res = await authFetch(path, {
     method: "DELETE",
     ...(origin ? { headers: { "X-Jinn-Origin": origin } } : {}),
@@ -199,7 +200,7 @@ async function del<T>(path: string, origin?: WriteOriginWire): Promise<T> {
   return res.json();
 }
 
-async function put<T>(path: string, body: unknown, origin?: WriteOriginWire): Promise<T> {
+export async function put<T>(path: string, body: unknown, origin?: WriteOriginWire): Promise<T> {
   const res = await authFetch(path, {
     method: "PUT",
     headers: writeHeaders(origin),
@@ -209,7 +210,7 @@ async function put<T>(path: string, body: unknown, origin?: WriteOriginWire): Pr
   return res.json();
 }
 
-async function patch<T>(path: string, body: unknown): Promise<T> {
+export async function patch<T>(path: string, body: unknown): Promise<T> {
   const res = await authFetch(path, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -390,6 +391,8 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
    *  while an incoming `blocks` relation originates from an open Todo; `kept`
    *  is true while the Todo sits on the operator's Home board. */
   labels?: WorkItemLabelWire[]
+  /** Optional: older gateways omit it. */
+  sprint?: WorkItemSprintRefWire | null
   blocked?: boolean
   kept?: boolean
   updatedAt: string
@@ -513,6 +516,8 @@ export interface WorkItemDetailWire extends TodoStopCauseWire {
   relations?: WorkItemRelationWire[]
   /** The Todo's labels, ordered by name (optional: older gateways omit it). */
   labels?: WorkItemLabelWire[]
+  /** The Todo's sprint — a sub-task's is its root's (optional: older gateways omit it). */
+  sprint?: WorkItemSprintRefWire | null
   /** The run ledger, oldest first (optional: older gateways omit it). */
   runs?: WorkItemRunWire[]
 }
@@ -532,7 +537,7 @@ export interface LinkedSessionWire {
 }
 
 /** Todo list params that pass straight through as a same-named query param. */
-const TODO_LIST_PARAMS = ["status", "assignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "offset"] as const
+const TODO_LIST_PARAMS = ["status", "assignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "offset"] as const
 
 export const api = {
   listWorkspaces: () => get<WorkspaceInfo[]>('/api/instances'),
@@ -677,6 +682,8 @@ export const api = {
     createdBy?: string
     rootsOnly?: boolean
     label?: string
+    /** A sprint id or name, `active`, or `none`. */
+    sprint?: string
     kept?: boolean
   }, signal?: AbortSignal) => {
     const q = new URLSearchParams()
