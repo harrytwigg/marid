@@ -191,6 +191,13 @@ describe("sprints through the Todo tools", () => {
     expect(again.workItem.id).toBe(first.workItem.id);
     expect(store.listWorkItemEvents(first.workItem.id).filter((e) => e.kind === "sprint_changed")).toHaveLength(1);
     await expect(tool("create_work_item").handler({ ...args, sprint: "Create Idem B" }, devCtx)).rejects.toThrow(/different request/);
+
+    // A create refused for its sprint leaves no receipt, so the same key succeeds once the sprint exists.
+    const late = { title: "idem late", sprint: "Create Idem Late", idempotencyKey: "sprint-create-late-key" };
+    await expect(tool("create_work_item").handler(late, devCtx)).rejects.toThrow(/open sprints/);
+    createSprint({ name: "Create Idem Late" });
+    const retried = (await tool("create_work_item").handler(late, devCtx)) as { workItem: { id: string }; sprint: { name: string } };
+    expect(retried.sprint.name).toBe("Create Idem Late");
   });
 
   it("an employee moves their own Todo between sprints, to `active` and to null, on the board's rules", async () => {
