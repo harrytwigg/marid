@@ -4,9 +4,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
  * Claude Code fires Stop before it has flushed the turn's last assistant
  * entries to the transcript. A turn that read the transcript once at Stop could
  * miss the whole of a short answer: it settled with no cost, and the context
- * meter kept the PREVIOUS turn's size. Under the auto-compaction floor while
- * the real context was over it, that stale meter made the next cold turn skip
- * its compaction. Seen live mostly on short turns answering a notification.
+ * meter took the PREVIOUS turn's size over the one it had streamed live. Under
+ * the auto-compaction floor while the real context was over it, that stale
+ * meter made the next cold turn skip its compaction. Seen live mostly on short
+ * turns answering a notification.
  */
 
 interface FakePty {
@@ -127,7 +128,7 @@ describe("InteractiveClaudeEngine — a Stop that beats the transcript", () => {
     expect((await turn).contextTokens).toBe(101_000);
   });
 
-  it("gives up on an answer that never lands, and settles on what the transcript has", async () => {
+  it("gives up on an answer that never lands, and never meters the earlier turn's size as this one's", async () => {
     const { transcript, turn } = await turnWithEarlierAnswer("s-never");
     hookCb!({ hook_event_name: "Stop", transcript_path: transcript, last_assistant_message: "lost" });
     await vi.advanceTimersByTimeAsync(2_500);
@@ -135,7 +136,22 @@ describe("InteractiveClaudeEngine — a Stop that beats the transcript", () => {
     const result = await turn;
     expect(result.error).toBeUndefined();
     expect(result.result).toBe("lost");
-    expect(result.contextTokens).toBe(94_000);
+    // Nothing of this turn's on disk: no reading, so the meter it streamed stands.
+    expect(result.contextTokens).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+  });
+
+  it("does not wait on a transcript it cannot read", async () => {
+    const { transcript, turn } = await turnWithEarlierAnswer("s-unreadable");
+    fs.chmodSync(transcript, 0o000);
+    try {
+      hookCb!({ hook_event_name: "Stop", transcript_path: transcript, last_assistant_message: "done" });
+      // Short of one poll: a turn that waited would still be pending.
+      await vi.advanceTimersByTimeAsync(20);
+      expect(await Promise.race([turn, Promise.resolve("pending")])).not.toBe("pending");
+    } finally {
+      fs.chmodSync(transcript, 0o644);
+    }
   });
 });
 
@@ -153,7 +169,14 @@ describe("transcriptHasTurnAnswer", () => {
     expect(transcriptHasTurnAnswer(transcript, at - 1, "this turn's answer")).toBe(false);
   });
 
-  it("is false for a transcript it cannot read", () => {
-    expect(transcriptHasTurnAnswer("/nonexistent/t.jsonl", 0, "anything")).toBe(false);
+  it("reads only the end of a long transcript, where the answer is", () => {
+    const padding = Array.from({ length: 400 }, (_, i) => assistantLine(at - 10_000, `old-${i}`, 1_000, "x".repeat(1_000)));
+    const transcript = writeTranscript([...padding, assistantLine(at, "m1", 1_000, "the answer")]);
+    expect(fs.statSync(transcript).size).toBeGreaterThan(256 * 1024);
+    expect(transcriptHasTurnAnswer(transcript, at - 1, "the answer")).toBe(true);
+  });
+
+  it("cannot say for a transcript it cannot read", () => {
+    expect(transcriptHasTurnAnswer("/nonexistent/t.jsonl", 0, "anything")).toBeUndefined();
   });
 });
