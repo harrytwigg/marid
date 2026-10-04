@@ -40,5 +40,5 @@ export const sprintApi = {
   deleteSprint: (id: string) => del<{ deleted: boolean; moved: string[] }>(`/api/sprints/${encodeURIComponent(id)}`),
   /** Move a top-level Todo into a sprint (id or name), or out with null. */
   setWorkItemSprint: (id: string, sprint: string | null) =>
-    put<{ sprint: WorkItemSprintRefWire | null }>(`/api/work-items/${encodeURIComponent(id)}/sprint`, { sprint }),
+    put<{ sprint: WorkItemSprintRefWire | null; version: number }>(`/api/work-items/${encodeURIComponent(id)}/sprint`, { sprint }),
 }

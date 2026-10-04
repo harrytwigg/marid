@@ -71,4 +71,47 @@ describe("sprints through the Todo tools", () => {
     await expect(tool("edit_work_item").handler({ id: todo.id, sprint: "Ghost" }, devCtx)).rejects.toThrow(/open sprints: .*MCP Sprint 1/);
   });
 
+
+  it("edit_work_item with a refused move saves nothing, and returns post-move state when both halves land", async () => {
+    const dev = registry.createSession({ engine: "codex", source: "web", sourceRef: "mcp-sprint-half", title: "dev", employee: "platform-dev" });
+    const devCtx = ctxFor(dev.id);
+    const { createSprint } = await import("../../work-items/sprints.js");
+    createSprint({ name: "MCP Half Sprint" });
+    const todo = store.createWorkItem({ title: "half edit", assignee: "platform-dev" });
+
+    // A typo in the sprint name: the move is refused first, so the title stays.
+    await expect(tool("edit_work_item").handler({ id: todo.id, title: "should not land", sprint: "MCP Hlaf Sprint" }, devCtx))
+      .rejects.toThrow(/nothing was saved/);
+    expect(store.getWorkItem(todo.id)!.title).toBe("half edit");
+
+    // Both halves land: the row-shaped sprint and the version after both writes.
+    const both = (await tool("edit_work_item").handler({ id: todo.id, title: "both landed", sprint: "MCP Half Sprint" }, devCtx)) as {
+      workItem: { version: number; title: string };
+      sprint: Record<string, unknown>;
+    };
+    expect(both.workItem.title).toBe("both landed");
+    expect(both.workItem.version).toBe(store.getWorkItem(todo.id)!.version);
+    expect(Object.keys(both.sprint).sort()).toEqual(["id", "name", "status"]);
+
+    // A move alone reports the version it left, so the next CAS edit does not conflict.
+    const out = (await tool("edit_work_item").handler({ id: todo.id, sprint: null }, devCtx)) as { sprint: unknown; version: number };
+    expect(out.sprint).toBeNull();
+    expect(out.version).toBe(store.getWorkItem(todo.id)!.version);
+  });
+
+  it("edit_work_item says the move landed when the content edit after it fails", async () => {
+    const calls: string[] = [];
+    const fetchFn = (async (input: string | URL, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push(`${method} ${new URL(String(input)).pathname}`);
+      const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+      if (method === "PUT") return reply(200, { sprint: { id: "spr_0123456789ab", name: "Stub Sprint", status: "active" }, version: 4 });
+      if (method === "GET") return reply(200, { workItem: { id: "TST-1", version: 4 } });
+      return reply(400, { error: "title must not be empty" });
+    }) as typeof fetch;
+    const ctx: JinnMcpContext = { gatewayUrl: "http://gateway.test", fetchFn, callerSessionId: "s-1", sessionCapability: "cap" };
+    await expect(tool("edit_work_item").handler({ id: "TST-1", title: "x", sprint: "Stub Sprint" }, ctx))
+      .rejects.toThrow(/TST-1 was moved to sprint "Stub Sprint"; the content edit then failed: .*title must not be empty/);
+    expect(calls).toEqual(["PUT /api/work-items/TST-1/sprint", "GET /api/work-items/TST-1", "PATCH /api/work-items/TST-1"]);
+  });
 });

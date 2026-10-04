@@ -228,10 +228,11 @@ function carryTarget(db: Db, sprint: Sprint, options: { carryTo: string | null; 
 }
 
 /** Delete a planned sprint. Its Todos return to no sprint, each with its own
- *  event; an active or closed sprint is refused. Returns the ids that moved. */
-export function deleteSprint(ref: string, actor: string, origin?: WriteOrigin): string[] {
+ *  event; an active or closed sprint is refused. Returns the deleted sprint's
+ *  id (the caller may have named it) and the Todos that moved. */
+export function deleteSprint(ref: string, actor: string, origin?: WriteOrigin): { sprintId: string; moved: string[] } {
   const db = initDb();
-  const txn = db.transaction((): string[] => {
+  const txn = db.transaction((): { sprintId: string; moved: string[] } => {
     const sprint = requireSprint(db, ref);
     if (sprint.status !== 'planned') {
       throw new SprintError(`only a planned sprint can be deleted; "${sprint.name}" is ${sprint.status}`, 'invalid');
@@ -240,7 +241,7 @@ export function deleteSprint(ref: string, actor: string, origin?: WriteOrigin): 
       .pluck().all(sprint.id) as string[];
     for (const id of members) moveInTxn(db, { id, from: sprint, to: null, actor, origin });
     db.prepare('DELETE FROM sprints WHERE id = ?').run(sprint.id);
-    return members;
+    return { sprintId: sprint.id, moved: members };
   });
   return holdLiveSignalsUntilCommit(() => txn.immediate());
 }

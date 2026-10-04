@@ -125,17 +125,34 @@ describe("the sprint planner", () => {
     await waitFor(() => expect(sprintApi.completeSprint).toHaveBeenCalledWith(ACTIVE.id, { carryTo: "spr_ffffffffffff", startNext: false }))
   })
 
-  it("reuses a planned sprint of that name when a new-sprint carry is retried", async () => {
-    const created = sprint({ id: "spr_ffffffffffff", name: "Hotfix week" })
-    sprintApi.listSprints.mockResolvedValue({ sprints: [ACTIVE, created] })
-    sprintApi.completeSprint.mockResolvedValue({ sprint: { ...ACTIVE, status: "closed" }, carried: [], carriedTo: { ...created, status: "active" } })
+  it("never carries into an existing sprint by typing its name: the create is refused and nothing moves", async () => {
+    const { ApiError } = await import("@/lib/api")
+    sprintApi.createSprint.mockRejectedValue(new ApiError(409, 'a sprint named "Sprint 2" already exists'))
     renderDialog({ completing: ACTIVE.id })
     await screen.findByTestId("sprint-complete-panel")
     fireEvent.click(screen.getByRole("radio", { name: /A new sprint/ }))
-    fireEvent.change(screen.getByTestId("sprint-carry-new-name"), { target: { value: "hotfix WEEK" } })
+    fireEvent.change(screen.getByTestId("sprint-carry-new-name"), { target: { value: "sprint 2" } })
     fireEvent.click(screen.getByTestId("sprint-complete-confirm"))
-    await waitFor(() => expect(sprintApi.completeSprint).toHaveBeenCalledWith(ACTIVE.id, { carryTo: created.id, startNext: true }))
-    expect(sprintApi.createSprint).not.toHaveBeenCalled()
+    expect((await screen.findByTestId("sprints-error")).textContent).toContain("already exists")
+    expect(sprintApi.completeSprint).not.toHaveBeenCalled()
+  })
+
+  it("reuses the sprint its own create made when a failed complete is retried", async () => {
+    sprintApi.createSprint.mockResolvedValue({ sprint: sprint({ id: "spr_ffffffffffff", name: "Hotfix  week" }) })
+    sprintApi.completeSprint
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce({ sprint: { ...ACTIVE, status: "closed" }, carried: [], carriedTo: null })
+    renderDialog({ completing: ACTIVE.id })
+    await screen.findByTestId("sprint-complete-panel")
+    fireEvent.click(screen.getByRole("radio", { name: /A new sprint/ }))
+    // Two spaces: the server collapses them, so matching by name would miss.
+    fireEvent.change(screen.getByTestId("sprint-carry-new-name"), { target: { value: "Hotfix  week" } })
+    fireEvent.click(screen.getByTestId("sprint-complete-confirm"))
+    await screen.findByTestId("sprints-error")
+    fireEvent.click(screen.getByTestId("sprint-complete-confirm"))
+    await waitFor(() => expect(sprintApi.completeSprint).toHaveBeenCalledTimes(2))
+    expect(sprintApi.createSprint).toHaveBeenCalledTimes(1)
+    expect(sprintApi.completeSprint).toHaveBeenLastCalledWith(ACTIVE.id, { carryTo: "spr_ffffffffffff", startNext: true })
   })
 
   it("shows the gateway's refusal instead of closing", async () => {
@@ -151,10 +168,10 @@ describe("the sprint planner", () => {
 })
 
 describe("the Todo page's Sprint row", () => {
-  function detail(over: { parentId?: string | null; rootId?: string; sprint?: SprintWire | null }) {
+  function detail(over: { parentId?: string | null; rootId?: string; sprint?: SprintWire | null; status?: string }) {
     const sprint = over.sprint === undefined ? null : over.sprint
     return {
-      workItem: { id: "PLA-7", parentId: over.parentId ?? null, rootId: over.rootId ?? "PLA-7" },
+      workItem: { id: "PLA-7", parentId: over.parentId ?? null, rootId: over.rootId ?? "PLA-7", status: over.status ?? "backlog" },
       sprint: sprint && { id: sprint.id, name: sprint.name, status: sprint.status },
     } as unknown as React.ComponentProps<typeof SprintRailRow>["detail"]
   }
@@ -184,6 +201,13 @@ describe("the Todo page's Sprint row", () => {
     fireEvent.pointerDown(screen.getByTestId("rail-sprint"), { button: 0, ctrlKey: false, pointerType: "mouse" })
     fireEvent.click(await screen.findByTestId(`rail-sprint-${NEXT.id}`))
     expect((await screen.findByRole("alert")).textContent).toContain("which keeps it as its record")
+  })
+
+  it("offers no move for a finished Todo its closed sprint keeps", () => {
+    renderRow({ detail: detail({ sprint: OLD, status: "done" }), editable: true })
+    const row = screen.getByTestId("rail-sprint")
+    expect(row.tagName).toBe("DIV")
+    expect(row.textContent).toContain("Sprint 0")
   })
 
   it("reads a sub-task's sprint from its root and offers no move", () => {

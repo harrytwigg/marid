@@ -10,7 +10,7 @@ import type { WorkItemDetailWire } from "@/lib/api"
 import type { SprintWire, WorkItemSprintRefWire } from "@/lib/sprint-api"
 import { RailRow } from "../task-page/rail-rows"
 import { MenuCheck } from "../filter-chips"
-import { useSetWorkItemSprint, useSprints, sprintErrorMessage } from "./use-sprints"
+import { keptByClosedSprint, sprintErrorMessage, useSetWorkItemSprint, useSprints } from "./use-sprints"
 
 /* The task rail's Sprint row: which sprint the Todo is in, and the menu that
  * moves it to another one or out of any. A sub-task has no sprint of its own —
@@ -32,7 +32,7 @@ export function SprintRailRow({ detail, editable }: { detail: WorkItemDetailWire
   const move = useSetWorkItemSprint()
   const value = <SprintValue current={current} followsRoot={followsRoot} />
 
-  if (!editable || followsRoot) return <RailRow quiet testId="rail-sprint">{value}</RailRow>
+  if (!editable || !movable(item.status, current, followsRoot)) return <RailRow quiet testId="rail-sprint">{value}</RailRow>
 
   return (
     <div className="relative">
@@ -59,6 +59,12 @@ export function SprintRailRow({ detail, editable }: { detail: WorkItemDetailWire
       )}
     </div>
   )
+}
+
+/** A sub-task follows its root, and a finished Todo is its closed sprint's
+ *  record: the gateway would refuse either move, so the row is read-only. */
+function movable(status: string, current: WorkItemSprintRefWire | null, followsRoot: string | null): boolean {
+  return !followsRoot && !keptByClosedSprint(status, current)
 }
 
 function SprintValue({ current, followsRoot }: { current: WorkItemSprintRefWire | null; followsRoot: string | null }) {

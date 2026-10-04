@@ -10,7 +10,7 @@ import {
 import type { WorkItemCompactWire } from "@/lib/api"
 import type { SprintWire } from "@/lib/sprint-api"
 import { MenuCheck } from "../filter-chips"
-import { useSetWorkItemSprint } from "./use-sprints"
+import { keptByClosedSprint, useSetWorkItemSprint } from "./use-sprints"
 
 /* Right-click a board card to move it into a sprint, between sprints, or out of
  * one — the way planning a sprint goes, card by card, without opening each
@@ -75,6 +75,7 @@ function SprintCardMenu({ target, sprints, onClose, onMove }: {
   onMove: (sprint: string | null) => void
 }) {
   const current = currentSprintOf(target)
+  const kept = keptByClosedSprint(target.item.status, target.item.sprint)
   return (
     <DropdownMenu open onOpenChange={(open) => { if (!open) onClose() }}>
       <DropdownMenuTrigger asChild>
@@ -88,15 +89,20 @@ function SprintCardMenu({ target, sprints, onClose, onMove }: {
         <DropdownMenuLabel className="px-2.5 pb-1 pt-1.5 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
           Move {target.item.id} to sprint
         </DropdownMenuLabel>
+        {kept && (
+          <div className="max-w-[240px] px-2.5 pb-1.5 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]" data-testid="sprint-card-kept">
+            {target.item.status === "done" ? "Done" : "Cancelled"} in closed sprint {target.item.sprint?.name}, which keeps it as its record.
+          </div>
+        )}
         {sprints.map((sprint) => (
-          <DropdownMenuItem key={sprint.id} className={ITEM_CLASS} data-testid={`sprint-card-move-${sprint.id}`} onSelect={() => onMove(sprint.id)}>
+          <DropdownMenuItem key={sprint.id} className={ITEM_CLASS} disabled={kept} data-testid={`sprint-card-move-${sprint.id}`} onSelect={() => onMove(sprint.id)}>
             <span className="min-w-0 truncate">{sprint.name}</span>
             <span className="text-[11px] text-[var(--text-quaternary)]">{sprint.status}</span>
             <MenuCheck on={current === sprint.id} />
           </DropdownMenuItem>
         ))}
         {sprints.length > 0 && <DropdownMenuSeparator />}
-        <DropdownMenuItem className={ITEM_CLASS} data-testid="sprint-card-move-none" onSelect={() => onMove(null)}>
+        <DropdownMenuItem className={ITEM_CLASS} disabled={kept} data-testid="sprint-card-move-none" onSelect={() => onMove(null)}>
           No sprint
           <MenuCheck on={current === null} />
         </DropdownMenuItem>

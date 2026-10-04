@@ -1,5 +1,6 @@
 import { gatewayRequest, JinnMcpToolError, type JinnMcpTool } from "./toolkit.js";
 import { labelTools } from "./label-tools.js";
+import { editWithSprintMove } from "./work-item-sprint-edit.js";
 import {
   uploadCommentAttachments,
   uploadWorkItemAttachment,
@@ -369,14 +370,8 @@ export function buildWorkItemTools(): JinnMcpTool[] {
       if (Object.keys(patch).length === 0 && sprint === undefined) {
         throw new JinnMcpToolError("pass at least one editable field (title, body, priority, dueAt, sprint)");
       }
-      const edited = Object.keys(patch).length > 0 ? await patchWorkItem(ctx, id, patch, `editing work item "${id}"`) : undefined;
-      if (sprint === undefined) return mutationResult(edited, "Todo metadata edited.");
-      // A sprint is not a metadata column: it moves through its own route, after
-      // any content edit, and a sub-task is refused there, naming its root.
-      const moved = await gatewayRequest(ctx, "PUT", `/api/work-items/${encodeURIComponent(id)}/sprint`, { sprint });
-      if (moved.status >= 400) throw gatewayFailure(`moving work item "${id}" to a sprint`, moved.status, moved.body);
-      return mutationResult({ ...((edited ?? {}) as Record<string, unknown>), ...(moved.body as Record<string, unknown>) },
-        "Todo edited; its sub-tasks follow its sprint.");
+      if (sprint === undefined) return mutationResult(await patchWorkItem(ctx, id, patch, `editing work item "${id}"`), "Todo metadata edited.");
+      return editWithSprintMove(ctx, id, sprint, patch, (edit) => patchWorkItem(ctx, id, edit, `editing work item "${id}"`));
     },
   };
 

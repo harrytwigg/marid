@@ -195,6 +195,8 @@ describe("the sprint lifecycle", () => {
 
     expect(() => sprints.setWorkItemSprint(shipped.id, next.id, "operator")).toThrow(/closed sprint "Record Keeper", which keeps it/);
     expect(() => sprints.setWorkItemSprint(dropped.id, null, "operator")).toThrow(/keeps it/);
+    // A retried move to the closed sprint it is already in answers unchanged.
+    expect(sprints.setWorkItemSprint(shipped.id, old.id, "operator")).toMatchObject({ changed: false, sprint: { id: old.id } });
     expect(sprints.listSprints().find((s) => s.id === old.id)?.total).toBe(3);
 
     // Reopened after the close: never carried, so it may still move on.
@@ -217,7 +219,7 @@ describe("the sprint lifecycle", () => {
     const doomed = sprints.createSprint({ name: "Doomed" });
     const todo = store.createWorkItem({ title: "orphan" });
     sprints.setWorkItemSprint(todo.id, doomed.id, "operator");
-    expect(sprints.deleteSprint(doomed.name, "operator")).toEqual([todo.id]);
+    expect(sprints.deleteSprint(doomed.name, "operator")).toEqual({ sprintId: doomed.id, moved: [todo.id] });
     expect(sprints.getSprint(doomed.id)).toBeUndefined();
     expect(sprints.getWorkItemSprint(todo.id)).toBeNull();
   });

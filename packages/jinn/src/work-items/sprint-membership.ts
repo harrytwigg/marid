@@ -83,7 +83,7 @@ function assertMayLeave(current: Sprint | null, id: string, status: string): voi
   }
 }
 
-/** The sprint a move goes to — never a closed one — or null for none.
+/** The sprint a move names, or null for none.
  *  `none` means no sprint and `active` the running one. */
 function openSprintOrNull(db: Db, sprintRef: string | null): Sprint | null {
   const word = sprintRef?.trim().toLowerCase();
@@ -93,11 +93,15 @@ function openSprintOrNull(db: Db, sprintRef: string | null): Sprint | null {
     if (!running) throw new SprintError('no sprint is active; name a planned sprint instead', 'not_found');
     return running;
   }
-  const target = requireSprint(db, sprintRef);
-  if (target.status === 'closed') {
+  return requireSprint(db, sprintRef);
+}
+
+/** Nothing new moves into a closed sprint. Checked after the no-op test, so a
+ *  retried move to the closed sprint a Todo is already in answers unchanged. */
+function assertMayEnter(target: Sprint | null): void {
+  if (target?.status === 'closed') {
     throw new SprintError(`sprint "${target.name}" is closed; move the Todo to a planned or active sprint`, 'invalid');
   }
-  return target;
 }
 
 /**
@@ -115,6 +119,7 @@ export function setWorkItemSprint(workItemId: string, sprintRef: string | null, 
     const target = openSprintOrNull(db, sprintRef);
     const current = currentSprintOf(db, id);
     if ((current?.id ?? null) === (target?.id ?? null)) return { sprint: current, changed: false };
+    assertMayEnter(target);
     assertMayLeave(current, id, status);
     moveInTxn(db, { id, from: current, to: target, actor, origin });
     return { sprint: target, changed: true };

@@ -1,6 +1,7 @@
 import { DropdownMenuItem, DropdownMenuLabel } from "@/components/ui/dropdown-menu"
 import type { SprintWire } from "@/lib/sprint-api"
 import { MenuCheck } from "../filter-chips"
+import { splitSprintChoices } from "./use-sprints"
 
 /* The board's Sprint chip menu: any sprint, the running one (which follows
  * the sprint as sprints roll over, so it is the one to bookmark), Todos in no
@@ -14,8 +15,7 @@ export function SprintFilterItems({ value, sprints, onChoose, onManage, itemClas
   onManage?: () => void
   itemClassName: string
 }) {
-  const open = (sprints ?? []).filter((sprint) => sprint.status !== "closed")
-  const closed = (sprints ?? []).filter((sprint) => sprint.status === "closed").slice(0, 5)
+  const { open, closed } = splitSprintChoices(sprints)
   return (
     <>
       <DropdownMenuItem className={itemClassName} onClick={() => onChoose(undefined)}>

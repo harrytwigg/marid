@@ -15,6 +15,7 @@ import {
   setWorkItemSprint,
   SprintError,
   startSprint,
+  type Sprint,
   updateSprint,
 } from "../work-items/sprints.js";
 
@@ -163,9 +164,9 @@ const completeRoute = plannerWrite(async (req, res, params, caller, options) => 
 });
 
 const deleteRoute = plannerWrite(async (_req, res, params, caller, options) => {
-  const moved = deleteSprint(params.id, workItemActor(caller), caller.origin);
+  const { sprintId, moved } = deleteSprint(params.id, workItemActor(caller), caller.origin);
   for (const id of moved) options.emitProjection(id);
-  options.emitSprintChange("deleted", params.id);
+  options.emitSprintChange("deleted", sprintId);
   json(res, { deleted: true, moved });
 });
 
@@ -187,6 +188,21 @@ function movableTodo(res: ServerResponse, id: string, caller: WorkItemCaller) {
   return item;
 }
 
+/** The `sprint` a move body names: an id or name, or null for none. */
+function readMoveTarget(res: ServerResponse, body: Record<string, unknown>): { ok: true; sprint: string | null } | { ok: false } {
+  const sprint = body.sprint;
+  if (sprint === null || (typeof sprint === "string" && sprint.trim())) return { ok: true, sprint };
+  badRequest(res, "sprint is required: a sprint id or name, or null for no sprint");
+  return { ok: false };
+}
+
+/** The row shape Todo payloads carry, and the version the move left, so a
+ *  caller's next CAS edit does not conflict with its own move. */
+function moveResponse(itemId: string, sprint: Sprint | null, fallbackVersion: number): Record<string, unknown> {
+  const ref = sprint && { id: sprint.id, name: sprint.name, status: sprint.status };
+  return { sprint: ref, version: getWorkItem(itemId)?.version ?? fallbackVersion };
+}
+
 const moveRoute: Handler = async (req, res, params, options) => {
   const caller = options.resolveCaller();
   if (!caller) return;
@@ -194,17 +210,15 @@ const moveRoute: Handler = async (req, res, params, options) => {
   if (!item) return;
   const body = await readObject(req, res);
   if (!body) return;
-  const sprint = body.sprint;
-  if (sprint !== null && (typeof sprint !== "string" || !sprint.trim())) {
-    return badRequest(res, "sprint is required: a sprint id or name, or null for no sprint");
-  }
+  const target = readMoveTarget(res, body);
+  if (!target.ok) return;
   try {
-    const result = setWorkItemSprint(item.id, sprint, workItemActor(caller), caller.origin);
+    const result = setWorkItemSprint(item.id, target.sprint, workItemActor(caller), caller.origin);
     if (result.changed) {
       options.emitProjection(item.id);
       options.emitSprintChange("moved", item.id); // its sub-tasks' rows changed too
     }
-    json(res, { sprint: result.sprint });
+    json(res, moveResponse(item.id, result.sprint, item.version));
   } catch (err) {
     sprintFailure(res, err);
   }

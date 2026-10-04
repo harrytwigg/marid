@@ -244,5 +244,11 @@ describe("moving Todos between sprints", () => {
     expect((active.body.workItems as Array<{ id: string }>).map((w) => w.id)).toEqual([open.id]);
     const deleteActive = await call("DELETE", `/api/sprints/${next.id}`, undefined, operatorHeaders);
     expect(deleteActive.status).toBe(400);
+
+    // Deleting by name still announces the sprint's id.
+    const spare = (await call("POST", "/api/sprints", { name: "HTTP Spare" }, operatorHeaders)).body.sprint;
+    emittedEvents.length = 0;
+    expect((await call("DELETE", `/api/sprints/${encodeURIComponent("HTTP Spare")}`, undefined, operatorHeaders)).status).toBe(200);
+    expect(emittedEvents.find((e) => e.payload.entity === "sprint")?.payload).toMatchObject({ action: "deleted", id: spare.id });
   });
 });

@@ -91,10 +91,22 @@ export function sprintFilterLabel(value: string | undefined, sprints: SprintWire
 }
 
 /** The sprints a filter offers: every open one, then the five most recently
- *  closed (the registry lists closed sprints newest first). */
-export function sprintChoices(sprints: SprintWire[] | undefined): SprintWire[] {
+ *  closed (the registry lists closed sprints newest first). The desktop chip
+ *  labels the two groups; the phone sheet lists them in one run. */
+export function splitSprintChoices(sprints: SprintWire[] | undefined): { open: SprintWire[]; closed: SprintWire[] } {
   const all = sprints ?? []
-  return [...all.filter((s) => s.status !== "closed"), ...all.filter((s) => s.status === "closed").slice(0, 5)]
+  return { open: all.filter((s) => s.status !== "closed"), closed: all.filter((s) => s.status === "closed").slice(0, 5) }
+}
+
+export function sprintChoices(sprints: SprintWire[] | undefined): SprintWire[] {
+  const { open, closed } = splitSprintChoices(sprints)
+  return [...open, ...closed]
+}
+
+/** A finished Todo in a closed sprint is that sprint's record: the gateway
+ *  refuses to move it, so no menu offers to. */
+export function keptByClosedSprint(status: string, sprint: { status: string } | null | undefined): boolean {
+  return sprint?.status === "closed" && (status === "done" || status === "cancelled")
 }
 
 /** A sprint refusal in the gateway's own words. Every 4xx the sprint routes

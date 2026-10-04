@@ -7,16 +7,23 @@ import { sprintDates, useCompleteSprint, useCreateSprint, sprintErrorMessage } f
  * (a planned sprint, a new one, or out of any sprint), and whether that sprint
  * starts in the same move. Nothing closes until the operator confirms. */
 
-/** The planned sprint to carry into, by name. Completing into a new sprint is
- *  two requests, create then complete; a retry after a failed complete finds
- *  the sprint the first attempt created rather than a 409 on its name. */
-async function plannedSprintNamed(
-  planned: SprintWire[],
+/** The sprint a "new sprint" carry goes into. Completing into a new sprint is
+ *  two requests, create then complete, so the panel remembers the sprint its
+ *  own create made and a retry after a failed complete reuses that id. It never
+ *  matches by name: a name an existing sprint already has is refused (409), so
+ *  work is never carried into a sprint the operator did not pick. */
+type Created = { name: string; id: string } | null
+
+async function newSprintId(
   name: string,
+  created: Created,
+  remember: (created: Created) => void,
   create: (input: { name: string }) => Promise<{ sprint: SprintWire }>,
 ): Promise<string> {
-  const existing = planned.find((s) => s.name.toLowerCase() === name.toLowerCase())
-  return existing ? existing.id : (await create({ name })).sprint.id
+  if (created && created.name === name) return created.id
+  const id = (await create({ name })).sprint.id
+  remember({ name, id })
+  return id
 }
 
 type CarryChoice = { kind: "sprint"; id: string } | { kind: "new" } | { kind: "none" }
@@ -33,13 +40,14 @@ export function CompletePanel({ sprint, planned, onCancel, onDone, onError }: {
   const [choice, setChoice] = useState<CarryChoice>(() => (planned[0] ? { kind: "sprint", id: planned[0].id } : { kind: "new" }))
   const [newName, setNewName] = useState("")
   const [startNext, setStartNext] = useState(true)
+  const [created, setCreated] = useState<Created>(null)
 
   const confirm = async () => {
     onError(null)
     if (choice.kind === "new" && !newName.trim()) return onError("Name the new sprint first")
     try {
       const carryTo = choice.kind === "sprint" ? choice.id
-        : choice.kind === "new" ? await plannedSprintNamed(planned, newName.trim(), create.mutateAsync)
+        : choice.kind === "new" ? await newSprintId(newName.trim(), created, setCreated, create.mutateAsync)
         : null
       const result = await complete.mutateAsync({ id: sprint.id, carryTo, startNext: carryTo !== null && startNext })
       onDone(result.carriedTo && startNext ? result.carriedTo.id : null)
