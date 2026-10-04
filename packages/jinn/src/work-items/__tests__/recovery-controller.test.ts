@@ -304,6 +304,7 @@ describe("the operator resuming a blocked Todo", () => {
     ["the operator annotating the stop", { kind: "note", toStatus: "blocked", actor: "operator" }],
     ["the operator re-blocking it", { kind: "status_change", fromStatus: "blocked", toStatus: "blocked", actor: "operator" }],
     ["an agent's own unblock", { kind: "status_change", fromStatus: "blocked", toStatus: "executing", actor: "platform-worker" }],
+    ["an agent taking it back from review", { kind: "status_change", fromStatus: "in_review", toStatus: "executing", actor: "platform-worker" }],
   ] as const)("keeps reading the failed run across %s", (_label, event) => {
     const { id, runId } = parked(`no answer: ${_label}`, "the build step exited with code 1");
     store.appendWorkItemEvent({ workItemId: id, ...event, detail: { note: "waiting on the vendor" }, versionEffect: "audit" });
@@ -314,5 +315,57 @@ describe("the operator resuming a blocked Todo", () => {
     });
     expect(rearm).toContain(id);
     expect(rows.getWorkItemRecovery(id)).toMatchObject({ class: "code", lane: "manager", lastRunId: runId });
+  });
+});
+
+describe("the operator sending a Todo back from review", () => {
+  function bounced(title: string) {
+    const parkedTodo = parked(title, "the build step exited with code 1");
+    controller.sweepTodoRecovery({ mode: "classify-only", rearm: () => ({ status: "executing" }) });
+    expect(rows.getWorkItemRecovery(parkedTodo.id)).toMatchObject({ class: "code", lane: "manager", lastRunId: parkedTodo.runId });
+    transitions.transition(parkedTodo.id, "in_review", "operator", { human: true, manual: true });
+    return parkedTodo;
+  }
+
+  it("answers the failed attempt before it: the row goes, and auto does not rearm from it", () => {
+    const { id } = bounced("operator bounces");
+    transitions.transition(id, "executing", "operator", { human: true, manual: true });
+    expect(store.getWorkItem(id)).toMatchObject({ status: "executing", rounds: 1 });
+    expect(rows.getWorkItemRecovery(id)).toBeUndefined();
+
+    const rearm: string[] = [];
+    controller.sweepTodoRecovery({ mode: "auto", rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; } });
+    expect(rearm).not.toContain(id);
+    expect(rows.getWorkItemRecovery(id)).not.toMatchObject({ lane: "manager" });
+    expect(rows.getWorkItemRecovery(id)).not.toMatchObject({ lane: "recovering" });
+  });
+
+  it("answers it the same through a session carrying his lane", () => {
+    const { id } = bounced("connector bounces");
+    transitions.transition(id, "executing", "session:remote-connector", { human: true, manual: true, detail: { operatorLane: true } });
+    expect(rows.getWorkItemRecovery(id)).toBeUndefined();
+
+    const rearm: string[] = [];
+    controller.sweepTodoRecovery({ mode: "auto", rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; } });
+    expect(rearm).not.toContain(id);
+    expect(rows.getWorkItemRecovery(id)).not.toMatchObject({ lane: "manager" });
+  });
+
+  it("still classifies a run that fails after the bounce, and auto repairs that one", () => {
+    const { id } = bounced("fails again after bounce");
+    transitions.transition(id, "executing", "operator", { human: true, manual: true });
+    const sessionId = `s2-${id}`;
+    const now = new Date(Date.now() + 5).toISOString();
+    db.prepare(
+      `INSERT INTO sessions (id, engine, source, source_ref, status, work_item_id, created_at, last_activity)
+       VALUES (?, 'claude', 'cron', ?, 'idle', ?, ?, ?)`,
+    ).run(sessionId, `cron:${sessionId}`, id, now, now);
+    const run = runs.openWorkItemRun({ workItemId: id, sessionId });
+    runs.closeWorkItemRun(run.id, { outcome: "crashed", endedAt: now, error: "the build step exited with code 1" });
+
+    const rearm: string[] = [];
+    controller.sweepTodoRecovery({ mode: "auto", rearm: (todoId) => { rearm.push(todoId); return { status: "executing" }; } });
+    expect(rearm).toContain(id);
+    expect(rows.getWorkItemRecovery(id)).toMatchObject({ class: "code", lane: "manager", lastRunId: run.id, attempts: 1 });
   });
 });
