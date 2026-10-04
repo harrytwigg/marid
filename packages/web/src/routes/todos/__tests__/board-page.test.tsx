@@ -7,6 +7,7 @@ import { useQueryInvalidation } from "@/hooks/use-query-invalidation"
 import TodoBoardPage from "../board/board-page"
 import { boardColumnQueryKey, boardScopeParams } from "../board/use-board"
 import { clearBoardScrollCache } from "../board/board-route"
+import { BOARD_FILTERS_KEY } from "@/lib/todo-filter-store"
 import { useSetWorkItemStatus } from "../use-todos"
 import type { GatewayEvent, GatewayEventListener } from "@jinn/gateway-events"
 
@@ -257,6 +258,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearBoardScrollCache()
   sessionStorage.clear()
+  localStorage.clear()
   rows = {}
   totals = {}
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
@@ -834,5 +836,128 @@ describe("board states (states mock §6 — stage C)", () => {
     renderBoard("/todos/b/platform")
     const error = await screen.findByTestId("board-error")
     expect(error.textContent).toBeTruthy()
+  })
+})
+
+function FilterRoundTripProbe() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  return (
+    <>
+      <span data-testid="board-search">{location.search}</span>
+      <button type="button" data-testid="go-detail" onClick={() => navigate("/todos/PLA-1")}>Detail</button>
+      <button type="button" data-testid="go-everything" onClick={() => navigate("/todos/b/everything")}>Everything</button>
+      <button type="button" data-testid="go-platform" onClick={() => navigate("/todos/b/platform")}>Platform</button>
+      <button type="button" data-testid="go-attention" onClick={() => navigate("/todos/b/attention")}>Attention</button>
+    </>
+  )
+}
+
+function renderFilterRoundTrip(path: string) {
+  rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
+  totals.backlog = 1
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[path]}>
+        <FilterRoundTripProbe />
+        <Routes>
+          <Route path="/todos/b/:board" element={<TodoBoardPage />} />
+          <Route path="/todos/:todoId" element={<span data-testid="detail" />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+function lastBoardLabel(): unknown {
+  const calls = listWorkItems.mock.calls.map(([params]) => params).filter((p) => p?.status)
+  return calls[calls.length - 1]?.label
+}
+
+function searchOf(): URLSearchParams {
+  return new URLSearchParams(screen.getByTestId("board-search").textContent ?? "")
+}
+
+describe("board filters persist across navigation and new tabs", () => {
+  it("restores the filter set after navigating away and back", async () => {
+    renderFilterRoundTrip("/todos/b/platform?label=infra&sprint=s-1&department=platform")
+    await screen.findByTestId("board-column-backlog")
+
+    fireEvent.click(screen.getByTestId("go-detail"))
+    await screen.findByTestId("detail")
+    fireEvent.click(screen.getByTestId("go-platform"))
+    await screen.findByTestId("board-column-backlog")
+
+    await waitFor(() => {
+      const search = searchOf()
+      expect(search.get("label")).toBe("infra")
+      expect(search.get("sprint")).toBe("s-1")
+      expect(search.get("department")).toBe("platform")
+    })
+    expect(lastBoardLabel()).toBe("infra")
+  })
+
+  it("carries the filter set across a board switch and back", async () => {
+    renderFilterRoundTrip("/todos/b/platform?label=infra&sprint=s-1")
+    await screen.findByTestId("board-column-backlog")
+
+    fireEvent.click(screen.getByTestId("go-everything"))
+    await waitFor(() => expect(searchOf().get("sprint")).toBe("s-1"))
+    expect(searchOf().get("label")).toBe("infra")
+
+    fireEvent.click(screen.getByTestId("go-platform"))
+    await waitFor(() => expect(searchOf().get("sprint")).toBe("s-1"))
+    expect(lastBoardLabel()).toBe("infra")
+  })
+
+  it("restores the filter set in a new tab (fresh router, same storage)", async () => {
+    const first = renderFilterRoundTrip("/todos/b/platform?label=infra&sprint=s-1")
+    await screen.findByTestId("board-column-backlog")
+    await waitFor(() => expect(localStorage.getItem(BOARD_FILTERS_KEY)).toContain("sprint=s-1"))
+    first.unmount()
+    sessionStorage.clear() // a new tab has its own session storage
+    listWorkItems.mockClear()
+
+    renderFilterRoundTrip("/todos/b/platform")
+    await screen.findByTestId("board-column-backlog")
+    await waitFor(() => expect(searchOf().get("sprint")).toBe("s-1"))
+    expect(searchOf().get("label")).toBe("infra")
+    expect(lastBoardLabel()).toBe("infra")
+  })
+
+  it("lets URL params win over the remembered set, and remembers the URL's", async () => {
+    localStorage.setItem(BOARD_FILTERS_KEY, "label=infra&sprint=s-1")
+    renderFilterRoundTrip("/todos/b/platform?label=ops")
+    await screen.findByTestId("board-column-backlog")
+
+    expect(lastBoardLabel()).toBe("ops")
+    expect(searchOf().get("sprint")).toBeNull()
+    await waitFor(() => expect(localStorage.getItem(BOARD_FILTERS_KEY)).toBe("label=ops"))
+  })
+
+  it("stays cleared after Clear filters, instead of restoring the old set", async () => {
+    renderFilterRoundTrip("/todos/b/platform?assignee=scout&due=week")
+    rows.backlog = []
+    fireEvent.click(await screen.findByTestId("board-clear-filters"))
+    await waitFor(() => expect(screen.queryByTestId("board-filtered-empty")).toBeNull())
+    expect(localStorage.getItem(BOARD_FILTERS_KEY)).toBeNull()
+
+    fireEvent.click(screen.getByTestId("go-detail"))
+    await screen.findByTestId("detail")
+    fireEvent.click(screen.getByTestId("go-platform"))
+    await screen.findByTestId("board-column-backlog")
+    expect(searchOf().toString()).toBe("")
+  })
+
+  it("ignores a corrupt remembered value and leaves Attention unfiltered", async () => {
+    localStorage.setItem(BOARD_FILTERS_KEY, "status=bogus&due=never")
+    renderFilterRoundTrip("/todos/b/platform")
+    await screen.findByTestId("board-column-backlog")
+    expect(searchOf().toString()).toBe("")
+
+    localStorage.setItem(BOARD_FILTERS_KEY, "label=infra")
+    fireEvent.click(screen.getByTestId("go-attention"))
+    await waitFor(() => expect(screen.getByTestId("board-search").textContent).toBe(""))
   })
 })

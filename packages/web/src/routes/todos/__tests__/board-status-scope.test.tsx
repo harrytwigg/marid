@@ -86,6 +86,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearBoardScrollCache()
   sessionStorage.clear()
+  localStorage.clear()
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
   getWorkItemTrees.mockImplementation((ids: string[]) =>
     Promise.resolve({ trees: Object.fromEntries(ids.map((id) => [id, tree(id)])) }),

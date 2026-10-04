@@ -26,6 +26,7 @@ import {
   useOrg,
 } from "../use-todos"
 import { FilterBar } from "../filter-bar"
+import { hasFilterParams, resolveBoardFilterParams, savePersistedFilters } from "@/lib/todo-filter-store"
 import { TodoFilterSheet } from "../todo-filter-sheet"
 import { NeedsYouView } from "../needs-you-view"
 import { NewTodoDialog } from "../new-todo-dialog"
@@ -101,10 +102,16 @@ export default function TodoBoardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   // Columns are the status dimension, so `status` narrows WHICH columns exist
   // rather than filtering within one (useBoardData gates the queries).
-  const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams])
+  // The URL wins when it names a filter; otherwise the operator's last
+  // selection is the fallback (never on Attention, which has no filter bar).
+  const isAttention = board.kind === "attention"
+  const effectiveParams = useMemo(
+    () => (isAttention ? searchParams : resolveBoardFilterParams(searchParams)),
+    [searchParams, isAttention],
+  )
+  const filters = useMemo(() => filtersFromSearchParams(effectiveParams), [effectiveParams])
   const now = useMemo(() => Date.now(), [filters.date, filters.due])
 
-  const isAttention = board.kind === "attention"
   // The viewport picks the view — grouped list on the phone, columns on the
   // desktop — so there is nothing for the operator to toggle or to remember.
   const mobile = useIsBoardMobile()
@@ -387,8 +394,21 @@ export default function TodoBoardPage() {
     setMobileFilterOpen(false)
   }, [key, closedFilter])
 
+  // Keep the URL and the remembered set in step: a URL that names filters
+  // becomes the remembered set, and a bare URL is filled in from it so the
+  // address bar stays shareable.
+  useEffect(() => {
+    if (isAttention) return
+    if (hasFilterParams(searchParams)) {
+      savePersistedFilters(filtersFromSearchParams(searchParams))
+    } else if (effectiveParams !== searchParams) {
+      setSearchParams(effectiveParams, { replace: true })
+    }
+  }, [isAttention, searchParams, effectiveParams, setSearchParams])
+
   const setFilters = useCallback(
     (next: TodoFilters) => {
+      savePersistedFilters(next)
       setSearchParams(filtersToSearchParams(next), { replace: false })
     },
     [setSearchParams],
@@ -449,8 +469,8 @@ export default function TodoBoardPage() {
   }, [data.columns, itemsByStatus, filters.due])
   const keep = useKeepWorkItem(announce)
   const clearAllFilters = useCallback(() => {
-    const params = new URLSearchParams()
-    setSearchParams(params, { replace: false })
+    savePersistedFilters({ status: "open" })
+    setSearchParams(new URLSearchParams(), { replace: false })
   }, [setSearchParams])
 
   const renderCards = (status: WorkItemStatusWire) => {
