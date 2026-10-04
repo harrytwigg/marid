@@ -43,6 +43,8 @@
 //   IGNORENOTICE  with EARLIER: take the previous request up even so
 //   ORPHAN      the reply is left as a server killed mid-reply leaves it: never
 //               completed, no error; the session goes idle
+//   DROPSTREAM  the turn narrates a step, then the host goes away: every event
+//               stream it was serving ends and nothing more is delivered
 //   FAILSTART   the prompt fails with a session.error before any reply exists
 //   GHOSTIDLE   the stream says busy then idle at once, but /session/status
 //               keeps the session busy for 1.5 s, and the prompt never runs
@@ -165,6 +167,15 @@ function serve() {
       return;
     }
     newReply(sessionID, turn);
+    if (text.includes("DROPSTREAM")) {
+      // The host drops mid-turn: a step had already spoken, then every event
+      // stream it was serving ends and nothing more arrives.
+      part(sessionID, turn, { type: "text", text: "Creating the worktree and inspecting the cron code and tests.", time: { start: 1, end: 2 } });
+      for (const res of clients) res.end();
+      clients.clear();
+      turn.endedItself = true;
+      return;
+    }
     if (text.includes("ORPHAN")) return;
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
