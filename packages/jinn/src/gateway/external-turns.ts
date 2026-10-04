@@ -445,7 +445,8 @@ export function syncExternalTurn(
       upgradeTruncatedRows(matchedPersistedTurn, tail);
     });
     txn();
-    setAnchor(sessionId, tailAnchorIso, { typedTurn: true });
+    // run() persisted this turn, so it is the gateway's own and its receipt already says whether it reached the provider.
+    setAnchor(sessionId, tailAnchorIso, { typedTurn: false });
     emit("session:external-turn", { sessionId });
     logger.info(
       `Reconciled ${tail.length} already-persisted turn message(s) in place for session ${sessionId} (anchor → ${tailAnchorIso}, no duplicates inserted)`,
