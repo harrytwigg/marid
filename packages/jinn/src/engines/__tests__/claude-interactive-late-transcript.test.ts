@@ -141,7 +141,8 @@ describe("InteractiveClaudeEngine — a Stop that beats the transcript", () => {
     expect(result.cost).toBeUndefined();
   });
 
-  it("does not wait on a transcript it cannot read", async () => {
+  // A mode-000 file is still readable on Windows and to root.
+  it.runIf(process.platform !== "win32" && process.getuid?.() !== 0)("does not wait on a transcript it cannot read", async () => {
     const { transcript, turn } = await turnWithEarlierAnswer("s-unreadable");
     fs.chmodSync(transcript, 0o000);
     try {
