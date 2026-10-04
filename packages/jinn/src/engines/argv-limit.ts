@@ -57,3 +57,13 @@ export function assertArgumentsFit(engine: string, args: readonly string[], desc
     + "Shorten it, or send the long text as an attached file.",
   );
 }
+
+/**
+ * "The message", naming whatever was folded into it, so an error about its size
+ * says what the person actually sent and not what a fresh session would carry.
+ * Falsy entries are skipped, so callers can list every candidate.
+ */
+export function describeMessage(folded: ReadonlyArray<string | false | null | undefined>): string {
+  const parts = folded.filter((part): part is string => !!part);
+  return parts.length ? `the message (with ${parts.join(" and ")})` : "the message";
+}

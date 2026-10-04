@@ -8,7 +8,7 @@ import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { tailTranscriptLines, type TranscriptTailer } from "./transcript-tailer.js";
-import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
+import { argumentLimitApplies, assertArgumentsFit, describeMessage } from "./argv-limit.js";
 import { prepareGrokProjectMcpConfig, cleanupGrokProjectMcpConfig, grokJinnSessionEnv, type GrokMcpAttachHandle } from "./grok-mcp.js";
 import {
   asRecord,
@@ -483,7 +483,11 @@ export class GrokEngine implements InterruptibleEngine {
     // refuse fails the turn here, naming its size and the limit, before the
     // project's MCP config is written.
     if (argumentLimitApplies(false)) {
-      assertArgumentsFit("Grok", args, (index) => index === args.length - 1 ? "the message (with its system prompt and attachment list)" : `command-line argument ${index + 1}`);
+      const message = describeMessage([
+        !opts.resumeSessionId && opts.systemPrompt && "its system prompt",
+        !!opts.attachments?.length && "its attachment list",
+      ]);
+      assertArgumentsFit("Grok", args, (index) => index === args.length - 1 ? message : `command-line argument ${index + 1}`);
     }
     logger.info(`Grok engine starting: ${bin} --model ${opts.model || "default"} (session: ${grokSessionId})`);
     const transcriptBaseline = listTranscriptStats();

@@ -22,7 +22,7 @@ import {
 import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import { costOfUsage } from "../shared/model-pricing.js";
 import { processStartFailure } from "../shared/process-start.js";
-import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
+import { argumentLimitApplies, assertArgumentsFit, describeMessage } from "./argv-limit.js";
 
 const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
@@ -32,8 +32,6 @@ const DONE_DEBOUNCE_MS = 60_000;
 const TAIL_POLL_MS = 250;
 const DISCOVER_POLL_MS = 200;
 const DISCOVER_TIMEOUT_MS = 30 * 1000;
-/** How much of a process's newest output is kept, for a process that dies before its session starts. */
-const OUTPUT_TAIL_CHARS = 4096;
 
 interface TranscriptFileStat {
   mtimeMs: number;
@@ -65,12 +63,12 @@ interface CodexSpawnParams {
 
 /**
  * The argument at `index` of a codex command line, named for the person
- * reading an error about it. The last positional is the message; a fresh
- * session's message carries the system prompt in front of it, because codex
- * has no flag of its own for one.
+ * reading an error about it. The last positional is the message, which a fresh
+ * session's system prompt is folded in front of, because codex has no flag of
+ * its own for one; `message` names what is in it.
  */
-export function describeCodexArgument(args: readonly string[], index: number): string {
-  if (index === args.length - 1) return "the message (with its system prompt and attachment list)";
+export function describeCodexArgument(args: readonly string[], index: number, message: string): string {
+  if (index === args.length - 1) return message;
   return `command-line argument ${index + 1}`;
 }
 
@@ -248,7 +246,11 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     const reuseWarm = !!this.lifecycle.getWarm(jinnSessionId) && !this.spawnParamsChanged(jinnSessionId, opts);
     if (!reuseWarm && argumentLimitApplies(false)) {
       const args = this.buildArgs(opts, prompt, opts.resumeSessionId);
-      assertArgumentsFit("Codex", args, (index) => describeCodexArgument(args, index));
+      const message = describeMessage([
+        !opts.resumeSessionId && opts.systemPrompt && "its system prompt",
+        !!opts.attachments?.length && "its attachment list",
+      ]);
+      assertArgumentsFit("Codex", args, (index) => describeCodexArgument(args, index, message));
     }
 
     let codexSessionId = opts.resumeSessionId;
@@ -557,13 +559,9 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
 
   private wireProcToStream(jinnSessionId: string, proc: pty.IPty): PtyHandle {
     const handle = createPtyHandle(proc);
-    // The newest output, for a process that dies before its turn starts: what it
-    // printed is the only account of why (see processStartFailure). It stops
-    // growing once that turn has started.
-    let tail = "";
-    this.streams.attach(jinnSessionId, proc, (raw) => {
+    const tail = this.streams.attachWithOutputTail(jinnSessionId, proc, () => {
       const e = this.active.get(jinnSessionId);
-      if (!(e && e.boundProc === proc && e.started)) tail = (tail + raw).slice(-OUTPUT_TAIL_CHARS);
+      return !!(e && e.boundProc === proc && e.started);
     });
     proc.onExit((event) => {
       // Identity-gated: only clean up if this PTY is still the session's current
@@ -574,7 +572,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
         this.lifecycle.releaseSession(jinnSessionId); // onRelease purges spawnParams
       }
       const e = this.active.get(jinnSessionId);
-      if (e && e.boundProc === proc) e.processExited(event, tail);
+      if (e && e.boundProc === proc) e.processExited(event, tail.text);
     });
     return handle;
   }

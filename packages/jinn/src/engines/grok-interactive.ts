@@ -28,8 +28,6 @@ const DISCOVER_TIMEOUT_MS = 90 * 1000;
 const PROMPT_READY_SUBMIT_DELAY_MS = 100;
 const PROMPT_SUBMIT_FALLBACK_MS = 2500;
 const CURSOR_POSITION_RESPONSE = "\x1b[1;1R";
-/** How much of a process's newest output is kept, for a process that dies before its session starts. */
-const OUTPUT_TAIL_CHARS = 4096;
 
 interface ActiveTurn {
   interrupt: (reason: string) => void;
@@ -440,13 +438,9 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
       screen = (screen + data).slice(-5000);
       if (isGrokTuiReady(screen) || isGrokProjectPicker(screen)) this.boot.markUp(proc);
     });
-    // The newest output, for a process that dies before its turn starts: what it
-    // printed is the only account of why (see processStartFailure). It stops
-    // growing once that turn has started.
-    let tail = "";
-    this.streams.attach(jinnSessionId, proc, (raw) => {
+    const tail = this.streams.attachWithOutputTail(jinnSessionId, proc, () => {
       const e = this.active.get(jinnSessionId);
-      if (!(e && e.boundProc === proc && e.started)) tail = (tail + raw).slice(-OUTPUT_TAIL_CHARS);
+      return !!(e && e.boundProc === proc && e.started);
     });
     proc.onExit((event) => {
       const isCurrent = this.lifecycle.getWarm(jinnSessionId) === handle;
@@ -455,7 +449,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
         this.lifecycle.releaseSession(jinnSessionId);
       }
       const e = this.active.get(jinnSessionId);
-      if (e && e.boundProc === proc) e.processExited(event, tail);
+      if (e && e.boundProc === proc) e.processExited(event, tail.text);
     });
     return handle;
   }

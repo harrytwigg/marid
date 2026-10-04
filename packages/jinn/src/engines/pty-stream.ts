@@ -30,6 +30,9 @@ export function setCapped<V>(map: Map<string, V>, key: string, value: V, cap = S
   }
 }
 
+/** How much of a process's newest output is kept, for a process that dies before its session starts. */
+export const OUTPUT_TAIL_CHARS = 4096;
+
 /**
  * How long after it was spawned a PTY's process is still "booting" when no
  * other sign says its session is up. A warm PTY is spawned ahead of any turn,
@@ -107,6 +110,26 @@ export class PtyStreamManager {
     options: PtyStreamManagerOptions = {},
   ) {
     this.snapshotStore = options.snapshotStore ?? ptySnapshotStore;
+  }
+
+  /**
+   * {@link attach}, keeping the newest {@link OUTPUT_TAIL_CHARS} of the
+   * process's raw output. A process that dies before its session starts can only
+   * say why through what it printed (see processStartFailure), so the tail stops
+   * growing once `started()` is true: nothing reads it after that.
+   */
+  attachWithOutputTail(
+    sessionId: string,
+    proc: pty.IPty,
+    started: () => boolean,
+    onData?: (raw: string) => void,
+  ): { text: string } {
+    const tail = { text: "" };
+    this.attach(sessionId, proc, (raw) => {
+      onData?.(raw);
+      if (!started()) tail.text = (tail.text + raw).slice(-OUTPUT_TAIL_CHARS);
+    });
+    return tail;
   }
 
   attach(sessionId: string, proc: pty.IPty, onData?: (raw: string) => void): void {

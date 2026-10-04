@@ -975,10 +975,6 @@ export class TurnResolver {
  *  the indicator from flapping null↔active on every inter-request beat. */
 const BACKGROUND_CLEAR_QUIET_MS = 10_000;
 
-/** How much of a PTY's newest raw output is kept, escape sequences and all,
- *  so that a process dying before its session starts can say why. */
-const OUTPUT_TAIL_CHARS = 4096;
-
 /** The one argument a remote spawn's message and system prompt travel in. */
 const REMOTE_COMMAND_LINE = "the remote command line (the message and the system prompt together)";
 
@@ -2797,17 +2793,16 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  `proxy` (the per-PTY SSE forward proxy) is torn down when this PTY exits. */
   private wireProcToStream(jinnSessionId: string, proc: pty.IPty, proxy?: SsePtyProxy): PtyHandle {
     const handle = createPtyHandle(proc);
-    // The newest output, raw, for a process that dies before its session starts:
-    // what it printed is the only account of why (see processStartFailure).
-    const tail = { text: "" };
+    const tail = this.streams.attachWithOutputTail(
+      jinnSessionId,
+      proc,
+      () => {
+        const e = this.active.get(jinnSessionId);
+        return !!(e && e.boundProc === proc && e.resolver.started);
+      },
+      () => { this.lastOutputAt.set(jinnSessionId, Date.now()); },
+    );
     this.outputTails.set(proc, tail);
-    this.streams.attach(jinnSessionId, proc, (raw) => {
-      this.lastOutputAt.set(jinnSessionId, Date.now());
-      // Read only for a process that dies before its session starts, so it
-      // stops growing once this process's turn has started.
-      const e = this.active.get(jinnSessionId);
-      if (!(e && e.boundProc === proc && e.resolver.started)) tail.text = (tail.text + raw).slice(-OUTPUT_TAIL_CHARS);
-    });
     proc.onExit((event) => {
       // Session-level cleanup MUST be identity-gated. In a kill->respawn race the
       // lifecycle/stream entries already point at the NEW PTY by the time THIS
