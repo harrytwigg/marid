@@ -52,11 +52,13 @@ export interface CreateWorkItemExtras {
    *  `false` is fingerprinted — every receipt minted before the flag existed
    *  stays byte-identical, and a retry that flips it reads as a conflict. */
   autoStart?: boolean;
+  /** The sprint the Todo is placed in at creation, as the caller named it. */
+  sprint?: string;
 }
 
 function canonicalCreateFingerprint(
   input: CreateWorkItemInput,
-  { labels, autoStart }: CreateWorkItemExtras,
+  { labels, autoStart, sprint }: CreateWorkItemExtras,
   legacyRetiredFields = false,
 ): string {
   const payload: Record<string, unknown> = {};
@@ -74,6 +76,8 @@ function canonicalCreateFingerprint(
   // same names is the same request and must not read as a conflict.
   if (labels !== undefined) payload.labels = [...labels].sort();
   if (autoStart === false) payload.autoStart = false;
+  // Appended last and only when named, so receipts minted before sprints existed hash the same.
+  if (sprint !== undefined) payload.sprint = sprint;
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 

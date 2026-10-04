@@ -33,7 +33,7 @@ export {
   type SprintStatus,
   type SprintSummary,
 } from './sprint-model.js';
-export { getWorkItemSprint, setWorkItemSprint, sprintRefs } from './sprint-membership.js';
+export { getWorkItemSprint, setWorkItemSprint, sprintRefs, subTaskSprintRefusal } from './sprint-membership.js';
 
 /**
  * Sprints — named, time-boxed groups of Todos the board can be scoped to.

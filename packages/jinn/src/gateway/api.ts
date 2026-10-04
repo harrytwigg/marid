@@ -317,6 +317,8 @@ import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
 import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
 import { handleSprintsApi } from "./sprints-api.js";
+import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
+import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
 import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
 import { handleBoardWalkApi } from "./board-walk-api.js";
 
@@ -2221,6 +2223,9 @@ export async function handleApiRequest(
         return badRequest(res, "autoStart must be a boolean");
       }
       const autoStartOptOut = body.autoStart === false;
+      const createSprint = readCreateSprint(body, parentId);
+      if (createSprint.error) return badRequest(res, createSprint.error);
+      const sprintRef = createSprint.sprint;
       // ICI-733: a caller-supplied create key, same shape rules as the edit key.
       // Cron and connector retries create duplicate Todos without one.
       let idempotencyKey: string | undefined;
@@ -2264,9 +2269,14 @@ export async function handleApiRequest(
         // the whole request rather than leave an untagged Todo behind.
         let labels: Label[] | undefined;
         const create = () => idempotencyKey
-          ? createWorkItemIdempotent(input, idempotencyKey, { labels: labelRefs, ...(autoStartOptOut ? { autoStart: false } : {}) })
+          ? createWorkItemIdempotent(input, idempotencyKey, {
+            labels: labelRefs,
+            ...(autoStartOptOut ? { autoStart: false } : {}),
+            ...(sprintRef ? { sprint: sprintRef } : {}),
+          })
           : { item: createWorkItem(input), replayed: false };
-        const created = labelRefs === undefined && !autoStartOptOut
+        const placed: { sprint: Sprint | null } = { sprint: null };
+        const created = labelRefs === undefined && !autoStartOptOut && sprintRef === undefined
           ? create()
           : initDb().transaction(() => {
             const result = create();
@@ -2276,11 +2286,21 @@ export async function handleApiRequest(
               labels = setWorkItemLabels(result.item.id, labelRefs, workItemActor(caller), caller.origin);
             }
             if (!result.replayed && autoStartOptOut) writeAutoStartRow(initDb(), result.item.id, false, result.item.createdAt);
+            // Placed in the same transaction, so a sprint that cannot take the
+            // Todo (unknown, closed, none active) leaves no Todo behind.
+            if (!result.replayed && sprintRef !== undefined) {
+              placed.sprint = setWorkItemSprint(result.item.id, sprintRef, workItemActor(caller), caller.origin).sprint;
+            }
             return result;
           })();
         if (created.replayed) return json(res, { workItem: created.item, replayed: true }, 200);
         const activityReceiptId = persistTodoMutationActivity(req, context, created.item, "created");
-        return json(res, withActivityReceipt({ workItem: created.item, ...(labels ? { labels } : {}) }, activityReceiptId), 201);
+        const sprint = sprintRow(placed.sprint);
+        if (sprint) {
+          emitTodoProjectionEvent(context, created.item.id, "sprint-updated");
+          context.emit("company:changed", { entity: "sprint", action: "moved", id: created.item.id });
+        }
+        return json(res, withActivityReceipt({ workItem: created.item, ...(labels ? { labels } : {}), ...(sprint ? { sprint } : {}) }, activityReceiptId), 201);
       } catch (err) {
         if (err instanceof WorkItemCreateIdempotencyConflictError) {
           return json(res, { error: err.message, code: "todo_create_idempotency_conflict", workItemId: err.workItemId }, 409);

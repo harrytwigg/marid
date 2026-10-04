@@ -7,7 +7,8 @@ import type { JinnMcpContext, JinnMcpTool } from "../toolkit.js";
 import { inProcessGatewayFetch, seedPlatformOrg } from "./helpers/in-process-gateway.js";
 
 /* Sprints through MCP: no tools of their own, only `sprint` on list_work_items
- * (the filter) and on edit_work_item (the move), driven through the real API. */
+ * (the filter), on create_work_item (placed at creation) and on edit_work_item
+ * (the move), driven through the real API. */
 
 process.env.JINN_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-mcp-sprints-home-"));
 
@@ -113,5 +114,120 @@ describe("sprints through the Todo tools", () => {
     await expect(tool("edit_work_item").handler({ id: "TST-1", title: "x", sprint: "Stub Sprint" }, ctx))
       .rejects.toThrow(/TST-1 was moved to sprint "Stub Sprint"; the content edit then failed: .*title must not be empty/);
     expect(calls).toEqual(["PUT /api/work-items/TST-1/sprint", "GET /api/work-items/TST-1", "PATCH /api/work-items/TST-1"]);
+  });
+
+  it("create_work_item { sprint } places the Todo at creation by name or `active`, and omitted means no sprint", async () => {
+    const dev = registry.createSession({ engine: "codex", source: "web", sourceRef: "mcp-sprint-create", title: "dev", employee: "platform-dev" });
+    const devCtx = ctxFor(dev.id);
+    const { createSprint, startSprint, listSprints, completeSprint } = await import("../../work-items/sprints.js");
+    for (const s of listSprints().filter((x) => x.status === "active")) completeSprint(s.id, { carryTo: null, startNext: false }, "operator");
+    const running = createSprint({ name: "Create Running" });
+    createSprint({ name: "Create Planned" });
+    startSprint(running.id);
+
+    const named = (await tool("create_work_item").handler({ title: "born in a named sprint", sprint: "create planned" }, devCtx)) as {
+      workItem: { id: string }; sprint: { name: string; status: string };
+    };
+    expect(named.sprint).toMatchObject({ name: "Create Planned", status: "planned" });
+    const inActive = (await tool("create_work_item").handler({ title: "born in the active sprint", sprint: "active" }, devCtx)) as {
+      workItem: { id: string }; sprint: { name: string };
+    };
+    expect(inActive.sprint.name).toBe("Create Running");
+    const bare = (await tool("create_work_item").handler({ title: "born with no sprint" }, devCtx)) as { workItem: { id: string }; sprint?: unknown };
+    expect(bare.sprint).toBeUndefined();
+
+    const detail = async (id: string) => (await tool("get_work_item").handler({ id }, devCtx)) as { sprint: { name: string } | null };
+    expect((await detail(named.workItem.id)).sprint?.name).toBe("Create Planned");
+    expect((await detail(inActive.workItem.id)).sprint?.name).toBe("Create Running");
+    expect((await detail(bare.workItem.id)).sprint).toBeNull();
+
+    // The same `sprint_changed` event a move appends, attributed as a move is.
+    const events = store.listWorkItemEvents(named.workItem.id).filter((e) => e.kind === "sprint_changed");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ actor: `session:${dev.id}`, detail: { sprint: "Create Planned", from: null } });
+    expect(store.listWorkItemEvents(bare.workItem.id).some((e) => e.kind === "sprint_changed")).toBe(false);
+  });
+
+  it("create_work_item with an unknown sprint, or `active` with none running, is refused and creates nothing", async () => {
+    const dev = registry.createSession({ engine: "codex", source: "web", sourceRef: "mcp-sprint-create-bad", title: "dev", employee: "platform-dev" });
+    const devCtx = ctxFor(dev.id);
+    const { createSprint, listSprints, completeSprint } = await import("../../work-items/sprints.js");
+    for (const s of listSprints().filter((x) => x.status === "active")) completeSprint(s.id, { carryTo: null, startNext: false }, "operator");
+    createSprint({ name: "Create Open Choice" });
+    const before = store.queryWorkItems({ limit: 1 }).total;
+
+    await expect(tool("create_work_item").handler({ title: "ghost sprint", sprint: "Ghost" }, devCtx)).rejects.toThrow(/open sprints: .*Create Open Choice/);
+    await expect(tool("create_work_item").handler({ title: "no active sprint", sprint: "active" }, devCtx)).rejects.toThrow(/no sprint is active/);
+    expect(store.queryWorkItems({ limit: 1 }).total).toBe(before);
+  });
+
+  it("create_work_item refuses a sprint on a sub-task, and the parent's sprint stays what it was", async () => {
+    const dev = registry.createSession({ engine: "codex", source: "web", sourceRef: "mcp-sprint-create-sub", title: "dev", employee: "platform-dev" });
+    const devCtx = ctxFor(dev.id);
+    const { createSprint } = await import("../../work-items/sprints.js");
+    createSprint({ name: "Create Sub Sprint" });
+    const parent = (await tool("create_work_item").handler({ title: "parent", sprint: "Create Sub Sprint" }, devCtx)) as { workItem: { id: string } };
+    const before = store.queryWorkItems({ limit: 1 }).total;
+
+    await expect(tool("create_work_item").handler({ title: "child", parentId: parent.workItem.id, sprint: "Create Sub Sprint" }, devCtx))
+      .rejects.toThrow(new RegExp(`sub-tasks follow their top-level Todo, so set the sprint on ${parent.workItem.id}`));
+    expect(store.queryWorkItems({ limit: 1 }).total).toBe(before);
+
+    // Without a sprint the sub-task is created and follows its root.
+    const child = (await tool("create_work_item").handler({ title: "child", parentId: parent.workItem.id }, devCtx)) as { workItem: { id: string } };
+    const detail = (await tool("get_work_item").handler({ id: child.workItem.id }, devCtx)) as { sprint: { name: string } | null };
+    expect(detail.sprint?.name).toBe("Create Sub Sprint");
+  });
+
+  it("create_work_item replays an idempotent create without a second sprint event, and reads a changed sprint as a conflict", async () => {
+    const dev = registry.createSession({ engine: "codex", source: "web", sourceRef: "mcp-sprint-create-idem", title: "dev", employee: "platform-dev" });
+    const devCtx = ctxFor(dev.id);
+    const { createSprint } = await import("../../work-items/sprints.js");
+    createSprint({ name: "Create Idem A" });
+    createSprint({ name: "Create Idem B" });
+    const args = { title: "idem", sprint: "Create Idem A", idempotencyKey: "sprint-create-key" };
+    const first = (await tool("create_work_item").handler(args, devCtx)) as { workItem: { id: string } };
+    const again = (await tool("create_work_item").handler(args, devCtx)) as { workItem: { id: string } };
+    expect(again.workItem.id).toBe(first.workItem.id);
+    expect(store.listWorkItemEvents(first.workItem.id).filter((e) => e.kind === "sprint_changed")).toHaveLength(1);
+    await expect(tool("create_work_item").handler({ ...args, sprint: "Create Idem B" }, devCtx)).rejects.toThrow(/different request/);
+
+    // A create refused for its sprint leaves no receipt, so the same key succeeds once the sprint exists.
+    const late = { title: "idem late", sprint: "Create Idem Late", idempotencyKey: "sprint-create-late-key" };
+    await expect(tool("create_work_item").handler(late, devCtx)).rejects.toThrow(/open sprints/);
+    createSprint({ name: "Create Idem Late" });
+    const retried = (await tool("create_work_item").handler(late, devCtx)) as { workItem: { id: string }; sprint: { name: string } };
+    expect(retried.sprint.name).toBe("Create Idem Late");
+  });
+
+  it("an employee moves their own Todo between sprints, to `active` and to null, on the board's rules", async () => {
+    const dev = registry.createSession({ engine: "codex", source: "web", sourceRef: "mcp-sprint-parity", title: "dev", employee: "platform-dev" });
+    const other = registry.createSession({ engine: "codex", source: "web", sourceRef: "mcp-sprint-parity-other", title: "other", employee: "platform-lead" });
+    const devCtx = ctxFor(dev.id);
+    const { createSprint, listSprints, completeSprint, startSprint } = await import("../../work-items/sprints.js");
+    for (const s of listSprints().filter((x) => x.status === "active")) completeSprint(s.id, { carryTo: null, startNext: false }, "operator");
+    const one = createSprint({ name: "Parity One" });
+    createSprint({ name: "Parity Two" });
+    startSprint(one.id);
+
+    // The employee created it, so it is theirs to place: no operator, no manager standing.
+    const created = (await tool("create_work_item").handler({ title: "parity todo" }, devCtx)) as { workItem: { id: string } };
+    const id = created.workItem.id;
+    const sprintOf = async () => ((await tool("get_work_item").handler({ id }, devCtx)) as { sprint: { name: string } | null }).sprint?.name ?? null;
+    await tool("edit_work_item").handler({ id, sprint: "active" }, devCtx);
+    expect(await sprintOf()).toBe("Parity One");
+    await tool("edit_work_item").handler({ id, sprint: "Parity Two" }, devCtx);
+    expect(await sprintOf()).toBe("Parity Two");
+    await tool("edit_work_item").handler({ id, sprint: null }, devCtx);
+    expect(await sprintOf()).toBeNull();
+
+    // A sub-task is refused, naming its root, exactly as on the board.
+    const child = (await tool("create_work_item").handler({ title: "parity child", parentId: id }, devCtx)) as { workItem: { id: string } };
+    await expect(tool("edit_work_item").handler({ id: child.workItem.id, sprint: "Parity Two" }, devCtx))
+      .rejects.toThrow(new RegExp(`sub-task; sub-tasks follow their top-level Todo, so set the sprint on ${id}`));
+
+    // The board's standing rule is unchanged: an employee with no hand in the Todo cannot place it.
+    await expect(tool("edit_work_item").handler({ id, sprint: "Parity Two" }, ctxFor(other.id))).rejects.toThrow(/requires the operator, the item creator, or the assignee/);
+    expect(await sprintOf()).toBeNull();
   });
 });

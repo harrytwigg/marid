@@ -220,6 +220,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         labels: { type: "array", items: { type: "string" } },
         idempotencyKey: { type: "string" },
         autoStart: { type: "boolean", description: "false: the board walk never starts it." },
+        sprint: { type: "string" },
       },
       required: ["title"],
     },
@@ -249,6 +250,9 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         if (typeof args.autoStart !== "boolean") throw new JinnMcpToolError("autoStart must be a boolean");
         body.autoStart = args.autoStart;
       }
+      // Same values as edit_work_item (a sprint name or id, `active`); a sub-task takes none.
+      const sprint = optionalSprintRef(args);
+      if (sprint !== undefined && sprint !== null) body.sprint = sprint;
       // ICI-733: repeating the same key returns the Todo the first call made,
       // so a retried cron or connector fire cannot mint a duplicate.
       const idempotencyKey = optionalString(args, "idempotencyKey");

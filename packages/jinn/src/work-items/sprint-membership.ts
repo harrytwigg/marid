@@ -61,6 +61,11 @@ export function moveInTxn(db: Db, { id, from, to, actor, origin, reason }: Sprin
   });
 }
 
+/** The refusal for a sub-task: it follows its root's sprint, never its own. */
+export function subTaskSprintRefusal(subject: string, rootId: string): string {
+  return `${subject}; sub-tasks follow their top-level Todo, so set the sprint on ${rootId}`;
+}
+
 /** Refuse an unknown Todo, and a sub-task, naming the root that holds its
  *  sprint. Returns the Todo's status. */
 function assertTopLevel(db: Db, id: string): string {
@@ -69,7 +74,7 @@ function assertTopLevel(db: Db, id: string): string {
     | undefined;
   if (!item) throw new SprintError(`Todo ${id} not found`, 'not_found');
   if (item.parent_id !== null) {
-    throw new SprintError(`${id} is a sub-task; sub-tasks follow their top-level Todo, so set the sprint on ${item.root_id}`, 'invalid');
+    throw new SprintError(subTaskSprintRefusal(`${id} is a sub-task`, item.root_id), 'invalid');
   }
   return item.status;
 }
