@@ -3,15 +3,16 @@ import type { CronJob, JinnConfig, Connector } from "../../shared/types.js";
 
 // Capture the callback node-cron would invoke on a scheduled tick so we can fire it
 // manually. cron.schedule/validate are stubbed; stopScheduler needs a `.stop()`.
-let scheduledCallback: (() => void) | undefined;
+let scheduledCallback: ((now: Date) => void) | undefined;
 let throwExpression: string | undefined;
-const scheduledTasks: Array<{ expression: string; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
+type ScheduleOpts = { timezone?: string; recoverMissedExecutions?: boolean; scheduled?: boolean };
+const scheduledTasks: Array<{ expression: string; opts?: ScheduleOpts; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }> = [];
 vi.mock("node-cron", () => ({
   default: {
-    schedule: vi.fn((expr: string, cb: () => void, opts?: { timezone?: string }) => {
+    schedule: vi.fn((expr: string, cb: (now: Date) => void, opts?: ScheduleOpts) => {
       if (opts?.timezone === "Mars/Olympus" || expr === throwExpression) throw new RangeError("Invalid time zone specified");
       scheduledCallback = cb;
-      const task = { expression: expr, start: vi.fn(), stop: vi.fn() };
+      const task = { expression: expr, opts, start: vi.fn(), stop: vi.fn() };
       scheduledTasks.push(task);
       return task;
     }),
@@ -49,6 +50,10 @@ let config = baseConfig;
 const connectors = new Map<string, Connector>();
 const deps = { sessionManager, getConfig: () => config, connectors };
 
+// A scheduled fire is deferred one loop turn so catch-up emissions coalesce; let
+// the queued setImmediate run before asserting the runner was invoked.
+const flushScheduledFire = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 beforeEach(() => {
   stopScheduler();
   vi.clearAllMocks();
@@ -77,13 +82,16 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
     expect(call[4]?.fireIso).toBeUndefined();
   });
 
-  it("a scheduled tick passes a deterministic per-fire fireIso and reads the live config", () => {
+  it("a scheduled tick passes a deterministic per-fire fireIso and reads the live config", async () => {
     startScheduler([job], deps); // schedules the job, captures cb
     expect(scheduledCallback).toBeTypeOf("function");
+    // A missed-execution ticker is armed so a skipped scheduled second is recovered.
+    expect(scheduledTasks[0]!.opts).toMatchObject({ scheduled: false, recoverMissedExecutions: true });
     const swapped = { engines: { default: "codex" } } as unknown as JinnConfig;
     config = swapped;
 
-    scheduledCallback!(); // simulate node-cron firing the tick
+    scheduledCallback!(new Date()); // simulate node-cron firing the tick
+    await flushScheduledFire();
 
     expect(runCronJob).toHaveBeenCalledTimes(1);
     const call = (runCronJob as any).mock.calls[0];
@@ -111,9 +119,10 @@ describe("scheduler — manual vs scheduled fire identity (GRS-003b-1)", () => {
 describe("scheduler — a job that runs a built-in action", () => {
   const walk: CronJob = { id: "board-walk", name: "Board walk", enabled: true, schedule: "0 * * * *", prompt: "", action: "board-walk" };
 
-  it("a scheduled fire tells the runner it is a scheduled fire", () => {
+  it("a scheduled fire tells the runner it is a scheduled fire", async () => {
     startScheduler([walk], deps);
-    scheduledCallback!();
+    scheduledCallback!(new Date());
+    await flushScheduledFire();
     const call = (runCronJob as any).mock.calls[0];
     expect(call[0]).toBe(walk);
     expect(call[4]).toMatchObject({ trigger: "schedule" });
