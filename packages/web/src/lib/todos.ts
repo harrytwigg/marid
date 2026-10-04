@@ -296,6 +296,65 @@ export function filtersFromSearchParams(p: URLSearchParams): TodoFilters {
   return f
 }
 
+// ── Filter persistence ──────────────────────────────────────────────────────
+// The filters live in the URL, so a filtered view is shareable and a refresh
+// keeps it. That is not enough across a board switch or a new tab, where the
+// URL arrives empty and the operator's view resets. So the set is mirrored to
+// localStorage — which the URL cannot reach across a tab — and reconciled on
+// the board's mount: the URL wins whenever it names a filter, the stored set is
+// the fallback when it does not.
+
+export const BOARD_FILTERS_STORAGE_KEY = "jinn-board-filters"
+
+/** The dimensions the board filters on — the params a filtered URL carries.
+ *  Key-based on purpose: `?status=open` is an explicit request for the default
+ *  and must not read as an empty, unfiltered URL. */
+const FILTER_PARAM_KEYS = ["status", "assignee", "department", "source", "date", "label", "sprint", "due", "q"] as const
+
+export function hasFilterParams(p: URLSearchParams): boolean {
+  return FILTER_PARAM_KEYS.some((key) => p.has(key))
+}
+
+type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">
+
+function safeLocalStorage(): StorageLike | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage
+  } catch {
+    return undefined
+  }
+}
+
+/** The stored filter set, or null when nothing meaningful is stored (or the
+ *  stored value is unreadable). Parsed back through the same URL vocabulary, so
+ *  a stale or hand-edited value can never smuggle an unknown shape into the
+ *  data layer. */
+export function readPersistedFilters(storage: StorageLike | undefined = safeLocalStorage()): TodoFilters | null {
+  if (!storage) return null
+  try {
+    const raw = storage.getItem(BOARD_FILTERS_STORAGE_KEY)
+    if (!raw) return null
+    const filters = filtersFromSearchParams(new URLSearchParams(raw))
+    return activeFilterCount(filters) > 0 || filters.q ? filters : null
+  } catch {
+    return null
+  }
+}
+
+/** Mirror the set to storage. A default set clears the key rather than storing
+ *  an empty value, so "nothing set" is unambiguous. Best-effort: private mode
+ *  and quota errors must never break the board. */
+export function writePersistedFilters(f: TodoFilters, storage: StorageLike | undefined = safeLocalStorage()): void {
+  if (!storage) return
+  try {
+    const serialized = filtersToSearchParams(f).toString()
+    if (serialized) storage.setItem(BOARD_FILTERS_STORAGE_KEY, serialized)
+    else storage.removeItem(BOARD_FILTERS_STORAGE_KEY)
+  } catch {
+    /* persistence is a convenience, never a hard dependency */
+  }
+}
+
 // ── History grouping (closed-status filters regroup by date, §3) ────────────
 export type DateBucket = "today" | "yesterday" | "week" | "earlier"
 export const DATE_BUCKETS: readonly DateBucket[] = ["today", "yesterday", "week", "earlier"]

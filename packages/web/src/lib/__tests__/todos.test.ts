@@ -11,6 +11,10 @@ import {
   matchesDueFilter,
   filtersToSearchParams,
   filtersFromSearchParams,
+  hasFilterParams,
+  readPersistedFilters,
+  writePersistedFilters,
+  BOARD_FILTERS_STORAGE_KEY,
   dateBucketOf,
   groupHistory,
   isTodoVersionConflictError,
@@ -203,6 +207,62 @@ describe("filters (design-todos §4.3)", () => {
     // Yesterday's overdue item is NOT "due this week" — Overdue is its lens.
     expect(matchesDueFilter("2026-07-04T09:00:00.000Z", "week", NOW)).toBe(false)
     expect(matchesDueFilter("invalid", "week", NOW)).toBe(false)
+  })
+})
+
+describe("filter persistence (board survives a return, a board switch and a new tab)", () => {
+  function memoryStorage(initial: Record<string, string> = {}) {
+    const map = new Map(Object.entries(initial))
+    return {
+      getItem: (key: string) => map.get(key) ?? null,
+      setItem: (key: string, value: string) => void map.set(key, value),
+      removeItem: (key: string) => void map.delete(key),
+      dump: () => Object.fromEntries(map),
+    }
+  }
+
+  it("reads a filtered URL as a filtered view, an empty one as unfiltered", () => {
+    expect(hasFilterParams(new URLSearchParams("sprint=active"))).toBe(true)
+    expect(hasFilterParams(new URLSearchParams("assignee=scout&label=infra"))).toBe(true)
+    expect(hasFilterParams(new URLSearchParams("q=roadmap"))).toBe(true)
+    // `status=open` is an explicit ask for the default, not an empty URL.
+    expect(hasFilterParams(new URLSearchParams("status=open"))).toBe(true)
+    expect(hasFilterParams(new URLSearchParams(""))).toBe(false)
+    expect(hasFilterParams(new URLSearchParams("view=needs"))).toBe(false)
+    expect(hasFilterParams(new URLSearchParams("wi_private=1"))).toBe(false)
+  })
+
+  it("round-trips the whole set, sprint included, through storage", () => {
+    const storage = memoryStorage()
+    const f: TodoFilters = { status: "executing", assignee: "scout", department: "platform", source: "cron", date: "week", label: "infra", sprint: "active", due: "overdue" }
+    writePersistedFilters(f, storage)
+    expect(readPersistedFilters(storage)).toEqual(f)
+    expect(storage.dump()[BOARD_FILTERS_STORAGE_KEY]).toBe(filtersToSearchParams(f).toString())
+  })
+
+  it("clears the key for a default set, so 'nothing set' is unambiguous", () => {
+    const storage = memoryStorage({ [BOARD_FILTERS_STORAGE_KEY]: "sprint=active" })
+    writePersistedFilters({ status: "open" }, storage)
+    expect(storage.dump()[BOARD_FILTERS_STORAGE_KEY]).toBeUndefined()
+    expect(readPersistedFilters(storage)).toBeNull()
+  })
+
+  it("never resurrects a private transport id and ignores unreadable values", () => {
+    const storage = memoryStorage({ [BOARD_FILTERS_STORAGE_KEY]: "q=wi_private_42" })
+    expect(readPersistedFilters(storage)).toBeNull()
+    const garbage = memoryStorage({ [BOARD_FILTERS_STORAGE_KEY]: "not an object" })
+    expect(readPersistedFilters(garbage)).toBeNull()
+    expect(readPersistedFilters(memoryStorage())).toBeNull()
+  })
+
+  it("survives a storage that throws (private mode, quota)", () => {
+    const hostile = {
+      getItem: () => { throw new Error("denied") },
+      setItem: () => { throw new Error("denied") },
+      removeItem: () => { throw new Error("denied") },
+    }
+    expect(() => writePersistedFilters({ status: "executing" }, hostile)).not.toThrow()
+    expect(readPersistedFilters(hostile)).toBeNull()
   })
 })
 

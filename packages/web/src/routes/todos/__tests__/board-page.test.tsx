@@ -257,6 +257,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   clearBoardScrollCache()
   sessionStorage.clear()
+  localStorage.clear()
   rows = {}
   totals = {}
   listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => Promise.resolve(listResponse(params)))
@@ -834,5 +835,48 @@ describe("board states (states mock §6 — stage C)", () => {
     renderBoard("/todos/b/platform")
     const error = await screen.findByTestId("board-error")
     expect(error.textContent).toBeTruthy()
+  })
+})
+
+describe("board filter persistence (survives a return, a board switch and a new tab)", () => {
+  it("restores a stored sprint filter on a fresh mount with no query string (a new tab)", async () => {
+    localStorage.setItem("jinn-board-filters", "sprint=active")
+    renderBoard("/todos/b/home")
+    await waitFor(() =>
+      expect(listWorkItems.mock.calls.some(([params]) => params?.sprint === "active")).toBe(true),
+    )
+  })
+
+  it("remembers a filter set that arrived in the URL", async () => {
+    renderBoard("/todos/b/home?sprint=active&assignee=scout")
+    await waitFor(() =>
+      expect(localStorage.getItem("jinn-board-filters")).toBe("assignee=scout&sprint=active"),
+    )
+  })
+
+  it("carries the filters across a board switch, not just to the same board", async () => {
+    renderBoard("/todos/b/home?sprint=active")
+    const trigger = await screen.findByTestId("board-switcher")
+    fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
+    fireEvent.click(trigger)
+    fireEvent.click(await screen.findByTestId("board-menu-everything"))
+    await waitFor(() =>
+      expect(
+        listWorkItems.mock.calls.some(
+          ([params]) => params?.rootsOnly === true && params?.home !== true && params?.sprint === "active",
+        ),
+      ).toBe(true),
+    )
+  })
+
+  it("clears the stored set with the filters, so a return does not resurrect them", async () => {
+    rows = {}
+    renderBoard("/todos/b/platform?sprint=active")
+    await waitFor(() => expect(localStorage.getItem("jinn-board-filters")).toBe("sprint=active"))
+    fireEvent.click(await screen.findByTestId("board-clear-filters"))
+    await waitFor(() => {
+      expect(localStorage.getItem("jinn-board-filters")).toBeNull()
+      expect(screen.queryByTestId("board-filtered-empty")).toBeNull()
+    })
   })
 })
