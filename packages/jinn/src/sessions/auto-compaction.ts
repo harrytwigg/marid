@@ -1,4 +1,4 @@
-import { TRANSCRIPT_SYNC_META_KEY } from "../gateway/external-turns.js";
+import { TRANSCRIPT_ACTIVITY_META_KEY } from "../gateway/external-turns.js";
 import { resolveAutoCompactPolicy, type AutoCompactPolicy } from "../shared/auto-compact-config.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
 import type { CompactionStats, JinnConfig, Session } from "../shared/types.js";
@@ -43,7 +43,7 @@ function isoMs(value: unknown): number | undefined {
 export function lastEngineActivityMs(session: Session, engine: string): number | undefined {
   const synced = isoMs(getEngineSessionRef(session, engine).lastSyncedAt);
   const meta = (session.transportMeta ?? {}) as Record<string, unknown>;
-  const typed = engine === "claude" ? isoMs(meta[TRANSCRIPT_SYNC_META_KEY]) : undefined;
+  const typed = engine === "claude" ? isoMs(meta[TRANSCRIPT_ACTIVITY_META_KEY]) : undefined;
   if (synced === undefined) return typed;
   if (typed === undefined) return synced;
   return Math.max(synced, typed);

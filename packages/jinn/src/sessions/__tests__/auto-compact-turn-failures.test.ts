@@ -38,6 +38,33 @@ describe("auto-compaction through runTurn: when it does not succeed", () => {
     expect(seen.receipts[0]!.result).toBe("done");
   });
 
+  it("compacts again on the retry after a login failure took both the compaction and the message", async () => {
+    // The observed sequence: the session is cold, the engine's login has expired, so the
+    // compaction fails and the message fails too. After re-login the retry must be treated
+    // as the cold turn it still is, not as a warm one because the failed turn left a mark.
+    const sessionId = coldSession("claude", "web:ac-login", 180_000, 30 * MINUTE);
+    // As the interactive engine reports a refused login: its session id, one turn, an error.
+    const loggedOut: EngineResult = { sessionId: "claude-thread-1", result: "", error: "Interactive turn failed: authentication_failed", numTurns: 1 };
+    const failing = recordingEngine("claude", async () => loggedOut);
+    const first = recordingSurface();
+
+    await runOne(failing.engine, sessionId, "carry on", first.surface, configWith(ENABLED));
+
+    expect(failing.calls.map((c) => c.prompt)).toEqual([expect.stringMatching(/^\/compact /), "carry on"]);
+    expect(first.seen.notices).toEqual([expect.stringContaining("authentication_failed")]);
+    expect(reg.getSession(sessionId)!.status).toBe("error");
+
+    const loggedIn = recordingEngine("claude", async (_opts, call) => call === 1
+      ? { sessionId: "claude-thread-1", result: "", compaction: { preTokens: 180_000, postTokens: 9_000 } }
+      : answered("claude-thread-1"));
+    const retry = recordingSurface();
+
+    await runOne(loggedIn.engine, sessionId, "retry", retry.surface, configWith(ENABLED));
+
+    expect(loggedIn.calls.map((c) => c.prompt)).toEqual([expect.stringMatching(/^\/compact /), "retry"]);
+    expect(retry.seen.notices).toEqual([expect.stringContaining("Auto-compacted this cold session")]);
+  });
+
   it("still runs the message when the engine throws during the compaction", async () => {
     const sessionId = coldSession("claude", "web:ac-throw", 180_000, 30 * MINUTE);
     const { engine, calls } = recordingEngine("claude", async (_opts, call) => {

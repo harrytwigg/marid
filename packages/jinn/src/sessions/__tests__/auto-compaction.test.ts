@@ -80,8 +80,13 @@ describe("decideAutoCompaction", () => {
 
 describe("lastEngineActivityMs", () => {
   it("counts a turn typed into Claude's terminal as activity", () => {
-    const s = session("claude", { transportMeta: { transcriptSyncedThrough: iso(NOW - MINUTE) } as never });
+    const s = session("claude", { transportMeta: { transcriptActivityAt: iso(NOW - MINUTE) } as never });
     expect(lastEngineActivityMs(s, "claude")).toBe(NOW - MINUTE);
+  });
+
+  it("does not count the transcript sync anchor, which a failed turn moves too", () => {
+    const s = session("claude", { transportMeta: { transcriptSyncedThrough: iso(NOW - MINUTE) } as never });
+    expect(lastEngineActivityMs(s, "claude")).toBe(NOW - 30 * MINUTE);
   });
 
   it("reads only the engine asked about", () => {

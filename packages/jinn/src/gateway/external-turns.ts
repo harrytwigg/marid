@@ -30,6 +30,19 @@ import type { Employee, Session } from "../shared/types.js";
  */
 export const TRANSCRIPT_SYNC_META_KEY = "transcriptSyncedThrough";
 
+/**
+ * When the newest turn typed straight into the terminal reached the provider,
+ * as far as this sync can tell. Kept apart from the anchor above because the
+ * anchor moves for a second reason: a gateway turn that failed settles by
+ * moving it past whatever that turn left in the transcript, and a turn that
+ * died on a login error leaves entries stamped "now" — `/compact`, the refresh
+ * prompt, a "Login expired" reply — none of which touched the prompt cache.
+ * Reading the anchor as activity made a session whose compaction had just
+ * failed look warm, so the retry never compacted it. Only turns this sync
+ * persists count here.
+ */
+export const TRANSCRIPT_ACTIVITY_META_KEY = "transcriptActivityAt";
+
 /** One user/assistant text entry from the transcript tail. */
 export interface TranscriptTailEntry {
   role: "user" | "assistant";
@@ -172,13 +185,14 @@ function anchorMsFor(session: { transportMeta: unknown }, sessionId: string): nu
   return messages.length > 0 ? messages[messages.length - 1].timestamp : 0;
 }
 
-function setAnchor(sessionId: string, anchorIso: string): void {
+function setAnchor(sessionId: string, anchorIso: string, opts: { typedTurn: boolean }): void {
   const live = getSession(sessionId);
   if (!live) return;
   const meta = (live.transportMeta && typeof live.transportMeta === "object" && !Array.isArray(live.transportMeta))
     ? { ...(live.transportMeta as Record<string, unknown>) }
     : {};
   meta[TRANSCRIPT_SYNC_META_KEY] = anchorIso;
+  if (opts.typedTurn) meta[TRANSCRIPT_ACTIVITY_META_KEY] = anchorIso;
   updateSession(sessionId, {
     transportMeta: meta as any,
     lastActivity: new Date().toISOString(),
@@ -216,7 +230,9 @@ export function markTranscriptSyncedThrough(sessionId: string, engineSessionId?:
   const sid = engineSessionId || session.engineSessionId || undefined;
   const transcriptPath = transcriptPathOverride || (sid ? findTranscriptForSession(sid) : undefined);
   const anchorIso = transcriptPath ? latestTranscriptTimestampIso(transcriptPath) : undefined;
-  setAnchor(sessionId, anchorIso ?? new Date().toISOString());
+  // The gateway's own completion path: the receipt says whether the engine
+  // conversation was filed, so this is not evidence the provider was touched.
+  setAnchor(sessionId, anchorIso ?? new Date().toISOString(), { typedTurn: false });
 }
 
 function contentCompatible(persisted: string, transcript: string): boolean {
@@ -389,7 +405,7 @@ export function syncExternalTurn(
     if (newest && newest.role === "assistant" && newest.content === hookText) return 0;
     insertMessage(sessionId, "assistant", hookText);
     const anchorIso = new Date().toISOString();
-    setAnchor(sessionId, anchorIso);
+    setAnchor(sessionId, anchorIso, { typedTurn: true });
     emit("session:external-turn", { sessionId });
     logger.info(
       `External turn persisted for session ${sessionId} from hook payload (transcript unreadable: ${transcriptPath ?? "not found"})`,
@@ -429,7 +445,8 @@ export function syncExternalTurn(
       upgradeTruncatedRows(matchedPersistedTurn, tail);
     });
     txn();
-    setAnchor(sessionId, tailAnchorIso);
+    // run() persisted this turn, so it is the gateway's own and its receipt already says whether it reached the provider.
+    setAnchor(sessionId, tailAnchorIso, { typedTurn: false });
     emit("session:external-turn", { sessionId });
     logger.info(
       `Reconciled ${tail.length} already-persisted turn message(s) in place for session ${sessionId} (anchor → ${tailAnchorIso}, no duplicates inserted)`,
@@ -452,7 +469,7 @@ export function syncExternalTurn(
   if (!session.engineSessionId && engineSessionId) {
     updateSession(sessionId, { engineSessionId });
   }
-  setAnchor(sessionId, tailAnchorIso);
+  setAnchor(sessionId, tailAnchorIso, { typedTurn: true });
   emit("session:external-turn", { sessionId });
   logger.info(
     `Synced ${fresh.length} external (CLI-native) message(s) for session ${sessionId} (anchor → ${tailAnchorIso}` +
