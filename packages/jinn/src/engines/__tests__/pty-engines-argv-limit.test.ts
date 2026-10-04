@@ -82,6 +82,7 @@ import { GrokInteractiveEngine, buildGrokInteractiveArgs, describeGrokArgument }
 import { CodexEngine } from "../codex.js";
 import { GrokEngine } from "../grok.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
+import { PTY_BOOT_GRACE_MS } from "../pty-stream.js";
 import { processStartFailure } from "../../shared/process-start.js";
 
 const flush = () => new Promise((r) => setTimeout(r, 20));
@@ -99,6 +100,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   Object.defineProperty(process, "platform", { value: realPlatform });
   lifecycle.killAll();
 });
@@ -171,6 +173,9 @@ describe("CodexInteractiveEngine — a prompt too long for one argument", () => 
     engine.ensureIdleSpawn("cx-started", { cwd: "/tmp", model: "gpt-5.5" });
     const run = engine.run({ sessionId: "cx-started", prompt: "hello", cwd: "/tmp", model: "gpt-5.5" } as any);
     await flush();
+    // A warm PTY is up once it has outlived its boot.
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + PTY_BOOT_GRACE_MS + 1_000);
     ptySpawns[0].proc._exit(1);
     expect((await run).error).toBe("Interrupted: codex process exited (code 1, signal 0)");
   });

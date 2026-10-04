@@ -9,7 +9,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { neutralizeForPaste } from "../shared/skill-commands.js";
 import { PtyLifecycleManager, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
-import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
+import { PtyBootTracker, PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import { tailTranscriptLines, type TranscriptTailer } from "./transcript-tailer.js";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
 import {
@@ -43,9 +43,9 @@ interface ActiveTurn {
   interrupt: (reason: string) => void;
   /** The turn's process went away: a failed start until {@link started}, else an interruption. */
   processExited: (exit: PtyExit | undefined, output: string) => void;
-  /** Whether the process serving this turn has written to its transcript. A
-   *  warm process already has; a fresh one has not until codex records the
-   *  session (a new session's session_meta, a resumed one's task_started). */
+  /** Whether the process serving this turn has written to its transcript: not
+   *  until codex records the session (a new session's session_meta, a resumed
+   *  one's task_started). A warm process is judged by {@link PtyBootTracker}. */
   started: boolean;
   tailer?: TranscriptTailer;
   discover?: { stop: () => void };
@@ -218,6 +218,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
   private streams: PtyStreamManager;
   private lastGeom = new Map<string, { cols: number; rows: number }>();
   private spawnParams = new Map<string, CodexSpawnParams>();
+  private boot = new PtyBootTracker();
 
   constructor(private lifecycle: PtyLifecycleManager) {
     this.streams = new PtyStreamManager("Codex PTY", (id) => this.lifecycle.getWarm(id) !== undefined);
@@ -260,7 +261,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     let settled = false;
     let resolveFn!: (r: EngineResult) => void;
     const promise = new Promise<EngineResult>((res) => { resolveFn = res; });
-    const turn: ActiveTurn = { interrupt: () => {}, processExited: () => {}, started: reuseWarm };
+    const turn: ActiveTurn = { interrupt: () => {}, processExited: () => {}, started: false };
 
     const cleanup = () => {
       if (turn.doneTimer) clearTimeout(turn.doneTimer);
@@ -282,11 +283,27 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     };
     turn.interrupt = (reason: string) =>
       finish({ sessionId: codexSessionId ?? opts.resumeSessionId ?? "", result: "", error: reason });
+    // What this turn's process has put on disk, read when it dies: the discovery
+    // and tail polls may not have seen it yet, and a process that wrote its
+    // transcript did start.
+    let tailed: { file: string; offset: number } | undefined;
+    let transcriptsBefore: Map<string, TranscriptFileStat> | undefined;
+    const transcriptMoved = (): boolean => {
+      if (tailed) {
+        try { return fs.statSync(tailed.file).size > tailed.offset; } catch { return false; }
+      }
+      if (!transcriptsBefore) return false;
+      for (const file of listTranscriptFiles().keys()) if (!transcriptsBefore.has(file)) return true;
+      return false;
+    };
     // Before codex writes to its transcript it never ran this turn (an exec
     // refusal, an unknown flag, a crash on boot): a failed start, carrying what
-    // the process printed, not a quiet interruption that loses the reason.
+    // the process printed, not a quiet interruption that loses the reason. A
+    // warm process is spawned ahead of the turn, so it counts as started only
+    // once it is past its boot.
     turn.processExited = (exit, output) => {
-      if (!turn.started) {
+      const up = turn.started || transcriptMoved() || (reuseWarm && !!turn.boundProc && this.boot.isUp(turn.boundProc));
+      if (!up) {
         finish({ sessionId: codexSessionId ?? opts.resumeSessionId ?? "", result: "", error: processStartFailure("codex", exit, output) });
         return;
       }
@@ -296,6 +313,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     const onParsed = (parsed: ReturnType<typeof codexTranscriptLineToDeltas>) => {
       if (settled) return;
       turn.started = true;
+      if (turn.boundProc) this.boot.markUp(turn.boundProc);
       if (parsed.sessionId && !codexSessionId) {
         codexSessionId = parsed.sessionId;
         this.updateSpawnResumeSessionId(jinnSessionId, codexSessionId);
@@ -382,6 +400,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
       if (!fromBeginning) {
         try { offset = fs.statSync(filePath).size; } catch { /* not created yet */ }
       }
+      tailed = { file: filePath, offset };
       turn.tailer = tailTranscriptLines(
         filePath,
         offset,
@@ -412,6 +431,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
       if (file) attachTail(file);
     } else {
       const before = listTranscriptFiles();
+      transcriptsBefore = before;
       const startedAt = Date.now();
       const discover = setInterval(() => {
         const after = listTranscriptFiles();
@@ -523,6 +543,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
       cwd: opts.cwd || JINN_HOME,
       env: this.buildEnv(jinnSessionId),
     });
+    this.boot.spawned(proc);
     this.spawnParams.set(jinnSessionId, {
       model: opts.model,
       effortLevel: opts.effortLevel,
