@@ -1,6 +1,6 @@
 import { Bell, ChevronDown, Globe } from "lucide-react"
 import { useState } from "react"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,13 +36,11 @@ export interface BoardSwitcherProps {
 
 export function BoardSwitcher({ board, title, departments, attentionCount }: BoardSwitcherProps) {
   const navigate = useNavigate()
-  const { search } = useLocation()
   const [open, setOpen] = useState(false)
   const counts = useBoardMenuCounts(departments, open)
 
-  // A board is a scope, not a view: the operator's filters follow them across.
   const go = (target: BoardId) => {
-    if (!isSameBoard(board, target)) navigate(`${boardPath(target)}${search}`)
+    if (!isSameBoard(board, target)) navigate(boardPath(target))
   }
   const countOf = (value: number | undefined) => (
     <span className="ml-auto text-[12px] tabular-nums text-[var(--text-quaternary)]">{value ?? ""}</span>

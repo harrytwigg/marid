@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCompactWire, WorkItemListWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
+import { BOARD_FILTERS_STORAGE_KEY } from "@/lib/todos"
 import { useQueryInvalidation } from "@/hooks/use-query-invalidation"
 import TodoBoardPage from "../board/board-page"
 import { boardColumnQueryKey, boardScopeParams } from "../board/use-board"
@@ -840,7 +841,7 @@ describe("board states (states mock §6 — stage C)", () => {
 
 describe("board filter persistence (survives a return, a board switch and a new tab)", () => {
   it("restores a stored sprint filter on a fresh mount with no query string (a new tab)", async () => {
-    localStorage.setItem("jinn-board-filters", "sprint=active")
+    localStorage.setItem(BOARD_FILTERS_STORAGE_KEY, "sprint=active")
     renderBoard("/todos/b/home")
     await waitFor(() =>
       expect(listWorkItems.mock.calls.some(([params]) => params?.sprint === "active")).toBe(true),
@@ -850,12 +851,23 @@ describe("board filter persistence (survives a return, a board switch and a new 
   it("remembers a filter set that arrived in the URL", async () => {
     renderBoard("/todos/b/home?sprint=active&assignee=scout")
     await waitFor(() =>
-      expect(localStorage.getItem("jinn-board-filters")).toBe("assignee=scout&sprint=active"),
+      expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("assignee=scout&sprint=active"),
     )
   })
 
-  it("carries the filters across a board switch, not just to the same board", async () => {
-    renderBoard("/todos/b/home?sprint=active")
+  it("keeps the filters when the operator switches to another board", async () => {
+    renderBoard("/todos/b/platform?sprint=active")
+    // The initial department board load carries its own scope. Only Everything
+    // drops `department`, so the assertion after the switch cannot pass on the
+    // initial request.
+    await waitFor(() =>
+      expect(
+        listWorkItems.mock.calls.some(([params]) => params?.department === "platform" && params?.sprint === "active"),
+      ).toBe(true),
+    )
+
+    // Switching boards re-renders the page with an empty query string, so this
+    // exercises the stored-set restore on a route change, not just first mount.
     const trigger = await screen.findByTestId("board-switcher")
     fireEvent.pointerDown(trigger, { button: 0, pointerType: "mouse" })
     fireEvent.click(trigger)
@@ -863,7 +875,7 @@ describe("board filter persistence (survives a return, a board switch and a new 
     await waitFor(() =>
       expect(
         listWorkItems.mock.calls.some(
-          ([params]) => params?.rootsOnly === true && params?.home !== true && params?.sprint === "active",
+          ([params]) => params?.department === undefined && params?.rootsOnly === true && params?.sprint === "active",
         ),
       ).toBe(true),
     )
@@ -872,10 +884,10 @@ describe("board filter persistence (survives a return, a board switch and a new 
   it("clears the stored set with the filters, so a return does not resurrect them", async () => {
     rows = {}
     renderBoard("/todos/b/platform?sprint=active")
-    await waitFor(() => expect(localStorage.getItem("jinn-board-filters")).toBe("sprint=active"))
+    await waitFor(() => expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBe("sprint=active"))
     fireEvent.click(await screen.findByTestId("board-clear-filters"))
     await waitFor(() => {
-      expect(localStorage.getItem("jinn-board-filters")).toBeNull()
+      expect(localStorage.getItem(BOARD_FILTERS_STORAGE_KEY)).toBeNull()
       expect(screen.queryByTestId("board-filtered-empty")).toBeNull()
     })
   })
