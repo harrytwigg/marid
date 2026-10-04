@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4149;
+const MAX_MANIFEST_TOKENS = 4156;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -230,9 +230,14 @@ const ATTESTED = {
   // existing handler, and an unknown sprint is refused with the open sprints
   // named, so a model can recover without a registry read. Planning a sprint
   // stays on the board and the HTTP routes. Pi stays one under the ceiling.
-  rpc: { tokens: 3813, sha256: "c78db7335dd30ecb3e4c7d78c19fff5554b3b53d46b548245102aec70b972133" },
-  pi: { tokens: 4148, sha256: "16bf3bf2d610812f48c3b6888b9c6cddd55b10caad1bf1e265eee98f7918cd10" },
-  openai: { tokens: 3952, sha256: "37a8905d4be734fef07ffc61ae32bdc2a541bd7ff5cb1786d04992767d0ecbb1" },
+  // Rebased for `sprint` on create_work_item: a bare string property, 7 tokens
+  // on every wrapper, so a Todo can be placed in the same call that makes it
+  // instead of a create followed by an edit. Its accepted values and refusals
+  // are the ones edit_work_item already teaches, so it carries no prose. The
+  // ceiling moves by exactly the 7 and Pi stays one under it.
+  rpc: { tokens: 3820, sha256: "a59a462df824d87a94ac9ca36ae54261133b6871ae570f4c8ee71e6c750e71c1" },
+  pi: { tokens: 4155, sha256: "03dbfb609c154740b183344e1cf00f81161a08755f7fa2bebf58320b8c4dbbb4" },
+  openai: { tokens: 3959, sha256: "10605f4f07512ce8b8de05006c5d26ebda937239f89ab898e73c3d8bc28a5aba" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

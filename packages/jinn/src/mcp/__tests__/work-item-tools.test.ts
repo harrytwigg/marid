@@ -108,7 +108,7 @@ describe("work-item tools — registry + schemas", () => {
   it("update schema allows manual start but leaves cancelling to archive", () => {
     const createProps = tool("create_work_item").inputSchema.properties;
     expect(Object.keys(createProps).sort()).toEqual(
-      ["autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "title"].sort(),
+      ["autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "sprint", "title"].sort(),
     );
     const status = tool("update_work_item").inputSchema.properties.status as { enum: string[] };
     expect(status.enum).toEqual(["backlog", "executing", "in_review", "blocked", "done"]);
