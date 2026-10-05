@@ -13,7 +13,8 @@
 - **Holding Todos:** the `dedicated` flag.
 - **Chrome:** unchanged.
 - **Replies:** live replies.
-- **New:** employees on their own Claude account, org tree badges, and YAML-first configuration.
+- **New:** org tree badges and YAML-first configuration.
+- **Deferred to a follow-up spec:** employees on their own Claude account (spec.md, "Follow-up").
 
 ## Existing infrastructure (constitution VII)
 
@@ -24,7 +25,7 @@ against `origin/main` at `60e675d6`.
 | --- | --- |
 | `packages/jinn/src/gateway/org-registry.ts:42` | `refreshOrg` / last-good roster: the shape copied for `project-registry.ts` |
 | `packages/jinn/src/gateway/watcher.ts:130` | The `org/` watcher, copied for `projects/` |
-| `packages/jinn/src/gateway/org.ts:170` | `WRITABLE_FIELDS` gains `projects` and `claudeConfigDir` |
+| `packages/jinn/src/gateway/org.ts:170` | `WRITABLE_FIELDS` gains `projects` |
 | `packages/jinn/src/backup/archive.ts:9` | `ARCHIVE_INCLUDES` gains `projects` |
 | `packages/jinn/src/work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: `work_item_projects` is added here |
 | `packages/jinn/src/work-items/sprints-schema.ts:60` | The root-membership filter, copied for `project` |
@@ -34,7 +35,10 @@ against `origin/main` at `60e675d6`.
 | `packages/jinn/src/gateway/remote-mcp/profile.ts:98` | The tool-profile filter shape |
 | `packages/jinn/src/gateway/api.ts:2148` / `:1744` | The `ids=`, `pinned` and `q` branches, served by the scoped read module |
 | `packages/jinn/src/work-items/store.ts:356` | `createWorkItem` insert: an `assignee` writer |
-| `packages/jinn/src/work-items/store.ts:797` / `:850` | The two `releaseOnOwnerChange` paths: "every writer of `assignee`" (`:961`) |
+| `packages/jinn/src/work-items/assignment.ts:98` | `assignWorkItem`'s own `UPDATE` of `assignee`, which does not go through `releaseOnOwnerChange` |
+| `packages/jinn/src/gateway/api.ts:1207` | Note routes gated on `notesEnabled`. Scoped callers are served regardless (FR-028) |
+| `packages/jinn/src/gateway/server.ts:565` | The only trust seed today: boot-time, for `$JINN_HOME`. Phase 3 adds one per stage dir |
+| `packages/jinn/src/work-items/store.ts:797` / `:850` | The two dynamic update paths, followed by `releaseOnOwnerChange` |
 | `packages/jinn/src/gateway/api.ts:3450` | The delegation route creates a Todo already assigned |
 | `packages/jinn/src/plugins/host/todos.ts:31` | A plugin create with `draft.assignee` |
 | `packages/jinn/src/cron/runner.ts:101` | A cron-created Todo |
@@ -44,48 +48,43 @@ against `origin/main` at `60e675d6`.
 | `packages/jinn/src/sessions/turn/engine-run.ts:46` | cwd becomes the stage dir for scoped sessions |
 | `packages/jinn/src/gateway/watcher.ts:38` | `syncSkillSymlinks`: the regeneration trigger for stage dirs |
 | `packages/jinn/src/notes/store.ts:613` | `SEARCH_ROOTS` becomes a parameter |
-| `packages/jinn/src/shared/home.ts:34` | `resolveClaudeConfigDir`: global today, made per-session for FR-037 |
-| `packages/jinn/src/shared/remote-target.ts:219` | The per-employee Claude profile precedent (remote) |
-| `packages/jinn/src/sessions/fork.ts:173` / `packages/jinn/src/engines/claude-interactive.ts:279` | The transcript directory, derived from the config dir |
-| `packages/jinn/src/shared/claude-settings.ts:124` | Trust seed: it must be written into the session's config dir |
-| `packages/jinn/src/shared/claude-auth.ts:121` | The auth check's config-dir seam |
-| `packages/jinn/src/shared/engine-health.ts:54` | `engineHealthForTarget`: health is keyed per target, and gains the config dir |
 | `packages/jinn/src/sessions/turn/preflight.ts:52` | `refuseTurn`: refuses on a lost binding or a wrong engine |
 
 ## Summary
 
-Four PRs, each off `main`, in the order below. Phases 2 and 4 may run in parallel once Phase 1
-has merged.
+Three PRs, each off `main`, built in order. Each phase starts only after the previous one
+merges.
 
-1. **Phase 1: projects as a grouping.**
-   - The YAML project registry, its watcher and backup.
-   - `work_item_projects`, the `project` filter, payloads and events.
-   - Projects REST: reads, plus operator writes to the YAML.
-   - FR-033 validation.
-   - Web: the board filter and badge, the create and detail field, the Projects page and the
+1. **Phase 1: projects as a grouping.** This covers:
+   - the YAML project registry, with its watcher, ids-seen record and backup;
+   - `work_item_projects`, the `project` filter, payloads and events;
+   - projects REST: reads, and atomic operator writes to the YAML;
+   - FR-033 validation;
+   - web: the board filter and badge, the create and detail field, the Projects page and the
      switcher.
 
    Nobody is restricted yet.
-2. **Phase 2: scoped employees.**
-   - Explicit `projects` scope and session binding.
-   - The scoped-caller gate and its read module.
-   - `mayHoldTodo` with `dedicated`.
-   - FR-018 path limits, the filtered MCP profile and the scoped roster.
-   - Web: org tree badges and filter, the employee scope control, session badges and the
+2. **Phase 2: scoped employees.** This covers:
+   - explicit `projects` scope and the session binding;
+   - the scoped-caller gate and its read module;
+   - `mayHoldTodo` with `dedicated`, where an unknown id fails closed;
+   - FR-018 path limits;
+   - the filtered MCP profile, which carries the note tools, and the scoped roster;
+   - `JINN_PROJECT_ID`;
+   - web: org tree badges and filter, the employee scope control, session badges and the
      new-chat project picker.
-3. **Phase 4: an employee on its own Claude account.**
-   - `claudeConfigDir`, carried through env, transcripts, trust seed, auth check and engine
-     health.
-   - The employee-editor field.
-4. **Phase 3: scoped context.**
-   - The stage dir as cwd, with skill copies and the generated `CLAUDE.md` (with the scope
-     paragraph).
-   - Notes and state roots, and claude-only validation.
 
-   It goes last because its trust seed must land in the employee's config dir from Phase 4.
+   Until Phase 3, scoped employees still load the company `CLAUDE.md` and skills. That is
+   acceptable under Q1 = A on the operator's account (spec.md, "Scope of the boundary").
+3. **Phase 3: scoped context.** This covers:
+   - the stage dir as cwd, with its own trust seed;
+   - skill copies and the generated `CLAUDE.md`, including the scope paragraph;
+   - Notes and state roots;
+   - claude-only validation.
 
-The phase numbers are kept from earlier drafts, which is why the build order runs 1, 2, 4, 3.
-Phase S, Phase 0 and the old containment Phase 4 are withdrawn (Q1 = A, Q6 = b).
+**After this feature**, the senior writes a follow-up spec for employees on another Claude
+account. It starts from the inputs recorded in spec.md. Phase S, Phase 0 and the old
+containment phase are withdrawn (Q1 = A, Q6 = b).
 
 ## Technical Context
 
@@ -104,7 +103,6 @@ Phase S, Phase 0 and the old containment Phase 4 are withdrawn (Q1 = A, Q6 = b).
   session against a seeded temp home that has `projects/` and `org/` YAML.
 - Web: Testing Library. Playwright runs against a sandbox gateway for the light and dark
   evidence.
-- Phase 4: a real `claude -p` session pair.
 
 **Constraints**:
 - **Size ratchet.** It is already red on `main` (`node scripts/ratchet.mjs --check`: 102
@@ -130,9 +128,9 @@ Phase S, Phase 0 and the old containment Phase 4 are withdrawn (Q1 = A, Q6 = b).
 | --- | --- |
 | I | Pass |
 | II | Rung 4, justified in spec.md "Why This Matters" |
-| III | Every premise has a `path:line` in research.md. Phase 4 opens with a red test that a session spawned with a non-default `claudeConfigDir` still resolves transcripts under `~/.claude` on `main` |
+| III | Every premise has a `path:line` in research.md. Phase 2 opens with a red test: on `main`, a session of an employee with `projects` set can list company Todos |
 | IV | Rung 1 throughout. No new core tool, and the manifest does not grow (attested hash) |
-| V | Every table, field and key has a v1 consumer. Secrets, sandboxing, a client layer and project cron are deferred. `claudeConfigDir` has the operator's named use: the friend-account employees |
+| V | Every table, field and key has a v1 consumer. Secrets, sandboxing, the per-employee account, a client layer and project cron are all deferred |
 | VI | Enforcement tests assert allow and refuse outcomes. The route-enumeration test fails on an unclassified route. No snapshots: SC-002 is one-off PR evidence |
 | VII | The table above. Re-verify it before each phase |
 | VIII | Each refused class in the scoped table carries its reason |
@@ -286,11 +284,13 @@ Senior, because it is the enforcement itself.
   employees are refused.
 - `gateway/project-scope/{caller,rules,read-routes,paths,assignee}.ts`, the gate line, and the
   upgrade-guard refusal.
-- `mayHoldTodo` and the store guard. Scope comes from a resolver injected at boot, with the
-  FR-015 fallbacks. It is checked at the entry of every path that starts work.
+- `mayHoldTodo` and the guard at every SQL writer of `assignee`: `work-items/store.ts:356`, the two
+  dynamic update paths, and `work-items/assignment.ts:98`. Scope comes from a resolver injected at boot,
+  with the FR-015 fallbacks, including "an unknown id counts as dedicated". It is checked at the entry of every path that starts work.
 - The stranding refusals. `dedicated` writes are enabled here.
 - FR-018 path checks. `list_files` and `read_file` are refused.
-- `mcp/project-profile.ts`.
+- `mcp/project-profile.ts`. It removes the refused tools and always includes the note tools, rooted at P's folder, even when `notesEnabled` is off.
+- `JINN_PROJECT_ID` in scoped sessions' engine environment.
 - `sessions/context/project.ts`: a members-only roster and a project section.
 - The `refuseTurn` lost-binding check.
 - An `escalated` event when a Todo leaves P.
@@ -318,29 +318,6 @@ Senior, because it is the enforcement itself.
 - An emptied scope fails closed.
 - The SC-002 one-off comparison, recorded in the PR.
 
-### Phase 4: employee on its own Claude account (senior-developer, then senior QA)
-
-Senior, because it is spawn infrastructure and engine health. Today every consumer reads one
-global config dir (`shared/home.ts:34`), and the remote path is the only precedent for doing
-otherwise.
-
-- `claudeConfigDir` in `org.ts`, `Employee` and `WRITABLE_FIELDS`, validated as described in
-  data-model.md.
-- One resolver, `effectiveClaudeConfigDir(employee)`, used by:
-  - the engine child env (`CLAUDE_CONFIG_DIR`);
-  - transcript lookup (`sessions/fork.ts:173`, `engines/claude-interactive.ts:279`), which
-    also covers resume, fork and auto-compaction;
-  - the trust seed (`shared/claude-settings.ts:124`);
-  - the auth check (`shared/claude-auth.ts:121`).
-
-  Every call site that today reads `resolveClaudeConfigDir()` for a session is enumerated and
-  routed through it.
-- The engine-health target key gains the config dir, so a rate limit on one account holds back
-  only that account's employees. The default dir keeps today's key.
-- Engine limits: the default account only. Other accounts show "not collected".
-- Web: a `claudeConfigDir` field in the employee editor, with light and dark screenshots.
-- Evidence: SC-003 against a real session pair, attached to the PR.
-
 ### Phase 3: scoped context (junior-developer, then senior QA)
 
 The stage dir lives at `<parent of home>/.jinn-projects/<id>/`.
@@ -350,16 +327,18 @@ The stage dir lives at `<parent of home>/.jinn-projects/<id>/`.
   `project+company` is set, plus the FR-029 scope paragraph.
 - **Regeneration.** It is rebuilt on skill changes, on project scan changes and on
   instruction changes.
-- **Use.** `engine-run.ts` uses it as the cwd for scoped sessions. Its trust entry is seeded
-  into the session's effective config dir, which comes from Phase 4.
+- **Use.** `engine-run.ts` uses it as the cwd for scoped sessions. A new trust seed for the
+  stage dir is written when the dir is generated. Today the only seed is the boot-time one
+  at `gateway/server.ts:565`.
 - **Transcripts.** Resume, fork and auto-compaction resolve the stage-dir transcript slug.
   Each gets a regression test.
 - **Skill allow-list.** It applies to the copies, the prompt and `dispatchConfig.skills`.
 - **Notes.** `SEARCH_ROOTS` becomes a parameter. Scoped callers search the project folder,
   which includes `state.md`, plus `sharedNotes`. Note writes go only into the project folder.
 - **Validation.** Scoped employees are claude-only.
-- **Docs.** The template docs explain projects, project state with `mem --file`, and the fact
-  that this is a guardrail, not a sandbox.
+- **Docs.** The template docs explain projects, project state through the note tools, and the
+  fact that this is a guardrail, not a sandbox. They do not mention `mem`, which is
+  instance-local.
 
 ## Delegation split
 
@@ -367,15 +346,15 @@ The stage dir lives at `<parent of home>/.jinn-projects/<id>/`.
 | --- | --- | --- | --- |
 | 1 | junior | junior QA | Fully specified, with no auth or secrets |
 | 2 | senior, with junior sub-Todos for the tests and the web | senior QA | Auth enforcement |
-| 4 | senior | senior QA | Spawn infrastructure and engine health |
+| Follow-up account spec | senior | senior QA | Engine accounts, auth, health and the Keychain |
 | 3 | junior | senior QA | Specified, but it decides what a scoped session can load |
 
 ## Complexity Tracking
 
 | Item | Why | Simpler alternative rejected because |
 | --- | --- | --- |
+| A YAML scan that refuses only on identity problems, with unknown ids failing closed | A missing skill or a moved working directory must not unscope members or open a dedicated project | Refusing the whole file on any error, which QA showed fails open on `dedicated` |
 | Project definitions in YAML, membership in the DB | The operator wants YAML configuration (Q3), and it is the same split as employees (YAML) versus assignees (registry names) | All-DB loses hand editing. All-YAML would put Todo membership in files that every Todo write would have to rewrite |
 | A second route table beside the connector's | The scoped principal differs from the connector in almost every row | One table with a principal column is harder to audit |
 | A scoped read module instead of filters inside handlers | Handlers are over budget and have unfiltered branches (`ids=`, `pinned`, `q`) | Threading `project` through every branch is where a missed branch leaks |
 | A stage dir outside the home, with copied skills | Claude loads the ancestor `CLAUDE.md`, and the shared skills dir sits under the home | A prompt-only "do not use skill X" is not a restriction |
-| One `effectiveClaudeConfigDir` resolver | Transcripts, trust, auth and health must agree on the directory, or the feature fails silently. The remote path learned this (`shared/remote-target.ts:219`) | Setting only `CLAUDE_CONFIG_DIR` in the environment leaves resume, the trust seed and health on the default account |

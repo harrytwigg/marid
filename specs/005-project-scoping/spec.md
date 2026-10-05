@@ -5,7 +5,8 @@
 **Created**: 2026-10-05
 
 **Status**: The operator answered Q1–Q11 on 2026-10-05. The decisions are recorded below and
-folded into the text. Ready for implementation per plan.md and tasks.md.
+folded into the text. Ready for implementation per plan.md and tasks.md. The friend-account
+capability is carried to a follow-up spec.
 
 **Input**: Marid issue #90 (upstream proposal hristo2612/jinn#81). The operator wants projects
 as a first-class scope:
@@ -35,15 +36,15 @@ everyone except its own members.
 | Q4 | No MCP parameter | FR-036 unchanged |
 | Q5 | Project instructions only | FR-029 unchanged |
 | Q6 | **b.** Existing employees keep reading everything as today. The new restrictions apply only to scoped sessions | Phase S is withdrawn. `read_knowledge` and the attachment paths change only for scoped callers (FR-018, FR-028) |
-| Q7 | Not answered. It falls away with Q1 = A, because there is no contained environment for secrets to feed | FR-030 to FR-032 are deferred with containment. A friend's account is a Claude login, not an API key (FR-037) |
+| Q7 | Not answered. It falls away with Q1 = A, because there is no contained environment for secrets to feed | FR-030 to FR-032 are deferred with containment. The follow-up account spec decides between a Claude login and a token |
 | Q8 | **a**, plus: employees on a project must not be able to work on anything else | That is the base rule already: a scoped employee holds only its projects' Todos. `dedicated` (FR-015) is how a project is closed to everyone else |
-| Q9 | Not fussed | Today's behaviour is kept, with no engine flag changes. FR-037 notes why `cliFlags: ["--no-chrome"]` suits a friend-account employee |
+| Q9 | Not fussed | Today's behaviour is kept, with no engine flag changes |
 | Q10 | a (a live reply) | FR-013 unchanged |
 | Q11 | Moot under Q1 = A | Withdrawn |
 
 **New in the operator's answer**:
 
-- employees bound to a different Claude account (FR-037);
+- employees bound to a different Claude account. This is **specified separately**, in a follow-up spec, because review showed it is a larger and riskier change than this feature (see "Follow-up: employees on another Claude account");
 - project membership shown on the org tree (FR-041);
 - configuration in YAML, with UI editing where possible (FR-001, FR-042).
 
@@ -77,6 +78,11 @@ This feature responds in three ways:
   company state files are not loaded (FR-020, FR-027, FR-028), and the jinn tools refuse.
 - **It keeps the docs honest.** Scoped employees are described as "kept in scope by the
   gateway", not "cannot reach".
+
+**Between Phase 2 and Phase 3.** Scoped employees already exist after Phase 2, but they still
+run with cwd `~/.jinn`. Until Phase 3 they therefore load the company `CLAUDE.md` and every
+skill. This is acceptable as an interim under Q1 = A, because they run on the operator's own
+account. It is the reason the follow-up account spec requires Phase 3 to be in place first.
 
 ## What the tree does today *(facts the spec depends on)*
 
@@ -177,25 +183,10 @@ existing employees can still read and comment, but can no longer be assigned P's
 
 ---
 
-### User Story 4: Project employees run on a different Claude account (Priority: P1)
+### User Story 4: (moved) Project employees on a different Claude account
 
-The operator logs the friend's account in once, under its own Claude config dir: run
-`CLAUDE_CONFIG_DIR=~/.claude-side claude`, then `/login`. The operator then sets
-`claudeConfigDir: ~/.claude-side` on `side-dev` and `side-qa`.
-
-Their sessions run on the friend's account, and every other employee stays on the operator's.
-When the friend's account hits its rate limit, only the employees on that account are held
-back.
-
-**Independent Test**: start a `side-dev` session and an unscoped one, then check:
-
-- the `side-dev` engine process carries `CLAUDE_CONFIG_DIR=<friend dir>`, and the unscoped one
-  does not;
-- the `side-dev` transcript is written under `<friend dir>/projects/`, and resume and fork
-  find it there;
-- the folder-trust seed is written to `<friend dir>/.claude.json`;
-- a rate-limit exhaustion recorded for `side-dev` does not make
-  `isEngineExhausted("claude")` true for the unscoped employee.
+This story is delivered by the follow-up spec, not by this feature's PRs. See "Follow-up:
+employees on another Claude account" below.
 
 ---
 
@@ -265,9 +256,10 @@ and dark, with screenshots on the PR (FR-040).
 - **The remote MCP connector** stays unscoped.
 - **Connector-originated sessions** (Telegram) for a scoped employee are refused in v1.
 - **Cron.** Validation refuses a cron job that targets a scoped employee.
-- **A friend-account employee's config dir is missing or logged out.** The spawn fails with
-  the existing auth-check message, which names the config dir
-  (`packages/jinn/src/shared/claude-auth.ts:154`). No other employee is affected.
+- **Project id reused.** A project file is deleted, and a file with the same `id` but a
+  different `name` later appears. The scan reports it in the gateway log and on the Projects
+  page: "id previously used by <old name>". It does not refuse the file, because the operator
+  may be restoring a backup (FR-001).
 
 ## Requirements *(mandatory)*
 
@@ -284,9 +276,22 @@ and dark, with screenshots on the PR (FR-040).
   - `dedicated`;
   - `workdirs`, `skills`, `sharedNotes` and `instructions` (see data-model.md).
 
-  The gateway scans and watches the directory as it does `org/`, and keeps the last good set
-  when a scan is bad. The Projects page creates new files with a generated id. The file name
-  is presentation only.
+  The gateway scans and watches the directory as it does `org/`. The Projects page creates new
+  files with a generated id. The file name is presentation only.
+
+  How the scan treats problems:
+
+  - **Identity problems.** A missing or malformed `id`, a duplicate or reserved `name`, or YAML
+    that does not parse refuses the file. If that id was already loaded, the scan keeps its
+    last good definition and logs the refusal, so a typo never turns a live project into an
+    unknown one.
+  - **Duplicate ids.** The definition already loaded for that id is kept, and the newcomer is
+    refused.
+  - **Content problems.** A `skills` entry that no longer exists, a `workdirs` entry that fails
+    FR-033, or a bad `sharedNotes` path drops only that entry, with a logged warning. The
+    project itself stays loaded.
+  - **Missing directory.** If `projects/` does not exist, there are no projects, and nothing is
+    logged.
 - **FR-002**: A top-level Todo MUST belong to zero or one project, recorded in the registry by
   project id. No project means company-level. **No existing Todo is migrated.**
 - **FR-003**: The project MUST be settable when a Todo is created, and changeable afterwards,
@@ -354,12 +359,20 @@ scoped employee; P is that session's binding)
   **Fallbacks**, so FR-035 holds:
   - with no scope resolver injected, everything passes except assignment into a `dedicated`
     project;
-  - a name that is not on the roster counts as unscoped.
+  - a name that is not on the roster counts as unscoped;
+  - an **unknown project id** (no YAML, or refused) counts as `dedicated`, so it fails closed
+    for holders. A broken file never opens a project to everyone.
 
-  **Where it is enforced**: at the store, in every writer of `assignee`. Those writers are the
-  `createWorkItem` insert (`packages/jinn/src/work-items/store.ts:356`) and both
-  `releaseOnOwnerChange` paths (`packages/jinn/src/work-items/store.ts:797`,
-  `packages/jinn/src/work-items/store.ts:850`; see `packages/jinn/src/work-items/store.ts:961`).
+  **Where it is enforced**: in the work-items layer, at every SQL writer of `assignee`:
+  - the `createWorkItem` insert (`packages/jinn/src/work-items/store.ts:356`);
+  - the two dynamic update paths in `store.ts`, which are followed by `releaseOnOwnerChange` at
+    `packages/jinn/src/work-items/store.ts:797` and `packages/jinn/src/work-items/store.ts:850`;
+  - **`assignWorkItem`'s own `UPDATE`** (`packages/jinn/src/work-items/assignment.ts:98`). It
+    does not go through `releaseOnOwnerChange`. It serves `POST /:id/assign`, delegation onto
+    an existing Todo (`packages/jinn/src/gateway/api.ts:3501`) and the talk adapters.
+
+  The list comes from `git grep` over the SQL, not from a code comment, and T045 re-runs that
+  enumeration.
   That covers:
   - `assignWorkItem`, PATCH and the talk adapters;
   - delegation's create-already-assigned path (`packages/jinn/src/gateway/api.ts:3450`);
@@ -400,11 +413,17 @@ scoped employee; P is that session's binding)
   - `dispatchConfig.skills` validation.
 
   An empty list means no skills.
-- **FR-028**: Project Notes live under `knowledge/projects/<project id>/`. That includes the
-  project's state file, `knowledge/projects/<id>/state.md`, written with
-  `mem state … --file projects/<id>/state.md`. For a scoped caller, `search_knowledge`,
-  `read_knowledge` and the note tools are rooted there, plus P's `sharedNotes`. Excluded
-  unless shared:
+- **FR-028**: Project Notes live under `knowledge/projects/<project id>/`, and that includes
+  the project's state file, `knowledge/projects/<id>/state.md`.
+  - **Rooting.** For a scoped caller, `search_knowledge`, `read_knowledge` and the note tools
+    are rooted there, plus P's `sharedNotes`.
+  - **Note tools always on for scoped sessions.** The scoped profile carries the note tools,
+    and the note routes serve scoped callers, even when `gateway.notesEnabled` is off (it is
+    off on this instance). This is safe because they are rooted at the project folder, and it
+    is how a scoped session reads and writes its own state.
+  - **Session marker.** The gateway sets `JINN_PROJECT_ID` in a scoped session's environment.
+
+  Excluded unless shared:
   - the company `knowledge/state.md`;
   - `knowledge/employees/`;
   - `docs/`;
@@ -416,7 +435,12 @@ scoped employee; P is that session's binding)
   - the session is scoped to P;
   - it uses the jinn tools for company state;
   - it does not read `$JINN_HOME`, other repos or other sessions' transcripts with its shell;
-  - it records project state with the `mem` command above.
+  - it keeps project state in `knowledge/projects/<id>/state.md` through the note tools.
+
+  The shipped template docs name only the jinn tools. `mem` is an instance-local script, not
+  part of the product. Making the instance's `mem` respect `JINN_PROJECT_ID` (defaulting to the
+  project's state file and refusing others) is a separate instance task, outside this
+  repository.
 - **FR-033**: **Working-directory validation.** A project working directory MUST:
   - be inside a git work tree whose top level is neither `$HOME` nor an ancestor of it;
   - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, the stage root or `~/.claude`;
@@ -425,33 +449,8 @@ scoped employee; P is that session's binding)
 
   The scan and the Projects page refuse a violating entry.
 
-**Claude account per employee**
-
-- **FR-037**: An employee MAY set `claudeConfigDir` (an absolute path, or one starting with
-  `~/`) for its local sessions. When it is set:
-  - the session's engine runs with `CLAUDE_CONFIG_DIR` set to that directory;
-  - transcript lookup for resume, fork and auto-compaction uses the same directory
-    (`packages/jinn/src/sessions/fork.ts:173`,
-    `packages/jinn/src/engines/claude-interactive.ts:279`);
-  - so do the folder-trust seed (`packages/jinn/src/shared/claude-settings.ts:124`) and the
-    auth check (`packages/jinn/src/shared/claude-auth.ts:121`);
-  - rate-limit exhaustion and engine health are recorded per config dir, so one account's
-    limit never blocks another. `packages/jinn/src/shared/engine-health.ts:54` already keys
-    health by target;
-  - the engine-limits page shows only the default account in v1. Other accounts are listed as
-    "not collected".
-
-  Today, every consumer above reads the gateway's global `resolveClaudeConfigDir`. The remote
-  path already threads a per-employee profile (`packages/jinn/src/shared/remote-target.ts:219`),
-  and that is the precedent.
-
-  The field is independent of project scope, but its motivating use is a project's dedicated
-  employees. The operator sets it up; the gateway never logs in on the operator's behalf.
-
-  For an employee on someone else's account, the operator should also set
-  `cliFlags: ["--no-chrome"]`. Otherwise the session drives the operator's logged-in browser
-  and sends its content under the other account. This works today, because employee flags
-  come after the gateway's own `--chrome` (`packages/jinn/src/board-walk/route-turn.ts:45`).
+**Claude account per employee**: not in this feature. See "Follow-up: employees on another
+Claude account".
 
 **Compatibility**
 
@@ -460,7 +459,9 @@ scoped employee; P is that session's binding)
   - wire changes are limited to additive, nullable fields;
   - the core MCP manifest is unchanged, checked by the attested hash in
     `tool-manifest-budget.test.ts`;
-  - an employee without `claudeConfigDir` launches exactly as today.
+  - with no `projects/` directory there are no projects and nothing is logged. The watcher
+    tolerates the directory being missing, and it is created only on the first UI write;
+  - adding `projects` to `ARCHIVE_INCLUDES` is a no-op when the directory is absent.
 - **FR-036**: The core MCP manifest MUST NOT grow. Scoped callers get their project from the
   binding, and `parentId` sub-tasks inherit their parent's. Only the operator, through REST or
   the UI, files a Todo directly into a chosen project.
@@ -473,14 +474,61 @@ scoped employee; P is that session's binding)
   - the project field on create and on the detail rail;
   - the Projects page;
   - the org tree's project badges and filter;
-  - the employee scope control and the Claude config dir control;
+  - the employee scope control;
   - the new-chat project picker;
   - the session badges.
 - **FR-041**: The org tree MUST show each employee's projects as badges, with `all` shown as
   no badge. It MUST offer a project filter that narrows the tree to that project's members.
-- **FR-042**: The UI MAY edit projects and scope. When it does, it writes the YAML, as
-  `PATCH /api/org/employees/:name` writes the employee's YAML today. Hand-edited YAML stays
-  the source of truth: the UI never holds state the files do not.
+- **FR-042**: The UI MAY edit projects and scope. When it does:
+  - it writes the YAML, as `PATCH /api/org/employees/:name` writes the employee's YAML today;
+  - each write is atomic: a temp file in the same directory, then a rename;
+  - the in-memory registry is refreshed before the response returns, so a Todo created
+    straight after a project is created never sees "unknown project".
+
+  Hand-edited YAML stays the source of truth. The UI never holds state the files do not.
+
+### Follow-up: employees on another Claude account (separate spec)
+
+The operator's friend-account case needs employees whose local sessions run on another Claude
+login. Review showed this is its own feature with real blast radius, so it gets its own spec,
+written after this one. That spec MUST address everything below. These items are recorded here
+so it starts from the findings, not from zero.
+
+1. **Keychain first.** On macOS the login lives in the Keychain. This host has one entry,
+   service `Claude Code-credentials`, and model discovery reads that fixed name
+   (`packages/jinn/src/shared/claude-models.ts:262`). It is unverified whether `/login` under
+   another `CLAUDE_CONFIG_DIR` creates a separate entry or overwrites that one. If it
+   overwrites, every company session moves onto the other account. The first step is to
+   establish this in a throwaway config dir, listing service names before and after. The
+   fallback is a token-based login (for example `claude setup-token`) held as a named secret.
+2. **Only for scoped employees with a stage dir.** Every prompt, tool output and file read in
+   such a session goes to the other account. An employee may therefore carry another account
+   only if it is scoped and this feature's Phase 3 stage dir is in place. Otherwise the company
+   `CLAUDE.md`, the skills and client context leave the company.
+3. **Every consumer of "the" Claude account moves to a per-session resolver**, each with a red
+   test. Today all of these assume one account:
+   - **Environment:** the engine child environment.
+   - **Transcript readers:** `sessions/fork.ts:173`, `engines/claude-interactive.ts:279`,
+     `:2117`, `:2648`, `:2726` and `:2740`; `gateway/api.ts:4634` and `:4748`; and
+     `gateway/external-turns.ts`.
+   - **Trust seed:** there is no per-session trust seed today. The only seed is the
+     boot-time call at `gateway/server.ts:565`, so a seed per config dir and stage dir has to
+     be built. It must also carry `skipDangerousModePermissionPrompt` and the hooks the
+     operator's settings rely on, or the PTY hangs at a first-run dialog.
+   - **Auth outage ledger:** it is one scope for every local employee
+     (`sessions/claude-auth-watch.ts:51`). On darwin, `readClaudeCredentialStatus` also fails
+     open.
+   - **Engine health:** it is keyed by engine only, so one account's limit holds back every
+     Claude session. The writers are `sessions/turn/settle.ts:124`, `sessions/rate-limit-handler.ts:118` and `:322`,
+     and `shared/engine-health.ts:193`. The readers are `board-walk/route-turn.ts:85`, `board-walk/snapshot.ts:244`,
+     `sessions/new-session-engine.ts:60`, and `shared/engine-health.ts:210` and `:228`.
+   - **Limits snapshot:** it is a single `CLAUDE_LIMITS_DIR`
+     (`engines/claude-interactive.ts:2140`), and the newest status line overwrites it.
+   - **Other launch sites:** the PTY idle spawn (`engines/claude-interactive.ts:3183`), which
+     uses `--chrome`, does not pass `cliFlags`, runs with cwd `$JINN_HOME` and inherits the
+     gateway environment. Also the rate-limit fallback and retry
+     (`sessions/rate-limit-handler.ts:185`, `:301`). Fallback to another engine must be
+     disabled for these employees.
 
 ### Deferred to future sandbox work (withdrawn from this feature by Q1 = A)
 
@@ -506,8 +554,6 @@ zero.
   Sub-tasks inherit it.
 - **Employee project scope** (employee YAML): `all`, or an explicit set of project ids, which
   may be empty.
-- **Employee Claude config dir** (employee YAML): the Claude account its local sessions run
-  on.
 - **Session project binding** (registry): present only on sessions of scoped employees, and
   fixed at creation.
 - **Project stage directory**: a generated cwd for each project, outside `$JINN_HOME`.
@@ -522,9 +568,7 @@ zero.
   - a one-off comparison of `buildContext` output and engine argv between `main` and the
     branch, for a fixed unscoped roster, is recorded as PR evidence. It is not committed as a
     fixture.
-- **SC-003**: Each US4 check passes against a real session pair: the per-session
-  `CLAUDE_CONFIG_DIR`, the transcript location with resume and fork, the trust seed location,
-  and rate-limit isolation. The output is attached to the PR.
+- **SC-003**: Withdrawn. It moved to the follow-up account spec.
 - **SC-004**: The token counts in `tool-manifest-budget.test.ts` do not rise.
 - **SC-005**: Every FR-040 element has light and dark screenshots on the PR.
 
@@ -537,4 +581,3 @@ zero.
 - Personas do not vary per project. A different role means a separate employee.
 - There is no client layer above projects, and nothing is reserved for one.
 - Cron stays company-level in v1.
-- The operator logs a non-default Claude account in by hand, once, under its config dir.

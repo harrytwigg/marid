@@ -20,8 +20,7 @@ withdrawn.
 | `path:line` | What it is | Bearing on this feature |
 | --- | --- | --- |
 | `work-items/sprints-schema.ts:5` | "Additive tables, never columns on `work_items`" | The project dimension is a join table, as sprints are |
-| `work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: tables created at boot when missing | `projects` and its child tables are registered here |
-| `work-items/migrate.ts:536` | `sprints` is registered before its membership table | Same ordering for `projects` before `work_item_projects` |
+| `work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: tables created at boot when missing | `work_item_projects` and `project_ids_seen` are registered here. Project definitions are YAML, so there is no `projects` table |
 | `work-items/sprints-schema.ts:60` | `sprintFilterCondition` filters on the **root's** membership (`root_id`) | Same shape for `project=<id>\|none`. Sub-tasks inherit their project for free |
 | `work-items/sprint-membership.ts:71` | `assertTopLevel`: only roots hold a sprint | Same rule for projects (FR-004) |
 | `work-items/store.ts:511` | The list filter applies `sprint` | `project` goes next to it |
@@ -43,17 +42,17 @@ withdrawn.
 | `mcp/identity.ts:143` | `deriveSessionCapability`: an HMAC of the session id under the capability key in the secrets directory | A scoped caller is identified exactly as today |
 | `mcp/identity.ts:162` | `verifySessionCapability` | Unchanged |
 | `mcp/identity.ts:42` | "defense-in-depth … not an internet auth boundary" | Why Q1 exists |
-| `mcp/server-bootstrap.ts:25` | The MCP server **derives** the capability itself from the key file, given only a session id and a home on argv | Any process that can read the key can mint any session's capability. FR-024 adds defence in depth on top of FR-022 |
-| `mcp/server.ts:39` | `resolveServerToken`: the MCP server authenticates with the bearer token from its environment or from `gateway.json` | It runs outside the Bash sandbox, so it keeps working. The shell cannot read `gateway.json` (FR-022) |
+| `mcp/server-bootstrap.ts:25` | The MCP server **derives** the capability itself from the key file, given only a session id and a home on argv | Any process that can read the key can mint any session's capability. Deferred to the sandbox work |
+| `mcp/server.ts:39` | `resolveServerToken`: the MCP server authenticates with the bearer token from its environment or from `gateway.json` | Deferred, not built: in a future sandbox this server would keep working while the shell could not read `gateway.json` |
 | `gateway/request-handler.ts:55` | With `authRequired`, a request without the bearer token gets 401 before any route, except the exempt set |
 | `gateway/auth.ts:250` | `authRequiredForRequest` exempts `/api/status`, `GET /api/auth/state`, the `POST` auth and pairing routes, and `POST /api/internal/hook` | E15 walks these |
 | `gateway/server.ts:1035` | Upgrades: `/ws` and plugin events refuse unidentified callers, then check auth. Only `/ws/pty` is operator-only | A token-holding session receives the company broadcast today |
 | `mcp/identity.ts:207` | Each jinn MCP server gets `JINN_SESSION_CAPABILITY` in its environment | Visible to `ps -E` from any same-user process. Seen on this host in 6 of 6 running MCP servers |
 | `gateway/server.ts:510` | `process.env.JINN_GATEWAY_TOKEN` is set in the gateway and inherited by every engine | Visible to `ps -E`. Seen on this host in 148 processes |
-| `packages/jinn/assets/hook-relay.mjs:10` | The hook relay resolves its home from `JINN_HOME` or `~/.jinn` | FR-025a | This instance runs `authRequired: true`. A contained shell holds no token, so it stops here (FR-025) |
-| `gateway/auth.ts:264` | `shouldRequireGatewayAuth`: auth is off on loopback unless `gateway.authRequired` is set | Hence FR-025's precondition |
+| `packages/jinn/assets/hook-relay.mjs:10` | The hook relay resolves its home from `JINN_HOME` or `~/.jinn` | FR-025a | This instance runs `authRequired: true`. Deferred, not built: a contained shell would stop here |
+| `gateway/auth.ts:264` | `shouldRequireGatewayAuth`: auth is off on loopback unless `gateway.authRequired` is set | Deferred to the sandbox work |
 | `gateway/api.ts:841` | `rejectUnverifiedIdentifiedApiCaller` lets unauthenticated `GET`s through when auth is off | Affects auth-off instances only |
-| `gateway/api.ts:796` | Same-origin browser inference, purely from headers | On an auth-off instance any local `curl` can forge it. Another reason for FR-025 |
+| `gateway/api.ts:796` | Same-origin browser inference, purely from headers | On an auth-off instance any local `curl` can forge it. Deferred to the sandbox work |
 | `gateway/session-comm-guards.ts:333` | `resolveCallerIdentity`: one of operator, session, unidentified-tool or unauthenticated | The scope check reads the session from here |
 | `gateway/api.ts:603` | `resolveScopedWriteCallerIdentity` | Same |
 
@@ -111,9 +110,9 @@ withdrawn.
 | --- | --- | --- |
 | `sessions/turn/engine-run.ts:46` | Local engines always run with `cwd: JINN_HOME` | FR-020: scoped sessions get the stage dir |
 | `gateway/server.ts:504` | Exports `JINN_GATEWAY_TOKEN` to every engine | FR-021 |
-| `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | FR-021 needs an allow-list builder |
-| `engines/claude-interactive.ts:451` | Claude argv: `--chrome` (`:451`, the operator's own browser), `--dangerously-skip-permissions` (`:454`), the gateway-written `--settings` under `tmp/` (`:456`), and `--mcp-config` without `--strict-mcp-config` (`:459`) | FR-022, FR-023 |
-| `shared/claude-settings.ts:70` | `buildSessionSettings` writes hooks and a status line only | Scoped sessions also get sandbox and deny blocks, in this file only |
+| `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | Deferred, not built: an allow-list builder |
+| `engines/claude-interactive.ts:451` | Claude argv: `--chrome` (`:451`, the operator's own browser), `--dangerously-skip-permissions` (`:454`), the gateway-written `--settings` under `tmp/` (`:456`), and `--mcp-config` without `--strict-mcp-config` (`:459`) | Deferred to the sandbox work |
+| `shared/claude-settings.ts:70` | `buildSessionSettings` writes hooks and a status line only | Deferred, not built: sandbox and deny blocks |
 | `board-walk/route-turn.ts:48` | `CLAUDE_WALK_FLAGS`: `--no-chrome --tools "" --strict-mcp-config` | The only existing locked-down Claude turn |
 | `gateway/watcher.ts:38` | `syncSkillSymlinks` links every skill into `~/.jinn/.claude/skills` | The stage dir gets copies of the allowed skills instead |
 | `work-items/dispatch-config.ts:253` | `resolveTodoDispatch` adds skills as prompt lines | FR-027 validates them against the allow-list |
@@ -123,12 +122,12 @@ withdrawn.
 | `sessions/turn/preflight.ts:52` | `refuseTurn`, the gate before every engine spawn | Lost binding, wrong engine |
 | `sessions/turn/preflight.ts:63` | Per-employee monthly budget check | Already a per-project cap for dedicated employees |
 | `sessions/fork.ts:164` / `engines/claude-interactive.ts:271` | Transcripts are keyed by the cwd slug | Resume, fork and compaction must resolve the stage-dir slug |
-| `shared/claude-settings.ts:124` | Trust entries per directory in `~/.claude.json` | Seed the stage dir into the session's effective config dir |
-| `shared/home.ts:34` | `resolveClaudeConfigDir` reads the gateway's own `CLAUDE_CONFIG_DIR` at call time | Global today. FR-037 needs a per-employee resolver |
-| `shared/remote-target.ts:219` | `resolveRemoteClaudeConfigDir`, whose comment says env and trust seed must agree or the first turn hangs | Precedent for FR-037 |
-| `shared/claude-auth.ts:121` | Auth check config-dir seam | Checks the employee's account |
-| `shared/engine-health.ts:54` | `engineHealthForTarget`: health keyed per target | Gains the config dir, so one account's limit does not block others |
-| `board-walk/route-turn.ts:45` | Employee `cliFlags` come after the gateway's `--chrome`, so `--no-chrome` in `cliFlags` wins | FR-037 recommendation, no code |
+| `shared/claude-settings.ts:124` | Trust entries per directory in `~/.claude.json` | The only seed today is boot-time (`gateway/server.ts:565`). Phase 3 adds one per stage dir |
+| `shared/home.ts:34` | `resolveClaudeConfigDir` reads the gateway's own `CLAUDE_CONFIG_DIR` at call time | Global today. The follow-up account spec needs a per-session resolver |
+| `shared/remote-target.ts:219` | `resolveRemoteClaudeConfigDir`, whose comment says env and trust seed must agree or the first turn hangs | Precedent for the follow-up account spec |
+| `shared/claude-auth.ts:121` | Auth check config-dir seam | Follow-up account spec. On darwin, credentials are in the Keychain and the check fails open |
+| `shared/engine-health.ts:54` | `engineHealthForTarget`: health keyed per target | Follow-up account spec. Health is keyed by engine only, so this is not a target key that can simply gain a field |
+| `board-walk/route-turn.ts:45` | Employee `cliFlags` come after the gateway's `--chrome`, so `--no-chrome` in `cliFlags` wins | Follow-up account spec. It does not hold on the PTY idle-spawn path (`engines/claude-interactive.ts:3183`) |
 | `gateway/org-registry.ts:42` | `refreshOrg`, which keeps the last good roster | Shape for `project-registry.ts` |
 
 ### Budgets

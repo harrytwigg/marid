@@ -20,28 +20,38 @@ sharedNotes: []               # paths relative to $JINN_HOME (knowledge/... or d
 instructions: project         # project | project+company (FR-029)
 ```
 
-**Scan.** `gateway/project-registry.ts` scans the directory, following the shape of `scanOrg`
-and `orgRegistry` (`packages/jinn/src/gateway/org-registry.ts:42`).
+**Scan.** `gateway/project-registry.ts` follows the shape of `refreshOrg`
+(`packages/jinn/src/gateway/org-registry.ts:42`). It runs at boot and from a watcher on
+`projects/`. FR-001 sets the rules:
 
-- It runs at boot and from a watcher on `projects/`.
-- If a scan fails, it keeps the last good set.
-- It refuses a file, logging the file and the reason, when the file has:
+- **Identity problems** refuse the file:
   - a missing or malformed `id`;
-  - a duplicate `id` (both files are refused);
   - a duplicate or reserved `name`;
-  - a `workdirs` entry that fails FR-033;
-  - a `skills` entry that does not exist under `skills/`;
-  - a `sharedNotes` entry outside `knowledge/` or `docs/`.
+  - YAML that does not parse.
 
-The `id` is required. Generating one on the operator's behalf would mean rewriting a file they
-edited by hand. The Projects page creates files with a generated id.
+  If that id was already loaded, its last good definition is kept and a log line names the
+  file.
+- **Duplicate `id`**: the definition already loaded is kept, and the newcomer is refused.
+- **Content problems** drop only the bad entry, with a warning, and the project stays loaded:
+  - a missing skill;
+  - an FR-033 `workdirs` failure;
+  - a `sharedNotes` entry outside `knowledge/` or `docs/`.
+- **Missing `projects/`**: the project set is empty, nothing is logged, and the watcher
+  tolerates the directory's absence.
+
+The `id` is required. Generating one would mean rewriting a hand-edited file. The Projects
+page creates files with a generated id.
 
 **Backup.** `projects` is added to `ARCHIVE_INCLUDES`
 (`packages/jinn/src/backup/archive.ts:9`).
 
-**Writes from the UI** (FR-042). `POST /api/projects` writes a new file, and
-`PATCH /api/projects/:id` rewrites that project's file. Both are operator-only, like
-`PATCH /api/org/employees/:name`.
+**Writes from the UI** (FR-042):
+
+- `POST /api/projects` writes a new file, and `PATCH /api/projects/:id` rewrites that
+  project's file.
+- Both are operator-only, like `PATCH /api/org/employees/:name`.
+- Writes are atomic: a temp file in the same directory, then a rename.
+- The in-memory registry is refreshed before the response returns.
 
 ## Registry tables
 
@@ -61,6 +71,19 @@ CREATE INDEX IF NOT EXISTS idx_work_item_projects_project ON work_item_projects(
 
 A boot data check, following `sprintRowsAreSound`, requires every `work_item_id` to be a
 root.
+
+```sql
+-- Ids the scan has seen, so a reused id can be reported (spec edge case "Project id reused").
+CREATE TABLE IF NOT EXISTS project_ids_seen (
+  project_id TEXT PRIMARY KEY,
+  last_name TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+```
+
+On each scan, every loaded project upserts its row. If an id that has been absent comes back
+with a different name, the scan logs "id previously used by <last_name>" and the Projects page
+shows the same warning. The file is still loaded.
 
 A `project_id` with no YAML is a dangling id. The project scan reports it. It is never
 refused at boot, so deleting a YAML file cannot brick the gateway.
@@ -92,8 +115,6 @@ CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 name: side-dev
 engine: claude
 projects: [prj_1a2b3c4d5e6f]      # absent = all (today); present = scoped to the known ids
-claudeConfigDir: ~/.claude-side   # optional; local sessions run on this Claude account (FR-037)
-cliFlags: ["--no-chrome"]         # recommended for someone else's account (FR-037)
 mcp: false                        # optional: no third-party MCP servers; the jinn server still attaches
 persona: ...
 ```
@@ -112,11 +133,10 @@ persona: ...
 - A cron job cannot target a scoped employee.
 - A PATCH that narrows scope is refused while the employee holds a Todo that would fall
   outside the new scope (FR-015).
-- `claudeConfigDir` must be absolute or start with `~/`, and must not be `~/.claude` itself.
-  The default account is expressed by leaving the field out.
 
-`WRITABLE_FIELDS` (`packages/jinn/src/gateway/org.ts:170`) gains `projects` and
-`claudeConfigDir`.
+`WRITABLE_FIELDS` (`packages/jinn/src/gateway/org.ts:170`) gains `projects`.
+
+A scoped session's engine environment also carries `JINN_PROJECT_ID=<P>` (FR-028).
 
 ## Stage directory
 
@@ -137,8 +157,6 @@ scan change, and when an instructions file changes. Nobody edits it by hand.
   read live (`packages/jinn/src/work-items/store.ts:865`).
 - **Scoped caller**: a capability-verified session whose employee's scope is not `all`. Its P
   is `sessions.project_id`.
-- **Engine-health key**: the target key gains the employee's effective Claude config dir. The
-  default dir keeps today's key, so existing health rows are unchanged.
 
 ## Wire shapes
 
@@ -163,5 +181,4 @@ type ProjectWire = ProjectRef & {
 project: ProjectRef | null;
 // Employee / EmployeeUpdate:
 projectScope: "all" | string[];
-claudeConfigDir?: string;
 ```

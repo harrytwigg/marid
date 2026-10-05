@@ -4,9 +4,9 @@ These tasks follow the operator's decisions of 2026-10-05 (spec.md, "Operator de
 
 ## How the work ships
 
-**Order.** Each phase is its own PR off `main`. The build order is 1 → (2 ∥ 4) → 3: Phase 1
-first, then Phases 2 and 4 in either order or in parallel, then Phase 3. Phase 3 starts only
-after both 2 and 4 have merged.
+**Order.** Each phase is its own PR off `main`. The build order is 1 → 2 → 3. The
+per-employee Claude account is a separate follow-up spec, written once Phase 3 has merged
+(spec.md, "Follow-up").
 
 **Rules for every phase.**
 
@@ -27,11 +27,16 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 
 - [ ] T020 Write `gateway/project-registry.ts`.
   - It scans `$JINN_HOME/projects/*.yaml` using the parser `org.ts` uses.
-  - It validates each file against data-model.md: `id` required and well-formed, unique ids
-    and names, reserved names, FR-033 working directories, skills that exist, and
-    `sharedNotes` under `knowledge/` or `docs/`.
-  - It keeps the last good set when a scan fails, as `gateway/org-registry.ts:42` does.
-  - It watches the directory, as `gateway/watcher.ts:130` does.
+  - It applies data-model.md's scan rules:
+    - identity problems refuse the file, but keep the last good definition of an id that was
+      already loaded;
+    - a duplicate id keeps the definition already loaded and refuses the newcomer;
+    - content problems drop only the entry, with a warning;
+    - a missing `projects/` gives an empty set, with no log line.
+  - It records ids it has seen in `project_ids_seen`, and reports an id that comes back under a
+    different name.
+  - It watches the directory, as `gateway/watcher.ts:130` does, and tolerates the directory
+    being absent.
   - It emits `company:changed {entity:"project"}`.
   - Add `projects` to `ARCHIVE_INCLUDES`.
 - [ ] T021 Write `work-items/projects-schema.ts`. It defines `work_item_projects` per
@@ -48,15 +53,24 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 - [ ] T023 Write `gateway/projects-api.ts`:
   - `GET /api/projects` and `GET /api/projects/:id`;
   - `POST /api/projects`, which writes a new YAML with a generated `prj_` + 12-hex id;
-  - `PATCH /api/projects/:id`, which rewrites that file;
+  - `PATCH /api/projects/:id`, which rewrites that file.
+
+  Both writes are atomic (temp file, then rename), and the registry refreshes before the
+  route responds.
+
+  The route list also includes:
   - `PUT /api/work-items/:id/project`.
 
   Writes are operator-only (`control-plane-routes.ts`). Refuse writes to `dedicated` until
   Phase 2. Mount the module with one line in `api.ts`, and pay for that line by moving
   `GET /api/sessions` into `gateway/sessions-list-api.ts`.
 - [ ] T024 Tests:
-  - scan validation, one case per refusal reason;
-  - the last-good set on a bad scan;
+  - scan rules: one case per identity refusal; a content problem drops only the entry and keeps
+    the project; a duplicate id keeps the first;
+  - a broken edit to a loaded file keeps its last good definition;
+  - a missing `projects/` gives an empty set and no log line;
+  - id reuse under a new name is reported;
+  - a project create followed at once by a Todo create in it succeeds;
   - rename or move a file and the id is kept;
   - filter semantics (`none`, an unknown id, an archived project);
   - root-only membership and sub-task inheritance;
@@ -105,12 +119,14 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 - [ ] T044 Write `gateway/project-scope/read-routes.ts` for every scoped list and search row,
   including the `ids=`, `pinned` and `q` branches and the hidden counts.
 - [ ] T045 Write `mayHoldTodo` (FR-015).
-  - Add a store guard in every `assignee` writer. Enumerate them first: `work-items/store.ts:356`,
-    `:797`, `:850`, and any others. Then enumerate their callers, including
+  - Add a guard at every SQL writer of `assignee`. Enumerate them first with
+    `git grep -n "SET assignee\|assignee = ?\|INSERT INTO work_items" packages/jinn/src`.
+    On `main` that finds the `store.ts` insert, the two dynamic update paths in `store.ts`, and
+    `work-items/assignment.ts:98`. Then enumerate their callers, including
     `cron/runner.ts:101`, `plugins/host/todos.ts:31` and `gateway/api.ts:3450`.
   - The guard learns scope from a resolver injected at boot. Its fallbacks: with no resolver,
     refuse only assignment into a `dedicated` project; treat an assignee not on the roster as
-    unscoped.
+    unscoped; treat an unknown project id as `dedicated`.
   - Check entry points: `spawnSession` with a linked Todo, Dispatcher routing, and the
     board-walk projection (which skips).
   - Refuse the stranding transitions and name the holders: a project change, setting
@@ -119,7 +135,10 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 - [ ] T046 Apply FR-018 path checks to `publish_attachment`, path-based `attach_to_work_item`
   and the JSON `{path}` attachment route, for scoped callers only. Refuse `list_files` and
   `read_file`.
-- [ ] T047 Write `mcp/project-profile.ts` and its resolver selection. Then:
+- [ ] T047 Write `mcp/project-profile.ts` and its resolver selection. The profile removes the
+  refused tools, and always includes the note tools rooted at P, even when `notesEnabled` is
+  off. Serve the note routes to scoped callers regardless of that flag (`gateway/api.ts:1207`).
+  Set `JINN_PROJECT_ID` in scoped sessions' environment. Then:
   - write `sessions/context/project.ts`, covering the roster limited to members and the
     project section, and pay for its call site in `context.ts`;
   - add a lost-binding check to `refuseTurn`;
@@ -146,42 +165,32 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 
   Capture each in light and dark.
 
-## Phase 4: an employee on its own Claude account (senior-developer, then senior QA)
-
-- [ ] T070 Red test on `main`: an employee's sessions cannot run under a non-default Claude
-  config dir, and transcript lookup always uses the gateway's global one.
-- [ ] T071 Add `claudeConfigDir` to `org.ts`, `Employee` and `WRITABLE_FIELDS`. It must be
-  absolute or start with `~/`, and must not be `~/.claude`.
-- [ ] T072 Write `effectiveClaudeConfigDir(employee)`. Enumerate every session-path call of
-  `resolveClaudeConfigDir()` and `claudeJsonPath()`, and route each through the new function:
-  - the engine child env (`CLAUDE_CONFIG_DIR`);
-  - transcript lookup for resume, fork and auto-compaction;
-  - the trust seed;
-  - the auth check.
-- [ ] T073 Add the config dir to the engine-health target key. The default dir keeps today's
-  key. Test that an exhaustion recorded for one account leaves another healthy.
-- [ ] T074 On the engine-limits page, list non-default accounts as "not collected".
-- [ ] T075 [P] Web: add a `claudeConfigDir` field to the employee editor. Capture it in light
-  and dark.
-- [ ] T076 Collect SC-003 evidence against a real session pair and attach it to the PR.
-
-## Phase 3: scoped context (junior-developer, then senior QA; starts after Phases 2 and 4 merge)
+## Phase 3: scoped context (junior-developer, then senior QA; starts after Phase 2 merges)
 
 - [ ] T060 Generate the stage dir at `<parent of home>/.jinn-projects/<id>/`. It contains
   copies of the allowed skills and a `CLAUDE.md` built from `INSTRUCTIONS.md`, plus the
   company file if `project+company` is set, plus the FR-029 scope paragraph. Regenerate it on
   skill, project-scan and instruction changes. Use it as cwd for scoped sessions in
-  `engine-run.ts`, and seed its trust entry into `effectiveClaudeConfigDir`.
-- [ ] T061 Make resume, fork and auto-compaction resolve the stage-dir transcript slug, under
-  the employee's config dir. Add a regression test for each.
+  `engine-run.ts`. Write a trust seed for the stage dir when it is generated: the only seed
+  today is the boot-time one at `gateway/server.ts:565`.
+- [ ] T061 Make resume, fork and auto-compaction resolve the stage-dir transcript slug. Add a regression test for each.
 - [ ] T062 Apply the skill allow-list to the copies, the prompt and `dispatchConfig.skills`.
 - [ ] T063 Make `SEARCH_ROOTS` a parameter. For scoped callers:
   - root reads at `knowledge/projects/<id>/` (including `state.md`) plus `sharedNotes`;
   - refuse the company `knowledge/state.md`, `knowledge/employees/` and `docs/` unless they
     are shared;
   - allow note writes only in the project folder.
-- [ ] T064 Update the template docs (`todo-handling`, `management`). Cover projects, project
-  state through `mem state … --file projects/<id>/state.md`, the friend-account setup
-  (`CLAUDE_CONFIG_DIR=… claude`, `/login`, `claudeConfigDir`, `cliFlags: ["--no-chrome"]`),
-  and the fact that scoping is a guardrail, not a sandbox. Add a migration note if instance
-  files change.
+- [ ] T064 Update the template docs (`todo-handling`, `management`). Cover:
+  - projects;
+  - project state in `knowledge/projects/<id>/state.md`, kept through the note tools;
+  - the fact that scoping is a guardrail, not a sandbox.
+
+  Do not mention `mem`, which is instance-local. Add a migration note if instance files
+  change.
+
+## Follow-ups outside this feature
+
+- [ ] F1 (senior-developer) Write the follow-up spec for employees on another Claude account,
+  from spec.md "Follow-up". Its first task is the Keychain check.
+- [ ] F2 (instance, not this repository) Make `~/.jinn/bin/mem` respect `JINN_PROJECT_ID`, so it
+  defaults to `projects/<id>/state.md` and refuses other files.
