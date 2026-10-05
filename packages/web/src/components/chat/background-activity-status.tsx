@@ -1,21 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { BackgroundActivity, DelegatedActivity } from '@/lib/api'
+import { countLabel, isBackgroundActivityVisible, joinParts, pendingWork } from './pending-work'
 
-const BACKGROUND_ACTIVITY_STALE_MS = 5 * 60 * 1000
 const EXIT_MS = 140
-
-/** True when background work should be surfaced. Streams retain the stale
- *  backstop; a tracked monitor stays visible until its observed end signal. */
-export function isBackgroundActivityVisible(
-  activity: BackgroundActivity | null,
-  nowMs: number,
-): boolean {
-  const streams = activity?.activeStreams ?? 0
-  const monitors = activity?.activeMonitors ?? 0
-  const lastActivityAt = activity?.lastActivityAt ? new Date(activity.lastActivityAt).getTime() : 0
-  const stale = lastActivityAt > 0 && nowMs - lastActivityAt > BACKGROUND_ACTIVITY_STALE_MS
-  return monitors > 0 || (streams > 0 && !stale)
-}
 
 interface ActivityCopy {
   kind: 'runtime' | 'delegated-one' | 'delegated-many' | 'delegated-generic'
@@ -33,6 +20,25 @@ function titleCaseSlug(slug: string): string {
     .join(' ')
 }
 
+/** The runtime part of the line. Work the turn left running is counted as
+ *  the answer caption counts it; model requests in flight with nothing else
+ *  pending fall back to the in-flight agent count. */
+function runtimeCopy(activity: BackgroundActivity | null, nowMs: number): { long: string; short: string } {
+  const work = pendingWork(activity, null, nowMs)
+  if (work) {
+    const parts = [
+      ...(work.subAgents ? [countLabel(work.subAgents, 'sub-agent')] : []),
+      ...(work.monitors ? [countLabel(work.monitors, 'monitor')] : []),
+    ]
+    if (!parts.length) return { long: 'Background re-run in progress', short: 'Re-running' }
+    const short = [...parts, ...(work.rerun ? ['re-run'] : [])].join(' · ')
+    return { long: `${joinParts([...parts, ...(work.rerun ? ['a re-run'] : [])])} in background`, short }
+  }
+  const agents = activity?.activeAgents ?? activity?.activeStreams ?? 0
+  if (agents > 0) return { long: `${countLabel(agents, 'agent')} in background`, short: countLabel(agents, 'agent') }
+  return { long: 'Background work in progress', short: 'Working' }
+}
+
 function activityCopy(
   activity: BackgroundActivity | null,
   delegatedActivity: DelegatedActivity | null,
@@ -41,7 +47,7 @@ function activityCopy(
   const delegatedSessions = delegatedActivity?.activeSessions ?? 0
   if (delegatedSessions > 0) {
     const employees = delegatedActivity?.employees ?? []
-    const title = `${delegatedSessions} delegated ${delegatedSessions === 1 ? 'task' : 'tasks'} still running`
+    const title = `${countLabel(delegatedSessions, 'delegated task')} still running`
     if (employees.length === 1) {
       const displayName = employeeDisplayNames[employees[0]] || titleCaseSlug(employees[0])
       return {
@@ -68,23 +74,9 @@ function activityCopy(
     }
   }
 
-  if (!isBackgroundActivityVisible(activity, Date.now())) return null
-  const agents = activity?.activeAgents ?? activity?.activeStreams ?? 0
-  const monitors = activity?.activeMonitors ?? 0
-  const agentLabel = `${agents} ${agents === 1 ? 'agent' : 'agents'}`
-  const monitorLabel = `${monitors} ${monitors === 1 ? 'monitor' : 'monitors'}`
-  let long = 'Background work in progress'
-  let short = 'Working'
-  if (agents > 0 && monitors > 0) {
-    long = `${agentLabel} and ${monitorLabel} in background`
-    short = `${agentLabel} · ${monitorLabel}`
-  } else if (agents > 0) {
-    long = `${agentLabel} in background`
-    short = agentLabel
-  } else if (monitors > 0) {
-    long = `${monitorLabel} in background`
-    short = monitorLabel
-  }
+  const nowMs = Date.now()
+  if (!isBackgroundActivityVisible(activity, nowMs)) return null
+  const { long, short } = runtimeCopy(activity, nowMs)
   return {
     kind: 'runtime',
     long,

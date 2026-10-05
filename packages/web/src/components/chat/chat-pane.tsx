@@ -431,6 +431,7 @@ export function ChatPane({
   const titleBarState = paneTitleBarState({ sessionId, currentSession, loading, turnPending,
     backgroundActivity, delegatedActivity, paneTitle, paneEmployee, portalName })
   const titleBarViewControls = paneViewControls(titleBarState.session, engineRegistry)
+  const paneDelegatedActivity = (titleBarState.session.delegatedActivity as DelegatedActivity | null | undefined) ?? null
   // A terminal session is its shell and nothing else: no transcript, no composer.
   const terminalPane = sessionId && (terminal || isTerminalSession(currentSession)) ? sessionId : null
   // A file tab of this pane's group is showing: it covers the chat, which stays mounted (scroll,
@@ -496,6 +497,8 @@ export function ChatPane({
             liveTerminalDelegationIds={liveTerminalDelegationIds}
             blockAnnouncement={blockAnnouncement}
             footer={staleChatNotice}
+            backgroundActivity={backgroundActivity}
+            delegatedActivity={paneDelegatedActivity}
             emptyState={sessionId ? undefined : newChatEmptyState ?? (
               <ChatEmployeePicker
                 employees={pickerEmployees}
@@ -545,11 +548,7 @@ export function ChatPane({
           !(viewMode === 'cli' && sessionId) && !loading ? (
             <BackgroundActivityStatus
               activity={backgroundActivity}
-              delegatedActivity={
-                delegatedActivity === undefined
-                  ? (currentSession?.delegatedActivity as DelegatedActivity | null | undefined) ?? null
-                  : delegatedActivity
-              }
+              delegatedActivity={paneDelegatedActivity}
               employeeDisplayNames={employeeDisplayNames}
             />
           ) : undefined

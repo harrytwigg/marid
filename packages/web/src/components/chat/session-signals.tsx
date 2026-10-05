@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react"
 import { type BackgroundActivity, type DelegatedActivity } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { isBackgroundActivityStale } from "./pending-work"
 
 export interface Session {
   id: string
@@ -30,7 +31,6 @@ export interface Session {
   [key: string]: unknown
 }
 
-const BACKGROUND_ACTIVITY_STALE_MS = 5 * 60 * 1000
 // A red error dot is only worth surfacing while the failure is fresh; older
 // errored sessions fall back to the normal idle/unread treatment so the list
 // isn't littered with stale red dots.
@@ -73,9 +73,7 @@ export function getSessionActivity(session: Session): string {
 
 function hasLiveStreams(activity: BackgroundActivity | null | undefined): boolean {
   if ((activity?.activeStreams ?? 0) <= 0) return false
-  const lastActivityAt = activity?.lastActivityAt ? new Date(activity.lastActivityAt).getTime() : 0
-  const stale = lastActivityAt > 0 && Date.now() - lastActivityAt > BACKGROUND_ACTIVITY_STALE_MS
-  return !stale
+  return !isBackgroundActivityStale(activity ?? null, Date.now())
 }
 
 /** Idle-but-busy: the session's turn ended but subagents/background tasks are
