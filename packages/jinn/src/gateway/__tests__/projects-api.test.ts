@@ -130,6 +130,29 @@ describe("project registry routes", () => {
     expect((await call("PATCH", `/api/projects/${other.id}`, { name: "sailing club" })).status).toBe(409);
   });
 
+  it("refuses a PATCH, with a 400, while the file on disk has a YAML syntax error", async () => {
+    const project = await newProject("Syntax Slip");
+    const file = path.join(tmp, project.file);
+    const broken = "id: [unclosed\nname: Syntax Slip\n";
+    fs.writeFileSync(file, broken);
+    const patched = await call("PATCH", `/api/projects/${project.id}`, { description: "x" });
+    expect(patched.status).toBe(400);
+    expect(patched.body.error).toMatch(/fix the YAML first/);
+    expect(fs.readFileSync(file, "utf-8")).toBe(broken);
+    expect((await call("GET", `/api/projects/${project.id}`)).body.project.name).toBe("Syntax Slip"); // last good definition still served
+  });
+
+  it("refuses a PATCH, with a 400, when the file's id was edited to something else", async () => {
+    const project = await newProject("Renumbered");
+    const file = path.join(tmp, project.file);
+    const edited = fs.readFileSync(file, "utf-8").replace(project.id, "prj_not-an-id");
+    fs.writeFileSync(file, edited);
+    const patched = await call("PATCH", `/api/projects/${project.id}`, { description: "x" });
+    expect(patched.status).toBe(400);
+    expect(patched.body.error).toMatch(/fix the YAML first/);
+    expect(fs.readFileSync(file, "utf-8")).toBe(edited);
+  });
+
   it("refuses writes to dedicated, but loads and preserves a hand-edited one", async () => {
     expect((await call("POST", "/api/projects", { name: "Locked", dedicated: true })).status).toBe(400);
     const project = await newProject("Hand Edited");

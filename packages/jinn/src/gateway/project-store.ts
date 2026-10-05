@@ -141,13 +141,13 @@ export function updateProject(id: string, patch: ProjectWriteInput): Project {
   if (!current) throw new ProjectWriteError(`project ${id} not found`, "not_found");
   if (patch.dedicated !== undefined && patch.dedicated !== current.dedicated) throw new ProjectWriteError(DEDICATED_REFUSAL, "invalid");
   const file = path.join(resolveJinnHome(), current.file);
-  const raw = yaml.load(fs.readFileSync(file, "utf-8"));
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new ProjectWriteError(`${current.file} is not readable as a project; fix the YAML first`, "invalid");
+  const raw = readRawDoc(file);
+  if (!raw || raw.id !== id) {
+    throw new ProjectWriteError(`${current.file} is not readable as project ${id}; fix the YAML first`, "invalid");
   }
   const changes: ProjectWriteInput = { ...patch };
   delete changes.dedicated; // unchanged, or refused above
-  const doc: Record<string, unknown> = { ...(raw as Record<string, unknown>), ...changes };
+  const doc: Record<string, unknown> = { ...raw, ...changes };
   if (typeof changes.name === "string") {
     doc.name = changes.name.trim();
     assertNameFree(doc.name as string, id);
@@ -155,6 +155,16 @@ export function updateProject(id: string, patch: ProjectWriteInput): Project {
   validated(doc, current.file, Object.keys(changes));
   writeFileAtomic(file, dumpProjectDoc(doc));
   return loadedOrThrow(id);
+}
+
+/** The file as a plain mapping, or null when it no longer parses (the registry then serves its last good definition). */
+function readRawDoc(file: string): Record<string, unknown> | null {
+  try {
+    const raw = yaml.load(fs.readFileSync(file, "utf-8"));
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 function loadedOrThrow(id: string): Project {

@@ -27,29 +27,42 @@ afterAll(async () => {
 });
 
 describe("the projects watcher", () => {
-  it("starts with no projects directory, then reports the change when the directory and a file appear", async () => {
+  const callbacksWith = (onProjectsChange: () => void): Callbacks => ({
+    onConfigReload: noop, onCronReload: noop, onOrgChange: noop, onSkillsChange: noop, onPluginsChange: noop, onProjectsChange,
+  });
+
+  it("starts with no projects directory: an empty set, and no change reported", async () => {
     expect(fs.existsSync(path.join(tmp, "projects"))).toBe(false);
     const onProjectsChange = vi.fn();
-    const callbacks: Callbacks = {
-      onConfigReload: noop, onCronReload: noop, onOrgChange: noop, onSkillsChange: noop, onPluginsChange: noop, onProjectsChange,
-    };
-    watcher.startWatchers(callbacks);
+    watcher.startWatchers(callbacksWith(onProjectsChange));
+    await watcher.projectsWatcherReady();
     expect(registry.readProjects().projects).toEqual([]);
     expect(onProjectsChange).not.toHaveBeenCalled();
+    await watcher.stopWatchers();
+  });
 
+  // On macOS a write made in the first moments after a watch attaches can be dropped, even once
+  // chokidar has said ready (the raw event stream stays silent). Nothing real edits a project file
+  // that fast, so the test writes again on each poll, slower than the watcher's write-settle window,
+  // until the watcher reports it, instead of guessing how long attaching takes.
+  it("reports a file written into the directory once the watcher is ready", async () => {
     fs.mkdirSync(path.join(tmp, "projects"));
-    fs.writeFileSync(projectFile, "id: prj_0a1b2c3d4e5f\nname: Garden Planner\n");
-    await vi.waitFor(() => expect(onProjectsChange).toHaveBeenCalled(), { timeout: 8000, interval: 100 });
+    const onProjectsChange = vi.fn();
+    watcher.startWatchers(callbacksWith(onProjectsChange));
+    await watcher.projectsWatcherReady();
+
+    let writes = 0;
+    await vi.waitFor(() => {
+      fs.writeFileSync(projectFile, `id: prj_0a1b2c3d4e5f\nname: Garden Planner\n# write ${writes++}\n`);
+      expect(onProjectsChange).toHaveBeenCalled();
+    }, { timeout: 12_000, interval: 700 });
     expect(registry.refreshProjects().projects.map((p) => p.name)).toEqual(["Garden Planner"]);
-  }, 15_000);
+  }, 20_000);
 
   it("loads definitions that already exist when the watchers start", async () => {
     await watcher.stopWatchers();
     registry.resetProjectRegistryForTests();
-    const callbacks: Callbacks = {
-      onConfigReload: noop, onCronReload: noop, onOrgChange: noop, onSkillsChange: noop, onPluginsChange: noop, onProjectsChange: noop,
-    };
-    watcher.startWatchers(callbacks);
+    watcher.startWatchers(callbacksWith(noop));
     expect(registry.readProjects().byId.get("prj_0a1b2c3d4e5f")?.name).toBe("Garden Planner");
   });
 });

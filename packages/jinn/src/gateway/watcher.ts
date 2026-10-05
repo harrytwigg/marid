@@ -102,6 +102,12 @@ export function isUnwatchedPluginPath(target: string): boolean {
     .some((segment) => UNWATCHED_PLUGIN_DIRS.has(segment));
 }
 
+/** Settles once the projects/ watcher has finished its initial scan, so a change made after it is never missed. */
+let projectsReady: Promise<void> = Promise.resolve();
+export function projectsWatcherReady(): Promise<void> {
+  return projectsReady;
+}
+
 export function startWatchers(callbacks: WatcherCallbacks): void {
   const DEBOUNCE_MS = 500;
 
@@ -150,6 +156,7 @@ export function startWatchers(callbacks: WatcherCallbacks): void {
     awaitWriteFinish: { stabilityThreshold: 300 },
   });
   projectsWatcher.on("all", debounce(() => callbacks.onProjectsChange(), DEBOUNCE_MS));
+  projectsReady = new Promise((resolve) => projectsWatcher.once("ready", () => resolve()));
 
   // Watch skills/ directory for added/removed skill folders → sync symlinks
   const skillsWatcher = watch(SKILLS_DIR, {
