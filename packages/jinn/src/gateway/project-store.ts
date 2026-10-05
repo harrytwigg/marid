@@ -153,8 +153,39 @@ export function updateProject(id: string, patch: ProjectWriteInput): Project {
     assertNameFree(doc.name as string, id);
   }
   validated(doc, current.file, Object.keys(changes));
+  for (const field of LIST_FIELDS) {
+    if (changes[field]) doc[field] = mergeList(field, raw[field], changes[field]);
+  }
   writeFileAtomic(file, dumpProjectDoc(doc));
   return loadedOrThrow(id);
+}
+
+/** What the scan makes of one list entry: its normalised form, or undefined when the scan would drop it. */
+function keptForm(field: (typeof LIST_FIELDS)[number], entry: string): string | undefined {
+  const parsed = parseProject(dumpProjectDoc({ id: "prj_000000000000", name: "probe", [field]: [entry] }), "probe.yaml");
+  return parsed.ok ? parsed.project[field][0] : undefined;
+}
+
+/**
+ * The list to write when a patch carries the list as the API shows it. The API shows only the
+ * entries the scan kept, in normalised form, so a plain overwrite would delete the entries the scan
+ * dropped (a skill not installed yet, an unmounted directory) and respell the rest. Entries the file
+ * holds keep their spelling and place; ones the patch no longer lists are removed; new ones go last.
+ */
+function mergeList(field: (typeof LIST_FIELDS)[number], current: unknown, patch: string[]): string[] {
+  const rawEntries = Array.isArray(current) ? current.filter((entry): entry is string => typeof entry === "string") : [];
+  const wanted = new Set(patch);
+  const written: string[] = [];
+  const matched = new Set<string>();
+  for (const entry of rawEntries) {
+    const kept = keptForm(field, entry);
+    if (kept === undefined) written.push(entry);
+    else if (wanted.has(kept)) {
+      written.push(entry);
+      matched.add(kept);
+    }
+  }
+  return [...written, ...patch.filter((entry) => !matched.has(entry))];
 }
 
 /** The file as a plain mapping, or null when it no longer parses (the registry then serves its last good definition). */

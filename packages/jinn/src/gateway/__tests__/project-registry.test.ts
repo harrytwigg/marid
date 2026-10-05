@@ -115,6 +115,30 @@ describe("duplicate ids", () => {
   });
 });
 
+describe("duplicate names", () => {
+  it("refuse the edited file, not the live project, when a hand-edit claims another project's name", () => {
+    write("a.yaml", doc(ID_A, "Alpha"));
+    write("b.yaml", doc(ID_B, "Beta"));
+    expect(names()).toEqual(["Alpha", "Beta"]);
+    write("a.yaml", doc(ID_A, "Beta"));
+    const set = registry.refreshProjects();
+    expect(set.projects.map((p) => `${p.id}=${p.name}`)).toEqual([`${ID_A}=Alpha`, `${ID_B}=Beta`]);
+    expect(registry.projectRefOf(ID_B)).toMatchObject({ name: "Beta", known: true });
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("projects/a.yaml refused"));
+  });
+
+  it("do the same across a restart, using the name each id was last seen under", () => {
+    write("a.yaml", doc(ID_A, "Alpha"));
+    write("b.yaml", doc(ID_B, "Beta"));
+    registry.refreshProjects();
+    write("a.yaml", doc(ID_A, "Beta"));
+    registry.resetProjectRegistryForTests(); // a restart keeps project_ids_seen but not the loaded set
+    const set = registry.refreshProjects();
+    expect(set.byId.get(ID_B)?.name).toBe("Beta");
+    expect(set.byId.has(ID_A)).toBe(false);
+  });
+});
+
 describe("content problems drop only the entry", () => {
   it("drops a missing skill, a bad shared-notes path and a bad working directory, and keeps the project", () => {
     write("garden.yaml", doc(ID_A, "Garden Planner", [

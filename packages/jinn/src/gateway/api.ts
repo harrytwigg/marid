@@ -1733,7 +1733,7 @@ export async function handleApiRequest(
     }
 
     // GET /api/sessions: the list, in its own module (api.ts is over its size budget).
-    if (await handleSessionsListApi(res, { method, pathname, url }, { serialize: (sessions) => serializeSessionList(sessions, context), portalSlug: context.getConfig().portal?.portalName })) return;
+    if (await handleSessionsListApi(res, { method, pathname, url }, { serialize: (sessions) => serializeSessionList(sessions, context), portalSlug: () => context.getConfig().portal?.portalName })) return;
 
     // GET /api/sessions/:id/messages?before=<messageId>&limit=N
     // Bounded older-history page for seamless transcript prepending in the web UI.

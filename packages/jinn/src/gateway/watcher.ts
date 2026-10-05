@@ -159,7 +159,7 @@ export function startWatchers(callbacks: WatcherCallbacks): void {
     awaitWriteFinish: { stabilityThreshold: 300 },
   });
   projectsWatcher.on("all", debounce(() => callbacks.onProjectsChange(), DEBOUNCE_MS));
-  projectsReady = new Promise((resolve) => projectsWatcher.once("ready", () => resolve()));
+  projectsReady = new Promise((resolve) => projectsWatcher.on("ready", () => resolve()));
 
   // Watch skills/ directory for added/removed skill folders → sync symlinks
   const skillsWatcher = watch(SKILLS_DIR, {

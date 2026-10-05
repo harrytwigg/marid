@@ -25,6 +25,7 @@ import {
 import { PickerPopover, PickerSheet } from "./pickers/picker-shell"
 import { creatableDepartment, offeredDepartments } from "./pickers/department-filters"
 import { PropertyChip } from "./pickers/property-chip"
+import { useProjects } from "@/hooks/use-projects"
 import { NewTodoProjectChip, seededProject } from "./projects/new-todo-project-chip"
 
 type CreatePicker = "assignee" | "department" | "priority" | "due" | "labels"
@@ -70,7 +71,13 @@ export function NewTodoDialog({
   const [parentId, setParentId] = useState("")
   const seededDepartment = creatableDepartment(defaults?.departments ?? [], defaults?.department)
   const [department, setDepartment] = useState<string | null>(seededDepartment)
-  const [project, setProject] = useState<string | null>(seededProject(defaults?.project))
+  const registry = useProjects(Boolean(defaults?.project) && defaults?.project !== "none")
+  const seededProjectId = seededProject(defaults?.project, registry.data)
+  const [project, setProject] = useState<string | null>(seededProjectId)
+  // The registry can arrive after the dialog opens; a seed it shows to be closed is dropped then.
+  useEffect(() => {
+    if (registry.data && seededProjectId === null) setProject((current) => (current === defaults?.project ? null : current))
+  }, [registry.data, seededProjectId, defaults?.project])
   const [assignee, setAssignee] = useState<string | null>(null)
   const [priority, setPriority] = useState(0)
   const [dueAt, setDueAt] = useState<string | null>(null)
@@ -98,7 +105,7 @@ export function NewTodoDialog({
   }), [title, department, assignee, priority, dueAt, selectedLabels])
   const dirty = Boolean(
     title.trim() || body.trim() || parentId.trim() || assignee
-    || priority || dueAt || labelIds.length || department !== seededDepartment || project !== seededProject(defaults?.project),
+    || priority || dueAt || labelIds.length || department !== seededDepartment || project !== seededProjectId,
   )
 
   const reset = useCallback(() => {
@@ -106,7 +113,7 @@ export function NewTodoDialog({
     setBody("")
     setParentId("")
     setDepartment(seededDepartment)
-    setProject(seededProject(defaults?.project))
+    setProject(seededProjectId)
     setAssignee(null)
     setPriority(0)
     setDueAt(null)
@@ -114,7 +121,7 @@ export function NewTodoDialog({
     setPicker(null)
     setShowParent(false)
     setError(null)
-  }, [seededDepartment, defaults?.project])
+  }, [seededDepartment, seededProjectId])
 
   const create = useCallback(async (keepOpen: boolean) => {
     const nextTitle = title.trim()

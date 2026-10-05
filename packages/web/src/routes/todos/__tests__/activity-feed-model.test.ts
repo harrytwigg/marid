@@ -103,6 +103,11 @@ describe("the merged feed model", () => {
       .toBe("claude window reopened, stated")
   })
 
+  it("reads a project move as a project move, in either direction", () => {
+    expect(whisperOf(event("e", "project_changed", "t", { detail: { from: null, to: "prj_0a1b2c3d4e5f" } })).text).toBe("moved it to a project")
+    expect(whisperOf(event("e", "project_changed", "t", { detail: { from: "prj_0a1b2c3d4e5f", to: null } })).text).toBe("took it out of its project")
+  })
+
   it("leaves inline HTML comments and fenced examples intact", () => {
     expect(stripCommentMarkers(
       "Before\n<!-- pipeline-status -->\nInline <!-- keep --> text\n<!-- keep --> visible <!-- too -->\n```\n<!-- code -->\n```\n<!-- /pipeline-status -->\nAfter",

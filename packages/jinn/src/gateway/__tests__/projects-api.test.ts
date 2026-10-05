@@ -153,6 +153,18 @@ describe("project registry routes", () => {
     expect(fs.readFileSync(file, "utf-8")).toBe(edited);
   });
 
+  it("merges a list PATCH into the file instead of overwriting what the scan dropped", async () => {
+    for (const skill of ["review", "audit"]) fs.mkdirSync(path.join(tmp, "skills", skill), { recursive: true });
+    const project = await newProject("Hand Written");
+    const file = path.join(tmp, project.file);
+    const doc = yaml.load(fs.readFileSync(file, "utf-8")) as Record<string, unknown>;
+    fs.writeFileSync(file, yaml.dump({ ...doc, skills: ["review", "not-installed-yet"] }));
+    expect((await call("PATCH", `/api/projects/${project.id}`, { skills: ["review", "audit"] })).status).toBe(200);
+    expect((yaml.load(fs.readFileSync(file, "utf-8")) as { skills: string[] }).skills).toEqual(["review", "not-installed-yet", "audit"]);
+    expect((await call("PATCH", `/api/projects/${project.id}`, { skills: ["audit"] })).status).toBe(200);
+    expect((yaml.load(fs.readFileSync(file, "utf-8")) as { skills: string[] }).skills).toEqual(["not-installed-yet", "audit"]);
+  });
+
   it("refuses writes to dedicated, but loads and preserves a hand-edited one", async () => {
     expect((await call("POST", "/api/projects", { name: "Locked", dedicated: true })).status).toBe(400);
     const project = await newProject("Hand Edited");

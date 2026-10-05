@@ -1,4 +1,4 @@
-import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
+import { ChevronRight, CornerDownRight, Flag, FolderKanban, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
 import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
@@ -72,6 +72,12 @@ const WHISPERS: Record<string, WhisperRule> = {
   }),
   attachment_removed: { Icon: Paperclip, text: "removed an attachment" },
   label_changed: { Icon: Tags, text: "changed the labels" },
+  project_changed: (detail) => {
+    const to = typeof detail.to === "string" ? detail.to : null
+    const from = typeof detail.from === "string" ? detail.from : null
+    if (to) return { Icon: FolderKanban, text: "moved it to a project" }
+    return { Icon: FolderKanban, text: from ? "took it out of its project" : "changed its project" }
+  },
   sprint_changed: (detail) => {
     const to = typeof detail.sprint === "string" ? detail.sprint : null
     const from = typeof detail.from === "string" ? detail.from : null

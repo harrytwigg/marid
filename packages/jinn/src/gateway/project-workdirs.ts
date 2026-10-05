@@ -36,12 +36,15 @@ export function expandHome(p: string): string {
   return p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
 }
 
-/** The top level of the git work tree holding `dir`, or null when there is none. */
+const GIT_PROBE_TIMEOUT_MS = 2000;
+
+/** The top level of the git work tree holding `dir`, or null when there is none. The probe is bounded, so a hung mount cannot stall the gateway. */
 function gitTopLevel(dir: string): string | null {
   try {
     const out = execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      timeout: GIT_PROBE_TIMEOUT_MS,
     });
     return out.trim() ? real(out.trim()) : null;
   } catch {

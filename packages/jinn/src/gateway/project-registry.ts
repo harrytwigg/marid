@@ -76,9 +76,24 @@ function readFile(file: string): string {
   }
 }
 
-/** A definition that already holds an id or name keeps it: loaded files go before newcomers. */
+/** The name each project id was last seen under, across boots. */
+function seenNames(): Map<string, string> {
+  const rows = initDb().prepare("SELECT project_id, last_name FROM project_ids_seen").all() as Array<{ project_id: string; last_name: string }>;
+  return new Map(rows.map((row) => [row.project_id, row.last_name]));
+}
+
+/**
+ * A definition that already holds an id and name keeps them: files that still say what they said
+ * go before newcomers and before files whose edit changed their name, so a hand-edit that claims
+ * another live project's name is the one refused. Within one process "said before" is the loaded
+ * set; on a fresh boot it is the name the id was last seen under.
+ */
 function inLoadOrder(candidates: Candidate[], loaded: ProjectSet | undefined): Candidate[] {
-  const heldBefore = (c: Candidate) => loaded?.byId.get(c.project.id)?.file === c.file;
+  const seen = loaded ? undefined : seenNames();
+  const heldBefore = (c: Candidate) => {
+    const prior = loaded?.byId.get(c.project.id);
+    return prior ? prior.file === c.file && prior.name === c.project.name : seen?.get(c.project.id) === c.project.name;
+  };
   return [...candidates].sort((a, b) => Number(heldBefore(b)) - Number(heldBefore(a)) || a.file.localeCompare(b.file));
 }
 

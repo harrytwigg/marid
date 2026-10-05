@@ -118,6 +118,17 @@ describe("the create dialog's Project chip", () => {
     await waitFor(() => expect(createWorkItem).toHaveBeenCalledWith(expect.objectContaining({ project: GARDEN.id })))
   })
 
+  it("starts company-level when the board is filtered to an archived project", async () => {
+    const user = userEvent.setup()
+    renderDialog({ project: OLD.id })
+    await user.type(screen.getByTestId("todo-new-title"), "Gather the windfalls")
+    await waitFor(() => expect(projectApi.listProjects).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByTestId("todo-new-project-chip").textContent).toContain("Project"))
+    await user.click(screen.getByTestId("todo-new-create"))
+    await waitFor(() => expect(createWorkItem).toHaveBeenCalledTimes(1))
+    expect(createWorkItem.mock.calls[0][0]).not.toHaveProperty("project")
+  })
+
   it("starts company-level when the board is filtered to 'No project'", async () => {
     const user = userEvent.setup()
     renderDialog({ project: "none" })
