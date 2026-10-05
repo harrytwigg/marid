@@ -70,6 +70,9 @@ vi.mock("../shared/claude-settings.js", () => ({
   writeSessionSettings: () => "/tmp/fake-settings.json",
 }));
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { InteractiveClaudeEngine } from "../claude-interactive.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { HookRegistry, type HookPayload } from "../../gateway/hook-registry.js";
@@ -343,6 +346,25 @@ describe("InteractiveClaudeEngine — background re-invocations never claim a ga
       const r = await t.p;
       expect(r.error).toBeUndefined();
       expect(r.result).toBe("");
+    });
+
+    it("a re-run that starts while the turn's answer is still being written is not swallowed by the turn", async () => {
+      const sid = "s-flushing";
+      await warmUp(sid);
+      // The turn's answer is not on disk yet when its Stop arrives, so the turn
+      // waits for it — and the re-run starts right then.
+      const transcript = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "jinn-rerun-flush-")), "t.jsonl");
+      fs.writeFileSync(transcript, "");
+      const t2 = send(sid, "second");
+      await vi.advanceTimersByTimeAsync(20);
+      registry.deliver(sid, prompt("second"));
+      registry.deliver(sid, { ...stop("SECOND"), transcript_path: transcript });
+      await vi.advanceTimersByTimeAsync(10);
+      registry.deliver(sid, bgPrompt());
+      registry.deliver(sid, stop("BGDONE"));
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect((await t2.p).result).toBe("SECOND");
+      expect(unclaimed.map((u) => u.text)).toEqual(["BGDONE"]);
     });
 
     it("a re-run that starts after the turn settled makes the next turn wait", async () => {

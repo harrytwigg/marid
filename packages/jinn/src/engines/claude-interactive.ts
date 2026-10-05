@@ -118,9 +118,12 @@ export function sumTranscriptUsage(content: string, afterMs?: number): Transcrip
   return u;
 }
 
-/** Most recent turn's input-context size (input + cache-read + cache-creation
- *  tokens) from the transcript — how full the window is. Undefined if no usage. */
-function lastTurnContextTokens(transcriptPath: string): number | undefined {
+/** The input-context size (input + cache-read + cache-creation tokens) of this
+ *  turn's last request — how full the window is — from transcript entries at or
+ *  after `afterMs`. Undefined when the transcript has none of this turn's yet:
+ *  the newest entry would then be an EARLIER turn's, and the meter the turn
+ *  streamed live is the better reading. */
+function lastTurnContextTokens(transcriptPath: string, afterMs: number): number | undefined {
   let content: string;
   try { content = fs.readFileSync(transcriptPath, "utf-8"); } catch { return undefined; }
   let last: number | undefined;
@@ -130,6 +133,8 @@ function lastTurnContextTokens(transcriptPath: string): number | undefined {
     let msg: any;
     try { msg = JSON.parse(t); } catch { continue; }
     if (msg.type !== "assistant") continue;
+    const at = transcriptLineTimestampMs(msg);
+    if (at === undefined || at < afterMs) continue;
     const u = msg?.message?.usage;
     if (!u) continue;
     last = Number(u.input_tokens ?? 0) + Number(u.cache_read_input_tokens ?? 0) + Number(u.cache_creation_input_tokens ?? 0);
@@ -186,12 +191,81 @@ export async function awaitCompactionStats(
   waitMs = COMPACT_BOUNDARY_WAIT_MS,
 ): Promise<CompactionStats> {
   if (!fs.existsSync(transcriptPath)) return {};
+  let stats: CompactionStats = {};
+  await pollUntil(() => {
+    stats = compactionStatsFromTranscript(transcriptPath, afterMs);
+    return stats.preTokens !== undefined || stats.postTokens !== undefined;
+  }, waitMs, COMPACT_BOUNDARY_POLL_MS);
+  return stats;
+}
+
+/** How long to wait for a turn's answer to reach the transcript after its Stop. */
+const TURN_ANSWER_WAIT_MS = 2_000;
+const TURN_ANSWER_POLL_MS = 50;
+/** How much of the transcript's end is read for the answer. Only the end can
+ *  hold it, and a transcript runs to tens of megabytes. */
+const TURN_ANSWER_TAIL_BYTES = 256 * 1024;
+
+/** Check `done` until it says so or `waitMs` has passed. */
+async function pollUntil(done: () => boolean, waitMs: number, pollMs: number): Promise<void> {
   const deadline = Date.now() + waitMs;
-  for (;;) {
-    const stats = compactionStatsFromTranscript(transcriptPath, afterMs);
-    if (stats.preTokens !== undefined || stats.postTokens !== undefined || Date.now() >= deadline) return stats;
-    await new Promise((resolve) => setTimeout(resolve, COMPACT_BOUNDARY_POLL_MS));
+  while (!done() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
+}
+
+/** The last `bytes` of a file, or undefined when it cannot be read. The first
+ *  line may be cut; a JSONL reader skips it. */
+function readTail(filePath: string, bytes: number): string | undefined {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(filePath, "r");
+    const size = fs.fstatSync(fd).size;
+    const start = Math.max(0, size - bytes);
+    const buf = Buffer.alloc(size - start);
+    fs.readSync(fd, buf, 0, buf.length, start);
+    return buf.toString("utf-8");
+  } catch {
+    return undefined;
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch { /* already gone */ }
+  }
+}
+
+/** Whether the end of the transcript holds the answer the Stop hook reported,
+ *  written at or after `afterMs`; undefined when it cannot be read. Exported
+ *  for tests. */
+export function transcriptHasTurnAnswer(transcriptPath: string, afterMs: number, answer: string): boolean | undefined {
+  const tail = readTail(transcriptPath, TURN_ANSWER_TAIL_BYTES);
+  if (tail === undefined) return undefined;
+  const written = lastAssistantText(tail, afterMs);
+  return written !== undefined && promptFingerprint(sanitizeAssistantText(written)) === promptFingerprint(answer);
+}
+
+/**
+ * Wait for the turn's answer to be on disk before the transcript is read for
+ * its cost. Claude Code fires Stop before it has flushed the turn's last
+ * assistant entries, so a single read at settle time can miss the whole of a
+ * short turn — typically one answering a notification — and its cost comes out
+ * empty. Bounded. Between checks only the file's size is looked at; its end is
+ * re-read only when it has grown. A transcript that cannot be read (on another
+ * host, or not ours to read) is not waited on.
+ */
+async function awaitTurnAnswerInTranscript(transcriptPath: string, afterMs: number, answer: string): Promise<void> {
+  let checkedSize = -1;
+  await pollUntil(() => {
+    let size: number;
+    try { size = fs.statSync(transcriptPath).size; } catch { return true; }
+    if (size === checkedSize) return false;
+    checkedSize = size;
+    return transcriptHasTurnAnswer(transcriptPath, afterMs, answer) !== false;
+  }, TURN_ANSWER_WAIT_MS, TURN_ANSWER_POLL_MS);
+}
+
+/** Where this turn's transcript entries start. Entries before it belong to a
+ *  background re-invocation the prompt waited behind or was queued behind. */
+function turnTranscriptStart(promptWrittenAt: number, resolver: TurnResolver): number {
+  return Math.max(promptWrittenAt, resolver.backgroundRerunEndedAt ?? 0);
 }
 
 /** Claude Code stores per-project transcripts at
@@ -233,6 +307,11 @@ function transcriptLineTimestampMs(msg: any): number | undefined {
 export function lastAssistantTextFromTranscript(transcriptPath: string, afterMs?: number): string | undefined {
   let raw: string;
   try { raw = fs.readFileSync(transcriptPath, "utf-8"); } catch { return undefined; }
+  return lastAssistantText(raw, afterMs);
+}
+
+/** Last assistant text block in transcript JSONL, at or after `afterMs` when given. */
+function lastAssistantText(raw: string, afterMs?: number): string | undefined {
   let last: string | undefined;
   for (const line of raw.split("\n")) {
     const t = line.trim();
@@ -2624,17 +2703,23 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
     // Reconstruct cost from the transcript (the Stop hook carries no cost).
     const transcriptPath = resolver.transcriptPath;
-    // Transcript entries before this belong to a background re-invocation the
-    // prompt waited behind or was queued behind, not to this turn.
-    const turnTranscriptFrom = Math.max(promptWrittenAt, resolver.backgroundRerunEndedAt ?? 0);
+    const turnTranscriptFrom = turnTranscriptStart(promptWrittenAt, resolver);
     if (transcriptPath && !result.error) {
+      // After the teardown, not before it: the turn has already settled, so a
+      // hook arriving while it waited would be taken as its own and lost — and
+      // Claude Code starts a background re-run right after a Stop. A turn typed
+      // into the terminal meanwhile may add to this cost; the wait ends as soon
+      // as the answer is on disk, usually within a poll or two.
+      if (!nativeCommand && result.result?.trim()) {
+        await awaitTurnAnswerInTranscript(transcriptPath, turnTranscriptFrom, result.result);
+      }
       // Scope to THIS turn: the transcript is cumulative and the caller adds
       // result.cost to the session total, so an unscoped sum over-counts.
       const cost = computeInteractiveCost(transcriptPath, opts.model, turnTranscriptFrom);
       if (cost) { result.cost = cost.cost; result.numTurns = cost.turns; }
       // Context-meter: most recent turn's input context (input + cache), mirroring
       // headless claude.ts so interactive/CLI-view turns also populate the meter.
-      const ctx = lastTurnContextTokens(transcriptPath);
+      const ctx = lastTurnContextTokens(transcriptPath, turnTranscriptFrom);
       if (ctx) result.contextTokens = ctx;
     }
     // A `/compact` that Claude Code confirmed. The context meter takes the size
