@@ -126,6 +126,14 @@ describe('BackgroundActivityStatus', () => {
     expect(short.textContent).toBe('2 sub-agents')
   })
 
+  it('lists sub-agents, monitors and a re-run together', () => {
+    render(<BackgroundActivityStatus activity={activity({ activeMonitors: 1, backgroundAgents: 2, backgroundRerun: true })} />)
+    const status = screen.getByRole('status')
+    const [long, short] = Array.from(status.querySelectorAll('span')).slice(-2)
+    expect(long.textContent).toBe('2 sub-agents, 1 monitor and a re-run in background')
+    expect(short.textContent).toBe('2 sub-agents · 1 monitor · re-run')
+  })
+
   it('names a background re-run', () => {
     render(<BackgroundActivityStatus activity={activity({ activeStreams: 1, backgroundRerun: true })} />)
     expect(screen.getByRole('status').textContent).toContain('Background re-run in progress')

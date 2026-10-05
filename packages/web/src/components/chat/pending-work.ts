@@ -70,7 +70,8 @@ export function pendingWorkChangesAt(activity: BackgroundActivity | null, work: 
   return Number.isFinite(at) ? at + BACKGROUND_ACTIVITY_STALE_MS + 1 : null
 }
 
-function joinParts(parts: string[]): string {
+/** "a", "a and b", "a, b and c". */
+export function joinParts(parts: string[]): string {
   return parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]
 }
 

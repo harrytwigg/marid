@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { BackgroundActivity, DelegatedActivity } from '@/lib/api'
-import { countLabel, isBackgroundActivityVisible, pendingWork } from './pending-work'
+import { countLabel, isBackgroundActivityVisible, joinParts, pendingWork } from './pending-work'
 
 const EXIT_MS = 140
 
@@ -31,8 +31,8 @@ function runtimeCopy(activity: BackgroundActivity | null, nowMs: number): { long
       ...(work.monitors ? [countLabel(work.monitors, 'monitor')] : []),
     ]
     if (!parts.length) return { long: 'Background re-run in progress', short: 'Re-running' }
-    const listed = parts.join(' and ')
-    return { long: `${listed}${work.rerun ? ' and a re-run' : ''} in background`, short: parts.join(' · ') }
+    const short = [...parts, ...(work.rerun ? ['re-run'] : [])].join(' · ')
+    return { long: `${joinParts([...parts, ...(work.rerun ? ['a re-run'] : [])])} in background`, short }
   }
   const agents = activity?.activeAgents ?? activity?.activeStreams ?? 0
   if (agents > 0) return { long: `${countLabel(agents, 'agent')} in background`, short: countLabel(agents, 'agent') }
