@@ -27,6 +27,8 @@ import { TranscriptEmptyState } from './chat-transcript-empty'
 import { TranscriptExpansionProvider, useTranscriptExpansionStore } from './transcript-expansion'
 import { ThinkingIndicator } from './thinking-indicator'
 import { turnSpacerClass } from './turn-spacer'
+import { answerCaption, usePendingWork, type PendingWork } from './pending-work'
+import type { BackgroundActivity, DelegatedActivity } from '@/lib/api'
 import {
   applyTranscriptAnchor,
   captureVirtualAnchor,
@@ -587,6 +589,9 @@ interface MessageRowProps {
   prevRole: Message['role'] | null
   prevUserText: string
   isFinalAnswer: boolean
+  /** Work the session's latest finished turn left running. Only the latest
+   *  answer carries it; every other answer is read as final. */
+  pendingWork?: PendingWork | null
   loading?: boolean
   onRetry?: (text: string, media?: MediaAttachment[]) => void
   onPeek?: (peek: CommsPeekData) => void
@@ -597,7 +602,7 @@ interface MessageRowProps {
   blockArrivals?: ReadonlyMap<string, LiveBlockArrival>
 }
 
-const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp, prevRole, prevUserText, isFinalAnswer, loading, onRetry, onPeek, arrival, entering, blockArrivals }: MessageRowProps) {
+const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp, prevRole, prevUserText, isFinalAnswer, pendingWork = null, loading, onRetry, onPeek, arrival, entering, blockArrivals }: MessageRowProps) {
   const isUser = msg.role === 'user'
   const isNotification = msg.role === 'notification'
   const media = messageMedia(msg)
@@ -730,7 +735,7 @@ const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp
               running has no answer yet, so none of its rows carries it. */}
           {textContent && isFinalAnswer && (
             <div>
-              <div className="mt-2 text-[length:var(--text-caption1)] text-[var(--text-secondary)]">{msg.meta?.turnOutcome === 'error' ? 'Turn failed' : 'Final answer'}</div>
+              <div data-answer-caption className="mt-2 text-[length:var(--text-caption1)] text-[var(--text-secondary)]">{answerCaption(msg.meta?.turnOutcome as string | undefined, pendingWork)}</div>
               <MessageActions
               id={msg.id || `idx-${i}`}
               text={textContent}
@@ -808,6 +813,19 @@ interface ChatMessagesProps {
   emptyState?: React.ReactNode
   /** Where the reader left this transcript. Opens there rather than at the bottom. */
   initialScrollTop?: number
+  /** Work the session left running after its latest turn ended; while any is
+   *  pending, that turn's answer names it instead of reading as final. */
+  backgroundActivity?: BackgroundActivity | null
+  delegatedActivity?: DelegatedActivity | null
+}
+
+/** The latest turn's answer, or -1 when that turn has none to show. */
+function latestTurnAnswerIndex(messages: Message[], rowMeta: RowMeta[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (rowMeta[i].isFinalAnswer) return i
+    if (messages[i].role === 'user') return -1
+  }
+  return -1
 }
 
 function latestTurnId(messages: Message[]): string | null {
@@ -836,6 +854,8 @@ export function ChatMessages({
   footer,
   emptyState,
   initialScrollTop,
+  backgroundActivity = null,
+  delegatedActivity = null,
 }: ChatMessagesProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null)
@@ -1005,6 +1025,11 @@ export function ChatMessages({
   // memoised row that reads the whole message array re-renders on every append,
   // which on a long transcript is the whole transcript per message.
   const rowMeta = useMemo(() => buildRowMeta(messages, pendingTurnId), [messages, pendingTurnId])
+  // Only the newest answer can be waiting on anything: an earlier turn's work
+  // either ended or carried on into a later turn. While a turn runs, its own
+  // answer is not written yet, so nothing is.
+  const pendingWork = usePendingWork(backgroundActivity, delegatedActivity)
+  const pendingAnswerIndex = pendingTurnId === null && pendingWork ? latestTurnAnswerIndex(messages, rowMeta) : -1
 
   // ONE renderer, used by both paths, so the windowed and plain transcripts
   // cannot drift apart.
@@ -1066,6 +1091,7 @@ export function ChatMessages({
         prevRole={meta.prevRole}
         prevUserText={meta.prevUserText}
         isFinalAnswer={meta.isFinalAnswer}
+        pendingWork={i === pendingAnswerIndex ? pendingWork : null}
         loading={loading}
         onRetry={retry}
         onPeek={onPeek}

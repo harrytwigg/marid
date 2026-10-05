@@ -1,21 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { BackgroundActivity, DelegatedActivity } from '@/lib/api'
+import { countLabel, isBackgroundActivityVisible } from './pending-work'
 
-const BACKGROUND_ACTIVITY_STALE_MS = 5 * 60 * 1000
 const EXIT_MS = 140
 
-/** True when background work should be surfaced. Streams retain the stale
- *  backstop; a tracked monitor stays visible until its observed end signal. */
-export function isBackgroundActivityVisible(
-  activity: BackgroundActivity | null,
-  nowMs: number,
-): boolean {
-  const streams = activity?.activeStreams ?? 0
-  const monitors = activity?.activeMonitors ?? 0
-  const lastActivityAt = activity?.lastActivityAt ? new Date(activity.lastActivityAt).getTime() : 0
-  const stale = lastActivityAt > 0 && nowMs - lastActivityAt > BACKGROUND_ACTIVITY_STALE_MS
-  return monitors > 0 || (streams > 0 && !stale)
-}
+export { isBackgroundActivityVisible }
 
 interface ActivityCopy {
   kind: 'runtime' | 'delegated-one' | 'delegated-many' | 'delegated-generic'
@@ -71,8 +60,8 @@ function activityCopy(
   if (!isBackgroundActivityVisible(activity, Date.now())) return null
   const agents = activity?.activeAgents ?? activity?.activeStreams ?? 0
   const monitors = activity?.activeMonitors ?? 0
-  const agentLabel = `${agents} ${agents === 1 ? 'agent' : 'agents'}`
-  const monitorLabel = `${monitors} ${monitors === 1 ? 'monitor' : 'monitors'}`
+  const agentLabel = countLabel(agents, 'agent')
+  const monitorLabel = countLabel(monitors, 'monitor')
   let long = 'Background work in progress'
   let short = 'Working'
   if (agents > 0 && monitors > 0) {
