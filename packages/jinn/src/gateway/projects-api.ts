@@ -12,7 +12,7 @@ import {
   type ProjectRef,
 } from "../work-items/project-membership.js";
 import type { Project } from "./project-model.js";
-import { getProject, projectRefOf, readProjects, refreshProjects } from "./project-registry.js";
+import { getProject, projectRefOf, readProjects } from "./project-registry.js";
 import { createProject, ProjectWriteError, readProjectInput, updateProject } from "./project-store.js";
 import type { ApiContext } from "./api.js";
 
@@ -89,7 +89,7 @@ function failure(res: ServerResponse, err: unknown): void {
 
 type Handler = (req: HttpRequest, res: ServerResponse, params: Record<string, string>, context: ApiContext) => Promise<void>;
 
-const listRoute: Handler = async (_req, res) => json(res, { projects: wires(refreshProjects().projects) });
+const listRoute: Handler = async (_req, res) => json(res, { projects: wires(readProjects().projects) });
 
 const getRoute: Handler = async (_req, res, params) => {
   const project = getProject(params.id);
