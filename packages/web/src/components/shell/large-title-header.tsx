@@ -10,13 +10,14 @@ const INLINE_TITLE_CLASS =
 
 // The gap between a header and the content under it, owned here so every page
 // that scrolls its header (the collapsing title) spaces its body the same way.
-// Whichever of the title and subtitle comes last carries it, so the body sits
-// the same distance below the header with or without a subtitle.
+// The subtitle carries it; with no subtitle a spacer does. Never the title: the
+// large title is display:none under reduced motion and without scroll timelines,
+// and a hidden box takes its margin with it.
 const HEADER_GAP_CLASS = "mb-[22px]"
 
-function LargeTitle({ title, className }: { title: ReactNode; className?: string }) {
+function LargeTitle({ title }: { title: ReactNode }) {
   return (
-    <div className={cn("jinn-large-title", LARGE_TITLE_CLASS, className)}>
+    <div className={cn("jinn-large-title", LARGE_TITLE_CLASS)}>
       {typeof title === "string" ? <h1>{title}</h1> : title}
     </div>
   )
@@ -104,8 +105,8 @@ export function LargeTitleHeader({
     <header data-slot="large-title-header" className="contents">
       <TitleBar title={title} trailing={trailingSlot} />
       {leading}
-      <LargeTitle title={title} className={subtitle ? undefined : gapClass} />
-      {subtitle ? <Subtitle className={gapClass}>{subtitle}</Subtitle> : null}
+      <LargeTitle title={title} />
+      {subtitle ? <Subtitle className={gapClass}>{subtitle}</Subtitle> : bodyGap ? <div aria-hidden data-slot="large-title-gap" className="h-[22px]" /> : null}
     </header>
   )
 }
