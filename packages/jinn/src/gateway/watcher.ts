@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { watch, type FSWatcher } from "chokidar";
-import { CONFIG_PATH, CRON_JOBS, ORG_DIR, PLUGINS_DIR, SKILLS_DIR, CLAUDE_SKILLS_DIR, AGENTS_SKILLS_DIR } from "../shared/paths.js";
+import { CONFIG_PATH, CRON_JOBS, ORG_DIR, PLUGINS_DIR, PROJECTS_DIR, SKILLS_DIR, CLAUDE_SKILLS_DIR, AGENTS_SKILLS_DIR } from "../shared/paths.js";
 import { logger } from "../shared/logger.js";
+import { refreshProjects } from "./project-registry.js";
 
 export interface WatcherCallbacks {
   onConfigReload: () => void;
   onCronReload: () => void;
   onOrgChange: () => void;
+  onProjectsChange: () => void;
   onSkillsChange: () => void;
   onPluginsChange: () => void;
 }
@@ -139,6 +141,16 @@ export function startWatchers(callbacks: WatcherCallbacks): void {
     }, DEBOUNCE_MS),
   );
 
+  // projects/ may not exist yet (it is created on the first project write); chokidar
+  // picks the directory up when it appears. Scan once now so definitions are loaded
+  // from boot, not from the first read.
+  refreshProjects();
+  const projectsWatcher = watch(PROJECTS_DIR, {
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 300 },
+  });
+  projectsWatcher.on("all", debounce(() => callbacks.onProjectsChange(), DEBOUNCE_MS));
+
   // Watch skills/ directory for added/removed skill folders → sync symlinks
   const skillsWatcher = watch(SKILLS_DIR, {
     ignoreInitial: true,
@@ -169,7 +181,7 @@ export function startWatchers(callbacks: WatcherCallbacks): void {
   }, DEBOUNCE_MS);
   pluginsWatcher.on("all", pluginsDebounce);
 
-  watchers = [configWatcher, cronWatcher, orgWatcher, skillsWatcher, pluginsWatcher];
+  watchers = [configWatcher, cronWatcher, orgWatcher, projectsWatcher, skillsWatcher, pluginsWatcher];
   logger.info("File watchers started");
 }
 

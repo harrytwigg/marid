@@ -54,11 +54,13 @@ export interface CreateWorkItemExtras {
   autoStart?: boolean;
   /** The sprint the Todo is placed in at creation, as the caller named it. */
   sprint?: string;
+  /** The project id the Todo is placed in at creation. */
+  project?: string;
 }
 
 function canonicalCreateFingerprint(
   input: CreateWorkItemInput,
-  { labels, autoStart, sprint }: CreateWorkItemExtras,
+  { labels, autoStart, sprint, project }: CreateWorkItemExtras,
   legacyRetiredFields = false,
 ): string {
   const payload: Record<string, unknown> = {};
@@ -78,6 +80,8 @@ function canonicalCreateFingerprint(
   if (autoStart === false) payload.autoStart = false;
   // Appended last and only when named, so receipts minted before sprints existed hash the same.
   if (sprint !== undefined) payload.sprint = sprint;
+  // Same rule: only when named, so every receipt minted before projects existed hashes the same.
+  if (project !== undefined) payload.project = project;
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 

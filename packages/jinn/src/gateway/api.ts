@@ -32,16 +32,11 @@ import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connect
 import { initDb } from "../shared/db.js";
 import {
   listSessions,
-  listPinnedSessions,
   listChatPins,
   pinChat,
   unpinChat,
   countSessions,
-  listRecentPerGroup,
-  listSessionsForGroup,
-  getSessionGroupCounts,
   coercePortalEmployee,
-  searchSessions,
   getMessageContext,
   getCostReport,
   MESSAGE_CONTEXT_MAX_RADIUS,
@@ -317,8 +312,11 @@ import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
 import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
 import { handleSprintsApi } from "./sprints-api.js";
+import { handleSessionsListApi } from "./sessions-list-api.js";
+import { handleProjectsApi } from "./projects-api.js";
 import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
 import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
+import { placeCreatedInProject, projectRow, readCreateProject } from "./work-item-create-project.js";
 import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
 import { handleBoardWalkApi } from "./board-walk-api.js";
 
@@ -328,7 +326,6 @@ const HOOK_BODY_MAX_BYTES = 64 * 1024;
 const AUTH_BODY_MAX_BYTES = 16 * 1024;
 /** Operator Todo PATCH cap, measured as raw UTF-8 request bytes including JSON overhead. */
 export const TODO_EDIT_BODY_MAX_BYTES = 64 * 1024;
-const SESSION_LIST_PER_GROUP = 50;
 const BACKGROUND_ACTIVITY_STALE_MS = 5 * 60 * 1000;
 function headerValue(req: HttpRequest, name: string): string | undefined {
   const value = req.headers[name.toLowerCase()];
@@ -1735,42 +1732,8 @@ export async function handleApiRequest(
       return json(res, { status: "unpinned" });
     }
 
-    // GET /api/sessions
-    //   ?group=<employee|__direct__|__cron__>&offset=M&limit=N → one group's page (sidebar "load more")
-    //   ?pinned=1                                           → pinned, non-archived sessions
-    //   ?limit=0                                              → every session (power-user escape hatch)
-    //   (default)                                             → top SESSION_LIST_PER_GROUP recent per group + counts
-    if (method === "GET" && pathname === "/api/sessions") {
-      if (url.searchParams.get("pinned") === "1") {
-        return json(res, serializeSessionList(listPinnedSessions(), context));
-      }
-      const query = url.searchParams.get("q");
-      if (query && query.trim()) {
-        const matches = searchSessions(query.trim());
-        return json(res, serializeSessionList(matches, context));
-      }
-      const group = url.searchParams.get("group");
-      const rawLimit = url.searchParams.get("limit");
-      // Portal-slug-tagged rows fold into the direct group (defensive +
-      // retroactive backstop to the create-time coercion above).
-      const portalSlug = context.getConfig().portal?.portalName;
-      if (group) {
-        const limit = Math.max(1, parseInt(rawLimit || "50", 10) || 50);
-        const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10) || 0);
-        const page = listSessionsForGroup(group, limit, offset, portalSlug);
-        return json(res, serializeSessionList(page, context));
-      }
-      if (rawLimit === "0") {
-        const all = listSessions();
-        return json(res, serializeSessionList(all, context));
-      }
-      const sessions = listRecentPerGroup(SESSION_LIST_PER_GROUP, portalSlug);
-      return json(res, {
-        sessions: serializeSessionList(sessions, context),
-        counts: getSessionGroupCounts(portalSlug),
-        perGroup: SESSION_LIST_PER_GROUP,
-      });
-    }
+    // GET /api/sessions: the list, in its own module (api.ts is over its size budget).
+    if (await handleSessionsListApi(res, { method, pathname, url }, { serialize: (sessions) => serializeSessionList(sessions, context), portalSlug: context.getConfig().portal?.portalName })) return;
 
     // GET /api/sessions/:id/messages?before=<messageId>&limit=N
     // Bounded older-history page for seamless transcript prepending in the web UI.
@@ -2226,6 +2189,9 @@ export async function handleApiRequest(
       const createSprint = readCreateSprint(body, parentId);
       if (createSprint.error) return badRequest(res, createSprint.error);
       const sprintRef = createSprint.sprint;
+      const createProject = readCreateProject(body, parentId);
+      if (createProject.error) return badRequest(res, createProject.error);
+      const projectId = createProject.project;
       // ICI-733: a caller-supplied create key, same shape rules as the edit key.
       // Cron and connector retries create duplicate Todos without one.
       let idempotencyKey: string | undefined;
@@ -2273,10 +2239,11 @@ export async function handleApiRequest(
             labels: labelRefs,
             ...(autoStartOptOut ? { autoStart: false } : {}),
             ...(sprintRef ? { sprint: sprintRef } : {}),
+            ...(projectId ? { project: projectId } : {}),
           })
           : { item: createWorkItem(input), replayed: false };
         const placed: { sprint: Sprint | null } = { sprint: null };
-        const created = labelRefs === undefined && !autoStartOptOut && sprintRef === undefined
+        const created = labelRefs === undefined && !autoStartOptOut && sprintRef === undefined && projectId === undefined
           ? create()
           : initDb().transaction(() => {
             const result = create();
@@ -2291,6 +2258,7 @@ export async function handleApiRequest(
             if (!result.replayed && sprintRef !== undefined) {
               placed.sprint = setWorkItemSprint(result.item.id, sprintRef, workItemActor(caller), caller.origin).sprint;
             }
+            if (!result.replayed && projectId !== undefined) placeCreatedInProject(result.item.id, projectId);
             return result;
           })();
         if (created.replayed) return json(res, { workItem: created.item, replayed: true }, 200);
@@ -2300,7 +2268,7 @@ export async function handleApiRequest(
           emitTodoProjectionEvent(context, created.item.id, "sprint-updated");
           context.emit("company:changed", { entity: "sprint", action: "moved", id: created.item.id });
         }
-        return json(res, withActivityReceipt({ workItem: created.item, ...(labels ? { labels } : {}), ...(sprint ? { sprint } : {}) }, activityReceiptId), 201);
+        return json(res, withActivityReceipt({ workItem: created.item, ...(labels ? { labels } : {}), ...(sprint ? { sprint } : {}), ...projectRow(projectId) }, activityReceiptId), 201);
       } catch (err) {
         if (err instanceof WorkItemCreateIdempotencyConflictError) {
           return json(res, { error: err.message, code: "todo_create_idempotency_conflict", workItemId: err.workItemId }, 409);
@@ -3150,6 +3118,8 @@ export async function handleApiRequest(
       emitTodoProjectionEvent(context, params.id, "dispatch-config-updated");
       return json(res, { dispatchConfig: result.config });
     }
+
+    if (await handleProjectsApi(req, res, { method, pathname, url }, context)) return;
 
     // Sprints: the registry, its lifecycle, and moving a Todo between sprints.
     if (await handleSprintsApi(req, res, { method, pathname, url }, {

@@ -9,7 +9,7 @@ import { resolveDepartmentPrefix } from './departments.js';
 import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
-import { sprintFilterCondition } from './sprints-schema.js';
+import { groupingFilterConditions } from './grouping-filters.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { WorkItemEventKind } from './event-log.js';
@@ -143,6 +143,7 @@ export interface ListWorkItemsFilter {
   label?: string;
   /** Items in this sprint (a sub-task reads its root's): id, name, `active` or `none`. */
   sprint?: string;
+  project?: string; // a project id or `none`; a sub-task reads its root's
   /** Free text, matched by the FTS5 indexes over title, body and comments. Relevance-ordered, exact Todo id first. */
   text?: string;
   /** Inclusive ISO timestamp bounds over `updated_at`. */
@@ -508,10 +509,9 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
     );
     values.push(filter.label, filter.label);
   }
-  if (filter.sprint) {
-    const sprint = sprintFilterCondition(filter.sprint);
-    conditions.push(sprint.sql);
-    values.push(...sprint.values);
+  for (const grouping of groupingFilterConditions(filter)) {
+    conditions.push(grouping.sql);
+    values.push(...grouping.values);
   }
   if (filter.needsAttentionFor) {
     // A blocked Todo held by the caller, or one recovery routed to a human; the operator's own queue

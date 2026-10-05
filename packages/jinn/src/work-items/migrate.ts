@@ -1,13 +1,7 @@
 import fs from "node:fs";
 import { assertLocalDatabasePath } from "../shared/local-db-guard.js";
 import Database, { type Database as DatabaseType } from "better-sqlite3";
-import {
-  resolveTodoIdPrefix,
-  isTodoId,
-  todoIdOrdinal,
-  todoIdPrefix,
-  TODO_ID_PREFIX_PATTERN,
-} from "./id.js";
+import { resolveTodoIdPrefix, isTodoId, todoIdOrdinal, todoIdPrefix, TODO_ID_PREFIX_PATTERN } from "./id.js";
 import { registerWorkItemIdentityFunctions } from "./id-allocator.js";
 import { WORK_ITEM_BLOCKS_DDL } from "./blocks.js";
 import { WORK_ITEM_STOP_CAUSE_DDL } from "./stop-cause.js";
@@ -39,6 +33,7 @@ import {
 } from "./frozen-schemas.js";
 import { resolveDepartmentPrefix } from "./departments.js";
 import { SPRINTS_DDL, SPRINTS_TABLE_DDL, sprintRowsAreSound, WORK_ITEM_SPRINTS_DDL, WORK_ITEM_SPRINTS_TABLE_DDL } from "./sprints-schema.js";
+import { PROJECT_TABLES, projectRowsAreSound } from "./projects-schema.js";
 import { CORRUPT_SESSIONS_DATABASE, isSqliteCorruption, UNSUPPORTED_PRERELEASE_TODO_DATA } from "./migrate-refusals.js";
 import { loadConfig } from "../shared/config.js";
 import { CONFIG_PATH } from "../shared/paths.js";
@@ -510,6 +505,7 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ["work_item_kept", WORK_ITEM_KEPT_DDL],
   ["work_item_auto_start", WORK_ITEM_AUTO_START_TABLE_DDL],
   ...WORK_ITEM_RECOVERY_TABLES.map((table) => [table.name, table.ddl] as [string, string]),
+  ...PROJECT_TABLES.map((table) => [table.name, table.tableDdl] as [string, string]),
   ["departments", DEPARTMENTS_TABLE_DDL],
 ]);
 
@@ -535,7 +531,7 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "work_item_auto_start", ddl: WORK_ITEM_AUTO_START_DDL },
   { name: "sprints", ddl: SPRINTS_DDL }, // before its membership, which references it
   { name: "work_item_sprints", ddl: WORK_ITEM_SPRINTS_DDL },
-].concat(WORK_ITEM_RECOVERY_TABLES);
+].concat(WORK_ITEM_RECOVERY_TABLES, PROJECT_TABLES);
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,
  * one row per item carrying a state — a one-shot step inside each rebuild, and
@@ -765,6 +761,7 @@ export function verifyCurrentWorkItemSchema(db: DatabaseType): void {
     if (!byId.has(pair.work_item_id) || !labelIds.has(pair.label_id)) refusal();
   }
   if (!sprintRowsAreSound(db, (id) => byId.has(id))) refusal();
+  if (!projectRowsAreSound(db, (id) => byId.get(id)?.parent_id === null)) refusal();
   // Approvals: every row references a live item, and at most one PENDING row per
   // item. The partial unique index makes the latter unforgeable through SQL, but
   // the data is re-proven here anyway (belt and suspenders, house style).

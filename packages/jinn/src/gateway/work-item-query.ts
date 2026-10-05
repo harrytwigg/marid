@@ -175,6 +175,15 @@ const readSprintFilter: FilterReader = (url, filter) => {
   return undefined;
 };
 
+/** `project` is a project id or `none` (company-level). An id no file defines matches nothing but the Todos that still name it. */
+const readProjectFilter: FilterReader = (url, filter) => {
+  const project = readCleanSearchParam(url, 'project');
+  if (!project) return undefined;
+  if (project !== 'none' && !/^prj_[0-9a-f]{12}$/.test(project)) return 'project must be a project ID (prj_…) or none';
+  filter.project = project;
+  return undefined;
+};
+
 const readWindowFilters: FilterReader = (url, filter) => {
   for (const name of ['since', 'until'] as const) {
     const bound = readWorkItemDateParam(url, name);
@@ -188,7 +197,7 @@ const readWindowFilters: FilterReader = (url, filter) => {
 };
 
 const FILTER_READERS: readonly FilterReader[] = [
-  readEnumFilters, readNameFilters, readTextFilter, readTreeFilters, readBoardScopeFilters, readLabelFilter, readSprintFilter, readWindowFilters,
+  readEnumFilters, readNameFilters, readTextFilter, readTreeFilters, readBoardScopeFilters, readLabelFilter, readSprintFilter, readProjectFilter, readWindowFilters,
 ];
 
 export function readWorkItemQueryParams(url: URL): { ok: true; value: WorkItemQueryParams } | { ok: false; error: string } {

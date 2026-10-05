@@ -6,7 +6,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import type { ArchiveCodec } from "./codec.js";
 
 /** What a home is worth keeping: configuration and authored content. */
-export const ARCHIVE_INCLUDES = ["config.yaml", "cron", "docs", "knowledge", "org", "secrets", "skills"] as const;
+export const ARCHIVE_INCLUDES = ["config.yaml", "cron", "docs", "knowledge", "org", "projects", "secrets", "skills"] as const;
 
 /**
  * Reproducible caches and nested checkouts. A skill that vendors its own git

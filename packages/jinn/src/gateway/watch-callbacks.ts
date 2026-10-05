@@ -7,6 +7,7 @@ import { isPluginEnabled } from "../plugins/enablement.js";
 import { reconcilePluginWatchers } from "../plugins/watcher-supervisor.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
+import { refreshProjects } from "./project-registry.js";
 import type { WatcherCallbacks } from "./watcher.js";
 
 /** The two reloads that only the server can perform, since they own state it holds. */
@@ -42,6 +43,11 @@ export function gatewayWatchCallbacks({ reloadConfig, getConfig, reloadOrg, emit
       emit("cron:reloaded", {});
     },
     onOrgChange: reloadOrg,
+    onProjectsChange: () => {
+      const { projects } = refreshProjects();
+      logger.info(`projects/ changed, reloaded ${projects.length} project(s)`);
+      emit("company:changed", { entity: "project", action: "reloaded", id: "*" });
+    },
     onSkillsChange: () => {
       logger.info("Skills changed, notifying clients");
       emit("skills:changed", {});

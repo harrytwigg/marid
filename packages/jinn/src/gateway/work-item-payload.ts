@@ -3,6 +3,8 @@ import { commentsTail } from "../work-items/comments.js";
 import { blockedSet, isBlocked, listRelations } from "../work-items/relations.js";
 import { getWorkItemLabels, labelSets, type Label } from "../work-items/labels.js";
 import { getWorkItemSprint, sprintRefs, type SprintRef } from "../work-items/sprints.js";
+import { projectIdOf, projectRefs, type ProjectRef } from "../work-items/project-membership.js";
+import { projectRefOf } from "./project-registry.js";
 import { listWorkItemRuns } from "../work-items/runs.js";
 import { getTodoDispatchConfig } from "../work-items/dispatch-config.js";
 import { readStopCause, type TodoStopCause } from "../work-items/stop-cause.js";
@@ -34,12 +36,24 @@ function attentionLaneOf(
   return null;
 }
 
+/** The row's project: from the page's batched read when there is one, else looked up for this item. */
+function compactProject(id: string, extras?: { projects?: Map<string, ProjectRef | null> }): ProjectRef | null {
+  const batched = extras?.projects;
+  return batched ? batched.get(id) ?? null : projectRefOrNull(id);
+}
+
+function projectRefOrNull(id: string): ProjectRef | null {
+  const projectId = projectIdOf(id);
+  return projectId === null ? null : projectRefOf(projectId);
+}
+
 export function compactWorkItem(
   item: WorkItem,
   extras?: {
     blocked: Set<string>;
     labels: Map<string, Label[]>;
     sprints?: Map<string, SprintRef | null>;
+    projects?: Map<string, ProjectRef | null>;
     kept: Set<string>;
     recovery?: Map<string, import("../work-items/recovery.js").WorkItemRecovery>;
   },
@@ -62,6 +76,8 @@ export function compactWorkItem(
     labels: extras ? extras.labels.get(item.id) ?? [] : getWorkItemLabels(item.id),
     // A sub-task carries its root's sprint: membership lives on the root.
     sprint: extras?.sprints ? extras.sprints.get(item.id) ?? null : getWorkItemSprint(item.id),
+    // Additive: a sub-task carries its root's project (null for company-level).
+    project: compactProject(item.id, extras),
     blocked: extras ? extras.blocked.has(item.id) : isBlocked(item.id),
     kept: extras ? extras.kept.has(item.id) : isWorkItemKept(initDb(), item.id),
     sessionRef: sessionRef(item),
@@ -79,6 +95,7 @@ export function workItemPagePayload(page: ReturnType<typeof queryWorkItems>): Re
     blocked: blockedSet(ids),
     labels: labelSets(ids),
     sprints: sprintRefs(ids),
+    projects: projectRefs(ids, projectRefOf),
     kept: keptSet(initDb(), ids),
     recovery: recoveryByItem(ids),
   };
@@ -123,6 +140,7 @@ export function fullWorkItemPayload(item: WorkItem): Record<string, unknown> {
     relations: listRelations(item.id),
     labels: getWorkItemLabels(item.id),
     sprint: getWorkItemSprint(item.id),
+    project: projectRefOrNull(item.id),
     // ICI-1357 (additive): whether this Todo sits on the operator's Home board.
     kept: isWorkItemKept(initDb(), item.id),
     // Additive: the same stop cause and attention lane the compact row carries,

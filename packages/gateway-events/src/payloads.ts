@@ -41,3 +41,7 @@ export type CompanyChangedEvent =
    *  Todo lists and details rather than patching one row. `id` is the sprint's,
    *  or the Todo's for a move. */
   | { entity: "sprint"; action: string; id: string }
+  /** A project was created or edited, or a Todo moved into or out of one. Rows embed
+   *  their project's name, so a listener refetches Todo lists and details. `id` is
+   *  the project's, or the Todo's for a move. */
+  | { entity: "project"; action: string; id: string }

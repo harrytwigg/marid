@@ -28,6 +28,7 @@ export type WorkItemEventKind =
   | 'relation_removed'
   | 'label_changed'
   | 'sprint_changed'
+  | 'project_changed'
   | 'attachment_added'
   | 'attachment_removed'
   | 'metadata_edited'

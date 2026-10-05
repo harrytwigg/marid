@@ -30,6 +30,7 @@ function callbacks() {
     onConfigReload: () => {},
     onCronReload: () => {},
     onOrgChange: () => {},
+    onProjectsChange: () => {},
     onSkillsChange: () => {},
     onPluginsChange: changes,
   };

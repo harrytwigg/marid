@@ -68,6 +68,7 @@ export const RESTART_RECORD_FILE = path.join(JINN_HOME, "sessions", "restart-int
 export const CRON_JOBS = path.join(JINN_HOME, "cron", "jobs.json");
 export const CRON_RUNS = path.join(JINN_HOME, "cron", "runs");
 export const ORG_DIR = path.join(JINN_HOME, "org");
+export const PROJECTS_DIR = path.join(JINN_HOME, "projects");
 export const SKILLS_DIR = path.join(JINN_HOME, "skills");
 export const PLUGINS_DIR = path.join(JINN_HOME, "plugins");
 export const DOCS_DIR = path.join(JINN_HOME, "docs");
