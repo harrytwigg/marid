@@ -31,7 +31,7 @@ CREATE INDEX IF NOT EXISTS idx_work_item_projects_project ON work_item_projects(
 -- Project configuration. One row per entry. The order of rows is irrelevant.
 CREATE TABLE IF NOT EXISTS project_workdirs (
   project_id TEXT NOT NULL REFERENCES projects(id),
-  path TEXT NOT NULL,                          -- absolute, realpath-normalised at write time
+  path TEXT NOT NULL,                          -- absolute, realpath-normalised at write time; FR-033 refuses $HOME, $JINN_HOME, the stage root, ~/.claude, their ancestors, and paths inside the last three
   PRIMARY KEY (project_id, path)
 );
 CREATE TABLE IF NOT EXISTS project_skills (
@@ -67,12 +67,14 @@ These columns are added through the add-column-if-missing path
 
 ```sql
 ALTER TABLE sessions ADD COLUMN project_id TEXT;           -- enforcement binding; set ONLY for sessions of scoped employees
-ALTER TABLE sessions ADD COLUMN requester_session_id TEXT; -- set ONLY for scoped sessions: the session that spawned or delegated to it (FR-013)
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 ```
 
-- **When they are set.** Both columns are set once, in `spawnSession`, by the FR-008 rules,
-  and never updated afterwards.
+The FR-013 requester is the existing `parent_session_id` (`packages/jinn/src/sessions/migrate.ts:26`),
+which `spawnSession` already sets. No new column.
+
+- **When it is set.** `project_id` is set once, in `spawnSession`, by the FR-008 rules, and
+  never updated afterwards.
 - **Unscoped sessions** never carry `project_id`. Their badge is derived at read time from the
   linked Todo's project (FR-009). As a result, a scoped filter
   (`project_id = P`) can never match an unscoped session.
@@ -104,7 +106,7 @@ persona: ...
 | --- | --- |
 | no `projects` key | **all** (today's behaviour) |
 | `projects: [a, b]` | scoped to the known ids among `a` and `b` |
-| `projects: []`, or only unknown ids | scoped to **nothing**: every scoped route refuses and no session starts |
+| `projects: []`, `projects:` (null), or only unknown ids | scoped to **nothing**: every scoped route refuses and no session starts |
 
 Unknown ids are dropped from a scope without widening it.
 

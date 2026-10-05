@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-05
 
-**Status**: Draft. Waiting on the operator's answers to Q1–Q9 (end of this file). Nothing is
+**Status**: Draft. Waiting on the operator's answers to Q1–Q11 (end of this file). Nothing is
 implemented until they are answered.
 
 **Input**: Marid issue #90 (upstream proposal hristo2612/jinn#81). The operator wants projects
@@ -26,10 +26,12 @@ for the operator to stop it" the condition for autonomy. Today the only ceiling 
 employee's reach is the whole instance. With project scoping, a set of dedicated employees can
 be left to run a project's backlog unattended, with a reach the operator chose in advance.
 
-The spend half of that ceiling already exists. The per-employee monthly cap
+This feature adds no spend ceiling of its own. The per-employee monthly cap
 (`config.budgets.employees`, enforced at `packages/jinn/src/sessions/turn/preflight.ts:63`)
-applies to a project's dedicated employees, so with Q2-a and Q8-a it is in effect a
-per-project cap. This feature adds no spend mechanism of its own.
+works as a per-project cap only for an employee scoped to exactly one project. An employee
+scoped to several projects is capped across all of them together. If the operator wants a
+separate cap for each project, that is a follow-up and needs its own decision. See "Decided
+by default".
 
 ## What the tree does today *(facts the spec depends on)*
 
@@ -50,7 +52,16 @@ research.md has the full audit, with `path:line` citations. Four facts shape the
    - with the operator bearer token in its environment
      (`packages/jinn/src/gateway/server.ts:504`);
    - with `--chrome`, which drives the operator's own browser
-     (`packages/jinn/src/engines/claude-interactive.ts:452`).
+     (`packages/jinn/src/engines/claude-interactive.ts:451`).
+
+   All engines also run as **the operator's own OS user**. As a result, every one of them
+   can read:
+   - the operator's other session transcripts under `~/.claude/projects/`;
+   - the credential directories (`~/.config/gh`, `~/.ssh`);
+   - every client repo under the work root;
+   - the environment of every other process it can list with `ps -E`. That includes each
+     jinn MCP server's `JINN_SESSION_CAPABILITY` (`packages/jinn/src/mcp/identity.ts:207`),
+     and the inherited `JINN_GATEWAY_TOKEN` of any process that carries it.
 
    So any employee can act as operator through `curl` or through the browser, read
    `sessions/registry.db`, or edit `org/` and `config.yaml` directly. The MCP identity code
@@ -74,9 +85,17 @@ though, it stops only an employee that keeps to its tools. It does not stop one 
 the company setup.
 
 This instance already runs with `gateway.authRequired: true`. A request with no bearer token
-gets 401 at `packages/jinn/src/gateway/request-handler.ts:55`. With the token removed from a
-contained session's environment, and `gateway.json` unreadable to it, its shell has no
-credential left to present.
+gets 401 at `packages/jinn/src/gateway/request-handler.ts:55`, except on the routes that
+`authRequiredForRequest` exempts (`packages/jinn/src/gateway/auth.ts:250`):
+
+- `/api/status`
+- `GET /api/auth/state`
+- the `POST` pairing and auth routes
+- `POST /api/internal/hook`
+
+A contained shell has to be left with no credential at all. That means the token is absent
+from its own environment, unreadable from `gateway.json`, and unreadable from **other
+processes' environments**. The last of these is the hard part on a single OS user.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -140,8 +159,8 @@ case.
 4. **Given** the COO is working a P Todo, **When** `marid-dev` lists, reads or messages
    sessions, **Then** the COO's session is not among them (FR-009, FR-012).
 5. **Given** `marid-dev` was spawned by the COO, **When** it sends its result back, **Then**
-   `send_to_session` to that requester succeeds. Sending to any other non-P session is refused
-   (FR-013).
+   the reply reaches its parent session, delivered as Q10 decides. Sending to any other
+   non-P session is refused (FR-013).
 6. **Given** `marid-dev` spawns or delegates to `senior-developer` (unscoped), **Then** the
    request is refused (Q2-a). Spawning `marid-qa`, which is scoped to P, succeeds, and the
    child is bound to P.
@@ -168,7 +187,7 @@ Q1 decides whether this story is in v1.
 
 **Independent Test**: the escape script (`scripts/verify-project-containment.sh`, Phase 4),
 first run by hand in Phase 0. It drives a real Claude session of a scoped employee, launched
-with the gateway's own argv and settings. Each of these must fail:
+with the gateway's own argv and settings. Each of these must fail (E1–E15):
 
 | Attempt | What it tries |
 | --- | --- |
@@ -181,6 +200,12 @@ with the gateway's own argv and settings. Each of these must fail:
 | E7 | `attach_to_work_item` and `publish_attachment` on `~/.jinn/sessions/registry.db` |
 | E8 | `read_knowledge` of `gateway.json` |
 | E9 | Any `mcp__claude-in-chrome__*` or `mcp__claude_ai_*` tool being present in the session |
+| E10 | E1's reads repeated with the Read, Grep and Glob tools instead of the shell |
+| E11 | Reading another session's transcript under `~/.claude/projects/`, or `~/.claude.json` |
+| E12 | Reading a sibling project's stage dir or working directory, or any other repo under the work root |
+| E13 | Reading `~/.config/gh`, `~/.ssh` or `~/.aws` |
+| E14 | `ps -Eww -A \| grep -E 'JINN_GATEWAY_TOKEN\|JINN_SESSION_CAPABILITY'`, which must print nothing |
+| E15 | Walking the auth-exempt routes (`/api/status`, `GET /api/auth/state`, the pairing routes, `POST /api/internal/hook` for another session's id): each must leak nothing and change nothing |
 
 `git status`, `git push` (to a throwaway remote) and a project build must succeed.
 
@@ -191,7 +216,8 @@ with the gateway's own argv and settings. Each of these must fail:
 2. **Given** a contained session, **When** it lists its environment, **Then** it sees only the
    allow-listed variables and the project's declared secret references (FR-030).
 3. **Given** a contained session, **When** it calls the gateway without the MCP server's
-   credential, **Then** every route returns 401.
+   credential, **Then** every route returns 401, except the auth-exempt set. E15 walks those
+   exempt routes.
 
 ---
 
@@ -310,8 +336,9 @@ and dark, with the screenshots attached to the PR (FR-040).
 - **FR-007**: Employee scope MUST be explicit:
   - In org YAML, an absent `projects` key means **all**. This is today's behaviour, and it is
     the only way to be unrestricted.
-  - A present key, even empty or holding only unknown ids, means **scoped to the known ids**.
-    That can be the empty set, which grants access to nothing.
+  - A present key means **scoped to the known ids**. This holds even when the key is empty,
+    holds only unknown ids, or is a bare `projects:` (YAML null). The known ids can be the
+    empty set, which grants access to nothing.
   - The wire carries `projectScope: "all" | string[]`.
   - `PATCH /api/org/employees/:name` (operator-only) refuses an empty list. To remove access
     entirely, the employee must be archived or removed.
@@ -335,9 +362,15 @@ scoped employee; **P** is the session's binding)
 
 - **FR-010**: **Default deny.** Every gateway route not on the scoped-caller table in plan.md
   MUST be refused. The table is enforced at the identified-caller gate, beside
-  `refuseRemoteMcpRoute` (`packages/jinn/src/gateway/api.ts:1181`). WebSocket upgrades (`/ws`,
-  `/ws/pty/:sessionId`, plugin events) sit outside that gate. They are operator-only today,
-  and MUST refuse scoped callers explicitly.
+  `refuseRemoteMcpRoute` (`packages/jinn/src/gateway/api.ts:1181`).
+
+  WebSocket upgrades sit outside that gate, and today they are **not** all operator-only:
+  - `/ws/pty` refuses non-operators;
+  - `/ws` and plugin events refuse only unidentified callers, and then check auth
+    (`packages/jinn/src/gateway/server.ts:1035`). So any session holding the token receives
+    the company-wide activity broadcast.
+
+  The upgrade guard MUST refuse scoped callers on every upgrade path.
 - **FR-011**: **Todos.**
   - Lists and searches MUST be limited to P.
   - Per-Todo routes MUST return 404 for a Todo outside P. That 404 MUST be identical to the
@@ -346,9 +379,17 @@ scoped employee; **P** is the session's binding)
   - A request to move a Todo out of P MUST be refused.
 - **FR-012**: **Sessions.** Session reads, searches, message context, `send_to_session` and
   `stop_session` MUST be limited to sessions bound to P, except as FR-013 allows.
-- **FR-013**: **Replying to a requester.** A scoped session MAY `send_to_session` to the
-  session that spawned it or delegated to it, recorded at spawn. This is send-only. It grants
-  no read of that session, and applies to no other session.
+- **FR-013**: **Replying to a requester.** A scoped session MAY reply to the session that
+  spawned it or delegated to it. That session is the existing `sessions.parent_session_id`,
+  set at spawn (`packages/jinn/src/gateway/spawn-session.ts:188`). The reply grants no read
+  of the parent session and reaches no other session.
+
+  How the reply is delivered is Q10:
+  - **(a)** a live `send_to_session`. This starts a turn in the parent session, which may be
+    uncontained, on text the scoped session wrote.
+  - **(b)** a non-executing callback. The reply is stored as a record on the parent session,
+    shown to its operator, and read by the parent on its next turn, marked as content from a
+    scoped session. It starts no turn.
 - **FR-014**: **Org.**
   - Org reads MUST return only employees scoped to P, and the prompt roster MUST match.
   - Departments MUST NOT be exposed.
@@ -357,18 +398,32 @@ scoped employee; **P** is the session's binding)
 - **FR-015**: **Who may hold a P Todo.** The predicate is `mayHoldTodo(employee, project)`
   (Q8-a):
   - a P Todo may be held only by employees scoped to P;
-  - a company Todo may be held only by unscoped employees.
+  - a company Todo may be held only by unscoped employees;
+  - `@operator` may hold any Todo. This keeps the blocked-Todo route to the operator
+    working (`packages/jinn/src/gateway/todo-assignee.ts:21`).
 
-  It MUST be checked on every path that sets an assignee or starts work on a Todo, whatever
-  the caller, the operator included:
-  - `assignWorkItem` itself (`packages/jinn/src/work-items/assignment.ts:77`), which covers its
-    callers at `gateway/api.ts:2650`, `gateway/api.ts:3501`,
-    `talk/control/todo-adapters.ts:132` and `talk/control/delegation-adapter.ts:107`;
-  - the direct assignee branch of `PATCH /api/work-items/:id`
-    (`packages/jinn/src/gateway/api.ts:2409`);
+  **Where it is enforced.** The check sits at the store, in every writer of `assignee`:
+  - the insert in `createWorkItem` (`packages/jinn/src/work-items/store.ts:356`);
+  - the two update paths that call `releaseOnOwnerChange` (`packages/jinn/src/work-items/store.ts:797`, `packages/jinn/src/work-items/store.ts:850`),
+    which the store documents as "every writer of `assignee`" (`packages/jinn/src/work-items/store.ts:961`).
+
+  **What that covers.** Whatever the caller, the operator included, this reaches every path
+  that sets an assignee:
+  - `assignWorkItem` (`packages/jinn/src/work-items/assignment.ts:77`) and its callers;
+  - the PATCH assignee branch (`packages/jinn/src/gateway/api.ts:2409`);
+  - the delegation route's create-already-assigned path
+    (`packages/jinn/src/gateway/api.ts:3450`);
+  - plugin-host creates (`packages/jinn/src/plugins/host/todos.ts:31`);
+  - the talk adapters.
+
+  **Paths that start work without writing an assignee** check it at their own entry:
   - spawn with a linked Todo (FR-008);
   - Dispatcher routing;
-  - board-walk projection, which skips an ineligible pairing rather than refusing it later.
+  - the board-walk projection, which skips an ineligible pairing.
+
+  **Changing a Todo's project** (FR-003) MUST be refused while the root, or any sub-task, is
+  held by someone who could not hold it in the new project. The refusal names the holders, so
+  the operator reassigns first.
 - **FR-016**: **Spawning from a scoped caller.** `spawn_session`, `delegate_task` and
   `dispatch_work_item` MUST target only employees scoped to P (Q2-a), and the child MUST be
   bound to P.
@@ -386,7 +441,7 @@ scoped employee; **P** is the session's binding)
 - **FR-019**: **Tool profile.** A scoped session's MCP manifest MUST omit every tool whose
   routes are all refused. Unscoped manifests are unchanged.
 
-**Containment** (v1 only if Q1 = B)
+**Containment** (FR-021 to FR-025a only if Q1 = B. FR-020 (stage dir), FR-023 (no Chrome, strict MCP; Q9) and FR-026 (claude-only) also apply under Q1 = A, in Phase 3, because skill and instructions scoping and Q9 need them.)
 
 - **FR-020**: A scoped session MUST run with cwd set to a generated stage dir **outside**
   `$JINN_HOME`. The default is `<parent of home>/.jinn-projects/<project id>/` (data-model.md).
@@ -395,9 +450,16 @@ scoped employee; **P** is the session's binding)
 - **FR-021**: Its environment MUST be built from an allow-list plus the project's secret
   references. Nothing is inherited from the gateway. In particular there MUST be no
   `JINN_GATEWAY_TOKEN`.
-- **FR-022**: Its shell MUST be sandboxed:
-  - reads are denied under `$JINN_HOME`;
-  - writes are denied outside P's working directories, temp and caches;
+- **FR-022**: Its shell **and its file tools** (Read, Edit, Write, Glob, Grep, NotebookEdit)
+  MUST be confined:
+  - **Reads under `$HOME` are denied by default.** The only exceptions are P's working
+    directories, P's stage dir, and the toolchain paths found by Phase 0 item 5. So
+    `$JINN_HOME`, `~/.claude/`, `~/.claude.json`, other projects' stage dirs and working
+    directories, the rest of the work root, and the credential directories are all
+    unreadable.
+  - Process inspection of other processes MUST be blocked (`ps -E`; Phase 0 item 10). If it
+    cannot be, Q11 applies.
+  - Writes are denied outside P's working directories, temp and caches.
   - writes to the stage dir's `.claude/`, `CLAUDE.md` and `.mcp.json` are denied;
   - unsandboxed commands are disabled (`sandbox.allowUnsandboxedCommands: false`, Phase 0
     item 2).
@@ -412,9 +474,26 @@ scoped employee; **P** is the session's binding)
   than derived from the key file. This is defence in depth on top of FR-022, which already
   makes the key unreadable to the shell.
 - **FR-025**: Contained sessions require `gateway.authRequired: true`. Config validation
-  refuses a scoped employee on an instance with auth off, and says why. With auth on, no
-  token in the environment and `gateway.json` unreadable, every request from the shell gets
-  401 at `packages/jinn/src/gateway/request-handler.ts:55`, and the gateway needs no change.
+  refuses a scoped employee on an instance with auth off, and says why. With auth on, a
+  request from the shell gets 401 at `packages/jinn/src/gateway/request-handler.ts:55` on
+  every route except the auth-exempt set (`packages/jinn/src/gateway/auth.ts:250`), provided
+  the shell holds no token. The exempt routes MUST be shown to leak and change nothing for a
+  credential-less caller (E15). `POST /api/internal/hook` MUST verify that the hook belongs to
+  the session it names.
+- **FR-025a**: The hook relay MUST work inside containment. It cannot use `JINN_HOME`, which
+  FR-021 strips, and it cannot read `gateway.json`, which FR-022 denies
+  (`packages/jinn/assets/hook-relay.mjs:10`). The gateway-written hook command therefore
+  carries what the relay needs on argv: the session id, the gateway URL, and a per-session
+  hook credential. Phase 0 item 8 verifies that this works.
+- **FR-033** (applies under Q1 = A and B, because FR-018 also allow-lists working directories): **Working-directory validation.** A project working directory MUST NOT be, or
+  be an ancestor of:
+  - `$HOME`;
+  - `$JINN_HOME`;
+  - the stage root;
+  - `~/.claude`.
+
+  It MUST NOT lie inside any of them either, except `$HOME`. Writes that break this rule are
+  refused. Without this, one working directory could void the read and write denies.
 - **FR-026**: In v1 a scoped employee MUST use the `claude` engine. Validation refuses any
   other engine and says why.
 
@@ -498,8 +577,8 @@ scoped employee; **P** is the session's binding)
 - **Employee project scope**: `all`, or an explicit set of project ids. The set may be empty,
   in which case the employee can reach nothing.
 - **Session project binding**: set only on sessions of scoped employees. It is fixed at
-  creation and is the "P" in every rule. Each scoped session also records its requester
-  session, for FR-013.
+  creation and is the "P" in every rule. A scoped session's requester for FR-013 is its
+  existing `parent_session_id`.
 - **Project stage directory** (Q1 = B): a generated cwd per project, outside `$JINN_HOME`. It
   holds the generated `CLAUDE.md` and copies of the allowed skills.
 
@@ -518,7 +597,7 @@ scoped employee; **P** is the session's binding)
     unscoped roster are identical on `main` and on the branch. This is run as PR evidence,
     not committed as a fixture (Principle VI bans snapshot tests).
 - **SC-003** (Q1 = B): run against a live sandbox gateway, the escape script fails every
-  attempt E1–E9 and every allowed action succeeds. The output is attached to the PR.
+  attempt E1–E15 and every allowed action succeeds. The output is attached to the PR.
 - **SC-004**: The token counts in `tool-manifest-budget.test.ts` do not rise.
 - **SC-005**: Every FR-040 element has a light and a dark screenshot on the PR.
 
@@ -548,36 +627,61 @@ recommendations.
 
 ### Q1: Is "cannot reach the company setup" a guardrail or a boundary?
 
-- **A. Guardrail.** Enforcement in the gateway and MCP only (FR-010 to FR-019). An employee
-  that keeps to its tools stays in scope. One that uses its shell or browser does not.
+Every engine runs as the operator's own OS user. On a single user, the list of ways out is
+long, and each review round found more of them:
+
+- other sessions' transcripts under `~/.claude/projects/`;
+- credential directories (`~/.config/gh`, `~/.ssh`);
+- client repos under the work root;
+- **other processes' environments**: `ps -E` on this host shows `JINN_GATEWAY_TOKEN` in 148
+  of the operator's processes, and a session capability in every running jinn MCP server;
+- the operator's browser;
+- hooks that run outside the sandbox;
+- the auth-exempt routes.
+
+The options:
+
+- **A. Guardrail.** Enforcement in the gateway and MCP only (FR-010 to FR-019), plus the
+  Phase S fixes. An employee that keeps to its tools stays in scope. One that uses its shell
+  does not. The docs say so plainly.
   - Cost: Phases S, 1, 2 and 3.
-- **B. Boundary (recommended).** A, plus containment (FR-020 to FR-026):
-  - a stage dir outside the home;
+- **B. Same-user sandbox.** A, plus containment (FR-020 to FR-026, FR-033):
+  - default-deny reads under `$HOME`;
   - an allow-listed environment;
-  - the Claude Code sandbox;
-  - no Chrome, no connectors, strict MCP config;
-  - `gateway.authRequired` on, which this instance already has.
+  - the Claude Code sandbox, with process inspection blocked;
+  - no Chrome, no connectors, strict MCP config.
 
-  Cost: a Phase 0 spike plus Phase 4. Scoped employees are claude-only, and lose browser and
-  connector access (Q9).
-- **C. OS isolation.** A separate macOS user or a container per project. Out of scope as
-  infrastructure, and listed so the choice is explicit.
+  This holds only if Phase 0 shows that E1–E15 can all be closed. Item 10 (process
+  inspection) is the one most likely to fail.
+  - Cost: Phase 0 plus Phase 4. Scoped employees are claude-only, and lose browser and
+    connector access.
+- **C. Separate OS user.** Scoped engines run as a dedicated macOS user. File permissions
+  then close transcripts, credentials, `ps -E` and the home directory, with no sandbox
+  rule list to keep complete. This is the real boundary. It needs you to create the user
+  and allow the gateway to launch processes as it (a sudoers entry), so it is
+  infrastructure, and your call. It is not specified here.
 
-B is recommended because the issue's words are a boundary claim, and A cannot keep it. Phase 0
-proves B before anything is built on it. If it cannot, v1 ships A and the docs call it a
-guardrail.
+**Recommendation: ship A as v1, and run Phase 0 alongside it as a time-boxed evaluation of
+B.**
+- A on its own delivers projects, scoped visibility and bounded tool reach. With Phase S it
+  also closes the worst existing gap: any session can read the operator token through
+  `read_knowledge`.
+- If Phase 0 closes every escape case, Phase 4 builds B.
+- If it does not, and you still need a boundary, C is the route, and it gets its own spec.
+- Under A, "scoped" is documented as "kept in scope by its tools", not as "cannot reach".
 
 ### Q2: Can a scoped employee spawn or delegate to employees outside its project?
 
 - **a. Project members only (recommended).**
-  - There is no confused deputy, because a scoped session can never start an uncontained one.
-  - The cost: each project needs its own reviewers. The org's review rules call for QA at a
-    tier no lower than the producer, so "Marid fork" would need its own `marid-qa`, and a
-    `marid-qa-senior` too if it has a senior producer.
-  - A scoped session can still reply to whoever spawned it (FR-013).
+  - A scoped session cannot *spawn* or *delegate to* an uncontained employee.
+  - It is not a full answer to upward influence. FR-013's reply (Q10-a) still puts
+    scoped-authored text in front of the requester, and the operator and the COO read P's
+    Todos (Q8).
+  - The cost: each project needs its own reviewers at each tier the org's review rule
+    requires. For example `marid-qa`, plus a senior one if the project has a senior producer.
 - **b. Scope inherits down the lineage.** A scoped session may spawn any employee, and the
-  child is bound and contained as if scoped. Shared reviewers then work across projects, but
-  every employee has to be containable, which widens Phases 0 and 4 to the whole roster.
+  child is bound, and contained under B, as if it were scoped. Shared reviewers then work
+  across projects. Under B, every employee would then have to be containable.
 
 ### Q3: Where do project definitions live?
 
@@ -637,16 +741,22 @@ The options:
 - **Yes (recommended).** Under Q1 = B the contained environment drops everything the gateway
   inherited. Any credential the project's work needs, for example `GH_TOKEN` for a push, has to
   come from a named reference. Resolving names from `secrets/` at spawn is cheap.
-- **No.** Defer it. Contained sessions then rely on credential files the sandbox leaves
-  readable, such as `~/.config/gh`. Phase 0 item 5 lists which ones.
+- **No.** Defer it. Contained sessions then need the sandbox to leave credential files
+  readable. In practice that means `~/.config/gh`, which holds **the operator's own
+  full-scope GitHub token**. That would hand every scoped employee the operator's GitHub
+  identity. Under Q1 = A secret references matter less, because there is no sandbox, and they
+  can be deferred.
 
 ### Q8: Who may hold a project's Todos?
 
 A scoped employee's Todo bodies and comments become prompt input to whoever works the Todo.
 
-- **a. Only that project's employees; company Todos only unscoped ones (recommended).** No
-  uncontained agent ever works from scoped-authored text. The operator and the COO can still
-  read and comment, as they oversee the work.
+- **a. Only that project's employees (plus `@operator`); company Todos only unscoped ones
+  (recommended).** No uncontained agent is ever *assigned* work authored inside P.
+  - Residual risk you accept: the COO, and any unscoped employee you ask to oversee, still
+    *reads* P's bodies and comments, and receives FR-013 replies. That is a narrower exposure
+    than holding the Todo, but not zero.
+  - The narrowest setting is Q8-a with Q10-b.
 - **b. Unscoped employees may hold P Todos too.** This is more flexible, for example the COO
   doing a P Todo. It accepts that P's content steers an uncontained agent, so it is prompt
   injection upward, which defeats Q1-B for whatever that agent can reach.
@@ -659,7 +769,34 @@ The connectors are Slack, Gmail, Drive, Atlassian and others.
   connectors reach well past the company setup. Neither is containable by the sandbox. The cost
   is that project employees cannot drive a browser for visual testing through Chrome. Headless
   Playwright inside the sandbox still works if Phase 0 item 5 allows it.
-- **On.** Only consistent with Q1 = A.
+- **On.** Only consistent with Q1 = A. Even under A, Chrome gives a scoped employee the
+  operator's logged-in browser, and turning it off costs two flags. So the recommendation is
+  off under A as well.
+
+### Q10: How does a scoped session reply to its requester?
+
+- **a. A live `send_to_session` to its parent session.** This is today's behaviour for every
+  employee, and the delegation rules expect it. It starts a turn in the parent on
+  scoped-authored text, so the parent may be steered by P's content.
+- **b. A non-executing callback (recommended under Q1 = B or C).** The reply is stored
+  against the parent session and shown in its UI. The parent reads it on its next turn,
+  marked as coming from a scoped session, and nothing starts a turn on its own. The cost: a
+  requester that ends its turn waiting is not woken. It needs a nudge from the operator or a
+  heartbeat.
+- Under Q1 = A, (a) is acceptable, because the boundary is a guardrail anyway.
+
+### Q11: If the sandbox cannot block `ps -E`, should the gateway stop exporting its token to every engine?
+
+Only relevant if Phase 0 item 10 fails and you still want B.
+
+- `packages/jinn/src/gateway/server.ts:504` puts `JINN_GATEWAY_TOKEN` in the gateway's own
+  environment, and every engine inherits it. The documented fallback lets employees `curl`
+  the gateway when the jinn tools are absent (`packages/jinn/src/sessions/context.ts:919`).
+- **Yes** removes that fallback for every employee. They then reach the gateway only through
+  the jinn MCP server. Even then, each MCP server's own capability stays visible to `ps -E`
+  (`packages/jinn/src/mcp/identity.ts:207`). Closing that needs the capability passed some
+  way other than the environment. This is why Q1 recommends treating C as the real boundary.
+- **No** means B is not buildable on a single user. v1 stays at A.
 
 ### Decided by default (say if you disagree)
 
@@ -671,5 +808,6 @@ The connectors are Slack, Gmail, Drive, Atlassian and others.
   employees have no cron jobs.
 - System employees and the remote connector stay unscoped.
 - Telegram and other connector sessions for scoped employees are refused in v1.
-- The spend ceiling is the existing per-employee cap. No per-project budget key.
+- No per-project budget key. The existing per-employee cap is a per-project cap only for an
+  employee scoped to a single project. Say if you want a per-project ceiling as a follow-up.
 - No client layer.

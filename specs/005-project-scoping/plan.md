@@ -6,7 +6,7 @@
 
 | Question | Assumed answer |
 | --- | --- |
-| Q1 | B |
+| Q1 | A for v1, with Phase 0 run alongside as an evaluation of B; Phase 4 only if Phase 0 passes and the operator confirms |
 | Q2 | a |
 | Q3 | a |
 | Q4 | a |
@@ -15,8 +15,23 @@
 | Q7 | yes |
 | Q8 | a |
 | Q9 | off |
+| Q10 | a under A; b if B or C is built |
+| Q11 | only asked if Phase 0 item 10 fails |
 
-Where a different answer changes the plan, the affected phase says how.
+Where a different answer changes the plan, the affected phase says how. In particular:
+
+- **Q8-b:** `mayHoldTodo` also admits unscoped employees for P Todos. Its store-level check
+  shrinks to "a scoped employee may hold only its projects' Todos", and the upward-injection
+  residual risk is recorded in the PR.
+- **Q9-on:** scoped sessions keep `--chrome` and the user's connectors. T082 drops out, and
+  E9 is removed from the escape script.
+- **Q10-b:** FR-013 replies become a stored callback, which needs a new small store and UI
+  surface. That is added to Phase 2 as its own task.
+- **Q11-yes:** `gateway/server.ts:504` stops exporting the token, and the context
+  section's `curl` fallback is removed. This is its own PR before Phase 4, because it changes
+  every employee.
+- **Q1-C:** Phase 4 is replaced by a separate spec for running scoped engines as a dedicated
+  OS user.
 
 ## Existing infrastructure (constitution VII)
 
@@ -34,9 +49,12 @@ what was rejected. These are the rows this plan builds on. All are verified agai
 | `packages/jinn/src/gateway/remote-mcp/profile.ts:98` | Tool-profile filter shape for the scoped MCP profile |
 | `packages/jinn/src/gateway/api.ts:2148` | `GET /api/work-items?ids=` returns Todos with no filter. The scoped read module must cover this branch |
 | `packages/jinn/src/gateway/api.ts:1744` | `GET /api/sessions` `pinned` and `q` branches, also served by the scoped read module |
-| `packages/jinn/src/work-items/assignment.ts:77` | `assignWorkItem`: the single choke point for FR-015 |
+| `packages/jinn/src/work-items/store.ts:356` | `createWorkItem` insert: the first `assignee` writer |
+| `packages/jinn/src/work-items/store.ts:797` / `:850` | The two update paths that call `releaseOnOwnerChange`, which the store calls "every writer of `assignee`" (`:961`). Between them, these three are the real choke point for FR-015 |
+| `packages/jinn/src/gateway/api.ts:3450` | The delegation route creates a Todo already assigned |
+| `packages/jinn/src/plugins/host/todos.ts:31` | A plugin creates with `draft.assignee` |
 | `packages/jinn/src/gateway/api.ts:2409` | PATCH assignee branch, which does not go through `assignWorkItem` |
-| `packages/jinn/src/gateway/spawn-session.ts:163` | Session binding (FR-008) and requester record (FR-013) |
+| `packages/jinn/src/gateway/spawn-session.ts:163` | Session binding (FR-008). The requester is the existing `parentSessionId` (`:188`) |
 | `packages/jinn/src/gateway/todo-dispatch.ts:197` | Dispatcher entry point |
 | `packages/jinn/src/gateway/api.ts:2925` | JSON `{path}` attachment ingestion (FR-018) |
 | `packages/jinn/src/mcp/work-item-attachments.ts:68` | Path-based `attach_to_work_item` ingestion (FR-018) |
@@ -45,7 +63,10 @@ what was rejected. These are the rows this plan builds on. All are verified agai
 | `packages/jinn/src/gateway/org.ts:170` | `WRITABLE_FIELDS`, which gains `projects` |
 | `packages/jinn/src/sessions/turn/engine-run.ts:46` | cwd, which becomes the stage dir for scoped sessions |
 | `packages/jinn/src/shared/child-env.ts:41` | Inherited environment. The allow-list builder sits beside it |
-| `packages/jinn/src/engines/claude-interactive.ts:451` | Claude argv: `--chrome` at :452, `--settings` at :456, `--mcp-config` at :459 |
+| `packages/jinn/src/engines/claude-interactive.ts:451` | Claude argv: `--chrome` at :451, `--dangerously-skip-permissions` at :454, `--settings` at :456, `--mcp-config` at :459 |
+| `packages/jinn/src/gateway/auth.ts:250` | `authRequiredForRequest` exempt set (FR-025, E15) |
+| `packages/jinn/src/gateway/server.ts:1035` | Upgrade handling: `/ws` and plugin events check auth only |
+| `packages/jinn/assets/hook-relay.mjs:10` | The relay resolves its home from `JINN_HOME` (FR-025a) |
 | `packages/jinn/src/board-walk/route-turn.ts:48` | `--no-chrome --strict-mcp-config` precedent |
 | `packages/jinn/src/mcp/server-bootstrap.ts:25` | Capability derived from the key file. Skipped when one is passed |
 | `packages/jinn/src/mcp/server.ts:39` | MCP server bearer fallback from `gateway.json`. It is how the MCP server authenticates when auth is on |
@@ -56,7 +77,7 @@ what was rejected. These are the rows this plan builds on. All are verified agai
 
 Each phase is its own PR off `main`, built in this order:
 
-1. **Phase 0, containment spike.** Produces evidence, not product code. Decides whether Phase 4
+1. **Phase 0, containment evaluation.** Runs alongside Phases S to 3. Produces evidence, not product code. Decides whether Phase 4
    is buildable.
 2. **Phase S, existing read gaps (Q6-a).** `read_knowledge` and `publish_attachment` go
    through the existing read policy.
@@ -80,7 +101,7 @@ Each phase is its own PR off `main`, built in this order:
    - the `authRequired` precondition;
    - the escape script.
 
-Under Q1 = A, Phases 0 and 4 drop out, and the docs call scope a guardrail.
+v1 (recommended Q1 = A) is Phases S, 1, 2 and 3, and the docs call scope a guardrail. Phase 4 is built only if Phase 0 passes and the operator confirms B.
 
 ## Technical Context
 
@@ -110,8 +131,16 @@ Query 5.
   - `packages/web/src/lib/api.ts`: 876 against 876.
 
   The rule for this feature: **no file already at or over budget grows.**
-  - `api.ts` gets only the gate line and the `projects-api.ts` mount. Lines spent there are
-    recovered in the same PR by moving an existing handler out.
+  - `api.ts` takes four kinds of edit:
+    - the gate line and the `projects-api.ts` mount;
+    - create-time `project`, through a new `gateway/work-item-create-project.ts` called on one
+      line, as `work-item-create-sprint.ts` is;
+    - the list `project=` filter, which needs **no** `api.ts` edit because it is parsed in
+      `gateway/work-item-query.ts`;
+    - no edit for `mayHoldTodo`, which lives in the store.
+
+    Every line spent in `api.ts` is paid for in the same PR by moving the `GET /api/sessions`
+    handler (`gateway/api.ts:1743`, about 30 lines) into `gateway/sessions-list-api.ts`.
   - `context.ts` gets its project section from a new `sessions/context/project.ts`, and the
     call site is paid for by moving one existing section out.
 - Scoped enforcement lives at the gate and in new modules (`gateway/project-scope/*`). No
@@ -156,7 +185,7 @@ Query 5.
 | `POST /api/work-items/:id/attachments` with JSON `{path}` | As above, plus the FR-018 path check | gate |
 | `GET /api/work-items/:id/sessions` | Todo in P. Lists only P-bound sessions, plus `hiddenCount` | read-routes |
 | `POST /api/work-items/:id/assign`, `/dispatch`, `POST /api/delegations` | Todo in P. The target must be scoped to P (FR-016). `mayHoldTodo` also runs inside `assignWorkItem` | gate + core |
-| `PATCH /api/work-items/:id` setting `assignee` | `mayHoldTodo` | core (the PATCH branch) |
+| `PATCH /api/work-items/:id` setting `assignee` | `mayHoldTodo` | store |
 | `PUT /api/work-items/:id/dispatch-config` | Todo in P, and every skill must be on P's allow-list | gate |
 | `/api/work-items/:id/relations` | Both ends in P. Reads report other relations as a hidden count | gate + read-routes |
 | `POST /api/work-items/:id/capture-landing` (`land_on_work_item`) | Todo in P | gate |
@@ -164,8 +193,8 @@ Query 5.
 | `PUT /api/work-items/:id/project`, `/sprint`, `/archive`, label create | Refused | — |
 | `GET /api/sessions` (every branch), `/api/search/sessions`, `/api/search/messages`, message context | Only sessions bound to P | read-routes |
 | `GET /api/sessions/:id` (+ `/messages`, `/children`, `/transcript`, `/context`) | Session must be bound to P, otherwise 404 | gate |
-| `POST /api/sessions` (spawn) | Target scoped to P. The child is bound to P and records its requester. A named parent must be bound to P | gate + `spawnSession` |
-| `POST /api/sessions/:id/message` | Target bound to P, **or** the caller's own recorded requester (FR-013, send only) | gate |
+| `POST /api/sessions` (spawn) | Target scoped to P. The child is bound to P. A named parent must be bound to P | gate + `spawnSession` |
+| `POST /api/sessions/:id/message` | Target bound to P, **or** the caller's own `parent_session_id` (FR-013, send only; delivery per Q10) | gate |
 | `POST /api/sessions/:id/stop`, `POST /api/compactions` | Target bound to P. Stop is limited to own descendants, as today. Compaction is limited to own session | gate |
 | `POST /api/sessions/:self/attachments` (`publish_attachment`) | Own session only. The FR-018 path check runs in the MCP tool | gate + tool |
 | `GET /api/org`, `GET /api/org/employees/:name` | Members of P only. No departments. Anyone else returns 404 | read-routes |
@@ -180,23 +209,38 @@ classifies each one. The enumeration test (SC-001) keeps the table complete from
 
 ### `mayHoldTodo` (FR-015, Q8-a)
 
-`project-scope/assignee.ts`: `mayHoldTodo(employee, todoProject)` holds when one of these is
-true:
+`project-scope/assignee.ts` defines `mayHoldTodo(employee, todoProject)`. It returns true when
+any of these holds:
 
-- the Todo is in a project and the employee's scope includes that project;
-- the Todo is company-level and the employee is unscoped.
+- the employee is `@operator`;
+- the Todo is in a project, and the employee is scoped to it;
+- the Todo is company-level, and the employee is unscoped.
 
-It is called from:
+**Where it is enforced:** at the store, in every writer of `assignee`:
 
-- inside `assignWorkItem` (`work-items/assignment.ts:77`), which covers `gateway/api.ts:2650`,
-  `gateway/api.ts:3501`, `talk/control/todo-adapters.ts:132` and `talk/control/delegation-adapter.ts:107`;
-- the PATCH assignee branch (`gateway/api.ts:2409`);
+- the `createWorkItem` insert (`work-items/store.ts:356`);
+- the two `releaseOnOwnerChange` update paths (`work-items/store.ts:797`, `:850`).
+
+The work-items layer does not know the roster. A resolver injected at gateway boot answers
+"what is this employee's scope?" so the store can decide. That one store-level check covers
+every caller:
+
+- `assignWorkItem`, and with it the assign, delegation and talk paths;
+- the PATCH assignee branch;
+- the delegation create-already-assigned path (`gateway/api.ts:3450`);
+- plugin creates (`plugins/host/todos.ts:31`).
+
+**Paths that start work without writing `assignee`** check it at their own entry:
+
 - `spawnSession` with a linked Todo;
 - Dispatcher routing;
 - the board-walk projection, which skips the pairing rather than proposing it.
 
-Phase 2 re-derives this list by enumerating callers of `assignWorkItem`, and every write of
-`patch.assignee`, before relying on it.
+**Changing a project** (`PUT /api/work-items/:id/project`) is refused while the root or any
+sub-task is held by someone ineligible under the new project. The refusal names them.
+
+**First step of the task:** enumerate every `assignee` write in `work-items/store.ts`, and
+every caller of those writers. Do not trust this list.
 
 ### Scoped MCP profile (FR-019)
 
@@ -216,17 +260,19 @@ Unscoped manifests are unchanged, and the attested hash test proves it.
 
 ## Phases
 
-### Phase 0: containment spike (senior-developer, Q1 = B only)
+### Phase 0: containment evaluation (senior-developer; time-boxed; alongside Phases S to 3)
 
 No product code. It uses a throwaway sandbox gateway with `authRequired: true` and a
-hand-built stage dir outside the home. It answers research.md "Containment" items 1–9 by
-running the escape script E1–E9 by hand, and records the commands and their output under
+hand-built stage dir outside the home. It answers research.md "Containment" items 1–10 by
+running the escape script E1–E15 by hand, and records the commands and their output under
 "Phase 0 findings".
 
-**Exit criterion**: E1–E9 all fail, the allowed actions succeed, and the exact settings,
+**Exit criterion**: E1–E15 all fail, the allowed actions succeed, and the exact settings,
 argv, and environment allow-list are written down.
 
-**On failure**: report to the operator. Phase 4 drops, and Q1 falls back to A.
+**On failure**: report to the operator with the failing items. v1 stays at A. If the operator still wants a boundary, C is the route, and Q11 is asked only if item 10 alone failed.
+
+**Time-box**: one working session. Phase 0 is an evaluation, not a build.
 
 ### Phase S: existing read gaps (senior-developer; senior QA)
 
@@ -281,8 +327,8 @@ separate Todos, specified from the route table and reviewed by the senior before
 - **Employee scope**: `projects` in `org.ts`, with explicit `all` versus a list (FR-007), the
   validation rules (claude-only, not system employees, `authRequired` under Q1 = B), and
   `WRITABLE_FIELDS`.
-- **Sessions**: `sessions.project_id` and `sessions.requester_session_id`, both set in
-  `spawnSession` by FR-008. The badge for unscoped sessions is derived at read time.
+- **Sessions**: `sessions.project_id`, set in `spawnSession` by FR-008. The FR-013 requester is
+  the existing `parent_session_id`. The badge for unscoped sessions is derived at read time.
 - **Gateway modules**: `gateway/project-scope/{caller,rules,assignee,read-routes,paths}.ts`, the
   gate line, and the upgrade-guard check.
 - **`mayHoldTodo`** at every call site listed above.
@@ -307,7 +353,8 @@ separate Todos, specified from the route table and reviewed by the senior before
   - 404 bodies identical to an unknown id;
   - `mayHoldTodo` per call site;
   - FR-009, where a scoped caller cannot see or message an unscoped session on a P Todo;
-  - FR-013, the requester reply.
+  - FR-013, the reply to `parent_session_id` only;
+  - FR-033, refusal of working directories that overlap the protected trees.
 
   SC-002 is checked by a one-off `buildContext` and argv comparison, recorded in the PR.
 
@@ -331,7 +378,7 @@ Senior QA because skill and Notes scoping is part of the boundary.
 
 ### Phase 4: containment (senior-developer; senior QA)
 
-Built only under Q1 = B, from the Phase 0 findings.
+Built only if Phase 0 passes and the operator confirms B, using the Phase 0 findings.
 
 - An allow-list environment builder, with secret references resolved at spawn. Values are
   never logged, which a test asserts.
@@ -342,13 +389,14 @@ Built only under Q1 = B, from the Phase 0 findings.
 - The capability passed on the jinn MCP server's environment. `server-bootstrap.ts` derives
   one only when none is passed.
 - Validation refusing scoped employees when `authRequired` is off.
-- `scripts/verify-project-containment.sh` (E1–E9), with its output attached to the PR.
+- Working-directory validation (FR-033), and the hook relay taking its home, URL and credential on argv (FR-025a).
+- `scripts/verify-project-containment.sh` (E1–E15), with its output attached to the PR.
 
 ## Delegation split
 
 | Phase | Producer | Reviewer | Trigger |
 | --- | --- | --- | --- |
-| 0 | senior | senior QA | Ambiguity in engine behaviour |
+| 0 | senior | senior QA | Ambiguity in engine behaviour (runs alongside Phases S to 3) |
 | S | senior | senior QA | Secrets exposure |
 | 1 | junior | junior QA | Fully specified, no auth or secrets |
 | 2 | senior, with junior sub-Todos for the test matrix and web | senior QA | Auth enforcement |

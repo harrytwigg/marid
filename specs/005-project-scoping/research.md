@@ -17,7 +17,7 @@ they start with `packages/`.
 | `work-items/store.ts:511` | The list filter applies `sprint` | `project` goes next to it |
 | `work-items/store.ts:331` | The id prefix comes from the department | Unchanged: a project does not affect numbering |
 | `work-items/migrate.ts:161` | `labels.department` is nullable, and null means company-wide | Precedent for a nullable scope column on a registry row |
-| `sessions/migrate.ts:342` | Sessions use add-column-if-missing | `sessions.project_id` and `requester_session_id` are plain added columns |
+| `sessions/migrate.ts:342` | Sessions use add-column-if-missing | `sessions.project_id` is a plain added column. The FR-013 requester reuses `parent_session_id` (`sessions/migrate.ts:26`) |
 | `sessions/migrate.ts:117` | The `files` table has no session or owner column | Managed files cannot be scoped, so FR-018 refuses them for scoped callers |
 | `shared/types.ts:515` | `Employee` | Gains an explicit project scope (FR-007) |
 | `shared/types.ts:529` | `mcp` allow-list, the only per-employee allow-list today | Precedent for an optional list field on the employee |
@@ -35,7 +35,12 @@ they start with `packages/`.
 | `mcp/identity.ts:42` | "defense-in-depth … not an internet auth boundary" | Why Q1 exists |
 | `mcp/server-bootstrap.ts:25` | The MCP server **derives** the capability itself from the key file, given only a session id and a home on argv | Any process that can read the key can mint any session's capability. FR-024 adds defence in depth on top of FR-022 |
 | `mcp/server.ts:39` | `resolveServerToken`: the MCP server authenticates with the bearer token from its environment or from `gateway.json` | It runs outside the Bash sandbox, so it keeps working. The shell cannot read `gateway.json` (FR-022) |
-| `gateway/request-handler.ts:55` | With `authRequired`, a request without the bearer token gets 401 before any route | This instance runs `authRequired: true`. A contained shell holds no token, so it stops here (FR-025) |
+| `gateway/request-handler.ts:55` | With `authRequired`, a request without the bearer token gets 401 before any route, except the exempt set |
+| `gateway/auth.ts:250` | `authRequiredForRequest` exempts `/api/status`, `GET /api/auth/state`, the `POST` auth and pairing routes, and `POST /api/internal/hook` | E15 walks these |
+| `gateway/server.ts:1035` | Upgrades: `/ws` and plugin events refuse unidentified callers, then check auth. Only `/ws/pty` is operator-only | A token-holding session receives the company broadcast today |
+| `mcp/identity.ts:207` | Each jinn MCP server gets `JINN_SESSION_CAPABILITY` in its environment | Visible to `ps -E` from any same-user process. Seen on this host in 6 of 6 running MCP servers |
+| `gateway/server.ts:510` | `process.env.JINN_GATEWAY_TOKEN` is set in the gateway and inherited by every engine | Visible to `ps -E`. Seen on this host in 148 processes |
+| `packages/jinn/assets/hook-relay.mjs:10` | The hook relay resolves its home from `JINN_HOME` or `~/.jinn` | FR-025a | This instance runs `authRequired: true`. A contained shell holds no token, so it stops here (FR-025) |
 | `gateway/auth.ts:264` | `shouldRequireGatewayAuth`: auth is off on loopback unless `gateway.authRequired` is set | Hence FR-025's precondition |
 | `gateway/api.ts:841` | `rejectUnverifiedIdentifiedApiCaller` lets unauthenticated `GET`s through when auth is off | Affects auth-off instances only |
 | `gateway/api.ts:796` | Same-origin browser inference, purely from headers | On an auth-off instance any local `curl` can forge it. Another reason for FR-025 |
@@ -59,11 +64,15 @@ they start with `packages/`.
 | `gateway/api.ts:1744` | `GET /api/sessions` has `pinned` and `q` branches | Same |
 | `gateway/api.ts:3273` | `POST /api/delegations` | FR-016 target check |
 | `gateway/api.ts:3640` | `POST /api/sessions` (spawn) | FR-016, and the FR-008 binding |
-| `gateway/spawn-session.ts:163` | `spawnSession`, where every spawn path converges | Sets the binding and the requester, once |
+| `gateway/spawn-session.ts:163` | `spawnSession`, where every spawn path converges | Sets the binding, once. `parentSessionId` (`:188`) is the requester |
 | `gateway/api.ts:3695` | `POST /api/sessions/:id/message` | FR-012 and FR-013 |
 | `gateway/api.ts:905` | `resolveSpawnParentSessionId` accepts any existing session as parent | Scoped callers may name only a P-bound parent |
-| `work-items/assignment.ts:77` | `assignWorkItem`. Callers: `gateway/api.ts:2650` (assign), `gateway/api.ts:3501` (delegation), `talk/control/todo-adapters.ts:132`, `talk/control/delegation-adapter.ts:107` | `mayHoldTodo` goes inside it |
-| `gateway/api.ts:2409` | PATCH sets `assignee` directly, without `assignWorkItem` | The second `mayHoldTodo` call site |
+| `work-items/assignment.ts:77` | `assignWorkItem`. Callers: `gateway/api.ts:2650` (assign), `gateway/api.ts:3501` (delegation), `talk/control/todo-adapters.ts:132`, `talk/control/delegation-adapter.ts:107` | Covered by the store-level check |
+| `gateway/api.ts:2409` | PATCH sets `assignee` directly, without `assignWorkItem` | Covered by the store-level check |
+| `gateway/api.ts:3450` | Delegation with no existing Todo creates one already assigned | Covered by the store-level check |
+| `plugins/host/todos.ts:31` | A plugin create passes `draft.assignee` and `parentId` | Covered by the store-level check |
+| `work-items/store.ts:356`, `:797`, `:850` | Every writer of `assignee` (`:961` says so) | **Where `mayHoldTodo` lives** |
+| `gateway/todo-assignee.ts:21` | `checkAssignee` accepts `@operator` | `mayHoldTodo` admits `@operator` |
 | `gateway/todo-dispatch.ts:197` | `startTodoDispatcher` (dispatch and board walk) | Routing check |
 | `gateway/self-compaction-api.ts:217` | `POST /api/compactions` | Own session only |
 | `gateway/todo-capture-api.ts:172` | `capture-landing` (`land_on_work_item`) | Todo must be in P |
@@ -93,7 +102,7 @@ they start with `packages/`.
 | `sessions/turn/engine-run.ts:46` | Local engines always run with `cwd: JINN_HOME` | FR-020: scoped sessions get the stage dir |
 | `gateway/server.ts:504` | Exports `JINN_GATEWAY_TOKEN` to every engine | FR-021 |
 | `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | FR-021 needs an allow-list builder |
-| `engines/claude-interactive.ts:451` | Claude argv: `--chrome` (`:452`, the operator's own browser), `--dangerously-skip-permissions` (`:454`), the gateway-written `--settings` under `tmp/` (`:456`), and `--mcp-config` without `--strict-mcp-config` (`:459`) | FR-022, FR-023 |
+| `engines/claude-interactive.ts:451` | Claude argv: `--chrome` (`:451`, the operator's own browser), `--dangerously-skip-permissions` (`:454`), the gateway-written `--settings` under `tmp/` (`:456`), and `--mcp-config` without `--strict-mcp-config` (`:459`) | FR-022, FR-023 |
 | `shared/claude-settings.ts:70` | `buildSessionSettings` writes hooks and a status line only | Scoped sessions also get sandbox and deny blocks, in this file only |
 | `board-walk/route-turn.ts:48` | `CLAUDE_WALK_FLAGS`: `--no-chrome --tools "" --strict-mcp-config` | The only existing locked-down Claude turn |
 | `gateway/watcher.ts:38` | `syncSkillSymlinks` links every skill into `~/.jinn/.claude/skills` | The stage dir gets copies of the allowed skills instead |
@@ -183,13 +192,25 @@ record the setting or flag that achieves it, or record that nothing does.
    (`mcp/__tests__/tool-manifest-budget.test.ts:205`), so they must inherit its sandbox too.
 9. **Reads made outside the sandbox.** With FR-018 in place, do `publish_attachment` and
    `attach_to_work_item` refuse paths under `$JINN_HOME`? (E7)
+10. **Process inspection.** Can the sandbox stop `ps -E` and other ways of reading another
+    process's environment (`sysctl KERN_PROCARGS2`, `proc_pidinfo`)? (E14) If it cannot,
+    every token and capability in a same-user process environment stays readable, and B is
+    not buildable without Q11. This is the item most likely to fail.
 
-**Exit criterion**: E1 to E9 pass in full on a throwaway gateway with `authRequired: true`.
+Two more checks belong to item 8:
+- whether hooks run inside the sandbox;
+- whether the relay works with its home, URL and credential passed on argv (FR-025a).
 
-If item 1, 2, 3 or 4 cannot be made to hold:
-- Q1 falls back to A for v1;
-- US3 moves to a follow-up;
-- the findings are recorded here.
+Three more checks belong to item 5:
+- E11 to E13 (transcripts, sibling projects, credential directories);
+- that default-deny reads under `$HOME` still let the toolchain run.
+
+**Exit criterion**: E1 to E15 pass in full on a throwaway gateway with `authRequired: true`.
+
+If any of items 1–4 or 10 cannot be made to hold:
+- v1 stays at A;
+- the findings are recorded here;
+- the operator chooses between C and Q11.
 
 ## Issue questions → where they are answered
 

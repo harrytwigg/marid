@@ -1,7 +1,7 @@
 # Tasks: Projects and Project-Scoped Employees
 
-**Status: provisional.** These tasks assume the recommended answer to each of Q1–Q9 in
-spec.md. They are re-cut after the operator answers, and no task starts before then.
+**Status: provisional.** These tasks assume the recommended answer to each of Q1–Q11 in
+spec.md. Q1 = A means Phase 4 waits on Phase 0 and on the operator. They are re-cut after the operator answers, and no task starts before then.
 
 **How phases ship.** Each phase is its own PR off `main`, and a phase starts only after the
 previous phase has merged.
@@ -17,17 +17,17 @@ previous phase has merged.
 **Legend.** `[P]` marks a task that can run in parallel within its phase. The producer and
 reviewer for each phase are in plan.md, "Delegation split".
 
-## Phase 0: containment spike (senior-developer → senior QA; only under Q1 = B)
+## Phase 0: containment evaluation (senior-developer → senior QA; runs alongside Phases S to 3; time-boxed)
 
 - [ ] T001 Set up a throwaway sandbox gateway on a port ≥ 8060 with `authRequired: true`, plus
   a scoped test employee and a hand-built stage dir outside the home. Launch the session with
   the gateway's own argv and a hand-written `--settings` file.
-- [ ] T002 Answer research.md "Containment" items 1–9 with real `claude -p` runs. Record
+- [ ] T002 Answer research.md "Containment" items 1–10 with real `claude -p` runs. Record
   commands and output under "Phase 0 findings".
-- [ ] T003 Run E1–E9 and the allowed actions by hand. Record the exact settings, argv and
+- [ ] T003 Run E1–E15 and the allowed actions by hand. Record the exact settings, argv and
   environment allow-list that make them pass.
-- [ ] T004 Report go or no-go to the operator. On no-go, mark Phase 4 dropped and amend
-  spec.md (Q1 → A).
+- [ ] T004 Report go or no-go to the operator. On no-go, name the failing items, and put the
+  choice between C and Q11 to the operator.
 
 ## Phase S: existing read gaps (senior-developer → senior QA)
 
@@ -61,7 +61,12 @@ reviewer for each phase are in plan.md, "Delegation split".
   - skills (each must exist);
   - shared Notes (relative, under `knowledge/` or `docs/`);
   - env (names checked against the FR-031 reserved set; responses return names and
-    `resolved` only).
+    `resolved` only);
+  - working directories also checked against FR-033.
+
+  Changing a Todo's project (`PUT /api/work-items/:id/project`) is refused while any holder is
+  ineligible. That check lands in Phase 2 with `mayHoldTodo`. Until then, Phase 1 has no
+  scoped employees.
 - [ ] T025 Tests:
   - filter semantics (`none`, an unknown id, an archived project);
   - root-only membership and sub-task inheritance;
@@ -93,8 +98,8 @@ reviewer for each phase are in plan.md, "Delegation split".
     targeting a scoped employee;
   - `WRITABLE_FIELDS`, with PATCH refusing an empty list;
   - the web `Employee` and `EmployeeUpdate` types.
-- [ ] T042 Add `sessions.project_id` and `sessions.requester_session_id`, set only for scoped
-  employees in `spawnSession` by FR-008. A scope mismatch, a company Todo, or a conflicting
+- [ ] T042 Add `sessions.project_id`, set only for scoped employees in `spawnSession` by
+  FR-008. Use the existing `parent_session_id` as the FR-013 requester. A scope mismatch, a company Todo, or a conflicting
   explicit project refuses the spawn. Refuse connector-originated sessions for scoped
   employees.
 - [ ] T043 Write `gateway/project-scope/{caller,rules,paths}.ts`. Add the gate line beside
@@ -103,10 +108,22 @@ reviewer for each phase are in plan.md, "Delegation split".
   row, including the `ids=`, `pinned` and `q` branches, the session-list `hiddenCount`, and
   the relation hidden count. It calls the store functions with a `project` filter, and no
   existing handler is edited.
-- [ ] T045 Write `gateway/project-scope/assignee.ts` (`mayHoldTodo`). First enumerate the
-  callers of `assignWorkItem` and every write of `patch.assignee`. Then call it inside
-  `assignWorkItem`, in the PATCH assignee branch, in `spawnSession` with a linked Todo, in
-  Dispatcher routing, and in the board-walk projection (which skips the Todo).
+- [ ] T045 Write `gateway/project-scope/assignee.ts` (`mayHoldTodo`, which admits
+  `@operator`), plus a store-level guard in every writer of `assignee`:
+  - the `createWorkItem` insert;
+  - both `releaseOnOwnerChange` paths.
+
+  The guard learns each employee's scope through a resolver injected at gateway boot.
+
+  Before relying on the list in plan.md, enumerate every `assignee` write in
+  `work-items/store.ts` and every caller of those writers.
+
+  Also check at each entry point that starts work without writing `assignee`:
+  - `spawnSession` with a linked Todo;
+  - Dispatcher routing;
+  - the board-walk projection, which skips the Todo.
+
+  Refuse a project change while any holder is ineligible.
 - [ ] T046 Add the FR-018 path checks: `publish_attachment`, path-based
   `attach_to_work_item`, and the JSON `{path}` attachment route. Refuse `list_files` and
   `read_file`.
@@ -119,8 +136,11 @@ reviewer for each phase are in plan.md, "Delegation split".
   - 404 bodies identical to an unknown id;
   - `mayHoldTodo` at each call site;
   - FR-009: a scoped caller cannot see or message an unscoped session working a P Todo;
-  - FR-013: the requester reply succeeds, and sending to any other non-P session is
-    refused;
+  - FR-013: the reply to `parent_session_id` succeeds, and sending to any other non-P
+    session is refused;
+  - every assignee writer refuses an ineligible holder, including the delegation create path
+    and plugin creates;
+  - `@operator` is accepted;
   - an emptied scope fails closed.
   Record the SC-002 one-off `buildContext` and argv comparison in the PR, not as a committed
   fixture.
@@ -142,16 +162,25 @@ reviewer for each phase are in plan.md, "Delegation split".
 - [ ] T064 Write `INSTRUCTIONS.md` into the stage `CLAUDE.md`, following
   `instructions_mode`. Update the template docs (`todo-handling`, `management`), and add a
   migration note if instance files change.
+- [ ] T065 For scoped sessions, pass `--no-chrome` and `--strict-mcp-config` (FR-023, Q9)
+  and refuse non-claude engines (FR-026). Write a test that a scoped session's argv carries
+  both flags, and that an unscoped session's argv is unchanged.
 
 ## Phase 4: containment (senior-developer → senior QA; Q1 = B)
 
 - [ ] T080 Build the allow-list environment for scoped sessions, with secret references
   resolved at spawn. Test that no value appears in logs, events or API responses.
-- [ ] T081 Put the sandbox and deny rules, `allowUnsandboxedCommands: false`, and the
-  stage-dir write denies in the gateway-written `--settings`, as Phase 0 established.
-- [ ] T082 Pass `--no-chrome` and `--strict-mcp-config` for scoped sessions, plus the
-  connector and user-level MCP exclusion Phase 0 found.
+- [ ] T081 Put these in the gateway-written `--settings`, as Phase 0 established:
+  - default-deny reads under `$HOME`, plus the allow-list;
+  - file-tool denies;
+  - the process-inspection block;
+  - `allowUnsandboxedCommands: false`;
+  - the stage-dir write denies.
+- [ ] T082 Add the claude.ai connector and user-level MCP exclusion Phase 0 found, on top of
+  T065's flags. Give the hook relay its home, URL and
+  per-session credential on argv (FR-025a). Make `POST /api/internal/hook` verify that the
+  session it names is the caller's.
 - [ ] T083 Pass the capability on the jinn MCP server's environment. `server-bootstrap.ts`
   derives it only when none is passed.
-- [ ] T084 Write `scripts/verify-project-containment.sh` (E1–E9) against a sandbox gateway,
+- [ ] T084 Write `scripts/verify-project-containment.sh` (E1–E15) against a sandbox gateway,
   and attach its output to the PR.
