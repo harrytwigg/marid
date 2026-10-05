@@ -1,172 +1,167 @@
 # Data Model: Projects and Project-Scoped Employees
 
-This assumes Q3-a: project definitions live in the registry DB, and employee scope lives in org
-YAML.
+Project definitions are YAML, mirroring `org/` (Q3). The registry holds only Todo membership
+and the session binding. Both are keyed by the project's stable id, the same way
+`work_items.assignee` names an employee.
+
+## Project YAML
+
+```yaml
+# $JINN_HOME/projects/side-project.yaml   (file name is presentation only)
+id: prj_1a2b3c4d5e6f          # required, stable, never changes
+name: Side project            # unique ignoring case; "none" and "all" reserved
+description: Friend's side project, on their Claude account
+archived: false               # true: readable, refuses new members
+dedicated: false              # true: only members may hold its Todos (FR-015)
+workdirs:                     # FR-033; realpath-normalised at scan time
+  - ~/Projects/side-project
+skills: [review, speckit-specify, speckit-plan]   # allow-list for scoped sessions; [] or absent = none
+sharedNotes: []               # paths relative to $JINN_HOME (knowledge/... or docs/...); a directory shares its subtree
+instructions: project         # project | project+company (FR-029)
+```
+
+**Scan.** `gateway/project-registry.ts` scans the directory, following the shape of `scanOrg`
+and `orgRegistry` (`packages/jinn/src/gateway/org-registry.ts:42`).
+
+- It runs at boot and from a watcher on `projects/`.
+- If a scan fails, it keeps the last good set.
+- It refuses a file, logging the file and the reason, when the file has:
+  - a missing or malformed `id`;
+  - a duplicate `id` (both files are refused);
+  - a duplicate or reserved `name`;
+  - a `workdirs` entry that fails FR-033;
+  - a `skills` entry that does not exist under `skills/`;
+  - a `sharedNotes` entry outside `knowledge/` or `docs/`.
+
+The `id` is required. Generating one on the operator's behalf would mean rewriting a file they
+edited by hand. The Projects page creates files with a generated id.
+
+**Backup.** `projects` is added to `ARCHIVE_INCLUDES`
+(`packages/jinn/src/backup/archive.ts:9`).
+
+**Writes from the UI** (FR-042). `POST /api/projects` writes a new file, and
+`PATCH /api/projects/:id` rewrites that project's file. Both are operator-only, like
+`PATCH /api/org/employees/:name`.
 
 ## Registry tables
 
-All new tables are additive and registered in `V2_ADDITIVE_TABLES`
-(`packages/jinn/src/work-items/migrate.ts:520`), in this order. No column is added to
-`work_items`.
+New tables are additive and registered in `V2_ADDITIVE_TABLES`
+(`packages/jinn/src/work-items/migrate.ts:520`). No column is added to `work_items`.
 
 ```sql
-CREATE TABLE IF NOT EXISTS projects (
-  id TEXT PRIMARY KEY CHECK (id GLOB 'prj_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
-  name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (length(trim(name)) > 0),
-  description TEXT NOT NULL DEFAULT '',
-  instructions_mode TEXT NOT NULL DEFAULT 'project' CHECK (instructions_mode IN ('project', 'project+company')),
-  dedicated INTEGER NOT NULL DEFAULT 0 CHECK (dedicated IN (0, 1)),  -- Q8-a: only members may hold its Todos
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  archived_at TEXT
-);
-
 -- Top-level Todos only (enforced in code, as sprints are). Sub-tasks read their root's row.
+-- project_id is not a foreign key: projects are YAML, like employees.
 CREATE TABLE IF NOT EXISTS work_item_projects (
   work_item_id TEXT PRIMARY KEY REFERENCES work_items(id),
-  project_id TEXT NOT NULL REFERENCES projects(id),
+  project_id TEXT NOT NULL CHECK (project_id GLOB 'prj_[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
   added_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_work_item_projects_project ON work_item_projects(project_id);
-
--- Project configuration. One row per entry. The order of rows is irrelevant.
-CREATE TABLE IF NOT EXISTS project_workdirs (
-  project_id TEXT NOT NULL REFERENCES projects(id),
-  path TEXT NOT NULL,                          -- absolute, realpath-normalised at write time; FR-033: inside a git work tree; not $HOME, $JINN_HOME, the stage root, ~/.claude or an ancestor of them; not inside $JINN_HOME, the stage root, ~/.claude, ~/.ssh, ~/.config, ~/.aws, ~/.gnupg or ~/Library
-  PRIMARY KEY (project_id, path)
-);
-CREATE TABLE IF NOT EXISTS project_skills (
-  project_id TEXT NOT NULL REFERENCES projects(id),
-  skill TEXT NOT NULL,                         -- a directory name under skills/
-  PRIMARY KEY (project_id, skill)
-);
-CREATE TABLE IF NOT EXISTS project_shared_notes (
-  project_id TEXT NOT NULL REFERENCES projects(id),
-  path TEXT NOT NULL,                          -- relative to the home: knowledge/... or docs/...; a directory shares its subtree
-  PRIMARY KEY (project_id, path)
-);
--- Phase 4 only (Q7): not created by Phase 1.
-CREATE TABLE IF NOT EXISTS project_env (
-  project_id TEXT NOT NULL REFERENCES projects(id),
-  env_name TEXT NOT NULL CHECK (env_name GLOB '[A-Z_]*' AND env_name NOT GLOB '*[^A-Z0-9_]*'),
-  secret_key TEXT NOT NULL,                    -- a key NAME in the secrets store; never a value. env_name is also checked against the FR-031 reserved set at write time
-  PRIMARY KEY (project_id, env_name)
-);
 ```
 
-Boot data check, following `sprintRowsAreSound`: every `work_item_projects.work_item_id` is a
-root (`parent_id IS NULL`). A failure refuses boot, as the sprint check does.
+A boot data check, following `sprintRowsAreSound`, requires every `work_item_id` to be a
+root.
 
-**Reserved names**: `none` and `all`, compared ignoring case, used by the filter grammar.
-
-**No `ALTER` on `work_items`**, so the exact-shape verifier is satisfied without a schema
-generation bump.
-
-## Sessions
-
-These columns are added through the add-column-if-missing path
-(`packages/jinn/src/sessions/migrate.ts:342`):
+A `project_id` with no YAML is a dangling id. The project scan reports it. It is never
+refused at boot, so deleting a YAML file cannot brick the gateway.
 
 ```sql
-ALTER TABLE sessions ADD COLUMN project_id TEXT;           -- enforcement binding; set ONLY for sessions of scoped employees
+-- sessions: add-column-if-missing path (packages/jinn/src/sessions/migrate.ts:342)
+ALTER TABLE sessions ADD COLUMN project_id TEXT;   -- enforcement binding; set ONLY for sessions of scoped employees
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 ```
 
-The FR-013 requester is the existing `parent_session_id` (`packages/jinn/src/sessions/migrate.ts:26`),
-which `spawnSession` already sets. No new column.
-
-- **When it is set.** `project_id` is set once, in `spawnSession`, by the FR-008 rules, and
-  never updated afterwards.
-- **Unscoped sessions** never carry `project_id`. Their badge is derived at read time from the
-  linked Todo's project (FR-009). As a result, a scoped filter
-  (`project_id = P`) can never match an unscoped session.
-- **No foreign key.** A dangling id is treated as an archived project: the session stays
-  readable, and no new turns start.
+- `project_id` is set once, in `spawnSession` (FR-008), and never updated.
+- The FR-013 requester is the existing `parent_session_id`
+  (`packages/jinn/src/sessions/migrate.ts:26`).
+- Unscoped sessions never carry `project_id`. Their badge is derived from the linked Todo.
 
 ## Events
 
 `work_item_events.kind` gains `project_changed`, with
 `detail = { from: <id|null>, to: <id|null> }`.
 
-- Creating a Todo inside a project records `to` on the `created` event; no separate
-  `project_changed` event is written.
-- If a Todo leaves P while a scoped session is working on it, an `escalated` event is also
-  written, naming the session.
+- Creating a Todo inside a project records `to` on the `created` event instead.
+- When a Todo leaves P while a scoped session is working it, an `escalated` event is written
+  as well.
 
-## Org YAML: explicit scope (FR-007)
+## Employee YAML
 
 ```yaml
-# org/engineering/marid-dev.yaml
-name: marid-dev
-department: engineering
+# org/engineering/side-dev.yaml
+name: side-dev
 engine: claude
-projects: [prj_1a2b3c4d5e6f]
+projects: [prj_1a2b3c4d5e6f]      # absent = all (today); present = scoped to the known ids
+claudeConfigDir: ~/.claude-side   # optional; local sessions run on this Claude account (FR-037)
+cliFlags: ["--no-chrome"]         # recommended for someone else's account (FR-037)
+mcp: false                        # optional: no third-party MCP servers; the jinn server still attaches
 persona: ...
 ```
 
 | YAML | Scope |
 | --- | --- |
-| no `projects` key | **all** (today's behaviour) |
-| `projects: [a, b]` | scoped to the known ids among `a` and `b` |
-| `projects: []`, `projects:` (null), or only unknown ids | scoped to **nothing**: every scoped route refuses and no session starts |
+| no `projects` key | **all**: today's behaviour, and every existing employee |
+| `projects: [a, b]` | scoped to whichever of `a` and `b` are known ids |
+| `projects: []`, `projects:` (null), or only unknown ids | scoped to **nothing** |
 
-Unknown ids are dropped from a scope without widening it.
+**Validation** runs at scan time (`gateway/org.ts`) and at PATCH time:
 
-Validation runs both at scan time (`gateway/org.ts`) and at PATCH time:
-
-- `PATCH` refuses an empty list. Valid values are `"all"` or a non-empty list of known ids.
-- The engine must be `claude` (FR-026).
-- Under Q1 = B, `gateway.authRequired` must be on (FR-025).
+- PATCH refuses an empty list.
+- A scoped employee must use the `claude` engine.
 - System employees cannot be scoped.
-- A cron job cannot target a scoped employee. This is checked during cron validation.
+- A cron job cannot target a scoped employee.
+- A PATCH that narrows scope is refused while the employee holds a Todo that would fall
+  outside the new scope (FR-015).
+- `claudeConfigDir` must be absolute or start with `~/`, and must not be `~/.claude` itself.
+  The default account is expressed by leaving the field out.
 
-## Derived values
+`WRITABLE_FIELDS` (`packages/jinn/src/gateway/org.ts:170`) gains `projects` and
+`claudeConfigDir`.
 
-- **A Todo's effective project**: `work_item_projects.project_id` for the Todo's `root_id`.
-- **Project spend**: `SUM(sessions.total_cost)` over sessions linked to the project's Todos.
-  It is read live, as Todo spend already is (`packages/jinn/src/work-items/store.ts:865`).
-- **Scoped caller**: a capability-verified session whose employee has a scope other than
-  `all`. Its project P is `sessions.project_id`.
-
-## Stage directory (Q1 = B, built in Phase 3)
+## Stage directory
 
 ```
 <parent of $JINN_HOME>/.jinn-projects/<project id>/
-  CLAUDE.md            # generated from knowledge/projects/<id>/INSTRUCTIONS.md (+ company CLAUDE.md if project+company)
-  .claude/skills/<s>/  # COPIES of skills/<s> for each allow-listed skill (symlinks would resolve into the denied home)
+  CLAUDE.md            # generated: INSTRUCTIONS.md (+ company CLAUDE.md if project+company) + the fixed scope paragraph (FR-029)
+  .claude/skills/<s>/  # copies of skills/<s> for each allow-listed skill
 ```
 
-- **Location.** The directory sits outside `$JINN_HOME`, so ancestor `CLAUDE.md` loading
-  cannot pull in the company file.
-- **Sandbox settings.** The sandbox and deny rules are **not** stored here. They go in the
-  gateway-written `--settings` file under `$JINN_HOME/tmp/`, and that file denies writes to
-  this directory's `.claude/`, `CLAUDE.md` and `.mcp.json` (FR-022).
-- **Regeneration.** The directory is rebuilt on the same triggers as `syncSkillSymlinks`, and
-  on any change to the project's config. Nobody edits it by hand.
+The stage directory is regenerated on the same triggers as `syncSkillSymlinks`, on a project
+scan change, and when an instructions file changes. Nobody edits it by hand.
+
+## Derived values
+
+- **A Todo's effective project**: the `work_item_projects` row for its `root_id`.
+- **Project members**: the employees whose scope includes the project id.
+- **Project spend**: `SUM(sessions.total_cost)` over sessions linked to the project's Todos,
+  read live (`packages/jinn/src/work-items/store.ts:865`).
+- **Scoped caller**: a capability-verified session whose employee's scope is not `all`. Its P
+  is `sessions.project_id`.
+- **Engine-health key**: the target key gains the employee's effective Claude config dir. The
+  default dir keeps today's key, so existing health rows are unchanged.
 
 ## Wire shapes
 
 ```ts
-type ProjectRef = { id: string; name: string; archived: boolean };
+type ProjectRef = { id: string; name: string; archived: boolean; known: boolean }; // known=false: dangling id
 
 type ProjectWire = ProjectRef & {
   description: string;
-  instructionsMode: "project" | "project+company";
   dedicated: boolean;
+  instructions: "project" | "project+company";
   workdirs: string[];
   skills: string[];
   sharedNotes: string[];
-  env?: Array<{ name: string; secret: string; resolved: boolean }>; // Phase 4 only; names only, never values
-  members: string[];      // employees whose scope includes this project
+  members: string[];
   todoCount: number;
   spendUsd: number;
-  createdAt: string; updatedAt: string; archivedAt: string | null;
+  file: string;          // path relative to $JINN_HOME, for "edit in YAML"
 };
 
-// Additive, nullable. Added to WorkItemCompactWire / WorkItemDetailWire:
+// Additive, nullable:
+// WorkItemCompactWire / WorkItemDetailWire, and the session list / tree wire:
 project: ProjectRef | null;
-// Added to the session list and tree wire (binding for scoped sessions, derived badge otherwise):
-project: ProjectRef | null;
-// Added to Employee and EmployeeUpdate:
+// Employee / EmployeeUpdate:
 projectScope: "all" | string[];
+claudeConfigDir?: string;
 ```

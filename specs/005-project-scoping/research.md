@@ -3,6 +3,16 @@
 Read against `origin/main` at `60e675d6`. Paths are relative to `packages/jinn/src/` unless
 they start with `packages/`.
 
+**After the operator's decisions (2026-10-05):**
+
+- Q1 = A: no sandbox in this feature.
+- Q6 = b: existing employees read as today.
+
+So the "Local file reads" rows and the "Containment" section below stay as findings, but
+nothing in this feature acts on them. They apply only to scoped callers (FR-018, FR-028), or
+they belong to the future sandbox work. Phase S, Phase 0 and the old containment Phase 4 are
+withdrawn.
+
 ## What already exists (constitution Principle VII)
 
 ### Data model
@@ -82,7 +92,7 @@ they start with `packages/`.
 | `mcp/server.ts:112` | `buildTools` | Scoped sessions get a filtered profile |
 | `gateway/remote-mcp/profile.ts:98` | The connector's tool filter | Precedent for a per-principal profile |
 
-### Local file reads (Q6, FR-018)
+### Local file reads (FR-018 for scoped callers; unchanged for everyone else, Q6 = b)
 
 | `path:line` | What it is | Bearing |
 | --- | --- | --- |
@@ -113,7 +123,13 @@ they start with `packages/`.
 | `sessions/turn/preflight.ts:52` | `refuseTurn`, the gate before every engine spawn | Lost binding, wrong engine |
 | `sessions/turn/preflight.ts:63` | Per-employee monthly budget check | Already a per-project cap for dedicated employees |
 | `sessions/fork.ts:164` / `engines/claude-interactive.ts:271` | Transcripts are keyed by the cwd slug | Resume, fork and compaction must resolve the stage-dir slug |
-| `shared/claude-settings.ts:124` | Trust entries per directory in `~/.claude.json` | Seed the stage dir |
+| `shared/claude-settings.ts:124` | Trust entries per directory in `~/.claude.json` | Seed the stage dir into the session's effective config dir |
+| `shared/home.ts:34` | `resolveClaudeConfigDir` reads the gateway's own `CLAUDE_CONFIG_DIR` at call time | Global today. FR-037 needs a per-employee resolver |
+| `shared/remote-target.ts:219` | `resolveRemoteClaudeConfigDir`, whose comment says env and trust seed must agree or the first turn hangs | Precedent for FR-037 |
+| `shared/claude-auth.ts:121` | Auth check config-dir seam | Checks the employee's account |
+| `shared/engine-health.ts:54` | `engineHealthForTarget`: health keyed per target | Gains the config dir, so one account's limit does not block others |
+| `board-walk/route-turn.ts:45` | Employee `cliFlags` come after the gateway's `--chrome`, so `--no-chrome` in `cliFlags` wins | FR-037 recommendation, no code |
+| `gateway/org-registry.ts:42` | `refreshOrg`, which keeps the last good roster | Shape for `project-registry.ts` |
 
 ### Budgets
 
@@ -157,7 +173,7 @@ to an over-budget file is paid for in the same PR by moving existing code out.
   file. Symlinked skills would resolve into the denied tree. A deny on the home would cover
   the stage dir too, because deny wins over allow.
 
-## Containment: what Phase 0 must establish
+## Containment: what Phase 0 must establish (deferred to the future sandbox work, Q1 = A)
 
 Claude Code 2.1.289 is installed. Its settings support a Bash sandbox, with filesystem and
 network rules, and `permissions.deny` rules for the Read and Edit tools.
@@ -221,6 +237,6 @@ If any of items 1–4 or 10 cannot be made to hold:
 | 3. What belongs to a project in v1 | Todos, with their comments, attachments, events, runs and relations; sessions of scoped employees, through the binding; Notes, in the project folder. Out of v1: cron, workflows (removed upstream), managed files (refused), labels and sprints (company-wide). Spend is capped by the existing per-employee budgets |
 | 4. Company-wide vs project skills and knowledge | FR-027 to FR-029, Q5 |
 | 5. Concurrent employees in a project | Worktrees, unchanged (Assumptions) |
-| 6. Secrets | FR-030 to FR-032, Q7 |
+| 6. Secrets | Deferred with containment (Q1 = A). A friend's account is a Claude login under its own config dir (FR-037), not a secret |
 | 7. Client layer | No, and nothing is reserved for it (Assumptions) |
-| 8. Where config lives and how it is backed up | Q3. The recommended DB is carried by the registry backup (`backup/snapshot.ts:38`). Employee scope lives in org YAML, carried by the home archive (`backup/archive.ts:9`) |
+| 8. Where config lives and how it is backed up | YAML under `projects/`, mirroring `org/` (operator, Q3). It is carried by the home archive once `projects` is added to `ARCHIVE_INCLUDES` (`backup/archive.ts:9`). Todo membership and session bindings live in the registry, carried by the registry backup (`backup/snapshot.ts:38`) |
