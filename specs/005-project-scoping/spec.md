@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-05
 
-**Status**: Reviewed (senior QA, 4 rounds). Waiting on the operator's answers to Q1–Q11 (end of this file). Nothing is
+**Status**: Reviewed (4 rounds). Waiting on the operator's answers to Q1–Q11 (end of this file). Nothing is
 implemented until they are answered.
 
 **Input**: Marid issue #90 (upstream proposal hristo2612/jinn#81). The operator wants projects
