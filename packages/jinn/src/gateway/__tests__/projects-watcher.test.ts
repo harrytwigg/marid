@@ -31,25 +31,18 @@ describe("the projects watcher", () => {
     onConfigReload: noop, onCronReload: noop, onOrgChange: noop, onSkillsChange: noop, onPluginsChange: noop, onProjectsChange,
   });
 
-  it("starts with no projects directory: an empty set, and no change reported", async () => {
-    expect(fs.existsSync(path.join(tmp, "projects"))).toBe(false);
-    const onProjectsChange = vi.fn();
-    watcher.startWatchers(callbacksWith(onProjectsChange));
-    await watcher.projectsWatcherReady();
-    expect(registry.readProjects().projects).toEqual([]);
-    expect(onProjectsChange).not.toHaveBeenCalled();
-    await watcher.stopWatchers();
-  });
-
   // On macOS a write made in the first moments after a watch attaches can be dropped, even once
   // chokidar has said ready (the raw event stream stays silent). Nothing real edits a project file
   // that fast, so the test writes again on each poll, slower than the watcher's write-settle window,
   // until the watcher reports it, instead of guessing how long attaching takes.
-  it("reports a file written into the directory once the watcher is ready", async () => {
-    fs.mkdirSync(path.join(tmp, "projects"));
+  it("creates a missing projects directory at start, and picks up a file written into it afterwards", async () => {
+    expect(fs.existsSync(path.join(tmp, "projects"))).toBe(false);
     const onProjectsChange = vi.fn();
     watcher.startWatchers(callbacksWith(onProjectsChange));
+    expect(fs.statSync(path.join(tmp, "projects")).isDirectory()).toBe(true);
+    expect(registry.readProjects().projects).toEqual([]);
     await watcher.projectsWatcherReady();
+    expect(onProjectsChange).not.toHaveBeenCalled();
 
     let writes = 0;
     await vi.waitFor(() => {

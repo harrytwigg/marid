@@ -14,8 +14,7 @@ interface WatcherDouble {
 const chokidar = vi.hoisted(() => {
   const watchers: WatcherDouble[] = [];
   const watch = vi.fn((watchPath: string) => {
-    // chokidar tolerates a path that does not exist yet, and so does the double for projects/, which is created on its first write.
-    if (!fs.existsSync(watchPath) && !watchPath.endsWith("/projects")) throw new Error(`Cannot watch missing path: ${watchPath}`);
+    if (!fs.existsSync(watchPath)) throw new Error(`Cannot watch missing path: ${watchPath}`);
     const listeners = new Map<string, Listener[]>();
     const watcher: WatcherDouble = {
       close: vi.fn(async () => {}),

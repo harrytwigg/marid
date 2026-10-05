@@ -147,9 +147,12 @@ export function startWatchers(callbacks: WatcherCallbacks): void {
     }, DEBOUNCE_MS),
   );
 
-  // projects/ may not exist yet (it is created on the first project write); chokidar
-  // picks the directory up when it appears. Scan once now so definitions are loaded
-  // from boot, not from the first read.
+  // Make projects/ so chokidar has a directory to watch: it cannot reliably watch one that
+  // does not exist yet (it reports ready before the watch that notices the directory appearing
+  // is attached), and a directory created after boot would then lose live reload until the
+  // next restart. The registry still treats a missing projects/ as an empty set; only this
+  // watcher creates it. Scan once now so definitions are loaded from boot, not the first read.
+  fs.mkdirSync(PROJECTS_DIR, { recursive: true });
   refreshProjects();
   const projectsWatcher = watch(PROJECTS_DIR, {
     ignoreInitial: true,
