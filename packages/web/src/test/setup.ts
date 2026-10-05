@@ -1,4 +1,5 @@
 import { configure } from "@testing-library/react";
+import { beforeEach } from "vitest";
 
 /* `findBy*` and `waitFor` give up after 1s by default, which measures the
  * machine more than the app: under a full monorepo run — several vitest pools,
@@ -37,6 +38,14 @@ if (typeof localStorage === "undefined" || typeof localStorage.clear !== "functi
     configurable: true,
   });
 }
+
+/* The Todos board mirrors its filter set to localStorage so a filtered view
+ * survives a new tab. That is real browser state, so it must not leak from one
+ * case into the next: every test starts with empty storage. Tests that need a
+ * stored value seed it in their own beforeEach, which runs after this one. */
+beforeEach(() => {
+  localStorage.clear();
+});
 
 /* @xyflow/react (the org map) needs DOM measurement APIs
  * jsdom doesn't implement. Standard mocks from the xyflow testing guide,

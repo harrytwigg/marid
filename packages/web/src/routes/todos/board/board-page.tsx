@@ -9,13 +9,10 @@ import {
   activeFilterCount,
   compareRank,
   deriveNeedsYou,
-  filtersFromSearchParams,
-  filtersToSearchParams,
   matchesDueFilter,
   operatorSafeTodoError,
   rankBetween,
   isPositiveTodoVersion,
-  type TodoFilters,
 } from "@/lib/todos"
 import { todoPath } from "@/lib/todo-id"
 import { useDepartments } from "@/hooks/use-departments"
@@ -44,6 +41,7 @@ import {
 import { useBoardDrag } from "./use-board-drag"
 import { boardKey, parseBoardParam } from "./board-route"
 import { useBoardScroll } from "./use-board-scroll"
+import { useBoardFilters } from "./use-board-filters"
 import { useBoardSprints } from "../sprints/use-board-sprints"
 import { GroupSkeleton } from "./group-skeleton"
 
@@ -99,12 +97,15 @@ export default function TodoBoardPage() {
   const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const isAttention = board.kind === "attention"
   // Columns are the status dimension, so `status` narrows WHICH columns exist
   // rather than filtering within one (useBoardData gates the queries).
-  const filters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams])
+  // The filter set rides the URL, but is reconciled with localStorage so a
+  // board switch or a new tab restores it instead of resetting (see the hook).
+  // Attention has no filters of its own, so it neither reads nor writes them.
+  const { filters, setFilters } = useBoardFilters(searchParams, setSearchParams, !isAttention)
   const now = useMemo(() => Date.now(), [filters.date, filters.due])
 
-  const isAttention = board.kind === "attention"
   // The viewport picks the view — grouped list on the phone, columns on the
   // desktop — so there is nothing for the operator to toggle or to remember.
   const mobile = useIsBoardMobile()
@@ -387,12 +388,6 @@ export default function TodoBoardPage() {
     setMobileFilterOpen(false)
   }, [key, closedFilter])
 
-  const setFilters = useCallback(
-    (next: TodoFilters) => {
-      setSearchParams(filtersToSearchParams(next), { replace: false })
-    },
-    [setSearchParams],
-  )
   const sprintTools = useBoardSprints({ filters, setFilters, columns: data.columns, mobile, announce })
   // Opening a card carries the board context so the task page's crumb knows
   // its way back (the board name is the back affordance).
@@ -448,10 +443,9 @@ export default function TodoBoardPage() {
     return columns
   }, [data.columns, itemsByStatus, filters.due])
   const keep = useKeepWorkItem(announce)
-  const clearAllFilters = useCallback(() => {
-    const params = new URLSearchParams()
-    setSearchParams(params, { replace: false })
-  }, [setSearchParams])
+  // Clearing goes through the same setter as any other change, so the cleared
+  // set is persisted and the storage fallback cannot restore it.
+  const clearAllFilters = useCallback(() => setFilters({ status: "open" }), [setFilters])
 
   const renderCards = (status: WorkItemStatusWire) => {
     const items = (itemsByStatus[status] ?? []).filter((item) => item.id !== drag?.id)
