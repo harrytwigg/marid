@@ -132,7 +132,7 @@ export default function MorePage() {
     <PageLayout>
       <PageScaffold contentWidth="560px" header={<LargeTitleHeader title="More" />}>
         <div>
-          <div className="mt-5">
+          <div>
             <Card>
               {overflowLinks.map((item, i) => (
                 <LinkRow key={item.href} item={item} first={i === 0} />

@@ -38,7 +38,7 @@ function SkillRow({ skill, onOpen }: { skill: SkillSummary; onOpen: (name: strin
 function ListSkeleton() {
   const widths = ["34%", "46%", "28%", "40%"]
   return (
-    <div className="mt-[22px] rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]" data-testid="skills-skeleton" aria-hidden>
+    <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]" data-testid="skills-skeleton" aria-hidden>
       {widths.map((w, i) => (
         <div key={i} className="flex min-h-[56px] flex-col justify-center gap-2 py-[9px] pl-3.5 pr-3">
           <span
@@ -109,13 +109,13 @@ export default function SkillsPage() {
             <ListSkeleton />
           ) : skillsQuery.isError ? (
             <div
-              className="mt-[22px] rounded-[var(--radius-lg)] p-4 text-[length:var(--text-subheadline)] text-[var(--system-red)]"
+              className="rounded-[var(--radius-lg)] p-4 text-[length:var(--text-subheadline)] text-[var(--system-red)]"
               style={{ background: "color-mix(in srgb, var(--system-red) 8%, transparent)" }}
             >
               {skillsQuery.error instanceof Error ? skillsQuery.error.message : "Failed to load skills"}
             </div>
           ) : skills.length === 0 ? (
-            <div className="mt-[22px] rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] shadow-[var(--shadow-card)]" data-testid="skills-empty">
+            <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] shadow-[var(--shadow-card)]" data-testid="skills-empty">
               <div className="px-6 py-12 text-center">
                 <h3 className="text-[length:var(--text-title3)] font-bold tracking-[var(--tracking-tight)] text-[var(--text-primary)]">
                   No skills yet
@@ -137,7 +137,7 @@ export default function SkillsPage() {
               </button>
             </div>
           ) : (
-            <div className="mt-[22px] rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]" data-testid="skills-list">
+            <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]" data-testid="skills-list">
               {shown.map((skill) => (
                 <SkillRow key={skill.name} skill={skill} onOpen={onOpen} />
               ))}

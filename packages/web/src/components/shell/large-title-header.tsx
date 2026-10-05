@@ -8,17 +8,23 @@ const LARGE_TITLE_CLASS =
 const INLINE_TITLE_CLASS =
   "font-[family-name:var(--font-ui)] text-[length:var(--text-headline)] font-[var(--weight-semibold)] leading-[var(--text-headline--line-height)] text-[var(--text-primary)]"
 
-function LargeTitle({ title }: { title: ReactNode }) {
+// The gap between a header and the content under it, owned here so every page
+// that scrolls its header (the collapsing title) spaces its body the same way.
+// Whichever of the title and subtitle comes last carries it, so the body sits
+// the same distance below the header with or without a subtitle.
+const HEADER_GAP_CLASS = "mb-[22px]"
+
+function LargeTitle({ title, className }: { title: ReactNode; className?: string }) {
   return (
-    <div className={cn("jinn-large-title", LARGE_TITLE_CLASS)}>
+    <div className={cn("jinn-large-title", LARGE_TITLE_CLASS, className)}>
       {typeof title === "string" ? <h1>{title}</h1> : title}
     </div>
   )
 }
 
-function Subtitle({ children }: { children: ReactNode }) {
+function Subtitle({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className="mt-1 text-[length:var(--text-footnote)] text-[var(--text-secondary)]">
+    <div className={cn("mt-1 text-[length:var(--text-footnote)] text-[var(--text-secondary)]", className)}>
       {children}
     </div>
   )
@@ -58,11 +64,15 @@ export function LargeTitleHeader({
   subtitle,
   trailing,
   leading,
+  bodyGap = true,
 }: {
   title: ReactNode
   subtitle?: ReactNode
   trailing?: ReactNode
   leading?: ReactNode
+  /** Space the body below the header. Detail pages that already lay out their
+   *  own first section turn it off rather than stack two gaps. */
+  bodyGap?: boolean
 }) {
   const chrome = useShellChrome()
   const trailingSlot = (
@@ -71,20 +81,20 @@ export function LargeTitleHeader({
       {chrome.trailingAction}
     </>
   )
-  const large = <LargeTitle title={title} />
-
   if (!chrome.collapse) {
     return (
       <header data-slot="large-title-header" className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           {leading}
-          {large}
+          <LargeTitle title={title} />
           {subtitle ? <Subtitle>{subtitle}</Subtitle> : null}
         </div>
         {trailingSlot}
       </header>
     )
   }
+
+  const gapClass = bodyGap ? HEADER_GAP_CLASS : undefined
 
   return (
     // `display: contents` so the bar's containing block is the scrollport rather
@@ -94,8 +104,8 @@ export function LargeTitleHeader({
     <header data-slot="large-title-header" className="contents">
       <TitleBar title={title} trailing={trailingSlot} />
       {leading}
-      {large}
-      {subtitle ? <Subtitle>{subtitle}</Subtitle> : null}
+      <LargeTitle title={title} className={subtitle ? undefined : gapClass} />
+      {subtitle ? <Subtitle className={gapClass}>{subtitle}</Subtitle> : null}
     </header>
   )
 }

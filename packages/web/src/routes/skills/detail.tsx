@@ -143,6 +143,7 @@ export default function SkillDetailPage() {
         contentWidth="840px"
         header={
           <LargeTitleHeader
+            bodyGap={false}
             leading={
               <Link
                 to="/skills"

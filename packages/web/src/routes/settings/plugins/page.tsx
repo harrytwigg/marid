@@ -84,7 +84,7 @@ export default function PluginsSettingsPage() {
       >
         <div>
 
-          <div className="mt-[22px]">
+          <div>
             {failure && <ActionError error={failure} />}
             <PluginList
               inventory={inventory}
