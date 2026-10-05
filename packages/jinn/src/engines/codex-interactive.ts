@@ -22,7 +22,7 @@ import {
 import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import { costOfUsage } from "../shared/model-pricing.js";
 import { processStartFailure } from "../shared/process-start.js";
-import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
+import { argumentLimitApplies, assertArgumentsFit, describeMessage } from "./argv-limit.js";
 
 const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
@@ -32,8 +32,6 @@ const DONE_DEBOUNCE_MS = 60_000;
 const TAIL_POLL_MS = 250;
 const DISCOVER_POLL_MS = 200;
 const DISCOVER_TIMEOUT_MS = 30 * 1000;
-/** How much of a process's newest output is kept, for a process that dies before its session starts. */
-const OUTPUT_TAIL_CHARS = 4096;
 
 interface TranscriptFileStat {
   mtimeMs: number;
@@ -43,9 +41,10 @@ interface ActiveTurn {
   interrupt: (reason: string) => void;
   /** The turn's process went away: a failed start until {@link started}, else an interruption. */
   processExited: (exit: PtyExit | undefined, output: string) => void;
-  /** Whether the process serving this turn has written to its transcript. A
-   *  warm process already has; a fresh one has not until codex records the
-   *  session (a new session's session_meta, a resumed one's task_started). */
+  /** Whether the process serving this turn has written to its transcript: not
+   *  until codex records the session (a new session's session_meta, a resumed
+   *  one's task_started). A warm process is up only if an earlier turn on it
+   *  started (see {@link CodexInteractiveEngine.startedProcs}). */
   started: boolean;
   tailer?: TranscriptTailer;
   discover?: { stop: () => void };
@@ -65,12 +64,12 @@ interface CodexSpawnParams {
 
 /**
  * The argument at `index` of a codex command line, named for the person
- * reading an error about it. The last positional is the message; a fresh
- * session's message carries the system prompt in front of it, because codex
- * has no flag of its own for one.
+ * reading an error about it. The last positional is the message, which a fresh
+ * session's system prompt is folded in front of, because codex has no flag of
+ * its own for one; `message` names what is in it.
  */
-export function describeCodexArgument(args: readonly string[], index: number): string {
-  if (index === args.length - 1) return "the message (with its system prompt and attachment list)";
+export function describeCodexArgument(args: readonly string[], index: number, message: string): string {
+  if (index === args.length - 1) return message;
   return `command-line argument ${index + 1}`;
 }
 
@@ -99,6 +98,24 @@ function listTranscriptFiles(root = CODEX_SESSIONS_DIR): Map<string, TranscriptF
     } catch { /* gone */ }
   }
   return files;
+}
+
+/** The working directory codex recorded in a transcript's session_meta, if it is readable yet. */
+function parseCwdFromFile(filePath: string): string | undefined {
+  try {
+    const first = fs.readFileSync(filePath, "utf-8").split("\n", 1)[0];
+    const cwd = JSON.parse(first)?.payload?.cwd;
+    return typeof cwd === "string" && cwd ? cwd : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether two paths name one directory, symlinks resolved: /tmp and /private/tmp are one. */
+function sameDirectory(a: string | undefined, b: string): boolean {
+  if (!a) return false;
+  const resolve = (p: string) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+  return resolve(a) === resolve(b);
 }
 
 function parseSessionIdFromFile(filePath: string): string | undefined {
@@ -218,6 +235,9 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
   private streams: PtyStreamManager;
   private lastGeom = new Map<string, { cols: number; rows: number }>();
   private spawnParams = new Map<string, CodexSpawnParams>();
+  /** Processes that have started a turn. A warm PTY is spawned ahead of any
+   *  turn, so being reused says nothing about whether it got past its boot. */
+  private readonly startedProcs = new WeakSet<pty.IPty>();
 
   constructor(private lifecycle: PtyLifecycleManager) {
     this.streams = new PtyStreamManager("Codex PTY", (id) => this.lifecycle.getWarm(id) !== undefined);
@@ -247,7 +267,11 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     const reuseWarm = !!this.lifecycle.getWarm(jinnSessionId) && !this.spawnParamsChanged(jinnSessionId, opts);
     if (!reuseWarm && argumentLimitApplies(false)) {
       const args = this.buildArgs(opts, prompt, opts.resumeSessionId);
-      assertArgumentsFit("Codex", args, (index) => describeCodexArgument(args, index));
+      const message = describeMessage([
+        !opts.resumeSessionId && opts.systemPrompt && "its system prompt",
+        !!opts.attachments?.length && "its attachment list",
+      ]);
+      assertArgumentsFit("Codex", args, (index) => describeCodexArgument(args, index, message));
     }
 
     let codexSessionId = opts.resumeSessionId;
@@ -260,7 +284,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     let settled = false;
     let resolveFn!: (r: EngineResult) => void;
     const promise = new Promise<EngineResult>((res) => { resolveFn = res; });
-    const turn: ActiveTurn = { interrupt: () => {}, processExited: () => {}, started: reuseWarm };
+    const turn: ActiveTurn = { interrupt: () => {}, processExited: () => {}, started: false };
 
     const cleanup = () => {
       if (turn.doneTimer) clearTimeout(turn.doneTimer);
@@ -282,11 +306,30 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     };
     turn.interrupt = (reason: string) =>
       finish({ sessionId: codexSessionId ?? opts.resumeSessionId ?? "", result: "", error: reason });
+    // What this turn's process has put on disk, read when it dies: the discovery
+    // and tail polls may not have seen it yet, and a process that wrote its
+    // transcript did start.
+    let tailed: { file: string; offset: number } | undefined;
+    let transcriptsBefore: Map<string, TranscriptFileStat> | undefined;
+    const transcriptMoved = (): boolean => {
+      if (tailed) {
+        try { return fs.statSync(tailed.file).size > tailed.offset; } catch { return false; }
+      }
+      if (!transcriptsBefore) return false;
+      // Discovery's own rule: only a unique fresh rollout can be this process's,
+      // and here also one recorded for its working directory. Another codex
+      // writing a rollout at the same time must not make this death look started.
+      const fresh = [...listTranscriptFiles().keys()].filter((file) => !transcriptsBefore!.has(file));
+      return fresh.length === 1 && sameDirectory(parseCwdFromFile(fresh[0]), opts.cwd || JINN_HOME);
+    };
     // Before codex writes to its transcript it never ran this turn (an exec
     // refusal, an unknown flag, a crash on boot): a failed start, carrying what
-    // the process printed, not a quiet interruption that loses the reason.
+    // the process printed, not a quiet interruption that loses the reason. A
+    // warm process counts as started only once this turn's transcript moved or
+    // an earlier turn on it started.
     turn.processExited = (exit, output) => {
-      if (!turn.started) {
+      const up = turn.started || transcriptMoved() || (!!turn.boundProc && this.startedProcs.has(turn.boundProc));
+      if (!up) {
         finish({ sessionId: codexSessionId ?? opts.resumeSessionId ?? "", result: "", error: processStartFailure("codex", exit, output) });
         return;
       }
@@ -296,6 +339,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     const onParsed = (parsed: ReturnType<typeof codexTranscriptLineToDeltas>) => {
       if (settled) return;
       turn.started = true;
+      if (turn.boundProc) this.startedProcs.add(turn.boundProc);
       if (parsed.sessionId && !codexSessionId) {
         codexSessionId = parsed.sessionId;
         this.updateSpawnResumeSessionId(jinnSessionId, codexSessionId);
@@ -382,6 +426,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
       if (!fromBeginning) {
         try { offset = fs.statSync(filePath).size; } catch { /* not created yet */ }
       }
+      tailed = { file: filePath, offset };
       turn.tailer = tailTranscriptLines(
         filePath,
         offset,
@@ -412,6 +457,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
       if (file) attachTail(file);
     } else {
       const before = listTranscriptFiles();
+      transcriptsBefore = before;
       const startedAt = Date.now();
       const discover = setInterval(() => {
         const after = listTranscriptFiles();
@@ -536,13 +582,9 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
 
   private wireProcToStream(jinnSessionId: string, proc: pty.IPty): PtyHandle {
     const handle = createPtyHandle(proc);
-    // The newest output, for a process that dies before its turn starts: what it
-    // printed is the only account of why (see processStartFailure). It stops
-    // growing once that turn has started.
-    let tail = "";
-    this.streams.attach(jinnSessionId, proc, (raw) => {
+    const tail = this.streams.attachWithOutputTail(jinnSessionId, proc, () => {
       const e = this.active.get(jinnSessionId);
-      if (!(e && e.boundProc === proc && e.started)) tail = (tail + raw).slice(-OUTPUT_TAIL_CHARS);
+      return !!(e && e.boundProc === proc && e.started);
     });
     proc.onExit((event) => {
       // Identity-gated: only clean up if this PTY is still the session's current
@@ -553,7 +595,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
         this.lifecycle.releaseSession(jinnSessionId); // onRelease purges spawnParams
       }
       const e = this.active.get(jinnSessionId);
-      if (e && e.boundProc === proc) e.processExited(event, tail);
+      if (e && e.boundProc === proc) e.processExited(event, tail.text);
     });
     return handle;
   }

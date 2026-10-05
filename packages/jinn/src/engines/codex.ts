@@ -11,7 +11,7 @@ import { CODEX_HOMES_DIR } from "../shared/paths.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { costOfUsage } from "../shared/model-pricing.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
-import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
+import { argumentLimitApplies, assertArgumentsFit, describeMessage } from "./argv-limit.js";
 import { CodexNativeAgents } from "./codex-native-agents.js";
 import {
   CODEX_SESSIONS_DIR,
@@ -517,9 +517,19 @@ export class CodexEngine implements InterruptibleEngine {
     if (opts.attachments?.length) {
       prompt += "\n\nAttached files:\n" + opts.attachments.map((a) => `- ${a}`).join("\n");
     }
-    // The prompt is one command-line argument. One the exec would refuse fails
-    // the turn here, naming its size and the limit, before anything is staged.
-    if (argumentLimitApplies(false)) assertArgumentsFit("Codex", [prompt], () => "the message (with its system prompt and attachment list)");
+    // Every argument is bound by the exec's limit, the prompt the likeliest to
+    // exceed it. One the exec would refuse fails the turn here, naming its size
+    // and the limit, before anything is staged. The session home is not staged
+    // yet, so the argv is sized as if it were absent: that only ever adds the
+    // jinn server's small arguments.
+    if (argumentLimitApplies(false)) {
+      const message = describeMessage([
+        opts.resumeSessionId ? opts.platformContextRefresh && "the platform context refresh" : opts.systemPrompt && "its system prompt",
+        !!opts.attachments?.length && "its attachment list",
+      ]);
+      const sized = opts.resumeSessionId ? this.buildResumeArgs(opts, prompt, false) : this.buildFreshArgs(opts, prompt, false);
+      assertArgumentsFit("Codex", sized, (index) => index === sized.length - 1 ? message : `command-line argument ${index + 1}`);
+    }
 
     const bin = resolveBin("codex", opts.bin);
     const sessionId = opts.sessionId || `codex-${Date.now()}`;

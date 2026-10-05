@@ -4,7 +4,7 @@ import path from "node:path";
 import { Terminal } from "@xterm/headless";
 import { afterEach, describe, expect, it } from "vitest";
 import { PtySnapshotStore } from "../pty-snapshot.js";
-import { PtyStreamManager, createPtyHandle, setCapped, STREAM_MAP_CAP } from "../pty-stream.js";
+import { OUTPUT_TAIL_CHARS, PtyStreamManager, createPtyHandle, setCapped, STREAM_MAP_CAP } from "../pty-stream.js";
 import type { PtyControlEvent } from "../pty-view-engine.js";
 
 const tempDirs: string[] = [];
@@ -306,5 +306,36 @@ describe("setCapped", () => {
     setCapped(map, "c", 3, 2);
     expect([...map.keys()]).toEqual(["a", "c"]);
     expect(map.get("a")).toBe(10);
+  });
+});
+
+describe("PtyStreamManager.attachWithOutputTail", () => {
+  it("keeps the newest output, capped, and still feeds the stream's own onData", async () => {
+    const manager = makeManager();
+    const proc = makeFakePty();
+    const seen: string[] = [];
+    const tail = manager.attachWithOutputTail("tail-1", proc, () => false, (raw) => seen.push(raw));
+
+    proc.emitData("a".repeat(OUTPUT_TAIL_CHARS));
+    proc.emitData("tail end");
+
+    expect(tail.text).toHaveLength(OUTPUT_TAIL_CHARS);
+    expect(tail.text.endsWith("tail end")).toBe(true);
+    expect(seen).toEqual(["a".repeat(OUTPUT_TAIL_CHARS), "tail end"]);
+    await settle();
+  });
+
+  it("stops growing once the session has started", async () => {
+    const manager = makeManager();
+    const proc = makeFakePty();
+    let started = false;
+    const tail = manager.attachWithOutputTail("tail-2", proc, () => started);
+
+    proc.emitData("boot output");
+    started = true;
+    proc.emitData("later output");
+
+    expect(tail.text).toBe("boot output");
+    await settle();
   });
 });

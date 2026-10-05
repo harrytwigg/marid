@@ -33,3 +33,27 @@ export function processStartFailure(engine: string, exit?: { exitCode?: number |
 export function isProcessStartFailure(error: string): boolean {
   return /^\S+ did not start: its process exited\b/.test(error);
 }
+
+/** What each CLI prints when the conversation `id` it was asked to resume is gone. */
+function missingConversation(id: string): RegExp[] {
+  const quoted = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const end = "(?![\\w-])";
+  return [
+    // Claude Code: "No conversation found with session ID: <id>"
+    new RegExp(`no conversation found with session id:?\\s*${quoted}${end}`, "i"),
+    // codex's TUI (`codex resume <id>`, codex-rs/tui/src/lib.rs):
+    // "No saved session found with ID <id>. Run `codex resume` without an ID ..."
+    new RegExp(`no saved session found with id\\s+${quoted}${end}`, "i"),
+  ];
+}
+
+/**
+ * Whether CLI output says the conversation it was asked to resume, `id`, no
+ * longer exists. The id must be in the sentence: what is cleared on a match is
+ * that conversation, and a resumed TUI can replay earlier messages, phrase and
+ * all, before it dies. grok has no verified wording, so it is never matched.
+ */
+export function isMissingConversationOutput(text: string, id: string | undefined): boolean {
+  if (!id) return false;
+  return missingConversation(id).some((pattern) => pattern.test(text));
+}

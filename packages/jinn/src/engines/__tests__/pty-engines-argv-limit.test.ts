@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * The codex and grok engines, like claude, put prompt text on a command line:
@@ -106,8 +108,8 @@ afterEach(() => {
 describe("describeCodexArgument / describeGrokArgument", () => {
   it("names the message, the system prompt, and anything else by position", () => {
     const codexArgs = ["--model", "m", "--", "hello"];
-    expect(describeCodexArgument(codexArgs, 3)).toBe("the message (with its system prompt and attachment list)");
-    expect(describeCodexArgument(codexArgs, 1)).toBe("command-line argument 2");
+    expect(describeCodexArgument(codexArgs, 3, "the message")).toBe("the message");
+    expect(describeCodexArgument(codexArgs, 1, "the message")).toBe("command-line argument 2");
 
     const grokArgs = buildGrokInteractiveArgs({ model: "m" } as any, undefined, "persona");
     expect(describeGrokArgument(grokArgs, grokArgs.indexOf("persona"))).toBe("the system prompt");
@@ -121,7 +123,7 @@ describe("CodexInteractiveEngine — a prompt too long for one argument", () => 
 
   it("fails the turn up front, naming the size and the limit, and leaves nothing running", async () => {
     await expect(engine.run({ sessionId: "cx-big", prompt: "p".repeat(136_066), cwd: "/tmp" } as any))
-      .rejects.toThrow(/^Codex cannot be started with this turn: the message \(with its system prompt and attachment list\) is 136,066 bytes, /);
+      .rejects.toThrow(/^Codex cannot be started with this turn: the message is 136,066 bytes, /);
     await expect(engine.run({ sessionId: "cx-big", prompt: "p".repeat(136_066), cwd: "/tmp" } as any)).rejects.toThrow(LIMIT);
     expect(ptySpawns).toHaveLength(0);
     expect(engine.isTurnRunning("cx-big")).toBe(false);
@@ -129,7 +131,17 @@ describe("CodexInteractiveEngine — a prompt too long for one argument", () => 
 
   it("counts a fresh session's system prompt, which codex takes in front of the message", async () => {
     await expect(engine.run({ sessionId: "cx-sys", prompt: "m".repeat(80_000), systemPrompt: "s".repeat(80_000), cwd: "/tmp" } as any))
-      .rejects.toThrow(/the message \(with its system prompt and attachment list\) is 160,0\d\d bytes/);
+      .rejects.toThrow(/the message \(with its system prompt\) is 160,0\d\d bytes/);
+    expect(ptySpawns).toHaveLength(0);
+  });
+
+  it("names only what is folded into the message: nothing on a resume, the attachment list when there is one", async () => {
+    await expect(engine.run({
+      sessionId: "cx-resume", prompt: "p".repeat(136_066), systemPrompt: "persona", resumeSessionId: "thread-1", cwd: "/tmp",
+    } as any)).rejects.toThrow(/^Codex cannot be started with this turn: the message is 136,066 bytes, /);
+    await expect(engine.run({
+      sessionId: "cx-attach", prompt: "p".repeat(136_066), attachments: ["/tmp/a.txt"], cwd: "/tmp",
+    } as any)).rejects.toThrow(/^Codex cannot be started with this turn: the message \(with its attachment list\) is 136,0\d\d bytes, /);
     expect(ptySpawns).toHaveLength(0);
   });
 
@@ -168,9 +180,12 @@ describe("CodexInteractiveEngine — a prompt too long for one argument", () => 
   });
 
   it("still reports a started process's death as an interruption", async () => {
-    engine.ensureIdleSpawn("cx-started", { cwd: "/tmp", model: "gpt-5.5" });
-    const run = engine.run({ sessionId: "cx-started", prompt: "hello", cwd: "/tmp", model: "gpt-5.5" } as any);
+    const run = engine.run({ sessionId: "cx-started", prompt: "hello", cwd: "/tmp" } as any);
     await flush();
+    // The process recorded its session, so it started.
+    const sessionsDir = path.join(osMockState.home, ".codex", "sessions");
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    fs.writeFileSync(path.join(sessionsDir, "rollout-started.jsonl"), JSON.stringify({ type: "session_meta", payload: { id: "thread-started", cwd: "/tmp" } }) + "\n");
     ptySpawns[0].proc._exit(1);
     expect((await run).error).toBe("Interrupted: codex process exited (code 1, signal 0)");
   });
@@ -220,14 +235,36 @@ describe("headless engines — a prompt too long for one argument", () => {
   it("codex fails up front, naming the message, its size and the limit, and spawns nothing", async () => {
     const engine = new CodexEngine({ codexHomesBaseDir: osMockState.home });
     await expect(engine.run({ sessionId: "cx-headless", prompt: "p".repeat(136_066), cwd: "/tmp" } as any))
-      .rejects.toThrow(/^Codex cannot be started with this turn: the message \(with its system prompt and attachment list\) is 136,066 bytes, /);
+      .rejects.toThrow(/^Codex cannot be started with this turn: the message is 136,066 bytes, /);
+    expect(childSpawns).toHaveLength(0);
+  });
+
+  it("codex on a resume names the platform context refresh folded into the message", async () => {
+    const engine = new CodexEngine({ codexHomesBaseDir: osMockState.home });
+    await expect(engine.run({
+      sessionId: "cx-headless-resume", prompt: "p".repeat(136_066), resumeSessionId: "thread-1", platformContextRefresh: "refresh", cwd: "/tmp",
+    } as any)).rejects.toThrow(/^Codex cannot be started with this turn: the message \(with the platform context refresh\) is 136,0\d\d bytes, /);
+    expect(childSpawns).toHaveLength(0);
+  });
+
+  it("codex checks every argument, not only the message", async () => {
+    const engine = new CodexEngine({ codexHomesBaseDir: osMockState.home });
+    await expect(engine.run({ sessionId: "cx-headless-model", prompt: "hi", model: "m".repeat(140_000), cwd: "/tmp" } as any))
+      .rejects.toThrow(/^Codex cannot be started with this turn: command-line argument 3 is 140,000 bytes, /);
     expect(childSpawns).toHaveLength(0);
   });
 
   it("grok fails up front, naming the message, its size and the limit, and spawns nothing", async () => {
     const engine = new GrokEngine();
-    await expect(engine.run({ sessionId: "gk-headless", prompt: "p".repeat(136_066), cwd: "/tmp" } as any))
-      .rejects.toThrow(/^Grok cannot be started with this turn: the message \(with its system prompt and attachment list\) is 136,066 bytes, /);
+    await expect(engine.run({ sessionId: "gk-headless", prompt: "p".repeat(136_066), systemPrompt: "persona", cwd: "/tmp" } as any))
+      .rejects.toThrow(/^Grok cannot be started with this turn: the message \(with its system prompt\) is 136,0\d\d bytes, /);
+    expect(childSpawns).toHaveLength(0);
+  });
+
+  it("grok on a resume names only the message", async () => {
+    const engine = new GrokEngine();
+    await expect(engine.run({ sessionId: "gk-headless-resume", prompt: "p".repeat(136_066), systemPrompt: "persona", resumeSessionId: "s1", cwd: "/tmp" } as any))
+      .rejects.toThrow(/^Grok cannot be started with this turn: the message is 136,066 bytes, /);
     expect(childSpawns).toHaveLength(0);
   });
 });
