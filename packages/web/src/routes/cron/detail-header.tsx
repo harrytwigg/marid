@@ -101,6 +101,7 @@ export function CronJobHeader({
 }) {
   return (
     <LargeTitleHeader
+      bodyGap={false}
       leading={<CronBackLink />}
       title={job?.name ?? "Cron"}
       subtitle={job ? <CronJobSubtitle job={job} /> : undefined}

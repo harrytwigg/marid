@@ -60,4 +60,59 @@ describe("LargeTitleHeader", () => {
     expect(bar?.className).toContain("--material-thick")
     expect(bar?.className).not.toMatch(/border/)
   })
+
+  describe("body gap", () => {
+    const gapOf = (el: Element | null) => el?.className.includes("mb-[22px]")
+
+    it("puts the gap below the subtitle when there is one", () => {
+      render(
+        <PageScaffold header={<LargeTitleHeader title="Limits" subtitle="Engine usage" />}>
+          <p>body</p>
+        </PageScaffold>,
+      )
+      expect(gapOf(screen.getByText("Engine usage"))).toBe(true)
+      expect(gapOf(document.querySelector(".jinn-large-title"))).toBeFalsy()
+    })
+
+    it("uses a spacer outside the large title when there is no subtitle", () => {
+      render(
+        <PageScaffold header={<LargeTitleHeader title="More" />}>
+          <p>body</p>
+        </PageScaffold>,
+      )
+      const title = document.querySelector(".jinn-large-title")
+      const spacer = document.querySelector("[data-slot='large-title-gap']")
+      // The title is display:none under reduced motion, which would take its margin with it.
+      expect(spacer).toBeTruthy()
+      expect(title?.contains(spacer)).toBe(false)
+      expect(gapOf(title)).toBeFalsy()
+    })
+
+    it("bodyGap=false leaves the spacing to the page", () => {
+      render(
+        <PageScaffold header={<LargeTitleHeader title="Detail" subtitle="Sub" bodyGap={false} />}>
+          <p>body</p>
+        </PageScaffold>,
+      )
+      expect(gapOf(screen.getByText("Sub"))).toBeFalsy()
+    })
+
+    it("bodyGap=false adds no spacer either", () => {
+      render(
+        <PageScaffold header={<LargeTitleHeader title="Detail" bodyGap={false} />}>
+          <p>body</p>
+        </PageScaffold>,
+      )
+      expect(document.querySelector("[data-slot='large-title-gap']")).toBeNull()
+    })
+
+    it("adds no gap on an externally scrolled route, whose toolbar sits right under the title", () => {
+      render(
+        <PageScaffold scroll="external" header={<LargeTitleHeader title="Todos" subtitle="3 open" />}>
+          <div />
+        </PageScaffold>,
+      )
+      expect(gapOf(screen.getByText("3 open"))).toBeFalsy()
+    })
+  })
 })
