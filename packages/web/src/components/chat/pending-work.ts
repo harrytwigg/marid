@@ -10,15 +10,15 @@ export function isBackgroundActivityStale(activity: BackgroundActivity | null, n
   return lastActivityAt > 0 && nowMs - lastActivityAt > BACKGROUND_ACTIVITY_STALE_MS
 }
 
-/** True when background work should be surfaced. Streams retain the stale
- *  backstop; a tracked monitor stays visible until its observed end signal. */
+/** True when background work should be surfaced: work the turn left running
+ *  (sub-agents, monitors, a re-run) until its observed end, and model requests
+ *  in flight until the stale backstop. */
 export function isBackgroundActivityVisible(
   activity: BackgroundActivity | null,
   nowMs: number,
 ): boolean {
-  const streams = activity?.activeStreams ?? 0
-  const monitors = activity?.activeMonitors ?? 0
-  return monitors > 0 || (streams > 0 && !isBackgroundActivityStale(activity, nowMs))
+  if (pendingWork(activity, null, nowMs)) return true
+  return (activity?.activeStreams ?? 0) > 0 && !isBackgroundActivityStale(activity, nowMs)
 }
 
 /** "1 monitor", "2 sub-agents". */

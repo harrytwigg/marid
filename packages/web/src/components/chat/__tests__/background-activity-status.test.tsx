@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
-import {
-  BackgroundActivityStatus,
-  isBackgroundActivityVisible,
-} from '../background-activity-status'
+import { BackgroundActivityStatus } from '../background-activity-status'
+import { isBackgroundActivityVisible } from '../pending-work'
 import type { BackgroundActivity } from '@/lib/api'
 
 const NOW = 1_780_000_000_000
@@ -33,6 +31,12 @@ describe('isBackgroundActivityVisible', () => {
 
   it('is hidden with zero active streams', () => {
     expect(isBackgroundActivityVisible(activity({ activeStreams: 0 }), NOW)).toBe(false)
+  })
+
+  it('is visible for sub-agents or a re-run with zero active streams, stale or not', () => {
+    const stale = new Date(NOW - 6 * 60 * 1000).toISOString()
+    expect(isBackgroundActivityVisible(activity({ activeStreams: 0, backgroundAgents: 1, lastActivityAt: stale }), NOW)).toBe(true)
+    expect(isBackgroundActivityVisible(activity({ activeStreams: 0, backgroundRerun: true, lastActivityAt: stale }), NOW)).toBe(true)
   })
 
   it('is visible for a monitor with zero active streams', () => {
@@ -95,16 +99,36 @@ describe('BackgroundActivityStatus', () => {
     expect(short.textContent).toBe('1 monitor')
   })
 
-  it('combines agents and monitors on one status line', () => {
+  it('combines sub-agents and monitors on one status line', () => {
     render(<BackgroundActivityStatus activity={activity({
       activeStreams: 9,
       activeAgents: 4,
       activeMonitors: 1,
+      backgroundAgents: 2,
     })} />)
     const status = screen.getByRole('status')
     const [long, short] = Array.from(status.querySelectorAll('span')).slice(-2)
-    expect(long.textContent).toBe('4 agents and 1 monitor in background')
-    expect(short.textContent).toBe('4 agents · 1 monitor')
+    // Counted as the answer caption counts them: launched sub-agents, not requests in flight.
+    expect(long.textContent).toBe('2 sub-agents and 1 monitor in background')
+    expect(short.textContent).toBe('2 sub-agents · 1 monitor')
+  })
+
+  it('shows sub-agents between their requests', () => {
+    render(<BackgroundActivityStatus activity={activity({
+      activeStreams: 0,
+      activeAgents: 0,
+      backgroundAgents: 2,
+      lastActivityAt: new Date(Date.now() - 6 * 60 * 1000).toISOString(),
+    })} />)
+    const status = screen.getByRole('status')
+    const [long, short] = Array.from(status.querySelectorAll('span')).slice(-2)
+    expect(long.textContent).toBe('2 sub-agents in background')
+    expect(short.textContent).toBe('2 sub-agents')
+  })
+
+  it('names a background re-run', () => {
+    render(<BackgroundActivityStatus activity={activity({ activeStreams: 1, backgroundRerun: true })} />)
+    expect(screen.getByRole('status').textContent).toContain('Background re-run in progress')
   })
 
   it('uses the singular label for one agent', () => {

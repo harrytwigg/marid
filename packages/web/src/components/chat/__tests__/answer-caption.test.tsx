@@ -69,6 +69,20 @@ describe('answer caption', () => {
     expect(captionOf('answer-2')).toBe('Turn failed')
   })
 
+  it('reads final while a turn runs with no user row of its own', () => {
+    // A callback-started turn adds no user row, and delegated activity is not
+    // suppressed while it runs: its answer is not written yet, so nothing waits.
+    const answered = messages.slice(0, 2)
+    render(<ChatMessages messages={answered} loading turnPending delegatedActivity={{ activeSessions: 1, employees: [] }} />)
+    expect(captionOf('answer-1')).toBe('Final answer')
+  })
+
+  it('shows no wait under an answer with no text to caption', () => {
+    const mediaOnly: Message[] = [...messages.slice(0, 3), { ...messages[3], content: '', media: [{ type: 'file', url: '/api/files/report', name: 'report.md' }] }]
+    render(<ChatMessages messages={mediaOnly} loading={false} backgroundActivity={activity({ backgroundAgents: 1 })} />)
+    expect(captionOf('answer-1')).toBe('Final answer')
+  })
+
   it('does not move the wait to an earlier answer while a turn runs or has none', () => {
     const asked: Message[] = [...messages, { id: 'ask-3', role: 'user', content: 'Third question.', timestamp: T0 + 4_000 }]
     render(<ChatMessages messages={asked} loading={false} turnPending={false} backgroundActivity={activity({ backgroundAgents: 1 })} />)

@@ -602,16 +602,9 @@ interface MessageRowProps {
   blockArrivals?: ReadonlyMap<string, LiveBlockArrival>
 }
 
-const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp, prevRole, prevUserText, isFinalAnswer, pendingWork = null, loading, onRetry, onPeek, arrival, entering, blockArrivals }: MessageRowProps) {
-  const isUser = msg.role === 'user'
-  const isNotification = msg.role === 'notification'
-  const media = messageMedia(msg)
-  const blocks = msg.blocks || []
-  const hasBlocks = blocks.length > 0
-  const teammate = useMemo(() => parseTeammateReply(msg), [msg])
-  const relay = useMemo(() => (teammate ? null : parseAgentRelay(msg)), [msg, teammate])
-
-  // Strip media URLs from text for display
+/** The text a message row shows, without media URLs, the engine-only
+ *  attached-files block, or a media-only message's auto label. */
+function messageText(msg: Message, media: MediaAttachment[]): string {
   let textContent = msg.content
   if (media.length > 0 && !msg.media) {
     media.forEach(m => {
@@ -628,6 +621,19 @@ const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp
     const isAutoLabel = textContent.startsWith('[') && textContent.endsWith(']')
     if (isAutoLabel) textContent = ''
   }
+  return textContent
+}
+
+const MessageRow = React.memo(function MessageRow({ msg, index: i, showTimestamp, prevRole, prevUserText, isFinalAnswer, pendingWork = null, loading, onRetry, onPeek, arrival, entering, blockArrivals }: MessageRowProps) {
+  const isUser = msg.role === 'user'
+  const isNotification = msg.role === 'notification'
+  const media = messageMedia(msg)
+  const blocks = msg.blocks || []
+  const hasBlocks = blocks.length > 0
+  const teammate = useMemo(() => parseTeammateReply(msg), [msg])
+  const relay = useMemo(() => (teammate ? null : parseAgentRelay(msg)), [msg, teammate])
+
+  let textContent = messageText(msg, media)
   const isBlockFallbackText = hasBlocks && blocks.some((block) => {
     const content = textContent.trim()
     return content === blockFallbackContent(block).trim()
@@ -822,7 +828,8 @@ interface ChatMessagesProps {
 /** The latest turn's answer, or -1 when that turn has none to show. */
 function latestTurnAnswerIndex(messages: Message[], rowMeta: RowMeta[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (rowMeta[i].isFinalAnswer) return i
+    // The caption is only drawn under an answer with text.
+    if (rowMeta[i].isFinalAnswer) return messageText(messages[i], messageMedia(messages[i])) ? i : -1
     if (messages[i].role === 'user') return -1
   }
   return -1
