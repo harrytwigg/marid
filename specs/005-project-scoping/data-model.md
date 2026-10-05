@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS project_shared_notes (
 CREATE TABLE IF NOT EXISTS project_env (
   project_id TEXT NOT NULL REFERENCES projects(id),
   env_name TEXT NOT NULL CHECK (env_name GLOB '[A-Z_]*' AND env_name NOT GLOB '*[^A-Z0-9_]*'),
-  secret_key TEXT NOT NULL,                    -- a key NAME in secrets/; never a value
+  secret_key TEXT NOT NULL,                    -- a key NAME in the secrets store; never a value. env_name is also checked against the FR-031 reserved set at write time
   PRIMARY KEY (project_id, env_name)
 );
 ```
@@ -62,59 +62,83 @@ generation bump.
 
 ## Sessions
 
+These columns are added through the add-column-if-missing path
+(`packages/jinn/src/sessions/migrate.ts:342`):
+
 ```sql
-ALTER TABLE sessions ADD COLUMN project_id TEXT;   -- via the add-column-if-missing path, sessions/migrate.ts:342
+ALTER TABLE sessions ADD COLUMN project_id TEXT;           -- enforcement binding; set ONLY for sessions of scoped employees
+ALTER TABLE sessions ADD COLUMN requester_session_id TEXT; -- set ONLY for scoped sessions: the session that spawned or delegated to it (FR-013)
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
 ```
 
-- Set once, in `spawnSession`, from the FR-008 rules. It is never updated.
-- It has no foreign key, because the sessions table predates projects and uses
-  add-column-if-missing. A dangling id is treated as an archived project: readable, and no new
-  turns start.
+- **When they are set.** Both columns are set once, in `spawnSession`, by the FR-008 rules,
+  and never updated afterwards.
+- **Unscoped sessions** never carry `project_id`. Their badge is derived at read time from the
+  linked Todo's project (FR-009). As a result, a scoped filter
+  (`project_id = P`) can never match an unscoped session.
+- **No foreign key.** A dangling id is treated as an archived project: the session stays
+  readable, and no new turns start.
 
 ## Events
 
 `work_item_events.kind` gains `project_changed`, with
-`detail = { from: <id|null>, to: <id|null> }` and `actor` as usual. Creation in a project
-records `to` on the `created` event's detail rather than writing a second event.
+`detail = { from: <id|null>, to: <id|null> }`.
 
-## Org YAML
+- Creating a Todo inside a project records `to` on the `created` event; no separate
+  `project_changed` event is written.
+- If a Todo leaves P while a scoped session is working on it, an `escalated` event is also
+  written, naming the session.
+
+## Org YAML: explicit scope (FR-007)
 
 ```yaml
 # org/engineering/marid-dev.yaml
 name: marid-dev
 department: engineering
 engine: claude
-projects: [prj_1a2b3c4d5e6f]   # absent or [] = unrestricted (today's behaviour)
+projects: [prj_1a2b3c4d5e6f]
 persona: ...
 ```
 
-Validation runs at scan time (`gateway/org.ts`) and at PATCH time:
+| YAML | Scope |
+| --- | --- |
+| no `projects` key | **all** (today's behaviour) |
+| `projects: [a, b]` | scoped to the known ids among `a` and `b` |
+| `projects: []`, or only unknown ids | scoped to **nothing**: every scoped route refuses and no session starts |
 
-- every id must be a known project, or the employee is loaded **as scoped to nothing**. An
-  unknown id fails closed, never open;
-- the engine must be `claude` (FR-025);
-- system employees may not be scoped.
+Unknown ids are dropped from a scope without widening it.
+
+Validation runs both at scan time (`gateway/org.ts`) and at PATCH time:
+
+- `PATCH` refuses an empty list. Valid values are `"all"` or a non-empty list of known ids.
+- The engine must be `claude` (FR-026).
+- Under Q1 = B, `gateway.authRequired` must be on (FR-025).
+- System employees cannot be scoped.
+- A cron job cannot target a scoped employee. This is checked during cron validation.
 
 ## Derived values
 
-- **A Todo's effective project**: `work_item_projects.project_id` for its `root_id`.
-- **Project spend**: `SUM(sessions.total_cost) WHERE project_id = ?`, read live and never
-  stored, the same way Todo spend is read at `work-items/store.ts:865`.
-- **Scoped caller**: a capability-verified session whose employee has non-empty `projects`.
-  Its bound project is `sessions.project_id`.
+- **A Todo's effective project**: `work_item_projects.project_id` for the Todo's `root_id`.
+- **Project spend**: `SUM(sessions.total_cost)` over sessions linked to the project's Todos.
+  It is read live, as Todo spend already is (`packages/jinn/src/work-items/store.ts:865`).
+- **Scoped caller**: a capability-verified session whose employee has a scope other than
+  `all`. Its project P is `sessions.project_id`.
 
-## Stage directory (Q1 = B)
+## Stage directory (Q1 = B, built in Phase 3)
 
 ```
-$JINN_HOME/projects/<project id>/stage/     # or outside the home if Phase 0 item 2 fails
-  CLAUDE.md            # generated: knowledge/projects/<id>/INSTRUCTIONS.md (+ company CLAUDE.md if project+company)
-  .claude/skills/<s>   # symlinks to skills/<s> for each allow-listed skill
-  .claude/settings.json # sandbox and deny rules (FR-022)
+<parent of $JINN_HOME>/.jinn-projects/<project id>/
+  CLAUDE.md            # generated from knowledge/projects/<id>/INSTRUCTIONS.md (+ company CLAUDE.md if project+company)
+  .claude/skills/<s>/  # COPIES of skills/<s> for each allow-listed skill (symlinks would resolve into the denied home)
 ```
 
-It is regenerated on the same triggers as `syncSkillSymlinks`, and on any project config change.
-It is never edited by hand.
+- **Location.** The directory sits outside `$JINN_HOME`, so ancestor `CLAUDE.md` loading
+  cannot pull in the company file.
+- **Sandbox settings.** The sandbox and deny rules are **not** stored here. They go in the
+  gateway-written `--settings` file under `$JINN_HOME/tmp/`, and that file denies writes to
+  this directory's `.claude/`, `CLAUDE.md` and `.mcp.json` (FR-022).
+- **Regeneration.** The directory is rebuilt on the same triggers as `syncSkillSymlinks`, and
+  on any change to the project's config. Nobody edits it by hand.
 
 ## Wire shapes
 
@@ -134,10 +158,10 @@ type ProjectWire = ProjectRef & {
   createdAt: string; updatedAt: string; archivedAt: string | null;
 };
 
-// Added to WorkItemCompactWire / WorkItemDetailWire:
+// Additive, nullable. Added to WorkItemCompactWire / WorkItemDetailWire:
 project: ProjectRef | null;
-// Added to the session list and tree wire:
+// Added to the session list and tree wire (binding for scoped sessions, derived badge otherwise):
 project: ProjectRef | null;
 // Added to Employee and EmployeeUpdate:
-projects?: string[];
+projectScope: "all" | string[];
 ```

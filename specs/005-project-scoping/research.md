@@ -10,142 +10,196 @@ they start with `packages/`.
 | `path:line` | What it is | Bearing on this feature |
 | --- | --- | --- |
 | `work-items/sprints-schema.ts:5` | "Additive tables, never columns on `work_items`" | The project dimension is a join table, as sprints are |
-| `work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: tables created at boot when missing | `projects` and `work_item_projects` are registered here |
-| `work-items/migrate.ts:536` | `sprints` registered before its membership table | Same ordering for `projects` → `work_item_projects` |
-| `work-items/sprints-schema.ts:60` | `sprintFilterCondition`: filters on the **root's** membership (`root_id`) | Same shape for `project=<id>|none`. Sub-tasks inherit their project for free |
+| `work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: tables created at boot when missing | `projects` and its child tables are registered here |
+| `work-items/migrate.ts:536` | `sprints` is registered before its membership table | Same ordering for `projects` before `work_item_projects` |
+| `work-items/sprints-schema.ts:60` | `sprintFilterCondition` filters on the **root's** membership (`root_id`) | Same shape for `project=<id>\|none`. Sub-tasks inherit their project for free |
 | `work-items/sprint-membership.ts:71` | `assertTopLevel`: only roots hold a sprint | Same rule for projects (FR-004) |
-| `work-items/store.ts:511` | List filter applies `sprint` | `project` goes next to it |
-| `work-items/store.ts:331` | Id prefix comes from the department | Unchanged: the project does not affect numbering |
-| `work-items/migrate.ts:161` | `labels.department` nullable = company-wide | Precedent for a nullable scope column on a registry row |
-| `sessions/migrate.ts:342` | Sessions use add-column-if-missing | `sessions.project_id` is a plain added column, with no exact-shape verifier to satisfy |
-| `sessions/migrate.ts:117` | `files` table: no session or owner column | Managed files cannot be scoped, so FR-016 refuses them for scoped callers |
-| `shared/types.ts:515` | `Employee` | Gains `projects?: string[]` |
+| `work-items/store.ts:511` | The list filter applies `sprint` | `project` goes next to it |
+| `work-items/store.ts:331` | The id prefix comes from the department | Unchanged: a project does not affect numbering |
+| `work-items/migrate.ts:161` | `labels.department` is nullable, and null means company-wide | Precedent for a nullable scope column on a registry row |
+| `sessions/migrate.ts:342` | Sessions use add-column-if-missing | `sessions.project_id` and `requester_session_id` are plain added columns |
+| `sessions/migrate.ts:117` | The `files` table has no session or owner column | Managed files cannot be scoped, so FR-018 refuses them for scoped callers |
+| `shared/types.ts:515` | `Employee` | Gains an explicit project scope (FR-007) |
 | `shared/types.ts:529` | `mcp` allow-list, the only per-employee allow-list today | Precedent for an optional list field on the employee |
-| `gateway/org.ts:78` | YAML → `Employee` field mapping | Reads `projects` |
+| `gateway/org.ts:78` | Maps YAML to `Employee` fields | Reads `projects` |
 | `gateway/org.ts:170` | `WRITABLE_FIELDS` for `PATCH /api/org/employees/:name` | Gains `projects` |
+| `gateway/api.ts:2187` | Create refuses `assignee` | There is no create-with-assignee path |
+| `gateway/api.ts:2192` | `parentId` is accepted only at create | There is no re-parent path |
+
+### Identity and authentication
+
+| `path:line` | What it is | Bearing |
+| --- | --- | --- |
+| `mcp/identity.ts:143` | `deriveSessionCapability`: an HMAC of the session id under the capability key in the secrets directory | A scoped caller is identified exactly as today |
+| `mcp/identity.ts:162` | `verifySessionCapability` | Unchanged |
+| `mcp/identity.ts:42` | "defense-in-depth … not an internet auth boundary" | Why Q1 exists |
+| `mcp/server-bootstrap.ts:25` | The MCP server **derives** the capability itself from the key file, given only a session id and a home on argv | Any process that can read the key can mint any session's capability. FR-024 adds defence in depth on top of FR-022 |
+| `mcp/server.ts:39` | `resolveServerToken`: the MCP server authenticates with the bearer token from its environment or from `gateway.json` | It runs outside the Bash sandbox, so it keeps working. The shell cannot read `gateway.json` (FR-022) |
+| `gateway/request-handler.ts:55` | With `authRequired`, a request without the bearer token gets 401 before any route | This instance runs `authRequired: true`. A contained shell holds no token, so it stops here (FR-025) |
+| `gateway/auth.ts:264` | `shouldRequireGatewayAuth`: auth is off on loopback unless `gateway.authRequired` is set | Hence FR-025's precondition |
+| `gateway/api.ts:841` | `rejectUnverifiedIdentifiedApiCaller` lets unauthenticated `GET`s through when auth is off | Affects auth-off instances only |
+| `gateway/api.ts:796` | Same-origin browser inference, purely from headers | On an auth-off instance any local `curl` can forge it. Another reason for FR-025 |
+| `gateway/session-comm-guards.ts:333` | `resolveCallerIdentity`: one of operator, session, unidentified-tool or unauthenticated | The scope check reads the session from here |
+| `gateway/api.ts:603` | `resolveScopedWriteCallerIdentity` | Same |
 
 ### Enforcement points
 
 | `path:line` | What it is | Bearing |
 | --- | --- | --- |
-| `mcp/identity.ts:143` | `deriveSessionCapability`: HMAC of the session id under `secrets/mcp-session-capability.key` | The scoped caller is identified exactly as today |
-| `mcp/identity.ts:162` | `verifySessionCapability` | Unchanged |
-| `mcp/identity.ts:42` | "defense-in-depth … not an internet auth boundary" | Why Q1 exists |
-| `mcp/server-bootstrap.ts:25` | The MCP server **derives** the capability itself from the key file, given only a session id and the home path on argv | Any process that can read the key can mint any session's capability. FR-023 |
-| `gateway/session-comm-guards.ts:333` | `resolveCallerIdentity`: operator, session, unidentified-tool or unauthenticated | The scope check reads the session from here |
-| `gateway/api.ts:603` | `resolveScopedWriteCallerIdentity` | Same |
-| `gateway/api.ts:1181` | `refuseRemoteMcpRoute` at the identified-caller gate | **The exact precedent:** a per-principal route allow-list enforced in one place. The scoped-caller gate goes next to it |
-| `gateway/remote-mcp/rules.ts:25` | `ALLOWED_ROUTES` table for the connector | Shape to copy, as `gateway/project-scope/rules.ts` |
-| `gateway/api.ts:1212` | `operatorOnlyControlPlaneRoute` | Already refuses config, cron and org writes for any non-operator |
+| `gateway/api.ts:1181` | `refuseRemoteMcpRoute` at the identified-caller gate | **The precedent:** a per-principal route allow-list enforced in one place. The scoped gate goes beside it |
+| `gateway/remote-mcp/rules.ts:25` | `ALLOWED_ROUTES`, the connector's allow-list | Shape copied for `gateway/project-scope/rules.ts` |
+| `gateway/api.ts:1212` | `operatorOnlyControlPlaneRoute` | Already refuses config, cron and org writes to every non-operator |
 | `gateway/control-plane-routes.ts:12` | The operator-only route table | Same |
-| `gateway/api.ts:841` | `rejectUnverifiedIdentifiedApiCaller` lets unauthenticated `GET`s through when auth is off | Q6 and FR-024 |
-| `gateway/auth.ts:264` | `shouldRequireGatewayAuth`: off on loopback unless `gateway.authRequired` | Same |
-| `gateway/api.ts:530` | `resolveWorkItemCaller` | Per-Todo scope check |
-| `gateway/work-item-authority.ts:25` | `hasStandingOverWorkItem`: org root, owner, or manager above the owner | Scope is checked **before** standing. Standing is never widened |
-| `gateway/work-item-standing.ts:20` | `mayRetagTodo` | Who may change a Todo's project (the same people who may change its sprint) |
-| `gateway/api.ts:2147` / `:2171` | `GET /api/work-items` → unscoped `queryWorkItems` | The project filter is forced for scoped callers |
-| `gateway/api.ts:1743` | `GET /api/sessions`, unscoped | Filtered by `project_id` for scoped callers |
-| `gateway/api.ts:3273` | `POST /api/delegations` | FR-015 target check |
-| `gateway/api.ts:3640` | `POST /api/sessions` (spawn) | FR-015 and FR-008 binding |
-| `gateway/spawn-session.ts:163` | `spawnSession`: every spawn path converges here | The binding is set here, once |
-| `gateway/api.ts:3695` | `POST /api/sessions/:id/message` | FR-012 target check |
-| `gateway/api.ts:905` | `resolveSpawnParentSessionId` accepts any existing session as parent | Scoped callers may only name a P-bound parent |
-| `gateway/todo-dispatch.ts:197` | `startTodoDispatcher` (dispatch, board walk) | FR-015 assignee check |
-| `gateway/api.ts:1681` / `:1694` | Knowledge search and read routes | Rooted per FR-027 |
-| `notes/store.ts:613` | `SEARCH_ROOTS = ["knowledge", "docs"]` | Becomes a parameter. Scoped callers pass their project roots |
-| `notes/store.ts:729` | `readKnowledgeFile`: containment in the home only, **no `secrets/` exclusion** | Q6 |
-| `shared/file-read-policy.ts:58` | "Refusing to read Jinn secrets", used only by `/api/files/read` and attachments | Q6-a extends it to `read_knowledge` |
-| `shared/protected-home-entries.ts:41` | Protected entries: `secrets`, `gateway.json`, `config.yaml`, `tmp/mcp`, … | Same list, and the containment deny list starts from it |
-| `mcp/file-tools.ts:96` | `publish_attachment` path: any absolute path, regular file, ≤ 50 MB | FR-016 and Q6 |
-| `mcp/server.ts:112` | `buildTools` | A scoped session gets a filtered profile (below) |
-| `gateway/remote-mcp/profile.ts:98` | The connector's tool filter | Precedent for a filtered tool profile per principal |
+| `gateway/upgrade-guards.ts` (imported at `gateway/server.ts:62`) | WebSocket upgrade guards | Scoped callers are refused here. Upgrades never reach `handleApiRequest` |
+| `gateway/api.ts:530` | `resolveWorkItemCaller` | The per-Todo check |
+| `gateway/work-item-authority.ts:25` | `hasStandingOverWorkItem`: the org root, the owner, or a manager above the owner | Scope is checked **before** standing. Standing is never widened |
+| `gateway/work-item-standing.ts:20` | `mayRetagTodo` | Who may change a Todo's project: the same people who may change its sprint |
+| `gateway/api.ts:2148` | `GET /api/work-items?ids=` returns the Todos it names, unfiltered | The scoped read module covers this branch |
+| `gateway/api.ts:2171` | The query form calls `queryWorkItems` | Same |
+| `gateway/api.ts:1744` | `GET /api/sessions` has `pinned` and `q` branches | Same |
+| `gateway/api.ts:3273` | `POST /api/delegations` | FR-016 target check |
+| `gateway/api.ts:3640` | `POST /api/sessions` (spawn) | FR-016, and the FR-008 binding |
+| `gateway/spawn-session.ts:163` | `spawnSession`, where every spawn path converges | Sets the binding and the requester, once |
+| `gateway/api.ts:3695` | `POST /api/sessions/:id/message` | FR-012 and FR-013 |
+| `gateway/api.ts:905` | `resolveSpawnParentSessionId` accepts any existing session as parent | Scoped callers may name only a P-bound parent |
+| `work-items/assignment.ts:77` | `assignWorkItem`. Callers: `gateway/api.ts:2650` (assign), `gateway/api.ts:3501` (delegation), `talk/control/todo-adapters.ts:132`, `talk/control/delegation-adapter.ts:107` | `mayHoldTodo` goes inside it |
+| `gateway/api.ts:2409` | PATCH sets `assignee` directly, without `assignWorkItem` | The second `mayHoldTodo` call site |
+| `gateway/todo-dispatch.ts:197` | `startTodoDispatcher` (dispatch and board walk) | Routing check |
+| `gateway/self-compaction-api.ts:217` | `POST /api/compactions` | Own session only |
+| `gateway/todo-capture-api.ts:172` | `capture-landing` (`land_on_work_item`) | Todo must be in P |
+| `gateway/search-api.ts:240` | `/api/search/global` | Refused for scoped callers |
+| `gateway/api.ts:1681` / `:1694` | Knowledge search and read routes | Rooted per FR-028 |
+| `notes/store.ts:613` | `SEARCH_ROOTS = ["knowledge", "docs"]` | Becomes a parameter |
+| `mcp/server.ts:112` | `buildTools` | Scoped sessions get a filtered profile |
+| `gateway/remote-mcp/profile.ts:98` | The connector's tool filter | Precedent for a per-principal profile |
+
+### Local file reads (Q6, FR-018)
+
+| `path:line` | What it is | Bearing |
+| --- | --- | --- |
+| `notes/store.ts:729` | `readKnowledgeFile` checks only that the path is inside the home | It can read `gateway.json` (the operator bearer token), the secrets directory, `config.yaml`, `tmp/mcp/*` and `auth-devices.json` |
+| `shared/file-read-policy.ts:58` | `assessFileRead` refuses the secrets directory. It is used only by `/api/files/read` and attachments | Q6-a routes `read_knowledge` through it |
+| `shared/protected-home-entries.ts:46` | `config.yaml` is a protected entry | So under Q6-a, `read_knowledge` can no longer read `config.yaml` |
+| `gateway/__tests__/knowledge-route.test.ts:155` | Asserts that `config.yaml` **is** readable through `read_knowledge` | Changes under Q6-a |
+| `mcp/__tests__/knowledge-tools.test.ts:152` | Stubbed test: the tool forwards any relative path and "leaves containment to the gateway" | Unaffected, because the refusal happens in the gateway |
+| `mcp/file-tools.ts:96` | `publish_attachment` accepts any absolute path to a regular file up to 50 MB | Q6, plus the FR-018 workdir check |
+| `mcp/work-item-attachments.ts:68` | Path-based `attach_to_work_item`, through `readLocalFileForIngestion` | The policy does not protect `registry.db`, `org/`, `CLAUDE.md`, or other projects' directories. FR-018 |
+| `gateway/api.ts:2925` | JSON `{path}` attachment ingestion, read inside the gateway | Same |
 
 ### Engine spawning
 
 | `path:line` | What it is | Bearing |
 | --- | --- | --- |
 | `sessions/turn/engine-run.ts:46` | Local engines always run with `cwd: JINN_HOME` | FR-020: scoped sessions get the stage dir |
-| `gateway/server.ts:504` | Exports `JINN_GATEWAY_TOKEN` into `process.env` for every engine | FR-021 |
-| `shared/child-env.ts:41` | `buildEngineChildEnv`: inherits `process.env` minus a short deny list | FR-021 needs an allow-list builder for scoped sessions |
-| `engines/claude-interactive.ts:451` | Claude argv: `--chrome`, `--dangerously-skip-permissions`, … | Phase 0 confirms the sandbox and deny rules still apply under this flag |
-| `shared/claude-settings.ts:70` | `buildSessionSettings`: hooks and status line only | The sandbox and `permissions.deny` blocks go here for scoped sessions |
+| `gateway/server.ts:504` | Exports `JINN_GATEWAY_TOKEN` to every engine | FR-021 |
+| `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | FR-021 needs an allow-list builder |
+| `engines/claude-interactive.ts:451` | Claude argv: `--chrome` (`:452`, the operator's own browser), `--dangerously-skip-permissions` (`:454`), the gateway-written `--settings` under `tmp/` (`:456`), and `--mcp-config` without `--strict-mcp-config` (`:459`) | FR-022, FR-023 |
+| `shared/claude-settings.ts:70` | `buildSessionSettings` writes hooks and a status line only | Scoped sessions also get sandbox and deny blocks, in this file only |
 | `board-walk/route-turn.ts:48` | `CLAUDE_WALK_FLAGS`: `--no-chrome --tools "" --strict-mcp-config` | The only existing locked-down Claude turn |
-| `gateway/watcher.ts:38` | `syncSkillSymlinks`: every skill → `~/.jinn/.claude/skills` | The stage dir gets its own filtered link set |
-| `work-items/dispatch-config.ts:253` | `resolveTodoDispatch`: skills are added as prompt lines | FR-026 validates against the allow-list |
-| `sessions/context.ts:198` | `buildContext` | Scoped sessions get a project section and a scoped roster |
-| `sessions/context.ts:298` | Working roster | Filtered to project members |
+| `gateway/watcher.ts:38` | `syncSkillSymlinks` links every skill into `~/.jinn/.claude/skills` | The stage dir gets copies of the allowed skills instead |
+| `work-items/dispatch-config.ts:253` | `resolveTodoDispatch` adds skills as prompt lines | FR-027 validates them against the allow-list |
+| `sessions/context.ts:198` | `buildContext` | The project section comes from a new module |
+| `sessions/context.ts:298` | Working roster | Filtered to members |
 | `sessions/context.ts:345` | Knowledge section | Points at the project Notes root |
-| `sessions/turn/preflight.ts:52` | `refuseTurn`: the single gate before any engine spawn | Refuses a turn whose binding the employee has lost, or a scoped employee on a non-claude engine |
-| `mcp/resolver.ts:51` | Per-employee MCP server selection | Unchanged |
+| `sessions/turn/preflight.ts:52` | `refuseTurn`, the gate before every engine spawn | Lost binding, wrong engine |
+| `sessions/turn/preflight.ts:63` | Per-employee monthly budget check | Already a per-project cap for dedicated employees |
+| `sessions/fork.ts:164` / `engines/claude-interactive.ts:271` | Transcripts are keyed by the cwd slug | Resume, fork and compaction must resolve the stage-dir slug |
+| `shared/claude-settings.ts:124` | Trust entries per directory in `~/.claude.json` | Seed the stage dir |
 
 ### Budgets
 
 | Source | Value |
 | --- | --- |
 | `mcp/__tests__/tool-manifest-budget.test.ts:11` | `MAX_MANIFEST_TOKENS = 4156` |
-| `mcp/__tests__/tool-manifest-budget.test.ts:239` | Measured `pi` wrapper: 4155. One token of headroom |
+| `mcp/__tests__/tool-manifest-budget.test.ts:239` | Measured `pi` wrapper: 4155, one token of headroom |
 | `mcp/__tests__/tool-manifest-budget.test.ts:307` | 51 tools pinned |
-| `size-baseline.json:290` | `gateway/api.ts` budget 4803 lines; the file is 4798. Only 5 lines of room |
-| `size-baseline.json:514` | `mcp/server.ts` budget 326 lines; the file is 326 |
-| `size-baseline.json:587` | `sessions/context.ts` budget 906 lines |
-| `packages/web/src/lib/api.ts` | At its recorded budget (876). New web calls go in `lib/project-api.ts`, as `lib/sprint-api.ts` did |
+| Sprint precedent (comments at `:225-237`) | `sprint` on list and edit cost 18 tokens, plus 7 on create, so 25 in all. That is the Q4-b estimate |
+| `size-baseline.json:290` | `gateway/api.ts` budget 4803. The file is 4798 |
+| `size-baseline.json:514` | `mcp/server.ts` budget 326. The file is 326 |
+| `size-baseline.json:587` | `sessions/context.ts` budget 906. The file is **1002**, already over |
+| `packages/web/src/lib/api.ts` | At its budget of 876 |
+| `node scripts/ratchet.mjs --check` | "102 violations, 14 stale entries" on `main`: the ratchet is red before this feature |
 
-Consequence: every new gateway behaviour lives in new modules (`gateway/projects-api.ts`,
-`gateway/project-scope/*`, `work-items/projects*.ts`). `api.ts` gains only the mount line and
-the gate call, at most 5 lines.
+The rule for this feature is that no file at or over budget grows. New behaviour lives in new
+modules (`gateway/projects-api.ts`, `gateway/project-scope/*`, `work-items/projects*.ts`,
+`sessions/context/project.ts`, `mcp/project-profile.ts`, `lib/project-api.ts`). Any line added
+to an over-budget file is paid for in the same PR by moving existing code out.
 
 ### Found and rejected
 
-- **The remote-connector principal as the scope carrier.** It is the operator's door, by
-  design unscoped (`specs/004-remote-mcp-connector/spec.md` amendment). Projects reuse its
-  *pattern* (a route table at the gate), not its principal.
-- **Departments as projects.** Departments drive id prefixes and the org tree, and are
-  per-employee singular. Projects cut across departments, and an employee can be in several.
-  Overloading departments would change Todo numbering, which the issue rules out.
-- **Labels as projects.** Labels are many-per-Todo and self-service. Scope needs at most one
-  per Todo and operator-only administration.
-- **`toolset` / board-walk toolset as the scoped profile.** `toolset` replaces the whole tool
-  set (`mcp/toolsets.ts:10`). Scoped sessions need the normal set minus refused groups, which
-  is the connector's `profile.ts` filter shape, not a toolset.
+- **The remote-connector principal as the scope carrier.** It is the operator's door, and
+  unscoped by design. Projects reuse its *pattern* (a route table at the gate), not its
+  principal.
+- **Departments as projects.** Departments drive id prefixes and the org tree, and each
+  employee has exactly one. Projects cut across departments, and an employee can be in
+  several.
+- **Labels as projects.** A Todo can carry many labels, and agents create them freely. Scope
+  needs at most one per Todo, with administration by the operator only.
+- **A `toolset` as the scoped profile.** A toolset replaces the whole tool set
+  (`mcp/toolsets.ts:10`). The connector's `profile.ts` filter is the right shape.
+- **Filtering inside each list handler.** Several handlers have unfiltered branches (`ids=`,
+  `pinned`, `q`) and are over budget. A dedicated read module for scoped callers is where a
+  missed branch cannot leak.
+- **A session `project_id` on unscoped sessions for badges.** That would make an unscoped
+  session match the scoped filter. It was QA's B1 confused deputy: transcript reads, and
+  `send_to_session` into an uncontained session. The badge is derived at read time instead
+  (FR-009).
+- **A stage dir inside `$JINN_HOME`.** Ancestor `CLAUDE.md` loading would pull in the company
+  file. Symlinked skills would resolve into the denied tree. A deny on the home would cover
+  the stage dir too, because deny wins over allow.
 
 ## Containment: what Phase 0 must establish
 
-Claude Code 2.1.289 is installed. Its settings support a Bash sandbox (filesystem and network
-rules) and `permissions.deny` rules for the Read and Edit tools. Phase 0 must establish each of
-these by running a real session, not by reading documentation:
+Claude Code 2.1.289 is installed. Its settings support a Bash sandbox, with filesystem and
+network rules, and `permissions.deny` rules for the Read and Edit tools.
 
-1. With `--dangerously-skip-permissions`, are `permissions.deny` rules for `Read(~/.jinn/**)`
-   and `Edit(~/.jinn/**)` still enforced? If not, the stage-dir session must drop that flag and
-   run in a permission mode that still enforces deny rules.
-2. Does the Bash sandbox deny reads under `$JINN_HOME` while allowing a stage dir *inside* it
-   (allow-subpath after deny-path)? If not, the stage dir moves outside `$JINN_HOME`.
-3. Can the Bash sandbox block loopback connections to the gateway port while the MCP server,
-   which runs outside the Bash sandbox, still reaches it? If yes, FR-024 needs no gateway
-   auth change and Q6's approval is moot. If no, gateway auth goes on.
-4. Does the jinn MCP server, a child of `claude` outside the Bash sandbox, start correctly from
-   a stage-dir cwd when the capability is passed on its environment instead of derived
-   (FR-023)?
-5. Do `git push`, `gh pr create`, `pnpm install` and `pnpm build` work under the sandbox with
-   the project working directories writable and only the minimal environment plus secret
-   references? What extra read paths do they need (`~/.gitconfig`, `~/.ssh`, `~/.config/gh`,
-   pnpm store)?
-6. Are sub-agents (the Task tool) and hooks covered by the same sandbox? Claude Task
-   sub-agents inherit the parent's identity (`mcp/__tests__/tool-manifest-budget.test.ts:205`),
-   which is fine provided they inherit its sandbox too.
+Phase 0 establishes each item below by running a real session, launched with the gateway's own
+argv and its gateway-written `--settings`. Reading documentation does not count. For each item,
+record the setting or flag that achieves it, or record that nothing does.
 
-The exit criterion is the US3 escape script passing in full on a throwaway gateway. If
-item 1 or 2 cannot be made to hold, Q1 falls back to A for v1, and the spec's US3 is moved to
-a follow-up with the findings recorded.
+1. **Deny rules under bypass.** With `--dangerously-skip-permissions`, are `permissions.deny`
+   rules for Read and Edit under `$JINN_HOME` still enforced? If not, scoped sessions drop
+   that flag for a mode that does enforce denies.
+2. **No unsandboxed escape.** Can the Bash tool's `dangerouslyDisableSandbox` be closed
+   (`sandbox.allowUnsandboxedCommands: false`) while permissions are bypassed? (E5)
+3. **Settings precedence.** Do a project-level `.claude/settings.json`, `.mcp.json` or
+   `CLAUDE.md` in the cwd override or extend `--settings`? Do write denies on them hold? Can
+   hooks added at project level run unsandboxed? (E6)
+4. **No browser and no foreign MCP.** Do `--no-chrome` and `--strict-mcp-config` remove the
+   Chrome tools, the claude.ai connectors, and user-level MCP servers and plugins? If the
+   connectors survive, find the switch that removes them. (E9)
+5. **Real work under the sandbox.** Do `git push`, `gh pr create`, `pnpm install`,
+   `pnpm build` and headless Playwright work with only the project directories writable and
+   the minimal environment plus secret references? Which extra read paths do they need, for
+   example `~/.gitconfig`, `~/.ssh`, `~/.config/gh`, the pnpm store, or the Playwright
+   browsers?
+6. **Ancestor files.** From a stage dir outside `$JINN_HOME`, which ancestor `CLAUDE.md` and
+   `AGENTS.md` load? On this host neither `~/CLAUDE.md` nor `~/AGENTS.md` exists.
+7. **The jinn MCP server keeps working.** It is a child of `claude` and runs outside the Bash
+   sandbox. Does it start from the stage dir with the capability passed on its environment,
+   and authenticate through `gateway.json`, while the shell cannot read that file? (E3, E4, E8)
+8. **Sub-agents and hooks.** Are Task sub-agents and gateway hooks inside the same sandbox?
+   Task sub-agents inherit the parent's identity
+   (`mcp/__tests__/tool-manifest-budget.test.ts:205`), so they must inherit its sandbox too.
+9. **Reads made outside the sandbox.** With FR-018 in place, do `publish_attachment` and
+   `attach_to_work_item` refuse paths under `$JINN_HOME`? (E7)
+
+**Exit criterion**: E1 to E9 pass in full on a throwaway gateway with `authRequired: true`.
+
+If item 1, 2, 3 or 4 cannot be made to hold:
+- Q1 falls back to A for v1;
+- US3 moves to a follow-up;
+- the findings are recorded here.
 
 ## Issue questions → where they are answered
 
 | Issue question | Answer |
 | --- | --- |
-| 1. Project vs working directory or repo | Zero or more working directories per project, not a repo (Decided by default) |
+| 1. Project vs working directory or repo | Zero or more working directories per project. A project is not a repo (Decided by default) |
 | 2. Persona per project | No. Scope is an allow-list, and a different role means a different employee (Assumptions) |
-| 3. What belongs to a project in v1 | Todos, plus their comments, attachments, events, runs and relations via the Todo; sessions (binding); spend (derived from bound sessions); Notes (project folder). Out of v1: cron, workflows (removed upstream), managed files (refused), labels and sprints (company-wide) |
-| 4. Company-wide vs project skills and knowledge | FR-026 to FR-028, Q5 |
+| 3. What belongs to a project in v1 | Todos, with their comments, attachments, events, runs and relations; sessions of scoped employees, through the binding; Notes, in the project folder. Out of v1: cron, workflows (removed upstream), managed files (refused), labels and sprints (company-wide). Spend is capped by the existing per-employee budgets |
+| 4. Company-wide vs project skills and knowledge | FR-027 to FR-029, Q5 |
 | 5. Concurrent employees in a project | Worktrees, unchanged (Assumptions) |
-| 6. Secrets | FR-030, FR-031, Q7 |
-| 7. Client layer | No, and nothing reserved for it (Assumptions) |
-| 8. Where config lives and how it backs up | Q3. DB is recommended, carried by the registry backup (`backup/snapshot.ts:38`); employee scope is in org YAML, carried by the home archive (`backup/archive.ts:9`) |
+| 6. Secrets | FR-030 to FR-032, Q7 |
+| 7. Client layer | No, and nothing is reserved for it (Assumptions) |
+| 8. Where config lives and how it is backed up | Q3. The recommended DB is carried by the registry backup (`backup/snapshot.ts:38`). Employee scope lives in org YAML, carried by the home archive (`backup/archive.ts:9`) |
