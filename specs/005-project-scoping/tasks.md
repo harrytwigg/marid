@@ -35,6 +35,8 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
     - a missing `projects/` gives an empty set, with no log line.
   - It records ids it has seen in `project_ids_seen`, and reports an id that comes back under a
     different name.
+  - It keeps the last good definition by file path, and loads files in lexical file-name
+    order.
   - It watches the directory, as `gateway/watcher.ts:130` does, and tolerates the directory
     being absent.
   - It emits `company:changed {entity:"project"}`.
@@ -54,6 +56,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   - `GET /api/projects` and `GET /api/projects/:id`;
   - `POST /api/projects`, which writes a new YAML with a generated `prj_` + 12-hex id;
   - `PATCH /api/projects/:id`, which rewrites that file.
+
+  `POST` also seeds `knowledge/projects/<id>/state.md` in the company `state.md` format
+  (FR-028).
 
   Both writes are atomic (temp file, then rename), and the registry refreshes before the
   route responds.

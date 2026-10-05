@@ -282,11 +282,13 @@ and dark, with screenshots on the PR (FR-040).
   How the scan treats problems:
 
   - **Identity problems.** A missing or malformed `id`, a duplicate or reserved `name`, or YAML
-    that does not parse refuses the file. If that id was already loaded, the scan keeps its
-    last good definition and logs the refusal, so a typo never turns a live project into an
-    unknown one.
+    that does not parse refuses the file. If that **file path** last loaded a project, the scan
+    keeps that project's last good definition and logs the refusal. A broken file has no
+    readable id, so the match is by path. A typo therefore never turns a live project into
+    an unknown one.
   - **Duplicate ids.** The definition already loaded for that id is kept, and the newcomer is
-    refused.
+    refused. On a fresh boot, files are loaded in lexical order of file name, so "first" is
+    deterministic.
   - **Content problems.** A `skills` entry that no longer exists, a `workdirs` entry that fails
     FR-033, or a bad `sharedNotes` path drops only that entry, with a logged warning. The
     project itself stays loaded.
@@ -415,6 +417,11 @@ scoped employee; P is that session's binding)
   An empty list means no skills.
 - **FR-028**: Project Notes live under `knowledge/projects/<project id>/`, and that includes
   the project's state file, `knowledge/projects/<id>/state.md`.
+  - **Seeding the state file.** The Projects page creates the file when it creates a project.
+    For a hand-written project YAML, the file is created on the first note write. The format
+    is the same as the company `state.md`: a title, then sections of keyed bullets
+    (`- key: value`). That way the note tools and a future `mem` that respects
+    `JINN_PROJECT_ID` (F2) agree on it.
   - **Rooting.** For a scoped caller, `search_knowledge`, `read_knowledge` and the note tools
     are rooted there, plus P's `sharedNotes`.
   - **Note tools always on for scoped sessions.** The scoped profile carries the note tools,

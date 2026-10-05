@@ -118,8 +118,11 @@ containment phase are withdrawn (Q1 = A, Q6 = b).
   `GET /api/sessions` (`gateway/api.ts:1743`) into `gateway/sessions-list-api.ts`.
 - **Scoped enforcement** lives at the gate and in `gateway/project-scope/*`. No existing
   handler is edited for scoping.
-- **Manifest.** The core manifest is at 4155 of 4156 on pi. Nothing adds a parameter, and the
-  scoped profile only removes tools.
+- **Manifest.** The core manifest is at 4155 of 4156 on pi. Nothing adds a parameter.
+  - The core and unscoped manifests are unchanged, so SC-004 holds.
+  - The scoped profile is smaller than the core manifest. It removes 9 tools, then adds back
+    the 4 note tools that `notesEnabled: false` gates out of the default manifest
+    (`mcp/server.ts:119`): a net of −9 / +4 tools.
 - **Privacy guard.** Fixtures use invented names and paths.
 
 ## Constitution Check

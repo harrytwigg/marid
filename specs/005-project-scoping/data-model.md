@@ -29,9 +29,10 @@ instructions: project         # project | project+company (FR-029)
   - a duplicate or reserved `name`;
   - YAML that does not parse.
 
-  If that id was already loaded, its last good definition is kept and a log line names the
-  file.
-- **Duplicate `id`**: the definition already loaded is kept, and the newcomer is refused.
+  If that file path last loaded a project, that project's last good definition is kept, and
+  a log line names the file.
+- **Duplicate `id`**: the definition already loaded is kept, and the newcomer is refused. On a
+  fresh boot, files load in lexical order of file name.
 - **Content problems** drop only the bad entry, with a warning, and the project stays loaded:
   - a missing skill;
   - an FR-033 `workdirs` failure;
