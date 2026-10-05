@@ -417,7 +417,7 @@ Built only if Phase 0 passes and the operator confirms B, using the Phase 0 find
 
 | Item | Why | Simpler alternative rejected because |
 | --- | --- | --- |
-| Six tables rather than one with a JSON config | Each list is validated on its own: skills against `skills/`, env names against FR-031 and `secrets/` | A JSON column escapes the boot data check, and invites values where names belong |
+| Five tables in v1 (`project_env` is the sixth, in Phase 4) rather than one with a JSON config | Each list is validated on its own: working directories against FR-033, skills against `skills/`, and in Phase 4 env names against FR-031 and the secrets store | A JSON column escapes the boot data check, and invites values where names belong |
 | A second route table beside the connector's | The scoped principal differs from the connector in almost every row | One table with a principal column is harder to audit |
 | A scoped read module rather than filters inside handlers | Handlers are over budget, and several have unfiltered branches (`ids=`, `pinned`, `q`) | Threading `project` through each branch of each handler is where a missed branch leaks |
 | A stage dir outside the home, with copied skills | Ancestor `CLAUDE.md` loading, and symlinks into a denied tree | A prompt-only skill restriction is not a restriction |

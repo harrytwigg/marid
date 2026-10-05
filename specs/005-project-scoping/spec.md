@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-05
 
-**Status**: Draft. Waiting on the operator's answers to Q1–Q11 (end of this file). Nothing is
+**Status**: Reviewed (senior QA, 4 rounds). Waiting on the operator's answers to Q1–Q11 (end of this file). Nothing is
 implemented until they are answered.
 
 **Input**: Marid issue #90 (upstream proposal hristo2612/jinn#81). The operator wants projects
@@ -512,8 +512,10 @@ scoped employee; **P** is the session's binding)
   hook credential. Phase 0 item 8 verifies that this works.
 - **FR-033**: **Working-directory validation.** This applies under Q1 = A and under B,
   because FR-018 also allow-lists working directories. A project working directory MUST:
-  - be inside a git work tree (`git rev-parse --show-toplevel` succeeds), which rules out a
-    bare work root such as `~/Projects` that would expose every client repo;
+  - be inside a git work tree whose top level (`git rev-parse --show-toplevel`) is neither
+    `$HOME` nor an ancestor of it. This rules out a bare work root such as `~/Projects`,
+    which would expose every client repo, even on a host where the home directory is itself
+    a dotfiles repo;
   - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, the stage root or `~/.claude`;
   - not lie inside `$JINN_HOME`, the stage root, `~/.claude`, `~/.ssh`, `~/.config`, `~/.aws`,
     `~/.gnupg` or `~/Library`.

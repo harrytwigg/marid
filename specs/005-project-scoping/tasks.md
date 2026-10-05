@@ -62,8 +62,9 @@ reviewer for each phase are in plan.md, "Delegation split".
   - shared Notes (relative, under `knowledge/` or `docs/`);
   - working directories also checked against FR-033: inside a git work tree, outside the
     protected and credential trees;
-  - the `dedicated` flag, writable by the operator. The refusal while non-members hold its
-    Todos lands with `mayHoldTodo` in Phase 2.
+  - the `dedicated` column exists from Phase 1. The routes refuse writes to it until
+    Phase 2, because the boot verifier refuses changes to a table's shape, so the column
+    cannot be added later.
 
   Changing a Todo's project (`PUT /api/work-items/:id/project`) is refused while any holder is
   ineligible. That check lands in Phase 2 with `mayHoldTodo`. Until then, Phase 1 has no
@@ -81,7 +82,7 @@ reviewer for each phase are in plan.md, "Delegation split".
 - [ ] T028 [P] The project `PropertyChip` in the create dialog, and a detail rail row
   modelled on `sprint-rail-row.tsx`.
 - [ ] T029 [P] The Projects page: route, nav, talk coverage, and `PageScaffold` sections for
-  details, working directories, skills, shared Notes, the `dedicated` toggle, members
+  details, working directories, skills, shared Notes, members
   (read-only) and archive.
 - [ ] T030 [P] The project switcher: a status bar contribution plus the chat sidebar header.
   It drives the board filter and the sidebar list.
@@ -150,7 +151,8 @@ reviewer for each phase are in plan.md, "Delegation split".
   - an emptied scope fails closed.
   Record the SC-002 one-off `buildContext` and argv comparison in the PR, not as a committed
   fixture.
-- [ ] T049 [P] Web (junior sub-Todo): the employee-editor scope control (all, or a list, with
+- [ ] T049 [P] Web (junior sub-Todo): the Projects-page `dedicated` toggle (enabling its
+  route write, with the stranding refusal from T045), the employee-editor scope control (all, or a list, with
   no empty list), the new-chat project picker for multi-project scoped employees, and session
   badges in `SessionRow`, `mobile-session-row` and session-tree `TreeRow`. Capture light and
   dark screenshots.
