@@ -37,8 +37,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
     different name.
   - It keeps the last good definition by file path, and loads files in lexical file-name
     order.
-  - It watches the directory, as `gateway/watcher.ts:130` does, and tolerates the directory
-    being absent.
+  - It watches the directory, as `gateway/watcher.ts:130` does. Before watching, the watcher
+    creates an empty `projects/`, as it already does for `PLUGINS_DIR` at
+    `gateway/watcher.ts:161`.
   - It emits `company:changed {entity:"project"}`.
   - Add `projects` to `ARCHIVE_INCLUDES`.
 - [ ] T021 Write `work-items/projects-schema.ts`. It defines `work_item_projects` per
