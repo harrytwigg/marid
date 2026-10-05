@@ -37,8 +37,8 @@ instructions: project         # project | project+company (FR-029)
   - a missing skill;
   - an FR-033 `workdirs` failure;
   - a `sharedNotes` entry outside `knowledge/` or `docs/`.
-- **Missing `projects/`**: the project set is empty, nothing is logged, and the watcher
-  tolerates the directory's absence.
+- **Missing `projects/`**: the project set is empty and nothing is logged. The watcher
+  creates the empty directory at start so it has something to watch (FR-035).
 
 The `id` is required. Generating one would mean rewriting a hand-edited file. The Projects
 page creates files with a generated id.

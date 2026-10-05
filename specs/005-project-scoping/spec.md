@@ -466,9 +466,11 @@ Claude account".
   - wire changes are limited to additive, nullable fields;
   - the core MCP manifest is unchanged, checked by the attested hash in
     `tool-manifest-budget.test.ts`;
-  - with no `projects/` directory there are no projects and nothing is logged. The watcher
-    tolerates the directory being missing, and it is created only on the first UI write;
-  - adding `projects` to `ARCHIVE_INCLUDES` is a no-op when the directory is absent.
+  - with no project files there are no projects and nothing is logged. The registry
+    tolerates a missing `projects/` directory. The file watcher creates the empty directory
+    at start, because chokidar cannot reliably watch a directory that does not exist yet, and
+    an empty directory changes no behaviour;
+  - adding `projects` to `ARCHIVE_INCLUDES` adds at most an empty directory to a backup.
 - **FR-036**: The core MCP manifest MUST NOT grow. Scoped callers get their project from the
   binding, and `parentId` sub-tasks inherit their parent's. Only the operator, through REST or
   the UI, files a Todo directly into a chosen project.
