@@ -12,17 +12,17 @@
 | Q4 | a |
 | Q5 | project only |
 | Q6 | a |
-| Q7 | yes |
-| Q8 | a |
+| Q7 | defer to Phase 4 |
+| Q8 | a (base rule plus a per-project `dedicated` flag) |
 | Q9 | off |
 | Q10 | a under A; b if B or C is built |
 | Q11 | only asked if Phase 0 item 10 fails |
 
 Where a different answer changes the plan, the affected phase says how. In particular:
 
-- **Q8-b:** `mayHoldTodo` also admits unscoped employees for P Todos. Its store-level check
-  shrinks to "a scoped employee may hold only its projects' Todos", and the upward-injection
-  residual risk is recorded in the PR.
+- **Q8-b:** every project behaves as `dedicated`. Phase 2 then needs a migration report of
+  project Todos held by non-members, and the flag column is dropped.
+- **Q8-c:** the `dedicated` flag and its checks drop out.
 - **Q9-on:** scoped sessions keep `--chrome` and the user's connectors. T082 drops out, and
   E9 is removed from the escape script.
 - **Q10-b:** FR-013 replies become a stored callback, which needs a new small store and UI
@@ -213,8 +213,11 @@ classifies each one. The enumeration test (SC-001) keeps the table complete from
 any of these holds:
 
 - the employee is `@operator`;
-- the Todo is in a project, and the employee is scoped to it;
-- the Todo is company-level, and the employee is unscoped.
+- the employee is scoped, and the Todo is in one of its projects;
+- the employee is unscoped, or not on the roster, and the Todo is either company-level or in
+  a project that is not `dedicated`.
+
+If the store has no resolver, it refuses only assignment into a `dedicated` project.
 
 **Where it is enforced:** at the store, in every writer of `assignee`:
 
@@ -228,7 +231,8 @@ every caller:
 - `assignWorkItem`, and with it the assign, delegation and talk paths;
 - the PATCH assignee branch;
 - the delegation create-already-assigned path (`gateway/api.ts:3450`);
-- plugin creates (`plugins/host/todos.ts:31`).
+- plugin creates (`plugins/host/todos.ts:31`);
+- cron-created Todos (`cron/runner.ts:101`).
 
 **Paths that start work without writing `assignee`** check it at their own entry:
 
@@ -236,8 +240,13 @@ every caller:
 - Dispatcher routing;
 - the board-walk projection, which skips the pairing rather than proposing it.
 
-**Changing a project** (`PUT /api/work-items/:id/project`) is refused while the root or any
-sub-task is held by someone ineligible under the new project. The refusal names them.
+**Stranding transitions are refused, naming the holders** (FR-015):
+
+- a project change;
+- setting `dedicated`;
+- a scope-narrowing `PATCH`.
+
+A violation that comes from a hand edit to the YAML is reported by the org scan instead.
 
 **First step of the task:** enumerate every `assignee` write in `work-items/store.ts`, and
 every caller of those writers. Do not trust this list.
@@ -300,8 +309,8 @@ This phase carries no auth or secret risk.
 - The list filter `project=<id>|none` in `store.ts`, next to sprint.
 - Payload `project`.
 - `gateway/projects-api.ts`. Writes are added to `control-plane-routes.ts` as operator-only.
-- Config child tables, with the env names checked against FR-031. The API returns names and
-  `resolved` only.
+- Config child tables for working directories (FR-033 validation), skills and shared Notes.
+  `project_env` is not built here; it waits for Phase 4 (Q7).
 - `company:changed {entity:"project"}`.
 
 **Web**
@@ -380,16 +389,17 @@ Senior QA because skill and Notes scoping is part of the boundary.
 
 Built only if Phase 0 passes and the operator confirms B, using the Phase 0 findings.
 
-- An allow-list environment builder, with secret references resolved at spawn. Values are
-  never logged, which a test asserts.
+- `project_env`: the table, the config route with names and `resolved` only, FR-031 name
+  checks, and the Projects-page env section. Then an allow-list environment builder that
+  resolves secret references at spawn. Values are never logged, and a test asserts it.
 - Sandbox and deny rules, `allowUnsandboxedCommands: false`, and stage-dir write denies, all in
   the gateway-written `--settings` file under `tmp/`.
 - `--no-chrome` and `--strict-mcp-config` for scoped sessions, plus the connector and
   user-MCP exclusion mechanism Phase 0 found.
-- The capability passed on the jinn MCP server's environment. `server-bootstrap.ts` derives
-  one only when none is passed.
+- `server-bootstrap.ts` stops deriving a capability when the environment already carries one
+  (FR-024). Today the derived value wins at `mcp/server.ts:291`.
 - Validation refusing scoped employees when `authRequired` is off.
-- Working-directory validation (FR-033), and the hook relay taking its home, URL and credential on argv (FR-025a).
+- The hook relay taking its home, URL and credential on argv (FR-025a). FR-033 already shipped in Phase 1.
 - `scripts/verify-project-containment.sh` (E1–E15), with its output attached to the PR.
 
 ## Delegation split

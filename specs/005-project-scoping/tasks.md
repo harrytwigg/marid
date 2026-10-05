@@ -43,7 +43,7 @@ reviewer for each phase are in plan.md, "Delegation split".
 
 ## Phase 1: projects as a grouping (junior-developer → junior QA)
 
-- [ ] T020 Write `work-items/projects-schema.ts` with the data-model tables. Register them in
+- [ ] T020 Write `work-items/projects-schema.ts` with the data-model tables, except `project_env` (Phase 4). Register them in
   `V2_ADDITIVE_TABLES` and `REQUIRED_TABLE_SQL`, and add the root-only boot data check.
 - [ ] T021 Write `work-items/projects.ts` (CRUD, archive/unarchive, reserved names) and
   `work-items/project-membership.ts` (root-only move, `project_changed` event, batch ref read).
@@ -60,9 +60,10 @@ reviewer for each phase are in plan.md, "Delegation split".
   - working directories (absolute, stored as realpath);
   - skills (each must exist);
   - shared Notes (relative, under `knowledge/` or `docs/`);
-  - env (names checked against the FR-031 reserved set; responses return names and
-    `resolved` only);
-  - working directories also checked against FR-033.
+  - working directories also checked against FR-033: inside a git work tree, outside the
+    protected and credential trees;
+  - the `dedicated` flag, writable by the operator. The refusal while non-members hold its
+    Todos lands with `mayHoldTodo` in Phase 2.
 
   Changing a Todo's project (`PUT /api/work-items/:id/project`) is refused while any holder is
   ineligible. That check lands in Phase 2 with `mayHoldTodo`. Until then, Phase 1 has no
@@ -71,7 +72,8 @@ reviewer for each phase are in plan.md, "Delegation split".
   - filter semantics (`none`, an unknown id, an archived project);
   - root-only membership and sub-task inheritance;
   - archive refusals and the name rules;
-  - FR-031 refusals;
+  - FR-033 refusals for each protected tree, for an ancestor of `$HOME`, and for a non-git
+    work root;
   - a seeded secret value appears in no response body.
 - [ ] T026 [P] Web: `lib/project-api.ts`, `hooks/use-projects.ts`, and query invalidation.
 - [ ] T027 [P] Board: the project filter in the four `lib/todos.ts` places and the `use-board`
@@ -79,7 +81,7 @@ reviewer for each phase are in plan.md, "Delegation split".
 - [ ] T028 [P] The project `PropertyChip` in the create dialog, and a detail rail row
   modelled on `sprint-rail-row.tsx`.
 - [ ] T029 [P] The Projects page: route, nav, talk coverage, and `PageScaffold` sections for
-  details, working directories, skills, shared Notes, env names with resolved state, members
+  details, working directories, skills, shared Notes, the `dedicated` toggle, members
   (read-only) and archive.
 - [ ] T030 [P] The project switcher: a status bar contribution plus the chat sidebar header.
   It drives the board filter and the sidebar list.
@@ -116,14 +118,18 @@ reviewer for each phase are in plan.md, "Delegation split".
   The guard learns each employee's scope through a resolver injected at gateway boot.
 
   Before relying on the list in plan.md, enumerate every `assignee` write in
-  `work-items/store.ts` and every caller of those writers.
+  `work-items/store.ts` and every caller of those writers, including `cron/runner.ts:101`.
+  Implement the fallbacks:
+  - with no resolver, refuse only assignment into a `dedicated` project;
+  - treat an assignee not on the roster as unscoped.
 
   Also check at each entry point that starts work without writing `assignee`:
   - `spawnSession` with a linked Todo;
   - Dispatcher routing;
   - the board-walk projection, which skips the Todo.
 
-  Refuse a project change while any holder is ineligible.
+  Refuse the stranding transitions (a project change, setting `dedicated`, a
+  scope-narrowing PATCH) and name the holders. Report YAML-made violations from the org scan.
 - [ ] T046 Add the FR-018 path checks: `publish_attachment`, path-based
   `attach_to_work_item`, and the JSON `{path}` attachment route. Refuse `list_files` and
   `read_file`.
@@ -168,8 +174,9 @@ reviewer for each phase are in plan.md, "Delegation split".
 
 ## Phase 4: containment (senior-developer → senior QA; Q1 = B)
 
-- [ ] T080 Build the allow-list environment for scoped sessions, with secret references
-  resolved at spawn. Test that no value appears in logs, events or API responses.
+- [ ] T080 Build `project_env` (table, config route, FR-031 checks, the Projects-page env
+  section with resolved state), then the allow-list environment for scoped sessions, with
+  secret references resolved at spawn. Test that no value appears in logs, events or API responses.
 - [ ] T081 Put these in the gateway-written `--settings`, as Phase 0 established:
   - default-deny reads under `$HOME`, plus the allow-list;
   - file-tool denies;
@@ -180,7 +187,7 @@ reviewer for each phase are in plan.md, "Delegation split".
   T065's flags. Give the hook relay its home, URL and
   per-session credential on argv (FR-025a). Make `POST /api/internal/hook` verify that the
   session it names is the caller's.
-- [ ] T083 Pass the capability on the jinn MCP server's environment. `server-bootstrap.ts`
-  derives it only when none is passed.
+- [ ] T083 Make `server-bootstrap.ts` skip derivation when `JINN_SESSION_CAPABILITY` is
+  already set. Today the derived value wins at `mcp/server.ts:291`.
 - [ ] T084 Write `scripts/verify-project-containment.sh` (E1–E15) against a sandbox gateway,
   and attach its output to the PR.

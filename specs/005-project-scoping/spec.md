@@ -257,7 +257,8 @@ skills.
 From the Projects page the operator can:
 
 - create, rename, describe and archive a project;
-- set its working directories, skill allow-list, shared Notes and secret references by name;
+- set its working directories, skill allow-list and shared Notes, plus secret references by
+  name once Phase 4 ships;
 - see its members.
 
 On an employee's edit panel, the operator sets the employee's scope: all projects, or a list
@@ -395,12 +396,23 @@ scoped employee; **P** is the session's binding)
   - Departments MUST NOT be exposed.
   - Applying an existing label to a P Todo is allowed.
   - Label, sprint and department administration MUST be refused.
-- **FR-015**: **Who may hold a P Todo.** The predicate is `mayHoldTodo(employee, project)`
-  (Q8-a):
-  - a P Todo may be held only by employees scoped to P;
-  - a company Todo may be held only by unscoped employees;
+- **FR-015**: **Who may hold a Todo.** The predicate is `mayHoldTodo(employee, todoProject)`.
+  Q8-a gives these rules:
+  - A **scoped** employee may hold only Todos in its own projects.
+  - An **unscoped** employee may hold company Todos, and Todos in any project that is not
+    marked `dedicated`.
+  - A project marked **`dedicated`** may have its Todos held only by its members.
   - `@operator` may hold any Todo. This keeps the blocked-Todo route to the operator
     working (`packages/jinn/src/gateway/todo-assignee.ts:21`).
+
+  So a project with no scoped members, and not marked `dedicated`, is a plain grouping that
+  anyone can work in. That is US1, unchanged.
+
+  **Fallbacks, so that FR-035 holds:**
+  - If the store has no scope resolver (store unit tests, or any writer outside the gateway),
+    every assignment passes except one into a `dedicated` project, which is refused.
+  - An assignee name that is not on the roster, such as a removed employee or an existing
+    fixture name, is treated as unscoped. That is today's behaviour.
 
   **Where it is enforced.** The check sits at the store, in every writer of `assignee`:
   - the insert in `createWorkItem` (`packages/jinn/src/work-items/store.ts:356`);
@@ -414,6 +426,7 @@ scoped employee; **P** is the session's binding)
   - the delegation route's create-already-assigned path
     (`packages/jinn/src/gateway/api.ts:3450`);
   - plugin-host creates (`packages/jinn/src/plugins/host/todos.ts:31`);
+  - cron-created Todos (`packages/jinn/src/cron/runner.ts:101`);
   - the talk adapters.
 
   **Paths that start work without writing an assignee** check it at their own entry:
@@ -421,9 +434,17 @@ scoped employee; **P** is the session's binding)
   - Dispatcher routing;
   - the board-walk projection, which skips an ineligible pairing.
 
-  **Changing a Todo's project** (FR-003) MUST be refused while the root, or any sub-task, is
-  held by someone who could not hold it in the new project. The refusal names the holders, so
-  the operator reassigns first.
+  **Transitions that would strand a holder** MUST each be refused, naming the holders so
+  the operator can reassign first:
+  - changing a Todo's project (FR-003) while the root or any sub-task is held by someone
+    ineligible under the new project;
+  - marking a project `dedicated` while any of its Todos is held by a non-member;
+  - narrowing an employee's scope through `PATCH` while the employee holds a Todo that would
+    fall outside it.
+
+  A scope narrowed by hand-editing the YAML cannot be refused. The org scan reports each
+  resulting violation in the gateway log and on the employee page, and FR-008 refuses new
+  sessions on the affected Todos until they are reassigned.
 - **FR-016**: **Spawning from a scoped caller.** `spawn_session`, `delegate_task` and
   `dispatch_work_item` MUST target only employees scoped to P (Q2-a), and the child MUST be
   bound to P.
@@ -470,9 +491,13 @@ scoped employee; **P** is the session's binding)
 - **FR-023**: Its argv MUST carry `--no-chrome` and `--strict-mcp-config`, so that only the
   gateway's own `--mcp-config` applies. claude.ai connectors and user-level MCP servers and
   plugins MUST NOT attach (Q9). Phase 0 establishes the mechanism.
-- **FR-024**: Its MCP capability MUST be passed to the jinn MCP server by the gateway, rather
-  than derived from the key file. This is defence in depth on top of FR-022, which already
-  makes the key unreadable to the shell.
+- **FR-024**: The jinn MCP server for a scoped session MUST use the capability the gateway
+  already places on its environment (`packages/jinn/src/mcp/identity.ts:207`). It MUST NOT
+  derive one from the key file, which it does today: the derivation in
+  `packages/jinn/src/mcp/server-bootstrap.ts:25` takes precedence over the environment value
+  (`packages/jinn/src/mcp/server.ts:291`). This is defence in depth, on top of FR-022 making
+  the key unreadable to the shell. It does not address the capability being visible through
+  `ps -E`. That is Phase 0 item 10, and Q11.
 - **FR-025**: Contained sessions require `gateway.authRequired: true`. Config validation
   refuses a scoped employee on an instance with auth off, and says why. With auth on, a
   request from the shell gets 401 at `packages/jinn/src/gateway/request-handler.ts:55` on
@@ -485,15 +510,16 @@ scoped employee; **P** is the session's binding)
   (`packages/jinn/assets/hook-relay.mjs:10`). The gateway-written hook command therefore
   carries what the relay needs on argv: the session id, the gateway URL, and a per-session
   hook credential. Phase 0 item 8 verifies that this works.
-- **FR-033** (applies under Q1 = A and B, because FR-018 also allow-lists working directories): **Working-directory validation.** A project working directory MUST NOT be, or
-  be an ancestor of:
-  - `$HOME`;
-  - `$JINN_HOME`;
-  - the stage root;
-  - `~/.claude`.
+- **FR-033**: **Working-directory validation.** This applies under Q1 = A and under B,
+  because FR-018 also allow-lists working directories. A project working directory MUST:
+  - be inside a git work tree (`git rev-parse --show-toplevel` succeeds), which rules out a
+    bare work root such as `~/Projects` that would expose every client repo;
+  - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, the stage root or `~/.claude`;
+  - not lie inside `$JINN_HOME`, the stage root, `~/.claude`, `~/.ssh`, `~/.config`, `~/.aws`,
+    `~/.gnupg` or `~/Library`.
 
-  It MUST NOT lie inside any of them either, except `$HOME`. Writes that break this rule are
-  refused. Without this, one working directory could void the read and write denies.
+  A write that breaks this rule is refused. Without it, one working directory could expose a
+  credential directory through FR-018 attachments, or void the containment denies.
 - **FR-026**: In v1 a scoped employee MUST use the `claude` engine. Validation refuses any
   other engine and says why.
 
@@ -515,7 +541,8 @@ scoped employee; **P** is the session's binding)
   the stage dir as `CLAUDE.md`. Appending the company `CLAUDE.md` as well is a per-project
   choice (Q5), and the default is not to.
 
-**Secrets**
+**Secrets** (Phase 4 only. Under Q1 = A there is no contained environment for them to feed
+(Q7), so these requirements, the `project_env` table, its route and its UI ship with Phase 4.)
 
 - **FR-030**: A project MAY declare environment variables as `{name, secret}`, where `secret`
   is a key name in the secrets store. Values are resolved at spawn from `secrets/` only. Raw
@@ -567,7 +594,7 @@ scoped employee; **P** is the session's binding)
   - working directories (zero or more absolute paths);
   - a skill allow-list;
   - shared company Notes;
-  - secret references;
+  - secret references (Phase 4);
   - an instructions mode.
 
   A project is not a repo or a directory. One project can list several, and several projects
@@ -738,28 +765,39 @@ The options:
 
 ### Q7: Should project secret references be in v1?
 
-- **Yes (recommended).** Under Q1 = B the contained environment drops everything the gateway
-  inherited. Any credential the project's work needs, for example `GH_TOKEN` for a push, has to
-  come from a named reference. Resolving names from `secrets/` at spawn is cheap.
-- **No.** Defer it. Contained sessions then need the sandbox to leave credential files
-  readable. In practice that means `~/.config/gh`, which holds **the operator's own
-  full-scope GitHub token**. That would hand every scoped employee the operator's GitHub
-  identity. Under Q1 = A secret references matter less, because there is no sandbox, and they
-  can be deferred.
+- **Defer to Phase 4 (recommended under Q1 = A).** Under A there is no contained environment.
+  A scoped session inherits the gateway's environment like every other session, so a secret
+  reference would feed nothing (Principle V). They ship with Phase 4, if B is built.
+- **Required, if B is built.** The contained environment drops everything the gateway
+  inherited, so any credential the project's work needs (for example `GH_TOKEN` for a push)
+  must come from a named reference. The alternative, leaving `~/.config/gh` readable inside
+  the sandbox, hands every scoped employee **the operator's own full-scope GitHub token**.
 
 ### Q8: Who may hold a project's Todos?
 
-A scoped employee's Todo bodies and comments become prompt input to whoever works the Todo.
+Bodies and comments written by a scoped employee become prompt input for whoever works the
+Todo.
 
-- **a. Only that project's employees (plus `@operator`); company Todos only unscoped ones
-  (recommended).** No uncontained agent is ever *assigned* work authored inside P.
-  - Residual risk you accept: the COO, and any unscoped employee you ask to oversee, still
-    *reads* P's bodies and comments, and receives FR-013 replies. That is a narrower exposure
-    than holding the Todo, but not zero.
-  - The narrowest setting is Q8-a with Q10-b.
-- **b. Unscoped employees may hold P Todos too.** This is more flexible, for example the COO
-  doing a P Todo. It accepts that P's content steers an uncontained agent, so it is prompt
-  injection upward, which defeats Q1-B for whatever that agent can reach.
+- **a. Base rule plus a per-project `dedicated` flag (recommended).**
+  - The base rule:
+    - a scoped employee holds only its projects' Todos;
+    - unscoped employees hold anything outside a `dedicated` project;
+    - `@operator` holds anything.
+  - Marking a project `dedicated` (for example "Marid fork") restricts its Todos to its
+    members.
+  - What it costs a grouping-only project: nothing. Without scoped members or the flag, a
+    project is a plain grouping anyone can work in.
+  - What it costs a dedicated project: its work needs its own employees, and the flag
+    cannot be set while a non-member holds one of its Todos (FR-015).
+  - Residual risk in a project that is **not** dedicated but does have scoped members: an
+    unscoped holder works from text those members wrote.
+  - Residual risk in a dedicated project: the COO, and any unscoped overseer, still *read* its
+    bodies and comments, and receive FR-013 replies.
+  - The narrowest setting is `dedicated` with Q10-b.
+- **b. Every project is dedicated.** Simpler, but a project is unusable until it has scoped
+  employees. Todos grouped by unscoped employees before Phase 2 would then need reassigning.
+- **c. No holder restriction on unscoped employees.** Even a project's own scoped employees
+  then hand their content to uncontained agents.
 
 ### Q9: Can scoped sessions use Chrome and the claude.ai connectors?
 

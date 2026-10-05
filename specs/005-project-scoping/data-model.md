@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS projects (
   name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (length(trim(name)) > 0),
   description TEXT NOT NULL DEFAULT '',
   instructions_mode TEXT NOT NULL DEFAULT 'project' CHECK (instructions_mode IN ('project', 'project+company')),
+  dedicated INTEGER NOT NULL DEFAULT 0 CHECK (dedicated IN (0, 1)),  -- Q8-a: only members may hold its Todos
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   archived_at TEXT
@@ -31,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_work_item_projects_project ON work_item_projects(
 -- Project configuration. One row per entry. The order of rows is irrelevant.
 CREATE TABLE IF NOT EXISTS project_workdirs (
   project_id TEXT NOT NULL REFERENCES projects(id),
-  path TEXT NOT NULL,                          -- absolute, realpath-normalised at write time; FR-033 refuses $HOME, $JINN_HOME, the stage root, ~/.claude, their ancestors, and paths inside the last three
+  path TEXT NOT NULL,                          -- absolute, realpath-normalised at write time; FR-033: inside a git work tree; not $HOME, $JINN_HOME, the stage root, ~/.claude or an ancestor of them; not inside $JINN_HOME, the stage root, ~/.claude, ~/.ssh, ~/.config, ~/.aws, ~/.gnupg or ~/Library
   PRIMARY KEY (project_id, path)
 );
 CREATE TABLE IF NOT EXISTS project_skills (
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS project_shared_notes (
   path TEXT NOT NULL,                          -- relative to the home: knowledge/... or docs/...; a directory shares its subtree
   PRIMARY KEY (project_id, path)
 );
+-- Phase 4 only (Q7): not created by Phase 1.
 CREATE TABLE IF NOT EXISTS project_env (
   project_id TEXT NOT NULL REFERENCES projects(id),
   env_name TEXT NOT NULL CHECK (env_name GLOB '[A-Z_]*' AND env_name NOT GLOB '*[^A-Z0-9_]*'),
@@ -150,10 +152,11 @@ type ProjectRef = { id: string; name: string; archived: boolean };
 type ProjectWire = ProjectRef & {
   description: string;
   instructionsMode: "project" | "project+company";
+  dedicated: boolean;
   workdirs: string[];
   skills: string[];
   sharedNotes: string[];
-  env: Array<{ name: string; secret: string; resolved: boolean }>; // names only, never values
+  env?: Array<{ name: string; secret: string; resolved: boolean }>; // Phase 4 only; names only, never values
   members: string[];      // employees whose scope includes this project
   todoCount: number;
   spendUsd: number;
