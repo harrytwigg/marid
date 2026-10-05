@@ -16,8 +16,8 @@ import type { Employee } from "@/lib/api"
 import { activeFilterCount, type TodoFilters } from "@/lib/todos"
 import { DATE_OPTIONS, DUE_OPTIONS, SOURCE_OPTIONS, STATUS_OPTIONS } from "./filter-options"
 import { useLabelRegistry } from "./use-todos"
-import { sprintFilterLabel, useSprints } from "./sprints/use-sprints"
-import { SprintFilterItems } from "./sprints/sprint-filter-items"
+import { SprintFilterChip } from "./sprints/sprint-filter-chip"
+import { ProjectFilterChip } from "./projects/project-filter-chip"
 import { SearchLauncher } from "./search-launcher"
 import { TodoFilterSheet } from "./todo-filter-sheet"
 import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
@@ -71,7 +71,6 @@ export function FilterBar({
 }) {
   const mobile = useIsTodoMobile()
   const labelRegistry = useLabelRegistry(!!board)
-  const sprints = useSprints(!!board)
   const [mobileOpen, setMobileOpen] = useState(false)
   const filterTriggerRef = useRef<HTMLButtonElement>(null)
   const wasMobileRef = useRef(mobile)
@@ -134,8 +133,6 @@ export function FilterBar({
     ? (labelRegistry.data ?? []).find((l) => l.name === filters.label || l.id === filters.label) ?? { name: filters.label, color: null }
     : null
 
-  const sprintLabel = sprintFilterLabel(filters.sprint, sprints.data)
-
   if (board && !mobile) {
     return (
       <div className="flex flex-wrap items-center gap-2" data-testid="todos-filters">
@@ -184,15 +181,8 @@ export function FilterBar({
           )}
         </ValueChip>
 
-        <ValueChip label="Sprint" set={!!filters.sprint} display={sprintLabel} testId="filter-chip-sprint">
-          <SprintFilterItems
-            value={filters.sprint}
-            sprints={sprints.data}
-            onChoose={(sprint) => onChange({ ...filters, sprint })}
-            onManage={onManageSprints}
-            itemClassName={ITEM_CLASS}
-          />
-        </ValueChip>
+        <SprintFilterChip filters={filters} onChange={onChange} onManage={onManageSprints} itemClassName={ITEM_CLASS} />
+        <ProjectFilterChip filters={filters} onChange={onChange} itemClassName={ITEM_CLASS} />
 
         <ValueChip label="Due" set={!!filters.due} display={dueLabel} testId="filter-chip-due">
           {DUE_OPTIONS.map((option) => (

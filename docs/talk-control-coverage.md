@@ -18,6 +18,7 @@
 | limits | `/limits` | semantic | engine limit windows and freshness; controls: refresh |
 | auto-dispatch | `/auto-dispatch` | semantic | board walk status and tick log, sessions started per engine, and usage projection; controls: refresh |
 | org | `/org` | semantic | employee, reporting line, and activity; controls: open, delegate |
+| projects | `/projects` | semantic | projects with their Todo counts, spend, directories, skills, and Notes; controls: none |
 | settings-plugins | `/settings/plugins` | semantic | plugin inventory and state; controls: enable, disable, rescan |
 | settings | `/settings` | semantic | active settings and safe configuration summary; controls: update |
 | skills-list | `/skills` | semantic | installed skill summaries; controls: open |

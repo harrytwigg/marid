@@ -10,6 +10,7 @@ import { LabelChip, RemoveButton } from "./label-chip"
 import { RailKicker, RailRow, RailPriorityBars, formatDueLong } from "./rail-rows"
 import { AutoStartRow } from "./auto-start-row"
 import { SprintRailRow } from "../sprints/sprint-rail-row"
+import { ProjectRailRow } from "../projects/project-rail-row"
 import { displayNameOf, formatRelativeTime } from "../util"
 
 /* Todos v2 slice 6 — the chrome-free properties rail (design-doc §7.2/§7.3,
@@ -199,6 +200,7 @@ export function PropsRail({
         {deptPick?.picker}
       </div>
       <SprintRailRow detail={detail} editable={!!rowFor} />
+      <ProjectRailRow detail={detail} editable={!!rowFor} />
       <div className="relative">
         <RailRow quiet testId="rail-due" label="Due date" onOpen={duePick?.onOpen} open={duePick?.open}>
           <Calendar size={14} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-quaternary)]" />

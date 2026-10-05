@@ -730,7 +730,7 @@ export default function TodoBoardPage() {
           onClose={() => setCreating(null)}
           onCreated={() => setCreating(null)}
           defaults={{
-            department: creating.department,
+            department: creating.department, project: filters.project,
             employees: org.data?.employees ?? [],
             departments: departments.data ?? [],
           }}

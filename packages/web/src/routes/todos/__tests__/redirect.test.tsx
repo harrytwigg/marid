@@ -29,8 +29,8 @@ describe("Todos nav + redirect", () => {
     expect(NAV_ITEMS.slice(0, 4).map((item) => item.href)).toEqual([
       "/",
       "/todos",
+      "/projects",
       "/org",
-      "/cron",
     ])
   })
 

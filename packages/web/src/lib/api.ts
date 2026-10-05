@@ -537,7 +537,7 @@ export interface LinkedSessionWire {
 }
 
 /** Todo list params that pass straight through as a same-named query param. */
-const TODO_LIST_PARAMS = ["status", "assignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "offset"] as const
+const TODO_LIST_PARAMS = ["status", "assignee", "department", "source", "needsAttentionFor", "since", "until", "q", "createdBy", "label", "sprint", "project", "offset"] as const
 
 export const api = {
   listWorkspaces: () => get<WorkspaceInfo[]>('/api/instances'),
@@ -682,8 +682,8 @@ export const api = {
     createdBy?: string
     rootsOnly?: boolean
     label?: string
-    /** A sprint id or name, `active`, or `none`. */
-    sprint?: string
+    sprint?: string // a sprint id or name, `active`, or `none`
+    project?: string // a project id, or `none`
     kept?: boolean
   }, signal?: AbortSignal) => {
     const q = new URLSearchParams()
@@ -759,7 +759,7 @@ export const api = {
     department?: string
     priority?: number
     dueAt?: string
-    labels?: string[]
+    labels?: string[]; project?: string // a project id (top-level Todos only)
   }, origin?: WriteOriginWire) =>
     post<{ workItem: WorkItemFullWire }>("/api/work-items", input, origin),
   /** Todos v2 slice 6: roster-validated assignment; status is unchanged. `@operator` assigns to the operator. */

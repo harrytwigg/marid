@@ -29,6 +29,7 @@ const SURFACE_LABEL: Record<PageKind, string> = {
   todos: "Todos board",
   todo: "Todo",
   org: "Org",
+  projects: "Projects",
   cron: "Cron",
   notes: "Notes",
   logs: "Activity",

@@ -3,6 +3,7 @@ import { Moon, Palette, Sun } from "lucide-react"
 import { useTheme } from "@/routes/providers"
 import { THEMES, type ThemeId } from "@/lib/themes"
 import { WorkspaceSwitcher } from "@/components/workspaces/workspace-menu"
+import { ProjectSwitcher } from "@/components/projects/project-switcher"
 import { contributions } from "@/contrib/registry"
 import { Slot } from "@/contrib/slot"
 import { AREAS } from "@/contrib/types"
@@ -54,6 +55,12 @@ contributions.registerMany([
     area: AREAS.statusbarRight,
     order: 0,
     render: () => <WorkspaceSwitcher className={cn(CONTROL_CLASS, "[&_[data-rail-label]]:hidden")} />,
+  },
+  {
+    id: "project",
+    area: AREAS.statusbarRight,
+    order: 5,
+    render: () => <ProjectSwitcher />,
   },
   {
     id: "theme",

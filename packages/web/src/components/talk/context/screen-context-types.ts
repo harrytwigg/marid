@@ -4,6 +4,7 @@ export type PageKind =
   | "todos"
   | "todo"
   | "org"
+  | "projects"
   | "cron"
   | "notes"
   | "logs"

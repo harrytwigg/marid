@@ -74,6 +74,8 @@ import { chatSessionDragProps } from "@/routes/chat/chat-session-dnd"
 import { TreeCollapsedCount, TreeLead, TreeMarker, treeRowPadding, type HiddenTreeSignal, type TreeRowMeta } from "@/components/chat/session-tree-row"
 import type { ChatSidebarProps } from "@/components/chat/chat-sidebar-types"
 import { PRODUCT_NAME } from "@/lib/brand"
+import { isVisibleSource, useSidebarSessions } from "@/components/chat/sidebar-sessions"
+import { SidebarProjectBar } from "@/components/projects/sidebar-project-bar"
 
 export type { SidebarOrder } from "@/components/chat/chat-sidebar-types"
 
@@ -214,10 +216,7 @@ export function isDirectSession(
   return !!portalSlug && session.employee.toLowerCase() === portalSlug
 }
 
-// Sources the sidebar renders (others, e.g. slack/telegram, are shown elsewhere).
-export function isVisibleSource(s: Pick<Session, "source">): boolean {
-  return s.source === "web" || s.source === "terminal" || s.source === "talk" || s.source === "cron" || s.source === "workflow" || s.source === "plugin" || s.source === "whatsapp" || s.source === "discord" || !s.source
-}
+export { isVisibleSource }
 
 export { pickDeleteFallbackId, pickNeighborSessionId } from "@/components/chat/session-delete-fallback"
 
@@ -891,23 +890,7 @@ export function ChatSidebar({
   const { data: terminalHosts } = useTerminalHosts()
   const { mutate: mutatePin } = useTogglePin()
 
-  const sessions = useMemo(() => {
-    if (!rawSessions) return []
-    const filtered = (rawSessions as Session[]).filter(isVisibleSource)
-    const loadedIds = new Set(filtered.map((session) => session.id))
-    for (const session of pinnedSessionRows as Session[]) {
-      if (isVisibleSource(session) && !loadedIds.has(session.id)) {
-        filtered.push(session)
-        loadedIds.add(session.id)
-      }
-    }
-    filtered.sort((a, b) => {
-      const ta = a.lastActivity || a.createdAt || ""
-      const tb = b.lastActivity || b.createdAt || ""
-      return tb.localeCompare(ta)
-    })
-    return filtered
-  }, [rawSessions, pinnedSessionRows])
+  const sessions = useSidebarSessions(rawSessions, pinnedSessionRows)
 
   const [search, setSearch] = useState("")
   // Search spans ALL sessions server-side (the loaded page is only a subset).
@@ -2020,6 +2003,8 @@ export function ChatSidebar({
           </div>
         </div>
       </div>
+
+      <SidebarProjectBar />
 
       {/* Home widgets — the app's home surface is this rail, on both the desktop
           list and the phone's home screen. Below the control band and above the

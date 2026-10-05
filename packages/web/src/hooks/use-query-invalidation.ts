@@ -9,7 +9,7 @@ import { mergeTodoIntoCaches } from '@/routes/todos/todo-edit-request'
 import type { BackgroundActivity, SessionsResponse } from '@/lib/api'
 import { GATEWAY_EVENTS, type GatewayEvent } from '@jinn/gateway-events'
 
-/** The company mutation event: a Todo, or a sprint the Todos embed. */
+/** The company mutation event: a Todo, or a sprint or project the Todos embed. */
 function handleCompanyChanged(
   qc: ReturnType<typeof useQueryClient>,
   p: Record<string, unknown>,
@@ -29,7 +29,7 @@ function handleCompanyChanged(
     pending.add('todos')
     if (id) pending.add(`todo:${id}`)
   }
-  if (entity === 'sprint') {
+  if (entity === 'sprint' || entity === 'project') {
     // Every Todo row and detail embeds its sprint's name and status, and a move
     // changes a whole tree's rows: refetch the lists and every open detail.
     pending.add('todos')

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Building2,
   CalendarDays,
-  ChevronDown,
   Flag,
   GitBranch,
   Tags,
@@ -25,6 +24,8 @@ import {
 } from "./pickers/picker-contents"
 import { PickerPopover, PickerSheet } from "./pickers/picker-shell"
 import { creatableDepartment, offeredDepartments } from "./pickers/department-filters"
+import { PropertyChip } from "./pickers/property-chip"
+import { NewTodoProjectChip, seededProject } from "./projects/new-todo-project-chip"
 
 type CreatePicker = "assignee" | "department" | "priority" | "due" | "labels"
 
@@ -44,43 +45,6 @@ function useIsCreateMobile(): boolean {
   return mobile
 }
 
-function PropertyChip({
-  icon,
-  label,
-  testId,
-  active,
-  onClick,
-  children,
-}: {
-  icon: React.ReactNode
-  label: string
-  testId: string
-  active?: boolean
-  onClick: () => void
-  children?: React.ReactNode
-}) {
-  return (
-    <span className="relative">
-      <button
-        type="button"
-        data-testid={testId}
-        aria-expanded={active || undefined}
-        onClick={onClick}
-        className={`focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors ${
-          active
-            ? "bg-[var(--accent-fill)] text-[var(--accent)]"
-            : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
-        }`}
-      >
-        {icon}
-        <span>{label}</span>
-        <ChevronDown size={11} aria-hidden className="opacity-60" />
-      </button>
-      {children}
-    </span>
-  )
-}
-
 export function NewTodoDialog({
   onClose,
   onCreated,
@@ -92,6 +56,8 @@ export function NewTodoDialog({
     /** Seeds the title, so a create started from the palette keeps its words. */
     title?: string
     department?: string
+    /** The board's project filter, so a Todo created under it starts in that project. */
+    project?: string
     askAssignee?: boolean
     employees?: Employee[]
     departments?: DepartmentSummaryWire[]
@@ -104,6 +70,7 @@ export function NewTodoDialog({
   const [parentId, setParentId] = useState("")
   const seededDepartment = creatableDepartment(defaults?.departments ?? [], defaults?.department)
   const [department, setDepartment] = useState<string | null>(seededDepartment)
+  const [project, setProject] = useState<string | null>(seededProject(defaults?.project))
   const [assignee, setAssignee] = useState<string | null>(null)
   const [priority, setPriority] = useState(0)
   const [dueAt, setDueAt] = useState<string | null>(null)
@@ -131,7 +98,7 @@ export function NewTodoDialog({
   }), [title, department, assignee, priority, dueAt, selectedLabels])
   const dirty = Boolean(
     title.trim() || body.trim() || parentId.trim() || assignee
-    || priority || dueAt || labelIds.length || department !== seededDepartment,
+    || priority || dueAt || labelIds.length || department !== seededDepartment || project !== seededProject(defaults?.project),
   )
 
   const reset = useCallback(() => {
@@ -139,6 +106,7 @@ export function NewTodoDialog({
     setBody("")
     setParentId("")
     setDepartment(seededDepartment)
+    setProject(seededProject(defaults?.project))
     setAssignee(null)
     setPriority(0)
     setDueAt(null)
@@ -146,7 +114,7 @@ export function NewTodoDialog({
     setPicker(null)
     setShowParent(false)
     setError(null)
-  }, [seededDepartment])
+  }, [seededDepartment, defaults?.project])
 
   const create = useCallback(async (keepOpen: boolean) => {
     const nextTitle = title.trim()
@@ -164,6 +132,7 @@ export function NewTodoDialog({
         ...(body.trim() ? { body: body.trim() } : {}),
         ...(parentId.trim() ? { parentId: parentId.trim() } : {}),
         ...(department ? { department } : {}),
+        ...(project && !parentId.trim() ? { project } : {}),
         ...(priority ? { priority } : {}),
         ...(dueAt ? { dueAt } : {}),
         ...(labelIds.length ? { labels: labelIds } : {}),
@@ -180,7 +149,7 @@ export function NewTodoDialog({
       setBusy(false)
       setError(operatorSafeTodoError(caught, "Failed to create"))
     }
-  }, [assignee, body, busy, department, dueAt, labelIds, parentId, priority, reset, title, defaults?.askAssignee])
+  }, [assignee, body, busy, department, dueAt, labelIds, parentId, priority, project, reset, title, defaults?.askAssignee])
 
   const closePicker = () => setPicker(null)
   const togglePicker = (next: CreatePicker) => setPicker((current) => current === next ? null : next)
@@ -285,6 +254,7 @@ export function NewTodoDialog({
           >
             {desktopPicker("department", Math.max(0, offeredDepartments(defaults?.departments ?? [], department).findIndex((item) => item.slug === department)))}
           </PropertyChip>
+          {!parentId.trim() && <NewTodoProjectChip value={project} onChange={setProject} mobile={mobile} />}
           <PropertyChip
             icon={<Flag size={13} aria-hidden />}
             label={priority ? priorityLabel(priority) : "Priority"}

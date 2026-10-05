@@ -7,9 +7,11 @@ import { TodoDialog } from "./todo-dialog"
 import { DATE_OPTIONS, DUE_OPTIONS, SOURCE_OPTIONS, STATUS_OPTIONS } from "./filter-options"
 import { useLabelRegistry } from "./use-todos"
 import { sprintChoices, sprintFilterLabel, useSprints } from "./sprints/use-sprints"
+import { projectFilterLabel, useProjects } from "@/hooks/use-projects"
+import { splitProjectChoices } from "./projects/project-choices"
 import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
 
-type FilterPanel = "root" | "status" | "person" | "department" | "source" | "date" | "label" | "sprint" | "due"
+type FilterPanel = "root" | "status" | "person" | "department" | "source" | "date" | "label" | "sprint" | "project" | "due"
 
 const ROW_CLASS =
   "flex min-h-11 w-full min-w-0 items-center gap-3 rounded-[12px] px-3 text-left text-[length:var(--text-subheadline)] text-[var(--text-primary)] transition-[background-color,transform] active:scale-[0.96] hover:bg-[var(--fill-tertiary)]"
@@ -52,6 +54,8 @@ export function TodoFilterSheet({
   const leave = useCallback(() => setLeaving(true), [])
   const labelRegistry = useLabelRegistry(!!showLabelDue)
   const sprints = useSprints(!!showLabelDue)
+  const projects = useProjects(!!showLabelDue)
+  const projectChoices = splitProjectChoices(projects.data)
   const title = panel === "root" ? "Filter" : panel.charAt(0).toUpperCase() + panel.slice(1)
   const choose = (next: TodoFilters) => {
     onChange(next)
@@ -90,6 +94,7 @@ export function TodoFilterSheet({
               ["person", "Person", assigneeFilterLabel(filters.assignee, byName) ?? "Anyone"],
               ["label", "Label", filters.label ?? "Any"],
               ["sprint", "Sprint", sprintFilterLabel(filters.sprint, sprints.data) ?? "Any"],
+              ["project", "Project", (projects.data || filters.project === "none" ? projectFilterLabel(filters.project, projects.data) : undefined) ?? "Any"],
               ["due", "Due", DUE_OPTIONS.find((option) => option.value === filters.due)?.label ?? "Any"],
               ["department", "Department", filters.department ? filters.department.charAt(0).toUpperCase() + filters.department.slice(1) : "Any"],
               ["source", "Source", SOURCE_OPTIONS.find((option) => option.value === filters.source)?.label ?? "Any"],
@@ -97,7 +102,7 @@ export function TodoFilterSheet({
             ] as const).filter(([value]) =>
               !(hideStatus && value === "status")
               && !(hideDepartment && value === "department")
-              && !(!showLabelDue && (value === "label" || value === "sprint" || value === "due")),
+              && !(!showLabelDue && (value === "label" || value === "sprint" || value === "project" || value === "due")),
             ).map(([value, label, current]) => (
               <button key={value} type="button" aria-label={label} onClick={() => setPanel(value)} className={ROW_CLASS}>
                 <span>{label}</span>
@@ -203,6 +208,24 @@ export function TodoFilterSheet({
                 Manage sprints…
               </button>
             )}
+          </>
+        )}
+        {panel === "project" && (
+          <>
+            <button type="button" onClick={() => choose({ ...filters, project: undefined })} className={ROW_CLASS}>
+              Any project<Selection selected={!filters.project} />
+            </button>
+            <button type="button" onClick={() => choose({ ...filters, project: "none" })} className={ROW_CLASS}>
+              No project<Selection selected={filters.project === "none"} />
+            </button>
+            {/* Live projects by name, then the archived ones dimmed, as the desktop chip lists them. */}
+            {[...projectChoices.live, ...projectChoices.archived].map((project) => (
+              <button key={project.id} type="button" onClick={() => choose({ ...filters, project: project.id })} className={ROW_CLASS}>
+                <span className={`min-w-0 truncate ${project.archived ? "text-[var(--text-quaternary)]" : ""}`}>{project.name}</span>
+                {project.archived && <span className="flex-none text-[12px] text-[var(--text-quaternary)]">archived</span>}
+                <Selection selected={filters.project === project.id} />
+              </button>
+            ))}
           </>
         )}
         {panel === "due" && DUE_OPTIONS.map((option) => (

@@ -12,6 +12,7 @@ import type {
 import { ApiError } from "./api"
 import { isParked } from "./parked"
 export { isPositiveTodoVersion } from "./api"
+export * from "./todo-history"
 
 /** Human label for a raw status (sheet, people queue, sub-lines). */
 export const STATUS_LABEL: Record<WorkItemStatusWire, string> = {
@@ -105,7 +106,6 @@ export function rankBetween(before: number | null | undefined, after: number | n
   return 0
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
 
 // ── Needs-you inbox ─────────────────────────────────────────────────────────
 // The gateway owns attention routing (?needsAttentionFor=me); this keeps the rows that still visibly need it, since an older
@@ -181,6 +181,8 @@ export interface TodoFilters {
   label?: string
   /** Sprint id, `active` (the running sprint) or `none` (in no sprint). */
   sprint?: string
+  /** Project id, or `none` (company-level). */
+  project?: string
   due?: DueFilter
   q?: string
 }
@@ -202,6 +204,7 @@ export function activeFilterCount(f: TodoFilters): number {
   if (f.date) n++
   if (f.label) n++
   if (f.sprint) n++
+  if (f.project) n++
   if (f.due) n++
   return n
 }
@@ -226,7 +229,7 @@ export function dateBounds(date: DateFilter | undefined, now: number): { since?:
 
 // NOTE: there is deliberately NO client-side re-filter of server results for
 // dimensions the gateway owns. The gateway owns `q` (escaped-LIKE over
-// title+body), `since`/`until`, `label` and `sprint` — a title-only client pass would
+// title+body), `since`/`until`, `label`, `sprint` and `project` — a title-only client pass would
 // silently discard body-only matches (shipped bug, QA 2026-07-10). The ONE
 // sanctioned client-side dimension is the due WINDOW below: the wire has no
 // due param and must not grow one (stage-A review F1 disposition), so it
@@ -260,6 +263,7 @@ export function filtersToSearchParams(f: TodoFilters): URLSearchParams {
   if (f.date) p.set("date", f.date)
   if (f.label) p.set("label", f.label)
   if (f.sprint) p.set("sprint", f.sprint)
+  if (f.project) p.set("project", f.project)
   if (f.due) p.set("due", f.due)
   const safeQuery = publicWorkItemReference(f.q)
   if (safeQuery) p.set("q", safeQuery)
@@ -289,6 +293,8 @@ export function filtersFromSearchParams(p: URLSearchParams): TodoFilters {
   if (label) f.label = label
   const sprint = p.get("sprint")?.trim()
   if (sprint) f.sprint = sprint
+  const project = p.get("project")?.trim()
+  if (project) f.project = project
   const due = p.get("due")
   if (due && DUE_VALUES.has(due)) f.due = due as DueFilter
   const q = publicWorkItemReference(p.get("q"))
@@ -309,7 +315,7 @@ export const BOARD_FILTERS_STORAGE_KEY = "jinn-board-filters"
 /** The dimensions the board filters on — the params a filtered URL carries.
  *  Key-based on purpose: `?status=open` is an explicit request for the default
  *  and must not read as an empty, unfiltered URL. */
-const FILTER_PARAM_KEYS = ["status", "assignee", "department", "source", "date", "label", "sprint", "due", "q"] as const
+const FILTER_PARAM_KEYS = ["status", "assignee", "department", "source", "date", "label", "sprint", "project", "due", "q"] as const
 
 export function hasFilterParams(p: URLSearchParams): boolean {
   return FILTER_PARAM_KEYS.some((key) => p.has(key))
@@ -353,45 +359,6 @@ export function writePersistedFilters(f: TodoFilters, storage: StorageLike | und
   } catch {
     /* persistence is a convenience, never a hard dependency */
   }
-}
-
-// ── History grouping (closed-status filters regroup by date, §3) ────────────
-export type DateBucket = "today" | "yesterday" | "week" | "earlier"
-export const DATE_BUCKETS: readonly DateBucket[] = ["today", "yesterday", "week", "earlier"]
-export const DATE_BUCKET_LABEL: Record<DateBucket, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  week: "This week",
-  earlier: "Earlier",
-}
-
-export function dateBucketOf(iso: string, now: number): DateBucket {
-  const t = Date.parse(iso)
-  if (Number.isNaN(t)) return "earlier"
-  const startOfToday = new Date(now)
-  startOfToday.setHours(0, 0, 0, 0)
-  if (t >= startOfToday.getTime()) return "today"
-  if (t >= startOfToday.getTime() - DAY_MS) return "yesterday"
-  if (t >= startOfToday.getTime() - 6 * DAY_MS) return "week"
-  return "earlier"
-}
-
-export interface HistoryGroup {
-  bucket: DateBucket
-  label: string
-  items: WorkItemCompactWire[]
-}
-
-/** Newest-first date grouping for history views. Empty buckets don't render. */
-export function groupHistory(items: WorkItemCompactWire[], now: number): HistoryGroup[] {
-  const buckets = new Map<DateBucket, WorkItemCompactWire[]>()
-  for (const b of DATE_BUCKETS) buckets.set(b, [])
-  for (const it of items) buckets.get(dateBucketOf(it.updatedAt, now))!.push(it)
-  return DATE_BUCKETS.map((b) => {
-    const list = buckets.get(b)!.slice()
-    list.sort((a, x) => (Date.parse(x.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0))
-    return { bucket: b, label: DATE_BUCKET_LABEL[b], items: list }
-  }).filter((g) => g.items.length > 0)
 }
 
 /** Human label for a comment author. Employee identities resolve through the

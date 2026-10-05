@@ -43,6 +43,7 @@ export const TALK_SURFACE_COVERAGE: Record<AppRouteId, TalkSurfaceCoverage> = {
   limits: supported("engine limit windows and freshness", ["read"], ["refresh"], "focus engine limits"),
   "auto-dispatch": supported("board walk status and tick log, sessions started per engine, and usage projection", ["read", "inspect"], ["refresh"], "focus a tick or session"),
   org: supported("employee, reporting line, and activity", ["list", "inspect"], ["open", "delegate"], "focus employee or resulting chat"),
+  projects: supported("projects with their Todo counts, spend, directories, skills, and Notes", ["list", "inspect"], [], "no company mutation"),
   settings: supported("active settings and safe configuration summary", ["read"], ["update"], "focus setting"),
   "settings-plugins": supported("plugin inventory and state", ["list", "inspect"], ["enable", "disable", "rescan"], "focus plugin state"),
   "skills-list": supported("installed skill summaries", ["list", "search"], ["open"], "open skill"),

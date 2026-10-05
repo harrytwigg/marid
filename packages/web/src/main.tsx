@@ -33,6 +33,7 @@ const LogsPage = lazyRoute(() => import('./routes/logs/page'), 'logs')
 const LimitsPage = lazyRoute(() => import('./routes/limits/page'), 'limits')
 const AutoDispatchPage = lazyRoute(() => import('./routes/auto-dispatch/page'), 'auto-dispatch')
 const OrgPage = lazyRoute(() => import('./routes/org/page'), 'org')
+const ProjectsPage = lazyRoute(() => import('./routes/projects/page'), 'projects')
 const SettingsPage = lazyRoute(() => import('./routes/settings/page'), 'settings')
 const PluginsSettingsPage = lazyRoute(() => import('./routes/settings/plugins/page'), 'settings-plugins')
 const SkillsPage = lazyRoute(() => import('./routes/skills/page'), 'skills')
@@ -50,6 +51,7 @@ registerRoutePrefetch('/logs', LogsPage.prefetch)
 registerRoutePrefetch('/limits', LimitsPage.prefetch)
 registerRoutePrefetch('/auto-dispatch', AutoDispatchPage.prefetch)
 registerRoutePrefetch('/org', OrgPage.prefetch)
+registerRoutePrefetch('/projects', ProjectsPage.prefetch)
 registerRoutePrefetch('/settings', SettingsPage.prefetch)
 registerRoutePrefetch('/skills', SkillsPage.prefetch)
 registerRoutePrefetch('/more', MorePage.prefetch)
@@ -117,6 +119,7 @@ const routeElements: Partial<Record<AppRouteId, ReactNode>> = {
   limits: <LimitsPage />,
   "auto-dispatch": <AutoDispatchPage />,
   org: <OrgPage />,
+  projects: <ProjectsPage />,
   settings: <SettingsPage />,
   "settings-plugins": <PluginsSettingsPage />,
   "skills-list": <SkillsPage />,

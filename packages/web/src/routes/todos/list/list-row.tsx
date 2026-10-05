@@ -5,6 +5,7 @@ import { StatusCircle } from "../state-glyph"
 import { hasStopLead, StopCauseLead } from "../board/stop-cause"
 import { KeepToggle, KeptCaption } from "../board/keep-control"
 import { formatRelativeTime } from "../util"
+import { ProjectBadge } from "../projects/project-badge"
 
 function PriorityBars({ priority }: { priority: number }) {
   const strong = priority >= 3
@@ -70,6 +71,7 @@ export const TodoListRow = memo(function TodoListRow({
         {item.title}
       </span>
       <span className="flex flex-none items-center gap-2 max-[700px]:gap-1.5">
+        <ProjectBadge project={item.project} className="max-w-[140px] max-[700px]:max-w-[88px]" />
         {(item.labels ?? []).slice(0, 2).map((label) => (
           <span
             key={label.id}

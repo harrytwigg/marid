@@ -3,6 +3,7 @@ import {
   Users,
   Clock,
   ListChecks,
+  FolderKanban,
   Activity,
   Gauge,
   Rocket,
@@ -51,6 +52,7 @@ function contributedNavItems(): NavItem[] {
 const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Chat", icon: MessageSquare },
   { href: "/todos", label: "Todos", icon: ListChecks },
+  { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/org", label: "Organization", icon: Users },
   { href: "/cron", label: "Cron", icon: Clock },
   { href: "/limits", label: "Limits", icon: Gauge },

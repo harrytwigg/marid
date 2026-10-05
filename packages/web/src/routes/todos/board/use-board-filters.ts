@@ -7,6 +7,7 @@ import {
   writePersistedFilters,
   type TodoFilters,
 } from "@/lib/todos"
+import { adoptBoardProject, useBoardProject } from "./use-board-project"
 
 const DEFAULT_FILTERS: TodoFilters = { status: "open" }
 
@@ -23,6 +24,9 @@ const DEFAULT_FILTERS: TodoFilters = { status: "open" }
  * cleared set and the storage fallback on the next render cannot resurrect the
  * filter the operator just removed.
  *
+ * The project filter is the exception to all of that: it is the active project
+ * (see `use-board-project.ts`), so the board and the project switcher agree.
+ *
  * `enabled` is false for a board that has no filters of its own (Attention),
  * which reads and writes the URL exactly as before.
  */
@@ -35,11 +39,14 @@ export function useBoardFilters(
   const urlFilters = useMemo(() => filtersFromSearchParams(searchParams), [searchParams])
   // Only consult storage when the URL carries no filter of its own; the read is
   // memoised per URL commit so a state-only re-render cannot churn `filters`.
-  const stored = useMemo(
-    () => (enabled && !fromUrl ? readPersistedFilters() : null),
-    [enabled, fromUrl, searchParams],
-  )
-  const filters = !enabled || fromUrl ? urlFilters : stored ?? DEFAULT_FILTERS
+  const stored = useMemo(() => {
+    const persisted = enabled && !fromUrl ? readPersistedFilters() : null
+    // The project is never restored from here: the active project owns it.
+    return persisted && { ...persisted, project: undefined }
+  }, [enabled, fromUrl, searchParams])
+  const base = !enabled || fromUrl ? urlFilters : stored ?? DEFAULT_FILTERS
+  const project = useBoardProject(searchParams, setSearchParams, enabled)
+  const filters = useMemo(() => (project === base.project ? base : { ...base, project }), [base, project])
 
   // A URL-driven arrival (a shared link, back/forward) is worth remembering too.
   useEffect(() => {
@@ -54,10 +61,13 @@ export function useBoardFilters(
 
   const setFilters = useCallback(
     (next: TodoFilters) => {
-      if (enabled) writePersistedFilters(next)
+      if (enabled) {
+        writePersistedFilters(next)
+        adoptBoardProject(next.project, filters.project)
+      }
       setSearchParams(filtersToSearchParams(next), { replace: false })
     },
-    [enabled, setSearchParams],
+    [enabled, setSearchParams, filters.project],
   )
 
   return { filters, setFilters }

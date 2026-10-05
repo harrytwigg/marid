@@ -66,6 +66,7 @@ async function fetchBoardPage(
     source: filters.source,
     label: filters.label,
     sprint: filters.sprint,
+    project: filters.project,
     q: filters.q,
     since,
     until,
@@ -79,7 +80,7 @@ export function boardColumnQueryKey(board: BoardId, status: WorkItemStatusWire, 
   return [
     "work-items", "board", boardKey(board), status,
     filters.assignee ?? "", filters.department ?? "", filters.source ?? "", filters.date ?? "",
-    filters.label ?? "", filters.sprint ?? "", filters.q ?? "",
+    filters.label ?? "", filters.sprint ?? "", filters.project ?? "", filters.q ?? "",
   ]
 }
 

@@ -8,6 +8,7 @@ import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
+import { ProjectBadge } from "../projects/project-badge"
 
 /* ICI-1427 — the board card, Variant A: four rows, the same four on every card.
  * ID + assignee, status glyph + title, priority + labels + roll-up, cost + due.
@@ -168,6 +169,7 @@ export const BoardCard = memo(function BoardCard({
         >
           {item.id}
         </span>
+        <ProjectBadge project={item.project} />
         <span className="ml-auto flex items-center gap-1">
           {/* Hover-revealed here alone: the resting face is a fixed grid, and a
            *  pin at rest in the row the avatar owns competes with it on every
