@@ -17,9 +17,9 @@ import { splitProjectChoices } from "./project-choices"
  * project seeds nothing, since the picker would not offer it and the gateway would refuse it.
  */
 export function seededProject(filter: string | undefined, projects?: ProjectWire[]): string | null {
-  if (!filter || filter === "none") return null;
-  if (projects && !splitProjectChoices(projects).live.some((project) => project.id === filter)) return null;
-  return filter;
+  if (!filter || filter === "none") return null
+  if (projects && !splitProjectChoices(projects).live.some((project) => project.id === filter)) return null
+  return filter
 }
 
 function ProjectPickerContent({ projects, current, sheet, commit, onDone }: {
