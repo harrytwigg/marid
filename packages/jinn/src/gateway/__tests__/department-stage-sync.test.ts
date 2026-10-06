@@ -164,6 +164,13 @@ describe("syncing a stage directory", () => {
     // A root that lies inside a forbidden tree is refused.
     const inside = path.join(home, "stage-root", "alpha");
     expect(() => syncStageDir(inside, files({ "CLAUDE.md": "x" }), Date.now(), [home])).toThrow(/resolves inside/);
+    // And it is refused before anything is created.
+    expect(fs.existsSync(path.join(home, "stage-root"))).toBe(false);
+    // So is a root reached through a link into the home, with no empty directory left behind.
+    const viaLink = path.join(root, "via-link");
+    fs.symlinkSync(home, viaLink);
+    expect(() => syncStageDir(path.join(viaLink, ".jinn-departments", "docs"), files({ "CLAUDE.md": "x" }), Date.now(), [home])).toThrow(/resolves inside/);
+    expect(fs.existsSync(path.join(home, ".jinn-departments"))).toBe(false);
   });
 
   it("leaves another department's stage directory alone", () => {

@@ -129,7 +129,7 @@ function dispatcherPrompt(item: WorkItem, prefix: string, suffix: string | undef
 function planDispatcher(item: WorkItem, context: ApiContext, suffix: string | undefined): PlanResult {
   // The Todo's own dispatch preferences are resolved BEFORE the claim, so a
   // Todo whose skills have all been uninstalled fails without holding one.
-  const dispatchPrefs = resolveTodoDispatch(item.id);
+  const dispatchPrefs = resolveTodoDispatch(item.id, TODO_DISPATCHER_NAME);
   if (!dispatchPrefs.ok) return failure(409, dispatchPrefs.error);
 
   const claimed = takeDispatchClaim(item.id);

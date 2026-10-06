@@ -124,33 +124,51 @@ function isWithin(child: string, parent: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
+/** `target` with every part that exists resolved through links, and the part that does not exist yet left as written. */
+function resolveExisting(target: string): string {
+  const missing: string[] = [];
+  let cursor = path.resolve(target);
+  while (!lstatOrNull(cursor)) {
+    missing.unshift(path.basename(cursor));
+    cursor = path.dirname(cursor);
+  }
+  return path.join(fs.realpathSync(cursor), ...missing);
+}
+
+function forbiddenTree(real: string, forbidden: readonly string[]): string | undefined {
+  return forbidden.map(resolveExisting).find((tree) => isWithin(real, tree));
+}
+
 /**
  * The sync deletes extras and a session's cwd is whatever this resolves to, so a root that
- * is a link, or a stage directory that lands anywhere but directly under the real root or
- * inside a `forbidden` tree (the instance home, say), is refused rather than followed.
+ * is a link, or one that lands inside a `forbidden` tree (the instance home, say), is refused
+ * before anything is created; and so is a stage directory that does not end up directly
+ * under the real root.
  */
-function assertContained(root: string, stageDir: string, forbidden: readonly string[]): void {
-  const rootStat = lstatOrNull(root);
-  if (rootStat?.isSymbolicLink()) throw new Error(`${root} is a symbolic link`);
+function assertRootAllowed(root: string, forbidden: readonly string[]): void {
+  if (lstatOrNull(root)?.isSymbolicLink()) throw new Error(`${root} is a symbolic link`);
+  const tree = forbiddenTree(resolveExisting(root), forbidden);
+  if (tree) throw new Error(`${root} resolves inside ${tree}`);
+}
+
+function assertStageContained(root: string, stageDir: string, forbidden: readonly string[]): void {
   const realRoot = fs.realpathSync(root);
   const realStage = fs.realpathSync(stageDir);
   if (realStage !== path.join(realRoot, path.basename(stageDir))) throw new Error(`${stageDir} resolves to ${realStage}, outside ${realRoot}`);
-  for (const tree of forbidden) {
-    const real = lstatOrNull(tree) ? fs.realpathSync(tree) : path.resolve(tree);
-    if (isWithin(realStage, real) || isWithin(realRoot, real)) throw new Error(`${stageDir} resolves inside ${real}`);
-  }
+  const tree = forbiddenTree(realStage, forbidden);
+  if (tree) throw new Error(`${stageDir} resolves inside ${tree}`);
 }
 
 export function syncStageDir(stageDir: string, files: StageFileSet, now: number = Date.now(), forbidden: readonly string[] = []): SyncReport {
   const report: SyncReport = { written: [], removed: [] };
   const root = path.dirname(stageDir);
-  if (lstatOrNull(root)?.isSymbolicLink()) throw new Error(`${root} is a symbolic link`);
+  assertRootAllowed(root, forbidden);
   fs.mkdirSync(root, { recursive: true });
   // A link or a file where the directory belongs is not the directory: nothing is lost by replacing it.
   const existing = lstatOrNull(stageDir);
   if (existing && !existing.isDirectory()) fs.rmSync(stageDir, { recursive: true, force: true });
   fs.mkdirSync(stageDir, { recursive: true });
-  assertContained(root, stageDir, forbidden);
+  assertStageContained(root, stageDir, forbidden);
   reapStaleIncoming(root, now);
 
   const incoming = fs.mkdtempSync(path.join(root, `.${path.basename(stageDir)}.incoming-`));

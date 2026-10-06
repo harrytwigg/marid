@@ -62,6 +62,8 @@ describe("dispatching a Todo's skills", () => {
     expect(prefix(heldByUnscoped.id, "side-dev")).toContain(".claude/skills/dev-workflow/SKILL.md");
     expect(prefix(heldByScoped.id, "eng-dev")).toContain("Read and follow skills/dev-workflow/SKILL.md");
     expect(prefix(heldByScoped.id, null)).toContain("Read and follow skills/dev-workflow/SKILL.md");
+    // The Todo Dispatcher runs in the instance home whoever holds the Todo.
+    expect(prefix(heldByScoped.id, "todo-dispatcher")).toContain("Read and follow skills/dev-workflow/SKILL.md");
     expect(prefix(heldByScoped.id)).toContain(".claude/skills/dev-workflow/SKILL.md");
   });
 
