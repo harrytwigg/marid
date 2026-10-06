@@ -28,7 +28,7 @@ vi.mock("node:child_process", async (importOriginal) => {
   };
 });
 vi.mock("../../gateway/gateway-info.js", () => ({
-  readGatewayInfo: () => ({ port: 7777, secret: "hook-secret", token: "bearer-token" }),
+  readGatewayInfo: () => ({ port: 40123, secret: "hook-secret", token: "bearer-token" }),
 }));
 
 const {
@@ -81,7 +81,7 @@ async function prepareCommands(): Promise<string> {
       claudeBin: "/bin/true", jinnVersion: "0.0.0", entryDir: path.join(tmp, "host", "entry"),
     };
     await prepareRemoteSession({
-      target: { remoteHost: "box", remoteCwd: path.join(tmp, "root", "work") }, remote, facts, engine: "claude", jinnSessionId: "s1", gatewayPort: 7777,
+      target: { remoteHost: "box", remoteCwd: path.join(tmp, "root", "work") }, remote, facts, engine: "claude", jinnSessionId: "s1", gatewayPort: 40123,
     });
     return hoisted.ssh.map((command) => command.split(tmp).join("<TMP>").split(process.execPath).join("<NODE>")).join("\n--\n");
   } finally {

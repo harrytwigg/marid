@@ -18,7 +18,7 @@ describe.skipIf(process.platform === "win32")("SCOPED_FARM_SCRIPT — run for re
   let root: string;
   let home: string;
 
-  const runFarm = (ttlDays = 7): string => execFileSync("sh", ["-c", SCOPED_FARM_SCRIPT, "sh", root, home, String(ttlDays)], { encoding: "utf8" });
+  const runFarm = (ttlDays = 7): string => execFileSync("sh", ["-c", SCOPED_FARM_SCRIPT, "sh", root, home, String(ttlDays)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
   /** Every path under `dir`, relative, directories with a trailing slash. */
   function walk(base: string, rel = ""): string[] {
@@ -55,7 +55,7 @@ describe.skipIf(process.platform === "win32")("SCOPED_FARM_SCRIPT — run for re
     fs.symlinkSync(path.join(mount, "knowledge"), path.join(home, "knowledge"));
     fs.symlinkSync(path.join(mount, "CLAUDE.md"), path.join(home, "CLAUDE.md"));
     fs.symlinkSync(path.join(mount, "CLAUDE.md"), path.join(home, "sessions", "link"));
-    fs.writeFileSync(path.join(home, "gateway.json"), '{"port":7777}\n');
+    fs.writeFileSync(path.join(home, "gateway.json"), '{"port":40123}\n');
     fs.writeFileSync(path.join(home, "tmp", "x"), "kept");
     runFarm();
     expect(fs.readdirSync(home).sort()).toEqual([".jinn-remote-stage", "gateway.json", "tmp"]);
@@ -121,7 +121,7 @@ describe.skipIf(process.platform === "win32")("buildStageTar", () => {
     expect(Buffer.byteLength(rel)).toBeGreaterThan(100);
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "stage-tar-"));
     try {
-      execFileSync("tar", ["-x", "-f", "-", "-C", out], { input: buildStageTar(one(rel)) });
+      execFileSync("tar", ["-x", "-f", "-", "-C", out], { input: buildStageTar(one(rel)), stdio: ["pipe", "pipe", "pipe"] });
       expect(fs.readFileSync(path.join(out, rel), "utf-8")).toBe("x");
     } finally {
       fs.rmSync(out, { recursive: true, force: true });

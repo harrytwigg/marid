@@ -26,7 +26,7 @@ describe.skipIf(process.platform === "win32")("STAGE_SYNC_SCRIPT — run for rea
   let stage: string;
 
   function run(files: Files, opts: { slug?: string; incoming?: string; forbidden?: string[]; root?: string } = {}) {
-    const res = spawnSync("sh", ["-c", STAGE_SYNC_SCRIPT, "sh", opts.root ?? root, opts.slug ?? SLUG, opts.incoming ?? INCOMING, ...(opts.forbidden ?? [])], { input: buildStageTar(fileSet(files)), encoding: "utf8" });
+    const res = spawnSync("sh", ["-c", STAGE_SYNC_SCRIPT, "sh", opts.root ?? root, opts.slug ?? SLUG, opts.incoming ?? INCOMING, ...(opts.forbidden ?? [])], { input: buildStageTar(fileSet(files)), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
     return { code: res.status, stdout: res.stdout, stderr: res.stderr };
   }
   function sync(files: Files, opts: Parameters<typeof run>[1] = {}) {
