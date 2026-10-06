@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { createNote, listNotes, NOTE_FILE_MAX_BYTES, readNote, searchKnowledge, updateNote } from "../../notes/store.js";
 import type { NoteStoreResult } from "../../shared/types.js";
@@ -7,6 +8,7 @@ import { departmentRecord } from "../department-registry.js";
 import { readJsonBody } from "../http-helpers.js";
 import { badRequest, json } from "../route-helpers.js";
 import { readCleanSearchParam, SEARCH_QUERY_ROUTE_CHAR_CAP } from "../work-item-query.js";
+import { departmentNotesFolder, seedDepartmentState } from "./department-state.js";
 import { forbid, type GateRequest } from "./gate.js";
 
 /**
@@ -24,11 +26,6 @@ import { forbid, type GateRequest } from "./gate.js";
 
 const NOTES_BODY_MAX_BYTES = NOTE_FILE_MAX_BYTES * 6 + 64_000;
 const FAILURE_STATUS = { "invalid-path": 400, forbidden: 403, "not-found": 404, conflict: 409, "too-large": 413, "already-exists": 409 } as const;
-
-/** The department's own folder, relative to `knowledge/`. */
-export function departmentNotesFolder(slug: string): string {
-  return `departments/${slug}`;
-}
 
 function normal(relPath: string): string | null {
   const cleaned = path.posix.normalize(relPath.replace(/\\/g, "/")).replace(/^\.\//, "");
@@ -48,6 +45,32 @@ export function inDepartmentKnowledge(slug: string, relPath: string, { writable 
   });
 }
 
+function isDirectory(absolute: string): boolean {
+  try {
+    return fs.statSync(absolute).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The directories a scoped search walks (FR-028): the department's folder and what it
+ * shares. A shared file is reached through its own folder, and the search accepts it by
+ * name. A root inside another is dropped, so no file is found twice.
+ */
+export function departmentSearchRoots(slug: string): string[] {
+  const home = resolveJinnHome();
+  const shared = (departmentRecord(slug).definition?.sharedNotes ?? []).map((entry) => (isDirectory(path.join(home, entry)) ? entry : path.posix.dirname(entry)));
+  const roots = [...new Set([`knowledge/${departmentNotesFolder(slug)}`, ...shared])];
+  return roots.filter((root) => !roots.some((other) => other !== root && root.startsWith(`${other}/`)));
+}
+
+/** The first note a department writes also creates its state file; clients are told of both. */
+function seedState(g: GateRequest): void {
+  const seeded = seedDepartmentState(g.caller.department);
+  if (seeded) g.deps.context.emit("notes:changed", { path: seeded.path, revision: seeded.revision, action: "created" });
+}
+
 function failure(g: GateRequest, result: Extract<NoteStoreResult<unknown>, { ok: false }>): true {
   json(g.res, { error: result.detail, ...(result.currentRevision ? { currentRevision: result.currentRevision } : {}) }, FAILURE_STATUS[result.reason]);
   return true;
@@ -56,7 +79,8 @@ function failure(g: GateRequest, result: Extract<NoteStoreResult<unknown>, { ok:
 function knowledgeSearch(g: GateRequest): boolean {
   const q = readCleanSearchParam(g.route.url, "q");
   if (!q || q.length > SEARCH_QUERY_ROUTE_CHAR_CAP) return false; // the route refuses it in its own words
-  const results = searchKnowledge(q, resolveJinnHome()).filter((hit) => inDepartmentKnowledge(g.caller.department, hit.path));
+  const { department } = g.caller;
+  const results = searchKnowledge(q, resolveJinnHome(), departmentSearchRoots(department), (hit) => inDepartmentKnowledge(department, hit));
   json(g.res, { query: q, results });
   return true;
 }
@@ -131,6 +155,7 @@ async function notesCreate(g: GateRequest): Promise<boolean> {
   const result = createNote({ title: body.title!, ...present(body, ["body"]), folder }, resolveJinnHome());
   if (!result.ok) return failure(g, result);
   g.deps.context.emit("notes:changed", { path: result.value.path, revision: result.value.revision, action: "created" });
+  seedState(g);
   json(g.res, { note: result.value }, 201);
   return true;
 }
@@ -145,6 +170,7 @@ async function notesUpdate(g: GateRequest): Promise<boolean> {
   const result = updateNote({ path: body.path!, expectedRevision: body.expectedRevision!, ...present(body, ["title", "body", "append"]) }, resolveJinnHome());
   if (!result.ok) return failure(g, result);
   g.deps.context.emit("notes:changed", { path: result.value.path, revision: result.value.revision, action: "updated" });
+  seedState(g);
   json(g.res, { note: result.value });
   return true;
 }

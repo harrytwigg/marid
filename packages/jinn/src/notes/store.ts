@@ -609,7 +609,7 @@ export const KNOWLEDGE_SEARCH_LIMIT = 20;
 export const KNOWLEDGE_SNIPPET_CHAR_CAP = 300;
 export { KNOWLEDGE_FILE_CHAR_CAP };
 const SNIPPET_WORDS_EACH_SIDE = 6;
-/** The allowlisted search roots — the ONLY directories search will ever touch. */
+/** The default search roots, relative to the instance. A department-scoped search passes its own (FR-028). */
 export const SEARCH_ROOTS = ["knowledge", "docs"] as const;
 
 export interface KnowledgeSearchHit {
@@ -672,14 +672,14 @@ function fallbackSnippet(content: string): string {
 
 /** A file matches when EVERY query token appears in its relative path or content.
  *  Results: `matchCount` desc, then path asc, capped at {@link KNOWLEDGE_SEARCH_LIMIT}.
- *  Snippets only — never bodies. Symlinks and realpath escapes are skipped
- *  entirely, so their content can't leak. */
-export function searchKnowledge(query: string, home: string = JINN_HOME): KnowledgeSearchHit[] {
+ *  Snippets only; symlinks and realpath escapes are skipped. `roots` are the only
+ *  directories walked; `accept` drops a file before it is read, ahead of the cap. */
+export function searchKnowledge(query: string, home: string = JINN_HOME, roots: readonly string[] = SEARCH_ROOTS, accept?: (relPath: string) => boolean): KnowledgeSearchHit[] {
   const tokens = [...new Set(stripControlChars(query).toLowerCase().split(/\s+/).filter(Boolean))];
   if (tokens.length === 0) return [];
 
   const hits: KnowledgeSearchHit[] = [];
-  for (const label of SEARCH_ROOTS) {
+  for (const label of roots) {
     const rootPath = path.join(home, label);
     let realRoot: string;
     try {
@@ -689,8 +689,8 @@ export function searchKnowledge(query: string, home: string = JINN_HOME): Knowle
     }
     walkMarkdown(rootPath, "", realRoot, (relativePath, absolutePath) => {
       const relPath = `${label}/${relativePath}`;
-      const file = openRegularFile(absolutePath);
-      if (isFailure(file)) return;
+      const file = accept && !accept(relPath) ? null : openRegularFile(absolutePath);
+      if (!file || isFailure(file)) return;
       const content = file.bytes.toString("utf-8");
       const lowerContent = content.toLowerCase();
       const lowerPath = relPath.toLowerCase();

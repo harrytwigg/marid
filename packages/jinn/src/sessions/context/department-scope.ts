@@ -1,6 +1,6 @@
 import type { OrgHierarchy } from "../../shared/types.js";
 import { getSession } from "../registry.js";
-import { scopedDepartmentOf } from "../../work-items/department-scope.js";
+import { departmentSkillAllowList, scopedDepartmentOf } from "../../work-items/department-scope.js";
 
 /**
  * The prompt of a department-scoped session (FR-014, FR-029): its roster shows only
@@ -43,6 +43,12 @@ export function withDepartmentScope<T extends ScopeInputs>(opts: T): T {
   return department && opts.hierarchy ? { ...opts, hierarchy: departmentHierarchy(opts.hierarchy, department) } : opts;
 }
 
+/** The skills the department offers (FR-027): the copies in the session's `.claude/skills/`, or none. */
+function departmentSkillsLine(department: string): string {
+  const skills = departmentSkillAllowList(department) ?? [];
+  return skills.length > 0 ? `Company skills available to you: ${skills.join(", ")} (in \`.claude/skills/\`). No other company skill is offered.` : "No company skills are offered to this department.";
+}
+
 /** The section that tells a scoped session what its scope is. Empty for anyone else. */
 export function departmentScopeSections(opts: ScopeInputs): Array<{ tier: number; required: true; marker: string; content: string }> {
   const department = promptDepartment(opts);
@@ -53,6 +59,7 @@ export function departmentScopeSections(opts: ScopeInputs): Array<{ tier: number
     `- Create and work Todos in ${department} only; delegate and spawn only to its members. You may reply to the session that asked you for work.`,
     "- Use the jinn tools for company state. Do not use your shell to read the Jinn home, other repositories, or other sessions' transcripts.",
     `- Keep your working state in \`knowledge/departments/${department}/state.md\` through the note tools.`,
+    `- ${departmentSkillsLine(department)}`,
   ].join("\n");
   return [{ tier: 0, required: true, marker: "## Department scope", content }];
 }

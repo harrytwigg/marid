@@ -18,6 +18,24 @@ export function setDepartmentScopeResolver(next: DepartmentScopeResolver | null)
   resolver = next;
 }
 
+/**
+ * The skills a non-open department offers its sessions (its `department.yaml` allow-list,
+ * FR-027), injected beside the scope resolver. `null` means no restriction: an open
+ * department, or no resolver.
+ */
+export type DepartmentSkillsResolver = (department: string) => readonly string[] | null;
+
+let skillsResolver: DepartmentSkillsResolver | null = null;
+
+export function setDepartmentSkillsResolver(next: DepartmentSkillsResolver | null): void {
+  skillsResolver = next;
+}
+
+/** The skill allow-list of a department; `null` when it is open, has none, or there is no resolver. */
+export function departmentSkillAllowList(department: string | null | undefined): readonly string[] | null {
+  return department && skillsResolver ? skillsResolver(department) : null;
+}
+
 /** The effective scope of a department; `open` for no department or no resolver. */
 export function departmentScope(department: string | null | undefined): DepartmentScope {
   if (!department || !resolver) return "open";
