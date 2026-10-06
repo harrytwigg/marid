@@ -11,7 +11,7 @@ import { context, home } from "./department-scope-harness.js";
 /** A git work tree beside the home (a department workdir must be one), holding `name`. */
 export function makeWorkdir(label: string, file = "notes.txt"): { dir: string; file: string } {
   const dir = fs.realpathSync(fs.mkdtempSync(`${home}-${label}-`));
-  execFileSync("git", ["init", "-q", dir]);
+  execFileSync("git", ["init", "-q", dir], { stdio: "ignore" });
   const target = path.join(dir, file);
   fs.writeFileSync(target, "department file\n");
   return { dir, file: target };
