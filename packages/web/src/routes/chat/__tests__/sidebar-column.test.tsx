@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SidebarColumn } from '../sidebar-column'
-import { DEFAULT_SIDEBAR_WIDTH, SIDEBAR_WIDTH_STORAGE_KEY } from '../sidebar-width'
+import { DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, SIDEBAR_WIDTH_STORAGE_KEY } from '../sidebar-width'
 
 const viewport = { width: 1600, height: 900 }
 
@@ -72,5 +72,22 @@ describe('SidebarColumn', () => {
     const { onOpenChange } = column(false)
     fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize chat list' }), { key: 'ArrowRight' })
     expect(onOpenChange).toHaveBeenCalledWith(true)
+  })
+
+  it('stops a keyboard step at the open minimum instead of folding the list', () => {
+    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, '300')
+    const { container, onOpenChange } = column(true)
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize chat list' }), { key: 'Home' })
+    expect(onOpenChange).toHaveBeenCalledWith(true)
+    expect(columnWidth(container)).toBe(`${MIN_SIDEBAR_WIDTH}px`)
+    expect(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)).toBe(String(MIN_SIDEBAR_WIDTH))
+  })
+
+  it('clamps a Shift+ArrowLeft at the minimum rather than folding the list', () => {
+    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(MIN_SIDEBAR_WIDTH))
+    const { container, onOpenChange } = column(true)
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize chat list' }), { key: 'ArrowLeft', shiftKey: true })
+    expect(onOpenChange).toHaveBeenCalledWith(true)
+    expect(columnWidth(container)).toBe(`${MIN_SIDEBAR_WIDTH}px`)
   })
 })

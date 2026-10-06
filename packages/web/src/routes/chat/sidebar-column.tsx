@@ -1,8 +1,20 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { SidebarResizeHandle } from './sidebar-resize-handle'
-import { resolveSidebarWidth } from './sidebar-width'
+import { clampSidebarWidth, collapsesSidebar, resolveSidebarWidth } from './sidebar-width'
 import { useSidebarWidth } from './use-sidebar-width'
+
+/** What a release means for the list. A keyboard step (`dragging` false) never folds it: it
+ * stops an open list at the open minimum, and reopens a folded one at its last open width (a
+ * null width). A drag that reaches the zone folds it. Pure, so the column body stays in budget. */
+type CommitAction = { fold: true } | { fold: false; width: number | null }
+function commitAction(width: number, dragging: boolean, collapsed: boolean, viewportWidth: number): CommitAction {
+  if (!dragging && collapsesSidebar(width)) {
+    return { fold: false, width: collapsed ? null : clampSidebarWidth(width, viewportWidth) }
+  }
+  const resolved = resolveSidebarWidth(width, viewportWidth)
+  return resolved.collapsed ? { fold: true } : { fold: false, width: resolved.width }
+}
 
 /**
  * The desktop chat list's column: it folds by animating its width, and its right edge drags to
@@ -22,16 +34,16 @@ export function SidebarColumn({ open, viewport, onOpenChange, children }: {
   // is not made permanent until release.
   const collapsed = sidebar.dragging ? sidebar.collapsed : !open
   const commit = (width: number) => {
-    const resolved = resolveSidebarWidth(width, viewport.width)
-    if (!resolved.collapsed) {
-      sidebar.commit(resolved.width)
-      onOpenChange(true)
+    const action = commitAction(width, sidebar.dragging, collapsed, viewport.width)
+    if (action.fold) {
+      sidebar.cancel()
+      onOpenChange(false)
       return
     }
-    sidebar.cancel()
-    // Already shut, and this was a keyboard step rather than a drag (a drag that reached the
-    // zone leaves it shut): the edge has nowhere further to go, so a step must mean "reopen".
-    onOpenChange(collapsed && !sidebar.dragging)
+    // A null width reopens at the stored value (cancel drops the live preview).
+    if (action.width === null) sidebar.cancel()
+    else sidebar.commit(action.width)
+    onOpenChange(true)
   }
   return (
     <div
