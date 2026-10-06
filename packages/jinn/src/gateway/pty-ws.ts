@@ -3,7 +3,7 @@ import type { PtyControlEvent, PtyIdleSpawnOpts, PtyViewEngine } from "../engine
 import { getEngineSessionRef, getSession } from "../sessions/registry.js";
 import { orgRegistry } from "./org-registry.js";
 import { employeeRemoteTarget } from "../shared/remote-target.js";
-import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
+import { sessionClaudeProfile } from "../sessions/session-account.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
@@ -139,7 +139,7 @@ export function attachPtyWebSocket(
       effortLevel: session?.effortLevel ?? undefined,
       cwd: JINN_HOME,
       ...remote,
-      claudeProfile: resolveEmployeeClaudeProfile(employee),
+      claudeProfile: sessionClaudeProfile(session, employee),
       cols,
       rows,
     };

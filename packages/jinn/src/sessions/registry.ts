@@ -2,6 +2,7 @@ import { parseBlocksColumn, parseMetaColumn, rowToMessage, type MessageRow, type
 export type { MessageMedia, SessionMessage, MessagePage, MessagePageOptions } from './message-row.js';
 import { CALLBACK_DELIVERY_SELECT } from "./callback-delivery-query.js";
 import { pendingCompletionBatch } from "./completion-batching.js";
+import { threadSlot } from "./session-account.js";
 export { coalescePendingParentCompletionQueueItems } from "./completion-batching.js";
 export { shouldHoldParentCompletionQueueDispatch, listReleasableParentCompletionQueuesForSource } from "./completion-drain.js";
 import { randomUUID } from 'node:crypto';
@@ -955,7 +956,7 @@ export function ensureCallbackAttemptToken(
 }
 
 export function getEngineSessionRef(session: Session, engine = session.engine): EngineSessionRef {
-  const stored = cleanEngineSessionRef(session.engineSessions?.[engine] ?? {});
+  const stored = cleanEngineSessionRef(session.engineSessions?.[threadSlot(session, engine)] ?? {});
   if (engine === session.engine) {
     if (!stored.id && session.engineSessionId && !session.transportMeta?.engineOverride) stored.id = session.engineSessionId; // a live override parks the PREVIOUS engine's id in the mirror
     if (!stored.model && session.model) stored.model = session.model;
@@ -975,7 +976,7 @@ export function nextEngineSessionFields(
   const id = nativeId.trim();
   if (!engine || !id) return {};
   const next = cleanEngineSessionRef({ ...getEngineSessionRef(session, engine), ...meta, id });
-  const updates: UpdateSessionFields = { engineSessions: { ...cleanEngineSessionRefs(session.engineSessions), [engine]: next } };
+  const updates: UpdateSessionFields = { engineSessions: { ...cleanEngineSessionRefs(session.engineSessions), [threadSlot(session, engine)]: next } };
   if (session.engine === engine) updates.engineSessionId = next.id ?? null;
   return updates;
 }

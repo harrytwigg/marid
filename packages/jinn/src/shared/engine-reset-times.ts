@@ -13,6 +13,9 @@
 import fs from "node:fs";
 import { CLAUDE_LIMITS_DIR } from "./paths.js";
 import { windowFromCodexRollout } from "./engine-limits.js";
+import { claudeAccountKey } from "./engine-account.js";
+import type { ClaudeProfile } from "./claude-profile.js";
+import { lastAccountReading } from "./account-readings.js";
 import {
   claudeSnapshotFile,
   fetchClaudeOAuthUsage,
@@ -32,9 +35,9 @@ export function resetsAtFromCodexRateLimits(rateLimits: unknown): number | undef
     ?? windowFromCodexRollout("7d", payload.secondary)?.resetsAt;
 }
 
-/** The 5h session window's reset from the most recent statusline snapshot. */
-function claudeSnapshotResetsAt(): number | undefined {
-  const file = claudeSnapshotFile(CLAUDE_LIMITS_DIR);
+/** The 5h session window's reset from the account's most recent statusline snapshot. */
+function claudeSnapshotResetsAt(account: string): number | undefined {
+  const file = claudeSnapshotFile(CLAUDE_LIMITS_DIR, account);
   if (!file) return undefined;
   try {
     const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as Record<string, unknown>;
@@ -46,17 +49,26 @@ function claudeSnapshotResetsAt(): number | undefined {
   }
 }
 
+/** Which account's window: a local profile (null is the default account), or a
+ *  remote login by its account key, whose last reading the gateway keeps. */
+export type ClaudeResetSource = { profile: ClaudeProfile } | { remoteAccount: string };
+
 /**
  * When Claude's session window reopens, in Unix seconds — the number the
  * rate-limit backoff wants and that the stop-failure hook never carries. Two
  * sources, the live usage API first and the on-disk statusline snapshot behind
- * it. A reset already in the past is no answer either, so it is discarded.
+ * it, both read for the account that hit the limit (FR-071). A remote account
+ * has neither on this host, so its last reading over SSH answers (FR-072). A
+ * reset already in the past is no answer either, so it is discarded.
  */
-export async function claudeResetsAtSeconds(nowMs: number = Date.now()): Promise<number | undefined> {
+export async function claudeResetsAtSeconds(nowMs: number = Date.now(), source: ClaudeResetSource = { profile: null }): Promise<number | undefined> {
   const stillAhead = (seconds: number | undefined) =>
     seconds !== undefined && seconds * 1000 > nowMs ? seconds : undefined;
+  if ("remoteAccount" in source) {
+    return stillAhead(lastAccountReading(source.remoteAccount)?.snapshot.windows?.find((window) => window.name === "5h")?.resetsAt);
+  }
   try {
-    const usage = await fetchClaudeOAuthUsage();
+    const usage = await fetchClaudeOAuthUsage(process.env, source.profile);
     const live = usage ? windowsFromClaudeUsage(usage) : [];
     const session = stillAhead(live.find((window) => window.name === "5h")?.resetsAt);
     if (session !== undefined) return session;
@@ -64,7 +76,7 @@ export async function claudeResetsAtSeconds(nowMs: number = Date.now()): Promise
     // The usage API is one of two sources; the on-disk snapshot is the other.
   }
   try {
-    return stillAhead(claudeSnapshotResetsAt());
+    return stillAhead(claudeSnapshotResetsAt(claudeAccountKey(source.profile)));
   } catch {
     return undefined;
   }

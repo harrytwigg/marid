@@ -12,6 +12,7 @@ import type {
   JinnConfig,
 } from "./types.js";
 import { recordExhaustedWindows } from "./engine-health.js";
+import { collectClaudeAccounts } from "./engine-limits-accounts.js";
 import { getModelRegistry } from "./models.js";
 import { resolveBin } from "./resolve-bin.js";
 import { collectClaudeLimits } from "./engine-limits-claude.js";
@@ -369,5 +370,8 @@ export async function collectEngineLimits(
     recordExhaustedWindows(name, engines[name].windows);
   }
 
-  return { generatedAt, default: config.engines.default, engines };
+  // Every other Claude account, beside the default one (FR-073). Omitted with a
+  // single account, so that response is unchanged (FR-078).
+  const claudeAccounts = engines.claude ? await collectClaudeAccounts(config, engines.claude) : undefined;
+  return { generatedAt, default: config.engines.default, engines, ...(claudeAccounts ? { accounts: { claude: claudeAccounts } } : {}) };
 }

@@ -1,7 +1,11 @@
 import { operatorSettingsCarry } from "../shared/claude-profile-settings.js";
 import { claudeJsonPathFor, type ClaudeProfile } from "../shared/claude-profile.js";
 import { seedTrust, writeSessionSettings } from "../shared/claude-settings.js";
+import { remoteAccountForTarget } from "../shared/engine-account.js";
+import type { ClaudeResetSource } from "../shared/engine-reset-times.js";
 import { logger } from "../shared/logger.js";
+import { isRemoteTarget } from "../shared/remote-target.js";
+import type { RemoteTarget } from "../shared/types.js";
 import { CLAUDE_LIMITS_DIR, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT } from "../shared/paths.js";
 
 /**
@@ -42,4 +46,14 @@ export function ensureClaudeProfileTrust(profile: ClaudeProfile | undefined, cwd
 
 export function resetClaudeProfileTrustForTests(): void {
   seeded.clear();
+}
+
+/**
+ * Whose usage answers "when does this limit reset" for a turn: a remote
+ * session's own login (its last reading over SSH), else the local profile the
+ * turn ran as, the default account when it named none (FR-071, FR-072).
+ */
+export function claudeResetSource(opts: Partial<RemoteTarget> & { claudeProfile?: ClaudeProfile }): ClaudeResetSource {
+  if (isRemoteTarget(opts)) return { remoteAccount: remoteAccountForTarget(opts) };
+  return { profile: opts.claudeProfile ?? null };
 }

@@ -23,20 +23,18 @@
  * or the order of side effects without auditing both call sites.
  */
 
-import { isBoardWalkTurn } from "../board-walk/started-sessions.js";
 import type { RateLimitHandlerOpts, RateLimitOutcome } from "./rate-limit-contract.js";
 import type { Engine, EngineResult, RemoteTarget } from "../shared/types.js";
-import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
+import { isRemoteTarget } from "../shared/remote-target.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { logger } from "../shared/logger.js";
-import { engineAvailable, engineSupportsRemote, REMOTE_ENGINE_NAMES, type EngineName } from "../shared/models.js";
-import { remoteEngineAvailable } from "../engines/remote-stage.js";
+import { REMOTE_ENGINE_NAMES, type EngineName } from "../shared/models.js";
 import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
 } from "../shared/rateLimit.js";
-import { rateLimitAccount, recordAccountRateLimit, resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
-import { engineHealthForTarget, readEngineHealth, resolveHealthyFallbackEngine } from "../shared/engine-health.js";
+import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
+import { chooseSubstitute } from "./rate-limit-substitute.js";
 import { beginEngineSubstitution } from "./engine-override.js";
 import { resolveEngineRunMcp } from "./engine-run-mcp.js";
 import { getSession, getMessages, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
@@ -114,34 +112,18 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     remoteClaudeConfigDir: employee?.remoteClaudeConfigDir ?? remoteClaudeConfigDir,
   };
 
-  const { claudeProfile, account } = rateLimitAccount(session.engine, employee);
+  const { claudeProfile, account } = rateLimitAccount(session.engine, employee, session);
   recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt);
 
-  // ── Branch A: hand the turn to this engine's chain ─────────────────────────
+  // ── Branch A: hand the turn to this account's chain ────────────────────────
   // A remote employee's substitute has to be an engine that can ALSO run on that
-  // host, and the usability question moves there with it. Two ways to get this
-  // wrong, both silent: hand the turn to an engine that ignores `remoteHost` and
-  // it runs on the gateway — unattended, with --dangerously-skip-permissions,
-  // against a repository deliberately never cloned there; or ask
-  // `engineAvailable`, which probes the GATEWAY's PATH, and a Raspberry Pi
-  // orchestrating a desktop answers "no pi installed" about the wrong machine
-  // entirely. A chain with nothing left in it after this falls through to Branch
-  // B, which waits the limit out on the host that already owns the work.
+  // host; hand the turn to one that ignores `remoteHost` and it runs on the
+  // gateway — unattended, with --dangerously-skip-permissions, against a
+  // repository deliberately never cloned there. A chain with nothing left in it
+  // falls through to Branch B, which waits the limit out where the work lives.
   const remote = isRemoteTarget(remoteTarget) ? remoteTarget : undefined;
-  const isUsable = (candidate: EngineName) => engines.has(candidate) && (remote
-    ? engineSupportsRemote(candidate) && remoteEngineAvailable(sshDestination(remote), candidate) !== false
-    : engineAvailable(config, candidate));
-  // A board walk turn never changes engine: it runs on the engine it is
-  // configured for because that is where its tools can be clamped to the walk's
-  // own, and a substitute would bring its own surface with it. Nor does a local named profile (no chain yet).
-  const substituteName = isBoardWalkTurn(session) || claudeProfile ? undefined : resolveHealthyFallbackEngine(
-    config,
-    session.engine,
-    isUsable,
-    // Same scoping as a new session's: health recorded about the gateway's own
-    // login says nothing about the host this turn is going back to.
-    substituteHealth(engineHealthForTarget(readEngineHealth(), remoteTarget), employee),
-  );
+  const choice = chooseSubstitute({ config, engines, session, employee, account, remote, remoteTarget });
+  const substituteName = choice?.engine;
   const substituteEngine = substituteName ? engines.get(substituteName) : undefined;
   if (!substituteName && remote) {
     logger.info(
@@ -149,16 +131,16 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       + `(a substitute must be one of ${REMOTE_ENGINE_NAMES.join(", ")} and installed on that host); waiting for the reset instead`,
     );
   }
-  if (substituteName && substituteEngine) {
+  if (choice && substituteName && substituteEngine) {
     const { resumeAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
     const until = resumeAt ?? new Date(Date.now() + 6 * 60 * 60_000);
     const syncSince = new Date().toISOString();
-    const substituteLabel = rateLimitEngineLabel(substituteName);
+    const substituteLabel = choice.accounts ? `the ${choice.accounts.substitute} Claude account` : rateLimitEngineLabel(substituteName);
 
     await hooks.onFallbackStart?.({ resumeAt: resumeAt ?? null, until, substitute: substituteName });
 
     const substitution = beginEngineSubstitution({
-      session, attemptToken, config, employee, substitute: substituteName, until, syncSince,
+      session, attemptToken, config, employee, substitute: substituteName, accounts: choice.accounts, until, syncSince,
       lastError: resumeAt
         ? `${engineLabel} usage limit — using ${substituteLabel} until ${resumeAt.toISOString()}`
         : `${engineLabel} usage limit — using ${substituteLabel} temporarily`,
@@ -195,7 +177,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       // entirely to avoid.
       ...remoteTarget,
       ...resolveEngineRunMcp({ config, employee, engine: substituteName, sessionId: session.id }),
-      claudeProfile: substituteName === "claude" ? resolveEmployeeClaudeProfile(employee) : null,
+      claudeProfile: choice.claudeProfile,
       attachments: attachments?.length ? attachments : undefined,
       sessionId: session.id,
       ...(hooks.onFallbackStream ? { onStream: hooks.onFallbackStream } : {}),
@@ -205,6 +187,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     // and so the mirror stops lying about which engine the id belongs to.
     const live = getSession(session.id);
     if (live && fallbackResult.sessionId) {
+      // The live row carries the override, so an account substitute's id lands in its own account's slot.
       updateSessionForAttempt(session.id, attemptToken, nextEngineSessionFields(live, substituteName, fallbackResult.sessionId));
     }
 

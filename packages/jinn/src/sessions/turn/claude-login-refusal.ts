@@ -1,5 +1,5 @@
 import { refuseClaudeLaunch } from "../claude-auth-watch.js";
-import { resolveEmployeeClaudeProfile } from "../../shared/claude-profile.js";
+import { sessionClaudeProfile } from "../session-account.js";
 import { verifyLocalClaudeProfile } from "../../shared/claude-profile-signin.js";
 import type { TurnInput } from "./types.js";
 
@@ -18,7 +18,7 @@ export function refuseClaudeLogin(input: TurnInput): string | undefined {
  * puts Claude Code's login screen in front of the turn.
  */
 function refuseUnsignedClaudeProfile(input: TurnInput): string | undefined {
-  return verifyLocalClaudeProfile(resolveEmployeeClaudeProfile(input.employee));
+  return verifyLocalClaudeProfile(sessionClaudeProfile(input.session, input.employee));
 }
 
 /**

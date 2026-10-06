@@ -83,12 +83,17 @@ describe("newSessionEngineSelection — a dead login on the gateway", () => {
     expect(newSessionEngineSelection(config, engines, { employee: remote }).engine).toBe("claude");
   });
 
-  it("still moves a remote employee off a spent ACCOUNT allowance", () => {
-    // The guard is about hosts, not about remoteness: a usage limit names no
-    // host because it holds wherever the turn runs, and a remote session must
-    // still give way to it.
-    recordEngineUnavailable("claude", "usage limit", RESETS_AT, NOW);
+  it("still moves a remote employee off its own account's spent allowance", () => {
+    // A remote login is its own account (FR-070): its usage limit is recorded
+    // under its own key, and a remote session gives way to it.
+    recordEngineUnavailable("claude@jinn@build-box", "usage limit", RESETS_AT, NOW);
 
     expect(newSessionEngineSelection(config, engines, { employee: remote }).engine).toBe("pi");
+  });
+
+  it("is not held back by the default account's spent allowance (FR-072)", () => {
+    recordEngineUnavailable("claude", "usage limit", RESETS_AT, NOW);
+
+    expect(newSessionEngineSelection(config, engines, { employee: remote }).engine).toBe("claude");
   });
 });

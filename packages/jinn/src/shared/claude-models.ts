@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawn, execFile } from "node:child_process";
 import type { ModelInfo } from "./types.js";
 import { resolveClaudeConfigDir } from "./home.js";
+import { CLAUDE_KEYCHAIN_SERVICE, claudeKeychainService, type ClaudeProfile } from "./claude-profile.js";
 import { ClaudeCatalogRequestError, parseClaudeCredentials } from "./claude-auth.js";
 
 export const CLAUDE_EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"];
@@ -255,11 +256,11 @@ function tokenFromCredentialsFile(configDir: string): string | undefined {
   }
 }
 
-function readMacosKeychainCredentials(): Promise<string | undefined> {
+function readMacosKeychainCredentials(service: string = CLAUDE_KEYCHAIN_SERVICE): Promise<string | undefined> {
   return new Promise((resolve) => {
     execFile(
       "security",
-      ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
+      ["find-generic-password", "-s", service, "-w"],
       { timeout: 3_000 },
       (err, stdout) => resolve(err ? undefined : stdout.trim() || undefined),
     );
@@ -270,8 +271,16 @@ export interface ReadClaudeOAuthTokenOptions {
   home?: string;
   /** Overridable so tests can exercise the darwin branch on any host. */
   platform?: NodeJS.Platform;
-  /** Overridable so tests never shell out to the real Keychain. */
-  readKeychain?: () => Promise<string | undefined>;
+  /** Overridable so tests never shell out to the real Keychain. Given the
+   *  service name, which carries a named profile's suffix. */
+  readKeychain?: (service: string) => Promise<string | undefined>;
+  /**
+   * A local named profile's account (FR-071): its suffixed Keychain entry, or
+   * its own `.credentials.json`. `$CLAUDE_CODE_OAUTH_TOKEN` is skipped, because
+   * it is the default account's, and would otherwise read as every named
+   * account's usage. Absent or null: the default account, exactly as before.
+   */
+  profile?: ClaudeProfile;
 }
 
 /**
@@ -289,19 +298,20 @@ export interface ReadClaudeOAuthTokenOptions {
 export async function readClaudeOAuthToken(
   options: ReadClaudeOAuthTokenOptions = {},
 ): Promise<string | undefined> {
-  const envToken = process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
+  const profile = options.profile ?? null;
+  const envToken = profile ? undefined : process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
   if (envToken) return envToken;
 
   const platform = options.platform ?? process.platform;
   if (platform === "darwin") {
-    const raw = await (options.readKeychain ?? readMacosKeychainCredentials)();
+    const raw = await (options.readKeychain ?? readMacosKeychainCredentials)(claudeKeychainService(profile));
     const token = raw ? claudeTokenFromCredentialsJson(raw) : undefined;
     if (token) return token;
   }
 
   // options.home is a test seam for the pre-CLAUDE_CONFIG_DIR layout.
   return tokenFromCredentialsFile(
-    options.home ? path.join(options.home, ".claude") : resolveClaudeConfigDir(),
+    profile ? profile.dir : options.home ? path.join(options.home, ".claude") : resolveClaudeConfigDir(),
   );
 }
 

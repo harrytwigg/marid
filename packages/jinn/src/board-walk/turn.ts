@@ -3,6 +3,7 @@ import { digestTodo, listOpenTodos, OPEN_STATUSES } from "./board.js";
 import { boardLine, renderTodo } from "./board-render.js";
 import { readStartDecision, readTodoDecision } from "./decisions.js";
 import { applyTodo, pruneFlags, startTodo, type ApplyDeps } from "./apply.js";
+import { UNROUTED } from "./accounts.js";
 import type { TickEntry } from "./store.js";
 
 /**
@@ -104,7 +105,8 @@ export class WalkTools {
     const open = listOpenTodos();
     const offset = integer(args.offset, 0);
     const page = open.slice(offset, offset + Math.min(integer(args.limit, BOARD_PAGE) || BOARD_PAGE, 100));
-    const lines = page.map((item) => boardLine(item, { flagged: this.opts.flagged.has(item.id), decided: this.decided.get(item.id)?.outcome }));
+    const lines = page.map((item) => boardLine(item, { flagged: this.opts.flagged.has(item.id), decided: this.decided.get(item.id)?.outcome })
+      + (this.accountOf(item) ? ` · account ${this.accountOf(item)}` : ""));
     const decided = open.filter((item) => this.decided.has(item.id)).length;
     const head = `${open.length} open Todo${open.length === 1 ? "" : "s"}, ${decided} decided this tick; showing ${page.length === 0 ? "none" : `${offset + 1}–${offset + page.length}`}.`;
     const more = offset + page.length < open.length ? `\nMore: call walk_board with offset ${offset + page.length}.` : "";
@@ -118,7 +120,18 @@ export class WalkTools {
     if (!OPEN.has(item.status)) return { ok: false, text: `${item.id} is ${item.status}; the walk only handles open Todos` };
     const todo = await digestTodo(item, { resolveLink: this.opts.apply.resolveLink, flagged: this.opts.flagged });
     const decided = this.decided.get(item.id);
-    return { ok: true, text: renderTodo(todo) + (decided ? `\nDECIDED this tick: ${decided.outcome}` : "") };
+    const account = this.accountOf(item);
+    return { ok: true, text: renderTodo(todo) + (account ? `\naccount: ${account}` : "") + (decided ? `\nDECIDED this tick: ${decided.outcome}` : "") };
+  }
+
+  /** The account a backlog candidate would run on, when there is more than one
+   *  Claude account to tell apart (FR-075); undefined otherwise. */
+  private accountOf(item: { id: string; assignee: string | null; status: string }): string | undefined {
+    const accounts = this.opts.apply.accounts;
+    if (!accounts?.multi || item.status !== "backlog") return undefined;
+    const account = accounts.of(item);
+    const label = account === UNROUTED ? "unrouted (the Dispatcher picks the employee; judged against claude)" : accounts.label(account);
+    return accounts.exhausted(account) ? `${label}, recorded at its limit` : label;
   }
 
   private async decide(args: Record<string, unknown>): Promise<WalkToolResult> {

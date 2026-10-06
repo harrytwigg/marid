@@ -28,6 +28,8 @@ export interface PriorFiveHour {
 
 export interface BoardWalkState {
   priorFiveHour?: PriorFiveHour;
+  /** Every other Claude account's last five-hour reading, by account key. */
+  priorFiveHourByAccount?: Record<string, PriorFiveHour>;
   /** Todo id → the stuck episode already flagged (see `stuckEpisode`). */
   stuckFlags: Record<string, string>;
 }
@@ -37,6 +39,7 @@ export function readState(file = BOARD_WALK_STATE_FILE): BoardWalkState {
     const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as Partial<BoardWalkState>;
     return {
       ...(parsed.priorFiveHour ? { priorFiveHour: parsed.priorFiveHour } : {}),
+      ...(parsed.priorFiveHourByAccount && typeof parsed.priorFiveHourByAccount === "object" ? { priorFiveHourByAccount: parsed.priorFiveHourByAccount } : {}),
       stuckFlags: parsed.stuckFlags && typeof parsed.stuckFlags === "object" ? parsed.stuckFlags : {},
     };
   } catch {

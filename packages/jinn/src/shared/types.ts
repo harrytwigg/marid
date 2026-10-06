@@ -836,6 +836,8 @@ export interface EngineLimitsResponse {
   generatedAt: string;
   default: string;
   engines: Record<string, EngineLimitEngineSnapshot>;
+  /** Per-account readings, only for an engine with more than one account; see engine-limits-accounts.ts. */
+  accounts?: Record<string, import("./engine-limits-accounts.js").EngineLimitAccountSnapshot[]>;
 }
 
 // --- config.yaml `models:` block shapes (all fields optional/forgiving) ---

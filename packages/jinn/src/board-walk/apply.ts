@@ -10,6 +10,7 @@ import type { StartTodoDispatcherResult } from "../gateway/todo-dispatch.js";
 import type { BoardWalkSettings } from "./settings.js";
 import type { Gate, StartDecision, TodoDecision } from "./decisions.js";
 import { findLinks, type LinkResolver } from "./pr-state.js";
+import { UNROUTED, type WalkAccounts } from "./accounts.js";
 import { namesDate } from "./dates.js";
 import { listComments } from "../work-items/comments.js";
 import { listRelations } from "../work-items/relations.js";
@@ -41,6 +42,8 @@ export interface ApplyDeps {
   now: () => number;
   /** Re-checks a cited pull request or issue at release time. */
   resolveLink: LinkResolver;
+  /** The tick's accounts: a start on an account recorded at its limit is refused in code (FR-075). */
+  accounts?: WalkAccounts;
 }
 
 const OPEN = new Set<string>(OPEN_STATUSES);
@@ -241,7 +244,17 @@ export async function applyTodo(deps: ApplyDeps, decision: TodoDecision): Promis
   }
 }
 
-/** One start, through the Todo Dispatcher, unless the switch or the Todo refuses it. */
+/** Why a start must not go ahead because its account is at its limit, or undefined. */
+function exhaustedAccountRefusal(accounts: WalkAccounts | undefined, item: WorkItem): string | undefined {
+  if (!accounts) return undefined;
+  const account = accounts.of(item);
+  if (!accounts.exhausted(account)) return undefined;
+  return account === UNROUTED
+    ? "it is unassigned, so it is judged against the default Claude account, which is recorded at its limit"
+    : `the account it would run on (${accounts.label(account)}) is recorded at its limit`;
+}
+
+/** One start, through the Todo Dispatcher, unless the switch, the Todo or its account refuses it. */
 export function startTodo(deps: ApplyDeps, decision: StartDecision): TickEntry {
   const entry: TickEntry = { kind: "dispatch", workItemId: decision.id, reason: decision.reason };
   if (!deps.settings.actions.dispatch) return { ...entry, kind: "refused", outcome: "dispatch is switched off" };
@@ -250,6 +263,8 @@ export function startTodo(deps: ApplyDeps, decision: StartDecision): TickEntry {
   if (item.status !== "backlog") return { ...entry, kind: "refused", outcome: `only a backlog Todo is started; this one is ${item.status}` };
   const optOut = noAutoStartReason(item);
   if (optOut) return { ...entry, kind: "refused", outcome: `it refuses automatic starts (${optOut})` };
+  const limited = exhaustedAccountRefusal(deps.accounts, item);
+  if (limited) return { ...entry, kind: "refused", outcome: limited };
   let result: StartTodoDispatcherResult;
   try {
     result = deps.dispatch(item, decision);

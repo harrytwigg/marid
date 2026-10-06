@@ -27,10 +27,10 @@ vi.mock("../sse-pty-proxy.js", () => ({
   },
 }));
 
-const resets = vi.hoisted(() => ({ calls: 0 }));
+const resets = vi.hoisted(() => ({ calls: 0, sources: [] as unknown[] }));
 vi.mock("../../shared/engine-reset-times.js", () => ({
   // The gateway's own account's 5h reset, four hours out: never a named profile's.
-  claudeResetsAtSeconds: async () => { resets.calls++; return Math.floor(Date.now() / 1000) + 4 * 3600; },
+  claudeResetsAtSeconds: async (_now: number, source?: unknown) => { resets.calls++; resets.sources.push(source); return Math.floor(Date.now() / 1000) + 4 * 3600; },
 }));
 
 import { InteractiveClaudeEngine, rateLimitFromStopFailure } from "../claude-interactive.js";
@@ -124,20 +124,23 @@ describe("InteractiveClaudeEngine on a named Claude profile (FR-051, FR-052, FR-
   });
 });
 
-describe("a named profile's rate limit (FR-055, FR-056)", () => {
+describe("a named profile's rate limit (FR-071)", () => {
   const stopFailure = { hook_event_name: "StopFailure", error: "rate_limit" } as any;
 
-  it("states no reset: the usage source reads only the gateway's own account, so it backs off instead", async () => {
+  it("asks the usage source of the profile that hit the limit, so it waits on its own reset", async () => {
     resets.calls = 0;
-    const rl = await rateLimitFromStopFailure(stopFailure, profile);
-    expect(rl).toEqual({ status: "rejected", rateLimitType: "interactive_detected" });
-    expect(resets.calls).toBe(0);
+    resets.sources = [];
+    const rl = await rateLimitFromStopFailure(stopFailure, { profile });
+    expect(rl?.resetsAt).toBeGreaterThan(Date.now() / 1000);
+    expect(resets.sources).toEqual([{ profile }]);
   });
 
-  it("still asks the usage source on the default profile", async () => {
+  it("still asks the default account's usage source on the default profile", async () => {
     resets.calls = 0;
+    resets.sources = [];
     const rl = await rateLimitFromStopFailure(stopFailure);
     expect(rl?.resetsAt).toBeGreaterThan(Date.now() / 1000);
     expect(resets.calls).toBe(1);
+    expect(resets.sources).toEqual([undefined]);
   });
 });

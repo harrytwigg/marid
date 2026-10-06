@@ -13,9 +13,10 @@ import type {
   EngineLimitWindow,
   JinnConfig,
 } from "./types.js";
-import { recordClaudeUsageSample } from "./claude-usage-history.js";
+import { recordClaudeUsageSample, usageHistoryPath } from "./claude-usage-history.js";
 import { CLAUDE_LIMITS_DIR } from "./paths.js";
-import { isDefaultAccountSession } from "./engine-account.js";
+import { claudeAccountKey, isAccountSession } from "./engine-account.js";
+import { applyClaudeProfileEnv, type ClaudeProfile } from "./claude-profile.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
 import { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
@@ -42,11 +43,11 @@ export function windowFromClaude(name: string, value: unknown, durationMins: num
   };
 }
 
-export function claudeSnapshotFile(dir: string): string | null {
+export function claudeSnapshotFile(dir: string, account = "claude"): string | null {
   try {
     const files = fs.readdirSync(dir)
-      // Default-account snapshots only: a named profile's windows are not the operator's (FR-055).
-      .filter((name) => name.endsWith(".json") && isDefaultAccountSession(name.slice(0, -".json".length)))
+      // One account's snapshots only: a named profile's windows are not the operator's (FR-055, FR-071).
+      .filter((name) => name.endsWith(".json") && isAccountSession(name.slice(0, -".json".length), account))
       .map((name) => path.join(dir, name))
       .map((file) => {
         let hasRateLimits = false;
@@ -79,10 +80,15 @@ const CLAUDE_OAUTH_TIMEOUT_MS = 3500;
 // keep a private copy; the two drifted (only this one learned to read the macOS
 // Keychain), which broke Claude model discovery. One reader, no drift.
 
-export async function fetchClaudeOAuthUsage(env: NodeJS.ProcessEnv = process.env): Promise<JsonRecord | undefined> {
+export async function fetchClaudeOAuthUsage(env: NodeJS.ProcessEnv = process.env, profile: ClaudeProfile = null): Promise<JsonRecord | undefined> {
   if (env.JINN_CLAUDE_USAGE_API === "off") return undefined;
-  const token = await readClaudeOAuthToken();
-  if (!token) return undefined;
+  const token = await readClaudeOAuthToken(profile ? { profile } : {});
+  return token ? fetchClaudeOAuthUsageWithToken(token) : undefined;
+}
+
+/** The usage call itself, with a token the caller read and holds in memory
+ *  for this call only. Never refreshed, logged or stored (FR-071, FR-072). */
+export async function fetchClaudeOAuthUsageWithToken(token: string): Promise<JsonRecord | undefined> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CLAUDE_OAUTH_TIMEOUT_MS);
   try {
@@ -104,14 +110,16 @@ export async function fetchClaudeOAuthUsage(env: NodeJS.ProcessEnv = process.env
   }
 }
 
-async function claudeAuthPlan(config: JinnConfig): Promise<string | undefined> {
+async function claudeAuthPlan(config: JinnConfig, profile: ClaudeProfile): Promise<string | undefined> {
   const bin = resolveBin("claude", config.engines.claude?.bin);
   return new Promise((resolve) => {
     // An npm-installed CLI on Windows is a .cmd shim, which Node refuses to
     // spawn without a shell; without this the call fails against a working
     // install and the plan silently reads as unknown.
     const auth = spawnableCommand(bin, ["auth", "status"]);
-    execFile(auth.command, auth.args, { timeout: 3000, windowsHide: true, ...auth.options }, (err, stdout) => {
+    // A named profile's plan is its own: the same command under its CLAUDE_CONFIG_DIR.
+    const env = profile ? { env: applyClaudeProfileEnv({ ...process.env } as Record<string, string>, profile) } : {};
+    execFile(auth.command, auth.args, { timeout: 3000, windowsHide: true, ...auth.options, ...env }, (err, stdout) => {
       if (err) return resolve(undefined);
       try {
         const parsed = JSON.parse(stdout);
@@ -232,16 +240,19 @@ function claudeFromStatusline(
   };
 }
 
-export async function collectClaudeLimits(config: JinnConfig): Promise<EngineLimitEngineSnapshot> {
+/** One local Claude account's reading: the default profile when `profile` is
+ *  null (exactly as before accounts), or a named one (FR-071). */
+export async function collectClaudeLimits(config: JinnConfig, profile: ClaudeProfile = null): Promise<EngineLimitEngineSnapshot> {
   const snap = baseSnapshot(config, "claude");
   if (!snap.available) {
     return { ...snap, status: "unavailable", unsupportedReason: "Claude CLI is not installed." };
   }
 
-  const latest = claudeSnapshotFile(CLAUDE_LIMITS_DIR);
+  const account = claudeAccountKey(profile);
+  const latest = claudeSnapshotFile(CLAUDE_LIMITS_DIR, account);
   const [accountPlan, oauthUsage] = await Promise.all([
-    claudeAuthPlan(config),
-    fetchClaudeOAuthUsage(),
+    claudeAuthPlan(config, profile),
+    fetchClaudeOAuthUsage(process.env, profile),
   ]);
   const liveWindows = oauthUsage ? windowsFromClaudeUsage(oauthUsage) : [];
   const statusline = latest ? readClaudeStatusline(latest) : null;
@@ -263,7 +274,7 @@ export async function collectClaudeLimits(config: JinnConfig): Promise<EngineLim
     // Every caller's reading — the loop's tick, the health refresh, the Limits
     // page, the CLI — passes through here, so this is where the usage history
     // the dashboard graphs is kept.
-    recordClaudeUsageSample(live);
+    recordClaudeUsageSample(live, Date.now(), usageHistoryPath(account));
     return live;
   }
 

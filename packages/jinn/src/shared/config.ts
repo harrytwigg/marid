@@ -2,6 +2,7 @@ import fs from "node:fs";
 import yaml from "js-yaml";
 import { CONFIG_PATH } from "./paths.js";
 import { applyLegacyFallbackMigration, validateEngineFallbackChains, validateEngineFallbackModelMaps } from "./engine-fallback.js";
+import { claudeChainAccountProblems, validateClaudeAccounts } from "./claude-accounts-config.js";
 import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
 import { autoCompactProblems } from "./auto-compact-config.js";
 import type { JinnConfig } from "./types.js";
@@ -87,7 +88,7 @@ export function validateConfigShape(config: unknown): string[] {
     if (typeof c.engines.claude !== "object" || c.engines.claude === null || Array.isArray(c.engines.claude)) {
       problems.push("engines.claude must be a mapping");
     }
-    problems.push(...validateEngineFallbackChains(c.engines));
+    problems.push(...validateEngineFallbackChains(c.engines), ...validateClaudeAccounts(c.engines), ...claudeChainAccountProblems(c.engines));
     problems.push(...validateEngineFallbackModelMaps(c.engines));
     problems.push(...opencodeUsageLimitsProblems(c.engines), ...autoCompactProblems(c.engines));
   }
