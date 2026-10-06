@@ -12,6 +12,13 @@ vi.mock("../../shared/paths.js", () => ({
   resolveJinnHome: () => tmpHome,
 }));
 
+// The department definitions are not what these cases are about, and reading them opens
+// the registry database, which this file's partial paths mock cannot serve.
+vi.mock("../department-registry.js", () => ({
+  refreshDepartments: vi.fn(),
+  departmentScopeOf: () => "open",
+}));
+
 vi.mock("../../shared/logger.js", () => ({
   logger: {
     warn: vi.fn(),

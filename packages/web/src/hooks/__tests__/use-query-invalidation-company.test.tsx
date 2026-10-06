@@ -57,6 +57,22 @@ describe('company + session:created invalidation', () => {
     expect(calledWithKey(invalidate, ['work-item'])).toBe(true)
   })
 
+  it('refetches the department list and every open department when a department changes', async () => {
+    const { invalidate } = setup()
+    act(() => listener?.('company:changed', { entity: 'department', action: 'changed', id: 'side-project' }))
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    expect(calledWithKey(invalidate, ['departments'])).toBe(true)
+    // A department's scope is not a Todo, so no Todo list is refetched for it.
+    expect(calledWithKey(invalidate, ['work-items'])).toBe(false)
+  })
+
+  it('refetches the department list when the org changes, since a panel lists its members', async () => {
+    const { invalidate } = setup()
+    act(() => listener?.('org:changed', {}))
+    await act(async () => vi.advanceTimersByTime(1_000))
+    expect(calledWithKey(invalidate, ['departments'])).toBe(true)
+  })
+
   it('refreshes pins immediately when another browser changes them', () => {
     const { invalidate } = setup()
     act(() => listener?.('pins:changed', {}))

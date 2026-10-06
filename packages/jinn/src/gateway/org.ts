@@ -3,43 +3,21 @@ import path from "node:path";
 import yaml from "js-yaml";
 import { resolveJinnHome } from "../shared/paths.js";
 import type { Employee, JinnConfig } from "../shared/types.js";
+import type { DepartmentScope } from "../work-items/department-scope.js";
 import { logger } from "../shared/logger.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
 import { validateEmployeeTargets } from "../shared/claude-profile.js";
+import { departmentDisagreement, resolveEmployeeDepartment } from "./org-department-check.js";
+import { walkEmployeeYamls, WRITABLE_FIELDS, type EmployeeUpdate } from "./org-yaml-files.js";
 import {
-  isSystemEmployeeName,
   resolveSystemEmployees,
   SYSTEM_EMPLOYEE_OVERRIDE_FIELDS,
 } from "./system-employees.js";
 
-/**
- * Recursively walk `dir`, invoking `visit` for every employee YAML file
- * (.yaml/.yml, skipping department.yaml). Stops early and returns the first
- * non-undefined value `visit` returns; visitors that never return a value
- * walk the whole tree.
- */
-function walkEmployeeYamls<T>(
-  dir: string,
-  visit: (fullPath: string) => T | undefined,
-): T | undefined {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      const found = walkEmployeeYamls(fullPath, visit);
-      if (found !== undefined) return found;
-    } else if (
-      (entry.name.endsWith(".yaml") || entry.name.endsWith(".yml")) &&
-      entry.name !== "department.yaml"
-    ) {
-      const found = visit(fullPath);
-      if (found !== undefined) return found;
-    }
-  }
-  return undefined;
-}
+export { updateEmployeeYaml, type EmployeeUpdate } from "./org-yaml-files.js";
 
-export function scanOrg(config?: JinnConfig): Map<string, Employee> {
+/** `scopeOf` answers how scoped a department is; the default holds every department open, so a scan that is handed none reads the org as it always did. */
+export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => DepartmentScope = () => "open"): Map<string, Employee> {
   const registry = new Map<string, Employee>(
     resolveSystemEmployees(config).map((employee) => [employee.name, employee]),
   );
@@ -78,8 +56,7 @@ export function scanOrg(config?: JinnConfig): Map<string, Employee> {
         const employee: Employee = {
           name: data.name,
           displayName: data.displayName || data.name,
-          department:
-            data.department || path.basename(path.dirname(fullPath)),
+          department: resolveEmployeeDepartment(data.department, path.basename(path.dirname(fullPath))),
           rank: data.rank || "employee",
           engine: data.engine || "claude",
           model: data.model || "sonnet",
@@ -110,6 +87,14 @@ export function scanOrg(config?: JinnConfig): Map<string, Employee> {
               .map((s: any) => ({ name: s.name as string, description: s.description as string }))
             : undefined,
         };
+        const departmentProblem = departmentDisagreement(orgDir, fullPath, employee.department, scopeOf);
+        if (departmentProblem) {
+          // Same containment as a bad remote target: this employee does not load, the
+          // rest of the org does. A scoped department's members are confined by what
+          // the roster says their department is, so an ambiguous one is refused.
+          logger.error(`Skipping employee file ${fullPath}: ${departmentProblem}`);
+          return undefined;
+        }
         const problem = validateEmployeeTargets(employee, config?.remote);
         if (problem) {
           // Skip THIS employee, keep loading the rest — same containment the
@@ -129,55 +114,6 @@ export function scanOrg(config?: JinnConfig): Map<string, Employee> {
 
   return registry;
 }
-
-/**
- * Find the YAML file for an employee by name.
- * Searches the current instance's org directory recursively.
- */
-function findEmployeeYamlPath(name: string): string | undefined {
-  const orgDir = path.join(resolveJinnHome(), "org");
-  if (!fs.existsSync(orgDir)) return undefined;
-
-  return walkEmployeeYamls(orgDir, (fullPath) => {
-    try {
-      const raw = fs.readFileSync(fullPath, "utf-8");
-      const data = yaml.load(raw) as any;
-      if (data?.name === name) return fullPath;
-    } catch {
-      // skip unreadable files
-    }
-    return undefined;
-  });
-}
-
-/** Fields of an employee YAML that may be mutated via the update API.
- *  `name` is intentionally excluded — it is the immutable identity/lookup key. */
-export interface EmployeeUpdate {
-  displayName?: string;
-  department?: string;
-  rank?: Employee["rank"];
-  engine?: string;
-  model?: string;
-  effortLevel?: string | null;
-  persona?: string;
-  reportsTo?: string | string[];
-  cliFlags?: string[];
-  alwaysNotify?: boolean;
-}
-
-/** The set of YAML keys the update path is allowed to write. `name` is never here. */
-const WRITABLE_FIELDS = [
-  "displayName",
-  "department",
-  "rank",
-  "engine",
-  "model",
-  "effortLevel",
-  "persona",
-  "reportsTo",
-  "cliFlags",
-  "alwaysNotify",
-] as const;
 
 const VALID_RANKS: ReadonlyArray<Employee["rank"]> = [
   "executive",
@@ -349,51 +285,6 @@ export function validateEmployeeUpdate(
   }
 
   return { ok: true, updates };
-}
-
-/**
- * Update an employee's YAML file by read-merging the provided writable fields.
- * Only keys in WRITABLE_FIELDS are written; `name` is never touched (immutable).
- * Untouched YAML fields are preserved. Returns true on success, false if the
- * employee's YAML can't be found/parsed. Validate with validateEmployeeUpdate first.
- */
-export function updateEmployeeYaml(
-  name: string,
-  updates: EmployeeUpdate,
-): boolean {
-  let filePath = findEmployeeYamlPath(name);
-  const systemEmployee = isSystemEmployeeName(name);
-  if (!filePath && !systemEmployee) return false;
-
-  if (!filePath) {
-    const systemDir = path.join(resolveJinnHome(), "org", "system");
-    fs.mkdirSync(systemDir, { recursive: true });
-    filePath = path.join(systemDir, `${name}.yaml`);
-    fs.writeFileSync(filePath, yaml.dump({ name }, { lineWidth: -1 }), "utf-8");
-  }
-
-  try {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    const data = yaml.load(raw) as Record<string, unknown>;
-    if (!data || typeof data !== "object") return false;
-
-    const fields = systemEmployee ? SYSTEM_EMPLOYEE_OVERRIDE_FIELDS : WRITABLE_FIELDS;
-    for (const key of fields) {
-      const value = (updates as Record<string, unknown>)[key];
-      if (value === null) {
-        delete data[key];
-      } else if (value !== undefined) {
-        data[key] = value;
-      }
-    }
-    // `name` is immutable — never write or rename it, even if present in `updates`.
-
-    fs.writeFileSync(filePath, yaml.dump(data, { lineWidth: -1 }), "utf-8");
-    return true;
-  } catch (err) {
-    logger.warn(`Failed to update employee YAML for ${name}: ${err}`);
-    return false;
-  }
 }
 
 export function extractMention(

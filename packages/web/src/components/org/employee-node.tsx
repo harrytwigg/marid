@@ -3,6 +3,8 @@ import type { Employee } from "@/lib/api"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { deptHue } from "@/components/org/layout/dept-color"
 import { ClaudeProfileBadge } from "@/components/org/claude-profile"
+import { DepartmentScopeBadge } from "@/components/department-scope-badge"
+import type { DepartmentScopeWire } from "@/lib/department-api"
 
 type EmployeeNodeData = Employee & Record<string, unknown>
 
@@ -70,11 +72,12 @@ export function EmployeeNode({ data, selected }: NodeProps) {
 }
 
 export function DepartmentGroupNode({ data }: NodeProps) {
-  const { label } = data as { label: string } & Record<string, unknown>
+  const { label, scope } = data as { label: string; scope?: DepartmentScopeWire } & Record<string, unknown>
   const hue = deptHue(label)
   return (
     <div
-      className="w-full h-full relative rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] overflow-hidden"
+      className="w-full h-full relative rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] overflow-hidden cursor-pointer"
+      data-testid={`department-group-${label}`}
       style={{ border: "1px solid var(--separator)", ["--dept-h" as string]: String(hue) }}
     >
       {/* Subtle per-department hue: left stripe only (amber stays for selection) */}
@@ -87,6 +90,7 @@ export function DepartmentGroupNode({ data }: NodeProps) {
         <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] tracking-[var(--tracking-wide)] uppercase text-[var(--text-tertiary)]">
           {label}
         </span>
+        <DepartmentScopeBadge scope={scope} />
       </div>
     </div>
   )

@@ -231,7 +231,8 @@ and no caller passes a sub-task's own column. It returns true when any of these 
   `dedicated`.
 
 A department's scope is its loaded scope, else its last good scope (`department_scopes`), else
-`open`. A refused file with no last good scope counts as `dedicated`. If the store has no
+`open`. A refused file with no last good scope counts as `dedicated` only if its raw text has a
+`scope:` key with a value other than `open`, else `open`. If the store has no
 resolver, it refuses nothing.
 
 **Where it is enforced:** at the store, in every writer of `assignee`:

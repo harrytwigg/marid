@@ -3,6 +3,9 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import type { Employee, OrgData, OrgHierarchy } from "@/lib/api";
 import { EmployeeDetail } from "@/components/org/employee-detail";
+import { DepartmentPanel } from "@/components/org/department-panel";
+import { useDepartments } from "@/hooks/use-departments";
+import { isConfined, type DepartmentScopeWire } from "@/lib/department-api";
 import { PageLayout } from "@/components/page-layout";
 import { useSettings } from "@/routes/settings-provider";
 import { PRODUCT_NAME } from "@/lib/brand"
@@ -27,18 +30,21 @@ export default function OrgPage() {
   // so the name resolves against the loaded list.
   const [params, setParams] = useSearchParams();
   const selectedName = params.get("employee");
+  // A department's panel is linkable the same way, and the two never show together.
+  const selectedDepartment = params.get("department");
   const selected = useMemo(
     () => employees.find((e) => e.name === selectedName) ?? null,
     [employees, selectedName],
   );
-  const setSelected = useCallback(
-    (emp: Employee | null) => {
+  const openPanel = useCallback(
+    (key: "employee" | "department" | null, value?: string) => {
       // Replace, not push: selecting a node never made a history entry before.
       setParams(
         (current) => {
           const next = new URLSearchParams(current);
-          if (emp) next.set("employee", emp.name);
-          else next.delete("employee");
+          next.delete("employee");
+          next.delete("department");
+          if (key && value) next.set(key, value);
           return next;
         },
         { replace: true },
@@ -46,6 +52,21 @@ export default function OrgPage() {
     },
     [setParams],
   );
+  const setSelected = useCallback(
+    (emp: Employee | null) => openPanel(emp ? "employee" : null, emp?.name),
+    [openPanel],
+  );
+  const setDepartment = useCallback(
+    (slug: string | null) => openPanel(slug ? "department" : null, slug ?? undefined),
+    [openPanel],
+  );
+  const departments = useDepartments();
+  const scopes = useMemo(() => {
+    const confined: Record<string, DepartmentScopeWire> = {};
+    for (const row of departments.data ?? []) if (isConfined(row.scope)) confined[row.slug] = row.scope;
+    return confined;
+  }, [departments.data]);
+  const panelOpen = !!selected || !!selectedDepartment;
   const closeRef = useRef<HTMLButtonElement>(null);
   const { settings } = useSettings();
 
@@ -77,21 +98,21 @@ export default function OrgPage() {
 
   // Focus close button when panel opens
   useEffect(() => {
-    if (selected && closeRef.current) {
+    if (panelOpen && closeRef.current) {
       closeRef.current.focus();
     }
-  }, [selected]);
+  }, [panelOpen]);
 
   // ESC closes panel
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && selected) {
-        setSelected(null);
+      if (e.key === "Escape" && panelOpen) {
+        openPanel(null);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selected, setSelected]);
+  }, [panelOpen, openPanel]);
 
   const handleSelectEmployee = useCallback((emp: Employee) => {
     setSelected(emp);
@@ -142,28 +163,30 @@ export default function OrgPage() {
                 hierarchy={hierarchy}
                 selectedName={selected?.name ?? null}
                 onNodeClick={handleSelectEmployee}
+                scopes={scopes}
+                onDepartmentClick={setDepartment}
               />
             </Suspense>
           )}
         </div>
 
         {/* Mobile backdrop */}
-        {selected && (
+        {panelOpen && (
           <div
             className="fixed inset-0 z-30 lg:hidden bg-black/50"
-            onClick={() => setSelected(null)}
+            onClick={() => openPanel(null)}
           />
         )}
 
         {/* Detail panel */}
-        {selected && (
+        {panelOpen && (
           <div className="absolute top-0 right-0 bottom-0 left-0 sm:left-auto z-30">
             <div className="w-full sm:w-[420px] lg:w-[468px] xl:w-[520px] max-w-[100vw] h-full overflow-y-auto bg-[var(--bg)] flex flex-col shadow-[var(--shadow-overlay)]">
               {/* Close button */}
               <div className="sticky top-0 z-10 flex items-center justify-end px-[var(--space-4)] py-[var(--space-3)] bg-[var(--bg)]">
                 <button
                   ref={closeRef}
-                  onClick={() => setSelected(null)}
+                  onClick={() => openPanel(null)}
                   aria-label="Close detail panel"
                   className="w-[30px] h-[30px] rounded-full flex items-center justify-center bg-[var(--fill-tertiary)] text-[var(--text-secondary)] border-none cursor-pointer text-sm"
                 >
@@ -171,13 +194,20 @@ export default function OrgPage() {
                 </button>
               </div>
 
-              {/* Employee detail */}
+              {/* Employee or department detail */}
               <div className="px-[var(--space-4)] pb-[var(--space-6)]">
-                <EmployeeDetail
-                  name={selected.name}
-                  prefetched={selected.rank === "executive" ? selected : undefined}
-                  onUpdated={handleEmployeeUpdated}
-                />
+                {selected ? (
+                  <EmployeeDetail
+                    name={selected.name}
+                    prefetched={selected.rank === "executive" ? selected : undefined}
+                    onUpdated={handleEmployeeUpdated}
+                  />
+                ) : (
+                  <DepartmentPanel
+                    slug={selectedDepartment!}
+                    onSelectEmployee={(name) => openPanel("employee", name)}
+                  />
+                )}
               </div>
             </div>
           </div>

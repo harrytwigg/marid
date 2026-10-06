@@ -9,6 +9,7 @@ import {
 } from "@xyflow/react"
 import { useCallback, useEffect } from "react"
 import type { Employee, OrgHierarchy } from "@/lib/api"
+import type { DepartmentScopeWire } from "@/lib/department-api"
 import { nodeTypes } from "@/components/org/employee-node"
 import { computeOrgLayout } from "@/components/org/layout/use-layouted-elements"
 
@@ -17,12 +18,16 @@ interface OrgMapProps {
   hierarchy?: OrgHierarchy
   selectedName: string | null
   onNodeClick: (employee: Employee) => void
+  /** The scope of each department that is not open, by slug. */
+  scopes?: Record<string, DepartmentScopeWire>
+  /** A department's group box was clicked. */
+  onDepartmentClick?: (slug: string) => void
 }
 
-export function OrgMap({ employees, hierarchy, selectedName, onNodeClick }: OrgMapProps) {
+export function OrgMap({ employees, hierarchy, selectedName, onNodeClick, scopes, onDepartmentClick }: OrgMapProps) {
   const buildLayout = useCallback(
-    () => computeOrgLayout(employees, hierarchy, selectedName),
-    [employees, hierarchy, selectedName],
+    () => computeOrgLayout(employees, hierarchy, selectedName, scopes),
+    [employees, hierarchy, selectedName, scopes],
   )
 
   const { nodes: initialNodes, edges: initialEdges } = buildLayout()
@@ -37,10 +42,11 @@ export function OrgMap({ employees, hierarchy, selectedName, onNodeClick }: OrgM
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      if (node.type === "departmentGroup") return onDepartmentClick?.((node.data as { label: string }).label)
       const employee = employees.find((e) => e.name === node.id)
       if (employee) onNodeClick(employee)
     },
-    [employees, onNodeClick],
+    [employees, onNodeClick, onDepartmentClick],
   )
 
   return (

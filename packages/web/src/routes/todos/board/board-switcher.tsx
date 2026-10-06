@@ -8,7 +8,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { DepartmentSummaryWire } from "@/lib/api"
+import { DepartmentScopeBadge } from "@/components/department-scope-badge"
+import type { DepartmentRowWire } from "@/lib/department-api"
 import { boardPath, isSameBoard, type BoardId } from "./board-route"
 import { useBoardMenuCounts } from "./use-board"
 
@@ -30,7 +31,7 @@ const ROW_CLASS =
 export interface BoardSwitcherProps {
   board: BoardId
   title: string
-  departments: DepartmentSummaryWire[] | undefined
+  departments: DepartmentRowWire[] | undefined
   attentionCount: number
 }
 
@@ -95,6 +96,7 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
                   {dept.prefix}
                 </span>
                 <span className="truncate">{departmentTitle(dept.slug)}</span>
+                <DepartmentScopeBadge scope={dept.scope} />
                 {countOf(counts.data?.byDepartment[dept.slug])}
               </DropdownMenuItem>
             ))}

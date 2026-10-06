@@ -368,7 +368,9 @@ and dark, with screenshots on the PR (FR-040).
 - **`department.yaml` broken or deleted.** The department keeps its last good scope, so a typo
   or a deleted file never opens a scoped department (FR-001). The last good scope lives in the
   registry, so a registry restored from an older backup or rebuilt from scratch, together with
-  a deleted file, does open it. A near-miss file name in a department directory, such as
+  a deleted file, does open it. A file that has never loaded and has no `scope` key, or `scope: open`
+  (for example an old file with an unquoted colon), leaves its department open; one with any
+  other `scope` value, a typo included, is held dedicated. A near-miss file name in a department directory, such as
   `department.yml`, is logged as a warning.
 - **Renaming a department.** Not supported today, and not added. Renaming the directory makes
   a new department. The old one keeps its Todos and its last good scope.
@@ -417,9 +419,28 @@ and dark, with screenshots on the PR (FR-040).
     (data-model.md, `department_scopes`). A department whose file is refused **or deleted**
     keeps its recorded scope. So a typo or a deleted file never turns a scoped department
     open. The operator opens a department only by writing `scope: open`.
-  - **A refused file with no recorded scope** (a brand-new file that has never loaded): the
-    department is treated as `dedicated` until the file loads, so its intended members are
-    confined and nobody else can hold its Todos. The log line says so.
+  - **A refused file with no recorded scope** (a file that has never loaded): the department
+    is treated as `dedicated` until the file loads **only if the file's `scope` is anything
+    other than `open`**. A file that parses is judged by its parsed `scope` key alone: present
+    and not exactly `open` means dedicated, including a quoted value other than `open`, a
+    capitalised or mistyped value, a list and a flow mapping. Absent or `open` means open, and
+    so does an empty `scope:` (or `scope: ~`), which YAML reads as null and which therefore
+    names no scope, as in a file that does not parse. `scope:` written inside a description,
+    or in a document that is not a mapping, does not count. A file that does not
+    parse is judged by an anchored line match,
+    `/^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S/m` (multiline, with no `i`
+    flag: it is case-sensitive, as YAML is, so `scope: OPEN` is not `open` and a key spelled
+    `Scope` is not the scope key), so a commented-out line or an empty `scope:` does not
+    count. A file that cannot be read (a permissions error on the file or on its department's
+    directory, say) is held `dedicated`, since what it asks for cannot be known. A recorded last good scope always
+    wins over all three. So a file that asks
+    for confinement, or that mistypes the scope (`scope: scopd`), fails closed: its intended
+    members are confined and nobody else can hold its Todos. A file with no `scope`, or with
+    `scope: open`, leaves the department `open`, which is today's behaviour: earlier templates
+    described a `department.yaml` that nothing read and never carried a `scope`, so an
+    instance may hold one the parser refuses, and an upgrade must not confine or drop anyone.
+    Either way the refusal is logged and shown on the department panel, and the log line says
+    which.
 - **FR-002**: A Todo's department MUST remain `work_items.department`. No membership table is
   added and **no existing Todo is migrated**. **A Todo's scope department is its root's
   department.** Every scope decision in this spec (FR-003, FR-011, FR-015, the route table and
@@ -630,10 +651,10 @@ scoped employee; D is that session's binding)
   - it keeps state in `knowledge/departments/<slug>/state.md` through the note tools.
 - **FR-033**: **Working-directory validation.** A department working directory MUST:
   - be inside a git work tree whose top level is neither `$HOME` nor an ancestor of it;
-  - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, the stage root, `~/.claude` or any
-    employee's `claudeConfigDir`;
-  - not lie inside `$JINN_HOME`, the stage root, `~/.claude`, any `claudeConfigDir`,
-    `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
+  - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, the stage root, `~/.claude`, the
+    gateway's own `CLAUDE_CONFIG_DIR` or any employee's `claudeConfigDir`;
+  - not lie inside `$JINN_HOME`, the stage root, `~/.claude`, the gateway's `CLAUDE_CONFIG_DIR`,
+    any `claudeConfigDir`, `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
 
   The scan and the department panel refuse a violating entry.
 

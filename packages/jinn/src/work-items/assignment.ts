@@ -1,4 +1,5 @@
 import { initDb } from '../shared/db.js';
+import { isNonOpenDepartment } from './department-scope.js';
 import type { WriteOrigin } from './origin.js';
 import {
   appendWorkItemEvent,
@@ -68,10 +69,21 @@ export interface AssignWorkItemOptions {
 
 /** With open departments a Todo follows its assignee's org department. Under
  *  `gateway.todoDepartments` (JIN-1) the department is a classification, so
- *  assignment keeps it and only fills an empty one with the configured default. */
-function departmentAfterAssignment(current: string | null, assigneeDepartment: string | null): string | null {
+ *  assignment keeps it and only fills an empty one with the configured default.
+ *  Whatever the mode, assignment never moves a Todo across a non-open department's
+ *  boundary: a Todo whose ROOT sits in one keeps its department, for an employee
+ *  elsewhere, `@operator` and an engine-only delegate alike. */
+function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | null): string | null {
+  const root = item.rootId === item.id ? item : getWorkItem(item.rootId) ?? item;
+  // FR-003: never move a Todo across a non-open boundary, in either direction. A root in a
+  // non-open department keeps its Todo there; an open root keeps its Todo out of the
+  // assignee's non-open department. Whether that assignee may hold the Todo at all is
+  // FR-015 (`mayHoldTodo`), which refuses on top of this; until then the assignment succeeds.
+  if (isNonOpenDepartment(root.department)) return item.department;
   const policy = resolveTodoDepartments();
-  return policy ? current ?? policy.defaultDepartment : assigneeDepartment;
+  // Under a closed policy the department is a classification: an empty one is filled with the default, even for a scoped assignee.
+  if (policy) return item.department ?? policy.defaultDepartment;
+  return isNonOpenDepartment(assigneeDepartment) ? item.department : assigneeDepartment;
 }
 
 export function assignWorkItem(
@@ -88,7 +100,7 @@ export function assignWorkItem(
     if (STICKY_STATUSES.has(item.status)) {
       throw new TransitionError('illegal-edge', `cannot assign work item ${id} while it is in terminal state ${item.status}`);
     }
-    const department = departmentAfterAssignment(item.department, assigneeDepartment);
+    const department = departmentAfterAssignment(item, assigneeDepartment);
     if (item.assignee === assignee && item.department === department) {
       return { item, escalated: false };
     }

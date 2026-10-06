@@ -43,6 +43,10 @@ persona: |
 
 Confirm the role, department, rank, engine, model, and persona. Create missing departments only with the user's agreement. Write the persona, verify that `get_employee` resolves it without warnings, and report the chosen manager.
 
+### Scope a department
+
+A department is open unless its `department.yaml` says otherwise: `scope: scoped` confines its employees to it and still lets everyone else read it and hold its Todos, and `scope: dedicated` also keeps everyone else from holding its Todos. Write the file by hand (`docs/org.md` has the fields); a scope set through the API is refused until scoped employees are enforced. Today a scope stops assignment moving a Todo across the department's boundary, makes sub-tasks share their root's department, and refuses an employee whose directory and `department` field disagree. It does not yet limit what a scoped employee can reach. A broken or deleted file keeps the last scope it loaded with, so open a department only by writing `scope: open`. Keep a scoped department's employees in `org/<department>/` with `department:` matching it.
+
 ### Fire
 
 Inspect the employee with `get_employee`, including direct reports and parent. Surface active Todos before removal. Reassign direct reports to the departing employee's manager, or remove their `reportsTo` when the departing employee reports to the root. Reassign or block active work as directed, then remove the persona and verify the roster.

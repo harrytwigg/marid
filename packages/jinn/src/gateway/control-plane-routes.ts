@@ -44,6 +44,7 @@ const OPERATOR_ONLY_ROUTES: ReadonlyArray<readonly [method: string, route: strin
   ["DELETE", "/api/cron/:id", "cron delete"],
   ["POST", "/api/cron/:id/trigger", "cron manual trigger"],
   ["PATCH", "/api/org/employees/:name", "org employee update"],
+  ["PATCH", "/api/departments/:slug", "department update"],
   ["DELETE", "/api/skills/:name", "skill removal"],
   ["PUT", "/api/skills/:name", "skill update"],
 ];

@@ -9,7 +9,7 @@ import { mergeTodoIntoCaches } from '@/routes/todos/todo-edit-request'
 import type { BackgroundActivity, SessionsResponse } from '@/lib/api'
 import { GATEWAY_EVENTS, type GatewayEvent } from '@jinn/gateway-events'
 
-/** The company mutation event: a Todo, or a sprint the Todos embed. */
+/** The company mutation event: a Todo, a sprint the Todos embed, or a department. */
 function handleCompanyChanged(
   qc: ReturnType<typeof useQueryClient>,
   p: Record<string, unknown>,
@@ -35,6 +35,8 @@ function handleCompanyChanged(
     pending.add('todos')
     pending.add('todo-details')
   }
+  // A department's definition or scope: the board switcher, the org tree and the panel all read it.
+  if (entity === 'department') pending.add('departments')
   // Loss recovery for the invoking transcript; normal session:delta stays the
   // surgical live path when the session is streaming.
   if (typeof p.sessionId === 'string' && p.sessionId) {
@@ -121,6 +123,11 @@ export function useQueryInvalidation() {
             break
           case 'org':
             qc.invalidateQueries({ queryKey: queryKeys.org.all })
+            // A department's members come from the roster, so an org change stales them too.
+            qc.invalidateQueries({ queryKey: ['departments'] })
+            break
+          case 'departments':
+            qc.invalidateQueries({ queryKey: ['departments'] })
             break
           case 'engines':
             qc.invalidateQueries({ queryKey: queryKeys.engines.all })

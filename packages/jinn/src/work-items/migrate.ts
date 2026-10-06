@@ -2,7 +2,6 @@ import fs from "node:fs";
 import { assertLocalDatabasePath } from "../shared/local-db-guard.js";
 import Database, { type Database as DatabaseType } from "better-sqlite3";
 import {
-  resolveTodoIdPrefix,
   isTodoId,
   todoIdOrdinal,
   todoIdPrefix,
@@ -37,11 +36,10 @@ import {
   V1_WORK_ITEM_ID_ISSUANCES_TABLE_DDL,
   V2_APPROVAL_WORK_ITEMS_TABLE_DDL,
 } from "./frozen-schemas.js";
-import { resolveDepartmentPrefix } from "./departments.js";
+import { reconcileDepartmentRegistry } from "./departments.js";
+import { DEPARTMENT_SCOPES_DDL, DEPARTMENT_SCOPES_TABLE_DDL } from "./department-scopes-schema.js";
 import { SPRINTS_DDL, SPRINTS_TABLE_DDL, sprintRowsAreSound, WORK_ITEM_SPRINTS_DDL, WORK_ITEM_SPRINTS_TABLE_DDL } from "./sprints-schema.js";
 import { CORRUPT_SESSIONS_DATABASE, isSqliteCorruption, UNSUPPORTED_PRERELEASE_TODO_DATA } from "./migrate-refusals.js";
-import { loadConfig } from "../shared/config.js";
-import { CONFIG_PATH } from "../shared/paths.js";
 
 export { CORRUPT_SESSIONS_DATABASE, UNSUPPORTED_PRERELEASE_TODO_DATA } from "./migrate-refusals.js";
 
@@ -511,6 +509,7 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ["work_item_auto_start", WORK_ITEM_AUTO_START_TABLE_DDL],
   ...WORK_ITEM_RECOVERY_TABLES.map((table) => [table.name, table.ddl] as [string, string]),
   ["departments", DEPARTMENTS_TABLE_DDL],
+  ["department_scopes", DEPARTMENT_SCOPES_TABLE_DDL],
 ]);
 
 /** Tables added additively AFTER the v2 rebuild first shipped, in ship order. A v2 database whose
@@ -535,6 +534,7 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "work_item_auto_start", ddl: WORK_ITEM_AUTO_START_DDL },
   { name: "sprints", ddl: SPRINTS_DDL }, // before its membership, which references it
   { name: "work_item_sprints", ddl: WORK_ITEM_SPRINTS_DDL },
+  { name: "department_scopes", ddl: DEPARTMENT_SCOPES_DDL },
 ].concat(WORK_ITEM_RECOVERY_TABLES);
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,
@@ -556,28 +556,6 @@ function backfillWorkItemApprovals(db: DatabaseType, source: "work_items" | "wor
          AND NOT EXISTS (SELECT 1 FROM work_item_approvals a WHERE a.work_item_id = w.id)`,
     )
     .run().changes;
-}
-
-/**
- * Register any department that holds Todos but is missing from the registry
- * (review F2). Department-changing writes now mint the row in their own
- * transaction; this reconciles rows written BEFORE that fix (move-only
- * departments). Idempotent — runs on every boot.
- */
-export function reconcileDepartmentRegistry(db: DatabaseType): number {
-  const missing = db
-    .prepare(
-      "SELECT DISTINCT department FROM work_items WHERE department IS NOT NULL AND department NOT IN (SELECT slug FROM departments) ORDER BY department",
-    )
-    .pluck()
-    .all() as string[];
-  if (missing.length === 0) return 0;
-  const portal = fs.existsSync(CONFIG_PATH) ? loadConfig().portal : undefined;
-  const companyPrefix = resolveTodoIdPrefix(portal?.companyName ?? "Jinn", portal?.companyPrefix);
-  for (const slug of missing) {
-    resolveDepartmentPrefix(db, slug, companyPrefix);
-  }
-  return missing.length;
 }
 
 const V1_REQUIRED_TABLE_SQL = new Map<string, string>([

@@ -1,5 +1,6 @@
 import type { Edge } from "@xyflow/react"
 import type { Employee, OrgHierarchy } from "@/lib/api"
+import type { DepartmentScopeWire } from "@/lib/department-api"
 import { buildTreeLayout, type LayoutResult } from "./d3-tree-layout"
 import { buildHierarchyLayout } from "./dagre-fallback"
 
@@ -22,10 +23,21 @@ function styleEdges(edges: Edge[]): Edge[] {
   })
 }
 
+/** Stamp each department group box with its scope, so the box can show its badge. Open departments carry none. */
+function withScopes(nodes: LayoutResult["nodes"], scopes: Record<string, DepartmentScopeWire> | undefined): LayoutResult["nodes"] {
+  if (!scopes) return nodes
+  return nodes.map((node) => {
+    if (node.type !== "departmentGroup") return node
+    const label = (node.data as { label: string }).label
+    return { ...node, data: { ...node.data, scope: scopes[label] } }
+  })
+}
+
 export function computeOrgLayout(
   employees: Employee[],
   hierarchy: OrgHierarchy | undefined,
   selectedName: string | null,
+  scopes?: Record<string, DepartmentScopeWire>,
 ): LayoutResult {
   let result: LayoutResult
   if (hierarchy) {
@@ -47,5 +59,5 @@ export function computeOrgLayout(
       selectedName,
     )
   }
-  return { nodes: result.nodes, edges: styleEdges(result.edges) }
+  return { nodes: withScopes(result.nodes, scopes), edges: styleEdges(result.edges) }
 }
