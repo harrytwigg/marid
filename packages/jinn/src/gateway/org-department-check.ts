@@ -2,6 +2,16 @@ import path from "node:path";
 import type { DepartmentScope } from "../work-items/department-scope.js";
 
 /**
+ * An employee's department: its `department` field, normalised to trimmed text, else its
+ * directory's name. One value feeds both the FR-007 check and the roster, so a padded or
+ * non-text field cannot read as one department to the check and another to the roster.
+ */
+export function resolveEmployeeDepartment(field: unknown, directory: string): string {
+  if (field === undefined || field === null) return directory;
+  return String(field).trim() || directory;
+}
+
+/**
  * FR-007: scope is read from the top-level directory under `org/`. When that
  * directory, the immediate directory and the `department` field are not the same
  * department and any of them is not open, the employee is refused. A file straight
@@ -11,13 +21,13 @@ import type { DepartmentScope } from "../work-items/department-scope.js";
 export function departmentDisagreement(
   orgDir: string,
   fullPath: string,
-  field: unknown,
+  department: string,
   scopeOf: (slug: string) => DepartmentScope,
 ): string | null {
   const parts = path.relative(orgDir, fullPath).split(path.sep);
   const top = parts.length > 1 ? parts[0] : "org";
   const immediate = parts.length > 1 ? parts[parts.length - 2] : "org";
-  const named = typeof field === "string" && field.trim() ? field.trim() : immediate;
+  const named = department;
   if (top === immediate && immediate === named) return null;
   const where = [...new Set([top, immediate, named])];
   const nonOpen = where.filter((slug) => scopeOf(slug) !== "open");

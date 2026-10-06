@@ -123,6 +123,8 @@ export function useQueryInvalidation() {
             break
           case 'org':
             qc.invalidateQueries({ queryKey: queryKeys.org.all })
+            // A department's members come from the roster, so an org change stales them too.
+            qc.invalidateQueries({ queryKey: ['departments'] })
             break
           case 'departments':
             qc.invalidateQueries({ queryKey: ['departments'] })

@@ -100,3 +100,16 @@ describe("an employee's Claude profile directory", () => {
     expect(workdirs.workdirRefusal(path.join(home, "code/garden-app"), options)).toBeNull();
   });
 });
+
+describe("a path spelled in another case", () => {
+  const caseInsensitive = root !== root.toUpperCase() && fs.existsSync(root.toUpperCase());
+
+  it.skipIf(!caseInsensitive)("is judged by what is on disk, so a protected tree cannot be reached by changing its case", () => {
+    const repo = path.join(home, ".config/tool/repo");
+    fs.mkdirSync(repo, { recursive: true });
+    git(repo);
+    expect(refusal(path.join(home, ".CONFIG/tool/repo"))).toMatch(/protected/);
+    expect(refusal(path.join(home, ".Claude"))).not.toBeNull();
+    expect(refusal(path.join(home, "CODE/garden-app"))).toBeNull();
+  });
+});

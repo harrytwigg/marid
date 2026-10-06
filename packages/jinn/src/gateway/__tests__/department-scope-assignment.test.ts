@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { resolveJinnHome } from "../../shared/paths.js";
 import { refreshOrg } from "../org-registry.js";
 import { assignWorkItem } from "../../work-items/assignment.js";
 import { createWorkItem, getWorkItem } from "../../work-items/store.js";
@@ -131,6 +134,37 @@ describe("open departments keep today's behaviour", () => {
     refreshOrg();
     const item = todoIn("side-project");
     expect(assign(item.id, "eng-dev", "engineering")?.department).toBe("engineering");
+  });
+});
+
+describe("a sub-task of an open root", () => {
+  it("is not moved into a scoped department by assigning it to a scoped employee", () => {
+    writeDepartmentFile("side-project", "name: side-project\nscope: scoped\n");
+    loadOrg();
+    const root = todoIn("platform");
+    const child = createWorkItem({ title: "child", parentId: root.id });
+    expect(assign(child.id, "side-dev", "side-project")?.department).toBe("platform");
+  });
+});
+
+describe("under a closed department policy", () => {
+  const config = path.join(resolveJinnHome(), "config.yaml");
+  beforeEach(() => {
+    writeDepartmentFile("side-project", "name: side-project\nscope: scoped\n");
+    loadOrg();
+    fs.writeFileSync(
+      config,
+      "engines:\n  default: claude\n  claude: {}\nportal:\n  companyName: Acme\n  companyPrefix: ACM\ngateway:\n  port: 8061\n  host: 127.0.0.1\n  todoDepartments:\n    allowed: [general, side-project]\n    default: general\n",
+    );
+  });
+  afterEach(() => fs.rmSync(config, { force: true }));
+
+  it("still fills an empty department with the default when a scoped employee is assigned", () => {
+    setDepartmentScopeResolver(null);
+    const item = createWorkItem({ title: "unclassified" });
+    refreshOrg();
+    expect(item.department).toBe("general");
+    expect(assign(item.id, "side-dev", "side-project")?.department).toBe("general");
   });
 });
 

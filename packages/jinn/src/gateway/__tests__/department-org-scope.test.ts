@@ -64,6 +64,20 @@ describe("an employee whose places disagree about a non-open department", () => 
     expect(roster()).toEqual([]);
   });
 
+  it("does not let a padded department field read as another department to the roster", () => {
+    writeEmployeeFile("side-project", "padded", { department: '"side-project "' });
+    refreshOrg();
+    // Normalised once: the check and the roster see the same department, so this one is a member.
+    expect(orgRegistry().get("padded")?.department).toBe("side-project");
+  });
+
+  it("refuses a padded field that names another department, and a non-text field", () => {
+    writeEmployeeFile("side-project", "elsewhere", { department: '"engineering "' });
+    writeEmployeeFile("side-project", "numeric", { department: "42" });
+    refreshOrg();
+    expect(roster()).toEqual([]);
+  });
+
   it("keeps the rest of the org loading", () => {
     writeEmployeeFile("engineering", "eng-dev", { department: "side-project" });
     writeEmployeeFile("engineering", "eng-ok");

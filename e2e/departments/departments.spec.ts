@@ -63,6 +63,19 @@ const PANEL_STATES: PanelState[] = [
 const panelBadge = (page: Page) => page.getByTestId('department-panel').getByTestId('department-scope-badge')
 const badgeText = (page: Page, container: string) => page.locator(`${container} [data-testid="department-scope-badge"]`)
 
+/** A brand-new department.yaml that is refused after the gateway has started is held as dedicated. */
+test.beforeAll(async ({ request, baseURL }) => {
+  const dir = sandboxFile('org', 'new-lab')
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(`${dir}/department.yaml`, 'name: some-other-lab\nscope: scoped\n')
+  fs.writeFileSync(`${dir}/new-lead.yaml`, 'name: new-lead\ndisplayName: new-lead\ndepartment: new-lab\nrank: manager\nengine: claude\nmodel: sonnet\npersona: Works on new-lab.\n')
+  const headers = { authorization: `Bearer ${gatewayToken()}` }
+  await expect.poll(async () => {
+    const response = await request.get(`${baseURL}/api/departments/new-lab`, { headers })
+    return response.ok() ? (await response.json()).department.definitionError : null
+  }, { timeout: 30_000 }).toMatch(/does not match the directory/)
+})
+
 /** A Todo in each non-open department, so the switcher and the panel have counts to show. */
 test.beforeAll(async ({ request, baseURL }) => {
   const headers = { authorization: `Bearer ${gatewayToken()}`, 'content-type': 'application/json' }
@@ -81,7 +94,8 @@ for (const theme of THEMES) {
         await expect(page.getByTestId('board-menu-side-project')).toBeVisible()
         await expect(badgeText(page, '[data-testid="board-menu-side-project"]')).toHaveText('Scoped')
         await expect(badgeText(page, '[data-testid="board-menu-friend-lab"]')).toHaveText('Dedicated')
-        await expect(badgeText(page, '[data-testid="board-menu-new-lab"]')).toHaveText('Dedicated')
+        // A department whose only file was refused is held dedicated, but a read does not put it on the board.
+        await expect(page.getByTestId('board-menu-new-lab')).toHaveCount(0)
         await expect(badgeText(page, '[data-testid="board-menu-engineering"]')).toHaveCount(0)
         await page.screenshot({ path: screenshotPath('board-switcher', theme, size) })
         await context.close()
@@ -94,6 +108,17 @@ for (const theme of THEMES) {
         await expect(badgeText(page, '[data-testid="department-group-friend-lab"]')).toHaveText('Dedicated')
         await expect(badgeText(page, '[data-testid="department-group-engineering"]')).toHaveCount(0)
         await page.screenshot({ path: screenshotPath('org-tree', theme, size) })
+        await context.close()
+      })
+
+      test('the org tree badges, zoomed so a phone can read them', async ({ browser }) => {
+        test.skip(size.name !== 'phone', 'the full-width capture is readable on a desktop')
+        const { context, page } = await openPage(browser, theme, size, '/org', 3)
+        for (const slug of ['side-project', 'friend-lab']) {
+          const box = page.getByTestId(`department-group-${slug}`)
+          await expect(box).toBeVisible()
+          await box.screenshot({ path: screenshotPath(`org-tree-zoom-${slug}`, theme, size) })
+        }
         await context.close()
       })
 

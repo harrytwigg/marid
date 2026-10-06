@@ -75,7 +75,11 @@ function listRows(context: ApiContext): DepartmentRow[] {
   // A department that has been given a scope is on the board before its first Todo,
   // like a department a closed policy allows.
   for (const slug of policy?.allowed ?? []) ensureDepartmentRegistered(slug);
-  for (const slug of departmentSlugsWithFiles()) if (departmentRecord(slug).scope !== "open") ensureDepartmentRegistered(slug);
+  // Not one whose file was refused: that is held dedicated until it loads, and a read does not mint it a permanent prefix.
+  for (const slug of departmentSlugsWithFiles()) {
+    const record = departmentRecord(slug);
+    if (record.scope !== "open" && !record.definitionError) ensureDepartmentRegistered(slug);
+  }
   const members = membersByDepartment(context);
   return listDepartmentsWithCounts(initDb(), policy?.allowed).map((row) => ({
     ...row,
@@ -113,7 +117,8 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
   };
 }
 
-const SLUG = /^[a-z0-9][a-z0-9-]*$/;
+/** Any directory name the registry reads, minus anything that could leave `org/`. */
+const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const WRITE_STATUS = { not_found: 404, conflict: 409, invalid: 400 } as const;
 
 /** Nothing enforces a non-open scope yet, so the API will not set one. Opening a department is always allowed; a scoped one is written in the YAML by hand. */
@@ -135,7 +140,6 @@ async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: stri
     return json(res, { error: err.message }, WRITE_STATUS[err.code]);
   }
   // Refresh before answering, so the response and the next read never trail the write.
-  context.reloadOrg?.();
   refreshOrg(context.getConfig());
   json(res, { department: definitionWire(slug, context) });
 }

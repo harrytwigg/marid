@@ -21,10 +21,14 @@ export interface WorkdirOptions {
   claudeConfigDirs?: readonly string[];
 }
 
-/** `p` resolved through symlinks, or as written when it does not exist yet. */
+/**
+ * `p` resolved through symlinks, or as written when it does not exist yet. The native
+ * resolver also returns the on-disk case; the JS one keeps the caller's, so on a
+ * case-insensitive filesystem `~/.CLAUDE/x` would slip past a check against `~/.claude`.
+ */
 function real(p: string): string {
   try {
-    return fs.realpathSync(p);
+    return fs.realpathSync.native(p);
   } catch {
     return path.resolve(p);
   }

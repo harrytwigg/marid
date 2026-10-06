@@ -198,7 +198,7 @@ function resetDepartmentFixturesKeepingRows(): void {
   // A process restart: memory is gone, the table stays.
   const rows = initDb().prepare("SELECT slug, scope, recorded_at FROM department_scopes").all() as Array<Record<string, string>>;
   resetDepartmentFixtures();
-  for (const row of rows) initDb().prepare("INSERT INTO department_scopes (slug, scope, recorded_at) VALUES (?, ?, ?)").run(row.slug, row.scope, row.recorded_at);
+  for (const row of rows) initDb().prepare("INSERT OR REPLACE INTO department_scopes (slug, scope, recorded_at) VALUES (?, ?, ?)").run(row.slug, row.scope, row.recorded_at);
 }
 
 describe("content problems drop only the entry", () => {

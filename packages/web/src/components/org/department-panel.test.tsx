@@ -85,6 +85,9 @@ describe("DepartmentPanel", () => {
     expect(alert.textContent).toContain("does not match the directory")
     expect(alert.textContent).toContain("The department stays scoped until the file is fixed")
     expect(screen.getByTestId("department-scope-badge").textContent).toBe("Scoped")
+    // The file's settings are not known while it is refused, so the panel does not show defaults as if they were them.
+    expect(screen.getByTestId("department-settings-unknown").textContent).toMatch(/unknown while the file is refused/)
+    expect(screen.queryByTestId("department-workdirs")).toBeNull()
   })
 
   it("lists the entries the scan dropped", async () => {

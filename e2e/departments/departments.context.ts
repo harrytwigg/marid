@@ -43,8 +43,9 @@ export function screenshotPath(name: string, theme: Theme, size: Size): string {
   return path.join(dir, `${name}-${theme}-${size.name}.png`)
 }
 
-export async function openPage(browser: Browser, theme: Theme, size: Size, url: string): Promise<{ context: BrowserContext; page: Page }> {
+export async function openPage(browser: Browser, theme: Theme, size: Size, url: string, deviceScaleFactor = 1): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
+    deviceScaleFactor,
     viewport: { width: size.width, height: size.height },
     screen: { width: size.width, height: size.height },
     colorScheme: theme,

@@ -48,6 +48,15 @@ let signatures = new Map<string, string>();
 let notifyChange: ((slug: string) => void) | null = null;
 
 const DEPARTMENT_FILE = "department.yaml";
+/**
+ * The row that says legacy files have been dealt with. Since 0.26 the shipped template has
+ * described a `department.yaml` that nothing read, so an instance may hold files the new
+ * parser refuses. The first refresh against a database without this row (a database that
+ * predates the scope table) records each such file's department as open instead of
+ * holding it dedicated, so an upgrade does not drop its employees. A slash cannot be a
+ * directory name, so it never collides with a department.
+ */
+export const LEGACY_ADOPTION_MARKER = "/legacy-adopted";
 const NEAR_MISS = /^departments?\.(ya?ml)$/i;
 
 /** One listener: called with a slug whenever its definition, scope or refusal changes after the first load. The gateway's watcher callbacks hand it the client broadcast. */
@@ -55,13 +64,15 @@ export function setDepartmentChangeListener(listener: ((slug: string) => void) |
   notifyChange = listener;
 }
 
-function readLastGood(): Map<string, DepartmentScope> {
+function readLastGood(): { known: Map<string, DepartmentScope>; adopted: boolean } {
   try {
     const rows = initDb().prepare("SELECT slug, scope FROM department_scopes").all() as Array<{ slug: string; scope: DepartmentScope }>;
-    return new Map(rows.map((row) => [row.slug, row.scope]));
+    const known = new Map(rows.filter((row) => row.slug !== LEGACY_ADOPTION_MARKER).map((row) => [row.slug, row.scope]));
+    return { known, adopted: rows.some((row) => row.slug === LEGACY_ADOPTION_MARKER) };
   } catch (err) {
     logger.error(`Could not read the recorded department scopes: ${err instanceof Error ? err.message : err}`);
-    return new Map(lastGood);
+    // Unreadable: do not adopt anything, and keep what this process already knew.
+    return { known: new Map(lastGood), adopted: true };
   }
 }
 
@@ -132,6 +143,8 @@ interface Pass {
   orgDir: string;
   /** Last good scopes, updated as files load. */
   known: Map<string, DepartmentScope>;
+  /** True on the first refresh after an upgrade: a refused file with no recorded scope is open. */
+  adopting: boolean;
   next: Map<string, FileState>;
   /** Everything said so far in this pass; the next pass only logs what is new. */
   current: Set<string>;
@@ -148,6 +161,12 @@ function loadDepartment(slug: string, pass: Pass): void {
     recordScope(slug, state.definition.scope);
   } else if (state.error) {
     const fallback = pass.known.get(slug);
+    if (!fallback && pass.adopting) {
+      pass.known.set(slug, "open");
+      recordScope(slug, "open");
+      say("warn", `Refusing ${state.file}: ${state.error}. The file predates this version, so the department stays open until it is fixed.`, pass.current);
+      return;
+    }
     const kept = fallback ? `The department keeps its last good scope, ${fallback}.` : "It has no last good scope, so it is treated as dedicated until the file loads.";
     say("error", `Refusing ${state.file}: ${state.error}. ${kept}`, pass.current);
   }
@@ -175,9 +194,11 @@ function notifyChanges(previous: Map<string, string>): void {
 export function refreshDepartments(): void {
   setDepartmentScopeResolver(departmentScopeOf);
   const home = resolveJinnHome();
-  const pass: Pass = { home, orgDir: path.join(home, "org"), known: readLastGood(), next: new Map(), current: new Set() };
+  const recorded = readLastGood();
+  const pass: Pass = { home, orgDir: path.join(home, "org"), known: recorded.known, adopting: !recorded.adopted, next: new Map(), current: new Set() };
   const firstLoad = files === null;
   for (const slug of departmentDirs(pass.orgDir)) loadDepartment(slug, pass);
+  if (pass.adopting) recordScope(LEGACY_ADOPTION_MARKER, "open");
   reportKeptScopes(pass);
   const previous = signatures;
   files = pass.next;

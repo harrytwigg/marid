@@ -182,6 +182,13 @@ function Work({ todoCount, spendUsd }: { todoCount: number; spendUsd: number }) 
 }
 
 function Definition({ department }: { department: DepartmentDefinitionWire }) {
+  if (department.definitionError) {
+    return (
+      <p className={MUTED} data-testid="department-settings-unknown">
+        Working directories, skills, shared Notes and instructions are unknown while the file is refused.
+      </p>
+    )
+  }
   if (isConfined(department.scope)) return <ScopedSections department={department} />
   return (
     <p className={MUTED} data-testid="department-open-note">

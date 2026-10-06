@@ -79,9 +79,11 @@ function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | 
   // non-open department keeps its Todo there; an open root keeps its Todo out of the
   // assignee's non-open department. Whether that assignee may hold the Todo at all is
   // FR-015 (`mayHoldTodo`), which refuses on top of this; until then the assignment succeeds.
-  if (isNonOpenDepartment(root.department) || isNonOpenDepartment(assigneeDepartment)) return item.department;
+  if (isNonOpenDepartment(root.department)) return item.department;
   const policy = resolveTodoDepartments();
-  return policy ? item.department ?? policy.defaultDepartment : assigneeDepartment;
+  // Under a closed policy the department is a classification: an empty one is filled with the default, even for a scoped assignee.
+  if (policy) return item.department ?? policy.defaultDepartment;
+  return isNonOpenDepartment(assigneeDepartment) ? item.department : assigneeDepartment;
 }
 
 export function assignWorkItem(
