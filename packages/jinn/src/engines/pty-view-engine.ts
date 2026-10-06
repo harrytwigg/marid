@@ -4,6 +4,7 @@
  * Antigravity engine implement this, so the WebSocket handler can route by
  * `session.engine` instead of being hardwired to one engine.
  */
+import type { ClaudeProfile } from "../shared/claude-profile.js";
 import type { RemoteTarget } from "../shared/types.js";
 
 import type { PtySnapshotStore, SerializedPtySnapshot } from "./pty-snapshot.js";
@@ -44,6 +45,8 @@ export interface PtyIdleSpawnOpts extends RemoteTarget {
   bin?: string;
   cols?: number;
   rows?: number;
+  /** Claude only: the session employee's named local profile. */
+  claudeProfile?: ClaudeProfile;
 }
 
 export interface PtyViewEngine {

@@ -1,5 +1,6 @@
 export type StreamDeltaType = "text" | "text_snapshot" | "tool_use" | "tool_result" | "status" | "error" | "context" | "block";
 
+import type { ClaudeProfile } from "./claude-profile.js";
 export type { CompanyChangedEvent } from "./gateway-events.js";
 
 export type { NoteDocument, NoteFolder, NoteStoreResult, NoteSummary } from "./note-types.js";
@@ -184,6 +185,8 @@ export interface RemoteTarget {
 
 export interface EngineRunOpts extends RemoteTarget {
   prompt: string;
+  /** Local sessions only: the employee's named Claude profile (null/unset = the gateway's own). */
+  claudeProfile?: ClaudeProfile;
   resumeSessionId?: string;
   systemPrompt?: string;
   /** Canonical platform/session metadata refresh for a resumed native transcript.
@@ -514,6 +517,8 @@ export interface CronDelivery {
 
 export interface Employee extends RemoteTarget {
   name: string;
+  /** Claude Code profile (`CLAUDE_CONFIG_DIR`) for LOCAL sessions; YAML-only. See shared/claude-profile.ts. */
+  claudeConfigDir?: string;
   /** Gateway-stamped built-in identity. Never sourced from employee YAML. */
   system?: boolean;
   displayName: string;
