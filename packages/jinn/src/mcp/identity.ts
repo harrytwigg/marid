@@ -183,6 +183,8 @@ export function verifySessionCapability(sessionId: string, capability: string, k
 export function attachSessionIdentity(
   resolved: ResolvedMcpConfig,
   sessionId: string,
+  /** More of the session's own environment for the server: a department-scoped session's marker and roots. */
+  extraEnv: Record<string, string> = {},
 ): ResolvedMcpConfig {
   const jinn = resolved.mcpServers["jinn"];
   if (!jinn || !("command" in jinn)) return resolved;
@@ -205,6 +207,7 @@ export function attachSessionIdentity(
           ...(stdio.env ?? {}),
           [JINN_SESSION_ID_ENV]: sessionId,
           [JINN_SESSION_CAPABILITY_ENV]: capability,
+          ...extraEnv,
         },
       },
     },

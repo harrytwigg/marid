@@ -1,5 +1,6 @@
 import { buildPlatformContextRefresh, fingerprintPlatformContext } from "../../engines/platform-context.js";
 import { isBudgetExhausted } from "../../gateway/budgets.js";
+import { refuseScopedTurn } from "./scoped-turn.js";
 import { refuseClaudeLogin } from "./claude-login-refusal.js";
 import { resolveEffort } from "../../shared/effort.js";
 import { isCompactCommand, isRawEngineCommand } from "../../shared/skill-commands.js";
@@ -59,7 +60,12 @@ function refuseTurn(input: TurnInput): string | undefined {
   if (session.employee && isBudgetExhausted(session.employee, input.config.budgets?.employees)) {
     return `Budget limit exceeded for employee "${session.employee}". Session blocked.`;
   }
-  return refuseClaudeLogin(input);
+  return refuseScopedOrLogin(input);
+}
+
+/** The department-scope gates (scoped-turn.ts), then the Claude login check. */
+function refuseScopedOrLogin(input: TurnInput): string | undefined {
+  return refuseScopedTurn(input.session, input.engineOverride?.name) ?? refuseClaudeLogin(input);
 }
 
 function resolveTurnEffort(input: TurnInput, engineConfig: EngineConfig): string | undefined {

@@ -1,6 +1,7 @@
 import React from "react"
 import { Pin } from "lucide-react"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
+import { SessionDepartmentBadge } from "@/components/session-department-badge"
 import { cleanPreview } from "@/lib/clean-preview"
 import { cn } from "@/lib/utils"
 import { ACTION_WIDTH, MobileRowMenu, SwipeActionRails, type RowActions } from "@/components/chat/mobile-row-actions"
@@ -92,11 +93,7 @@ function RowSummary({ session, avatarName, displayName, title, strong, showPin, 
           </span>
           {tree ? <TreeMarker meta={tree} variant="mobile" /> : null}
           {tree ? <TreeCollapsedCount meta={tree} /> : null}
-          {isArchived ? (
-            <span className="shrink-0 text-caption2 font-[var(--weight-medium)] text-[var(--text-tertiary)]">
-              Archived
-            </span>
-          ) : null}
+          {isArchived ? <span className="shrink-0 text-caption2 font-[var(--weight-medium)] text-[var(--text-tertiary)]">Archived</span> : null}
           {showPin ? <Pin className="size-3 shrink-0 text-[var(--text-tertiary)]" /> : null}
           <span className="shrink-0 text-caption1 tabular-nums text-[var(--text-quaternary)]">
             {formatTime(getSessionActivity(session))}
@@ -105,6 +102,7 @@ function RowSummary({ session, avatarName, displayName, title, strong, showPin, 
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="min-w-0 truncate text-caption1 text-[var(--text-tertiary)]">{displayName}</span>
           <SessionAttentionChips session={session} />
+          <SessionDepartmentBadge department={session.scopeDepartment} />
         </span>
       </span>
     </>

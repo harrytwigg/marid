@@ -53,6 +53,7 @@ import { TerminalSectionHeader, useTerminalHosts } from "@/components/chat/sideb
 import { isTerminalSession } from "@/lib/terminal-session"
 import { TERMINAL_AVATAR } from "@/components/ui/employee-avatar"
 import { MobileSessionRow } from "@/components/chat/mobile-session-row"
+import { SessionDepartmentBadge } from "@/components/session-department-badge"
 import {
   formatTime,
   getSessionActivity,
@@ -389,6 +390,7 @@ const SessionRow = React.memo(function SessionRow({
               {cleanPreview(sessionTitle) || "Untitled"}
             </span>
           )}
+          <SessionDepartmentBadge department={session.scopeDepartment} />
           {isPinned ? (
             <Pin className="size-3 shrink-0 text-[var(--text-tertiary)] transition-opacity group-hover/session:lg:opacity-0 group-has-[[data-state=open]]/session:lg:opacity-0" />
           ) : null}
@@ -510,8 +512,7 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
   const isPinned = pinnedSessions.has(session.id)
   const isArchived = isArchivedSession(session)
   const isRenaming = renamingSessionId === session.id
-  const isUnread =
-    !readSessions.has(session.id) && session.status !== "running" && session.status !== "error"
+  const isUnread = !readSessions.has(session.id) && session.status !== "running" && session.status !== "error"
 
   return (
     <ContextMenu>
@@ -593,12 +594,11 @@ const FlatSessionRow = React.memo(function FlatSessionRow({
             )}
             {tree ? <TreeMarker meta={tree} variant="desktop" /> : null}
             <SessionAttentionChips session={session} />
+            <SessionDepartmentBadge department={session.scopeDepartment} />
           </button>
 
           {tree ? <TreeCollapsedCount meta={tree} /> : null}
-          {isArchived ? (
-            <span className="shrink-0 text-caption2 font-medium text-[var(--text-tertiary)]">Archived</span>
-          ) : null}
+          {isArchived ? <span className="shrink-0 text-caption2 font-medium text-[var(--text-tertiary)]">Archived</span> : null}
           {isPinned && !hidePin ? (
             <Pin className="size-3 shrink-0 text-[var(--text-tertiary)] transition-opacity group-hover/flat:lg:opacity-0 group-has-[[data-state=open]]/flat:lg:opacity-0" />
           ) : null}

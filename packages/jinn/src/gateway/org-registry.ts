@@ -2,6 +2,7 @@ import { logger } from "../shared/logger.js";
 import type { Employee, JinnConfig } from "../shared/types.js";
 import { departmentScopeOf, refreshDepartments } from "./department-registry.js";
 import { scanOrg } from "./org.js";
+import { setEmployeeDepartmentResolver } from "../work-items/department-scope.js";
 
 /**
  * The one place production code asks "who is in the org". `scanOrg` walks the
@@ -48,6 +49,10 @@ export function refreshOrg(config?: JinnConfig): OrgRead {
     // and department field disagree about a non-open department.
     refreshDepartments();
     cache = { registry: scanOrg(resolved, departmentScopeOf), config: resolved };
+    // FR-015: the work-items layer asks which department an employee is in through this.
+    setEmployeeDepartmentResolver((name) => cache?.registry.get(name)?.department);
+    // Loaded lazily: it reads the work-items registry, and this module is imported early.
+    void import("./department-scope/stranding.js").then(({ reportHoldingViolations }) => reportHoldingViolations((message) => logger.warn(message))).catch(() => undefined);
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     // Keep the last known good roster. Handing back an empty map here would
@@ -76,5 +81,6 @@ export function orgRegistry(config?: JinnConfig): Map<string, Employee> {
 
 export function resetOrgRegistryForTests(): void {
   cache = undefined;
+  setEmployeeDepartmentResolver(null);
   lastConfig = undefined;
 }

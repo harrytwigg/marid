@@ -20,6 +20,8 @@ Fresh work should not ping the operator by default. Employees handle their lane,
 
 For company state, the Jinn MCP is the hands. Employees should use it to read and update org, sessions, Todos, Notes, cron, and reference material. Shell and filesystem access are for local implementation work or gaps the MCP does not cover.
 
+A department can confine its employees (`scope: scoped` or `dedicated` in its `department.yaml`, see `docs/org.md`). The gateway then holds a scoped employee's sessions to that department through these same tools: its Todos, its members, sessions bound to it and its own Notes, and nothing of the company's configuration. That is a guardrail on the tools, not a sandbox around the shell, so a scoped employee is told not to read around them.
+
 ## 5. Uniform Contracts
 
 The same contract should hold everywhere: sources emit events, cron runs scheduled prompts, Todos are deliberately authored to record owned work, and Notes preserve Markdown knowledge. Avoid parallel concepts that do the same job in different shapes.

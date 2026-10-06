@@ -1,4 +1,5 @@
 import { initDb } from "../shared/db.js";
+import { todoHoldRefusal } from "../work-items/todo-hold.js";
 import type { Session } from "../shared/types.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
 import { listWorkItems, type WorkItem, type WorkItemStatus } from "../work-items/store.js";
@@ -84,7 +85,7 @@ export function statusSince(item: WorkItem): string {
 export function noAutoStartReason(item: WorkItem): string | undefined {
   if (getTodoDispatchConfig(item.id)?.autoStart === false) return "autoStart is false";
   if (item.assignee === OPERATOR_ASSIGNEE) return "assigned to the operator";
-  return undefined;
+  return todoHoldRefusal(item) ?? undefined;
 }
 
 const IN_FLIGHT = new Set<Session["status"]>(["running", "waiting"]);

@@ -110,3 +110,19 @@ describe("remote employees keep main's rule", () => {
     expect(pick).toEqual({ engine: "pi", claudeProfile: null });
   });
 });
+
+describe("a department-scoped session (FR-026a)", () => {
+  const scoped = () => makeSession({ engine: "claude", scopeDepartment: "side-project" });
+
+  it("skips engine entries and waits when its chain has no Claude account", () => {
+    expect(choose("claude")?.engine).toBe("codex");
+    expect(choose("claude", {}, scoped())).toBeUndefined();
+  });
+
+  it("moves only to a Claude account in its chain, even one recorded exhausted, never to the engine entry", () => {
+    health = { claude: spent() };
+    const choice = choose(`claude:${work2.key}`, { claudeConfigDir: WORK2 }, scoped());
+    expect(choice?.engine).toBe("claude");
+    expect(choice?.accounts?.substitute).toBe("claude");
+  });
+});

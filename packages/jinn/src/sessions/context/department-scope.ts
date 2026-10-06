@@ -1,0 +1,58 @@
+import type { OrgHierarchy } from "../../shared/types.js";
+import { getSession } from "../registry.js";
+import { scopedDepartmentOf } from "../../work-items/department-scope.js";
+
+/**
+ * The prompt of a department-scoped session (FR-014, FR-029): its roster shows only
+ * its department's members, as the org tools do, and a section says what the scope
+ * means. Unscoped sessions are untouched.
+ */
+
+interface ScopeInputs {
+  sessionId?: string;
+  employee?: { name: string };
+  hierarchy?: OrgHierarchy;
+}
+
+export function promptDepartment(opts: ScopeInputs): string | null {
+  if (!opts.employee) return null;
+  const bound = opts.sessionId ? getSession(opts.sessionId)?.scopeDepartment : null;
+  return bound ?? scopedDepartmentOf(opts.employee.name);
+}
+
+/** The hierarchy narrowed to `department`'s members: anyone else, a manager included, is left out. */
+export function departmentHierarchy(hierarchy: OrgHierarchy, department: string): OrgHierarchy {
+  const members = new Set(Object.values(hierarchy.nodes).filter((node) => node.employee.department === department).map((node) => node.employee.name));
+  const nodes = Object.fromEntries(
+    [...members].map((name) => {
+      const node = hierarchy.nodes[name];
+      return [name, {
+        ...node,
+        parentName: node.parentName && members.has(node.parentName) ? node.parentName : null,
+        directReports: node.directReports.filter((report) => members.has(report)),
+        chain: node.chain.filter((link) => members.has(link)),
+      }];
+    }),
+  );
+  return { root: hierarchy.root && members.has(hierarchy.root) ? hierarchy.root : null, nodes, sorted: hierarchy.sorted.filter((name) => members.has(name)), warnings: [] };
+}
+
+/** `opts` with its roster narrowed to the session's department, when it is scoped. */
+export function withDepartmentScope<T extends ScopeInputs>(opts: T): T {
+  const department = promptDepartment(opts);
+  return department && opts.hierarchy ? { ...opts, hierarchy: departmentHierarchy(opts.hierarchy, department) } : opts;
+}
+
+/** The section that tells a scoped session what its scope is. Empty for anyone else. */
+export function departmentScopeSections(opts: ScopeInputs): Array<{ tier: number; required: true; marker: string; content: string }> {
+  const department = promptDepartment(opts);
+  if (!department) return [];
+  const content = [
+    "## Department scope",
+    `This session is scoped to department **${department}**. The jinn tools reach only this department: its Todos, its members, sessions bound to it, and its Notes under \`knowledge/departments/${department}/\`. Everything else answers as not found or refused.`,
+    `- Create and work Todos in ${department} only; delegate and spawn only to its members. You may reply to the session that asked you for work.`,
+    "- Use the jinn tools for company state. Do not use your shell to read the Jinn home, other repositories, or other sessions' transcripts.",
+    `- Keep your working state in \`knowledge/departments/${department}/state.md\` through the note tools.`,
+  ].join("\n");
+  return [{ tier: 0, required: true, marker: "## Department scope", content }];
+}

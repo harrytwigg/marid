@@ -1,4 +1,5 @@
 import { createSession, insertMessage, listSessionsByWorkItem, updateSession } from "../sessions/registry.js";
+import { todoHoldRefusal } from "../work-items/todo-hold.js";
 import { enqueueQueueItem } from "../sessions/queue-item-registry.js";
 import { linkSession, type WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
@@ -201,6 +202,9 @@ export function startTodoDispatcher(
 ): StartTodoDispatcherResult {
   const existing = existingExecution(item);
   if (existing) return alreadyExecuting(item, existing);
+  // FR-015: a holding a hand edit left outside the department rules starts nothing.
+  const held = todoHoldRefusal(item);
+  if (held) return { ok: false, status: 409, body: { error: held } };
   const planned = planDispatcher(item, context, opts.promptSuffix);
   if (!planned.ok) return planned.result;
   const { plan } = planned;

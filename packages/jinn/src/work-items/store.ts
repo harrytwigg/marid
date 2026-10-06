@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { initDb } from '../shared/db.js';
 import { loadConfig } from '../shared/config.js';
@@ -6,6 +6,8 @@ import { CONFIG_PATH } from '../shared/paths.js';
 import { assertTodoDepartmentAllowed, resolveTodoDepartmentPolicy, type TodoDepartmentPolicy } from '../shared/todo-departments-config.js';
 import { parseTodoId, resolveTodoIdPrefix } from './id.js';
 import { resolveDepartmentPrefix, resolveSubtaskDepartment } from './departments.js';
+import { assertCreateMayHold, assertSessionMayLink, guardWorkItemUpdate } from './department-guard.js';
+import { canonicalUpdateFingerprint, idempotencyKeyDigest, UPDATE_FIELD_COLUMNS, updateChangesItem } from './update-fields.js';
 import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
@@ -133,6 +135,8 @@ export interface ListWorkItemsFilter {
   parentId?: string;
   /** Whole family sharing this root Todo. */
   rootId?: string;
+  /** Only Todos whose root sits in this department: a Todo's scope is its root's (FR-002). */
+  rootDepartment?: string;
   /** Only tree roots (parentless items). */
   rootsOnly?: boolean;
   /** Board scopes — `kept`: pinned (ICI-1357). `home`: pinned OR operator-created (PLA-230). */
@@ -328,6 +332,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
   if (input.department !== undefined) assertTodoDepartmentAllowed(departmentPolicy, input.department);
   const named = resolveSubtaskDepartment(parent, input.department, getWorkItem);
   const department = named ?? departmentPolicy?.defaultDepartment ?? null;
+  assertCreateMayHold(db, parent, department, input.assignee);
   const prefix = department ? resolveDepartmentPrefix(db, department, companyPrefix) : companyPrefix;
   const claim = allocateWorkItemId(db, now, prefix);
   const id = claim.id;
@@ -498,6 +503,10 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
   if (filter.rootId) {
     conditions.push('root_id = ?');
     values.push(parseTodoId(filter.rootId));
+  }
+  if (filter.rootDepartment) {
+    conditions.push('work_items.root_id IN (SELECT scope_root.id FROM work_items scope_root WHERE scope_root.department = ?)');
+    values.push(filter.rootDepartment);
   }
   if (filter.rootsOnly) conditions.push('parent_id IS NULL');
   if (filter.kept) conditions.push(KEPT_EXISTS_SQL);
@@ -711,38 +720,6 @@ export class WorkItemIdempotencyConflictError extends Error {
   }
 }
 
-const UPDATE_FIELD_COLUMNS: Readonly<Record<keyof UpdateWorkItemInput, string>> = {
-  title: 'title',
-  body: 'body',
-  assignee: 'assignee',
-  department: 'department',
-  priority: 'priority',
-  rank: 'rank',
-  // Appended AFTER the original six so pre-slice-4 idempotency-receipt
-  // fingerprints (key order feeds the canonical JSON) stay byte-stable.
-  dueAt: 'due_at',
-};
-
-function canonicalUpdateFingerprint(id: string, input: UpdateWorkItemInput, expectedVersion: number): string {
-  const patch: Record<string, unknown> = {};
-  for (const key of Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof UpdateWorkItemInput>) {
-    if (input[key] !== undefined) patch[key] = input[key];
-  }
-  return createHash('sha256').update(JSON.stringify({ id, expectedVersion, patch })).digest('hex');
-}
-
-function idempotencyKeyDigest(key: string): string {
-  return createHash('sha256').update(key).digest('hex');
-}
-
-function updateChangesItem(item: WorkItem, input: UpdateWorkItemInput): boolean {
-  return (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof UpdateWorkItemInput>)
-    .some((key) => {
-      if (input[key] === undefined) return false;
-      return item[key] !== input[key];
-    });
-}
-
 /** Atomic row-level compare-and-update for the operator metadata surface.
  * Partial fields are patch semantics, but `expectedVersion` protects the whole
  * Todo row: any intervening editable or lifecycle mutation conflicts. An exact
@@ -784,6 +761,7 @@ export function updateWorkItemConditional(
       const fields = (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof UpdateWorkItemInput>)
         .filter((key) => input[key] !== undefined)
         .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: input[key] }));
+      guardWorkItemUpdate(db, current, input, opts.actor, appendWorkItemEvent);
       if (typeof input.department === 'string') ensureDepartmentRegistered(input.department);
       const now = new Date().toISOString();
       const result = db
@@ -839,6 +817,7 @@ export function updateWorkItem(id: string, input: UpdateWorkItemInput, actor?: s
     if (!current) return undefined;
     const changedFields = fields.filter((field) => current[field.name] !== field.value);
     if (changedFields.length === 0) return current;
+    guardWorkItemUpdate(db, current, input, actor, appendWorkItemEvent);
     if (changedFields.some((field) => field.name === 'department' && typeof field.value === 'string')) {
       ensureDepartmentRegistered(input.department as string);
     }
@@ -907,6 +886,7 @@ export function linkSession(
     if (!session) throw new Error(`linkSession: session ${sessionId} not found`);
     const workItemExists = db.prepare('SELECT 1 FROM work_items WHERE id = ?').get(todoId);
     if (!workItemExists) throw new Error(`linkSession: work item ${todoId} not found`);
+    assertSessionMayLink(db, sessionId, todoId, role);
     // Already linked to this exact item, for the same reason → no write, no
     // `updated_at` bump. A re-link that CHANGES the role still writes: the role
     // is what the self-review ban reads, and a stale one is not a detail.

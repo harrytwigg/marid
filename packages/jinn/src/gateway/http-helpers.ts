@@ -68,7 +68,18 @@ function hasDuplicateTopLevelObjectKeys(raw: string): boolean {
   return false;
 }
 
+export const PEEKED_BODY = Symbol.for("jinn.department-scope.peeked-body");
+
+/** A body the department-scope gate already read and judged (department-scope/body.ts); the route reads it instead of the drained stream. */
+export function peekedBody(req: HttpRequest): string | undefined {
+  return (req as HttpRequest & { [PEEKED_BODY]?: string })[PEEKED_BODY];
+}
+
 export function readBody(req: HttpRequest, opts: ReadBodyOpts = {}): Promise<string> {
+  const peeked = peekedBody(req);
+  if (peeked !== undefined) {
+    return opts.maxBytes !== undefined && Buffer.byteLength(peeked) > opts.maxBytes ? Promise.reject(new BodyTooLargeError()) : Promise.resolve(peeked);
+  }
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
@@ -102,6 +113,8 @@ export function readBody(req: HttpRequest, opts: ReadBodyOpts = {}): Promise<str
 }
 
 export function readBodyRaw(req: HttpRequest): Promise<Buffer> {
+  const peeked = peekedBody(req);
+  if (peeked !== undefined) return Promise.resolve(Buffer.from(peeked));
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));

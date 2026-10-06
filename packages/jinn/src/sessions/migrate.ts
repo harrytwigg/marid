@@ -331,9 +331,9 @@ export function migrateSessionsSchema(database: Database.Database): void {
     ['attempt_turn', 'INTEGER NOT NULL', '0'],
     ['attempt_interruption_cause', 'TEXT'],
     ['attempt_interruption_turn', 'INTEGER'],
-    // Archive is reversible: retain the durable chat and only hide it from
-    // normal list queries. NULL keeps all pre-existing sessions visible.
+    // Archive is reversible: it only hides the chat from lists. NULL keeps existing sessions visible.
     ['archived_at', 'TEXT'],
+    ['scope_department', 'TEXT'], // a scoped employee's binding, set in registry.ts createSession
   ];
 
   for (const [name, type, defaultVal] of missingColumns) {

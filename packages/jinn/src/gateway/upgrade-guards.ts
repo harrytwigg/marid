@@ -10,6 +10,7 @@ import {
   type RequestHeaders,
 } from "./request-authority.js";
 import { resolveCallerIdentity, type CallerIdentityOptions } from "./session-comm-guards.js";
+import { resolveScopedCaller } from "./department-scope/caller.js";
 
 /**
  * Who may open a WebSocket upgrade.
@@ -48,6 +49,10 @@ export function rejectUnverifiedIdentifiedUpgradeCaller(
     verifySessionCapability,
     requireCapability: true,
   });
+  // FR-010: every upgrade runs this guard first, so a department-scoped session is refused every socket here.
+  if (identity.kind === "session" && resolveScopedCaller(identity)) {
+    return reject(socket, "WebSocket upgrades are not available to a department-scoped session");
+  }
   if (identity.kind !== "unidentified-tool") return false;
   return reject(socket, UNIDENTIFIED_TOOL_CALL_ERROR);
 }

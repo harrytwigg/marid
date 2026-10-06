@@ -131,6 +131,7 @@ import { handleSkillsApi } from "./skills-api.js";
 import { handleSearchApi, type NeedsAttentionTarget } from "./search-api.js";
 import { operatorOnlyControlPlaneRoute } from "./control-plane-routes.js";
 import { refuseRemoteMcpRoute, remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
+import { handleScopedCaller, type ScopedGateDeps } from "./department-scope/gate.js";
 import { handlePluginsApi } from "./plugins-api.js";
 import QRCode from "qrcode";
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
@@ -224,6 +225,7 @@ import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./wor
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
+import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
 import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
@@ -594,6 +596,15 @@ function terminalApiOptions(req: HttpRequest, context: ApiContext): TerminalApiO
     isOperator: () => scopedOperatorAuthenticated(req, context),
     serialize: (session) => serializeSessionResponse(session, context),
     onCreated: (session) => context.emit("session:created", { sessionId: session.id }),
+  };
+}
+
+function scopedGateDeps(context: ApiContext): ScopedGateDeps {
+  return {
+    context,
+    serializeSessions: (sessions) => serializeSessionList(sessions, context),
+    compactSessionSummary,
+    readSessionTree: (todoId) => readTodoSessionTree(todoId, (all) => sessionTreeActivity(buildSessionDelegatedActivityIndex(all, context), (session) => currentRuntimeActivity(session, context))),
   };
 }
 
@@ -1162,7 +1173,7 @@ export async function handleApiRequest(
   } catch {
     return json(res, { error: "Invalid request target" }, 400);
   }
-  const pathname = url.pathname;
+  let pathname = url.pathname;
   const method = req.method || "GET";
   // Stashed on `res` because that is what json() holds: ParsedRoute carries the target, not the headers.
   (res as ResWithEncoding).__acceptEncoding = req.headers["accept-encoding"];
@@ -1176,6 +1187,9 @@ export async function handleApiRequest(
     }
     // D4: ahead of every handler, a connector anchor reaches only its tool profile's routes.
     if (identifiedCaller && refuseRemoteMcpRoute(res, method, pathname, resolveScopedWriteCallerIdentity(req, context))) return;
+    // FR-010: a session of a department-scoped employee reaches only its department (department-scope/gate.ts).
+    if (identifiedCaller && await handleScopedCaller(req, res, { method, pathname, url }, resolveScopedWriteCallerIdentity(req, context), scopedGateDeps(context))) return;
+    pathname = url.pathname; // the gate shows a Todo outside the caller's department to the route as an unknown id
     if (await handleTalkApi(req, res, { method, pathname, url }, {
       getConfig: context.getConfig, caller: resolveScopedWriteCallerIdentity(req, context),
       context,
@@ -3410,9 +3424,9 @@ export async function handleApiRequest(
               ? `delegate:${callerRef}:idempotency:${idempotencyDigest}`
               : `delegate:${callerRef}:${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
             assignee: employeeName ?? null,
-            // A closed department policy classifies by work, not by who does it:
-            // leave it to the store's default.
-            department: resolveTodoDepartments() ? undefined : delegateEmployee?.department ?? null,
+            // A closed department policy classifies by work, not by who does it: leave it to the
+            // store's default, except for a scoped delegate, whose Todo can only be in its department.
+            department: scopedDepartmentOf(employeeName) ?? (resolveTodoDepartments() ? undefined : delegateEmployee?.department ?? null),
             // Slice-5 decision 7: the DELEGATING caller is the creator — the
             // operator, or the delegating session's resolved employee slug
             // (`session:<uuid>` only when that session carries no employee).
@@ -3421,6 +3435,8 @@ export async function handleApiRequest(
               : "operator",
           });
         } catch (mintErr) {
+          if (mintErr instanceof DepartmentBoundaryError) throw mintErr; // 409 with the reason, like every other assignee writer
+          if (mintErr instanceof TodoDepartmentNotAllowedError) return badRequest(res, mintErr.message);
           logger.warn(`Delegation work-item mint failed: ${mintErr instanceof Error ? mintErr.message : mintErr}`);
           return json(res, { error: "delegation failed before any work started — the work item could not be minted; nothing was spawned" }, 500);
         }
@@ -4560,6 +4576,8 @@ export async function handleApiRequest(
 
     return notFound(res);
   } catch (err) {
+    // FR-015: a write a department's boundary refuses, from whichever store writer the route reached.
+    if (err instanceof DepartmentBoundaryError) return json(res, { error: err.message, code: err.code, holders: err.holders }, 409);
     const msg = err instanceof Error ? err.message : String(err);
     logger.error(`API error: ${msg}`);
     return serverError(res, msg);

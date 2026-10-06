@@ -9,6 +9,8 @@ import { ensureDepartmentRegistered, resolveTodoDepartments } from "../work-item
 import { departmentRecord, departmentSlugsWithFiles, type DepartmentRecord } from "./department-registry.js";
 import { DepartmentWriteError, readDepartmentPatch, writeDepartmentFile } from "./department-store.js";
 import { readJsonBody } from "./http-helpers.js";
+import { strandedByScopeChange, strandingMessage } from "./department-scope/stranding.js";
+import { droppedByScopeChange } from "./department-scope/scope-change.js";
 import { orgRegistry, refreshOrg } from "./org-registry.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import type { ApiContext } from "./api.js";
@@ -21,9 +23,8 @@ import type { ApiContext } from "./api.js";
  *   PATCH /api/departments/:slug  rewrite that department's `department.yaml` (operator only)
  *
  * Writes are operator-only: `control-plane-routes.ts` lists the PATCH and api.ts
- * enforces that table before any module is asked. Nothing here restricts what an
- * employee can see or do; a scope only changes how assignment and sub-tasks behave
- * until scoped employees are enforced.
+ * enforces that table before any module is asked. A scope change that would strand a
+ * Todo's holder is refused, naming them (FR-015).
  */
 
 export interface DepartmentDefinitionFields {
@@ -70,7 +71,8 @@ function membersByDepartment(context: ApiContext): Map<string, string[]> {
   return byDepartment;
 }
 
-function listRows(context: ApiContext): DepartmentRow[] {
+/** The `GET /api/departments` rows; the department-scope gate narrows them to one. */
+export function listDepartmentRows(context: ApiContext): DepartmentRow[] {
   const policy = resolveTodoDepartments();
   // A department that has been given a scope is on the board before its first Todo,
   // like a department a closed policy allows.
@@ -123,10 +125,22 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const WRITE_STATUS = { not_found: 404, conflict: 409, invalid: 400 } as const;
 
-/** Nothing enforces a non-open scope yet, so the API will not set one. Opening a department is always allowed; a scoped one is written in the YAML by hand. */
-function refuseNonOpenScope(slug: string, scope: DepartmentScope | undefined): void {
-  if (scope === undefined || scope === "open") return;
-  throw new DepartmentWriteError("invalid", `setting scope: ${scope} through the API is not available yet; write it in org/${slug}/department.yaml`);
+/**
+ * Why a scope change is refused, as the 409 body, or null. An employee the next scan would
+ * drop from the roster because of the change (FR-007, FR-026) is named, and the change
+ * refused, rather than the employee vanishing. FR-015: a change that would leave a
+ * Todo with a holder who may no longer hold it is refused naming them.
+ */
+function scopeChangeRefusal(slug: string, scope: DepartmentScope | undefined, context: ApiContext): Record<string, unknown> | null {
+  if (scope === undefined || scope === departmentRecord(slug).scope) return null;
+  const members = droppedByScopeChange(slug, scope, orgRegistry(context.getConfig()).values());
+  if (members.length > 0) {
+    const named = members.map((member) => `${member.name} (${member.reason})`).join("; ");
+    return { error: `Making ${slug} ${scope} would drop employee(s) from the roster: ${named}. Change them first`, code: "department-members", members };
+  }
+  const holders = strandedByScopeChange(slug, scope);
+  if (holders.length === 0) return null;
+  return { error: strandingMessage(`Making ${slug} ${scope}`, holders), code: "department-boundary", holders };
 }
 
 async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: string, context: ApiContext): Promise<void> {
@@ -135,7 +149,8 @@ async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: stri
   if (!parsed.body || typeof parsed.body !== "object" || Array.isArray(parsed.body)) return badRequest(res, "update body must be a JSON object");
   try {
     const patch = readDepartmentPatch(parsed.body as Record<string, unknown>);
-    refuseNonOpenScope(slug, patch.scope);
+    const refused = scopeChangeRefusal(slug, patch.scope, context);
+    if (refused) return json(res, refused, 409);
     writeDepartmentFile(slug, patch);
   } catch (err) {
     if (!(err instanceof DepartmentWriteError)) throw err;
@@ -154,7 +169,7 @@ async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: stri
 export async function handleDepartmentsApi(req: HttpRequest, res: ServerResponse, route: ParsedRoute, context: ApiContext): Promise<boolean> {
   const { method, pathname } = route;
   if (method === "GET" && pathname === "/api/departments") {
-    json(res, { departments: listRows(context) });
+    json(res, { departments: listDepartmentRows(context) });
     return true;
   }
   const params = matchRoute("/api/departments/:slug", pathname);

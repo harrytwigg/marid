@@ -243,3 +243,15 @@ describe("a finished session that left work running", () => {
     expect(screen.getByTestId("session-tree-node-s-2").textContent).toContain("Error")
   })
 })
+
+describe("the session tree's department badge", () => {
+  it("badges a session bound to a department, at any depth, and no other", () => {
+    const child = node({ id: "s-2", isRootLink: false, scopeDepartment: "side-project" })
+    mount(<SessionTreePanel tree={tree({ roots: [node({ id: "s-1", children: [child] })] })} byName={byName} todoId="TST-81" />)
+
+    const badges = screen.getAllByTestId("session-department-badge")
+    expect(badges).toHaveLength(1)
+    expect(badges[0].textContent).toBe("side-project")
+    expect(screen.getByTestId("session-tree-node-s-2").contains(badges[0])).toBe(true)
+  })
+})

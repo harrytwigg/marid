@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { departmentPathError } from "../shared/department-file-roots.js";
 import path from "node:path";
 import { assertBoundCaller, gatewayGet, gatewayRequest, JinnMcpToolError, type JinnMcpContext, type JinnMcpTool } from "./toolkit.js";
 import { resolveJinnHome } from "../shared/home.js";
@@ -101,6 +102,9 @@ function attachmentPath(value: unknown): string {
     throw new JinnMcpToolError("path must be normalized and contain no control bytes");
   }
   if (!path.isAbsolute(value)) throw new JinnMcpToolError("path must be absolute");
+  // FR-018: a department-scoped session publishes only from its department's roots.
+  const outside = departmentPathError(value);
+  if (outside) throw new JinnMcpToolError(outside);
   let stat: fs.Stats;
   try {
     stat = fs.statSync(value);

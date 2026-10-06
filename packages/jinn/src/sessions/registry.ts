@@ -16,6 +16,7 @@ import { AUTO_COMPACT_BUDGET_HOLD_KEY } from '../shared/auto-compact-config.js';
 import { getMeta, setMeta, canonicalCallbackIdentityText, canonicalSessionDeliveryIdentity, sessionDeliveryFromRow, validateSessionDeliveryIdentity, type SessionDeliveryRow } from './migrate.js';
 import { parseTodoId } from '../work-items/id.js';
 import { toWorkItemLinkRole } from '../work-items/link-role.js';
+import { scopedDepartmentOf } from '../work-items/department-scope.js';
 import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs, JsonObject, ReplyContext, Session, SessionAttemptOutcome, SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload, SessionAttemptInterruptionCause } from '../shared/types.js';
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
@@ -49,8 +50,7 @@ function parseJsonObject(value: unknown, label?: string): JsonObject | null {
     const parsed = JSON.parse(value) as JsonObject;
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
-    // Graceful degrade (don't crash the load), but surface it — silent loss of
-    // reply_context/transport_meta otherwise shows up as a cryptic "no target".
+    // Degrade without crashing, but say so: a silently lost reply_context reads as a cryptic "no target".
     logger.warn(`registry: dropped corrupt JSON in ${label ?? 'session field'}`);
     return null;
   }
@@ -69,9 +69,7 @@ function parseEngineSessions(value: unknown): EngineSessionRefs | null {
     if (typeof obj.model === 'string' && obj.model.trim()) ref.model = obj.model;
     if (typeof obj.effortLevel === 'string' && obj.effortLevel.trim()) ref.effortLevel = obj.effortLevel;
     if (typeof obj.lastSyncedAt === 'string' && obj.lastSyncedAt.trim()) ref.lastSyncedAt = obj.lastSyncedAt;
-    if (typeof obj.platformContextFingerprint === 'string' && obj.platformContextFingerprint.trim()) {
-      ref.platformContextFingerprint = obj.platformContextFingerprint;
-    }
+    if (typeof obj.platformContextFingerprint === 'string' && obj.platformContextFingerprint.trim()) ref.platformContextFingerprint = obj.platformContextFingerprint;
     if (Object.keys(ref).length > 0) refs[engine] = ref;
   }
   return Object.keys(refs).length > 0 ? refs : null;
@@ -124,6 +122,7 @@ function rowToSession(row: Record<string, unknown>): Session {
     promptExcerpt: (row.prompt_excerpt as string) ?? null,
     archivedAt: (row.archived_at as string) ?? null,
     parentSessionId: (row.parent_session_id as string) ?? null,
+    scopeDepartment: (row.scope_department as string) ?? null,
     userId: (row.user_id as string) ?? null,
     effortLevel: (row.effort_level as string) ?? null,
     status: row.status as Session['status'],
@@ -195,8 +194,7 @@ export function backfillFtsSync(database: Database.Database, chunkSize = FTS_BAC
   }
 }
 
-// Set to false when the FTS boot drain fails. `searchMessages` checks this first so it
-// returns [] immediately without touching a broken or absent table.
+// False when the FTS boot drain fails: `searchMessages` then returns [] without touching the table.
 let ftsAvailable = true;
 
 /**
@@ -295,6 +293,8 @@ export interface MessageSearchFilter {
   /** Case-insensitive equality on the owning session's engine. */
   engine?: string;
   role?: 'user' | 'assistant';
+  /** Only messages of sessions bound to this department (FR-008). */
+  scopeDepartment?: string;
   /** Inclusive epoch-ms bounds on the message timestamp. */
   since?: number;
   until?: number;
@@ -367,6 +367,7 @@ export function searchMessages(query: string, limit = 50, filter?: MessageSearch
     conditions.push('LOWER(s.engine) = ?');
     values.push(filter.engine.toLowerCase());
   }
+  if (filter?.scopeDepartment) { conditions.push('s.scope_department = ?'); values.push(filter.scopeDepartment); }
   const extra = conditions.length ? ` AND ${conditions.join(' AND ')}` : '';
   try {
     return db
@@ -419,8 +420,7 @@ export interface CreateSessionOpts {
 
 function getNextSessionNumber(): number {
   const db = initDb();
-  // MAX(rowid) is an O(1) b-tree seek (COUNT(*) walks the whole table) and keeps
-  // numbers monotonic even after deletions.
+  // MAX(rowid) is an O(1) seek (COUNT(*) walks the table) and stays monotonic after deletions.
   const row = db.prepare('SELECT MAX(rowid) as maxRowid FROM sessions').get() as { maxRowid: number | null };
   return (row.maxRowid ?? 0) + 1;
 }
@@ -452,17 +452,19 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
   const connector = opts.connector ?? opts.source;
   const replyContext = opts.replyContext ? JSON.stringify(opts.replyContext) : null;
   const transportMeta = opts.transportMeta ? JSON.stringify(opts.transportMeta) : null;
+  // FR-008: a scoped employee's session is bound to its department, once, here, whatever path created it.
+  const scopeDepartment = scopedDepartmentOf(opts.employee);
 
   const stmt = db.prepare(`
     INSERT INTO sessions (
       id, engine, source, source_ref, connector, session_key, reply_context, message_id, transport_meta,
       employee, model, title, prompt_excerpt, parent_session_id,
-      user_id, effort_level, status, created_at, last_activity
+      user_id, effort_level, status, created_at, last_activity, scope_department
     )
     VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, 'idle', ?, ?
+      ?, ?, 'idle', ?, ?, ?
     )
   `);
   stmt.run(
@@ -484,6 +486,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     opts.effortLevel ?? null,
     now,
     now,
+    scopeDepartment,
   );
 
   return {
@@ -505,6 +508,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     promptExcerpt,
     archivedAt: null,
     parentSessionId: opts.parentSessionId ?? null,
+    scopeDepartment,
     userId: opts.userId ?? null,
     effortLevel: opts.effortLevel ?? null,
     status: 'idle',
@@ -1014,8 +1018,7 @@ export function switchSessionEngine(
       model: session.model ?? currentRef.model,
       effortLevel: session.effortLevel ?? currentRef.effortLevel,
     });
-    // Parked under the account it ran on; the switch then drops any override, so
-    // the target is read from the session's own account.
+    // Parked under the account it ran on; the switch drops any override, so read the session's own account.
     if (Object.keys(current).length > 0) refs[threadSlot(session, session.engine)] = current;
   }
   const own = withoutAccountOverride(session);
@@ -1082,24 +1085,17 @@ export interface ListSessionsFilter {
   status?: Session['status'];
   source?: string;
   engine?: string;
+  /** Only sessions bound to this department (FR-008). */
+  scopeDepartment?: string;
 }
 
 export function listSessions(filter?: ListSessionsFilter): Session[] {
   const db = initDb();
   const conditions: string[] = ['archived_at IS NULL', 'workflow_kind IS NULL'];
   const values: unknown[] = [];
-
-  if (filter?.status) {
-    conditions.push('status = ?');
-    values.push(filter.status);
-  }
-  if (filter?.source) {
-    conditions.push('source = ?');
-    values.push(filter.source);
-  }
-  if (filter?.engine) {
-    conditions.push('engine = ?');
-    values.push(filter.engine);
+  const equalities = [['status', filter?.status], ['source', filter?.source], ['engine', filter?.engine], ['scope_department', filter?.scopeDepartment]] as const;
+  for (const [column, value] of equalities) {
+    if (value) { conditions.push(`${column} = ?`); values.push(value); }
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -1299,8 +1295,7 @@ function groupFilter(group: string, portalSlug?: string | null): { clause: strin
       params: slug ? [slug] : [],
     };
   }
-  // A per-employee page must never leak portal-slug rows (they live in direct).
-  // If the requested group *is* the portal slug, this yields nothing.
+  // A per-employee page never leaks portal-slug rows (they live in direct); asking for the slug itself yields nothing.
   const slugExclude = slug ? ` AND LOWER(employee) <> ?` : '';
   return {
     clause: `NOT ${IS_CRON_SQL} AND employee = ?${slugExclude}`,
@@ -1342,16 +1337,17 @@ export function listSessionsForGroup(
 }
 
 /** Search across ALL sessions by identity, title, or settled message text. */
-export function searchSessions(query: string, limit = 100): Session[] {
+export function searchSessions(query: string, limit = 100, scopeDepartment?: string): Session[] {
   const db = initDb();
   const like = `%${query.replace(/[%_]/g, (m) => `\\${m}`)}%`;
   const rows = db
     .prepare(
       `SELECT * FROM sessions
-       WHERE title LIKE ? ESCAPE '\\' OR employee LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages WHERE messages.session_id = sessions.id AND messages.content LIKE ? ESCAPE '\\')
+       WHERE (title LIKE ? ESCAPE '\\' OR employee LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages WHERE messages.session_id = sessions.id AND messages.content LIKE ? ESCAPE '\\'))
+         AND (? IS NULL OR scope_department = ?)
        ORDER BY last_activity DESC LIMIT ?`,
     )
-    .all(like, like, like, like, limit) as Record<string, unknown>[];
+    .all(like, like, like, like, scopeDepartment ?? null, scopeDepartment ?? null, limit) as Record<string, unknown>[];
   return rows.map(rowToSession);
 }
 
@@ -1373,6 +1369,8 @@ export interface SearchSessionsFilter {
   /** Deterministic derivation: status IN ('error','interrupted'). `waiting` is
    *  deliberately excluded (operator ruling — usage-limit pauses self-resolve). */
   needsAttention?: boolean;
+  /** Only sessions bound to this department (FR-008). */
+  scopeDepartment?: string;
 }
 
 export function searchSessionsFiltered(filter: SearchSessionsFilter, limit = 20): Session[] {
@@ -1407,6 +1405,7 @@ export function searchSessionsFiltered(filter: SearchSessionsFilter, limit = 20)
     conditions.push('parent_session_id = ?');
     values.push(filter.parentSessionId);
   }
+  if (filter.scopeDepartment) { conditions.push('scope_department = ?'); values.push(filter.scopeDepartment); }
   if (filter.activeSince) {
     conditions.push('last_activity >= ?');
     values.push(filter.activeSince);
@@ -1822,9 +1821,9 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
         id, engine, engine_session_id, source, source_ref, connector, session_key,
         reply_context, message_id, transport_meta,
         employee, model, title, parent_session_id, effort_level, status,
-        total_cost, total_turns, created_at, last_activity
+        total_cost, total_turns, created_at, last_activity, scope_department
       )
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'idle', 0, 0, ?, ?)
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'idle', 0, 0, ?, ?, ?)
     `).run(
       newId,
       source.engine,
@@ -1841,6 +1840,7 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       source.effortLevel,
       now,
       now,
+      scopedDepartmentOf(source.employee),
     );
 
     const insertMsg = db.prepare(

@@ -10,6 +10,7 @@ import {
   buildScopedRosterSection,
   buildScopedRosterSummary,
 } from "./context/roster.js";
+import { departmentScopeSections, withDepartmentScope } from "./context/department-scope.js";
 
 /**
  * Token budget strategy:
@@ -26,14 +27,11 @@ import {
  *   OPTIONAL   – knowledge listing, environment scan,
  *                delegation protocol                       (trimmed first when over budget)
  *
- * Knowledge and docs files are NEVER inlined — only filenames are listed —
- * except the few an instance names in context.alwaysInclude, which are inlined
- * as ESSENTIAL sections kept whole until all optional content has been trimmed.
- * The AI can read files on demand, saving ~200K+ chars per session.
+ * Knowledge and docs files are NEVER inlined (only filenames are listed), except those
+ * context.alwaysInclude names, inlined as ESSENTIAL sections; the rest are read on demand.
  */
 
 const DEFAULT_MAX_CONTEXT_CHARS = 100_000;
-
 // ── Tier enum for progressive trimming ────────────────────────
 const enum Tier {
   ESSENTIAL = 0,
@@ -196,6 +194,7 @@ export function renderPlatformConfigContext(snapshot: PlatformContextSnapshot): 
  * before responding to the user.
  */
 export function buildContext(opts: BuildContextOptions): string {
+  opts = withDepartmentScope(opts); // FR-014: a scoped session's roster shows only its department
   const configuredMaxChars = opts.config?.context?.maxChars ?? DEFAULT_MAX_CONTEXT_CHARS;
   const maxChars = Number.isFinite(configuredMaxChars)
     ? Math.max(0, Math.floor(configuredMaxChars))
@@ -290,6 +289,7 @@ export function buildContext(opts: BuildContextOptions): string {
   for (const included of buildAlwaysIncludeSections(opts.config?.context?.alwaysInclude)) {
     sections.push({ tier: Tier.ESSENTIAL, required: true, ...included });
   }
+  sections.push(...(departmentScopeSections(opts) as Section[]));
 
   // ── STANDARD: Relationship-scoped role orientation ──────────
   const jinnMcpAttached = opts.jinnMcpAttached === true;

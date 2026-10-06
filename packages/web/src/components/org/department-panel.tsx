@@ -2,18 +2,13 @@ import type { ReactNode } from "react"
 import { DepartmentScopeBadge } from "@/components/department-scope-badge"
 import { useDepartment } from "@/hooks/use-department"
 import { isConfined, type DepartmentDefinitionWire, type DepartmentScopeWire } from "@/lib/department-api"
+import { ScopeSection, SCOPE_TEXT } from "@/components/org/department-scope-section"
 import { departmentTitle } from "@/routes/todos/board/board-switcher"
 
 /* The department panel, opened from a department's group box on the org tree.
  * It shows what the department's `department.yaml` says and how the gateway reads it.
- * Read-only: the YAML is the source of truth, so the panel names the file to edit.
- * Scope cannot be changed from here until scoped employees are enforced. */
-
-const SCOPE_TEXT: Record<DepartmentScopeWire, { name: string; body: string }> = {
-  open: { name: "Open", body: "No restriction. Its employees work across the company and its Todos can be held by anyone." },
-  scoped: { name: "Scoped", body: "Its employees are confined to this department. Everyone else can still read it, comment on it and hold its Todos." },
-  dedicated: { name: "Dedicated", body: "Its employees are confined to this department, and only they can hold its Todos. Everyone else can read and comment." },
-}
+ * The YAML is the source of truth and the panel names the file to edit. The one thing
+ * it changes itself is the scope, which the gateway writes back into that file. */
 
 const CARD = "rounded-[var(--radius-lg,16px)] border border-[var(--separator)] bg-[var(--material-regular)] p-[var(--space-5)]"
 const LABEL = "m-0 mb-[var(--space-2)] text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[var(--tracking-wide)] text-[var(--text-tertiary)]"
@@ -120,20 +115,6 @@ function Header({ department }: { department: DepartmentDefinitionWire }) {
   )
 }
 
-function ScopeSection({ scope }: { scope: DepartmentScopeWire }) {
-  return (
-    <Section title="Scope" testId="department-scope">
-      <p className="m-0 text-[length:var(--text-body)] text-[var(--text-primary)]">
-        <span className="font-[var(--weight-semibold)]">{SCOPE_TEXT[scope].name}</span>
-        <span className="text-[var(--text-secondary)]">. {SCOPE_TEXT[scope].body}</span>
-      </p>
-      <p className={`${MUTED} mt-[var(--space-2)]`}>
-        Read-only. Scope is set with <code className={MONO}>scope:</code> in department.yaml.
-      </p>
-    </Section>
-  )
-}
-
 function Warnings({ warnings }: { warnings: string[] }) {
   if (warnings.length === 0) return null
   return (
@@ -213,7 +194,9 @@ export function DepartmentPanel({ slug, onSelectEmployee }: DepartmentPanelProps
     <div className="flex flex-col gap-[var(--space-6)]" data-testid="department-panel" data-scope={department.scope}>
       <Header department={department} />
       {department.definitionError && <RefusedNotice error={department.definitionError} scope={department.scope} />}
-      <ScopeSection scope={department.scope} />
+      <Section title="Scope" testId="department-scope">
+        <ScopeSection department={department} />
+      </Section>
       <Definition department={department} />
       <Warnings warnings={department.warnings} />
       <Members members={department.members} onSelect={onSelectEmployee} />

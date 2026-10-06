@@ -10,6 +10,7 @@ Use this skill when another employee or engine is a better fit for a bounded pie
 ## Choose the target
 
 1. Use `list_employees` for the roster, `find_employees` to filter by department/rank/engine, and `get_employee` to inspect persona, manager, and direct reports.
+   A department-scoped session sees only its own department's members and can delegate, spawn and dispatch only to them; it may always reply to the session that asked it for work. Anyone delegating into a `dedicated` department must pick one of its members.
 2. Select by role and persona fit, not novelty or a desire to spread work around. One employee can have several parallel sessions.
 3. Delegate through the relevant manager when they should own decomposition and review. Direct delegation remains valid when it is the clearest route, but the IC's manager is notified so they retain visibility.
 

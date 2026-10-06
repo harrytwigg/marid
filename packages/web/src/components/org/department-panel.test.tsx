@@ -49,7 +49,7 @@ describe("DepartmentPanel", () => {
     expect(screen.getByRole("heading", { name: "Side project" })).toBeTruthy()
     expect(screen.getByTestId("department-scope-badge").textContent).toBe("Scoped")
     expect(text("department-scope")).toMatch(/Scoped\. Its employees are confined/)
-    expect(text("department-scope")).toMatch(/Read-only/)
+    expect(screen.getByRole("radiogroup", { name: "Scope" })).toBeTruthy()
     expect(text("department-workdirs")).toContain("/work/side-project")
     expect(text("department-skills")).toBe("Skillsreviewspeckit-plan")
     expect(text("department-shared-notes")).toContain("knowledge/shared/glossary.md")

@@ -1,4 +1,5 @@
 import { logger } from "../shared/logger.js";
+import { scopedMentionRefusal, scopedReplyAllowed } from "./department-scope/comments.js";
 import type { Employee, Session } from "../shared/types.js";
 import { getSession } from "../sessions/registry.js";
 import { addComment, getComment, setTodoCommentListener, type WorkItemComment } from "../work-items/comments.js";
@@ -66,7 +67,7 @@ export const MAX_AGENT_REPLIES_PER_TODO = 20;
 function answeredSession(comment: WorkItemComment, authorEmployee: string | undefined, roster: Roster): Session | undefined {
   const answered = comment.repliedToId ? getComment(comment.repliedToId) : undefined;
   const session = answered?.sessionId ? getSession(answered.sessionId) : undefined;
-  if (!session || !canMessageSession(session) || session.id === comment.sessionId) return undefined;
+  if (!session || !canMessageSession(session) || session.id === comment.sessionId || !scopedReplyAllowed(comment, session)) return undefined;
   return answersItself(session, authorEmployee, roster) ? undefined : session;
 }
 
@@ -124,6 +125,11 @@ function wakeMentioned(context: ApiContext, item: WorkItem, comment: WorkItemCom
   for (const name of parseMentions(comment.body)) {
     const employee = roster.get(name);
     if (!employee || employee.system || employee.name === authorEmployee) continue;
+    const refused = scopedMentionRefusal(comment, employee);
+    if (refused) {
+      reportFailedWake(comment, employee.name, refused);
+      continue;
+    }
     const wake = wakeOne(context, item, comment, employee);
     if (wake) wakes.push(wake);
   }

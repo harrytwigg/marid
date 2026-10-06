@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { departmentPathError } from "../shared/department-file-roots.js";
 import path from "node:path";
 import { GATEWAY_TIMEOUT_MS, gatewayRequest, JinnMcpToolError, type JinnMcpContext } from "./toolkit.js";
 import { expandPath, readLocalFileForIngestion, vetLocalFileForIngestion } from "../shared/file-read-policy.js";
@@ -58,6 +59,12 @@ function refusal(requested: string, resolved: string, error: string, status: num
   return new JinnMcpToolError(`cannot attach "${requested}"${where}: ${error}${code}${help}`);
 }
 
+/** FR-018: a department-scoped session attaches only from its department's roots. */
+function refuseOutsideDepartment(resolved: string): void {
+  const outside = departmentPathError(resolved);
+  if (outside) throw new JinnMcpToolError(outside);
+}
+
 /**
  * Check a file is attachable without reading it: present on this host, allowed
  * by the file-read policy, non-empty, within the cap. Throws the refusal. Lets
@@ -65,6 +72,7 @@ function refusal(requested: string, resolved: string, error: string, status: num
  */
 function vetWorkItemAttachment(requestedPath: string): void {
   const resolved = sessionHostPath(requestedPath);
+  refuseOutsideDepartment(resolved);
   const vetted = vetLocalFileForIngestion(resolved, ATTACHMENT_MAX_BYTES);
   if (!vetted.ok) throw refusal(requestedPath, resolved, vetted.error, vetted.status);
   if (vetted.size === 0) throw refusal(requestedPath, resolved, "attachment must not be empty", 400);
@@ -109,6 +117,7 @@ export async function uploadWorkItemAttachment(
   // A caller with no host of its own has nothing to read here (the remote door).
   if (ctx.hostLocations === false) throw new JinnMcpToolError(NO_HOST_REFUSAL);
   const resolved = sessionHostPath(requestedPath);
+  refuseOutsideDepartment(resolved);
   const read = readLocalFileForIngestion(resolved, ATTACHMENT_MAX_BYTES);
   if (!read.ok) throw refusal(requestedPath, resolved, read.error, read.status);
   if (read.buffer.length === 0) throw refusal(requestedPath, resolved, "attachment must not be empty", 400);

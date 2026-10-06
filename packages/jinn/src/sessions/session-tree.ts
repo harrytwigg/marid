@@ -53,6 +53,8 @@ export interface SessionTreeNode {
   /** True when this session is linked directly to the Todo being viewed. */
   isRootLink: boolean;
   archived: boolean;
+  /** The department a scoped employee's session is bound to (FR-008); null otherwise. */
+  scopeDepartment: string | null;
   /** The session's post-settle background work, exactly as the session list
    *  carries it. A finished turn with a monitor or sub-agent still running is
    *  not "finished" to the operator, and the chat says so; the tree reads the
@@ -136,6 +138,7 @@ function nodeFor(session: Session, todoId: string, activity: SessionTreeActivity
     workItemId: session.workItemId ?? null,
     isRootLink: session.workItemId === todoId,
     archived: isArchived(session),
+    scopeDepartment: session.scopeDepartment ?? null,
     backgroundActivity: activity?.backgroundActivity(session) ?? null,
     delegatedActivity: activity?.delegatedActivity(session) ?? null,
     truncated: null,
