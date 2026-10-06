@@ -131,4 +131,12 @@ const sessions = {}
   sessions[key] = id
 })
 db.close()
-fs.writeFileSync(path.join(sandboxHome, 'departments-seed.json'), JSON.stringify({ sessions }, null, 2))
+
+// A stage directory as an earlier build made it, at the old path (before each instance had its own
+// stage root). The gateway moves it at boot; its inode is recorded so the run can show it was a rename.
+const legacyStage = path.join(path.dirname(sandboxHome), '.jinn-departments', 'side-project')
+write(path.join(legacyStage, 'CLAUDE.md'), ['An earlier build generated this file.'])
+write(path.join(legacyStage, '.claude', 'skills', 'management', 'SKILL.md'), ['---', 'name: management', 'description: stale copy', '---'])
+const legacyStageIno = fs.statSync(legacyStage).ino
+
+fs.writeFileSync(path.join(sandboxHome, 'departments-seed.json'), JSON.stringify({ sessions, legacyStage, legacyStageIno }, null, 2))

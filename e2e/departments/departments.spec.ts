@@ -35,6 +35,8 @@ const PANEL_STATES: PanelState[] = [
       await expect(page.getByTestId('department-workdirs')).toContainText('side-project')
       await expect(page.getByTestId('department-skills')).toContainText('management')
       await expect(page.getByTestId('department-warnings')).toContainText('no-such-skill')
+      // linked-skill is on the allow-list but holds a symlink: it is not offered, and the panel says why under the skills.
+      await expect(page.getByTestId('department-skill-problems')).toContainText('linked-skill is not offered to this department: it contains a symlink (company.md).')
       await expect(page.getByTestId('department-instructions')).toContainText("then the company's")
       await expect(page.getByTestId('department-yaml')).toContainText('org/side-project/department.yaml')
     },

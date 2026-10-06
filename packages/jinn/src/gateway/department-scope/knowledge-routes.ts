@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createNote, listNotes, NOTE_FILE_MAX_BYTES, readNote, searchKnowledge, updateNote } from "../../notes/store.js";
+import { createNote, listNotes, NOTE_FILE_MAX_BYTES, readNote, searchKnowledge, slugify, updateNote } from "../../notes/store.js";
 import type { NoteStoreResult } from "../../shared/types.js";
 import { resolveJinnHome } from "../../shared/paths.js";
 import { hasControlBytes } from "../../shared/sanitize.js";
@@ -14,9 +14,11 @@ import { forbid, type GateRequest } from "./gate.js";
 /**
  * Notes and knowledge for a scoped session (FR-028): rooted at the department's own
  * folder, `knowledge/departments/<slug>/`, plus whatever the department shares
- * (`sharedNotes`). Writes go only into the department's folder. The company
- * `knowledge/state.md`, `knowledge/employees/` and `docs/` are out of reach unless
- * shared.
+ * (`sharedNotes`). Writes go only into the department's folder, and never to its
+ * `INSTRUCTIONS.md`: that file becomes the stage directory's `CLAUDE.md` (FR-029), so a
+ * session that could write it would write what every later session of the department
+ * loads (FR-029a). The company `knowledge/state.md`, `knowledge/employees/` and `docs/`
+ * are out of reach unless shared.
  *
  * The gate serves these routes itself, from the same stores the routes use, so a
  * scoped session has its Notes even where `gateway.notesEnabled` is off: the folder is
@@ -43,6 +45,36 @@ export function inDepartmentKnowledge(slug: string, relPath: string, { writable 
     const root = normal(shared)?.replace(/\/$/, "");
     return !!root && (target === root || target.startsWith(`${root}/`));
   });
+}
+
+const INSTRUCTIONS_FILE = "INSTRUCTIONS.md";
+
+function sameFile(a: string, b: string): boolean {
+  try {
+    const first = fs.statSync(a);
+    const second = fs.statSync(b);
+    return first.ino === second.ino && first.dev === second.dev;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether an instance-relative path (`knowledge/...`) is department `slug`'s
+ * `INSTRUCTIONS.md`. The name is judged in any case, and a file that is the same file on
+ * disk counts too: on a case-insensitive filesystem `Instructions.md`, or any spelling the
+ * filesystem folds to it, reaches the same file, and so does a hard link.
+ */
+export function isDepartmentInstructions(slug: string, relPath: string): boolean {
+  const target = normal(relPath);
+  if (!target) return false;
+  if (path.posix.basename(target).toLowerCase() === INSTRUCTIONS_FILE.toLowerCase()) return true;
+  return sameFile(path.join(resolveJinnHome(), target), path.join(resolveJinnHome(), "knowledge", departmentNotesFolder(slug), INSTRUCTIONS_FILE));
+}
+
+/** The refusal for a write to the department's instructions. */
+function refuseInstructions(g: GateRequest): true {
+  return forbid(g, `${INSTRUCTIONS_FILE} is set by the operator and cannot be written by a department-scoped session`);
 }
 
 function isDirectory(absolute: string): boolean {
@@ -152,6 +184,8 @@ async function notesCreate(g: GateRequest): Promise<boolean> {
   const own = departmentNotesFolder(g.caller.department);
   const folder = body.folder?.trim() || own;
   if (!inDepartmentKnowledge(g.caller.department, `knowledge/${folder}`, { writable: true })) return forbid(g, `Notes are written only under knowledge/${own}/`);
+  // The file a title gets is `<slug>.md`: a title that slugs to `instructions` would be the instructions file on a filesystem that folds case.
+  if (isDepartmentInstructions(g.caller.department, `knowledge/${folder}/${slugify(body.title!)}.md`)) return refuseInstructions(g);
   const result = createNote({ title: body.title!, ...present(body, ["body"]), folder }, resolveJinnHome());
   if (!result.ok) return failure(g, result);
   g.deps.context.emit("notes:changed", { path: result.value.path, revision: result.value.revision, action: "created" });
@@ -167,6 +201,7 @@ async function notesUpdate(g: GateRequest): Promise<boolean> {
   if (!inDepartmentKnowledge(g.caller.department, notePath, { writable: true })) {
     return forbid(g, `Notes are written only under knowledge/${departmentNotesFolder(g.caller.department)}/`);
   }
+  if (isDepartmentInstructions(g.caller.department, notePath)) return refuseInstructions(g);
   const result = updateNote({ path: body.path!, expectedRevision: body.expectedRevision!, ...present(body, ["title", "body", "append"]) }, resolveJinnHome());
   if (!result.ok) return failure(g, result);
   g.deps.context.emit("notes:changed", { path: result.value.path, revision: result.value.revision, action: "updated" });

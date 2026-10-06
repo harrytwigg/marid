@@ -1,6 +1,7 @@
 import { getSession } from "../../sessions/registry.js";
 import type { Session } from "../../shared/types.js";
-import { lostBindingReason, scopedDepartmentOf } from "../../work-items/department-scope.js";
+import { sessionScopeDepartment } from "../../sessions/session-scope.js";
+import { lostBindingReason } from "../../work-items/department-scope.js";
 import type { CallerIdentity } from "../session-comm-guards.js";
 
 /**
@@ -27,7 +28,7 @@ export function resolveScopedCaller(identity: CallerIdentity): ScopedCaller | nu
   if (identity.kind !== "session") return null;
   const session = getSession(identity.callerId);
   if (!session) return null;
-  const department = session.scopeDepartment ?? scopedDepartmentOf(session.employee);
+  const department = sessionScopeDepartment(session);
   if (!department) return null;
   return { session, department, lost: lostBindingReason(session) };
 }

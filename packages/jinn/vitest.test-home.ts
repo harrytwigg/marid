@@ -105,7 +105,7 @@ export function createIsolatedTestFileHome(env: NodeJS.ProcessEnv = process.env)
   const root = env.TMPDIR ?? env.TEMP ?? env.TMP ?? os.tmpdir();
   assertIsolatedTestHome(root);
   // The home sits inside a directory of its own: a department's stage directory is made beside
-  // the home (`<parent of home>/.jinn-departments`), and two files must not share that parent.
+  // the home (`<parent of home>/.jinn-departments/.instances/<basename of home>`), and two files must not share that parent.
   const base = fs.mkdtempSync(path.join(root, 'jinn-vitest-file-'));
   const home = path.join(base, 'home');
   fs.mkdirSync(home);

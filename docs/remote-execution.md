@@ -467,7 +467,9 @@ An employee in a `scoped` or `dedicated` department (see the instance's
   directories are made and never renamed over one that exists, extras go, and
   incoming directories older than an hour are reaped. The directory itself is
   never replaced, so its path (which the transcript slug and the trust key come
-  from) stays put. Nothing is cached, so a wiped or edited copy is restored by
+  from) stays put. The path is not keyed by instance, unlike the local stage
+  directory: `remote.root` is the instance's own on a host, so two instances that
+  share a host need different `remote.root` values. Nothing is cached, so a wiped or edited copy is restored by
   the next spawn. The sync runs inside the per-host lock, after the session's
   home and the assets and before the folder-trust seed.
 - **Its instance home links nothing.** A variant of the farm script makes the

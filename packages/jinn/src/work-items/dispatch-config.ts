@@ -1,5 +1,5 @@
 import { initDb } from '../shared/db.js';
-import { offeredSkillNames, skillAllowListNote, skillsRootFor } from './dispatch-skills.js';
+import { offeredSkillNames, refusedDepartmentSkills, skillAllowListNote, skillsRootFor } from './dispatch-skills.js';
 import { logger } from '../shared/logger.js';
 import { getModelRegistry } from '../shared/models.js';
 import { validateNewSessionSelection } from '../sessions/session-patch.js';
@@ -75,6 +75,15 @@ function validateSkills(raw: unknown, workItemId: string): { ok: true; skills: s
         `skills entries name workspace playbooks, not MCP tools: ${toolNames.join(', ')} ` +
         'looks like a tool id (mcp__<server>__<tool>). A skill is a directory under skills/ with a ' +
         'SKILL.md — pass its directory name. MCP tools are attached per engine and need no Todo field.',
+    };
+  }
+
+  // Named before the unknown ones: the skill is installed and on the list, so "unknown" would send the reader to the wrong place.
+  const refused = refusedDepartmentSkills(workItemId, skills);
+  if (refused.length > 0) {
+    return {
+      ok: false,
+      error: `${refused.map(({ skill, reason }) => `skill ${skill} cannot be used here: ${reason}`).join('; ')} — a department's skills are copied into its stage directory, which refuses a skill like that`,
     };
   }
 
@@ -261,11 +270,13 @@ export function resolveTodoDispatch(workItemId: string, employee?: string | null
   const missing = stored.skills.filter((name) => !installed.has(name));
 
   if (stored.skills.length > 0 && present.length === 0) {
+    const refused = refusedDepartmentSkills(workItemId, missing).map(({ skill, reason }) => `${skill}: ${reason}`);
     return {
       ok: false,
       error:
         `Todo ${workItemId} requests skill${missing.length > 1 ? 's' : ''} ${missing.join(', ')}, ` +
-        `and none of them are installed${skillAllowListNote(workItemId)}. Install them under skills/, or clear the Todo's skills before dispatching.`,
+        `and none of them are installed${skillAllowListNote(workItemId)}${refused.length > 0 ? ` (its department cannot hold ${refused.join('; ')})` : ''}. ` +
+        `Install them under skills/, or clear the Todo's skills before dispatching.`,
     };
   }
   if (missing.length > 0) {

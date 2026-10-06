@@ -417,7 +417,8 @@ function validTitle(value: unknown): string | StoreFailure {
   return title;
 }
 
-function slugify(title: string): string {
+/** The file stem `createNote` gives a title: lower case, ASCII, words joined by `-`. */
+export function slugify(title: string): string {
   const slug = title
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")

@@ -562,16 +562,33 @@ scoped employee; D is that session's binding)
 **Scoped context** (what a scoped session's engine loads)
 
 - **FR-020**: A scoped session MUST run with cwd set to a generated stage dir outside
-  `$JINN_HOME`: `<parent of home>/.jinn-departments/<slug>/`. This is the only way to stop
-  Claude Code loading the company `CLAUDE.md` (it reads from the cwd and its ancestors) and the
-  company skills directory.
+  `$JINN_HOME`: `<parent of home>/.jinn-departments/.instances/<basename of home>/<slug>/`. This is the
+  only way to stop Claude Code loading the company `CLAUDE.md` (it reads from the cwd and its
+  ancestors) and the company skills directory.
+  - **The stage root is the instance's own.** Every instance under one parent keeps its stage
+    dirs in a root named for its home (`~/.jinn` is `~/.jinn-departments/.instances/.jinn/`,
+    `~/.jinn-staging` is `~/.jinn-departments/.instances/.jinn-staging/`). The roots sit under a
+    dot-named directory because no department slug can start with a dot (the org scan skips such
+    directories), so an instance's root can never be the same path as a department's old-layout
+    stage dir, whatever its home is called. Two instances with a
+    department of the same slug therefore never share, or overwrite, a stage dir.
+    `<parent of home>/.jinn-departments/` itself holds no stage dir, and FR-033 treats the
+    whole of it as protected.
+  - **Remote hosts are not re-keyed.** The remote stage dir stays
+    `<remote.root>/.jinn-departments/<slug>/` (FR-060). `remote.root` is the operator's own
+    setting for that host, and an instance already has to have a root of its own there: the
+    company `CLAUDE.md` link an unscoped remote session gets points at one instance's
+    mounted home, and the first link wins. Two instances sharing a host give each its own
+    `remote.root`. Re-keying the remote path would also strand every existing remote stage
+    dir and the transcripts filed under its path on the host, which a rename on the gateway's
+    own disk (below) does not.
 - **FR-020a**: **Stage dir updates.** The stage dir's path and the directory itself MUST stay
   stable. It is never replaced or renamed, because the transcript slug (resume, fork and
   auto-compaction) and the trust key (`trustSeedKey`,
   `packages/jinn/src/engines/remote-stage.ts:912`) both derive from the cwd. An update
   **syncs** it to the generated file set:
   - the new file set is written to an incoming directory beside the stage dir, on the same
-    filesystem (`.jinn-departments/.<slug>.incoming-<random>/`);
+    filesystem (`.jinn-departments/.instances/<basename of home>/.<slug>.incoming-<random>/`);
   - the sync works **file by file**. Only files are renamed: each file whose content differs is
     renamed over the old one, which is atomic. Directories are created with `mkdir -p` and are
     never renamed over an existing directory (a skill is a directory, and that rename fails on
@@ -585,7 +602,26 @@ scoped employee; D is that session's binding)
   - unchanged files are not touched.
 
   The generator refuses a skill that contains a symlink and logs why, so no link to a gateway
-  path is copied or shipped to a remote host.
+  path is copied or shipped to a remote host. The department panel and `dispatchConfig.skills`
+  validation make the same judgement, from the same code (FR-027).
+
+  **Moving a stage dir made at the old path (once).** Before the stage root was keyed by
+  instance (FR-020), a stage dir lived at `<parent of home>/.jinn-departments/<slug>/`. The
+  first prepare of a department that finds one there, and none at the new path, **renames** it
+  to the new path. A rename on one filesystem keeps the directory's inode, so a session
+  running in it keeps its cwd; nothing is copied. The Claude transcripts filed under the old
+  path's project key (`<profile>/projects/<slug of the old path>/`, in the gateway's profile
+  and every named one) are moved to the new key, so resume, fork and auto-compaction find them.
+  Incoming directories the old sync left beside the old path are removed. After that the new
+  path is the only one looked at, and it is never moved again. A directory at the old path is
+  left alone when it is a link, when it has no generated `CLAUDE.md` (it is another instance's
+  root, not a stage dir), or when the new path exists already. Of two instances that both
+  have a stage dir at the old path, the one that prepares first takes it and the other
+  generates its own. The transcripts move with it by project key, and one key holds the sessions
+  of both instances, so the instance that takes the dir also takes the other's resume history for
+  that department; nothing is lost, and it can be moved back by hand. A running Claude Code
+  process cannot outlive the gateway restart that brings this change (a graceful shutdown kills
+  every PTY), so none keeps writing to the old key after the move.
 
   **What a running session sees during a sync:** each file is either wholly old or wholly new.
   For a moment it can see a mix of old and new files, and a dropped skill disappears at the
@@ -625,7 +661,14 @@ scoped employee; D is that session's binding)
   - the prompt;
   - `dispatchConfig.skills` validation.
 
-  An empty list means no company skills. Skills and plugins installed in the session's Claude
+  An empty list means no company skills. A listed skill the stage dir refuses (it contains a
+  symlink, a file that is not a regular file, or too much, or it has no `SKILL.md`: the same
+  judgement as FR-020a's generator, made by the same code) is not offered either:
+  - `dispatchConfig.skills` validation refuses it at set time, naming the skill and why, and a
+    stored one that became refused is dropped at dispatch with the reason;
+  - the department panel leaves it out of the skills it shows and warns, under them, which
+    skill and why (`skillProblems` on `GET /api/departments/:slug`, read from disk each time);
+  - `PATCH /api/departments/:slug` refuses to write it into the list. Skills and plugins installed in the session's Claude
   profile still load ("Scope of the boundary").
 - **FR-028**: Department Notes live under `knowledge/departments/<slug>/`, including the
   department's state file, `knowledge/departments/<slug>/state.md`.
@@ -649,11 +692,25 @@ scoped employee; D is that session's binding)
   - it uses the jinn tools for company state;
   - it does not read `$JINN_HOME`, other repos or other sessions' transcripts with its shell;
   - it keeps state in `knowledge/departments/<slug>/state.md` through the note tools.
+- **FR-029a**: **A scoped session cannot write its department's `INSTRUCTIONS.md`.** The file
+  becomes the stage dir's `CLAUDE.md` (FR-029), so a session able to write it would write what
+  every later session of the department loads. A write by a scoped caller to it is refused
+  with a 403 in the scoped note routes (`PUT /api/notes`, and `POST /api/notes` for a title
+  that would be `instructions.md`). It is refused:
+  - by name, in any case, whatever the folder (`INSTRUCTIONS.md`, `instructions.md`,
+    `./INSTRUCTIONS.md`, `sub/../INSTRUCTIONS.md`);
+  - by identity on disk, so a case-insensitive filesystem's other spellings and a hard link
+    to it are refused too.
+
+  The operator and unscoped callers are unchanged: the Notes routes they use are not touched.
+  This is the API's guard. A scoped session's own shell can still write wherever the guardrail
+  does not reach ("Scope of the boundary").
 - **FR-033**: **Working-directory validation.** A department working directory MUST:
   - be inside a git work tree whose top level is neither `$HOME` nor an ancestor of it;
-  - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, the stage root, `~/.claude`, the
+  - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, `<parent of home>/.jinn-departments`
+    (every instance's stage roots, this one's included), `~/.claude`, the
     gateway's own `CLAUDE_CONFIG_DIR` or any employee's `claudeConfigDir`;
-  - not lie inside `$JINN_HOME`, the stage root, `~/.claude`, the gateway's `CLAUDE_CONFIG_DIR`,
+  - not lie inside `$JINN_HOME`, `<parent of home>/.jinn-departments`, `~/.claude`, the gateway's `CLAUDE_CONFIG_DIR`,
     any `claudeConfigDir`, `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
 
   The scan and the department panel refuse a violating entry.
@@ -768,7 +825,9 @@ scoped employee each of those would undo FR-020, FR-027 and FR-028, so a scoped 
 is staged differently. Unscoped remote sessions are unchanged.
 
 - **FR-060**: **Remote stage dir.** For each remote host a scoped member uses, the gateway MUST
-  keep a copy of D's stage dir at `<remote.root>/.jinn-departments/<slug>/` on that host.
+  keep a copy of D's stage dir at `<remote.root>/.jinn-departments/<slug>/` on that host. The
+  path is not keyed by instance, unlike the local one (FR-020): `remote.root` is already one
+  instance's own on a host, and two instances sharing a host use different roots.
   - Its content is exactly the local stage dir's: the same generator (Phase 3) produces it.
   - It is synced by FR-020a before **every** scoped spawn on that host. The file set travels
     as a tar stream over SSH into the incoming directory, and a sync script applies it. With

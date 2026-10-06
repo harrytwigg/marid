@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Which substitute a rate-limited turn moves onto (FR-079, FR-056, FR-076):
@@ -22,6 +22,8 @@ vi.mock("../../shared/engine-health.js", async (importOriginal) => ({
 }));
 
 import { chooseSubstitute } from "../rate-limit-substitute.js";
+import { sessionScopeDepartment } from "../session-cwd.js";
+import { setDepartmentScopeResolver, setEmployeeDepartmentResolver } from "../../work-items/department-scope.js";
 import { claudeProfileFromDir } from "../../shared/claude-profile.js";
 import { makeSession } from "./helpers/session-fixture.js";
 import type { Employee, JinnConfig } from "../../shared/types.js";
@@ -124,5 +126,51 @@ describe("a department-scoped session (FR-026a)", () => {
     const choice = choose(`claude:${work2.key}`, { claudeConfigDir: WORK2 }, scoped());
     expect(choice?.engine).toBe("claude");
     expect(choice?.accounts?.substitute).toBe("claude");
+  });
+});
+
+describe("which sessions are department-scoped is the shared helper's answer", () => {
+  // side-dev belongs to the scoped department; eng-dev does not.
+  beforeEach(() => {
+    setDepartmentScopeResolver((department) => (department === "side-project" ? "scoped" : "open"));
+    setEmployeeDepartmentResolver((employee) => (employee === "side-dev" ? "side-project" : "engineering"));
+  });
+  afterEach(() => {
+    setDepartmentScopeResolver(null);
+    setEmployeeDepartmentResolver(null);
+  });
+
+  const sessions = {
+    scoped: () => makeSession({ engine: "claude", employee: "side-dev", scopeDepartment: "side-project" }),
+    unscoped: () => makeSession({ engine: "claude", employee: "eng-dev", scopeDepartment: null }),
+    // The binding is gone, but the employee is still confined: the session's cwd, transcript and prompt all still say scoped.
+    "lost binding": () => makeSession({ engine: "claude", employee: "side-dev", scopeDepartment: null }),
+  };
+  const chooseFor = (session: ReturnType<typeof makeSession>) =>
+    choose("claude", { name: session.employee ?? "e" }, session);
+
+  it.each([
+    ["scoped", "side-project", true],
+    ["unscoped", null, false],
+    ["lost binding", "side-project", true],
+  ] as const)("a %s session: the helper says %j, and the substitute stays on claude exactly when it is scoped", (label, department, stays) => {
+    const session = sessions[label]();
+    expect(sessionScopeDepartment(session)).toBe(department);
+    // The default account's chain is [codex]: an unscoped session moves to it, a scoped one waits for its reset.
+    expect(chooseFor(session)?.engine).toBe(stays ? undefined : "codex");
+  });
+
+  it("answers the same for a lost-binding session as for a bound one, and differently from an unscoped one", () => {
+    expect(chooseFor(sessions["lost binding"]())).toEqual(chooseFor(sessions.scoped()));
+    expect(chooseFor(sessions["lost binding"]())).not.toEqual(chooseFor(sessions.unscoped()));
+  });
+
+  it("applies to a session on another engine too: it may move only to claude", () => {
+    const piChain = { ...config, engines: { ...config.engines, pi: { bin: "pi", model: "m", fallback: ["codex", "claude"] } } } as JinnConfig;
+    const onPi = (session: ReturnType<typeof makeSession>) =>
+      chooseSubstitute({ config: piChain, engines, session: { ...session, engine: "pi" }, employee: { name: session.employee ?? "e", engine: "pi" } as Employee, account: "pi", remote: undefined, remoteTarget: {} });
+    expect(onPi(sessions.unscoped())?.engine).toBe("codex");
+    expect(onPi(sessions.scoped())?.engine).toBe("claude");
+    expect(onPi(sessions["lost binding"]())?.engine).toBe("claude");
   });
 });
