@@ -12,8 +12,9 @@
 - **Existing employees:** unchanged (Q6 = b).
 - **Holding Todos:** `scope: dedicated`.
 - **Replies:** live replies.
-- **Accounts:** a per-employee local Claude profile, `claudeConfigDir` (D2).
-- **Spec's own choice:** scoped employees run locally (FR-026).
+- **Accounts:** a per-employee local Claude profile, `claudeConfigDir` (D2). It is independent
+  of scope, with no owner marker (D4).
+- **Hosts:** scoped employees run locally or on a remote host (D5).
 
 ## Existing infrastructure (constitution VII)
 
@@ -59,8 +60,8 @@ against `origin/main` at `3c032251`.
 
 ## Summary
 
-Four PRs, each off `main`. Phases 1 → 2 → 3 are built in order. Phase 4 is independent and may
-run alongside them once this spec merges.
+Five PRs, each off `main`. Phases 1 → 2 → 3 → 5 are built in order. Phase 4 is independent and
+may run alongside them once this spec merges.
 
 1. **Phase 1: departments carry a scope.** This covers:
    - `department.yaml` loading, validation and the last-good `department_scopes` table;
@@ -83,13 +84,13 @@ run alongside them once this spec merges.
    - `JINN_DEPARTMENT`;
    - web: session badges, and scope editing in the department panel.
 
-   Until Phase 3, scoped employees still load the company `CLAUDE.md` and skills, on the
-   operator's own account (FR-059 keeps named profiles off scoped employees until then).
+   Until Phase 3, scoped employees still load the company `CLAUDE.md` and skills, on whatever
+   profile their YAML names (D4). Scoped employees with a `remoteHost` are refused until
+   Phase 5.
 3. **Phase 3: scoped context.** This covers:
    - the stage dir as cwd, with its own trust seed;
    - skill copies and the generated `CLAUDE.md`, including the scope paragraph;
-   - Notes and state roots;
-   - claude-only, local-only validation.
+   - Notes and state roots.
 4. **Phase 4: per-employee Claude profiles.** This covers:
    - `claudeConfigDir` validation;
    - the environment on every launch path;
@@ -99,8 +100,14 @@ run alongside them once this spec merges.
    - per-profile outage, health, rate-limit memory and limits;
    - no cross-account fallback;
    - the remote profile fix (FR-058);
-   - the FR-059 refusal for scoped employees, lifted once Phase 3 has merged;
    - web: the profile badge and the read-only profile row.
+5. **Phase 5: scoped employees on remote hosts.** This covers:
+   - pushing the stage dir to each remote host a scoped member uses (FR-060);
+   - the remote stage dir as cwd on every remote launch path (FR-061);
+   - a scoped variant of the remote home that links nothing from the company home (FR-062);
+   - the remote trust seed, binding and `JINN_DEPARTMENT` (FR-063, FR-064);
+   - the FR-018 path limit in the remote MCP server (FR-065);
+   - lifting the Phase 2 refusal of scoped employees with a `remoteHost`.
 
 ## Technical Context
 
@@ -149,9 +156,9 @@ run alongside them once this spec merges.
 | --- | --- |
 | I | Pass |
 | II | Rung 4, justified in spec.md "Why This Matters" |
-| III | Every premise has a `path:line` in research.md. Phase 1 opens with a red test: on `main`, assigning a Todo in department D to an Engineering employee moves it to Engineering. Phase 2 opens with one: a session of an employee in a scoped department can list company Todos. Phase 4 opens with one: an employee with `claudeConfigDir` set spawns without `CLAUDE_CONFIG_DIR` |
+| III | Every premise has a `path:line` in research.md. Phase 1 opens with a red test: on `main`, assigning a Todo in department D to an Engineering employee moves it to Engineering. Phase 2 opens with one: a session of an employee in a scoped department can list company Todos. Phase 4 opens with one: an employee with `claudeConfigDir` set spawns without `CLAUDE_CONFIG_DIR`. Phase 5 opens with one: a scoped remote employee's session home links the company home |
 | IV | Rung 1 throughout. No new core tool, and the manifest does not grow (attested hash) |
-| V | Every table, field and key has a v1 consumer. Secrets, sandboxing, scoped remote employees and department cron are deferred |
+| V | Every table, field and key has a v1 consumer. Secrets, sandboxing and department cron are deferred |
 | VI | Enforcement tests assert allow and refuse outcomes. The route-enumeration test fails on an unclassified route. No snapshots: SC-002 is one-off PR evidence |
 | VII | The table above. Re-verify it before each phase |
 | VIII | Each refused class in the scoped table carries its reason |
@@ -365,7 +372,8 @@ Senior, because it is the enforcement itself.
 - The `refuseTurn` lost-binding check.
 - An `escalated` event when a Todo leaves D.
 - Hidden counts.
-- Cron validation, and claude-only, local-only validation for scoped employees.
+- Cron validation, and claude-only validation for scoped employees. A scoped employee with a
+  `remoteHost` is refused, with the reason, until Phase 5 lifts it (FR-026).
 
 **Web (junior sub-Todo)**
 
@@ -392,6 +400,8 @@ The stage dir lives at `<parent of home>/.jinn-departments/<slug>/`.
   `department+company` is set, plus the FR-029 scope paragraph.
 - **Regeneration.** It is rebuilt on skill changes, on department scan changes and on
   instruction changes.
+- **Generator shape.** The generator returns the file set and a content hash before writing
+  it, so Phase 5 pushes exactly the same content to remote hosts.
 - **Use.** `engine-run.ts` uses it as the cwd for scoped sessions. A trust seed for the stage
   dir is written when the dir is generated, under the session's profile once Phase 4 exists.
 - **Transcripts.** Resume, fork and auto-compaction resolve the stage-dir transcript slug.
@@ -422,9 +432,46 @@ Senior, because it touches auth, engine health and every launch path.
 - No fallback for named profiles.
 - FR-058, with a red test first.
 - FR-052a, with a test per key.
-- FR-059: refuse a named profile on a scoped employee until Phase 3's stage dir is in use. If
-  Phase 3 has merged first, the check is "the stage dir is in use", not a flag.
+- FR-059: no scope check on profiles. A test pins that an unscoped and a scoped employee with
+  `claudeConfigDir` both spawn on it.
 - Web: the profile badge on the org tree and a read-only profile row in the employee panel.
+
+### Phase 5: scoped employees on remote hosts (senior-developer; junior sub-Todo for the tests; senior QA)
+
+Senior, because it changes the SSH staging every remote session goes through.
+
+- **Opening red test.** On `main`, a scoped employee with a `remoteHost` (Phase 2's refusal
+  bypassed in the test) gets a session home that links the company home, and the company
+  `CLAUDE.md` is linked into its `remoteCwd`.
+- **Push** (`engines/remote-department-stage.ts`): the file set from Phase 3's generator, as a
+  tar stream over `sshRun`'s stdin, unpacked into `<remote.root>/.jinn-departments/.<slug>.tmp`
+  and renamed over `<slug>/`. It runs inside `serializePerHost`
+  (`engines/remote-stage.ts:792`). The pushed hash is cached per host and slug, and cleared
+  with `clearRemoteStagingCache`.
+- **Staging** (`prepareRemoteSession`, `engines/remote-stage.ts:1248`): it gains an optional
+  `department` with the remote stage dir.
+  - A scoped session runs a scoped farm script: the session-stage reaping, the marker and the
+    real `tmp/`, with no links into the mount and no `CLAUDE.md` link. `FARM_SCRIPT` itself is
+    untouched, so unscoped staging stays byte-identical.
+  - The trust seed takes the remote stage dir as its cwd.
+  - The session environment file gains `JINN_DEPARTMENT`.
+- **cwd.** `engine-run.ts` (which auto-compaction also uses), `rate-limit-turn.ts`, the
+  rate-limit handler and `pty-ws.ts` pass the remote stage dir as `remoteCwd` for a scoped
+  remote session. Fork has no remote path.
+  The employee's own `remoteCwd` goes into the scoped prompt section as the work area.
+- **Validation.** In `gateway/org.ts`: a scoped employee's `remoteCwd` must not be, contain or
+  lie inside `<remote.root>/.jinn-departments`. Phase 2's refusal of scoped remote employees is
+  removed.
+- **File reads.** The remote jinn MCP server's attachment read applies the FR-018 limit
+  against the employee's `remoteCwd` and the remote stage dir, both passed in its staged
+  config. The gateway's JSON `{path}` route refuses remote scoped sessions.
+- **Tests (junior sub-Todo).** One per remote launch path for cwd and `JINN_DEPARTMENT`. The
+  scoped farm script runs under `sh` against temporary directories standing in for the mount
+  and the remote root, and the test asserts no link into the mount and no `CLAUDE.md`. A
+  byte comparison pins the unscoped scripts and argv to `main` (SC-007).
+- **Live check.** This instance has no `remote` block configured. If the operator has a remote
+  host, the PR records one scoped session run there. If not, the PR says the remote path is
+  verified by tests only.
 
 ## Delegation split
 
@@ -434,6 +481,7 @@ Senior, because it touches auth, engine health and every launch path.
 | 2 | senior, with junior sub-Todos for the tests and the web | senior QA | Auth enforcement |
 | 3 | junior | senior QA | Specified, but it decides what a scoped session can load |
 | 4 | senior, with a junior sub-Todo for the transcript readers | senior QA | Auth, engine health and every launch path |
+| 5 | senior, with a junior sub-Todo for the tests | senior QA | Changes the SSH staging every remote session uses |
 
 ## Complexity Tracking
 
@@ -444,4 +492,5 @@ Senior, because it touches auth, engine health and every launch path.
 | A second route table beside the connector's | The scoped principal differs from the connector in almost every row | One table with a principal column is harder to audit |
 | A scoped read module instead of filters inside handlers | Handlers are over budget and have unfiltered branches (`ids=`, `pinned`, `q`) | Threading `department` through every branch is where a missed branch leaks |
 | A stage dir outside the home, with copied skills | Claude loads the ancestor `CLAUDE.md`, and the shared skills dir sits under the home | A prompt-only "do not use skill X" is not a restriction |
+| A pushed copy of the stage dir on each remote host | A remote session cannot use a local cwd, and the remote home today is a farm over the whole company home | Linking the stage dir through the sshfs mount, which works only while the mount is up and puts the session's cwd on a network filesystem |
 | One `ClaudeProfile` value threaded from the employee | About fifteen places assume one profile today | Setting `CLAUDE_CONFIG_DIR` in the environment only, which leaves transcripts, trust, auth and health reading the wrong account |

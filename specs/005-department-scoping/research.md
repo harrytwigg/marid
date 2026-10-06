@@ -108,7 +108,12 @@ and the decision. This reading was matched by content in minified code, so Phase
 | `engines/remote-stage.ts:658` | `verifyClaudeProfile`, which caches only successes (`:639`) | Copied for the local check |
 | `sessions/turn/engine-run.ts:55` | Passes host, user and cwd, but not the profile | A bug: ordinary remote turns and auto-compaction fall back to the instance default. FR-058 |
 | `sessions/rate-limit-handler.ts:104` | Rebuilds the remote target from the employee, profile included | The rate-limit path keeps the profile. `rate-limit-turn.ts:166`'s omission is redundant |
-| `shared/config-types.ts:268` / `:274` | `remoteCwd` must sit under `remote.root`, and the remote `$JINN_HOME` is a link farm over the gateway's real knowledge, docs, org and skills | Why scoped employees stay local in v1 (FR-026) |
+| `shared/config-types.ts:268` / `:274` | `remoteCwd` must sit under `remote.root`, and the remote `$JINN_HOME` is a link farm over the gateway's real knowledge, docs, org and skills | A scoped remote session gets a home with no farm links, and a stage dir under `remote.root` (FR-060, FR-062) |
+| `engines/remote-stage.ts:966` | `FARM_SCRIPT`: links every top-level entry of the mount into the session home, and links the company `CLAUDE.md` into `remoteCwd` when it is not a git tree | Left untouched. Scoped sessions run a scoped variant (FR-062) |
+| `engines/remote-stage.ts:792` / `:167` | `serializePerHost`, and `stageRemoteFile` (temp file, then rename) | The stage-dir push runs inside the first and follows the second's discipline (FR-060) |
+| `engines/remote-stage.ts:1248` | `prepareRemoteSession`: farm, assets and trust seed under the per-host lock, then the session's own files | Gains an optional department (Phase 5) |
+| `mcp/file-tools.ts:98` | The jinn MCP server reads an attachment path itself; for a remote session that server runs on the remote host | FR-065 checks the path limit there |
+| `sessions/fork.ts` | No remote target is built | Fork has no remote path, so FR-061 does not list it |
 
 ### Identity and authentication
 
@@ -247,9 +252,14 @@ to an over-budget file is paid for in the same PR by moving existing code out.
   check, the outage ledger, engine health and the limits would all keep reading the default
   account, so one account's limit would stop the other and resume would not find
   transcripts.
-- **A scoped employee on a remote target.** Its session ignores the local stage dir, and the
-  remote home is a link farm over the company's real files. Local profiles make it
-  unnecessary for the motivating case (FR-026).
+- **Refusing scoped employees on remote targets** (the draft before D5). The operator wants
+  the system to work off this Mac (D5), so Phase 5 stages scoped remote sessions instead.
+- **Linking the remote stage dir through the sshfs mount** instead of pushing a copy. The
+  session's cwd would sit on a network filesystem, and every scoped remote session would stop
+  when the mount drops. A pushed copy needs the mount only for what the unscoped path already
+  uses.
+- **A profile owner marker** (`claudeProfileOwner`, the FR-059 option (b) in an earlier
+  draft). The operator owns every profile, and the system does not track ownership (D4).
 - **A stage dir inside `$JINN_HOME`.** Ancestor `CLAUDE.md` loading would pull in the company
   file. Symlinked skills would resolve into the denied tree. A deny on the home would cover
   the stage dir too, because deny wins over allow.

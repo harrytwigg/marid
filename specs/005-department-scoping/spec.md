@@ -3,7 +3,8 @@
 **Feature Branch**: `feat/project-scoping-spec`
 
 **Created**: 2026-10-05. **Revised**: 2026-10-06, when the operator replaced projects with
-departments and brought per-employee local Claude profiles into scope.
+departments, brought per-employee local Claude profiles into scope, separated profiles from
+scope, and asked for scoped employees on remote hosts (D1 to D5).
 
 **Status**: Ready for implementation per plan.md and tasks.md. The operator's decisions are
 recorded below and folded into the text.
@@ -53,12 +54,8 @@ closed to everyone except its own members.
 | D1 | **Departments, not a new project concept.** Departments already give a board, an id prefix and a group on the org tree. A `dedicated` department is the closed form | The project registry, project YAML, project membership table and Projects page are dropped. A department gains a `scope` (FR-001) |
 | D2 | **Local employees can name their own Claude profile**, as remote employees already can | FR-050 to FR-059 |
 | D3 | The separate account follow-up is cancelled. Its findings are folded into FR-050 to FR-059 | — |
-
-**One choice this spec makes that the operator may override**: a scoped employee must run
-locally (FR-026). Before D2, the only way to put an employee on another account was a remote
-target, and a remote session cannot use the stage dir (research.md, "Remote targets"). With
-local profiles that need goes away, so refusing `remoteHost` on scoped employees costs the
-motivating case nothing.
+| D4 | **A Claude profile is a per-employee path and nothing more.** It is independent of department scope. The operator owns every profile, and the system does not track who a profile belongs to | FR-059: no owner marker, and no rule tying a profile to a scope or a phase |
+| D5 | **Scoped employees run locally or on a remote host.** The system must not assume this Mac | FR-026 and FR-060 to FR-066 (Phase 5). The earlier local-only rule is withdrawn |
 
 ## Why This Matters *(constitution Principle II)*
 
@@ -96,13 +93,17 @@ This feature responds in three ways:
   gateway", not "cannot reach".
 
 **What goes to another account.** Every prompt, tool output and file read in a session on a
-named Claude profile goes to that profile's account. Before Phase 3, a scoped session still
-runs with cwd `$JINN_HOME` and loads the company `CLAUDE.md` and every skill. So an employee
-on a friend's profile must be scoped **and** Phase 3 must have merged before it runs. Phase 4
-enforces the second half: a named profile on a scoped employee is refused until the stage dir
-is in use (FR-059). The first half, that a friend's profile is only ever used by a scoped
-employee, depends on the open question in FR-059, because the gateway cannot tell a friend's
-profile from the operator's own second account.
+named Claude profile goes to that profile's account. Which profile an employee uses is the
+operator's choice, made in its YAML, and the gateway applies it as written (D4). It does not
+tie profiles to departments, and it does not ask whose account a profile is. What a session
+sends follows from its scope: an unscoped session loads the company `CLAUDE.md`, every skill
+and `state.md`, and so does a scoped one until Phase 3 has merged. The docs (T078) say so
+beside the profile field.
+
+**Remote hosts.** A remote session runs over SSH with the gateway's home mounted on the remote
+host (`packages/jinn/src/shared/config-types.ts:274`). A scoped remote session is held to the
+same guardrail as a local one (FR-060 to FR-066). Its shell can still reach that mount, just
+as a local scoped session's shell can reach `$JINN_HOME`.
 
 ## What the tree does today *(facts the spec depends on)*
 
@@ -249,6 +250,8 @@ employee's transcript under the profile's `projects/` directory.
    another profile (FR-056).
 5. **Given** a remote employee with `remoteClaudeConfigDir`, **When** it runs an ordinary
    turn, **Then** the turn uses that profile, not the instance default (FR-058).
+6. **Given** an unscoped employee with `claudeConfigDir` set, **When** it runs, **Then** it
+   runs on that profile with no further marker or check (FR-059).
 
 ---
 
@@ -268,6 +271,31 @@ includes the department's own state file.
 - a `search_knowledge` term present in both a company Note and a D Note returns only the D
   Note;
 - the session's cwd holds exactly the allowed skills and the generated `CLAUDE.md`.
+
+---
+
+### User Story 5a: A scoped employee runs on a remote host (Priority: P2)
+
+The operator gives `side-dev` a `remoteHost` and a `remoteCwd` under `remote.root`, and leaves
+it in scoped department D. Its sessions run on that host, held to the same scope as a local
+scoped session.
+
+**Acceptance Scenarios**:
+
+1. **Given** `side-dev` is remote and scoped, **When** it starts, **Then** its cwd is
+   `<remote.root>/.jinn-departments/side-project/`, holding exactly the allowed skills and the
+   generated `CLAUDE.md` (FR-060, FR-061).
+2. **Given** the same session, **Then** its `$JINN_HOME` has no links into the company home,
+   and no company `CLAUDE.md` is linked into any directory for it (FR-062).
+3. **Given** the operator edits D's `INSTRUCTIONS.md`, **When** `side-dev` next starts on that
+   host, **Then** the remote stage dir holds the new `CLAUDE.md` (FR-060).
+4. **Given** `side-dev` calls a jinn tool, **Then** the gateway applies D's scope exactly as for
+   a local scoped session (FR-064).
+5. **Given** an unscoped remote employee, **Then** its staging is unchanged from `main`.
+
+**Independent Test**: the remote staging for a scoped session, recorded as the SSH scripts it
+runs, has the stage dir as cwd and no farm links. The farm script variant runs under `sh`
+against temporary directories standing in for the mount and the remote root.
 
 ---
 
@@ -319,6 +347,11 @@ and dark, with screenshots on the PR (FR-040).
 - **Cron.** Validation refuses a cron job that targets a scoped employee.
 - **Two employees on one profile.** Allowed. They share that account's limits, as everyone on
   the default profile does today.
+- **A remote host that is asleep or unreachable.** A scoped remote session waits or is refused
+  exactly as an unscoped one is today (`ensureRemoteReady`). The stage dir is pushed once the
+  host answers.
+- **A scoped department used from several hosts.** Each host gets its own copy of the stage
+  dir, pushed on first use and on change.
 - **A profile directory that does not exist.** The employee loads, and its turns are refused
   with the login hint (FR-054), as remote profiles are today
   (`packages/jinn/src/engines/remote-stage.ts:658`).
@@ -473,10 +506,11 @@ scoped employee; D is that session's binding)
   `$JINN_HOME`: `<parent of home>/.jinn-departments/<slug>/`. This is the only way to stop
   Claude Code loading the company `CLAUDE.md` (it reads from the cwd and its ancestors) and the
   company skills directory.
-- **FR-026**: In v1 a scoped employee MUST use the `claude` engine and run locally. The stage
-  dir uses Claude's layout (`CLAUDE.md`, `.claude/skills/`), and a remote session ignores the
-  local cwd and runs in `remoteCwd`. Validation refuses another engine or a `remoteHost` on a
-  scoped employee, and says why.
+- **FR-026**: In v1 a scoped employee MUST use the `claude` engine, because the stage dir uses
+  Claude's layout (`CLAUDE.md`, `.claude/skills/`). It MAY run locally or on a remote host
+  (D5). Validation refuses another engine and says why. A scoped employee with a `remoteHost`
+  is refused until Phase 5 has merged, because before then its session would run in
+  `remoteCwd` with the company home linked in. The refusal names the reason.
 - **FR-027**: A department MAY carry a skill allow-list. Of the company skills, a scoped
   session is offered only the allow-listed ones, through:
   - copies in the stage dir;
@@ -602,20 +636,59 @@ scoped employee; D is that session's binding)
   `engine-run.ts:55` does not pass it. The rate-limit path already rebuilds it from the
   employee (`sessions/rate-limit-handler.ts:104`); `rate-limit-turn.ts:166` passes it too, for
   consistency.
-- **FR-059**: **Profiles and scope.** A scoped employee's named profile is refused until it
-  runs from a stage dir (FR-020). If Phase 4 merges before Phase 3, that refusal is what keeps
-  the company `CLAUDE.md` and skills off another account.
+- **FR-059**: **Profiles are independent of scope (D4).** Any employee, scoped or not, MAY name
+  a profile, and the gateway applies it as written. There is no owner field, no check of whose
+  account a profile is, and no ordering between the profile work and the scope work: Phase 4
+  does not wait for Phase 3. Two employees, scoped or not, may share a profile (Edge Cases).
 
-  **Open question for the operator: may an unscoped employee use a named profile?** An
-  unscoped session loads the company `CLAUDE.md`, every skill and `state.md`, so on a friend's
-  profile all of that goes to the friend's account. The gateway cannot tell a friend's profile
-  from the operator's own second account. The options are:
-  - (a) **Operator discipline.** Unscoped employees may use any profile. The docs (T078) and
-    the employee panel say plainly that an unscoped employee on someone else's account sends
-    company context to it.
-  - (b) **A declared owner.** A named profile is allowed on an unscoped employee only with
-    `claudeProfileOwner: operator` beside it, so pointing an unscoped employee at a friend's
-    profile takes a deliberate, visible statement. A scoped employee needs no marker.
+**Scoped employees on remote hosts** (D5, Phase 5)
+
+A remote session today runs in the employee's `remoteCwd`. Its `$JINN_HOME` is a symlink farm
+over the gateway's home, which is mounted on the remote host, and the company `CLAUDE.md` is
+linked into its cwd (`packages/jinn/src/engines/remote-stage.ts:966`, the farm script). For a
+scoped employee each of those would undo FR-020, FR-027 and FR-028, so a scoped remote session
+is staged differently. Unscoped remote sessions are unchanged.
+
+- **FR-060**: **Remote stage dir.** For each remote host a scoped member uses, the gateway MUST
+  keep a copy of D's stage dir at `<remote.root>/.jinn-departments/<slug>/` on that host.
+  - Its content is exactly the local stage dir's: the same generator (Phase 3) produces it.
+  - It is pushed over SSH before a scoped session's first spawn on that host, and again
+    whenever its content hash changes. A push writes a sibling temp dir and renames it into
+    place, so a session never sees a half-written stage dir.
+  - Pushes run inside the existing per-host serialisation
+    (`packages/jinn/src/engines/remote-stage.ts:792`). The pushed hash is cached per host and
+    cleared with the remote staging cache.
+  - It sits under `remote.root`, so it stays inside the existing remote guardrail
+    (`packages/jinn/src/shared/config-types.ts:268`).
+- **FR-061**: **Remote cwd.** A scoped remote session MUST run with its cwd set to the remote
+  stage dir, not the employee's `remoteCwd`. This holds on every path that builds a remote
+  target: `sessions/turn/engine-run.ts` (turns, and auto-compaction through it),
+  `sessions/turn/rate-limit-turn.ts`, the rate-limit handler and `gateway/pty-ws.ts`. Fork
+  has no remote path today.
+  - The employee's `remoteCwd` stays its work area. The session's prompt names it, because the
+    stage dir is shared by the whole department and cannot. FR-065 uses it.
+  - Validation refuses a `remoteCwd` on a scoped employee that is, contains or lies inside
+    `<remote.root>/.jinn-departments`.
+- **FR-062**: **No company home on the remote host.** A scoped remote session's `$JINN_HOME`
+  MUST hold only what reaches the gateway: `gateway.json`, `tmp/` (settings, MCP config and the
+  environment file) and the stage marker. The farm links to the company home are not made, and
+  the company `CLAUDE.md` is not linked into any cwd. Reaping old session stages still runs.
+- **FR-063**: **Trust.** The gateway MUST seed folder trust for the remote stage dir under the
+  session's profile, with the existing remote seed (`seedRemoteTrust`, keyed by host, profile
+  and cwd).
+- **FR-064**: **Binding and marker.** A scoped remote session is bound to D in `spawnSession`
+  exactly as a local one is (FR-008), and the remote environment file carries
+  `JINN_DEPARTMENT=<slug>`. The gateway's scope checks (FR-010 to FR-019) do not depend on where
+  the session runs.
+- **FR-065**: **File reads on the remote host.** For a scoped remote session, the FR-018 path
+  limit is checked where the file is read. That is the session's jinn MCP server on the remote
+  host, which reads attachment paths itself (`packages/jinn/src/mcp/file-tools.ts:98`). It
+  accepts only realpaths inside the employee's `remoteCwd` or the remote stage dir. The
+  gateway's JSON `{path}` attachment route refuses a remote scoped session, because the path
+  names a file on another machine.
+- **FR-066**: **Profiles on remote hosts.** A scoped remote employee uses
+  `remoteClaudeConfigDir`, or `remote.claudeConfigDir`, as every remote employee does, with the
+  FR-058 fix. No new field is added.
 
 **Compatibility**
 
@@ -662,7 +735,6 @@ research.md keeps the findings, so that work does not start from zero.
   relay's context on argv.
 - The escape script.
 - A separate OS user.
-- Scoped employees on remote targets (FR-026).
 
 ### Key Entities
 
@@ -675,8 +747,10 @@ research.md keeps the findings, so that work does not start from zero.
   fixed at creation.
 - **Department stage directory**: a generated cwd for each non-open department, outside
   `$JINN_HOME`.
+- **Remote department stage directory**: a pushed copy of the stage directory on each remote
+  host a scoped member uses, at `<remote.root>/.jinn-departments/<slug>/`.
 - **Employee Claude profile** (employee YAML, `claudeConfigDir`): the profile its local
-  sessions run as.
+  sessions run as. Remote employees keep `remoteClaudeConfigDir`.
 
 ## Success Criteria *(mandatory)*
 
@@ -694,11 +768,16 @@ research.md keeps the findings, so that work does not start from zero.
 - **SC-005**: Every FR-040 element has light and dark screenshots on the PR.
 - **SC-006**: Two profiles with independent limits: marking one rate-limited leaves sessions on
   the other startable, and the reverse.
+- **SC-007**: For a scoped remote employee, a test per remote launch path asserts the remote
+  stage dir as cwd and `JINN_DEPARTMENT` in the environment file. The scoped farm script,
+  run under `sh` against temporary directories, makes no link into the company home and no
+  `CLAUDE.md` link. The unscoped remote staging scripts are byte-identical to `main`.
 
 ## Assumptions
 
-- Single operator, single machine, single OS user. Scoping is a gateway guardrail, not an OS
-  boundary (see "Scope of the boundary").
+- Single operator and one gateway. Engines run as the operator's user on the gateway's
+  machine, or as the configured remote user on a remote host. Scoping is a gateway guardrail,
+  not an OS boundary (see "Scope of the boundary").
 - The operator signs each profile in by hand, once. The gateway never runs `/login`.
 - Concurrent employees in one department share its working directories. Worktrees remain the
   answer.

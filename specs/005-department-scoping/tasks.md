@@ -4,8 +4,8 @@ These tasks follow the operator's decisions (spec.md, "Operator decisions").
 
 ## How the work ships
 
-**Order.** Each phase is its own PR off `main`. Phases 1 → 2 → 3 are built in order. Phase 4
-is independent and may run alongside them.
+**Order.** Each phase is its own PR off `main`. Phases 1 → 2 → 3 → 5 are built in order.
+Phase 4 is independent and may run alongside them.
 
 **Rules for every phase.**
 
@@ -95,8 +95,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 - [ ] T040 Enumerate every API route on `main` and every upgrade path, and classify each
   against plan.md's table. Write the route-enumeration test.
 - [ ] T041 Inject the scope resolver at boot: an employee's department and that department's
-  effective scope. Validation: a scoped employee is claude-only and local-only (FR-026), and
-  no cron job may target one.
+  effective scope. Validation: a scoped employee is claude-only (FR-026), a scoped employee
+  with a `remoteHost` is refused with the reason until Phase 5 lifts it, and no cron job may
+  target one.
 - [ ] T042 Add `sessions.scope_department`, set only for scoped employees in `spawnSession` by
   FR-008. Use `parent_session_id` as the FR-013 requester. Refuse connector-originated
   sessions for scoped employees.
@@ -151,7 +152,8 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   company file if `department+company` is set, plus the FR-029 scope paragraph. Regenerate it
   on skill, department-scan and instruction changes. Use it as cwd for scoped sessions in
   `engine-run.ts`. Write a trust seed for the stage dir when it is generated (under the
-  session's profile, if Phase 4 has merged).
+  session's profile, if Phase 4 has merged). The generator returns the file set and a content
+  hash before writing, so Phase 5 can push the same content.
 - [ ] T061 Make resume, fork and auto-compaction resolve the stage-dir transcript slug. Add a
   regression test for each.
 - [ ] T062 Apply the skill allow-list to the copies, the prompt and `dispatchConfig.skills`.
@@ -176,8 +178,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   `claudeConfigDir` spawns without `CLAUDE_CONFIG_DIR`, and a remote employee's ordinary turn
   drops `remoteClaudeConfigDir` (`sessions/turn/engine-run.ts:55`).
 - [ ] T071 Parse and validate `claudeConfigDir` in `gateway/org.ts` beside the remote check
-  (FR-050). Refuse it with `remoteHost`, and on a scoped employee until the stage dir is in
-  use (FR-059). Add every `claudeConfigDir` to the file-read policy's protected Claude dirs.
+  (FR-050). Refuse it with `remoteHost`. Apply no scope check (FR-059): a test pins that a
+  scoped and an unscoped employee both spawn on their profile. Add every `claudeConfigDir` to
+  the file-read policy's protected Claude dirs.
 - [ ] T072 Write `shared/claude-profile.ts` (plan.md, "Claude profile threading"). Thread the
   profile through `buildEngineChildEnv` and every launch path in FR-051, with a test per path
   (SC-003). Pass `remoteClaudeConfigDir` on the remote paths (FR-058).
@@ -205,7 +208,41 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 - [ ] T077 Web: the profile badge on the org tree and a read-only profile row in the employee
   panel. Capture both, and the "not signed in" refusal in chat, in light and dark.
 - [ ] T078 Docs: how to create and sign in a profile, what goes to its account (including the
-  profile's own skills, plugins and connectors), and FR-059 as the operator decided it.
+  profile's own skills, plugins and connectors). Say plainly that a profile is independent of
+  department scope, so an unscoped employee on a profile sends company context to that
+  account (FR-059).
+
+## Phase 5: scoped employees on remote hosts (senior-developer, then senior QA; starts after Phase 3 merges; T084 goes to the junior as its own Todo)
+
+- [ ] T080 Red test: on `main`, a scoped remote employee (Phase 2's refusal bypassed in the
+  test) gets a session home linking the company home, and the company `CLAUDE.md` linked into
+  its `remoteCwd`.
+- [ ] T081 Write `engines/remote-department-stage.ts`: push Phase 3's file set to
+  `<remote.root>/.jinn-departments/<slug>/` as a tar stream over `sshRun`, into a sibling temp
+  dir, then rename. Run it inside `serializePerHost`. Cache the pushed hash per host and slug,
+  and clear it with `clearRemoteStagingCache` (FR-060).
+- [ ] T082 Give `prepareRemoteSession` an optional department. For a scoped session, run a
+  scoped farm script (reaping, marker and real `tmp/`, with no mount links and no `CLAUDE.md`
+  link), seed trust for the remote stage dir, and add `JINN_DEPARTMENT` to the environment
+  file. Leave `FARM_SCRIPT` untouched (FR-062 to FR-064).
+- [ ] T083 Pass the remote stage dir as `remoteCwd` for scoped remote sessions in
+  `engine-run.ts`, `rate-limit-turn.ts`, the rate-limit handler and `pty-ws.ts`. Put the
+  employee's own `remoteCwd` in the scoped prompt section as the work area. In
+  `gateway/org.ts`, refuse a scoped employee's `remoteCwd` that is, contains or lies inside
+  `<remote.root>/.jinn-departments`, and remove Phase 2's refusal of scoped remote employees
+  (FR-026, FR-061).
+- [ ] T084 Tests (junior sub-Todo): cwd and `JINN_DEPARTMENT` on each remote path in T083; the
+  scoped farm script under `sh` against temporary directories standing in for the mount and
+  the remote root, asserting no link into the mount and no `CLAUDE.md`; a byte comparison of
+  the unscoped scripts and argv against `main` (SC-007).
+- [ ] T085 Apply the FR-018 limit in the remote jinn MCP server's attachment read, against the
+  employee's `remoteCwd` and the remote stage dir, passed in its staged config. Refuse the
+  gateway's JSON `{path}` route for remote scoped sessions (FR-065).
+- [ ] T086 Live check. This instance has no `remote` block. If the operator provides a remote
+  host, run one scoped session there and record the result in the PR. Otherwise say in the PR
+  that the remote path is verified by tests only.
+- [ ] T087 Docs: scoped employees on remote hosts, and the fact that the remote shell can still
+  reach the mounted home (a guardrail, not a sandbox).
 
 ## Follow-ups outside this feature
 

@@ -103,11 +103,13 @@ persona: ...
 - Scope is read from the top-level directory under `org/`. When that directory, the
   immediate directory or the `department` field names a non-open department, all three must
   agree (FR-007).
-- A scoped employee must use the `claude` engine and have no `remoteHost` (FR-026).
+- A scoped employee must use the `claude` engine (FR-026). It may set `remoteHost`; until
+  Phase 5 that is refused. Its `remoteCwd` must not be, contain or lie inside
+  `<remote.root>/.jinn-departments` (FR-061).
 - `claudeConfigDir` must be absolute, must not start with `~`, must not lie inside
   `$JINN_HOME`, must not equal the default profile's directory, and is refused alongside
-  `remoteHost` (FR-050). It is canonicalised at load: no trailing slash, no `.` or `..`. On a scoped employee it is
-  refused until the stage dir is in use (FR-059).
+  `remoteHost` (FR-050). It is canonicalised at load: no trailing slash, no `.` or `..`. It
+  does not depend on the employee's department (FR-059).
 - A cron job cannot target a scoped employee.
 - A PATCH that changes `department` into or out of a non-open department is refused while the
   employee holds a Todo it could no longer hold (FR-015).
@@ -127,6 +129,12 @@ A scoped session's engine environment also carries `JINN_DEPARTMENT=<slug>` (FR-
 
 The stage directory is regenerated on the same triggers as `syncSkillSymlinks`, on a
 department scan change, and when an instructions file changes. Nobody edits it by hand.
+
+**On a remote host** (FR-060), the same content is pushed to
+`<remote.root>/.jinn-departments/<slug>/` before a scoped session's first spawn there and
+whenever its content hash changes. The gateway caches the pushed hash per host and slug, in
+memory only. A scoped remote session's `$JINN_HOME` holds only `gateway.json`, `tmp/` and the
+stage marker (FR-062).
 
 ## Claude profiles
 
