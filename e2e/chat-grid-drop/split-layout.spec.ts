@@ -157,7 +157,9 @@ test('splitters resize by pointer and keyboard, reset on double-click, and persi
   const [a, b, c] = ids
   await arrangeThree(page, ids)
 
-  const column = page.locator('[role="separator"][aria-orientation="vertical"]')
+  // The chat list's own resize handle is a vertical separator too; only the grid's are under test.
+  const grid = page.getByTestId('chat-grid')
+  const column = grid.locator('[role="separator"][aria-orientation="vertical"]')
   await expect(column).toHaveCount(1)
   const before = await box(page, a)
   const handle = rect((await column.boundingBox())!)
@@ -176,7 +178,7 @@ test('splitters resize by pointer and keyboard, reset on double-click, and persi
   const keyed = await box(page, a)
   expect(Math.abs(dragged.width - keyed.width - 32)).toBeLessThanOrEqual(2)
 
-  const row = page.locator('[role="separator"][aria-orientation="horizontal"]')
+  const row = grid.locator('[role="separator"][aria-orientation="horizontal"]')
   await row.focus()
   await page.keyboard.press('Shift+ArrowDown')
   const topAfterKeys = await box(page, c)
