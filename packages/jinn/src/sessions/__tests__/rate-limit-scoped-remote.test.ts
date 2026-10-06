@@ -57,10 +57,14 @@ const REMOTE = { remoteHost: "build-box", remoteUser: "ci", remoteCwd: "/srv/roo
 
 const remoteEmployee = { name: "remote-rl-dev", engine: "claude", ...REMOTE } as Employee;
 
-function opts(run: ReturnType<typeof vi.fn>, extra: Partial<RateLimitHandlerOpts> & { scoped?: boolean } = {}): RateLimitHandlerOpts {
-  const { scoped = true, ...rest } = extra;
+/**
+ * `scoped: false` is a session of an employee outside the department. `lostBinding` is a session
+ * of the scoped employee whose `scope_department` is gone: it is still scoped (`sessionScopeDepartment`).
+ */
+function opts(run: ReturnType<typeof vi.fn>, extra: Partial<RateLimitHandlerOpts> & { scoped?: boolean; lostBinding?: boolean } = {}): RateLimitHandlerOpts {
+  const { scoped = true, lostBinding = false, ...rest } = extra;
   return {
-    session: makeSession({ engine: "claude", engineSessionId: "claude-thread-1", employee: "remote-rl-dev", scopeDepartment: scoped ? SLUG : null }),
+    session: makeSession({ engine: "claude", engineSessionId: "claude-thread-1", employee: scoped ? "remote-rl-dev" : "remote-rl-eng", scopeDepartment: scoped && !lostBinding ? SLUG : null }),
     attemptToken: "attempt-1",
     prompt: "hello",
     engineConfig: { bin: "claude", model: "opus" },
@@ -85,6 +89,7 @@ beforeEach(() => {
   fs.rmSync(departmentStageDir(SLUG), { recursive: true, force: true });
   writeDepartmentFile(SLUG, `name: ${SLUG}\nscope: scoped\n`);
   writeEmployeeFile(SLUG, "remote-rl-dev");
+  writeEmployeeFile("engineering", "remote-rl-eng");
   refreshOrg();
 });
 
@@ -115,7 +120,7 @@ describe("a rate-limited scoped remote session (Branch B)", () => {
 });
 
 describe("a rate-limited scoped remote session whose chain names another engine (FR-026a)", () => {
-  const withOpencode = (run: ReturnType<typeof vi.fn>, substitute: ReturnType<typeof vi.fn>, extra: Partial<RateLimitHandlerOpts> & { scoped?: boolean } = {}) => {
+  const withOpencode = (run: ReturnType<typeof vi.fn>, substitute: ReturnType<typeof vi.fn>, extra: Partial<RateLimitHandlerOpts> & { scoped?: boolean; lostBinding?: boolean } = {}) => {
     const base = opts(run, extra);
     return {
       ...base,
@@ -128,6 +133,15 @@ describe("a rate-limited scoped remote session whose chain names another engine 
     const run = answered();
     const substitute = vi.fn();
     const outcome = await handleRateLimit(withOpencode(run, substitute, { employee: remoteEmployee }));
+    expect(outcome.kind).toBe("resumed");
+    expect(substitute).not.toHaveBeenCalled();
+    expect(run.mock.calls[0]![0]).toMatchObject({ remoteCwd: STAGE, remoteDepartment: SLUG });
+  });
+
+  it("treats a session whose binding was lost as scoped, as its cwd and prompt do: it waits too", async () => {
+    const run = answered();
+    const substitute = vi.fn();
+    const outcome = await handleRateLimit(withOpencode(run, substitute, { employee: remoteEmployee, lostBinding: true }));
     expect(outcome.kind).toBe("resumed");
     expect(substitute).not.toHaveBeenCalled();
     expect(run.mock.calls[0]![0]).toMatchObject({ remoteCwd: STAGE, remoteDepartment: SLUG });

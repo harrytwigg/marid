@@ -10,6 +10,7 @@ import type { Employee, JinnConfig, RemoteTarget, Session, SessionRemoteTarget }
 import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import { resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
 import { accountOverride } from "./session-account.js";
+import { sessionScopeDepartment } from "./session-cwd.js";
 
 /** What a rate-limited turn moves onto: an engine, the Claude profile it runs
  *  as there, and, for another Claude account, the swap the override records. */
@@ -56,10 +57,12 @@ export function chooseSubstitute(input: ChooseSubstituteInput): SubstituteChoice
 }
 
 /** The walk's options: the caller's, plus the account a substituted session belongs to. A
- *  department-scoped session takes only Claude-account entries (FR-026a): it must stay on claude. */
+ *  department-scoped session takes only Claude-account entries (FR-026a): it must stay on claude.
+ *  Whether it is scoped is `sessionScopeDepartment`'s answer, as everywhere else: a session whose
+ *  binding was lost is still its scoped employee's, and stays on claude. */
 function walkOptions(input: ChooseSubstituteInput): AccountFallbackOptions {
   const original = accountOverride(input.session)?.originalAccount;
-  return { ...input.options, ...(original ? { original } : {}), ...(input.session.scopeDepartment ? { accountsOnly: true } : {}) };
+  return { ...input.options, ...(original ? { original } : {}), ...(sessionScopeDepartment(input.session) ? { accountsOnly: true } : {}) };
 }
 
 /** A local Claude session: its account's own chain (FR-079). */
@@ -84,7 +87,7 @@ function engineSubstitute(input: ChooseSubstituteInput, health: EngineHealthRead
   // A department-scoped session stays on claude (FR-026a): its stage directory is Claude's
   // layout, and on a remote host the account entries that could keep it there do not apply,
   // so it waits for its reset rather than move to another engine.
-  const scoped = Boolean(session.scopeDepartment ?? input.remoteTarget.remoteDepartment);
+  const scoped = Boolean(sessionScopeDepartment(session) ?? input.remoteTarget.remoteDepartment);
   // A remote employee's substitute has to be an engine that can ALSO run on that
   // host, and the usability question moves there with it: `engineAvailable`
   // probes the GATEWAY's PATH, which says nothing about another machine.
