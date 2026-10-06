@@ -40,29 +40,42 @@ function refuseSessionOutside(g: GateRequest, id: string): boolean {
   return true;
 }
 
-function serveSessionList(g: GateRequest): boolean {
-  const params = g.route.url.searchParams;
-  const visible = bound(g.caller.department);
-  const portal = g.deps.context.getConfig().portal?.portalName;
-  const serialize = (sessions: Session[]) => g.deps.serializeSessions(sessions.filter(visible));
+/** The page for `?group=`, cut after narrowing so its offset counts only visible rows. */
+function groupPage(params: URLSearchParams, group: string, portal: string | undefined, visible: (session: Session) => boolean): Session[] {
+  const limit = Math.max(1, parseInt(params.get("limit") || "50", 10) || 50);
+  const offset = Math.max(0, parseInt(params.get("offset") || "0", 10) || 0);
+  return listSessionsForGroup(group, SEARCH_WINDOW, 0, portal).filter(visible).slice(offset, offset + limit);
+}
+
+/** The `?pinned`, `?q`, `?group` and `?limit=0` forms, narrowed; undefined for the default listing. */
+function selectedList(params: URLSearchParams, portal: string | undefined, visible: (session: Session) => boolean): Session[] | undefined {
   const query = params.get("q")?.trim();
   const group = params.get("group");
-  if (params.get("pinned") === "1") return json(g.res, serialize(listPinnedSessions())), true;
-  if (query) return json(g.res, serialize(searchSessions(query, SEARCH_WINDOW))), true;
-  if (group) {
-    const limit = Math.max(1, parseInt(params.get("limit") || "50", 10) || 50);
-    const offset = Math.max(0, parseInt(params.get("offset") || "0", 10) || 0);
-    const all = listSessionsForGroup(group, SEARCH_WINDOW, 0, portal).filter(visible);
-    return json(g.res, g.deps.serializeSessions(all.slice(offset, offset + limit))), true;
-  }
-  if (params.get("limit") === "0") return json(g.res, serialize(listSessions())), true;
+  if (params.get("pinned") === "1") return listPinnedSessions().filter(visible);
+  if (query) return searchSessions(query, SEARCH_WINDOW).filter(visible);
+  if (group) return groupPage(params, group, portal, visible);
+  return params.get("limit") === "0" ? listSessions().filter(visible) : undefined;
+}
+
+function groupCounts(sessions: readonly Session[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const session of listSessions().filter(visible)) {
+  for (const session of sessions) {
     if (session.archivedAt) continue;
     const key = session.employee ?? "__direct__";
     counts[key] = (counts[key] ?? 0) + 1;
   }
-  json(g.res, { sessions: serialize(listRecentPerGroup(PER_GROUP, portal)), counts, perGroup: PER_GROUP });
+  return counts;
+}
+
+function serveSessionList(g: GateRequest): boolean {
+  const visible = bound(g.caller.department);
+  const portal = g.deps.context.getConfig().portal?.portalName;
+  const selected = selectedList(g.route.url.searchParams, portal, visible);
+  json(g.res, selected ? g.deps.serializeSessions(selected) : {
+    sessions: g.deps.serializeSessions(listRecentPerGroup(PER_GROUP, portal).filter(visible)),
+    counts: groupCounts(listSessions().filter(visible)),
+    perGroup: PER_GROUP,
+  });
   return true;
 }
 

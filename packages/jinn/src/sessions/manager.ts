@@ -57,9 +57,8 @@ export function mergeTransportMeta(
 
   const merged: Record<string, unknown> = { ...baseExisting, ...baseIncoming };
 
-  // Preserve Jinn internal keys from being overwritten by transport adapters.
-  // Engine thread ids are not among them: they live in the typed engineSessions
-  // column the registry owns, out of reach of any connector merge.
+  // Keep Jinn's internal keys from transport adapters. Engine thread ids live in the
+  // registry's typed engineSessions column, out of reach of any connector merge.
   for (const key of [
     "engineOverride",
     "claudeSyncSince",
@@ -168,13 +167,10 @@ export class SessionManager {
       .filter((filePath): filePath is string => !!filePath);
 
     if (session.status === "waiting") {
-      // A new user message on a rate-limit-paused session is an explicit "retry
-      // now" (e.g. the user cleared the limit provider-side). handleRateLimit's
-      // wait loop is sleeping until the engine's own reported resetsAt while
-      // holding this session's serial queue slot, so queueing behind it would
-      // park the message on a now-stale reset and keep replying "still limited".
-      // Flip out of `waiting` so that loop unwinds as cancelled and frees the
-      // queue; the enqueue below then runs immediately on the now-available engine.
+      // A new message on a rate-limit-paused session is an explicit "retry now". handleRateLimit's
+      // wait loop sleeps until the reported resetsAt while holding this session's queue slot, so
+      // queueing behind it would park the message on a stale reset. Leaving `waiting` unwinds that
+      // loop as cancelled and frees the queue; the enqueue below then runs at once.
       session = updateSession(session.id, {
         status: "idle",
         lastActivity: new Date().toISOString(),

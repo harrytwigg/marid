@@ -1,5 +1,6 @@
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import type { Session } from "../../shared/types.js";
+import { getSession } from "../../sessions/registry.js";
 import { departmentPathRefusal, insideDepartmentRoots } from "../../shared/department-file-roots.js";
 import { isTodoId } from "../../work-items/id.js";
 import { OPERATOR_ASSIGNEE } from "../../work-items/operator-assignee.js";
@@ -102,10 +103,8 @@ function narrowTodoList(g: GateRequest, emptyBody: Record<string, unknown>): boo
 async function createInDepartment(g: GateRequest): Promise<boolean> {
   const body = await peekJsonObject(g.req, g.res);
   if (!body) return true;
-  const parentId = typeof body.parentId === "string" ? body.parentId.trim() : "";
-  if (parentId && isTodoId(parentId) && getWorkItem(parentId) && !todoInDepartment(parentId, g.caller.department)) {
-    return badRequest(g.res, `parent Todo ${parentId} not found`), true;
-  }
+  const parentId = namedTodoOutside(body.parentId, g.caller.department);
+  if (parentId) return badRequest(g.res, `parent Todo ${parentId} not found`), true;
   setPeekedBody(g.req, { ...body, department: g.caller.department });
   return false;
 }
@@ -124,8 +123,7 @@ async function relateInDepartment(g: GateRequest): Promise<boolean> {
   if (refuseTodoOutside(g, g.rule.params.id)) return true;
   const body = await peekJsonObject(g.req, g.res);
   if (!body) return true;
-  const other = typeof body.dstId === "string" ? body.dstId.trim() : "";
-  if (other && isTodoId(other) && getWorkItem(other) && !todoInDepartment(other, g.caller.department)) return notFound(g.res), true;
+  if (namedTodoOutside(body.dstId, g.caller.department)) return notFound(g.res), true;
   return false;
 }
 
@@ -158,23 +156,27 @@ async function dispatchConfigInDepartment(g: GateRequest): Promise<boolean> {
   return forbid(g, `skill(s) ${refused.join(", ")} are not on department "${g.caller.department}"'s skill allow-list`);
 }
 
+/** A Todo id the body names that exists outside D; unknown and malformed ids are the route's to answer. */
+function namedTodoOutside(value: unknown, department: string): string | null {
+  const id = typeof value === "string" ? value.trim() : "";
+  return id && isTodoId(id) && getWorkItem(id) && !todoInDepartment(id, department) ? id : null;
+}
+
+/** A parent the body names that exists outside D reads as unknown: the route then uses the caller itself. */
+function dropParentOutside(g: GateRequest, body: Record<string, unknown>): void {
+  const parent = typeof body.parentSessionId === "string" ? getSession(body.parentSessionId) : undefined;
+  if (!parent || parent.scopeDepartment === g.caller.department) return;
+  const { parentSessionId: _dropped, ...rest } = body;
+  setPeekedBody(g.req, rest);
+}
+
 async function delegateInDepartment(g: GateRequest): Promise<boolean> {
   const body = await peekJsonObject(g.req, g.res);
   if (!body) return true;
   if (!isMember(body.employee, g.caller.department)) return memberRefusal(g, body.employee, "delegate to");
-  const todo = typeof body.workItemId === "string" ? body.workItemId.trim() : "";
-  if (todo && isTodoId(todo) && getWorkItem(todo) && !todoInDepartment(todo, g.caller.department)) {
-    return json(g.res, { error: `Todo ${todo} not found` }, 404), true;
-  }
-  // A parent outside D reads as unknown, which the route answers by using the caller itself.
-  const parent = typeof body.parentSessionId === "string" ? body.parentSessionId : "";
-  if (parent) {
-    const { getSession } = await import("../../sessions/registry.js");
-    if (getSession(parent) && getSession(parent)?.scopeDepartment !== g.caller.department) {
-      const { parentSessionId: _dropped, ...rest } = body;
-      setPeekedBody(g.req, rest);
-    }
-  }
+  const outside = namedTodoOutside(body.workItemId, g.caller.department);
+  if (outside) return json(g.res, { error: `Todo ${outside} not found` }, 404), true;
+  dropParentOutside(g, body);
   return false;
 }
 

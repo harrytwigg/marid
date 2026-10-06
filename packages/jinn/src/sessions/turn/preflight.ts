@@ -51,8 +51,6 @@ function refuseTurn(input: TurnInput): string | undefined {
   // D3: a connector anchor is an identity, never an agent. Running one would be an employee-less engine turn — COO-shaped.
   if (isRemoteMcpSession(session)) return "A remote MCP connector session never runs an engine; its results are read back through the connector.";
   if (isTerminalSession(session)) return TERMINAL_REFUSES_MESSAGES;
-  const scoped = refuseScopedTurn(session, input.engineOverride?.name);
-  if (scoped) return scoped;
   if (!input.engineOverride && !input.engines.has(session.engine)) {
     return `Engine "${session.engine}" not available`;
   }
@@ -62,7 +60,12 @@ function refuseTurn(input: TurnInput): string | undefined {
   if (session.employee && isBudgetExhausted(session.employee, input.config.budgets?.employees)) {
     return `Budget limit exceeded for employee "${session.employee}". Session blocked.`;
   }
-  return refuseClaudeLogin(input);
+  return refuseScopedOrLogin(input);
+}
+
+/** The department-scope gates (scoped-turn.ts), then the Claude login check. */
+function refuseScopedOrLogin(input: TurnInput): string | undefined {
+  return refuseScopedTurn(input.session, input.engineOverride?.name) ?? refuseClaudeLogin(input);
 }
 
 function resolveTurnEffort(input: TurnInput, engineConfig: EngineConfig): string | undefined {

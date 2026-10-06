@@ -131,6 +131,11 @@ export function guardWorkItemUpdate(db: Db, current: WorkItem, input: UpdateWork
   if (input.assignee !== undefined && input.assignee !== current.assignee) assertMayHold(input.assignee, current.id, scopeDepartment);
 }
 
+/** A system employee (the Dispatcher) runs a Todo's thread without holding it, and `system` is never scoped (FR-006). */
+function holdsWhenExecuting(employee: string | null): employee is string {
+  return !!employee && employeeDepartment(employee) !== 'system';
+}
+
 /**
  * FR-008 and FR-015 at the link, the backstop for every path that starts work on a
  * Todo: a session bound to a department links only to Todos in it, and a session
@@ -142,11 +147,9 @@ export function assertSessionMayLink(db: Db, sessionId: string, todoId: string, 
   const item = db.prepare('SELECT id, root_id, department FROM work_items WHERE id = ?').get(todoId) as
     { id: string; root_id: string; department: string | null } | undefined;
   if (!session || !item) return;
-  const rootDept = item.root_id === item.id ? item.department
-    : (db.prepare('SELECT department FROM work_items WHERE id = ?').get(item.root_id) as { department: string | null } | undefined)?.department ?? item.department;
+  const rootDept = rootDepartment(db, { id: item.id, rootId: item.root_id, department: item.department } as WorkItem);
   if (session.scope_department !== null && session.scope_department !== rootDept) {
     throw new DepartmentBoundaryError(`session ${sessionId} is bound to department "${session.scope_department}" and cannot be linked to ${todoId}, which is in ${where(rootDept)}`);
   }
-  // A system employee (the Dispatcher) runs a Todo's thread without holding it, and `system` is never scoped (FR-006).
-  if (role === 'execute' && session.employee && employeeDepartment(session.employee) !== 'system') assertMayHold(session.employee, todoId, rootDept);
+  if (role === 'execute' && holdsWhenExecuting(session.employee)) assertMayHold(session.employee, todoId, rootDept);
 }

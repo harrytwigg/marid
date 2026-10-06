@@ -50,8 +50,7 @@ function parseJsonObject(value: unknown, label?: string): JsonObject | null {
     const parsed = JSON.parse(value) as JsonObject;
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
-    // Graceful degrade (don't crash the load), but surface it — silent loss of
-    // reply_context/transport_meta otherwise shows up as a cryptic "no target".
+    // Degrade without crashing, but say so: a silently lost reply_context reads as a cryptic "no target".
     logger.warn(`registry: dropped corrupt JSON in ${label ?? 'session field'}`);
     return null;
   }
@@ -195,8 +194,7 @@ export function backfillFtsSync(database: Database.Database, chunkSize = FTS_BAC
   }
 }
 
-// Set to false when the FTS boot drain fails. `searchMessages` checks this first so it
-// returns [] immediately without touching a broken or absent table.
+// False when the FTS boot drain fails: `searchMessages` then returns [] without touching the table.
 let ftsAvailable = true;
 
 /**
@@ -419,8 +417,7 @@ export interface CreateSessionOpts {
 
 function getNextSessionNumber(): number {
   const db = initDb();
-  // MAX(rowid) is an O(1) b-tree seek (COUNT(*) walks the whole table) and keeps
-  // numbers monotonic even after deletions.
+  // MAX(rowid) is an O(1) seek (COUNT(*) walks the table) and stays monotonic after deletions.
   const row = db.prepare('SELECT MAX(rowid) as maxRowid FROM sessions').get() as { maxRowid: number | null };
   return (row.maxRowid ?? 0) + 1;
 }
@@ -1018,8 +1015,7 @@ export function switchSessionEngine(
       model: session.model ?? currentRef.model,
       effortLevel: session.effortLevel ?? currentRef.effortLevel,
     });
-    // Parked under the account it ran on; the switch then drops any override, so
-    // the target is read from the session's own account.
+    // Parked under the account it ran on; the switch drops any override, so read the session's own account.
     if (Object.keys(current).length > 0) refs[threadSlot(session, session.engine)] = current;
   }
   const own = withoutAccountOverride(session);
@@ -1303,8 +1299,7 @@ function groupFilter(group: string, portalSlug?: string | null): { clause: strin
       params: slug ? [slug] : [],
     };
   }
-  // A per-employee page must never leak portal-slug rows (they live in direct).
-  // If the requested group *is* the portal slug, this yields nothing.
+  // A per-employee page never leaks portal-slug rows (they live in direct); asking for the slug itself yields nothing.
   const slugExclude = slug ? ` AND LOWER(employee) <> ?` : '';
   return {
     clause: `NOT ${IS_CRON_SQL} AND employee = ?${slugExclude}`,
