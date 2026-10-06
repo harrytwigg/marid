@@ -1,0 +1,180 @@
+# Data Model: Department-Scoped Employees and Per-Employee Claude Profiles
+
+Scope is part of a department's definition, in YAML beside its employees (Q3, D1). The
+registry keeps what it already keeps (`work_items.department`, the `departments` prefix table)
+and gains one small table for last good scopes, plus one `sessions` column for the binding.
+
+## Department YAML
+
+```yaml
+# $JINN_HOME/org/side-project/department.yaml
+name: side-project            # must equal the directory name
+displayName: Side project
+description: Friend's side project
+scope: scoped                 # open (default, also when absent) | scoped | dedicated
+workdirs:                     # FR-033; realpath-normalised at scan time
+  - ~/Projects/side-project
+skills: [review, speckit-specify, speckit-plan]   # allow-list for scoped sessions; [] or absent = none
+sharedNotes: []               # paths relative to $JINN_HOME (knowledge/... or docs/...); a directory shares its subtree
+instructions: department      # department | department+company (FR-029)
+```
+
+| `scope` | Its members | Everyone else |
+| --- | --- | --- |
+| `open` (or absent) | Unscoped: today's behaviour | Today's behaviour |
+| `scoped` | Confined to this department | May read, comment on and hold its Todos |
+| `dedicated` | Confined to this department | May read and comment, but not hold its Todos |
+
+`workdirs`, `skills`, `sharedNotes` and `instructions` are read only when the scope is not
+`open`.
+
+**Scan.** `gateway/department-registry.ts` follows the shape of `refreshOrg`
+(`packages/jinn/src/gateway/org-registry.ts:42`). It runs with the org scan, at boot and from
+the existing `org/` watcher (`packages/jinn/src/gateway/watcher.ts:130`). The org walker keeps
+skipping `department.yaml` as an employee file (`packages/jinn/src/gateway/org.ts:31`). FR-001
+sets the rules:
+
+- **Identity problems** refuse the file: YAML that does not parse, a `name` that does not
+  match the directory, an unknown `scope`, or a non-open scope on `system`. The department
+  keeps its last good scope. With none recorded, it is treated as `dedicated`.
+- **Content problems** drop only the bad entry, with a warning: a missing skill, an FR-033
+  `workdirs` failure, or a `sharedNotes` entry outside `knowledge/` or `docs/`.
+- **No `department.yaml`**: the department keeps its last good scope. With none recorded, it
+  is `open`, which is every department today.
+
+**Backup.** `org` is already in `ARCHIVE_INCLUDES` (`packages/jinn/src/backup/archive.ts:9`).
+
+**Writes from the UI** (FR-042): `PATCH /api/departments/:slug` rewrites that file (or creates
+it in an existing department directory). It is operator-only, like
+`PATCH /api/org/employees/:name`. Writes are atomic: a temp file in the same directory, then a
+rename. The in-memory definitions are refreshed before the response returns.
+
+## Registry tables
+
+New tables are additive and registered in `V2_ADDITIVE_TABLES`
+(`packages/jinn/src/work-items/migrate.ts:520`). No column is added to `work_items` or
+`departments`.
+
+```sql
+-- The last scope each department loaded with (FR-001). A refused or deleted department.yaml
+-- keeps this value, so a broken file never opens a scoped department.
+CREATE TABLE IF NOT EXISTS department_scopes (
+  slug TEXT PRIMARY KEY,
+  scope TEXT NOT NULL CHECK (scope IN ('open', 'scoped', 'dedicated')),
+  recorded_at TEXT NOT NULL
+);
+```
+
+Every successful load of a `department.yaml` upserts its row. A department with no row and no
+file is `open`. The row is never deleted by the scan. The operator opens a department by
+writing `scope: open`, which upserts `open`.
+
+```sql
+-- sessions: add-column-if-missing path (packages/jinn/src/sessions/migrate.ts:342)
+ALTER TABLE sessions ADD COLUMN scope_department TEXT;   -- enforcement binding; set ONLY for sessions of scoped employees
+CREATE INDEX IF NOT EXISTS idx_sessions_scope_department ON sessions(scope_department);
+```
+
+- `scope_department` is set once, in `spawnSession` (FR-008), and never updated.
+- The FR-013 requester is the existing `parent_session_id`
+  (`packages/jinn/src/sessions/migrate.ts:26`).
+- Unscoped sessions never carry `scope_department`. Their badge is derived from the linked
+  Todo.
+
+## Events
+
+No new event kind. A department change already records through the metadata edit. When a Todo
+leaves D while a scoped session is working it, an `escalated` event is written as well.
+
+## Employee YAML
+
+```yaml
+# org/side-project/side-dev.yaml
+name: side-dev
+department: side-project            # optional: defaults to the directory; must match it when either is non-open
+engine: claude
+claudeConfigDir: /Users/operator/.claude-friend   # optional, local employees only (FR-050)
+mcp: false                          # optional: no third-party MCP servers; the jinn server still attaches
+persona: ...
+```
+
+**Validation** runs at scan time (`gateway/org.ts`) and at PATCH time:
+
+- In a non-open department, the `department` field and the directory must agree.
+- A scoped employee must use the `claude` engine and have no `remoteHost` (FR-026).
+- `claudeConfigDir` must be absolute, must not start with `~`, must not lie inside
+  `$JINN_HOME`, and is refused alongside `remoteHost` (FR-050). On a scoped employee it is
+  refused until the stage dir is in use (FR-059).
+- A cron job cannot target a scoped employee.
+- A PATCH that changes `department` into or out of a non-open department is refused while the
+  employee holds a Todo it could no longer hold (FR-015).
+
+`claudeConfigDir` is not added to `WRITABLE_FIELDS` (`packages/jinn/src/gateway/org.ts:170`).
+The department field already is.
+
+A scoped session's engine environment also carries `JINN_DEPARTMENT=<slug>` (FR-028).
+
+## Stage directory
+
+```
+<parent of $JINN_HOME>/.jinn-departments/<slug>/
+  CLAUDE.md            # generated: INSTRUCTIONS.md (+ company CLAUDE.md if department+company) + the fixed scope paragraph (FR-029)
+  .claude/skills/<s>/  # copies of skills/<s> for each allow-listed skill
+```
+
+The stage directory is regenerated on the same triggers as `syncSkillSymlinks`, on a
+department scan change, and when an instructions file changes. Nobody edits it by hand.
+
+## Claude profiles
+
+| Thing | Default profile (no `claudeConfigDir`) | Named profile |
+| --- | --- | --- |
+| `CLAUDE_CONFIG_DIR` in the session | The gateway's own, as today | The profile path |
+| `.claude.json` (trust) | `claudeJsonPath()`, as today | `<profile>/.claude.json` |
+| Transcripts | `<config>/projects/<slug>` | `<profile>/projects/<slug>` |
+| macOS Keychain entry | `Claude Code-credentials` | `Claude Code-credentials-<first 8 hex of sha256(profile path)>` |
+| Auth outage scope | `local` (`packages/jinn/src/shared/claude-auth-outage.ts:18`) | `local:<profile key>` |
+| Engine health and rate-limit memory | Engine key, as today | Engine key plus profile key |
+| Limits snapshot | As today | Filtered to the profile's sessions |
+
+**Profile key**: the first 8 hex characters of sha256 of the NFC-normalised absolute path, the
+same suffix Claude Code uses. One helper, `shared/claude-profile.ts`, computes it, and every
+keyed store uses that helper.
+
+## Derived values
+
+- **A Todo's scope department**: the department of its root.
+- **Department members**: the employees whose resolved department is that slug.
+- **Scoped caller**: a capability-verified session whose employee's department is not open.
+  Its D is `sessions.scope_department`.
+- **Department spend**: `SUM(sessions.total_cost)` over sessions linked to the department's
+  Todos, read live (`packages/jinn/src/work-items/store.ts:865`).
+
+## Wire shapes
+
+```ts
+type DepartmentScope = "open" | "scoped" | "dedicated";
+
+// GET /api/departments rows gain (additive):
+scope: DepartmentScope;
+displayName: string | null;
+description: string | null;
+members: string[];
+definitionFile: string | null;   // path relative to $JINN_HOME, for "edit in YAML"
+definitionError: string | null;  // set when department.yaml was refused; scope is then the last good one
+
+// GET /api/departments/:slug (new, operator and unscoped callers):
+type DepartmentDefinitionWire = {
+  slug: string; scope: DepartmentScope; displayName: string | null; description: string | null;
+  workdirs: string[]; skills: string[]; sharedNotes: string[];
+  instructions: "department" | "department+company";
+  members: string[]; todoCount: number; spendUsd: number;
+  definitionFile: string | null; definitionError: string | null;
+};
+
+// Additive, nullable:
+// session list / tree wire:
+scopeDepartment: string | null;
+// Employee wire:
+claudeProfile: { path: string; key: string } | null;
+```

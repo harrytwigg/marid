@@ -1,12 +1,19 @@
-# Research: Projects and Project-Scoped Employees
+# Research: Department-Scoped Employees and Per-Employee Claude Profiles
 
-Read against `origin/main` at `60e675d6`. Paths are relative to `packages/jinn/src/` unless
+Read against `origin/main` at `60e675d6`, and re-verified at `3c032251` for every row spec.md
+and plan.md cite. The "Departments today", "Claude profiles" and "Remote targets" sections
+were read at `3c032251`. Paths are relative to `packages/jinn/src/` unless
 they start with `packages/`.
 
 **After the operator's decisions (2026-10-05):**
 
 - Q1 = A: no sandbox in this feature.
 - Q6 = b: existing employees read as today.
+
+**After the operator's decisions (2026-10-06):**
+
+- D1: the department is the unit of scope. The project registry is dropped.
+- D2: local employees can name their own Claude profile.
 
 So the "Local file reads" rows and the "Containment" section below stay as findings, but
 nothing in this feature acts on them. They apply only to scoped callers (FR-018, FR-028), or
@@ -19,21 +26,83 @@ withdrawn.
 
 | `path:line` | What it is | Bearing on this feature |
 | --- | --- | --- |
-| `work-items/sprints-schema.ts:5` | "Additive tables, never columns on `work_items`" | The project dimension is a join table, as sprints are |
-| `work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: tables created at boot when missing | `work_item_projects` and `project_ids_seen` are registered here. Project definitions are YAML, so there is no `projects` table |
-| `work-items/sprints-schema.ts:60` | `sprintFilterCondition` filters on the **root's** membership (`root_id`) | Same shape for `project=<id>\|none`. Sub-tasks inherit their project for free |
-| `work-items/sprint-membership.ts:71` | `assertTopLevel`: only roots hold a sprint | Same rule for projects (FR-004) |
-| `work-items/store.ts:511` | The list filter applies `sprint` | `project` goes next to it |
-| `work-items/store.ts:331` | The id prefix comes from the department | Unchanged: a project does not affect numbering |
-| `work-items/migrate.ts:161` | `labels.department` is nullable, and null means company-wide | Precedent for a nullable scope column on a registry row |
-| `sessions/migrate.ts:342` | Sessions use add-column-if-missing | `sessions.project_id` is a plain added column. The FR-013 requester reuses `parent_session_id` (`sessions/migrate.ts:26`) |
+| `work-items/migrate.ts:520` | `V2_ADDITIVE_TABLES`: tables created at boot when missing | `department_scopes` is registered here |
+| `work-items/migrate.ts:294` | The `departments` table: slug, a fixed three-letter prefix, created time | Unchanged. Scope is not a column here, because the boot verifier checks table shapes exactly |
+| `work-items/store.ts:331` | The id prefix comes from the department | A scoped department gets its own numbering for free |
+| `work-items/store.ts:474` | `department` is a plain equality filter on the list | A department board is not access control. Scoped reads go through the read module |
+| `work-items/migrate.ts:161` | `labels.department` is nullable, and null means company-wide | Stored only, never enforced. Labels stay company-wide |
+| `sessions/migrate.ts:342` | Sessions use add-column-if-missing | `sessions.scope_department` is a plain added column. The FR-013 requester reuses `parent_session_id` (`sessions/migrate.ts:26`) |
 | `sessions/migrate.ts:117` | The `files` table has no session or owner column | Managed files cannot be scoped, so FR-018 refuses them for scoped callers |
-| `shared/types.ts:515` | `Employee` | Gains an explicit project scope (FR-007) |
-| `shared/types.ts:529` | `mcp` allow-list, the only per-employee allow-list today | Precedent for an optional list field on the employee |
-| `gateway/org.ts:78` | Maps YAML to `Employee` fields | Reads `projects` |
-| `gateway/org.ts:170` | `WRITABLE_FIELDS` for `PATCH /api/org/employees/:name` | Gains `projects` |
+| `shared/types.ts:515` | `Employee` | Gains `claudeConfigDir` (FR-050). Scope needs no field |
+| `shared/types.ts:520` | `department: string` | One department per employee, so one scope per employee |
+| `shared/types.ts:529` | `mcp` allow-list, the only per-employee allow-list today | Precedent for an optional field on the employee |
+| `gateway/org.ts:170` | `WRITABLE_FIELDS` for `PATCH /api/org/employees/:name` | Already has `department`. `claudeConfigDir` stays YAML-only, like the remote fields |
 | `gateway/api.ts:2187` | Create refuses `assignee` | There is no create-with-assignee path |
 | `gateway/api.ts:2192` | `parentId` is accepted only at create | There is no re-parent path |
+
+### Departments today
+
+| `path:line` | What it is | Bearing |
+| --- | --- | --- |
+| `gateway/org.ts:31` | The org walker skips `department.yaml` | Nothing reads the file today. The department registry reads it (FR-001) |
+| `shared/types.ts:594` | A `Department {name, displayName, description}` type, re-exported but unused | The definition type extends it |
+| `gateway/org.ts:81` | An employee's department is the YAML field, else the directory name | The two can disagree. FR-007 refuses a mismatch that touches a non-open department |
+| `gateway/org-api.ts:25` | `GET /api/org` lists departments as directory names | Three lists can diverge: directories, employee fields and registry slugs. Scope is read only from `department.yaml` in a directory |
+| `work-items/departments.ts:40` | `resolveDepartmentPrefix` registers a slug lazily on first use | Any writer can mint an open department in open mode. Scope cannot be minted that way (FR-005) |
+| `shared/todo-departments-config.ts:14` | `gateway.todoDepartments`: open when unset (this instance), closed when set | Both modes keep working. FR-003 only changes behaviour for non-open departments |
+| `work-items/assignment.ts:72` | Open mode moves a Todo to the assignee's department on assignment | The leak FR-003 closes: assigning a scoped Todo to an Engineering employee would move it to Engineering |
+| `gateway/api.ts:2650` | The assign route passes `employee?.department ?? null` | `@operator` and engine-only delegates null the department in open mode |
+| `gateway/api.ts:3461` / `:3501` | Delegation passes the delegate's department in open mode | Also kept for non-open departments |
+| `work-items/store.ts:324` | Create takes the named department, else the parent's, else the policy default | A sub-task can name a different department today. FR-004 refuses that across a non-open boundary |
+| `gateway/api.ts:2466` | The department field is operator-only in the metadata pen | Scoped callers cannot move a Todo out, and nor can agents |
+| `gateway/api.ts:3196` | "there are no create/rename routes" for departments | Rename stays unsupported |
+| `gateway/work-item-authority.ts:25` | Standing over a Todo comes from the reporting tree | Departments carry no authority today. Scope adds a boundary, not authority |
+| `gateway/org-hierarchy.ts:82` | The manager is `reportsTo`, else inferred within the department | A scoped department's members can report to anyone. Authority does not cross the scope, because scoped reads hide everything outside D |
+| `gateway/system-employees.ts:22` | Dispatcher and Shaper are in `system` | `system` cannot be scoped (FR-006) |
+| `packages/web/src/routes/todos/board/board-route.ts:6` | Boards are `attention`, `everything` or a department slug | The switcher rows gain the scope badge |
+| `packages/web/src/components/org/layout/d3-tree-layout.ts:125` | The org map draws one group box per department | The group box gains the scope badge |
+
+### Claude profiles
+
+| `path:line` | What it is | Bearing |
+| --- | --- | --- |
+| `shared/home.ts:34` / `:42` | `resolveClaudeConfigDir` and `claudeJsonPath` read the gateway's own environment | Gain a profile argument |
+| `shared/child-env.ts:41` | `buildEngineChildEnv` passes the gateway's `CLAUDE_CONFIG_DIR` through | The named profile is set here |
+| `engines/claude-interactive.ts:3146` / `:3255` / `:2152` | Local turn spawn, idle spawn and redelivery respawn | FR-051 |
+| `sessions/turn/engine-run.ts:41`, `sessions/turn/rate-limit-turn.ts:157`, `sessions/rate-limit-handler.ts:104`, `gateway/pty-ws.ts:125`, `sessions/turn/auto-compact.ts:168` | Where run options are built | Each passes the profile |
+| `sessions/fork.ts:72` / `:129` | Headless and interactive fork environments, built from `process.env` | FR-051 |
+| `engines/claude-interactive.ts:276` | `findTranscriptForSession`, defaulting to the global projects dir. Used at `:2117`, `:2648`, `:2726`, `:2740` | FR-053 |
+| `gateway/external-turns.ts:231`, `:390`, `:522` | External turn transcript reads | FR-053 |
+| `gateway/api.ts:4634` / `:4748` | `loadRawTranscript` and `loadTranscriptMessages` | FR-053 |
+| `sessions/fork.ts:171` | `claudeProjectDir` | FR-053 |
+| `gateway/server.ts:563` | The boot trust seed, default profile only | FR-052 adds a lazy seed per profile |
+| `shared/claude-settings.ts:149` | Bypass-permissions consent is deliberately not seeded on the host | A fresh profile may show that dialog. Phase 4's first task checks it on a throwaway profile |
+| `shared/claude-auth.ts:134` | `readClaudeCredentialStatus` takes a `configDir`, but every caller omits it. On darwin a missing file reads as `unknown` (`:147`) | FR-054 uses the Keychain by name instead |
+| `sessions/claude-auth-watch.ts:51`, `shared/claude-auth-outage.ts:18` | One outage scope, `local`, for every local employee | FR-055 |
+| `shared/claude-models.ts:262` | Reads the Keychain entry `Claude Code-credentials` by fixed name | Stays on the default profile (FR-057) |
+| `shared/engine-health.ts:54` / `:127` | Health is keyed by engine, optionally host | FR-055 adds a profile key |
+| `sessions/turn/settle.ts:124`, `sessions/rate-limit-handler.ts:118` / `:322` | Health writers with no host | Account-wide today |
+| `board-walk/route-turn.ts:85`, `board-walk/snapshot.ts:238`, `sessions/new-session-engine.ts:60` | Health readers | Read the profile's key |
+| `shared/usageAwareness.ts:10` | One rate-limit memory file | FR-055 |
+| `shared/engine-limits-claude.ts:233` | `collectClaudeLimits`: one token, the newest snapshot in one `CLAUDE_LIMITS_DIR` | Snapshots are filtered per profile. The OAuth usage reading stays on the default profile |
+| `board-walk/walk.ts:208` | The board walk reads the five-hour window | Reads the profile it is about to start |
+| `shared/file-read-policy.ts:64` | Refuses `auth*` files under the default config dir or any `.claude` segment | A profile elsewhere is not covered. FR-050 adds every `claudeConfigDir` |
+
+**The Keychain**, checked in the installed Claude Code 2.1.291: the service name is
+`Claude Code` + `-credentials` + a suffix. The suffix is empty when `CLAUDE_CONFIG_DIR` is
+unset, and `-` plus the first 8 hex characters of sha256 of the NFC-normalised config dir when
+it is set (or when `CLAUDE_SECURESTORAGE_CONFIG_DIR` overrides it). This Mac has one entry,
+`Claude Code-credentials`. Phase 4's first task confirms the suffix with a throwaway profile.
+
+### Remote targets
+
+| `path:line` | What it is | Bearing |
+| --- | --- | --- |
+| `shared/types.ts:182` | `remoteClaudeConfigDir` | The pattern for `claudeConfigDir` |
+| `shared/remote-target.ts:114` / `:230` | Its validation and its precedence over `remote.claudeConfigDir` | Copied for the local field |
+| `engines/remote-stage.ts:658` | `verifyClaudeProfile`, which caches only successes (`:639`) | Copied for the local check |
+| `sessions/turn/engine-run.ts:55`, `sessions/turn/rate-limit-turn.ts:166` | Pass host, user and cwd, but not the profile | A bug: ordinary remote turns fall back to the instance default. FR-058 |
+| `shared/config-types.ts:268` / `:274` | `remoteCwd` must sit under `remote.root`, and the remote `$JINN_HOME` is a link farm over the gateway's real knowledge, docs, org and skills | Why scoped employees stay local in v1 (FR-026) |
 
 ### Identity and authentication
 
@@ -61,13 +130,13 @@ withdrawn.
 | `path:line` | What it is | Bearing |
 | --- | --- | --- |
 | `gateway/api.ts:1181` | `refuseRemoteMcpRoute` at the identified-caller gate | **The precedent:** a per-principal route allow-list enforced in one place. The scoped gate goes beside it |
-| `gateway/remote-mcp/rules.ts:25` | `ALLOWED_ROUTES`, the connector's allow-list | Shape copied for `gateway/project-scope/rules.ts` |
+| `gateway/remote-mcp/rules.ts:25` | `ALLOWED_ROUTES`, the connector's allow-list | Shape copied for `gateway/department-scope/rules.ts` |
 | `gateway/api.ts:1212` | `operatorOnlyControlPlaneRoute` | Already refuses config, cron and org writes to every non-operator |
 | `gateway/control-plane-routes.ts:12` | The operator-only route table | Same |
 | `gateway/upgrade-guards.ts` (imported at `gateway/server.ts:62`) | WebSocket upgrade guards | Scoped callers are refused here. Upgrades never reach `handleApiRequest` |
 | `gateway/api.ts:530` | `resolveWorkItemCaller` | The per-Todo check |
 | `gateway/work-item-authority.ts:25` | `hasStandingOverWorkItem`: the org root, the owner, or a manager above the owner | Scope is checked **before** standing. Standing is never widened |
-| `gateway/work-item-standing.ts:20` | `mayRetagTodo` | Who may change a Todo's project: the same people who may change its sprint |
+| `gateway/work-item-standing.ts:20` | `mayRetagTodo` | Who may retag a Todo. A department change is already operator-only (`gateway/api.ts:2466`) |
 | `gateway/api.ts:2148` | `GET /api/work-items?ids=` returns the Todos it names, unfiltered | The scoped read module covers this branch |
 | `gateway/api.ts:2171` | The query form calls `queryWorkItems` | Same |
 | `gateway/api.ts:1744` | `GET /api/sessions` has `pinned` and `q` branches | Same |
@@ -75,7 +144,7 @@ withdrawn.
 | `gateway/api.ts:3640` | `POST /api/sessions` (spawn) | FR-016, and the FR-008 binding |
 | `gateway/spawn-session.ts:163` | `spawnSession`, where every spawn path converges | Sets the binding, once. `parentSessionId` (`:188`) is the requester |
 | `gateway/api.ts:3695` | `POST /api/sessions/:id/message` | FR-012 and FR-013 |
-| `gateway/api.ts:905` | `resolveSpawnParentSessionId` accepts any existing session as parent | Scoped callers may name only a P-bound parent |
+| `gateway/api.ts:905` | `resolveSpawnParentSessionId` accepts any existing session as parent | Scoped callers may name only a parent bound to D |
 | `work-items/assignment.ts:77` | `assignWorkItem`. Callers: `gateway/api.ts:2650` (assign), `gateway/api.ts:3501` (delegation), `talk/control/todo-adapters.ts:132`, `talk/control/delegation-adapter.ts:107` | Covered by the store-level check |
 | `gateway/api.ts:2409` | PATCH sets `assignee` directly, without `assignWorkItem` | Covered by the store-level check |
 | `gateway/api.ts:3450` | Delegation with no existing Todo creates one already assigned | Covered by the store-level check |
@@ -84,7 +153,7 @@ withdrawn.
 | `gateway/todo-assignee.ts:21` | `checkAssignee` accepts `@operator` | `mayHoldTodo` admits `@operator` |
 | `gateway/todo-dispatch.ts:197` | `startTodoDispatcher` (dispatch and board walk) | Routing check |
 | `gateway/self-compaction-api.ts:217` | `POST /api/compactions` | Own session only |
-| `gateway/todo-capture-api.ts:172` | `capture-landing` (`land_on_work_item`) | Todo must be in P |
+| `gateway/todo-capture-api.ts:172` | `capture-landing` (`land_on_work_item`) | Todo must be in D |
 | `gateway/search-api.ts:240` | `/api/search/global` | Refused for scoped callers |
 | `gateway/api.ts:1681` / `:1694` | Knowledge search and read routes | Rooted per FR-028 |
 | `notes/store.ts:613` | `SEARCH_ROOTS = ["knowledge", "docs"]` | Becomes a parameter |
@@ -101,7 +170,7 @@ withdrawn.
 | `gateway/__tests__/knowledge-route.test.ts:155` | Asserts that `config.yaml` **is** readable through `read_knowledge` | Changes under Q6-a |
 | `mcp/__tests__/knowledge-tools.test.ts:152` | Stubbed test: the tool forwards any relative path and "leaves containment to the gateway" | Unaffected, because the refusal happens in the gateway |
 | `mcp/file-tools.ts:96` | `publish_attachment` accepts any absolute path to a regular file up to 50 MB | Q6, plus the FR-018 workdir check |
-| `mcp/work-item-attachments.ts:68` | Path-based `attach_to_work_item`, through `readLocalFileForIngestion` | The policy does not protect `registry.db`, `org/`, `CLAUDE.md`, or other projects' directories. FR-018 |
+| `mcp/work-item-attachments.ts:68` | Path-based `attach_to_work_item`, through `readLocalFileForIngestion` | The policy does not protect `registry.db`, `org/`, `CLAUDE.md`, or other departments' directories. FR-018 |
 | `gateway/api.ts:2925` | JSON `{path}` attachment ingestion, read inside the gateway | Same |
 
 ### Engine spawning
@@ -109,26 +178,22 @@ withdrawn.
 | `path:line` | What it is | Bearing |
 | --- | --- | --- |
 | `sessions/turn/engine-run.ts:46` | Local engines always run with `cwd: JINN_HOME` | FR-020: scoped sessions get the stage dir |
-| `gateway/server.ts:504` | Exports `JINN_GATEWAY_TOKEN` to every engine | FR-021 |
+| `gateway/server.ts:504` | Exports `JINN_GATEWAY_TOKEN` to every engine | Deferred to the sandbox work |
 | `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | Deferred, not built: an allow-list builder |
 | `engines/claude-interactive.ts:451` | Claude argv: `--chrome` (`:451`, the operator's own browser), `--dangerously-skip-permissions` (`:454`), the gateway-written `--settings` under `tmp/` (`:456`), and `--mcp-config` without `--strict-mcp-config` (`:459`) | Deferred to the sandbox work |
 | `shared/claude-settings.ts:70` | `buildSessionSettings` writes hooks and a status line only | Deferred, not built: sandbox and deny blocks |
 | `board-walk/route-turn.ts:48` | `CLAUDE_WALK_FLAGS`: `--no-chrome --tools "" --strict-mcp-config` | The only existing locked-down Claude turn |
 | `gateway/watcher.ts:38` | `syncSkillSymlinks` links every skill into `~/.jinn/.claude/skills` | The stage dir gets copies of the allowed skills instead |
 | `work-items/dispatch-config.ts:253` | `resolveTodoDispatch` adds skills as prompt lines | FR-027 validates them against the allow-list |
-| `sessions/context.ts:198` | `buildContext` | The project section comes from a new module |
+| `sessions/context.ts:198` | `buildContext` | The department section comes from a new module |
 | `sessions/context.ts:298` | Working roster | Filtered to members |
-| `sessions/context.ts:345` | Knowledge section | Points at the project Notes root |
-| `sessions/turn/preflight.ts:52` | `refuseTurn`, the gate before every engine spawn | Lost binding, wrong engine |
-| `sessions/turn/preflight.ts:63` | Per-employee monthly budget check | Already a per-project cap for dedicated employees |
+| `sessions/context.ts:345` | Knowledge section | Points at the department Notes root |
+| `sessions/turn/preflight.ts:52` | `refuseTurn`, the gate before every engine spawn | Lost binding, wrong engine, profile not signed in |
+| `sessions/turn/preflight.ts:63` | Per-employee monthly budget check | Already a per-scope cap, since a scoped employee works only in its department |
 | `sessions/fork.ts:164` / `engines/claude-interactive.ts:271` | Transcripts are keyed by the cwd slug | Resume, fork and compaction must resolve the stage-dir slug |
 | `shared/claude-settings.ts:124` | Trust entries per directory in `~/.claude.json` | The only seed today is boot-time (`gateway/server.ts:565`). Phase 3 adds one per stage dir |
-| `shared/home.ts:34` | `resolveClaudeConfigDir` reads the gateway's own `CLAUDE_CONFIG_DIR` at call time | Global today. Not changed by this feature |
-| `shared/remote-target.ts:219` | `resolveRemoteClaudeConfigDir`, whose comment says env and trust seed must agree or the first turn hangs | The existing per-employee profile setting |
-| `shared/claude-auth.ts:121` | Auth check config-dir seam | Not changed by this feature. On darwin, credentials are in the Keychain and the check fails open |
-| `shared/engine-health.ts:54` | `engineHealthForTarget`: health keyed per target | Not changed by this feature. Health is keyed by engine only, so this is not a target key that can simply gain a field |
-| `board-walk/route-turn.ts:45` | Employee `cliFlags` come after the gateway's `--chrome`, so `--no-chrome` in `cliFlags` wins | Not changed by this feature. It does not hold on the PTY idle-spawn path (`engines/claude-interactive.ts:3183`) |
-| `gateway/org-registry.ts:42` | `refreshOrg`, which keeps the last good roster | Shape for `project-registry.ts` |
+| `board-walk/route-turn.ts:45` | Employee `cliFlags` come after the gateway's `--chrome`, so `--no-chrome` in `cliFlags` wins | Unchanged. It does not hold on the PTY idle-spawn path (`engines/claude-interactive.ts:3183`) |
+| `gateway/org-registry.ts:42` | `refreshOrg`, which keeps the last good roster | Shape for `department-registry.ts` |
 
 ### Budgets
 
@@ -145,29 +210,40 @@ withdrawn.
 | `node scripts/ratchet.mjs --check` | "102 violations, 14 stale entries" on `main`: the ratchet is red before this feature |
 
 The rule for this feature is that no file at or over budget grows. New behaviour lives in new
-modules (`gateway/projects-api.ts`, `gateway/project-scope/*`, `work-items/projects*.ts`,
-`sessions/context/project.ts`, `mcp/project-profile.ts`, `lib/project-api.ts`). Any line added
+modules (`gateway/department-registry.ts`, `gateway/departments-api.ts`,
+`gateway/department-scope/*`, `sessions/context/department-scope.ts`,
+`mcp/department-profile.ts`, `shared/claude-profile.ts`, `lib/department-api.ts`). Any line added
 to an over-budget file is paid for in the same PR by moving existing code out.
 
 ### Found and rejected
 
 - **The remote-connector principal as the scope carrier.** It is the operator's door, and
-  unscoped by design. Projects reuse its *pattern* (a route table at the gate), not its
+  unscoped by design. Scoping reuses its *pattern* (a route table at the gate), not its
   principal.
-- **Departments as projects.** Departments drive id prefixes and the org tree, and each
-  employee has exactly one. Projects cut across departments, and an employee can be in
-  several.
-- **Labels as projects.** A Todo can carry many labels, and agents create them freely. Scope
+- **A separate project concept beside departments** (the first draft of this spec). It would
+  allow an employee in several scopes, and grouping a department's work by client without
+  changing its numbering. Neither is a requirement, and a department already gives the
+  board, the prefix and the org tree group. Two overlapping scopes would double the rules on
+  every scoped route. The operator chose departments (D1). Grouping by client, if it is ever
+  needed, can use labels or sprints.
+- **Labels as scopes.** A Todo can carry many labels, and agents create them freely. Scope
   needs at most one per Todo, with administration by the operator only.
 - **A `toolset` as the scoped profile.** A toolset replaces the whole tool set
   (`mcp/toolsets.ts:10`). The connector's `profile.ts` filter is the right shape.
 - **Filtering inside each list handler.** Several handlers have unfiltered branches (`ids=`,
   `pinned`, `q`) and are over budget. A dedicated read module for scoped callers is where a
   missed branch cannot leak.
-- **A session `project_id` on unscoped sessions for badges.** That would make an unscoped
+- **A session binding on unscoped sessions for badges.** That would make an unscoped
   session match the scoped filter. It was QA's B1 confused deputy: transcript reads, and
   `send_to_session` into an uncontained session. The badge is derived at read time instead
   (FR-009).
+- **Only setting `CLAUDE_CONFIG_DIR` for a named profile.** Transcripts, trust, the signed-in
+  check, the outage ledger, engine health and the limits would all keep reading the default
+  account, so one account's limit would stop the other and resume would not find
+  transcripts.
+- **A scoped employee on a remote target.** Its session ignores the local stage dir, and the
+  remote home is a link farm over the company's real files. Local profiles make it
+  unnecessary for the motivating case (FR-026).
 - **A stage dir inside `$JINN_HOME`.** Ancestor `CLAUDE.md` loading would pull in the company
   file. Symlinked skills would resolve into the denied tree. A deny on the home would cover
   the stage dir too, because deny wins over allow.
@@ -231,11 +307,11 @@ If any of items 1–4 or 10 cannot be made to hold:
 
 | Issue question | Answer |
 | --- | --- |
-| 1. Project vs working directory or repo | Zero or more working directories per project. A project is not a repo (Decided by default) |
-| 2. Persona per project | No. Scope is an allow-list, and a different role means a different employee (Assumptions) |
-| 3. What belongs to a project in v1 | Todos, with their comments, attachments, events, runs and relations; sessions of scoped employees, through the binding; Notes, in the project folder. Out of v1: cron, workflows (removed upstream), managed files (refused), labels and sprints (company-wide). Spend is capped by the existing per-employee budgets |
-| 4. Company-wide vs project skills and knowledge | FR-027 to FR-029, Q5 |
-| 5. Concurrent employees in a project | Worktrees, unchanged (Assumptions) |
-| 6. Secrets | Deferred with containment (Q1 = A). A friend's account is not built here. Only a remote-target employee can name its own profile (spec.md, "Employees on another Claude account") |
+| 1. Project vs working directory or repo | A scoped department has zero or more working directories. It is not a repo (Decided by default) |
+| 2. Persona per scope | No. Scope is an allow-list, and a different role means a different employee (Assumptions) |
+| 3. What belongs to a scope in v1 | Todos in the department, with their comments, attachments, events, runs and relations; sessions of scoped employees, through the binding; Notes, in the department folder. Out of v1: cron, workflows (removed upstream), managed files (refused), labels and sprints (company-wide). Spend is capped by the existing per-employee budgets |
+| 4. Company-wide vs scoped skills and knowledge | FR-027 to FR-029, Q5 |
+| 5. Concurrent employees in a scope | Worktrees, unchanged (Assumptions) |
+| 6. Secrets | Deferred with containment (Q1 = A). A friend's account is a per-employee Claude profile (FR-050 to FR-059), signed in once by the operator |
 | 7. Client layer | No, and nothing is reserved for it (Assumptions) |
-| 8. Where config lives and how it is backed up | YAML under `projects/`, mirroring `org/` (operator, Q3). It is carried by the home archive once `projects` is added to `ARCHIVE_INCLUDES` (`backup/archive.ts:9`). Todo membership and session bindings live in the registry, carried by the registry backup (`backup/snapshot.ts:38`) |
+| 8. Where config lives and how it is backed up | `department.yaml` and employee YAML under `org/` (operator, Q3), already in `ARCHIVE_INCLUDES` (`backup/archive.ts:9`). Last good scopes and session bindings live in the registry, carried by the registry backup (`backup/snapshot.ts:38`) |
