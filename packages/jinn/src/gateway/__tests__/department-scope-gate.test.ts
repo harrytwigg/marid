@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { as, call, sessionOf, startScopedHarness } from "./department-scope-harness.js";
+import { as, call, context, sessionOf, startScopedHarness } from "./department-scope-harness.js";
 
 /**
  * The gate's wiring, end to end through `handleApiRequest`: a scoped session is held to
@@ -70,5 +70,44 @@ describe("an unscoped session", () => {
     const open = as((await sessionOf("eng-dev")).id);
     expect((await open("GET", `/api/work-items/${mine.id}`)).status).toBe(200);
     expect((await call("GET", "/api/cron")).status).toBe(200);
+  });
+});
+
+describe("comments from a scoped session", () => {
+  it("wake only its department's members, and say on the thread why another was not woken", async () => {
+    const { addComment } = await import("../../work-items/comment-add.js");
+    const { listComments } = await import("../../work-items/comments.js");
+    const { routeTodoComment } = await import("../todo-comment-routing.js");
+    const item = workItems.createWorkItem({ title: "mention", department: "side-project" });
+    const author = await sessionOf("side-dev");
+    const comment = addComment({ workItemId: item.id, body: "@eng-dev take a look", author: "side-dev", authorKind: "employee", sessionId: author.id });
+    expect(routeTodoComment(context, comment)).toEqual([]);
+    const notice = listComments(item.id).comments.find((entry) => entry.parentCommentId === comment.id);
+    expect(notice?.body).toMatch(/@eng-dev was not woken\.\*\* a session scoped to department "side-project"/);
+  });
+
+  it("reply only into a session bound to the department, or the session that asked", async () => {
+    const { addComment } = await import("../../work-items/comment-add.js");
+    const { scopedReplyAllowed } = await import("../department-scope/comments.js");
+    const item = workItems.createWorkItem({ title: "reply", department: "side-project" });
+    const coo = await sessionOf(null);
+    const other = await sessionOf(null);
+    const peer = await sessionOf("side-qa");
+    const author = await sessionOf("side-dev", { parentSessionId: coo.id });
+    const reply = addComment({ workItemId: item.id, body: "done", author: "side-dev", authorKind: "employee", sessionId: author.id });
+    expect(scopedReplyAllowed(reply, other)).toBe(false);
+    expect(scopedReplyAllowed(reply, coo)).toBe(true);
+    expect(scopedReplyAllowed(reply, peer)).toBe(true);
+    const fromCoo = addComment({ workItemId: item.id, body: "thanks", author: "operator", authorKind: "operator", sessionId: coo.id });
+    expect(scopedReplyAllowed(fromCoo, other)).toBe(true);
+  });
+});
+
+describe("a scoped create", () => {
+  it("cannot place the Todo in a sprint", async () => {
+    const scoped = as((await sessionOf("side-dev")).id);
+    const refused = await scoped("POST", "/api/work-items", { title: "sprinted", sprint: "active" });
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toMatch(/sprints are the operator's/);
   });
 });

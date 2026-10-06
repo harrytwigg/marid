@@ -103,6 +103,7 @@ function narrowTodoList(g: GateRequest, emptyBody: Record<string, unknown>): boo
 async function createInDepartment(g: GateRequest): Promise<boolean> {
   const body = await peekJsonObject(g.req, g.res);
   if (!body) return true;
+  if (body.sprint !== undefined) return forbid(g, "sprints are the operator's; a department-scoped session cannot place a Todo in one");
   const parentId = namedTodoOutside(body.parentId, g.caller.department);
   if (parentId) return badRequest(g.res, `parent Todo ${parentId} not found`), true;
   setPeekedBody(g.req, { ...body, department: g.caller.department });
