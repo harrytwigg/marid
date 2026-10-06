@@ -21,7 +21,7 @@ let workdirs: Workdirs;
 
 beforeAll(async () => {
   workdirs = await import("../department-workdirs.js");
-  for (const dir of [".jinn", ".claude/projects", ".ssh", ".config/tool", ".aws", ".gnupg", "Library/Caches", "code/garden-app", "code/plain", ".jinn-departments/side-project", ".jinn-departments/.jinn/side-project", ".jinn-departments/.jinn-other/side-project"]) mkdir(dir);
+  for (const dir of [".jinn", ".claude/projects", ".ssh", ".config/tool", ".aws", ".gnupg", "Library/Caches", "code/garden-app", "code/plain", ".jinn-departments/side-project", ".jinn-departments/.instances/.jinn/side-project", ".jinn-departments/.instances/.jinn-other/side-project"]) mkdir(dir);
   git(path.join(home, "code/garden-app"));
 });
 
@@ -54,9 +54,9 @@ describe("a refused working directory", () => {
     ["the instance home", () => jinnHome],
     ["an ancestor of the instance home that is not the home", () => path.dirname(jinnHome)],
     ["the directory the stage roots are in", () => path.join(home, ".jinn-departments")],
-    ["this instance's stage root", () => path.join(home, ".jinn-departments/.jinn")],
-    ["inside this instance's stage root", () => path.join(home, ".jinn-departments/.jinn/side-project")],
-    ["inside another instance's stage root", () => path.join(home, ".jinn-departments/.jinn-other/side-project")],
+    ["this instance's stage root", () => path.join(home, ".jinn-departments/.instances/.jinn")],
+    ["inside this instance's stage root", () => path.join(home, ".jinn-departments/.instances/.jinn/side-project")],
+    ["inside another instance's stage root", () => path.join(home, ".jinn-departments/.instances/.jinn-other/side-project")],
     ["an old-layout stage directory", () => path.join(home, ".jinn-departments/side-project")],
     ["the Claude config directory", () => path.join(home, ".claude")],
     ["inside the Claude config directory", () => path.join(home, ".claude/projects")],

@@ -3,6 +3,9 @@ import { JINN_HOME } from "../shared/paths.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import type { RemoteScope } from "../shared/remote-department.js";
 import { scopedDepartmentOf } from "../work-items/department-scope.js";
+import { sessionScopeDepartment, type SessionView } from "./session-scope.js";
+
+export { sessionScopeDepartment };
 
 /**
  * The working directory of a local session (FR-020b): the Jinn home for everyone, the
@@ -10,16 +13,6 @@ import { scopedDepartmentOf } from "../work-items/department-scope.js";
  * that spawns a local session, or looks for its transcript, asks here, so a scoped
  * session never starts, retries or attaches in the Jinn home.
  */
-
-interface SessionView {
-  employee?: string | null;
-  scopeDepartment?: string | null;
-}
-
-/** The department a session's cwd belongs to: its binding, else its employee's scoped department. */
-export function sessionScopeDepartment(session: SessionView | undefined): string | null {
-  return session?.scopeDepartment ?? scopedDepartmentOf(session?.employee) ?? null;
-}
 
 /**
  * The cwd to spawn `session` in. For a scoped session this syncs the stage directory

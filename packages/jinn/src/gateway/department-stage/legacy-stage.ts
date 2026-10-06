@@ -11,15 +11,18 @@ import { STAGE_CLAUDE_MD } from "./file-set.js";
  * Moving a stage directory made before the stage root was keyed by instance (FR-020a).
  *
  * The old path was `<parent>/.jinn-departments/<slug>/`; it is now
- * `<parent>/.jinn-departments/<instance>/<slug>/`. The directory is renamed, not copied,
+ * `<parent>/.jinn-departments/.instances/<instance>/<slug>/`. The directory is renamed, not copied,
  * so its inode is the one a running session already has as its cwd, and it is moved once:
  * after that the new path is the only one anything looks at. The transcripts Claude Code
  * filed under the old path's project key follow it, so resume, fork and auto-compaction
  * find them under the new key.
  *
  * Two instances under one parent could both have a directory at the old path, which was
- * the bug. Whichever prepares its stage directory first takes it; the other finds nothing
- * there and generates its own.
+ * the bug. Whichever prepares its stage directory first takes it, with every transcript
+ * filed under that path's project key (the other instance's sessions of that department
+ * included, as the key cannot tell them apart); the other finds nothing there and
+ * generates its own. The instance roots live under a dot-named directory (`STAGE_INSTANCES_DIR`),
+ * which no old-layout stage directory can be, so the two layouts never share a path.
  */
 
 function isRealDirectory(target: string): boolean {
@@ -100,15 +103,7 @@ export function migrateLegacyStageDir(slug: string): boolean {
   try {
     const before = fs.realpathSync(legacy);
     fs.mkdirSync(departmentStageRoot(), { recursive: true });
-    // A department named like the instance: the old directory is the new root's own path, so it steps aside first.
-    if (legacy === departmentStageRoot()) {
-      const aside = path.join(departmentStagesContainer(), `.${slug}.legacy-${process.pid}`);
-      fs.renameSync(legacy, aside);
-      fs.mkdirSync(departmentStageRoot(), { recursive: true });
-      fs.renameSync(aside, target);
-    } else {
-      fs.renameSync(legacy, target);
-    }
+    fs.renameSync(legacy, target);
     moveTranscripts(before, fs.realpathSync(target));
     reapLegacyIncoming(slug);
     logger.info(`Moved department "${slug}"'s stage directory from ${legacy} to ${target}`);

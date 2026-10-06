@@ -192,4 +192,23 @@ describe("writing the allow-list", () => {
     expect(fs.readFileSync(path.join(home, "org", SLUG, "department.yaml"), "utf-8")).toBe(before);
     expect((await call("PATCH", `/api/departments/${SLUG}`, { skills: ["dev-workflow", "clean-skill"] })).status).toBe(200);
   });
+
+  it("refuses only a skill the write introduces: one already in the file stays, as the hand-edited file had it", async () => {
+    allow("dev-workflow", "linked-folder");
+    const kept = await call("PATCH", `/api/departments/${SLUG}`, { skills: ["dev-workflow", "linked-folder", "clean-skill"] });
+    expect(kept.status).toBe(200);
+    expect((await call("PATCH", `/api/departments/${SLUG}`, { skills: ["dev-workflow", "linked-folder", "clean-skill", "linked-file"] })).status).toBe(400);
+  });
+
+  it("does not judge a department that stages nothing: an open one may list it", async () => {
+    const file = path.join(home, "org", "engineering", "department.yaml");
+    try {
+      const written = await call("PATCH", "/api/departments/engineering", { skills: ["linked-folder"] });
+      expect(written.status).toBe(200);
+      expect(fs.readFileSync(file, "utf-8")).toContain("linked-folder");
+    } finally {
+      fs.rmSync(file, { force: true });
+      reload();
+    }
+  });
 });

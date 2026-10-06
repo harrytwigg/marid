@@ -100,7 +100,7 @@ describe("DepartmentPanel", () => {
     mount({ skills: ["review"], skillProblems: [{ skill: "speckit-plan", reason: "it contains a symlink (reference/guide.md)" }] })
     await screen.findByTestId("department-panel")
     expect(text("department-skills")).toContain("review")
-    const alert = within(screen.getByTestId("department-skills")).getByRole("alert")
+    const alert = within(screen.getByTestId("department-skills")).getByTestId("department-skill-problems")
     expect(alert.textContent).toBe("speckit-plan is not offered to this department: it contains a symlink (reference/guide.md).")
     expect(text("department-skills").split("speckit-plan").length - 1).toBe(1)
   })

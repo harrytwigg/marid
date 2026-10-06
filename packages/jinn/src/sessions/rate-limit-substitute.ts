@@ -10,7 +10,7 @@ import type { Employee, JinnConfig, RemoteTarget, Session, SessionRemoteTarget }
 import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import { resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
 import { accountOverride } from "./session-account.js";
-import { sessionScopeDepartment } from "./session-cwd.js";
+import { sessionScopeDepartment } from "./session-scope.js";
 
 /** What a rate-limited turn moves onto: an engine, the Claude profile it runs
  *  as there, and, for another Claude account, the swap the override records. */

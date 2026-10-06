@@ -562,12 +562,15 @@ scoped employee; D is that session's binding)
 **Scoped context** (what a scoped session's engine loads)
 
 - **FR-020**: A scoped session MUST run with cwd set to a generated stage dir outside
-  `$JINN_HOME`: `<parent of home>/.jinn-departments/<basename of home>/<slug>/`. This is the
+  `$JINN_HOME`: `<parent of home>/.jinn-departments/.instances/<basename of home>/<slug>/`. This is the
   only way to stop Claude Code loading the company `CLAUDE.md` (it reads from the cwd and its
   ancestors) and the company skills directory.
   - **The stage root is the instance's own.** Every instance under one parent keeps its stage
-    dirs in a root named for its home (`~/.jinn` is `~/.jinn-departments/.jinn/`,
-    `~/.jinn-staging` is `~/.jinn-departments/.jinn-staging/`). Two instances with a
+    dirs in a root named for its home (`~/.jinn` is `~/.jinn-departments/.instances/.jinn/`,
+    `~/.jinn-staging` is `~/.jinn-departments/.instances/.jinn-staging/`). The roots sit under a
+    dot-named directory because no department slug can start with a dot (the org scan skips such
+    directories), so an instance's root can never be the same path as a department's old-layout
+    stage dir, whatever its home is called. Two instances with a
     department of the same slug therefore never share, or overwrite, a stage dir.
     `<parent of home>/.jinn-departments/` itself holds no stage dir, and FR-033 treats the
     whole of it as protected.
@@ -585,7 +588,7 @@ scoped employee; D is that session's binding)
   `packages/jinn/src/engines/remote-stage.ts:912`) both derive from the cwd. An update
   **syncs** it to the generated file set:
   - the new file set is written to an incoming directory beside the stage dir, on the same
-    filesystem (`.jinn-departments/<basename of home>/.<slug>.incoming-<random>/`);
+    filesystem (`.jinn-departments/.instances/<basename of home>/.<slug>.incoming-<random>/`);
   - the sync works **file by file**. Only files are renamed: each file whose content differs is
     renamed over the old one, which is atomic. Directories are created with `mkdir -p` and are
     never renamed over an existing directory (a skill is a directory, and that rename fails on
@@ -614,8 +617,11 @@ scoped employee; D is that session's binding)
   left alone when it is a link, when it has no generated `CLAUDE.md` (it is another instance's
   root, not a stage dir), or when the new path exists already. Of two instances that both
   have a stage dir at the old path, the one that prepares first takes it and the other
-  generates its own. A department whose slug equals its instance's basename has the old path
-  as its new root: the old dir steps aside, the root is made, and the dir moves in.
+  generates its own. The transcripts move with it by project key, and one key holds the sessions
+  of both instances, so the instance that takes the dir also takes the other's resume history for
+  that department; nothing is lost, and it can be moved back by hand. A running Claude Code
+  process cannot outlive the gateway restart that brings this change (a graceful shutdown kills
+  every PTY), so none keeps writing to the old key after the move.
 
   **What a running session sees during a sync:** each file is either wholly old or wholly new.
   For a moment it can see a mix of old and new files, and a dropped skill disappears at the

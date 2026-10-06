@@ -54,10 +54,10 @@ describe("the stage root", () => {
     process.env.JINN_HOME = savedHome;
   });
 
-  it("is keyed by the instance: <parent>/.jinn-departments/<basename of home>/", () => {
+  it("is keyed by the instance: <parent>/.jinn-departments/.instances/<basename of home>/", () => {
     const parent = path.join(os.tmpdir(), "instances");
     process.env.JINN_HOME = path.join(parent, ".jinn-yorio");
-    expect(departmentStageRoot()).toBe(path.join(parent, ".jinn-departments", ".jinn-yorio"));
+    expect(departmentStageRoot()).toBe(path.join(parent, ".jinn-departments", ".instances", ".jinn-yorio"));
     expect(departmentStagesContainer()).toBe(path.join(parent, ".jinn-departments"));
   });
 
@@ -67,13 +67,22 @@ describe("the stage root", () => {
     const first = departmentStageDir("side-project");
     process.env.JINN_HOME = path.join(parent, ".jinn-test");
     const second = departmentStageDir("side-project");
-    expect(first).toBe(path.join(parent, ".jinn-departments", ".jinn", "side-project"));
-    expect(second).toBe(path.join(parent, ".jinn-departments", ".jinn-test", "side-project"));
+    expect(first).toBe(path.join(parent, ".jinn-departments", ".instances", ".jinn", "side-project"));
+    expect(second).toBe(path.join(parent, ".jinn-departments", ".instances", ".jinn-test", "side-project"));
     expect(first).not.toBe(second);
   });
 
+  it("can never be a department's old-layout path, whatever the home is called", () => {
+    // A slug cannot start with a dot, and the root is under a dot-named directory: a home called
+    // like a department (here, undotted) never makes its root the same path as that department's old stage directory.
+    process.env.JINN_HOME = path.join(os.tmpdir(), "instances", "alpha");
+    expect(departmentStageRoot()).toBe(path.join(os.tmpdir(), "instances", ".jinn-departments", ".instances", "alpha"));
+    expect(departmentStageRoot()).not.toBe(path.join(departmentStagesContainer(), "alpha"));
+    expect(path.dirname(departmentStageRoot())).not.toBe(departmentStagesContainer());
+  });
+
   it("is outside the home, and the stage directory sits directly in it", () => {
-    expect(path.relative(path.dirname(departmentStageRoot()), departmentStageDir(SLUG))).toBe(path.join(path.basename(departmentStageRoot()), SLUG));
+    expect(path.dirname(departmentStageDir(SLUG))).toBe(departmentStageRoot());
     expect(path.relative(process.env.JINN_HOME!, departmentStageDir(SLUG)).startsWith("..")).toBe(true);
   });
 });
@@ -127,7 +136,7 @@ describe("a stage directory made at the old path", () => {
     const oldKey = fs.realpathSync(legacyDir());
     writeTranscript(oldKey, ID);
     writeTranscript(oldKey, "11111111-1111-1111-1111-111111111111");
-    const newKeyDir = path.join(projects(), claudeProjectSlug(path.join(fs.realpathSync(departmentStagesContainer()), path.basename(departmentStageRoot()), SLUG)));
+    const newKeyDir = path.join(projects(), claudeProjectSlug(path.join(fs.realpathSync(departmentStagesContainer()), ".instances", path.basename(departmentStageRoot()), SLUG)));
     fs.mkdirSync(newKeyDir, { recursive: true });
     fs.writeFileSync(path.join(newKeyDir, `${ID}.jsonl`), "newer\n");
     prepareDepartmentStage(SLUG);
@@ -170,21 +179,39 @@ describe("a stage directory made at the old path", () => {
     expect(fs.readFileSync(path.join(legacyDir(), "CLAUDE.md"), "utf-8")).toBe("old generated file\n");
   });
 
-  it("moves a department named like the instance, whose old path is the new root's own", () => {
-    const named = path.basename(departmentStageRoot());
-    writeDepartmentFile(named, `name: ${named}\nscope: scoped\nskills: [review]\n`);
-    writeEmployeeFile(named, "stage-root-namesake");
+  it.each([
+    ["the namesake first", ["home", "other"]],
+    ["the namesake last", ["other", "home"]],
+  ])("moves every old directory, whatever order they are prepared in, when a department is named like the instance (%s)", (_label, order) => {
+    // The test instance's home is called `home`, so a department of that name is the namesake.
+    const slugs = ["home", "other"];
+    for (const slug of slugs) {
+      writeDepartmentFile(slug, `name: ${slug}\nscope: scoped\nskills: [review]\n`);
+      writeEmployeeFile(slug, `stage-root-${slug}-dev`);
+    }
     refreshOrg();
-    const old = path.join(departmentStagesContainer(), named);
-    fs.rmSync(old, { recursive: true, force: true });
-    writeLegacyStage(old);
-    const inode = fs.statSync(old).ino;
-    const stage = prepareDepartmentStage(named);
-    expect(stage).toBe(path.join(fs.realpathSync(departmentStageRoot()), named));
-    expect(fs.statSync(stage).ino).toBe(inode);
-    // The root is not a stage directory: nothing in it carries instructions down to the sessions below.
+    const inodes = new Map<string, number>();
+    for (const slug of slugs) {
+      const old = path.join(departmentStagesContainer(), slug);
+      fs.rmSync(old, { recursive: true, force: true });
+      fs.rmSync(departmentStageDir(slug), { recursive: true, force: true });
+      writeLegacyStage(old);
+      inodes.set(slug, fs.statSync(old).ino);
+    }
+    for (const slug of order) {
+      const stage = prepareDepartmentStage(slug);
+      expect(stage).toBe(path.join(fs.realpathSync(departmentStageRoot()), slug));
+      expect(fs.statSync(stage).ino).toBe(inodes.get(slug));
+    }
+    // Both are where they belong, directly in the root, neither nested in the other, and the root carries no instructions of its own.
+    for (const slug of slugs) {
+      expect(fs.readFileSync(path.join(departmentStageDir(slug), "CLAUDE.md"), "utf-8")).toContain("## Department scope");
+      expect(fs.existsSync(path.join(departmentStageDir(slug), "home"))).toBe(false);
+      expect(fs.existsSync(path.join(departmentStageDir(slug), "other"))).toBe(false);
+    }
+    expect(fs.readdirSync(departmentStageRoot()).filter((name) => !name.startsWith(".")).sort()).toEqual(["home", "other"]);
     expect(fs.existsSync(path.join(departmentStageRoot(), "CLAUDE.md"))).toBe(false);
-    expect(fs.existsSync(path.join(departmentStageRoot(), ".claude"))).toBe(false);
+    expect(fs.existsSync(path.join(departmentStagesContainer(), "home"))).toBe(false);
   });
 
   it("changes nothing for a department that never had one", () => {

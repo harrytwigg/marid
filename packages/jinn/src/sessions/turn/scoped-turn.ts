@@ -2,7 +2,8 @@ import { prepareDepartmentStage } from "../../gateway/department-stage/stage.js"
 import type { Session } from "../../shared/types.js";
 import { scopedClaudeProblem } from "../../shared/claude-md-excludes.js";
 import { resolveBin } from "../../shared/resolve-bin.js";
-import { lostBindingReason, scopedDepartmentOf } from "../../work-items/department-scope.js";
+import { lostBindingReason } from "../../work-items/department-scope.js";
+import { sessionScopeDepartment } from "../session-scope.js";
 
 /**
  * The department-scope gates on a turn (FR-008, FR-020, FR-026): no turn starts in a
@@ -12,7 +13,7 @@ import { lostBindingReason, scopedDepartmentOf } from "../../work-items/departme
  * a remote host that is the host's copy, which the remote staging prepares.
  */
 export function refuseScopedTurn(session: Session, engineOverride: string | undefined, remote = false, claudeBin = "claude"): string | undefined {
-  const department = session.scopeDepartment ?? scopedDepartmentOf(session.employee);
+  const department = sessionScopeDepartment(session);
   if (!department) return undefined;
   const lost = lostBindingReason(session);
   if (lost) return `This department-scoped session cannot start a turn: ${lost}.`;
@@ -28,7 +29,7 @@ export function refuseScopedTurn(session: Session, engineOverride: string | unde
  * view's idle start asks this too, since it starts Claude in the stage directory without a turn.
  */
 export function localScopedClaudeRefusal(session: Session, claudeBin = "claude"): string | null {
-  if (!(session.scopeDepartment ?? scopedDepartmentOf(session.employee))) return null;
+  if (!(sessionScopeDepartment(session))) return null;
   const problem = scopedClaudeProblem(resolveBin("claude", claudeBin));
   return problem ? `This department-scoped session cannot start Claude Code: ${problem}.` : null;
 }

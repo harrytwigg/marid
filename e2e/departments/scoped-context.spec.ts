@@ -13,7 +13,7 @@ import { gatewayToken, openPage, sandboxFile, screenshotPath, SIZES, tallerFor, 
  */
 
 const hostHome = path.dirname(sandboxFile())
-const stageRoot = path.join(hostHome, '.jinn-departments', path.basename(sandboxFile()))
+const stageRoot = path.join(hostHome, '.jinn-departments', '.instances', path.basename(sandboxFile()))
 const stage = path.join(stageRoot, 'side-project')
 const knowledge = (...segments: string[]) => sandboxFile('knowledge', 'departments', 'side-project', ...segments)
 const artifactsDir = process.env.JINN_VERIFY_ARTIFACTS!
@@ -56,7 +56,7 @@ test.describe.configure({ mode: 'serial' })
 
 test('a stage directory made at the old path is moved to the instance\'s own stage root at boot, keeping its inode', async () => {
   await eventually(() => (fs.existsSync(path.join(stage, 'CLAUDE.md')) ? true : undefined), 'the stage directory')
-  expect(stage).toBe(path.join(hostHome, '.jinn-departments', path.basename(sandboxFile()), 'side-project'))
+  expect(stage).toBe(path.join(hostHome, '.jinn-departments', '.instances', path.basename(sandboxFile()), 'side-project'))
   expect(fs.existsSync(seed.legacyStage)).toBe(false)
   expect(fs.statSync(stage).ino).toBe(seed.legacyStageIno)
   // The old file was replaced by the generated one, in place.

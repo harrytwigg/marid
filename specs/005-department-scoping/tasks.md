@@ -163,7 +163,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
 
 ## Phase 3: scoped context (junior-developer, then senior QA; starts after Phase 2 merges)
 
-- [ ] T060 Generate the stage dir at `<parent of home>/.jinn-departments/<basename of home>/<slug>/`. It contains
+- [ ] T060 Generate the stage dir at `<parent of home>/.jinn-departments/.instances/<basename of home>/<slug>/`. It contains
   copies of the allowed skills and a `CLAUDE.md` built from `INSTRUCTIONS.md`, plus the
   company file if `department+company` is set, plus the FR-029 scope paragraph. Sync it by
   FR-020a (stable path and inode; changed files renamed in from an incoming directory beside

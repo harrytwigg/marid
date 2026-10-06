@@ -23,9 +23,16 @@ export function departmentStagesContainer(): string {
   return path.join(path.dirname(resolveJinnHome()), ".jinn-departments");
 }
 
-/** The generated per-department directories live beside the home, never inside it, in a root of this instance's own: `<parent>/.jinn-departments/<basename of the home>/`. */
+/**
+ * The directory under `departmentStagesContainer()` that holds one root per instance. It starts
+ * with a dot, as no department slug can (the org scan skips such directories), so a department's
+ * old-layout stage directory, `<container>/<slug>`, can never be the same path as an instance's root.
+ */
+export const STAGE_INSTANCES_DIR = ".instances";
+
+/** The generated per-department directories live beside the home, never inside it, in a root of this instance's own: `<parent>/.jinn-departments/.instances/<basename of the home>/`. */
 export function departmentStageRoot(): string {
-  return path.join(departmentStagesContainer(), path.basename(resolveJinnHome()) || "instance");
+  return path.join(departmentStagesContainer(), STAGE_INSTANCES_DIR, path.basename(resolveJinnHome()) || "instance");
 }
 
 /** Profile directories employees run their Claude sessions as (`claudeConfigDir`). */

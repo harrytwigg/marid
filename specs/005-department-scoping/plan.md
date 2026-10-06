@@ -409,7 +409,7 @@ Senior, because it is the enforcement itself.
 
 ### Phase 3: scoped context (junior-developer, then senior QA)
 
-The stage dir lives at `<parent of home>/.jinn-departments/<basename of home>/<slug>/` (the root is keyed by instance by the stage-hardening follow-up, below; Phase 3 as first built used `<parent of home>/.jinn-departments/<slug>/`).
+The stage dir lives at `<parent of home>/.jinn-departments/.instances/<basename of home>/<slug>/` (the root is keyed by instance by the stage-hardening follow-up, below; Phase 3 as first built used `<parent of home>/.jinn-departments/<slug>/`).
 
 - **Contents.** It holds copies of the allowed skills and a generated `CLAUDE.md`. The
   `CLAUDE.md` is built from `INSTRUCTIONS.md`, plus the company `CLAUDE.md` if
@@ -442,7 +442,7 @@ The stage dir lives at `<parent of home>/.jinn-departments/<basename of home>/<s
 
 Four residual risks from Phase 3, closed after Phase 5 merged:
 
-- **Per-instance stage root (FR-020, FR-020a).** The root is `<parent of home>/.jinn-departments/<basename of home>/`.
+- **Per-instance stage root (FR-020, FR-020a).** The root is `<parent of home>/.jinn-departments/.instances/<basename of home>/`.
   `prepareDepartmentStage` first runs `migrateLegacyStageDir` (`department-stage/legacy-stage.ts`): a
   stage dir at the old path is renamed to the new one (inode kept), its Claude transcripts are moved to the
   new project key in every profile, and it is never moved again. FR-033 protects the whole

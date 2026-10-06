@@ -108,9 +108,15 @@ export function departmentFilePath(slug: string): string {
   return path.join(resolveJinnHome(), "org", slug, "department.yaml");
 }
 
-/** A skill the stage directory refuses (a symlink inside it) is not offered, so it is not written into the list as if it were. */
-function refuseUnstageableSkills(home: string, skills: readonly string[]): void {
-  for (const skill of skills) {
+/**
+ * A skill the stage directory refuses (a symlink inside it) is not offered, so a write does not add it
+ * to the list as if it were. Only skills the write introduces are judged (one already in the file is the
+ * operator's to fix by hand), and only for a department that stages anything: an open one does not.
+ */
+function refuseUnstageableSkills(home: string, existing: Record<string, unknown>, merged: Record<string, unknown>, patch: DepartmentPatch): void {
+  if (merged.scope === undefined || merged.scope === "open") return;
+  const already = new Set(Array.isArray(existing.skills) ? existing.skills : []);
+  for (const skill of (patch.skills ?? []).filter((name) => !already.has(name))) {
     const reason = skillRefusal(path.join(home, "skills", skill));
     if (reason) invalid(`skills: "${skill}" cannot be copied to a stage directory: ${reason}`);
   }
@@ -136,7 +142,7 @@ export function writeDepartmentFile(slug: string, patch: DepartmentPatch): void 
   // Only what this write touches is refused; an entry that was already dropped is the operator's to fix by hand.
   const introduced = parsed.warnings.filter((warning) => Object.keys(patch).some((field) => warning.startsWith(`${field}:`)));
   if (introduced.length > 0) invalid(introduced.join("; "));
-  refuseUnstageableSkills(home, patch.skills ?? []);
+  refuseUnstageableSkills(home, existing, merged, patch);
   const temp = path.join(path.dirname(file), `.department.yaml.${crypto.randomBytes(6).toString("hex")}.tmp`);
   try {
     fs.writeFileSync(temp, text, { encoding: "utf-8", mode: 0o644 });

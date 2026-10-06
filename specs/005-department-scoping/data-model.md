@@ -125,7 +125,7 @@ A scoped session's engine environment also carries `JINN_DEPARTMENT=<slug>` (FR-
 ## Stage directory
 
 ```
-<parent of $JINN_HOME>/.jinn-departments/<basename of $JINN_HOME>/<slug>/
+<parent of $JINN_HOME>/.jinn-departments/.instances/<basename of $JINN_HOME>/<slug>/
   CLAUDE.md            # generated: INSTRUCTIONS.md (+ company CLAUDE.md if department+company) + the fixed scope paragraph (FR-029)
   .claude/skills/<s>/  # copies of skills/<s> for each allow-listed skill
 ```
@@ -133,7 +133,7 @@ A scoped session's engine environment also carries `JINN_DEPARTMENT=<slug>` (FR-
 The stage directory is synced (FR-020a) on the same triggers as `syncSkillSymlinks`, on a
 department scan change, when an instructions file changes, and before every scoped spawn. A
 sync keeps its path and inode: changed files are renamed in from
-`.jinn-departments/<basename of $JINN_HOME>/.<slug>.incoming-<random>/`, and extras are removed
+`.jinn-departments/.instances/<basename of $JINN_HOME>/.<slug>.incoming-<random>/`, and extras are removed
 afterwards. Nobody edits it by hand. The root is the instance's own, so two instances under one
 parent do not share a stage directory. A stage directory made at the old path,
 `.jinn-departments/<slug>/`, is renamed to the new one once (its inode kept) and its Claude

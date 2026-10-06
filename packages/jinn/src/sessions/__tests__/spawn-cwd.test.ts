@@ -28,7 +28,7 @@ beforeEach(() => {
 
 describe("the stage directory", () => {
   it("lives beside the Jinn home, outside it, in a root of this instance's own", () => {
-    expect(departmentStageDir(SLUG)).toBe(path.join(path.dirname(JINN_HOME), ".jinn-departments", path.basename(JINN_HOME), SLUG));
+    expect(departmentStageDir(SLUG)).toBe(path.join(path.dirname(JINN_HOME), ".jinn-departments", ".instances", path.basename(JINN_HOME), SLUG));
     expect(path.relative(JINN_HOME, departmentStageDir(SLUG)).startsWith("..")).toBe(true);
   });
 

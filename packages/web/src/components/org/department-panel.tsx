@@ -54,7 +54,7 @@ function Chips({ items, empty }: { items: string[]; empty: string }) {
 function SkillProblems({ problems }: { problems: Array<{ skill: string; reason: string }> }) {
   if (problems.length === 0) return null
   return (
-    <ul role="alert" data-testid="department-skill-problems" className="m-0 mt-[var(--space-3)] flex list-none flex-col gap-1 p-0">
+    <ul data-testid="department-skill-problems" className="m-0 mt-[var(--space-3)] flex list-none flex-col gap-1 p-0">
       {problems.map(({ skill, reason }) => (
         <li key={skill} className="text-[length:var(--text-caption1)] text-[var(--system-orange)]">
           <span className={`${MONO} font-[var(--weight-semibold)]`}>{skill}</span> is not offered to this department: {reason}.
