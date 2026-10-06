@@ -58,17 +58,25 @@ CLI_NODE_BIN="${JINN_SANDBOX_NODE_BIN:-$NODE_BIN}"
 PNPM_BIN="$(command -v pnpm || true)"
 
 [[ -n "${HOME:-}" && -d "$HOME" ]] || die "HOME must name the sandbox host home"
-HOST_HOME="$(cd "$HOME" && pwd -P)"
-# The operator's real home comes from the account database (os.userInfo ignores $HOME), which is
-# exactly what a caller overrides.
-ACCOUNT_HOME="$("$NODE_BIN" -e 'process.stdout.write(require("node:fs").realpathSync(require("node:os").userInfo().homedir))' 2>/dev/null || true)"
-[[ -n "$ACCOUNT_HOME" ]] || die "cannot resolve the operator's home"
+# Both homes are resolved by the OS's own realpath (realpathSync.native), which also returns the
+# on-disk case: on a case-insensitive volume `pwd -P` keeps the typed case, so an upper-cased home
+# would never string-match the real one. The operator's home comes from the account database
+# (os.userInfo ignores $HOME), which is exactly what a caller overrides.
+native_realpath() {
+  "$NODE_BIN" -e 'process.stdout.write(require("node:fs").realpathSync.native(process.argv[1]))' "$1" 2>/dev/null
+}
+HOST_HOME="$(native_realpath "$HOME")" || die "cannot resolve HOME: $HOME"
+ACCOUNT_HOME="$("$NODE_BIN" -e 'process.stdout.write(require("node:os").userInfo().homedir)' 2>/dev/null || true)"
+[[ -n "$ACCOUNT_HOME" ]] && ACCOUNT_HOME="$(native_realpath "$ACCOUNT_HOME")" || die "cannot resolve the operator's home"
 # The real home, and anything inside an operator instance home (~/.jinn, ~/.jinn-*), is not a
-# sandbox host: create would write ~/.jinn/.jinn-<instance> and setup its caches there.
+# sandbox host: create would write ~/.jinn/.jinn-<instance> and setup its caches there. Matched
+# without regard to case as well, so a case-sensitive volume can only over-refuse.
+shopt -s nocasematch
 case "$HOST_HOME" in
   "$ACCOUNT_HOME"|"$ACCOUNT_HOME"/.jinn|"$ACCOUNT_HOME"/.jinn/*|"$ACCOUNT_HOME"/.jinn-*|"$ACCOUNT_HOME"/.jinn-*/*)
     die "refusing HOME=$HOST_HOME: it is the operator's real home or inside an operator instance; pass a throwaway HOME" ;;
 esac
+shopt -u nocasematch
 
 [[ $# -ge 2 ]] || die "usage: jinn-sandbox.sh <create|start|stop|destroy> <instance> [flags]"
 COMMAND="$1"; INSTANCE="$2"; shift 2
@@ -242,11 +250,11 @@ cmd_start() {
   require_sandbox
   local port; port="$(sandbox_port)"
   if port_listening "$port"; then die "port $port is already in use" 1; fi
-  jinn start --daemon </dev/null >"$SANDBOX_HOME/start.log" 2>&1 \
+  jinn start --daemon --port "$port" </dev/null >"$SANDBOX_HOME/start.log" 2>&1 \
     || { cat "$SANDBOX_HOME/start.log" >&2; die "jinn start failed" 1; }
   if ! wait_healthy "$port"; then
     # Leave nothing listening: a daemon that never got healthy still holds the port.
-    jinn stop </dev/null >/dev/null 2>&1 || true
+    jinn stop --port "$port" </dev/null >/dev/null 2>&1 || true
     die "gateway did not become healthy on port $port within ${HEALTH_TIMEOUT_S}s (see $SANDBOX_HOME/logs)" 1
   fi
   echo "Sandbox '$INSTANCE' listening on http://127.0.0.1:$port"
@@ -256,7 +264,7 @@ cmd_stop() {
   [[ $# -eq 0 ]] || die "stop takes no flags"
   require_sandbox
   local port; port="$(sandbox_port)"
-  jinn stop </dev/null || die "jinn stop failed" 1
+  jinn stop --port "$port" </dev/null || die "jinn stop failed" 1
   wait_port_free "$port" || die "listener remains on port $port after stop" 1
   echo "Sandbox '$INSTANCE' stopped"
 }
@@ -280,7 +288,11 @@ cmd_destroy() {
   if port="$(marker_port 2>/dev/null)"; then ports+=("$port"); fi
   (( ${#ports[@]} > 0 )) || die "cannot tell which port $SANDBOX_HOME uses; not removing it" 1
   for port in "${ports[@]}"; do check_port "$port"; done
-  [[ -f "$JINN_BIN" ]] && { jinn stop </dev/null >/dev/null 2>&1 || true; }
+  # Every stop names its port: without one the CLI falls back to the default gateway port when
+  # config.yaml cannot be read, and that port is the operator's.
+  if [[ -f "$JINN_BIN" ]]; then
+    for port in "${ports[@]}"; do jinn stop --port "$port" </dev/null >/dev/null 2>&1 || true; done
+  fi
   for port in "${ports[@]}"; do
     wait_port_free "$port" || die "listener remains on port $port; not removing a live sandbox" 1
   done

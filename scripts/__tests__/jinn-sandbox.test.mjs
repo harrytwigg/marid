@@ -148,6 +148,52 @@ test("a HOME inside the operator's instance home is refused", () => {
   }
 })
 
+test("a case-variant spelling of the operator's home or instance home is refused", () => {
+  const real = fs.realpathSync(os.userInfo().homedir)
+  for (const inside of ["", ".jinn", ".jinn/knowledge"]) {
+    const dir = path.join(real, inside)
+    if (!fs.existsSync(dir)) continue
+    const upper = dir.toUpperCase()
+    // Only meaningful where the volume folds case, as macOS volumes do by default.
+    if (!fs.existsSync(upper)) continue
+    const result = run(upper, ["start", "probe"])
+    assert.equal(result.status, 2, `${upper}: ${result.stderr}`)
+    assert.match(result.stderr, /operator/)
+  }
+})
+
+/** Stands in for node when the helper runs the Marid CLI, and appends each argv it was given. */
+function argvStub(root) {
+  const stub = path.join(root, "node-argv-stub.sh")
+  fs.writeFileSync(stub, `#!/bin/sh\necho "$*" >> "$STUB_ARGV_OUT"\nexit 0\n`, { mode: 0o755 })
+  return stub
+}
+
+test("every stop names the sandbox's port, even when config.yaml cannot be read", () => {
+  withHost((host) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-sandbox-helper-argv-"))
+    try {
+      const fake = fakeRepo(root)
+      const out = path.join(root, "argv.txt")
+      const env = { JINN_REPO: fake, JINN_SANDBOX_NODE_BIN: argvStub(root), JINN_SANDBOX_HEALTH_TIMEOUT: "1", STUB_ARGV_OUT: out }
+      fakeSandbox(host, "healthless", { port: 8091 })
+      assert.equal(run(host, ["start", "healthless"], env).status, 1) // nothing listens, so start stops it again
+      assert.equal(run(host, ["stop", "healthless"], env).status, 0)
+      // An unreadable config leaves only the port recorded at create.
+      fakeSandbox(host, "broken", { port: 8092, config: "gateway: [unclosed\n" })
+      const destroyed = run(host, ["destroy", "broken", "--yes"], env)
+      assert.equal(destroyed.status, 0, destroyed.stderr)
+      const stops = fs.readFileSync(out, "utf8").split("\n").filter((line) => / stop\b/.test(line))
+      assert.equal(stops.length, 3, stops.join("\n"))
+      assert.match(stops[0], / stop --port 8091$/)
+      assert.match(stops[1], / stop --port 8091$/)
+      assert.match(stops[2], / stop --port 8092$/)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 test("ports must be plain four or five digit integers", () => {
   withHost((host) => {
     for (const port of ["18446744073709559676", "08080", "+8060", "-8060", "8060.5"]) {
