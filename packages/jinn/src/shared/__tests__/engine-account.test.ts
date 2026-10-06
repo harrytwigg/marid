@@ -175,11 +175,9 @@ describe("the auth outage ledger is per account", () => {
     expect(claudeAuthScope(local({ remoteHost: "box", remoteUser: "b" }))).toBe("b@box");
   });
 
-  it("refuses a turn on a named profile that is not signed in, naming the login command (FR-054)", () => {
+  it("leaves a named profile's signed-in check to the turn's own preflight", () => {
     const missing = path.join(JINN_HOME, "..", "no-such-claude-profile");
-    expect(refuseClaudeLaunch(local({ claudeConfigDir: missing }))).toBe(
-      `The Claude profile ${missing} does not exist. To sign it in on this machine, run \`CLAUDE_CONFIG_DIR=${missing} claude\`, then \`/login\`.`,
-    );
+    expect(refuseClaudeLaunch(local({ claudeConfigDir: missing }))).toBeUndefined();
   });
 
   it("tells the operator to sign that profile in, not to log the gateway in", () => {

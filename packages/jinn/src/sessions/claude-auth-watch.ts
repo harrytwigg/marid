@@ -3,7 +3,6 @@ import { logger } from "../shared/logger.js";
 import { loadConfig } from "../shared/config.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
-import { verifyLocalClaudeProfile } from "../shared/claude-profile-signin.js";
 import { recordEngineUnavailable } from "../shared/engine-health.js";
 import { readClaudeCredentialStatus, type ClaudeCredentialStatus } from "../shared/claude-auth.js";
 import {
@@ -200,9 +199,6 @@ function loggedInSince(outage: ClaudeAuthOutage | undefined, status: ClaudeCrede
  */
 export function refuseClaudeLaunch(employee: Employee | undefined, now: Date = new Date()): string | undefined {
   try {
-    // A named profile's signed-in check (FR-054) stands in for the default login's disk check.
-    const profile = resolveEmployeeClaudeProfile(employee);
-    if (profile) return verifyLocalClaudeProfile(profile);
     const scope = claudeAuthScope(employee);
     if (scope !== LOCAL_CLAUDE_AUTH_SCOPE) return undefined;
     const status = localStatus();

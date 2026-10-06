@@ -1,6 +1,8 @@
 import { buildPlatformContextRefresh, fingerprintPlatformContext } from "../../engines/platform-context.js";
 import { isBudgetExhausted } from "../../gateway/budgets.js";
 import { refuseClaudeLaunch } from "../claude-auth-watch.js";
+import { resolveEmployeeClaudeProfile } from "../../shared/claude-profile.js";
+import { verifyLocalClaudeProfile } from "../../shared/claude-profile-signin.js";
 import { resolveEffort } from "../../shared/effort.js";
 import { isCompactCommand, isRawEngineCommand } from "../../shared/skill-commands.js";
 import { opencodeMode } from "../../engines/opencode-server.js";
@@ -58,6 +60,12 @@ function refuseTurn(input: TurnInput): string | undefined {
   }
   if (session.employee && isBudgetExhausted(session.employee, input.config.budgets?.employees)) {
     return `Budget limit exceeded for employee "${session.employee}". Session blocked.`;
+  }
+  // A named profile must exist and be signed in (FR-054). Unlike the default login's check below, a
+  // terminal-view turn is not exempt: a signed-out profile puts Claude Code's login screen in front of it.
+  if (session.engine === "claude") {
+    const unsigned = verifyLocalClaudeProfile(resolveEmployeeClaudeProfile(input.employee));
+    if (unsigned) return unsigned;
   }
   return refuseDeadClaudeLogin(input);
 }
