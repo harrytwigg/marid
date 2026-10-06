@@ -123,11 +123,11 @@ withdrawn.
 | `sessions/turn/preflight.ts:63` | Per-employee monthly budget check | Already a per-project cap for dedicated employees |
 | `sessions/fork.ts:164` / `engines/claude-interactive.ts:271` | Transcripts are keyed by the cwd slug | Resume, fork and compaction must resolve the stage-dir slug |
 | `shared/claude-settings.ts:124` | Trust entries per directory in `~/.claude.json` | The only seed today is boot-time (`gateway/server.ts:565`). Phase 3 adds one per stage dir |
-| `shared/home.ts:34` | `resolveClaudeConfigDir` reads the gateway's own `CLAUDE_CONFIG_DIR` at call time | Global today. The follow-up account spec needs a per-session resolver |
-| `shared/remote-target.ts:219` | `resolveRemoteClaudeConfigDir`, whose comment says env and trust seed must agree or the first turn hangs | Precedent for the follow-up account spec |
-| `shared/claude-auth.ts:121` | Auth check config-dir seam | Follow-up account spec. On darwin, credentials are in the Keychain and the check fails open |
-| `shared/engine-health.ts:54` | `engineHealthForTarget`: health keyed per target | Follow-up account spec. Health is keyed by engine only, so this is not a target key that can simply gain a field |
-| `board-walk/route-turn.ts:45` | Employee `cliFlags` come after the gateway's `--chrome`, so `--no-chrome` in `cliFlags` wins | Follow-up account spec. It does not hold on the PTY idle-spawn path (`engines/claude-interactive.ts:3183`) |
+| `shared/home.ts:34` | `resolveClaudeConfigDir` reads the gateway's own `CLAUDE_CONFIG_DIR` at call time | Global today. Not changed by this feature |
+| `shared/remote-target.ts:219` | `resolveRemoteClaudeConfigDir`, whose comment says env and trust seed must agree or the first turn hangs | The existing per-employee profile setting |
+| `shared/claude-auth.ts:121` | Auth check config-dir seam | Not changed by this feature. On darwin, credentials are in the Keychain and the check fails open |
+| `shared/engine-health.ts:54` | `engineHealthForTarget`: health keyed per target | Not changed by this feature. Health is keyed by engine only, so this is not a target key that can simply gain a field |
+| `board-walk/route-turn.ts:45` | Employee `cliFlags` come after the gateway's `--chrome`, so `--no-chrome` in `cliFlags` wins | Not changed by this feature. It does not hold on the PTY idle-spawn path (`engines/claude-interactive.ts:3183`) |
 | `gateway/org-registry.ts:42` | `refreshOrg`, which keeps the last good roster | Shape for `project-registry.ts` |
 
 ### Budgets
@@ -236,6 +236,6 @@ If any of items 1–4 or 10 cannot be made to hold:
 | 3. What belongs to a project in v1 | Todos, with their comments, attachments, events, runs and relations; sessions of scoped employees, through the binding; Notes, in the project folder. Out of v1: cron, workflows (removed upstream), managed files (refused), labels and sprints (company-wide). Spend is capped by the existing per-employee budgets |
 | 4. Company-wide vs project skills and knowledge | FR-027 to FR-029, Q5 |
 | 5. Concurrent employees in a project | Worktrees, unchanged (Assumptions) |
-| 6. Secrets | Deferred with containment (Q1 = A). A friend's account is handled by the follow-up account spec (spec.md, "Follow-up: employees on another Claude account"). That spec chooses between a Claude login and a token held as a named secret |
+| 6. Secrets | Deferred with containment (Q1 = A). A friend's account uses the existing per-employee profile setting (spec.md, "Employees on another Claude account") |
 | 7. Client layer | No, and nothing is reserved for it (Assumptions) |
 | 8. Where config lives and how it is backed up | YAML under `projects/`, mirroring `org/` (operator, Q3). It is carried by the home archive once `projects` is added to `ARCHIVE_INCLUDES` (`backup/archive.ts:9`). Todo membership and session bindings live in the registry, carried by the registry backup (`backup/snapshot.ts:38`) |

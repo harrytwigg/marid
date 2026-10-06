@@ -14,7 +14,8 @@
 - **Chrome:** unchanged.
 - **Replies:** live replies.
 - **New:** org tree badges and YAML-first configuration.
-- **Deferred to a follow-up spec:** employees on their own Claude account (spec.md, "Follow-up").
+- **Not built:** employees on their own Claude account use the existing per-employee profile
+  setting (spec.md, "Employees on another Claude account").
 
 ## Existing infrastructure (constitution VII)
 
@@ -82,9 +83,7 @@ merges.
    - Notes and state roots;
    - claude-only validation.
 
-**After this feature**, the senior writes a follow-up spec for employees on another Claude
-account. It starts from the inputs recorded in spec.md. Phase S, Phase 0 and the old
-containment phase are withdrawn (Q1 = A, Q6 = b).
+Phase S, Phase 0 and the old containment phase are withdrawn (Q1 = A, Q6 = b).
 
 ## Technical Context
 
@@ -349,7 +348,6 @@ The stage dir lives at `<parent of home>/.jinn-projects/<id>/`.
 | --- | --- | --- | --- |
 | 1 | junior | junior QA | Fully specified, with no auth or secrets |
 | 2 | senior, with junior sub-Todos for the tests and the web | senior QA | Auth enforcement |
-| Follow-up account spec | senior | senior QA | Engine accounts, auth, health and the Keychain |
 | 3 | junior | senior QA | Specified, but it decides what a scoped session can load |
 
 ## Complexity Tracking

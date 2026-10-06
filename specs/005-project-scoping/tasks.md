@@ -4,9 +4,7 @@ These tasks follow the operator's decisions of 2026-10-05 (spec.md, "Operator de
 
 ## How the work ships
 
-**Order.** Each phase is its own PR off `main`. The build order is 1 → 2 → 3. The
-per-employee Claude account is a separate follow-up spec, written once Phase 3 has merged
-(spec.md, "Follow-up").
+**Order.** Each phase is its own PR off `main`. The build order is 1 → 2 → 3.
 
 **Rules for every phase.**
 
@@ -196,7 +194,5 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 
 ## Follow-ups outside this feature
 
-- [ ] F1 (senior-developer) Write the follow-up spec for employees on another Claude account,
-  from spec.md "Follow-up". Its first task is the Keychain check.
-- [ ] F2 (instance, not this repository) Make `~/.jinn/bin/mem` respect `JINN_PROJECT_ID`, so it
+- [ ] F1 (instance, not this repository) Make `~/.jinn/bin/mem` respect `JINN_PROJECT_ID`, so it
   defaults to `projects/<id>/state.md` and refuses other files.

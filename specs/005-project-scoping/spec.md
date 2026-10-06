@@ -5,8 +5,9 @@
 **Created**: 2026-10-05
 
 **Status**: The operator answered Q1–Q11 on 2026-10-05. The decisions are recorded below and
-folded into the text. Ready for implementation per plan.md and tasks.md. The friend-account
-capability is carried to a follow-up spec.
+folded into the text. Ready for implementation per plan.md and tasks.md. Employees on another
+Claude account use the existing per-employee profile setting (see "Employees on another
+Claude account").
 
 **Input**: Marid issue #90 (upstream proposal hristo2612/jinn#81). The operator wants projects
 as a first-class scope:
@@ -36,7 +37,7 @@ everyone except its own members.
 | Q4 | No MCP parameter | FR-036 unchanged |
 | Q5 | Project instructions only | FR-029 unchanged |
 | Q6 | **b.** Existing employees keep reading everything as today. The new restrictions apply only to scoped sessions | Phase S is withdrawn. `read_knowledge` and the attachment paths change only for scoped callers (FR-018, FR-028) |
-| Q7 | Not answered. It falls away with Q1 = A, because there is no contained environment for secrets to feed | FR-030 to FR-032 are deferred with containment. The follow-up account spec decides between a Claude login and a token |
+| Q7 | Not answered. It falls away with Q1 = A, because there is no contained environment for secrets to feed | FR-030 to FR-032 are deferred with containment |
 | Q8 | **a**, plus: employees on a project must not be able to work on anything else | That is the base rule already: a scoped employee holds only its projects' Todos. `dedicated` (FR-015) is how a project is closed to everyone else |
 | Q9 | Not fussed | Today's behaviour is kept, with no engine flag changes |
 | Q10 | a (a live reply) | FR-013 unchanged |
@@ -44,7 +45,7 @@ everyone except its own members.
 
 **New in the operator's answer**:
 
-- employees bound to a different Claude account. This is **specified separately**, in a follow-up spec, because review showed it is a larger and riskier change than this feature (see "Follow-up: employees on another Claude account");
+- employees bound to a different Claude account. The operator cancelled the separate spec for this on 2026-10-06, because the existing per-employee profile setting already covers it (see "Employees on another Claude account");
 - project membership shown on the org tree (FR-041);
 - configuration in YAML, with UI editing where possible (FR-001, FR-042).
 
@@ -82,7 +83,7 @@ This feature responds in three ways:
 **Between Phase 2 and Phase 3.** Scoped employees already exist after Phase 2, but they still
 run with cwd `~/.jinn`. Until Phase 3 they therefore load the company `CLAUDE.md` and every
 skill. This is acceptable as an interim under Q1 = A, because they run on the operator's own
-account. It is the reason the follow-up account spec requires Phase 3 to be in place first.
+account. It is why an employee should move to another account only once Phase 3 is in place.
 
 ## What the tree does today *(facts the spec depends on)*
 
@@ -183,10 +184,10 @@ existing employees can still read and comment, but can no longer be assigned P's
 
 ---
 
-### User Story 4: (moved) Project employees on a different Claude account
+### User Story 4: (not built here) Project employees on a different Claude account
 
-This story is delivered by the follow-up spec, not by this feature's PRs. See "Follow-up:
-employees on another Claude account" below.
+The existing per-employee profile setting delivers this story, so no PR in this feature does.
+See "Employees on another Claude account" below.
 
 ---
 
@@ -421,7 +422,7 @@ scoped employee; P is that session's binding)
     For a hand-written project YAML, the file is created on the first note write. The format
     is the same as the company `state.md`: a title, then sections of keyed bullets
     (`- key: value`). That way the note tools and a future `mem` that respects
-    `JINN_PROJECT_ID` (F2) agree on it.
+    `JINN_PROJECT_ID` (F1) agree on it.
   - **Rooting.** For a scoped caller, `search_knowledge`, `read_knowledge` and the note tools
     are rooted there, plus P's `sharedNotes`.
   - **Note tools always on for scoped sessions.** The scoped profile carries the note tools,
@@ -456,8 +457,8 @@ scoped employee; P is that session's binding)
 
   The scan and the Projects page refuse a violating entry.
 
-**Claude account per employee**: not in this feature. See "Follow-up: employees on another
-Claude account".
+**Claude account per employee**: not in this feature. See "Employees on another Claude
+account".
 
 **Compatibility**
 
@@ -496,48 +497,20 @@ Claude account".
 
   Hand-edited YAML stays the source of truth. The UI never holds state the files do not.
 
-### Follow-up: employees on another Claude account (separate spec)
+### Employees on another Claude account (not built here)
 
-The operator's friend-account case needs employees whose local sessions run on another Claude
-login. Review showed this is its own feature with real blast radius, so it gets its own spec,
-written after this one. That spec MUST address everything below. These items are recorded here
-so it starts from the findings, not from zero.
+The operator cancelled the separate account spec on 2026-10-06. A project's employees run on
+another Claude account through the existing per-employee profile setting,
+`remoteClaudeConfigDir` (fact 4 in "What the tree does today"), so this feature builds nothing
+for it.
 
-1. **Keychain first.** On macOS the login lives in the Keychain. This host has one entry,
-   service `Claude Code-credentials`, and model discovery reads that fixed name
-   (`packages/jinn/src/shared/claude-models.ts:262`). It is unverified whether `/login` under
-   another `CLAUDE_CONFIG_DIR` creates a separate entry or overwrites that one. If it
-   overwrites, every company session moves onto the other account. The first step is to
-   establish this in a throwaway config dir, listing service names before and after. The
-   fallback is a token-based login (for example `claude setup-token`) held as a named secret.
-2. **Only for scoped employees with a stage dir.** Every prompt, tool output and file read in
-   such a session goes to the other account. An employee may therefore carry another account
-   only if it is scoped and this feature's Phase 3 stage dir is in place. Otherwise the company
-   `CLAUDE.md`, the skills and client context leave the company.
-3. **Every consumer of "the" Claude account moves to a per-session resolver**, each with a red
-   test. Today all of these assume one account:
-   - **Environment:** the engine child environment.
-   - **Transcript readers:** `sessions/fork.ts:173`, `engines/claude-interactive.ts:279`,
-     `:2117`, `:2648`, `:2726` and `:2740`; `gateway/api.ts:4634` and `:4748`; and
-     `gateway/external-turns.ts`.
-   - **Trust seed:** there is no per-session trust seed today. The only seed is the
-     boot-time call at `gateway/server.ts:565`, so a seed per config dir and stage dir has to
-     be built. It must also carry `skipDangerousModePermissionPrompt` and the hooks the
-     operator's settings rely on, or the PTY hangs at a first-run dialog.
-   - **Auth outage ledger:** it is one scope for every local employee
-     (`sessions/claude-auth-watch.ts:51`). On darwin, `readClaudeCredentialStatus` also fails
-     open.
-   - **Engine health:** it is keyed by engine only, so one account's limit holds back every
-     Claude session. The writers are `sessions/turn/settle.ts:124`, `sessions/rate-limit-handler.ts:118` and `:322`,
-     and `shared/engine-health.ts:193`. The readers are `board-walk/route-turn.ts:85`, `board-walk/snapshot.ts:244`,
-     `sessions/new-session-engine.ts:60`, and `shared/engine-health.ts:210` and `:228`.
-   - **Limits snapshot:** it is a single `CLAUDE_LIMITS_DIR`
-     (`engines/claude-interactive.ts:2140`), and the newest status line overwrites it.
-   - **Other launch sites:** the PTY idle spawn (`engines/claude-interactive.ts:3183`), which
-     uses `--chrome`, does not pass `cliFlags`, runs with cwd `$JINN_HOME` and inherits the
-     gateway environment. Also the rate-limit fallback and retry
-     (`sessions/rate-limit-handler.ts:185`, `:301`). Fallback to another engine must be
-     disabled for these employees.
+One rule from this feature still applies. Every prompt, tool output and file read in a session
+on another account goes to that account. Put an employee on another account only once it is
+scoped and Phase 3's stage dir is in place. Otherwise the company `CLAUDE.md`, the skills and
+client context leave the company.
+
+research.md keeps its findings on what assumes a single local account (the rows from
+`shared/home.ts:34` on), in case local sessions ever need a profile of their own.
 
 ### Deferred to future sandbox work (withdrawn from this feature by Q1 = A)
 
@@ -577,7 +550,7 @@ zero.
   - a one-off comparison of `buildContext` output and engine argv between `main` and the
     branch, for a fixed unscoped roster, is recorded as PR evidence. It is not committed as a
     fixture.
-- **SC-003**: Withdrawn. It moved to the follow-up account spec.
+- **SC-003**: Withdrawn. Employees on another account use the existing profile setting.
 - **SC-004**: The token counts in `tool-manifest-budget.test.ts` do not rise.
 - **SC-005**: Every FR-040 element has light and dark screenshots on the PR.
 
