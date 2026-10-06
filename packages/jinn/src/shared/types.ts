@@ -170,19 +170,19 @@ export interface RemoteTarget {
   remoteUser?: string;
   /** Working directory ON the remote host. Must resolve under `config.remote.root`. */
   remoteCwd?: string;
-  /**
-   * `CLAUDE_CONFIG_DIR` for this employee's sessions on the remote host —
-   * which Claude Code profile they run as. Overrides `remote.claudeConfigDir`;
-   * unset on both means the remote user's default profile.
-   *
-   * Per-employee rather than per-host because one machine commonly holds
-   * several profiles (a personal one and a work one), and which an employee
-   * should use is a property of the employee, not the box.
-   */
+  /** `CLAUDE_CONFIG_DIR` for this employee's sessions on the remote host, overriding `remote.claudeConfigDir`;
+   *  per employee because one machine commonly holds several profiles. Unset on both: the remote user's default. */
   remoteClaudeConfigDir?: string;
 }
 
-export interface EngineRunOpts extends RemoteTarget {
+/** A target as a session runs it (`employeeRemoteTarget`, FR-061), never read from YAML. A scoped
+ *  session's `remoteCwd` is its department's stage directory, and the employee's own is its work area. */
+export interface SessionRemoteTarget extends RemoteTarget {
+  remoteDepartment?: string;
+  remoteWorkArea?: string;
+}
+
+export interface EngineRunOpts extends SessionRemoteTarget {
   prompt: string;
   claudeProfile?: import("./claude-profile.js").ClaudeProfile; // local only; null/unset = the gateway's own
   resumeSessionId?: string;

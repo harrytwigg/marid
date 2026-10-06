@@ -4,7 +4,8 @@ import { getEngineSessionRef, getSession } from "../sessions/registry.js";
 import { orgRegistry } from "./org-registry.js";
 import { employeeRemoteTarget } from "../shared/remote-target.js";
 import { sessionClaudeProfile } from "../sessions/session-account.js";
-import { spawnCwd } from "../sessions/session-cwd.js";
+import { remoteScopeFor, spawnCwd } from "../sessions/session-cwd.js";
+import { localScopedClaudeRefusal } from "../sessions/turn/scoped-turn.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
 
@@ -132,12 +133,14 @@ export function attachPtyWebSocket(
     const employee = session?.employee
       ? orgRegistry(options.getConfig?.()).get(session.employee)
       : undefined;
-    const remote = employeeRemoteTarget(employee);
+    const remote = employeeRemoteTarget(employee, remoteScopeFor(options.getConfig?.()?.remote, session));
+    const refused = session && !remote ? localScopedClaudeRefusal(session) : null; // the PTY runs the PATH claude
+    if (refused) throw new Error(refused);
     return {
       engineSessionId: session ? getEngineSessionRef(session).id : undefined,
       model: session?.model ?? undefined,
       effortLevel: session?.effortLevel ?? undefined,
-      cwd: spawnCwd(session),
+      cwd: spawnCwd(session, Boolean(remote)),
       ...remote,
       claudeProfile: sessionClaudeProfile(session, employee),
       cols,

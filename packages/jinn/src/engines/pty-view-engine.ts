@@ -5,7 +5,7 @@
  * `session.engine` instead of being hardwired to one engine.
  */
 import type { ClaudeProfile } from "../shared/claude-profile.js";
-import type { RemoteTarget } from "../shared/types.js";
+import type { SessionRemoteTarget } from "../shared/remote-department.js";
 
 import type { PtySnapshotStore, SerializedPtySnapshot } from "./pty-snapshot.js";
 
@@ -36,7 +36,7 @@ export interface PtySnapshotSubscription {
   unsubscribe(): void;
 }
 
-export interface PtyIdleSpawnOpts extends RemoteTarget {
+export interface PtyIdleSpawnOpts extends SessionRemoteTarget {
   /** Engine-side conversation/session id to resume into the idle PTY, if any. */
   engineSessionId?: string;
   cwd?: string;

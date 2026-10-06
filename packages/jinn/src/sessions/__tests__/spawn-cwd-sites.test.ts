@@ -55,6 +55,6 @@ describe("hard-coded `cwd: JINN_HOME` at session-spawn sites", () => {
     const text = fs.readFileSync(path.join(SRC, "sessions/rate-limit-handler.ts"), "utf-8");
     expect((text.match(/\bspawnCwd\(/g) ?? []).length).toBe(2);
     expect(text).toMatch(/cwd: substituteCwd,/);
-    expect(text).toMatch(/cwd: spawnCwd\(session\),/);
+    expect(text).toMatch(/cwd: spawnCwd\(session, Boolean\(remote\)\),/);
   });
 });

@@ -5,6 +5,7 @@ import { compactEmployeeRole } from "../shared/employee-role.js";
 import { readJsonBody } from "./http-helpers.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import type { Employee, OrgNode } from "../shared/types.js";
+import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import { claudeProfileWire } from "../shared/claude-profile.js";
 import type { ApiContext } from "./api.js";
 import { departmentScopeOf } from "./department-registry.js";
@@ -86,16 +87,16 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 /**
  * Why an employee update is refused by the department rules, as the 409 body, or null:
  * a move that would strand a Todo's holder (FR-015), a move into or out of a non-open
- * department through the field (FR-007), or a scoped employee off claude or onto a
- * remote host (FR-026).
+ * department through the field (FR-007), or a scoped employee off claude, or on a
+ * remote host with a work area over the mount or the stage directories (FR-026, FR-061).
  */
-function employeeUpdateRefusal(name: string, current: Employee, updates: { department?: string; engine?: string }): Record<string, unknown> | null {
+function employeeUpdateRefusal(name: string, current: Employee, updates: { department?: string; engine?: string }, remote: RemoteExecutionConfig | undefined): Record<string, unknown> | null {
   const next = updates.department;
   const holders = next !== undefined && next !== current.department ? strandedByEmployeeMove(name, next) : [];
   if (holders.length > 0) return { error: strandingMessage(`Moving ${name} to ${next}`, holders), code: "department-boundary", holders };
   const moved = departmentChangeRefusal(name, current.department, next, departmentScopeOf);
   if (moved) return { error: moved };
-  const confined = scopedEmployeeRefusal({ ...current, department: next ?? current.department, engine: updates.engine ?? current.engine }, departmentScopeOf);
+  const confined = scopedEmployeeRefusal({ ...current, department: next ?? current.department, engine: updates.engine ?? current.engine }, departmentScopeOf, remote);
   return confined ? { error: `${name} cannot be updated: ${confined}` } : null;
 }
 
@@ -119,7 +120,7 @@ async function patchEmployee(
   const result = validateEmployeeUpdate(context.getConfig(), current, body);
   if (!result.ok) return badRequest(res, result.error || "invalid update");
 
-  const refused = employeeUpdateRefusal(name, current, result.updates!);
+  const refused = employeeUpdateRefusal(name, current, result.updates!, context.getConfig().remote);
   if (refused) return json(res, refused, 409);
 
   const wrote = updateEmployeeYaml(name, result.updates!);

@@ -1,5 +1,6 @@
 import { sessionClaudeProfile } from "../session-account.js";
-import { spawnCwd } from "../session-cwd.js";
+import { remoteScopeFor, spawnCwd } from "../session-cwd.js";
+import { employeeRemoteTarget, isRemoteTarget } from "../../shared/remote-target.js";
 import { logger } from "../../shared/logger.js";
 import { selectClaudeModelFallback } from "../../shared/model-fallback.js";
 import { getModelRegistry, refreshClaudeModels } from "../../shared/models.js";
@@ -44,7 +45,7 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     resumeSessionId: plan.resumeSessionId,
     systemPrompt: prepared.systemPrompt,
     platformContextRefresh: prepared.refresh,
-    cwd: spawnCwd(input.session),
+    cwd: spawnCwd(input.session, isRemoteTarget(input.employee)),
     bin: plan.engineConfig.bin,
     model: args.model,
     effortLevel: plan.effortLevel,
@@ -53,10 +54,8 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     // session's stage directory) and is meaningless on the remote host. The engine branches on `remoteHost` and
     // uses `remoteCwd` instead — passing both is what lets one code path serve
     // a local and a remote employee.
-    remoteHost: input.employee?.remoteHost,
-    remoteUser: input.employee?.remoteUser,
-    remoteCwd: input.employee?.remoteCwd,
-    remoteClaudeConfigDir: input.employee?.remoteClaudeConfigDir,
+    // A scoped employee's remote cwd is its department's stage directory on the host.
+    ...employeeRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session)),
     claudeProfile: sessionClaudeProfile(input.session, input.employee),
     mcpConfigPath: plan.mcpConfigPath,
     resolvedMcp: plan.resolvedMcp,

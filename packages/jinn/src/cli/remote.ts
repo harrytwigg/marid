@@ -2,7 +2,10 @@ import { loadConfig } from "../shared/config.js";
 import { scanOrg } from "../gateway/org.js";
 import { employeeRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination, validateRemoteTarget } from "../shared/remote-target.js";
 import { ensureRemoteReady, sendWakeOnLan, clearRemoteFactsCache, remoteEngineBin } from "../engines/remote-stage.js";
-import type { RemoteTarget } from "../shared/types.js";
+import { setDepartmentScopeResolver, setEmployeeDepartmentResolver } from "../work-items/department-scope.js";
+import { remoteScopeFor } from "../sessions/session-cwd.js";
+import type { SessionRemoteTarget } from "../shared/remote-department.js";
+import { departmentScopeOf } from "../gateway/department-registry.js";
 import { engineSupportsRemote, REMOTE_ENGINE_NAMES } from "../shared/models.js";
 
 const GREEN = "\x1b[32m";
@@ -44,7 +47,7 @@ interface RemoteEmployee {
    *  the GATEWAY's username and report an employee as unreachable that is
    *  perfectly fine — a debugging command that lies about the thing it exists
    *  to diagnose. */
-  target: RemoteTarget;
+  target: SessionRemoteTarget;
   remoteCwd: string;
   /** The engine this employee runs, as configured. Kept because it decides
    *  which agent CLI the host must carry — a status line that probed for
@@ -54,8 +57,14 @@ interface RemoteEmployee {
 
 function remoteEmployees(config: ReturnType<typeof loadConfig>): RemoteEmployee[] {
   const out: RemoteEmployee[] = [];
-  for (const employee of scanOrg(config).values()) {
-    const target = employeeRemoteTarget(employee);
+  // The roster and scopes the gateway would use, read through the same resolver, so a scoped
+  // employee shows its department's stage directory.
+  const roster = scanOrg(config, departmentScopeOf);
+  setDepartmentScopeResolver(departmentScopeOf);
+  setEmployeeDepartmentResolver((name) => roster.get(name)?.department);
+  const scope = remoteScopeFor(config.remote);
+  for (const employee of roster.values()) {
+    const target = employeeRemoteTarget(employee, scope);
     if (!target) continue;
     out.push({
       name: employee.name,
@@ -126,6 +135,8 @@ async function printEmployeeStatus(
     return;
   }
   console.log(`${GREEN}✓ ${employee.name}${RESET} ${DIM}${employee.destination}:${employee.remoteCwd}${RESET}`);
+  const { remoteDepartment, remoteWorkArea } = employee.target;
+  if (remoteDepartment) console.log(`  ${DIM}department ${remoteDepartment}: runs in its stage directory; work area ${remoteWorkArea ?? "(none)"}${RESET}`);
   console.log(`  ${DIM}jinn ${readiness.facts.jinnVersion}, node ${readiness.facts.nodeBin}, home ${readiness.facts.stageDir}${RESET}`);
   if (employee.engine === "claude") {
     const profile = resolveRemoteClaudeConfigDir(employee.target, remote);

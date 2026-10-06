@@ -24,7 +24,8 @@
  */
 
 import type { RateLimitHandlerOpts, RateLimitOutcome } from "./rate-limit-contract.js";
-import type { Engine, EngineResult, RemoteTarget } from "../shared/types.js";
+import type { Engine, EngineResult } from "../shared/types.js";
+import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { spawnCwd } from "./session-cwd.js";
 import { logger } from "../shared/logger.js";
@@ -91,26 +92,13 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const {
     session, attemptToken, prompt, systemPrompt, platformContextRefresh, engineConfig, effortLevel, cliFlags,
     mcpConfigPath, resolvedMcp, attachments, config, engines, employee, engine,
-    remoteHost, remoteUser, remoteCwd, remoteClaudeConfigDir, rateLimit, originalResult, hooks,
+    rateLimit, originalResult, hooks,
   } = opts;
 
   const engineLabel = rateLimitEngineLabel(session.engine);
 
-  // Where this turn actually runs. Read the same way `cliFlags` is below — the
-  // employee record first, the explicitly passed target as the fallback — so the
-  // two sources cannot silently disagree about which host owns the session.
-  const remoteTarget: RemoteTarget = {
-    remoteHost: employee?.remoteHost ?? remoteHost,
-    remoteUser: employee?.remoteUser ?? remoteUser,
-    remoteCwd: employee?.remoteCwd ?? remoteCwd,
-    // The profile travels too. Dropping it does not fall back to "no profile" —
-    // it falls back to the instance-wide `remote.claudeConfigDir`, so a respawn
-    // silently runs as a DIFFERENT Claude Code profile from the one the session
-    // was staged and trust-seeded for: `verifyClaudeProfile` then checks the
-    // wrong directory and the folder-trust dialog appears in front of a PTY with
-    // nobody at the keyboard (see resolveRemoteClaudeConfigDir).
-    remoteClaudeConfigDir: employee?.remoteClaudeConfigDir ?? remoteClaudeConfigDir,
-  };
+  // Where this turn actually runs: the employee record first, the target the turn ran with as the fallback.
+  const remoteTarget = rateLimitRemoteTarget(opts);
 
   const { claudeProfile, account } = rateLimitAccount(session.engine, employee, session);
   recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt);
@@ -132,7 +120,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     );
   }
   if (choice && substituteName && substituteEngine) {
-    const substituteCwd = spawnCwd(session); // a scoped session's stage directory, resolved before anything is flipped
+    const substituteCwd = spawnCwd(session, Boolean(remote)); // a scoped session's stage directory, resolved before anything is flipped
     const { resumeAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
     const until = resumeAt ?? new Date(Date.now() + 6 * 60 * 60_000);
     const syncSince = new Date().toISOString();
@@ -281,7 +269,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         resumeSessionId: currentSession.engineSessionId ?? undefined,
         systemPrompt,
         platformContextRefresh,
-        cwd: spawnCwd(session),
+        cwd: spawnCwd(session, Boolean(remote)),
         bin: engineConfig.bin,
         model: currentSession.model ?? engineConfig.model,
         effortLevel,
