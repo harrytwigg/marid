@@ -101,6 +101,16 @@ describe("SC-006: two profiles with independent limits", () => {
     expect(startsOn(local())).toBe("claude");
   });
 
+  it("a profile employee rerouted off codex lands on claude when only the default account is out", () => {
+    const chain = { engines: { default: "codex", codex: { fallback: ["claude"] }, claude: {} } } as unknown as JinnConfig;
+    recordEngineUnavailable("codex", "Codex usage limit", until());
+    recordEngineUnavailable("claude", "Claude usage limit", until());
+    const employee = local({ engine: "codex", claudeConfigDir: FRIEND });
+    expect(newSessionEngineSelection(chain, engines, { employee }).engine).toBe("claude");
+    recordEngineUnavailable(FRIEND_ACCOUNT, "Claude usage limit", until());
+    expect(newSessionEngineSelection(chain, engines, { employee }).engine).toBe("codex");
+  });
+
   it("the default account at its limit: the named profile's sessions still start on claude", () => {
     recordEngineUnavailable("claude", "Claude usage limit", until());
     expect(startsOn(local())).toBe("codex");
