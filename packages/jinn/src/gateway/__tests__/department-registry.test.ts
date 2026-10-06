@@ -125,6 +125,10 @@ describe("identity problems refuse the file", () => {
     ["a dedicated scope behind a bad name, in quotes", "name: x\nscope : 'Dedicated'\n", /does not match the directory/, true],
     ["a key spelled SCOPE, which is no scope key", "name: x\nSCOPE: dedicated\n", /does not match the directory/, false],
     ["scope: written inside a description of a parsed file", "name: x\ndescription: |\n  scope: dedicated\n", /does not match the directory/, false],
+    ["YAML that does not parse and scope: OPEN, which is not open", "name: [unclosed\nscope: OPEN\n", /does not parse/, true],
+    ["a parsed file with scope: OPEN, which is not open", "name: x\nscope: OPEN\n", /does not match the directory/, true],
+    ["YAML that does not parse and an empty scope key before another key", "name: [unclosed\nscope:\ndescription: x\n", /does not parse/, false],
+    ["YAML that does not parse and a key spelled Scope", "name: [unclosed\nScope: scoped\n", /does not parse/, false],
     ["YAML that does not parse and a mistyped scope", "name: [unclosed\nscope: scopd\n", /does not parse/, true],
     ["YAML that does not parse and scope: dedicated", "name: [unclosed\nscope: dedicated\n", /does not parse/, true],
   ];

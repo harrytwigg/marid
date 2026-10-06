@@ -423,8 +423,9 @@ and dark, with screenshots on the PR (FR-040).
     is treated as `dedicated` until the file loads **only if the file's `scope` is anything
     other than `open`**. A file that parses is judged by its parsed `scope` key alone: present
     and not `open` means dedicated; absent or `open` means open. A file that does not parse is
-    judged by an anchored, case-insensitive line match,
-    `^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S` (multiline), so a
+    judged by an anchored line match,
+    `^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S` (multiline, case-sensitive, as
+    YAML is: `scope: OPEN` is not `open`, and a key spelled `Scope` is not the scope key), so a
     commented-out line, or `scope:` inside a description, does not count. So a file that asks
     for confinement, or that mistypes the scope (`scope: scopd`), fails closed: its intended
     members are confined and nobody else can hold its Todos. A file with no `scope`, or with
