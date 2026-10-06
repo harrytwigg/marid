@@ -3,8 +3,10 @@ import path from "node:path";
 import * as pty from "node-pty";
 import type { CompactionStats, InterruptibleEngine, EngineRunOpts, EngineResult, EngineRateLimitInfo, StreamDelta, TurnProgress } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
-import { JINN_HOME, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT, CLAUDE_LIMITS_DIR } from "../shared/paths.js";
-import { cleanupSessionSettings, writeSessionSettings } from "../shared/claude-settings.js";
+import { JINN_HOME, CLAUDE_SETTINGS_DIR } from "../shared/paths.js";
+import { cleanupSessionSettings } from "../shared/claude-settings.js";
+import { ensureClaudeProfileTrust, writeClaudeSessionSettings } from "./claude-profile-launch.js";
+import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { PtyLifecycleManager, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
@@ -2134,11 +2136,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
     let handle: PtyHandle | undefined;
     try {
-      const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
-        sessionId: jinnSessionId,
-        relayScript: HOOK_RELAY_SCRIPT,
-        statusLineDir: CLAUDE_LIMITS_DIR,
-      });
+      const settingsPath = writeClaudeSessionSettings(jinnSessionId, opts.claudeProfile);
       if (opts.resolvedMcp && !isRemoteTarget(opts)) {
         opts.mcpConfigPath = writeMcpConfigFile(opts.resolvedMcp, jinnSessionId);
       }
@@ -2359,11 +2357,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // view showed "Settings file not found". The settings file carries HOOKS only; the
     // system prompt + main-agent sentinel go via the --append-system-prompt CLI flag at
     // spawn() (the settings-file appendSystemPrompt KEY is ignored by claude ≥2.1.x).
-    const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
-      sessionId: jinnSessionId,
-      relayScript: HOOK_RELAY_SCRIPT,
-      statusLineDir: CLAUDE_LIMITS_DIR,
-    });
+    const settingsPath = writeClaudeSessionSettings(jinnSessionId, opts.claudeProfile);
     // A cold-respawn release cleans the per-session MCP file. Materialize the
     // already-resolved config again at the boundary where Claude will read it.
     // A remote session gets its MCP config staged on the other host instead
@@ -2768,8 +2762,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  When `proxyPort` is given, points ANTHROPIC_BASE_URL at the per-PTY SSE
    *  forward proxy on 127.0.0.1 — subscription OAuth token is passed separately
    *  by claude, so this stays cc_entrypoint=cli / subsidy-safe (verified Item A). */
-  private buildPtyEnv(proxyPort?: number, sessionId?: string): Record<string, string> {
+  private buildPtyEnv(proxyPort?: number, sessionId?: string, claudeProfile?: ClaudeProfile): Record<string, string> {
     const env = buildEngineChildEnv(process.env, {
+      claudeProfile,
       scrubClaudeCode: true,
       // Belt-and-suspenders: a stray API key/token would flip the child to metered
       // API billing instead of the Max subscription. Strip both so the PTY session
@@ -3143,7 +3138,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       proxy.stop();
       return undefined;
     }
-    const env = this.buildPtyEnv(port || undefined, jinnSessionId);
+    const env = this.buildPtyEnv(port || undefined, jinnSessionId, opts.claudeProfile);
+    ensureClaudeProfileTrust(opts.claudeProfile, opts.cwd || JINN_HOME);
     const bin = resolveBin("claude", opts.bin);
     const geom = this.lastGeom.get(jinnSessionId);
     logger.info(`InteractiveClaudeEngine spawning ${bin} (resume: ${opts.resumeSessionId || "none"}, geom: ${geom ? `${geom.cols}×${geom.rows}` : "default"}, sseProxy: ${port || "off"})`);
@@ -3175,11 +3171,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // cleanup path (`cleanupSessionSettings`) is keyed on it, and leaving a
     // dangling entry there would be a second, subtler divergence. The REMOTE
     // path is what actually reaches `--settings`.
-    const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
-      sessionId: jinnSessionId,
-      relayScript: HOOK_RELAY_SCRIPT,
-      statusLineDir: CLAUDE_LIMITS_DIR,
-    });
+    const settingsPath = writeClaudeSessionSettings(jinnSessionId, opts.claudeProfile);
     const baseArgs = (settings: string): string[] => {
       const args: string[] = [
         "--chrome",
@@ -3252,7 +3244,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           proxy.stop();
           return;
         }
-        const env = this.buildPtyEnv(port || undefined, jinnSessionId);
+        const env = this.buildPtyEnv(port || undefined, jinnSessionId, opts.claudeProfile);
+        ensureClaudeProfileTrust(opts.claudeProfile, opts.cwd || JINN_HOME);
         logger.info(`InteractiveClaudeEngine ensureIdleSpawn for session ${jinnSessionId} (resume ${opts.engineSessionId || "none — fresh"}, geom ${cols}×${rows}, sseProxy: ${port || "off"})`);
         const proc = pty.spawn(bin, args, {
           name: "xterm-256color",

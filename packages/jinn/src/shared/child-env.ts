@@ -1,4 +1,5 @@
 import path from "node:path";
+import { applyClaudeProfileEnv, type ClaudeProfile } from "./claude-profile.js";
 
 export interface EngineChildEnvOptions {
   scrubClaudeCode?: boolean;
@@ -11,6 +12,8 @@ export interface EngineChildEnvOptions {
    *  none of its own. */
   scrubOpencode?: boolean;
   denyExact?: Iterable<string>;
+  /** A named Claude profile sets `CLAUDE_CONFIG_DIR` (claude-profile.ts); null/unset keeps today's env. */
+  claudeProfile?: ClaudeProfile;
 }
 
 const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set([
@@ -53,7 +56,7 @@ export function buildEngineChildEnv(
   // child to a different directory than the one the gateway seeded consent flags in
   // and watches for transcripts. Hand it the path already resolved.
   if (env.CLAUDE_CONFIG_DIR) env.CLAUDE_CONFIG_DIR = path.resolve(env.CLAUDE_CONFIG_DIR);
-  return env;
+  return applyClaudeProfileEnv(env, options.claudeProfile ?? null);
 }
 
 function shouldScrubEngineChildEnv(
