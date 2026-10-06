@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { departmentStageDir } from "../../gateway/department-scope/paths.js";
 import type { OrgHierarchy } from "../../shared/types.js";
 import { getSession } from "../registry.js";
 import { departmentSkillAllowList, scopedDepartmentOf } from "../../work-items/department-scope.js";
@@ -43,9 +46,18 @@ export function withDepartmentScope<T extends ScopeInputs>(opts: T): T {
   return department && opts.hierarchy ? { ...opts, hierarchy: departmentHierarchy(opts.hierarchy, department) } : opts;
 }
 
-/** The skills the department offers (FR-027): the copies in the session's `.claude/skills/`, or none. */
+/**
+ * The skills the department offers (FR-027): its allow-list, narrowed to the copies the stage
+ * directory actually holds once it exists (a skill the generator refused is not there).
+ */
+function departmentSkills(department: string): readonly string[] {
+  const allowed = departmentSkillAllowList(department) ?? [];
+  const copies = path.join(departmentStageDir(department), ".claude", "skills");
+  return fs.existsSync(copies) ? allowed.filter((name) => fs.existsSync(path.join(copies, name, "SKILL.md"))) : allowed;
+}
+
 function departmentSkillsLine(department: string): string {
-  const skills = departmentSkillAllowList(department) ?? [];
+  const skills = departmentSkills(department);
   return skills.length > 0 ? `Company skills available to you: ${skills.join(", ")} (in \`.claude/skills/\`). No other company skill is offered.` : "No company skills are offered to this department.";
 }
 

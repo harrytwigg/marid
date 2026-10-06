@@ -130,3 +130,23 @@ describe("folder trust for the stage directory", () => {
     }
   });
 });
+
+describe("the prompt's skill line", () => {
+  it("names only the skills the stage directory holds: a skill the generator refused is not offered", async () => {
+    const { departmentScopeSections } = await import("../../sessions/context/department-scope.js");
+    const { refreshOrg } = await import("../org-registry.js");
+    const { writeEmployeeFile } = await import("./department-fixtures.js");
+    writeEmployeeFile(SLUG, "triggers-dev");
+    writeSkill("risky");
+    fs.symlinkSync(path.join(resolveJinnHome(), "skills", "review", "SKILL.md"), path.join(resolveJinnHome(), "skills", "risky", "link.md"));
+    writeDepartmentFile(SLUG, `name: ${SLUG}\nscope: scoped\nskills: [review, risky]\n`);
+    refreshOrg();
+    const line = () => departmentScopeSections({ employee: { name: "triggers-dev" } })[0]?.content ?? "";
+    // Before the directory exists the allow-list is all there is to go on.
+    expect(line()).toContain("Company skills available to you: review, risky");
+    const { prepareDepartmentStage } = await import("../department-stage/stage.js");
+    prepareDepartmentStage(SLUG);
+    expect(line()).toContain("Company skills available to you: review (in `.claude/skills/`)");
+    expect(line()).not.toContain("risky");
+  });
+});
