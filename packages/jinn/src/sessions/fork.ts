@@ -18,6 +18,7 @@ import type { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { HermesRpc } from "../engines/hermes-jsonrpc.js";
 import { applyClaudeProfileEnv, claudeConfigDirFor, type ClaudeProfile } from "../shared/claude-profile.js";
 import { assertClaudeProfileDirExists } from "../engines/claude-profile-launch.js";
+import { claudeProjectSlug } from "../engines/claude-transcript-path.js";
 
 export interface ForkResult {
   engineSessionId: string;
@@ -171,8 +172,7 @@ async function forkClaudeSessionInteractive(
  * dot (every COO/.jinn session).
  */
 export function claudeProjectDir(cwd: string, claudeProfile: ClaudeProfile = null): string {
-  const key = cwd.replace(/[^a-zA-Z0-9]/g, "-");
-  return path.join(claudeConfigDirFor(claudeProfile), "projects", key);
+  return path.join(claudeConfigDirFor(claudeProfile), "projects", claudeProjectSlug(cwd));
 }
 
 /** Async sleep — yields the event loop instead of busy-spinning. */

@@ -1,6 +1,8 @@
 import type { ClaudeProfile } from "../shared/claude-profile.js";
 import type { JinnConfig, Session } from "../shared/types.js";
+import { findSessionTranscript } from "../engines/claude-transcript-path.js";
 import { sessionClaudeProfile } from "../sessions/session-account.js";
+import { transcriptCwd } from "../sessions/session-cwd.js";
 import { orgRegistry } from "./org-registry.js";
 
 /**
@@ -17,4 +19,12 @@ export function claudeProfileForSession(
 ): ClaudeProfile {
   if (!session?.employee) return session ? sessionClaudeProfile(session, null) : null;
   return sessionClaudeProfile(session, orgRegistry(config).get(session.employee));
+}
+
+/** The transcript of `session`'s Claude session `engineSessionId`, on the profile and in the cwd the session ran in (the department's stage directory when it is scoped). */
+export function findTranscriptOfSession(
+  session: { employee?: string | null; scopeDepartment?: string | null; transportMeta?: Session["transportMeta"] },
+  engineSessionId: string,
+): string | undefined {
+  return findSessionTranscript(engineSessionId, claudeProfileForSession(session), transcriptCwd(session));
 }

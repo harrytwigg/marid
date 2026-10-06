@@ -2095,7 +2095,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (resolver.isSettled || resolver.promptSubmittedAt !== undefined) return;
     if (!isRemoteTarget(opts)) {
       const sid = resolver.sessionId ?? opts.resumeSessionId;
-      const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
+      const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile, opts.cwd) : undefined;
       if (transcript && transcriptHasPromptSince(transcript, pastedAt, opts.prompt)) {
         logger.warn(`InteractiveClaudeEngine: ${jinnSessionId}'s transcript has the prompt though no hook said so — not respawning, which would run it twice. Leaving the turn to the stall backstop.`);
         return;
@@ -2618,7 +2618,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // Only attempt recovery when we can identify THIS turn's transcript.
           // Transcripts share one project dir keyed by Claude session id, so
           // guessing by mtime could attach another session's answer.
-          const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
+          const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile, opts.cwd) : undefined;
           let transcriptIsFresh = false;
           if (transcript) {
             try { transcriptIsFresh = fs.statSync(transcript).mtimeMs >= startedAt - 1000; } catch { /* unreadable */ }
@@ -2696,7 +2696,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (compactedBy && !result.error) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
       const hookPath = typeof compactedBy.transcript_path === "string" ? compactedBy.transcript_path : undefined;
-      const statsPath = hookPath ?? (sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined);
+      const statsPath = hookPath ?? (sid ? findSessionTranscript(sid, opts.claudeProfile, opts.cwd) : undefined);
       result.compaction = statsPath ? await awaitCompactionStats(statsPath, turnTranscriptFrom) : {};
       if (result.compaction.postTokens) result.contextTokens = result.compaction.postTokens;
       else delete result.contextTokens;
@@ -2710,7 +2710,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // genuine no-output API error — leave those alone.
     if (!nativeCommand && !result.error && !result.result?.trim() && !resolver.stopFailure) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
-      const recoveryPath = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
+      const recoveryPath = sid ? findSessionTranscript(sid, opts.claudeProfile, opts.cwd) : undefined;
       // Same floor as lost-Stop recovery: under the warm-PTY gate, transcript
       // text before our own UserPromptSubmit is a turn typed in the terminal,
       // and text before a background re-invocation's Stop is that re-run's.

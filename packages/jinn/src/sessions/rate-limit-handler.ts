@@ -26,7 +26,7 @@
 import type { RateLimitHandlerOpts, RateLimitOutcome } from "./rate-limit-contract.js";
 import type { Engine, EngineResult, RemoteTarget } from "../shared/types.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
-import { JINN_HOME } from "../shared/paths.js";
+import { spawnCwd } from "./session-cwd.js";
 import { logger } from "../shared/logger.js";
 import { REMOTE_ENGINE_NAMES, type EngineName } from "../shared/models.js";
 import {
@@ -132,6 +132,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     );
   }
   if (choice && substituteName && substituteEngine) {
+    const substituteCwd = spawnCwd(session); // a scoped session's stage directory, resolved before anything is flipped
     const { resumeAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
     const until = resumeAt ?? new Date(Date.now() + 6 * 60 * 60_000);
     const syncSince = new Date().toISOString();
@@ -163,18 +164,17 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       prompt: fallbackPrompt,
       resumeSessionId: substituteResume,
       systemPrompt,
-      cwd: JINN_HOME,
+      cwd: substituteCwd,
       // The substitute runs as itself: its own binary, the MCP payload resolved for it,
       // and a model it actually serves — the limited engine's would be meaningless here.
       bin: substitution.engineConfig.bin,
       model: substitution.model ?? substitution.engineConfig.model,
       effortLevel: substitution.effortLevel,
       cliFlags: employee?.cliFlags ?? cliFlags,
-      // Where it runs. `cwd` above is the gateway's and means nothing on the
-      // other machine; the substitute branches on `remoteHost` and uses
-      // `remoteCwd` instead. Omit this and a remote employee's fallback turn
-      // comes back to the gateway — the failure Branch A used to be skipped
-      // entirely to avoid.
+      // Where it runs. `cwd` above is the gateway's and means nothing on the other
+      // machine; the substitute branches on `remoteHost` and uses `remoteCwd`
+      // instead. Omit this and a remote employee's fallback turn comes back to the
+      // gateway — the failure Branch A used to be skipped entirely to avoid.
       ...remoteTarget,
       ...resolveEngineRunMcp({ config, employee, engine: substituteName, sessionId: session.id }),
       claudeProfile: choice.claudeProfile,
@@ -281,7 +281,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         resumeSessionId: currentSession.engineSessionId ?? undefined,
         systemPrompt,
         platformContextRefresh,
-        cwd: JINN_HOME,
+        cwd: spawnCwd(session),
         bin: engineConfig.bin,
         model: currentSession.model ?? engineConfig.model,
         effortLevel,

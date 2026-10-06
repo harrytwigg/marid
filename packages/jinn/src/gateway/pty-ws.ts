@@ -4,7 +4,7 @@ import { getEngineSessionRef, getSession } from "../sessions/registry.js";
 import { orgRegistry } from "./org-registry.js";
 import { employeeRemoteTarget } from "../shared/remote-target.js";
 import { sessionClaudeProfile } from "../sessions/session-account.js";
-import { JINN_HOME } from "../shared/paths.js";
+import { spawnCwd } from "../sessions/session-cwd.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
 
@@ -137,7 +137,7 @@ export function attachPtyWebSocket(
       engineSessionId: session ? getEngineSessionRef(session).id : undefined,
       model: session?.model ?? undefined,
       effortLevel: session?.effortLevel ?? undefined,
-      cwd: JINN_HOME,
+      cwd: spawnCwd(session),
       ...remote,
       claudeProfile: sessionClaudeProfile(session, employee),
       cols,
