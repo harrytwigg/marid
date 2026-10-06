@@ -43,8 +43,8 @@ export function EmployeeNode({ data, selected }: NodeProps) {
         >
           {employee.displayName || employee.name}
         </div>
-        <div className="flex items-center gap-[4px] min-w-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)] whitespace-nowrap overflow-hidden text-ellipsis">
-          {roleLabel(employee)}
+        <div className="flex items-center gap-[4px] min-w-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)] whitespace-nowrap">
+          <span className="min-w-0 overflow-hidden text-ellipsis">{roleLabel(employee)}</span>
           <ClaudeProfileBadge profile={employee.claudeProfile} />
         </div>
       </div>
