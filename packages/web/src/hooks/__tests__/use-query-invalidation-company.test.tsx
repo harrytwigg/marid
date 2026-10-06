@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useQueryInvalidation } from '../use-query-invalidation'
@@ -98,6 +98,33 @@ describe('company + session:created invalidation', () => {
     await act(async () => vi.advanceTimersByTimeAsync(1_000))
 
     expect(calledWithKey(invalidate, queryKeys.sessions.all)).toBe(false)
+  })
+
+  it('refreshes an open Todo session tree when a top-level session\'s background work changes', async () => {
+    const { client, invalidate } = setup()
+    const observer = new QueryObserver(client, { queryKey: ['work-item-sessions', 'TST-1', 'tree'], queryFn: async () => ({}) })
+    const unsubscribe = observer.subscribe(() => {})
+
+    act(() => listener?.('session:background', {
+      sessionId: 'parent',
+      backgroundActivity: { activeStreams: 0, activeMonitors: 1, lastActivityAt: new Date().toISOString() },
+    }))
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+    unsubscribe()
+
+    expect(calledWithKey(invalidate, ['work-item-sessions'])).toBe(true)
+  })
+
+  it('leaves the session tree alone when no Todo page is showing one', async () => {
+    const { invalidate } = setup()
+
+    act(() => listener?.('session:background', {
+      sessionId: 'parent',
+      backgroundActivity: { activeStreams: 0, activeMonitors: 1, lastActivityAt: new Date().toISOString() },
+    }))
+    await act(async () => vi.advanceTimersByTimeAsync(1_000))
+
+    expect(calledWithKey(invalidate, ['work-item-sessions'])).toBe(false)
   })
 
   it('patches a Todo cache by newer version and never regresses to an older one', async () => {

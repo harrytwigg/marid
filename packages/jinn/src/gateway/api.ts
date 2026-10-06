@@ -26,6 +26,7 @@ import { validateNewSessionSelection, validateSessionPatch } from "../sessions/s
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
 import { effectiveSessionStatus, isBackgroundWorkLive, runtimeTransportRunning, serializeRuntimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
 import { readTodoSessionTree } from "../sessions/session-tree.js";
+import { sessionTreeActivity } from "./session-tree-activity.js";
 import { maybeRevertEngineOverride, type SessionManager } from "../sessions/manager.js";
 import { stripControlChars, hasControlBytes } from "../shared/sanitize.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
@@ -2709,7 +2710,7 @@ export async function handleApiRequest(
     if (method === "GET" && params) {
       if (!requireTodoRouteId(res, params.id)) return;
       // Opt-in: the flat shape stays the default so its existing callers keep parsing.
-      if (url.searchParams.get("tree") === "1") return json(res, readTodoSessionTree(params.id));
+      if (url.searchParams.get("tree") === "1") return json(res, readTodoSessionTree(params.id, (all) => sessionTreeActivity(buildSessionDelegatedActivityIndex(all, context), (session) => currentRuntimeActivity(session, context))));
       const linked = listSessionsByWorkItem(params.id);
       return json(res, serializeSessionList(linked, context));
     }

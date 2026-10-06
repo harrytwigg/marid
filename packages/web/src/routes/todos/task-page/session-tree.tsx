@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom"
 import { ArrowUpRight, CornerDownRight, Eye, MessageCircle } from "lucide-react"
 import type { Employee } from "@/lib/api"
 import type { SessionTreeNodeWire, SessionTreeWire } from "@/lib/session-tree-api"
+import { pendingCaption, usePendingWork, type PendingWork } from "@/components/chat/pending-work"
 import { SessionRef } from "./session-ref"
 
 /**
@@ -23,10 +24,19 @@ const LIVE = new Set(["running", "waiting"])
  *  the deepest row still has room for a name on a narrow rail. */
 const STEP = 14
 
-function stateLabel(node: SessionTreeNodeWire): string {
+/** A finished session is "Finished" only when nothing it left running can still
+ *  change its answer. Otherwise the row says what it is waiting on, in the
+ *  chat's own words, read from the same activity the chat reads. */
+function StateLabel({ node }: { node: SessionTreeNodeWire }) {
+  const pending = usePendingWork(node.backgroundActivity, node.delegatedActivity)
+  return <>{stateLabel(node, pending)}</>
+}
+
+function stateLabel(node: SessionTreeNodeWire, pending: PendingWork | null): string {
   if (node.archived) return "Archived"
   if (LIVE.has(node.status ?? "")) return "Working"
-  return node.status === "error" ? "Error" : "Finished"
+  if (node.status === "error") return "Error"
+  return pending ? pendingCaption(pending) : "Finished"
 }
 
 /** The badge that says this session is checking someone else's work, not doing
@@ -114,7 +124,7 @@ function TreeRow({
         {node.role === "review" && <ReviewBadge id={node.id} />}
         {node.role === "consult" && <ConsultBadge id={node.id} />}
         <SessionRef sessionId={node.id} byName={byName} />
-        <span className="flex-none text-[11.5px] text-[var(--text-quaternary)]">{stateLabel(node)}</span>
+        <span className="flex-none text-[11.5px] text-[var(--text-quaternary)]"><StateLabel node={node} /></span>
         {otherTodo && <NodeTodo id={node.id} todoId={otherTodo} />}
       </div>
       {node.truncated && <TruncationNote id={node.id} reason={node.truncated.reason} depth={depth} />}

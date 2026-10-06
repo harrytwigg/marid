@@ -184,6 +184,31 @@ describe("buildSessionTree", () => {
     expect(tree.directory.gone).toMatchObject({ id: "gone", missing: true, employee: null });
   });
 
+  it("carries each session's background and delegated activity so a reader can say what a finished turn waits on", () => {
+    const monitor = { activeStreams: 0, activeMonitors: 1, lastActivityAt: "2026-07-20T10:05:00.000Z" };
+    const sessions = [session("a", { workItemId: TODO }), session("b", { parentSessionId: "a" })];
+
+    const { roots } = buildSessionTree({
+      todoId: TODO,
+      sessions,
+      activity: {
+        backgroundActivity: (s) => (s.id === "a" ? monitor : null),
+        delegatedActivity: (s) => (s.id === "a" ? { activeSessions: 1, employees: ["junior-developer"] } : null),
+      },
+    });
+
+    expect(roots[0].backgroundActivity).toEqual(monitor);
+    expect(roots[0].delegatedActivity).toEqual({ activeSessions: 1, employees: ["junior-developer"] });
+    expect(roots[0].children[0].backgroundActivity).toBeNull();
+    expect(roots[0].children[0].delegatedActivity).toBeNull();
+  });
+
+  it("reports no activity on any node when the caller supplies none", () => {
+    const { roots } = buildSessionTree({ todoId: TODO, sessions: [session("a", { workItemId: TODO })] });
+    expect(roots[0].backgroundActivity).toBeNull();
+    expect(roots[0].delegatedActivity).toBeNull();
+  });
+
   it("returns an empty tree for a Todo nothing is linked to", () => {
     const tree = buildSessionTree({ todoId: TODO, sessions: [session("elsewhere", { workItemId: "TST-9" })] });
 

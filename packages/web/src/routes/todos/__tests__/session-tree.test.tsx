@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { Employee } from "@/lib/api"
 import type { SessionDirectoryEntryWire, SessionTreeNodeWire, SessionTreeWire } from "@/lib/session-tree-api"
 import { SessionRef, SessionDirectoryProvider } from "../task-page/session-ref"
+import { answerCaption, pendingWork } from "@/components/chat/pending-work"
 import { SessionTreePanel } from "../task-page/session-tree"
 import { hasLiveWorker, isLiveSession, pickRailSession } from "../task-page/use-todo-sessions"
 
@@ -35,6 +36,8 @@ function node(over: Partial<SessionTreeNodeWire> & { id: string }): SessionTreeN
     workItemId: "TST-81",
     isRootLink: true,
     archived: false,
+    backgroundActivity: null,
+    delegatedActivity: null,
     truncated: null,
     children: [],
     ...over,
@@ -203,5 +206,40 @@ describe("which session the rail offers", () => {
   it("offers nothing for a Todo no session has touched", () => {
     expect(pickRailSession([])).toBeUndefined()
     expect(isLiveSession(undefined)).toBe(false)
+  })
+})
+
+describe("a finished session that left work running", () => {
+  const recent = () => new Date().toISOString()
+
+  it("reads the same words the chat puts under the turn's answer", () => {
+    const backgroundActivity = { activeStreams: 0, activeMonitors: 1, lastActivityAt: recent() }
+    mount(<SessionTreePanel tree={tree({ roots: [node({ id: "s-1", backgroundActivity })], totals: { nodes: 1, live: 0 } })} byName={byName} todoId="TST-81" />)
+
+    const chat = answerCaption("complete", pendingWork(backgroundActivity, null, Date.now()))
+    expect(chat).toBe("Waiting on 1 monitor")
+    expect(screen.getByTestId("session-tree-node-s-1").textContent).toContain(chat)
+    expect(screen.getByTestId("session-tree-node-s-1").textContent).not.toContain("Finished")
+  })
+
+  it("names delegated work the chat counts as pending", () => {
+    const delegatedActivity = { activeSessions: 2, employees: ["senior-developer"] }
+    mount(<SessionTreePanel tree={tree({ roots: [node({ id: "s-1", delegatedActivity })], totals: { nodes: 1, live: 0 } })} byName={byName} todoId="TST-81" />)
+
+    expect(screen.getByTestId("session-tree-node-s-1").textContent).toContain("Waiting on 2 delegated tasks")
+  })
+
+  it("says Finished when nothing it left running can still change its answer", () => {
+    mount(<SessionTreePanel tree={tree({ roots: [node({ id: "s-1" })], totals: { nodes: 1, live: 0 } })} byName={byName} todoId="TST-81" />)
+
+    expect(screen.getByTestId("session-tree-node-s-1").textContent).toContain("Finished")
+  })
+
+  it("keeps Working and Error ahead of any pending-work caption", () => {
+    const backgroundActivity = { activeStreams: 0, activeMonitors: 1, lastActivityAt: recent() }
+    mount(<SessionTreePanel tree={tree({ roots: [node({ id: "s-1", status: "running", backgroundActivity }), node({ id: "s-2", status: "error", backgroundActivity })], totals: { nodes: 2, live: 1 } })} byName={byName} todoId="TST-81" />)
+
+    expect(screen.getByTestId("session-tree-node-s-1").textContent).toContain("Working")
+    expect(screen.getByTestId("session-tree-node-s-2").textContent).toContain("Error")
   })
 })
