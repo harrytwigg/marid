@@ -23,6 +23,16 @@ export function refuseScopedTurn(session: Session, engineOverride: string | unde
   return remote ? undefined : refuseLocalScopedTurn(department, claudeBin);
 }
 
+/**
+ * Why a local scoped session's Claude Code at `claudeBin` may not run, or null: the terminal
+ * view's idle start asks this too, since it starts Claude in the stage directory without a turn.
+ */
+export function localScopedClaudeRefusal(session: Session, claudeBin = "claude"): string | null {
+  if (!(session.scopeDepartment ?? scopedDepartmentOf(session.employee))) return null;
+  const problem = scopedClaudeProblem(resolveBin("claude", claudeBin));
+  return problem ? `This department-scoped session cannot start Claude Code: ${problem}.` : null;
+}
+
 /** A local scoped turn: its Claude Code can skip the instructions above the stage directory, and the directory is in place. */
 function refuseLocalScopedTurn(department: string, claudeBin: string): string | undefined {
   const claude = scopedClaudeProblem(resolveBin("claude", claudeBin));

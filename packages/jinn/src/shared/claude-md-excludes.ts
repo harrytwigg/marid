@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { compareSemver } from "./version.js";
 
 /**
  * Whether a Claude Code install honours the `claudeMdExcludes` setting, which a
@@ -15,16 +16,9 @@ import fs from "node:fs";
 /** The oldest Claude Code verified to carry the setting. An older build may too, but is refused rather than assumed to. */
 export const CLAUDE_MD_EXCLUDES_MIN_VERSION = "2.1.288";
 
-function parseVersion(text: string): number[] | null {
-  const match = /(\d+)\.(\d+)\.(\d+)/.exec(text);
-  return match ? match.slice(1, 4).map(Number) : null;
-}
-
-function atLeast(version: number[], min: number[]): boolean {
-  for (let i = 0; i < min.length; i++) {
-    if (version[i] !== min[i]) return version[i]! > min[i]!;
-  }
-  return true;
+/** The version in a `claude --version` line, such as "2.1.291 (Claude Code)". */
+function parseVersion(text: string): string | null {
+  return /\d+\.\d+\.\d+/.exec(text)?.[0] ?? null;
 }
 
 /**
@@ -33,15 +27,18 @@ function atLeast(version: number[], min: number[]): boolean {
  */
 export function claudeMdExcludesProblem(where: string, versionOutput: string): string | null {
   const version = parseVersion(versionOutput);
-  const min = parseVersion(CLAUDE_MD_EXCLUDES_MIN_VERSION)!;
-  if (version && atLeast(version, min)) return null;
-  const reported = version ? `reports ${version.join(".")}` : "did not report a version for `--version`";
+  if (version && compareSemver(version, CLAUDE_MD_EXCLUDES_MIN_VERSION) >= 0) return null;
+  const reported = version ? `reports ${version}` : "did not report a version for `--version`";
   return `the Claude Code at ${where} ${reported}; a department-scoped session needs ${CLAUDE_MD_EXCLUDES_MIN_VERSION} or later, which can be told to skip the CLAUDE.md files above its stage directory (claudeMdExcludes)`;
 }
 
-const known = new Map<string, string | null>();
+/** Binaries that passed. Only a pass is kept: a refusal is asked again, so an upgrade made
+ *  through a version manager whose shim never changes, or a run that merely timed out, is
+ *  not held against the next turn. A downgrade at the same path keeps passing until the
+ *  binary itself changes; that is accepted for a guardrail. */
+const passed = new Set<string>();
 
-/** The local check: run `bin --version` once per path, size and modification time. */
+/** The local check: run `bin --version`, remembering a pass per path, size and modification time. */
 export function localClaudeMdExcludesProblem(bin: string): string | null {
   let key = bin;
   try {
@@ -51,7 +48,7 @@ export function localClaudeMdExcludesProblem(bin: string): string | null {
   } catch {
     // Not a path we can see (a bare name, say): asked every time, never cached.
   }
-  if (known.has(key)) return known.get(key)!;
+  if (passed.has(key)) return null;
   let output = "";
   try {
     output = execFileSync(bin, ["--version"], { encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "ignore"] });
@@ -59,7 +56,7 @@ export function localClaudeMdExcludesProblem(bin: string): string | null {
     output = "";
   }
   const problem = claudeMdExcludesProblem(bin, output);
-  if (key !== bin) known.set(key, problem);
+  if (!problem && key !== bin) passed.add(key);
   return problem;
 }
 
@@ -81,5 +78,5 @@ export function scopedClaudeProblem(bin: string): string | null {
 }
 
 export function clearClaudeMdExcludesCacheForTests(): void {
-  known.clear();
+  passed.clear();
 }

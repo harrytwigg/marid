@@ -22,7 +22,7 @@ const { writeClaudeSessionSettings } = await import("../../engines/claude-profil
 const { departmentStageDir } = await import("../../gateway/department-scope/paths.js");
 const { refreshOrg } = await import("../../gateway/org-registry.js");
 const { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile } = await import("../../gateway/__tests__/department-fixtures.js");
-const { refuseScopedTurn } = await import("../turn/scoped-turn.js");
+const { localScopedClaudeRefusal, refuseScopedTurn } = await import("../turn/scoped-turn.js");
 const { makeSession } = await import("./helpers/session-fixture.js");
 
 const SLUG = "local-excludes-dept";
@@ -73,6 +73,15 @@ describe("localClaudeMdExcludesProblem", () => {
     expect(localClaudeMdExcludesProblem(path.join(tmp, "missing"))).toMatch(/did not report a version/);
   });
 
+  it("asks again after a refusal, so an upgrade behind an unchanged shim is seen", () => {
+    const versionFile = path.join(tmp, "selected-version");
+    fs.writeFileSync(versionFile, "2.0.14");
+    const shim = bin("shim", `#!/bin/sh\necho "$(cat '${versionFile}') (Claude Code)"\n`);
+    expect(localClaudeMdExcludesProblem(shim)).toMatch(/reports 2\.0\.14/);
+    fs.writeFileSync(versionFile, "2.1.291");
+    expect(localClaudeMdExcludesProblem(shim)).toBeNull();
+  });
+
   it("asks again when the binary is replaced", () => {
     const file = claude("swap", "2.0.1");
     expect(localClaudeMdExcludesProblem(file)).not.toBeNull();
@@ -109,6 +118,13 @@ describe("a scoped local turn", () => {
     setClaudeMdExcludesProbe(localClaudeMdExcludesProblem);
     expect(refuseScopedTurn(session(), undefined, false, claude("old-claude", "2.0.14"))).toMatch(/^This department-scoped session cannot start a turn: the Claude Code at .*old-claude reports 2\.0\.14; .*claudeMdExcludes/);
     expect(refuseScopedTurn(session(), undefined, false, claude("new-claude", "2.1.291"))).toBeUndefined();
+  });
+
+  it("is refused the terminal view's idle start too, which runs Claude in the stage directory without a turn", () => {
+    setClaudeMdExcludesProbe(localClaudeMdExcludesProblem);
+    expect(localScopedClaudeRefusal(session(), claude("idle-old", "2.0.14"))).toMatch(/^This department-scoped session cannot start Claude Code: .*reports 2\.0\.14/);
+    expect(localScopedClaudeRefusal(session(), claude("idle-new", "2.1.291"))).toBeNull();
+    expect(localScopedClaudeRefusal(makeSession({ employee: "local-eng-dev", engine: "claude" }), claude("idle-unscoped", "2.0.14"))).toBeNull();
   });
 
   it("does not ask on a remote host, where the sync checks the host's own Claude Code", () => {
