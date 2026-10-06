@@ -66,8 +66,12 @@ describe.each(WRITERS)("%s and the department boundary", (_name, write) => {
     const root = createWorkItem({ title: "root", department: "engineering" });
     const stray = createWorkItem({ title: "stray", parentId: root.id, department: "platform" });
     expect(() => write(root.id, { department: "side-project" })).toThrow(new RegExp(`${stray.id} \\(department "platform"\\)`));
-    expect(getWorkItem(root.id)?.department).toBe("engineering");
-    expect(getWorkItem(stray.id)?.department).toBe("platform");
+    expect(() => write(root.id, { department: "side-project" })).toThrow(/Sub-tasks in department "engineering" move with .*; move these into department "engineering" first/);
+    expect([getWorkItem(root.id)?.department, getWorkItem(stray.id)?.department]).toEqual(["engineering", "platform"]);
+    // Following that advice clears the way, and the whole tree moves.
+    write(stray.id, { department: "engineering" });
+    write(root.id, { department: "side-project" });
+    expect(getWorkItem(stray.id)?.department).toBe("side-project");
   });
 
   it("leaves sub-tasks alone when a root moves between open departments", () => {

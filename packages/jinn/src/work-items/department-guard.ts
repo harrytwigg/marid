@@ -78,7 +78,7 @@ function planRootMove(db: Db, item: WorkItem, next: string | null, assignee: str
     && (isNonOpenDepartment(row.department) || isNonOpenDepartment(next)));
   if (straddling.length > 0) {
     const named = straddling.map((row) => `${row.id} (${where(row.department)})`).join(', ');
-    throw new DepartmentBoundaryError(`moving ${item.id} to ${where(next)} would leave sub-task(s) ${named} on the other side of a non-open department's boundary; a sub-task shares its root's department`);
+    throw new DepartmentBoundaryError(`moving ${item.id} to ${where(next)} would leave sub-task(s) ${named} on the other side of a non-open department's boundary. Sub-tasks in ${where(from)} move with ${item.id}; move these into ${where(from)} first`);
   }
   const self: TreeRow = { id: item.id, department: from, assignee: assignee === undefined ? item.assignee : assignee, status: item.status };
   const stranded = strandedHolders([self, ...subtasks], next);
