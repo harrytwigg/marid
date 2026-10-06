@@ -142,6 +142,21 @@ describe("InteractiveClaudeEngine on a named Claude profile (FR-051, FR-052, FR-
   });
 });
 
+describe("attaching the terminal to a warm PTY on another profile", () => {
+  it("drops it and spawns on the profile asked for, and reuses one already on it", async () => {
+    engine.ensureIdleSpawn(SID, { cwd, claudeProfile: profile });
+    await flush();
+    // The override has ended: the session's own (default) profile is asked for.
+    engine.ensureIdleSpawn(SID, { cwd, claudeProfile: null });
+    await flush();
+    expect(spawns).toHaveLength(2);
+    expect(spawns[1]!.options.env.CLAUDE_CONFIG_DIR).toBe(path.join(tmp, "default-claude"));
+    engine.ensureIdleSpawn(SID, { cwd, claudeProfile: null });
+    await flush();
+    expect(spawns).toHaveLength(2);
+  });
+});
+
 describe("a named profile's rate limit (FR-071)", () => {
   const stopFailure = { hook_event_name: "StopFailure", error: "rate_limit" } as any;
 

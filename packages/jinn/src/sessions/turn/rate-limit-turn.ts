@@ -152,11 +152,13 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
 
 /**
  * The rate-limit branch of a turn: hand off to the wait/retry/fallback handler
- * and settle whichever of its outcomes lands.
+ * and settle whichever of its outcomes lands. Returns the session to re-run the
+ * turn on when a wait on a substitute Claude account handed it back to its own
+ * account; that turn has not settled, and the caller runs it again.
  */
-export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<void> {
+export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session | undefined> {
   const { input, plan } = args;
-  await handleRateLimit({
+  const outcome = await handleRateLimit({
     session: input.session,
     attemptToken: input.attemptToken,
     prompt: input.prompt,
@@ -177,4 +179,13 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<void> {
     originalResult: args.originalResult,
     hooks: rateLimitHooks(args),
   });
+  if (outcome.kind !== "handback") return undefined;
+  if (outcome.waited) {
+    // The parent and the operator channel were told this session paused; tell them it is moving again.
+    await args.surface.waiting(false);
+    notifyRateLimitResumed(outcome.session);
+    notifyOperatorChannel(`✅ ${describe(input.session)} back on its own Claude account and resumed.`);
+  }
+  await args.surface.notice("↩️ Back on this session's own Claude account — continuing there.");
+  return outcome.session;
 }
