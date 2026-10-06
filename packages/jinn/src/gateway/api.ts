@@ -303,7 +303,6 @@ import {
 } from "./pairing-challenge.js";
 import { scheduleOnLoadTailSync } from "./external-turns.js";
 import { loadRawTranscript, loadTranscriptMessages } from "./claude-transcript-loaders.js";
-import { claudeProfileForSession } from "./session-claude-profile.js";
 import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { handleTalkApi } from "./talk-api.js";
 import { onboardingNeeded, applyEngineChoice, personalizeOperatingManual } from "./onboarding-policy.js";
