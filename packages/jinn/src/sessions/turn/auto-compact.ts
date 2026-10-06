@@ -107,14 +107,14 @@ function resultFields(result: Pick<EngineResult, "compaction" | "cost"> | undefi
   ];
 }
 
-/** One greppable line per auto-compaction, so the saving can be checked later
- *  against the spend ledger (the compaction's own cost is recorded there too). */
 function triggerFields(decision: AutoCompactGo): string[] {
   return decision.trigger === "budget"
     ? [`trigger=budget`, `budgetTokens=${decision.budgetTokens}`]
     : [`trigger=cold`, `idleSec=${Math.round(decision.idleMs / 1000)}`, `windowSec=${decision.policy.cacheWindowSeconds}`];
 }
 
+/** One greppable line per auto-compaction, so the saving can be checked later
+ *  against the spend ledger (the compaction's own cost is recorded there too). */
 function logAutoCompaction(pending: Pending, outcome: Outcome, result?: Pick<EngineResult, "compaction" | "cost" | "error">): void {
   const { run, decision } = pending;
   const line = "[auto-compact] " + [
