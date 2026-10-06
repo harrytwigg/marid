@@ -60,8 +60,11 @@ against `origin/main` at `3c032251`.
 
 ## Summary
 
-Five PRs, each off `main`. Phases 1 → 2 → 3 → 5 are built in order. Phase 4 is independent and
-may run alongside them once this spec merges.
+Six PRs, each off `main`. Phases 1 → 2 → 3 → 5 are built in order. Phase 4 is independent and
+may run alongside them once this spec merges. Phase 6 follows Phase 4.
+
+Every phase ships its docs, its instance migration bundle and its visual evidence in the same
+PR (FR-043 to FR-045).
 
 1. **Phase 1: departments carry a scope.** This covers:
    - `department.yaml` loading, validation and the last-good `department_scopes` table;
@@ -108,6 +111,11 @@ may run alongside them once this spec merges.
    - the remote trust seed, binding and `JINN_DEPARTMENT` (FR-063, FR-064);
    - the FR-018 path limit in the remote MCP server (FR-065);
    - lifting the Phase 2 refusal of scoped employees with a `remoteHost`.
+6. **Phase 6: limits and auto-dispatch per account.** This covers:
+   - the account helper (FR-070);
+   - live readings per local account, and remote accounts without them (FR-071, FR-072);
+   - the Limits page and the usage card per account (FR-073, FR-074);
+   - the board walk's per-account snapshot, prose and code gate (FR-075 to FR-077).
 
 ## Technical Context
 
@@ -301,8 +309,9 @@ The value is resolved once per run from the employee and passed down. It reaches
   (`security find-generic-password -s <service>`, exit status only, no `-w`), or
   `.credentials.json` elsewhere. Successes are cached.
 - **Per-account state**: the auth outage scope, engine health, the rate-limit memory
-  (`shared/usageAwareness.ts`) and the limits snapshot take the profile key. The default
-  profile's keys are unchanged.
+  (`shared/usageAwareness.ts`) take the account key (Phase 6's `shared/engine-account.ts`
+  starts here, in Phase 4, with the local accounts). The default profile's keys are unchanged.
+  The limits reading is Phase 6.
 - **Fallback**: the rate-limit handler skips engine fallback and profile substitution for a
   named profile.
 - **Settings** (FR-052a): for a named profile, `buildSessionSettings`
@@ -432,8 +441,8 @@ Senior, because it touches auth, engine health and every launch path.
 - The transcript readers (junior sub-Todo), each with a test that finds a transcript under a
   fake profile.
 - `verifyLocalClaudeProfile` in `refuseTurn`, with the login hint.
-- Per-profile keys for the auth outage ledger, engine health, the rate-limit memory and the
-  limits snapshot, and the board walk reading the profile it is about to start (SC-006).
+- Per-account keys for the auth outage ledger, engine health and the rate-limit memory
+  (SC-006). The limits reading and the board walk are Phase 6.
 - No fallback for named profiles.
 - FR-058, with a red test first.
 - FR-052a, with a test per key.
@@ -507,6 +516,45 @@ Senior, because it changes the SSH staging every remote session goes through.
   host, the PR records one scoped session run there. If not, the PR says the remote path is
   verified by tests only.
 
+### Phase 6: limits and auto-dispatch per account (senior-developer; junior sub-Todo for the web; senior QA)
+
+Senior, because it reads account tokens and changes what the walk starts.
+
+- **Opening red test.** On `main`, with two local Claude accounts (Phase 4), a rate limit on
+  the named one marks Claude exhausted for the walk, and `/api/engine-limits` has one Claude
+  slot.
+- **Accounts** (`shared/engine-account.ts`, begun in Phase 4 for local accounts):
+  `accountFor(employee)` and `accountLabel(key)`, extended here to remote accounts. Health,
+  the rate-limit memory, the outage ledger and the readings below all key on it.
+- **Readings.** `collectClaudeLimits` (`shared/engine-limits-claude.ts:233`) takes an account.
+  - The token reader (`shared/claude-models.ts:289`) gains an account argument and reads the
+    suffixed Keychain entry or `<profile>/.credentials.json`. The model catalog keeps calling
+    it with the default account.
+  - `claude auth status` runs with the profile's `CLAUDE_CONFIG_DIR`.
+  - Status-line snapshots are filtered by the writing session's account.
+  - The reset times and the usage history are per account. The default account keeps its
+    file names.
+  - `collectEngineLimits` (`shared/engine-limits.ts:323`) loops over the accounts of the
+    current roster, and the background refresh does the same.
+  - A test asserts the token never reaches a log line, a file or a child environment.
+- **Wire and web (junior sub-Todo).**
+  - `accounts` on `/api/engine-limits`, with `engines.claude` unchanged.
+  - The Limits page groups cards by engine.
+  - `/api/auto-dispatch/usage?account=` and the usage card's switcher.
+  - Screenshots for every FR-040 limits state.
+- **Board walk.**
+  - `buildCapacitySnapshot` (`board-walk/snapshot.ts:248`) adds `accounts`, keeping the
+    existing Claude fields as the default account's.
+  - `priorFiveHour` (`board-walk/store.ts:23`) becomes per account.
+  - Candidates carry their account.
+  - `startTodo` (`board-walk/apply.ts:245`) refuses a start on an exhausted account.
+  - `dispatcherSuffix` (`board-walk/walk.ts:142`) lists the exhausted accounts.
+  - The shipped `template/board-walk.md` is rewritten per account (FR-075), with the FR-077
+    migration rationale.
+  - FR-076 is applied as the operator decides.
+- **Unchanged with one account.** A byte comparison of the snapshot, the limits response and
+  the walk prompt, for a single-account roster, against `main` (FR-078).
+
 ## Delegation split
 
 | Phase | Producer | Reviewer | Trigger |
@@ -516,6 +564,7 @@ Senior, because it changes the SSH staging every remote session goes through.
 | 3 | junior | senior QA | Specified, but it decides what a scoped session can load |
 | 4 | senior, with a junior sub-Todo for the transcript readers | senior QA | Auth, engine health and every launch path |
 | 5 | senior, with a junior sub-Todo for the tests | senior QA | Changes the SSH staging every remote session uses |
+| 6 | senior, with a junior sub-Todo for the web | senior QA | Reads account tokens and changes what the walk starts |
 
 ## Complexity Tracking
 

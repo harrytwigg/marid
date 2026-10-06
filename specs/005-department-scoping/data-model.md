@@ -149,7 +149,7 @@ A scoped remote session's `$JINN_HOME` holds only `gateway.json`, `tmp/` and the
 | macOS Keychain entry | `Claude Code-credentials` | `Claude Code-credentials-<first 8 hex of sha256(profile path)>` |
 | Auth outage scope | `local` (`packages/jinn/src/shared/claude-auth-outage.ts:18`) | `local:<profile key>` |
 | Engine health and rate-limit memory | Engine key, as today | Engine key plus profile key |
-| Limits snapshot | As today | Filtered to the profile's sessions |
+| Limits reading | As today | Its own live reading, plan and history (Phase 6, FR-071) |
 
 **Profile key**: the first 8 hex characters of sha256 of the canonical `claudeConfigDir`
 string, NFC-normalised as Claude Code does. That string is exactly what the session receives
@@ -193,4 +193,24 @@ type DepartmentDefinitionWire = {
 scopeDepartment: string | null;
 // Employee wire:
 claudeProfile: { path: string; key: string } | null;
+
+// GET /api/engine-limits gains (additive; engines.claude stays the default account):
+accounts?: Record<string /* engine */, Array<EngineLimitEngineSnapshot & {
+  account: string;            // "claude", "claude:<key>", "claude@<host>[:<key>]" (FR-070)
+  label: string;              // e.g. ".claude-friend" or the host
+  location: { kind: "local" } | { kind: "remote"; host: string };
+  employees: string[];
+}>>;
+
+// GET /api/auto-dispatch/usage?account=<key>  (default: the default account)
 ```
+
+## Per-account state (Phase 6)
+
+| Store | Default account | Other accounts |
+| --- | --- | --- |
+| Engine health (`tmp/engine-health.json`) | Today's `claude` record | A record per account key |
+| Rate-limit memory (`tmp/claude-usage.json`) | Today's file | A record per account key |
+| Usage history (`tmp/engine-limits/claude-usage-history.json`) | Today's file | One file per account key beside it |
+| Status-line snapshots (`tmp/engine-limits/claude/`) | Unchanged | Same directory, filtered by the writing session's account |
+| Board walk `priorFiveHour` | Today's field | A map by account key |

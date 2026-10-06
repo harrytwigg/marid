@@ -56,6 +56,12 @@ closed to everyone except its own members.
 | D3 | The separate account follow-up is cancelled. Its findings are folded into FR-050 to FR-059 | — |
 | D4 | **A Claude profile is a per-employee path and nothing more.** It is independent of department scope. The operator owns every profile, and the system does not track who a profile belongs to | FR-059: no owner marker, and no rule tying a profile to a scope or a phase |
 | D5 | **Scoped employees run locally or on a remote host.** The system must not assume this Mac | FR-026 and FR-060 to FR-066 (Phase 5). The earlier local-only rule is withdrawn |
+| D6 | **The Limits screen and auto-dispatch must handle several Claude accounts.** Raised by the operator | FR-070 to FR-078 (Phase 6). Limits and dispatch are judged **per account**, not per department, because a profile is independent of department (D4). An operator who gives each department its own account gets per-department dispatch from the same rule |
+| D7 | **Docs, instance migration and visual testing are part of every phase** | FR-043 to FR-045 |
+
+**Open decision for the operator (FR-076).** The board walk's own turn runs on one account.
+When that account is exhausted, should the walk skip the tick (today's behaviour, which also
+holds every other account's work), or fall back to a plain code rule for the other accounts?
 
 ## Why This Matters *(constitution Principle II)*
 
@@ -297,6 +303,25 @@ scoped session.
 **Independent Test**: the remote staging for a scoped session, recorded as the SSH scripts it
 runs, has the stage dir as cwd and no farm links. The farm script variant runs under `sh`
 against temporary directories standing in for the mount and the remote root.
+
+---
+
+### User Story 5b: Several Claude accounts on the Limits page and in auto-dispatch (Priority: P1)
+
+The operator runs `side-dev` on the friend's account and everyone else on their own.
+
+**Acceptance Scenarios**:
+
+1. **Given** two local Claude accounts, **When** the operator opens Limits, **Then** there
+   are two Claude cards, each with its own windows, plan and employees (FR-073).
+2. **Given** the operator's account is near its weekly ceiling and the friend's is about to
+   lapse unused, **When** the board walk ticks, **Then** it may start a ready D Todo
+   assigned to `side-dev`, and starts nothing on the operator's account (FR-075).
+3. **Given** the friend's account is recorded exhausted, **When** the walk tries to start a
+   Todo assigned to `side-dev`, **Then** the start is refused in code, and work on the
+   operator's account is unaffected (FR-075).
+4. **Given** only the default account, **Then** Limits, the usage card and the walk behave
+   exactly as on `main` (FR-078).
 
 ---
 
@@ -649,11 +674,11 @@ scoped employee; D is that session's binding)
   (`CLAUDE_CONFIG_DIR=<dir> claude`, then `/login`), printing the canonical string from
   FR-050 exactly. Only successes are cached, as the remote
   check does (`packages/jinn/src/engines/remote-stage.ts:639`).
-- **FR-055**: **Per-account state.** The auth outage ledger, engine health, the rate-limit
-  memory and the limits snapshot MUST be keyed per profile. The default profile keeps today's
-  keys, so nothing changes for it. A named profile gets its own key. One account's limit or
-  outage never holds back another account's sessions, and the board walk reads the windows of
-  the profile it is about to start.
+- **FR-055**: **Per-account state.** The auth outage ledger, engine health and the rate-limit
+  memory MUST be keyed per account (FR-070). The default profile keeps today's keys, so nothing
+  changes for it. A named profile gets its own key. One account's limit or outage never holds
+  back another account's sessions. The limits reading and the board walk follow in Phase 6
+  (FR-071 to FR-077).
 - **FR-056**: **No cross-account fallback.** A session with a named profile MUST NOT be retried
   on another profile or on another engine. A rate limit makes it wait for its own reset.
   Fallback would move the work onto the operator's accounts.
@@ -661,12 +686,10 @@ scoped employee; D is that session's binding)
   and keep reading the operator's login:
   - the model catalog and effort discovery (`packages/jinn/src/shared/claude-models.ts:262`,
     and its credentials-file fallback at `:304`);
-  - the plan reading, `claude auth status`
-    (`packages/jinn/src/shared/engine-limits-claude.ts:111`);
   - the Telegram connector's auth providers (`packages/jinn/src/connectors/telegram/auth-providers.ts:60`).
 
-  A named profile uses the same model list. Its limits come only from its own sessions' status
-  line snapshots, and its plan shows as unknown.
+  A named profile uses the same model list. Its plan and limits are read per account in
+  Phase 6 (FR-071).
 - **FR-058**: **Remote profile fix.** `remoteClaudeConfigDir` MUST reach the session on every
   remote launch path. Ordinary turns and auto-compaction drop it today, because
   `engine-run.ts:55` does not pass it. The rate-limit path already rebuilds it from the
@@ -766,6 +789,94 @@ is staged differently. Unscoped remote sessions are unchanged.
   `remoteClaudeConfigDir`, or `remote.claudeConfigDir`, as every remote employee does, with the
   FR-058 fix. No new field is added.
 
+**Limits and auto-dispatch per account** (D6, Phase 6)
+
+Today the Limits page (`packages/web/src/routes/limits/page.tsx:232`) shows one card per
+engine, and the gateway reads one Claude account for it
+(`packages/jinn/src/shared/engine-limits-claude.ts:233`). The board walk measures "the Claude
+allowance" as one pool. Its thresholds are prose in the operator's `board-walk.md`, and its
+code gates are global (`packages/jinn/src/board-walk/route-turn.ts:85`,
+`packages/jinn/src/board-walk/snapshot.ts:224`). research.md ("Limits and the board walk")
+lists the ten places that assume one account.
+
+- **FR-070**: **Accounts.** An account is an engine plus the login it runs as:
+  - `claude`: the default profile, exactly as today;
+  - `claude:<profile key>`: a local named profile (FR-050). It is labelled by its directory
+    name, for example `.claude-friend`;
+  - `claude@<host>` or `claude@<host>:<profile key>`: a remote host's default or named profile;
+  - every other engine keeps one account, its engine name. The shape allows more later.
+
+  Each employee's account is derived from its engine, `remoteHost` and profile settings. One
+  helper, beside `shared/claude-profile.ts`, computes it, and every per-account store uses it.
+  Departments play no part: two departments sharing an account share its limits.
+- **FR-071**: **Reading each local account.** For every local Claude account, the gateway MUST
+  read live limits the way it reads the default one today:
+  - the OAuth usage API, with that account's own token: the Keychain entry
+    `Claude Code-credentials-<key>` on macOS, or `<profile>/.credentials.json` elsewhere. The
+    token is used only in-process for that call. It is never logged, written to disk, put in a
+    child environment or sent anywhere else. The signed-in check (FR-054) stays existence-only;
+  - the plan, from `claude auth status` run with `CLAUDE_CONFIG_DIR` set to the profile;
+  - the status-line snapshots, filtered to sessions on that account, as the fallback;
+  - the reset time used by the rate-limit backoff
+    (`packages/jinn/src/shared/engine-reset-times.ts:55`) and the usage history
+    (`packages/jinn/src/shared/claude-usage-history.ts:44`), each per account. The default
+    account keeps today's files.
+- **FR-072**: **Remote accounts.** Remote sessions report no status line to the gateway today
+  (`packages/jinn/src/engines/remote-stage.ts:1378`). In v1 a remote account has no live
+  reading. It shows as "no live reading", with its last rate limit and reset time from the
+  rate-limit handler, and its health is kept per account (FR-055). So a remote account at its
+  limit holds only its own work. Live remote readings are a follow-up.
+- **FR-073**: **The Limits page.** `GET /api/engine-limits` MUST gain an additive
+  `accounts` map: engine to a list of account snapshots. Each has today's snapshot fields plus
+  the account key, its label, where it runs (local or a host) and the employees on it.
+  `engines.claude` stays the default account, so existing clients are unchanged. The page shows
+  one card per account, grouped by engine, with the default account first, as today. Each
+  extra account's card names its employees. An engine with one account looks exactly as
+  today.
+- **FR-074**: **The Auto-Dispatch usage card.** `GET /api/auto-dispatch/usage` MUST take an
+  optional `account`, defaulting to the default account, and the card gains an account
+  switcher when there is more than one Claude account. Its title names the account.
+- **FR-075**: **The board walk judges each account on its own.** The snapshot MUST carry, per
+  account:
+  - its windows, its exhausted flag, its prediction and its previous five-hour reading;
+  - whether a session on it already holds capacity;
+  - the starts the walk made on it in the current five-hour window.
+
+  Each backlog candidate is annotated with the account it would run on: its assignee's account,
+  or `unrouted` for an unassigned Todo, which the Dispatcher will route.
+
+  The shipped `board-walk.md` prose is rewritten so that every rule applies **per account**:
+  - the allowance thresholds;
+  - "hold, never guess";
+  - the concurrency rule;
+  - at most one start per tick **per account**.
+
+  An unrouted Todo is judged against the default account, and the walk passes the exhausted
+  accounts to the Dispatcher as advice, the way it passes a preferred engine today
+  (`packages/jinn/src/board-walk/walk.ts:142`). A child that still lands on an exhausted
+  account waits for its own reset (FR-056).
+
+  **Code gate.** `startTodo` (`packages/jinn/src/board-walk/apply.ts:245`) MUST refuse a
+  start whose candidate's account is recorded exhausted. Today that is checked only in prose.
+- **FR-076**: **The walk's own account.** The walk's turn runs on its runner's account (the
+  default profile, unless `board-walk.md` names another engine). When that account is
+  exhausted, `route-turn.ts:85` skips the tick, and so every other account's work waits too.
+  **Open decision:**
+  - (a) **Keep it.** Document that the runner can be pointed at another engine.
+  - (b) **A plain code rule for the other accounts.** When the runner is exhausted, the gateway
+    starts, for each other account that is not exhausted and holds no capacity, its oldest,
+    highest-priority ready Todo whose assignee is on that account. That is at most one per
+    account per tick, without the threshold prose.
+
+  Recommendation: (a) for v1. (b) adds a second dispatch rule that does not read the
+  operator's thresholds.
+- **FR-077**: **Migration of `board-walk.md`.** The operator owns `board-walk.md`, and it is
+  never overwritten. The FR-044 rationale tells an instance to reconcile its own prose to the
+  per-account wording, and to flag differing wording as a conflict.
+- **FR-078**: **Unchanged with one account.** With no named profile and no remote Claude
+  employee, the Limits page, the usage card, the snapshot's existing fields and the walk's
+  decisions MUST be what they are on `main`.
+
 **Compatibility**
 
 - **FR-035**: Unscoped employees, open departments and employees without a named profile MUST
@@ -785,7 +896,10 @@ is staged differently. Unscoped remote sessions are unchanged.
   - the department panel;
   - the profile badge on the org tree and the read-only profile row in the employee panel;
   - the session badges;
-  - the "not signed in" refusal as shown in chat.
+  - the "not signed in" refusal as shown in chat;
+  - the Limits page with one, two and three Claude accounts, including an exhausted account
+    and a remote account with no live reading (FR-073);
+  - the Auto-Dispatch usage card's account switcher (FR-074).
 - **FR-041**: The org tree MUST show each department's scope, and each employee's named
   profile, as badges. Open departments and the default profile show no badge.
 - **FR-042**: The UI MAY edit a department's definition. When it does:
@@ -796,6 +910,42 @@ is staged differently. Unscoped remote sessions are unchanged.
   - a scope change runs the FR-015 stranding check.
 
   Hand-edited YAML stays the source of truth. The UI never holds state the files do not.
+
+**Docs, instance migration and visual evidence** (every phase)
+
+- **FR-043**: **Docs ship with the code.** Each phase PR MUST update, in the same PR, every
+  doc its change makes wrong or incomplete:
+  - the shipped template under `packages/jinn/template/` (the `docs/` reference pages and the
+    shipped skills), which is what every instance reads;
+  - the repository's own docs.
+
+  A phase is not finished with its docs still to come. Each phase's docs task names the
+  pages it touches.
+- **FR-044**: **Instance migration.** A phase that changes anything under
+  `packages/jinn/template/` MUST include the instance migration bundle for the next
+  unreleased version in the same PR. It is generated with `pnpm migration:generate`
+  (`packages/jinn/scripts/instance-migration-bundle.mjs`) and passes `pnpm migration:check`,
+  the check the "Migration bundle" workflow runs. Its release-rationale section says plainly:
+  - what an instance must merge into its own `CLAUDE.md` and `docs/`, and what is only
+    informational because shipped skills are rewritten at boot;
+  - what the gateway does by itself at boot: the `department_scopes` table, the
+    `sessions.scope_department` column, and any per-account limit state;
+  - that an instance with no `department.yaml` and no `claudeConfigDir` needs nothing else,
+    because every department stays `open` and every employee stays on the default profile;
+  - how an operator opts in: writing a `department.yaml`, signing a profile in and setting
+    `claudeConfigDir`, and for remote hosts, any `remote` settings.
+
+  Phases that land before one release share that version's bundle. Each phase adds its own
+  paragraph to the rationale, so nothing an earlier phase wrote is lost.
+- **FR-045**: **Visual testing is part of done.** Every phase that changes the web UI MUST
+  capture each new or changed element (FR-040) against a seeded sandbox gateway:
+  - in light and dark;
+  - at desktop and phone widths;
+  - in each state the element has, for example open, scoped, dedicated, a refused
+    `department.yaml`, not signed in, and an account at its limit.
+
+  The screenshots go on the PR, and senior QA reviews them as part of the review, not after
+  it. A UI change without them is not ready for review.
 
 ### Deferred to future sandbox work (withdrawn from this feature by Q1 = A)
 
@@ -841,9 +991,17 @@ research.md keeps the findings, so that work does not start from zero.
 - **SC-003**: For an employee with a named profile, a test asserts `CLAUDE_CONFIG_DIR` on every
   launch path in FR-051, and a test per FR-053 reader finds a transcript under the profile.
 - **SC-004**: The token counts in `tool-manifest-budget.test.ts` do not rise.
-- **SC-005**: Every FR-040 element has light and dark screenshots on the PR.
+- **SC-005**: Every FR-040 element has screenshots on its phase's PR, in light and dark, at
+  desktop and phone widths, in each of its states (FR-045).
+- **SC-008**: Every phase PR that touches `packages/jinn/template/` passes
+  `pnpm migration:check`, and its bundle's rationale covers that phase (FR-044).
 - **SC-006**: Two profiles with independent limits: marking one rate-limited leaves sessions on
   the other startable, and the reverse.
+- **SC-009**: With two local Claude accounts, the Limits page shows two Claude cards with their
+  own windows and employees, and the usage card switches between them. The board walk, with
+  one account exhausted, starts a ready Todo on the other and refuses one on the exhausted
+  account in code (FR-075). With one account, the page, card and walk match `main`
+  (FR-078).
 - **SC-007**: For a scoped remote employee, a test per `employeeRemoteTarget` caller, the
   rate-limit retry included, asserts the remote stage dir as cwd, and the environment file
   carries `JINN_DEPARTMENT`. The grep test in FR-061 passes. A sync test

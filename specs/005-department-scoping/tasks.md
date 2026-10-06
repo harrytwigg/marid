@@ -5,7 +5,7 @@ These tasks follow the operator's decisions (spec.md, "Operator decisions").
 ## How the work ships
 
 **Order.** Each phase is its own PR off `main`. Phases 1 → 2 → 3 → 5 are built in order.
-Phase 4 is independent and may run alongside them.
+Phase 4 is independent and may run alongside them. Phase 6 follows Phase 4.
 
 **Rules for every phase.**
 
@@ -14,9 +14,15 @@ Phase 4 is independent and may run alongside them.
   running CI, so say in the PR that verification was local.
 - Do not grow any file that is at or over its size budget.
 - Commits, branch names and PRs use no internal tracking numbers.
+- **Docs** (FR-043): update the template docs and skills, and the repository docs, that the
+  change affects, in the same PR.
+- **Instance migration** (FR-044): if anything under `packages/jinn/template/` changed, run
+  `pnpm migration:generate` for the next unreleased version, add this phase's paragraph to the
+  release rationale, and pass `pnpm migration:check`.
 
-**Visual evidence.** Every UI task captures light and dark screenshots with the sandbox
-gateway script from T031. The screenshots go on the PR with `gh pr comment --attach`.
+**Visual evidence** (FR-045). Every UI task captures screenshots with the sandbox gateway
+script from T031: light and dark, desktop and phone widths, and every state the element has.
+The screenshots go on the PR, and senior QA reviews them as part of the review.
 
 `[P]` means the task can run in parallel with others in its phase.
 
@@ -89,6 +95,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   was refused.
 - [ ] T031 Write `scripts/verify-departments.sh`, a Playwright config and a seed script,
   following the chat-grid-drop sandbox pattern. Capture T029 and T030 in light and dark.
+- [ ] T032 Docs and migration: `docs/org.md` and the `management` skill describe
+  `department.yaml`, `scope` and the department panel. Generate the instance migration bundle
+  and write Phase 1's rationale paragraph (FR-043, FR-044).
 
 ## Phase 2: scoped employees (senior-developer, then senior QA; T048 and T049 go to the junior as their own Todos)
 
@@ -145,6 +154,10 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   - session badges in `SessionRow`, `mobile-session-row` and `TreeRow`.
 
   Capture each in light and dark.
+- [ ] T050 Docs and migration: `docs/org.md`, `docs/company-doctrine.md` and the
+  `todo-handling` and `delegation` skills describe what a scoped employee can and cannot
+  reach, `dedicated`, and the assignment rules. Add Phase 2's rationale paragraph (FR-043,
+  FR-044).
 
 ## Phase 3: scoped context (junior-developer, then senior QA; starts after Phase 2 merges)
 
@@ -167,7 +180,7 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   - refuse the company `knowledge/state.md`, `knowledge/employees/` and `docs/` unless they
     are shared;
   - allow note writes only in the department folder.
-- [ ] T064 Update the template docs (`todo-handling`, `management`, `docs/org.md`). Cover:
+- [ ] T064 Docs and migration (FR-043, FR-044; add Phase 3's rationale paragraph). Update the template docs (`todo-handling`, `management`, `docs/org.md`). Cover:
   - `department.yaml` and its `scope`;
   - department state in `knowledge/departments/<slug>/state.md`, kept through the note tools;
   - the fact that scoping is a guardrail, not a sandbox.
@@ -206,13 +219,13 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 - [ ] T075 Write `verifyLocalClaudeProfile` and call it from `refuseTurn` (FR-054). The
   Keychain probe is injectable, checks by service name and exit status only, and never reads
   the secret.
-- [ ] T076 Key the auth outage ledger, engine health, the rate-limit memory and the limits
-  snapshot per profile, leaving the default profile's keys unchanged (FR-055). Make the board
-  walk read the windows of the profile it is about to start. Skip fallback and substitution for
-  named profiles (FR-056). Test SC-006.
+- [ ] T076 Write `shared/engine-account.ts` for local accounts (FR-070). Key the auth outage
+  ledger, engine health and the rate-limit memory per account,
+  leaving the default profile's keys unchanged (FR-055). The limits reading and the board walk
+  are Phase 6. Skip fallback and substitution for named profiles (FR-056). Test SC-006.
 - [ ] T077 Web: the profile badge on the org tree and a read-only profile row in the employee
   panel. Capture both, and the "not signed in" refusal in chat, in light and dark.
-- [ ] T078 Docs: how to create and sign in a profile, what goes to its account (including the
+- [ ] T078 Docs and migration (FR-043, FR-044; add Phase 4's rationale paragraph, including how to opt in): how to create and sign in a profile, what goes to its account (including the
   profile's own skills, plugins and connectors). Say plainly that a profile is independent of
   department scope, so an unscoped employee on a profile sends company context to that
   account (FR-059).
@@ -260,8 +273,33 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 - [ ] T086 Live check. This instance has no `remote` block. If the operator provides a remote
   host, run one scoped session there and record the result in the PR. Otherwise say in the PR
   that the remote path is verified by tests only.
-- [ ] T087 Docs: scoped employees on remote hosts, and the fact that the remote shell can still
+- [ ] T087 Docs and migration (FR-043, FR-044; add Phase 5's rationale paragraph): scoped employees on remote hosts, and the fact that the remote shell can still
   reach the mounted home (a guardrail, not a sandbox).
+
+## Phase 6: limits and auto-dispatch per account (senior-developer, then senior QA; starts after Phase 4 merges; T094 goes to the junior as its own Todo)
+
+- [ ] T090 Red test: with two local Claude accounts, a rate limit on the named one marks Claude
+  exhausted for the walk, and `/api/engine-limits` has one Claude slot.
+- [ ] T091 Extend `shared/engine-account.ts` (begun in Phase 4 for local accounts) to remote
+  accounts (FR-070), so health, the rate-limit memory and the outage ledger key remote
+  sessions on their own account.
+- [ ] T092 Read limits per local account (FR-071): the token reader with an account argument
+  (the model catalog keeps the default), `claude auth status` with the profile's
+  `CLAUDE_CONFIG_DIR`, snapshots filtered by account, and reset times and usage history per
+  account. `collectEngineLimits` and the background refresh loop over the roster's accounts.
+  Test that the token never reaches a log, a file or a child environment. Remote accounts
+  report "no live reading" with their last rate limit (FR-072).
+- [ ] T093 Board walk (FR-075 to FR-077): per-account snapshot fields and `priorFiveHour`,
+  candidate accounts, the `startTodo` code gate, exhausted accounts in `dispatcherSuffix`,
+  the per-account rewrite of `template/board-walk.md`, and FR-076 as the operator decides.
+- [ ] T094 Web (junior sub-Todo): `accounts` on `/api/engine-limits` with `engines.claude`
+  unchanged, the Limits page grouped by engine, `/api/auto-dispatch/usage?account=`, and the
+  usage card's switcher. Capture every FR-040 limits state (FR-045).
+- [ ] T095 Test SC-009 and FR-078: a byte comparison of the snapshot, the limits response and
+  the walk prompt for a single-account roster against `main`.
+- [ ] T096 Docs and migration: `docs/architecture.md` and the Limits and Auto-Dispatch docs
+  describe accounts. The rationale tells an instance to reconcile its own `board-walk.md` to
+  the per-account wording (FR-077), and adds Phase 6's paragraph (FR-044).
 
 ## Follow-ups outside this feature
 

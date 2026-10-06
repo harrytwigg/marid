@@ -209,7 +209,30 @@ and the decision. This reading was matched by content in minified code, so Phase
 | `board-walk/route-turn.ts:45` | Employee `cliFlags` come after the gateway's `--chrome`, so `--no-chrome` in `cliFlags` wins | Unchanged. It does not hold on the PTY idle-spawn path (`engines/claude-interactive.ts:3183`) |
 | `gateway/org-registry.ts:42` | `refreshOrg`, which keeps the last good roster | Shape for `department-registry.ts` |
 
-### Budgets
+### Limits and the board walk (Phase 6)
+
+Read at `origin/main` 70419b04.
+
+| `path:line` | What it is | Bearing |
+| --- | --- | --- |
+| `packages/web/src/routes/limits/page.tsx:232` | One `EngineCard` per engine, in a two-column grid | FR-073: one card per account, grouped by engine |
+| `packages/web/src/routes/auto-dispatch/usage-card.tsx:57` | "Where the Claude allowance is heading": one Claude history | FR-074 |
+| `shared/engine-limits.ts:323` | `collectEngineLimits` loops over engines, one slot each | Loops over accounts |
+| `shared/engine-limits-claude.ts:233` | `collectClaudeLimits`: OAuth usage API, then the newest status-line snapshot, plus `claude auth status` for the plan | Takes an account (FR-071) |
+| `shared/claude-models.ts:289` | `readClaudeOAuthToken`: env, then the unsuffixed Keychain entry, then the default credentials file | Gains an account argument; the model catalog keeps the default |
+| `shared/engine-reset-times.ts:55` | One Claude reset time for the backoff | Per account |
+| `shared/claude-usage-history.ts:44` | One usage-history file | Per account |
+| `shared/usageAwareness.ts:10` | One rate-limit record, read only by a preflight notice | Per account (FR-055) |
+| `shared/engine-health-store.ts:45` | One health record per engine; quota records carry no host | Per account (FR-055) |
+| `engines/remote-stage.ts:1378` | Remote sessions write no status-line snapshot to the gateway | Remote accounts have no live reading in v1 (FR-072) |
+| `board-walk/snapshot.ts:14`, `:224`, `:238` | No numeric thresholds in code; one Claude five-hour window; an unscoped exhausted flag | Per-account snapshot (FR-075) |
+| `packages/jinn/template/board-walk.md:98` | The thresholds, "hold, never guess", concurrency and "one start per tick" are prose about one Claude pool | Rewritten per account; the instance copy is the operator's (FR-077) |
+| `board-walk/apply.ts:245` | `startTodo` checks only the switch, the status and the opt-out | Gains the exhausted-account gate (FR-075) |
+| `board-walk/walk.ts:142` | `dispatcherSuffix` passes a preferred engine to the Dispatcher as advice | Also lists exhausted accounts |
+| `board-walk/route-turn.ts:85` | The walk skips the tick when its runner engine is exhausted | FR-076 |
+| `gateway/todo-dispatch.ts:147` | The Dispatcher starts with no limits check | Unchanged; the walk gates before it |
+
+
 
 | Source | Value |
 | --- | --- |
