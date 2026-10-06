@@ -101,6 +101,23 @@ describe("an employee's Claude profile directory", () => {
   });
 });
 
+describe("the gateway's own Claude profile", () => {
+  it("is refused, and so is what contains it, when CLAUDE_CONFIG_DIR puts it outside ~/.claude", () => {
+    mkdir("code/garden-app/gateway-profile/projects");
+    const saved = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = path.join(home, "code/garden-app/gateway-profile");
+    try {
+      expect(refusal(path.join(home, "code/garden-app"))).toMatch(/is, or contains/);
+      expect(refusal(path.join(home, "code/garden-app/gateway-profile"))).not.toBeNull();
+      expect(refusal(path.join(home, "code/garden-app/gateway-profile/projects"))).toMatch(/protected/);
+    } finally {
+      if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = saved;
+    }
+    expect(refusal(path.join(home, "code/garden-app"))).toBeNull();
+  });
+});
+
 describe("a path spelled in another case", () => {
   const caseInsensitive = root !== root.toUpperCase() && fs.existsSync(root.toUpperCase());
 

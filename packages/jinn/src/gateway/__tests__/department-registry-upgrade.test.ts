@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
 import { initDb } from "../../shared/db.js";
 import { logger } from "../../shared/logger.js";
 import { assignWorkItem } from "../../work-items/assignment.js";
@@ -75,5 +76,36 @@ describe("an upgraded instance with an old department.yaml the parser refuses", 
     writeDepartmentFile("engineering", LEGACY);
     refreshDepartments();
     expect(departmentScopeOf("engineering")).toBe("dedicated");
+  });
+});
+
+describe("a department.yaml that exists but cannot be read", () => {
+  let unreadable: string | undefined;
+  afterEach(() => {
+    if (unreadable) fs.chmodSync(unreadable, 0o644);
+    unreadable = undefined;
+  });
+  const lockOut = (text: string) => {
+    unreadable = writeDepartmentFile("engineering", text);
+    fs.chmodSync(unreadable, 0o000);
+  };
+
+  it.skipIf(process.getuid?.() === 0)("is held dedicated when no scope was recorded, and says why", () => {
+    const error = vi.spyOn(logger, "error");
+    lockOut("name: engineering\nscope: open\n");
+    refreshDepartments();
+    expect(departmentScopeOf("engineering")).toBe("dedicated");
+    expect(departmentRecord("engineering").definitionError).toMatch(/cannot be read/);
+    expect(recorded("engineering")).toBeUndefined();
+    expect(error.mock.calls.map((call) => call[0]).join("\n")).toMatch(/cannot be known, so it is treated as dedicated/);
+  });
+
+  it.skipIf(process.getuid?.() === 0)("keeps a recorded scope", () => {
+    writeDepartmentFile("engineering", "name: engineering\nscope: scoped\n");
+    refreshDepartments();
+    lockOut("name: engineering\nscope: scoped\n");
+    refreshDepartments();
+    expect(departmentScopeOf("engineering")).toBe("scoped");
+    expect(departmentRecord("engineering").definitionError).toMatch(/cannot be read/);
   });
 });

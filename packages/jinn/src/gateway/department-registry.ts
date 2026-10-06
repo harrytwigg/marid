@@ -17,8 +17,9 @@ import { departmentWorkdirOptions, type WorkdirOptions } from "./department-work
  * Scope fails closed (FR-001): a department that has loaded a scope keeps it in the
  * `department_scopes` table, so a file that is refused, or deleted, never opens a
  * scoped department. A refused file with no recorded scope counts as `dedicated`
- * when it asks for a scope other than `open` (see `parseDepartmentYaml`), and stays
- * open otherwise, so an old file nothing ever read confines no one on upgrade.
+ * when it asks for a scope other than `open` (see `parseDepartmentYaml`) or cannot be
+ * read at all, and stays open otherwise, so an old file nothing ever read confines no
+ * one on upgrade.
  */
 
 export interface DepartmentRecord {
@@ -38,8 +39,10 @@ export interface DepartmentRecord {
 interface FileState {
   definition: DepartmentDefinition | null;
   error: string | null;
-  /** For a refused file: whether its raw text asks for a non-open scope. */
+  /** For a refused file: whether it asks for a non-open scope. An unreadable file is taken to. */
   asksToConfine: boolean;
+  /** The file exists but could not be read. */
+  unreadable?: boolean;
   file: string;
   warnings: string[];
 }
@@ -98,20 +101,29 @@ function departmentDirs(orgDir: string): string[] {
   }
 }
 
-function readFileState(slug: string, pass: Pass): FileState | undefined {
-  const { orgDir, home, current } = pass;
-  const dir = path.join(orgDir, slug);
-  let names: string[] = [];
+/** Whether the directory holds a file named exactly `department.yaml`, warning about near misses; null when it cannot be listed. */
+function hasDefinitionFile(slug: string, dir: string, current: Set<string>): boolean | null {
+  let names: string[];
   try {
     names = fs.readdirSync(dir);
   } catch {
-    // An unreadable directory is reported by the read below.
+    return null;
   }
   for (const name of names) {
     if (name !== DEPARTMENT_FILE && NEAR_MISS.test(name)) {
       say("warn", `org/${slug}/${name} is not read: a department's definition is org/${slug}/${DEPARTMENT_FILE}`, current);
     }
   }
+  return names.includes(DEPARTMENT_FILE);
+}
+
+function readFileState(slug: string, pass: Pass): FileState | undefined {
+  const { orgDir, home, current } = pass;
+  const dir = path.join(orgDir, slug);
+  // Only the exact name counts. A case-insensitive filesystem would otherwise open
+  // `Department.yaml` for it, and the department would load while the log says it is not read.
+  // A directory that cannot be listed is reported by the read below.
+  if (hasDefinitionFile(slug, dir, current) === false) return undefined;
   const fullPath = path.join(dir, DEPARTMENT_FILE);
   const file = path.relative(home, fullPath).split(path.sep).join("/");
   let raw: string;
@@ -119,7 +131,8 @@ function readFileState(slug: string, pass: Pass): FileState | undefined {
     raw = fs.readFileSync(fullPath, "utf-8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    return { definition: null, error: `the file cannot be read: ${(err as Error).message}`, asksToConfine: false, file, warnings: [] };
+    // What an unreadable file asks for is unknown, so it fails closed.
+    return { definition: null, error: `the file cannot be read: ${(err as Error).message}`, asksToConfine: true, unreadable: true, file, warnings: [] };
   }
   const parsed = parseDepartmentYaml(slug, raw, { home, workdirOptions: pass.workdirOptions() });
   if (!parsed.ok) return { definition: null, error: parsed.error, asksToConfine: parsed.asksToConfine, file, warnings: [] };
@@ -156,7 +169,9 @@ function loadDepartment(slug: string, pass: Pass): void {
     const fallback = pass.known.get(slug);
     const kept = fallback
       ? `The department keeps its last good scope, ${fallback}.`
-      : state.asksToConfine
+      : state.unreadable
+        ? "It has no last good scope and what it asks for cannot be known, so it is treated as dedicated until the file loads."
+        : state.asksToConfine
         ? "It has no last good scope and names a scope, so it is treated as dedicated until the file loads."
         : "It has no last good scope and has no scope other than open, so the department stays open until the file loads.";
     say("error", `Refusing ${state.file}: ${state.error}. ${kept}`, pass.current);
@@ -211,7 +226,7 @@ function loaded(): Map<string, FileState> {
   return files!;
 }
 
-/** The scope a department is held to now: its file, else its last good scope, else `dedicated` for a refused file that never loaded and asks to confine, else open. */
+/** The scope a department is held to now: its file, else its last good scope, else `dedicated` for a refused file that never loaded and asks to confine (or cannot be read), else open. */
 export function departmentScopeOf(slug: string): DepartmentScope {
   if (UNSCOPABLE_DEPARTMENTS.has(slug)) return "open";
   const state = loaded().get(slug);

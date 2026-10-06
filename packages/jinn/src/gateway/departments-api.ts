@@ -87,10 +87,12 @@ function listRows(context: ApiContext): DepartmentRow[] {
   }));
 }
 
-/** A department exists when it has a registry row, a directory under `org/`, or a definition file. */
-function knownDepartment(slug: string): boolean {
+/** A department exists when it has a registry row, a directory under `org/`, a definition file, or an employee whose `department:` names it. */
+function knownDepartment(slug: string, context: ApiContext): boolean {
   if (initDb().prepare("SELECT 1 FROM departments WHERE slug = ?").get(slug)) return true;
   if (departmentSlugsWithFiles().includes(slug)) return true;
+  // A department may exist only as an employee's `department:` field; the org tree groups it, so its panel must open.
+  if ([...orgRegistry(context.getConfig()).values()].some((employee) => employee.department === slug)) return true;
   try {
     return fs.statSync(path.join(resolveJinnHome(), "org", slug)).isDirectory();
   } catch {
@@ -157,7 +159,7 @@ export async function handleDepartmentsApi(req: HttpRequest, res: ServerResponse
   }
   const params = matchRoute("/api/departments/:slug", pathname);
   if (!params || (method !== "GET" && method !== "PATCH")) return false;
-  if (!SLUG.test(params.slug) || !knownDepartment(params.slug)) {
+  if (!SLUG.test(params.slug) || !knownDepartment(params.slug, context)) {
     notFound(res);
     return true;
   }

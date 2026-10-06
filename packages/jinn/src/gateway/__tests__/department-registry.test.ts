@@ -5,12 +5,7 @@ import { initDb } from "../../shared/db.js";
 import { logger } from "../../shared/logger.js";
 import { resolveJinnHome } from "../../shared/paths.js";
 import { departmentScope } from "../../work-items/department-scope.js";
-import {
-  departmentRecord,
-  departmentScopeOf,
-  refreshDepartments,
-  setDepartmentChangeListener,
-} from "../department-registry.js";
+import { departmentRecord, departmentScopeOf, refreshDepartments, setDepartmentChangeListener } from "../department-registry.js";
 import { resetDepartmentFixtures, writeDepartmentFile, writeSkill } from "./department-fixtures.js";
 
 /** FR-001: what a department's file says, what a broken or missing one does, and the last good scope. */
@@ -113,6 +108,7 @@ describe("identity problems refuse the file", () => {
     ["a file that is not a mapping", "- just\n- a list\n", /mapping/, false],
     ["a name that is not the directory's and scope: scoped", "name: other\nscope: scoped\n", /does not match the directory/, true],
     ["a name that is not the directory's and no scope", "name: Another\n", /does not match the directory/, false],
+    ["a name that is not the directory's and an empty scope, which is no scope", "name: other\nscope:\n", /does not match the directory/, false],
     ["a name that is not the directory's and scope: open", "name: Another\nscope: open  # as before\n", /does not match the directory/, false],
     ["YAML that does not parse and scope: open, quoted", "scope: \"open\"\nname: [unclosed\n", /does not parse/, false],
     ["a flow mapping with a wrong name and a scope", "{name: other, scope: scoped}\n", /does not match the directory/, true],

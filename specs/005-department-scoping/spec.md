@@ -422,14 +422,16 @@ and dark, with screenshots on the PR (FR-040).
   - **A refused file with no recorded scope** (a file that has never loaded): the department
     is treated as `dedicated` until the file loads **only if the file's `scope` is anything
     other than `open`**. A file that parses is judged by its parsed `scope` key alone: present
-    and not exactly `open` means dedicated, including a quoted, capitalised or mistyped value, a
-    list and a flow mapping; absent, empty or `open` means open, and `scope:` written inside a
+    and not exactly `open` means dedicated, including a quoted value other than `open`, a
+    capitalised or mistyped value, a list and a flow mapping; absent, empty or `open` means open, and `scope:` written inside a
     description, or in a document that is not a mapping, does not count. A file that does not
     parse is judged by an anchored line match,
     `/^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S/m` (multiline, with no `i`
     flag: it is case-sensitive, as YAML is, so `scope: OPEN` is not `open` and a key spelled
     `Scope` is not the scope key), so a commented-out line or an empty `scope:` does not
-    count. A recorded last good scope always wins over both. So a file that asks
+    count. A file that exists but cannot be read (a permissions error, say) is held
+    `dedicated`, since what it asks for cannot be known. A recorded last good scope always
+    wins over all three. So a file that asks
     for confinement, or that mistypes the scope (`scope: scopd`), fails closed: its intended
     members are confined and nobody else can hold its Todos. A file with no `scope`, or with
     `scope: open`, leaves the department `open`, which is today's behaviour: earlier templates
@@ -647,10 +649,10 @@ scoped employee; D is that session's binding)
   - it keeps state in `knowledge/departments/<slug>/state.md` through the note tools.
 - **FR-033**: **Working-directory validation.** A department working directory MUST:
   - be inside a git work tree whose top level is neither `$HOME` nor an ancestor of it;
-  - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, the stage root, `~/.claude` or any
-    employee's `claudeConfigDir`;
-  - not lie inside `$JINN_HOME`, the stage root, `~/.claude`, any `claudeConfigDir`,
-    `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
+  - not be, or be an ancestor of, `$HOME`, `$JINN_HOME`, the stage root, `~/.claude`, the
+    gateway's own `CLAUDE_CONFIG_DIR` or any employee's `claudeConfigDir`;
+  - not lie inside `$JINN_HOME`, the stage root, `~/.claude`, the gateway's `CLAUDE_CONFIG_DIR`,
+    any `claudeConfigDir`, `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
 
   The scan and the department panel refuse a violating entry.
 

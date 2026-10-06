@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -12,6 +12,12 @@ import { call, loadApi, takeOrgReloads } from "./departments-api-harness.js";
 import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile, writeSkill } from "./department-fixtures.js";
 
 /** PATCH /api/departments/:slug, and the employee PATCH that must not cross a scope boundary. */
+
+// Counts every org re-scan, the harness's reload hook included, so a handler that re-scans beside the hook is caught.
+vi.mock("../org-registry.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../org-registry.js")>();
+  return { ...actual, refreshOrg: vi.fn(actual.refreshOrg) };
+});
 
 const fileOf = (slug: string) => path.join(resolveJinnHome(), "org", slug, "department.yaml");
 const read = (slug: string) => yaml.load(fs.readFileSync(fileOf(slug), "utf-8")) as Record<string, unknown>;
@@ -61,10 +67,14 @@ describe("PATCH /api/departments/:slug", () => {
     writeDepartmentFile("side-project", "name: side-project\n");
     refreshOrg();
     takeOrgReloads();
+    vi.mocked(refreshOrg).mockClear();
     expect((await call("PATCH", "/api/departments/side-project", { displayName: "Side" })).status).toBe(200);
     expect(takeOrgReloads()).toBe(1);
+    expect(refreshOrg).toHaveBeenCalledTimes(1);
+    vi.mocked(refreshOrg).mockClear();
     expect((await call("PATCH", "/api/departments/side-project", { scope: "dedicated" })).status).toBe(400);
     expect(takeOrgReloads()).toBe(0);
+    expect(refreshOrg).not.toHaveBeenCalled();
   });
 
   it("refuses a working directory an employee's Claude profile lives in, and writes nothing", async () => {

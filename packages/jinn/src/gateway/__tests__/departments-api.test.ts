@@ -123,6 +123,14 @@ describe("GET /api/departments/:slug", () => {
     expect(panel.body.department.scope).toBe("scoped");
   });
 
+  it("answers for a department that exists only as an employee's department field, which the org tree groups", async () => {
+    writeEmployeeFile("engineering", "researcher", { department: "research" });
+    refreshOrg();
+    const panel = await call("GET", "/api/departments/research");
+    expect(panel.status).toBe(200);
+    expect(panel.body.department).toMatchObject({ slug: "research", scope: "open", definitionFile: null });
+  });
+
   it("is 404 for a department that does not exist, and for a slug that is not one", async () => {
     expect((await call("GET", "/api/departments/nowhere")).status).toBe(404);
     expect((await call("GET", "/api/departments/..%2Fetc")).status).toBe(404);

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { resolveClaudeConfigDir } from "../shared/home.js";
 import { resolveJinnHome } from "../shared/paths.js";
 import { employeeClaudeConfigDirs } from "./org-yaml-files.js";
 
@@ -69,7 +70,7 @@ function gitTopLevel(dir: string): string | null {
 
 /** Neither the directory nor anything above it may be one of these roots. */
 function exactOrAncestorRoots(options: WorkdirOptions): string[] {
-  return [os.homedir(), resolveJinnHome(), departmentStageRoot(), path.join(os.homedir(), ".claude"), ...(options.claudeConfigDirs ?? [])].map(real);
+  return [os.homedir(), resolveJinnHome(), departmentStageRoot(), path.join(os.homedir(), ".claude"), resolveClaudeConfigDir(), ...(options.claudeConfigDirs ?? [])].map(real);
 }
 
 /** Nothing inside any of these may be a department's working directory. */
@@ -79,6 +80,8 @@ function protectedTrees(options: WorkdirOptions): string[] {
     resolveJinnHome(),
     departmentStageRoot(),
     ...[".claude", ".ssh", ".config", ".aws", ".gnupg", "Library"].map((name) => path.join(home, name)),
+    // The gateway's own profile, which `CLAUDE_CONFIG_DIR` may put somewhere other than ~/.claude.
+    resolveClaudeConfigDir(),
     ...(options.claudeConfigDirs ?? []),
   ].map(real);
 }

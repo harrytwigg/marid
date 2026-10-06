@@ -6,21 +6,31 @@ import { resolveJinnHome } from "../shared/paths.js";
 import type { Employee } from "../shared/types.js";
 import { isSystemEmployeeName, SYSTEM_EMPLOYEE_OVERRIDE_FIELDS } from "./system-employees.js";
 
+function listEntries(dir: string, skipUnreadable: boolean): fs.Dirent[] {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true });
+  } catch (err) {
+    if (skipUnreadable) return [];
+    throw err;
+  }
+}
+
 /**
  * Recursively walk `dir`, invoking `visit` for every employee YAML file
  * (.yaml/.yml, skipping department.yaml). Stops early and returns the first
  * non-undefined value `visit` returns; visitors that never return a value
- * walk the whole tree.
+ * walk the whole tree. A directory that cannot be listed throws, unless
+ * `skipUnreadable` says to pass over it.
  */
 export function walkEmployeeYamls<T>(
   dir: string,
   visit: (fullPath: string) => T | undefined,
+  options: { skipUnreadable?: boolean } = {},
 ): T | undefined {
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
+  for (const entry of listEntries(dir, options.skipUnreadable === true)) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      const found = walkEmployeeYamls(fullPath, visit);
+      const found = walkEmployeeYamls(fullPath, visit, options);
       if (found !== undefined) return found;
     } else if (
       (entry.name.endsWith(".yaml") || entry.name.endsWith(".yml")) &&
@@ -36,8 +46,8 @@ export function walkEmployeeYamls<T>(
 /**
  * Every absolute `claudeConfigDir` an employee YAML under `orgDir` names, read from the
  * files rather than the roster. The department scan runs before the employee scan, and a
- * profile is protected whether or not its employee loads. An unreadable file is skipped;
- * the employee scan reports it.
+ * profile is protected whether or not its employee loads. An unreadable file or directory
+ * is skipped, so it cannot stop the department scan; the employee scan reports it.
  */
 export function employeeClaudeConfigDirs(orgDir: string): string[] {
   const dirs = new Set<string>();
@@ -51,7 +61,7 @@ export function employeeClaudeConfigDirs(orgDir: string): string[] {
       // skip unreadable files
     }
     return undefined;
-  });
+  }, { skipUnreadable: true });
   return [...dirs];
 }
 
