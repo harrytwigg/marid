@@ -34,7 +34,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 vi.mock("../../gateway/gateway-info.js", () => ({
-  readGatewayInfo: () => ({ port: 7777, secret: "hook-secret", token: "bearer-token" }),
+  readGatewayInfo: () => ({ port: 40123, secret: "hook-secret", token: "bearer-token" }),
 }));
 
 vi.mock("../../gateway/department-registry.js", async (importOriginal) => ({
@@ -60,7 +60,7 @@ function employee(overrides: Partial<Employee> = {}): Employee {
 const scoped = () => ({ remoteRoot: remote.root, departmentOf: (e: Employee) => (e.department === "side-project" ? "side-project" : null) });
 
 async function stage(target: ReturnType<typeof employeeRemoteTarget>, jinnSessionId = "s1") {
-  return prepareRemoteSession({ target: target!, remote, facts, engine: "claude", jinnSessionId, gatewayPort: 7777 });
+  return prepareRemoteSession({ target: target!, remote, facts, engine: "claude", jinnSessionId, gatewayPort: 40123 });
 }
 
 beforeEach(() => {
