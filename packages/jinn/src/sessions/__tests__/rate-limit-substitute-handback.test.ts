@@ -215,4 +215,27 @@ describe("a substitute limit that never names a reset", () => {
     expect(calls.length).toBeGreaterThan(12);
     expect(currentClaudeAccount(reg.getSession(id)!)).toBe("claude");
   });
+
+  it("hands back, not times out, when a retry against the substitute runs past until", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    // Past the six-hour deadline of a limit that names no reset; a retry starts
+    // just before `until` and returns after it.
+    const until = new Date(Date.now() + 7 * 3600_000 + 5 * 60_000);
+    const id = nestedSession("web:handback-spanning-retry", until);
+    const started = reg.beginSessionAttempt(id)!;
+    const unstated: EngineResult = { sessionId: "c-thread", result: "", error: "usage limit reached", rateLimit: { status: "rejected" } };
+    const { engine } = claudeEngine(async () => {
+      await new Promise((r) => setTimeout(r, 2 * 60_000));
+      return unstated;
+    });
+
+    const outcome = handleRateLimit({
+      session: reg.getSession(id)!, attemptToken: started.attemptToken!, prompt: "now publish them", engineConfig: {},
+      config, engines: new Map(), engine, rateLimit: {}, originalResult: unstated, hooks: {},
+    });
+    await vi.advanceTimersByTimeAsync(9 * 3600_000);
+
+    expect((await outcome).kind).toBe("handback");
+    expect(currentClaudeAccount(reg.getSession(id)!)).toBe("claude");
+  });
 });

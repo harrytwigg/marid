@@ -243,9 +243,10 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     // back to being slept to rather than guessed at.
     let unstatedAttempts = 0;
 
-    // Never give up before the hand-back: the own account reopens then at the latest.
-    const loopDeadlineMs = handBackAt ? Math.max(deadlineMs, handBackAt.getTime()) : deadlineMs;
-    while (Date.now() < loopDeadlineMs) {
+    // With a hand-back pending the wait never times out: every sleep is capped at
+    // `until` and the hand-back check follows it, so the loop ends there anyway,
+    // even when a retry against the substitute runs past it.
+    while (handBackAt || Date.now() < deadlineMs) {
       const stillWaiting = await waitWhileSessionWaiting(session.id, handBackAt ? Math.min(nextDelayMs, handBackAt.getTime() - Date.now()) : nextDelayMs);
       if (!stillWaiting) {
         const currentSession = getSession(session.id);
