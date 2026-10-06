@@ -236,6 +236,6 @@ If any of items 1–4 or 10 cannot be made to hold:
 | 3. What belongs to a project in v1 | Todos, with their comments, attachments, events, runs and relations; sessions of scoped employees, through the binding; Notes, in the project folder. Out of v1: cron, workflows (removed upstream), managed files (refused), labels and sprints (company-wide). Spend is capped by the existing per-employee budgets |
 | 4. Company-wide vs project skills and knowledge | FR-027 to FR-029, Q5 |
 | 5. Concurrent employees in a project | Worktrees, unchanged (Assumptions) |
-| 6. Secrets | Deferred with containment (Q1 = A). A friend's account uses the existing per-employee profile setting (spec.md, "Employees on another Claude account") |
+| 6. Secrets | Deferred with containment (Q1 = A). A friend's account is not built here. Only a remote-target employee can name its own profile (spec.md, "Employees on another Claude account") |
 | 7. Client layer | No, and nothing is reserved for it (Assumptions) |
 | 8. Where config lives and how it is backed up | YAML under `projects/`, mirroring `org/` (operator, Q3). It is carried by the home archive once `projects` is added to `ARCHIVE_INCLUDES` (`backup/archive.ts:9`). Todo membership and session bindings live in the registry, carried by the registry backup (`backup/snapshot.ts:38`) |

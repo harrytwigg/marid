@@ -6,8 +6,8 @@
 
 **Status**: The operator answered Q1–Q11 on 2026-10-05. The decisions are recorded below and
 folded into the text. Ready for implementation per plan.md and tasks.md. Employees on another
-Claude account use the existing per-employee profile setting (see "Employees on another
-Claude account").
+Claude account are not built here; today only a remote-target employee can name its own
+profile (see "Employees on another Claude account").
 
 **Input**: Marid issue #90 (upstream proposal hristo2612/jinn#81). The operator wants projects
 as a first-class scope:
@@ -45,7 +45,7 @@ everyone except its own members.
 
 **New in the operator's answer**:
 
-- employees bound to a different Claude account. The operator cancelled the separate spec for this on 2026-10-06, because the existing per-employee profile setting already covers it (see "Employees on another Claude account");
+- employees bound to a different Claude account. The operator cancelled the separate spec for this on 2026-10-06, pointing instead at the existing per-employee profile setting, which applies only to remote-target employees (see "Employees on another Claude account");
 - project membership shown on the org tree (FR-041);
 - configuration in YAML, with UI editing where possible (FR-001, FR-042).
 
@@ -186,8 +186,8 @@ existing employees can still read and comment, but can no longer be assigned P's
 
 ### User Story 4: (not built here) Project employees on a different Claude account
 
-The existing per-employee profile setting delivers this story, so no PR in this feature does.
-See "Employees on another Claude account" below.
+No PR in this feature delivers this story. Today only a remote-target employee can run on
+another account. See "Employees on another Claude account" below.
 
 ---
 
@@ -499,15 +499,24 @@ account".
 
 ### Employees on another Claude account (not built here)
 
-The operator cancelled the separate account spec on 2026-10-06. A project's employees run on
-another Claude account through the existing per-employee profile setting,
-`remoteClaudeConfigDir` (fact 4 in "What the tree does today"), so this feature builds nothing
-for it.
+The operator cancelled the separate account spec on 2026-10-06, and this feature builds
+nothing for another account. The existing per-employee profile setting,
+`remoteClaudeConfigDir`, applies **only to an employee run through a remote target**
+(`remoteHost`, which can be this Mac over ssh). A local employee has no per-employee account:
+it runs on the gateway's global `CLAUDE_CONFIG_DIR` (fact 4 in "What the tree does today").
 
-One rule from this feature still applies. Every prompt, tool output and file read in a session
-on another account goes to that account. Put an employee on another account only once it is
-scoped and Phase 3's stage dir is in place. Otherwise the company `CLAUDE.md`, the skills and
-client context leave the company.
+Every prompt, tool output and file read in a session on another account goes to that account,
+so such an employee should be scoped with a stage dir. Otherwise the company `CLAUDE.md`, the
+skills and client context leave the company. **Open question for the operator:** Phase 3's
+stage dir is a local cwd, and a remote-target session ignores it and runs in `remoteCwd`, so
+nothing in this feature gives a remote employee a stage dir yet. The options are:
+
+- (a) Phase 3 sets a scoped remote employee's `remoteCwd` to its stage dir, with trust seeded
+  under its config dir (`shared/remote-target.ts:221` warns that the environment and the seed
+  must agree or the first turn hangs);
+- (b) Phase 3 refuses `remoteHost` on scoped employees, so another account is not usable until
+  (a) is built;
+- (c) the rule stays a manual check by the operator, not enforced.
 
 research.md keeps its findings on what assumes a single local account (the rows from
 `shared/home.ts:34` on), in case local sessions ever need a profile of their own.
@@ -550,7 +559,7 @@ zero.
   - a one-off comparison of `buildContext` output and engine argv between `main` and the
     branch, for a fixed unscoped roster, is recorded as PR evidence. It is not committed as a
     fixture.
-- **SC-003**: Withdrawn. Employees on another account use the existing profile setting.
+- **SC-003**: Withdrawn. Another account is not built here (see "Employees on another Claude account").
 - **SC-004**: The token counts in `tool-manifest-budget.test.ts` do not rise.
 - **SC-005**: Every FR-040 element has light and dark screenshots on the PR.
 

@@ -14,8 +14,9 @@
 - **Chrome:** unchanged.
 - **Replies:** live replies.
 - **New:** org tree badges and YAML-first configuration.
-- **Not built:** employees on their own Claude account use the existing per-employee profile
-  setting (spec.md, "Employees on another Claude account").
+- **Not built:** employees on their own Claude account. Only a remote-target employee can name
+  its own profile today, with an open question on its stage dir (spec.md, "Employees on
+  another Claude account").
 
 ## Existing infrastructure (constitution VII)
 

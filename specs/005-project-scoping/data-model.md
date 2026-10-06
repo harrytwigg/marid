@@ -10,7 +10,7 @@ and the session binding. Both are keyed by the project's stable id, the same way
 # $JINN_HOME/projects/side-project.yaml   (file name is presentation only)
 id: prj_1a2b3c4d5e6f          # required, stable, never changes
 name: Side project            # unique ignoring case; "none" and "all" reserved
-description: Friend's side project, on their Claude account
+description: Friend's side project
 archived: false               # true: readable, refuses new members
 dedicated: false              # true: only members may hold its Todos (FR-015)
 workdirs:                     # FR-033; realpath-normalised at scan time
