@@ -63,19 +63,6 @@ const PANEL_STATES: PanelState[] = [
 const panelBadge = (page: Page) => page.getByTestId('department-panel').getByTestId('department-scope-badge')
 const badgeText = (page: Page, container: string) => page.locator(`${container} [data-testid="department-scope-badge"]`)
 
-/** A brand-new department.yaml that is refused after the gateway has started is held as dedicated. */
-test.beforeAll(async ({ request, baseURL }) => {
-  const dir = sandboxFile('org', 'new-lab')
-  fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(`${dir}/department.yaml`, 'name: some-other-lab\nscope: scoped\n')
-  fs.writeFileSync(`${dir}/new-lead.yaml`, 'name: new-lead\ndisplayName: new-lead\ndepartment: new-lab\nrank: manager\nengine: claude\nmodel: sonnet\npersona: Works on new-lab.\n')
-  const headers = { authorization: `Bearer ${gatewayToken()}` }
-  await expect.poll(async () => {
-    const response = await request.get(`${baseURL}/api/departments/new-lab`, { headers })
-    return response.ok() ? (await response.json()).department.definitionError : null
-  }, { timeout: 30_000 }).toMatch(/does not match the directory/)
-})
-
 /** A Todo in each non-open department, so the switcher and the panel have counts to show. */
 test.beforeAll(async ({ request, baseURL }) => {
   const headers = { authorization: `Bearer ${gatewayToken()}`, 'content-type': 'application/json' }

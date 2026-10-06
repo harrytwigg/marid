@@ -37,6 +37,8 @@ export interface DepartmentRecord {
 interface FileState {
   definition: DepartmentDefinition | null;
   error: string | null;
+  /** For a refused file: whether its raw text asks for a non-open scope. */
+  asksToConfine: boolean;
   file: string;
   warnings: string[];
 }
@@ -49,14 +51,12 @@ let notifyChange: ((slug: string) => void) | null = null;
 
 const DEPARTMENT_FILE = "department.yaml";
 /**
- * The row that says legacy files have been dealt with. Since 0.26 the shipped template has
- * described a `department.yaml` that nothing read, so an instance may hold files the new
- * parser refuses. The first refresh against a database without this row (a database that
- * predates the scope table) records each such file's department as open instead of
- * holding it dedicated, so an upgrade does not drop its employees. A slash cannot be a
- * directory name, so it never collides with a department.
+ * Whether a refused file's raw text asks to confine its department: a line that sets
+ * `scope` to `scoped` or `dedicated`. Only such a file is held dedicated when it has never
+ * loaded (FR-001). Earlier templates described a `department.yaml` that nothing read, so an
+ * instance may hold one the parser refuses; that must not confine anyone on upgrade.
  */
-export const LEGACY_ADOPTION_MARKER = "/legacy-adopted";
+const ASKS_FOR_CONFINEMENT = /^\s*scope\s*:\s*["']?(scoped|dedicated)\b/im
 const NEAR_MISS = /^departments?\.(ya?ml)$/i;
 
 /** One listener: called with a slug whenever its definition, scope or refusal changes after the first load. The gateway's watcher callbacks hand it the client broadcast. */
@@ -64,15 +64,13 @@ export function setDepartmentChangeListener(listener: ((slug: string) => void) |
   notifyChange = listener;
 }
 
-function readLastGood(): { known: Map<string, DepartmentScope>; adopted: boolean } {
+function readLastGood(): Map<string, DepartmentScope> {
   try {
     const rows = initDb().prepare("SELECT slug, scope FROM department_scopes").all() as Array<{ slug: string; scope: DepartmentScope }>;
-    const known = new Map(rows.filter((row) => row.slug !== LEGACY_ADOPTION_MARKER).map((row) => [row.slug, row.scope]));
-    return { known, adopted: rows.some((row) => row.slug === LEGACY_ADOPTION_MARKER) };
+    return new Map(rows.map((row) => [row.slug, row.scope]));
   } catch (err) {
     logger.error(`Could not read the recorded department scopes: ${err instanceof Error ? err.message : err}`);
-    // Unreadable: do not adopt anything, and keep what this process already knew.
-    return { known: new Map(lastGood), adopted: true };
+    return new Map(lastGood);
   }
 }
 
@@ -126,11 +124,11 @@ function readFileState(slug: string, orgDir: string, home: string, current: Set<
     raw = fs.readFileSync(fullPath, "utf-8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    return { definition: null, error: `the file cannot be read: ${(err as Error).message}`, file, warnings: [] };
+    return { definition: null, error: `the file cannot be read: ${(err as Error).message}`, asksToConfine: false, file, warnings: [] };
   }
   const parsed = parseDepartmentYaml(slug, raw, { home });
-  if (!parsed.ok) return { definition: null, error: parsed.error, file, warnings: [] };
-  return { definition: parsed.definition, error: null, file, warnings: parsed.warnings };
+  if (!parsed.ok) return { definition: null, error: parsed.error, asksToConfine: ASKS_FOR_CONFINEMENT.test(raw), file, warnings: [] };
+  return { definition: parsed.definition, error: null, asksToConfine: false, file, warnings: parsed.warnings };
 }
 
 function signature(slug: string): string {
@@ -143,8 +141,6 @@ interface Pass {
   orgDir: string;
   /** Last good scopes, updated as files load. */
   known: Map<string, DepartmentScope>;
-  /** True on the first refresh after an upgrade: a refused file with no recorded scope is open. */
-  adopting: boolean;
   next: Map<string, FileState>;
   /** Everything said so far in this pass; the next pass only logs what is new. */
   current: Set<string>;
@@ -161,13 +157,11 @@ function loadDepartment(slug: string, pass: Pass): void {
     recordScope(slug, state.definition.scope);
   } else if (state.error) {
     const fallback = pass.known.get(slug);
-    if (!fallback && pass.adopting) {
-      pass.known.set(slug, "open");
-      recordScope(slug, "open");
-      say("warn", `Refusing ${state.file}: ${state.error}. The file predates this version, so the department stays open until it is fixed.`, pass.current);
-      return;
-    }
-    const kept = fallback ? `The department keeps its last good scope, ${fallback}.` : "It has no last good scope, so it is treated as dedicated until the file loads.";
+    const kept = fallback
+      ? `The department keeps its last good scope, ${fallback}.`
+      : state.asksToConfine
+        ? "It has no last good scope and asks for one, so it is treated as dedicated until the file loads."
+        : "It has no last good scope and does not ask for one, so the department stays open until the file loads.";
     say("error", `Refusing ${state.file}: ${state.error}. ${kept}`, pass.current);
   }
 }
@@ -194,11 +188,9 @@ function notifyChanges(previous: Map<string, string>): void {
 export function refreshDepartments(): void {
   setDepartmentScopeResolver(departmentScopeOf);
   const home = resolveJinnHome();
-  const recorded = readLastGood();
-  const pass: Pass = { home, orgDir: path.join(home, "org"), known: recorded.known, adopting: !recorded.adopted, next: new Map(), current: new Set() };
+  const pass: Pass = { home, orgDir: path.join(home, "org"), known: readLastGood(), next: new Map(), current: new Set() };
   const firstLoad = files === null;
   for (const slug of departmentDirs(pass.orgDir)) loadDepartment(slug, pass);
-  if (pass.adopting) recordScope(LEGACY_ADOPTION_MARKER, "open");
   reportKeptScopes(pass);
   const previous = signatures;
   files = pass.next;
@@ -214,14 +206,14 @@ function loaded(): Map<string, FileState> {
   return files!;
 }
 
-/** The scope a department is held to now: its file, else its last good scope, else `dedicated` for a refused file that never loaded, else open. */
+/** The scope a department is held to now: its file, else its last good scope, else `dedicated` for a refused file that never loaded and asks to confine, else open. */
 export function departmentScopeOf(slug: string): DepartmentScope {
   if (UNSCOPABLE_DEPARTMENTS.has(slug)) return "open";
   const state = loaded().get(slug);
   if (state?.definition) return state.definition.scope;
   const recorded = lastGood.get(slug);
   if (recorded) return recorded;
-  return state?.error ? "dedicated" : "open";
+  return state?.error && state.asksToConfine ? "dedicated" : "open";
 }
 
 export function departmentRecord(slug: string): DepartmentRecord {

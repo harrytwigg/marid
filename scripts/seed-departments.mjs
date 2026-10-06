@@ -67,8 +67,9 @@ write(path.join(org, 'friend-lab', 'department.yaml'), [
 ])
 employee('friend-lab', 'friend-lead', 'manager')
 
-// (new-lab, a brand-new refused file, is written by the spec after the gateway has started: the first start
-// after an upgrade leaves a refused file open, so only a file that appears later is held as dedicated.)
+// a refused file that asks for a scope and has never loaded: the department is held as dedicated.
+write(path.join(org, 'new-lab', 'department.yaml'), ['name: some-other-lab', 'scope: scoped'])
+employee('new-lab', 'new-lead', 'manager')
 
 // scoped now; the spec breaks its file live to show a refusal that keeps the last good scope.
 write(path.join(org, 'garden', 'department.yaml'), [
