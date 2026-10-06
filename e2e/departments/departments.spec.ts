@@ -100,7 +100,7 @@ for (const theme of THEMES) {
 
       test('the org tree badges, zoomed so a phone can read them', async ({ browser }) => {
         test.skip(size.name !== 'phone', 'the full-width capture is readable on a desktop')
-        const { context, page } = await openPage(browser, theme, size, '/org', 3)
+        const { context, page } = await openPage(browser, theme, size, '/org', { deviceScaleFactor: 3 })
         for (const slug of ['side-project', 'friend-lab']) {
           const box = page.getByTestId(`department-group-${slug}`)
           await expect(box).toBeVisible()

@@ -107,7 +107,7 @@ const sessions = {}
   ['open-plan', 'Plan the next release', 'eng-dev', null, 20],
 ].forEach(([key, title, who, department, minutesAgo]) => {
   const id = crypto.randomUUID()
-  const at = new Date(now - minutesAgo * 60_000).toISOString()
+  const at = new Date(now - Number(minutesAgo) * 60_000).toISOString()
   insert.run(id, `departments:${key}`, `web:departments:${key}`, title, who, title, at, at, department)
   sessions[key] = id
 })

@@ -93,7 +93,7 @@ for (const theme of THEMES) {
       })
 
       test('session badge: the chat sidebar', async ({ browser }) => {
-        const { context, page } = await openPage(browser, theme, size, '/', 1, true)
+        const { context, page } = await openPage(browser, theme, size, '/', { chatListOpen: true })
         await expect(page.getByTestId('session-department-badge')).toHaveCount(2)
         await expect(page.getByTestId('session-department-badge').first()).toBeVisible()
         await expect(page.getByTestId('session-department-badge').first()).toHaveText('side-project')
@@ -106,7 +106,7 @@ for (const theme of THEMES) {
       })
 
       test('session badge: the chat sidebar tree view', async ({ browser }) => {
-        const { context, page } = await openPage(browser, theme, size, '/', 1, true)
+        const { context, page } = await openPage(browser, theme, size, '/', { chatListOpen: true })
         await page.evaluate(() => localStorage.setItem('jinn-sidebar-focus-mode', 'tree'))
         await page.goto('/', { waitUntil: 'networkidle' })
         await expect(page.getByTestId('session-department-badge')).toHaveCount(2)
@@ -116,7 +116,7 @@ for (const theme of THEMES) {
       })
 
       test('session badge: a Team group expanded to its sessions', async ({ browser }) => {
-        const { context, page } = await openPage(browser, theme, size, '/', 1, true)
+        const { context, page } = await openPage(browser, theme, size, '/', { chatListOpen: true })
         await expect(page.getByTestId('session-department-badge')).toHaveCount(2)
         await page.getByRole('button', { name: /side-dev.*2 chats/ }).click()
         await expect(page.getByTestId('session-department-badge')).toHaveCount(4)
