@@ -519,10 +519,20 @@ scoped employee; D is that session's binding)
   **syncs** it to the generated file set:
   - the new file set is written to an incoming directory beside the stage dir, on the same
     filesystem (`.jinn-departments/.<slug>.incoming-<random>/`);
-  - each entry whose content differs is moved over the old one with a single rename, which is
-    atomic for a file;
-  - entries not in the set are removed afterwards, and the incoming directory is deleted;
-  - unchanged entries are not touched.
+  - the sync works **file by file**. Only files are renamed: each file whose content differs is
+    renamed over the old one, which is atomic. Directories are created with `mkdir -p` and are
+    never renamed over an existing directory (a skill is a directory, and that rename fails on
+    a non-empty target). A whole skill directory is moved in only when nothing exists at its
+    target yet;
+  - a path that changes type (file to directory, or the reverse) is removed first;
+  - extras are then removed: any file or directory not in the set, **including a file that
+    disappeared from inside a skill still on the list**, as well as whole dropped skills;
+  - the incoming directory is deleted. Each sync also removes incoming directories older than
+    an hour, left by a sync that died, as the farm script reaps old session stages;
+  - unchanged files are not touched.
+
+  The generator refuses a skill that contains a symlink and logs why, so no link to a gateway
+  path is copied or shipped to a remote host.
 
   **What a running session sees during a sync:** each file is either wholly old or wholly new.
   For a moment it can see a mix of old and new files, and a dropped skill disappears at the
@@ -690,10 +700,18 @@ is staged differently. Unscoped remote sessions are unchanged.
 - **FR-061**: **Remote cwd.** A scoped remote session MUST run with its cwd set to the remote
   stage dir, not the employee's `remoteCwd`.
   - **One helper.** The override lives in `employeeRemoteTarget`
-    (`packages/jinn/src/shared/remote-target.ts:207`). It gains the scope resolver as a
-    **required** argument, so the compiler finds every caller and none can build a scoped
-    target with the work area as cwd. The inline target in `sessions/turn/engine-run.ts:55`
-    moves onto the helper. The callers are:
+    (`packages/jinn/src/shared/remote-target.ts:207`), which gains the scope resolver as a
+    **required** argument. A required argument only catches existing callers, so three sites
+    that read `employee.remoteCwd` themselves move onto the helper by hand:
+    - the inline target in `sessions/turn/engine-run.ts:55`;
+    - the inline target in the rate-limit handler (`sessions/rate-limit-handler.ts:104`). Its
+      `?? remoteCwd` fallback to the original run's value fails closed for a scoped session
+      with no employee record: the retry is refused;
+    - `sessions/turn/rate-limit-turn.ts:168`, which stops passing a raw `remoteCwd`.
+
+    A grep-based test, like the route-enumeration test, fails if anything outside
+    `shared/remote-target.ts` reads an employee's `remoteCwd` to build a target. The callers
+    are then:
     - `sessions/turn/engine-run.ts`: turns, and auto-compaction through it;
     - `sessions/turn/rate-limit-turn.ts` and the rate-limit handler: the retry;
     - `gateway/pty-ws.ts:134`: the terminal attach;
@@ -824,8 +842,9 @@ research.md keeps the findings, so that work does not start from zero.
 - **SC-005**: Every FR-040 element has light and dark screenshots on the PR.
 - **SC-006**: Two profiles with independent limits: marking one rate-limited leaves sessions on
   the other startable, and the reverse.
-- **SC-007**: For a scoped remote employee, a test per `employeeRemoteTarget` caller asserts
-  the remote stage dir as cwd, and the environment file carries `JINN_DEPARTMENT`. A sync test
+- **SC-007**: For a scoped remote employee, a test per `employeeRemoteTarget` caller, the
+  rate-limit retry included, asserts the remote stage dir as cwd, and the environment file
+  carries `JINN_DEPARTMENT`. The grep test in FR-061 passes. A sync test
   shows the stage dir's inode unchanged across an update, with a dropped skill removed. The scoped farm script,
   run under `sh` against temporary directories, makes no link into the company home and no
   `CLAUDE.md` link. The unscoped remote staging scripts are byte-identical to `main`.

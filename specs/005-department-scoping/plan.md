@@ -404,7 +404,9 @@ The stage dir lives at `<parent of home>/.jinn-departments/<slug>/`.
   inode: changed files are renamed in from an incoming directory beside it, and extras are
   removed afterwards. A test shows the inode unchanged across a sync.
 - **Generator shape.** The generator returns the file set without writing it, so the local
-  sync and Phase 5's remote sync apply exactly the same content.
+  sync and Phase 5's remote sync apply exactly the same content. It refuses a skill containing
+  a symlink. The sync is one shared routine (file by file, FR-020a), with a `sh` form for
+  remote hosts.
 - **Use.** `engine-run.ts` uses it as the cwd for scoped sessions. A trust seed for the stage
   dir is written when the dir is generated, under the session's profile once Phase 4 exists.
 - **Transcripts.** Resume, fork and auto-compaction resolve the stage-dir transcript slug.
@@ -449,8 +451,11 @@ Senior, because it changes the SSH staging every remote session goes through.
 - **Sync** (`engines/remote-department-stage.ts`): before every scoped spawn on a host, the
   file set from Phase 3's generator goes as a tar stream over `sshRun`'s stdin into
   `<remote.root>/.jinn-departments/.<slug>.incoming-<random>/`. A sync script then applies
-  FR-020a: changed files are renamed over the old ones, extras are removed, and the incoming
-  directory is deleted. The stage dir is never replaced. No hash cache is kept.
+  FR-020a file by file: changed files are renamed over the old ones, directories are made with
+  `mkdir -p` and never renamed over an existing one, type changes are removed first, extras
+  (including files gone from a kept skill) are removed, and the incoming directory is deleted.
+  Stale incoming directories are reaped. The stage dir is never replaced. No hash cache is
+  kept.
 - **Staging** (`prepareRemoteSession`, `engines/remote-stage.ts:1248`): it gains an optional
   `department` with the remote stage dir. Under `serializePerHost`
   (`engines/remote-stage.ts:792`), the order is: scoped farm script, assets, **sync**, then the
@@ -466,8 +471,11 @@ Senior, because it changes the SSH staging every remote session goes through.
   - The session environment file gains `JINN_DEPARTMENT`.
 - **cwd.** `employeeRemoteTarget` (`shared/remote-target.ts:207`) takes the scope resolver as
   a required argument and returns the remote stage dir as `remoteCwd` for a scoped employee.
-  `engine-run.ts:55` stops building its target inline and uses the helper. The compiler then
-  lists every caller: `engine-run.ts` (which auto-compaction also uses), `rate-limit-turn.ts`,
+  Three sites read `employee.remoteCwd` directly and move onto the helper by hand:
+  `engine-run.ts:55`, the rate-limit handler's inline target (`rate-limit-handler.ts:104`,
+  whose `?? remoteCwd` fallback refuses a scoped retry with no employee record) and
+  `rate-limit-turn.ts:168`. A grep test fails on any other read of an employee's `remoteCwd`
+  outside `remote-target.ts`. The callers are then: `engine-run.ts` (which auto-compaction also uses), `rate-limit-turn.ts`,
   the rate-limit handler, `pty-ws.ts:134`, `turn/remote-ready.ts:76` (host only),
   `session-file-read.ts:67` (relative chat links resolve against the stage dir) and
   `cli/remote.ts:58` (shows the stage dir and the work area). Fork has no remote path. The
@@ -481,12 +489,17 @@ Senior, because it changes the SSH staging every remote session goes through.
   `remoteCwd` and the remote stage dir. This is the same tool-side check T046 adds locally.
   The gateway's JSON `{path}` route refuses remote scoped sessions.
 - **Tests (junior sub-Todo).**
-  - Per `employeeRemoteTarget` caller: the cwd, and `JINN_DEPARTMENT` in the environment file.
+  - Per `employeeRemoteTarget` caller, the rate-limit retry included: the cwd, and
+    `JINN_DEPARTMENT` in the environment file. A scoped retry with no employee record is
+    refused.
+  - The grep test: no read of an employee's `remoteCwd` outside `remote-target.ts`.
   - The scoped farm script, run under `sh` against temporary directories standing in for the
     mount and the remote root: no link into the mount, no `CLAUDE.md`, and the `asset=` report
     present.
   - The sync script under `sh`: an update keeps the stage dir's inode, replaces a changed file,
-    removes a dropped skill, and restores a file a session edited.
+    removes a dropped skill, restores a file a session edited, handles a kept skill whose
+    content changed and that lost a file, handles a path that changed type, and reaps a stale
+    incoming directory.
   - Each attachment tool refuses a path outside the roots, on a remote scoped session.
   - The spawn-time stage-root check refuses, including when the facts are missing.
   - A byte comparison pins the unscoped scripts and argv to `main` (SC-007).

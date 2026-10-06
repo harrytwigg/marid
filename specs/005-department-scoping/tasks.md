@@ -153,7 +153,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   company file if `department+company` is set, plus the FR-029 scope paragraph. Sync it by
   FR-020a (stable path and inode; changed files renamed in from an incoming directory beside
   it; extras removed afterwards) on skill, department-scan and instruction changes and before
-  every scoped spawn. Test that the inode is unchanged and that a session's edit is reverted.
+  every scoped spawn, file by file (only files are renamed; directories are made with
+  `mkdir -p`). Refuse a skill containing a symlink. Test that the inode is unchanged, that a
+  session's edit is reverted, and that a kept skill that changed and lost a file syncs.
   Use it as cwd for scoped sessions in `engine-run.ts`. Write a trust seed for the stage dir
   when it is generated (under the session's profile, if Phase 4 has merged). The generator
   returns the file set without writing it, so Phase 5 syncs the same content.
@@ -224,7 +226,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   send Phase 3's file set as a tar stream over `sshRun` into
   `<remote.root>/.jinn-departments/.<slug>.incoming-<random>/`, then run a sync script that
   applies FR-020a (rename changed files over the old ones, remove extras, delete the incoming
-  directory). Never replace the stage dir. Keep no hash cache (FR-060).
+  directory) file by file: rename only files, `mkdir -p` directories, remove type changes
+  first, remove extras including files gone from a kept skill, and reap stale incoming dirs.
+  Never replace the stage dir. Keep no hash cache (FR-060).
 - [ ] T082 Give `prepareRemoteSession` an optional department. Under `serializePerHost`, run in
   this order: a scoped farm script, assets, the sync, then the trust seed for the remote stage
   dir. The scoped farm script keeps reaping, the per-session lock, the marker, the real `tmp/`
@@ -234,15 +238,20 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   untouched (FR-061 to FR-064).
 - [ ] T083 Give `employeeRemoteTarget` the scope resolver as a required argument, returning the
   remote stage dir as `remoteCwd` for a scoped employee. Move `engine-run.ts:55` onto it and
-  update every caller the compiler lists (FR-061 names them). Put the employee's own
+  update every caller the compiler lists. Move the rate-limit handler's inline target and
+  `rate-limit-turn.ts:168`'s raw `remoteCwd` onto it by hand, since the compiler does not flag
+  them; a scoped retry with no employee record is refused. Add the grep test that fails on any
+  other read of an employee's `remoteCwd` outside `remote-target.ts` (FR-061 names every
+  caller). Put the employee's own
   `remoteCwd` in the scoped prompt section as the work area. In `gateway/org.ts`, refuse a
   scoped employee's `remoteCwd` that is, contains or lies inside
   `<remote.root>/.jinn-departments` or `remote.mount`, and remove Phase 2's refusal of scoped
   remote employees (FR-026, FR-061).
 - [ ] T084 Tests (junior sub-Todo), as listed in plan.md Phase 5: cwd and `JINN_DEPARTMENT` per
-  `employeeRemoteTarget` caller; the scoped farm script and the sync script under `sh` against
+  `employeeRemoteTarget` caller, the rate-limit retry included; the scoped farm script and the sync script under `sh` against
   temporary directories (no mount link, no `CLAUDE.md`, `asset=` report present, inode
-  unchanged, dropped skill removed, edited file restored); the stage-root refusal; a byte
+  unchanged, dropped skill removed, edited file restored, a kept skill that changed and lost a
+  file, a path that changed type, a stale incoming dir reaped); the stage-root refusal; a byte
   comparison of the unscoped scripts and argv against `main` (SC-007).
 - [ ] T085 Apply the FR-018 limit in both remote tools, `publish_attachment` and
   `uploadWorkItemAttachment`, against the employee's `remoteCwd` and the remote stage dir from
