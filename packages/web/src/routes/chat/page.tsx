@@ -44,7 +44,8 @@ import { useSessionLifecycleActions } from './use-session-lifecycle-actions'
 const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
-import { FileOpenContext, TodoOpenContext, type OpenFile, type OpenTodo } from '@/components/chat/file-open-context'
+import { FileOpenContext, TodoOpenContext, type OpenFile } from '@/components/chat/file-open-context'
+import { useNewChatTabHandlers, useNewChatTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
 import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
 import { useChatTabs, type ChatTab } from '@/hooks/use-chat-tabs'
@@ -373,15 +374,7 @@ function ChatPage() {
     paneState.bumpFocus(selectedId)
   }, [paneState.bumpFocus, selectedId])
 
-  // With chats already on screen (desktop), a new chat is a tab of the layout, opened in the focused
-  // pane: a composer that can be dragged, split and resized like any other tab, and becomes its chat in
-  // place on the first send. With no chat in the layout, or on a phone, the route's own composer is
-  // the new chat.
-  const openNewChatTab = workingSet.openNewChat
-  const openNewChatInLayout = useCallback((employee: string | null) => (
-    !viewport.mobile && openNewChatTab(employee)
-  ), [openNewChatTab, viewport.mobile])
-
+  const openNewChatInLayout = useNewChatTabOpener(workingSet.openNewChat, viewport.mobile)
   const handleNewChat = useCallback(() => {
     if (openNewChatInLayout(null)) return
     newChatIntentRef.current = true; releaseMobilePicker()
@@ -446,13 +439,7 @@ function ChatPage() {
     setMobileView('chat')
     return true
   }, [chatTabs, viewport.mobile, workingSet])
-
-  // A Todo mention, opened as a tab beside the chat that mentions it (desktop). A phone, or a layout
-  // with no chat to open it beside, keeps the peek panel: false hands the click back to the mention.
-  const openTodo = useCallback<OpenTodo>((todoId, sessionId) => (
-    !viewport.mobile && workingSet.openTodo(sessionId, todoId)
-  ), [viewport.mobile, workingSet])
-
+  const openTodo = useTodoTabOpener(workingSet.openTodo, viewport.mobile)
 
   // Mobile-only: back from the file view to the chat it was opened from (closing the
   // file tab, so they do not pile up into the open-chats cap), or to the chat list
@@ -567,14 +554,7 @@ function ChatPage() {
     navigate(sessionPath(newId), { replace: true })
     qc.invalidateQueries({ queryKey: queryKeys.sessions.all })
   }, [adoptSession, chatTabs, qc, navigate])
-
-  // A new chat tab's first send created its session: the tab becomes that chat's, in its slot, and
-  // the route moves to it as it does for the route's own composer (handleSessionCreated).
-  const handleNewChatTabCreated = useCallback((tabId: string, sessionId: string, pending?: Message) => {
-    workingSet.remove(tabId, sessionId)
-    handleSessionCreated(sessionId, pending)
-  }, [handleSessionCreated, workingSet])
-  const closeNewChatTab = workingSet.split.close
+  const newChatTabs = useNewChatTabHandlers(workingSet, handleSessionCreated)
 
   // Tag incoming meta with the sessionId it belongs to so consumers (e.g.
   // the tab-label effect) can ignore stale meta from a previous session.
@@ -1012,7 +992,7 @@ function ChatPage() {
                 onContentReady={handlePaneContentReady}
                 onStartFreshChat={handleStartFreshChat}
                 pickerPane={pickerPane}
-                newChat={{ onSessionCreated: handleNewChatTabCreated, onClose: closeNewChatTab }}
+                newChat={newChatTabs}
               />
               </SplitGridContext.Provider>
             )}

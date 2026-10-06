@@ -50,15 +50,14 @@ export function TodoMention({ id, fallback }: { id: string; fallback?: React.Rea
   return <LiveTodoMention id={id} />
 }
 
-/** The anchor itself, and the two affordances layered on it: the strip that
- *  reads the Todo on hover, and the click that opens it in a tab (or the panel).
- *  Mounted only for an id that names a live Todo, so a plain word never pays for
- *  either. */
-function LiveTodoMention({ id }: { id: string }) {
+/** What a plain left click on a live mention does: open the Todo as a tab beside the chat it was
+ *  clicked in where the chat layout can take one, else in the peek panel where one is mounted; a
+ *  modified click, or a surface with neither, stays navigation. Also whether the hover strip may
+ *  open, which it may not while the Todo is already on screen because of this mention. */
+function useMentionOpen(id: string) {
   const peek = usePeekStack()
   const openTodo = useOpenTodo()
   const sessionId = useFileLinkSession()
-  const glanceEnabled = useHoverGlanceEnabled()
   const [glanceOpen, setGlanceOpen] = useState(false)
   // The panel is already showing this Todo, so the strip has nothing left to
   // say about it. Merely closing the strip on click is not enough: the click
@@ -70,41 +69,58 @@ function LiveTodoMention({ id }: { id: string }) {
   // reason until the cursor next comes back to the mention: the tab is not something it can read.
   const [openedHere, setOpenedHere] = useState(false)
 
+  const onClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (isBrowserNavigation(event)) return
+    if (openTodo?.(id, sessionId)) {
+      event.preventDefault()
+      // The pane the mention sits in would take focus back on this click's way up, from the Todo's
+      // tab where it is open in another pane.
+      event.stopPropagation()
+      setGlanceOpen(false)
+      setOpenedHere(true)
+      return
+    }
+    if (!peek) return
+    event.preventDefault()
+    peek.open({ kind: 'todo', id }, event.currentTarget)
+  }
+
+  return {
+    onClick,
+    glanceOpen: glanceOpen && !peekingThis && !openedHere,
+    setGlanceOpen,
+    onPointerEnter: () => setOpenedHere(false),
+  }
+}
+
+/** The anchor itself, and the two affordances layered on it: the strip that
+ *  reads the Todo on hover, and the click that opens it in a tab (or the panel).
+ *  Mounted only for an id that names a live Todo, so a plain word never pays for
+ *  either. */
+function LiveTodoMention({ id }: { id: string }) {
+  const glanceEnabled = useHoverGlanceEnabled()
+  const mention = useMentionOpen(id)
+
   const link = (
     <Link
       to={todoPath(id)}
       title={`Open ${id}`}
-      onClick={(event) => {
-        if (isBrowserNavigation(event)) return
-        if (openTodo?.(id, sessionId)) {
-          event.preventDefault()
-          // The pane the mention sits in would take focus back on this click's way up, from the Todo's
-          // tab where it is open in another pane.
-          event.stopPropagation()
-          setGlanceOpen(false)
-          setOpenedHere(true)
-          return
-        }
-        if (!peek) return
-        event.preventDefault()
-        peek.open({ kind: 'todo', id }, event.currentTarget)
-      }}
+      onClick={mention.onClick}
       className="text-[var(--system-blue)] underline decoration-[var(--system-blue)]/40 hover:decoration-[var(--system-blue)] underline-offset-2 font-[family-name:var(--font-code)] text-[0.88em]"
     >
       {id}
     </Link>
   )
-  const enter = () => setOpenedHere(false)
 
   if (!glanceEnabled) return link
   return (
     <HoverCard.Root
-      open={glanceOpen && !peekingThis && !openedHere}
-      onOpenChange={setGlanceOpen}
+      open={mention.glanceOpen}
+      onOpenChange={mention.setGlanceOpen}
       openDelay={OPEN_DELAY_MS}
       closeDelay={CLOSE_DELAY_MS}
     >
-      <HoverCard.Trigger asChild onPointerEnter={enter}>{link}</HoverCard.Trigger>
+      <HoverCard.Trigger asChild onPointerEnter={mention.onPointerEnter}>{link}</HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
           side="bottom"

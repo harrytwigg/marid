@@ -184,7 +184,7 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
   // chat layout it opens as a tab beside this chat, as a Todo mention does;
   // anywhere else (or on a phone) it is the Todo's page.
   const openObject = block.type === 'todo-activity'
-    ? () => { if (!openTodo?.(todoId, linkSession)) navigate(todoPath(todoId)) }
+    ? () => { if (!openTodo?.(todoId, linkSession)) void navigate(todoPath(todoId)) }
     : null
 
   return (

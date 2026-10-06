@@ -153,6 +153,23 @@ function paneChrome(owner: MultiChatGridProps, sessionId: string | null): Pick<P
   }
 }
 
+/** What a pane composes with when it has no session yet, by which composer it is: the route's own
+ *  (primary), the "Open chat" picker, or a new chat tab of the layout, which becomes its chat in place. */
+function paneComposer(owner: MultiChatGridProps, gridId: string): Pick<PaneProps, 'onSessionCreated' | 'initialEmployee' | 'pendingUserMessage' | 'newChatEmptyState'> {
+  if (gridId === owner.primary.paneKey) {
+    const { onSessionCreated, initialEmployee, pendingUserMessage } = owner.primary
+    return { onSessionCreated, initialEmployee, pendingUserMessage }
+  }
+  const pickerPane = gridId === owner.pickerPane?.paneKey ? owner.pickerPane : undefined
+  if (pickerPane) return { onSessionCreated: pickerPane.onSessionCreated, newChatEmptyState: <SessionPicker onPick={pickerPane.onPick} /> }
+  const newChatTab = parseNewChatTabId(gridId)
+  if (!newChatTab) return {}
+  return {
+    onSessionCreated: (createdId, pending) => owner.newChat?.onSessionCreated(gridId, createdId, pending),
+    initialEmployee: newChatTab.employee ?? undefined,
+  }
+}
+
 function GridChatPane({
   gridId,
   active,
@@ -166,44 +183,34 @@ function GridChatPane({
 }) {
   const sessionId = sessionForGridId(owner, gridId)
   const tabbed = usePaneTabsShown()
-  const primary = gridId === owner.primary.paneKey
-  const pickerPane = gridId === owner.pickerPane?.paneKey ? owner.pickerPane : undefined
-  const newChatTab = parseNewChatTabId(gridId)
-  const onSessionCreated: PaneProps['onSessionCreated'] = primary
-    ? owner.primary.onSessionCreated
-    : newChatTab
-      ? (createdId, pending) => owner.newChat?.onSessionCreated(gridId, createdId, pending)
-      : pickerPane?.onSessionCreated
   const cliAvailable = paneCliAvailable(owner, sessionId)
   const pane = (
     <ChatPane
       {...owner.runtime}
       {...paneChrome(owner, sessionId)}
+      {...paneComposer(owner, gridId)}
       sessionId={sessionId}
       initialScrollTop={paneScrollTop(owner, sessionId)}
-      initialEmployee={primary ? owner.primary.initialEmployee : newChatTab?.employee ?? undefined}
       isActive={active}
       multiPane={multiPane || (tabbed && !owner.viewport.mobile)}
       {...paneIdentity(owner, sessionId)}
       paneTitle={titleForGridId(owner, gridId)}
       onClose={() => removeGridPane(owner, gridId)}
       onFocus={() => { if (sessionId) owner.onFocus(sessionId) }}
-      onSessionCreated={onSessionCreated}
       onNewChat={owner.onNewChat}
       onSessionMetaChange={(update) => updatePaneMeta(owner, sessionId, update)}
       onRefresh={owner.onRefresh}
       viewMode={viewModeForPane(owner, sessionId, cliAvailable)}
       focusTrigger={focusTriggerForPane(owner, sessionId)}
-      pendingUserMessage={primary ? owner.primary.pendingUserMessage : undefined}
       onPeek={panePeek(owner, sessionId)}
       onContentReady={owner.onContentReady}
       delegatedActivity={delegatedActivityForPane(owner, sessionId)}
       onStartFreshChat={owner.onStartFreshChat}
-      newChatEmptyState={pickerPane ? <SessionPicker onPick={pickerPane.onPick} /> : undefined}
     />
   )
   return (
-    <PaneTabIdContext.Provider value={newChatTab ? gridId : null}>
+    // A new chat's pane finds its strip, and a document shown over it, by its tab id (pane-tabs-context).
+    <PaneTabIdContext.Provider value={isNewChatTabId(gridId) ? gridId : null}>
       <FileLinkSessionContext.Provider value={sessionId}>
         {pane}
       </FileLinkSessionContext.Provider>

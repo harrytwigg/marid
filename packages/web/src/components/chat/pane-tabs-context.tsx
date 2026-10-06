@@ -32,8 +32,10 @@ export function usePaneTabId(sessionId: string | null): string | null {
   return useContext(PaneTabIdContext) ?? sessionId
 }
 
+/** The strip of the pane a title bar sits in: by its session, or by its tab id for a new chat's. */
 export function usePaneTabsStrip(sessionId: string): ReactNode | null {
-  return useContext(PaneTabsContext)?.renderStrip(sessionId) ?? null
+  const tabId = useContext(PaneTabIdContext) ?? sessionId
+  return useContext(PaneTabsContext)?.renderStrip(tabId) ?? null
 }
 
 export function usePaneTabsShown(): boolean {
