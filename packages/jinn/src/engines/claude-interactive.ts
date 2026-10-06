@@ -2767,7 +2767,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // `native_1m`). Left alone, long sessions compact ~5x more often than the model
     // requires. claude clamps this to the model's own max (`min(modelWindow, value)`)
     // and only accepts 100_000..1_000_000, so asking for 1M is safe for every model:
-    // a haiku-4-5 turn clamps back to its real 200K window. scrubClaudeCode strips any inherited value, so read process.env.
+    // a haiku-4-5 turn clamps back to its real 200K window. scrubClaudeCode strips any inherited value, so read the gateway's own.
     env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW || "1000000";
     if (sessionId) Object.assign(env, { JINN_SESSION_ID: sessionId }, departmentSessionEnv(sessionId));
     if (proxyPort) {
