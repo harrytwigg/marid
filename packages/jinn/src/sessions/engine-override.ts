@@ -23,18 +23,19 @@ import {
 type AccountSwap = { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };
 
 /** What the swap parks on the session, to be handed back when `until` passes.
- *  A swap made while an account override stands (the substitute account was
- *  limited too) keeps the first swap's originals: the account, thread, model and
- *  sync point the session goes back to are still those of its own account. */
+ *  A swap made while an override stands (the substitute, engine or account, was
+ *  limited too) keeps the first swap's originals and replaces only the substitute:
+ *  the engine, account, thread, model and sync point the session goes back to are
+ *  still the ones it had before any swap, and `until` is still when that engine
+ *  or account reopens. */
 function overrideRecord(session: Session, accounts: AccountSwap | undefined, until: Date, syncSince: string): Record<string, unknown> {
-  const standing = accountOverride(session);
-  if (standing) {
-    const previous = (session.transportMeta as Record<string, Record<string, unknown>>).engineOverride;
-    // `until` is when the session goes back to its OWN account, so it stays the first swap's.
+  const previous = standingOverride(session);
+  if (previous) {
     return {
       ...previous,
       ...(accounts
-        ? { substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir }
+        // A first swap onto another engine named no account; the one the session leaves now is its own.
+        ? { originalAccount: previous.originalAccount ?? accounts.original, substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir }
         : { substituteAccount: undefined, substituteConfigDir: undefined, originalAccount: undefined }),
     };
   }
@@ -48,6 +49,14 @@ function overrideRecord(session: Session, accounts: AccountSwap | undefined, unt
     syncSince,
     ...(accounts ? { originalAccount: accounts.original, substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir } : {}),
   };
+}
+
+/** The session's override record when one stands that the revert can act on. A
+ *  record naming no engine or window to go back to is replaced, not extended. */
+function standingOverride(session: Session): Record<string, unknown> | undefined {
+  const record = (session.transportMeta as Record<string, unknown> | null | undefined)?.engineOverride;
+  if (!record || typeof record !== "object" || Array.isArray(record)) return undefined;
+  return parkedOverride(record as Record<string, unknown>) ? record as Record<string, unknown> : undefined;
 }
 
 /** A model id belongs to one provider, and an account swap stays on it: the pin
