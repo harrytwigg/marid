@@ -20,6 +20,10 @@ export interface RateLimitInfo {
 export type RateLimitOutcome =
   | { kind: "fallback"; result: EngineResult }
   | { kind: "resumed"; result: EngineResult }
+  /** A wait on a substitute Claude account reached the override's `until`: the
+   *  session is back on its own account, running, and the caller re-runs the
+   *  turn there from the start, on that account's thread and sync point. */
+  | { kind: "handback"; session: Session }
   | { kind: "timeout" }
   | { kind: "cancelled" };
 

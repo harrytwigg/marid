@@ -38,6 +38,17 @@ import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
  * the only thing they supply differently is the `TurnSurface`.
  */
 export async function runTurn(input: TurnInput, surface: TurnSurface): Promise<void> {
+  let turn: TurnInput | undefined = input;
+  while (turn) turn = await runTurnOnce(turn, surface);
+}
+
+/**
+ * One pass of a turn. Returns the input to run it again with when a rate-limit
+ * wait on a substitute Claude account handed the session back to its own
+ * account: the same turn, under the same attempt, from preflight onwards, so it
+ * resumes that account's thread with the sync transcript it is owed.
+ */
+async function runTurnOnce(input: TurnInput, surface: TurnSurface): Promise<TurnInput | undefined> {
   const sessionId = input.session.id;
   const terminalFields = (): UpdateSessionFields => input.terminalFields?.() ?? {};
 
@@ -45,7 +56,7 @@ export async function runTurn(input: TurnInput, surface: TurnSurface): Promise<v
   if (!plan.ok) {
     if (plan.declined) await settleDeclinedTurn(input, surface, plan.error, terminalFields);
     else await settleRefusedTurn(input, surface, plan.error, terminalFields);
-    return;
+    return undefined;
   }
 
   // A remote employee's host may be asleep. Wake it and wait for it BEFORE the
@@ -54,7 +65,7 @@ export async function runTurn(input: TurnInput, surface: TurnSurface): Promise<v
   const remoteReady = await ensureRemoteHostReady(input, plan.engineName);
   if (!remoteReady.ok) {
     await settleRefusedTurn(input, surface, remoteReady.error, terminalFields);
-    return;
+    return undefined;
   }
 
   logger.info(`Session ${sessionId} running engine "${plan.engineName}" (model: ${plan.model || "default"})`);
@@ -73,15 +84,22 @@ export async function runTurn(input: TurnInput, surface: TurnSurface): Promise<v
     terminalFields,
   };
 
+  return await runPlannedTurn(run);
+}
+
+/** From the engine run to the terminal receipt, or to the hand-back's re-run. */
+async function runPlannedTurn(run: TurnRun): Promise<TurnInput | undefined> {
   try {
-    if (!await compactFirstIfCold(run)) return;
+    if (!await compactFirstIfCold(run)) return undefined;
     const { attempt, model } = await runEngineWithModelFallback(run);
     run.heartbeat.stop();
-    await concludeTurn(run, attempt, model);
+    const handedBack = await concludeTurn(run, attempt, model);
+    return handedBack ? { ...run.input, session: handedBack } : undefined;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    logger.error(`Session ${sessionId} error: ${errMsg}`);
+    logger.error(`Session ${run.input.session.id} error: ${errMsg}`);
     if (claimSettleableSession(run, "error")) await settleThrownTurn(run, errMsg);
+    return undefined;
   } finally {
     run.heartbeat.stop();
   }
@@ -174,9 +192,12 @@ async function settleLimitedTurn(
   run: TurnRun,
   attempt: EngineAttempt,
   rateLimit: RateLimitDetection,
-): Promise<void> {
-  if (run.plan.compaction) return await settleRateLimitedCompaction(run, rateLimit.resetsAt);
-  await runRateLimitTurn({
+): Promise<Session | undefined> {
+  if (run.plan.compaction) {
+    await settleRateLimitedCompaction(run, rateLimit.resetsAt);
+    return undefined;
+  }
+  return await runRateLimitTurn({
     input: run.input,
     plan: run.plan,
     surface: run.surface,
@@ -189,11 +210,12 @@ async function settleLimitedTurn(
   });
 }
 
-/** Settle whichever terminal class this turn landed in. */
-async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string | undefined): Promise<void> {
+/** Settle whichever terminal class this turn landed in, or return the session
+ *  a rate-limit hand-back left it to be re-run on. */
+async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string | undefined): Promise<Session | undefined> {
   const sessionId = run.input.session.id;
   const live = claimSettleableSession(run, "result");
-  if (!live) return;
+  if (!live) return undefined;
 
   const result = attempt.result;
   const superseded = isTurnSuperseded(sessionId, run.turnStartedAt);
@@ -218,10 +240,7 @@ async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string 
     streamedBlocks,
   }));
 
-  if (rateLimit.limited) {
-    await settleLimitedTurn(run, attempt, rateLimit);
-    return;
-  }
+  if (rateLimit.limited) return await settleLimitedTurn(run, attempt, rateLimit);
 
   const streamedThrough = streamedBlocks.reduce((latest, message) => Math.max(latest, message.timestamp), 0);
   // A turn killed before it emitted anything is one the engine never began, so
@@ -229,4 +248,5 @@ async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string 
   // proves the engine read the prompt and recorded it.
   const enginePromptRead = !quietPreempted || streamedBlocks.length > 0;
   await settleAnsweredTurn(run, attempt, model, { quietPreempted, streamedThrough, superseded, enginePromptRead });
+  return undefined;
 }
