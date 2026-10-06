@@ -136,7 +136,7 @@ describe("org and departments", () => {
   // Finding: the member rows keep `reportsTo`, `parentName` and `chain` as the org scan
   // resolved them, so a manager outside D (here eng-dev) is named. The prompt roster strips
   // it (`departmentHierarchy`); the API does not. Flips red when the rows are narrowed too.
-  it.fails("does not name a manager outside D in the org rows", async () => {
+  it("does not name a manager outside D in the org rows", async () => {
     expect(JSON.stringify((await scoped("GET", "/api/org")).body)).not.toContain("eng-dev");
     expect(JSON.stringify((await scoped("GET", "/api/org/employees/side-dev")).body)).not.toContain("eng-dev");
   });

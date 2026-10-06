@@ -8,7 +8,7 @@ import { getWorkItem, type WorkItem } from "../../work-items/store.js";
 import { employeeDepartment } from "../../work-items/department-scope.js";
 import type { ApiContext } from "../api.js";
 import { departmentRecord } from "../department-registry.js";
-import { badRequest, json, notFound, type ParsedRoute } from "../route-helpers.js";
+import { badRequest, json, type ParsedRoute } from "../route-helpers.js";
 import type { SessionTreeResponse } from "../../sessions/session-tree.js";
 import type { CallerIdentity } from "../session-comm-guards.js";
 import { peekJsonObject, setPeekedBody } from "./body.js";
@@ -65,17 +65,30 @@ export function isMember(employee: unknown, department: string): boolean {
   return typeof employee === "string" && employeeDepartment(employee.trim()) === department;
 }
 
+/** A well-formed Todo id with `id`'s prefix that no Todo will ever have (the allocator counts up from 1). */
+function unknownTodoLike(id: string): string {
+  return `${id.slice(0, id.lastIndexOf("-"))}-${Number.MAX_SAFE_INTEGER}`;
+}
+
 /**
- * A Todo outside D answers as the route answers an unknown one, and true is returned.
- * A malformed or unknown id is left to the route, which already answers it.
+ * Hold a per-Todo route to D. A Todo outside D is presented to the route as an unknown
+ * one: the gate rewrites the id in the path to one that cannot exist, so the route
+ * answers exactly as it does for an unknown id, whatever it checks first (its caller's
+ * standing, a precondition, an empty list). A route whose unknown-id answer names the
+ * id is answered here instead, with the real id. Returns true when the gate answered,
+ * false when the route should run now on the hidden id, and null for a Todo in D (or
+ * an unknown or malformed id, which the route answers itself), so the row's own checks
+ * go on.
  */
-export function refuseTodoOutside(g: GateRequest, id: string): boolean {
-  if (!isTodoId(id)) return false;
+export function holdTodo(g: GateRequest, id: string): boolean | null {
+  if (!isTodoId(id)) return null;
   const item = getWorkItem(id);
-  if (!item || scopeDepartmentOfTodo(item) === g.caller.department) return false;
-  if (g.rule.namedNotFound) json(g.res, { error: `Todo ${id} not found` }, 404);
-  else notFound(g.res);
-  return true;
+  if (!item || scopeDepartmentOfTodo(item) === g.caller.department) return null;
+  if (g.rule.namedNotFound) return json(g.res, { error: `Todo ${id} not found` }, 404), true;
+  const parts = g.route.url.pathname.split("/");
+  parts[3] = unknownTodoLike(id);
+  g.route.url.pathname = parts.join("/");
+  return false;
 }
 
 export function forbid(g: GateRequest, message: string): true {
@@ -111,7 +124,8 @@ async function createInDepartment(g: GateRequest): Promise<boolean> {
 }
 
 async function attachInDepartment(g: GateRequest): Promise<boolean> {
-  if (refuseTodoOutside(g, g.rule.params.id)) return true;
+  const held = holdTodo(g, g.rule.params.id);
+  if (held !== null) return held;
   if (g.route.method !== "POST" || !String(g.req.headers["content-type"] ?? "").includes("application/json")) return false;
   const body = await peekJsonObject(g.req, g.res);
   if (!body) return true;
@@ -121,15 +135,19 @@ async function attachInDepartment(g: GateRequest): Promise<boolean> {
 }
 
 async function relateInDepartment(g: GateRequest): Promise<boolean> {
-  if (refuseTodoOutside(g, g.rule.params.id)) return true;
+  const held = holdTodo(g, g.rule.params.id);
+  if (held !== null) return held;
   const body = await peekJsonObject(g.req, g.res);
   if (!body) return true;
-  if (namedTodoOutside(body.dstId, g.caller.department)) return notFound(g.res), true;
+  // The other end, too, reads as unknown to the route.
+  const other = namedTodoOutside(body.dstId, g.caller.department);
+  if (other) setPeekedBody(g.req, { ...body, dstId: unknownTodoLike(other) });
   return false;
 }
 
 async function assignInDepartment(g: GateRequest): Promise<boolean> {
-  if (refuseTodoOutside(g, g.rule.params.id)) return true;
+  const held = holdTodo(g, g.rule.params.id);
+  if (held !== null) return held;
   const body = await peekJsonObject(g.req, g.res);
   if (!body) return true;
   const assignee = typeof body.assignee === "string" ? body.assignee.trim() : body.assignee;
@@ -138,7 +156,8 @@ async function assignInDepartment(g: GateRequest): Promise<boolean> {
 }
 
 function dispatchInDepartment(g: GateRequest): boolean {
-  if (refuseTodoOutside(g, g.rule.params.id)) return true;
+  const held = holdTodo(g, g.rule.params.id);
+  if (held !== null) return held;
   const item = isTodoId(g.rule.params.id) ? getWorkItem(g.rule.params.id) : undefined;
   if (!item || isMember(item.assignee, g.caller.department)) return false;
   if (!item.assignee) return forbid(g, `${item.id} has no assignee; assign it to a member of the department before dispatching it`);
@@ -146,8 +165,8 @@ function dispatchInDepartment(g: GateRequest): boolean {
 }
 
 async function dispatchConfigInDepartment(g: GateRequest): Promise<boolean> {
-  if (refuseTodoOutside(g, g.rule.params.id)) return true;
-  if (g.route.method !== "PUT") return false;
+  const held = holdTodo(g, g.rule.params.id);
+  if (held !== null) return held;
   const body = await peekJsonObject(g.req, g.res);
   if (!body) return true;
   const allowed = new Set(departmentRecord(g.caller.department).definition?.skills ?? []);
@@ -187,11 +206,11 @@ const TODO_KINDS: Partial<Record<ScopedRouteKind, KindHandler>> = {
   "todo-list": (g) => narrowTodoList(g, { workItems: [] }),
   "todo-trees": (g) => narrowTodoList(g, { trees: {} }),
   "todo-create": createInDepartment,
-  "todo-read": (g) => refuseTodoOutside(g, g.rule.params.id) || serveTodoRead(g),
-  "todo": (g) => refuseTodoOutside(g, g.rule.params.id),
+  "todo-read": (g) => holdTodo(g, g.rule.params.id) ?? serveTodoRead(g),
+  "todo": (g) => holdTodo(g, g.rule.params.id) ?? false,
   "todo-attach": attachInDepartment,
   "todo-relation": relateInDepartment,
-  "todo-sessions": (g) => refuseTodoOutside(g, g.rule.params.id) || serveTodoSessions(g),
+  "todo-sessions": (g) => holdTodo(g, g.rule.params.id) ?? serveTodoSessions(g),
   "todo-assign": assignInDepartment,
   "todo-dispatch": dispatchInDepartment,
   "dispatch-config": dispatchConfigInDepartment,

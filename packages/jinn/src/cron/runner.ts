@@ -98,7 +98,8 @@ export async function runCronJob(
   // transaction. Because the spawn is irreversible and would run first, a crash before
   // the txn leaves an orphaned session with NO durable intent — strictly worse.
   let workItem: WorkItem | undefined;
-  try {
+  // A job naming a department-scoped employee is refused below; it mints nothing first.
+  if (!cronTargetRefusal(job.employee)) try {
     workItem = createWorkItem({
       title: job.name,
       body: job.prompt,

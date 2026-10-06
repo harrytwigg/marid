@@ -18,18 +18,6 @@ import { TODO_CASES } from "./department-scope-todo-cases.js";
 const CASES: Record<string, CaseBuilder> = { ...TODO_CASES, ...SESSION_CASES, ...NOTES_CASES };
 const rowKey = (row: { method: string; route: string }) => `${row.method} ${row.route}`;
 
-/**
- * Rows whose refusal is not yet identical to the route's answer for an unknown id: the
- * route checks its caller's standing, or answers an empty list, before it looks the Todo
- * up, so the gate's 404 tells a scoped session that the Todo exists. Kept as `it.fails`
- * so the fix flips them red.
- */
-const KNOWN_BUGS: Record<string, string> = {
-  "PUT /api/work-items/:id/status": "an unknown id answers 403 (operator-only) before looking the Todo up; an out-of-department Todo answers 404",
-  "* /api/work-items/:id/kept": "an unknown id answers 403 (operator-only) before looking the Todo up; an out-of-department Todo answers 404",
-  "GET /api/work-items/:id/sessions": "an unknown id answers 200 [] (the route never checks existence); an out-of-department Todo answers 404",
-};
-
 let fx: Fx;
 let count = 0;
 
@@ -93,7 +81,7 @@ describe("the scoped-caller route table", () => {
       else expect(got.status).toBe(matrix.allowStatus);
     });
 
-    (key in KNOWN_BUGS ? it.fails : it)("refuses a request outside it", async () => {
+    it("refuses a request outside it", async () => {
       for (const refusal of [matrix.refuse].flat()) await assertRefusal(refusal);
     });
   });

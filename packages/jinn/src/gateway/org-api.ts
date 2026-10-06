@@ -54,22 +54,29 @@ async function getOrg(res: ServerResponse, context: ApiContext): Promise<void> {
   json(res, await orgPayload(context));
 }
 
-async function getEmployee(res: ServerResponse, name: string, context: ApiContext): Promise<void> {
+/** The `GET /api/org/employees/:name` body, or null for an unknown name; the department-scope gate narrows it. */
+export async function employeePayload(name: string, context: ApiContext): Promise<Record<string, unknown> | null> {
   const { orgRegistry } = await import("./org-registry.js");
   const { resolveOrgHierarchy } = await import("./org-hierarchy.js");
   const roster = orgRegistry(context.getConfig());
   const emp = roster.get(name);
-  if (!emp) return notFound(res);
+  if (!emp) return null;
 
   // An employee the hierarchy never placed still reports its own edges.
   const node = resolveOrgHierarchy(roster).nodes[name];
-  json(res, {
+  return {
     ...emp,
     claudeProfile: claudeProfileWire(emp),
     ...(node
       ? { parentName: node.parentName, directReports: node.directReports, depth: node.depth, chain: node.chain }
       : { parentName: null, directReports: [], depth: 0, chain: [name] }),
-  });
+  };
+}
+
+async function getEmployee(res: ServerResponse, name: string, context: ApiContext): Promise<void> {
+  const payload = await employeePayload(name, context);
+  if (!payload) return notFound(res);
+  json(res, payload);
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {

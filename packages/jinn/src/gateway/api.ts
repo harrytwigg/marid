@@ -1173,7 +1173,7 @@ export async function handleApiRequest(
   } catch {
     return json(res, { error: "Invalid request target" }, 400);
   }
-  const pathname = url.pathname;
+  let pathname = url.pathname;
   const method = req.method || "GET";
   // Stashed on `res` because that is what json() holds: ParsedRoute carries the target, not the headers.
   (res as ResWithEncoding).__acceptEncoding = req.headers["accept-encoding"];
@@ -1189,6 +1189,7 @@ export async function handleApiRequest(
     if (identifiedCaller && refuseRemoteMcpRoute(res, method, pathname, resolveScopedWriteCallerIdentity(req, context))) return;
     // FR-010: a session of a department-scoped employee reaches only its department (department-scope/gate.ts).
     if (identifiedCaller && await handleScopedCaller(req, res, { method, pathname, url }, resolveScopedWriteCallerIdentity(req, context), scopedGateDeps(context))) return;
+    pathname = url.pathname; // the gate shows a Todo outside the caller's department to the route as an unknown id
     if (await handleTalkApi(req, res, { method, pathname, url }, {
       getConfig: context.getConfig, caller: resolveScopedWriteCallerIdentity(req, context),
       context,
@@ -3434,6 +3435,7 @@ export async function handleApiRequest(
               : "operator",
           });
         } catch (mintErr) {
+          if (mintErr instanceof DepartmentBoundaryError) throw mintErr; // 409 with the reason, like every other assignee writer
           logger.warn(`Delegation work-item mint failed: ${mintErr instanceof Error ? mintErr.message : mintErr}`);
           return json(res, { error: "delegation failed before any work started — the work item could not be minted; nothing was spawned" }, 500);
         }

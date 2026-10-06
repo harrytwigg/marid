@@ -76,13 +76,13 @@ describe("a scoped session's Todo writes cannot move a Todo out of D", () => {
 // Findings. Each states what the scoped route answers today against the route's own answer
 // for the same request on an unknown id; the fix flips them red.
 describe("known differences from the unscoped route", () => {
-  it.fails("answers a search with no filter as the route does, a 400, not a 500", async () => {
+  it("answers a search with no filter as the route does, a 400, not a 500", async () => {
     const unscoped = await as(eng.id)("GET", "/api/search/sessions?q=x");
     expect(unscoped.status).toBe(400);
     expect((await as(self.id)("GET", "/api/search/sessions?q=x")).status).toBe(400);
   });
 
-  it.fails("answers a PATCH with no version on a Todo outside D as it does an unknown id (428, not 404)", async () => {
+  it("answers a PATCH with no version on a Todo outside D as it does an unknown id (428, not 404)", async () => {
     const unknown = company.id.replace(/\d+$/, "99999");
     const outside = await as(self.id)("PATCH", `/api/work-items/${company.id}`, { title: "x" });
     const missing = await as(self.id)("PATCH", `/api/work-items/${unknown}`, { title: "x" });

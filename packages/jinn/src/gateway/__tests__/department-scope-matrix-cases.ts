@@ -53,17 +53,18 @@ function unknownRefusal(theirs: WorkItem, at: (id: string) => Req, status?: numb
   return { kind: "unknown", req: at(theirs.id), like: at(unknown), ids: [theirs.id, unknown], ...(status ? { status } : {}) };
 }
 
-/** A per-Todo row: the request on a Todo outside D is refused as the request on an unknown one. */
-export function perTodo(allowStatus: MatrixCase["allowStatus"], at: (id: string, item: WorkItem) => Req): CaseBuilder {
+/** A per-Todo row: the request on a Todo outside D is answered as the request on an unknown one,
+ *  which is a 404 unless `unknownStatus` says the route answers an unknown id otherwise. */
+export function perTodo(allowStatus: MatrixCase["allowStatus"], at: (id: string, item: WorkItem) => Req, unknownStatus?: number): CaseBuilder {
   return (fx) => {
     const mine = fx.mine();
     const theirs = fx.theirs();
-    return { allow: at(mine.id, mine), allowStatus, refuse: unknownRefusal(theirs, (id) => at(id, theirs)) };
+    return { allow: at(mine.id, mine), allowStatus, refuse: unknownRefusal(theirs, (id) => at(id, theirs), unknownStatus) };
   };
 }
 
-export const todoRoute = (method: string, suffix: string, allowStatus: MatrixCase["allowStatus"], body?: unknown): CaseBuilder =>
-  perTodo(allowStatus, (id) => [method, `/api/work-items/${id}${suffix}`, body]);
+export const todoRoute = (method: string, suffix: string, allowStatus: MatrixCase["allowStatus"], body?: unknown, unknownStatus?: number): CaseBuilder =>
+  perTodo(allowStatus, (id) => [method, `/api/work-items/${id}${suffix}`, body], unknownStatus);
 
 /** An attachment on `item`, uploaded by side-dev. */
 export function seedAttachment(item: WorkItem, employee = "side-dev"): string {

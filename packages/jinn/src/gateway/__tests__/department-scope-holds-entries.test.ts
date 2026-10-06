@@ -80,7 +80,7 @@ describe("delegation that creates an already-assigned Todo", () => {
     // Finding: the refusal is a DepartmentBoundaryError, which the mint's catch turns into a
     // 500 "the work item could not be minted", where every other writer route answers 409
     // with `code: "department-boundary"` and the reason. Flips red when it is mapped.
-    it.fails("answers it as the other entries do: 409 with the boundary code", async () => {
+    it("answers it as the other entries do: 409 with the boundary code", async () => {
       const refused = await delegate("side-dev");
       expect({ status: refused.status, code: refused.body.code }).toEqual({ status: 409, code: "department-boundary" });
     });

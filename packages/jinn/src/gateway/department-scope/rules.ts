@@ -13,7 +13,7 @@ import { matchRoute } from "../route-helpers.js";
  *   todo-trees      batched trees: ids outside D are dropped
  *   todo-create     lands in D whatever it names; a parent outside D reads as unknown
  *   todo-read       one Todo, served here with relations to Todos outside D hidden
- *   todo            any other per-Todo route: the Todo must be in D, else the route's own unknown-id answer
+ *   todo            any other per-Todo route: a Todo outside D is shown to the route as an unknown id
  *   todo-attach     as todo, plus FR-018's path check on a JSON {path} upload
  *   todo-relation   as todo, and the other end must be in D too
  *   todo-sessions   the Todo's sessions: only those bound to D, plus a hidden count
@@ -71,7 +71,7 @@ export const SCOPED_ROUTES: readonly ScopedRoute[] = [
   ...rows("todo-assign", ["POST"], "/api/work-items/:id/assign"),
   { method: "POST", route: "/api/work-items/:id/dispatch", kind: "todo-dispatch", namedNotFound: true },
   { method: "POST", route: "/api/work-items/:id/capture-landing", kind: "todo", namedNotFound: true },
-  ...rows("dispatch-config", ["GET", "PUT"], "/api/work-items/:id/dispatch-config"),
+  ...rows("dispatch-config", ["PUT"], "/api/work-items/:id/dispatch-config"),
   ...rows("delegation", ["POST"], "/api/delegations"),
   ...rows("spawn", ["POST"], "/api/sessions"),
   ...rows("sessions-list", ["GET"], "/api/sessions"),

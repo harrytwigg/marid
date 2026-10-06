@@ -11,7 +11,7 @@ import {
 } from "../../sessions/registry.js";
 import type { Session } from "../../shared/types.js";
 import { listDepartmentRows } from "../departments-api.js";
-import { orgPayload } from "../org-api.js";
+import { employeePayload, orgPayload } from "../org-api.js";
 import { badRequest, json, notFound } from "../route-helpers.js";
 import { messageSearchFilter, sessionSearchFilter } from "../search-api.js";
 import { readCleanSearchParam } from "../work-item-query.js";
@@ -81,7 +81,8 @@ function serveSessionList(g: GateRequest): boolean {
 
 function serveSessionSearch(g: GateRequest): boolean {
   const filter = sessionSearchFilter(g.route.url);
-  if (!filter.ok) return badRequest(g.res, filter.error), true;
+  // An unusable or empty filter: the route answers it in its own words.
+  if (!filter.ok || Object.keys(filter.value).length === 0) return false;
   const limit = Math.max(1, Math.min(parseInt(g.route.url.searchParams.get("limit") || "20", 10) || 20, 50));
   const sessions = searchSessionsFiltered(filter.value, SEARCH_WINDOW).filter(bound(g.caller.department)).slice(0, limit);
   json(g.res, { sessions: sessions.map(g.deps.compactSessionSummary) });
@@ -127,18 +128,41 @@ async function spawnInDepartment(g: GateRequest): Promise<boolean> {
   return false;
 }
 
+/** An employee row with everyone outside `members` taken out of its reporting edges: a manager outside D is not named. */
+function narrowEmployee(view: Record<string, unknown>, members: ReadonlySet<string>): Record<string, unknown> {
+  const inside = (name: unknown) => typeof name === "string" && members.has(name);
+  const names = (value: unknown) => (Array.isArray(value) ? value.filter(inside) : value);
+  const reportsTo = Array.isArray(view.reportsTo) ? view.reportsTo.filter(inside) : inside(view.reportsTo) ? view.reportsTo : undefined;
+  return {
+    ...view,
+    reportsTo: Array.isArray(reportsTo) && reportsTo.length === 0 ? undefined : reportsTo,
+    parentName: inside(view.parentName) ? view.parentName : null,
+    directReports: names(view.directReports),
+    chain: names(view.chain),
+  };
+}
+
 async function serveOrg(g: GateRequest): Promise<boolean> {
   const payload = await orgPayload(g.deps.context);
-  const members = new Set(payload.employees.filter((employee) => isMember(employee.name, g.caller.department)).map((employee) => employee.name));
+  const members = new Set(payload.employees.filter((employee) => isMember(employee.name, g.caller.department)).map((employee) => String(employee.name)));
   json(g.res, {
     departments: [g.caller.department],
-    employees: payload.employees.filter((employee) => members.has(employee.name)),
+    employees: payload.employees.filter((employee) => members.has(String(employee.name))).map((employee) => narrowEmployee(employee, members)),
     hierarchy: {
       root: payload.hierarchy.root && members.has(payload.hierarchy.root) ? payload.hierarchy.root : null,
       sorted: payload.hierarchy.sorted.filter((name) => members.has(name)),
       warnings: [],
     },
   });
+  return true;
+}
+
+/** One member's row, narrowed as the list is; anyone else answers as unknown. */
+async function serveOrgEmployee(g: GateRequest): Promise<boolean> {
+  const payload = isMember(g.rule.params.name, g.caller.department) ? await employeePayload(g.rule.params.name, g.deps.context) : null;
+  if (!payload) return notFound(g.res), true;
+  const roster = (await orgPayload(g.deps.context)).employees.map((employee) => String(employee.name));
+  json(g.res, narrowEmployee(payload, new Set(roster.filter((name) => isMember(name, g.caller.department)))));
   return true;
 }
 
@@ -152,7 +176,7 @@ const HANDLERS: Partial<Record<ScopedRouteKind, (g: GateRequest) => boolean | Pr
   "own-session": (g) => (g.rule.params.id === g.caller.session.id ? false : forbid(g, "a department-scoped session can publish attachments only to its own session")),
   spawn: spawnInDepartment,
   org: serveOrg,
-  "org-employee": (g) => (isMember(g.rule.params.name, g.caller.department) ? false : (notFound(g.res), true)),
+  "org-employee": serveOrgEmployee,
   departments: (g) => (json(g.res, { departments: listDepartmentRows(g.deps.context).filter((row) => row.slug === g.caller.department) }), true),
 };
 
