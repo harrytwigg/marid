@@ -4,14 +4,17 @@ import { moveHandle } from '../layout/split-layout'
 import { SidebarResizeHandle } from '../sidebar-resize-handle'
 import {
   clampSidebarWidth,
+  collapsesSidebar,
+  COLLAPSE_SIDEBAR_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
   loadSidebarWidth,
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
+  rawWidthFromSizes,
+  resolveSidebarWidth,
   SIDEBAR_WIDTH_STORAGE_KEY,
   sidebarHandle,
   sidebarWidthBounds,
-  widthFromSizes,
 } from '../sidebar-width'
 import { useSidebarWidth } from '../use-sidebar-width'
 
@@ -35,18 +38,51 @@ describe('sidebar width bounds', () => {
 })
 
 describe('sidebar handle model', () => {
-  it('drags through moveHandle and clamps at both ends', () => {
+  it('resolves a drag through moveHandle: open widths clamp at the ends, far left collapses', () => {
     const viewport = 1600
     const handle = sidebarHandle(300, viewport, 900)
-    const dragBy = (pixels: number) => widthFromSizes(moveHandle(handle.sizes, 0, pixels / handle.extent, handle.minimums), viewport)
+    const resolveBy = (pixels: number) => resolveSidebarWidth(
+      rawWidthFromSizes(moveHandle(handle.sizes, 0, pixels / handle.extent, handle.minimums), viewport),
+      viewport,
+    )
 
-    expect(dragBy(40)).toBeCloseTo(340)
-    expect(dragBy(-1000)).toBe(MIN_SIDEBAR_WIDTH)
-    expect(dragBy(5000)).toBe(MAX_SIDEBAR_WIDTH)
+    expect(resolveBy(40)).toEqual({ collapsed: false, width: 340 })
+    expect(resolveBy(5000)).toEqual({ collapsed: false, width: MAX_SIDEBAR_WIDTH })
+    expect(resolveBy(-1000)).toEqual({ collapsed: true })
   })
 
   it('places the handle on the list\'s right edge', () => {
     expect(sidebarHandle(320, 1600, 900).rect).toEqual({ left: 320, top: 0, width: 0, height: 900 })
+  })
+
+  it('lets the drag run below the open minimum, into the collapse zone', () => {
+    const viewport = 1600
+    const handle = sidebarHandle(MIN_SIDEBAR_WIDTH, viewport, 900)
+    const rawBy = (pixels: number) => rawWidthFromSizes(moveHandle(handle.sizes, 0, pixels / handle.extent, handle.minimums), viewport)
+
+    expect(rawBy(-1000)).toBe(0)
+    expect(rawBy(-50)).toBe(MIN_SIDEBAR_WIDTH - 50)
+    expect(rawBy(40)).toBe(MIN_SIDEBAR_WIDTH + 40)
+    // A drag taken past the floor resolves as a collapse, not a narrower open width.
+    expect(resolveSidebarWidth(rawBy(-1000), viewport)).toEqual({ collapsed: true })
+  })
+})
+
+describe('collapse threshold', () => {
+  it('treats a width at or below the threshold as a collapse, and keeps non-finite values out of it', () => {
+    expect(collapsesSidebar(COLLAPSE_SIDEBAR_WIDTH)).toBe(true)
+    expect(collapsesSidebar(COLLAPSE_SIDEBAR_WIDTH + 1)).toBe(false)
+    expect(collapsesSidebar(0)).toBe(true)
+    expect(collapsesSidebar(Number.NaN)).toBe(false)
+  })
+
+  it('resolves above the threshold to an open width clamped to the range, and the snap zone up to the minimum', () => {
+    expect(resolveSidebarWidth(COLLAPSE_SIDEBAR_WIDTH, 1600)).toEqual({ collapsed: true })
+    expect(resolveSidebarWidth(60, 1600)).toEqual({ collapsed: true })
+    // The 120..MIN_SIDEBAR_WIDTH band snaps up, so the not-quite-wide-enough value never persists.
+    expect(resolveSidebarWidth(COLLAPSE_SIDEBAR_WIDTH + 1, 1600)).toEqual({ collapsed: false, width: MIN_SIDEBAR_WIDTH })
+    expect(resolveSidebarWidth(200, 1600)).toEqual({ collapsed: false, width: 200 })
+    expect(resolveSidebarWidth(2000, 1600)).toEqual({ collapsed: false, width: MAX_SIDEBAR_WIDTH })
   })
 })
 

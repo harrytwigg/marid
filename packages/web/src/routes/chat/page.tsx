@@ -137,13 +137,16 @@ function ChatPage() {
   const [listOpen, setListOpen] = useState<boolean>(() => {
     try { return localStorage.getItem('jinn-chat-list-open') !== 'false' } catch { return true }
   })
-  const toggleList = useCallback(() => {
-    setListOpen((prev) => {
-      const next = !prev
-      try { localStorage.setItem('jinn-chat-list-open', String(next)) } catch { /* ignore */ }
-      return next
-    })
+  const persistListOpen = useCallback((next: boolean) => {
+    try { localStorage.setItem('jinn-chat-list-open', String(next)) } catch { /* ignore */ }
   }, [])
+  const toggleList = useCallback(() => {
+    setListOpen((prev) => { const next = !prev; persistListOpen(next); return next })
+  }, [persistListOpen])
+  // The edge's drag-to-collapse/reopen and the ribbon toggle share one persisted open state.
+  const setListOpenFromDrag = useCallback((next: boolean) => {
+    setListOpen((prev) => { if (prev === next) return prev; persistListOpen(next); return next })
+  }, [persistListOpen])
   // Mobile: pop from the thread back to the chat list (the tab bar's Chat screen).
   const backToList = useCallback(() => { releaseMobilePicker(); setMobileView('sidebar') }, [releaseMobilePicker])
   const [threadPreview, setThreadPreview] = useState<CommsPeekData | null>(() => parseHistoryPreview(location.state))
@@ -859,7 +862,7 @@ function ChatPage() {
             The sibling thread therefore owns the remaining width throughout. */}
         {!viewport.mobile && <div className="group/sidebar hidden h-full shrink-0 lg:flex">
           <NavRibbon listOpen={listOpen} onToggleList={toggleList} />
-          <SidebarColumn open={listOpen} viewport={viewport}>
+          <SidebarColumn open={listOpen} viewport={viewport} onOpenChange={setListOpenFromDrag}>
             <ChatSidebar
               selectedId={selectedId}
               onSelect={handleOpenChat}

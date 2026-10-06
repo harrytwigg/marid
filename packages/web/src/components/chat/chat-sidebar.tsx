@@ -1911,12 +1911,16 @@ export function ChatSidebar({
             </button>
           </div>
         ) : null}
-        <div className={cn("relative flex h-9 items-center", selectionMode && "hidden")}>
-          {/* Resting controls — fade/disable while the search field is open. */}
+        <div className={cn("relative flex min-h-9 items-center", selectionMode && "hidden")}>
+          {/* Resting controls — fade/disable while the search field is open. Below ~265px the
+              row wraps: the view switch keeps the first line and the actions take a second,
+              right-aligned one, so the last icon is never clipped at the new minimum. While the
+              search field is open it leaves the flow, so a wrapped row cannot make the band
+              taller than the field it is hiding (the field is absolutely positioned over it). */}
           <div
             className={cn(
-              "flex w-full items-center gap-2 transition-opacity duration-200 [transition-timing-function:var(--ease-smooth)] motion-reduce:transition-none",
-              searchOpen ? "pointer-events-none opacity-0" : "opacity-100",
+              "flex w-full flex-wrap items-center gap-2 transition-opacity duration-200 [transition-timing-function:var(--ease-smooth)] motion-reduce:transition-none",
+              searchOpen ? "pointer-events-none absolute inset-x-0 opacity-0" : "opacity-100",
             )}
             aria-hidden={searchOpen}
           >
@@ -1947,47 +1951,48 @@ export function ChatSidebar({
               ))}
             </div>
 
-            <div className="flex-1" />
+            {/* Actions take the second line, right-aligned, once the row wraps (the group's
+                ml-auto does both jobs). GRS-022 — new-chat (compose) in the chat LIST header.
+                It remains available on desktop when a multi-pane grid retires the thread
+                header pill, and owns the same action on the mobile list. This is one shared
+                action across both responsive surfaces. GRS-023b — sits BEFORE search (order
+                swapped per operator). */}
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={onNewChat}
+                title="New chat"
+                aria-label="New chat"
+                className="inline-flex size-11 lg:size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
+              >
+                <SquarePen className="size-[18px]" />
+              </button>
 
-            {/* GRS-022 — new-chat (compose) in the chat LIST header. It remains
-                available on desktop when a multi-pane grid retires the thread
-                header pill, and owns the same action on the mobile list.
-                This is one shared action across both responsive surfaces.
-                GRS-023b — sits BEFORE search (order swapped per operator). */}
-            <button
-              onClick={onNewChat}
-              title="New chat"
-              aria-label="New chat"
-              className="inline-flex size-11 lg:size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
-            >
-              <SquarePen className="size-[18px]" />
-            </button>
+              <button
+                onClick={() => setSearchOpen(true)}
+                title="Search chats"
+                aria-label="Search chats"
+                className="inline-flex size-11 lg:size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
+              >
+                <Search className="size-[18px]" />
+              </button>
 
-            <button
-              onClick={() => setSearchOpen(true)}
-              title="Search chats"
-              aria-label="Search chats"
-              className="inline-flex size-11 lg:size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
-            >
-              <Search className="size-[18px]" />
-            </button>
-
-            {/* Enter multi-select. The batch actions themselves live in the
-                bar below, so this row stays one affordance wide. */}
-            <button
-              onClick={() => { setSearchOpen(false); setSearch(""); setSelectionMode(true) }}
-              title="Select chats"
-              aria-label="Select chats"
-              className="inline-flex size-11 lg:size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
-            >
-              <ListChecks className="size-[18px]" />
-            </button>
+              {/* Enter multi-select. The batch actions themselves live in the
+                  bar below, so this row stays one affordance wide. */}
+              <button
+                onClick={() => { setSearchOpen(false); setSearch(""); setSelectionMode(true) }}
+                title="Select chats"
+                aria-label="Select chats"
+                className="inline-flex size-11 lg:size-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-foreground"
+              >
+                <ListChecks className="size-[18px]" />
+              </button>
+            </div>
           </div>
 
           {/* Inline search field — morphs in from the right (width + opacity). */}
           <div
             className={cn(
-              "absolute inset-y-0 right-0 flex items-center gap-2 overflow-hidden rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] transition-[width,opacity] duration-200 [transition-timing-function:var(--ease-smooth)] motion-reduce:transition-none",
+              "absolute right-0 top-1/2 flex h-9 -translate-y-1/2 items-center gap-2 overflow-hidden rounded-[var(--radius-md)] bg-[var(--fill-tertiary)] transition-[width,opacity] duration-200 [transition-timing-function:var(--ease-smooth)] motion-reduce:transition-none",
               searchOpen ? "w-full px-3 opacity-100" : "w-0 px-0 opacity-0",
             )}
           >
