@@ -7,7 +7,7 @@ import type { DepartmentScope } from "../work-items/department-scope.js";
 import { logger } from "../shared/logger.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
 import { validateEmployeeTargets } from "../shared/claude-profile.js";
-import { departmentDisagreement, resolveEmployeeDepartment } from "./org-department-check.js";
+import { departmentDisagreement, resolveEmployeeDepartment, scopedEmployeeRefusal } from "./org-department-check.js";
 import { walkEmployeeYamls, WRITABLE_FIELDS, type EmployeeUpdate } from "./org-yaml-files.js";
 import {
   resolveSystemEmployees,
@@ -87,7 +87,7 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
               .map((s: any) => ({ name: s.name as string, description: s.description as string }))
             : undefined,
         };
-        const departmentProblem = departmentDisagreement(orgDir, fullPath, employee.department, scopeOf);
+        const departmentProblem = departmentDisagreement(orgDir, fullPath, employee.department, scopeOf) ?? scopedEmployeeRefusal(employee, scopeOf);
         if (departmentProblem) {
           // Same containment as a bad remote target: this employee does not load, the
           // rest of the org does. A scoped department's members are confined by what

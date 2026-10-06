@@ -54,3 +54,22 @@ export function departmentChangeRefusal(
   if (guarded.length === 0) return null;
   return `${name} cannot be moved between "${current}" and "${next}" through the API because "${guarded[0]}" is not an open department: its file must sit under org/${guarded[0]} and say so; move the file by hand`;
 }
+
+/**
+ * FR-026: a department-scoped employee runs on the claude engine in v1, because the
+ * department's stage directory uses Claude's layout, and runs locally until scoped
+ * sessions on remote hosts are supported. Returns why the employee is refused, or null.
+ */
+export function scopedEmployeeRefusal(
+  employee: { department: string; engine?: string; remoteHost?: string },
+  scopeOf: (slug: string) => DepartmentScope,
+): string | null {
+  if (scopeOf(employee.department) === "open") return null;
+  if ((employee.engine ?? "claude") !== "claude") {
+    return `it is in non-open department "${employee.department}", whose employees must use the claude engine (the department's working directory uses Claude's layout), not "${employee.engine}"`;
+  }
+  if (employee.remoteHost) {
+    return `it is in non-open department "${employee.department}" and sets remoteHost "${employee.remoteHost}": department-scoped employees cannot run on a remote host yet, because the session would run in its remoteCwd with the company home linked in`;
+  }
+  return null;
+}

@@ -1,5 +1,6 @@
 import { buildPlatformContextRefresh, fingerprintPlatformContext } from "../../engines/platform-context.js";
 import { isBudgetExhausted } from "../../gateway/budgets.js";
+import { refuseScopedTurn } from "./scoped-turn.js";
 import { refuseClaudeLogin } from "./claude-login-refusal.js";
 import { resolveEffort } from "../../shared/effort.js";
 import { isCompactCommand, isRawEngineCommand } from "../../shared/skill-commands.js";
@@ -50,6 +51,8 @@ function refuseTurn(input: TurnInput): string | undefined {
   // D3: a connector anchor is an identity, never an agent. Running one would be an employee-less engine turn — COO-shaped.
   if (isRemoteMcpSession(session)) return "A remote MCP connector session never runs an engine; its results are read back through the connector.";
   if (isTerminalSession(session)) return TERMINAL_REFUSES_MESSAGES;
+  const scoped = refuseScopedTurn(session, input.engineOverride?.name);
+  if (scoped) return scoped;
   if (!input.engineOverride && !input.engines.has(session.engine)) {
     return `Engine "${session.engine}" not available`;
   }

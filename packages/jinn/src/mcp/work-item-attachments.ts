@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { departmentPathError } from "../shared/department-file-roots.js";
 import path from "node:path";
 import { GATEWAY_TIMEOUT_MS, gatewayRequest, JinnMcpToolError, type JinnMcpContext } from "./toolkit.js";
 import { expandPath, readLocalFileForIngestion, vetLocalFileForIngestion } from "../shared/file-read-policy.js";
@@ -65,6 +66,8 @@ function refusal(requested: string, resolved: string, error: string, status: num
  */
 function vetWorkItemAttachment(requestedPath: string): void {
   const resolved = sessionHostPath(requestedPath);
+  const outside = departmentPathError(resolved);
+  if (outside) throw new JinnMcpToolError(outside);
   const vetted = vetLocalFileForIngestion(resolved, ATTACHMENT_MAX_BYTES);
   if (!vetted.ok) throw refusal(requestedPath, resolved, vetted.error, vetted.status);
   if (vetted.size === 0) throw refusal(requestedPath, resolved, "attachment must not be empty", 400);
@@ -109,6 +112,9 @@ export async function uploadWorkItemAttachment(
   // A caller with no host of its own has nothing to read here (the remote door).
   if (ctx.hostLocations === false) throw new JinnMcpToolError(NO_HOST_REFUSAL);
   const resolved = sessionHostPath(requestedPath);
+  // FR-018: a department-scoped session attaches only from its department's roots.
+  const outside = departmentPathError(resolved);
+  if (outside) throw new JinnMcpToolError(outside);
   const read = readLocalFileForIngestion(resolved, ATTACHMENT_MAX_BYTES);
   if (!read.ok) throw refusal(requestedPath, resolved, read.error, read.status);
   if (read.buffer.length === 0) throw refusal(requestedPath, resolved, "attachment must not be empty", 400);

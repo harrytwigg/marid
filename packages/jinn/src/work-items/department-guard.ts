@@ -1,5 +1,5 @@
 import type { initDb } from '../shared/db.js';
-import { DepartmentBoundaryError, holdRefusal, isNonOpenDepartment, LIVE_HOLD_LOOKUPS } from './department-scope.js';
+import { DepartmentBoundaryError, employeeDepartment, holdRefusal, isNonOpenDepartment, LIVE_HOLD_LOOKUPS } from './department-scope.js';
 import type { AppendWorkItemEventInput, UpdateWorkItemInput, WorkItem } from './store.js';
 
 /**
@@ -147,5 +147,6 @@ export function assertSessionMayLink(db: Db, sessionId: string, todoId: string, 
   if (session.scope_department !== null && session.scope_department !== rootDept) {
     throw new DepartmentBoundaryError(`session ${sessionId} is bound to department "${session.scope_department}" and cannot be linked to ${todoId}, which is in ${where(rootDept)}`);
   }
-  if (role === 'execute' && session.employee) assertMayHold(session.employee, todoId, rootDept);
+  // A system employee (the Dispatcher) runs a Todo's thread without holding it, and `system` is never scoped (FR-006).
+  if (role === 'execute' && session.employee && employeeDepartment(session.employee) !== 'system') assertMayHold(session.employee, todoId, rootDept);
 }

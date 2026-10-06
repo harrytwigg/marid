@@ -1,3 +1,4 @@
+import { cronTargetRefusal } from "../work-items/department-scope.js";
 import type { CronJob, Connector, JinnConfig, Session } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { appendRunLog } from "./jobs.js";
@@ -136,6 +137,9 @@ export async function runCronJob(
     let employee;
     if (job.employee) {
       employee = orgRegistry(config).get(job.employee);
+      // A hand-edited jobs.json can name a scoped employee; the API refuses it, the run does too.
+      const scoped = cronTargetRefusal(job.employee);
+      if (scoped) throw new Error(scoped);
     }
 
     const routeResult = await sessionManager.route(

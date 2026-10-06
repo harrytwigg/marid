@@ -10,6 +10,7 @@ import { canonicalCronJobId, loadJobs, saveJobs } from "../cron/jobs.js";
 import { summarizeCronRun } from "../cron/run-summary.js";
 import { reloadScheduler } from "../cron/scheduler.js";
 import { validateCronSchedule } from "../cron/validation.js";
+import { cronTargetRefusal } from "../work-items/department-scope.js";
 import { runCronJob } from "../cron/runner.js";
 import { cronActionError } from "../cron/actions.js";
 import { readJsonlTail } from "./jsonl-tail.js";
@@ -77,7 +78,7 @@ function boardWalkRunnerError(job: CronJob, config: JinnConfig): string | null {
 
 /** Why `job` cannot be stored, or null. */
 function jobError(job: CronJob, config: JinnConfig): string | null {
-  return scheduleError(job) ?? cronActionError(job) ?? boardWalkRunnerError(job, config);
+  return scheduleError(job) ?? cronActionError(job) ?? boardWalkRunnerError(job, config) ?? cronTargetRefusal(job.employee);
 }
 
 /** Why a new job cannot join `jobs`: a built-in action runs from one job

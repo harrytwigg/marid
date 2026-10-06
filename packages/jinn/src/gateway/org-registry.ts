@@ -51,6 +51,8 @@ export function refreshOrg(config?: JinnConfig): OrgRead {
     cache = { registry: scanOrg(resolved, departmentScopeOf), config: resolved };
     // FR-015: the work-items layer asks which department an employee is in through this.
     setEmployeeDepartmentResolver((name) => cache?.registry.get(name)?.department);
+    // Loaded lazily: it reads the work-items registry, and this module is imported early.
+    void import("./department-scope/stranding.js").then(({ reportHoldingViolations }) => reportHoldingViolations((message) => logger.warn(message))).catch(() => undefined);
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     // Keep the last known good roster. Handing back an empty map here would

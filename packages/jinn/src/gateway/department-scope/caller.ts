@@ -1,6 +1,6 @@
 import { getSession } from "../../sessions/registry.js";
 import type { Session } from "../../shared/types.js";
-import { scopedDepartmentOf } from "../../work-items/department-scope.js";
+import { lostBindingReason, scopedDepartmentOf } from "../../work-items/department-scope.js";
 import type { CallerIdentity } from "../session-comm-guards.js";
 
 /**
@@ -20,15 +20,6 @@ export interface ScopedCaller {
   department: string;
   /** Why the binding is lost, or null while it holds. */
   lost: string | null;
-}
-
-export function lostBindingReason(session: Pick<Session, "employee" | "scopeDepartment">): string | null {
-  const live = scopedDepartmentOf(session.employee);
-  const bound = session.scopeDepartment ?? null;
-  if (bound === live) return null;
-  if (bound === null) return `this session of ${session.employee} was created before department "${live}" was scoped, so it has no binding; start a new session`;
-  if (live === null) return `this session is bound to department "${bound}", which ${session.employee} is no longer confined to; start a new session`;
-  return `this session is bound to department "${bound}", but ${session.employee} is now in department "${live}"; start a new session`;
 }
 
 /** The scoped caller behind a resolved identity, or null for anyone unscoped. */

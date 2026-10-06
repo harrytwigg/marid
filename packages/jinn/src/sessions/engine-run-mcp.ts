@@ -1,5 +1,6 @@
 import type { Employee, JinnConfig, ResolvedMcpConfig, Session } from "../shared/types.js";
 import { attachSessionIdentity } from "../mcp/identity.js";
+import { departmentMcpEnv } from "../gateway/department-scope/session-env.js";
 import { buildJinnServerSpec, isMcpCapableEngine, resolveMcpServers, writeMcpConfigFile } from "../mcp/resolver.js";
 
 export interface EngineRunMcp {
@@ -23,7 +24,8 @@ export function resolveEngineRunMcp(opts: {
     : resolveMcpServers(opts.config.mcp, opts.employee, opts.engine);
   if (Object.keys(mcpConfig.mcpServers).length === 0) return {};
 
-  const resolvedMcp = attachSessionIdentity(mcpConfig, opts.sessionId);
+  // A department-scoped session's server offers the scoped tool profile and holds file paths to its roots.
+  const resolvedMcp = attachSessionIdentity(mcpConfig, opts.sessionId, departmentMcpEnv(opts.sessionId));
   return {
     resolvedMcp,
     ...(opts.engine === "claude" ? { mcpConfigPath: writeMcpConfigFile(resolvedMcp, opts.sessionId) } : {}),

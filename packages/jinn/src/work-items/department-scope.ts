@@ -103,3 +103,24 @@ export function scopedDepartmentOf(employee: string | null | undefined): string 
   const own = employeeDepartment(employee);
   return own && departmentScope(own) !== "open" ? own : null;
 }
+
+/** Cron stays company-level in v1: a job may not run as a department-scoped employee. */
+export function cronTargetRefusal(employee: string | null | undefined): string | null {
+  const department = scopedDepartmentOf(employee);
+  return department ? `cron jobs cannot target ${employee}, who is confined to department "${department}"; cron stays company-level` : null;
+}
+
+/**
+ * Why a session's department binding no longer holds, or null while it does (or the
+ * session is not scoped). A binding is fixed at creation (FR-008), so it is lost when
+ * the employee has since moved, or its department was opened, or the employee was
+ * scoped after the session was created and the session has no binding at all.
+ */
+export function lostBindingReason(session: { employee?: string | null; scopeDepartment?: string | null }): string | null {
+  const live = scopedDepartmentOf(session.employee);
+  const bound = session.scopeDepartment ?? null;
+  if (bound === live) return null;
+  if (bound === null) return `this session of ${session.employee} was created before department "${live}" was scoped, so it has no binding; start a new session`;
+  if (live === null) return `this session is bound to department "${bound}", which ${session.employee} is no longer confined to; start a new session`;
+  return `this session is bound to department "${bound}", but ${session.employee} is now in department "${live}"; start a new session`;
+}

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { refuseScopedConnectorSession } from "./scoped-connector.js";
 import type {
   Connector,
   Employee,
@@ -125,6 +126,7 @@ export class SessionManager {
     if (await this.handleCommand(msg, connector)) return;
 
     let session = getSessionBySessionKey(msg.sessionKey);
+    if (!session && refuseScopedConnectorSession(msg, opts.employee?.name, connector)) return;
     if (!session) {
       session = createSession({
         ...newSessionEngineSelection(this.config, this.engines, opts),

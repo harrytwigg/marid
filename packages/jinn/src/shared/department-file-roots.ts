@@ -51,3 +51,10 @@ export function departmentPathRefusal(file: string, roots: readonly string[]): s
   const where = roots.length > 0 ? roots.join(", ") : "none are configured";
   return `${file} is outside this department's working directories and stage directory (${where}); a department-scoped session can only attach files from there`;
 }
+
+/** For an MCP tool about to read `file`: the refusal when this server is a scoped session's and the file is outside its roots, else null. */
+export function departmentPathError(file: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  const roots = departmentRootsFromEnv(env);
+  if (!roots) return null;
+  return insideDepartmentRoots(file, roots) ? null : departmentPathRefusal(file, roots);
+}
