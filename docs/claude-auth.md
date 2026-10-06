@@ -37,8 +37,9 @@ Two consequences shape everything below:
 
 1. **Observe.** Every Claude turn reports how it ended. `authentication_failed`
    or `oauth_org_not_allowed` opens an outage for the session's *scope* — the
-   gateway host, or a remote employee's `user@host[:profile]`. A turn that
-   authenticated closes it.
+   gateway host (`local`), a local employee's named profile
+   (`local:<profile key>`, from `claudeConfigDir`), or a remote employee's
+   `user@host[:profile]`. A turn that authenticated closes it.
 2. **Alert once.** The first failure of an outage sends one operator message
    naming the host, the reason, what it costs (every Claude turn and cron job
    there), and the fix. The outage then counts; it does not re-send. Recovery
@@ -52,10 +53,16 @@ Two consequences shape everything below:
    error, so cron history records a failed run without spawning a CLI. It is a
    cooldown, not a lock: one launch per hour re-probes, and a login lifts it
    immediately because the pair on disk changes. Remote employees are never
-   refused — their credentials are on a host the gateway cannot read.
+   refused — their credentials are on a host the gateway cannot read. A turn
+   on a local named profile is checked differently: the profile directory must
+   exist and hold a login (its Keychain item by name on macOS, its
+   `.credentials.json` elsewhere, never reading the secret), and the refusal
+   names the `CLAUDE_CONFIG_DIR=<dir> claude`, then `/login`, that fixes it.
 4. **Prefer a fallback engine.** The failure also records `claude` as
    unavailable in engine health for the recheck window, so new sessions with an
    engine chain start on the next healthy engine and the dashboard shows why.
+   A named profile's failure is recorded under its own account,
+   `claude:<profile key>`, and moves nothing else.
 5. **Warn ahead of the predictable expiry.** The 15-minute engine-health tick
    checks `refreshTokenExpiresAt` and sends one warning 48 hours before it — the
    only credential expiry that is both foreseeable from the file and fatal.
