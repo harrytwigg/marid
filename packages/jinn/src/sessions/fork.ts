@@ -17,6 +17,7 @@ import { findCodexSessionFile } from "../engines/codex-rollout.js";
 import type { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { HermesRpc } from "../engines/hermes-jsonrpc.js";
 import { applyClaudeProfileEnv, claudeConfigDirFor, type ClaudeProfile } from "../shared/claude-profile.js";
+import { assertClaudeProfileDirExists } from "../engines/claude-profile-launch.js";
 
 export interface ForkResult {
   engineSessionId: string;
@@ -63,6 +64,7 @@ export interface ForkClaudeOpts {
  */
 export async function forkClaudeSession(opts: ForkClaudeOpts): Promise<ForkResult> {
   const { engineSessionId, cwd, interactive, claudeProfile = null } = opts;
+  assertClaudeProfileDirExists(claudeProfile);
   if (interactive) return forkClaudeSessionInteractive(engineSessionId, cwd, interactive, claudeProfile);
 
   logger.info(`Forking Claude session ${engineSessionId} in ${cwd} (headless)`);

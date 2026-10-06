@@ -16,7 +16,7 @@ import type {
 import { recordClaudeUsageSample, usageHistoryPath } from "./claude-usage-history.js";
 import { CLAUDE_LIMITS_DIR } from "./paths.js";
 import { claudeAccountKey, isAccountSession } from "./engine-account.js";
-import type { ClaudeProfile } from "./claude-profile.js";
+import { claudeProfileDirExists, type ClaudeProfile } from "./claude-profile.js";
 import { buildEngineChildEnv } from "./child-env.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
@@ -112,6 +112,9 @@ export async function fetchClaudeOAuthUsageWithToken(token: string): Promise<Jso
 }
 
 async function claudeAuthPlan(config: JinnConfig, profile: ClaudeProfile): Promise<string | undefined> {
+  // `claude auth status` creates its config dir when it is missing, and the gateway never
+  // creates a named profile's directory: a missing one has no plan to read (FR-054).
+  if (profile && !claudeProfileDirExists(profile)) return undefined;
   const bin = resolveBin("claude", config.engines.claude?.bin);
   return new Promise((resolve) => {
     // An npm-installed CLI on Windows is a .cmd shim, which Node refuses to

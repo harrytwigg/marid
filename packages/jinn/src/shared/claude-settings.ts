@@ -160,7 +160,7 @@ export function applyTrustSeed(data: any, realProjectDir: string): { data: any; 
  * the dedicated Claude volume; this host path only handles ordinary onboarding and
  * per-project trust. See upstream issue #66.
  */
-export function seedTrust(claudeJsonFile: string, projectDir: string): void {
+export function seedTrust(claudeJsonFile: string, projectDir: string, opts: { createDir?: boolean } = {}): void {
   const realDir = fs.realpathSync(projectDir);
   let data: any = {};
   try { data = JSON.parse(fs.readFileSync(claudeJsonFile, "utf-8")); } catch { /* new file */ }
@@ -175,7 +175,10 @@ export function seedTrust(claudeJsonFile: string, projectDir: string): void {
   // Under CLAUDE_CONFIG_DIR the target directory may not exist yet, unlike the old
   // os.homedir(); the caller swallows the ENOENT and every turn then hangs on the dialog
   // this function exists to answer. 0700 because credentials and transcripts land there.
-  fs.mkdirSync(path.dirname(claudeJsonFile), { recursive: true, mode: 0o700 });
+  // A named profile's directory is the operator's to create (`createDir: false`): the write
+  // then fails with ENOENT instead of conjuring a directory the "does not exist" refusal
+  // should have reported.
+  if (opts.createDir !== false) fs.mkdirSync(path.dirname(claudeJsonFile), { recursive: true, mode: 0o700 });
   const tmp = `${claudeJsonFile}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(seeded.data, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, claudeJsonFile);

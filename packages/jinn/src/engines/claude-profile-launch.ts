@@ -1,5 +1,5 @@
 import { operatorSettingsCarry } from "../shared/claude-profile-settings.js";
-import { claudeJsonPathFor, type ClaudeProfile } from "../shared/claude-profile.js";
+import { claudeJsonPathFor, claudeProfileDirExists, claudeProfileMissingMessage, type ClaudeProfile } from "../shared/claude-profile.js";
 import { seedTrust, writeSessionSettings } from "../shared/claude-settings.js";
 import { remoteAccountForTarget } from "../shared/engine-account.js";
 import type { ClaudeResetSource } from "../shared/engine-reset-times.js";
@@ -36,12 +36,24 @@ export function ensureClaudeProfileTrust(profile: ClaudeProfile | undefined, cwd
   if (!profile) return;
   const key = `${profile.key}\0${cwd}`;
   if (seeded.has(key)) return;
+  // Never create a named profile's directory; a missing one is refused as "does not exist".
+  if (!claudeProfileDirExists(profile)) return;
   try {
-    seedTrust(claudeJsonPathFor(profile), cwd);
+    seedTrust(claudeJsonPathFor(profile), cwd, { createDir: false });
     seeded.add(key);
   } catch (err) {
     logger.warn(`Could not seed folder trust for ${cwd} in the Claude profile ${profile.dir}: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/**
+ * Refuse to launch the CLI under a named profile whose directory is missing: Claude Code
+ * creates its config dir on first run, and the gateway never creates a named profile's
+ * directory. A turn is refused earlier in preflight (FR-054); this covers the launches
+ * that have no preflight, the terminal view and a fork.
+ */
+export function assertClaudeProfileDirExists(profile: ClaudeProfile | undefined): void {
+  if (profile && !claudeProfileDirExists(profile)) throw new Error(claudeProfileMissingMessage(profile));
 }
 
 export function resetClaudeProfileTrustForTests(): void {

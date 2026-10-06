@@ -4,7 +4,7 @@ import type { CompactionStats, InterruptibleEngine, EngineRunOpts, EngineResult,
 import { logger } from "../shared/logger.js";
 import { JINN_HOME, CLAUDE_SETTINGS_DIR } from "../shared/paths.js";
 import { cleanupSessionSettings } from "../shared/claude-settings.js";
-import { claudeResetSource, ensureClaudeProfileTrust, writeClaudeSessionSettings } from "./claude-profile-launch.js";
+import { assertClaudeProfileDirExists, claudeResetSource, ensureClaudeProfileTrust, writeClaudeSessionSettings } from "./claude-profile-launch.js";
 import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
@@ -3111,6 +3111,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // Before anything is allocated: an argument the exec will refuse fails the
     // turn here, with its size, instead of as a process that died at birth.
     if (argumentLimitApplies(false)) assertArgumentsFit("Claude Code", args, (index) => describeInteractiveArgument(args, index));
+    assertClaudeProfileDirExists(opts.claudeProfile);
     const { proxy, port } = await this.startProxy(jinnSessionId);
     if (standDown?.()) {
       proxy.stop();
@@ -3214,6 +3215,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           this.lifecycle.adopt(jinnSessionId, handle);
           return;
         }
+        assertClaudeProfileDirExists(opts.claudeProfile);
         const { proxy, port } = await this.startProxy(jinnSessionId);
         // Re-check after the async gap: a real turn (run) or another idle spawn may
         // have claimed the session while we awaited the proxy bind. If so, don't

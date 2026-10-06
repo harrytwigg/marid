@@ -34,7 +34,12 @@ afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-const named = () => claudeProfileFromDir(path.join(tmp, "friend"));
+/** The operator creates a profile's directory; the gateway never does. */
+const named = () => {
+  const profile = claudeProfileFromDir(path.join(tmp, "friend"));
+  fs.mkdirSync(profile.dir, { recursive: true });
+  return profile;
+};
 const settingsFor = (carry: ReturnType<typeof operatorSettingsCarry>) =>
   buildSessionSettings({ sessionId: "s1", relayScript: "/relay.mjs", carry });
 

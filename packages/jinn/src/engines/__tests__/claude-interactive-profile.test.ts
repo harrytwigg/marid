@@ -75,6 +75,8 @@ beforeEach(() => {
   vi.stubEnv("CLAUDE_CONFIG_DIR", defaultDir);
   vi.stubEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR", path.join(tmp, "inherited"));
   profile = claudeProfileFromDir(path.join(tmp, "friend"));
+  // The operator creates a profile; the gateway never does.
+  fs.mkdirSync(profile.dir);
   resetClaudeProfileTrustForTests();
   lifecycle = new PtyLifecycleManager({ maxLivePtys: 10 });
   engine = new InteractiveClaudeEngine(lifecycle, { register: () => {}, unregister: () => {} } as any);

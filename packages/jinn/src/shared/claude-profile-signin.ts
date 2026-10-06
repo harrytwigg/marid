@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { claudeKeychainService, claudeLoginHint, type ClaudeProfile } from "./claude-profile.js";
+import {
+  claudeKeychainService, claudeLoginHint, claudeProfileDirExists, claudeProfileMissingMessage, type ClaudeProfile,
+} from "./claude-profile.js";
 
 /**
  * Whether a Keychain item with this service name exists. Exit status only:
@@ -40,11 +42,7 @@ export function verifyLocalClaudeProfile(
 ): string | undefined {
   if (!profile || signedIn.has(profile.dir)) return undefined;
   const hint = `To sign it in on this machine, ${claudeLoginHint(profile)}.`;
-  let isDir = false;
-  try {
-    isDir = fs.statSync(profile.dir).isDirectory();
-  } catch { /* missing */ }
-  if (!isDir) return `The Claude profile \`${profile.dir}\` does not exist. ${hint}`;
+  if (!claudeProfileDirExists(profile)) return claudeProfileMissingMessage(profile);
   const platform = deps.platform ?? process.platform;
   const hasLogin = platform === "darwin"
     ? (deps.keychain ?? securityKeychainProbe)(claudeKeychainService(profile))
