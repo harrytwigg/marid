@@ -418,7 +418,11 @@ The stage dir lives at `<parent of home>/.jinn-departments/<slug>/`.
   sync and Phase 5's remote sync apply exactly the same content. It refuses a skill containing
   a symlink. The sync is one shared routine (file by file, FR-020a), with a `sh` form for
   remote hosts.
-- **Use.** `engine-run.ts` uses it as the cwd for scoped sessions. A trust seed for the stage
+- **Use.** A cwd helper (session or employee to cwd) gives the stage dir for scoped sessions.
+  All four local spawn sites use it: `engine-run.ts:46`, the rate-limit handler's Branch A
+  (`:185`) and Branch B (`:301`), and `pty-ws.ts:139`. A grep test, with an allow-list,
+  catches any new `cwd: JINN_HOME` at a session-spawn site (FR-020b). Scoped sessions skip
+  engine fallback entries (FR-026a). A trust seed for the stage
   dir is written when the dir is generated, under the session's profile once Phase 4 exists.
 - **Transcripts.** Resume, fork and auto-compaction resolve the stage-dir transcript slug.
   Each gets a regression test.
@@ -561,17 +565,27 @@ Senior, because it reads account tokens and changes what the walk starts.
   - FR-076: nothing changes; the docs say the runner can be pointed at another engine.
 - **No live reading** (FR-075a): the snapshot marks such an account `noReading`. The prose
   allows one probing start on it when it is not exhausted and nothing holds it.
-- **Remote readings** (FR-072): `engines/remote-account-usage.ts` reads each remote account's
-  `.credentials.json` (or its Keychain over SSH on a macOS host) and runs `claude auth status`
-  over SSH, only when `probeReachable` says the host is up. The token stays in memory for the
-  one call. A test asserts that nothing writes it to disk or a log and that nothing wakes a
-  host.
+- **Remote readings** (FR-072): `engines/remote-account-usage.ts` runs a small script with
+  the host's Node that parses `.credentials.json` (or reads the Keychain entry for that path on
+  a macOS host) and prints only the access token and its expiry. It also runs
+  `claude auth status` over SSH, and only when `probeReachable` says the host is up. The token
+  stays in memory for the one call. Tests assert that the captured output holds no refresh
+  token, that nothing writes the token to disk or a log, and that nothing wakes a host.
 - **Account fallback chains** (FR-079): `engines.claude.accounts` is parsed and validated
-  beside `validateEngineFallbackChains` (`shared/engine-fallback.ts:24`). Chain entries become
-  engine-or-account names. `resolveFallbackEngine` (`:178`) walks them with per-account health.
-  The rate-limit handler's Branch A runs an account substitute as a fresh session on that
-  profile with the recent history, keeping the stage dir and binding of a scoped session.
-  Board-walk turns are still never substituted (`sessions/rate-limit-handler.ts:138`, FR-076).
+  beside `validateEngineFallbackChains` (`shared/engine-fallback.ts:24`), refusing duplicate
+  or default `configDir`s and FR-050 failures. Names resolve to FR-070 keys, so stores never key
+  on a name. Chain entries become engine-or-account names, and `resolveFallbackEngine` (`:178`)
+  walks them with per-account health.
+  - Branch A runs an account substitute as a fresh session on that profile with the recent
+    history.
+  - `beginEngineSubstitution` (`sessions/engine-override.ts:38`) records the original and
+    substitute accounts.
+  - `nextEngineSessionFields` (`sessions/registry.ts:969`) keys `engineSessions` by account,
+    with `claude` unchanged for the default.
+  - The FR-051 profile resolver honours an active account override until `until`.
+  - Scoped sessions keep their stage dir and accept only account entries (FR-026a).
+  - Board-walk turns are still never substituted (`sessions/rate-limit-handler.ts:138`,
+    FR-076).
 - **Unchanged with one account** (FR-078): a byte comparison, on a fixed clock and fixed
   fixtures, of the snapshot JSON, the `dispatcherSuffix` text and the limits response, with
   `accounts` omitted for one account. The walk prompt is compared with the same `board-walk.md`

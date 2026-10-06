@@ -574,6 +574,24 @@ scoped employee; D is that session's binding)
   session made to its stage dir is reverted when the next scoped session starts. Between
   spawns a session can still edit it; this is a guardrail. No hash cache is kept, so there is
   no cache to outlive the directory. Local and remote stage dirs follow this rule identically.
+- **FR-020b**: **Every local spawn of a scoped session uses the stage dir.** Today four local
+  session-spawn sites hard-code `cwd: JINN_HOME`:
+  - `packages/jinn/src/sessions/turn/engine-run.ts:46`: turns, and auto-compaction through it;
+  - `packages/jinn/src/sessions/rate-limit-handler.ts:185`: the substitute (Branch A);
+  - `packages/jinn/src/sessions/rate-limit-handler.ts:301`: the wait-and-retry (Branch B), which
+    resumes the engine session from that cwd;
+  - `packages/jinn/src/gateway/pty-ws.ts:139`: the terminal attach.
+
+  All four MUST take the cwd from one helper (session or employee to cwd), the local twin of
+  FR-061, so a scoped session never retries or attaches in `$JINN_HOME`. A grep test fails on
+  any `cwd: JINN_HOME` at a session-spawn site outside an allow-list. The allow-list covers the
+  ssh process's own local cwd (`packages/jinn/src/engines/claude-interactive.ts:3102`, `:3240`)
+  and engines a scoped employee cannot use (opencode, pi).
+- **FR-026a**: **No engine substitute for a scoped session.** Another engine cannot use the stage
+  dir's Claude layout, and in `$JINN_HOME` it would read the company `AGENTS.md`. So a scoped
+  session MUST skip engine entries in any fallback chain, its account's own (FR-079) or
+  `engines.claude.fallback`, and accept only Claude-account entries. With none left, it waits
+  for its reset. Until Phase 6, a scoped session skips engine fallback entirely.
 - **FR-026**: In v1 a scoped employee MUST use the `claude` engine, because the stage dir uses
   Claude's layout (`CLAUDE.md`, `.claude/skills/`). It MAY run locally or on a remote host
   (D5). Validation refuses another engine and says why. A scoped employee with a `remoteHost`
@@ -695,10 +713,12 @@ scoped employee; D is that session's binding)
   board walk's reading. Otherwise a friend's session would show as the operator's windows,
   and the walk could start work on the operator's account because the friend's allowance is
   about to lapse. Phase 6 adds the readings of the other accounts (FR-071 to FR-077).
-- **FR-056**: **Each account has its own fallback chain** (D9). A session on a named profile
-  MUST NOT inherit the default account's `engines.claude.fallback`, because that chain was
-  written for the operator's account. Until Phase 6 gives accounts their own chains (FR-079),
-  a named-profile session has none: a rate limit makes it wait for its own reset.
+- **FR-056**: **Each account has its own fallback chain** (D9). A session on a **local** named
+  profile MUST NOT inherit the default account's `engines.claude.fallback`, because that chain
+  was written for the operator's account. Until Phase 6 gives accounts their own chains
+  (FR-079), such a session has none: a rate limit makes it wait for its own reset. Remote
+  employees, `remoteClaudeConfigDir` included, keep exactly today's behaviour: they inherit the
+  engine chain, limited to engines that can run on their host.
 - **FR-057**: **Non-session reads stay on the default profile.** These run outside any session
   and keep reading the operator's login:
   - the model catalog and effort discovery (`packages/jinn/src/shared/claude-models.ts:262`,
@@ -853,14 +873,20 @@ lists the ten places that assume one account.
 - **FR-072**: **Remote accounts report their usage** (D8). Remote sessions write no status line
   to the gateway today (`packages/jinn/src/engines/remote-stage.ts:1378`), so the gateway MUST
   read each remote account itself, on the same refresh as the local ones:
-  - **The token.** Over SSH, it reads the account's `.credentials.json`: the
+  - **The token.** Over SSH, from the account's `.credentials.json`: the
     `remoteClaudeConfigDir` (or `remote.claudeConfigDir`), or `~/.claude` when neither is set.
     That is the file the existing remote sign-in check looks for
-    (`packages/jinn/src/engines/remote-stage.ts:665`). The token is held in memory for the one
+    (`packages/jinn/src/engines/remote-stage.ts:665`). **Only the access token and its expiry
+    leave the host:** a small script run with the host's own Node (`facts.nodeBin`) parses the
+    file there and prints those two fields, so the refresh token never crosses the network. The
+    path is passed quoted, not interpolated. The access token is held in memory for the one
     usage call. It is never stored, so it cannot go stale when Claude Code rotates it, and it
-    is never refreshed (FR-071). A macOS remote host whose login is in its Keychain is read
-    with `security find-generic-password -w` over SSH. If its Keychain is locked, the account
-    shows "no live reading".
+    is never refreshed (FR-071).
+  - **A macOS remote host** keeps its login in its Keychain. The same script reads it there with
+    `security find-generic-password -w` under the service name Claude Code uses for that path:
+    `Claude Code-credentials`, plus `-<first 8 hex of sha256 of the remote CLAUDE_CONFIG_DIR>`
+    when one is set (the rule in data-model.md, applied to the remote path). It prints only the
+    two fields. If the Keychain is locked, the account shows "no live reading".
   - **The plan**, from `claude auth status` run over SSH with the account's
     `CLAUDE_CONFIG_DIR`.
   - **Only when the host is awake.** A host that is asleep or unreachable is not woken for
@@ -930,7 +956,11 @@ lists the ten places that assume one account.
   - accounts are declared under `engines.claude.accounts.<name>` with `configDir`,
     `fallback` and `fallbackModelMap` (data-model.md). An employee's `claudeConfigDir`
     matches a declared account by its canonical path (FR-050). The name labels its Limits card
-    (FR-073);
+    (FR-073). **The name is only an alias:** `claude:<name>` resolves to the FR-070 key
+    `claude:<profile key>`, and every store keys on that, so renaming an account in config
+    orphans no health, history or limits;
+  - validation refuses two accounts with the same canonical `configDir`, a `configDir` equal
+    to the default profile's directory, and a `configDir` that fails FR-050's rules;
   - `engines.claude.fallback` stays the default account's chain, unchanged;
   - a chain entry is an engine name (`codex`) or an account (`claude` for the default,
     `claude:<name>` for a declared one). Validation refuses unknown names and an account
@@ -940,9 +970,23 @@ lists the ten places that assume one account.
     waits for its own reset (FR-056);
   - the walker skips an exhausted account using per-account health (FR-055). A substitute on
     another account runs as a fresh session on that account's profile with the recent history
-    in its prompt, as an engine substitute does today, because a transcript cannot be resumed
-    across profiles;
-  - a scoped session's substitute keeps its stage dir and binding;
+    in its prompt, because a transcript cannot be resumed across profiles;
+  - **substitution is tracked by account, not engine name.** Today's plumbing is keyed by
+    engine: `beginEngineSubstitution` (`packages/jinn/src/sessions/engine-override.ts:38`) sets
+    the session's engine and records the original, and `nextEngineSessionFields`
+    (`packages/jinn/src/sessions/registry.ts:969`) stores thread ids per engine. A
+    `claude` to `claude:friend` substitute would keep the engine name, overwrite the original
+    account's thread id, and make the restore meaningless. So:
+    - the override records the original and substitute **accounts**;
+    - `engineSessions` is keyed by account. The default account keeps the key `claude`, so
+      existing rows still read;
+    - the profile resolver (FR-051) honours an active account override until its `until`, then
+      hands the session back to its own account;
+  - a scoped session's substitute keeps its stage dir (FR-020b) and binding, and only
+    Claude-account entries apply to it (FR-026a);
+  - putting `claude:<name>` in `engines.claude.fallback` moves the default account's
+    sessions, including unscoped company sessions, onto that account when the default is
+    limited. The docs say so;
   - remote employees keep today's rule that a substitute must run on their host. Account
     entries apply to local sessions only in v1;
   - a board-walk turn still never changes engine or account (FR-076).

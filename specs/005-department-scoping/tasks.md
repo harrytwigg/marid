@@ -175,6 +175,11 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   returns the file set without writing it, so Phase 5 syncs the same content.
 - [ ] T061 Make resume, fork and auto-compaction resolve the stage-dir transcript slug. Add a
   regression test for each.
+- [ ] T061a Add the local cwd helper (FR-020b) and use it at `engine-run.ts:46`,
+  `rate-limit-handler.ts:185` and `:301`, and `pty-ws.ts:139`. Add the grep test for
+  `cwd: JINN_HOME` at session-spawn sites, with its allow-list. Make scoped sessions skip
+  engine fallback entries (FR-026a). Test a scoped session's Branch B retry, its terminal
+  attach, and a rate limit with `engines.claude.fallback: [codex]` (it waits).
 - [ ] T062 Apply the skill allow-list to the copies, the prompt and `dispatchConfig.skills`.
 - [ ] T063 Make `SEARCH_ROOTS` a parameter. For scoped callers:
   - root reads at `knowledge/departments/<slug>/` (including `state.md`) plus `sharedNotes`;
@@ -295,10 +300,12 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   account's read skips `$CLAUDE_CODE_OAUTH_TOKEN`, and that nothing refreshes a token. Check
   once, on T070's throwaway profile, that reading the suffixed Keychain entry with
   `security -w` does not prompt, and record it in the PR.
-- [ ] T092a Remote readings (FR-072): read each remote account's `.credentials.json` (or its
-  Keychain over SSH on a macOS host) and `claude auth status` over SSH, only when the host is
-  reachable. Keep the token in memory for the one call. Test that nothing stores or logs it,
-  that nothing wakes a host, and that a sleeping host shows its last reading and its age.
+- [ ] T092a Remote readings (FR-072): on the host, with its Node, parse `.credentials.json` (or
+  read the Keychain entry named for that path on a macOS host) and print only the access token
+  and its expiry. Run `claude auth status` over SSH, only when the host is reachable. Keep the
+  token in memory for the one call. Test that the captured output holds no refresh token, that
+  nothing stores or logs the token, that nothing wakes a host, and that a sleeping host shows
+  its last reading and its age.
 - [ ] T093 Board walk (FR-075 to FR-077): per-account snapshot fields and `priorFiveHour`,
   candidate accounts, the `startTodo` code gate, exhausted accounts in `dispatcherSuffix`,
   the per-account rewrite of `template/board-walk.md`, the `noReading` flag with one probing
@@ -308,11 +315,21 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   start per tick per account).
 - [ ] T093a Per-account fallback chains (FR-079): parse and validate `engines.claude.accounts`,
   let chain entries name accounts, walk them with per-account health, and run an account
-  substitute as a fresh session on that profile with the recent history. Test: a declared
-  account with `fallback: []` waits; one with `[claude, codex]` moves to the default account,
-  or to codex when the default account is exhausted; a scoped session's substitute keeps its
-  stage dir; a board-walk turn is never substituted; an undeclared named profile never
-  inherits `engines.claude.fallback`.
+  substitute as a fresh session on that profile with the recent history. Validate duplicate
+  and default `configDir`s and FR-050 failures, and resolve names to FR-070 keys. Track
+  substitution by account: the override records both accounts, `engineSessions` is keyed by
+  account (`claude` unchanged for the default), and the profile resolver honours the override
+  until `until`. Test:
+  - a declared account with `fallback: []` waits;
+  - one with `[claude, codex]` moves to the default account, or to codex when the default
+    account is exhausted;
+  - a second turn inside the override window runs on the substitute account and resumes its
+    thread, and after `until` the session is back on its own account and thread;
+  - renaming an account in config keeps its health and history;
+  - a scoped session accepts only account entries and keeps its stage dir;
+  - a board-walk turn is never substituted;
+  - an undeclared local named profile never inherits `engines.claude.fallback`, and a remote
+    employee behaves as on `main`.
 - [ ] T094 Web (junior sub-Todo): `accounts` on `/api/engine-limits` with `engines.claude`
   unchanged, the Limits page grouped by engine, `/api/auto-dispatch/usage?account=`, and the
   usage card's switcher. Capture every FR-040 limits state (FR-045).
@@ -321,7 +338,9 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   single-account roster (`accounts` omitted); the walk prompt with the same `board-walk.md`
   on both sides; and a decision-level test of the walk's choices.
 - [ ] T096 Docs and migration: `docs/architecture.md` and the Limits and Auto-Dispatch docs
-  describe accounts. The rationale tells an instance to reconcile its own `board-walk.md` to
+  describe accounts and their fallback chains, including that putting `claude:<name>` in
+  `engines.claude.fallback` moves the default account's unscoped company sessions onto that
+  account. The rationale tells an instance to reconcile its own `board-walk.md` to
   the per-account wording (FR-077), and adds Phase 6's paragraph (FR-044).
 
 ## Follow-ups outside this feature
