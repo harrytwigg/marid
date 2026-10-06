@@ -2,7 +2,8 @@ import type { JinnConfig } from "./types.js";
 
 /**
  * `engines.<claude|opencode>.autoCompact`: the policy that decides
- * when a long, cache-cold session is compacted before its next turn. The
+ * when a long session is compacted before its next turn — because its cache
+ * has gone cold, or because its context has passed a budget. The
  * decision itself lives in `sessions/auto-compaction.ts`; this is the config
  * half — defaults, resolution and validation — kept free of the session
  * registry so the config loader can use it.
@@ -11,13 +12,15 @@ import type { JinnConfig } from "./types.js";
 /**
  * The config block. When enabled, a turn on a session whose last-turn context
  * is at least `minContextTokens`, and whose engine has been idle at least
- * `cacheWindowSeconds`, runs the engine's own compaction first. Defaults:
- * disabled, 300 s, 100000 tokens.
+ * `cacheWindowSeconds`, runs the engine's own compaction first. So does a turn
+ * on a session whose context has reached `maxContextTokens`, warm or not.
+ * Defaults: disabled, 300 s, 100000 tokens, no budget.
  */
 export interface AutoCompactConfig {
   enabled?: boolean;
   cacheWindowSeconds?: number;
   minContextTokens?: number;
+  maxContextTokens?: number;
 }
 
 /** Engines `engines.<name>.autoCompact` may be set on. */
@@ -30,6 +33,14 @@ export interface AutoCompactPolicy {
   cacheWindowSeconds: number;
   /** Below this context size a session is not worth compacting. */
   minContextTokens: number;
+  /**
+   * The context budget: at or above it a session is compacted before its next
+   * turn whether its cache is warm or cold. Undefined, the default, leaves a
+   * warm session to the engine's own compaction, which waits for the model's
+   * context ceiling (opencode's ignores its `compaction.reserved` unless the
+   * provider declares `limit.input`, so Jinn cannot lower it by config).
+   */
+  maxContextTokens?: number;
 }
 
 /**
@@ -61,6 +72,9 @@ export function resolveAutoCompactPolicy(config: Pick<JinnConfig, "engines">, en
   const engineConfig = (config.engines as unknown as Record<string, unknown>)[engine];
   const raw = isMapping(engineConfig) && isMapping(engineConfig.autoCompact) ? engineConfig.autoCompact : {};
   const defaults = AUTO_COMPACT_DEFAULTS[engine];
+  const budget = typeof raw.maxContextTokens === "number" && Number.isFinite(raw.maxContextTokens)
+    ? Math.max(MIN_CONTEXT_TOKENS, raw.maxContextTokens)
+    : undefined;
   return {
     enabled: raw.enabled === true,
     cacheWindowSeconds: typeof raw.cacheWindowSeconds === "number" && Number.isFinite(raw.cacheWindowSeconds)
@@ -69,6 +83,7 @@ export function resolveAutoCompactPolicy(config: Pick<JinnConfig, "engines">, en
     minContextTokens: typeof raw.minContextTokens === "number" && Number.isFinite(raw.minContextTokens)
       ? Math.max(MIN_CONTEXT_TOKENS, raw.minContextTokens)
       : defaults.minContextTokens,
+    ...(budget !== undefined ? { maxContextTokens: budget } : {}),
   };
 }
 
@@ -93,7 +108,7 @@ export function autoCompactProblems(engines: Record<string, unknown>): string[] 
       : []);
 }
 
-const KNOWN_SETTINGS = new Set(["enabled", "cacheWindowSeconds", "minContextTokens"]);
+const KNOWN_SETTINGS = new Set(["enabled", "cacheWindowSeconds", "minContextTokens", "maxContextTokens"]);
 
 function engineAutoCompactProblems(engine: string, block: unknown): string[] {
   const path = `engines.${engine}.autoCompact`;
@@ -107,6 +122,7 @@ function engineAutoCompactProblems(engine: string, block: unknown): string[] {
       : undefined,
     positiveNumberProblem(`${path}.cacheWindowSeconds`, block.cacheWindowSeconds, MIN_CACHE_WINDOW_SECONDS),
     positiveNumberProblem(`${path}.minContextTokens`, block.minContextTokens, MIN_CONTEXT_TOKENS),
+    positiveNumberProblem(`${path}.maxContextTokens`, block.maxContextTokens, MIN_CONTEXT_TOKENS),
     ...Object.keys(block)
       .filter((key) => !KNOWN_SETTINGS.has(key))
       .map((key) => `${path}.${key} is not a known setting (${[...KNOWN_SETTINGS].join(", ")})`),

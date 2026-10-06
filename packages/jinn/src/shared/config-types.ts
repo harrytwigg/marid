@@ -98,7 +98,7 @@ export interface JinnConfig {
        *  substitute runs on its own default — this is only for keeping the tier a
        *  turn was sized for, e.g. a cheap model swapping to a cheap one. */
       fallbackModelMap?: Record<string, string>;
-      /** Compact a long, cache-cold session first. See auto-compact-config.ts. */
+      /** Compact a long session first: cache-cold, or past its context budget. See auto-compact-config.ts. */
       autoCompact?: AutoCompactConfig;
     };
     codex: { bin: string; model: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };

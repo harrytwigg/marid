@@ -2,14 +2,18 @@ import { opencodeMode } from "../../engines/opencode-server.js";
 import { logger } from "../../shared/logger.js";
 import { detectRateLimit } from "../../shared/rateLimit.js";
 import type { EngineResult, Session } from "../../shared/types.js";
+import { resolveAutoCompactPolicy } from "../../shared/auto-compact-config.js";
 import {
+  AUTO_COMPACT_BUDGET_HOLD_KEY,
   autoCompactDoneNotice,
   autoCompactFailedNotice,
   autoCompactStatus,
+  budgetHoldReleased,
   buildAutoCompactCommand,
   decideAutoCompaction,
   markAutoCompacting,
   type AutoCompactDecision,
+  type AutoCompactGo,
 } from "../auto-compaction.js";
 import type { PartialStreamWriter } from "../partial-stream.js";
 import {
@@ -88,7 +92,7 @@ type Outcome = "compacted" | "unconfirmed" | "failed" | "rate-limited" | "preemp
 /** One auto-compaction in progress: what was decided, and when it started. */
 interface Pending {
   run: TurnRun;
-  decision: Extract<AutoCompactDecision, { compact: true }>;
+  decision: AutoCompactGo;
   startedAt: number;
 }
 
@@ -105,14 +109,19 @@ function resultFields(result: Pick<EngineResult, "compaction" | "cost"> | undefi
 
 /** One greppable line per auto-compaction, so the saving can be checked later
  *  against the spend ledger (the compaction's own cost is recorded there too). */
+function triggerFields(decision: AutoCompactGo): string[] {
+  return decision.trigger === "budget"
+    ? [`trigger=budget`, `budgetTokens=${decision.budgetTokens}`]
+    : [`trigger=cold`, `idleSec=${Math.round(decision.idleMs / 1000)}`, `windowSec=${decision.policy.cacheWindowSeconds}`];
+}
+
 function logAutoCompaction(pending: Pending, outcome: Outcome, result?: Pick<EngineResult, "compaction" | "cost" | "error">): void {
   const { run, decision } = pending;
   const line = "[auto-compact] " + [
     `session=${run.input.session.id}`,
     `engine=${run.plan.engineName}`,
     `outcome=${outcome}`,
-    `idleSec=${Math.round(decision.idleMs / 1000)}`,
-    `windowSec=${decision.policy.cacheWindowSeconds}`,
+    ...triggerFields(decision),
     `contextTokens=${decision.contextTokens}`,
     ...resultFields(result),
     `durationMs=${Date.now() - pending.startedAt}`,
@@ -133,9 +142,11 @@ function wasPreempted(run: TurnRun, live: Session | undefined, result: EngineRes
 /**
  * Record a confirmed compaction on the session, fenced to this attempt: its
  * cost, the engine session it compacted (so `lastSyncedAt` says the cache is
- * warm again), and the meter's new reading — the size after, or nothing when
+ * warm again), the meter's new reading — the size after, or nothing when
  * the engine reported none, so the meter never shows the pre-compaction size
- * as current. Returns the engine id the turn should now resume.
+ * as current — and the budget hold, so the budget cannot fire again until a
+ * turn reads the context back under it. Returns the engine id the turn should
+ * now resume.
  */
 function recordCompaction(run: TurnRun, compactPlan: TurnPlan, attempt: EngineAttempt): string | undefined {
   const { result } = attempt;
@@ -152,6 +163,7 @@ function recordCompaction(run: TurnRun, compactPlan: TurnPlan, attempt: EngineAt
       })
       : {}),
     lastContextTokens: typeof result.contextTokens === "number" ? result.contextTokens : null,
+    transportMeta: { ...(current.transportMeta ?? {}), [AUTO_COMPACT_BUDGET_HOLD_KEY]: true },
   }));
   return nativeId;
 }
@@ -199,13 +211,25 @@ function judge(run: TurnRun, result: EngineResult): Verdict {
   return { outcome: "compacted" };
 }
 
+/** Lift the budget hold once a turn has read the context back under the
+ *  budget; returns the row the decision should see. */
+function releaseBudgetHold(run: TurnRun, session: Session): Session {
+  if (!budgetHoldReleased(session, resolveAutoCompactPolicy(run.input.config, run.plan.engineName))) return session;
+  const withoutHold = (current: Session): UpdateSessionFields => {
+    const { [AUTO_COMPACT_BUDGET_HOLD_KEY]: _released, ...rest } = current.transportMeta ?? {};
+    return { transportMeta: rest };
+  };
+  return updateSessionForAttempt(session.id, run.input.attemptToken, withoutHold) ?? { ...session, ...withoutHold(session) };
+}
+
 function decide(run: TurnRun): AutoCompactDecision {
   const { input, plan } = run;
+  // The live row: an earlier turn's receipt has moved the meter and the
+  // engine ref since this turn's snapshot was taken.
+  const live = getSession(input.session.id) ?? input.session;
   return decideAutoCompaction({
     config: input.config,
-    // The live row: an earlier turn's receipt has moved the meter and the
-    // engine ref since this turn's snapshot was taken.
-    session: getSession(input.session.id) ?? input.session,
+    session: releaseBudgetHold(run, live),
     engine: plan.engineName,
     opencodeMode: opencodeMode(input.config.engines.opencode),
     prompt: input.prompt,
@@ -217,7 +241,8 @@ function decide(run: TurnRun): AutoCompactDecision {
 
 /**
  * Compact this turn's session first when it is long and its cache has gone
- * cold; otherwise hand the plan straight back. See the module comment.
+ * cold, or its context has passed its budget; otherwise hand the plan straight
+ * back. See the module comment.
  */
 export async function compactColdSessionFirst(run: TurnRun): Promise<PreTurnCompaction> {
   const decision = decide(run);
@@ -235,7 +260,7 @@ async function compactThenRun(pending: Pending): Promise<PreTurnCompaction> {
   const compactPlan = preflightTurn({
     ...input,
     session: getSession(sessionId) ?? input.session,
-    prompt: buildAutoCompactCommand(childrenInFlight(sessionId)),
+    prompt: buildAutoCompactCommand(childrenInFlight(sessionId), decision.trigger),
   });
   if (!compactPlan.ok || !compactPlan.compaction) {
     logAutoCompaction(pending, "not-planned", { error: compactPlan.ok ? "not a compaction" : compactPlan.error });
@@ -246,7 +271,7 @@ async function compactThenRun(pending: Pending): Promise<PreTurnCompaction> {
   const attempt = await runCompaction(run, compactPlan);
   if (attempt instanceof Error) {
     logAutoCompaction(pending, "failed", { error: attempt.message });
-    await run.surface.notice(autoCompactFailedNotice(attempt.message));
+    await run.surface.notice(autoCompactFailedNotice(attempt.message, decision.trigger));
     return { kind: "run", plan };
   }
 
@@ -254,7 +279,7 @@ async function compactThenRun(pending: Pending): Promise<PreTurnCompaction> {
   logAutoCompaction(pending, verdict.outcome, attempt.result);
   if (verdict.outcome === "preempted") return { kind: "preempted" };
   if (verdict.outcome !== "compacted") {
-    await run.surface.notice(autoCompactFailedNotice(verdict.reason));
+    await run.surface.notice(autoCompactFailedNotice(verdict.reason, decision.trigger));
     return { kind: "run", plan };
   }
   const nativeId = recordCompaction(run, compactPlan, attempt);
