@@ -5,7 +5,7 @@ import { loadConfig } from '../shared/config.js';
 import { CONFIG_PATH } from '../shared/paths.js';
 import { assertTodoDepartmentAllowed, resolveTodoDepartmentPolicy, type TodoDepartmentPolicy } from '../shared/todo-departments-config.js';
 import { parseTodoId, resolveTodoIdPrefix } from './id.js';
-import { resolveDepartmentPrefix } from './departments.js';
+import { resolveDepartmentPrefix, resolveSubtaskDepartment } from './departments.js';
 import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
@@ -326,7 +326,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
   // parent classified before the policy existed stays with its parent. Under a
   // policy with a default, nothing lands unclassified in the company namespace.
   if (input.department !== undefined) assertTodoDepartmentAllowed(departmentPolicy, input.department);
-  const named = input.department !== undefined ? input.department : parent?.department ?? null;
+  const named = resolveSubtaskDepartment(parent, input.department, getWorkItem);
   const department = named ?? departmentPolicy?.defaultDepartment ?? null;
   const prefix = department ? resolveDepartmentPrefix(db, department, companyPrefix) : companyPrefix;
   const claim = allocateWorkItemId(db, now, prefix);

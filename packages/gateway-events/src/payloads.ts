@@ -41,3 +41,7 @@ export type CompanyChangedEvent =
    *  Todo lists and details rather than patching one row. `id` is the sprint's,
    *  or the Todo's for a move. */
   | { entity: "sprint"; action: string; id: string }
+  /** A department's definition (its `department.yaml` and the scope it carries) was
+   *  loaded, changed or refused. A listener refetches the department list. `id` is
+   *  the department's slug. */
+  | { entity: "department"; action: string; id: string }

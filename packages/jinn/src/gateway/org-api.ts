@@ -7,6 +7,8 @@ import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./rout
 import type { OrgNode } from "../shared/types.js";
 import { claudeProfileWire } from "../shared/claude-profile.js";
 import type { ApiContext } from "./api.js";
+import { departmentScopeOf } from "./department-registry.js";
+import { departmentChangeRefusal } from "./org-department-check.js";
 
 /** Wire shape for the org list: the persona is replaced by its compact role. */
 function employeeView(node: OrgNode): Record<string, unknown> {
@@ -87,6 +89,9 @@ async function patchEmployee(
 
   const result = validateEmployeeUpdate(context.getConfig(), current, body);
   if (!result.ok) return badRequest(res, result.error || "invalid update");
+
+  const moved = departmentChangeRefusal(name, current.department, result.updates!.department, departmentScopeOf);
+  if (moved) return json(res, { error: moved }, 409);
 
   const wrote = updateEmployeeYaml(name, result.updates!);
   if (!wrote) return notFound(res);

@@ -7,6 +7,7 @@ import { isPluginEnabled } from "../plugins/enablement.js";
 import { reconcilePluginWatchers } from "../plugins/watcher-supervisor.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
+import { setDepartmentChangeListener } from "./department-registry.js";
 import type { WatcherCallbacks } from "./watcher.js";
 
 /** The two reloads that only the server can perform, since they own state it holds. */
@@ -23,6 +24,9 @@ export interface WatchDependencies {
  *  thing that changed and tells connected clients, so an edit on disk takes effect
  *  without a restart. */
 export function gatewayWatchCallbacks({ reloadConfig, getConfig, reloadOrg, emit }: WatchDependencies): WatcherCallbacks {
+  // A department file edited, refused or deleted changes its scope badge and panel, so
+  // clients refetch the department list.
+  setDepartmentChangeListener((slug) => emit("company:changed", { entity: "department", action: "changed", id: slug }));
   return {
     onConfigReload: () => {
       reloadConfig();

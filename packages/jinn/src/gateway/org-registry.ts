@@ -1,5 +1,6 @@
 import { logger } from "../shared/logger.js";
 import type { Employee, JinnConfig } from "../shared/types.js";
+import { departmentScopeOf, refreshDepartments } from "./department-registry.js";
 import { scanOrg } from "./org.js";
 
 /**
@@ -43,7 +44,10 @@ export function refreshOrg(config?: JinnConfig): OrgRead {
   const resolved = config ?? lastConfig;
   if (config) lastConfig = config;
   try {
-    cache = { registry: scanOrg(resolved), config: resolved };
+    // The department definitions first: the scan refuses an employee whose directory
+    // and department field disagree about a non-open department.
+    refreshDepartments();
+    cache = { registry: scanOrg(resolved, departmentScopeOf), config: resolved };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     // Keep the last known good roster. Handing back an empty map here would

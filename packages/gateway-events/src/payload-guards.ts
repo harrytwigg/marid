@@ -91,6 +91,7 @@ function isCompanyChangedEvent(value: unknown): value is CompanyChangedEvent {
     case "todo":
       return isTodoChange(value)
     case "sprint":
+    case "department":
       return isString(value.action) && isString(value.id)
     default:
       return false

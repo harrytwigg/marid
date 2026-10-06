@@ -33,16 +33,11 @@ import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connect
 import { initDb } from "../shared/db.js";
 import {
   listSessions,
-  listPinnedSessions,
   listChatPins,
   pinChat,
   unpinChat,
   countSessions,
-  listRecentPerGroup,
-  listSessionsForGroup,
-  getSessionGroupCounts,
   coercePortalEmployee,
-  searchSessions,
   getMessageContext,
   getCostReport,
   MESSAGE_CONTEXT_MAX_RADIUS,
@@ -173,7 +168,6 @@ import {
   getWorkItems,
   getWorkItemTree,
   getWorkItemTrees,
-  ensureDepartmentRegistered,
   linkSession,
   listWorkItemEventsForItems,
   queryWorkItems,
@@ -229,7 +223,6 @@ import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
-import { listDepartmentsWithCounts } from "../work-items/departments.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
 import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
@@ -320,6 +313,8 @@ import { handleTerminalApi, type TerminalApiOptions } from "./terminal-api.js";
 import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } from "../terminals/session.js";
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
 import { handleSprintsApi } from "./sprints-api.js";
+import { handleSessionsListApi } from "./sessions-list-api.js";
+import { handleDepartmentsApi } from "./departments-api.js";
 import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
 import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
 import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
@@ -331,7 +326,6 @@ const HOOK_BODY_MAX_BYTES = 64 * 1024;
 const AUTH_BODY_MAX_BYTES = 16 * 1024;
 /** Operator Todo PATCH cap, measured as raw UTF-8 request bytes including JSON overhead. */
 export const TODO_EDIT_BODY_MAX_BYTES = 64 * 1024;
-const SESSION_LIST_PER_GROUP = 50;
 const BACKGROUND_ACTIVITY_STALE_MS = 5 * 60 * 1000;
 function headerValue(req: HttpRequest, name: string): string | undefined {
   const value = req.headers[name.toLowerCase()];
@@ -1738,42 +1732,8 @@ export async function handleApiRequest(
       return json(res, { status: "unpinned" });
     }
 
-    // GET /api/sessions
-    //   ?group=<employee|__direct__|__cron__>&offset=M&limit=N → one group's page (sidebar "load more")
-    //   ?pinned=1                                           → pinned, non-archived sessions
-    //   ?limit=0                                              → every session (power-user escape hatch)
-    //   (default)                                             → top SESSION_LIST_PER_GROUP recent per group + counts
-    if (method === "GET" && pathname === "/api/sessions") {
-      if (url.searchParams.get("pinned") === "1") {
-        return json(res, serializeSessionList(listPinnedSessions(), context));
-      }
-      const query = url.searchParams.get("q");
-      if (query && query.trim()) {
-        const matches = searchSessions(query.trim());
-        return json(res, serializeSessionList(matches, context));
-      }
-      const group = url.searchParams.get("group");
-      const rawLimit = url.searchParams.get("limit");
-      // Portal-slug-tagged rows fold into the direct group (defensive +
-      // retroactive backstop to the create-time coercion above).
-      const portalSlug = context.getConfig().portal?.portalName;
-      if (group) {
-        const limit = Math.max(1, parseInt(rawLimit || "50", 10) || 50);
-        const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10) || 0);
-        const page = listSessionsForGroup(group, limit, offset, portalSlug);
-        return json(res, serializeSessionList(page, context));
-      }
-      if (rawLimit === "0") {
-        const all = listSessions();
-        return json(res, serializeSessionList(all, context));
-      }
-      const sessions = listRecentPerGroup(SESSION_LIST_PER_GROUP, portalSlug);
-      return json(res, {
-        sessions: serializeSessionList(sessions, context),
-        counts: getSessionGroupCounts(portalSlug),
-        perGroup: SESSION_LIST_PER_GROUP,
-      });
-    }
+    // GET /api/sessions: the list, in its own module (api.ts is over its size budget).
+    if (await handleSessionsListApi(res, { method, pathname, url }, { serialize: (sessions) => serializeSessionList(sessions, context), portalSlug: () => context.getConfig().portal?.portalName })) return;
 
     // GET /api/sessions/:id/messages?before=<messageId>&limit=N
     // Bounded older-history page for seamless transcript prepending in the web UI.
@@ -3194,17 +3154,8 @@ export async function handleApiRequest(
       return json(res, { labels: listLabels() });
     }
 
-    // GET /api/departments — the department registry (any caller): slug,
-    // immutable ID prefix, and a live Todo count per department. Prefixes mint
-    // lazily on first departmental create; there are no create/rename routes.
-    // Under `gateway.todoDepartments` every configured slug is listed (minted
-    // here if no Todo has used it yet, so pickers can offer it) and the rest are
-    // marked unselectable — kept, because their prefixes still name Todos.
-    if (method === "GET" && pathname === "/api/departments") {
-      const policy = resolveTodoDepartments();
-      for (const slug of policy?.allowed ?? []) ensureDepartmentRegistered(slug);
-      return json(res, { departments: listDepartmentsWithCounts(initDb(), policy?.allowed) });
-    }
+    // GET /api/departments, GET and PATCH /api/departments/:slug: registry rows and their definitions.
+    if (await handleDepartmentsApi(req, res, { method, pathname, url }, context)) return;
 
     // POST /api/labels — create a label (operator or a manager: an employee
     // with direct reports in the org hierarchy).

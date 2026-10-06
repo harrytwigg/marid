@@ -1,5 +1,10 @@
+import fs from "node:fs";
 import type { Database as DatabaseType } from "better-sqlite3";
-import { deriveTodoIdPrefix } from "./id.js";
+import { loadConfig } from "../shared/config.js";
+import { CONFIG_PATH } from "../shared/paths.js";
+import { DepartmentBoundaryError, isNonOpenDepartment } from "./department-scope.js";
+import { deriveTodoIdPrefix, resolveTodoIdPrefix } from "./id.js";
+import type { WorkItem } from "./store.js";
 
 /**
  * Per-department Todo ID prefixes (Todos v2 slice 1). A department's prefix is
@@ -95,4 +100,69 @@ export function listDepartmentsWithCounts(db: DatabaseType, allowed?: readonly s
     todoCount: Number(row.todo_count),
     selectable: !allowed || allowed.includes(row.slug as string),
   }));
+}
+
+/** Live spend per department: `SUM(total_cost)` over the sessions linked to its Todos. A Todo's department is its root's (FR-002), so a sub-task counts toward its root's department. */
+export function departmentSpend(db: DatabaseType): Map<string, number> {
+  const rows = db
+    .prepare(
+      `SELECT r.department AS department, COALESCE(SUM(s.total_cost), 0) AS spend
+         FROM work_items w
+         JOIN work_items r ON r.id = w.root_id
+         JOIN sessions s ON s.work_item_id = w.id
+        WHERE r.department IS NOT NULL
+        GROUP BY r.department`,
+    )
+    .all() as Array<{ department: string; spend: number }>;
+  return new Map(rows.map((row) => [row.department, row.spend]));
+}
+
+/**
+ * Register any department that holds Todos but is missing from the registry
+ * (review F2). Department-changing writes now mint the row in their own
+ * transaction; this reconciles rows written BEFORE that fix (move-only
+ * departments). Idempotent — runs on every boot.
+ */
+export function reconcileDepartmentRegistry(db: DatabaseType): number {
+  const missing = db
+    .prepare(
+      "SELECT DISTINCT department FROM work_items WHERE department IS NOT NULL AND department NOT IN (SELECT slug FROM departments) ORDER BY department",
+    )
+    .pluck()
+    .all() as string[];
+  if (missing.length === 0) return 0;
+  const portal = fs.existsSync(CONFIG_PATH) ? loadConfig().portal : undefined;
+  const companyPrefix = resolveTodoIdPrefix(portal?.companyName ?? "Jinn", portal?.companyPrefix);
+  for (const slug of missing) {
+    resolveDepartmentPrefix(db, slug, companyPrefix);
+  }
+  return missing.length;
+}
+
+/**
+ * The department a new sub-task lands in. A sub-task shares its root's department
+ * whenever either side is not open, so a create that names another department
+ * across that boundary is refused. Between open departments nothing changes: a
+ * sub-task may still name its own, and otherwise inherits its parent's.
+ *
+ * Lives in the store's create path, not in a route, because plugin and cron creates
+ * pass a draft straight through.
+ */
+export function resolveSubtaskDepartment(
+  parent: WorkItem | undefined,
+  named: string | null | undefined,
+  getItem: (id: string) => WorkItem | undefined,
+): string | null {
+  if (!parent) return named ?? null;
+  const root = parent.rootId === parent.id ? parent : getItem(parent.rootId) ?? parent;
+  const inherited = named === undefined ? parent.department : named;
+  if (!isNonOpenDepartment(root.department) && !isNonOpenDepartment(inherited)) return inherited;
+  if (named !== undefined && named !== root.department) throw boundaryRefusal(root, named);
+  return root.department;
+}
+
+function boundaryRefusal(root: WorkItem, named: string | null): DepartmentBoundaryError {
+  const where = root.department ? `department "${root.department}"` : 'the company';
+  const target = named ? `department "${named}"` : 'the company';
+  return new DepartmentBoundaryError(`a sub-task of ${root.id} stays in ${where}: it cannot be created in ${target} because one of them is scoped`);
 }

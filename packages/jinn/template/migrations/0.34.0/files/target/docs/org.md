@@ -82,6 +82,38 @@ displayName: Engineering
 description: Builds and maintains the product codebase.
 ```
 
+`name` must be the directory's name (leave it out and the directory's is used). The file may also say how far the department confines its people:
+
+```yaml
+name: side-project
+displayName: Side project
+description: A friend's side project
+scope: scoped              # open (the default, also when absent) | scoped | dedicated
+workdirs:                  # scoped and dedicated departments only
+  - ~/Projects/side-project
+skills: [review]           # company skills a scoped session is offered; [] or absent = none
+sharedNotes: [knowledge/shared/glossary.md]   # paths under knowledge/ or docs/ that the department may read
+instructions: department   # department | department+company
+```
+
+| `scope` | Its employees | Everyone else |
+|---|---|---|
+| `open` | Unrestricted: how every department behaves with no `department.yaml` | Unrestricted |
+| `scoped` | Confined to the department | May read, comment on and hold its Todos |
+| `dedicated` | Confined to the department | May read and comment, but not hold its Todos |
+
+`workdirs`, `skills`, `sharedNotes` and `instructions` are read only when the scope is not `open`. A working directory must sit inside a git work tree whose top is neither your home directory nor above it, and must not be, contain or lie inside the instance home, `~/.claude`, `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
+
+**What a scope does today.** It changes how Todos move; it does not yet confine anyone:
+
+- Assigning a Todo never moves it across a scoped or dedicated department's boundary. A Todo whose root is in one keeps its department when it is assigned to an employee elsewhere, to `@operator`, or to an engine-only delegate.
+- A sub-task shares its root's department whenever either is scoped or dedicated, so a create that names another department under such a root is refused.
+- An employee in a scoped or dedicated department must have the department's directory, its immediate directory and its `department` field all agree, or the employee is refused at load and the log says why. `PATCH /api/org/employees/:name` will not move an employee into or out of such a department; move the file by hand.
+
+**A broken file never opens a department.** Every successful load records the scope. A file that is refused (YAML that does not parse, a `name` that is not the directory's, an unknown `scope`, or a non-open scope on `system` or `org`) or deleted leaves the department at its last recorded scope; one that has never loaded is held as `dedicated` until it does. Write `scope: open` to open a department. A bad entry in `workdirs`, `skills` or `sharedNotes` is dropped with a warning and the rest of the file still applies. A near-miss name such as `department.yml` is logged and not read.
+
+The org page shows a department's scope as a badge on its group box. Click the box to open the department panel: its details, scope, working directories, skills, shared Notes, instructions, members and the file to edit. The panel is read-only. `GET /api/departments` and `GET /api/departments/:slug` carry the same fields, and `PATCH /api/departments/:slug` (operator only) rewrites the file; until scoped employees are enforced it will not set a scope other than `open`, so write `scope: scoped` in the file.
+
 ### Todos
 
 Todos are deliberately authored work in the live ledger. Employees find and update their assigned Todos, move finished work to in review, and use blocked only when they cannot proceed. Closing, cancelling and archiving Todos are the operator's.
