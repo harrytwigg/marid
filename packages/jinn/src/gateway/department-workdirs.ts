@@ -13,9 +13,19 @@ import { employeeClaudeConfigDirs } from "./org-yaml-files.js";
  * state or the operator keeps credentials is refused here, at the edge.
  */
 
-/** The generated per-department directories live beside the home, never inside it. */
-export function departmentStageRoot(): string {
+/**
+ * Beside every instance home sits one directory for all the instances that share its
+ * parent. A department's stage directory is never inside it by accident of naming: each
+ * instance keeps its own root below it, so two instances with a department of the same
+ * name do not overwrite each other's stage directory.
+ */
+export function departmentStagesContainer(): string {
   return path.join(path.dirname(resolveJinnHome()), ".jinn-departments");
+}
+
+/** The generated per-department directories live beside the home, never inside it, in a root of this instance's own: `<parent>/.jinn-departments/<basename of the home>/`. */
+export function departmentStageRoot(): string {
+  return path.join(departmentStagesContainer(), path.basename(resolveJinnHome()) || "instance");
 }
 
 /** Profile directories employees run their Claude sessions as (`claudeConfigDir`). */
@@ -70,7 +80,7 @@ function gitTopLevel(dir: string): string | null {
 
 /** Neither the directory nor anything above it may be one of these roots. */
 function exactOrAncestorRoots(options: WorkdirOptions): string[] {
-  return [os.homedir(), resolveJinnHome(), departmentStageRoot(), path.join(os.homedir(), ".claude"), resolveClaudeConfigDir(), ...(options.claudeConfigDirs ?? [])].map(real);
+  return [os.homedir(), resolveJinnHome(), departmentStagesContainer(), path.join(os.homedir(), ".claude"), resolveClaudeConfigDir(), ...(options.claudeConfigDirs ?? [])].map(real);
 }
 
 /** Nothing inside any of these may be a department's working directory. */
@@ -78,7 +88,7 @@ function protectedTrees(options: WorkdirOptions): string[] {
   const home = os.homedir();
   return [
     resolveJinnHome(),
-    departmentStageRoot(),
+    departmentStagesContainer(),
     ...[".claude", ".ssh", ".config", ".aws", ".gnupg", "Library"].map((name) => path.join(home, name)),
     // The gateway's own profile, which `CLAUDE_CONFIG_DIR` may put somewhere other than ~/.claude.
     resolveClaudeConfigDir(),

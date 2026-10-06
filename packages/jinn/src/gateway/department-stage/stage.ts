@@ -5,6 +5,7 @@ import { resolveJinnHome } from "../../shared/paths.js";
 import { departmentRecord, departmentScopeOf, departmentSlugsWithFiles } from "../department-registry.js";
 import { departmentStageDir } from "../department-scope/paths.js";
 import { generateStageFileSet } from "./file-set.js";
+import { migrateLegacyStageDir } from "./legacy-stage.js";
 import { syncStageDir } from "./sync.js";
 
 /**
@@ -43,6 +44,8 @@ export function resolvedStageDir(slug: string): string {
 export function prepareDepartmentStage(slug: string): string {
   const { files } = generateStageFileSet({ home: resolveJinnHome(), slug, definition: departmentRecord(slug).definition });
   const dir = departmentStageDir(slug);
+  // A directory made before the stage root was keyed by instance is moved here once, keeping its inode (FR-020a).
+  migrateLegacyStageDir(slug);
   try {
     // Never inside the instance home or the Claude profile: a stage directory there would load the company context, and the sync deletes extras.
     syncStageDir(dir, files, Date.now(), [resolveJinnHome(), resolveClaudeConfigDir()]);
