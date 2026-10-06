@@ -40,8 +40,8 @@ beforeEach(() => {
 
 describe("the project slug", () => {
   it("replaces every non-alphanumeric character, as Claude Code does", () => {
-    expect(claudeProjectSlug("/Users/h/.jinn")).toBe("-Users-h--jinn");
-    expect(claudeProjectSlug("/Users/h/.jinn-departments/side_project")).toBe("-Users-h--jinn-departments-side-project");
+    expect(claudeProjectSlug("/home/h/.jinn")).toBe("-home-h--jinn");
+    expect(claudeProjectSlug("/home/h/.jinn-departments/side_project")).toBe("-home-h--jinn-departments-side-project");
   });
 
   it("is the one the fork polls and the readers look under", () => {

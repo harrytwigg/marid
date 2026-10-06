@@ -63,8 +63,8 @@ import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile, writeS
 import { JINN_HOME } from "../../shared/paths.js";
 
 const SLUG = "rl-scoped-dept";
-const WORK2 = "/Users/operator/.claude-work2";
-const WORK3 = "/Users/operator/.claude-work3";
+const WORK2 = "/srv/operator/.claude-work2";
+const WORK3 = "/srv/operator/.claude-work3";
 const stageDir = () => resolvedStageDir(SLUG);
 
 function opts(
