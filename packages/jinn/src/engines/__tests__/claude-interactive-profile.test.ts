@@ -113,6 +113,22 @@ describe("InteractiveClaudeEngine on a named Claude profile (FR-051, FR-052, FR-
     expectOnProfile(spawns[0]!);
   });
 
+  it("the turn spawn launches nothing for a profile directory that does not exist", async () => {
+    fs.rmSync(profile.dir, { recursive: true });
+    void engine.run({ sessionId: SID, prompt: "hi", cwd, claudeProfile: profile } as any).catch(() => {});
+    await flush();
+    expect(spawns).toHaveLength(0);
+    expect(fs.existsSync(profile.dir)).toBe(false);
+  });
+
+  it("the idle PTY spawn (terminal view, no preflight) launches nothing for a profile directory that does not exist", async () => {
+    fs.rmSync(profile.dir, { recursive: true });
+    engine.ensureIdleSpawn(SID, { cwd, claudeProfile: profile });
+    await flush();
+    expect(spawns).toHaveLength(0);
+    expect(fs.existsSync(profile.dir)).toBe(false);
+  });
+
   it("a default-profile turn keeps the gateway's environment and carries no operator keys", async () => {
     void engine.run({ sessionId: SID, prompt: "hi", cwd } as any).catch(() => {});
     await flush();
