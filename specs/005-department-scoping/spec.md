@@ -359,7 +359,8 @@ and dark, with screenshots on the PR (FR-040).
   department.** Every scope decision in this spec (FR-003, FR-011, FR-015, the route table and
   the board) reads the root's department, never a sub-task's own column. A sub-task whose own
   column differs from its root's (possible today, `packages/jinn/src/work-items/store.ts:329`)
-  is in its root's scope, and the scan reports it.
+  is in its root's scope. The department registry, which reads the work-items registry, reports
+  it at scan time.
 - **FR-003**: **Assignment never moves a Todo across a non-open boundary.** When the root's
   department is not open, assignment leaves the Todo's department unchanged, including
   assignment to `@operator` and to engine-only delegates. When the root's department is open,
@@ -558,6 +559,13 @@ scoped employee; D is that session's binding)
   `settings.json` into the session's `--settings` file
   (`packages/jinn/src/shared/claude-settings.ts:70`), merging `hooks` with the gateway's own.
   Each key gets a test. Sessions on the default profile are unchanged.
+
+  A unit test only proves the file holds the keys. Claude Code may read some of them only from
+  user or policy settings, not from `--settings`: the installed binary reads
+  `skipDangerousModePermissionPrompt` from user and policy settings in at least one place. So
+  Phase 4 verifies each key end to end in a real session (T070). **Fallback:** a key that is not
+  honoured from `--settings` is written into `<profile>/settings.json` instead, and the FR-054
+  check also requires it to be there.
 - **FR-053**: **Transcripts.** Every local transcript reader MUST resolve the session's
   profile: redelivery dedupe, lost-Stop and lost-text recovery, compaction stats, the
   transcript and backfill endpoints, external turns, and fork. research.md lists each one.

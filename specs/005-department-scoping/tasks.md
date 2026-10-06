@@ -52,7 +52,8 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   refuse an employee when that directory, its immediate directory or its `department` field
   disagree and any of them is a non-open department. Log why, beside the remote-target check
   at `gateway/org.ts:112`. Report sub-tasks whose own department differs from a non-open
-  root's. Warn on a near-miss file name such as `department.yml`.
+  root's; that check lives in `department-registry.ts`, which reads the work-items registry,
+  not in the org scan. Warn on a near-miss file name such as `department.yml`.
 - [ ] T025 Write `gateway/departments-api.ts`:
   - the definition fields on `GET /api/departments` (data-model.md, "Wire shapes");
   - `GET /api/departments/:slug`;
@@ -171,8 +172,12 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 
 - [ ] T070 Confirm fact 4 on this Mac with a throwaway profile: list the Keychain service names,
   sign the throwaway profile in, list them again, and record the result in the PR. Repeat with
-  the same directory spelled with a trailing slash. Check whether the bypass-consent dialog
-  appears without FR-052a. Delete the throwaway entries afterwards. Then write red tests: an employee with `claudeConfigDir` spawns
+  the same directory spelled with a trailing slash. Then, after T073, run a real session on the
+  throwaway profile with the gateway-built `--settings`, and record in the PR that: (1) the
+  bypass-consent dialog does not appear with FR-052a (and whether it appears without it);
+  (2) a commit and a PR body made in that session carry no Co-Authored-By or "Generated with"
+  line; (3) the PreToolUse hook fires. For any key that fails, apply FR-052a's fallback (write
+  it into `<profile>/settings.json` and add it to the FR-054 check) and record the re-run. Delete the throwaway entries afterwards. Then write red tests: an employee with `claudeConfigDir` spawns
   without `CLAUDE_CONFIG_DIR`, and a remote employee's ordinary turn drops
   `remoteClaudeConfigDir` (`sessions/turn/engine-run.ts:55`).
 - [ ] T071 Parse and validate `claudeConfigDir` in `gateway/org.ts` beside the remote check
