@@ -15,8 +15,7 @@ set -euo pipefail
 unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-OPERATOR_HOME="$HOME"
-HELPER="${JINN_SANDBOX_HELPER:-$OPERATOR_HOME/.jinn/skills/jinn-sandbox/scripts/jinn-sandbox.sh}"
+HELPER="${JINN_SANDBOX_HELPER:-$REPO/scripts/jinn-sandbox.sh}"
 PORT="${JINN_VERIFY_PORT:-8060}"
 TMP_BASE="${JINN_VERIFY_TMP_ROOT:-/tmp}"
 INSTANCE="chat-grid-drop-verification"
