@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Employee, RemoteTarget } from "./types.js";
 import type { RemoteExecutionConfig } from "./config-types.js";
+import { remoteDepartmentStageDir, type RemoteScope, type SessionRemoteTarget } from "./remote-department.js";
 
 /**
  * Remote-execution containment.
@@ -203,14 +204,27 @@ export function sshDestination(target: RemoteTarget & { remoteHost: string }): s
   return user ? `${user}@${target.remoteHost.trim()}` : target.remoteHost.trim();
 }
 
-/** The remote target carried by an employee, or undefined when it is local. */
-export function employeeRemoteTarget(employee: Employee | undefined): RemoteTarget | undefined {
+/**
+ * The remote target carried by an employee, or undefined when it is local.
+ *
+ * The one place a target is built from an employee (FR-061). A scoped employee's
+ * sessions run in its department's stage directory on the host, so `remoteCwd` is
+ * that directory and the employee's own `remoteCwd` becomes `remoteWorkArea`. With no
+ * `remote.root` there is no stage directory, and no `remoteCwd` either: the spawn is
+ * refused rather than run in the work area with the company home linked in. `scope`
+ * is required so no caller can build a target and forget it.
+ */
+export function employeeRemoteTarget(employee: Employee | undefined, scope: RemoteScope): SessionRemoteTarget | undefined {
   if (!employee || !isRemoteTarget(employee)) return undefined;
+  const department = scope.departmentOf(employee);
+  const workArea = employee.remoteCwd;
+  const remoteCwd = department ? (scope.remoteRoot ? remoteDepartmentStageDir(scope.remoteRoot, department) : undefined) : workArea;
   return {
     remoteHost: employee.remoteHost,
     ...(employee.remoteUser === undefined ? {} : { remoteUser: employee.remoteUser }),
-    ...(employee.remoteCwd === undefined ? {} : { remoteCwd: employee.remoteCwd }),
+    ...(remoteCwd === undefined ? {} : { remoteCwd }),
     ...(employee.remoteClaudeConfigDir === undefined ? {} : { remoteClaudeConfigDir: employee.remoteClaudeConfigDir }),
+    ...(department ? { remoteDepartment: department, ...(workArea === undefined ? {} : { remoteWorkArea: workArea }) } : {}),
   };
 }
 

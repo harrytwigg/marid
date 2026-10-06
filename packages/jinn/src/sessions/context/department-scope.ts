@@ -13,7 +13,7 @@ import { departmentSkillAllowList, scopedDepartmentOf } from "../../work-items/d
 
 interface ScopeInputs {
   sessionId?: string;
-  employee?: { name: string };
+  employee?: { name: string; remoteHost?: string; remoteCwd?: string };
   hierarchy?: OrgHierarchy;
 }
 
@@ -62,6 +62,15 @@ function departmentSkillsLine(department: string): string {
   return skills.length > 0 ? `Company skills available to you: ${skills.join(", ")} (in \`.claude/skills/\`). No other company skill is offered.` : "No company skills are offered to this department.";
 }
 
+/**
+ * On a remote host the session's cwd is the department's stage directory, which the whole
+ * department shares and every spawn resyncs, so it is told where its own work goes (FR-061).
+ */
+function workAreaLines(employee: ScopeInputs["employee"]): string[] {
+  if (!employee?.remoteHost || !employee.remoteCwd) return [];
+  return [`- You run on ${employee.remoteHost}. Your working directory is the department's stage directory, which is rewritten before every session starts: do your work in your work area, \`${employee.remoteCwd}\`.`];
+}
+
 /** The section that tells a scoped session what its scope is. Empty for anyone else. */
 export function departmentScopeSections(opts: ScopeInputs): Array<{ tier: number; required: true; marker: string; content: string }> {
   const department = promptDepartment(opts);
@@ -73,6 +82,7 @@ export function departmentScopeSections(opts: ScopeInputs): Array<{ tier: number
     "- Use the jinn tools for company state. Do not use your shell to read the Jinn home, other repositories, or other sessions' transcripts.",
     `- Keep your working state in \`knowledge/departments/${department}/state.md\` through the note tools.`,
     `- ${departmentSkillsLine(department)}`,
+    ...workAreaLines(opts.employee),
   ].join("\n");
   return [{ tier: 0, required: true, marker: "## Department scope", content }];
 }

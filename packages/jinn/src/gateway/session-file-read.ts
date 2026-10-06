@@ -3,6 +3,7 @@ import path from "node:path";
 import { getSession } from "../sessions/registry.js";
 import { orgRegistry } from "./org-registry.js";
 import { employeeRemoteTarget, isRemoteTarget } from "../shared/remote-target.js";
+import { remoteScopeFor } from "../sessions/session-cwd.js";
 import { engineSupportsRemote } from "../shared/models.js";
 import { expandPath, readLocalFileForIngestion, vetLocalFileForIngestion } from "../shared/file-read-policy.js";
 import { hasControlBytes } from "../shared/sanitize.js";
@@ -64,7 +65,8 @@ function hostReadFor(sessionId: string, requested: string, context: ApiContext):
   // session last ran: an employee moved between hosts reads old links from the
   // new one. Sessions record no host of their own to prefer.
   const employee = session.employee ? orgRegistry(context.getConfig()).get(session.employee) : undefined;
-  const target = employeeRemoteTarget(employee);
+  // A scoped session runs in its department's stage directory, so relative links resolve there.
+  const target = employeeRemoteTarget(employee, remoteScopeFor(context.getConfig().remote, session));
   if (!isRemoteTarget(target)) return { read: localHostRead(requested) };
   if (!engineSupportsRemote(session.engine)) {
     return { status: 409, error: `${session.engine} sessions do not run on ${target.remoteHost}` };

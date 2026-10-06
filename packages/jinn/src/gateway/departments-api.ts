@@ -133,7 +133,7 @@ const WRITE_STATUS = { not_found: 404, conflict: 409, invalid: 400 } as const;
  */
 function scopeChangeRefusal(slug: string, scope: DepartmentScope | undefined, context: ApiContext): Record<string, unknown> | null {
   if (scope === undefined || scope === departmentRecord(slug).scope) return null;
-  const members = droppedByScopeChange(slug, scope, orgRegistry(context.getConfig()).values());
+  const members = droppedByScopeChange(slug, scope, orgRegistry(context.getConfig()).values(), context.getConfig().remote);
   if (members.length > 0) {
     const named = members.map((member) => `${member.name} (${member.reason})`).join("; ");
     return { error: `Making ${slug} ${scope} would drop employee(s) from the roster: ${named}. Change them first`, code: "department-members", members };

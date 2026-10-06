@@ -1,5 +1,7 @@
 import path from "node:path";
 import type { DepartmentScope } from "../work-items/department-scope.js";
+import type { RemoteExecutionConfig } from "../shared/config-types.js";
+import { scopedRemoteTargetProblem } from "../shared/remote-department.js";
 
 /**
  * An employee's department: its `department` field, normalised to trimmed text, else its
@@ -57,19 +59,19 @@ export function departmentChangeRefusal(
 
 /**
  * FR-026: a department-scoped employee runs on the claude engine in v1, because the
- * department's stage directory uses Claude's layout, and runs locally until scoped
- * sessions on remote hosts are supported. Returns why the employee is refused, or null.
+ * department's stage directory uses Claude's layout. It may run on a remote host, where
+ * its work area (its `remoteCwd`) must stay clear of the department stage directories and
+ * of the mounted gateway home (FR-061). Returns why the employee is refused, or null.
  */
 export function scopedEmployeeRefusal(
-  employee: { department: string; engine?: string; remoteHost?: string },
+  employee: { department: string; engine?: string; remoteHost?: string; remoteCwd?: string },
   scopeOf: (slug: string) => DepartmentScope,
+  remote: RemoteExecutionConfig | undefined,
 ): string | null {
   if (scopeOf(employee.department) === "open") return null;
   if ((employee.engine ?? "claude") !== "claude") {
     return `it is in non-open department "${employee.department}", whose employees must use the claude engine (the department's working directory uses Claude's layout), not "${employee.engine}"`;
   }
-  if (employee.remoteHost) {
-    return `it is in non-open department "${employee.department}" and sets remoteHost "${employee.remoteHost}": department-scoped employees cannot run on a remote host yet, because the session would run in its remoteCwd with the company home linked in`;
-  }
-  return null;
+  const remoteProblem = employee.remoteHost ? scopedRemoteTargetProblem(employee.remoteCwd, remote) : null;
+  return remoteProblem ? `it is in non-open department "${employee.department}" and runs on remote host "${employee.remoteHost}", but ${remoteProblem}` : null;
 }

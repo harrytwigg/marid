@@ -1,5 +1,6 @@
 import { logger } from "../../shared/logger.js";
 import { employeeRemoteTarget } from "../../shared/remote-target.js";
+import { remoteScopeFor } from "../session-cwd.js";
 import { engineSupportsRemote, REMOTE_ENGINE_NAMES, type RemoteEngineName } from "../../shared/models.js";
 import { ensureRemoteReady } from "../../engines/remote-stage.js";
 import { getSession, updateSessionForAttempt } from "../registry.js";
@@ -73,7 +74,7 @@ export async function ensureRemoteHostReady(
   input: TurnInput,
   engineName: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const target = employeeRemoteTarget(input.employee);
+  const target = employeeRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session));
   if (!target) return { ok: true };
 
   const wrongEngine = refuseNonRemoteEngine(input, target.remoteHost!, engineName);

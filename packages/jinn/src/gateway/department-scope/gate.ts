@@ -8,6 +8,7 @@ import { getWorkItem, type WorkItem } from "../../work-items/store.js";
 import { employeeDepartment, scopeDepartmentOfItem } from "../../work-items/department-scope.js";
 import type { ApiContext } from "../api.js";
 import { departmentRecord } from "../department-registry.js";
+import { orgRegistry } from "../org-registry.js";
 import { badRequest, json, type ParsedRoute } from "../route-helpers.js";
 import type { SessionTreeResponse } from "../../sessions/session-tree.js";
 import type { CallerIdentity } from "../session-comm-guards.js";
@@ -128,15 +129,25 @@ async function createInDepartment(g: GateRequest): Promise<boolean> {
  * FR-018 on the JSON `{path}` upload. The route reads any body that is not multipart as
  * JSON, so the check runs on every such body, whatever its Content-Type says; and it runs
  * before the Todo is looked up, so a refused path answers the same for a Todo outside D
- * as for an unknown one.
+ * as for an unknown one. A session on a remote host is refused any path (FR-065): it names
+ * a file on another machine, which `attach_to_work_item` reads there instead.
  */
+function attachPathRefusal(g: GateRequest, file: string): string | null {
+  const employee = g.caller.session.employee ? orgRegistry(g.deps.context.getConfig()).get(g.caller.session.employee) : undefined;
+  if (employee?.remoteHost) {
+    return `${file} names a file on ${employee.remoteHost}, not on the gateway; a department-scoped session on a remote host attaches files with attach_to_work_item, which reads them there`;
+  }
+  const roots = departmentFileRoots(g.caller.department);
+  return insideDepartmentRoots(file, roots) ? null : departmentPathRefusal(file, roots);
+}
+
 async function attachInDepartment(g: GateRequest): Promise<boolean> {
   if (g.route.method === "POST" && !String(g.req.headers["content-type"] ?? "").toLowerCase().includes("multipart/form-data")) {
     const body = await peekJsonObject(g.req, g.res);
     if (body === null) return true;
     if (body && typeof body.path === "string") {
-      const roots = departmentFileRoots(g.caller.department);
-      if (!insideDepartmentRoots(body.path, roots)) return forbid(g, departmentPathRefusal(body.path, roots));
+      const refused = attachPathRefusal(g, body.path);
+      if (refused) return forbid(g, refused);
     }
   }
   return holdTodo(g, g.rule.params.id) ?? false;

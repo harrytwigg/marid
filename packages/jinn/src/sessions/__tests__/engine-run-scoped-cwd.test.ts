@@ -21,7 +21,7 @@ const SLUG = "engine-run-dept";
 function attempt(session: ReturnType<typeof makeSession>, employee: { name: string } | undefined) {
   const run = vi.fn(async (_opts: EngineRunOpts) => ({ result: "ok", sessionId: "s1" }) as EngineResult);
   return runEngineAttempt({
-    input: { session, attachments: [], employee, attemptToken: "t1" } as any,
+    input: { session, attachments: [], employee, attemptToken: "t1", config: {} } as any,
     plan: {
       engine: { run }, engineConfig: {}, promptToRun: "hi", runtimeSource: "web",
       prepareContext: () => ({ systemPrompt: "sys", fingerprint: "f", refresh: undefined }),

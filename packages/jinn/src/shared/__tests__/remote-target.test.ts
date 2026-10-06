@@ -214,34 +214,30 @@ describe("sshDestination", () => {
 });
 
 describe("employeeRemoteTarget", () => {
+  const target = (employee: Employee | undefined) => employeeRemoteTarget(employee, { departmentOf: () => null, remoteRoot: ROOT });
   const base = { name: "bee", displayName: "Bee", department: "eng", rank: "employee", engine: "claude", model: "m", persona: "p" } as unknown as Employee;
 
   it("is undefined for a purely local employee", () => {
-    expect(employeeRemoteTarget({ ...base })).toBeUndefined();
-    expect(employeeRemoteTarget(undefined)).toBeUndefined();
+    expect(target({ ...base })).toBeUndefined();
+    expect(target(undefined)).toBeUndefined();
   });
 
   it("is undefined for an employee with remoteCwd but no remoteHost", () => {
-    expect(employeeRemoteTarget({ ...base, remoteCwd: `${ROOT}/proj` })).toBeUndefined();
+    expect(target({ ...base, remoteCwd: `${ROOT}/proj` })).toBeUndefined();
   });
 
   it("carries host, user and cwd through for a remote employee", () => {
-    expect(employeeRemoteTarget({
-      ...base,
-      remoteHost: "build-box",
-      remoteUser: "builder",
-      remoteCwd: `${ROOT}/proj`,
-    })).toEqual({ remoteHost: "build-box", remoteUser: "builder", remoteCwd: `${ROOT}/proj` });
+    expect(target({ ...base, remoteHost: "build-box", remoteUser: "builder", remoteCwd: `${ROOT}/proj` })).toEqual({ remoteHost: "build-box", remoteUser: "builder", remoteCwd: `${ROOT}/proj` });
   });
 
   it("omits absent optional fields rather than emitting undefined values", () => {
-    const t = employeeRemoteTarget({ ...base, remoteHost: "build-box" }) as RemoteTarget;
+    const t = target({ ...base, remoteHost: "build-box" }) as RemoteTarget;
     expect(t).toEqual({ remoteHost: "build-box" });
     expect(Object.keys(t)).toEqual(["remoteHost"]);
   });
 
   it("the produced target round-trips through validateRemoteTarget", () => {
-    const t = employeeRemoteTarget({
+    const t = target({
       ...base,
       remoteHost: "build-box",
       remoteCwd: "/srv/jinn-work-evil/proj",

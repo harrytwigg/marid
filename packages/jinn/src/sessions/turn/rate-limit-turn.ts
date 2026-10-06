@@ -4,6 +4,8 @@ import type { EngineName } from "../../shared/models.js";
 import { getSession, insertMessage, type UpdateSessionFields } from "../registry.js";
 import { notifyOperatorChannel, notifyRateLimited, notifyRateLimitResumed } from "../callbacks.js";
 import { handleRateLimit, type RateLimitHandlerHooks, type RateLimitInfo } from "../rate-limit-handler.js";
+import { remoteScopeFor } from "../session-cwd.js";
+import { employeeRemoteTarget } from "../../shared/remote-target.js";
 import { settleTurn, type SettleTurnInput } from "./completion.js";
 import { formatResumeTime, turnDisplayText } from "./text.js";
 import type { TurnInput, TurnPlan, TurnSurface } from "./types.js";
@@ -163,10 +165,7 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<void> {
     engineConfig: plan.engineConfig,
     effortLevel: plan.effortLevel,
     cliFlags: input.employee?.cliFlags,
-    remoteHost: input.employee?.remoteHost,
-    remoteUser: input.employee?.remoteUser,
-    remoteCwd: input.employee?.remoteCwd,
-    remoteClaudeConfigDir: input.employee?.remoteClaudeConfigDir,
+    ...employeeRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session)),
     mcpConfigPath: plan.mcpConfigPath,
     resolvedMcp: plan.resolvedMcp,
     attachments: input.attachments.length ? input.attachments : undefined,

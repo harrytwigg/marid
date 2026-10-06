@@ -14,7 +14,8 @@ import { orgRegistry, refreshOrg } from "../org-registry.js";
 /**
  * FR-017, FR-026 and the edges of a scoped employee's validation: the turn runs only on
  * the claude engine, a connector session is refused, cron cannot target a scoped
- * employee, the org scan drops one that asks for another engine or a remote host, and a
+ * employee, the org scan drops one that asks for another engine (a remote host is held only
+ * to the remote target rules, FR-061), and a
  * socket upgrade is refused.
  */
 
@@ -92,10 +93,11 @@ describe("the org scan", () => {
     expect(error).toHaveBeenCalledWith(expect.stringMatching(/codex-dev\.yaml: it is in non-open department "side-project", whose employees must use the claude engine .*not "codex"/));
   });
 
-  it("drops a scoped employee with a remote host, and logs why", () => {
+  it("no longer drops a scoped employee for having a remote host: only the remote target rules apply", () => {
     const { error, loaded } = dropped("remote-dev", { remoteHost: "build-box" });
     expect(loaded).toBe(false);
-    expect(error).toHaveBeenCalledWith(expect.stringMatching(/remote-dev\.yaml: it is in non-open department "side-project" and sets remoteHost "build-box"/));
+    expect(error).toHaveBeenCalledWith(expect.stringMatching(/remote-dev\.yaml: remoteHost "build-box" is set but the instance has no `remote` config block/));
+    expect(error).not.toHaveBeenCalledWith(expect.stringMatching(/remote-dev\.yaml: it is in non-open department/));
   });
 
   it("loads an unscoped employee on any engine, so the rule is the department's", () => {
