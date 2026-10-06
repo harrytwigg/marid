@@ -303,7 +303,9 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   candidate accounts, the `startTodo` code gate, exhausted accounts in `dispatcherSuffix`,
   the per-account rewrite of `template/board-walk.md`, the `noReading` flag with one probing
   start (FR-075a), and no change to the runner's own fallback (FR-076). Document the
-  unrouted-Todo limit (FR-075).
+  unrouted-Todo limit (FR-075), and that a probe whose session ends before its token is
+  refreshed leaves the account unread, so it may be probed again on a later tick (at most one
+  start per tick per account).
 - [ ] T093a Per-account fallback chains (FR-079): parse and validate `engines.claude.accounts`,
   let chain entries name accounts, walk them with per-account health, and run an account
   substitute as a fresh session on that profile with the recent history. Test: a declared
