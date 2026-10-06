@@ -7,19 +7,29 @@ import { logger } from "../shared/logger.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import type { RemoteTarget } from "../shared/types.js";
 import { CLAUDE_LIMITS_DIR, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT } from "../shared/paths.js";
+import { ancestorMemoryExcludes } from "../shared/remote-department.js";
+import { departmentStageDir } from "../gateway/department-scope/paths.js";
+import { resolvedStageDir } from "../gateway/department-stage/stage.js";
+import { getSession } from "../sessions/registry.js";
+import { sessionScopeDepartment } from "../sessions/session-cwd.js";
 
 /**
  * The per-turn `--settings` file for a Claude session. Local and remote
  * sessions both write it (the cold-spawn cleanup is keyed on it); a named
  * local profile also carries the operator's keys that profile cannot read
- * from its own directory (claude-profile-settings.ts).
+ * from its own directory (claude-profile-settings.ts). A department-scoped session
+ * skips the instructions in every directory above its stage directory, as a remote one
+ * does (`ancestorMemoryExcludes`): the stage directory sits beside the instance home, so
+ * the operator's home directory is one of them.
  */
 export function writeClaudeSessionSettings(jinnSessionId: string, profile: ClaudeProfile | undefined): string {
+  const department = sessionScopeDepartment(getSession(jinnSessionId));
   return writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
     sessionId: jinnSessionId,
     relayScript: HOOK_RELAY_SCRIPT,
     statusLineDir: CLAUDE_LIMITS_DIR,
     carry: operatorSettingsCarry(profile ?? null),
+    ...(department ? { claudeMdExcludes: ancestorMemoryExcludes([departmentStageDir(department), resolvedStageDir(department)]) } : {}),
   });
 }
 

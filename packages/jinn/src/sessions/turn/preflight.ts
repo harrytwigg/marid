@@ -65,7 +65,7 @@ function refuseTurn(input: TurnInput): string | undefined {
 
 /** The department-scope gates (scoped-turn.ts), then the Claude login check. */
 function refuseScopedOrLogin(input: TurnInput): string | undefined {
-  return refuseScopedTurn(input.session, input.engineOverride?.name, Boolean(input.employee?.remoteHost)) ?? refuseClaudeLogin(input);
+  return refuseScopedTurn(input.session, input.engineOverride?.name, Boolean(input.employee?.remoteHost), input.config.engines.claude?.bin) ?? refuseClaudeLogin(input);
 }
 
 function resolveTurnEffort(input: TurnInput, engineConfig: EngineConfig): string | undefined {

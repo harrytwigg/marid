@@ -1,5 +1,7 @@
 import { prepareDepartmentStage } from "../../gateway/department-stage/stage.js";
 import type { Session } from "../../shared/types.js";
+import { claudeMayRunScoped } from "../../shared/claude-md-excludes.js";
+import { resolveBin } from "../../shared/resolve-bin.js";
 import { lostBindingReason, scopedDepartmentOf } from "../../work-items/department-scope.js";
 
 /**
@@ -9,7 +11,7 @@ import { lostBindingReason, scopedDepartmentOf } from "../../work-items/departme
  * its stage directory is in place: it never falls back to the Jinn home. For a session on
  * a remote host that is the host's copy, which the remote staging prepares.
  */
-export function refuseScopedTurn(session: Session, engineOverride: string | undefined, remote = false): string | undefined {
+export function refuseScopedTurn(session: Session, engineOverride: string | undefined, remote = false, claudeBin = "claude"): string | undefined {
   const department = session.scopeDepartment ?? scopedDepartmentOf(session.employee);
   if (!department) return undefined;
   const lost = lostBindingReason(session);
@@ -18,7 +20,14 @@ export function refuseScopedTurn(session: Session, engineOverride: string | unde
   if (engine !== "claude") return `A session scoped to department "${department}" runs only on the claude engine, not "${engine}".`;
   // On a remote host the stage directory is the host's copy, synced and checked by the
   // remote staging; the local one plays no part, so it is neither prepared nor required.
-  if (remote) return undefined;
+  return remote ? undefined : refuseLocalScopedTurn(department, claudeBin);
+}
+
+/** A local scoped turn: its Claude Code can skip the instructions above the stage directory, and the directory is in place. */
+function refuseLocalScopedTurn(department: string, claudeBin: string): string | undefined {
+  if (!claudeMayRunScoped(resolveBin("claude", claudeBin))) {
+    return "This department-scoped session cannot start a turn: the installed Claude Code cannot be told to skip the CLAUDE.md files above the department's stage directory (claudeMdExcludes); update it.";
+  }
   try {
     prepareDepartmentStage(department);
   } catch (err) {
