@@ -23,6 +23,8 @@ export interface SessionTreeNodeWire {
   workItemId: string | null
   isRootLink: boolean
   archived: boolean
+  /** The department a scoped employee's session is bound to; null for every other session. */
+  scopeDepartment?: string | null
   /** The same post-settle activity the session list carries, so the row can
    *  say what a finished turn is still waiting on the way the chat does. */
   backgroundActivity: BackgroundActivity | null

@@ -3,6 +3,7 @@ import { ArrowUpRight, CornerDownRight, Eye, MessageCircle } from "lucide-react"
 import type { Employee } from "@/lib/api"
 import type { SessionTreeNodeWire, SessionTreeWire } from "@/lib/session-tree-api"
 import { pendingCaption, usePendingWork, type PendingWork } from "@/components/chat/pending-work"
+import { SessionDepartmentBadge } from "@/components/session-department-badge"
 import { SessionRef } from "./session-ref"
 
 /**
@@ -124,6 +125,7 @@ function TreeRow({
         {node.role === "review" && <ReviewBadge id={node.id} />}
         {node.role === "consult" && <ConsultBadge id={node.id} />}
         <SessionRef sessionId={node.id} byName={byName} />
+        <SessionDepartmentBadge department={node.scopeDepartment} />
         <span className="flex-none text-[11.5px] text-[var(--text-quaternary)]"><StateLabel node={node} /></span>
         {otherTodo && <NodeTodo id={node.id} todoId={otherTodo} />}
       </div>

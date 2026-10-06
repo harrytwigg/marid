@@ -1,3 +1,4 @@
+import { authFetch } from "@/lib/auth"
 import { get, type DepartmentSummaryWire } from "./api"
 
 /* The department routes' wire shapes and client calls. Kept beside api.ts rather
@@ -39,9 +40,47 @@ export interface DepartmentDefinitionWire {
   warnings: string[]
 }
 
+/** A Todo that would be stranded by a scope change: who holds it. */
+export interface DepartmentHolderWire {
+  todo: string
+  assignee: string
+}
+
+/** A refused PATCH. `holders` is set on a `department-boundary` refusal, which
+ *  `ApiError` has no room for, so the body is read here. */
+export class DepartmentPatchError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+    readonly holders: DepartmentHolderWire[] = [],
+  ) {
+    super(message)
+    this.name = "DepartmentPatchError"
+  }
+}
+
+function holdersOf(value: unknown): DepartmentHolderWire[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((row) => (row && typeof row.todo === "string" && typeof row.assignee === "string" ? [{ todo: row.todo, assignee: row.assignee }] : []))
+}
+
 export const departmentApi = {
   get: async (slug: string): Promise<DepartmentDefinitionWire> =>
     (await get<{ department: DepartmentDefinitionWire }>(`/api/departments/${encodeURIComponent(slug)}`)).department,
+  /** Changes a department's scope. Operator only. */
+  patch: async (slug: string, body: { scope: DepartmentScopeWire }): Promise<DepartmentDefinitionWire> => {
+    const res = await authFetch(`/api/departments/${encodeURIComponent(slug)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    const json = (await res.json().catch(() => null)) as { department?: DepartmentDefinitionWire; error?: unknown; code?: unknown; holders?: unknown } | null
+    if (!res.ok || !json?.department) {
+      throw new DepartmentPatchError(res.status, typeof json?.error === "string" ? json.error : `API error: ${res.status}`, typeof json?.code === "string" ? json.code : undefined, holdersOf(json?.holders))
+    }
+    return json.department
+  },
 }
 
 /** Whether a department confines anyone: open departments show no badge. */

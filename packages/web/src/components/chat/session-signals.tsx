@@ -14,19 +14,19 @@ export interface Session {
   sessionKey?: string
   /** Set on delegated/spawned child sessions; null/empty for top-level chats. */
   parentSessionId?: string | null
+  /** The department a scoped employee's session is bound to; null for every other session. */
+  scopeDepartment?: string | null
   transportState?: string
   queueDepth?: number
   lastActivity?: string
   createdAt?: string
   archivedAt?: string | null
-  /** Background work (subagents/background tasks) still running while the
-   *  session is officially idle. null/absent = none. Kept live via the
-   *  session:background WS event (cache patch in useQueryInvalidation). */
+  /** Background work (subagents/tasks) still running while the session is idle;
+   *  null/absent = none. Kept live via the session:background WS event. */
   backgroundActivity?: BackgroundActivity | null
   /** Active descendant employee sessions; derived by the gateway. */
   delegatedActivity?: DelegatedActivity | null
-  /** The in-flight turn has produced nothing for a while; derived by the gateway.
-   *  A running session and a wedged one are otherwise indistinguishable. */
+  /** The in-flight turn has produced nothing for a while; derived by the gateway. */
   turnProgress?: { lastProgressAt: number; awaitingSubmit: boolean; waitingForTerminalTurn?: boolean } | null
   [key: string]: unknown
 }

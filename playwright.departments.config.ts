@@ -6,7 +6,7 @@ const artifacts = process.env.JINN_VERIFY_ARTIFACTS ?? path.join('/tmp', 'jinn-d
 
 export default defineConfig({
   testDir: './e2e/departments',
-  testMatch: ['departments.spec.ts'],
+  testMatch: ['departments.spec.ts', 'scope-editing.spec.ts'],
   fullyParallel: false,
   workers: 1,
   retries: 0,
