@@ -38,7 +38,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
     scan, so the existing `org/` watcher (`gateway/watcher.ts:130`) covers it.
   - It applies data-model.md's scan rules: identity problems refuse the file and keep the last
     good scope; content problems drop only the entry; a refused file with no last good scope
-    counts as `dedicated` only if its raw text asks for a non-open scope, else `open`; a missing file keeps the last good scope, else `open`.
+    counts as `dedicated` only if its raw text has a `scope:` key with a value other than `open`, else `open`; a missing file keeps the last good scope, else `open`.
   - It upserts `department_scopes` on every successful load.
   - It emits `company:changed {entity:"department"}`.
 - [ ] T022 Write `work-items/department-scopes-schema.ts`, defining `department_scopes` per
@@ -75,7 +75,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
 - [ ] T027 Tests:
   - scan rules: one case per identity refusal; a content problem drops only the entry; a
     broken edit keeps the last good scope; a deleted file keeps it; a brand-new refused file
-    that asks for a non-open scope counts as `dedicated`, and one that does not stays `open`
+    with a `scope` other than `open` (a typo included) counts as `dedicated`, and one with none, or `scope: open`, stays `open`
     (an upgrade-style fixture: an old file with an unquoted colon and no `scope`); `scope: open` opens a department;
   - no `department.yaml` anywhere: everything is open and nothing is logged;
   - T020 turns green, plus `@operator`, engine-only delegates, delegation and sub-tasks;

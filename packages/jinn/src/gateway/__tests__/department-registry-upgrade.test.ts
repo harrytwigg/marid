@@ -9,7 +9,7 @@ import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile } from 
 
 /* Since 0.26 the shipped template has described a department.yaml that nothing read, so an
  * instance may hold one the parser refuses. Upgrading must not confine anyone or drop an employee
- * for it. Only a refused file whose own text asks for a non-open scope is held dedicated. */
+ * for it. Only a refused file whose own text names a scope other than open is held dedicated. */
 
 const recorded = (slug: string) =>
   initDb().prepare("SELECT scope FROM department_scopes WHERE slug = ?").pluck().get(slug) as string | undefined;
@@ -26,7 +26,7 @@ describe("an upgraded instance with an old department.yaml the parser refuses", 
     expect(departmentScopeOf("engineering")).toBe("open");
     expect(recorded("engineering")).toBeUndefined();
     expect(departmentRecord("engineering").definitionError).toMatch(/does not parse/);
-    expect(error.mock.calls.map((call) => call[0]).join("\n")).toMatch(/does not ask for one, so the department stays open/);
+    expect(error.mock.calls.map((call) => call[0]).join("\n")).toMatch(/has no scope other than open, so the department stays open/);
   });
 
   it("keeps its employees on the roster and its Todos moving as they did", () => {
@@ -38,12 +38,24 @@ describe("an upgraded instance with an old department.yaml the parser refuses", 
     expect(assignWorkItem(item.id, "alice", "platform", "operator")?.department).toBe("platform");
   });
 
-  it("is held dedicated when the same broken file asks for confinement", () => {
+  it("is held dedicated when the same broken file says scope: dedicated", () => {
     writeDepartmentFile("engineering", `${LEGACY}scope: dedicated\n`);
     writeEmployeeFile("engineering", "alice", { department: "platform" });
     refreshOrg();
     expect(departmentScopeOf("engineering")).toBe("dedicated");
     expect(orgRegistry().has("alice")).toBe(false);
+  });
+
+  it("is held dedicated when the broken file mistypes its scope", () => {
+    writeDepartmentFile("engineering", `${LEGACY}scope: scopd\n`);
+    refreshDepartments();
+    expect(departmentScopeOf("engineering")).toBe("dedicated");
+  });
+
+  it("stays open when the broken file says scope: open", () => {
+    writeDepartmentFile("engineering", `${LEGACY}scope: open\n`);
+    refreshDepartments();
+    expect(departmentScopeOf("engineering")).toBe("open");
   });
 
   it("still loads a valid old file with its real scope", () => {

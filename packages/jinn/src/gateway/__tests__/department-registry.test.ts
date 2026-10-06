@@ -106,15 +106,19 @@ describe("a department file that loads", () => {
 });
 
 describe("identity problems refuse the file", () => {
-  /** [label, file text, why it is refused, whether the text asks for a non-open scope] */
+  /** [label, file text, why it is refused, whether the text has a scope other than open] */
   const refusals: Array<[string, string, RegExp, boolean]> = [
     ["YAML that does not parse", "scope: scoped\nname: [unclosed\n", /does not parse/, true],
-    ["YAML that does not parse and asks for nothing", "name: side-project\ndescription: Builds: and ships\n", /does not parse/, false],
+    ["YAML that does not parse and has no scope", "name: side-project\ndescription: Builds: and ships\n", /does not parse/, false],
     ["a file that is not a mapping", "- just\n- a list\n", /mapping/, false],
     ["a name that is not the directory's", "name: another-project\nscope: scoped\n", /does not match the directory/, true],
-    ["a name that is not the directory's and asks for nothing", "name: Another\n", /does not match the directory/, false],
-    ["an unknown scope", "name: side-project\nscope: sealed\n", /unknown scope/, false],
-    ["a non-text scope", "name: side-project\nscope: true\n", /unknown scope/, false],
+    ["a name that is not the directory's and no scope", "name: Another\n", /does not match the directory/, false],
+    ["a name that is not the directory's and scope: open", "name: Another\nscope: open  # as before\n", /does not match the directory/, false],
+    ["YAML that does not parse and scope: open, quoted", "scope: \"open\"\nname: [unclosed\n", /does not parse/, false],
+    ["a mistyped scope", "name: side-project\nscope: scopd\n", /unknown scope/, true],
+    ["an unknown scope", "name: side-project\nscope: sealed\n", /unknown scope/, true],
+    ["a non-text scope", "name: side-project\nscope: true\n", /unknown scope/, true],
+    ["a scope key with no value", "name: side-project\nscope:\ndescription: x: y\n", /does not parse/, false],
     ["a dedicated scope behind a bad name, in quotes and capitals", "name: x\nSCOPE : 'Dedicated'\n", /does not match the directory/, true],
   ];
 
@@ -128,7 +132,7 @@ describe("identity problems refuse the file", () => {
     expect(recorded("side-project")).toBe("scoped");
   });
 
-  it.each(refusals)("%s: a department that never loaded is dedicated only if the text asks to confine it", (_label, text, why, asks) => {
+  it.each(refusals)("%s: a department that never loaded is dedicated only if the text names a scope other than open", (_label, text, why, asks) => {
     writeDepartmentFile("side-project", text);
     refreshDepartments();
     expect(departmentScopeOf("side-project")).toBe(asks ? "dedicated" : "open");
@@ -166,13 +170,13 @@ describe("identity problems refuse the file", () => {
   it("logs a refusal once, saying what the department falls back to", () => {
     const error = vi.spyOn(logger, "error");
     writeDepartmentFile("side-project", "name: wrong\nscope: scoped\n");
-    writeDepartmentFile("quiet", "name: quiet\nscope: [broken\n");
+    writeDepartmentFile("quiet", "name: quiet\ndescription: Builds: and ships\n");
     refreshDepartments();
     refreshDepartments();
     expect(error).toHaveBeenCalledTimes(2);
     const messages = error.mock.calls.map((call) => call[0] as string);
-    expect(messages.find((m) => m.includes("side-project"))).toMatch(/asks for one, so it is treated as dedicated until the file loads/);
-    expect(messages.find((m) => m.includes("quiet"))).toMatch(/does not ask for one, so the department stays open/);
+    expect(messages.find((m) => m.includes("side-project"))).toMatch(/names a scope, so it is treated as dedicated until the file loads/);
+    expect(messages.find((m) => m.includes("quiet"))).toMatch(/has no scope other than open, so the department stays open/);
   });
 });
 

@@ -37,7 +37,8 @@ sets the rules:
 - **Identity problems** refuse the file: YAML that does not parse, a `name` that does not
   match the directory, an unknown `scope`, or a non-open scope on `system`. The department
   keeps its last good scope. With none recorded, it is treated as `dedicated` only if the raw
-  text asks for a non-open scope (FR-001); otherwise the department stays `open`.
+  text has a `scope:` key with a value other than `open` (FR-001); otherwise the department
+  stays `open`.
 - **Content problems** drop only the bad entry, with a warning: a missing skill, an FR-033
   `workdirs` failure, or a `sharedNotes` entry outside `knowledge/` or `docs/`.
 - **No `department.yaml`**: the department keeps its last good scope. With none recorded, it

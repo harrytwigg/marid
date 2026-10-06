@@ -368,8 +368,9 @@ and dark, with screenshots on the PR (FR-040).
 - **`department.yaml` broken or deleted.** The department keeps its last good scope, so a typo
   or a deleted file never opens a scoped department (FR-001). The last good scope lives in the
   registry, so a registry restored from an older backup or rebuilt from scratch, together with
-  a deleted file, does open it. A file that has never loaded and does not ask for a non-open
-  scope (for example an old file with an unquoted colon) leaves its department open. A near-miss file name in a department directory, such as
+  a deleted file, does open it. A file that has never loaded and has no `scope` key, or `scope: open`
+  (for example an old file with an unquoted colon), leaves its department open; one with any
+  other `scope` value, a typo included, is held dedicated. A near-miss file name in a department directory, such as
   `department.yml`, is logged as a warning.
 - **Renaming a department.** Not supported today, and not added. Renaming the directory makes
   a new department. The old one keeps its Todos and its last good scope.
@@ -419,14 +420,16 @@ and dark, with screenshots on the PR (FR-040).
     keeps its recorded scope. So a typo or a deleted file never turns a scoped department
     open. The operator opens a department only by writing `scope: open`.
   - **A refused file with no recorded scope** (a file that has never loaded): the department
-    is treated as `dedicated` until the file loads **only if the file's raw text asks for a
-    non-open scope**, meaning a line that matches
-    `^\s*scope\s*:\s*["']?(scoped|dedicated)\b` (multiline, case-insensitive), so its
-    intended members are confined and nobody else can hold its Todos. A file that does not
-    ask for one leaves the department `open`, which is today's behaviour: earlier templates
-    described a `department.yaml` that nothing read, so an instance may hold one the parser
-    refuses, and an upgrade must not confine or drop anyone. Either way the refusal is logged
-    and shown on the department panel, and the log line says which.
+    is treated as `dedicated` until the file loads **only if the file's raw text has a
+    `scope:` key whose value is anything other than `open`**, meaning a line that matches
+    `^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S` (multiline,
+    case-insensitive). So a file that asks for confinement, or that mistypes the scope
+    (`scope: scopd`), fails closed: its intended members are confined and nobody else can
+    hold its Todos. A file with no `scope` key, or with `scope: open`, leaves the department
+    `open`, which is today's behaviour: earlier templates described a `department.yaml` that
+    nothing read and never carried a `scope`, so an instance may hold one the parser refuses,
+    and an upgrade must not confine or drop anyone. Either way the refusal is logged and shown
+    on the department panel, and the log line says which.
 - **FR-002**: A Todo's department MUST remain `work_items.department`. No membership table is
   added and **no existing Todo is migrated**. **A Todo's scope department is its root's
   department.** Every scope decision in this spec (FR-003, FR-011, FR-015, the route table and

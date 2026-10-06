@@ -51,12 +51,13 @@ let notifyChange: ((slug: string) => void) | null = null;
 
 const DEPARTMENT_FILE = "department.yaml";
 /**
- * Whether a refused file's raw text asks to confine its department: a line that sets
- * `scope` to `scoped` or `dedicated`. Only such a file is held dedicated when it has never
- * loaded (FR-001). Earlier templates described a `department.yaml` that nothing read, so an
- * instance may hold one the parser refuses; that must not confine anyone on upgrade.
+ * Whether a refused file's raw text has a `scope:` key whose value is anything but `open`.
+ * Only such a file is held dedicated when it has never loaded (FR-001), so a typo such as
+ * `scope: scopd` fails closed. Earlier templates described a `department.yaml` that nothing
+ * read and never carried a `scope`, so an old file the parser refuses leaves its department
+ * open and confines no one on upgrade.
  */
-const ASKS_FOR_CONFINEMENT = /^\s*scope\s*:\s*["']?(scoped|dedicated)\b/im
+const ASKS_FOR_CONFINEMENT = /^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S/im;
 const NEAR_MISS = /^departments?\.(ya?ml)$/i;
 
 /** One listener: called with a slug whenever its definition, scope or refusal changes after the first load. The gateway's watcher callbacks hand it the client broadcast. */
@@ -160,8 +161,8 @@ function loadDepartment(slug: string, pass: Pass): void {
     const kept = fallback
       ? `The department keeps its last good scope, ${fallback}.`
       : state.asksToConfine
-        ? "It has no last good scope and asks for one, so it is treated as dedicated until the file loads."
-        : "It has no last good scope and does not ask for one, so the department stays open until the file loads.";
+        ? "It has no last good scope and names a scope, so it is treated as dedicated until the file loads."
+        : "It has no last good scope and has no scope other than open, so the department stays open until the file loads.";
     say("error", `Refusing ${state.file}: ${state.error}. ${kept}`, pass.current);
   }
 }
