@@ -115,47 +115,109 @@ function asleep(account: string): EngineLimitEngineSnapshot {
   return { ...base(Date.now()), refreshedAt: new Date(0).toISOString(), unsupportedReason: "The host is asleep or unreachable, and has not been read yet; it is not woken to be read." };
 }
 
-export async function readRemoteAccountUsage(
-  account: ClaudeAccountInfo,
-  deps: RemoteAccountUsageDeps = defaultDeps,
-): Promise<{ snapshot: EngineLimitEngineSnapshot; reachable: boolean }> {
-  const destination = account.remote?.destination;
-  if (!destination) return { snapshot: asleep(account.key), reachable: false };
-  let reachable = false;
+async function isAwake(deps: RemoteAccountUsageDeps, destination: string): Promise<boolean> {
   try {
-    reachable = await deps.probe(destination);
+    return await deps.probe(destination);
   } catch {
-    reachable = false;
+    return false;
   }
-  if (!reachable) return { snapshot: asleep(account.key), reachable: false };
+}
 
+/** The access token the host prints for the profile, or undefined. */
+async function remoteToken(deps: RemoteAccountUsageDeps, destination: string, facts: RemoteFacts, configDir: string | undefined, nowMs: number): Promise<string | undefined> {
+  if (process.env.JINN_CLAUDE_USAGE_API === "off") return undefined;
+  const res = await deps.run(destination, [`${shq(facts.nodeBin)} - ${shq(configDir ?? "")}`], { stdin: REMOTE_TOKEN_SCRIPT, timeoutMs: 15_000 });
+  return res.code === 0 ? accessTokenFromScriptOutput(res.stdout, nowMs) : undefined;
+}
+
+/** A host that answered: read its login's usage and plan. */
+async function readAwake(deps: RemoteAccountUsageDeps, account: ClaudeAccountInfo, destination: string): Promise<EngineLimitEngineSnapshot> {
   const nowMs = deps.now();
   const configDir = account.remote?.configDir;
   let facts: RemoteFacts;
   try {
     facts = await deps.facts(destination);
   } catch {
-    return { snapshot: { ...base(nowMs), unsupportedReason: "The host answered, but its toolchain could not be read." }, reachable: true };
+    return { ...base(nowMs), unsupportedReason: "The host answered, but its toolchain could not be read." };
   }
-  const [tokenRun, accountPlan] = await Promise.all([
-    process.env.JINN_CLAUDE_USAGE_API === "off"
-      ? Promise.resolve(undefined)
-      : deps.run(destination, [`${shq(facts.nodeBin)} - ${shq(configDir ?? "")}`], { stdin: REMOTE_TOKEN_SCRIPT, timeoutMs: 15_000 }),
+  const [token, accountPlan] = await Promise.all([
+    remoteToken(deps, destination, facts, configDir, nowMs),
     remotePlan(deps, destination, facts, configDir),
   ]);
-  const token = tokenRun && tokenRun.code === 0 ? accessTokenFromScriptOutput(tokenRun.stdout, nowMs) : undefined;
   const usage = token ? await deps.fetchUsage(token) : undefined;
   const windows = usage ? windowsFromClaudeUsage(usage) : [];
   if (windows.length === 0) {
-    return {
-      snapshot: { ...base(nowMs), accountPlan, unsupportedReason: "No live reading: the account's access token has expired or its login could not be read. A session on it refreshes the token." },
-      reachable: true,
-    };
+    return { ...base(nowMs), accountPlan, unsupportedReason: "No live reading: the account's access token has expired or its login could not be read. A session on it refreshes the token." };
   }
   const live: EngineLimitEngineSnapshot = { ...base(nowMs), status: "live", accountPlan, windows };
   rememberAccountReading(account.key, live, nowMs);
   recordClaudeUsageSample(live, nowMs, usageHistoryPath(account.key));
-  return { snapshot: live, reachable: true };
+  return live;
 }
 
-export const remoteAccountReader: RemoteAccountReader = (_config, account) => readRemoteAccountUsage(account);
+export async function readRemoteAccountUsage(
+  account: ClaudeAccountInfo,
+  deps: RemoteAccountUsageDeps = defaultDeps,
+): Promise<{ snapshot: EngineLimitEngineSnapshot; reachable: boolean }> {
+  const destination = account.remote?.destination;
+  if (!destination || !await isAwake(deps, destination)) return { snapshot: asleep(account.key), reachable: false };
+  return { snapshot: await readAwake(deps, account, destination), reachable: true };
+}
+
+type RemoteResult = { snapshot: EngineLimitEngineSnapshot; reachable: boolean };
+
+/** A reading this fresh is served without asking the host again. */
+export const REMOTE_READING_TTL_MS = 60_000;
+/** How long a request waits for an account's very first reading. The Limits
+ *  page gives up on a request after 8 seconds, and a probe of a sleeping host
+ *  alone can take ten, so a slow host is never what makes the page time out. */
+export const REMOTE_FIRST_READ_BUDGET_MS = 3_000;
+
+const results = new Map<string, { result: RemoteResult; at: number }>();
+const inFlight = new Map<string, Promise<RemoteResult>>();
+
+function refresh(account: ClaudeAccountInfo, read: (account: ClaudeAccountInfo) => Promise<RemoteResult>): Promise<RemoteResult> {
+  const running = inFlight.get(account.key);
+  if (running) return running;
+  const next = read(account)
+    .then((result) => { results.set(account.key, { result, at: Date.now() }); return result; })
+    .finally(() => inFlight.delete(account.key));
+  inFlight.set(account.key, next);
+  return next;
+}
+
+/**
+ * The reader the Limits page, the background refresh and the board walk use:
+ * stale-while-revalidate, one SSH read per account at a time. A cached result
+ * under a minute old is served as it is; an older one is served at once while
+ * a fresh read runs behind it; with none yet, the caller waits up to
+ * {@link REMOTE_FIRST_READ_BUDGET_MS} and otherwise sees "not read yet".
+ */
+export function cachedRemoteAccountReader(
+  read: (account: ClaudeAccountInfo) => Promise<RemoteResult> = (account) => readRemoteAccountUsage(account),
+  budgetMs: number = REMOTE_FIRST_READ_BUDGET_MS,
+): RemoteAccountReader {
+  return async (_config, account) => {
+    const cached = results.get(account.key);
+    if (cached && Date.now() - cached.at < REMOTE_READING_TTL_MS) return cached.result;
+    const fresh = refresh(account, read).catch(() => ({ snapshot: asleep(account.key), reachable: false }));
+    if (cached) return cached.result;
+    let timer: NodeJS.Timeout | undefined;
+    const waiting = new Promise<RemoteResult>((resolve) => {
+      timer = setTimeout(() => resolve({
+        snapshot: { ...base(Date.now()), unsupportedReason: "The host is being read for the first time; its reading appears on the next refresh." },
+        reachable: true,
+      }), budgetMs);
+      timer.unref?.();
+    });
+    return Promise.race([fresh, waiting]).finally(() => clearTimeout(timer));
+  };
+}
+
+/** Test seam. */
+export function clearRemoteAccountReaderCache(): void {
+  results.clear();
+  inFlight.clear();
+}
+
+export const remoteAccountReader: RemoteAccountReader = cachedRemoteAccountReader();

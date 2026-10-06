@@ -102,6 +102,32 @@ function chainProblems(where: string, chain: unknown, names: ReadonlySet<string>
   return problems;
 }
 
+function configDirProblems(where: string, configDir: unknown, seenDirs: Map<string, string>, name: string, jinnHome: string | undefined): string[] {
+  if (typeof configDir !== "string") return [`${where}.configDir must be an absolute path`];
+  const problems: string[] = [];
+  const why = validateEmployeeClaudeConfigDir({ claudeConfigDir: configDir }, jinnHome);
+  if (why) problems.push(`${where}: ${why.replace(/^claudeConfigDir/, "configDir")}`);
+  const dir = canonicalClaudeConfigDir(configDir);
+  const other = seenDirs.get(dir);
+  if (other) problems.push(`${where}.configDir ${dir} is already account ${other}'s`);
+  else seenDirs.set(dir, name);
+  return problems;
+}
+
+function accountProblems(name: string, raw: unknown, names: ReadonlySet<string>, seenDirs: Map<string, string>, jinnHome: string | undefined): string[] {
+  const where = `engines.claude.accounts.${name}`;
+  const problems = ACCOUNT_NAME_RE.test(name) ? [] : [`${where}: an account name is letters, digits, ".", "_" and "-"`];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [...problems, `${where} must be a mapping with configDir`];
+  const entry = raw as Record<string, unknown>;
+  problems.push(...configDirProblems(where, entry.configDir, seenDirs, name, jinnHome));
+  problems.push(...chainProblems(`${where}.fallback`, entry.fallback, names, `claude:${name}`));
+  const map = entry.fallbackModelMap;
+  if (map !== undefined && (!map || typeof map !== "object" || Array.isArray(map))) {
+    problems.push(`${where}.fallbackModelMap must be a mapping of model ids`);
+  }
+  return problems;
+}
+
 /**
  * Problems with `engines.claude.accounts` (empty = valid). Refused: a name that
  * cannot be written as `claude:<name>`, a `configDir` that fails the
@@ -117,33 +143,8 @@ export function validateClaudeAccounts(engines: Record<string, unknown>, jinnHom
   }
   const accounts = claude.accounts as Record<string, unknown>;
   const names = new Set(Object.keys(accounts));
-  const problems: string[] = [];
   const seenDirs = new Map<string, string>();
-  for (const [name, raw] of Object.entries(accounts)) {
-    const where = `engines.claude.accounts.${name}`;
-    if (!ACCOUNT_NAME_RE.test(name)) problems.push(`${where}: an account name is letters, digits, ".", "_" and "-"`);
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      problems.push(`${where} must be a mapping with configDir`);
-      continue;
-    }
-    const entry = raw as Record<string, unknown>;
-    if (typeof entry.configDir !== "string") {
-      problems.push(`${where}.configDir must be an absolute path`);
-    } else {
-      const why = validateEmployeeClaudeConfigDir({ claudeConfigDir: entry.configDir }, jinnHome);
-      if (why) problems.push(`${where}: ${why.replace(/^claudeConfigDir/, "configDir")}`);
-      const dir = canonicalClaudeConfigDir(entry.configDir);
-      const other = seenDirs.get(dir);
-      if (other) problems.push(`${where}.configDir ${dir} is already account ${other}'s`);
-      else seenDirs.set(dir, name);
-    }
-    problems.push(...chainProblems(`${where}.fallback`, entry.fallback, names, `claude:${name}`));
-    const map = entry.fallbackModelMap;
-    if (map !== undefined && (!map || typeof map !== "object" || Array.isArray(map))) {
-      problems.push(`${where}.fallbackModelMap must be a mapping of model ids`);
-    }
-  }
-  return problems;
+  return Object.entries(accounts).flatMap(([name, raw]) => accountProblems(name, raw, names, seenDirs, jinnHome));
 }
 
 /** Problems with account entries in the default account's own chain,

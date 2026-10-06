@@ -67,17 +67,22 @@ export async function claudeResetsAtSeconds(nowMs: number = Date.now(), source: 
   if ("remoteAccount" in source) {
     return stillAhead(lastAccountReading(source.remoteAccount)?.snapshot.windows?.find((window) => window.name === "5h")?.resetsAt);
   }
-  try {
-    const usage = await fetchClaudeOAuthUsage(process.env, source.profile);
-    const live = usage ? windowsFromClaudeUsage(usage) : [];
-    const session = stillAhead(live.find((window) => window.name === "5h")?.resetsAt);
-    if (session !== undefined) return session;
-  } catch {
-    // The usage API is one of two sources; the on-disk snapshot is the other.
-  }
+  const live = stillAhead(await liveSessionResetsAt(source.profile));
+  if (live !== undefined) return live;
   try {
     return stillAhead(claudeSnapshotResetsAt(claudeAccountKey(source.profile)));
   } catch {
+    return undefined;
+  }
+}
+
+/** The live usage API's five-hour reset for the profile's account, if it answers. */
+async function liveSessionResetsAt(profile: ClaudeProfile): Promise<number | undefined> {
+  try {
+    const usage = await fetchClaudeOAuthUsage(process.env, profile);
+    return (usage ? windowsFromClaudeUsage(usage) : []).find((window) => window.name === "5h")?.resetsAt;
+  } catch {
+    // The usage API is one of two sources; the on-disk snapshot is the other.
     return undefined;
   }
 }

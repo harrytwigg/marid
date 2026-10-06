@@ -22,6 +22,20 @@ import {
 /** Per-engine config as this module reads it; unconfigured engines resolve to {}. */
 type AccountSwap = { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };
 
+/** What the swap parks on the session, to be handed back when `until` passes. */
+function overrideRecord(session: Session, accounts: AccountSwap | undefined, until: Date, syncSince: string): Record<string, unknown> {
+  return {
+    originalEngine: session.engine,
+    originalEngineSessionId: session.engineSessionId,
+    // The pin comes off the row for the duration, so the record is the only place
+    // it survives to be handed back from.
+    originalModel: session.model ?? null,
+    until: until.toISOString(),
+    syncSince,
+    ...(accounts ? { originalAccount: accounts.original, substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir } : {}),
+  };
+}
+
 /** A model id belongs to one provider, and an account swap stays on it: the pin
  *  survives, through the original account's `fallbackModelMap` when it maps it. */
 function accountSwapModel(accounts: AccountSwap, model: string | null | undefined): string | undefined {
@@ -67,17 +81,7 @@ export function beginEngineSubstitution(opts: {
   const model = accounts
     ? accountSwapModel(accounts, session.model)
     : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model });
-
-  const engineOverride = {
-    originalEngine: session.engine,
-    originalEngineSessionId: session.engineSessionId,
-    // The pin comes off the row for the duration, so the record is the only place
-    // it survives to be handed back from.
-    originalModel: session.model ?? null,
-    until: until.toISOString(),
-    syncSince,
-    ...(accounts ? { originalAccount: accounts.original, substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir } : {}),
-  };
+  const engineOverride = overrideRecord(session, accounts, until, syncSince);
 
   const started = updateSessionForAttempt(session.id, attemptToken, {
     // The limited engine's thread id moves to its own typed ref (the override record

@@ -92,41 +92,57 @@ export function fiveHourOf(snapshot: EngineLimitEngineSnapshot, now: number): Pr
   return { resetsAt: window.resetsAt, usedPercent: window.usedPercent, atMs: now };
 }
 
+function entryWindows(reading: EngineLimitAccountSnapshot, history: UsageSample[], now: number): SnapshotAccountWindow[] {
+  return (reading.windows ?? []).map((window) => ({
+    name: window.name,
+    ...(window.usedPercent !== undefined ? { usedPercent: window.usedPercent } : {}),
+    ...(window.resetsAt !== undefined ? { resetsAt: new Date(window.resetsAt * 1000).toISOString(), minutesToReset: Math.round((window.resetsAt * 1000 - now) / 60_000) } : {}),
+    ...(history.length > 0 ? { prediction: projectWindow(history, window.name, now) } : {}),
+  }));
+}
+
+/** The reading's state as the walk's rules read it: present keys only. */
+function entryState(reading: EngineLimitAccountSnapshot): Pick<SnapshotAccount, "stale" | "plan" | "noReading" | "hostAsleep"> {
+  return {
+    ...(reading.stale ? { stale: true as const } : {}),
+    ...(reading.accountPlan ? { plan: reading.accountPlan } : {}),
+    ...(reading.noReading ? { noReading: true as const } : {}),
+    ...(reading.hostUnreachable ? { hostAsleep: true as const } : {}),
+  };
+}
+
+function usageDelta(reading: EngineLimitAccountSnapshot, prior: PriorFiveHour | undefined, now: number): Pick<SnapshotAccount, "usageSincePreviousTick"> {
+  const fiveHour = fiveHourOf(reading, now);
+  if (!fiveHour || !prior || prior.resetsAt !== fiveHour.resetsAt) return {};
+  return {
+    usageSincePreviousTick: {
+      previousAt: new Date(prior.atMs).toISOString(), previousUsedPercent: prior.usedPercent, usedPercentNow: fiveHour.usedPercent,
+      risePoints: Math.round((fiveHour.usedPercent - prior.usedPercent) * 10) / 10,
+    },
+  };
+}
+
 function accountEntry(reading: EngineLimitAccountSnapshot, deps: AccountSnapshotDeps): SnapshotAccount {
   const { now } = deps;
   const sessionAccount = deps.sessionAccount ?? defaultSessionAccount;
   const since = windowStart(reading, now);
-  const history = (deps.history ?? ((account, sinceMs) => readClaudeUsageHistory(sinceMs, usageHistoryPath(account))))(reading.account, now - 7 * 24 * 60 * 60_000);
-  const started = (deps.createdSince ?? ((sinceMs) => listSessionsCreatedSince(new Date(sinceMs).toISOString())))(since)
+  const readHistory = deps.history ?? ((account: string, sinceMs: number) => readClaudeUsageHistory(sinceMs, usageHistoryPath(account)));
+  const createdSince = deps.createdSince ?? ((sinceMs: number) => listSessionsCreatedSince(new Date(sinceMs).toISOString()));
+  const started = createdSince(since)
     .filter((session) => !isBoardWalkTurn(session) && startAccount(session, deps) === reading.account)
     .map(toStartedSession);
-  const fiveHour = fiveHourOf(reading, now);
-  const prior = deps.prior?.[reading.account];
   return {
     account: reading.account,
     label: reading.label,
     where: reading.location.kind === "remote" ? `remote host ${reading.location.host}` : "this host",
     employees: reading.employees,
     status: reading.status,
-    ...(reading.stale ? { stale: true as const } : {}),
-    ...(reading.accountPlan ? { plan: reading.accountPlan } : {}),
-    ...(reading.noReading ? { noReading: true as const } : {}),
-    ...(reading.hostUnreachable ? { hostAsleep: true as const } : {}),
+    ...entryState(reading),
     exhausted: reading.exhausted !== undefined,
-    windows: (reading.windows ?? []).map((window) => ({
-      name: window.name,
-      ...(window.usedPercent !== undefined ? { usedPercent: window.usedPercent } : {}),
-      ...(window.resetsAt !== undefined ? { resetsAt: new Date(window.resetsAt * 1000).toISOString(), minutesToReset: Math.round((window.resetsAt * 1000 - now) / 60_000) } : {}),
-      ...(history.length > 0 ? { prediction: projectWindow(history, window.name, now) } : {}),
-    })),
+    windows: entryWindows(reading, readHistory(reading.account, now - 7 * 24 * 60 * 60_000), now),
     holdingCapacityNow: deps.holding.filter((session) => sessionAccount(session) === reading.account).length,
     startedThisWindow: { ...countStarts(started), since: new Date(since).toISOString() },
-    ...(fiveHour && prior && prior.resetsAt === fiveHour.resetsAt ? {
-      usageSincePreviousTick: {
-        previousAt: new Date(prior.atMs).toISOString(), previousUsedPercent: prior.usedPercent, usedPercentNow: fiveHour.usedPercent,
-        risePoints: Math.round((fiveHour.usedPercent - prior.usedPercent) * 10) / 10,
-      },
-    } : {}),
+    ...usageDelta(reading, deps.prior?.[reading.account], now),
   };
 }
 

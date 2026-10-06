@@ -130,7 +130,20 @@ The prompt carries one structure with readings and predictions, and no verdict:
   - how much the Claude five-hour usage has risen since the previous tick's reading, and whether any Jinn session ran in between.
 
   The previous reading is taken after the walk's own turn, so the walk's own spend is not counted as the operator's. Whether all of this means "the operator is live" is the rules file's call.
+- **Every Claude account, when there is more than one** (`accounts`): a local named profile or a remote host's login beside the operator's own (see `docs/org.md`, "Claude accounts"). Each has its label and where it runs, its employees, its windows and predictions from its own history, whether it is recorded as exhausted, `noReading` when there is no live reading (an expired token on an idle profile, or a remote host asleep), the sessions on it holding capacity, the starts on it in its own five-hour window, and its usage since the previous tick. A start the walk made counts on the account of the Todo it started, not on the Dispatcher's. With one account the key is absent and the snapshot is exactly as before.
 - **The local time, weekday and zone.**
+
+## Several Claude accounts
+
+When more than one Claude account is in use, the walk judges each on its own:
+
+- `walk_board` and `walk_todo` name the account each backlog Todo would run on: its assignee's (the assignee's engine, or the Todo's dispatch override, and the login that employee runs as), or `unrouted` for an unassigned Todo, which is judged against the default account.
+- **The gate is in code.** A start whose account is recorded at its limit is refused, whatever the model asks. An unrouted start is refused while the default account is spent.
+- **The Dispatcher is told** which accounts are spent, as it is told a preferred engine, so it can route an unassigned Todo elsewhere. That is advice: an unrouted Todo's account is known only once it is routed, so a child can still land on a spent account. It then waits for that account's own reset, not the operator's.
+- **One probing start** for an account with no live reading, when it is not exhausted and nothing holds it. That session refreshes the token and produces a reading. A probe whose session ends before it refreshes the token leaves the account unread, so it may be probed again on a later tick, at most once per tick per account.
+- **The walk's own turn** runs on its runner's account: the configured employee's login on the configured engine. When that account is exhausted the tick is skipped, as before, and every other account's work waits too. A walk turn never changes engine or account. To keep ticking while the operator's account is spent, point the runner at another engine in `board-walk.md` (or the cron job's runner fields).
+
+The shipped `board-walk.md` states every Dispatch rule per account. An instance's own file is never rewritten, so an older copy keeps its single-account wording until the operator reconciles it.
 
 ## Parking date-gated work
 

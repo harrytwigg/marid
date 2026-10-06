@@ -41,6 +41,9 @@ Central router. Receives messages from connectors, resolves the target employee 
 ### Engine Abstraction
 Uniform adapters support the canonical engines: claude, codex, antigravity, grok, pi, hermes, opencode. Each adapter owns its engine-specific session and tool integration while the gateway keeps routing uniform.
 
+### Accounts
+An account is an engine plus the login it runs as. Claude has one per login: the gateway's own profile (`claude`), each local named profile (`claude:<key>`) and each remote host's login (`claude@<user>@<host>`). Every other engine has one. Usage limits, engine health, the usage history, the rate-limit backoff, fallback chains (`engines.<engine>.fallback`, and `engines.claude.accounts.<name>.fallback` for a declared Claude account), the Limits page and the board walk all work per account, so one account at its limit holds back only its own sessions. With a single Claude account all of this reads exactly as one engine did. See `docs/org.md`, "Claude accounts".
+
 ### Connector System
 Modular adapters that implement a standard interface. Each connector translates between its platform's message format and {{portalName}}'s internal message format. See `connectors.md`.
 

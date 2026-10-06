@@ -16,7 +16,8 @@ import type {
 import { recordClaudeUsageSample, usageHistoryPath } from "./claude-usage-history.js";
 import { CLAUDE_LIMITS_DIR } from "./paths.js";
 import { claudeAccountKey, isAccountSession } from "./engine-account.js";
-import { applyClaudeProfileEnv, type ClaudeProfile } from "./claude-profile.js";
+import type { ClaudeProfile } from "./claude-profile.js";
+import { buildEngineChildEnv } from "./child-env.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
 import { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
@@ -117,8 +118,9 @@ async function claudeAuthPlan(config: JinnConfig, profile: ClaudeProfile): Promi
     // spawn without a shell; without this the call fails against a working
     // install and the plan silently reads as unknown.
     const auth = spawnableCommand(bin, ["auth", "status"]);
-    // A named profile's plan is its own: the same command under its CLAUDE_CONFIG_DIR.
-    const env = profile ? { env: applyClaudeProfileEnv({ ...process.env } as Record<string, string>, profile) } : {};
+    // A named profile's plan is its own: the same command under its CLAUDE_CONFIG_DIR, with
+    // the inherited CLAUDE_CODE_* (an OAuth token among them) scrubbed as a session's are.
+    const env = profile ? { env: buildEngineChildEnv(process.env, { scrubClaudeCode: true, claudeProfile: profile }) } : {};
     execFile(auth.command, auth.args, { timeout: 3000, windowsHide: true, ...auth.options, ...env }, (err, stdout) => {
       if (err) return resolve(undefined);
       try {

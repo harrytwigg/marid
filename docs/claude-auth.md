@@ -66,7 +66,16 @@ Two consequences shape everything below:
 5. **Warn ahead of the predictable expiry.** The 15-minute engine-health tick
    checks `refreshTokenExpiresAt` and sends one warning 48 hours before it — the
    only credential expiry that is both foreseeable from the file and fatal.
-6. **Read the catalog honestly.** Model discovery returning 0 models no longer
+6. **Read each account's limits without touching its login.** The Limits page
+   reads every Claude account with its own access token: the default account's
+   as before, a named profile's from its own Keychain item or
+   `.credentials.json` (never `$CLAUDE_CODE_OAUTH_TOKEN`), and a remote login's
+   over SSH, where only the access token and its expiry leave the host. The
+   token is used in memory for the one usage call. The gateway never refreshes
+   a token, because refreshing rotates the refresh token under Claude Code; an
+   expired one just means no live reading until a session on that account
+   refreshes it. The signed-in check before a turn stays existence-only.
+7. **Read the catalog honestly.** Model discovery returning 0 models no longer
    says "run `claude login`" unless logging in is the fix; an expired access
    token is logged at info as what it is, and the last discovered catalog is
    kept rather than replaced with offline aliases.

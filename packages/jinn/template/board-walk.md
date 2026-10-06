@@ -101,11 +101,21 @@ Start backlog work when Claude allowance would otherwise lapse unused, without
 crowding the operator's own use. Every number here is a default, not a limit in
 code: change any of them.
 
+**Each account on its own.** When the snapshot lists `accounts`, there is more
+than one Claude login (the operator's, a friend's profile, a remote host's), and
+every rule below applies to each account separately: its own windows, its own
+"hold, never guess", its own concurrency and its own starts. A Todo uses the
+allowance of the account it names in the board (`account ...`): its assignee's.
+An `unrouted` Todo has no assignee yet; judge it against the default account
+(`claude`). With no `accounts` in the snapshot there is one account, Claude.
+
 **Who is around.** The operator is live when the snapshot shows any of these
 within the last 30 minutes: activity on a session they drive, a turn in a Jinn
 interactive Claude session, or the Claude five-hour usage rising by 2 points or
 more since the previous tick while no Jinn session ran. The quiet hours are
-01:00 to 06:00 local time.
+01:00 to 06:00 local time. The operator's activity is about the default
+account; an account only Jinn uses has the operator not live, unless its own
+usage rose while none of its sessions ran.
 
 **Three situations.** Pick the one that applies; the operator being live
 outranks the clock.
@@ -121,19 +131,33 @@ with its usage under the ceiling, or the weekly window resets within its
 lookahead with every window under its ceiling. Otherwise the allowance is not
 about to lapse, so hold.
 
-**Hold, never guess.** Start nothing when the Claude reading is missing, stale,
-errored, or lacks a five-hour or weekly window with a reset still ahead, or when
-Claude is recorded as exhausted.
+**Hold, never guess.** Start nothing on an account whose reading is stale,
+errored, or lacks a five-hour or weekly window with a reset still ahead, or that
+is recorded as exhausted. The gateway refuses a start on an exhausted account
+itself.
 
-**Concurrency.** Start nothing while any session already holds engine capacity (running, queued or waiting).
+**No live reading.** An account marked `noReading` (an idle profile whose token
+has expired, or a remote host that is asleep) may get one probing start, if it
+is not exhausted and no session holds it: that session produces a reading, and
+these rules apply from the next tick. A probe whose session ends before it
+refreshes the token leaves the account unread, so it may be probed again on a
+later tick.
 
-**How many.** At most one start per tick. Count the starts in the current
-five-hour window from the snapshot's sessions started by the board walk.
+**Concurrency.** Start nothing on an account while any session on it already
+holds capacity (running, queued or waiting).
+
+**How many.** At most one start per tick on each account. Count the starts in
+the account's current five-hour window from its sessions started by the board
+walk.
 
 **Which Todo.** Only Todos in `backlog` that are ready. Highest priority first,
 then the oldest. Skip a Todo whose dispatch override names an engine other than
 Claude: it would not use the Claude allowance. Prefer that the Todo goes to an
 employee on Claude.
+
+**Known limit.** An unrouted Todo's account is known only once the Dispatcher
+routes it. The gateway tells the Dispatcher which accounts are spent, but a
+Todo can still land on one; it then waits for that account's own reset.
 
 ## Your own rules
 

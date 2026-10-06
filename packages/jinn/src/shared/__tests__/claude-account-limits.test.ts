@@ -29,7 +29,7 @@ vi.mock("node:child_process", async (importOriginal) => {
     childEnvs.push(options.env ?? {});
     callback(null, JSON.stringify({ subscriptionType: options.env?.CLAUDE_CONFIG_DIR ? "max-friend" : "max" }), "");
     return undefined as never;
-  }) as typeof real.execFile;
+  }) as unknown as typeof real.execFile;
   return { ...real, execFile };
 });
 
@@ -159,7 +159,10 @@ describe("two local Claude accounts (FR-071, FR-073)", () => {
     expect(fs.readFileSync(path.join(PROFILE_DIR, ".credentials.json"), "utf-8")).toContain(REFRESH);
     for (const file of everyFile(ROOT)) expect(fs.readFileSync(file, "utf-8")).not.toContain(SECRET);
     expect(JSON.stringify(childEnvs)).not.toContain(SECRET);
-    expect(childEnvs.some((env) => env.CLAUDE_CONFIG_DIR === PROFILE_DIR)).toBe(true);
+    const friendEnv = childEnvs.find((env) => env.CLAUDE_CONFIG_DIR === PROFILE_DIR);
+    expect(friendEnv).toBeDefined();
+    // The default account's token stays out of the named profile's `claude auth status`.
+    expect(friendEnv!.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(logged.join("\n")).not.toContain(SECRET);
     // Each account keeps its own history; the default keeps today's file.
     const histories = fs.readdirSync(path.join(ROOT, "tmp", "engine-limits")).filter((name) => name.startsWith("claude-usage-history"));

@@ -3,7 +3,7 @@ import { accountHasChain, resolveHealthyAccountFallback, type AccountFallbackOpt
 import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
-import { engineHealthForTarget, readEngineHealth, resolveHealthyFallbackEngine } from "../shared/engine-health.js";
+import { engineHealthForTarget, readEngineHealth, resolveHealthyFallbackEngine, type EngineHealthReading } from "../shared/engine-health.js";
 import { engineAvailable, engineSupportsRemote, type EngineName } from "../shared/models.js";
 import { sshDestination } from "../shared/remote-target.js";
 import type { Employee, JinnConfig, RemoteTarget, Session } from "../shared/types.js";
@@ -47,26 +47,32 @@ function fallbackModelMapOf(config: JinnConfig, account: string): Record<string,
  * - Any other local session walks its engine's chain, as before accounts.
  */
 export function chooseSubstitute(input: ChooseSubstituteInput): SubstituteChoice | undefined {
-  const { config, engines, session, employee, account, remote, remoteTarget } = input;
-  if (isBoardWalkTurn(session)) return undefined;
+  if (isBoardWalkTurn(input.session)) return undefined;
   // Health recorded about the gateway's own login says nothing about the host
   // this turn is going back to.
-  const health = engineHealthForTarget(readEngineHealth(), remoteTarget);
+  const health = engineHealthForTarget(readEngineHealth(), input.remoteTarget);
+  return !input.remote && input.session.engine === "claude" ? accountSubstitute(input, health) : engineSubstitute(input, health);
+}
 
-  if (!remote && session.engine === "claude") {
-    if (!accountHasChain(config, account)) return undefined;
-    const target = resolveHealthyAccountFallback(config, account,
-      (candidate) => engines.has(candidate.engine) && engineAvailable(config, candidate.engine), health, input.options);
-    if (!target) return undefined;
-    if (target.engine !== "claude") return { engine: target.engine, claudeProfile: null };
-    const profile = target.account === DEFAULT_CLAUDE_ACCOUNT ? null : declaredAccountByKey(config, target.account)?.profile ?? null;
-    return {
-      engine: "claude",
-      claudeProfile: profile,
-      accounts: { original: account, substitute: target.account, substituteConfigDir: profile?.dir ?? null, fallbackModelMap: fallbackModelMapOf(config, account) },
-    };
-  }
+/** A local Claude session: its account's own chain (FR-079). */
+function accountSubstitute(input: ChooseSubstituteInput, health: EngineHealthReading): SubstituteChoice | undefined {
+  const { config, engines, account } = input;
+  if (!accountHasChain(config, account)) return undefined;
+  const target = resolveHealthyAccountFallback(config, account,
+    (candidate) => engines.has(candidate.engine) && engineAvailable(config, candidate.engine), health, input.options);
+  if (!target) return undefined;
+  if (target.engine !== "claude") return { engine: target.engine, claudeProfile: null };
+  const profile = target.account === DEFAULT_CLAUDE_ACCOUNT ? null : declaredAccountByKey(config, target.account)?.profile ?? null;
+  return {
+    engine: "claude",
+    claudeProfile: profile,
+    accounts: { original: account, substitute: target.account, substituteConfigDir: profile?.dir ?? null, fallbackModelMap: fallbackModelMapOf(config, account) },
+  };
+}
 
+/** Every other session: its engine's chain, as before accounts. */
+function engineSubstitute(input: ChooseSubstituteInput, health: EngineHealthReading): SubstituteChoice | undefined {
+  const { config, engines, session, employee, remote } = input;
   // A remote employee's substitute has to be an engine that can ALSO run on that
   // host, and the usability question moves there with it: `engineAvailable`
   // probes the GATEWAY's PATH, which says nothing about another machine.
