@@ -81,9 +81,9 @@ describe("DepartmentPanel", () => {
   it("shows why a refused department.yaml was refused, and the scope the department keeps", async () => {
     mount({ definitionError: "name \"x\" does not match the directory \"side-project\"" })
     const alert = await screen.findByTestId("department-definition-error")
-    expect(alert.textContent).toContain("department.yaml was refused")
+    expect(alert.textContent).toContain("department.yaml was refused:")
     expect(alert.textContent).toContain("does not match the directory")
-    expect(alert.textContent).toContain("keeps its last good scope, scoped")
+    expect(alert.textContent).toContain("The department stays scoped until the file is fixed")
     expect(screen.getByTestId("department-scope-badge").textContent).toBe("Scoped")
   })
 

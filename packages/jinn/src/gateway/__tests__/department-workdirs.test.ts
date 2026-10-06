@@ -13,7 +13,7 @@ const savedHome = process.env.HOME;
 process.env.HOME = home;
 process.env.JINN_HOME = jinnHome;
 
-const git = (cwd: string) => execFileSync("git", ["init", "-q", cwd]);
+const git = (cwd: string) => execFileSync("git", ["init", "-q", cwd], { stdio: "ignore" });
 const mkdir = (...parts: string[]) => fs.mkdirSync(path.join(home, ...parts), { recursive: true });
 
 type Workdirs = typeof import("../department-workdirs.js");

@@ -63,8 +63,8 @@ function RefusedNotice({ error, scope }: { error: string; scope: DepartmentScope
       className="rounded-[var(--radius-md,12px)] px-[var(--space-4)] py-[var(--space-3)] text-[length:var(--text-caption1)] text-[var(--system-red)]"
       style={{ background: "color-mix(in srgb, var(--system-red) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--system-red) 30%, transparent)" }}
     >
-      <strong className="font-[var(--weight-semibold)]">department.yaml was refused.</strong> {error}.{" "}
-      {scope === "open" ? "The department stays open." : `The department keeps its last good scope, ${SCOPE_TEXT[scope].name.toLowerCase()}.`}
+      <strong className="font-[var(--weight-semibold)]">department.yaml was refused:</strong> {error}.{" "}
+      The department stays {SCOPE_TEXT[scope].name.toLowerCase()} until the file is fixed.
     </div>
   )
 }
