@@ -89,6 +89,12 @@ describe("isClaudeAuthFailure / claudeAuthScope", () => {
     expect(claudeAuthScope(undefined)).toBe(LOCAL_CLAUDE_AUTH_SCOPE);
     expect(claudeAuthScope({ ...remoteDev, remoteHost: undefined })).toBe(LOCAL_CLAUDE_AUTH_SCOPE);
     expect(claudeAuthScope(remoteDev)).toBe("dev@buildbox");
+    // A session moved onto another account authenticates as that account (FR-079).
+    const onFriend = { transportMeta: { engineOverride: { substituteAccount: "claude:0a1b2c3d", substituteConfigDir: "/Users/o/.claude-friend" } } } as never;
+    const onDefault = { transportMeta: { engineOverride: { substituteAccount: "claude", substituteConfigDir: null } } } as never;
+    expect(claudeAuthScope(undefined, onFriend)).toMatch(new RegExp(`^${LOCAL_CLAUDE_AUTH_SCOPE}:[0-9a-f]{8}$`));
+    expect(claudeAuthScope({ name: "f", claudeConfigDir: "/Users/o/.claude-friend" } as Employee, onDefault)).toBe(LOCAL_CLAUDE_AUTH_SCOPE);
+    expect(claudeAuthScope(remoteDev, onFriend)).toBe("dev@buildbox");
     expect(claudeAuthScope({ ...remoteDev, remoteClaudeConfigDir: "/home/dev/.claude-work" }))
       .toBe("dev@buildbox:/home/dev/.claude-work");
   });
@@ -179,6 +185,18 @@ describe("refuseClaudeLaunch", () => {
     expect(refused).toContain("could not refresh its expired login");
     expect(refused).toContain("claude auth login");
     expect(activeClaudeAuthOutage(LOCAL_CLAUDE_AUTH_SCOPE)?.skipped).toBe(1);
+  });
+
+  it("follows an account swap: a dead default login neither refuses a turn moved onto a friend's account nor records its failures", () => {
+    const onFriend = { transportMeta: { engineOverride: { substituteAccount: "claude:0a1b2c3d", substituteConfigDir: "/Users/o/.claude-friend" } } };
+    observeClaudeTurnOutcome(undefined, AUTH_FAILED, NOW);
+    expect(refuseClaudeLaunch(undefined, at(60_000))).toContain("claude auth login");
+    expect(refuseClaudeLaunch(undefined, at(60_000), onFriend)).toBeUndefined();
+    // A failure on the friend's account is that account's outage, and a success there closes nothing of the default's.
+    observeClaudeTurnOutcome(undefined, AUTH_FAILED, at(120_000), onFriend);
+    expect(activeClaudeAuthOutage(LOCAL_CLAUDE_AUTH_SCOPE)?.failures).toBe(1);
+    observeClaudeTurnOutcome(undefined, null, at(180_000), onFriend);
+    expect(activeClaudeAuthOutage(LOCAL_CLAUDE_AUTH_SCOPE)).toBeDefined();
   });
 
   it("closes the outage and lets the launch through as soon as a live pair from a login is on disk", () => {

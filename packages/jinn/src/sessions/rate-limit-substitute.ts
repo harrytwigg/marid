@@ -9,6 +9,7 @@ import { sshDestination } from "../shared/remote-target.js";
 import type { Employee, JinnConfig, RemoteTarget, Session } from "../shared/types.js";
 import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import { resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
+import { accountOverride } from "./session-account.js";
 
 /** What a rate-limited turn moves onto: an engine, the Claude profile it runs
  *  as there, and, for another Claude account, the swap the override records. */
@@ -54,12 +55,18 @@ export function chooseSubstitute(input: ChooseSubstituteInput): SubstituteChoice
   return !input.remote && input.session.engine === "claude" ? accountSubstitute(input, health) : engineSubstitute(input, health);
 }
 
+/** The walk's options: the caller's, plus the account a substituted session belongs to. */
+function walkOptions(input: ChooseSubstituteInput): AccountFallbackOptions {
+  const original = accountOverride(input.session)?.originalAccount;
+  return { ...input.options, ...(original ? { original } : {}) };
+}
+
 /** A local Claude session: its account's own chain (FR-079). */
 function accountSubstitute(input: ChooseSubstituteInput, health: EngineHealthReading): SubstituteChoice | undefined {
   const { config, engines, account } = input;
   if (!accountHasChain(config, account)) return undefined;
   const target = resolveHealthyAccountFallback(config, account,
-    (candidate) => engines.has(candidate.engine) && engineAvailable(config, candidate.engine), health, input.options);
+    (candidate) => engines.has(candidate.engine) && engineAvailable(config, candidate.engine), health, walkOptions(input));
   if (!target) return undefined;
   if (target.engine !== "claude") return { engine: target.engine, claudeProfile: null };
   const profile = target.account === DEFAULT_CLAUDE_ACCOUNT ? null : declaredAccountByKey(config, target.account)?.profile ?? null;

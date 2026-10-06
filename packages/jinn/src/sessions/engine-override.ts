@@ -22,8 +22,22 @@ import {
 /** Per-engine config as this module reads it; unconfigured engines resolve to {}. */
 type AccountSwap = { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };
 
-/** What the swap parks on the session, to be handed back when `until` passes. */
+/** What the swap parks on the session, to be handed back when `until` passes.
+ *  A swap made while an account override stands (the substitute account was
+ *  limited too) keeps the first swap's originals: the account, thread, model and
+ *  sync point the session goes back to are still those of its own account. */
 function overrideRecord(session: Session, accounts: AccountSwap | undefined, until: Date, syncSince: string): Record<string, unknown> {
+  const standing = accountOverride(session);
+  if (standing) {
+    const previous = (session.transportMeta as Record<string, Record<string, unknown>>).engineOverride;
+    return {
+      ...previous,
+      until: until.toISOString(),
+      ...(accounts
+        ? { substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir }
+        : { substituteAccount: undefined, substituteConfigDir: undefined, originalAccount: undefined }),
+    };
+  }
   return {
     originalEngine: session.engine,
     originalEngineSessionId: session.engineSessionId,
@@ -146,6 +160,8 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
   // the substitute's turns all the same.
   if (parked.engine === "claude" && parked.syncSince && (session.engine !== "claude" || accountOverride(session))) {
     next["claudeSyncSince"] = parked.syncSince;
+    // The prompt's sync intro names what happened: another account, not another engine.
+    if (session.engine === "claude") next["claudeSyncAccount"] = true;
   }
   delete next["engineOverride"];
   return next;

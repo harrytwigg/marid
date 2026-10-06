@@ -2,14 +2,14 @@ import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import { json, type ParsedRoute } from "./route-helpers.js";
 import type { ApiContext } from "./api.js";
 import { readTicks } from "../board-walk/store.js";
-import { countStarts, listStartedSessions } from "../board-walk/started-sessions.js";
+import { countStarts, toStartedSession } from "../board-walk/started-sessions.js";
 import { readClaudeUsageHistory, usageHistoryPath } from "../shared/claude-usage-history.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
-import type { JinnConfig } from "../shared/types.js";
+import type { JinnConfig, Session } from "../shared/types.js";
 import { walkAccounts } from "../board-walk/accounts.js";
 import { sessionStartAccount } from "../board-walk/snapshot-accounts.js";
 import { rosterClaudeAccounts } from "../shared/engine-limits-accounts.js";
-import { getSession } from "../sessions/registry.js";
+import { getSession, listSessionsCreatedSince } from "../sessions/registry.js";
 import { verifySessionCapability } from "../mcp/identity.js";
 import { readJsonBody } from "./http-helpers.js";
 import { resolveCallerIdentity } from "./session-comm-guards.js";
@@ -42,12 +42,9 @@ function bounded(url: URL, key: string, fallback: number, max: number): number {
 const TURN_TOOL_PREFIX = "/api/board-walk/turn/";
 
 /** The account a start counts on, as the walk counts it (snapshot-accounts.ts). */
-function startAccountOf(config: JinnConfig): (session: { id: string; engine: string }) => string {
+function startAccountOf(config: JinnConfig): (session: Session) => string {
   const accounts = walkAccounts({ config, now: Date.now() });
-  return (started) => {
-    const session = getSession(started.id);
-    return session ? sessionStartAccount(session, (item) => accounts.of(item)) : started.engine;
-  };
+  return (session) => sessionStartAccount(session, (item) => accounts.of(item));
 }
 
 /** A walk tool's call: answered only for a caller that proves which session it
@@ -100,9 +97,9 @@ function handleAutoDispatch(res: ServerResponse, route: ParsedRoute, context: Ap
   // the board walk, the dispatch button, a mention, cron or a chat.
   if (pathname === "/api/auto-dispatch/sessions") {
     const engine = url.searchParams.get("engine") || undefined;
-    const listed = listStartedSessions(since, { ...(engine ? { engine } : {}), limit: bounded(url, "limit", 500, 2000) });
+    const raw = listSessionsCreatedSince(new Date(since).toISOString(), { ...(engine ? { engine } : {}), limit: bounded(url, "limit", 500, 2000) });
     const accountOf = multi ? startAccountOf(context.getConfig()) : undefined;
-    const sessions = accountOf ? listed.map((session) => ({ ...session, account: accountOf(session) })) : listed;
+    const sessions = raw.map((session) => (accountOf ? { ...toStartedSession(session), account: accountOf(session) } : toStartedSession(session)));
     json(res, { sessions, counts: countStarts(sessions) });
     return true;
   }

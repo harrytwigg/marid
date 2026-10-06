@@ -48,7 +48,8 @@ describe("preflightTurn and the Claude auth watch", () => {
     const plan = preflightTurn(input("claude"));
 
     expect(plan).toEqual({ ok: false, error: expect.stringContaining("claude auth login") });
-    expect(refuseClaudeLaunch).toHaveBeenCalledWith(dev);
+    // Asked about the session too, so a turn moved onto another account is judged on that account's login.
+    expect(refuseClaudeLaunch).toHaveBeenCalledWith(dev, expect.any(Date), expect.objectContaining({ id: "s1" }));
   });
 
   it("runs a Claude turn the watch has no objection to", () => {

@@ -161,7 +161,7 @@ function noteClaudeLogin(run: TurnRun, result: EngineResult, silent: boolean): v
   // A clean turn that produced nothing and cost nothing (a native `/command`)
   // never reached the API, so it is no evidence the login works.
   if (!result.error && !result.result?.trim() && !result.cost) return;
-  observeClaudeTurnOutcome(run.input.employee, result.error);
+  observeClaudeTurnOutcome(run.input.employee, result.error, new Date(), run.input.session);
 }
 
 /**

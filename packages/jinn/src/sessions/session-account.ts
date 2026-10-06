@@ -75,3 +75,24 @@ export function sessionClaudeProfile(
 export function threadSlot(session: SessionView, engine: string): string {
   return engine === "claude" ? currentClaudeAccount(session) : engine;
 }
+
+/**
+ * A row written before Claude's slot was keyed by account: a named-profile or
+ * remote employee's own thread sits under `claude`. Read it there while the row
+ * has no account-keyed slot yet and no account override stands; the first
+ * account-keyed write ends the fallback, so a `claude` slot later holding the
+ * default account's substitute thread is never mistaken for the session's own.
+ */
+export function legacyThreadRef<T>(session: SessionView & { engineSessions?: Record<string, T> | null }, engine: string): T | undefined {
+  if (engine !== "claude" || threadSlot(session, engine) === engine || accountOverride(session)) return undefined;
+  const refs = session.engineSessions ?? {};
+  if (Object.keys(refs).some((key) => key !== "claude" && key.startsWith("claude"))) return undefined;
+  return refs.claude;
+}
+
+/** The session as it reads with no account override: its own account's slots. */
+export function withoutAccountOverride<S extends SessionView>(session: S): S {
+  const meta = session.transportMeta && typeof session.transportMeta === "object" ? { ...(session.transportMeta as Record<string, unknown>) } : {};
+  delete meta.engineOverride;
+  return { ...session, transportMeta: meta as Session["transportMeta"] };
+}

@@ -105,8 +105,10 @@ export class WalkTools {
     const open = listOpenTodos();
     const offset = integer(args.offset, 0);
     const page = open.slice(offset, offset + Math.min(integer(args.limit, BOARD_PAGE) || BOARD_PAGE, 100));
-    const lines = page.map((item) => boardLine(item, { flagged: this.opts.flagged.has(item.id), decided: this.decided.get(item.id)?.outcome })
-      + (this.accountOf(item) ? ` · account ${this.accountOf(item)}` : ""));
+    const lines = page.map((item) => {
+      const account = this.accountOf(item);
+      return boardLine(item, { flagged: this.opts.flagged.has(item.id), decided: this.decided.get(item.id)?.outcome }) + (account ? ` · account ${account}` : "");
+    });
     const decided = open.filter((item) => this.decided.has(item.id)).length;
     const head = `${open.length} open Todo${open.length === 1 ? "" : "s"}, ${decided} decided this tick; showing ${page.length === 0 ? "none" : `${offset + 1}–${offset + page.length}`}.`;
     const more = offset + page.length < open.length ? `\nMore: call walk_board with offset ${offset + page.length}.` : "";

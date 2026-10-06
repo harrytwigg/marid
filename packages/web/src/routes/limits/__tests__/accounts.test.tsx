@@ -75,8 +75,11 @@ describe("LimitsPage — accounts", () => {
     const [group] = screen.getAllByTestId("account-group")
     expect(within(group).getByRole("heading", { level: 2 }).textContent).toBe("claude")
     expect(within(group).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["claude", ".claude-friend"])
-    // codex has one account: a plain card outside the group.
-    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["claude", "codex"])
+    // codex has one account: its card sits under its own "Other engines" heading, never in the Claude group.
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["claude", "Other engines"])
+    const others = screen.getByTestId("other-engines")
+    expect(within(others).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["codex"])
+    expect(within(group).queryByText("codex")).toBeNull()
     expect(within(card(".claude-friend")).getByText("Used by side-dev, side-qa")).toBeTruthy()
     expect(within(card("claude")).queryByText(/Used by/)).toBeNull()
   })

@@ -2,7 +2,7 @@ import { parseBlocksColumn, parseMetaColumn, rowToMessage, type MessageRow, type
 export type { MessageMedia, SessionMessage, MessagePage, MessagePageOptions } from './message-row.js';
 import { CALLBACK_DELIVERY_SELECT } from "./callback-delivery-query.js";
 import { pendingCompletionBatch } from "./completion-batching.js";
-import { threadSlot } from "./session-account.js";
+import { legacyThreadRef, threadSlot, withoutAccountOverride } from "./session-account.js";
 export { coalescePendingParentCompletionQueueItems } from "./completion-batching.js";
 export { shouldHoldParentCompletionQueueDispatch, listReleasableParentCompletionQueuesForSource } from "./completion-drain.js";
 import { randomUUID } from 'node:crypto';
@@ -956,7 +956,7 @@ export function ensureCallbackAttemptToken(
 }
 
 export function getEngineSessionRef(session: Session, engine = session.engine): EngineSessionRef {
-  const stored = cleanEngineSessionRef(session.engineSessions?.[threadSlot(session, engine)] ?? {});
+  const stored = cleanEngineSessionRef(session.engineSessions?.[threadSlot(session, engine)] ?? legacyThreadRef(session, engine) ?? {});
   if (engine === session.engine) {
     if (!stored.id && session.engineSessionId && !session.transportMeta?.engineOverride) stored.id = session.engineSessionId; // a live override parks the PREVIOUS engine's id in the mirror
     if (!stored.model && session.model) stored.model = session.model;
@@ -1014,10 +1014,14 @@ export function switchSessionEngine(
       model: session.model ?? currentRef.model,
       effortLevel: session.effortLevel ?? currentRef.effortLevel,
     });
-    if (Object.keys(current).length > 0) refs[session.engine] = current;
+    // Parked under the account it ran on; the switch then drops any override, so
+    // the target is read from the session's own account.
+    if (Object.keys(current).length > 0) refs[threadSlot(session, session.engine)] = current;
   }
+  const own = withoutAccountOverride(session);
+  const targetSlot = threadSlot(own, nextEngine);
 
-  let target = cleanEngineSessionRef(refs[nextEngine] ?? {});
+  let target = cleanEngineSessionRef(refs[targetSlot] ?? legacyThreadRef({ ...own, engineSessions: refs }, nextEngine) ?? {});
   const requestedTargetModel = typeof opts.model === 'string' && opts.model.trim() ? opts.model : undefined;
   if (nextEngine === 'grok' && target.id && requestedTargetModel && target.model !== requestedTargetModel) {
     target = cleanEngineSessionRef({
@@ -1035,7 +1039,7 @@ export function switchSessionEngine(
     model: nextModel ?? undefined,
     effortLevel: nextEffort ?? undefined,
   });
-  if (Object.keys(nextTarget).length > 0) refs[nextEngine] = nextTarget;
+  if (Object.keys(nextTarget).length > 0) refs[targetSlot] = nextTarget;
 
   const transportMeta = (session.transportMeta && typeof session.transportMeta === 'object' && !Array.isArray(session.transportMeta))
     ? { ...session.transportMeta }

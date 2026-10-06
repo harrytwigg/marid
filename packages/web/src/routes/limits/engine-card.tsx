@@ -95,13 +95,13 @@ function toneAndNote(engine: EngineLimitEngineSnapshot, account: EngineLimitAcco
   return { tone: badge(kind, engine, now), note: noteFor(engine, kind) }
 }
 
-function CardHeader({ engine, account, title, tone }: {
+function CardHeader({ engine, account, title, tone, Title }: {
   engine: EngineLimitEngineSnapshot
   account?: EngineLimitAccountSnapshot
   title?: string
   tone: Tone
+  Title: "h2" | "h3"
 }) {
-  const Title = account ? "h3" : "h2"
   const where = account?.location
   const remoteHost = where?.kind === "remote" ? where.host : null
   return (
@@ -148,11 +148,13 @@ function Windows({ engine, now }: { engine: EngineLimitEngineSnapshot; now: numb
 
 /** One card per engine, or, for an engine with several accounts, one per
  *  account: `account` carries the per-account state and `title` its name. */
-export function EngineCard({ engine, now, account, title }: {
+export function EngineCard({ engine, now, account, title, nested }: {
   engine: EngineLimitEngineSnapshot
   now: number
   account?: EngineLimitAccountSnapshot
   title?: string
+  /** Under a section heading, so the card's own title is one level down. */
+  nested?: boolean
 }) {
   const { tone, note } = toneAndNote(engine, account, now)
   const creditLabel = creditLabelFor(engine)
@@ -161,7 +163,7 @@ export function EngineCard({ engine, now, account, title }: {
     // Grouped-inset card (shared visual language): --bg-secondary carrying the
     // page's only card shadow — no border at rest.
     <section className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-6)] shadow-[var(--shadow-card)]">
-      <CardHeader engine={engine} account={account} title={title} tone={tone} />
+      <CardHeader engine={engine} account={account} title={title} tone={tone} Title={account || nested ? "h3" : "h2"} />
 
       {account && account.employees.length > 0 && (
         <div className="mt-[var(--space-2)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">

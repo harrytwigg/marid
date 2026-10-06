@@ -45,6 +45,10 @@ export interface AccountFallbackOptions {
   /** Only Claude-account entries apply: a session whose working layout is
    *  Claude's cannot move to another engine (FR-026a). */
   accountsOnly?: boolean;
+  /** The account a substituted session belongs to. The health-blind second
+   *  pass never hands the session back to it: that account was limited, and a
+   *  stale record must not bounce the session onto it again. */
+  original?: string;
 }
 
 /** The first target in `from`'s chain that `isUsable` accepts, walking on
@@ -80,7 +84,7 @@ export function resolveHealthyAccountFallback(
   options: AccountFallbackOptions = {},
 ): FallbackTarget | null {
   return resolveAccountFallback(config, from, (target) => isUsable(target) && !isEngineExhausted(health, target.account), options)
-    ?? resolveAccountFallback(config, from, isUsable, options);
+    ?? resolveAccountFallback(config, from, (target) => isUsable(target) && target.account !== options.original, options);
 }
 
 /** Whether an account has a chain of its own to walk: the default account and

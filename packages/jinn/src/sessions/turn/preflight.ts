@@ -221,7 +221,7 @@ function withInterruptedPrompts(prompt: string, unseen: string[]): string {
 }
 
 /** The instant a pending engine-switch transcript should start from, if any. */
-function syncSince(session: Session, engineName: string): { sinceMs: number; engineSwitch: boolean } | undefined {
+function syncSince(session: Session, engineName: string): { sinceMs: number; engineSwitch: boolean; accountSwap?: boolean } | undefined {
   const meta = (session.transportMeta || {}) as Record<string, unknown>;
   const switchTarget = typeof meta.engineSyncTarget === "string" ? meta.engineSyncTarget : null;
   const switchSinceMs = new Date(String(meta.engineSyncSince ?? "")).getTime();
@@ -230,7 +230,7 @@ function syncSince(session: Session, engineName: string): { sinceMs: number; eng
   }
   const claudeSinceMs = new Date(String(meta.claudeSyncSince ?? "")).getTime();
   if (engineName === "claude" && Number.isFinite(claudeSinceMs)) {
-    return { sinceMs: claudeSinceMs, engineSwitch: false };
+    return { sinceMs: claudeSinceMs, engineSwitch: false, ...(meta.claudeSyncAccount === true ? { accountSwap: true } : {}) };
   }
   return undefined;
 }
@@ -241,7 +241,7 @@ function syncSince(session: Session, engineName: string): { sinceMs: number; eng
  * turns since the switch. The markers driving this are cleared by the terminal
  * write once a synced turn settles cleanly.
  */
-function resolveSyncPrompt(
+export function resolveSyncPrompt(
   session: Session,
   engineName: string,
   prompt: string,
@@ -263,7 +263,9 @@ function resolveSyncPrompt(
 
   const intro = sync.engineSwitch
     ? "We switched engines in this Jinn session. Sync your context with this transcript (most recent last), then respond to the current message."
-    : "We temporarily switched to GPT due to a Claude usage limit. Sync your context with this transcript (most recent last), then respond to the current message.";
+    : sync.accountSwap
+      ? "We temporarily ran this session on another Claude account due to a usage limit. Sync your context with this transcript (most recent last), then respond to the current message."
+      : "We temporarily switched to GPT due to a Claude usage limit. Sync your context with this transcript (most recent last), then respond to the current message.";
 
   return {
     promptToRun: [intro, transcript, currentPrompt].filter(Boolean).join("\n\n"),
@@ -275,6 +277,7 @@ function resolveSyncPrompt(
 export function withSyncMarkersCleared(meta: unknown): Record<string, unknown> {
   const base = meta && typeof meta === "object" && !Array.isArray(meta) ? { ...(meta as Record<string, unknown>) } : {};
   delete base["claudeSyncSince"];
+  delete base["claudeSyncAccount"];
   delete base["engineSyncTarget"];
   delete base["engineSyncSince"];
   return base;

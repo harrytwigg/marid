@@ -29,5 +29,5 @@ function refuseUnsignedClaudeProfile(input: TurnInput): string | undefined {
  */
 function refuseDeadClaudeLogin(input: TurnInput): string | undefined {
   if (input.engineOverride) return undefined;
-  return refuseClaudeLaunch(input.employee);
+  return refuseClaudeLaunch(input.employee, new Date(), input.session);
 }
