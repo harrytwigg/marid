@@ -106,7 +106,7 @@ instructions: department   # department | department+company
 
 **What a scope does today.** It changes how Todos move; it does not yet confine anyone:
 
-- Assigning a Todo never moves it across a scoped or dedicated department's boundary. A Todo whose root is in one keeps its department when it is assigned to an employee elsewhere, to `@operator`, or to an engine-only delegate.
+- Assigning a Todo never moves it across a scoped or dedicated department's boundary, in either direction. A Todo whose root is in one keeps its department when it is assigned to an employee elsewhere, to `@operator`, or to an engine-only delegate; a Todo in an open department keeps its department when it is assigned to an employee of a scoped one. Refusing such an assignment outright comes with enforcing scoped employees.
 - A sub-task shares its root's department whenever either is scoped or dedicated, so a create that names another department under such a root is refused.
 - An employee in a scoped or dedicated department must have the department's directory, its immediate directory and its `department` field all agree, or the employee is refused at load and the log says why. `PATCH /api/org/employees/:name` will not move an employee into or out of such a department; move the file by hand.
 

@@ -75,7 +75,11 @@ export interface AssignWorkItemOptions {
  *  elsewhere, `@operator` and an engine-only delegate alike. */
 function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | null): string | null {
   const root = item.rootId === item.id ? item : getWorkItem(item.rootId) ?? item;
-  if (isNonOpenDepartment(root.department)) return item.department;
+  // FR-003: never move a Todo across a non-open boundary, in either direction. A root in a
+  // non-open department keeps its Todo there; an open root keeps its Todo out of the
+  // assignee's non-open department. Whether that assignee may hold the Todo at all is
+  // FR-015 (`mayHoldTodo`), which refuses on top of this; until then the assignment succeeds.
+  if (isNonOpenDepartment(root.department) || isNonOpenDepartment(assigneeDepartment)) return item.department;
   const policy = resolveTodoDepartments();
   return policy ? item.department ?? policy.defaultDepartment : assigneeDepartment;
 }

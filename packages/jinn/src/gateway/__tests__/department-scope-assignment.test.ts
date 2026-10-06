@@ -109,6 +109,22 @@ describe("open departments keep today's behaviour", () => {
     expect(assign(item.id, "@operator", null)?.department).toBeNull();
   });
 
+  it("keeps an open Todo in its open department when the assignee is in a scoped one", () => {
+    const item = todoIn("platform");
+    expect(assign(item.id, "side-dev", "side-project")?.department).toBe("platform");
+    expect(getWorkItem(item.id)?.assignee).toBe("side-dev");
+  });
+
+  it("keeps a company Todo out of a scoped department when its employee is assigned", () => {
+    const item = todoIn(null);
+    expect(assign(item.id, "side-dev", "side-project")?.department).toBeNull();
+  });
+
+  it("keeps a scoped Todo in its department when an open employee is assigned (the other direction)", () => {
+    const item = todoIn("side-project");
+    expect(assign(item.id, "eng-dev", "engineering")?.department).toBe("side-project");
+  });
+
   it("behaves the same with no department.yaml anywhere", () => {
     resetDepartmentFixtures();
     writeEmployeeFile("engineering", "eng-dev");
