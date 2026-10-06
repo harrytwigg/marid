@@ -80,10 +80,10 @@ export interface Employee {
   directReports?: string[];
   depth?: number;
   chain?: string[];
+  claudeProfile?: { path: string; key: string } | null; // named Claude profile (YAML only); null = the gateway's own
 }
 
-/** Editable employee fields accepted by PATCH /api/org/employees/:name.
- *  `name` is immutable and is intentionally omitted. */
+/** Editable employee fields accepted by PATCH /api/org/employees/:name; `name` is immutable and omitted. */
 export interface EmployeeUpdate {
   displayName?: string;
   department?: string;

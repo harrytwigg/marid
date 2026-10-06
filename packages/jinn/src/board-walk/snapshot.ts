@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { EngineLimitEngineSnapshot, EngineLimitsResponse, JinnConfig, Session } from "../shared/types.js";
 import { CLAUDE_LIMITS_DIR } from "../shared/paths.js";
+import { isDefaultAccountSession } from "../shared/engine-account.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
 import { isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
 import { readClaudeUsageHistory, type UsageSample } from "../shared/claude-usage-history.js";
@@ -122,7 +123,7 @@ export function newestOperatorStatuslineMtime(sessions: readonly Session[], dir 
   const driven = new Set(sessions.filter(operatorDrivenSession).map((session) => session.id));
   try {
     const stamps = fs.readdirSync(dir)
-      .filter((name) => name.endsWith(".json") && driven.has(name.slice(0, -".json".length)))
+      .filter((name) => name.endsWith(".json") && driven.has(name.slice(0, -".json".length)) && isDefaultAccountSession(name.slice(0, -".json".length)))
       .map((name) => fs.statSync(path.join(dir, name)).mtimeMs);
     return stamps.length > 0 ? Math.max(...stamps) : undefined;
   } catch {

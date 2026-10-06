@@ -2,6 +2,8 @@ import os from "node:os";
 import { logger } from "../shared/logger.js";
 import { loadConfig } from "../shared/config.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
+import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
+import { verifyLocalClaudeProfile } from "../shared/claude-profile-signin.js";
 import { recordEngineUnavailable } from "../shared/engine-health.js";
 import { readClaudeCredentialStatus, type ClaudeCredentialStatus } from "../shared/claude-auth.js";
 import {
@@ -49,10 +51,13 @@ export function isClaudeAuthFailure(error: string | null | undefined): boolean {
  * different outage from the gateway's — and one this host cannot inspect.
  */
 export function claudeAuthScope(employee: Employee | undefined): string {
+  // A local named profile is its own login on this host: `local:<profile key>` (FR-055).
+  const profile = resolveEmployeeClaudeProfile(employee);
+  if (profile) return `${LOCAL_CLAUDE_AUTH_SCOPE}:${profile.key}`;
   if (!isRemoteTarget(employee)) return LOCAL_CLAUDE_AUTH_SCOPE;
   const user = employee.remoteUser ? `${employee.remoteUser}@` : "";
-  const profile = employee.remoteClaudeConfigDir ? `:${employee.remoteClaudeConfigDir}` : "";
-  return `${user}${employee.remoteHost}${profile}`;
+  const remoteProfile = employee.remoteClaudeConfigDir ? `:${employee.remoteClaudeConfigDir}` : "";
+  return `${user}${employee.remoteHost}${remoteProfile}`;
 }
 
 function hostname(): string {
@@ -135,6 +140,12 @@ interface ClaudeAuthOutageEvent {
 }
 
 function raiseClaudeAuthOutage({ scope, note, status, reason, kind }: ClaudeAuthOutageEvent, now: Date): void {
+  const namedProfileKey = scope.startsWith(`${LOCAL_CLAUDE_AUTH_SCOPE}:`) ? scope.slice(LOCAL_CLAUDE_AUTH_SCOPE.length + 1) : undefined;
+  if (namedProfileKey) {
+    // That profile's own account record: the default account's sessions are unaffected.
+    recordEngineUnavailable(`claude:${namedProfileKey}`, "authentication failed — sign the Claude profile in again",
+      Math.floor((now.getTime() + CLAUDE_AUTH_RECHECK_MS) / 1000), now, { host: hostname() });
+  }
   if (scope === LOCAL_CLAUDE_AUTH_SCOPE) {
     // Advisory: new sessions prefer a healthy fallback engine while this
     // stands, and the dashboard shows why. Preflight, not this record, is
@@ -189,6 +200,9 @@ function loggedInSince(outage: ClaudeAuthOutage | undefined, status: ClaudeCrede
  */
 export function refuseClaudeLaunch(employee: Employee | undefined, now: Date = new Date()): string | undefined {
   try {
+    // A named profile's signed-in check (FR-054) stands in for the default login's disk check.
+    const profile = resolveEmployeeClaudeProfile(employee);
+    if (profile) return verifyLocalClaudeProfile(profile);
     const scope = claudeAuthScope(employee);
     if (scope !== LOCAL_CLAUDE_AUTH_SCOPE) return undefined;
     const status = localStatus();

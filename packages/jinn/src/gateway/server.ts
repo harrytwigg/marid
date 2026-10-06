@@ -49,8 +49,8 @@ import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnot
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
 import { reconcileWorkItemsOnStartup, startWorkItemReconciler } from "../work-items/reconcile.js";
 import { setTodoLiveEmitter } from "../work-items/live-events.js";
-import { seedTrust, cleanupSessionSettings } from "../shared/claude-settings.js";
-import { claudeJsonPath } from "../shared/home.js";
+import { cleanupSessionSettings } from "../shared/claude-settings.js";
+import { bootClaudeProfiles } from "./claude-profile-boot.js";
 import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
 import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
 import { reapableGatewayPids } from "./process-home.js";
@@ -560,12 +560,7 @@ export async function startGateway(
     logger.warn(`Failed to copy hook-relay.mjs: ${err instanceof Error ? err.message : err}`);
   }
 
-  // Seed trust for the Jinn project dir so interactive Claude doesn't prompt.
-  try {
-    seedTrust(claudeJsonPath(), JINN_HOME);
-  } catch (err) {
-    logger.warn(`Failed to seed Claude trust: ${err instanceof Error ? err.message : err}`);
-  }
+  bootClaudeProfiles();
 
   // Orphan-PTY tracking spans all interactive engines.
   // Declared as a hoisted function so the lifecycle callbacks below can reference

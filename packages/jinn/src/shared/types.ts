@@ -1,6 +1,5 @@
 export type StreamDeltaType = "text" | "text_snapshot" | "tool_use" | "tool_result" | "status" | "error" | "context" | "block";
 
-import type { ClaudeProfile } from "./claude-profile.js";
 export type { CompanyChangedEvent } from "./gateway-events.js";
 
 export type { NoteDocument, NoteFolder, NoteStoreResult, NoteSummary } from "./note-types.js";
@@ -185,8 +184,7 @@ export interface RemoteTarget {
 
 export interface EngineRunOpts extends RemoteTarget {
   prompt: string;
-  /** Local sessions only: the employee's named Claude profile (null/unset = the gateway's own). */
-  claudeProfile?: ClaudeProfile;
+  claudeProfile?: import("./claude-profile.js").ClaudeProfile; // local only; null/unset = the gateway's own
   resumeSessionId?: string;
   systemPrompt?: string;
   /** Canonical platform/session metadata refresh for a resumed native transcript.
@@ -236,7 +234,7 @@ export interface EngineResult {
   error?: string;
   /** Set by a `/compact` turn that compacted: the context size either side of
    *  it, as far as the engine reports them. */
-  compaction?: CompactionStats;
+  compaction?: import("./compaction-stats.js").CompactionStats;
   /**
    * Optional rate limit metadata returned by an engine.
    * `resetsAt` is a Unix timestamp in seconds.
@@ -244,12 +242,7 @@ export interface EngineResult {
   rateLimit?: EngineRateLimitInfo;
 }
 
-export interface CompactionStats {
-  /** Context tokens before the compaction. */
-  preTokens?: number;
-  /** Context tokens after it: what the next turn starts from. */
-  postTokens?: number;
-}
+export type { CompactionStats } from "./compaction-stats.js";
 
 export interface EngineRateLimitInfo {
   status?: string;
@@ -517,8 +510,7 @@ export interface CronDelivery {
 
 export interface Employee extends RemoteTarget {
   name: string;
-  /** Claude Code profile (`CLAUDE_CONFIG_DIR`) for LOCAL sessions; YAML-only. See shared/claude-profile.ts. */
-  claudeConfigDir?: string;
+  claudeConfigDir?: string; // Claude Code profile for LOCAL sessions, YAML-only (shared/claude-profile.ts)
   /** Gateway-stamped built-in identity. Never sourced from employee YAML. */
   system?: boolean;
   displayName: string;

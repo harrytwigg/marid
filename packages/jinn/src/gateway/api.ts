@@ -86,6 +86,7 @@ export {
   normalizeBlockDeltaForTurn,
 } from "../sessions/partial-stream.js";
 import { forkEngineSession } from "../sessions/fork.js";
+import { claudeProfileForSession } from "./session-claude-profile.js";
 import { cleanUpDeletedSession } from "./session-cleanup.js";
 import { ptySnapshotStore } from "../engines/pty-snapshot.js";
 import { configDocumentForApi, deepMerge } from "./config-payload.js";
@@ -2044,7 +2045,7 @@ export async function handleApiRequest(
               destinationSessionsRoot: path.join(CODEX_HOMES_DIR, newSession.id, "sessions"),
             }
           : undefined;
-        const forkResult = await forkEngineSession(source.engine, source.engineSessionId, JINN_HOME, { interactive, codex });
+        const forkResult = await forkEngineSession(source.engine, source.engineSessionId, JINN_HOME, { interactive, codex, claudeProfile: claudeProfileForSession(source) });
 
         // 3. Store the new engine session ID
         recordEngineSessionId(newSession.id, newSession.engine, forkResult.engineSessionId, {

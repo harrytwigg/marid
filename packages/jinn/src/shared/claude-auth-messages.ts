@@ -19,7 +19,14 @@ function describeDuration(ms: number): string {
   return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
 
+/** The profile key of a local named profile's scope (`local:<key>`), if it is one. */
+function namedProfileKey(scope: string): string | undefined {
+  return scope.startsWith(`${LOCAL_CLAUDE_AUTH_SCOPE}:`) ? scope.slice(LOCAL_CLAUDE_AUTH_SCOPE.length + 1) : undefined;
+}
+
 function describeScope(scope: string, hostname: string): string {
+  const key = namedProfileKey(scope);
+  if (key) return `the Claude profile ${key} on the gateway host (${hostname})`;
   return scope === LOCAL_CLAUDE_AUTH_SCOPE ? `the gateway host (${hostname})` : scope;
 }
 
@@ -42,6 +49,9 @@ function describeCredentialFailure(status: ClaudeCredentialStatus | undefined): 
 
 /** The line of the alert that says what to do. */
 function describeFix(scope: string, hostname: string, telegramLogin: boolean): string {
+  if (namedProfileKey(scope)) {
+    return `Fix: on ${hostname}, run \`CLAUDE_CONFIG_DIR=<that employee's claudeConfigDir> claude\`, then \`/login\`. One message follows when it recovers.`;
+  }
   if (scope !== LOCAL_CLAUDE_AUTH_SCOPE) {
     return `Fix: run \`claude auth login\` on ${scope} as the user the remote sessions run as. One message follows when it recovers.`;
   }

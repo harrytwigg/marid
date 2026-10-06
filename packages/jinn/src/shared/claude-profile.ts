@@ -3,7 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { claudeJsonPath, resolveClaudeConfigDir, resolveJinnHome } from "./home.js";
-import type { Employee } from "./types.js";
+import { validateRemoteTarget } from "./remote-target.js";
+import type { Employee, RemoteExecutionConfig } from "./types.js";
 
 /**
  * The Claude Code profile a local session runs as. `null` is the gateway's own
@@ -73,6 +74,17 @@ export function validateEmployeeClaudeConfigDir(
   return undefined;
 }
 
+/**
+ * The org scan's check of where an employee runs: its remote target, then its
+ * local profile, which a passing check canonicalises in place so every reader
+ * sees the one spelling Claude Code hashes. Returns why the employee is refused.
+ */
+export function validateEmployeeTargets(employee: Employee, remote: RemoteExecutionConfig | undefined): string | undefined {
+  const problem = validateRemoteTarget(employee, remote)?.error ?? validateEmployeeClaudeConfigDir(employee);
+  if (!problem && employee.claudeConfigDir) employee.claudeConfigDir = canonicalClaudeConfigDir(employee.claudeConfigDir);
+  return problem;
+}
+
 /** The profile an employee's LOCAL sessions run as. Remote employees name
  *  theirs with `remoteClaudeConfigDir`, which the remote engine path applies. */
 export function resolveEmployeeClaudeProfile(
@@ -81,6 +93,14 @@ export function resolveEmployeeClaudeProfile(
   if (!employee || employee.remoteHost) return null;
   const raw = typeof employee.claudeConfigDir === "string" ? employee.claudeConfigDir.trim() : "";
   return raw ? claudeProfileFromDir(raw) : null;
+}
+
+/** The employee wire's read-only view of its profile: null for the default. */
+export function claudeProfileWire(
+  employee: Pick<Employee, "claudeConfigDir" | "remoteHost">,
+): { path: string; key: string } | null {
+  const profile = resolveEmployeeClaudeProfile(employee);
+  return profile ? { path: profile.dir, key: profile.key } : null;
 }
 
 export function claudeConfigDirFor(profile: ClaudeProfile): string {
@@ -101,9 +121,9 @@ export function claudeKeychainService(profile: ClaudeProfile): string {
   return profile ? `${CLAUDE_KEYCHAIN_SERVICE}-${profile.key}` : CLAUDE_KEYCHAIN_SERVICE;
 }
 
-/** The exact command an operator runs to sign a profile in. */
+/** How an operator signs a profile in, naming the canonical directory exactly. */
 export function claudeLoginHint(profile: Exclude<ClaudeProfile, null>): string {
-  return `CLAUDE_CONFIG_DIR=${profile.dir} claude, then /login`;
+  return `run \`CLAUDE_CONFIG_DIR=${profile.dir} claude\`, then \`/login\``;
 }
 
 /**
@@ -117,6 +137,24 @@ export function applyClaudeProfileEnv(env: Record<string, string>, profile: Clau
   env.CLAUDE_CONFIG_DIR = profile.dir;
   delete env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
   return env;
+}
+
+/** Every named profile directory on the roster, registered by the gateway at
+ *  boot. The file-read policy refuses their auth files as it does the default
+ *  profile's. */
+let namedProfileDirs: () => readonly string[] = () => [];
+
+export function registerClaudeProfileDirs(source: () => readonly string[]): void {
+  namedProfileDirs = source;
+}
+
+/** The default profile's directory plus every named one. */
+export function protectedClaudeConfigDirs(): string[] {
+  let named: readonly string[] = [];
+  try {
+    named = namedProfileDirs();
+  } catch { /* a roster that cannot be read still protects the default profile */ }
+  return [resolveClaudeConfigDir(), ...named];
 }
 
 function forms(p: string): string[] {

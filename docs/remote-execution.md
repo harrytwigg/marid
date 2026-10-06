@@ -166,6 +166,11 @@ employee rather than the machine:
 remoteClaudeConfigDir: /home/<user>/.claude-profiles/alt
 ```
 
+The profile reaches every remote launch: ordinary turns, auto-compaction, the
+rate-limit retry and the dashboard terminal. A local employee names its profile
+with `claudeConfigDir` instead (see the shipped `docs/org.md`, "Claude
+profiles"). The two fields cannot be combined on one employee.
+
 **Do not point Jinn at a profile-manager wrapper instead.** Those wrappers set
 `CLAUDE_CONFIG_DIR` and then `unset` every `CLAUDE_*` and `ANTHROPIC_*` variable
 before exec. That strips the three a session depends on — and losing

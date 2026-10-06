@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react"
 import type { Employee } from "@/lib/api"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { deptHue } from "@/components/org/layout/dept-color"
+import { ClaudeProfileBadge } from "@/components/org/claude-profile"
 
 type EmployeeNodeData = Employee & Record<string, unknown>
 
@@ -52,6 +53,7 @@ export function EmployeeNode({ data, selected }: NodeProps) {
         <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] text-[var(--accent)] bg-[var(--accent-fill)] py-px px-[7px] rounded-[10px]">
           {employee.engine}
         </span>
+        <ClaudeProfileBadge profile={employee.claudeProfile} />
         {employee.model && (
           <span
             className={`text-[length:var(--text-caption2)] text-[var(--text-tertiary)] bg-[var(--fill-quaternary)] py-px px-[7px] rounded-[10px] transition-opacity duration-150 ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}

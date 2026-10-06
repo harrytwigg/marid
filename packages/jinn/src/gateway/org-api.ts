@@ -5,6 +5,7 @@ import { compactEmployeeRole } from "../shared/employee-role.js";
 import { readJsonBody } from "./http-helpers.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import type { OrgNode } from "../shared/types.js";
+import { claudeProfileWire } from "../shared/claude-profile.js";
 import type { ApiContext } from "./api.js";
 
 /** Wire shape for the org list: the persona is replaced by its compact role. */
@@ -13,6 +14,7 @@ function employeeView(node: OrgNode): Record<string, unknown> {
   const role = compactEmployeeRole(persona);
   return {
     ...rest,
+    claudeProfile: claudeProfileWire(node.employee),
     ...(role ? { role } : {}),
     parentName: node.parentName,
     directReports: node.directReports,
@@ -55,6 +57,7 @@ async function getEmployee(res: ServerResponse, name: string, context: ApiContex
   const node = resolveOrgHierarchy(roster).nodes[name];
   json(res, {
     ...emp,
+    claudeProfile: claudeProfileWire(emp),
     ...(node
       ? { parentName: node.parentName, directReports: node.directReports, depth: node.depth, chain: node.chain }
       : { parentName: null, directReports: [], depth: 0, chain: [name] }),

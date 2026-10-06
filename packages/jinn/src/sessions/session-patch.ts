@@ -2,6 +2,8 @@ import type { JinnConfig } from "../shared/types.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
 import { preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
 import { logger } from "../shared/logger.js";
+import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
+import { orgRegistry } from "../gateway/org-registry.js";
 
 /**
  * Validate a mid-chat model/effort change for an existing session.
@@ -58,7 +60,10 @@ export function validateNewSessionSelection(
   // hands the preference back and the session starts where it would have.
   let defaultModel = defaults.model;
   let defaultEffortLevel = defaults.effortLevel;
-  if (body.engine === undefined && body.model === undefined && isKnownEngine(engine)) {
+  // A local named Claude profile has no fallback chain yet (FR-056), so it is never reordered.
+  const ownAccount = engine === "claude" && Boolean(defaults.employee)
+    && resolveEmployeeClaudeProfile(orgRegistry().get(defaults.employee!)) !== null;
+  if (body.engine === undefined && body.model === undefined && isKnownEngine(engine) && !ownAccount) {
     // NOT scoped by host, unlike the other two engine-choosing paths: `defaults`
     // carries the employee's NAME, not its record, so this cannot tell whether
     // the session runs here or on another machine. Until the Employee is

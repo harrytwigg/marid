@@ -166,6 +166,7 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<void> {
     remoteHost: input.employee?.remoteHost,
     remoteUser: input.employee?.remoteUser,
     remoteCwd: input.employee?.remoteCwd,
+    remoteClaudeConfigDir: input.employee?.remoteClaudeConfigDir,
     mcpConfigPath: plan.mcpConfigPath,
     resolvedMcp: plan.resolvedMcp,
     attachments: input.attachments.length ? input.attachments : undefined,

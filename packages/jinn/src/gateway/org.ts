@@ -5,8 +5,7 @@ import { resolveJinnHome } from "../shared/paths.js";
 import type { Employee, JinnConfig } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
-import { validateRemoteTarget } from "../shared/remote-target.js";
-import { canonicalClaudeConfigDir, validateEmployeeClaudeConfigDir } from "../shared/claude-profile.js";
+import { validateEmployeeTargets } from "../shared/claude-profile.js";
 import {
   isSystemEmployeeName,
   resolveSystemEmployees,
@@ -111,7 +110,7 @@ export function scanOrg(config?: JinnConfig): Map<string, Employee> {
               .map((s: any) => ({ name: s.name as string, description: s.description as string }))
             : undefined,
         };
-        const problem = validateRemoteTarget(employee, config?.remote)?.error ?? validateEmployeeClaudeConfigDir(employee);
+        const problem = validateEmployeeTargets(employee, config?.remote);
         if (problem) {
           // Skip THIS employee, keep loading the rest — same containment the
           // reserved-name guard above uses. Dropping the whole org because one
@@ -120,7 +119,6 @@ export function scanOrg(config?: JinnConfig): Map<string, Employee> {
           logger.error(`Skipping employee file ${fullPath}: ${problem}`);
           return undefined;
         }
-        if (employee.claudeConfigDir) employee.claudeConfigDir = canonicalClaudeConfigDir(employee.claudeConfigDir);
         registry.set(employee.name, employee);
       }
     } catch (err) {
