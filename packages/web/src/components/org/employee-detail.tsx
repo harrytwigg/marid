@@ -6,6 +6,7 @@ import { useSettings } from "@/routes/settings-provider";
 import { emojiForName } from "@/lib/emoji-pool";
 import { EmojiPicker } from "@/components/ui/emoji-picker";
 import { EmployeeEditor } from "@/components/org/employee-editor";
+import { ClaudeProfileRow } from "@/components/org/claude-profile";
 
 interface SessionData {
   id: string;
@@ -203,6 +204,7 @@ export function EmployeeDetail({
             </p>
           </div>
         </div>
+        <ClaudeProfileRow profile={employee.claudeProfile} />
 
         {persona && (
           <div className="mt-[var(--space-4)] pt-[var(--space-4)] border-t border-[var(--separator)]">

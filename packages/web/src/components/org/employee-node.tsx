@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react"
 import type { Employee } from "@/lib/api"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { deptHue } from "@/components/org/layout/dept-color"
+import { ClaudeProfileBadge } from "@/components/org/claude-profile"
 
 type EmployeeNodeData = Employee & Record<string, unknown>
 
@@ -45,6 +46,7 @@ export function EmployeeNode({ data, selected }: NodeProps) {
         <div className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] whitespace-nowrap overflow-hidden text-ellipsis">
           {roleLabel(employee)}
         </div>
+        <ClaudeProfileBadge profile={employee.claudeProfile} />
       </div>
 
       {/* Engine always; model revealed on hover/selected to keep nodes quiet */}

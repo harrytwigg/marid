@@ -16,7 +16,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { findCodexSessionFile } from "../engines/codex-rollout.js";
 import type { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { HermesRpc } from "../engines/hermes-jsonrpc.js";
-import { resolveClaudeConfigDir } from "../shared/home.js";
+import { applyClaudeProfileEnv, claudeConfigDirFor, type ClaudeProfile } from "../shared/claude-profile.js";
 
 export interface ForkResult {
   engineSessionId: string;
@@ -47,6 +47,7 @@ export interface ForkClaudeOpts {
   cwd: string;
   /** When set, the fork uses interactive (no -p) and releases the source PTY first. */
   interactive?: InteractiveForkCtx;
+  claudeProfile?: ClaudeProfile; // the source's named Claude profile: the fork runs, and finds its transcript, there
 }
 
 /**
@@ -61,11 +62,8 @@ export interface ForkClaudeOpts {
  *   discover the new session id. Bills as `cc_entrypoint=cli`.
  */
 export async function forkClaudeSession(opts: ForkClaudeOpts): Promise<ForkResult> {
-  const { engineSessionId, cwd, interactive } = opts;
-
-  if (interactive) {
-    return forkClaudeSessionInteractive(engineSessionId, cwd, interactive);
-  }
+  const { engineSessionId, cwd, interactive, claudeProfile = null } = opts;
+  if (interactive) return forkClaudeSessionInteractive(engineSessionId, cwd, interactive, claudeProfile);
 
   logger.info(`Forking Claude session ${engineSessionId} in ${cwd} (headless)`);
 
@@ -79,7 +77,7 @@ export async function forkClaudeSession(opts: ForkClaudeOpts): Promise<ForkResul
     cwd,
     encoding: "utf-8",
     timeout: 60_000,
-    env: { ...process.env, PATH: process.env.PATH },
+    env: applyClaudeProfileEnv({ ...process.env } as Record<string, string>, claudeProfile),
   });
 
   const lastLine = result.trim().split("\n").pop();
@@ -102,6 +100,7 @@ async function forkClaudeSessionInteractive(
   engineSessionId: string,
   cwd: string,
   ctx: InteractiveForkCtx,
+  claudeProfile: ClaudeProfile = null,
 ): Promise<ForkResult> {
   logger.info(`Forking Claude session ${engineSessionId} in ${cwd} (interactive)`);
 
@@ -116,7 +115,7 @@ async function forkClaudeSessionInteractive(
   // before we spawn the fork. Async sleep — never block the gateway event loop.
   await sleep(150);
 
-  const projectDir = claudeProjectDir(cwd);
+  const projectDir = claudeProjectDir(cwd, claudeProfile);
   const spawnedAfter = Date.now();
 
   const bin = resolveBin("claude", ctx.bin);
@@ -133,6 +132,7 @@ async function forkClaudeSessionInteractive(
     if (v !== undefined) env[k] = v;
   }
   env.CLAUDE_CODE_NO_FLICKER = "1";
+  applyClaudeProfileEnv(env, claudeProfile);
 
   logger.info(`Interactive fork: spawning ${bin} ${args.join(" ")}`);
   const proc = pty.spawn(bin, args, {
@@ -168,9 +168,9 @@ async function forkClaudeSessionInteractive(
  * fork polls a non-existent directory and times out for any cwd containing a
  * dot (every COO/.jinn session).
  */
-export function claudeProjectDir(cwd: string): string {
+export function claudeProjectDir(cwd: string, claudeProfile: ClaudeProfile = null): string {
   const key = cwd.replace(/[^a-zA-Z0-9]/g, "-");
-  return path.join(resolveClaudeConfigDir(), "projects", key);
+  return path.join(claudeConfigDirFor(claudeProfile), "projects", key);
 }
 
 /** Async sleep — yields the event loop instead of busy-spinning. */
@@ -346,11 +346,11 @@ export async function forkEngineSession(
   engine: string,
   engineSessionId: string,
   cwd: string,
-  opts: { interactive?: InteractiveForkCtx; codex?: ForkCodexOpts } = {},
+  opts: { interactive?: InteractiveForkCtx; codex?: ForkCodexOpts; claudeProfile?: ClaudeProfile } = {},
 ): Promise<ForkResult> {
   switch (engine) {
     case "claude":
-      return forkClaudeSession({ engineSessionId, cwd, interactive: opts.interactive });
+      return forkClaudeSession({ engineSessionId, cwd, interactive: opts.interactive, claudeProfile: opts.claudeProfile });
     case "codex":
       return forkCodexSession(engineSessionId, opts.codex);
     case "hermes":

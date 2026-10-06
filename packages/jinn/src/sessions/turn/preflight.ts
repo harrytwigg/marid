@@ -1,13 +1,12 @@
 import { buildPlatformContextRefresh, fingerprintPlatformContext } from "../../engines/platform-context.js";
 import { isBudgetExhausted } from "../../gateway/budgets.js";
-import { refuseClaudeLaunch } from "../claude-auth-watch.js";
+import { refuseClaudeLogin } from "./claude-login-refusal.js";
 import { resolveEffort } from "../../shared/effort.js";
 import { isCompactCommand, isRawEngineCommand } from "../../shared/skill-commands.js";
 import { opencodeMode } from "../../engines/opencode-server.js";
 import { compactCommandRefusal } from "../compact-command.js";
 import { logger } from "../../shared/logger.js";
 import { effortLevelsForModel, engineAvailable, engineUnavailableMessage, isKnownEngine } from "../../shared/models.js";
-import { getClaudeExpectedResetAt, isLikelyNearClaudeUsageLimit } from "../../shared/usageAwareness.js";
 import type { EngineSessionRef, ResolvedMcpConfig, Session } from "../../shared/types.js";
 import { buildContext, buildPlatformContextSnapshot, runtimeSessionSource, type BuildContextOptions } from "../context.js";
 import { resolveEngineRunMcp } from "../engine-run-mcp.js";
@@ -15,14 +14,11 @@ import { getEngineSessionRef, getMessages } from "../registry.js";
 import { isRemoteMcpSession } from "../remote-mcp-session.js";
 import { isTerminalSession, TERMINAL_REFUSES_MESSAGES } from "../../terminals/session.js";
 import { readUnseenInterruptedPrompts } from "./superseded.js";
-import { formatResumeTime } from "./text.js";
-import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight, TurnSurface } from "./types.js";
+import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight } from "./types.js";
+export { warnIfNearUsageLimit } from "./usage-warning.js";
 
 /** How many prior messages a synthesized engine-switch transcript carries. */
 const SYNC_TRANSCRIPT_MESSAGES = 20;
-/** A prompt this long, on a heavy model, is worth warning about before spending it. */
-const HEAVY_PROMPT_CHARS = 6000;
-const HEAVY_EFFORTS = new Set(["high", "xhigh", "max"]);
 
 type EngineConfig = { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string };
 
@@ -63,18 +59,7 @@ function refuseTurn(input: TurnInput): string | undefined {
   if (session.employee && isBudgetExhausted(session.employee, input.config.budgets?.employees)) {
     return `Budget limit exceeded for employee "${session.employee}". Session blocked.`;
   }
-  return refuseDeadClaudeLogin(input);
-}
-
-/**
- * Last, because it reads a file: a Claude launch on credentials a launch has
- * already proved dead (or that the disk says cannot work) costs a spawn and a
- * guaranteed `authentication_failed`, and says nothing new. The PTY view's
- * engine override is a human at a terminal who can read the error themselves.
- */
-function refuseDeadClaudeLogin(input: TurnInput): string | undefined {
-  if (input.session.engine !== "claude" || input.engineOverride) return undefined;
-  return refuseClaudeLaunch(input.employee);
+  return refuseClaudeLogin(input);
 }
 
 function resolveTurnEffort(input: TurnInput, engineConfig: EngineConfig): string | undefined {
@@ -284,28 +269,6 @@ function resolveSyncPrompt(
     promptToRun: [intro, transcript, currentPrompt].filter(Boolean).join("\n\n"),
     syncRequested: true,
   };
-}
-
-/** A turn big enough that pausing it on a usage limit would actually hurt. */
-function isExpensiveTurn(input: TurnInput, plan: TurnPlan): boolean {
-  const heavyRun = HEAVY_EFFORTS.has((plan.effortLevel || "").toLowerCase())
-    || (plan.model ?? "").toLowerCase().includes("opus");
-  const bigInput = input.attachments.length > 0 || input.prompt.length > HEAVY_PROMPT_CHARS;
-  return heavyRun && bigInput;
-}
-
-/**
- * Claude usage limits expose no remaining budget, so a heavy turn started just
- * after a limit was hit is worth a heads-up before it is spent.
- */
-export async function warnIfNearUsageLimit(input: TurnInput, plan: TurnPlan, surface: TurnSurface): Promise<void> {
-  if (!input.announceUsageWarnings || plan.engineName !== "claude") return;
-  if (!isLikelyNearClaudeUsageLimit() || !isExpensiveTurn(input, plan)) return;
-
-  const resumeText = formatResumeTime(getClaudeExpectedResetAt());
-  await surface.notice(
-    `⚠️ Heads up: Claude usage limits were hit recently, and this looks like a bigger task. If you're near the limit, it may pause${resumeText ? ` until ~${resumeText}` : ""}.`,
-  );
 }
 
 /** Strip the engine-switch sync markers a cleanly settled synced turn consumed. */

@@ -42,8 +42,26 @@ persona: |
 | `remoteUser` | string | no | SSH user on `remoteHost` (default: ssh's own resolution) |
 | `remoteCwd` | string | no | Absolute working directory on the remote host, required when `remoteHost` is set; must sit under `remote.root` in `config.yaml` |
 | `remoteClaudeConfigDir` | string | no | Absolute path used as `CLAUDE_CONFIG_DIR` for this employee's sessions on the remote host |
+| `claudeConfigDir` | string | no | Absolute path of the Claude Code profile this employee's **local** sessions run on (see "Claude profiles" below). Not allowed with `remoteHost` |
 
 The `remote*` fields need a `remote` block in `config.yaml`. A bad remote target is refused at load: that one employee is skipped and the rest of the org still loads.
+
+### Claude profiles
+
+By default every local Claude session runs on the gateway's own Claude Code login. `claudeConfigDir` puts one employee on another login, for example a friend's account that the friend lets you use for their side project.
+
+1. Sign the profile in once, on the gateway's machine: run `CLAUDE_CONFIG_DIR=/Users/<you>/.claude-friend claude`, then `/login`. On macOS the login is kept in its own Keychain item, so it does not replace yours.
+2. Set the same path on the employee: `claudeConfigDir: /Users/<you>/.claude-friend`. Write it exactly as you signed it in. Claude Code names the login after the exact string, so `/Users/<you>/.claude-friend/` with a trailing slash is a different login. The gateway removes a trailing slash and any `.` or `..` segments when it loads the file, so sign in with that form.
+
+The path must be absolute, must not start with `~`, must not lie inside the instance home, and must not be the gateway's own profile. A bad value skips that one employee at load, as a bad remote target does. The field is YAML-only. The org chart shows a profile badge on the employee, and the employee panel shows the path read-only.
+
+Before each turn the gateway checks that the profile exists and is signed in, by the Keychain item's name on macOS or by `<profile>/.credentials.json` elsewhere. It never reads the secret. If the check fails, the turn is refused with the command that signs the profile in.
+
+**What goes to that account.** Every prompt, tool output and file read in the employee's sessions goes to the profile's account. That includes the company context every unscoped session loads: this instance's `CLAUDE.md`, every skill and `knowledge/state.md`. A profile is independent of the employee's department, and setting one does not limit what the employee can reach. The profile's own user-level skills, plugins, settings and claude.ai connectors also load. The gateway carries three of your own settings into those sessions, because the profile cannot read them: `attribution`, your `PreToolUse` hooks and `skipDangerousModePermissionPrompt`.
+
+**Limits.** Each profile is its own account. Its usage limit and its login failures hold back only its own sessions, and yours hold back only yours. A profile's session has no fallback engine: when it hits its limit it waits for its own reset, whatever `engines.claude.fallback` says. The Limits page and the board walk still read only your own account.
+
+Two employees may share one profile, and then they share its limits. `remoteClaudeConfigDir` is the remote equivalent, and the remote employee keeps the engine fallback chain.
 
 ## Departments
 

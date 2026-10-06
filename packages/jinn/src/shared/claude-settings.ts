@@ -1,15 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { OperatorSettingsCarry } from "./claude-profile-settings.js";
 
 export interface SessionSettingsOpts {
   sessionId: string;
   relayScript: string;
   statusLineDir?: string;
   appendSystemPrompt?: string;
+  /** Named Claude profiles only: the operator's keys that profile cannot read itself (claude-profile-settings.ts). */
+  carry?: OperatorSettingsCarry;
 }
 
 interface HookCommand { type: "command"; command: string; }
-interface HookMatcher { hooks: HookCommand[]; }
+interface HookMatcher { matcher?: string; hooks: HookCommand[]; }
 
 // StopFailure fires INSTEAD of Stop when an API error ends the turn (rate_limit,
 // billing_error, server_error, …) — confirmed by the Phase 0 spike. It is the
@@ -39,6 +42,8 @@ export interface ClaudeSettings {
   hooks: Record<"SessionStart" | "UserPromptSubmit" | "Stop" | "StopFailure" | "PreToolUse" | "PostToolUse" | "Notification" | "PostCompact", HookMatcher[]>;
   statusLine?: HookCommand;
   appendSystemPrompt?: string;
+  attribution?: unknown;
+  skipDangerousModePermissionPrompt?: boolean;
 }
 
 function shellQuote(value: string): string {
@@ -79,13 +84,17 @@ export function buildSessionSettings(opts: SessionSettingsOpts): ClaudeSettings 
       UserPromptSubmit: [cmd()],
       Stop: [cmd()],
       StopFailure: [cmd()],
-      PreToolUse: [cmd()],
+      PreToolUse: [cmd(), ...(opts.carry?.preToolUse ?? [])],
       PostToolUse: [cmd()],
       Notification: [cmd()],
       PostCompact: [cmd()],
     },
     ...(opts.statusLineDir ? { statusLine: { type: "command", command: buildStatusLineRecorderCommand(opts.sessionId, opts.statusLineDir) } } : {}),
     ...(opts.appendSystemPrompt ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
+    ...(opts.carry?.attribution !== undefined ? { attribution: opts.carry.attribution } : {}),
+    ...(opts.carry?.skipDangerousModePermissionPrompt !== undefined
+      ? { skipDangerousModePermissionPrompt: opts.carry.skipDangerousModePermissionPrompt }
+      : {}),
   };
 }
 

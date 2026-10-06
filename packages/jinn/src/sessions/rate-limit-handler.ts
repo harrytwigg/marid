@@ -35,8 +35,8 @@ import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
 } from "../shared/rateLimit.js";
-import { recordClaudeRateLimit } from "../shared/usageAwareness.js";
-import { engineHealthForTarget, readEngineHealth, recordEngineUnavailable, resolveHealthyFallbackEngine } from "../shared/engine-health.js";
+import { rateLimitAccount, recordAccountRateLimit, resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
+import { engineHealthForTarget, readEngineHealth, resolveHealthyFallbackEngine } from "../shared/engine-health.js";
 import { beginEngineSubstitution } from "./engine-override.js";
 import { resolveEngineRunMcp } from "./engine-run-mcp.js";
 import { getSession, getMessages, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
@@ -114,9 +114,8 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     remoteClaudeConfigDir: employee?.remoteClaudeConfigDir ?? remoteClaudeConfigDir,
   };
 
-  // Both chain walkers read the generic record; Claude's store answers a different question.
-  recordEngineUnavailable(session.engine, `${engineLabel} usage limit`, rateLimit.resetsAt);
-  if (session.engine === "claude") recordClaudeRateLimit(rateLimit.resetsAt);
+  const { claudeProfile, account } = rateLimitAccount(session.engine, employee);
+  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt);
 
   // ── Branch A: hand the turn to this engine's chain ─────────────────────────
   // A remote employee's substitute has to be an engine that can ALSO run on that
@@ -134,14 +133,14 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     : engineAvailable(config, candidate));
   // A board walk turn never changes engine: it runs on the engine it is
   // configured for because that is where its tools can be clamped to the walk's
-  // own, and a substitute would bring its own surface with it.
-  const substituteName = isBoardWalkTurn(session) ? undefined : resolveHealthyFallbackEngine(
+  // own, and a substitute would bring its own surface with it. Nor does a local named profile (no chain yet).
+  const substituteName = isBoardWalkTurn(session) || claudeProfile ? undefined : resolveHealthyFallbackEngine(
     config,
     session.engine,
     isUsable,
     // Same scoping as a new session's: health recorded about the gateway's own
     // login says nothing about the host this turn is going back to.
-    engineHealthForTarget(readEngineHealth(), remoteTarget),
+    substituteHealth(engineHealthForTarget(readEngineHealth(), remoteTarget), employee),
   );
   const substituteEngine = substituteName ? engines.get(substituteName) : undefined;
   if (!substituteName && remote) {
@@ -196,6 +195,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       // entirely to avoid.
       ...remoteTarget,
       ...resolveEngineRunMcp({ config, employee, engine: substituteName, sessionId: session.id }),
+      claudeProfile: substituteName === "claude" ? resolveEmployeeClaudeProfile(employee) : null,
       attachments: attachments?.length ? attachments : undefined,
       sessionId: session.id,
       ...(hooks.onFallbackStream ? { onStream: hooks.onFallbackStream } : {}),
@@ -307,6 +307,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         // re-states where the session runs. Omit this and a rate-limited remote
         // turn silently comes back on the gateway.
         ...remoteTarget,
+        claudeProfile,
         mcpConfigPath,
         resolvedMcp,
         attachments: attachments?.length ? attachments : undefined,
@@ -319,8 +320,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       const retryRateLimit = !retryInterrupted ? detectRateLimit(retryResult) : { limited: false as const };
 
       if (retryRateLimit.limited) {
-        recordEngineUnavailable(session.engine, `${engineLabel} usage limit`, retryRateLimit.resetsAt);
-        if (session.engine === "claude") recordClaudeRateLimit(retryRateLimit.resetsAt);
+        recordAccountRateLimit(account, session.engine, engineLabel, retryRateLimit.resetsAt);
         logger.info(`Session ${session.id} still rate limited (attempt ${attempt})`);
 
         const next = computeNextRetryDelayMs(retryRateLimit.resetsAt);

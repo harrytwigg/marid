@@ -5,7 +5,7 @@ import { resolveJinnHome } from "../shared/paths.js";
 import type { Employee, JinnConfig } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
-import { validateRemoteTarget } from "../shared/remote-target.js";
+import { validateEmployeeTargets } from "../shared/claude-profile.js";
 import {
   isSystemEmployeeName,
   resolveSystemEmployees,
@@ -104,20 +104,19 @@ export function scanOrg(config?: JinnConfig): Map<string, Employee> {
           remoteUser: typeof data.remoteUser === "string" ? data.remoteUser.trim() : undefined,
           remoteCwd: typeof data.remoteCwd === "string" ? data.remoteCwd.trim() : undefined,
           remoteClaudeConfigDir: typeof data.remoteClaudeConfigDir === "string" ? data.remoteClaudeConfigDir.trim() : undefined,
+          claudeConfigDir: data.claudeConfigDir ?? undefined,
           provides: Array.isArray(data.provides)
             ? data.provides.filter((s: unknown) => s && typeof s === "object" && typeof (s as any).name === "string" && typeof (s as any).description === "string")
               .map((s: any) => ({ name: s.name as string, description: s.description as string }))
             : undefined,
         };
-        const remoteProblem = validateRemoteTarget(employee, config?.remote);
-        if (remoteProblem) {
+        const problem = validateEmployeeTargets(employee, config?.remote);
+        if (problem) {
           // Skip THIS employee, keep loading the rest — same containment the
           // reserved-name guard above uses. Dropping the whole org because one
           // YAML names an unconfigured host would be a worse outage than the
           // misconfiguration it reports.
-          logger.error(
-            `Skipping employee file ${fullPath}: ${remoteProblem.error}`,
-          );
+          logger.error(`Skipping employee file ${fullPath}: ${problem}`);
           return undefined;
         }
         registry.set(employee.name, employee);

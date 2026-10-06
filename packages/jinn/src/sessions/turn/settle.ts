@@ -21,8 +21,7 @@ import {
 import { formatResumeTime, shouldPersistFinalAssistantMessage, turnDisplayText } from "./text.js";
 import { COMPACTION_UNCONFIRMED, compactionConfirmation, compactionRateLimited, unusedFocusNote } from "../compact-command.js";
 import { rateLimitEngineLabel } from "../../shared/rateLimit.js";
-import { recordClaudeRateLimit } from "../../shared/usageAwareness.js";
-import { recordEngineUnavailable } from "../../shared/engine-health.js";
+import { rateLimitAccount, recordAccountRateLimit } from "../rate-limit-account.js";
 import type { EngineResult } from "../../shared/types.js";
 import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
 
@@ -121,8 +120,8 @@ export async function settleRateLimitedCompaction(run: TurnRun, resetsAtSeconds:
   logger.info(`Session ${sessionId}: /compact hit a usage limit; not retried or moved to another engine`);
   // Recorded as the rate-limit branch records it, so the next turn — here or
   // in any session — knows the limit without spending a spawn to find it.
-  recordEngineUnavailable(run.plan.engineName, `${engineLabel} usage limit`, resetsAtSeconds);
-  if (run.plan.engineName === "claude") recordClaudeRateLimit(resetsAtSeconds);
+  const { account } = rateLimitAccount(run.plan.engineName, run.input.employee);
+  recordAccountRateLimit(account, run.plan.engineName, engineLabel, resetsAtSeconds);
   await run.surface.notice(text);
   await settleTurn({
     sessionId,

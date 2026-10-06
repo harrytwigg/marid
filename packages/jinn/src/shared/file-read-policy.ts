@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveClaudeConfigDir, resolveJinnHome } from "./home.js";
+import { resolveJinnHome } from "./home.js";
+import { protectedClaudeConfigDirs } from "./claude-profile.js";
 import { homeGuard, isInsidePath, protectedHomeEntry, realpathOrResolved, type HomeGuard } from "./protected-home-entries.js";
 
 /**
@@ -61,8 +62,8 @@ function assessLocation(resolved: string, base: string, guard: HomeGuard): FileR
   // covers the real one, which CLAUDE_CONFIG_DIR can move anywhere (the container
   // does exactly that).
   const segments = pathSegments(resolved);
-  const claudeConfigDir = realpathOrResolved(resolveClaudeConfigDir());
-  if ((segments.includes(".claude") || isInsidePath(resolved, claudeConfigDir)) && base.startsWith("auth")) {
+  const claudeConfigDirs = protectedClaudeConfigDirs().map(realpathOrResolved);
+  if ((segments.includes(".claude") || claudeConfigDirs.some((dir) => isInsidePath(resolved, dir))) && base.startsWith("auth")) {
     return { allowed: false, reason: "Refusing to read Claude auth files" };
   }
   if (segments.includes(".codex") && base === "auth.json") return { allowed: false, reason: "Refusing to read Codex auth files" };

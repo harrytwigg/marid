@@ -3,7 +3,8 @@ import { logger } from "../shared/logger.js";
 import { getSession, getMessages, insertMessage, updateMessageContent, updateSession, type SessionMessage } from "../sessions/registry.js";
 import { notifyParentOfExternalTurn } from "../sessions/callbacks.js";
 import { initDb } from "../shared/db.js";
-import { findTranscriptForSession } from "../engines/claude-interactive.js";
+import { findSessionTranscript } from "../engines/claude-transcript-path.js";
+import { claudeProfileForSession } from "./session-claude-profile.js";
 import type { HookPayload } from "./hook-registry.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
 import type { Employee, Session } from "../shared/types.js";
@@ -228,7 +229,7 @@ export function markTranscriptSyncedThrough(sessionId: string, engineSessionId?:
   const session = getSession(sessionId);
   if (!session || session.engine !== "claude") return;
   const sid = engineSessionId || session.engineSessionId || undefined;
-  const transcriptPath = transcriptPathOverride || (sid ? findTranscriptForSession(sid) : undefined);
+  const transcriptPath = transcriptPathOverride || (sid ? findSessionTranscript(sid, claudeProfileForSession(session)) : undefined);
   const anchorIso = transcriptPath ? latestTranscriptTimestampIso(transcriptPath) : undefined;
   // The gateway's own completion path: the receipt says whether the engine
   // conversation was filed, so this is not evidence the provider was touched.
@@ -387,7 +388,7 @@ export function syncExternalTurn(
   const transcriptPath =
     (typeof payload?.transcript_path === "string" && fs.existsSync(payload.transcript_path)
       ? payload.transcript_path
-      : undefined) ?? (engineSessionId ? findTranscriptForSession(engineSessionId) : undefined);
+      : undefined) ?? (engineSessionId ? findSessionTranscript(engineSessionId, claudeProfileForSession(session)) : undefined);
 
   const anchorMs = anchorMsFor(session, sessionId);
   const entries = transcriptPath ? readTranscriptTail(transcriptPath, anchorMs) : null;
@@ -517,9 +518,8 @@ export function scheduleOnLoadTailSync(
   setImmediate(() => {
     try {
       const session = getSession(sessionId);
-      if (!session || session.engine !== "claude" || session.status === "running") return;
-      if (!session.engineSessionId) return;
-      const transcriptPath = findTranscriptForSession(session.engineSessionId);
+      if (!session || session.engine !== "claude" || session.status === "running" || !session.engineSessionId) return;
+      const transcriptPath = findSessionTranscript(session.engineSessionId, claudeProfileForSession(session));
       if (!transcriptPath) return;
       const anchorMs = anchorMsFor(session, sessionId);
       try {

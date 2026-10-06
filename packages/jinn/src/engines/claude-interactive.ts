@@ -1,10 +1,11 @@
 import fs from "node:fs";
-import path from "node:path";
 import * as pty from "node-pty";
 import type { CompactionStats, InterruptibleEngine, EngineRunOpts, EngineResult, EngineRateLimitInfo, StreamDelta, TurnProgress } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
-import { JINN_HOME, CLAUDE_SETTINGS_DIR, HOOK_RELAY_SCRIPT, CLAUDE_LIMITS_DIR } from "../shared/paths.js";
-import { cleanupSessionSettings, writeSessionSettings } from "../shared/claude-settings.js";
+import { JINN_HOME, CLAUDE_SETTINGS_DIR } from "../shared/paths.js";
+import { cleanupSessionSettings } from "../shared/claude-settings.js";
+import { ensureClaudeProfileTrust, writeClaudeSessionSettings } from "./claude-profile-launch.js";
+import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { PtyLifecycleManager, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
@@ -17,12 +18,12 @@ import { SsePtyProxy, MAIN_AGENT_SENTINEL, type SseDataEvent, type UpstreamActiv
 import { finishedTaskNotificationIds } from "./task-notifications.js";
 import { isCompactCommand, isNativeClaudeCommand, neutralizeForPaste } from "../shared/skill-commands.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
+import { findSessionTranscript } from "./claude-transcript-path.js";
 import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import { costOfUsage } from "../shared/model-pricing.js";
 import { claudeResetsAtSeconds } from "../shared/engine-reset-times.js";
 import { writeMcpConfigFile } from "../mcp/resolver.js";
 import { parsePermissionPrompt, chooseApproval, keystrokesToSelect } from "./claude-permission-prompt.js";
-import { resolveClaudeConfigDir } from "../shared/home.js";
 import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { assertRemoteTarget, isRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination } from "../shared/remote-target.js";
 import { mapAttachmentsForRemote, withRemoteAttachments } from "../shared/remote-attachments.js";
@@ -268,28 +269,7 @@ function turnTranscriptStart(promptWrittenAt: number, resolver: TurnResolver): n
   return Math.max(promptWrittenAt, resolver.backgroundRerunEndedAt ?? 0);
 }
 
-/** Claude Code stores per-project transcripts at
- *  ~/.claude/projects/<cwd-slug>/<claudeSessionId>.jsonl, where the slug is the
- *  cwd with every "/" and "." replaced by "-". Derive that path; fall back to a
- *  scan across project dirs if the slug heuristic misses (defensive). Exported
- *  for the transcript-recovery unit test. */
-export function findTranscriptForSession(
-  claudeSessionId: string,
-  homeDir: string = JINN_HOME,
-  projectsDir: string = path.join(resolveClaudeConfigDir(), "projects"),
-): string | undefined {
-  if (!claudeSessionId) return undefined;
-  const slug = homeDir.replace(/[/.]/g, "-");
-  const direct = path.join(projectsDir, slug, `${claudeSessionId}.jsonl`);
-  if (fs.existsSync(direct)) return direct;
-  try {
-    for (const d of fs.readdirSync(projectsDir)) {
-      const p = path.join(projectsDir, d, `${claudeSessionId}.jsonl`);
-      if (fs.existsSync(p)) return p;
-    }
-  } catch { /* projects dir missing — nothing to recover */ }
-  return undefined;
-}
+export { findTranscriptForSession } from "./claude-transcript-path.js";
 
 /** Last assistant text block from a Claude transcript — the turn's final
  *  message. Used to recover result text when the Stop hook (which normally
@@ -422,13 +402,13 @@ export function computeInteractiveCost(transcriptPath: string, model?: string, a
 /**
  * Map a StopFailure payload to an EngineRateLimitInfo in the shape ClaudeEngine
  * produces from `rate_limit_event` JSON, so detectRateLimit() and manager.ts's
- * wait-retry machinery work unchanged. The payload never names the reset, so a
- * rate-limit failure — and only that one — asks the account's usage source.
+ * wait-retry machinery work unchanged. The payload never names the reset, so a rate-limit failure asks the
+ * usage source, which reads only the gateway's own account: a named profile states no reset and backs off instead.
  */
-export async function rateLimitFromStopFailure(payload: HookPayload | undefined): Promise<EngineRateLimitInfo | null> {
+export async function rateLimitFromStopFailure(payload: HookPayload | undefined, profile?: ClaudeProfile): Promise<EngineRateLimitInfo | null> {
   if (!payload || payload.hook_event_name !== "StopFailure") return null;
   if (payload.error !== "rate_limit") return null;
-  const resetsAt = await claudeResetsAtSeconds();
+  const resetsAt = profile ? undefined : await claudeResetsAtSeconds();
   return { status: "rejected", rateLimitType: "interactive_detected", ...(resetsAt === undefined ? {} : { resetsAt }) };
 }
 
@@ -2114,7 +2094,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (resolver.isSettled || resolver.promptSubmittedAt !== undefined) return;
     if (!isRemoteTarget(opts)) {
       const sid = resolver.sessionId ?? opts.resumeSessionId;
-      const transcript = sid ? findTranscriptForSession(sid) : undefined;
+      const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
       if (transcript && transcriptHasPromptSince(transcript, pastedAt, opts.prompt)) {
         logger.warn(`InteractiveClaudeEngine: ${jinnSessionId}'s transcript has the prompt though no hook said so — not respawning, which would run it twice. Leaving the turn to the stall backstop.`);
         return;
@@ -2134,11 +2114,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
     let handle: PtyHandle | undefined;
     try {
-      const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
-        sessionId: jinnSessionId,
-        relayScript: HOOK_RELAY_SCRIPT,
-        statusLineDir: CLAUDE_LIMITS_DIR,
-      });
+      const settingsPath = writeClaudeSessionSettings(jinnSessionId, opts.claudeProfile);
       if (opts.resolvedMcp && !isRemoteTarget(opts)) {
         opts.mcpConfigPath = writeMcpConfigFile(opts.resolvedMcp, jinnSessionId);
       }
@@ -2359,11 +2335,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // view showed "Settings file not found". The settings file carries HOOKS only; the
     // system prompt + main-agent sentinel go via the --append-system-prompt CLI flag at
     // spawn() (the settings-file appendSystemPrompt KEY is ignored by claude ≥2.1.x).
-    const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
-      sessionId: jinnSessionId,
-      relayScript: HOOK_RELAY_SCRIPT,
-      statusLineDir: CLAUDE_LIMITS_DIR,
-    });
+    const settingsPath = writeClaudeSessionSettings(jinnSessionId, opts.claudeProfile);
     // A cold-respawn release cleans the per-session MCP file. Materialize the
     // already-resolved config again at the boundary where Claude will read it.
     // A remote session gets its MCP config staged on the other host instead
@@ -2645,7 +2617,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // Only attempt recovery when we can identify THIS turn's transcript.
           // Transcripts share one project dir keyed by Claude session id, so
           // guessing by mtime could attach another session's answer.
-          const transcript = sid ? findTranscriptForSession(sid) : undefined;
+          const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
           let transcriptIsFresh = false;
           if (transcript) {
             try { transcriptIsFresh = fs.statSync(transcript).mtimeMs >= startedAt - 1000; } catch { /* unreadable */ }
@@ -2723,7 +2695,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (compactedBy && !result.error) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
       const hookPath = typeof compactedBy.transcript_path === "string" ? compactedBy.transcript_path : undefined;
-      const statsPath = hookPath ?? (sid ? findTranscriptForSession(sid) : undefined);
+      const statsPath = hookPath ?? (sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined);
       result.compaction = statsPath ? await awaitCompactionStats(statsPath, turnTranscriptFrom) : {};
       if (result.compaction.postTokens) result.contextTokens = result.compaction.postTokens;
       else delete result.contextTokens;
@@ -2737,7 +2709,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // genuine no-output API error — leave those alone.
     if (!nativeCommand && !result.error && !result.result?.trim() && !resolver.stopFailure) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
-      const recoveryPath = sid ? findTranscriptForSession(sid) : undefined;
+      const recoveryPath = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
       // Same floor as lost-Stop recovery: under the warm-PTY gate, transcript
       // text before our own UserPromptSubmit is a turn typed in the terminal,
       // and text before a background re-invocation's Stop is that re-run's.
@@ -2752,7 +2724,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     }
     // Map a StopFailure rate-limit into result.rateLimit so manager.ts's
     // wait/retry/fallback machinery engages exactly as it does for `claude -p`.
-    const rl = await rateLimitFromStopFailure(resolver.stopFailure);
+    const rl = await rateLimitFromStopFailure(resolver.stopFailure, opts.claudeProfile ?? undefined);
     if (rl) result.rateLimit = rl;
     // Turn settled as an API-error failure — the CLI may still be retrying.
     // Keep listening for a late Stop so a wrong "failed" verdict self-corrects.
@@ -2768,8 +2740,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  When `proxyPort` is given, points ANTHROPIC_BASE_URL at the per-PTY SSE
    *  forward proxy on 127.0.0.1 — subscription OAuth token is passed separately
    *  by claude, so this stays cc_entrypoint=cli / subsidy-safe (verified Item A). */
-  private buildPtyEnv(proxyPort?: number, sessionId?: string): Record<string, string> {
+  private buildPtyEnv(proxyPort?: number, sessionId?: string, claudeProfile?: ClaudeProfile): Record<string, string> {
     const env = buildEngineChildEnv(process.env, {
+      claudeProfile,
       scrubClaudeCode: true,
       // Belt-and-suspenders: a stray API key/token would flip the child to metered
       // API billing instead of the Max subscription. Strip both so the PTY session
@@ -3143,7 +3116,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       proxy.stop();
       return undefined;
     }
-    const env = this.buildPtyEnv(port || undefined, jinnSessionId);
+    const env = this.buildPtyEnv(port || undefined, jinnSessionId, opts.claudeProfile);
+    ensureClaudeProfileTrust(opts.claudeProfile, opts.cwd || JINN_HOME);
     const bin = resolveBin("claude", opts.bin);
     const geom = this.lastGeom.get(jinnSessionId);
     logger.info(`InteractiveClaudeEngine spawning ${bin} (resume: ${opts.resumeSessionId || "none"}, geom: ${geom ? `${geom.cols}×${geom.rows}` : "default"}, sseProxy: ${port || "off"})`);
@@ -3175,11 +3149,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // cleanup path (`cleanupSessionSettings`) is keyed on it, and leaving a
     // dangling entry there would be a second, subtler divergence. The REMOTE
     // path is what actually reaches `--settings`.
-    const settingsPath = writeSessionSettings(CLAUDE_SETTINGS_DIR, jinnSessionId, {
-      sessionId: jinnSessionId,
-      relayScript: HOOK_RELAY_SCRIPT,
-      statusLineDir: CLAUDE_LIMITS_DIR,
-    });
+    const settingsPath = writeClaudeSessionSettings(jinnSessionId, opts.claudeProfile);
     const baseArgs = (settings: string): string[] => {
       const args: string[] = [
         "--chrome",
@@ -3252,7 +3222,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           proxy.stop();
           return;
         }
-        const env = this.buildPtyEnv(port || undefined, jinnSessionId);
+        const env = this.buildPtyEnv(port || undefined, jinnSessionId, opts.claudeProfile);
+        ensureClaudeProfileTrust(opts.claudeProfile, opts.cwd || JINN_HOME);
         logger.info(`InteractiveClaudeEngine ensureIdleSpawn for session ${jinnSessionId} (resume ${opts.engineSessionId || "none — fresh"}, geom ${cols}×${rows}, sseProxy: ${port || "off"})`);
         const proc = pty.spawn(bin, args, {
           name: "xterm-256color",

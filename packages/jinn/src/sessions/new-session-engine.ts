@@ -1,6 +1,8 @@
 import type { Employee, Engine, JinnConfig } from "../shared/types.js";
 import { engineAvailable, engineSupportsRemote, type EngineName } from "../shared/models.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
+import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
+import { substituteHealth } from "./rate-limit-account.js";
 import { engineHealthForTarget, preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
 
 /** What a routed turn brought with it about where the session should run. */
@@ -48,7 +50,10 @@ export function newSessionEngineSelection(
   // `remoteHost` would start the session on an engine whose every turn the
   // remote gate then refuses — a session that looks started and can never run.
   const remote = isRemoteTarget(preference.employee);
-  const engine = named
+  // A local named Claude profile is its own account with no fallback chain yet (FR-056): its
+  // session starts where it prefers, whatever the default account's health says.
+  const ownAccount = preferred === "claude" && resolveEmployeeClaudeProfile(preference.employee) !== null;
+  const engine = named || ownAccount
     ? preferred
     : preferHealthySessionEngine(
       config,
@@ -57,7 +62,7 @@ export function newSessionEngineSelection(
         && (!remote || engineSupportsRemote(candidate)),
       // Scoped to the machine this session will actually run on: a login that
       // died on the gateway is no reason to move a remote employee's session.
-      engineHealthForTarget(readEngineHealth(), preference.employee),
+      substituteHealth(engineHealthForTarget(readEngineHealth(), preference.employee), preference.employee),
     );
   return { engine, ...inheritedDefaults(preference, engine !== preferred) };
 }

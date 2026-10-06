@@ -15,6 +15,7 @@ import type {
 } from "./types.js";
 import { recordClaudeUsageSample } from "./claude-usage-history.js";
 import { CLAUDE_LIMITS_DIR } from "./paths.js";
+import { isDefaultAccountSession } from "./engine-account.js";
 import { readClaudeOAuthToken } from "./claude-models.js";
 import { resolveBin } from "./resolve-bin.js";
 import { windowsFromClaudeUsage } from "./engine-limits-claude-usage.js";
@@ -44,7 +45,8 @@ export function windowFromClaude(name: string, value: unknown, durationMins: num
 export function claudeSnapshotFile(dir: string): string | null {
   try {
     const files = fs.readdirSync(dir)
-      .filter((name) => name.endsWith(".json"))
+      // Default-account snapshots only: a named profile's windows are not the operator's (FR-055).
+      .filter((name) => name.endsWith(".json") && isDefaultAccountSession(name.slice(0, -".json".length)))
       .map((name) => path.join(dir, name))
       .map((file) => {
         let hasRateLimits = false;
