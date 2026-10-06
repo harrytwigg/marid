@@ -39,9 +39,14 @@ describe("org routes still answer identically through handleOrgApi", () => {
     const r = await call("GET", "/api/org");
     expect(r.status).toBe(200);
     // persona is replaced by the compact role on this surface; the exact match proves it.
+    // Every employee carries its read-only Claude profile: null for the gateway's own.
     expect(r.body).toEqual({
       departments: ["platform"],
-      employees: [{ ...WORKER, role: "Does platform work", ...EDGES }, DISPATCHER, SHAPER],
+      employees: [
+        { ...WORKER, role: "Does platform work", ...EDGES, claudeProfile: null },
+        { ...DISPATCHER, claudeProfile: null },
+        { ...SHAPER, claudeProfile: null },
+      ],
       hierarchy: { root: null, sorted: ["worker", "todo-dispatcher", "todo-shaper"], warnings: [] },
     });
   });
@@ -49,7 +54,7 @@ describe("org routes still answer identically through handleOrgApi", () => {
   it("GET /api/org/employees/:name returns the employee with its hierarchy edges, 404 for unknown", async () => {
     const r = await call("GET", "/api/org/employees/worker");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ ...WORKER, persona: PERSONA, ...EDGES });
+    expect(r.body).toEqual({ ...WORKER, persona: PERSONA, ...EDGES, claudeProfile: null });
 
     const missing = await call("GET", "/api/org/employees/ghost");
     expect(missing.status).toBe(404);
