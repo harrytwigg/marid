@@ -180,10 +180,6 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session
     hooks: rateLimitHooks(args),
   });
   if (outcome.kind !== "handback") return undefined;
-  // The limited turn's warm PTY runs as the substitute account, and a warm PTY
-  // is reused whatever profile the next turn asks for: drop it, so the re-run
-  // spawns on the session's own account instead of answering on the substitute's.
-  if (isInterruptibleEngine(plan.engine)) plan.engine.kill(input.session.id, "Interrupted: account switched");
   await args.surface.waiting(false);
   await args.surface.notice("↩️ Back on this session's own Claude account — continuing there.");
   return outcome.session;

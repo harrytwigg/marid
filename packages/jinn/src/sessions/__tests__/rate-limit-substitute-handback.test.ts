@@ -51,19 +51,14 @@ interface Call { prompt: string; resumeSessionId?: string; claudeProfile: Claude
 
 function claudeEngine(behaviour: (call: number) => EngineResult) {
   const calls: Call[] = [];
-  const events: string[] = [];
-  const engine: Engine & { kill(sessionId: string, reason?: string): void; isAlive(): boolean; killAll(): void } = {
+  const engine: Engine = {
     name: "claude",
     async run(opts: EngineRunOpts) {
       calls.push({ prompt: opts.prompt, resumeSessionId: opts.resumeSessionId, claudeProfile: opts.claudeProfile });
-      events.push(`run:${opts.resumeSessionId}`);
       return behaviour(calls.length);
     },
-    kill() { events.push("kill"); },
-    isAlive: () => false,
-    killAll() {},
   };
-  return { engine, calls, events };
+  return { engine, calls };
 }
 
 function recordingSurface() {
@@ -109,7 +104,7 @@ describe("a nested account swap whose substitute hits its weekly limit", () => {
 
     // The third account is out for five days; the own account answers.
     const weeklyReset = Math.floor(Date.now() / 1000) + 5 * 24 * 3600;
-    const { engine, calls, events } = claudeEngine((call) => call === 1
+    const { engine, calls } = claudeEngine((call) => call === 1
       ? { sessionId: "c-thread", result: "", error: "You've hit your weekly limit", rateLimit: { status: "rejected", resetsAt: weeklyReset } }
       : { sessionId: "a-thread", result: "done on the own account" });
     const { surface, seen } = recordingSurface();
@@ -140,8 +135,6 @@ describe("a nested account swap whose substitute hits its weekly limit", () => {
     expect(calls[1]!.prompt).toMatch(/^We temporarily ran this session on another Claude account due to a usage limit\./);
     expect(calls[1]!.prompt).toContain("ASSISTANT: drafted on the friend account");
     expect(calls[1]!.prompt).toContain("USER: now publish them");
-    // The third account's warm PTY is dropped before the re-run, not pasted into.
-    expect(events).toEqual(["run:c-thread", "kill", "run:a-thread"]);
 
     const after = reg.getSession(s.id)!;
     expect(after.status).toBe("idle");
