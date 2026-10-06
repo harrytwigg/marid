@@ -13,7 +13,7 @@ import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile, writeS
 
 /**
  * FR-020, FR-020a: each instance keeps its stage directories in a root of its own,
- * `<parent of home>/.jinn-departments/<basename of home>/`, so two instances under one
+ * `<parent of home>/.jinn-departments/.instances/<basename of home>/`, so two instances under one
  * parent do not share a department's stage directory. A directory made at the old path,
  * `.jinn-departments/<slug>/`, is moved once, keeping its inode and its transcripts.
  */
