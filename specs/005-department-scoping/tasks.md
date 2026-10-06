@@ -163,7 +163,7 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
 
 ## Phase 3: scoped context (junior-developer, then senior QA; starts after Phase 2 merges)
 
-- [ ] T060 Generate the stage dir at `<parent of home>/.jinn-departments/<slug>/`. It contains
+- [ ] T060 Generate the stage dir at `<parent of home>/.jinn-departments/<basename of home>/<slug>/`. It contains
   copies of the allowed skills and a `CLAUDE.md` built from `INSTRUCTIONS.md`, plus the
   company file if `department+company` is set, plus the FR-029 scope paragraph. Sync it by
   FR-020a (stable path and inode; changed files renamed in from an incoming directory beside
@@ -345,6 +345,17 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   `engines.claude.fallback` moves the default account's unscoped company sessions onto that
   account. The rationale tells an instance to reconcile its own `board-walk.md` to
   the per-account wording (FR-077), and adds Phase 6's paragraph (FR-044).
+
+## Stage hardening (follow-up to Phases 3 and 5)
+
+- [x] T100 Key the local stage root by instance, move an existing stage dir once with its inode and
+  transcripts (FR-020, FR-020a), and decide the remote path (not re-keyed; FR-020, FR-060).
+- [x] T101 Refuse scoped writes to `INSTRUCTIONS.md` (FR-029a), with a test.
+- [x] T102 Refuse a skill the stage dir refuses in the department panel (with a warning) and in
+  `dispatchConfig.skills` validation (FR-027), with tests.
+- [x] T103 Move the rate-limit substitution's department check onto `sessionScopeDepartment`, with a test that a
+  scoped, an unscoped and a lost-binding session get the same answer from both.
+- [x] T104 Docs (the spec, `docs/org.md`, `docs/remote-execution.md`, the changelog) and the 0.34.0 bundle.
 
 ## Follow-ups outside this feature
 
