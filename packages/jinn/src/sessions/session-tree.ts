@@ -1,4 +1,4 @@
-import type { Session, WorkItemLinkRole } from '../shared/types.js';
+import type { DelegatedActivity, Session, WorkItemLinkRole } from '../shared/types.js';
 import { listComments } from '../work-items/comments.js';
 import { listWorkItemEvents } from '../work-items/event-log.js';
 import { toWorkItemLinkRole } from '../work-items/link-role.js';
@@ -53,8 +53,23 @@ export interface SessionTreeNode {
   /** True when this session is linked directly to the Todo being viewed. */
   isRootLink: boolean;
   archived: boolean;
+  /** The session's post-settle background work, exactly as the session list
+   *  carries it. A finished turn with a monitor or sub-agent still running is
+   *  not "finished" to the operator, and the chat says so; the tree reads the
+   *  same activity rather than guessing from the stored status. */
+  backgroundActivity: NonNullable<Session['backgroundActivity']> | null;
+  /** Employee sessions still active anywhere below this one. */
+  delegatedActivity: DelegatedActivity | null;
   truncated: { reason: 'depth' | 'count' } | null;
   children: SessionTreeNode[];
+}
+
+/** Where a node reads its runtime activity from. The caller owns it because
+ *  the gateway's in-memory activity (and its staleness rule) lives behind the
+ *  API context; the walk stays a pure function of what it is handed. */
+export interface SessionTreeActivity {
+  backgroundActivity(session: Session): SessionTreeNode['backgroundActivity'];
+  delegatedActivity(session: Session): DelegatedActivity | null;
 }
 
 export interface SessionDirectoryEntry {
@@ -83,6 +98,8 @@ export interface SessionTreeInput {
   todoId: string;
   /** Every session in play — the caller's already-loaded array, not a query. */
   sessions: readonly Session[];
+  /** Runtime activity per session; omitted, every node reports none. */
+  activity?: SessionTreeActivity;
   /** Extra ids the Todo names elsewhere: its `created_by`, its comment authors,
    *  its audit actors. Bare ids, `session:` prefix already stripped. */
   referencedSessionIds?: readonly string[];
@@ -109,7 +126,7 @@ function missingDirectoryEntry(id: string): SessionDirectoryEntry {
   return { id, employee: null, status: null, title: null, archived: false, missing: true };
 }
 
-function nodeFor(session: Session, todoId: string): SessionTreeNode {
+function nodeFor(session: Session, todoId: string, activity: SessionTreeActivity | undefined): SessionTreeNode {
   return {
     id: session.id,
     employee: session.employee ?? null,
@@ -119,6 +136,8 @@ function nodeFor(session: Session, todoId: string): SessionTreeNode {
     workItemId: session.workItemId ?? null,
     isRootLink: session.workItemId === todoId,
     archived: isArchived(session),
+    backgroundActivity: activity?.backgroundActivity(session) ?? null,
+    delegatedActivity: activity?.delegatedActivity(session) ?? null,
     truncated: null,
     children: [],
   };
@@ -165,6 +184,7 @@ function expand(
   children: ReadonlyMap<string, Session[]>,
   todoId: string,
   state: WalkState,
+  activity: SessionTreeActivity | undefined,
 ): SessionTreeNode[] {
   const next: SessionTreeNode[] = [];
   for (const node of frontier) {
@@ -179,7 +199,7 @@ function expand(
       }
       state.visited.add(child.id);
       state.nodes += 1;
-      const childNode = nodeFor(child, todoId);
+      const childNode = nodeFor(child, todoId, activity);
       node.children.push(childNode);
       next.push(childNode);
     }
@@ -196,14 +216,14 @@ function markDepthBound(frontier: readonly SessionTreeNode[], children: Readonly
 }
 
 export function buildSessionTree(input: SessionTreeInput): SessionTreeResponse {
-  const { todoId, sessions } = input;
+  const { todoId, sessions, activity } = input;
   const byId = new Map(sessions.map((session) => [session.id, session]));
   const children = childIndex(sessions);
 
   const roots = sessions
     .filter((session) => session.workItemId === todoId)
     .sort((a, b) => String(b.lastActivity ?? '').localeCompare(String(a.lastActivity ?? '')))
-    .map((session) => nodeFor(session, todoId));
+    .map((session) => nodeFor(session, todoId, activity));
 
   const state: WalkState = { visited: new Set(roots.map((node) => node.id)), truncated: { depth: false, count: false }, nodes: roots.length };
   let frontier: SessionTreeNode[] = roots;
@@ -212,7 +232,7 @@ export function buildSessionTree(input: SessionTreeInput): SessionTreeResponse {
       markDepthBound(frontier, children, state);
       break;
     }
-    frontier = expand(frontier, children, todoId, state);
+    frontier = expand(frontier, children, todoId, state, activity);
   }
   const { visited, truncated } = state;
 
@@ -246,7 +266,10 @@ export function sessionIdFromActor(actor: string | null | undefined): string | n
  * performs on this route to build the delegated-activity index, so the tree
  * shape costs no extra query — it replaces that work rather than adding to it.
  */
-export function readTodoSessionTree(todoId: string): SessionTreeResponse {
+export function readTodoSessionTree(
+  todoId: string,
+  activityFor?: (sessions: readonly Session[]) => SessionTreeActivity,
+): SessionTreeResponse {
   const item = getWorkItem(todoId);
   const referenced = new Set<string>();
   const add = (actor: string | null | undefined) => {
@@ -259,5 +282,6 @@ export function readTodoSessionTree(todoId: string): SessionTreeResponse {
     if (comment.sessionId) referenced.add(comment.sessionId);
   }
   for (const event of listWorkItemEvents(todoId)) add(event.actor);
-  return buildSessionTree({ todoId, sessions: listSessions(), referencedSessionIds: [...referenced] });
+  const sessions = listSessions();
+  return buildSessionTree({ todoId, sessions, activity: activityFor?.(sessions), referencedSessionIds: [...referenced] });
 }

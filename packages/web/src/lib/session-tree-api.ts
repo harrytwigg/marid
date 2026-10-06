@@ -1,4 +1,4 @@
-import { get } from "./api"
+import { get, type BackgroundActivity, type DelegatedActivity } from "./api"
 
 /**
  * The tree a Todo caused, as the gateway serves it.
@@ -23,6 +23,10 @@ export interface SessionTreeNodeWire {
   workItemId: string | null
   isRootLink: boolean
   archived: boolean
+  /** The same post-settle activity the session list carries, so the row can
+   *  say what a finished turn is still waiting on the way the chat does. */
+  backgroundActivity: BackgroundActivity | null
+  delegatedActivity: DelegatedActivity | null
   /** Set on the node whose children the depth or count bound withheld, so the
    *  operator is told rather than shown a short tree. */
   truncated: { reason: "depth" | "count" } | null

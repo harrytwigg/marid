@@ -203,10 +203,13 @@ export function useQueryInvalidation() {
               typeof p.transportState === 'string' ? p.transportState : undefined,
               typeof p.status === 'string' ? p.status : undefined,
             )
-            if (hasParent) {
-              pendingRef.current.add('sessions')
-              break
-            }
+            // The Todo page's session tree names what a finished turn is still
+            // waiting on, so it follows this activity too. Only a tree that is
+            // on screen asks for it, which keeps the no-storm rule above.
+            const treeOpen = qc.getQueryCache().findAll({ queryKey: ['work-item-sessions'], type: 'active' }).length > 0
+            if (treeOpen) pendingRef.current.add('work-item-sessions')
+            if (hasParent) pendingRef.current.add('sessions')
+            if (hasParent || treeOpen) break
           }
           return
         case 'session:completed':

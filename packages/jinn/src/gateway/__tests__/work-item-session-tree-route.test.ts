@@ -55,14 +55,14 @@ function makeRes() {
   };
 }
 
-async function get(urlPath: string): Promise<{ status: number; body: any }> {
+async function get(urlPath: string, ctx: import("../api.js").ApiContext = apiCtx): Promise<{ status: number; body: any }> {
   const req = Object.assign(Readable.from([]), {
     method: "GET",
     url: urlPath,
     headers: { host: "localhost", authorization: "Bearer test-token" },
   });
   const cap = makeRes();
-  await api.handleApiRequest(req as unknown as Parameters<Api["handleApiRequest"]>[0], cap.res, apiCtx);
+  await api.handleApiRequest(req as unknown as Parameters<Api["handleApiRequest"]>[0], cap.res, ctx);
   return { status: cap.status, body: cap.body };
 }
 
@@ -126,6 +126,17 @@ describe("GET /api/work-items/:id/sessions", () => {
     const root = resp.body.roots.find((n: { id: string }) => n.id === rootSessionId);
     expect(root.children.map((n: { id: string }) => n.id)).toEqual([childSessionId]);
     expect(root.children[0].workItemId).toBe(otherTodoId);
+  });
+
+  it("carries a finished session's background work, so the page can say what it is still waiting on", async () => {
+    const monitor = { activeStreams: 0, activeMonitors: 1, lastActivityAt: Date.now() };
+    const ctx = { ...apiCtx, backgroundActivity: new Map([[rootSessionId, monitor]]) };
+
+    const { body } = await get(`/api/work-items/${todoId}/sessions?tree=1`, ctx);
+
+    const root = body.roots.find((node: { id: string }) => node.id === rootSessionId);
+    expect(root.backgroundActivity).toMatchObject({ activeMonitors: 1 });
+    expect(root.children.every((node: { backgroundActivity: unknown }) => node.backgroundActivity === null)).toBe(true);
   });
 
   it("carries the review role a delegation onto the Todo recorded", async () => {

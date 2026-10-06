@@ -84,6 +84,12 @@ export function joinParts(parts: string[]): string {
 export function answerCaption(outcome: string | undefined, work: PendingWork | null): string {
   if (outcome === 'error') return 'Turn failed'
   if (!work) return 'Final answer'
+  return pendingCaption(work)
+}
+
+/** What pending work reads as wherever a finished turn is described: the chat's
+ *  caption and the Todo page's session tree both say it with these words. */
+export function pendingCaption(work: PendingWork): string {
   const waitingOnOthers = work.delegated > 0 || work.subAgents > 0 || work.rerun
   if (!waitingOnOthers && work.quiet) return `${countLabel(work.monitors, 'monitor')} still running`
   return `Waiting on ${joinParts(pendingParts(work))}`
