@@ -75,6 +75,8 @@ beforeEach(() => {
   vi.stubEnv("CLAUDE_CONFIG_DIR", defaultDir);
   vi.stubEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR", path.join(tmp, "inherited"));
   profile = claudeProfileFromDir(path.join(tmp, "friend"));
+  // The operator creates a profile; the gateway never does.
+  fs.mkdirSync(profile.dir);
   resetClaudeProfileTrustForTests();
   lifecycle = new PtyLifecycleManager({ maxLivePtys: 10 });
   engine = new InteractiveClaudeEngine(lifecycle, { register: () => {}, unregister: () => {} } as any);
@@ -109,6 +111,22 @@ describe("InteractiveClaudeEngine on a named Claude profile (FR-051, FR-052, FR-
     await (engine as any).redeliverByRespawn(SID, entry, opts, Date.now(), () => {});
     expect(spawns).toHaveLength(1);
     expectOnProfile(spawns[0]!);
+  });
+
+  it("the turn spawn launches nothing for a profile directory that does not exist", async () => {
+    fs.rmSync(profile.dir, { recursive: true });
+    void engine.run({ sessionId: SID, prompt: "hi", cwd, claudeProfile: profile } as any).catch(() => {});
+    await flush();
+    expect(spawns).toHaveLength(0);
+    expect(fs.existsSync(profile.dir)).toBe(false);
+  });
+
+  it("the idle PTY spawn (terminal view, no preflight) launches nothing for a profile directory that does not exist", async () => {
+    fs.rmSync(profile.dir, { recursive: true });
+    engine.ensureIdleSpawn(SID, { cwd, claudeProfile: profile });
+    await flush();
+    expect(spawns).toHaveLength(0);
+    expect(fs.existsSync(profile.dir)).toBe(false);
   });
 
   it("a default-profile turn keeps the gateway's environment and carries no operator keys", async () => {

@@ -72,6 +72,7 @@ describe("a turn reaches the spawned claude on the employee's profile", () => {
   it("an employee with claudeConfigDir spawns with that CLAUDE_CONFIG_DIR", async () => {
     const engine = new InteractiveClaudeEngine(lifecycle, { register: () => {}, unregister: () => {} } as any);
     const profileDir = path.join(tmp, "claude-friend");
+    fs.mkdirSync(profileDir);
     turn(engine, { name: "side-dev", claudeConfigDir: profileDir });
     await flush();
     expect(spawns).toHaveLength(1);

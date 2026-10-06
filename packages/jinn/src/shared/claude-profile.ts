@@ -113,6 +113,26 @@ export function claudeJsonPathFor(profile: ClaudeProfile): string {
   return profile ? path.join(profile.dir, ".claude.json") : claudeJsonPath();
 }
 
+/**
+ * Whether a named profile's directory exists. The gateway never creates one: Claude Code
+ * itself makes its config dir on first run (even for `claude auth status`), so anything
+ * that launches the CLI under a named profile, or writes inside it, must check this
+ * first and leave a missing directory to the "does not exist" refusal (FR-054). The
+ * default profile (`null`) is the gateway's own and is not this function's concern.
+ */
+export function claudeProfileDirExists(profile: Exclude<ClaudeProfile, null>): boolean {
+  try {
+    return fs.statSync(profile.dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** The refusal text for a named profile whose directory is missing. */
+export function claudeProfileMissingMessage(profile: Exclude<ClaudeProfile, null>): string {
+  return `The Claude profile \`${profile.dir}\` does not exist. To sign it in on this machine, ${claudeLoginHint(profile)}.`;
+}
+
 export function claudeProjectsDirFor(profile: ClaudeProfile): string {
   return path.join(claudeConfigDirFor(profile), "projects");
 }
