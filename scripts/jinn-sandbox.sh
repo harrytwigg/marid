@@ -38,7 +38,7 @@ MIN_PORT=8060
 HEALTH_TIMEOUT_S="${JINN_SANDBOX_HEALTH_TIMEOUT:-90}"
 MARKER=".jinn-sandbox.json"
 
-die() { echo "jinn-sandbox: $*" >&2; exit "${2:-2}"; }
+die() { echo "jinn-sandbox: $1" >&2; exit "${2:-2}"; }
 
 # Same scrub the verify scripts do, repeated here because this script is also run by hand.
 unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID \
@@ -50,18 +50,25 @@ REPO="${JINN_REPO:-$SCRIPT_REPO}"
 REPO="$(cd "$REPO" && pwd -P)"
 JINN_BIN="$REPO/packages/jinn/dist/bin/jinn.js"
 
-NODE_BIN="${JINN_SANDBOX_NODE_BIN:-$(command -v node || true)}"
+# NODE_BIN runs this script's own helpers. CLI_NODE_BIN runs the Marid CLI and can be swapped
+# (JINN_SANDBOX_NODE_BIN) so a test can observe the environment the CLI is given.
+NODE_BIN="$(command -v node || true)"
 [[ -n "$NODE_BIN" && -x "$NODE_BIN" ]] || die "node is required"
+CLI_NODE_BIN="${JINN_SANDBOX_NODE_BIN:-$NODE_BIN}"
 PNPM_BIN="$(command -v pnpm || true)"
 
 [[ -n "${HOME:-}" && -d "$HOME" ]] || die "HOME must name the sandbox host home"
 HOST_HOME="$(cd "$HOME" && pwd -P)"
-# The operator's real home comes from the account database, not from $HOME, which is exactly
-# what a caller overrides.
-ACCOUNT_HOME="$(dscl . -read "/Users/$(id -un)" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
-[[ -n "$ACCOUNT_HOME" ]] || ACCOUNT_HOME="$(eval echo "~$(id -un)")"
-ACCOUNT_HOME="$(cd "$ACCOUNT_HOME" 2>/dev/null && pwd -P || echo "$ACCOUNT_HOME")"
-[[ "$HOST_HOME" != "$ACCOUNT_HOME" ]] || die "refusing to run with HOME set to the operator's real home ($HOST_HOME); pass a throwaway HOME"
+# The operator's real home comes from the account database (os.userInfo ignores $HOME), which is
+# exactly what a caller overrides.
+ACCOUNT_HOME="$("$NODE_BIN" -e 'process.stdout.write(require("node:fs").realpathSync(require("node:os").userInfo().homedir))' 2>/dev/null || true)"
+[[ -n "$ACCOUNT_HOME" ]] || die "cannot resolve the operator's home"
+# The real home, and anything inside an operator instance home (~/.jinn, ~/.jinn-*), is not a
+# sandbox host: create would write ~/.jinn/.jinn-<instance> and setup its caches there.
+case "$HOST_HOME" in
+  "$ACCOUNT_HOME"|"$ACCOUNT_HOME"/.jinn|"$ACCOUNT_HOME"/.jinn/*|"$ACCOUNT_HOME"/.jinn-*|"$ACCOUNT_HOME"/.jinn-*/*)
+    die "refusing HOME=$HOST_HOME: it is the operator's real home or inside an operator instance; pass a throwaway HOME" ;;
+esac
 
 [[ $# -ge 2 ]] || die "usage: jinn-sandbox.sh <create|start|stop|destroy> <instance> [flags]"
 COMMAND="$1"; INSTANCE="$2"; shift 2
@@ -69,11 +76,12 @@ COMMAND="$1"; INSTANCE="$2"; shift 2
   || die "instance must be lowercase letters, digits and dashes, start with a letter, and not be 'jinn': $INSTANCE"
 
 SANDBOX_HOME="$HOST_HOME/.jinn-$INSTANCE"
-[[ "$SANDBOX_HOME" != "$ACCOUNT_HOME/.jinn" ]] || die "refusing the operator's instance home"
 
 check_port() {
   local port="$1"
-  [[ "$port" =~ ^[0-9]+$ ]] || die "port must be an integer: $port"
+  # Four or five digits, no sign, no leading zero: bash arithmetic would otherwise read 08080 as
+  # a bad octal and wrap a value past 2^63 back into range.
+  [[ "$port" =~ ^[1-9][0-9]{3,4}$ ]] || die "port must be an integer between $MIN_PORT and 65535: $port"
   [[ "$port" != "7777" && "$port" != "7788" ]] || die "refusing port $port: it belongs to a live gateway" # footgun: ok this refusal set is the point of the check
   (( port >= MIN_PORT && port <= 65535 )) || die "port must be between $MIN_PORT and 65535: $port"
 }
@@ -86,7 +94,7 @@ sandbox_env() {
   env HOME="$HOST_HOME" JINN_HOME="$SANDBOX_HOME" JINN_REPO="$REPO" JINN_NO_OPEN=1 "$@"
 }
 
-jinn() { sandbox_env "$NODE_BIN" "$JINN_BIN" "$@"; }
+jinn() { sandbox_env "$CLI_NODE_BIN" "$JINN_BIN" "$@"; }
 
 require_sandbox() {
   [[ -d "$SANDBOX_HOME" && -f "$SANDBOX_HOME/$MARKER" ]] \
@@ -94,19 +102,34 @@ require_sandbox() {
   [[ -f "$JINN_BIN" ]] || die "build missing: $JINN_BIN (run create with --build)"
 }
 
-# The port the sandbox will actually bind: what config.yaml declares, re-validated on every
-# operation so an edited config cannot point stop or start at a live gateway.
+# The port the sandbox will actually bind: gateway.port as the gateway's own YAML parser reads
+# it, re-validated on every operation so an edited config cannot point start or stop at a live
+# gateway. Anything that is not an integer fails closed.
 declared_port() {
-  SANDBOX_CONFIG="$SANDBOX_HOME/config.yaml" "$NODE_BIN" -e '
+  SANDBOX_CONFIG="$SANDBOX_HOME/config.yaml" REPO="$REPO" "$NODE_BIN" - <<'JS'
 const fs = require("node:fs")
-let inGateway = false
-for (const line of fs.readFileSync(process.env.SANDBOX_CONFIG, "utf8").split(/\r?\n/)) {
-  if (/^gateway:\s*$/.test(line)) { inGateway = true; continue }
-  if (inGateway && /^\S/.test(line)) break
-  const match = inGateway ? line.match(/^\s+port:\s*(\d+)\s*$/) : null
-  if (match) { process.stdout.write(match[1]); process.exit(0) }
+const path = require("node:path")
+const { createRequire } = require("node:module")
+const yaml = createRequire(path.join(process.env.REPO, "packages/jinn/package.json"))("js-yaml")
+const port = yaml.load(fs.readFileSync(process.env.SANDBOX_CONFIG, "utf8"))?.gateway?.port
+if (!Number.isInteger(port)) process.exit(1)
+process.stdout.write(String(port))
+JS
 }
-process.exit(1)'
+
+# The port this script recorded when it created the sandbox.
+marker_port() {
+  MARKER_FILE="$SANDBOX_HOME/$MARKER" "$NODE_BIN" -e '
+const port = JSON.parse(require("node:fs").readFileSync(process.env.MARKER_FILE, "utf8")).port
+if (!Number.isInteger(port)) process.exit(1)
+process.stdout.write(String(port))'
+}
+
+# Waits up to 10s for the port to stop listening; succeeds when it is free.
+wait_port_free() {
+  local port="$1" waited=0
+  while port_listening "$port" && (( waited < 40 )); do sleep 0.25; waited=$((waited + 1)); done
+  ! port_listening "$port"
 }
 
 sandbox_port() {
@@ -192,9 +215,8 @@ cmd_create() {
     (( build )) || die "no build at $JINN_BIN; pass --build"
     [[ -n "$PNPM_BIN" ]] || die "pnpm is required for --build"
     echo "Building $REPO"
-    # Built with the operator's real HOME untouched: the build never reads the instance home, and
-    # pnpm's store and caches are the tool's own.
-    ( cd "$REPO" && env -u JINN_HOME "$PNPM_BIN" build ) || die "build failed" 1
+    # HOME is the sandbox host home here too, so the build's tool caches land inside it.
+    ( cd "$REPO" && "$PNPM_BIN" build ) || die "build failed" 1
   fi
   [[ -f "$JINN_BIN" ]] || die "build missing after build step: $JINN_BIN" 1
 
@@ -222,7 +244,11 @@ cmd_start() {
   if port_listening "$port"; then die "port $port is already in use" 1; fi
   jinn start --daemon </dev/null >"$SANDBOX_HOME/start.log" 2>&1 \
     || { cat "$SANDBOX_HOME/start.log" >&2; die "jinn start failed" 1; }
-  wait_healthy "$port" || die "gateway did not become healthy on port $port within ${HEALTH_TIMEOUT_S}s (see $SANDBOX_HOME/logs)" 1
+  if ! wait_healthy "$port"; then
+    # Leave nothing listening: a daemon that never got healthy still holds the port.
+    jinn stop </dev/null >/dev/null 2>&1 || true
+    die "gateway did not become healthy on port $port within ${HEALTH_TIMEOUT_S}s (see $SANDBOX_HOME/logs)" 1
+  fi
   echo "Sandbox '$INSTANCE' listening on http://127.0.0.1:$port"
 }
 
@@ -231,9 +257,7 @@ cmd_stop() {
   require_sandbox
   local port; port="$(sandbox_port)"
   jinn stop </dev/null || die "jinn stop failed" 1
-  local waited=0
-  while port_listening "$port" && (( waited < 40 )); do sleep 0.25; waited=$((waited + 1)); done
-  if port_listening "$port"; then die "listener remains on port $port after stop" 1; fi
+  wait_port_free "$port" || die "listener remains on port $port after stop" 1
   echo "Sandbox '$INSTANCE' stopped"
 }
 
@@ -248,12 +272,18 @@ cmd_destroy() {
   (( yes )) || die "destroy removes $SANDBOX_HOME; pass --yes"
   [[ -d "$SANDBOX_HOME" ]] || { echo "Sandbox '$INSTANCE' does not exist"; return 0; }
   [[ -f "$SANDBOX_HOME/$MARKER" ]] || die "refusing to remove $SANDBOX_HOME: it was not created by this script"
-  # Stop first so no daemon is left holding a deleted home; an already-stopped sandbox is fine.
-  if [[ -f "$JINN_BIN" ]] && port="$(declared_port 2>/dev/null)"; then
-    check_port "$port"
-    jinn stop </dev/null >/dev/null 2>&1 || true
-    if port_listening "$port"; then die "listener remains on port $port; not removing a live sandbox" 1; fi
-  fi
+  # Stop first so no daemon is left holding a deleted home. The config's port and the one recorded
+  # at create are both checked, so a missing build or an unreadable config cannot skip the
+  # liveness check and remove a live home.
+  local ports=() port
+  if port="$(declared_port 2>/dev/null)"; then ports+=("$port"); fi
+  if port="$(marker_port 2>/dev/null)"; then ports+=("$port"); fi
+  (( ${#ports[@]} > 0 )) || die "cannot tell which port $SANDBOX_HOME uses; not removing it" 1
+  for port in "${ports[@]}"; do check_port "$port"; done
+  [[ -f "$JINN_BIN" ]] && { jinn stop </dev/null >/dev/null 2>&1 || true; }
+  for port in "${ports[@]}"; do
+    wait_port_free "$port" || die "listener remains on port $port; not removing a live sandbox" 1
+  done
   [[ "$SANDBOX_HOME" == "$HOST_HOME"/.jinn-* ]] || die "refusing to remove a path outside the sandbox home: $SANDBOX_HOME"
   rm -rf "$SANDBOX_HOME"
   echo "Destroyed sandbox '$INSTANCE'"

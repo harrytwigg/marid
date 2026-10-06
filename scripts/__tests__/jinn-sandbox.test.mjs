@@ -47,11 +47,112 @@ test("instance names cannot reach the operator's instance or escape the home", (
   })
 })
 
-test("a caller's own live instance variables do not reach the sandbox", () => {
+/**
+ * A repo just real enough for the helper: the CLI entry exists (the helper only checks for it) and
+ * js-yaml resolves, through the real checkout's modules, the way the helper reads gateway.port.
+ */
+function fakeRepo(root) {
+  const jinn = path.join(root, "repo/packages/jinn")
+  fs.mkdirSync(path.join(jinn, "dist/bin"), { recursive: true })
+  fs.writeFileSync(path.join(jinn, "package.json"), "{}")
+  fs.writeFileSync(path.join(jinn, "dist/bin/jinn.js"), "")
+  fs.symlinkSync(path.join(repo, "packages/jinn/node_modules"), path.join(jinn, "node_modules"))
+  return path.join(root, "repo")
+}
+
+/**
+ * A sandbox as `create` leaves it: marker plus a config.yaml declaring `port`.
+ * @param {string} host
+ * @param {string} name
+ * @param {{ port?: number, config?: string }} [options]
+ */
+function fakeSandbox(host, name, { port = 8089, config } = {}) {
+  const home = path.join(host, `.jinn-${name}`)
+  fs.mkdirSync(home)
+  fs.writeFileSync(path.join(home, ".jinn-sandbox.json"), JSON.stringify({ instance: name, port }))
+  fs.writeFileSync(path.join(home, "config.yaml"), config ?? `gateway:\n  port: ${port}\n`)
+  return home
+}
+
+/** Stands in for node when the helper runs the Marid CLI, and records the environment it was given. */
+function envStub(root) {
+  const stub = path.join(root, "node-stub.sh")
+  fs.writeFileSync(stub, `#!/bin/sh\nenv > "$STUB_ENV_OUT"\nexit 0\n`, { mode: 0o755 })
+  return stub
+}
+
+test("the CLI is run with the sandbox's identity and none of the caller's", () => {
   withHost((host) => {
-    const result = run(host, ["destroy", "absent", "--yes"], { JINN_HOME: "/nonexistent-live-home", JINN_PORT: "7777" })
-    assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /does not exist/)
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-sandbox-helper-stub-"))
+    try {
+      const fake = fakeRepo(root)
+      const home = fakeSandbox(host, "probe")
+      const out = path.join(root, "env.txt")
+      const result = run(host, ["start", "probe"], {
+        JINN_REPO: fake,
+        JINN_SANDBOX_NODE_BIN: envStub(root),
+        JINN_SANDBOX_HEALTH_TIMEOUT: "1",
+        STUB_ENV_OUT: out,
+        JINN_HOME: "/live/instance",
+        JINN_PORT: "7777",
+        JINN_GATEWAY_URL: "http://127.0.0.1:7777",
+        JINN_GATEWAY_TOKEN: "live-token",
+        JINN_INSTANCE: "jinn",
+        JINN_SESSION_ID: "live-session",
+        CLAUDE_CONFIG_DIR: "/live/claude",
+      })
+      // Nothing listens on 8089, so the health wait gives up; the environment is what is under test.
+      assert.equal(result.status, 1, result.stderr)
+      const seen = Object.fromEntries(fs.readFileSync(out, "utf8").split("\n").filter(Boolean).map((line) => {
+        const at = line.indexOf("=")
+        return [line.slice(0, at), line.slice(at + 1)]
+      }))
+      assert.equal(seen.JINN_HOME, fs.realpathSync(home))
+      assert.equal(seen.HOME, host)
+      for (const key of ["JINN_PORT", "JINN_GATEWAY_URL", "JINN_GATEWAY_TOKEN", "JINN_INSTANCE", "JINN_SESSION_ID", "CLAUDE_CONFIG_DIR"]) {
+        assert.equal(seen[key], undefined, `${key} leaked into the CLI environment`)
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+test("the port is read the way the gateway reads it, and a live one is refused at start", () => {
+  withHost((host) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-sandbox-helper-port-"))
+    try {
+      const fake = fakeRepo(root)
+      // A nested `tls.port` precedes the real `port`: a line scanner reads 8443, the gateway reads 7777.
+      fakeSandbox(host, "nested", { config: "gateway:\n  tls:\n    port: 8443\n  port: 7777\n" })
+      const nested = run(host, ["start", "nested"], { JINN_REPO: fake })
+      assert.equal(nested.status, 2, nested.stderr)
+      assert.match(nested.stderr, /7777/)
+      fakeSandbox(host, "stringy", { config: 'gateway:\n  port: "8089"\n' })
+      assert.notEqual(run(host, ["start", "stringy"], { JINN_REPO: fake }).status, 0)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+test("a HOME inside the operator's instance home is refused", () => {
+  const real = fs.realpathSync(os.userInfo().homedir)
+  for (const inside of [".jinn", ".jinn/knowledge"]) {
+    const dir = path.join(real, inside)
+    if (!fs.existsSync(dir)) continue // nothing to point HOME at on a machine without one
+    // `start` writes nothing, so a failed refusal cannot touch the directory it was pointed at.
+    const result = run(dir, ["start", "probe"])
+    assert.equal(result.status, 2, `${inside}: ${result.stderr}`)
+    assert.match(result.stderr, /operator/)
+  }
+})
+
+test("ports must be plain four or five digit integers", () => {
+  withHost((host) => {
+    for (const port of ["18446744073709559676", "08080", "+8060", "-8060", "8060.5"]) {
+      assert.equal(run(host, ["create", "wrapped", "--port", port]).status, 2, `port ${port}`)
+    }
   })
 })
 
