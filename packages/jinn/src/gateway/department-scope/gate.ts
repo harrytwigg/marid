@@ -207,6 +207,7 @@ async function delegateInDepartment(g: GateRequest): Promise<boolean> {
   if (!body) return false;
   // With neither an employee nor an engine there is nothing to delegate to: the route refuses it.
   if (body.employee === undefined && body.engine === undefined) return false;
+  if (body.employee === undefined) return forbid(g, "an engine-only delegation is not available to a department-scoped session; delegate to a member of the department");
   if (!isMember(body.employee, g.caller.department)) return memberRefusal(g, body.employee, "delegate to");
   const outside = namedTodoOutside(body.workItemId, g.caller.department);
   if (outside) return json(g.res, { error: `Todo ${outside} not found` }, 404), true;

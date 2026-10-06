@@ -2,13 +2,11 @@ import {
   getSession,
   listChildSessions,
   listPinnedSessions,
-  listRecentPerGroup,
-  listSessionsForGroup,
+  listSessions,
   searchMessages,
   searchSessions,
   searchSessionsFiltered,
 } from "../../sessions/registry.js";
-import { initDb } from "../../shared/db.js";
 import type { Session } from "../../shared/types.js";
 import { listDepartmentRows } from "../departments-api.js";
 import { employeePayload, orgPayload } from "../org-api.js";
@@ -27,19 +25,8 @@ import type { ScopedRouteKind } from "./rules.js";
  */
 
 const PER_GROUP = 50;
-/** Searches run unbounded and are then narrowed, so a page is never short for want of rows
- *  outside D. The queries scan the table either way; only message search keeps a ceiling. */
-const SEARCH_WINDOW = 1_000_000;
-const MESSAGE_WINDOW = 10_000;
 
-/** Every session bound to `department`, newest first: the department's whole session list, read directly. */
-function boundSessions(department: string): Session[] {
-  const ids = initDb().prepare("SELECT id FROM sessions WHERE scope_department = ? ORDER BY last_activity DESC").all(department) as Array<{ id: string }>;
-  return ids.map((row) => getSession(row.id)).filter((session): session is Session => !!session);
-}
-
-const bound = (department: string) =>
-  Object.assign((session: Pick<Session, "scopeDepartment"> | undefined) => session?.scopeDepartment === department, { department });
+const bound = (department: string) => (session: Pick<Session, "scopeDepartment"> | undefined) => session?.scopeDepartment === department;
 
 /** An unknown session is left to the route; one outside D answers as unknown. */
 function refuseSessionOutside(g: GateRequest, id: string): boolean {
@@ -49,42 +36,39 @@ function refuseSessionOutside(g: GateRequest, id: string): boolean {
   return true;
 }
 
-/** The page for `?group=`, cut after narrowing so its offset counts only visible rows. */
-function groupPage(params: URLSearchParams, group: string, portal: string | undefined, visible: (session: Session) => boolean): Session[] {
-  const limit = Math.max(1, parseInt(params.get("limit") || "50", 10) || 50);
-  const offset = Math.max(0, parseInt(params.get("offset") || "0", 10) || 0);
-  return listSessionsForGroup(group, SEARCH_WINDOW, 0, portal).filter(visible).slice(offset, offset + limit);
-}
-
-/** The `?pinned`, `?q`, `?group` and `?limit=0` forms, narrowed; undefined for the default listing. */
-function selectedList(params: URLSearchParams, portal: string | undefined, visible: ((session: Session) => boolean) & { department: string }): Session[] | undefined {
+/** The `?pinned`, `?q`, `?group` and `?limit=0` forms, read for D alone; undefined for the default listing. */
+function selectedList(params: URLSearchParams, department: string): Session[] | undefined {
   const query = params.get("q")?.trim();
   const group = params.get("group");
-  if (params.get("pinned") === "1") return listPinnedSessions().filter(visible);
-  if (query) return searchSessions(query, SEARCH_WINDOW).filter(visible);
-  if (group) return groupPage(params, group, portal, visible);
-  return params.get("limit") === "0" ? boundSessions(visible.department) : undefined;
+  if (params.get("pinned") === "1") return listPinnedSessions().filter(bound(department));
+  if (query) return searchSessions(query, 100, department);
+  if (group) {
+    // A bound session always has its employee, so D's group pages are its members' own sessions.
+    const limit = Math.max(1, parseInt(params.get("limit") || "50", 10) || 50);
+    const offset = Math.max(0, parseInt(params.get("offset") || "0", 10) || 0);
+    return listSessions({ scopeDepartment: department }).filter((session) => session.employee === group).slice(offset, offset + limit);
+  }
+  return params.get("limit") === "0" ? listSessions({ scopeDepartment: department }) : undefined;
 }
 
+/** The default listing's counts: D's sessions per member, archived ones excluded as the list excludes them. */
 function groupCounts(sessions: readonly Session[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const session of sessions) {
-    if (session.archivedAt) continue;
-    const key = session.employee ?? "__direct__";
-    counts[key] = (counts[key] ?? 0) + 1;
-  }
+  for (const session of sessions) counts[session.employee ?? "__direct__"] = (counts[session.employee ?? "__direct__"] ?? 0) + 1;
   return counts;
 }
 
 function serveSessionList(g: GateRequest): boolean {
-  const visible = bound(g.caller.department);
-  const portal = g.deps.context.getConfig().portal?.portalName;
-  const selected = selectedList(g.route.url.searchParams, portal, visible);
-  json(g.res, selected ? g.deps.serializeSessions(selected) : {
-    sessions: g.deps.serializeSessions(listRecentPerGroup(PER_GROUP, portal).filter(visible)),
-    counts: groupCounts(boundSessions(g.caller.department)),
-    perGroup: PER_GROUP,
+  const department = g.caller.department;
+  const selected = selectedList(g.route.url.searchParams, department);
+  const all = selected ? [] : listSessions({ scopeDepartment: department });
+  const perMember = new Map<string, number>();
+  const recent = all.filter((session) => {
+    const key = session.employee ?? "__direct__";
+    perMember.set(key, (perMember.get(key) ?? 0) + 1);
+    return perMember.get(key)! <= PER_GROUP;
   });
+  json(g.res, selected ? g.deps.serializeSessions(selected) : { sessions: g.deps.serializeSessions(recent), counts: groupCounts(all), perGroup: PER_GROUP });
   return true;
 }
 
@@ -93,7 +77,7 @@ function serveSessionSearch(g: GateRequest): boolean {
   // An unusable or empty filter: the route answers it in its own words.
   if (!filter.ok || Object.keys(filter.value).length === 0) return false;
   const limit = Math.max(1, Math.min(parseInt(g.route.url.searchParams.get("limit") || "20", 10) || 20, 50));
-  const sessions = searchSessionsFiltered(filter.value, SEARCH_WINDOW).filter(bound(g.caller.department)).slice(0, limit);
+  const sessions = searchSessionsFiltered({ ...filter.value, scopeDepartment: g.caller.department }, limit);
   json(g.res, { sessions: sessions.map(g.deps.compactSessionSummary) });
   return true;
 }
@@ -104,9 +88,7 @@ function serveMessageSearch(g: GateRequest): boolean {
   const filter = messageSearchFilter(g.route.url);
   if (!filter.ok) return badRequest(g.res, filter.error), true;
   const limit = Math.max(1, Math.min(parseInt(g.route.url.searchParams.get("limit") || "20", 10) || 20, 200));
-  const visible = bound(g.caller.department);
-  const results = searchMessages(q, MESSAGE_WINDOW, filter.value).filter((hit) => visible(getSession(hit.sessionId))).slice(0, limit);
-  json(g.res, { query: q, results });
+  json(g.res, { query: q, results: searchMessages(q, limit, { ...filter.value, scopeDepartment: g.caller.department }) });
   return true;
 }
 

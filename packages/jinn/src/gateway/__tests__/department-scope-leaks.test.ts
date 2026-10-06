@@ -140,3 +140,54 @@ describe("a malformed body", () => {
     expect(scoped).toEqual(open);
   });
 });
+
+describe("D's session list and searches", () => {
+  it("leave out archived sessions, in the rows and in the counts", async () => {
+    const { updateSession } = await import("../../sessions/registry.js");
+    const self = await sessionOf("side-dev");
+    const archived = await sessionOf("side-qa");
+    updateSession(archived.id, { archivedAt: new Date().toISOString() });
+    const scoped = as(self.id);
+    const all = await scoped("GET", "/api/sessions?limit=0");
+    expect(all.body.map((session: { id: string }) => session.id)).not.toContain(archived.id);
+    const listing = await scoped("GET", "/api/sessions");
+    expect(listing.body.sessions.map((session: { id: string }) => session.id)).not.toContain(archived.id);
+    const counted = Object.values(listing.body.counts as Record<string, number>).reduce((sum, n) => sum + n, 0);
+    expect(counted).toBe(listing.body.sessions.length);
+  });
+
+  it("find D's own sessions even behind more than a page of newer matches outside it", async () => {
+    const { createSession, insertMessage } = await import("../../sessions/registry.js");
+    const self = await sessionOf("side-dev");
+    const mine = createSession({ engine: "claude", source: "web", sourceRef: "web:kumquat:mine", employee: "side-qa", title: "kumquat mine" });
+    insertMessage(mine.id, "user", "the kumquat inventory");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    // More newer matches outside D than either search's own cap (50 sessions, 200 messages).
+    for (let i = 0; i < 210; i++) {
+      const other = createSession({ engine: "claude", source: "web", sourceRef: `web:kumquat:${i}`, employee: "eng-dev", title: `kumquat ${i}` });
+      insertMessage(other.id, "user", "the kumquat inventory");
+    }
+    const scoped = as(self.id);
+    const sessions = await scoped("GET", "/api/search/sessions?text=kumquat&limit=50");
+    expect(sessions.body.sessions.map((session: { id: string }) => session.id)).toEqual([mine.id]);
+    const messages = await scoped("GET", "/api/search/messages?q=kumquat&limit=20");
+    expect(messages.body.results.map((hit: { sessionId: string }) => hit.sessionId)).toEqual([mine.id]);
+    const queried = await scoped("GET", "/api/sessions?q=kumquat");
+    expect(queried.body.map((session: { id: string }) => session.id)).toEqual([mine.id]);
+  });
+});
+
+describe("the redaction leaves the department's own words alone", () => {
+  it("returns a Note path that contains an outside Todo id as written, and still hides an outside id that stands alone", async () => {
+    const theirs = workItems.createWorkItem({ title: "theirs" });
+    const self = await sessionOf("side-dev");
+    const created = await as(self.id)("POST", "/api/notes", { title: "probe", body: `see ${theirs.id}`, folder: `departments/side-project/${theirs.id}` });
+    expect(created.status).toBe(201);
+    expect(created.body.note.path).toContain(`/${theirs.id}/`);
+    const mine = workItems.createWorkItem({ title: "mine", department: "side-project" });
+    const { addRelation } = await import("../../work-items/relations.js");
+    addRelation(mine.id, theirs.id, "relates", "operator");
+    const read = await as(self.id)("GET", `/api/work-items/${mine.id}`);
+    expect(JSON.stringify(read.body)).not.toContain(theirs.id);
+  });
+});

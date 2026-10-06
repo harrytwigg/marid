@@ -2,9 +2,9 @@ import type { ServerResponse } from "node:http";
 import { getSession } from "../../sessions/registry.js";
 import { isTodoId } from "../../work-items/id.js";
 import { getWorkItem } from "../../work-items/store.js";
+import { scopeDepartmentOfItem } from "../../work-items/department-scope.js";
 import type { ResWithEncoding } from "../route-helpers.js";
 import type { ScopedCaller } from "./caller.js";
-import { scopeDepartmentOfTodo } from "./gate.js";
 
 /**
  * The backstop behind the gate's per-route narrowing (FR-009, FR-011): whatever a route
@@ -14,18 +14,19 @@ import { scopeDepartmentOfTodo } from "./gate.js";
  * narrowing each one by hand is where one is missed.
  *
  * Every successful JSON answer to a scoped caller is rewritten before it is sent: a
- * session id that is not bound to the department (the caller's own requester excepted,
- * which it already knows and may reply to) and an existing Todo id outside the
- * department become `hidden`, and an object entry keyed by one is dropped. Free text the
- * department's own people wrote (titles, bodies, comment and message text) is left as
- * written. Error answers are left alone, so an out-of-department id still answers
- * exactly as an unknown one.
+ * value that IS a session id not bound to the department (the caller's own requester
+ * excepted, which it already knows and may reply to) or an existing Todo id outside the
+ * department becomes `hidden`, as does such an id standing as one `:`-separated part of a
+ * reference (`session:<id>`, `delegate:<id>:...`), and an object entry keyed by one is
+ * dropped. Text that merely contains an id (a path, a note, a title, a message) is left as
+ * written, so the department's own words are never altered and an altered string cannot
+ * tell the caller that some id exists. Error answers are left alone, so an
+ * out-of-department id still answers exactly as an unknown one.
  */
 
-const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const WHOLE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TODO = /\b[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*\b/g;
-const FREE_TEXT = new Set(["title", "body", "content", "text", "snippet", "promptExcerpt", "prompt", "message", "displayMessage", "persona", "description"]);
+/** Keys whose values are words people wrote, never references, so they are not even split on `:`. */
+const FREE_TEXT = new Set(["title", "body", "content", "text", "snippet", "promptExcerpt", "prompt", "message", "displayMessage", "persona", "description", "note", "summary", "reason", "path", "name"]);
 export const HIDDEN = "hidden";
 
 export interface Redactor {
@@ -45,13 +46,13 @@ export function departmentRedactor(caller: Pick<ScopedCaller, "department" | "se
   const hideTodo = (id: string): boolean => {
     if (!verdicts.has(id)) {
       const item = isTodoId(id) ? getWorkItem(id) : undefined;
-      verdicts.set(id, !!item && scopeDepartmentOfTodo(item) !== caller.department);
+      verdicts.set(id, !!item && scopeDepartmentOfItem(item, getWorkItem) !== caller.department);
     }
     return verdicts.get(id)!;
   };
-  const scrub = (text: string): string =>
-    text.replace(UUID, (id) => (hideSession(id) ? HIDDEN : id)).replace(TODO, (id) => (hideTodo(id) ? HIDDEN : id));
-  const hiddenKey = (key: string): boolean => (WHOLE_UUID.test(key) && hideSession(key)) || (isTodoId(key) && hideTodo(key));
+  const hidden = (part: string): boolean => (WHOLE_UUID.test(part) && hideSession(part)) || (isTodoId(part) && hideTodo(part));
+  const scrub = (text: string): string => text.split(":").map((part) => (hidden(part) ? HIDDEN : part)).join(":");
+  const hiddenKey = hidden;
   const walk = (value: unknown, key?: string): unknown => {
     if (typeof value === "string") return key && FREE_TEXT.has(key) ? value : scrub(value);
     if (Array.isArray(value)) return value.map((entry) => walk(entry, key));

@@ -2,6 +2,7 @@ import path from "node:path";
 import { createNote, listNotes, NOTE_FILE_MAX_BYTES, readNote, searchKnowledge, updateNote } from "../../notes/store.js";
 import type { NoteStoreResult } from "../../shared/types.js";
 import { resolveJinnHome } from "../../shared/paths.js";
+import { hasControlBytes } from "../../shared/sanitize.js";
 import { departmentRecord } from "../department-registry.js";
 import { readJsonBody } from "../http-helpers.js";
 import { badRequest, json } from "../route-helpers.js";
@@ -62,7 +63,7 @@ function knowledgeSearch(g: GateRequest): boolean {
 
 function knowledgeRead(g: GateRequest): boolean {
   // A path with control bytes is refused by the route before anything else; let it.
-  if (/[\x00-\x1f\x7f]/.test(g.route.url.searchParams.get("path") ?? "")) return false;
+  if (hasControlBytes(g.route.url.searchParams.get("path") ?? "")) return false;
   const rel = readCleanSearchParam(g.route.url, "path");
   if (!rel || inDepartmentKnowledge(g.caller.department, rel)) return false;
   json(g.res, { error: `no such instance file: ${rel}` }, 404);
@@ -80,7 +81,7 @@ function notesList(g: GateRequest): boolean {
 
 function notesRead(g: GateRequest): boolean {
   const raw = g.route.url.searchParams.get("path");
-  if (!raw || /[\x00-\x1f\x7f]/.test(raw)) return false;
+  if (!raw || hasControlBytes(raw)) return false;
   if (!inDepartmentKnowledge(g.caller.department, raw.startsWith("knowledge/") ? raw : `knowledge/${raw}`)) {
     return json(g.res, { error: `no such note: ${raw}` }, 404), true;
   }

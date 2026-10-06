@@ -293,6 +293,8 @@ export interface MessageSearchFilter {
   /** Case-insensitive equality on the owning session's engine. */
   engine?: string;
   role?: 'user' | 'assistant';
+  /** Only messages of sessions bound to this department (FR-008). */
+  scopeDepartment?: string;
   /** Inclusive epoch-ms bounds on the message timestamp. */
   since?: number;
   until?: number;
@@ -365,6 +367,7 @@ export function searchMessages(query: string, limit = 50, filter?: MessageSearch
     conditions.push('LOWER(s.engine) = ?');
     values.push(filter.engine.toLowerCase());
   }
+  if (filter?.scopeDepartment) { conditions.push('s.scope_department = ?'); values.push(filter.scopeDepartment); }
   const extra = conditions.length ? ` AND ${conditions.join(' AND ')}` : '';
   try {
     return db
@@ -1082,24 +1085,17 @@ export interface ListSessionsFilter {
   status?: Session['status'];
   source?: string;
   engine?: string;
+  /** Only sessions bound to this department (FR-008). */
+  scopeDepartment?: string;
 }
 
 export function listSessions(filter?: ListSessionsFilter): Session[] {
   const db = initDb();
   const conditions: string[] = ['archived_at IS NULL', 'workflow_kind IS NULL'];
   const values: unknown[] = [];
-
-  if (filter?.status) {
-    conditions.push('status = ?');
-    values.push(filter.status);
-  }
-  if (filter?.source) {
-    conditions.push('source = ?');
-    values.push(filter.source);
-  }
-  if (filter?.engine) {
-    conditions.push('engine = ?');
-    values.push(filter.engine);
+  const equalities = [['status', filter?.status], ['source', filter?.source], ['engine', filter?.engine], ['scope_department', filter?.scopeDepartment]] as const;
+  for (const [column, value] of equalities) {
+    if (value) { conditions.push(`${column} = ?`); values.push(value); }
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -1341,16 +1337,17 @@ export function listSessionsForGroup(
 }
 
 /** Search across ALL sessions by identity, title, or settled message text. */
-export function searchSessions(query: string, limit = 100): Session[] {
+export function searchSessions(query: string, limit = 100, scopeDepartment?: string): Session[] {
   const db = initDb();
   const like = `%${query.replace(/[%_]/g, (m) => `\\${m}`)}%`;
   const rows = db
     .prepare(
       `SELECT * FROM sessions
-       WHERE title LIKE ? ESCAPE '\\' OR employee LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages WHERE messages.session_id = sessions.id AND messages.content LIKE ? ESCAPE '\\')
+       WHERE (title LIKE ? ESCAPE '\\' OR employee LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages WHERE messages.session_id = sessions.id AND messages.content LIKE ? ESCAPE '\\'))
+         AND (? IS NULL OR scope_department = ?)
        ORDER BY last_activity DESC LIMIT ?`,
     )
-    .all(like, like, like, like, limit) as Record<string, unknown>[];
+    .all(like, like, like, like, scopeDepartment ?? null, scopeDepartment ?? null, limit) as Record<string, unknown>[];
   return rows.map(rowToSession);
 }
 
@@ -1372,6 +1369,8 @@ export interface SearchSessionsFilter {
   /** Deterministic derivation: status IN ('error','interrupted'). `waiting` is
    *  deliberately excluded (operator ruling — usage-limit pauses self-resolve). */
   needsAttention?: boolean;
+  /** Only sessions bound to this department (FR-008). */
+  scopeDepartment?: string;
 }
 
 export function searchSessionsFiltered(filter: SearchSessionsFilter, limit = 20): Session[] {
@@ -1406,6 +1405,7 @@ export function searchSessionsFiltered(filter: SearchSessionsFilter, limit = 20)
     conditions.push('parent_session_id = ?');
     values.push(filter.parentSessionId);
   }
+  if (filter.scopeDepartment) { conditions.push('scope_department = ?'); values.push(filter.scopeDepartment); }
   if (filter.activeSince) {
     conditions.push('last_activity >= ?');
     values.push(filter.activeSince);
