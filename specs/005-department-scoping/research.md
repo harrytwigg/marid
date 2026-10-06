@@ -112,7 +112,10 @@ and the decision. This reading was matched by content in minified code, so Phase
 | `engines/remote-stage.ts:966` | `FARM_SCRIPT`: links every top-level entry of the mount into the session home, and links the company `CLAUDE.md` into `remoteCwd` when it is not a git tree | Left untouched. Scoped sessions run a scoped variant (FR-062) |
 | `engines/remote-stage.ts:792` / `:167` | `serializePerHost`, and `stageRemoteFile` (temp file, then rename) | The stage-dir push runs inside the first and follows the second's discipline (FR-060) |
 | `engines/remote-stage.ts:1248` | `prepareRemoteSession`: farm, assets and trust seed under the per-host lock, then the session's own files | Gains an optional department (Phase 5) |
-| `mcp/file-tools.ts:98` | The jinn MCP server reads an attachment path itself; for a remote session that server runs on the remote host | FR-065 checks the path limit there |
+| `mcp/file-tools.ts:98`, `mcp/work-item-attachments.ts:103` | `publish_attachment` and path-based `attach_to_work_item` read the file in the jinn MCP server and upload the bytes; neither uses the JSON `{path}` route. For a remote session that server runs on the remote host (its config is remapped to the remote install, `engines/remote-stage.ts:1398`) | FR-018 and FR-065 check the path limit in both tools |
+| `shared/remote-target.ts:207` | `employeeRemoteTarget`, called by `pty-ws.ts:134`, `turn/remote-ready.ts:76`, `session-file-read.ts:67` and `cli/remote.ts:58`; `engine-run.ts:55` builds its target inline | FR-061 puts the scoped cwd override in this one helper |
+| `shared/remote-target.ts:156` | `remote.root` and `remote.mount` are each checked to be absolute; nothing stops the mount sitting under the root | FR-061 refuses a scoped `remoteCwd` over the mount |
+| `engines/remote-stage.ts:418`, `:912`, `:936` | The per-host stage root holds every session's `gateway.json`; the trust key includes the cwd; the trust seed runs `mkdir -p <cwd>` | FR-061 spawn-time check; FR-020a keeps the cwd stable; the sync runs before the seed |
 | `sessions/fork.ts` | No remote target is built | Fork has no remote path, so FR-061 does not list it |
 
 ### Identity and authentication
@@ -254,7 +257,12 @@ to an over-budget file is paid for in the same PR by moving existing code out.
   transcripts.
 - **Refusing scoped employees on remote targets** (the draft before D5). The operator wants
   the system to work off this Mac (D5), so Phase 5 stages scoped remote sessions instead.
-- **Linking the remote stage dir through the sshfs mount** instead of pushing a copy. The
+- **Replacing the stage dir by a directory rename.** `rename(2)` onto a non-empty directory
+  fails, `mv` nests the new directory inside the old one, and a two-step swap deletes running
+  sessions' cwd. FR-020a syncs in place instead.
+- **A cache of the pushed content hash.** It outlives a wiped or edited remote stage dir. The
+  sync runs before every scoped spawn instead.
+- **Linking the remote stage dir through the sshfs mount** instead of syncing a copy. The
   session's cwd would sit on a network filesystem, and every scoped remote session would stop
   when the mount drops. A pushed copy needs the mount only for what the unscoped path already
   uses.

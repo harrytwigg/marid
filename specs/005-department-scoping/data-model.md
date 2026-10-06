@@ -105,7 +105,8 @@ persona: ...
   agree (FR-007).
 - A scoped employee must use the `claude` engine (FR-026). It may set `remoteHost`; until
   Phase 5 that is refused. Its `remoteCwd` must not be, contain or lie inside
-  `<remote.root>/.jinn-departments` (FR-061).
+  `<remote.root>/.jinn-departments` or `remote.mount`, nor (checked at spawn) the per-host
+  stage root (FR-061).
 - `claudeConfigDir` must be absolute, must not start with `~`, must not lie inside
   `$JINN_HOME`, must not equal the default profile's directory, and is refused alongside
   `remoteHost` (FR-050). It is canonicalised at load: no trailing slash, no `.` or `..`. It
@@ -127,14 +128,16 @@ A scoped session's engine environment also carries `JINN_DEPARTMENT=<slug>` (FR-
   .claude/skills/<s>/  # copies of skills/<s> for each allow-listed skill
 ```
 
-The stage directory is regenerated on the same triggers as `syncSkillSymlinks`, on a
-department scan change, and when an instructions file changes. Nobody edits it by hand.
+The stage directory is synced (FR-020a) on the same triggers as `syncSkillSymlinks`, on a
+department scan change, when an instructions file changes, and before every scoped spawn. A
+sync keeps its path and inode: changed files are renamed in from
+`.jinn-departments/.<slug>.incoming-<random>/`, and extras are removed afterwards. Nobody
+edits it by hand.
 
-**On a remote host** (FR-060), the same content is pushed to
-`<remote.root>/.jinn-departments/<slug>/` before a scoped session's first spawn there and
-whenever its content hash changes. The gateway caches the pushed hash per host and slug, in
-memory only. A scoped remote session's `$JINN_HOME` holds only `gateway.json`, `tmp/` and the
-stage marker (FR-062).
+**On a remote host** (FR-060), the same content is synced the same way to
+`<remote.root>/.jinn-departments/<slug>/` before every scoped spawn there. Nothing is cached.
+A scoped remote session's `$JINN_HOME` holds only `gateway.json`, `tmp/` and the stage marker
+(FR-062).
 
 ## Claude profiles
 

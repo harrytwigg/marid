@@ -287,8 +287,9 @@ scoped session.
    generated `CLAUDE.md` (FR-060, FR-061).
 2. **Given** the same session, **Then** its `$JINN_HOME` has no links into the company home,
    and no company `CLAUDE.md` is linked into any directory for it (FR-062).
-3. **Given** the operator edits D's `INSTRUCTIONS.md`, **When** `side-dev` next starts on that
-   host, **Then** the remote stage dir holds the new `CLAUDE.md` (FR-060).
+3. **Given** the operator edits D's `INSTRUCTIONS.md`, or a session edited the remote stage
+   dir, **When** `side-dev` next starts on that host, **Then** the remote stage dir holds the
+   generated `CLAUDE.md`, and its path and inode are unchanged (FR-020a, FR-060).
 4. **Given** `side-dev` calls a jinn tool, **Then** the gateway applies D's scope exactly as for
    a local scoped session (FR-064).
 5. **Given** an unscoped remote employee, **Then** its staging is unchanged from `main`.
@@ -497,6 +498,11 @@ scoped employee; D is that session's binding)
   path-based `attach_to_work_item` and the JSON `{path}` attachment route accept only
   realpaths inside D's working directories or D's stage dir. `list_files` and `read_file` are
   refused. Unscoped callers are unchanged (Q6-b).
+  - The two MCP tools read the file themselves, in the session's jinn MCP server, and upload
+    the bytes (`packages/jinn/src/mcp/file-tools.ts:98`,
+    `packages/jinn/src/mcp/work-item-attachments.ts:103`). They never use the JSON `{path}`
+    route. So the check runs **in each tool**, with the allowed roots taken from the scoped
+    session's MCP config. The gate checks only the JSON `{path}` route.
 - **FR-019**: **Tool profile.** A scoped session's MCP manifest omits every tool whose routes
   are all refused. Unscoped manifests are unchanged.
 
@@ -506,6 +512,26 @@ scoped employee; D is that session's binding)
   `$JINN_HOME`: `<parent of home>/.jinn-departments/<slug>/`. This is the only way to stop
   Claude Code loading the company `CLAUDE.md` (it reads from the cwd and its ancestors) and the
   company skills directory.
+- **FR-020a**: **Stage dir updates.** The stage dir's path and the directory itself MUST stay
+  stable. It is never replaced or renamed, because the transcript slug (resume, fork and
+  auto-compaction) and the trust key (`trustSeedKey`,
+  `packages/jinn/src/engines/remote-stage.ts:912`) both derive from the cwd. An update
+  **syncs** it to the generated file set:
+  - the new file set is written to an incoming directory beside the stage dir, on the same
+    filesystem (`.jinn-departments/.<slug>.incoming-<random>/`);
+  - each entry whose content differs is moved over the old one with a single rename, which is
+    atomic for a file;
+  - entries not in the set are removed afterwards, and the incoming directory is deleted;
+  - unchanged entries are not touched.
+
+  **What a running session sees during a sync:** each file is either wholly old or wholly new.
+  For a moment it can see a mix of old and new files, and a dropped skill disappears at the
+  end. Its cwd never disappears.
+
+  The sync runs on the Phase 3 triggers and **before every scoped spawn**, so an edit a
+  session made to its stage dir is reverted when the next scoped session starts. Between
+  spawns a session can still edit it; this is a guardrail. No hash cache is kept, so there is
+  no cache to outlive the directory. Local and remote stage dirs follow this rule identically.
 - **FR-026**: In v1 a scoped employee MUST use the `claude` engine, because the stage dir uses
   Claude's layout (`CLAUDE.md`, `.claude/skills/`). It MAY run locally or on a remote host
   (D5). Validation refuses another engine and says why. A scoped employee with a `remoteHost`
@@ -652,27 +678,55 @@ is staged differently. Unscoped remote sessions are unchanged.
 - **FR-060**: **Remote stage dir.** For each remote host a scoped member uses, the gateway MUST
   keep a copy of D's stage dir at `<remote.root>/.jinn-departments/<slug>/` on that host.
   - Its content is exactly the local stage dir's: the same generator (Phase 3) produces it.
-  - It is pushed over SSH before a scoped session's first spawn on that host, and again
-    whenever its content hash changes. A push writes a sibling temp dir and renames it into
-    place, so a session never sees a half-written stage dir.
-  - Pushes run inside the existing per-host serialisation
-    (`packages/jinn/src/engines/remote-stage.ts:792`). The pushed hash is cached per host and
-    cleared with the remote staging cache.
+  - It is synced by FR-020a before **every** scoped spawn on that host. The file set travels
+    as a tar stream over SSH into the incoming directory, and a sync script applies it. With
+    no cache, a wiped or edited remote stage dir is restored on the next spawn.
+  - Syncs run inside the existing per-host serialisation
+    (`packages/jinn/src/engines/remote-stage.ts:792`), **before the trust seed**. The seed runs
+    `mkdir -p <cwd>` (`packages/jinn/src/engines/remote-stage.ts:936`), so seeding first would
+    create an empty stage dir.
   - It sits under `remote.root`, so it stays inside the existing remote guardrail
     (`packages/jinn/src/shared/config-types.ts:268`).
 - **FR-061**: **Remote cwd.** A scoped remote session MUST run with its cwd set to the remote
-  stage dir, not the employee's `remoteCwd`. This holds on every path that builds a remote
-  target: `sessions/turn/engine-run.ts` (turns, and auto-compaction through it),
-  `sessions/turn/rate-limit-turn.ts`, the rate-limit handler and `gateway/pty-ws.ts`. Fork
-  has no remote path today.
+  stage dir, not the employee's `remoteCwd`.
+  - **One helper.** The override lives in `employeeRemoteTarget`
+    (`packages/jinn/src/shared/remote-target.ts:207`). It gains the scope resolver as a
+    **required** argument, so the compiler finds every caller and none can build a scoped
+    target with the work area as cwd. The inline target in `sessions/turn/engine-run.ts:55`
+    moves onto the helper. The callers are:
+    - `sessions/turn/engine-run.ts`: turns, and auto-compaction through it;
+    - `sessions/turn/rate-limit-turn.ts` and the rate-limit handler: the retry;
+    - `gateway/pty-ws.ts:134`: the terminal attach;
+    - `sessions/turn/remote-ready.ts:76`: wake, mount and profile readiness before a turn. It
+      uses the host, not the cwd;
+    - `gateway/session-file-read.ts:67`: the operator's chat file links. Relative links
+      resolve against the stage dir, which is the session's real cwd. Absolute links work as
+      today;
+    - `cli/remote.ts:58`: `jinn remote` status, which shows both the stage dir and the work
+      area for a scoped employee.
+
+    Fork has no remote path today.
   - The employee's `remoteCwd` stays its work area. The session's prompt names it, because the
     stage dir is shared by the whole department and cannot. FR-065 uses it.
-  - Validation refuses a `remoteCwd` on a scoped employee that is, contains or lies inside
-    `<remote.root>/.jinn-departments`.
+  - **Validation at load** (`gateway/org.ts`): a scoped employee's `remoteCwd` must not be,
+    contain or lie inside `<remote.root>/.jinn-departments` or `remote.mount`. Nothing today
+    stops the mount sitting under `remote.root`
+    (`packages/jinn/src/shared/remote-target.ts:156`), and a work area over the mount would make
+    the whole company home an FR-065 root.
+  - **Validation at spawn** (`prepareRemoteSession`): the per-host stage root
+    (`$HOME/<REMOTE_STAGE_DIR>`, `packages/jinn/src/engines/remote-stage.ts:418`) holds every
+    session's `gateway.json` and bearer token, and is known only from the host's facts. A
+    scoped spawn whose `remoteCwd` is, contains or lies inside it is refused. The check fails
+    closed: if the facts are missing, the spawn is refused.
 - **FR-062**: **No company home on the remote host.** A scoped remote session's `$JINN_HOME`
   MUST hold only what reaches the gateway: `gateway.json`, `tmp/` (settings, MCP config and the
   environment file) and the stage marker. The farm links to the company home are not made, and
-  the company `CLAUDE.md` is not linked into any cwd. Reaping old session stages still runs.
+  the company `CLAUDE.md` is not linked into any cwd. The scoped variant of the farm script
+  keeps the rest:
+  - reaping old session stages;
+  - the per-session lock;
+  - the `asset=` report (`packages/jinn/src/engines/remote-stage.ts:1086`), which
+    `ensureAssets` reads, so a wiped per-host stage still restages itself.
 - **FR-063**: **Trust.** The gateway MUST seed folder trust for the remote stage dir under the
   session's profile, with the existing remote seed (`seedRemoteTrust`, keyed by host, profile
   and cwd).
@@ -680,12 +734,14 @@ is staged differently. Unscoped remote sessions are unchanged.
   exactly as a local one is (FR-008), and the remote environment file carries
   `JINN_DEPARTMENT=<slug>`. The gateway's scope checks (FR-010 to FR-019) do not depend on where
   the session runs.
-- **FR-065**: **File reads on the remote host.** For a scoped remote session, the FR-018 path
-  limit is checked where the file is read. That is the session's jinn MCP server on the remote
-  host, which reads attachment paths itself (`packages/jinn/src/mcp/file-tools.ts:98`). It
-  accepts only realpaths inside the employee's `remoteCwd` or the remote stage dir. The
-  gateway's JSON `{path}` attachment route refuses a remote scoped session, because the path
-  names a file on another machine.
+- **FR-065**: **File reads on the remote host.** For a scoped remote session, the FR-018 check
+  runs in the same two tools, `publish_attachment` (`packages/jinn/src/mcp/file-tools.ts:98`)
+  and path-based `attach_to_work_item` (`uploadWorkItemAttachment`,
+  `packages/jinn/src/mcp/work-item-attachments.ts:103`). Both run in the session's jinn MCP
+  server on the remote host. The allowed roots come from its staged MCP config: the employee's
+  `remoteCwd` and the remote stage dir. Each tool has a test. The gateway's JSON `{path}`
+  attachment route refuses a remote scoped session, because the path names a file on another
+  machine.
 - **FR-066**: **Profiles on remote hosts.** A scoped remote employee uses
   `remoteClaudeConfigDir`, or `remote.claudeConfigDir`, as every remote employee does, with the
   FR-058 fix. No new field is added.
@@ -768,8 +824,9 @@ research.md keeps the findings, so that work does not start from zero.
 - **SC-005**: Every FR-040 element has light and dark screenshots on the PR.
 - **SC-006**: Two profiles with independent limits: marking one rate-limited leaves sessions on
   the other startable, and the reverse.
-- **SC-007**: For a scoped remote employee, a test per remote launch path asserts the remote
-  stage dir as cwd and `JINN_DEPARTMENT` in the environment file. The scoped farm script,
+- **SC-007**: For a scoped remote employee, a test per `employeeRemoteTarget` caller asserts
+  the remote stage dir as cwd, and the environment file carries `JINN_DEPARTMENT`. A sync test
+  shows the stage dir's inode unchanged across an update, with a dropped skill removed. The scoped farm script,
   run under `sh` against temporary directories, makes no link into the company home and no
   `CLAUDE.md` link. The unscoped remote staging scripts are byte-identical to `main`.
 
