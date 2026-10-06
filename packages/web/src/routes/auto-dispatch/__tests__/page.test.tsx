@@ -68,7 +68,7 @@ beforeEach(() => {
     session({ id: "manual", title: "Dispatch ABC-3", startedBy: "dispatch" }),
     session({ id: "codex-chat", engine: "codex", employee: "writer", title: "Draft the post", startedBy: "chat" }),
   ])
-  reads.getUsageSamples.mockResolvedValue([])
+  reads.getUsageSamples.mockResolvedValue({ samples: [] })
 })
 
 describe("the Auto-Dispatch page", () => {

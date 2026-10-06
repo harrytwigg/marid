@@ -4,10 +4,9 @@ import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { PolledReadState } from "@/hooks/use-polled-read"
-import type { UsageSample } from "@/lib/api-auto-dispatch"
 import { BoardWalkCard } from "./board-walk-card"
 import { SessionsList } from "./sessions-list"
-import { useAutoDispatchLive, useUsageSamples, type AutoDispatchLive } from "./use-auto-dispatch"
+import { DEFAULT_ACCOUNT, useAutoDispatchLive, useUsageSamples, type AutoDispatchLive, type UsageRead } from "./use-auto-dispatch"
 import { UsageCard } from "./usage-card"
 
 /**
@@ -29,7 +28,7 @@ function RefreshButton({ onClick, busy }: { onClick: () => void; busy: boolean }
   )
 }
 
-function Body({ live, usage }: { live: PolledReadState<AutoDispatchLive>; usage: PolledReadState<UsageSample[]> }) {
+function Body({ live, usage }: { live: PolledReadState<AutoDispatchLive>; usage: UsageRead }) {
   if (live.phase === "loading") {
     return (
       <>
@@ -39,11 +38,16 @@ function Body({ live, usage }: { live: PolledReadState<AutoDispatchLive>; usage:
     )
   }
   const data: AutoDispatchLive = live.data ?? { status: null, walkAbsent: false, ticks: [], sessions: [] }
-  const claudeStarts = data.sessions.filter((session) => session.engine === "claude")
+  // With several Claude accounts the card is one account's history, so the starts
+  // on it are that account's too; a session with no account ran on the default.
+  const switcher = usage.accounts.length > 1 ? { accounts: usage.accounts, account: usage.account, onSelect: usage.select } : undefined
+  const claudeStarts = data.sessions.filter(
+    (session) => session.engine === "claude" && (!switcher || (session.account ?? DEFAULT_ACCOUNT) === usage.account),
+  )
   return (
     <>
       <BoardWalkCard status={data.status} ticks={data.ticks} absent={data.walkAbsent} now={live.now} />
-      <UsageCard samples={usage.data} starts={claudeStarts} now={live.now} error={usage.error} />
+      <UsageCard samples={usage.data} starts={claudeStarts} now={live.now} error={usage.error} switcher={switcher} />
       <SessionsList sessions={data.sessions} now={live.now} />
     </>
   )
