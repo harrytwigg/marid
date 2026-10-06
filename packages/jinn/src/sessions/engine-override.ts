@@ -14,7 +14,7 @@ import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { effortLevelsForModel, getModelRegistry } from "../shared/models.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import {
-  getEngineSessionRef, nextEngineSessionFields, updateSession, updateSessionForAttempt,
+  getEngineSessionRef, getSession, nextEngineSessionFields, updateSession, updateSessionForAttempt,
 } from "./registry.js";
 
 /** Per-engine config as this module reads it; unconfigured engines resolve to {}. */
@@ -62,7 +62,7 @@ export function beginEngineSubstitution(opts: {
     syncSince,
   };
 
-  const started = updateSessionForAttempt(session.id, attemptToken, (current) => ({
+  const started = updateSessionForAttempt(session.id, attemptToken, {
     // The limited engine's thread id moves to its own typed ref (the override record
     // keeps a second copy). The mirror belongs to whichever engine is actually running,
     // so it goes null until the substitute returns a thread id of its own.
@@ -71,11 +71,11 @@ export function beginEngineSubstitution(opts: {
     engineSessionId: null,
     model: model ?? null,
     // The live row, not the snapshot: this turn may already have written to it.
-    transportMeta: { ...(current.transportMeta || {}), engineOverride } as never,
+    transportMeta: { ...((getSession(session.id) ?? session).transportMeta || {}), engineOverride } as never,
     status: "running",
     lastActivity: new Date().toISOString(),
     lastError,
-  }));
+  });
   if (!started) return undefined;
 
   return {
