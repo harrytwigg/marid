@@ -36,7 +36,7 @@ import {
 } from "../shared/rateLimit.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
 import { chooseSubstitute } from "./rate-limit-substitute.js";
-import { beginEngineSubstitution } from "./engine-override.js";
+import { beginEngineSubstitution, standingOverrideUntil } from "./engine-override.js";
 import { resolveEngineRunMcp } from "./engine-run-mcp.js";
 import { getSession, getMessages, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
 import { runtimeSessionSource } from "./context.js";
@@ -128,10 +128,12 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
     await hooks.onFallbackStart?.({ resumeAt: resumeAt ?? null, until, substitute: substituteName });
 
+    // A swap made while another stands keeps that swap's window, so the session stays on the substitute until then.
+    const backAt = standingOverrideUntil(session) ?? resumeAt;
     const substitution = beginEngineSubstitution({
       session, attemptToken, config, employee, substitute: substituteName, accounts: choice.accounts, until, syncSince,
-      lastError: resumeAt
-        ? `${engineLabel} usage limit — using ${substituteLabel} until ${resumeAt.toISOString()}`
+      lastError: backAt
+        ? `${engineLabel} usage limit — using ${substituteLabel} until ${backAt.toISOString()}`
         : `${engineLabel} usage limit — using ${substituteLabel} temporarily`,
     });
     if (!substitution) {

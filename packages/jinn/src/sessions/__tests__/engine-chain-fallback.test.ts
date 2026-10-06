@@ -164,6 +164,23 @@ describe("handleRateLimit — chain fallback for any engine", () => {
     }));
   });
 
+  it("names the standing swap's window in lastError when a substitute is limited in turn", async () => {
+    vi.mocked(computeNextRetryDelayMs).mockReturnValue({ delayMs: 0, resumeAt: RESETS_AT });
+    const firstUntil = "2025-12-31T22:00:00.000Z";
+    const opts = makeOpts(vi.fn(async () => ({ result: "ok" }) as EngineResult));
+    opts.session = makeSession({
+      ...codexSessionFields(),
+      transportMeta: { engineOverride: { originalEngine: "pi", originalEngineSessionId: "pi-thread", originalModel: null, until: firstUntil, syncSince: "2025-12-31T20:00:00.000Z" } },
+    } as Partial<Session>);
+
+    await handleRateLimit(opts);
+
+    expect(updateSessionForAttemptMock).toHaveBeenCalledWith("sess-1", "attempt-1", expect.objectContaining({
+      lastError: `Codex usage limit — using Claude until ${firstUntil}`,
+    }));
+    expect(overrideRecord()).toMatchObject({ originalEngine: "pi", until: firstUntil });
+  });
+
   it("runs the substitute on its own bin and model, never the limited session's", async () => {
     const claudeRun = vi.fn(async () => ({ result: "ok" }) as EngineResult);
 

@@ -51,6 +51,13 @@ function overrideRecord(session: Session, accounts: AccountSwap | undefined, unt
   };
 }
 
+/** When a swap made now would end: a standing swap's window, which a nested one
+ *  keeps, else `undefined` (the new swap's own `until` applies). */
+export function standingOverrideUntil(session: Session): Date | undefined {
+  const record = standingOverride(session);
+  return record ? parkedOverride(record)?.until : undefined;
+}
+
 /** The session's override record when one stands that the revert can act on. A
  *  record naming no engine or window to go back to is replaced, not extended. */
 function standingOverride(session: Session): Record<string, unknown> | undefined {
@@ -165,16 +172,28 @@ function parkedOverride(override: Record<string, unknown>): ParkedOverride | nul
  *  sync marker in its place when the engine coming back is the one that needs it. */
 function revertedMeta(meta: Record<string, unknown>, session: Session, parked: ParkedOverride): Record<string, unknown> {
   const next = { ...meta };
-  // An account swap kept the engine, but the original account's thread missed
-  // the substitute's turns all the same.
-  if (parked.engine === "claude" && parked.syncSince && (session.engine !== "claude" || accountOverride(session))) {
+  // Whatever the session ran on in between (another engine, another account, or
+  // claude itself handed the turn back by an exhausted chain), claude's own thread
+  // was left at the first swap, so it is caught up from there.
+  if (parked.engine === "claude" && parked.syncSince) {
     next["claudeSyncSince"] = parked.syncSince;
     // The prompt's sync intro names what happened: another account, not another engine.
-    if (session.engine === "claude") next["claudeSyncAccount"] = true;
+    if (accountOverride(session)) next["claudeSyncAccount"] = true;
     else delete next["claudeSyncAccount"];
   }
   delete next["engineOverride"];
   return next;
+}
+
+/** The thread the restored engine resumes. A chain that handed the turn back to
+ *  the original engine on its own account ran that engine's own thread, so the
+ *  live id is the newest one (and the one the revert parks in its slot). */
+function restoredThread(session: Session, meta: Record<string, unknown>, parked: ParkedOverride): string | null {
+  if (session.engine === parked.engine && !accountOverride(session) && session.engineSessionId) return session.engineSessionId;
+  // The original account's own slot, read without the record that points the
+  // session's Claude slot at the substitute account.
+  const unswapped: Session = { ...session, transportMeta: { ...meta, engineOverride: undefined } as never };
+  return parked.engineSessionId ?? getEngineSessionRef(unswapped, parked.engine).id ?? null;
 }
 
 /** Restore the pre-rate-limit engine, and the model that belonged to it, once the
@@ -194,13 +213,10 @@ export function maybeRevertEngineOverride(session: Session): Session {
     ? nextEngineSessionFields(session, session.engine, session.engineSessionId)
     : {};
 
-  // The original account's own slot, read without the record that points the
-  // session's Claude slot at the substitute account.
-  const unswapped: Session = { ...session, transportMeta: { ...meta, engineOverride: undefined } as never };
   return updateSession(session.id, {
     ...preserved,
     engine: parked.engine,
-    engineSessionId: parked.engineSessionId ?? getEngineSessionRef(unswapped, parked.engine).id ?? null,
+    engineSessionId: restoredThread(session, meta, parked),
     ...(parked.model !== undefined ? { model: parked.model } : {}),
     transportMeta: revertedMeta(meta, session, parked) as never,
     lastError: null,

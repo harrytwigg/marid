@@ -104,6 +104,32 @@ describe("an engine swap while an engine swap stands (claude → codex, then cod
   });
 });
 
+describe("a chain that hands the turn back to the limited engine (claude → codex, then codex limited → claude)", () => {
+  it("stays on claude's newest thread at the revert and catches it up on the codex turns, as an engine swap", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const start = new Date("2026-10-06T10:00:00.000Z");
+    vi.setSystemTime(start);
+    const id = claudeSession("web:hand-back");
+    swap(id, "codex", new Date(start.getTime() + HOUR), FIRST_SYNC);
+    reg.recordEngineSessionId(id, "codex", "codex-thread");
+    // Every member is exhausted, so the chain's second pass hands the turn back to claude.
+    const back = swap(id, "claude", new Date(start.getTime() + 5 * HOUR), "2026-10-06T10:30:00.000Z");
+    expect(back?.resumeSessionId).toBe("claude-thread");
+    reg.recordEngineSessionId(id, "claude", "claude-thread-2");
+
+    vi.setSystemTime(new Date(start.getTime() + 2 * HOUR));
+    const after = maybeRevertEngineOverride(reg.getSession(id)!);
+    expect(after.engine).toBe("claude");
+    expect(after.engineSessionId).toBe("claude-thread-2");
+    expect(after.engineSessions?.claude?.id).toBe(after.engineSessionId);
+    expect(after.model).toBe("opus");
+    const meta = after.transportMeta as Record<string, unknown>;
+    expect(meta.claudeSyncSince).toBe(FIRST_SYNC);
+    expect(meta.claudeSyncAccount).toBeUndefined();
+    expect(after.engineSessions?.codex?.id).toBe("codex-thread");
+  });
+});
+
 describe("an engine swap while an account swap's engine swap stands (account → codex → pi)", () => {
   it("goes back to claude on its own account and thread, not to codex", () => {
     vi.useFakeTimers({ toFake: ["Date"] });

@@ -98,6 +98,7 @@ engines:
 - An employee's `claudeConfigDir` matches a declared account by its path. The name labels the account's card. The name is only an alias: renaming it keeps the account's history and limits.
 - A chain entry is an engine, `claude` (the default account) or `claude:<name>`. Unknown names and an account naming itself are refused; cycles are allowed.
 - A substitute on another account runs on that account's profile, as a fresh session with the recent history in its prompt (a transcript cannot be resumed across profiles). Further turns inside the limit's window stay on it and resume its thread; after the window the session goes back to its own account and thread.
+- If the substitute is limited too, the session moves on to the next one, but what it goes back to does not change: when the first limit's window ends it returns to the engine, account, thread and model it had before the first swap, and a Claude thread is caught up on everything since then. This holds for an engine chain as well (claude → codex, then codex limited → pi returns to claude).
 - **Naming `claude:<name>` in `engines.claude.fallback` moves the default account's sessions onto that account when yours is limited, company sessions included**, with everything they load. Only do that with an account that may see your company's context.
 - An undeclared profile, or a declared one with no `fallback`, has none. Remote employees keep their engine chain, limited to engines their host can run; account entries apply to local sessions only. A board walk turn never changes engine or account.
 
