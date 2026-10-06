@@ -294,12 +294,23 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   Test that the token never reaches a log, a file or a child environment, that a named
   account's read skips `$CLAUDE_CODE_OAUTH_TOKEN`, and that nothing refreshes a token. Check
   once, on T070's throwaway profile, that reading the suffixed Keychain entry with
-  `security -w` does not prompt, and record it in the PR. Remote accounts report "no live
-  reading" with their last rate limit (FR-072).
+  `security -w` does not prompt, and record it in the PR.
+- [ ] T092a Remote readings (FR-072): read each remote account's `.credentials.json` (or its
+  Keychain over SSH on a macOS host) and `claude auth status` over SSH, only when the host is
+  reachable. Keep the token in memory for the one call. Test that nothing stores or logs it,
+  that nothing wakes a host, and that a sleeping host shows its last reading and its age.
 - [ ] T093 Board walk (FR-075 to FR-077): per-account snapshot fields and `priorFiveHour`,
   candidate accounts, the `startTodo` code gate, exhausted accounts in `dispatcherSuffix`,
-  the per-account rewrite of `template/board-walk.md`, the `noReading` flag, and FR-075a and
-  FR-076 as the operator decides. Document the unrouted-Todo limit (FR-075).
+  the per-account rewrite of `template/board-walk.md`, the `noReading` flag with one probing
+  start (FR-075a), and no change to the runner's own fallback (FR-076). Document the
+  unrouted-Todo limit (FR-075).
+- [ ] T093a Per-account fallback chains (FR-079): parse and validate `engines.claude.accounts`,
+  let chain entries name accounts, walk them with per-account health, and run an account
+  substitute as a fresh session on that profile with the recent history. Test: a declared
+  account with `fallback: []` waits; one with `[claude, codex]` moves to the default account,
+  or to codex when the default account is exhausted; a scoped session's substitute keeps its
+  stage dir; a board-walk turn is never substituted; an undeclared named profile never
+  inherits `engines.claude.fallback`.
 - [ ] T094 Web (junior sub-Todo): `accounts` on `/api/engine-limits` with `engines.claude`
   unchanged, the Limits page grouped by engine, `/api/auto-dispatch/usage?account=`, and the
   usage card's switcher. Capture every FR-040 limits state (FR-045).

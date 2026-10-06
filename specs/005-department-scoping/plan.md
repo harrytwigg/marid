@@ -115,7 +115,9 @@ PR (FR-043 to FR-045).
    - the account helper (FR-070);
    - live readings per local account, and remote accounts without them (FR-071, FR-072);
    - the Limits page and the usage card per account (FR-073, FR-074);
-   - the board walk's per-account snapshot, prose and code gate (FR-075 to FR-077).
+   - the board walk's per-account snapshot, prose and code gate (FR-075 to FR-077);
+   - live readings for remote accounts over SSH (FR-072);
+   - per-account fallback chains on the existing mechanism (FR-079).
 
 ## Technical Context
 
@@ -556,9 +558,20 @@ Senior, because it reads account tokens and changes what the walk starts.
   - `dispatcherSuffix` (`board-walk/walk.ts:142`) lists the exhausted accounts.
   - The shipped `template/board-walk.md` is rewritten per account (FR-075), with the FR-077
     migration rationale.
-  - FR-076 is applied as the operator decides.
-- **No live reading** (FR-075a): applied as the operator decides. The snapshot marks such an
-  account `noReading`, so the prose and the code gate can tell it apart from an exhausted one.
+  - FR-076: nothing changes; the docs say the runner can be pointed at another engine.
+- **No live reading** (FR-075a): the snapshot marks such an account `noReading`. The prose
+  allows one probing start on it when it is not exhausted and nothing holds it.
+- **Remote readings** (FR-072): `engines/remote-account-usage.ts` reads each remote account's
+  `.credentials.json` (or its Keychain over SSH on a macOS host) and runs `claude auth status`
+  over SSH, only when `probeReachable` says the host is up. The token stays in memory for the
+  one call. A test asserts that nothing writes it to disk or a log and that nothing wakes a
+  host.
+- **Account fallback chains** (FR-079): `engines.claude.accounts` is parsed and validated
+  beside `validateEngineFallbackChains` (`shared/engine-fallback.ts:24`). Chain entries become
+  engine-or-account names. `resolveFallbackEngine` (`:178`) walks them with per-account health.
+  The rate-limit handler's Branch A runs an account substitute as a fresh session on that
+  profile with the recent history, keeping the stage dir and binding of a scoped session.
+  Board-walk turns are still never substituted (`sessions/rate-limit-handler.ts:138`, FR-076).
 - **Unchanged with one account** (FR-078): a byte comparison, on a fixed clock and fixed
   fixtures, of the snapshot JSON, the `dispatcherSuffix` text and the limits response, with
   `accounts` omitted for one account. The walk prompt is compared with the same `board-walk.md`

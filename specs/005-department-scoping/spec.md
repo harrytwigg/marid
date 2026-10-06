@@ -58,14 +58,11 @@ closed to everyone except its own members.
 | D5 | **Scoped employees run locally or on a remote host.** The system must not assume this Mac | FR-026 and FR-060 to FR-066 (Phase 5). The earlier local-only rule is withdrawn |
 | D6 | **The Limits screen and auto-dispatch must handle several Claude accounts.** Raised by the operator | FR-070 to FR-078 (Phase 6). Limits and dispatch are judged **per account**, not per department, because a profile is independent of department (D4). An operator who gives each department its own account gets per-department dispatch from the same rule |
 | D7 | **Docs, instance migration and visual testing are part of every phase** | FR-043 to FR-045 |
+| D8 | **Remote accounts report their usage back to the gateway** | FR-072: live readings for remote accounts |
+| D9 | **No custom fallback for the board walk.** Use the existing routing fallbacks (`engines.<engine>.fallback`), and let **each Claude account have its own fallback chain**, as if each were its own Claude installation | FR-076 decided: a walk turn keeps today's behaviour. FR-056 and FR-079: per-account chains on the existing mechanism |
 
-**Open decisions for the operator.**
-- **FR-075a.** What does the walk do with an account that has no live reading: an idle named
-  account, or any remote account? The options are to hold, to allow one probing start, or to
-  judge it against the default account.
-- **FR-076.** The board walk's own turn runs on one account. When that account is exhausted,
-  should the walk skip the tick (today's behaviour, which also holds every other account's
-  work), or fall back to a plain code rule for the other accounts?
+**One choice this spec makes that the operator may override (FR-075a).** An account with no
+live reading gets at most one probing start, which produces a reading.
 
 ## Why This Matters *(constitution Principle II)*
 
@@ -321,7 +318,12 @@ The operator runs `side-dev` on the friend's account and everyone else on their 
 2. **Given** the operator's account is near its weekly ceiling and the friend's is about to
    lapse unused, **When** the board walk ticks, **Then** it may start a ready D Todo
    assigned to `side-dev`, and starts nothing on the operator's account (FR-075). If the
-   friend's account has no live reading, FR-075a decides.
+   friend's account has no live reading, it gets one probing start (FR-075a).
+5. **Given** `engines.claude.accounts.friend.fallback: []` and `engines.claude.fallback:
+   [codex]`, **When** `side-dev` is rate-limited, **Then** it waits for the friend's reset,
+   while an operator-account session in the same state moves to codex (FR-079).
+6. **Given** a remote employee on its host's default login, **When** the operator opens
+   Limits, **Then** that account has its own card with live windows, read over SSH (FR-072).
 3. **Given** the friend's account is recorded exhausted, **When** the walk tries to start a
    Todo assigned to `side-dev`, **Then** the start is refused in code, and work on the
    operator's account is unaffected (FR-075).
@@ -693,9 +695,10 @@ scoped employee; D is that session's binding)
   board walk's reading. Otherwise a friend's session would show as the operator's windows,
   and the walk could start work on the operator's account because the friend's allowance is
   about to lapse. Phase 6 adds the readings of the other accounts (FR-071 to FR-077).
-- **FR-056**: **No cross-account fallback.** A session with a named profile MUST NOT be retried
-  on another profile or on another engine. A rate limit makes it wait for its own reset.
-  Fallback would move the work onto the operator's accounts.
+- **FR-056**: **Each account has its own fallback chain** (D9). A session on a named profile
+  MUST NOT inherit the default account's `engines.claude.fallback`, because that chain was
+  written for the operator's account. Until Phase 6 gives accounts their own chains (FR-079),
+  a named-profile session has none: a rate limit makes it wait for its own reset.
 - **FR-057**: **Non-session reads stay on the default profile.** These run outside any session
   and keep reading the operator's login:
   - the model catalog and effort discovery (`packages/jinn/src/shared/claude-models.ts:262`,
@@ -847,11 +850,24 @@ lists the ten places that assume one account.
     (`packages/jinn/src/shared/engine-reset-times.ts:55`) and the usage history
     (`packages/jinn/src/shared/claude-usage-history.ts:44`), each per account. The default
     account keeps today's files.
-- **FR-072**: **Remote accounts.** Remote sessions report no status line to the gateway today
-  (`packages/jinn/src/engines/remote-stage.ts:1378`). In v1 a remote account has no live
-  reading. It shows as "no live reading", with its last rate limit and reset time from the
-  rate-limit handler, and its health is kept per account (FR-055). So a remote account at its
-  limit holds only its own work. Live remote readings are a follow-up.
+- **FR-072**: **Remote accounts report their usage** (D8). Remote sessions write no status line
+  to the gateway today (`packages/jinn/src/engines/remote-stage.ts:1378`), so the gateway MUST
+  read each remote account itself, on the same refresh as the local ones:
+  - **The token.** Over SSH, it reads the account's `.credentials.json`: the
+    `remoteClaudeConfigDir` (or `remote.claudeConfigDir`), or `~/.claude` when neither is set.
+    That is the file the existing remote sign-in check looks for
+    (`packages/jinn/src/engines/remote-stage.ts:665`). The token is held in memory for the one
+    usage call. It is never stored, so it cannot go stale when Claude Code rotates it, and it
+    is never refreshed (FR-071). A macOS remote host whose login is in its Keychain is read
+    with `security find-generic-password -w` over SSH. If its Keychain is locked, the account
+    shows "no live reading".
+  - **The plan**, from `claude auth status` run over SSH with the account's
+    `CLAUDE_CONFIG_DIR`.
+  - **Only when the host is awake.** A host that is asleep or unreachable is not woken for
+    monitoring (`probeReachable`, `packages/jinn/src/engines/remote-stage.ts:562`). Its card
+    shows the last reading and its age.
+  - Its health, rate-limit memory, history and reset time are per account (FR-055), so a
+    remote account at its limit holds only its own work.
 - **FR-073**: **The Limits page.** `GET /api/engine-limits` MUST gain an additive
   `accounts` map: engine to a list of account snapshots. Each has today's snapshot fields plus
   the account key, its label, where it runs (local or a host) and the employees on it.
@@ -890,31 +906,46 @@ lists the ten places that assume one account.
   the operator's (FR-056). The docs say so.
 - **FR-075a**: **An account with no live reading.** This is common: an idle named account's
   access token has expired, so it has no API reading (FR-071), and its status-line snapshot is
-  stale after 30 minutes (`packages/jinn/src/shared/engine-limits-claude.ts:163`). Every remote
-  account has none in v1 (FR-072). Applied per account, "hold, never guess" would never start
-  anything on such an account. **Open decision:**
-  - (a) **Hold.** Idle and remote accounts get no auto-dispatch. US5b scenario 2 is dropped,
-    and D6 says so.
-  - (b) **One probing start.** If the account is not recorded exhausted and no session holds
-    it, the walk may start one Todo on it. That session refreshes the token and produces a
-    reading, and the normal rules apply from the next tick.
-  - (c) **Judge it against the default account**, as `main` does for every Claude employee
-    today.
+  stale after 30 minutes (`packages/jinn/src/shared/engine-limits-claude.ts:163`). A remote
+  host that is asleep, or a locked remote Keychain, gives the same result (FR-072). Applied per
+  account, "hold, never guess" would never start anything on such an account.
 
-  Recommendation: (b) for local named accounts, and (c) for remote accounts, which keeps
-  today's behaviour for remote employees (D5).
-- **FR-076**: **The walk's own account.** The walk's turn runs on its runner's account (the
-  default profile, unless `board-walk.md` names another engine). When that account is
-  exhausted, `route-turn.ts:85` skips the tick, and so every other account's work waits too.
-  **Open decision:**
-  - (a) **Keep it.** Document that the runner can be pointed at another engine.
-  - (b) **A plain code rule for the other accounts.** When the runner is exhausted, the gateway
-    starts, for each other account that is not exhausted and holds no capacity, its oldest,
-    highest-priority ready Todo whose assignee is on that account. That is at most one per
-    account per tick, without the threshold prose.
-
-  Recommendation: (a) for v1. (b) adds a second dispatch rule that does not read the
-  operator's thresholds.
+  **Rule (the spec's choice; the operator may override): one probing start.** If the account
+  is not recorded exhausted and no session holds it, the walk may start one Todo on it. That
+  session refreshes the token and produces a reading, and the normal rules apply from the next
+  tick. The rejected alternatives were holding (idle accounts would never be used, which
+  defeats D6) and judging the account against the default one (the wrong account's
+  allowance).
+- **FR-076**: **The walk's own account: no custom fallback** (D9). The walk's turn runs on its
+  runner's account (the default profile, unless `board-walk.md` names another engine). When
+  that account is exhausted, `route-turn.ts:85` skips the tick as today, so every other
+  account's work waits too. A walk turn never changes engine
+  (`packages/jinn/src/sessions/rate-limit-handler.ts:138`), and that stays. Nothing new is
+  added. The docs say the runner can be pointed at another engine.
+- **FR-079**: **Per-account fallback chains** (D9). Each Claude account MAY have its own
+  fallback chain, using the existing mechanism (`engines.<engine>.fallback`,
+  `packages/jinn/src/shared/config-types.ts:94`, walked by
+  `packages/jinn/src/shared/engine-fallback.ts:178`), as if each account were its own Claude
+  installation:
+  - accounts are declared under `engines.claude.accounts.<name>` with `configDir`,
+    `fallback` and `fallbackModelMap` (data-model.md). An employee's `claudeConfigDir`
+    matches a declared account by its canonical path (FR-050). The name labels its Limits card
+    (FR-073);
+  - `engines.claude.fallback` stays the default account's chain, unchanged;
+  - a chain entry is an engine name (`codex`) or an account (`claude` for the default,
+    `claude:<name>` for a declared one). Validation refuses unknown names and an account
+    naming itself, and tolerates cycles, as `validateEngineFallbackChains`
+    (`packages/jinn/src/shared/engine-fallback.ts:24`) does today;
+  - an undeclared named profile, or a declared one with no `fallback`, has no fallback: it
+    waits for its own reset (FR-056);
+  - the walker skips an exhausted account using per-account health (FR-055). A substitute on
+    another account runs as a fresh session on that account's profile with the recent history
+    in its prompt, as an engine substitute does today, because a transcript cannot be resumed
+    across profiles;
+  - a scoped session's substitute keeps its stage dir and binding;
+  - remote employees keep today's rule that a substitute must run on their host. Account
+    entries apply to local sessions only in v1;
+  - a board-walk turn still never changes engine or account (FR-076).
 - **FR-077**: **Migration of `board-walk.md`.** The operator owns `board-walk.md`, and it is
   never overwritten. The FR-044 rationale tells an instance to reconcile its own prose to the
   per-account wording, and to flag differing wording as a conflict.
@@ -950,8 +981,8 @@ lists the ten places that assume one account.
   - the profile badge on the org tree and the read-only profile row in the employee panel;
   - the session badges;
   - the "not signed in" refusal as shown in chat;
-  - the Limits page with one, two and three Claude accounts, including an exhausted account
-    and a remote account with no live reading (FR-073);
+  - the Limits page with one, two and three Claude accounts, including an exhausted account,
+    a remote account with a live reading and one whose host is asleep (FR-073);
   - the Auto-Dispatch usage card's account switcher (FR-074).
 - **FR-041**: The org tree MUST show each department's scope, and each employee's named
   profile, as badges. Open departments and the default profile show no badge.

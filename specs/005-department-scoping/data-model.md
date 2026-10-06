@@ -197,7 +197,7 @@ claudeProfile: { path: string; key: string } | null;
 // GET /api/engine-limits gains (additive; engines.claude stays the default account):
 accounts?: Record<string /* engine */, Array<EngineLimitEngineSnapshot & {
   account: string;            // "claude", "claude:<key>", "claude@<user>@<host>[:<key>]" (FR-070)
-  noReading?: true;           // no live reading: an idle account's expired token, or a remote account (FR-075a)
+  noReading?: true;           // no live reading: an expired token, a sleeping remote host or a locked remote Keychain (FR-075a)
   label: string;              // e.g. ".claude-friend" or the host
   location: { kind: "local" } | { kind: "remote"; host: string };
   employees: string[];
@@ -205,6 +205,27 @@ accounts?: Record<string /* engine */, Array<EngineLimitEngineSnapshot & {
 
 // GET /api/auto-dispatch/usage?account=<key>  (default: the default account)
 ```
+
+## Account fallback chains (Phase 6, FR-079)
+
+```yaml
+# config.yaml
+engines:
+  claude:
+    fallback: [codex]            # the default account's chain, unchanged
+    accounts:                    # optional; an undeclared named profile has no fallback
+      friend:
+        configDir: /Users/operator/.claude-friend    # matched to employees' claudeConfigDir
+        fallback: []             # wait for its own reset
+      work2:
+        configDir: /Users/operator/.claude-work2
+        fallback: [claude, codex]    # may fall back to the default account, then codex
+        fallbackModelMap: {}
+```
+
+A chain entry is an engine name or an account: `claude` for the default, `claude:<name>` for a
+declared one. Validation follows `validateEngineFallbackChains`: unknown names and
+self-references are refused, and cycles are tolerated.
 
 ## Per-account state (Phase 6)
 

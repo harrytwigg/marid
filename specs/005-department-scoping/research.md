@@ -224,7 +224,7 @@ Read at `origin/main` 70419b04.
 | `shared/claude-usage-history.ts:44` | One usage-history file | Per account |
 | `shared/usageAwareness.ts:10` | One rate-limit record, read only by a preflight notice | Per account (FR-055) |
 | `shared/engine-health-store.ts:45` | One health record per engine; quota records carry no host | Per account (FR-055) |
-| `engines/remote-stage.ts:1378` | Remote sessions write no status-line snapshot to the gateway | Remote accounts have no live reading in v1 (FR-072) |
+| `engines/remote-stage.ts:1378` | Remote sessions write no status-line snapshot to the gateway | The gateway reads remote accounts itself over SSH (FR-072) |
 | `board-walk/snapshot.ts:14`, `:224`, `:238` | No numeric thresholds in code; one Claude five-hour window; an unscoped exhausted flag | Per-account snapshot (FR-075) |
 | `packages/jinn/template/board-walk.md:98` | The thresholds, "hold, never guess", concurrency and "one start per tick" are prose about one Claude pool | Rewritten per account; the instance copy is the operator's (FR-077) |
 | `board-walk/apply.ts:245` | `startTodo` checks only the switch, the status and the opt-out | Gains the exhausted-account gate (FR-075) |
@@ -234,6 +234,9 @@ Read at `origin/main` 70419b04.
 | `shared/claude-models.ts:244`, `:290` | An expired access token reads as no token, and the gateway never refreshes one; `$CLAUDE_CODE_OAUTH_TOKEN` is checked first | An idle account has no live reading (FR-075a); a named account's read skips the variable (FR-071) |
 | `shared/engine-limits-claude.ts:163` | A status-line snapshot is stale after 30 minutes | Same |
 | `shared/engine-limits-claude.ts:239`, `shared/engine-reset-times.ts:37` | The newest snapshot in the shared directory, whoever wrote it | From Phase 4, readers take only default-account snapshots (FR-055) |
+| `shared/engine-fallback.ts:24`, `:178`; `shared/config-types.ts:94` | `engines.<engine>.fallback` chains: validated (unknown names and self-references refused, cycles tolerated) and walked with health | FR-079 extends the entries to accounts. This instance's `config.yaml` sets no chain today |
+| `sessions/rate-limit-handler.ts:121`, `:138` | Branch A hands a rate-limited turn to the chain, as a fresh session with recent history; a board-walk turn is never substituted | Account substitutes reuse Branch A; FR-076 keeps the walk rule |
+| `engines/remote-stage.ts:562`, `:665` | `probeReachable`; the remote sign-in check looks for `<profile>/.credentials.json` over SSH | FR-072 reads the token from the same file, only when the host is reachable |
 | `sessions/claude-auth-watch.ts:50` | `claudeAuthScope`: `local`, or `<user>@<host>[:<remoteClaudeConfigDir>]` | Remote account keys include the user; the ledger keeps these strings (FR-070) |
 
 ### Budgets
