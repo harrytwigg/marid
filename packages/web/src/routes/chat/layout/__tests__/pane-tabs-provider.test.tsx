@@ -54,6 +54,7 @@ function harness(start: SplitLayout) {
     close: (id) => set(closeSession(layout, id)),
     pin: (id) => { if (pinTab(layout, id) !== layout) set(pinTab(layout, id)) },
     show: (id) => { if (showTab(layout, id) !== layout) set(showTab(layout, id)) },
+    focusPane: vi.fn(),
   } as SplitLayoutControls)
   return { onSelect, controls, set, get layout() { return layout }, bind: (fn: () => void) => { rerender = fn } }
 }

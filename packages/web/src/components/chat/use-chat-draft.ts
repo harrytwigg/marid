@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import { gatewayTransport } from '@/lib/gateway-transport'
+import { PaneTabIdContext } from '@/components/chat/pane-tabs-context'
 
 const acknowledgments = new Map<string, Set<(sentValue: string) => void>>()
 
@@ -40,15 +41,18 @@ function useDraftAcknowledgment(owner: RefObject<DraftOwner>, updateValue: Dispa
   }, [key, storedAtRender, owner, updateValue])
 }
 
-/** Text survives pane/route remounts and reload in this tab, scoped to its gateway. */
+/** Text survives pane/route remounts and reload in this tab, scoped to its gateway. A composer with
+ *  no session yet keeps one shared draft, except a new chat tab of the layout, which keeps its own
+ *  under its tab id: several can be open at once. */
 export function useChatDraft(sessionId: string | null) {
   const scope = `jinn-chat-draft:${gatewayTransport().profile.origin}:`
-  const key = scope + (sessionId ?? 'new')
+  const blank = useContext(PaneTabIdContext) ?? 'new'
+  const key = scope + (sessionId ?? blank)
   const [value, updateValue] = useState(() => readDraft(key) ?? '')
   const owner = useRef({ key, value })
   if (owner.current.key !== key) {
     const previous = owner.current
-    if (previous.key === scope + 'new' && sessionId) {
+    if (previous.key === scope + blank && sessionId) {
       // First-send adoption keeps the composer mounted while assigning its id.
       writeDraft(previous.key, '')
       previous.key = key

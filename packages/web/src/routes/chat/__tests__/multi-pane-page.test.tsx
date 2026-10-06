@@ -225,6 +225,32 @@ describe('the routed multi-pane surface', () => {
     expect(pane('b')).toBeDefined()
   })
 
+  it('sends from a New chat tab as a new history entry: back returns to the chat it opened over', async () => {
+    seedWorkingSet(['a', 'b'])
+    renderRoute(['/?session=b', '/?session=a'])
+    await waitFor(() => expect(pane('a').textContent).toContain('transcript-a'))
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'New chat' })[0])
+    await waitFor(() => expect(pane('new')).toBeDefined())
+    const textarea = pane('new').querySelector<HTMLTextAreaElement>('[data-chat-textarea]')!
+    fireEvent.change(textarea, { target: { value: 'from the tab' } })
+    fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' })
+    await waitFor(() => expect(screen.getByTestId('route-location').textContent).toBe('/?session=e'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Test browser back' }))
+    await waitFor(() => expect(screen.getByTestId('route-location').textContent).toBe('/?session=a'))
+  })
+
+  it('opens an ?employee= deep link as a New chat tab once the stored layout has loaded', async () => {
+    seedWorkingSet(['a', 'b'])
+    renderRoute('/?employee=writer')
+
+    await waitFor(() => expect(document.querySelector('[data-pane-tab-kind="new-chat"]')).not.toBeNull())
+    const keys = Array.from(document.querySelectorAll('[data-chat-grid-pane]')).map((node) => node.getAttribute('data-chat-grid-pane'))
+    expect(keys.some((key) => key?.startsWith('__new__'))).toBe(false)
+    expect(keys.some((key) => key?.startsWith('new:') && key.includes('employee=writer'))).toBe(true)
+  })
+
   it('renders exactly one composer pane when the working set is empty', async () => {
     sessionIds.length = 0
     localStorage.setItem(WORKING_SET_STORAGE_KEY, JSON.stringify({

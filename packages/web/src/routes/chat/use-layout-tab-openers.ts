@@ -1,5 +1,7 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { Message } from '@/lib/conversations'
+import { resolveDeepLink } from '@/components/chat/chat-route-helpers'
 import type { OpenTodo } from '@/components/chat/file-open-context'
 import type { useSplitWorkingSet } from './layout/use-split-working-set'
 
@@ -24,16 +26,42 @@ export function useTodoTabOpener(openTodo: SplitWorkingSet['openTodo'], mobile: 
 
 /**
  * What a new chat tab's pane reports: its first send created a session, so the tab becomes that
- * chat's, in its slot, and the route moves to it as it does for the route's own composer; or it was
- * closed.
+ * chat's, in its slot, and the route moves to it as it does for the route's own composer, as a new
+ * history entry; or it was closed. Opening the tab adds no entry, as opening a file tab adds none.
  */
-export function useNewChatTabHandlers(workingSet: SplitWorkingSet, onSessionCreated: (sessionId: string, pending?: Message) => void) {
+export function useNewChatTabHandlers(workingSet: SplitWorkingSet, onSessionCreated: (sessionId: string, pending: Message | undefined, history: 'push') => void) {
   const { remove, split } = workingSet
   return useMemo(() => ({
     onSessionCreated: (tabId: string, sessionId: string, pending?: Message) => {
       remove(tabId, sessionId)
-      onSessionCreated(sessionId, pending)
+      // Opening the tab left the route (and history) on the chat it opened over: the new chat is a new entry.
+      onSessionCreated(sessionId, pending, 'push')
     },
     onClose: split.close,
   }), [onSessionCreated, remove, split.close])
+}
+
+/**
+ * The ?employee=<name> deep link: an INTENT (compose to that employee), not a location, so it is
+ * consumed once and does not re-fire or stick. ?session= is never consumed: it IS the selection, and
+ * resolveDeepLink's session-first precedence keeps a stray employee param inert beside it. While the
+ * stored layout loads (`waitForLayout`, desktop) the intent is held, not dropped: the new chat may
+ * open as a tab of it, and the route may move to a chat meanwhile, taking the param with it.
+ */
+export function useEmployeeDeepLink(contactEmployee: (name: string) => void, waitForLayout: boolean) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [linked, setLinked] = useState<string | null>(null)
+  useEffect(() => {
+    const link = resolveDeepLink(searchParams)
+    if (link?.kind !== 'employee') return
+    setLinked(link.name)
+    const next = new URLSearchParams(searchParams)
+    next.delete('employee')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+  useEffect(() => {
+    if (!linked || waitForLayout) return
+    setLinked(null)
+    contactEmployee(linked)
+  }, [contactEmployee, linked, waitForLayout])
 }

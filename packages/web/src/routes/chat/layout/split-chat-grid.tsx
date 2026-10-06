@@ -110,8 +110,8 @@ export function SplitChatGrid(props: ChatGridProps) {
 /**
  * The grid's props with the panes that have no chat handled here: a document-only pane's key is its
  * document's tab id and a new chat's is its own, neither a session, so the page's focus handler never
- * sees one. Focusing such a pane shows its tab and focuses its group (the route stays on the last
- * chat), and while it holds focus it is the active pane, which the page's focused chat is not. A
+ * sees one. Focusing such a pane focuses its group, keeping the tab it shows (the route stays on the
+ * last chat), and while it holds focus it is the active pane, which the page's focused chat is not. A
  * document pane is rendered here; a new chat's is a composer, which the page renders.
  */
 function useChatlessPaneProps(props: ChatGridProps, split: SplitLayoutControls): Pick<ChatGridProps, 'focusedId' | 'onFocus' | 'renderPane'> {
@@ -121,7 +121,8 @@ function useChatlessPaneProps(props: ChatGridProps, split: SplitLayoutControls):
   const { onFocus, renderPane } = props
   return {
     focusedId: focusedPaneKey && !isChatTabId(focusedPaneKey) ? focusedPaneKey : props.focusedId,
-    onFocus: (key) => (isChatTabId(key) ? onFocus(key) : split.show(key)),
+    // The key is the pane's tab when it was drawn; its strip may have just shown another one.
+    onFocus: (key) => (isChatTabId(key) ? onFocus(key) : split.focusPane(key)),
     renderPane: (key, active) => (isDocTabId(key) ? renderDocPane(key) : renderPane(key, active)),
   }
 }

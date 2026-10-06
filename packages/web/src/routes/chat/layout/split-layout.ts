@@ -116,9 +116,7 @@ export function focusedGroup(layout: SplitLayout): LayoutGroup | null {
  * routeSessionOf.
  */
 export function paneSessionOf(target: LayoutGroup, focusHistory: readonly string[]): string {
-  if (!isDocTabId(target.activeTab)) return target.activeTab
-  const sessions = target.tabs.filter((id) => !isDocTabId(id))
-  return [...focusHistory].reverse().find((id) => sessions.includes(id)) ?? sessions[0] ?? ''
+  return shownOrRecent(target, focusHistory, (id) => !isDocTabId(id))
 }
 
 /**
@@ -127,9 +125,14 @@ export function paneSessionOf(target: LayoutGroup, focusHistory: readonly string
  * document-only pane, a lone new chat's).
  */
 export function routeSessionOf(target: LayoutGroup, focusHistory: readonly string[]): string {
-  if (isChatTabId(target.activeTab)) return target.activeTab
-  const chats = target.tabs.filter(isChatTabId)
-  return [...focusHistory].reverse().find((id) => chats.includes(id)) ?? chats[0] ?? ''
+  return shownOrRecent(target, focusHistory, isChatTabId)
+}
+
+/** The group's shown tab when `kind` accepts it, else its most recently focused tab that it accepts. */
+function shownOrRecent(target: LayoutGroup, focusHistory: readonly string[], kind: (tabId: string) => boolean): string {
+  if (kind(target.activeTab)) return target.activeTab
+  const tabs = target.tabs.filter(kind)
+  return [...focusHistory].reverse().find((id) => tabs.includes(id)) ?? tabs[0] ?? ''
 }
 
 /**
@@ -393,6 +396,15 @@ export function focusSession(layout: SplitLayout, sessionId: string): SplitLayou
   return keepsShown ? focusGroupOn(layout, owner, owner.activeTab, sessionId) : showTab(layout, sessionId)
 }
 
+/**
+ * Focuses the group holding the tab, leaving whichever tab it shows shown: a click anywhere in a pane
+ * with no chat, which must not undo the tab its own strip just switched to.
+ */
+export function focusGroupOfTab(layout: SplitLayout, tabId: string): SplitLayout {
+  const owner = groupOfSession(layout, tabId)
+  return owner ? focusGroupOn(layout, owner, owner.activeTab, owner.activeTab) : layout
+}
+
 /** Focuses the group holding the tab and shows that tab in it, file or chat. */
 export function showTab(layout: SplitLayout, tabId: string): SplitLayout {
   const owner = groupOfSession(layout, tabId)
@@ -435,11 +447,16 @@ export function openDocTab(layout: SplitLayout, ownerSessionId: string | null, d
  */
 export function openNewChatTab(layout: SplitLayout, employee: string | null = null): SplitLayout {
   if (!layout.root || !holdsChat(layout.root)) return layout
-  const existing = groupsOf(layout).flatMap((g) => g.tabs).find((id) => parseNewChatTabId(id)?.employee === (employee || null))
+  const existing = newChatTabFor(layout, employee)
   if (existing) return showTab(layout, existing)
   const target = openTargetGroup(layout) ?? groupsOf(layout).at(-1)
   if (!target) return layout
   return placeTab({ ...layout, nextId: layout.nextId + 1 }, target.id, newChatTabId({ serial: layout.nextId, employee }))
+}
+
+/** The new chat tab addressed to `employee` (or to no one) the layout holds, if any. */
+export function newChatTabFor(layout: SplitLayout, employee: string | null): string | null {
+  return groupsOf(layout).flatMap((g) => g.tabs).find((id) => parseNewChatTabId(id)?.employee === (employee || null)) ?? null
 }
 
 /**

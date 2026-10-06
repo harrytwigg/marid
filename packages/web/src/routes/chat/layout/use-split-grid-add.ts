@@ -37,7 +37,7 @@ interface SplitWorkingSet {
   split: { layout: SplitLayout }
 }
 
-/** A drag the pane surface takes: a chat (from the sidebar or a chat tab) or a file tab. */
+/** A drag the pane surface takes: a chat (from the sidebar or a chat tab) or a tab of another kind (a document, a new chat). */
 function hasSplitDrag(dataTransfer: DataTransfer): boolean {
   return hasChatSessionDrag(dataTransfer) || tabOnlyDragId(dataTransfer) !== null
 }

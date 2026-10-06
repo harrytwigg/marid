@@ -103,3 +103,28 @@ describe('a file-only pane', () => {
     expect(result.current.split.layout.focusedGroupId).toBe(groupOfSession(result.current.split.layout, 'b')!.id)
   })
 })
+
+describe('a new chat tab', () => {
+  it('opened again while it is already shown and focused, in a pane of its own, counts as opened', () => {
+    const { result } = renderHook(() => useSplitWorkingSet('a', [{ id: 'a' }, { id: 'b' }]))
+    let opened = false
+    act(() => { opened = result.current.openNewChat(null) })
+    expect(opened).toBe(true)
+    const fresh = groupsOf(result.current.split.layout).flatMap((group) => group.tabs).find((id) => id.startsWith('new:'))!
+    act(() => result.current.drop(fresh, { region: 'right', key: 'a', groupId: groupOfSession(result.current.split.layout, 'a')!.id }, { columns: 1, cap: 4 }))
+    act(() => result.current.split.show(fresh))
+    expect(groupOfSession(result.current.split.layout, fresh)!.tabs).toEqual([fresh])
+
+    // Nothing changes, but the new chat is on screen: the caller must not fall back to the route composer.
+    act(() => { opened = result.current.openNewChat(null) })
+    expect(opened).toBe(true)
+    expect(groupsOf(result.current.split.layout).flatMap((group) => group.tabs).filter((id) => id.startsWith('new:'))).toEqual([fresh])
+  })
+
+  it('is refused with no chat in the layout, so the route composer is the new chat', () => {
+    const { result } = renderHook(() => useSplitWorkingSet(null, []))
+    let opened = true
+    act(() => { opened = result.current.openNewChat(null) })
+    expect(opened).toBe(false)
+  })
+})

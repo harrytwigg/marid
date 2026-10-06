@@ -1,11 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo, Suspense, lazy } from 'react'
-import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { api } from '@/lib/api'
 import {
   initialMobileView,
   parseSelectedSession,
   parseThreadOrigin,
-  resolveDeepLink,
   selectedDelegatedActivityFromList,
   sessionPath,
   threadOriginLabel,
@@ -45,7 +44,7 @@ const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
 import { FileOpenContext, TodoOpenContext, type OpenFile } from '@/components/chat/file-open-context'
-import { useNewChatTabHandlers, useNewChatTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
+import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
 import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
 import { useChatTabs, type ChatTab } from '@/hooks/use-chat-tabs'
@@ -409,20 +408,8 @@ function ChatPage() {
     }
   }, [chatTabs, navigate, openNewChatInLayout, releaseMobilePicker, startComposer])
 
-  // ?employee=<name> deep-link: an INTENT (compose to that employee), not a
-  // location — consumed once so it doesn't re-fire or stick. ?session= is NOT
-  // consumed any more: it IS the selection (see the URL model above);
-  // resolveDeepLink's session-first precedence keeps a stray employee param
-  // inert next to a session link.
-  const [searchParams, setSearchParams] = useSearchParams()
-  useEffect(() => {
-    const link = resolveDeepLink(searchParams)
-    if (link?.kind !== 'employee') return
-    contactEmployee(link.name)
-    const next = new URLSearchParams(searchParams)
-    next.delete('employee')
-    setSearchParams(next, { replace: true })
-  }, [searchParams, contactEmployee, setSearchParams])
+  // ?employee=<name> deep-link: an INTENT (compose to that employee), consumed once (use-layout-tab-openers).
+  useEmployeeDeepLink(contactEmployee, !viewport.mobile && !workingSet.hydrated && !sessionsQuery.isError)
 
   // Back target for the phone file view's "back" button: the chat a file link
   // was clicked in. selectedIdRef is read at call time so the callback stays stable.
@@ -545,13 +532,15 @@ function ChatPage() {
   }, [chatTabs, navigate, qc])
 
   // ChatPane callbacks
-  const handleSessionCreated = useCallback((newId: string, pending?: Message) => {
+  const handleSessionCreated = useCallback((newId: string, pending?: Message, history: 'replace' | 'push' = 'replace') => {
     adoptSession(newId, pending)
     chatTabs.openTab({ sessionId: newId, label: 'New Chat', status: 'running', unread: false, pinned: true })
     // REPLACE — the composer entry BECOMES the created session (same
-    // conversation); back should skip the empty composer, not revisit it.
+    // conversation); back should skip the empty composer, not revisit it. A
+    // new chat tab never had an entry (the route stayed on the chat it opened
+    // over), so it pushes: back returns to that chat.
     pendingNavRef.current = newId
-    navigate(sessionPath(newId), { replace: true })
+    navigate(sessionPath(newId), { replace: history === 'replace' })
     qc.invalidateQueries({ queryKey: queryKeys.sessions.all })
   }, [adoptSession, chatTabs, qc, navigate])
   const newChatTabs = useNewChatTabHandlers(workingSet, handleSessionCreated)

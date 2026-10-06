@@ -169,7 +169,8 @@ function autoColumns(count: number, viewport: GeometryInput['viewport']): { colu
 function resolveKeys(input: GeometryInput): Array<{ key: string; groupId: string | null }> {
   const groupByPaneKey = groupIdsByPaneKey(input.layout)
   return input.keys.map((key) => {
-    // A file-only pane's key is its file tab id, which sessionForKey (chats and the composer) never maps.
+    // A pane with no chat is keyed by its own tab id (a document's, a new chat's), which sessionForKey
+    // (chats and the route composer) never maps.
     const paneKey = isChatTabId(key) ? input.sessionForKey(key) : key
     return { key, groupId: paneKey ? groupByPaneKey.get(paneKey) ?? null : null }
   })

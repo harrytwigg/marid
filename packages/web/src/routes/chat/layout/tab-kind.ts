@@ -5,9 +5,9 @@ import { isFileTabId, parseFileTabId, type FileTabRef } from './file-tab'
  * a chat is an id in its own prefixed namespace, which a session id never carries:
  *
  * - a chat: a session id;
- * - a new chat (`new:`): a blank composer that becomes a chat on its first send. Like a chat it is a
- *   pane of its own, never shown over one, but it is no session: the route and the working set never
- *   see it;
+ * - a new chat (`new:`): a blank composer that becomes a chat on its first send. Like a chat it is
+ *   its pane's identity when shown (its own composer pane, not drawn over a chat that stays mounted),
+ *   but it is no session: the route and the working set never see it;
  * - a document (file-tab.ts `file:`, `todo:`): something read beside a chat. It is shown over its
  *   group's chat, which stays mounted under it, or, dragged out, in a pane of its own.
  */

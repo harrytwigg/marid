@@ -14,11 +14,13 @@ import {
   equalizeSplit,
   evictToCap,
   focusedGroup,
+  focusGroupOfTab,
   focusSession,
   groupOfSession,
   groupsOf,
   materializeLayout,
   openDocTab,
+  newChatTabFor,
   openNewChatTab,
   openInFocusedGroup,
   pinTab,
@@ -105,6 +107,8 @@ export interface SplitLayoutControls {
   pin: (sessionId: string) => void
   /** Shows a tab in its group, file or chat; focusing a chat would keep a file shown over it. */
   show: (tabId: string) => void
+  /** Focuses the pane holding a tab without changing the tab it shows (a pane with no chat). */
+  focusPane: (tabId: string) => void
 }
 
 /**
@@ -188,7 +192,41 @@ function useSplitControls(
   const close = useCallback((sessionId: string) => setLayout((current) => closeSession(current, sessionId)), [setLayout])
   const pin = useCallback((sessionId: string) => setLayout((current) => pinTab(current, sessionId)), [setLayout])
   const show = useCallback((tabId: string) => setLayout((current) => showTab(current, tabId)), [setLayout])
-  return useMemo(() => ({ layout, resize, equalize, place, close, pin, show }), [close, equalize, layout, pin, place, resize, show])
+  const focusPane = useCallback((tabId: string) => setLayout((current) => focusGroupOfTab(current, tabId)), [setLayout])
+  return useMemo(() => ({ layout, resize, equalize, place, close, pin, show, focusPane }), [close, equalize, focusPane, layout, pin, place, resize, show])
+}
+
+/** The page's openers for tabs other than the route's chat: a file or a Todo beside a chat, a new chat. */
+function useTabOpeners(
+  shown: SplitLayout,
+  hydrated: boolean,
+  project: (layout: SplitLayout) => SplitLayout,
+  setLayout: Dispatch<SetStateAction<SplitLayout>>,
+) {
+  /** Opens a file preview as a tab beside `ownerSessionId`'s chat (else the focused one), on the
+   *  layout as shown (the URL's chat in it). False when there is no chat on screen to open it
+   *  beside, or the stored layout has yet to load over this one, so the caller can fall back: until
+   *  the session list first loads (or if it never does) links open in a browser tab, as they did
+   *  before file tabs, rather than land in a layout hydration is about to replace. */
+  const openDoc = useCallback((ownerSessionId: string | null, tabId: string) => {
+    if (!hydrated || (openDocTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId))) return false
+    setLayout((current) => openDocTab(project(current), ownerSessionId, tabId))
+    return true
+  }, [hydrated, project, shown])
+  const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => openDoc(ownerSessionId, fileTabId(file)), [openDoc])
+  /** A Todo opened as a tab beside the chat that linked it, as openFile does for a file. */
+  const openTodo = useCallback((ownerSessionId: string | null, todoId: string) => openDoc(ownerSessionId, todoTabId(todoId)), [openDoc])
+  /** A new chat (addressed to `employee`, if given) as a tab of the focused pane. False when the layout
+   *  holds no chat to open it beside, or has yet to load, so the caller falls back to the route's own
+   *  composer. */
+  const openNewChat = useCallback((employee: string | null) => {
+    // Unchanged is success when the tab is already open (and shown, and focused): it is on screen.
+    if (!hydrated || (openNewChatTab(shown, employee) === shown && !newChatTabFor(shown, employee))) return false
+    setLayout((current) => openNewChatTab(project(current), employee))
+    return true
+  }, [hydrated, project, shown])
+
+  return { openFile, openTodo, openNewChat }
 }
 
 /**
@@ -222,27 +260,7 @@ export function useSplitWorkingSet(
    * prediction (removeWorkingSetSession on `state`) cannot see a group's hidden tabs, which is
    * what the pane falls back to. */
   const afterRemove = useCallback((sessionId: string) => workingSetFromLayout(closeSession(shown, sessionId)), [shown])
-  /** Opens a file preview as a tab beside `ownerSessionId`'s chat (else the focused one), on the
-   *  layout as shown (the URL's chat in it). False when there is no chat on screen to open it
-   *  beside, or the stored layout has yet to load over this one, so the caller can fall back: until
-   *  the session list first loads (or if it never does) links open in a browser tab, as they did
-   *  before file tabs, rather than land in a layout hydration is about to replace. */
-  const openDoc = useCallback((ownerSessionId: string | null, tabId: string) => {
-    if (!hydrated || (openDocTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId))) return false
-    setLayout((current) => openDocTab(project(current), ownerSessionId, tabId))
-    return true
-  }, [hydrated, project, shown])
-  const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => openDoc(ownerSessionId, fileTabId(file)), [openDoc])
-  /** A Todo opened as a tab beside the chat that linked it, as openFile does for a file. */
-  const openTodo = useCallback((ownerSessionId: string | null, todoId: string) => openDoc(ownerSessionId, todoTabId(todoId)), [openDoc])
-  /** A new chat (addressed to `employee`, if given) as a tab of the focused pane. False when the layout
-   *  holds no chat to open it beside, or has yet to load, so the caller falls back to the route's own
-   *  composer. */
-  const openNewChat = useCallback((employee: string | null) => {
-    if (!hydrated || openNewChatTab(shown, employee) === shown) return false
-    setLayout((current) => openNewChatTab(project(current), employee))
-    return true
-  }, [hydrated, project, shown])
+  const { openFile, openTodo, openNewChat } = useTabOpeners(shown, hydrated, project, setLayout)
 
-  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openNewChat }
+  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openNewChat, hydrated }
 }

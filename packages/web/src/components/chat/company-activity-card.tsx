@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useId, useRef, useState, type ComponentType, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowUpRight, Check, ChevronDown, ListChecks, Play, Workflow } from 'lucide-react'
 import type { ChatBlock, JsonValue } from '@/lib/blocks'
@@ -183,8 +183,12 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
   // surface left behind them, so they offer a Preview and nothing else. In the
   // chat layout it opens as a tab beside this chat, as a Todo mention does;
   // anywhere else (or on a phone) it is the Todo's page.
-  const openObject = block.type === 'todo-activity'
-    ? () => { if (!openTodo?.(todoId, linkSession)) void navigate(todoPath(todoId)) }
+  const openObject = block.type === 'todo-activity' && todoId
+    ? (event: ReactMouseEvent) => {
+      // The pane the card sits in would take focus back from the Todo's tab, as for a mention.
+      if (openTodo?.(todoId, linkSession)) event.stopPropagation()
+      else void navigate(todoPath(todoId))
+    }
     : null
 
   return (

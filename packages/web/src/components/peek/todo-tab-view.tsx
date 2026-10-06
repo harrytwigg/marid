@@ -1,8 +1,9 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUpRight } from 'lucide-react'
 import { todoPath } from '@/lib/todo-id'
 import { TodoPeek } from './todo-peek'
+
+const ignorePickerOpen = () => undefined
 
 /**
  * A Todo opened as a tab: the peek panel's body (the glance, with Status and Assignee editable), in
@@ -10,8 +11,6 @@ import { TodoPeek } from './todo-peek'
  * the panel, and a modified click on the mention still goes straight there.
  */
 export function TodoTabView({ todoId }: { todoId: string }) {
-  // The pickers report whether they are open; a tab has no Escape-to-close or focus ring to yield.
-  const [, setPickerOpen] = useState(false)
   return (
     <div data-testid="todo-tab-view" className="flex min-h-0 flex-1 flex-col gap-[var(--space-3)] overflow-y-auto px-[var(--space-4)] pb-[var(--space-5)] pt-[var(--space-3)]">
       <div className="flex flex-none items-center gap-[var(--space-1)]">
@@ -25,7 +24,8 @@ export function TodoTabView({ todoId }: { todoId: string }) {
           <ArrowUpRight size={14} strokeWidth={2} aria-hidden />
         </Link>
       </div>
-      <TodoPeek key={todoId} id={todoId} sheet={false} onPickerOpenChange={setPickerOpen} />
+      {/* The pickers report whether they are open; a tab has no Escape-to-close or focus ring to yield. */}
+      <TodoPeek key={todoId} id={todoId} sheet={false} onPickerOpenChange={ignorePickerOpen} />
     </div>
   )
 }
