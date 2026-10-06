@@ -3,7 +3,7 @@ import { departmentRecord } from "../gateway/department-registry.js";
 import { generateStageFileSet } from "../gateway/department-stage/file-set.js";
 import { logger } from "../shared/logger.js";
 import { resolveJinnHome } from "../shared/paths.js";
-import { REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
+import { FARM_FILTERED_DIRS, REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
 import { assertScopedRemoteSpawn, remoteDepartmentsRoot, remoteDepartmentStageDir } from "../shared/remote-department.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import type { SessionRemoteTarget } from "../shared/types.js";
@@ -73,7 +73,7 @@ trap 'exit 1' HUP INT TERM
 # Nothing in a department-scoped session's home leads to the gateway home. A link,
 # or a filtered directory of links, left by an unscoped rebuild of this home goes.
 find "$home" -maxdepth 1 -type l -exec rm -f {} + 2>/dev/null || true
-for dir in sessions workflows; do
+for dir in ${FARM_FILTERED_DIRS.join(" ")}; do
   if [ -d "$home/$dir" ] && [ ! -L "$home/$dir" ]; then rm -rf "$home/$dir"; fi
 done
 # Marks this as a remote session's stage, so Marid code started here refuses to

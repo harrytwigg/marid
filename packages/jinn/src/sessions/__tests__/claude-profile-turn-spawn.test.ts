@@ -41,7 +41,7 @@ let lifecycle: PtyLifecycleManager;
 
 function turn(engine: { run: (opts: EngineRunOpts) => Promise<EngineResult> }, employee: Partial<Employee>): void {
   void runEngineAttempt({
-    input: { session: { id: "turn-spawn-1" }, attachments: [], employee, attemptToken: "t1" } as any,
+    input: { session: { id: "turn-spawn-1" }, attachments: [], employee, attemptToken: "t1", config: {} } as any,
     plan: {
       engine, engineConfig: {}, promptToRun: "hi", runtimeSource: "web",
       prepareContext: () => ({ systemPrompt: "sys", fingerprint: "f", refresh: undefined }),
