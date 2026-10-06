@@ -92,6 +92,32 @@ describe("a scope change through the API", () => {
   });
 });
 
+describe("a scope change that would drop an employee whose file disagrees", () => {
+  const write = (file: string, text: string) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+  };
+  const employee = (name: string, department: string) =>
+    `name: ${name}\ndisplayName: ${name}\ndepartment: ${department}\nrank: employee\nengine: claude\nmodel: opus\npersona: Works.\n`;
+
+  it.each([
+    ["a member whose file sits in another department's folder", "lab", "lab-stray", path.join("engineering", "lab-stray.yaml"), "lab"],
+    ["a file in the department's folder that names another department", "kiln", "kiln-guest", path.join("kiln", "kiln-guest.yaml"), "engineering"],
+  ])("is refused for %s, naming them, and writes nothing", async (_case, slug, name, file, department) => {
+    write(path.join(home, "org", slug, "department.yaml"), `name: ${slug}\n`);
+    write(path.join(home, "org", file), employee(name, department));
+    const { refreshOrg, orgRegistry } = await import("../org-registry.js");
+    refreshOrg();
+    expect(orgRegistry().has(name)).toBe(true);
+    const refused = await call("PATCH", `/api/departments/${slug}`, { scope: "dedicated" });
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ code: "department-members", members: [{ name }] });
+    expect(fs.readFileSync(path.join(home, "org", slug, "department.yaml"), "utf-8")).not.toMatch(/scope/);
+    refreshOrg();
+    expect(orgRegistry().has(name)).toBe(true);
+  });
+});
+
 describe("a spawn naming a parent outside D", () => {
   it("is answered as for an unknown parent: the caller becomes the parent", async () => {
     const coo = await sessionOf(null);

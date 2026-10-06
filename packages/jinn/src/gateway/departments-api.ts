@@ -10,7 +10,7 @@ import { departmentRecord, departmentSlugsWithFiles, type DepartmentRecord } fro
 import { DepartmentWriteError, readDepartmentPatch, writeDepartmentFile } from "./department-store.js";
 import { readJsonBody } from "./http-helpers.js";
 import { strandedByScopeChange, strandingMessage } from "./department-scope/stranding.js";
-import { scopedEmployeeRefusal } from "./org-department-check.js";
+import { droppedByScopeChange } from "./department-scope/scope-change.js";
 import { orgRegistry, refreshOrg } from "./org-registry.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import type { ApiContext } from "./api.js";
@@ -126,22 +126,17 @@ const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const WRITE_STATUS = { not_found: 404, conflict: 409, invalid: 400 } as const;
 
 /**
- * Why a scope change is refused, as the 409 body, or null. FR-026: a member that could not
- * be a scoped employee (another engine, a remote host) would be dropped from the roster by
- * the next scan, so the change is refused naming them. FR-015: a change that would leave a
+ * Why a scope change is refused, as the 409 body, or null. An employee the next scan would
+ * drop from the roster because of the change (FR-007, FR-026) is named, and the change
+ * refused, rather than the employee vanishing. FR-015: a change that would leave a
  * Todo with a holder who may no longer hold it is refused naming them.
  */
 function scopeChangeRefusal(slug: string, scope: DepartmentScope | undefined, context: ApiContext): Record<string, unknown> | null {
   if (scope === undefined || scope === departmentRecord(slug).scope) return null;
-  if (scope !== "open") {
-    const members = [...orgRegistry(context.getConfig()).values()]
-      .filter((employee) => employee.department === slug)
-      .map((employee) => ({ name: employee.name, reason: scopedEmployeeRefusal(employee, () => scope) }))
-      .filter((member): member is { name: string; reason: string } => member.reason !== null);
-    if (members.length > 0) {
-      const named = members.map((member) => `${member.name} (${member.reason})`).join("; ");
-      return { error: `Making ${slug} ${scope} would drop member(s) from the roster: ${named}. Change them first`, code: "department-members", members };
-    }
+  const members = droppedByScopeChange(slug, scope, orgRegistry(context.getConfig()).values());
+  if (members.length > 0) {
+    const named = members.map((member) => `${member.name} (${member.reason})`).join("; ");
+    return { error: `Making ${slug} ${scope} would drop employee(s) from the roster: ${named}. Change them first`, code: "department-members", members };
   }
   const holders = strandedByScopeChange(slug, scope);
   if (holders.length === 0) return null;

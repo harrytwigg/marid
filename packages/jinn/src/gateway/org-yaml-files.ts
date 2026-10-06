@@ -163,3 +163,19 @@ export function updateEmployeeYaml(
     return false;
   }
 }
+
+/** Every employee YAML under `orgDir` by the `name` it declares; unreadable files and directories are skipped. */
+export function employeeYamlPaths(orgDir: string): Map<string, string> {
+  const paths = new Map<string, string>();
+  if (!fs.existsSync(orgDir)) return paths;
+  walkEmployeeYamls(orgDir, (fullPath) => {
+    try {
+      const data = yaml.load(fs.readFileSync(fullPath, "utf-8")) as { name?: unknown } | null;
+      if (typeof data?.name === "string" && !paths.has(data.name)) paths.set(data.name, fullPath);
+    } catch {
+      // the employee scan reports it
+    }
+    return undefined;
+  }, { skipUnreadable: true });
+  return paths;
+}
