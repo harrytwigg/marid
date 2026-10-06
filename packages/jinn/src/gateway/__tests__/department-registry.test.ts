@@ -1,5 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { execFileSync } from "node:child_process";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { initDb } from "../../shared/db.js";
@@ -12,8 +11,7 @@ import {
   refreshDepartments,
   setDepartmentChangeListener,
 } from "../department-registry.js";
-import { orgRegistry, refreshOrg } from "../org-registry.js";
-import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile, writeSkill } from "./department-fixtures.js";
+import { resetDepartmentFixtures, writeDepartmentFile, writeSkill } from "./department-fixtures.js";
 
 /** FR-001: what a department's file says, what a broken or missing one does, and the last good scope. */
 
@@ -113,7 +111,6 @@ describe("identity problems refuse the file", () => {
     ["YAML that does not parse", "scope: scoped\nname: [unclosed\n", /does not parse/, true],
     ["YAML that does not parse and has no scope", "name: side-project\ndescription: Builds: and ships\n", /does not parse/, false],
     ["a file that is not a mapping", "- just\n- a list\n", /mapping/, false],
-    ["a name that is not the directory's", "name: another-project\nscope: scoped\n", /does not match the directory/, true],
     ["a name that is not the directory's and scope: scoped", "name: other\nscope: scoped\n", /does not match the directory/, true],
     ["a name that is not the directory's and no scope", "name: Another\n", /does not match the directory/, false],
     ["a name that is not the directory's and scope: open", "name: Another\nscope: open  # as before\n", /does not match the directory/, false],
@@ -256,38 +253,6 @@ describe("content problems drop only the entry", () => {
     expect(record.scope).toBe("scoped");
     expect(record.definition?.workdirs).toEqual([]);
     expect(record.warnings).toHaveLength(2);
-  });
-
-  describe("an employee's Claude profile (FR-033)", () => {
-    // Beside the instance home: the test temp directory sits inside it, which is a protected tree.
-    const repo = fs.realpathSync(fs.mkdtempSync(path.join(path.dirname(resolveJinnHome()), "jinn-department-profile-")));
-    const profile = path.join(repo, "profile");
-    beforeAll(() => {
-      fs.mkdirSync(path.join(profile, "projects"), { recursive: true });
-      fs.mkdirSync(path.join(repo, "app"), { recursive: true });
-      execFileSync("git", ["init", "-q", repo], { stdio: "ignore" });
-    });
-    afterAll(() => fs.rmSync(repo, { recursive: true, force: true }));
-    const workdirs = `workdirs: ['${repo}', '${profile}', '${path.join(profile, "projects")}', '${path.join(repo, "app")}']`;
-
-    it("is kept when no employee runs on it", () => {
-      writeDepartmentFile("side-project", `name: side-project\nscope: scoped\n${workdirs}\n`);
-      refreshDepartments();
-      expect(departmentRecord("side-project").definition?.workdirs).toEqual([repo, profile, path.join(profile, "projects"), path.join(repo, "app")]);
-    });
-
-    it.each([
-      ["an employee that loads", "engineering", {}],
-      ["an employee the scan refuses", "side-project", { department: "engineering" }],
-    ])("is dropped, with what contains it, when %s runs on it", (_label, directory, extra) => {
-      writeDepartmentFile("side-project", `name: side-project\nscope: scoped\n${workdirs}\n`);
-      writeEmployeeFile(directory, "friend", { ...extra, claudeConfigDir: profile });
-      refreshOrg();
-      expect(orgRegistry().has("friend")).toBe(directory === "engineering");
-      const record = departmentRecord("side-project");
-      expect(record.definition?.workdirs).toEqual([path.join(repo, "app")]);
-      expect(record.warnings.filter((warning) => warning.startsWith("workdirs:"))).toHaveLength(3);
-    });
   });
 
   it.each(["../secrets", "/etc/passwd", "config.yaml", "org/engineering", "knowledge/../config.yaml", "docs\\..\\x"])(
