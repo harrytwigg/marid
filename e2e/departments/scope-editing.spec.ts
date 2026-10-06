@@ -152,3 +152,11 @@ test('saving a scope updates the panel and the org tree', async ({ browser, requ
     await context.close()
   }
 })
+
+test('the sandbox starts no scheduled turn: the board walk is switched off and no walk session exists', async ({ request, baseURL }) => {
+  const jobs = (await (await request.get(`${baseURL}/api/cron`, { headers: authHeaders() })).json()) as Array<{ id: string; enabled: boolean }>
+  expect(jobs.length).toBeGreaterThan(0)
+  expect(jobs.filter((job) => job.enabled)).toEqual([])
+  const { sessions } = (await (await request.get(`${baseURL}/api/sessions`, { headers: authHeaders() })).json()) as { sessions: Array<{ title: string | null }> }
+  expect(sessions.filter((session) => /board walk/i.test(session.title ?? ''))).toEqual([])
+})

@@ -30,7 +30,8 @@
 #   8. in an EXIT trap: stop, check the port is free, destroy <instance> --yes, then rm -rf "$HOST_HOME".
 #
 # --seed leaves three idle web sessions titled "#1 - Chat layout QA", "#2 - Delegation flow" and
-# "#3 - Design pass" (source_ref sandbox:1..3). Exit codes: 0 ok, 1 an operation failed,
+# "#3 - Design pass" (source_ref sandbox:1..3). Every create also leaves cron/jobs.json with each job,
+# the board walk included, switched off, so a sandbox starts no scheduled engine turn. Exit codes: 0 ok, 1 an operation failed,
 # 2 bad usage or a refused request.
 set -euo pipefail
 
@@ -176,6 +177,28 @@ ensureGatewayAuthToken(process.env.SANDBOX_HOME)
 JS
 }
 
+# A sandbox must never start a scheduled turn: the board walk is an hourly cron job that opens a
+# real engine session, and a verify run that straddles the top of the hour would spend on whatever
+# account the engine finds. The gateway keeps an existing board-walk job as it is (it seeds one only
+# when none exists and none was seeded before), so the job goes in switched off, and any other job
+# setup left behind is switched off with it.
+disable_scheduled_turns() {
+  SANDBOX_HOME="$SANDBOX_HOME" "$NODE_BIN" --input-type=module - <<'JS'
+import fs from "node:fs"
+import path from "node:path"
+const file = path.join(process.env.SANDBOX_HOME, "cron", "jobs.json")
+let jobs = []
+try { jobs = JSON.parse(fs.readFileSync(file, "utf8")) } catch (error) { if (error.code !== "ENOENT") throw error }
+if (!Array.isArray(jobs)) throw new Error(`${file} is not a JSON array`)
+jobs = jobs.map((job) => ({ ...job, enabled: false }))
+if (!jobs.some((job) => job.action === "board-walk")) {
+  jobs.push({ id: "board-walk", name: "Board walk", enabled: false, schedule: "0 * * * *", prompt: "", action: "board-walk" })
+}
+fs.mkdirSync(path.dirname(file), { recursive: true })
+fs.writeFileSync(file, JSON.stringify(jobs, null, 2) + "\n")
+JS
+}
+
 seed_sessions() {
   SANDBOX_HOME="$SANDBOX_HOME" REPO="$REPO" "$NODE_BIN" --input-type=module - <<'JS'
 import crypto from "node:crypto"
@@ -240,6 +263,7 @@ cmd_create() {
     || { cat "$SANDBOX_HOME/setup.log" >&2; die "jinn setup failed" 1; }
   [[ -f "$SANDBOX_HOME/config.yaml" ]] || die "setup did not create config.yaml" 1
   patch_config "$port" || die "could not patch config.yaml" 1
+  disable_scheduled_turns || die "could not switch off the sandbox's scheduled jobs" 1
   (( seed )) && { [[ -f "$SANDBOX_HOME/sessions/registry.db" ]] || die "setup left no sessions/registry.db to seed" 1; seed_sessions; }
   CREATE_OK=1
   echo "Created sandbox '$INSTANCE' at $SANDBOX_HOME on port $port"

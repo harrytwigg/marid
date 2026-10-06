@@ -226,3 +226,48 @@ test("refuses to run against the operator's real home", () => {
   assert.equal(result.status, 2)
   assert.match(result.stderr, /real home/)
 })
+
+/** Stands in for `jinn setup`: writes the config.yaml it would, and the jobs file when STUB_JOBS is set. */
+function setupStub(root) {
+  const stub = path.join(root, "setup-stub.sh")
+  fs.writeFileSync(stub, `#!/bin/sh
+mkdir -p "$JINN_HOME"
+printf 'gateway:\\n  port: 8089\\nportal:\\n  companyName: X\\n' > "$JINN_HOME/config.yaml"
+if [ -n "$STUB_JOBS" ]; then mkdir -p "$JINN_HOME/cron"; printf '%s' "$STUB_JOBS" > "$JINN_HOME/cron/jobs.json"; fi
+exit 0
+`, { mode: 0o755 })
+  return stub
+}
+
+/** Creates a sandbox with the real helper and a stubbed `jinn setup`, and returns the jobs file it left. */
+function createdJobs(setupJobs) {
+  return withHost((host) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-sandbox-helper-setup-"))
+    try {
+      const result = run(host, ["create", "scheduled", "--port", "8089"], {
+        JINN_SANDBOX_NODE_BIN: setupStub(root),
+        ...(setupJobs ? { STUB_JOBS: JSON.stringify(setupJobs) } : {}),
+      })
+      assert.equal(result.status, 0, result.stderr)
+      return JSON.parse(fs.readFileSync(path.join(host, ".jinn-scheduled", "cron", "jobs.json"), "utf8"))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+}
+
+const built = fs.existsSync(path.join(repo, "packages/jinn/dist/bin/jinn.js")) && fs.existsSync(path.join(repo, "packages/jinn/dist/src/shared/config-document.js"))
+
+test("a created sandbox starts no scheduled turn: the board walk is added switched off", { skip: !built && "needs a built checkout" }, () => {
+  const jobs = createdJobs(null)
+  assert.deepEqual(jobs.map((job) => [job.id, job.action, job.enabled]), [["board-walk", "board-walk", false]])
+})
+
+test("a board walk or any other job that setup left switched on is switched off", { skip: !built && "needs a built checkout" }, () => {
+  const jobs = createdJobs([
+    { id: "board-walk", name: "Board walk", enabled: true, schedule: "0 * * * *", prompt: "", action: "board-walk" },
+    { id: "digest", name: "Digest", enabled: true, schedule: "0 9 * * *", prompt: "Summarise the day" },
+  ])
+  assert.deepEqual(jobs.map((job) => [job.id, job.enabled]), [["board-walk", false], ["digest", false]])
+  assert.equal(jobs[1].prompt, "Summarise the day")
+})
