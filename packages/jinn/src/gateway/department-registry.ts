@@ -7,6 +7,7 @@ import type { DepartmentScope } from "../work-items/department-scope.js";
 import { setDepartmentScopeResolver } from "../work-items/department-scope.js";
 import { parseDepartmentYaml, UNSCOPABLE_DEPARTMENTS, type DepartmentDefinition } from "./department-definition.js";
 import { reportStraddlingSubtasks } from "./department-straddle.js";
+import { departmentWorkdirOptions, type WorkdirOptions } from "./department-workdirs.js";
 
 /**
  * What every department's `org/<slug>/department.yaml` says, and the scope each
@@ -15,9 +16,9 @@ import { reportStraddlingSubtasks } from "./department-straddle.js";
  *
  * Scope fails closed (FR-001): a department that has loaded a scope keeps it in the
  * `department_scopes` table, so a file that is refused, or deleted, never opens a
- * scoped department. A refused file that has never loaded counts as `dedicated`.
- * Only a file that loads and says `scope: open` (or that no row has ever
- * contradicted) is open.
+ * scoped department. A refused file with no recorded scope counts as `dedicated`
+ * when it asks for a scope other than `open` (see `parseDepartmentYaml`), and stays
+ * open otherwise, so an old file nothing ever read confines no one on upgrade.
  */
 
 export interface DepartmentRecord {
@@ -97,7 +98,8 @@ function departmentDirs(orgDir: string): string[] {
   }
 }
 
-function readFileState(slug: string, orgDir: string, home: string, current: Set<string>): FileState | undefined {
+function readFileState(slug: string, pass: Pass): FileState | undefined {
+  const { orgDir, home, current } = pass;
   const dir = path.join(orgDir, slug);
   let names: string[] = [];
   try {
@@ -119,7 +121,7 @@ function readFileState(slug: string, orgDir: string, home: string, current: Set<
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     return { definition: null, error: `the file cannot be read: ${(err as Error).message}`, asksToConfine: false, file, warnings: [] };
   }
-  const parsed = parseDepartmentYaml(slug, raw, { home });
+  const parsed = parseDepartmentYaml(slug, raw, { home, workdirOptions: pass.workdirOptions() });
   if (!parsed.ok) return { definition: null, error: parsed.error, asksToConfine: parsed.asksToConfine, file, warnings: [] };
   return { definition: parsed.definition, error: null, asksToConfine: false, file, warnings: parsed.warnings };
 }
@@ -137,11 +139,13 @@ interface Pass {
   next: Map<string, FileState>;
   /** Everything said so far in this pass; the next pass only logs what is new. */
   current: Set<string>;
+  /** The working-directory options, read at most once a pass. */
+  workdirOptions: () => WorkdirOptions;
 }
 
 /** Read one department's file; record its scope when it loads, say why when it does not. */
 function loadDepartment(slug: string, pass: Pass): void {
-  const state = readFileState(slug, pass.orgDir, pass.home, pass.current);
+  const state = readFileState(slug, pass);
   if (!state) return;
   pass.next.set(slug, state);
   for (const warning of state.warnings) say("warn", `Department "${slug}" (${state.file}): ${warning}`, pass.current);
@@ -181,7 +185,15 @@ function notifyChanges(previous: Map<string, string>): void {
 export function refreshDepartments(): void {
   setDepartmentScopeResolver(departmentScopeOf);
   const home = resolveJinnHome();
-  const pass: Pass = { home, orgDir: path.join(home, "org"), known: readLastGood(), next: new Map(), current: new Set() };
+  let workdirOptions: WorkdirOptions | undefined;
+  const pass: Pass = {
+    home,
+    orgDir: path.join(home, "org"),
+    known: readLastGood(),
+    next: new Map(),
+    current: new Set(),
+    workdirOptions: () => (workdirOptions ??= departmentWorkdirOptions(home)),
+  };
   const firstLoad = files === null;
   for (const slug of departmentDirs(pass.orgDir)) loadDepartment(slug, pass);
   reportKeptScopes(pass);

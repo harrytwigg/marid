@@ -97,6 +97,12 @@ describe("departments that are open keep today's behaviour", () => {
     expect(orgRegistry().get("eng-qa")?.department).toBe("qa");
   });
 
+  it.each(["false", "0", '""'])("files an employee whose department field is %s under its directory, as before", (field) => {
+    writeEmployeeFile("engineering", "eng-dev", { department: field });
+    refreshOrg();
+    expect(orgRegistry().get("eng-dev")?.department).toBe("engineering");
+  });
+
   it("lets a file straight under org/ load into the org department", () => {
     writeEmployeeFile("", "loose-dev");
     refreshOrg();

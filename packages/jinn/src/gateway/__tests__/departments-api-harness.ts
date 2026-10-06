@@ -1,6 +1,7 @@
 import type { ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import type { JinnConfig } from "../../shared/types.js";
+import { refreshOrg } from "../org-registry.js";
 
 /** Drives the real API handler as the operator, for the department route suites. */
 
@@ -9,6 +10,15 @@ let api: Api;
 
 export async function loadApi(): Promise<void> {
   api = await import("../api.js");
+}
+
+let orgReloads = 0;
+
+/** How many times a handler has asked the gateway to reload the org since the last call. */
+export function takeOrgReloads(): number {
+  const count = orgReloads;
+  orgReloads = 0;
+  return count;
 }
 
 const config = {
@@ -26,7 +36,10 @@ const context = {
   startTime: Date.now(),
   gatewayAuthToken: "test-token",
   emit: () => {},
-  reloadOrg: () => {},
+  reloadOrg: () => {
+    orgReloads++;
+    refreshOrg(config);
+  },
   sessionManager: { getEngine: () => undefined, getEngines: () => new Map() },
 } as unknown as import("../api.js").ApiContext;
 

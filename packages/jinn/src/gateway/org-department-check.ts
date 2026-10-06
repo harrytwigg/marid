@@ -7,7 +7,8 @@ import type { DepartmentScope } from "../work-items/department-scope.js";
  * non-text field cannot read as one department to the check and another to the roster.
  */
 export function resolveEmployeeDepartment(field: unknown, directory: string): string {
-  if (field === undefined || field === null) return directory;
+  // A falsy value (absent, empty, `false`, `0`) falls back to the directory, as it always has.
+  if (!field) return directory;
   return String(field).trim() || directory;
 }
 

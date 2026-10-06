@@ -139,8 +139,12 @@ async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: stri
     if (!(err instanceof DepartmentWriteError)) throw err;
     return json(res, { error: err.message }, WRITE_STATUS[err.code]);
   }
-  // Refresh before answering, so the response and the next read never trail the write.
-  refreshOrg(context.getConfig());
+  // Re-scan org/ before answering, through the gateway's own reload, so its employee list
+  // and the clients (`org:changed`) see the write now rather than when the watcher catches
+  // up, and the response and the next read never trail it. A context without the hook
+  // (some tests) re-scans directly.
+  if (context.reloadOrg) context.reloadOrg();
+  else refreshOrg(context.getConfig());
   json(res, { department: definitionWire(slug, context) });
 }
 

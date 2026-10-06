@@ -40,17 +40,19 @@ export type ParsedDepartment =
 
 /**
  * A refused file asks to confine its department when its `scope` is anything but `open`.
- * A file that parses is judged by its parsed `scope` key alone: present and not `open` asks,
- * absent or `open` does not, so a quoted value, a flow mapping, `Scoped` and a mistyped
- * scope all count while text in a description does not. A file that does not parse has no
- * key to read, so an anchored line match stands in; a commented-out line does not satisfy it. YAML is case-sensitive, so `scope: OPEN` is not `open` and a key spelled `Scope` is not the scope key.
+ * A file that parses is judged by its parsed `scope` key alone: present and not exactly the
+ * string `open` asks (a quoted value, a list, a flow mapping, `Scoped`, `OPEN` and a mistyped
+ * scope all do), absent or `open` does not, and neither does text in a description or a
+ * document that is not a mapping. A file that does not parse has no key to read, so an
+ * anchored line match stands in: a commented-out line, an empty `scope:` and a key spelled
+ * `Scope` do not satisfy it. YAML is case-sensitive, and so are both checks.
  */
 const SCOPE_LINE = /^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S/m;
 
-function namesScopeOtherThanOpen(raw: string, doc: Record<string, unknown> | null): boolean {
-  if (!doc) return SCOPE_LINE.test(raw);
-  const value = doc.scope;
-  return value !== undefined && value !== null && String(value).trim() !== "open";
+function namesScopeOtherThanOpen(raw: string, parsed: { doc: Record<string, unknown> | null } | null): boolean {
+  if (!parsed) return SCOPE_LINE.test(raw);
+  const value = parsed.doc?.scope;
+  return value !== undefined && value !== null && value !== "open";
 }
 
 export interface ParseContext {
@@ -134,16 +136,16 @@ function readScope(value: unknown): { scope: DepartmentScope } | { error: string
   return { error: `unknown scope ${JSON.stringify(value)}; expected open, scoped or dedicated` };
 }
 
-/** The mapping a file holds, or why it is not one. An empty file is an empty definition. */
-function readDocument(raw: string): { doc: Record<string, unknown> } | { error: string; doc?: undefined } {
+/** The mapping a file holds, or why it is not one. An empty file is an empty definition. `parsed` is false only when the YAML itself does not parse. */
+function readDocument(raw: string): { doc: Record<string, unknown> } | { error: string; parsed: boolean; doc?: undefined } {
   let data: unknown;
   try {
     data = yaml.load(raw);
   } catch (err) {
-    return { error: `the YAML does not parse: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}` };
+    return { error: `the YAML does not parse: ${err instanceof Error ? err.message.split("\n")[0] : String(err)}`, parsed: false };
   }
   if (data === undefined || data === null) return { doc: {} };
-  if (typeof data !== "object" || Array.isArray(data)) return { error: "the file must hold a YAML mapping" };
+  if (typeof data !== "object" || Array.isArray(data)) return { error: "the file must hold a YAML mapping", parsed: true };
   return { doc: data as Record<string, unknown> };
 }
 
@@ -173,11 +175,11 @@ function readExtras(definition: DepartmentDefinition, doc: Record<string, unknow
 export function parseDepartmentYaml(slug: string, raw: string, ctx: ParseContext): ParsedDepartment {
   const read = readDocument(raw);
   if ("error" in read) {
-    // Not a mapping at all (a list) names no scope; one that does not parse is judged by its text.
-    return { ok: false, error: read.error, asksToConfine: namesScopeOtherThanOpen(raw, null) };
+    // A document that parses but is not a mapping (a list, a block of text) has no scope key; one that does not parse is judged by its text.
+    return { ok: false, error: read.error, asksToConfine: namesScopeOtherThanOpen(raw, read.parsed ? { doc: null } : null) };
   }
   const identity = readIdentity(slug, read.doc);
-  if ("error" in identity) return { ok: false, error: identity.error, asksToConfine: namesScopeOtherThanOpen(raw, read.doc) };
+  if ("error" in identity) return { ok: false, error: identity.error, asksToConfine: namesScopeOtherThanOpen(raw, { doc: read.doc }) };
   const warnings: string[] = [];
   const definition: DepartmentDefinition = {
     slug,

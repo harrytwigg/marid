@@ -34,6 +34,28 @@ export function walkEmployeeYamls<T>(
 }
 
 /**
+ * Every absolute `claudeConfigDir` an employee YAML under `orgDir` names, read from the
+ * files rather than the roster. The department scan runs before the employee scan, and a
+ * profile is protected whether or not its employee loads. An unreadable file is skipped;
+ * the employee scan reports it.
+ */
+export function employeeClaudeConfigDirs(orgDir: string): string[] {
+  const dirs = new Set<string>();
+  if (!fs.existsSync(orgDir)) return [];
+  walkEmployeeYamls(orgDir, (fullPath) => {
+    try {
+      const data = yaml.load(fs.readFileSync(fullPath, "utf-8")) as { claudeConfigDir?: unknown } | null;
+      const dir = typeof data?.claudeConfigDir === "string" ? data.claudeConfigDir.trim() : "";
+      if (path.isAbsolute(dir)) dirs.add(dir);
+    } catch {
+      // skip unreadable files
+    }
+    return undefined;
+  });
+  return [...dirs];
+}
+
+/**
  * Find the YAML file for an employee by name.
  * Searches the current instance's org directory recursively.
  */

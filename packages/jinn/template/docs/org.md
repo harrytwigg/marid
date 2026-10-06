@@ -102,7 +102,7 @@ instructions: department   # department | department+company
 | `scoped` | Confined to the department | May read, comment on and hold its Todos |
 | `dedicated` | Confined to the department | May read and comment, but not hold its Todos |
 
-`workdirs`, `skills`, `sharedNotes` and `instructions` are read only when the scope is not `open`. A working directory must sit inside a git work tree whose top is neither your home directory nor above it, and must not be, contain or lie inside the instance home, `~/.claude`, `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
+`workdirs`, `skills`, `sharedNotes` and `instructions` are read only when the scope is not `open`. A working directory must sit inside a git work tree whose top is neither your home directory nor above it, and must not be, contain or lie inside the instance home, `~/.claude`, any employee's Claude profile (`claudeConfigDir`), `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
 
 **What a scope does today.** It changes how Todos move; it does not yet confine anyone:
 

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
@@ -7,7 +8,7 @@ import { resolveJinnHome } from "../../shared/paths.js";
 import { operatorOnlyControlPlaneRoute } from "../control-plane-routes.js";
 import { departmentScopeOf, refreshDepartments } from "../department-registry.js";
 import { refreshOrg } from "../org-registry.js";
-import { call, loadApi } from "./departments-api-harness.js";
+import { call, loadApi, takeOrgReloads } from "./departments-api-harness.js";
 import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile, writeSkill } from "./department-fixtures.js";
 
 /** PATCH /api/departments/:slug, and the employee PATCH that must not cross a scope boundary. */
@@ -54,6 +55,35 @@ describe("PATCH /api/departments/:slug", () => {
     expect(body.department).toMatchObject({ scope: "scoped", displayName: "Side", skills: ["review"], sharedNotes: ["knowledge/shared"], instructions: "department+company" });
     const again = await call("GET", "/api/departments/side-project");
     expect(again.body.department).toEqual(body.department);
+  });
+
+  it("reloads the gateway's org once after a write, and not after a refused one", async () => {
+    writeDepartmentFile("side-project", "name: side-project\n");
+    refreshOrg();
+    takeOrgReloads();
+    expect((await call("PATCH", "/api/departments/side-project", { displayName: "Side" })).status).toBe(200);
+    expect(takeOrgReloads()).toBe(1);
+    expect((await call("PATCH", "/api/departments/side-project", { scope: "dedicated" })).status).toBe(400);
+    expect(takeOrgReloads()).toBe(0);
+  });
+
+  it("refuses a working directory an employee's Claude profile lives in, and writes nothing", async () => {
+    // Beside the instance home: the test temp directory sits inside it, which is a protected tree.
+    const repo = fs.realpathSync(fs.mkdtempSync(path.join(path.dirname(resolveJinnHome()), "jinn-department-profile-")));
+    try {
+      fs.mkdirSync(path.join(repo, "profile"));
+      execFileSync("git", ["init", "-q", repo], { stdio: "ignore" });
+      writeDepartmentFile("side-project", "name: side-project\n");
+      expect((await call("PATCH", "/api/departments/side-project", { workdirs: [repo] })).status).toBe(200);
+      writeEmployeeFile("engineering", "friend", { claudeConfigDir: path.join(repo, "profile") });
+      const before = fs.readFileSync(fileOf("side-project"), "utf-8");
+      const refused = await call("PATCH", "/api/departments/side-project", { workdirs: [repo, path.join(repo, "profile")] });
+      expect(refused.status).toBe(400);
+      expect(refused.body.error).toMatch(/workdirs: dropped/);
+      expect(fs.readFileSync(fileOf("side-project"), "utf-8")).toBe(before);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it("removes a text field with null", async () => {

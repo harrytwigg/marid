@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { resolveJinnHome } from "../shared/paths.js";
+import { employeeClaudeConfigDirs } from "./org-yaml-files.js";
 
 /**
  * Working-directory validation for a department (FR-033). A department's working
@@ -16,9 +17,14 @@ export function departmentStageRoot(): string {
   return path.join(path.dirname(resolveJinnHome()), ".jinn-departments");
 }
 
-/** Profile directories an employee runs its Claude sessions as (`claudeConfigDir`). Nothing names one yet, so callers pass none. */
+/** Profile directories employees run their Claude sessions as (`claudeConfigDir`). */
 export interface WorkdirOptions {
   claudeConfigDirs?: readonly string[];
+}
+
+/** The options every department read and write judges working directories with: each employee's Claude profile, from the YAML under `org/`. */
+export function departmentWorkdirOptions(home: string = resolveJinnHome()): WorkdirOptions {
+  return { claudeConfigDirs: employeeClaudeConfigDirs(path.join(home, "org")) };
 }
 
 /**

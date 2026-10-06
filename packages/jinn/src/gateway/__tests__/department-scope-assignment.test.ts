@@ -149,21 +149,19 @@ describe("a sub-task of an open root", () => {
 
 describe("under a closed department policy", () => {
   const config = path.join(resolveJinnHome(), "config.yaml");
+  const closedPolicy =
+    "engines:\n  default: claude\n  claude: {}\nportal:\n  companyName: Acme\n  companyPrefix: ACM\ngateway:\n  port: 8061\n  host: 127.0.0.1\n  todoDepartments:\n    allowed: [general, side-project]\n    default: general\n";
   beforeEach(() => {
     writeDepartmentFile("side-project", "name: side-project\nscope: scoped\n");
     loadOrg();
-    fs.writeFileSync(
-      config,
-      "engines:\n  default: claude\n  claude: {}\nportal:\n  companyName: Acme\n  companyPrefix: ACM\ngateway:\n  port: 8061\n  host: 127.0.0.1\n  todoDepartments:\n    allowed: [general, side-project]\n    default: general\n",
-    );
   });
   afterEach(() => fs.rmSync(config, { force: true }));
 
   it("still fills an empty department with the default when a scoped employee is assigned", () => {
-    setDepartmentScopeResolver(null);
+    // Created before the policy, so the Todo is still unclassified when it is assigned.
     const item = createWorkItem({ title: "unclassified" });
-    refreshOrg();
-    expect(item.department).toBe("general");
+    expect(item.department).toBeNull();
+    fs.writeFileSync(config, closedPolicy);
     expect(assign(item.id, "side-dev", "side-project")?.department).toBe("general");
   });
 });

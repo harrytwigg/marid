@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import yaml from "js-yaml";
 import { resolveJinnHome } from "../shared/paths.js";
 import { DEPARTMENT_SCOPES, INSTRUCTION_MODES, parseDepartmentYaml } from "./department-definition.js";
+import { departmentWorkdirOptions } from "./department-workdirs.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
 
 /**
@@ -121,7 +122,7 @@ export function writeDepartmentFile(slug: string, patch: DepartmentPatch): void 
   }
   const text = yaml.dump(merged, { lineWidth: -1, noRefs: true });
   // The same judgement the scan will make, applied before anything is written.
-  const parsed = parseDepartmentYaml(slug, text, { home, judgeExtrasWhenOpen: true });
+  const parsed = parseDepartmentYaml(slug, text, { home, judgeExtrasWhenOpen: true, workdirOptions: departmentWorkdirOptions(home) });
   if (!parsed.ok) invalid(parsed.error);
   // Only what this write touches is refused; an entry that was already dropped is the operator's to fix by hand.
   const introduced = parsed.warnings.filter((warning) => Object.keys(patch).some((field) => warning.startsWith(`${field}:`)));

@@ -29,10 +29,15 @@ describe("an upgraded instance with an old department.yaml the parser refuses", 
     expect(error.mock.calls.map((call) => call[0]).join("\n")).toMatch(/has no scope other than open, so the department stays open/);
   });
 
-  it("keeps its employees on the roster and its Todos moving as they did", () => {
-    writeDepartmentFile("engineering", "name: Engineering\n");
+  it.each([
+    ["an unquoted colon that does not parse", LEGACY, /does not parse/],
+    ["a name that is not the directory's", "name: Engineering\n", /does not match the directory/],
+  ])("keeps its employees on the roster and its Todos moving as they did: %s", (_label, text, why) => {
+    writeDepartmentFile("engineering", text);
     writeEmployeeFile("engineering", "alice", { department: "platform" });
     refreshOrg();
+    expect(departmentRecord("engineering").definitionError).toMatch(why);
+    expect(departmentScopeOf("engineering")).toBe("open");
     expect(orgRegistry().get("alice")?.department).toBe("platform");
     const item = createWorkItem({ title: "in engineering", department: "engineering" });
     expect(assignWorkItem(item.id, "alice", "platform", "operator")?.department).toBe("platform");
