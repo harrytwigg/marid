@@ -35,10 +35,11 @@ vi.mock("../registry.js", () => ({
 
 const recordClaudeRateLimitMock = vi.fn();
 vi.mock("../../shared/usageAwareness.js", () => ({ recordClaudeRateLimit: (...a: unknown[]) => recordClaudeRateLimitMock(...a) }));
+let healthReading: Record<string, { state: string; until?: string; recheckAt?: string }> = {};
 const recordEngineUnavailableMock = vi.fn();
 vi.mock("../../shared/engine-health.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../shared/engine-health.js")>()),
-  readEngineHealth: () => ({}),
+  readEngineHealth: () => healthReading,
   recordEngineUnavailable: (...args: unknown[]) => recordEngineUnavailableMock(...args),
 }));
 vi.mock("../../shared/logger.js", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
@@ -59,16 +60,21 @@ import type { EngineResult, EngineRunOpts, Employee, Session } from "../../share
 const FRIEND = "/Users/operator/.claude-friend";
 const friendProfile = claudeProfileFromDir(FRIEND);
 
-function opts(employee: Partial<Employee>, run: ReturnType<typeof vi.fn>, substitutes: Record<string, ReturnType<typeof vi.fn>>): RateLimitHandlerOpts {
+function opts(
+  employee: Partial<Employee>,
+  run: ReturnType<typeof vi.fn>,
+  substitutes: Record<string, ReturnType<typeof vi.fn>>,
+  engine = "claude",
+): RateLimitHandlerOpts {
   return {
-    session: makeSession({ engine: "claude", engineSessionId: "claude-thread-1" }),
+    session: makeSession({ engine, engineSessionId: "thread-1" }),
     attemptToken: "attempt-1",
     prompt: "hello",
     engineConfig: { bin: "claude", model: "opus" },
     config: {
       engines: {
         claude: { bin: "claude", model: "opus", fallback: ["codex", "pi"] },
-        codex: { bin: "codex", model: "gpt" },
+        codex: { bin: "codex", model: "gpt", fallback: ["claude"] },
         pi: { bin: "pi", model: "m" },
       },
       remote: { root: "/srv/w", mount: "/mnt/h" },
@@ -84,6 +90,7 @@ function opts(employee: Partial<Employee>, run: ReturnType<typeof vi.fn>, substi
 
 beforeEach(() => {
   vi.clearAllMocks();
+  healthReading = {};
   sessionStatus = "waiting";
   deadlineMs = Date.now() - 1;
 });
@@ -135,5 +142,47 @@ describe("the default profile and remote employees keep main's behaviour", () =>
     expect(pi).toHaveBeenCalledTimes(1);
     expect(outcome.kind).toBe("fallback");
     expect(recordEngineUnavailableMock).toHaveBeenCalledWith("claude", "Claude usage limit", 1_900_000_000);
+  });
+});
+
+describe("a substitute that lands on claude, for an employee on a named profile", () => {
+  const hourAhead = () => new Date(Date.now() + 3600_000).toISOString();
+
+  it("runs on the employee's profile", async () => {
+    let seen: EngineRunOpts | undefined;
+    const claude = vi.fn(async (o: EngineRunOpts) => { seen = o; return { result: "ok", sessionId: "c1" } as EngineResult; });
+    const outcome = await handleRateLimit(opts({ claudeConfigDir: FRIEND }, vi.fn(), { claude }, "codex"));
+    expect(outcome.kind).toBe("fallback");
+    expect(seen?.claudeProfile).toEqual(friendProfile);
+  });
+
+  it("is judged on the employee's own account, not the default account's", async () => {
+    // The operator's account is out; the employee's own is not, so claude is still a good substitute.
+    healthReading = { claude: { state: "exhausted", until: hourAhead(), recheckAt: hourAhead() } };
+    const claude = vi.fn(async () => ({ result: "ok", sessionId: "c1" }) as EngineResult);
+    const pi = vi.fn(async () => ({ result: "ok", sessionId: "p1" }) as EngineResult);
+    const config = opts({ claudeConfigDir: FRIEND }, vi.fn(), { claude, pi }, "codex");
+    (config.config.engines as any).codex.fallback = ["claude", "pi"];
+    await handleRateLimit(config);
+    expect(claude).toHaveBeenCalledTimes(1);
+    expect(pi).not.toHaveBeenCalled();
+  });
+
+  it("skips claude when the employee's own account is the one that is out", async () => {
+    healthReading = { [`claude:${friendProfile.key}`]: { state: "exhausted", until: hourAhead(), recheckAt: hourAhead() } };
+    const claude = vi.fn(async () => ({ result: "ok", sessionId: "c1" }) as EngineResult);
+    const pi = vi.fn(async () => ({ result: "ok", sessionId: "p1" }) as EngineResult);
+    const config = opts({ claudeConfigDir: FRIEND }, vi.fn(), { claude, pi }, "codex");
+    (config.config.engines as any).codex.fallback = ["claude", "pi"];
+    await handleRateLimit(config);
+    expect(claude).not.toHaveBeenCalled();
+    expect(pi).toHaveBeenCalledTimes(1);
+  });
+
+  it("a default-profile employee's claude substitute carries no profile", async () => {
+    let seen: EngineRunOpts | undefined;
+    const claude = vi.fn(async (o: EngineRunOpts) => { seen = o; return { result: "ok", sessionId: "c1" } as EngineResult; });
+    await handleRateLimit(opts({}, vi.fn(), { claude }, "codex"));
+    expect(seen?.claudeProfile).toBeNull();
   });
 });

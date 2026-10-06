@@ -2,6 +2,7 @@ import type { Employee, Engine, JinnConfig } from "../shared/types.js";
 import { engineAvailable, engineSupportsRemote, type EngineName } from "../shared/models.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
+import { substituteHealth } from "./rate-limit-account.js";
 import { engineHealthForTarget, preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
 
 /** What a routed turn brought with it about where the session should run. */
@@ -61,7 +62,7 @@ export function newSessionEngineSelection(
         && (!remote || engineSupportsRemote(candidate)),
       // Scoped to the machine this session will actually run on: a login that
       // died on the gateway is no reason to move a remote employee's session.
-      engineHealthForTarget(readEngineHealth(), preference.employee),
+      substituteHealth(engineHealthForTarget(readEngineHealth(), preference.employee), preference.employee),
     );
   return { engine, ...inheritedDefaults(preference, engine !== preferred) };
 }

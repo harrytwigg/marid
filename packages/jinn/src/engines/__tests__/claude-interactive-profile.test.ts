@@ -27,7 +27,13 @@ vi.mock("../sse-pty-proxy.js", () => ({
   },
 }));
 
-import { InteractiveClaudeEngine } from "../claude-interactive.js";
+const resets = vi.hoisted(() => ({ calls: 0 }));
+vi.mock("../../shared/engine-reset-times.js", () => ({
+  // The gateway's own account's 5h reset, four hours out: never a named profile's.
+  claudeResetsAtSeconds: async () => { resets.calls++; return Math.floor(Date.now() / 1000) + 4 * 3600; },
+}));
+
+import { InteractiveClaudeEngine, rateLimitFromStopFailure } from "../claude-interactive.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { resetClaudeProfileTrustForTests } from "../claude-profile-launch.js";
 import { claudeProfileFromDir, type ClaudeProfile } from "../../shared/claude-profile.js";
@@ -115,5 +121,23 @@ describe("InteractiveClaudeEngine on a named Claude profile (FR-051, FR-052, FR-
     expect(settings).not.toHaveProperty("attribution");
     expect(settings).not.toHaveProperty("skipDangerousModePermissionPrompt");
     expect(fs.existsSync(path.join(profile.dir, ".claude.json"))).toBe(false);
+  });
+});
+
+describe("a named profile's rate limit (FR-055, FR-056)", () => {
+  const stopFailure = { hook_event_name: "StopFailure", error: "rate_limit" } as any;
+
+  it("states no reset: the usage source reads only the gateway's own account, so it backs off instead", async () => {
+    resets.calls = 0;
+    const rl = await rateLimitFromStopFailure(stopFailure, profile);
+    expect(rl).toEqual({ status: "rejected", rateLimitType: "interactive_detected" });
+    expect(resets.calls).toBe(0);
+  });
+
+  it("still asks the usage source on the default profile", async () => {
+    resets.calls = 0;
+    const rl = await rateLimitFromStopFailure(stopFailure);
+    expect(rl?.resetsAt).toBeGreaterThan(Date.now() / 1000);
+    expect(resets.calls).toBe(1);
   });
 });

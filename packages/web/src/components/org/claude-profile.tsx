@@ -22,7 +22,7 @@ export function ClaudeProfileBadge({ profile }: { profile: Employee["claudeProfi
     <span
       data-testid="claude-profile-badge"
       title={`Runs on the Claude profile ${profile.path}`}
-      className="shrink-0 max-w-[76px] whitespace-nowrap overflow-hidden text-ellipsis text-[length:var(--text-caption2)] font-[var(--weight-semibold)] py-px px-[6px] rounded-[10px]"
+      className="inline-block max-w-full mt-[1px] whitespace-nowrap overflow-hidden text-ellipsis align-top text-[length:var(--text-caption2)] leading-[var(--leading-tight)] font-[var(--weight-semibold)] py-0 px-[6px] rounded-[10px]"
       style={PROFILE_TINT}
     >
       {claudeProfileLabel(profile)}
@@ -39,8 +39,8 @@ export function ClaudeProfileRow({ profile }: { profile: Employee["claudeProfile
       <p className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[var(--tracking-wide)] text-[var(--text-tertiary)] mb-[var(--space-1)]">
         Claude profile
       </p>
-      <p className="text-[length:var(--text-body)] text-[var(--text-primary)] m-0 flex items-center gap-[var(--space-2)] min-w-0">
-        <span className="font-[family-name:var(--font-mono)] whitespace-nowrap overflow-hidden text-ellipsis min-w-0">{profile.path}</span>
+      <p className="text-[length:var(--text-body)] text-[var(--text-primary)] m-0 flex items-start gap-[var(--space-2)] min-w-0">
+        <span title={profile.path} className="font-[family-name:var(--font-mono)] break-all min-w-0">{profile.path}</span>
         <span className="shrink-0 text-[length:var(--text-caption2)] font-[var(--weight-semibold)] py-px px-[7px] rounded-[10px]" style={PROFILE_TINT}>
           {profile.key}
         </span>

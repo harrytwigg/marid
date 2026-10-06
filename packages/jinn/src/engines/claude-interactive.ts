@@ -402,13 +402,13 @@ export function computeInteractiveCost(transcriptPath: string, model?: string, a
 /**
  * Map a StopFailure payload to an EngineRateLimitInfo in the shape ClaudeEngine
  * produces from `rate_limit_event` JSON, so detectRateLimit() and manager.ts's
- * wait-retry machinery work unchanged. The payload never names the reset, so a
- * rate-limit failure — and only that one — asks the account's usage source.
+ * wait-retry machinery work unchanged. The payload never names the reset, so a rate-limit failure asks the
+ * usage source, which reads only the gateway's own account: a named profile states no reset and backs off instead.
  */
-export async function rateLimitFromStopFailure(payload: HookPayload | undefined): Promise<EngineRateLimitInfo | null> {
+export async function rateLimitFromStopFailure(payload: HookPayload | undefined, profile?: ClaudeProfile): Promise<EngineRateLimitInfo | null> {
   if (!payload || payload.hook_event_name !== "StopFailure") return null;
   if (payload.error !== "rate_limit") return null;
-  const resetsAt = await claudeResetsAtSeconds();
+  const resetsAt = profile ? undefined : await claudeResetsAtSeconds();
   return { status: "rejected", rateLimitType: "interactive_detected", ...(resetsAt === undefined ? {} : { resetsAt }) };
 }
 
@@ -2724,7 +2724,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     }
     // Map a StopFailure rate-limit into result.rateLimit so manager.ts's
     // wait/retry/fallback machinery engages exactly as it does for `claude -p`.
-    const rl = await rateLimitFromStopFailure(resolver.stopFailure);
+    const rl = await rateLimitFromStopFailure(resolver.stopFailure, opts.claudeProfile ?? undefined);
     if (rl) result.rateLimit = rl;
     // Turn settled as an API-error failure — the CLI may still be retrying.
     // Keep listening for a late Stop so a wrong "failed" verdict self-corrects.

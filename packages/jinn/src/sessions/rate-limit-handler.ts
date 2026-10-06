@@ -35,7 +35,7 @@ import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
 } from "../shared/rateLimit.js";
-import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
+import { rateLimitAccount, recordAccountRateLimit, resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
 import { engineHealthForTarget, readEngineHealth, resolveHealthyFallbackEngine } from "../shared/engine-health.js";
 import { beginEngineSubstitution } from "./engine-override.js";
 import { resolveEngineRunMcp } from "./engine-run-mcp.js";
@@ -133,15 +133,14 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     : engineAvailable(config, candidate));
   // A board walk turn never changes engine: it runs on the engine it is
   // configured for because that is where its tools can be clamped to the walk's
-  // own, and a substitute would bring its own surface with it. Nor does a local
-  // named Claude profile, which has no fallback chain of its own yet.
+  // own, and a substitute would bring its own surface with it. Nor does a local named profile (no chain yet).
   const substituteName = isBoardWalkTurn(session) || claudeProfile ? undefined : resolveHealthyFallbackEngine(
     config,
     session.engine,
     isUsable,
     // Same scoping as a new session's: health recorded about the gateway's own
     // login says nothing about the host this turn is going back to.
-    engineHealthForTarget(readEngineHealth(), remoteTarget),
+    substituteHealth(engineHealthForTarget(readEngineHealth(), remoteTarget), employee),
   );
   const substituteEngine = substituteName ? engines.get(substituteName) : undefined;
   if (!substituteName && remote) {
@@ -196,6 +195,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       // entirely to avoid.
       ...remoteTarget,
       ...resolveEngineRunMcp({ config, employee, engine: substituteName, sessionId: session.id }),
+      claudeProfile: substituteName === "claude" ? resolveEmployeeClaudeProfile(employee) : null,
       attachments: attachments?.length ? attachments : undefined,
       sessionId: session.id,
       ...(hooks.onFallbackStream ? { onStream: hooks.onFallbackStream } : {}),
