@@ -167,8 +167,8 @@ export function groupIdsByPaneKey(layout: SplitLayout): Map<string, string> {
 }
 
 /** The chat whose pane shows `tabId` once that tab is shown: the tab itself for a chat, the chat
- * it sits beside for a document. Null for a tab not in the layout, and for a new chat's pane (and a
- * document shown in one), which has no session for the route to move to. */
+ * it sits beside for a document or a new chat. Null for a tab not in the layout, and for one whose
+ * pane holds no chat, which has no session for the route to move to. */
 export function paneSessionForTab(layout: SplitLayout, tabId: string): string | null {
   if (isChatTabId(tabId)) return groupOfSession(layout, tabId) ? tabId : null
   const shown = showTab(layout, tabId)

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode, type RefCallback } from 'react'
 import type { ChatGrid } from '../chat-grid'
 import { useChatGridMotion } from '../use-chat-grid-motion'
-import { focusedGroup, groupOfSession, paneKeyOf, routeSessionOf, setVisibleSplitSizes } from './split-layout'
+import { focusedGroup, paneKeyOf, paneSessionForTab, setVisibleSplitSizes } from './split-layout'
 import { isChatTabId, isDocTabId } from './tab-kind'
 import { usePaneTabsDocPane } from '@/components/chat/pane-tabs-context'
 import { splitGeometry, type Rect, type SplitHandle } from './split-geometry'
@@ -126,9 +126,8 @@ function useChatlessPaneProps(props: ChatGridProps, split: SplitLayoutControls):
       // The key is the pane's tab when it was drawn; its strip may have just shown another one.
       split.focusPane(key)
       // A new chat or document shown over a chat makes that chat the route's, as the chat's own pane does.
-      const owner = groupOfSession(split.layout, key)
-      const chat = owner ? routeSessionOf(owner, split.layout.focusHistory) : ''
-      if (chat) onFocus(chat)
+      const chat = paneSessionForTab(split.layout, key)
+      if (chat && chat !== props.focusedId) onFocus(chat)
     },
     renderPane: (key, active) => (isDocTabId(key) ? renderDocPane(key) : renderPane(key, active)),
   }
