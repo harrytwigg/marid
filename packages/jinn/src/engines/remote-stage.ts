@@ -8,6 +8,7 @@ import { JINN_HOME } from "../shared/paths.js";
 import { FARM_FILTERED_DIRS, REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
 import { runLocalWakeCommand, sendWakeOnLan } from "./remote-wake.js";
 import { ancestorMemoryExcludes } from "../shared/remote-department.js";
+import { assertRemoteClaudeSkipsAncestors, clearRemoteClaudeCheckCache } from "./remote-claude-check.js";
 import { rebuildScopedHome, remoteDepartmentEnv, remoteDepartmentFileRoots, scopedRemoteDepartment, syncRemoteDepartmentStage } from "./remote-department-stage.js";
 import { parseVersionOutput } from "../shared/brand.js";
 import { getPackageVersion } from "../shared/version.js";
@@ -692,6 +693,7 @@ const seededTrust = new Set<string>();
 /** Exported for tests: forget per-host staging so it runs again. */
 export function clearRemoteStagingCache(): void {
   seededTrust.clear();
+  clearRemoteClaudeCheckCache();
   stagingQueues.clear();
 }
 
@@ -1173,6 +1175,7 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
   const sessionHome = remoteSessionHome(facts, jinnSessionId, engine);
   // Refused here, before anything is written, if it cannot be staged in scope.
   const department = scopedRemoteDepartment(target, remote, facts, engine);
+  if (department) await assertRemoteClaudeSkipsAncestors(destination, facts);
   const realStageDir = await stageHostState(opts, destination, sessionHome, department);
 
   const tunnelPort = await probeFreePort(destination, facts);
@@ -1200,7 +1203,7 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
   }
 
   // A scoped session skips every CLAUDE.md above its stage directory (`ancestorMemoryExcludes`).
-  const excludes = department ? { claudeMdExcludes: ancestorMemoryExcludes([target.remoteCwd!, ...(realStageDir ? [realStageDir] : [])]) } : undefined;
+  const excludes = department ? { claudeMdExcludes: ancestorMemoryExcludes([target.remoteCwd!, realStageDir!]) } : undefined;
   const settingsPath = await stageSettings(destination, facts, sessionHome, jinnSessionId, excludes);
   const mcp = { resolved: opts.resolvedMcp, departmentFileRoots: remoteDepartmentFileRoots(target) };
   const mcpConfigPath = await stageMcpConfig(destination, facts, sessionHome, tunnelPort, mcp);

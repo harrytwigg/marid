@@ -111,25 +111,20 @@ done
  * under it, or overlaps one of the forbidden trees (the mounted gateway home, the
  * per-host stage root), is refused before anything is changed.
  *
- * Claude Code also loads the instructions in every directory above its cwd, and a
- * colleague's farm links the company CLAUDE.md into its own cwd, which may be one of them.
- * The session's settings exclude those files (`claudeMdExcludes`), so the sync refuses
- * a host whose Claude Code cannot be told to: its binary must name the setting. It prints
- * the stage directory's real path, whose ancestors the exclusions must also cover.
+ * It prints the stage directory's real path: Claude Code walks up from its resolved cwd,
+ * so the exclusions of the instructions above it (`ancestorMemoryExcludes`) must cover
+ * that spelling too.
  *
  * Arguments: the departments root (`<remote.root>/.jinn-departments`), the slug, the
- * incoming directory's name, the host's Claude Code binary, then the forbidden trees.
+ * incoming directory's name, then the forbidden trees.
  */
 export const STAGE_SYNC_SCRIPT = `
 set -eu
 root=$1
 slug=$2
 incoming_name=$3
-claude_bin=$4
-shift 4
+shift 3
 fail() { echo "remote department stage: $*" >&2; exit 1; }
-grep -q claudeMdExcludes "$claude_bin" 2>/dev/null \\
-  || fail "the Claude Code at \${claude_bin:-(none)} cannot be told to skip the CLAUDE.md files above the stage directory (claudeMdExcludes); update it"
 case "$slug" in ''|.*|*/*) fail "\\"$slug\\" is not a department name" ;; esac
 case "$incoming_name" in ".$slug".incoming-??????) ;; *) fail "\\"$incoming_name\\" is not an incoming directory name" ;; esac
 stage="$root/$slug"
@@ -223,7 +218,7 @@ export async function rebuildScopedHome(destination: string, facts: RemoteFacts,
 
 /** The ssh remote command that applies a tar stream on stdin to department `slug`'s stage directory. */
 export function buildStageSyncCommand(remote: RemoteExecutionConfig, facts: RemoteFacts, slug: string, incomingName: string): string {
-  const args = [remoteDepartmentsRoot(remote.root), slug, incomingName, facts.claudeBin ?? "", remote.mount, facts.stageDir];
+  const args = [remoteDepartmentsRoot(remote.root), slug, incomingName, remote.mount, facts.stageDir];
   return ["sh", "-c", shq(STAGE_SYNC_SCRIPT), "sh", ...args.map(shq)].join(" ");
 }
 
@@ -239,15 +234,19 @@ function incomingName(slug: string): string {
  * before the trust seed, whose `mkdir -p` would otherwise create an empty stage directory.
  * Returns the stage directory's real path on the host.
  */
-export async function syncRemoteDepartmentStage(destination: string, facts: RemoteFacts, remote: RemoteExecutionConfig, slug: string): Promise<string | undefined> {
+export async function syncRemoteDepartmentStage(destination: string, facts: RemoteFacts, remote: RemoteExecutionConfig, slug: string): Promise<string> {
   const { files } = generateStageFileSet({ home: resolveJinnHome(), slug, definition: departmentRecord(slug).definition });
   const res = await sshRun(destination, [buildStageSyncCommand(remote, facts, slug, incomingName(slug))], { stdin: buildStageTar(files) });
   if (res.code !== 0) {
     throw new Error(`could not sync department "${slug}"'s stage directory on ${destination}: ${res.stderr.trim() || `exit ${res.code}`}`);
   }
   const lines = res.stdout.split("\n").map((line) => line.trim());
+  // Without the real path the exclusions would cover only the configured spelling, and a
+  // root reached through a link would leave the directories Claude Code walks unexcluded.
+  const real = lines.find((line) => line.startsWith("real_stage="))?.slice("real_stage=".length);
+  if (!real) throw new Error(`could not sync department "${slug}"'s stage directory on ${destination}: the sync did not report where it is`);
   logger.info(`remote: department "${slug}" stage directory synced on ${destination} (${lines.find((line) => line.startsWith("written=")) ?? ""})`);
-  return lines.find((line) => line.startsWith("real_stage="))?.slice("real_stage=".length) || undefined;
+  return real;
 }
 
 // ── What a scoped spawn is staged with ──────────────────────────────────────

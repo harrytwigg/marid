@@ -479,8 +479,13 @@ An employee in a `scoped` or `dedicated` department (see the instance's
   unscoped colleague whose `remoteCwd` is `remote.root` has the company
   `CLAUDE.md` linked there. The scoped session's settings list every such path
   above the stage directory, as configured and as the host resolves it, in
-  `claudeMdExcludes`. The sync refuses a host whose Claude Code binary does not
-  know that setting. No remote employee, scoped or not, may have a `remoteCwd`
+  `claudeMdExcludes`. A scoped spawn is refused on a host whose `claude --version`
+  is older than 2.1.288, the oldest build verified to honour it (asked once per
+  host and binary), and when the sync does not report the real path. The
+  exclusions cover every directory above the stage directory, so with no
+  Claude profile configured and `remote.root` under the remote user's home, that
+  user's `~/.claude/CLAUDE.md` and `~/.claude/rules/` are skipped as well; a
+  profile's own `CLAUDE.md` lives in the profile and still loads. No remote employee, scoped or not, may have a `remoteCwd`
   in `<remote.root>/.jinn-departments`.
 - **Its own `remoteCwd` is its work area**, named in the session's prompt and
   created on the host if it is missing. It

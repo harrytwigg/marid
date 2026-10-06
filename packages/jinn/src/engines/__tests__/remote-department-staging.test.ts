@@ -18,7 +18,7 @@ import type { RemoteExecutionConfig } from "../../shared/config-types.js";
  * into its remoteCwd.
  */
 
-const hoisted = vi.hoisted(() => ({ ssh: [] as string[] }));
+const hoisted = vi.hoisted(() => ({ ssh: [] as string[], rewrite: undefined as ((command: string) => string) | undefined }));
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -28,7 +28,7 @@ vi.mock("node:child_process", async (importOriginal) => {
       if (command !== "ssh") return actual.spawn(command, args as string[], options);
       const remote = args.slice(args.indexOf("--") + 2).join(" ");
       hoisted.ssh.push(remote);
-      return actual.spawn("sh", ["-c", remote], options);
+      return actual.spawn("sh", ["-c", hoisted.rewrite?.(remote) ?? remote], options);
     }) as typeof actual.spawn,
   };
 });
@@ -65,6 +65,7 @@ async function stage(target: ReturnType<typeof employeeRemoteTarget>, jinnSessio
 
 beforeEach(() => {
   hoisted.ssh.length = 0;
+  hoisted.rewrite = undefined;
   clearRemoteStagingCache();
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "remote-dept-")));
   const mount = path.join(tmp, "mount");
@@ -78,8 +79,8 @@ beforeEach(() => {
     home: path.join(tmp, "host"), stageDir: path.join(tmp, "host", ".jinn-remote-stage"), nodeBin: process.execPath,
     claudeBin: path.join(tmp, "host", "claude"), jinnVersion: "0.0.0", entryDir: path.join(tmp, "host", "entry"),
   };
-  // Stands in for a Claude Code that knows the setting the scoped settings rely on.
-  fs.writeFileSync(facts.claudeBin!, "#!/bin/sh\n# claudeMdExcludes\n", { mode: 0o755 });
+  // Stands in for a Claude Code recent enough to know the setting the scoped settings rely on.
+  fs.writeFileSync(facts.claudeBin!, '#!/bin/sh\n[ "$1" = --version ] && echo "2.1.291 (Claude Code)"\n', { mode: 0o755 });
   const home = resolveJinnHome();
   fs.mkdirSync(path.join(home, "knowledge", "departments", "side-project"), { recursive: true });
   fs.writeFileSync(path.join(home, "knowledge", "departments", "side-project", "INSTRUCTIONS.md"), "Side project rules.\n");
@@ -170,9 +171,22 @@ describe("a department-scoped employee on a remote host", { timeout: 60_000 }, (
     expect(JSON.parse(fs.readFileSync(staging.settingsPath, "utf-8")).claudeMdExcludes).toBeUndefined();
   });
 
-  it("is refused on a host whose Claude Code cannot be told to skip the CLAUDE.md files above it", async () => {
-    fs.writeFileSync(facts.claudeBin!, "#!/bin/sh\n");
-    await expect(stage(employeeRemoteTarget(employee(), scoped()))).rejects.toThrow(/cannot be told to skip the CLAUDE\.md files above the stage directory/);
+  it("is refused, before anything is staged, on a host whose Claude Code is too old to skip the CLAUDE.md files above it", async () => {
+    fs.writeFileSync(facts.claudeBin!, '#!/bin/sh\necho "2.0.14 (Claude Code)"\n');
+    await expect(stage(employeeRemoteTarget(employee(), scoped()))).rejects.toThrow(/reports 2\.0\.14; a department-scoped session needs 2\.1\.288 or later/);
+    expect(hoisted.ssh).toHaveLength(1);
+  });
+
+  it("asks the host's Claude Code once, not on every spawn", async () => {
+    const target = employeeRemoteTarget(employee(), scoped());
+    await stage(target, "s1");
+    await stage(target, "s2");
+    expect(hoisted.ssh.filter((command) => command.endsWith("--version"))).toHaveLength(1);
+  });
+
+  it("is refused when the sync does not say where the stage directory resolves, rather than exclude one spelling only", async () => {
+    hoisted.rewrite = (command) => (command.includes("remote department stage") ? `{ ${command}; } | grep -v '^real_stage='` : command);
+    await expect(stage(employeeRemoteTarget(employee(), scoped()))).rejects.toThrow(/the sync did not report where it is/);
     expect(hoisted.ssh.some((command) => command.includes("remote-trust-seed.mjs' '"))).toBe(false);
   });
 

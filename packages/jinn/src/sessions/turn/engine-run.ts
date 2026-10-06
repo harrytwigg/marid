@@ -1,6 +1,6 @@
 import { sessionClaudeProfile } from "../session-account.js";
 import { remoteScopeFor, spawnCwd } from "../session-cwd.js";
-import { employeeRemoteTarget } from "../../shared/remote-target.js";
+import { employeeRemoteTarget, isRemoteTarget } from "../../shared/remote-target.js";
 import { logger } from "../../shared/logger.js";
 import { selectClaudeModelFallback } from "../../shared/model-fallback.js";
 import { getModelRegistry, refreshClaudeModels } from "../../shared/models.js";
@@ -45,7 +45,7 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     resumeSessionId: plan.resumeSessionId,
     systemPrompt: prepared.systemPrompt,
     platformContextRefresh: prepared.refresh,
-    cwd: spawnCwd(input.session, Boolean(input.employee?.remoteHost)),
+    cwd: spawnCwd(input.session, isRemoteTarget(input.employee)),
     bin: plan.engineConfig.bin,
     model: args.model,
     effortLevel: plan.effortLevel,

@@ -17,7 +17,7 @@ vi.mock("../registry.js", async (importOriginal) => ({
   getSession: () => hoisted.session,
 }));
 
-const { claudeKnowsMdExcludes, clearClaudeMdExcludesCacheForTests, setClaudeMdExcludesProbe } = await import("../../shared/claude-md-excludes.js");
+const { claudeMdExcludesProblem, clearClaudeMdExcludesCacheForTests, localClaudeMdExcludesProblem, setClaudeMdExcludesProbe } = await import("../../shared/claude-md-excludes.js");
 const { writeClaudeSessionSettings } = await import("../../engines/claude-profile-launch.js");
 const { departmentStageDir } = await import("../../gateway/department-scope/paths.js");
 const { refreshOrg } = await import("../../gateway/org-registry.js");
@@ -50,28 +50,34 @@ const bin = (name: string, content: string | Buffer) => {
   return file;
 };
 
-describe("claudeKnowsMdExcludes", () => {
-  it("finds the setting's name in a binary, through a link, and not in one that lacks it or does not exist", () => {
-    const knows = bin("new", "#!/bin/sh\n# claudeMdExcludes\n");
-    fs.symlinkSync(knows, path.join(tmp, "claude"));
-    expect(claudeKnowsMdExcludes(knows)).toBe(true);
-    expect(claudeKnowsMdExcludes(path.join(tmp, "claude"))).toBe(true);
-    expect(claudeKnowsMdExcludes(bin("old", "#!/bin/sh\n"))).toBe(false);
-    expect(claudeKnowsMdExcludes(path.join(tmp, "missing"))).toBe(false);
+/** A stand-in Claude Code that prints `version` for `--version`, as a wrapper script would. */
+const claude = (name: string, version: string) => bin(name, `#!/bin/sh\n[ "$1" = --version ] && echo "${version} (Claude Code)"\n`);
+
+describe("claudeMdExcludesProblem", () => {
+  it("passes the minimum and later, and names the version and the minimum otherwise", () => {
+    for (const ok of ["2.1.288 (Claude Code)", "2.1.291", "2.2.0", "3.0.0"]) expect(claudeMdExcludesProblem("x", ok), ok).toBeNull();
+    expect(claudeMdExcludesProblem("/opt/claude", "2.1.287 (Claude Code)")).toMatch(/^the Claude Code at \/opt\/claude reports 2\.1\.287; a department-scoped session needs 2\.1\.288 or later/);
+    expect(claudeMdExcludesProblem("/opt/claude", "1.9.999")).toMatch(/reports 1\.9\.999/);
+    expect(claudeMdExcludesProblem("/opt/claude", "")).toMatch(/did not report a version/);
+  });
+});
+
+describe("localClaudeMdExcludesProblem", () => {
+  it("asks the binary, through a link or a wrapper script, and refuses one that is old, silent or missing", () => {
+    const current = claude("current", "2.1.291");
+    fs.symlinkSync(current, path.join(tmp, "claude"));
+    expect(localClaudeMdExcludesProblem(current)).toBeNull();
+    expect(localClaudeMdExcludesProblem(path.join(tmp, "claude"))).toBeNull();
+    expect(localClaudeMdExcludesProblem(claude("old", "2.0.14"))).toMatch(/reports 2\.0\.14/);
+    expect(localClaudeMdExcludesProblem(bin("silent", "#!/bin/sh\nexit 1\n"))).toMatch(/did not report a version/);
+    expect(localClaudeMdExcludesProblem(path.join(tmp, "missing"))).toMatch(/did not report a version/);
   });
 
-  it("finds a name that straddles two read chunks", () => {
-    const chunk = 4 * 1024 * 1024;
-    const content = Buffer.alloc(chunk + 64, 0x20);
-    content.write("claudeMdExcludes", chunk - 5);
-    expect(claudeKnowsMdExcludes(bin("big", content))).toBe(true);
-  });
-
-  it("answers again when the binary is replaced", () => {
-    const file = bin("swap", "#!/bin/sh\n");
-    expect(claudeKnowsMdExcludes(file)).toBe(false);
-    fs.writeFileSync(file, "#!/bin/sh\n# claudeMdExcludes, now\n");
-    expect(claudeKnowsMdExcludes(file)).toBe(true);
+  it("asks again when the binary is replaced", () => {
+    const file = claude("swap", "2.0.1");
+    expect(localClaudeMdExcludesProblem(file)).not.toBeNull();
+    fs.writeFileSync(file, '#!/bin/sh\necho "2.1.300 (Claude Code), upgraded"\n');
+    expect(localClaudeMdExcludesProblem(file)).toBeNull();
   });
 });
 
@@ -100,13 +106,13 @@ describe("a scoped local turn", () => {
   const session = () => makeSession({ employee: "local-side-dev", scopeDepartment: SLUG, engine: "claude" });
 
   it("is refused when the installed Claude Code cannot skip the instructions above its stage directory", () => {
-    setClaudeMdExcludesProbe(claudeKnowsMdExcludes);
-    expect(refuseScopedTurn(session(), undefined, false, bin("old-claude", "#!/bin/sh\n"))).toMatch(/cannot be told to skip the CLAUDE\.md files above the department's stage directory/);
-    expect(refuseScopedTurn(session(), undefined, false, bin("new-claude", "# claudeMdExcludes\n"))).toBeUndefined();
+    setClaudeMdExcludesProbe(localClaudeMdExcludesProblem);
+    expect(refuseScopedTurn(session(), undefined, false, claude("old-claude", "2.0.14"))).toMatch(/^This department-scoped session cannot start a turn: the Claude Code at .*old-claude reports 2\.0\.14; .*claudeMdExcludes/);
+    expect(refuseScopedTurn(session(), undefined, false, claude("new-claude", "2.1.291"))).toBeUndefined();
   });
 
   it("does not ask on a remote host, where the sync checks the host's own Claude Code", () => {
-    const probe = vi.fn(() => false);
+    const probe = vi.fn((): string | null => "too old");
     setClaudeMdExcludesProbe(probe);
     expect(refuseScopedTurn(session(), undefined, true)).toBeUndefined();
     expect(probe).not.toHaveBeenCalled();

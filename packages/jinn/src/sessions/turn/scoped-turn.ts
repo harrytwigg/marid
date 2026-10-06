@@ -1,6 +1,6 @@
 import { prepareDepartmentStage } from "../../gateway/department-stage/stage.js";
 import type { Session } from "../../shared/types.js";
-import { claudeMayRunScoped } from "../../shared/claude-md-excludes.js";
+import { scopedClaudeProblem } from "../../shared/claude-md-excludes.js";
 import { resolveBin } from "../../shared/resolve-bin.js";
 import { lostBindingReason, scopedDepartmentOf } from "../../work-items/department-scope.js";
 
@@ -25,9 +25,8 @@ export function refuseScopedTurn(session: Session, engineOverride: string | unde
 
 /** A local scoped turn: its Claude Code can skip the instructions above the stage directory, and the directory is in place. */
 function refuseLocalScopedTurn(department: string, claudeBin: string): string | undefined {
-  if (!claudeMayRunScoped(resolveBin("claude", claudeBin))) {
-    return "This department-scoped session cannot start a turn: the installed Claude Code cannot be told to skip the CLAUDE.md files above the department's stage directory (claudeMdExcludes); update it.";
-  }
+  const claude = scopedClaudeProblem(resolveBin("claude", claudeBin));
+  if (claude) return `This department-scoped session cannot start a turn: ${claude}.`;
   try {
     prepareDepartmentStage(department);
   } catch (err) {

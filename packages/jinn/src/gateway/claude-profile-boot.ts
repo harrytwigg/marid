@@ -1,4 +1,4 @@
-import { claudeKnowsMdExcludes, setClaudeMdExcludesProbe } from "../shared/claude-md-excludes.js";
+import { localClaudeMdExcludesProblem, setClaudeMdExcludesProbe } from "../shared/claude-md-excludes.js";
 import { declaredClaudeAccounts } from "../shared/claude-accounts-config.js";
 import { registerClaudeProfileDirs } from "../shared/claude-profile.js";
 import { setStageTrustSeeder } from "./department-stage/stage.js";
@@ -35,7 +35,7 @@ export function bootClaudeProfiles(getConfig: () => JinnConfig): void {
   // A department's stage directory is a cwd of its own, so it needs the same seed (FR-020).
   setStageTrustSeeder((stageDir) => seedTrust(claudeJsonPath(), stageDir));
   // A scoped session skips the instructions above its stage directory; refuse a Claude Code that cannot.
-  setClaudeMdExcludesProbe(claudeKnowsMdExcludes);
+  setClaudeMdExcludesProbe(localClaudeMdExcludesProblem);
   registerRemoteAccountDefaults(() => getConfig().remote);
   registerAccountRoster(() => orgRegistry().values());
   registerRemoteAccountReader(remoteAccountReader);

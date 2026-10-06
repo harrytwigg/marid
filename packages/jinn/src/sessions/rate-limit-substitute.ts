@@ -27,7 +27,7 @@ export interface ChooseSubstituteInput {
   /** The account the limit was recorded on (rate-limit-account.ts). */
   account: string;
   remote: (RemoteTarget & { remoteHost: string }) | undefined;
-  remoteTarget: RemoteTarget;
+  remoteTarget: SessionRemoteTarget;
   options?: AccountFallbackOptions;
 }
 
@@ -84,7 +84,7 @@ function engineSubstitute(input: ChooseSubstituteInput, health: EngineHealthRead
   // A department-scoped session stays on claude (FR-026a): its stage directory is Claude's
   // layout, and on a remote host the account entries that could keep it there do not apply,
   // so it waits for its reset rather than move to another engine.
-  const scoped = Boolean(session.scopeDepartment ?? (input.remoteTarget as SessionRemoteTarget).remoteDepartment);
+  const scoped = Boolean(session.scopeDepartment ?? input.remoteTarget.remoteDepartment);
   // A remote employee's substitute has to be an engine that can ALSO run on that
   // host, and the usability question moves there with it: `engineAvailable`
   // probes the GATEWAY's PATH, which says nothing about another machine.
