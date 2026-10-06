@@ -55,10 +55,11 @@ export function chooseSubstitute(input: ChooseSubstituteInput): SubstituteChoice
   return !input.remote && input.session.engine === "claude" ? accountSubstitute(input, health) : engineSubstitute(input, health);
 }
 
-/** The walk's options: the caller's, plus the account a substituted session belongs to. */
+/** The walk's options: the caller's, plus the account a substituted session belongs to. A
+ *  department-scoped session takes only Claude-account entries (FR-026a): it must stay on claude. */
 function walkOptions(input: ChooseSubstituteInput): AccountFallbackOptions {
   const original = accountOverride(input.session)?.originalAccount;
-  return { ...input.options, ...(original ? { original } : {}) };
+  return { ...input.options, ...(original ? { original } : {}), ...(input.session.scopeDepartment ? { accountsOnly: true } : {}) };
 }
 
 /** A local Claude session: its account's own chain (FR-079). */
