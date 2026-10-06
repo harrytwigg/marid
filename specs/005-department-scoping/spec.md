@@ -59,9 +59,13 @@ closed to everyone except its own members.
 | D6 | **The Limits screen and auto-dispatch must handle several Claude accounts.** Raised by the operator | FR-070 to FR-078 (Phase 6). Limits and dispatch are judged **per account**, not per department, because a profile is independent of department (D4). An operator who gives each department its own account gets per-department dispatch from the same rule |
 | D7 | **Docs, instance migration and visual testing are part of every phase** | FR-043 to FR-045 |
 
-**Open decision for the operator (FR-076).** The board walk's own turn runs on one account.
-When that account is exhausted, should the walk skip the tick (today's behaviour, which also
-holds every other account's work), or fall back to a plain code rule for the other accounts?
+**Open decisions for the operator.**
+- **FR-075a.** What does the walk do with an account that has no live reading: an idle named
+  account, or any remote account? The options are to hold, to allow one probing start, or to
+  judge it against the default account.
+- **FR-076.** The board walk's own turn runs on one account. When that account is exhausted,
+  should the walk skip the tick (today's behaviour, which also holds every other account's
+  work), or fall back to a plain code rule for the other accounts?
 
 ## Why This Matters *(constitution Principle II)*
 
@@ -316,7 +320,8 @@ The operator runs `side-dev` on the friend's account and everyone else on their 
    are two Claude cards, each with its own windows, plan and employees (FR-073).
 2. **Given** the operator's account is near its weekly ceiling and the friend's is about to
    lapse unused, **When** the board walk ticks, **Then** it may start a ready D Todo
-   assigned to `side-dev`, and starts nothing on the operator's account (FR-075).
+   assigned to `side-dev`, and starts nothing on the operator's account (FR-075). If the
+   friend's account has no live reading, FR-075a decides.
 3. **Given** the friend's account is recorded exhausted, **When** the walk tries to start a
    Todo assigned to `side-dev`, **Then** the start is refused in code, and work on the
    operator's account is unaffected (FR-075).
@@ -677,8 +682,17 @@ scoped employee; D is that session's binding)
 - **FR-055**: **Per-account state.** The auth outage ledger, engine health and the rate-limit
   memory MUST be keyed per account (FR-070). The default profile keeps today's keys, so nothing
   changes for it. A named profile gets its own key. One account's limit or outage never holds
-  back another account's sessions. The limits reading and the board walk follow in Phase 6
-  (FR-071 to FR-077).
+  back another account's sessions.
+
+  **The default reading stays the default account's.** Every local session writes its
+  status-line snapshot into one directory, and the default reading takes the newest file
+  there, whoever wrote it (`packages/jinn/src/shared/engine-limits-claude.ts:239`,
+  `packages/jinn/src/shared/engine-reset-times.ts:37`). So from Phase 4 on, every reader of
+  that directory MUST take only snapshots written by default-account sessions (session to
+  employee to account): the Limits card, the backoff reset time, the usage history and the
+  board walk's reading. Otherwise a friend's session would show as the operator's windows,
+  and the walk could start work on the operator's account because the friend's allowance is
+  about to lapse. Phase 6 adds the readings of the other accounts (FR-071 to FR-077).
 - **FR-056**: **No cross-account fallback.** A session with a named profile MUST NOT be retried
   on another profile or on another engine. A rate limit makes it wait for its own reset.
   Fallback would move the work onto the operator's accounts.
@@ -803,7 +817,12 @@ lists the ten places that assume one account.
   - `claude`: the default profile, exactly as today;
   - `claude:<profile key>`: a local named profile (FR-050). It is labelled by its directory
     name, for example `.claude-friend`;
-  - `claude@<host>` or `claude@<host>:<profile key>`: a remote host's default or named profile;
+  - `claude@<user>@<host>`, or `claude@<user>@<host>:<profile key>` for a named profile: a
+    remote login. The user is part of it, because two users on one host are two logins. With
+    no `remoteUser` the key is `claude@<host>`. The auth outage ledger keeps its existing
+    remote scope strings (`claudeAuthScope`,
+    `packages/jinn/src/sessions/claude-auth-watch.ts:50`), and the helper maps an account to
+    that scope, so no ledger entry is migrated;
   - every other engine keeps one account, its engine name. The shape allows more later.
 
   Each employee's account is derived from its engine, `remoteHost` and profile settings. One
@@ -814,7 +833,14 @@ lists the ten places that assume one account.
   - the OAuth usage API, with that account's own token: the Keychain entry
     `Claude Code-credentials-<key>` on macOS, or `<profile>/.credentials.json` elsewhere. The
     token is used only in-process for that call. It is never logged, written to disk, put in a
-    child environment or sent anywhere else. The signed-in check (FR-054) stays existence-only;
+    child environment or sent anywhere else. The signed-in check (FR-054) stays existence-only.
+    A named account's read MUST skip `$CLAUDE_CODE_OAUTH_TOKEN`, which the reader checks first
+    (`packages/jinn/src/shared/claude-models.ts:290`); otherwise every named account would show
+    the default account's usage whenever that variable is set;
+  - **no token refresh.** The gateway MUST NOT refresh a token itself. Refreshing rotates the
+    refresh token underneath Claude Code. An expired access token
+    (`packages/jinn/src/shared/claude-models.ts:244`) means no live reading until a session on
+    that account refreshes it;
   - the plan, from `claude auth status` run with `CLAUDE_CONFIG_DIR` set to the profile;
   - the status-line snapshots, filtered to sessions on that account, as the fallback;
   - the reset time used by the rate-limit backoff
@@ -858,6 +884,25 @@ lists the ten places that assume one account.
 
   **Code gate.** `startTodo` (`packages/jinn/src/board-walk/apply.ts:245`) MUST refuse a
   start whose candidate's account is recorded exhausted. Today that is checked only in prose.
+
+  **Known limit.** An unrouted Todo's account is known only after the Dispatcher routes it, so
+  a child can still land on an exhausted account. It then waits for that account's reset, not
+  the operator's (FR-056). The docs say so.
+- **FR-075a**: **An account with no live reading.** This is common: an idle named account's
+  access token has expired, so it has no API reading (FR-071), and its status-line snapshot is
+  stale after 30 minutes (`packages/jinn/src/shared/engine-limits-claude.ts:163`). Every remote
+  account has none in v1 (FR-072). Applied per account, "hold, never guess" would never start
+  anything on such an account. **Open decision:**
+  - (a) **Hold.** Idle and remote accounts get no auto-dispatch. US5b scenario 2 is dropped,
+    and D6 says so.
+  - (b) **One probing start.** If the account is not recorded exhausted and no session holds
+    it, the walk may start one Todo on it. That session refreshes the token and produces a
+    reading, and the normal rules apply from the next tick.
+  - (c) **Judge it against the default account**, as `main` does for every Claude employee
+    today.
+
+  Recommendation: (b) for local named accounts, and (c) for remote accounts, which keeps
+  today's behaviour for remote employees (D5).
 - **FR-076**: **The walk's own account.** The walk's turn runs on its runner's account (the
   default profile, unless `board-walk.md` names another engine). When that account is
   exhausted, `route-turn.ts:85` skips the tick, and so every other account's work waits too.
@@ -874,8 +919,16 @@ lists the ten places that assume one account.
   never overwritten. The FR-044 rationale tells an instance to reconcile its own prose to the
   per-account wording, and to flag differing wording as a conflict.
 - **FR-078**: **Unchanged with one account.** With no named profile and no remote Claude
-  employee, the Limits page, the usage card, the snapshot's existing fields and the walk's
-  decisions MUST be what they are on `main`.
+  employee, the parts the code builds MUST match `main` byte for byte, on a fixed clock and
+  fixed fixtures:
+  - the snapshot JSON;
+  - the `dispatcherSuffix` text;
+  - the `/api/engine-limits` response.
+
+  The new `accounts` fields are omitted when there is only one account, so they cannot break
+  the comparison. The walk prompt is compared using the same `board-walk.md` on both sides,
+  because Phase 6 rewrites the shipped template. The walk's decisions are checked by a
+  decision-level test over the same fixtures, not by bytes.
 
 **Compatibility**
 
@@ -923,9 +976,12 @@ lists the ten places that assume one account.
   pages it touches.
 - **FR-044**: **Instance migration.** A phase that changes anything under
   `packages/jinn/template/` MUST include the instance migration bundle for the next
-  unreleased version in the same PR. It is generated with `pnpm migration:generate`
-  (`packages/jinn/scripts/instance-migration-bundle.mjs`) and passes `pnpm migration:check`,
-  the check the "Migration bundle" workflow runs. Its release-rationale section says plainly:
+  unreleased version in the same PR. It is generated with
+  `pnpm --filter jinn-cli migration:generate -- --base-ref <latest release tag> --version <next version> --allow-unreleased`
+  (`packages/jinn/scripts/instance-migration-bundle.mjs:29`), and it passes the same command
+  with `migration:check`, which the "Migration bundle" workflow runs. When two phases are in
+  flight together (Phase 4 beside Phases 1 to 3), the one that merges second rebases and
+  regenerates, because the manifest hashes cover the combined template change. Its release-rationale section says plainly:
   - what an instance must merge into its own `CLAUDE.md` and `docs/`, and what is only
     informational because shipped skills are rewritten at boot;
   - what the gateway does by itself at boot: the `department_scopes` table, the

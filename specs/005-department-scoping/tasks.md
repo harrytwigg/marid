@@ -17,8 +17,9 @@ Phase 4 is independent and may run alongside them. Phase 6 follows Phase 4.
 - **Docs** (FR-043): update the template docs and skills, and the repository docs, that the
   change affects, in the same PR.
 - **Instance migration** (FR-044): if anything under `packages/jinn/template/` changed, run
-  `pnpm migration:generate` for the next unreleased version, add this phase's paragraph to the
-  release rationale, and pass `pnpm migration:check`.
+  `pnpm --filter jinn-cli migration:generate -- --base-ref <latest release tag> --version <next version> --allow-unreleased`,
+  add this phase's paragraph to the release rationale, and pass the same command with
+  `migration:check`. If another phase merged first, rebase and regenerate.
 
 **Visual evidence** (FR-045). Every UI task captures screenshots with the sandbox gateway
 script from T031: light and dark, desktop and phone widths, and every state the element has.
@@ -219,8 +220,11 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
 - [ ] T075 Write `verifyLocalClaudeProfile` and call it from `refuseTurn` (FR-054). The
   Keychain probe is injectable, checks by service name and exit status only, and never reads
   the secret.
-- [ ] T076 Write `shared/engine-account.ts` for local accounts (FR-070). Key the auth outage
-  ledger, engine health and the rate-limit memory per account,
+- [ ] T076 Write `shared/engine-account.ts` for local accounts (FR-070). Restrict every
+  reader of the shared status-line directory (the Limits card, `engine-reset-times.ts`, the
+  usage history, the walk) to default-account sessions, with a test that a newer named-profile
+  snapshot changes neither the default reading nor the reset time (FR-055). Key the auth
+  outage ledger, engine health and the rate-limit memory per account,
   leaving the default profile's keys unchanged (FR-055). The limits reading and the board walk
   are Phase 6. Skip fallback and substitution for named profiles (FR-056). Test SC-006.
 - [ ] T077 Web: the profile badge on the org tree and a read-only profile row in the employee
@@ -287,16 +291,22 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   (the model catalog keeps the default), `claude auth status` with the profile's
   `CLAUDE_CONFIG_DIR`, snapshots filtered by account, and reset times and usage history per
   account. `collectEngineLimits` and the background refresh loop over the roster's accounts.
-  Test that the token never reaches a log, a file or a child environment. Remote accounts
-  report "no live reading" with their last rate limit (FR-072).
+  Test that the token never reaches a log, a file or a child environment, that a named
+  account's read skips `$CLAUDE_CODE_OAUTH_TOKEN`, and that nothing refreshes a token. Check
+  once, on T070's throwaway profile, that reading the suffixed Keychain entry with
+  `security -w` does not prompt, and record it in the PR. Remote accounts report "no live
+  reading" with their last rate limit (FR-072).
 - [ ] T093 Board walk (FR-075 to FR-077): per-account snapshot fields and `priorFiveHour`,
   candidate accounts, the `startTodo` code gate, exhausted accounts in `dispatcherSuffix`,
-  the per-account rewrite of `template/board-walk.md`, and FR-076 as the operator decides.
+  the per-account rewrite of `template/board-walk.md`, the `noReading` flag, and FR-075a and
+  FR-076 as the operator decides. Document the unrouted-Todo limit (FR-075).
 - [ ] T094 Web (junior sub-Todo): `accounts` on `/api/engine-limits` with `engines.claude`
   unchanged, the Limits page grouped by engine, `/api/auto-dispatch/usage?account=`, and the
   usage card's switcher. Capture every FR-040 limits state (FR-045).
-- [ ] T095 Test SC-009 and FR-078: a byte comparison of the snapshot, the limits response and
-  the walk prompt for a single-account roster against `main`.
+- [ ] T095 Test SC-009 and FR-078: on a fixed clock and fixtures, a byte comparison against
+  `main` of the snapshot JSON, the `dispatcherSuffix` text and the limits response for a
+  single-account roster (`accounts` omitted); the walk prompt with the same `board-walk.md`
+  on both sides; and a decision-level test of the walk's choices.
 - [ ] T096 Docs and migration: `docs/architecture.md` and the Limits and Auto-Dispatch docs
   describe accounts. The rationale tells an instance to reconcile its own `board-walk.md` to
   the per-account wording (FR-077), and adds Phase 6's paragraph (FR-044).

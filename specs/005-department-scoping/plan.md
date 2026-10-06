@@ -442,7 +442,12 @@ Senior, because it touches auth, engine health and every launch path.
   fake profile.
 - `verifyLocalClaudeProfile` in `refuseTurn`, with the login hint.
 - Per-account keys for the auth outage ledger, engine health and the rate-limit memory
-  (SC-006). The limits reading and the board walk are Phase 6.
+  (SC-006).
+- The default reading stays the default account's (FR-055). `claudeSnapshotFile`'s callers
+  (the Limits card, `engine-reset-times.ts`, the usage history and the walk) take only
+  snapshots written by default-account sessions. A test shows that a newer named-profile
+  snapshot changes neither the default reading nor the reset time. The other accounts'
+  readings are Phase 6.
 - No fallback for named profiles.
 - FR-058, with a red test first.
 - FR-052a, with a test per key.
@@ -552,8 +557,12 @@ Senior, because it reads account tokens and changes what the walk starts.
   - The shipped `template/board-walk.md` is rewritten per account (FR-075), with the FR-077
     migration rationale.
   - FR-076 is applied as the operator decides.
-- **Unchanged with one account.** A byte comparison of the snapshot, the limits response and
-  the walk prompt, for a single-account roster, against `main` (FR-078).
+- **No live reading** (FR-075a): applied as the operator decides. The snapshot marks such an
+  account `noReading`, so the prose and the code gate can tell it apart from an exhausted one.
+- **Unchanged with one account** (FR-078): a byte comparison, on a fixed clock and fixed
+  fixtures, of the snapshot JSON, the `dispatcherSuffix` text and the limits response, with
+  `accounts` omitted for one account. The walk prompt is compared with the same `board-walk.md`
+  on both sides. A decision-level test covers the walk's choices.
 
 ## Delegation split
 

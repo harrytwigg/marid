@@ -196,7 +196,8 @@ claudeProfile: { path: string; key: string } | null;
 
 // GET /api/engine-limits gains (additive; engines.claude stays the default account):
 accounts?: Record<string /* engine */, Array<EngineLimitEngineSnapshot & {
-  account: string;            // "claude", "claude:<key>", "claude@<host>[:<key>]" (FR-070)
+  account: string;            // "claude", "claude:<key>", "claude@<user>@<host>[:<key>]" (FR-070)
+  noReading?: true;           // no live reading: an idle account's expired token, or a remote account (FR-075a)
   label: string;              // e.g. ".claude-friend" or the host
   location: { kind: "local" } | { kind: "remote"; host: string };
   employees: string[];

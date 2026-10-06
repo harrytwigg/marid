@@ -231,8 +231,12 @@ Read at `origin/main` 70419b04.
 | `board-walk/walk.ts:142` | `dispatcherSuffix` passes a preferred engine to the Dispatcher as advice | Also lists exhausted accounts |
 | `board-walk/route-turn.ts:85` | The walk skips the tick when its runner engine is exhausted | FR-076 |
 | `gateway/todo-dispatch.ts:147` | The Dispatcher starts with no limits check | Unchanged; the walk gates before it |
+| `shared/claude-models.ts:244`, `:290` | An expired access token reads as no token, and the gateway never refreshes one; `$CLAUDE_CODE_OAUTH_TOKEN` is checked first | An idle account has no live reading (FR-075a); a named account's read skips the variable (FR-071) |
+| `shared/engine-limits-claude.ts:163` | A status-line snapshot is stale after 30 minutes | Same |
+| `shared/engine-limits-claude.ts:239`, `shared/engine-reset-times.ts:37` | The newest snapshot in the shared directory, whoever wrote it | From Phase 4, readers take only default-account snapshots (FR-055) |
+| `sessions/claude-auth-watch.ts:50` | `claudeAuthScope`: `local`, or `<user>@<host>[:<remoteClaudeConfigDir>]` | Remote account keys include the user; the ledger keeps these strings (FR-070) |
 
-
+### Budgets
 
 | Source | Value |
 | --- | --- |
