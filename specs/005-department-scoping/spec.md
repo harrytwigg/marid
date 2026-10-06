@@ -710,7 +710,9 @@ is staged differently. Unscoped remote sessions are unchanged.
     - `sessions/turn/rate-limit-turn.ts:168`, which stops passing a raw `remoteCwd`.
 
     A grep-based test, like the route-enumeration test, fails if anything outside
-    `shared/remote-target.ts` reads an employee's `remoteCwd` to build a target. The callers
+    `shared/remote-target.ts` reads an employee's `remoteCwd` to build a target. It matches
+    reads off an employee record only, so display structs such as `cli/remote.ts`'s own
+    `remoteCwd` field do not trip it. The callers
     are then:
     - `sessions/turn/engine-run.ts`: turns, and auto-compaction through it;
     - `sessions/turn/rate-limit-turn.ts` and the rate-limit handler: the retry;
