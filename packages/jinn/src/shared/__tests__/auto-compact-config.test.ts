@@ -22,6 +22,18 @@ describe("resolveAutoCompactPolicy", () => {
     expect(resolveAutoCompactPolicy(config, "opencode")).toEqual({ enabled: true, cacheWindowSeconds: 300, minContextTokens: 60_000 });
   });
 
+  it("has no budget unless one is set, and clamps one to the floor", () => {
+    expect(resolveAutoCompactPolicy(withEngines({}), "opencode")).not.toHaveProperty("maxContextTokens");
+    const config = withEngines({
+      claude: { autoCompact: { enabled: true, maxContextTokens: 10 } },
+      opencode: { autoCompact: { enabled: true, maxContextTokens: 300_000 } },
+    });
+    expect(resolveAutoCompactPolicy(config, "opencode")).toEqual({ enabled: true, cacheWindowSeconds: 300, minContextTokens: 100_000, maxContextTokens: 300_000 });
+    expect(resolveAutoCompactPolicy(config, "claude")?.maxContextTokens).toBe(1_000);
+    expect(resolveAutoCompactPolicy(withEngines({ opencode: { autoCompact: { maxContextTokens: "300000" } } }), "opencode"))
+      .not.toHaveProperty("maxContextTokens");
+  });
+
   it("only enables on a literal true", () => {
     expect(resolveAutoCompactPolicy(withEngines({ claude: { autoCompact: { enabled: "yes" } } }), "claude")?.enabled).toBe(false);
   });
@@ -35,16 +47,18 @@ describe("autoCompactProblems", () => {
   it("accepts a well-formed block, or none", () => {
     expect(autoCompactProblems({ claude: {}, opencode: {} })).toEqual([]);
     expect(autoCompactProblems({ claude: { autoCompact: { enabled: true, cacheWindowSeconds: 300, minContextTokens: 80_000 } } })).toEqual([]);
+    expect(autoCompactProblems({ opencode: { autoCompact: { enabled: true, maxContextTokens: 300_000 } } })).toEqual([]);
   });
 
   it("names every bad field", () => {
     expect(autoCompactProblems({
-      claude: { autoCompact: { enabled: "true", cacheWindowSeconds: "300", minContextTokens: -5, cacheTTL: 60 } },
+      claude: { autoCompact: { enabled: "true", cacheWindowSeconds: "300", minContextTokens: -5, maxContextTokens: 500, cacheTTL: 60 } },
     })).toEqual([
       'engines.claude.autoCompact.enabled must be a boolean (got "true")',
       'engines.claude.autoCompact.cacheWindowSeconds must be a number of at least 1 (got "300")',
       "engines.claude.autoCompact.minContextTokens must be a number of at least 1000 (got -5)",
-      "engines.claude.autoCompact.cacheTTL is not a known setting (enabled, cacheWindowSeconds, minContextTokens)",
+      "engines.claude.autoCompact.maxContextTokens must be a number of at least 1000 (got 500)",
+      "engines.claude.autoCompact.cacheTTL is not a known setting (enabled, cacheWindowSeconds, minContextTokens, maxContextTokens)",
     ]);
   });
 

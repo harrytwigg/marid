@@ -14,7 +14,7 @@ import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { effortLevelsForModel, getModelRegistry } from "../shared/models.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import {
-  getEngineSessionRef, nextEngineSessionFields, updateSession, updateSessionForAttempt,
+  getEngineSessionRef, getSession, nextEngineSessionFields, updateSession, updateSessionForAttempt,
 } from "./registry.js";
 
 /** Per-engine config as this module reads it; unconfigured engines resolve to {}. */
@@ -52,8 +52,7 @@ export function beginEngineSubstitution(opts: {
     from: session.engine, to: substitute, model: session.model,
   });
 
-  const transportMeta = { ...(session.transportMeta || {}) } as Record<string, unknown>;
-  transportMeta.engineOverride = {
+  const engineOverride = {
     originalEngine: session.engine,
     originalEngineSessionId: session.engineSessionId,
     // The pin comes off the row for the duration, so the record is the only place
@@ -71,7 +70,8 @@ export function beginEngineSubstitution(opts: {
     engine: substitute,
     engineSessionId: null,
     model: model ?? null,
-    transportMeta: transportMeta as never,
+    // The live row, not the snapshot: this turn may already have written to it.
+    transportMeta: { ...((getSession(session.id) ?? session).transportMeta || {}), engineOverride } as never,
     status: "running",
     lastActivity: new Date().toISOString(),
     lastError,

@@ -40,8 +40,10 @@ describe("mergeTransportMeta", () => {
       claudeSyncSince: "2026-06-10T00:00:00Z",
       delegationCompletionTracked: true,
       delegationCompletionContract: { workItemId: "wi-live", state: "nudged" },
+      autoCompactBudgetHold: { floor: 310_000 },
     } as any;
     const incoming = {
+      autoCompactBudgetHold: null,
       engineOverride: null,
       claudeSyncSince: "stomped",
       delegationCompletionTracked: false,
@@ -54,6 +56,7 @@ describe("mergeTransportMeta", () => {
     expect(merged.claudeSyncSince).toBe("2026-06-10T00:00:00Z");
     expect(merged.delegationCompletionTracked).toBe(true);
     expect(merged.delegationCompletionContract).toEqual(existing.delegationCompletionContract);
+    expect(merged.autoCompactBudgetHold).toEqual({ floor: 310_000 });
     expect(merged.channelName).toBe("general");
   });
 

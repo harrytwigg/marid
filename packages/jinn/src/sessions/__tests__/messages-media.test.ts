@@ -91,4 +91,14 @@ describe("messages.media column", () => {
     const copied = reg.getMessages(session.id);
     expect(copied[0].media).toEqual(media);
   });
+
+  it("duplicateSession does not copy the budget hold, which describes the source's compaction", () => {
+    const db = dbModule.initDb();
+    db.prepare(
+      "INSERT INTO sessions (id, engine, engine_session_id, source, source_ref, status, transport_meta, created_at, last_activity) VALUES ('held','opencode','eng-2','web','web:held','idle',?,'t','t')",
+    ).run(JSON.stringify({ channelName: "general", autoCompactBudgetHold: { floor: 310_000 } }));
+
+    const { session } = reg.duplicateSession("held");
+    expect(reg.getSession(session.id)!.transportMeta).toEqual({ channelName: "general" });
+  });
 });
