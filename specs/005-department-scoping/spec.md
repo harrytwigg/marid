@@ -88,6 +88,10 @@ This feature responds in three ways:
 - **It discourages shell access.** The department's instructions file says not to (FR-029).
 - **It removes the easy paths.** The company `CLAUDE.md`, the company skills directory and the
   company state files are not loaded (FR-020, FR-027, FR-028), and the jinn tools refuse.
+  What follows the **Claude profile** rather than the cwd still loads: the profile's own
+  user-level skills and plugins, and the claude.ai connectors of that account. On the default
+  profile those are the operator's (for example Slack, Gmail, Drive and Jira). Excluding them
+  is part of the deferred connector work.
 - **It keeps the docs honest.** Scoped employees are described as "kept in scope by the
   gateway", not "cannot reach".
 
@@ -95,8 +99,10 @@ This feature responds in three ways:
 named Claude profile goes to that profile's account. Before Phase 3, a scoped session still
 runs with cwd `$JINN_HOME` and loads the company `CLAUDE.md` and every skill. So an employee
 on a friend's profile must be scoped **and** Phase 3 must have merged before it runs. Phase 4
-enforces this: a named profile on a scoped employee is refused until the stage dir is in use
-(FR-059).
+enforces the second half: a named profile on a scoped employee is refused until the stage dir
+is in use (FR-059). The first half, that a friend's profile is only ever used by a scoped
+employee, depends on the open question in FR-059, because the gateway cannot tell a friend's
+profile from the operator's own second account.
 
 ## What the tree does today *(facts the spec depends on)*
 
@@ -127,9 +133,10 @@ research.md has the full audit, with `path:line` citations against `origin/main`
    - `resolveClaudeConfigDir` and `claudeJsonPath` read the gateway's own `CLAUDE_CONFIG_DIR`
      (`packages/jinn/src/shared/home.ts:34`, `:42`).
    - Only remote employees can name a profile, with `remoteClaudeConfigDir`
-     (`packages/jinn/src/shared/types.ts:182`). Even that is dropped on ordinary turns:
-     `engine-run.ts:55` and `rate-limit-turn.ts:166` pass the remote host, user and cwd but
-     not the profile, so those turns fall back to the instance default.
+     (`packages/jinn/src/shared/types.ts:182`). Even that is dropped on ordinary turns and on
+     auto-compaction: `engine-run.ts:55` passes the remote host, user and cwd but not the
+     profile, so those turns fall back to the instance default. The rate-limit path rebuilds
+     the target from the employee (`sessions/rate-limit-handler.ts:104`), so it keeps it.
    - About fifteen places assume one local profile: the child environment, the transcript
      readers, the trust seed, the auth outage ledger, engine health, the rate-limit memory and
      the limits snapshot. research.md lists them.
@@ -298,10 +305,13 @@ and dark, with screenshots on the PR (FR-040).
 - **Linking.** A scoped caller can link only D Todos, and sees any relation to a non-D Todo as
   a hidden count. Unscoped callers can link anything.
 - **`department.yaml` broken or deleted.** The department keeps its last good scope, so a typo
-  or a deleted file never opens a scoped department (FR-001).
+  or a deleted file never opens a scoped department (FR-001). The last good scope lives in the
+  registry, so a registry restored from an older backup or rebuilt from scratch, together with
+  a deleted file, does open it. A near-miss file name in a department directory, such as
+  `department.yml`, is logged as a warning.
 - **Renaming a department.** Not supported today, and not added. Renaming the directory makes
   a new department. The old one keeps its Todos and its last good scope.
-- **The `system` department** and the executive (the COO, who has no department) cannot be
+- **The `system` and `org` departments** and the executive (the COO, who has no department) cannot be
   scoped. System employees follow FR-015 and never route a Todo to an employee who may not
   hold it.
 - **The remote MCP connector** stays unscoped.
@@ -345,27 +355,38 @@ and dark, with screenshots on the PR (FR-040).
     department is treated as `dedicated` until the file loads, so its intended members are
     confined and nobody else can hold its Todos. The log line says so.
 - **FR-002**: A Todo's department MUST remain `work_items.department`. No membership table is
-  added and **no existing Todo is migrated**. "In D" means `department = D`, judged on the
-  Todo's root (FR-004).
-- **FR-003**: **Assignment never moves a Todo across a non-open boundary.** When a Todo's
-  current department is not open, assignment keeps it, including assignment to `@operator`
-  and to engine-only delegates. When a Todo is in an open department, assignment behaves as
-  today. An assignment that would move a Todo into a non-open department is refused by
-  FR-015 instead.
+  added and **no existing Todo is migrated**. **A Todo's scope department is its root's
+  department.** Every scope decision in this spec (FR-003, FR-011, FR-015, the route table and
+  the board) reads the root's department, never a sub-task's own column. A sub-task whose own
+  column differs from its root's (possible today, `packages/jinn/src/work-items/store.ts:329`)
+  is in its root's scope, and the scan reports it.
+- **FR-003**: **Assignment never moves a Todo across a non-open boundary.** When the root's
+  department is not open, assignment leaves the Todo's department unchanged, including
+  assignment to `@operator` and to engine-only delegates. When the root's department is open,
+  assignment behaves as today. An assignment that would move a Todo into a non-open department
+  is refused by FR-015 instead.
 - **FR-004**: A sub-task MUST share its root's department when either department is not open.
-  A create that names another department under such a root is refused. The board already shows
+  A create that names another department under such a root is refused. The check lives in
+  `createWorkItem` in the store, not only in the route, because plugin creates pass a draft
+  straight through (`packages/jinn/src/plugins/host/todos.ts:31`). The board already shows
   sub-tasks under their root.
 - **FR-005**: Scope comes only from `department.yaml`. A slug a writer names in open mode is an
   open department, as today. Unscoped callers may create Todos in a non-open department.
   Scoped callers create only in their own (FR-011).
-- **FR-006**: `system` and the executive cannot be scoped. A `department.yaml` that sets a
-  non-open scope on `system` is refused as an identity problem.
+- **FR-006**: `system`, `org` and the executive cannot be scoped. A `department.yaml` that sets
+  a non-open scope on `system` is refused as an identity problem. An employee YAML at the top of
+  `org/` resolves to the department `org` today (`packages/jinn/src/gateway/org.ts:81`); it
+  stays unscoped.
 
 **Employee scope and session binding**
 
 - **FR-007**: An employee MUST be scoped exactly when its resolved department is not open. No
-  new employee field carries scope. The org scan refuses an employee whose `department` field
-  and directory disagree when either is a non-open department. `PATCH
+  new employee field carries scope. **Scope is read from the top-level directory under
+  `org/`**, not from the immediate parent: the org walker recurses, and today
+  `org/side-project/qa/side-qa.yaml` resolves to department `qa`
+  (`packages/jinn/src/gateway/org.ts:81`). The org scan refuses an employee when its top-level
+  directory, its immediate directory or its `department` field disagree and any of them is a
+  non-open department. `PATCH
   /api/org/employees/:name` changing `department` into or out of a non-open department is
   subject to the stranding refusals in FR-015.
 - **FR-008**: A session of a scoped employee MUST be bound to its department when it is
@@ -455,13 +476,14 @@ scoped employee; D is that session's binding)
   dir uses Claude's layout (`CLAUDE.md`, `.claude/skills/`), and a remote session ignores the
   local cwd and runs in `remoteCwd`. Validation refuses another engine or a `remoteHost` on a
   scoped employee, and says why.
-- **FR-027**: A department MAY carry a skill allow-list. A scoped session is offered only the
-  allow-listed skills, through:
+- **FR-027**: A department MAY carry a skill allow-list. Of the company skills, a scoped
+  session is offered only the allow-listed ones, through:
   - copies in the stage dir;
   - the prompt;
   - `dispatchConfig.skills` validation.
 
-  An empty list means no skills.
+  An empty list means no company skills. Skills and plugins installed in the session's Claude
+  profile still load ("Scope of the boundary").
 - **FR-028**: Department Notes live under `knowledge/departments/<slug>/`, including the
   department's state file, `knowledge/departments/<slug>/state.md`.
   - **Seeding the state file.** It is created on the first note write, in the same format as
@@ -499,7 +521,12 @@ scoped employee; D is that session's binding)
   sessions run as. Absent means the gateway's own profile, as today.
   - It must be an absolute path, not starting with `~`, as `remoteClaudeConfigDir` is
     validated (`packages/jinn/src/shared/remote-target.ts:114`).
-  - It must not lie inside `$JINN_HOME`.
+  - It is canonicalised once, at load: no trailing slash, no `.` or `..` segments. That exact
+    string is what the session gets as `CLAUDE_CONFIG_DIR`, what the Keychain name is hashed
+    from, and what the login hint prints. Claude Code hashes the raw string, so two spellings
+    of one directory are two logins.
+  - It must not lie inside `$JINN_HOME`, and must not equal the default profile's directory:
+    naming the default explicitly gives a suffixed Keychain entry, not the operator's login.
   - It is refused on a remote employee, which uses `remoteClaudeConfigDir`. One field per
     target, so there is never a question of which applies.
   - It is YAML-only, like the remote fields (`WRITABLE_FIELDS`,
@@ -509,14 +536,28 @@ scoped employee; D is that session's binding)
     its auth files.
 - **FR-051**: **Environment.** Every local launch of a session with a named profile MUST set
   `CLAUDE_CONFIG_DIR` to it: the turn spawn, the idle PTY spawn, the redelivery respawn, the
-  rate-limit retry, auto-compaction, and both forms of fork. A session without one gets
-  exactly today's environment.
+  rate-limit retry, auto-compaction, and both forms of fork. It MUST also remove any inherited
+  `CLAUDE_SECURESTORAGE_CONFIG_DIR`, which would otherwise override the Keychain name. A
+  session without a named profile gets exactly today's environment.
 - **FR-052**: **Trust.** Before the first spawn under a named profile in a given cwd, the
   gateway MUST seed folder trust in that profile's `.claude.json`, cached per profile and cwd.
   Today's only seed is the boot-time one for the default profile
   (`packages/jinn/src/gateway/server.ts:565`). Without it, the trust dialog appears in front of
   an unattended PTY and the first turn hangs (the warning at
   `packages/jinn/src/shared/remote-target.ts:217`).
+- **FR-052a**: **Operator settings travel with the session.** A named profile does not read the
+  operator's `~/.claude/settings.json`, and today the gateway relies on three of its keys
+  without carrying them itself:
+  - `attribution` (empty commit and PR attribution, no session URL), which keeps
+    Co-Authored-By trailers and "Generated with" lines out of commits and PRs;
+  - `hooks.PreToolUse`, which on this instance carries the Slack read-only guard;
+  - `skipDangerousModePermissionPrompt`, without which the bypass-permissions consent dialog
+    appears in front of an unattended PTY.
+
+  For a named profile only, the gateway MUST copy these three keys from the default profile's
+  `settings.json` into the session's `--settings` file
+  (`packages/jinn/src/shared/claude-settings.ts:70`), merging `hooks` with the gateway's own.
+  Each key gets a test. Sessions on the default profile are unchanged.
 - **FR-053**: **Transcripts.** Every local transcript reader MUST resolve the session's
   profile: redelivery dedupe, lost-Stop and lost-text recovery, compaction stats, the
   transcript and backfill endpoints, external turns, and fork. research.md lists each one.
@@ -527,7 +568,8 @@ scoped employee; D is that session's binding)
   - elsewhere, `<profile>/.credentials.json`.
 
   If it fails, `refuseTurn` refuses with the profile path and the login command
-  (`CLAUDE_CONFIG_DIR=<dir> claude`, then `/login`). Only successes are cached, as the remote
+  (`CLAUDE_CONFIG_DIR=<dir> claude`, then `/login`), printing the canonical string from
+  FR-050 exactly. Only successes are cached, as the remote
   check does (`packages/jinn/src/engines/remote-stage.ts:639`).
 - **FR-055**: **Per-account state.** The auth outage ledger, engine health, the rate-limit
   memory and the limits snapshot MUST be keyed per profile. The default profile keeps today's
@@ -537,15 +579,35 @@ scoped employee; D is that session's binding)
 - **FR-056**: **No cross-account fallback.** A session with a named profile MUST NOT be retried
   on another profile or on another engine. A rate limit makes it wait for its own reset.
   Fallback would move the work onto the operator's accounts.
-- **FR-057**: **Model discovery stays on the default profile.** The model catalog and effort
-  discovery read the operator's login, as today. A named profile uses the same model list.
+- **FR-057**: **Non-session reads stay on the default profile.** These run outside any session
+  and keep reading the operator's login:
+  - the model catalog and effort discovery (`packages/jinn/src/shared/claude-models.ts:262`,
+    and its credentials-file fallback at `:304`);
+  - the plan reading, `claude auth status`
+    (`packages/jinn/src/shared/engine-limits-claude.ts:111`);
+  - the Telegram connector's auth providers (`packages/jinn/src/connectors/telegram/auth-providers.ts:60`).
+
+  A named profile uses the same model list. Its limits come only from its own sessions' status
+  line snapshots, and its plan shows as unknown.
 - **FR-058**: **Remote profile fix.** `remoteClaudeConfigDir` MUST reach the session on every
-  remote launch path, including ordinary turns (`engine-run.ts:55`) and the rate-limit turn
-  (`rate-limit-turn.ts:166`), which drop it today.
-- **FR-059**: **Profiles and scope.** Unscoped employees MAY use a named profile, for example
-  the operator's own second account. A scoped employee's named profile is refused until it
+  remote launch path. Ordinary turns and auto-compaction drop it today, because
+  `engine-run.ts:55` does not pass it. The rate-limit path already rebuilds it from the
+  employee (`sessions/rate-limit-handler.ts:104`); `rate-limit-turn.ts:166` passes it too, for
+  consistency.
+- **FR-059**: **Profiles and scope.** A scoped employee's named profile is refused until it
   runs from a stage dir (FR-020). If Phase 4 merges before Phase 3, that refusal is what keeps
   the company `CLAUDE.md` and skills off another account.
+
+  **Open question for the operator: may an unscoped employee use a named profile?** An
+  unscoped session loads the company `CLAUDE.md`, every skill and `state.md`, so on a friend's
+  profile all of that goes to the friend's account. The gateway cannot tell a friend's profile
+  from the operator's own second account. The options are:
+  - (a) **Operator discipline.** Unscoped employees may use any profile. The docs (T078) and
+    the employee panel say plainly that an unscoped employee on someone else's account sends
+    company context to it.
+  - (b) **A declared owner.** A named profile is allowed on an unscoped employee only with
+    `claudeProfileOwner: operator` beside it, so pointing an unscoped employee at a friend's
+    profile takes a deliberate, visible statement. A scoped employee needs no marker.
 
 **Compatibility**
 

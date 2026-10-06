@@ -73,25 +73,30 @@ withdrawn.
 | `sessions/fork.ts:72` / `:129` | Headless and interactive fork environments, built from `process.env` | FR-051 |
 | `engines/claude-interactive.ts:276` | `findTranscriptForSession`, defaulting to the global projects dir. Used at `:2117`, `:2648`, `:2726`, `:2740` | FR-053 |
 | `gateway/external-turns.ts:231`, `:390`, `:522` | External turn transcript reads | FR-053 |
-| `gateway/api.ts:4634` / `:4748` | `loadRawTranscript` and `loadTranscriptMessages` | FR-053 |
+| `gateway/api.ts:4634` / `:4748` | `loadRawTranscript` and `loadTranscriptMessages`, called at `:3248` (the transcript route) and `:4722` (backfill) | FR-053 |
 | `sessions/fork.ts:171` | `claudeProjectDir` | FR-053 |
 | `gateway/server.ts:563` | The boot trust seed, default profile only | FR-052 adds a lazy seed per profile |
-| `shared/claude-settings.ts:149` | Bypass-permissions consent is deliberately not seeded on the host | A fresh profile may show that dialog. Phase 4's first task checks it on a throwaway profile |
+| `shared/claude-settings.ts:149` | Bypass-permissions consent is deliberately not seeded on the host | The operator's profile avoids the dialog only through `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`. FR-052a carries it |
+| `shared/claude-settings.ts:70` | `buildSessionSettings`: the per-session `--settings` holds only the hook relay and the status line | The operator's `attribution`, `hooks.PreToolUse` (the Slack guard on this instance) and bypass consent live in `~/.claude/settings.json`, which a named profile does not read. FR-052a |
+| `shared/child-env.ts:55` | The child environment copies `process.env` | An inherited `CLAUDE_SECURESTORAGE_CONFIG_DIR` would override the Keychain name. FR-051 removes it for named profiles |
 | `shared/claude-auth.ts:134` | `readClaudeCredentialStatus` takes a `configDir`, but every caller omits it. On darwin a missing file reads as `unknown` (`:147`) | FR-054 uses the Keychain by name instead |
 | `sessions/claude-auth-watch.ts:51`, `shared/claude-auth-outage.ts:18` | One outage scope, `local`, for every local employee | FR-055 |
-| `shared/claude-models.ts:262` | Reads the Keychain entry `Claude Code-credentials` by fixed name | Stays on the default profile (FR-057) |
+| `shared/claude-models.ts:262` / `:304` | Reads the Keychain entry `Claude Code-credentials` by fixed name, then the default credentials file | Stays on the default profile (FR-057) |
+| `shared/engine-limits-claude.ts:111`, `connectors/telegram/auth-providers.ts:60` | `claude auth status` for the plan, and the Telegram auth providers | Stay on the default profile (FR-057) |
 | `shared/engine-health.ts:54` / `:127` | Health is keyed by engine, optionally host | FR-055 adds a profile key |
 | `sessions/turn/settle.ts:124`, `sessions/rate-limit-handler.ts:118` / `:322` | Health writers with no host | Account-wide today |
 | `board-walk/route-turn.ts:85`, `board-walk/snapshot.ts:238`, `sessions/new-session-engine.ts:60` | Health readers | Read the profile's key |
 | `shared/usageAwareness.ts:10` | One rate-limit memory file | FR-055 |
 | `shared/engine-limits-claude.ts:233` | `collectClaudeLimits`: one token, the newest snapshot in one `CLAUDE_LIMITS_DIR` | Snapshots are filtered per profile. The OAuth usage reading stays on the default profile |
-| `board-walk/walk.ts:208` | The board walk reads the five-hour window | Reads the profile it is about to start |
+| `board-walk/snapshot.ts:224` | The board walk reads the five-hour window (`claudeFiveHour`) | Reads the profile it is about to start |
 | `shared/file-read-policy.ts:64` | Refuses `auth*` files under the default config dir or any `.claude` segment | A profile elsewhere is not covered. FR-050 adds every `claudeConfigDir` |
 
 **The Keychain**, checked in the installed Claude Code 2.1.291: the service name is
 `Claude Code` + `-credentials` + a suffix. The suffix is empty when `CLAUDE_CONFIG_DIR` is
-unset, and `-` plus the first 8 hex characters of sha256 of the NFC-normalised config dir when
-it is set (or when `CLAUDE_SECURESTORAGE_CONFIG_DIR` overrides it). This Mac has one entry,
+unset, and `-` plus the first 8 hex characters of sha256 of the config dir string when it is
+set. The string is the raw `CLAUDE_CONFIG_DIR` value, NFC-normalised, with no realpath and no
+trailing-slash stripping. A defined `CLAUDE_SECURESTORAGE_CONFIG_DIR` overrides both the input
+and the decision. This reading was matched by content in minified code, so Phase 4 confirms it. This Mac has one entry,
 `Claude Code-credentials`. Phase 4's first task confirms the suffix with a throwaway profile.
 
 ### Remote targets
@@ -101,7 +106,8 @@ it is set (or when `CLAUDE_SECURESTORAGE_CONFIG_DIR` overrides it). This Mac has
 | `shared/types.ts:182` | `remoteClaudeConfigDir` | The pattern for `claudeConfigDir` |
 | `shared/remote-target.ts:114` / `:230` | Its validation and its precedence over `remote.claudeConfigDir` | Copied for the local field |
 | `engines/remote-stage.ts:658` | `verifyClaudeProfile`, which caches only successes (`:639`) | Copied for the local check |
-| `sessions/turn/engine-run.ts:55`, `sessions/turn/rate-limit-turn.ts:166` | Pass host, user and cwd, but not the profile | A bug: ordinary remote turns fall back to the instance default. FR-058 |
+| `sessions/turn/engine-run.ts:55` | Passes host, user and cwd, but not the profile | A bug: ordinary remote turns and auto-compaction fall back to the instance default. FR-058 |
+| `sessions/rate-limit-handler.ts:104` | Rebuilds the remote target from the employee, profile included | The rate-limit path keeps the profile. `rate-limit-turn.ts:166`'s omission is redundant |
 | `shared/config-types.ts:268` / `:274` | `remoteCwd` must sit under `remote.root`, and the remote `$JINN_HOME` is a link farm over the gateway's real knowledge, docs, org and skills | Why scoped employees stay local in v1 (FR-026) |
 
 ### Identity and authentication

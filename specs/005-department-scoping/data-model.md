@@ -100,10 +100,13 @@ persona: ...
 
 **Validation** runs at scan time (`gateway/org.ts`) and at PATCH time:
 
-- In a non-open department, the `department` field and the directory must agree.
+- Scope is read from the top-level directory under `org/`. When that directory, the
+  immediate directory or the `department` field names a non-open department, all three must
+  agree (FR-007).
 - A scoped employee must use the `claude` engine and have no `remoteHost` (FR-026).
 - `claudeConfigDir` must be absolute, must not start with `~`, must not lie inside
-  `$JINN_HOME`, and is refused alongside `remoteHost` (FR-050). On a scoped employee it is
+  `$JINN_HOME`, must not equal the default profile's directory, and is refused alongside
+  `remoteHost` (FR-050). It is canonicalised at load: no trailing slash, no `.` or `..`. On a scoped employee it is
   refused until the stage dir is in use (FR-059).
 - A cron job cannot target a scoped employee.
 - A PATCH that changes `department` into or out of a non-open department is refused while the
@@ -137,8 +140,10 @@ department scan change, and when an instructions file changes. Nobody edits it b
 | Engine health and rate-limit memory | Engine key, as today | Engine key plus profile key |
 | Limits snapshot | As today | Filtered to the profile's sessions |
 
-**Profile key**: the first 8 hex characters of sha256 of the NFC-normalised absolute path, the
-same suffix Claude Code uses. One helper, `shared/claude-profile.ts`, computes it, and every
+**Profile key**: the first 8 hex characters of sha256 of the canonical `claudeConfigDir`
+string, NFC-normalised as Claude Code does. That string is exactly what the session receives
+as `CLAUDE_CONFIG_DIR`, because Claude Code hashes the raw value and does not resolve it. This
+is the same suffix Claude Code uses. One helper, `shared/claude-profile.ts`, computes it, and every
 keyed store uses that helper.
 
 ## Derived values

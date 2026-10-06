@@ -201,8 +201,9 @@ classifies each one. The enumeration test (SC-001) keeps the table complete from
 
 ### `mayHoldTodo` (FR-015, Q8-a)
 
-`department-scope/assignee.ts` defines `mayHoldTodo(employee, todoDepartment)`. It returns
-true when any of these holds:
+`department-scope/assignee.ts` defines `mayHoldTodo(employee, rootDepartment)`. Its input is
+always the department of the Todo's **root** (FR-002): every caller resolves the root first,
+and no caller passes a sub-task's own column. It returns true when any of these holds:
 
 - the employee is `@operator`;
 - the employee is scoped, and the Todo is in its department;
@@ -296,9 +297,18 @@ The value is resolved once per run from the employee and passed down. It reaches
   profile's keys are unchanged.
 - **Fallback**: the rate-limit handler skips engine fallback and profile substitution for a
   named profile.
+- **Settings** (FR-052a): for a named profile, `buildSessionSettings`
+  (`shared/claude-settings.ts:70`) copies `attribution`, `hooks.PreToolUse` and
+  `skipDangerousModePermissionPrompt` from the default profile's `settings.json`, merging
+  `hooks` with the gateway's own.
+- **Environment hygiene**: for a named profile, `CLAUDE_SECURESTORAGE_CONFIG_DIR` is removed
+  from the child environment.
+- **Canonical path**: `claudeConfigDir` is canonicalised once at load (no trailing slash, no
+  `.` or `..`). The environment, the Keychain hash and the login hint all use that string.
 
-The remote path gets the same treatment for `remoteClaudeConfigDir`: `engine-run.ts:55` and
-`rate-limit-turn.ts:166` pass it, which fixes FR-058.
+The remote path gets the same treatment for `remoteClaudeConfigDir`: `engine-run.ts:55` passes
+it, which fixes FR-058 for ordinary turns and auto-compaction. `rate-limit-turn.ts:166` passes
+it too, although the rate-limit handler already rebuilds it from the employee.
 
 ## Phases
 
@@ -409,6 +419,7 @@ Senior, because it touches auth, engine health and every launch path.
   limits snapshot, and the board walk reading the profile it is about to start (SC-006).
 - No fallback for named profiles.
 - FR-058, with a red test first.
+- FR-052a, with a test per key.
 - FR-059: refuse a named profile on a scoped employee until Phase 3's stage dir is in use. If
   Phase 3 has merged first, the check is "the stage dir is in use", not a flag.
 - Web: the profile badge on the org tree and a read-only profile row in the employee panel.

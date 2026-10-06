@@ -36,20 +36,23 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   - It emits `company:changed {entity:"department"}`.
 - [ ] T022 Write `work-items/department-scopes-schema.ts`, defining `department_scopes` per
   data-model.md, registered in `V2_ADDITIVE_TABLES` and `REQUIRED_TABLE_SQL`.
-- [ ] T023 Apply FR-003 and FR-004:
+- [ ] T023 Apply FR-003 and FR-004, always judging by the root's department (FR-002):
   - `departmentAfterAssignment` (`work-items/assignment.ts:72`) keeps a non-open department;
   - the assign route (`gateway/api.ts:2650`) no longer nulls a non-open department for
     `@operator` or an engine-only delegate;
   - delegation's create and assign paths (`gateway/api.ts:3461`, `:3501`) keep a non-open
     department;
   - a create under a root in a non-open department, or naming a non-open department under a
-    root elsewhere, is refused unless the departments match.
+    root elsewhere, is refused unless the departments match. The check lives in
+    `createWorkItem`, so plugin and cron creates are covered.
 
   The work-items layer learns scope from a resolver injected at boot. With none injected,
   every department is open.
-- [ ] T024 FR-007 in the org scan: refuse an employee whose `department` field and directory
-  disagree when either is a non-open department, and log why, beside the remote-target check
-  at `gateway/org.ts:112`.
+- [ ] T024 FR-007 in the org scan: read scope from the top-level directory under `org/`, and
+  refuse an employee when that directory, its immediate directory or its `department` field
+  disagree and any of them is a non-open department. Log why, beside the remote-target check
+  at `gateway/org.ts:112`. Report sub-tasks whose own department differs from a non-open
+  root's. Warn on a near-miss file name such as `department.yml`.
 - [ ] T025 Write `gateway/departments-api.ts`:
   - the definition fields on `GET /api/departments` (data-model.md, "Wire shapes");
   - `GET /api/departments/:slug`;
@@ -167,8 +170,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 ## Phase 4: per-employee Claude profiles (senior-developer, then senior QA; T074 goes to the junior as its own Todo)
 
 - [ ] T070 Confirm fact 4 on this Mac with a throwaway profile: list the Keychain service names,
-  sign the throwaway profile in, list them again, and record the result in the PR. Delete the
-  throwaway entry afterwards. Then write red tests: an employee with `claudeConfigDir` spawns
+  sign the throwaway profile in, list them again, and record the result in the PR. Repeat with
+  the same directory spelled with a trailing slash. Check whether the bypass-consent dialog
+  appears without FR-052a. Delete the throwaway entries afterwards. Then write red tests: an employee with `claudeConfigDir` spawns
   without `CLAUDE_CONFIG_DIR`, and a remote employee's ordinary turn drops
   `remoteClaudeConfigDir` (`sessions/turn/engine-run.ts:55`).
 - [ ] T071 Parse and validate `claudeConfigDir` in `gateway/org.ts` beside the remote check
@@ -177,7 +181,10 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 - [ ] T072 Write `shared/claude-profile.ts` (plan.md, "Claude profile threading"). Thread the
   profile through `buildEngineChildEnv` and every launch path in FR-051, with a test per path
   (SC-003). Pass `remoteClaudeConfigDir` on the remote paths (FR-058).
-- [ ] T073 Seed trust lazily per profile and cwd before the first spawn (FR-052).
+- [ ] T073 Seed trust lazily per profile and cwd before the first spawn (FR-052). Carry
+  `attribution`, `hooks.PreToolUse` and `skipDangerousModePermissionPrompt` into the session
+  settings for named profiles, with a test per key (FR-052a). Remove an inherited
+  `CLAUDE_SECURESTORAGE_CONFIG_DIR` for named profiles.
 - [ ] T074 Transcript readers (junior sub-Todo): give `findTranscriptForSession` and every
   FR-053 reader the session's profile, with a test per reader that finds a transcript under a
   fake profile.
@@ -190,7 +197,8 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   named profiles (FR-056). Test SC-006.
 - [ ] T077 Web: the profile badge on the org tree and a read-only profile row in the employee
   panel. Capture both, and the "not signed in" refusal in chat, in light and dark.
-- [ ] T078 Docs: how to create and sign in a profile, what goes to its account, and FR-059.
+- [ ] T078 Docs: how to create and sign in a profile, what goes to its account (including the
+  profile's own skills, plugins and connectors), and FR-059 as the operator decided it.
 
 ## Follow-ups outside this feature
 
