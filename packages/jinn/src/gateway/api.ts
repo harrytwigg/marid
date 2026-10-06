@@ -115,7 +115,6 @@ import {
   writeSharedSttSettings,
 } from "../stt/settings-store.js";
 import { CODEX_HOMES_DIR, JINN_HOME } from "../shared/paths.js";
-import { resolveClaudeConfigDir } from "../shared/home.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
 import { supersedeRunningTurn } from "../sessions/turn/superseded.js";
 import { dispatchWebSessionRun, resolveAttachmentPaths } from "./web-session-dispatch.js";
@@ -301,7 +300,10 @@ import {
   issuePairingChallenge,
   PAIRING_CHALLENGE_TTL_MS,
 } from "./pairing-challenge.js";
-import { scheduleOnLoadTailSync, transcriptEntryText } from "./external-turns.js";
+import { scheduleOnLoadTailSync } from "./external-turns.js";
+import { loadRawTranscript, loadTranscriptMessages } from "./claude-transcript-loaders.js";
+import { claudeProfileForSession } from "./session-claude-profile.js";
+import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { handleTalkApi } from "./talk-api.js";
 import { onboardingNeeded, applyEngineChoice, personalizeOperatingManual } from "./onboarding-policy.js";
 import {
@@ -1805,7 +1807,7 @@ export async function handleApiRequest(
       // once the backfill finishes; this one returns whatever is in DB now.
       const claudeSessionId = getEngineSessionRef(session, "claude").id;
       if (includeMessages && messages.length === 0 && session.engine === "claude" && claudeSessionId) {
-        scheduleTranscriptBackfill(params.id, claudeSessionId, context);
+        scheduleTranscriptBackfill(params.id, claudeSessionId, claudeProfileForSession(session), context);
       } else if (includeMessages && session.engine === "claude") {
         // On-load safety net for PTY-native (CLI-typed) turns whose unclaimed
         // Stop was missed entirely: fire-and-forget a transcript tail sync.
@@ -3246,7 +3248,7 @@ export async function handleApiRequest(
       if (!session) return notFound(res);
       const claudeSessionId = getEngineSessionRef(session, "claude").id;
       if (!claudeSessionId) return json(res, []);
-      const entries = loadRawTranscript(claudeSessionId);
+      const entries = loadRawTranscript(claudeSessionId, claudeProfileForSession(session));
       return json(res, entries);
     }
 
@@ -4614,94 +4616,6 @@ export async function handleApiRequest(
 }
 
 /**
- * Load messages from a Claude Code JSONL transcript file.
- * Used as a fallback when the messages DB is empty (pre-existing sessions).
- */
-interface TranscriptContentBlock {
-  type: "text" | "tool_use" | "tool_result" | "thinking";
-  text?: string;
-  name?: string;
-  input?: Record<string, unknown>;
-  content?: unknown;
-  id?: string;
-}
-
-interface TranscriptEntry {
-  role: "user" | "assistant" | "system";
-  content: TranscriptContentBlock[];
-}
-
-function loadRawTranscript(engineSessionId: string): TranscriptEntry[] {
-  const claudeProjectsDir = path.join(resolveClaudeConfigDir(), "projects");
-  if (!fs.existsSync(claudeProjectsDir)) return [];
-
-  const projectDirs = fs.readdirSync(claudeProjectsDir, { withFileTypes: true });
-  for (const dir of projectDirs) {
-    if (!dir.isDirectory()) continue;
-    const jsonlPath = path.join(claudeProjectsDir, dir.name, `${engineSessionId}.jsonl`);
-    if (!fs.existsSync(jsonlPath)) continue;
-
-    const entries: TranscriptEntry[] = [];
-    const lines = fs.readFileSync(jsonlPath, "utf-8").trim().split("\n").filter(Boolean);
-    for (const line of lines) {
-      try {
-        const obj = JSON.parse(line);
-        const type = obj.type;
-        if (type !== "user" && type !== "assistant") continue;
-        const msg = obj.message;
-        if (!msg) continue;
-
-        const rawContent = msg.content;
-        const blocks: TranscriptContentBlock[] = [];
-
-        if (typeof rawContent === "string") {
-          if (rawContent.trim()) blocks.push({ type: "text", text: rawContent });
-        } else if (Array.isArray(rawContent)) {
-          for (const block of rawContent) {
-            if (!block || typeof block !== "object") continue;
-            const b = block as Record<string, unknown>;
-            const blockType = String(b.type || "");
-            if (blockType === "text") {
-              blocks.push({ type: "text", text: String(b.text || "") });
-            } else if (blockType === "tool_use") {
-              blocks.push({
-                type: "tool_use",
-                name: String(b.name || ""),
-                input: (b.input as Record<string, unknown>) || {},
-              });
-            } else if (blockType === "tool_result") {
-              const resultContent = b.content;
-              let resultText: string;
-              if (typeof resultContent === "string") {
-                resultText = resultContent;
-              } else if (Array.isArray(resultContent)) {
-                resultText = (resultContent as Record<string, unknown>[])
-                  .filter((rc) => rc.type === "text")
-                  .map((rc) => String(rc.text || ""))
-                  .join("");
-              } else {
-                resultText = "";
-              }
-              blocks.push({ type: "tool_result", text: resultText });
-            } else if (blockType === "thinking") {
-              blocks.push({ type: "thinking", text: String(b.thinking || b.text || "") });
-            }
-          }
-        }
-
-        if (blocks.length > 0) {
-          entries.push({ role: type as "user" | "assistant", content: blocks });
-        }
-      } catch {
-        continue;
-      }
-    }
-    return entries;
-  }
-  return [];
-}
-
-/**
  * Track which sessions currently have an in-flight transcript backfill so
  * concurrent GETs don't kick off duplicate (expensive) parses. Once a backfill
  * finishes and inserts rows, subsequent GETs see messages.length > 0 and skip
@@ -4709,7 +4623,7 @@ function loadRawTranscript(engineSessionId: string): TranscriptEntry[] {
  */
 const backfillInProgress = new Set<string>();
 
-function scheduleTranscriptBackfill(sessionId: string, engineSessionId: string, context: ApiContext): void {
+function scheduleTranscriptBackfill(sessionId: string, engineSessionId: string, profile: ClaudeProfile, context: ApiContext): void {
   if (backfillInProgress.has(sessionId)) return;
   backfillInProgress.add(sessionId);
   // Defer off the request-handling tick so the GET returns immediately.
@@ -4720,7 +4634,7 @@ function scheduleTranscriptBackfill(sessionId: string, engineSessionId: string, 
       // guard, but cheap insurance).
       const existing = getMessages(sessionId);
       if (existing.length > 0) return;
-      const transcriptMessages = loadTranscriptMessages(engineSessionId);
+      const transcriptMessages = loadTranscriptMessages(engineSessionId, profile);
       if (transcriptMessages.length === 0) return;
       // One transaction for the whole backfill — better-sqlite3 executes the
       // inner inserts synchronously inside a single BEGIN/COMMIT, which is
@@ -4742,34 +4656,6 @@ function scheduleTranscriptBackfill(sessionId: string, engineSessionId: string, 
       backfillInProgress.delete(sessionId);
     }
   });
-}
-
-function loadTranscriptMessages(engineSessionId: string): Array<{ role: string; content: string }> {
-  // Claude Code stores transcripts in <config dir>/projects/<project-key>/<sessionId>.jsonl
-  const claudeProjectsDir = path.join(resolveClaudeConfigDir(), "projects");
-  if (!fs.existsSync(claudeProjectsDir)) return [];
-
-  // Search all project dirs for the transcript
-  const projectDirs = fs.readdirSync(claudeProjectsDir, { withFileTypes: true });
-  for (const dir of projectDirs) {
-    if (!dir.isDirectory()) continue;
-    const jsonlPath = path.join(claudeProjectsDir, dir.name, `${engineSessionId}.jsonl`);
-    if (!fs.existsSync(jsonlPath)) continue;
-
-    const messages: Array<{ role: string; content: string }> = [];
-    const lines = fs.readFileSync(jsonlPath, "utf-8").trim().split("\n").filter(Boolean);
-    for (const line of lines) {
-      try {
-        const obj = JSON.parse(line);
-        const text = transcriptEntryText(obj);
-        if (text) messages.push(text);
-      } catch {
-        continue;
-      }
-    }
-    return messages;
-  }
-  return [];
 }
 
 /**

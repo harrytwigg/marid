@@ -757,3 +757,78 @@ describe("syncExternalTurn — waking the parent", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("transcripts of a session on another Claude profile", () => {
+  let events: Array<{ event: string; payload: unknown }>;
+  const emit = (event: string, payload: unknown) => events.push({ event, payload });
+  let profileDir: string;
+  let ownDir: string;
+  let orgRegistryMod: typeof import("../org-registry.js");
+
+  beforeEach(async () => {
+    events = [];
+    profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-profile-"));
+    ownDir = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-own-profile-"));
+    vi.stubEnv("CLAUDE_CONFIG_DIR", ownDir);
+    fs.mkdirSync(path.join(tmp, "org", "dept"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, "org", "dept", "profile-employee.yaml"),
+      `name: profile-employee\npersona: test persona\nclaudeConfigDir: ${profileDir}\n`,
+    );
+    orgRegistryMod = await import("../org-registry.js");
+    orgRegistryMod.resetOrgRegistryForTests();
+    orgRegistryMod.refreshOrg();
+  });
+  afterEach(() => {
+    orgRegistryMod.resetOrgRegistryForTests();
+    vi.unstubAllEnvs();
+    fs.rmSync(path.join(tmp, "org"), { recursive: true, force: true });
+  });
+
+  /** A session of the profile employee, with its transcript only under the profile. */
+  function makeProfileSession(): { id: string; engineSessionId: string; assistantIso: string } {
+    const engineSessionId = `eng-profile-${++seq}`;
+    const s = reg.createSession({
+      engine: "claude",
+      source: "web",
+      sourceRef: `web:profile-${seq}`,
+      prompt: "test",
+      employee: "profile-employee",
+    });
+    reg.updateSession(s.id, { engineSessionId });
+    const assistantIso = iso(1_000);
+    const projectDir = path.join(profileDir, "projects", "-some-project");
+    fs.mkdirSync(projectDir, { recursive: true });
+    const line = (type: string, text: string, ts: string) =>
+      JSON.stringify({ type, timestamp: ts, message: { role: type, content: [{ type: "text", text }] } });
+    fs.writeFileSync(
+      path.join(projectDir, `${engineSessionId}.jsonl`),
+      [line("user", "typed in the terminal", iso(2_000)), line("assistant", "answered in the terminal", assistantIso)].join("\n") + "\n",
+    );
+    return { id: s.id, engineSessionId, assistantIso };
+  }
+
+  it("markTranscriptSyncedThrough anchors on the transcript under the session's profile", () => {
+    const { id, assistantIso } = makeProfileSession();
+    ext.markTranscriptSyncedThrough(id);
+    expect((reg.getSession(id)!.transportMeta as any)?.[ext.TRANSCRIPT_SYNC_META_KEY]).toBe(assistantIso);
+  });
+
+  it("syncExternalTurn reads the transcript under the session's profile when the hook names none", () => {
+    const { id } = makeProfileSession();
+    const n = ext.syncExternalTurn(id, emit, { hook_event_name: "Stop" });
+    expect(n).toBe(2);
+    expect(reg.getMessages(id).map((m) => [m.role, m.content])).toEqual([
+      ["user", "typed in the terminal"],
+      ["assistant", "answered in the terminal"],
+    ]);
+  });
+
+  it("scheduleOnLoadTailSync finds the transcript under the session's profile", async () => {
+    const { id } = makeProfileSession();
+    ext.scheduleOnLoadTailSync(id, emit);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(reg.getMessages(id).map((m) => m.content)).toEqual(["typed in the terminal", "answered in the terminal"]);
+    expect(events).toEqual([{ event: "session:external-turn", payload: { sessionId: id } }]);
+  });
+});
