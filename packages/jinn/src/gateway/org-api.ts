@@ -9,6 +9,7 @@ import { claudeProfileWire } from "../shared/claude-profile.js";
 import type { ApiContext } from "./api.js";
 import { departmentScopeOf } from "./department-registry.js";
 import { departmentChangeRefusal } from "./org-department-check.js";
+import { strandedByEmployeeMove, strandingMessage } from "./department-scope/stranding.js";
 
 /** Wire shape for the org list: the persona is replaced by its compact role. */
 function employeeView(node: OrgNode): Record<string, unknown> {
@@ -90,7 +91,10 @@ async function patchEmployee(
   const result = validateEmployeeUpdate(context.getConfig(), current, body);
   if (!result.ok) return badRequest(res, result.error || "invalid update");
 
-  const moved = departmentChangeRefusal(name, current.department, result.updates!.department, departmentScopeOf);
+  const next = result.updates!.department;
+  const holders = next !== undefined && next !== current.department ? strandedByEmployeeMove(name, next) : [];
+  if (holders.length > 0) return json(res, { error: strandingMessage(`Moving ${name} to ${next}`, holders), code: "department-boundary", holders }, 409);
+  const moved = departmentChangeRefusal(name, current.department, next, departmentScopeOf);
   if (moved) return json(res, { error: moved }, 409);
 
   const wrote = updateEmployeeYaml(name, result.updates!);

@@ -16,6 +16,7 @@ import { AUTO_COMPACT_BUDGET_HOLD_KEY } from '../shared/auto-compact-config.js';
 import { getMeta, setMeta, canonicalCallbackIdentityText, canonicalSessionDeliveryIdentity, sessionDeliveryFromRow, validateSessionDeliveryIdentity, type SessionDeliveryRow } from './migrate.js';
 import { parseTodoId } from '../work-items/id.js';
 import { toWorkItemLinkRole } from '../work-items/link-role.js';
+import { scopedDepartmentOf } from '../work-items/department-scope.js';
 import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs, JsonObject, ReplyContext, Session, SessionAttemptOutcome, SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload, SessionAttemptInterruptionCause } from '../shared/types.js';
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
@@ -69,9 +70,7 @@ function parseEngineSessions(value: unknown): EngineSessionRefs | null {
     if (typeof obj.model === 'string' && obj.model.trim()) ref.model = obj.model;
     if (typeof obj.effortLevel === 'string' && obj.effortLevel.trim()) ref.effortLevel = obj.effortLevel;
     if (typeof obj.lastSyncedAt === 'string' && obj.lastSyncedAt.trim()) ref.lastSyncedAt = obj.lastSyncedAt;
-    if (typeof obj.platformContextFingerprint === 'string' && obj.platformContextFingerprint.trim()) {
-      ref.platformContextFingerprint = obj.platformContextFingerprint;
-    }
+    if (typeof obj.platformContextFingerprint === 'string' && obj.platformContextFingerprint.trim()) ref.platformContextFingerprint = obj.platformContextFingerprint;
     if (Object.keys(ref).length > 0) refs[engine] = ref;
   }
   return Object.keys(refs).length > 0 ? refs : null;
@@ -124,6 +123,7 @@ function rowToSession(row: Record<string, unknown>): Session {
     promptExcerpt: (row.prompt_excerpt as string) ?? null,
     archivedAt: (row.archived_at as string) ?? null,
     parentSessionId: (row.parent_session_id as string) ?? null,
+    scopeDepartment: (row.scope_department as string) ?? null,
     userId: (row.user_id as string) ?? null,
     effortLevel: (row.effort_level as string) ?? null,
     status: row.status as Session['status'],
@@ -452,17 +452,19 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
   const connector = opts.connector ?? opts.source;
   const replyContext = opts.replyContext ? JSON.stringify(opts.replyContext) : null;
   const transportMeta = opts.transportMeta ? JSON.stringify(opts.transportMeta) : null;
+  // FR-008: a scoped employee's session is bound to its department, once, here, whatever path created it.
+  const scopeDepartment = scopedDepartmentOf(opts.employee);
 
   const stmt = db.prepare(`
     INSERT INTO sessions (
       id, engine, source, source_ref, connector, session_key, reply_context, message_id, transport_meta,
       employee, model, title, prompt_excerpt, parent_session_id,
-      user_id, effort_level, status, created_at, last_activity
+      user_id, effort_level, status, created_at, last_activity, scope_department
     )
     VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, 'idle', ?, ?
+      ?, ?, 'idle', ?, ?, ?
     )
   `);
   stmt.run(
@@ -484,6 +486,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     opts.effortLevel ?? null,
     now,
     now,
+    scopeDepartment,
   );
 
   return {
@@ -505,6 +508,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     promptExcerpt,
     archivedAt: null,
     parentSessionId: opts.parentSessionId ?? null,
+    scopeDepartment,
     userId: opts.userId ?? null,
     effortLevel: opts.effortLevel ?? null,
     status: 'idle',
@@ -1822,9 +1826,9 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
         id, engine, engine_session_id, source, source_ref, connector, session_key,
         reply_context, message_id, transport_meta,
         employee, model, title, parent_session_id, effort_level, status,
-        total_cost, total_turns, created_at, last_activity
+        total_cost, total_turns, created_at, last_activity, scope_department
       )
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'idle', 0, 0, ?, ?)
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'idle', 0, 0, ?, ?, ?)
     `).run(
       newId,
       source.engine,
@@ -1841,6 +1845,7 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       source.effortLevel,
       now,
       now,
+      scopedDepartmentOf(source.employee),
     );
 
     const insertMsg = db.prepare(

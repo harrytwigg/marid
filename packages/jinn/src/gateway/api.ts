@@ -224,6 +224,7 @@ import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./wor
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
+import { DepartmentBoundaryError } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
 import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
@@ -4560,6 +4561,8 @@ export async function handleApiRequest(
 
     return notFound(res);
   } catch (err) {
+    // FR-015: a write a department's boundary refuses, from whichever store writer the route reached.
+    if (err instanceof DepartmentBoundaryError) return json(res, { error: err.message, code: err.code, holders: err.holders }, 409);
     const msg = err instanceof Error ? err.message : String(err);
     logger.error(`API error: ${msg}`);
     return serverError(res, msg);

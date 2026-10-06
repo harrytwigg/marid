@@ -8,6 +8,8 @@ import { resolveJinnHome } from "../../shared/paths.js";
 import { operatorOnlyControlPlaneRoute } from "../control-plane-routes.js";
 import { departmentScopeOf, refreshDepartments } from "../department-registry.js";
 import { refreshOrg } from "../org-registry.js";
+import { assignWorkItem } from "../../work-items/assignment.js";
+import { createWorkItem } from "../../work-items/store.js";
 import { call, loadApi, takeOrgReloads } from "./departments-api-harness.js";
 import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile, writeSkill } from "./department-fixtures.js";
 
@@ -72,7 +74,7 @@ describe("PATCH /api/departments/:slug", () => {
     expect(takeOrgReloads()).toBe(1);
     expect(refreshOrg).toHaveBeenCalledTimes(1);
     vi.mocked(refreshOrg).mockClear();
-    expect((await call("PATCH", "/api/departments/side-project", { scope: "dedicated" })).status).toBe(400);
+    expect((await call("PATCH", "/api/departments/side-project", { instructions: "nonsense" })).status).toBe(400);
     expect(takeOrgReloads()).toBe(0);
     expect(refreshOrg).not.toHaveBeenCalled();
   });
@@ -108,14 +110,39 @@ describe("PATCH /api/departments/:slug", () => {
     expect(fs.readdirSync(path.dirname(fileOf("side-project"))).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
-  it("refuses a non-open scope until scoped employees are enforced", async () => {
+  it("sets a non-open scope now that scoped employees are enforced", async () => {
     writeDepartmentFile("side-project", "name: side-project\n");
-    for (const scope of ["scoped", "dedicated"]) {
+    for (const scope of ["scoped", "dedicated"] as const) {
       const { status, body } = await call("PATCH", "/api/departments/side-project", { scope });
-      expect(status).toBe(400);
-      expect(body.error).toMatch(/not available yet/);
+      expect(status).toBe(200);
+      expect(body.department.scope).toBe(scope);
+      expect(read("side-project")).toEqual({ name: "side-project", scope });
     }
-    expect(read("side-project")).toEqual({ name: "side-project" });
+  });
+
+  it("refuses a scope change that would strand a holder, names them, and writes nothing (FR-015)", async () => {
+    writeDepartmentFile("side-project", "name: side-project\nscope: scoped\n");
+    writeEmployeeFile("engineering", "eng-dev");
+    writeEmployeeFile("side-project", "side-dev");
+    refreshOrg();
+    const held = createWorkItem({ title: "held", department: "side-project", assignee: "eng-dev" });
+    const { status, body } = await call("PATCH", "/api/departments/side-project", { scope: "dedicated" });
+    expect(status).toBe(409);
+    expect(body).toMatchObject({ code: "department-boundary", holders: [{ todo: held.id, assignee: "eng-dev" }] });
+    expect(body.error).toMatch(new RegExp(`${held.id} \\(held by eng-dev\\)`));
+    expect(read("side-project")).toEqual({ name: "side-project", scope: "scoped" });
+    assignWorkItem(held.id, "side-dev", "side-project", "operator");
+    expect((await call("PATCH", "/api/departments/side-project", { scope: "dedicated" })).status).toBe(200);
+  });
+
+  it("refuses scoping an open department whose members hold Todos elsewhere", async () => {
+    writeDepartmentFile("side-project", "name: side-project\n");
+    writeEmployeeFile("side-project", "side-dev");
+    refreshOrg();
+    const held = createWorkItem({ title: "company", assignee: "side-dev" });
+    const { status, body } = await call("PATCH", "/api/departments/side-project", { scope: "scoped" });
+    expect(status).toBe(409);
+    expect(body.holders).toEqual([{ todo: held.id, assignee: "side-dev" }]);
   });
 
   it("opens a scoped department when told scope: open", async () => {

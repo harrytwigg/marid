@@ -72,11 +72,13 @@ describe("assignment in a scoped department", () => {
 });
 
 describe("assignment in a dedicated department", () => {
-  it("keeps the department too", () => {
+  it("refuses an employee who is not a member (FR-015), and the Todo stays where it is", () => {
     writeDepartmentFile("side-project", "name: side-project\nscope: dedicated\n");
     loadOrg();
     const item = todoIn("side-project");
-    expect(assign(item.id, "eng-dev", "engineering")?.department).toBe("side-project");
+    expect(() => assign(item.id, "eng-dev", "engineering")).toThrow(DepartmentBoundaryError);
+    expect(getWorkItem(item.id)).toMatchObject({ department: "side-project", assignee: null });
+    expect(assign(item.id, "side-dev", "side-project")?.department).toBe("side-project");
   });
 });
 
@@ -112,15 +114,16 @@ describe("open departments keep today's behaviour", () => {
     expect(assign(item.id, "@operator", null)?.department).toBeNull();
   });
 
-  it("keeps an open Todo in its open department when the assignee is in a scoped one", () => {
+  it("refuses a scoped employee on an open Todo (FR-015), and the Todo stays in its open department", () => {
     const item = todoIn("platform");
-    expect(assign(item.id, "side-dev", "side-project")?.department).toBe("platform");
-    expect(getWorkItem(item.id)?.assignee).toBe("side-dev");
+    expect(() => assign(item.id, "side-dev", "side-project")).toThrow(DepartmentBoundaryError);
+    expect(getWorkItem(item.id)).toMatchObject({ department: "platform", assignee: null });
   });
 
-  it("keeps a company Todo out of a scoped department when its employee is assigned", () => {
+  it("refuses a scoped employee on a company Todo, which stays out of the scoped department", () => {
     const item = todoIn(null);
-    expect(assign(item.id, "side-dev", "side-project")?.department).toBeNull();
+    expect(() => assign(item.id, "side-dev", "side-project")).toThrow(DepartmentBoundaryError);
+    expect(getWorkItem(item.id)?.department).toBeNull();
   });
 
   it("keeps a scoped Todo in its department when an open employee is assigned (the other direction)", () => {
@@ -138,12 +141,13 @@ describe("open departments keep today's behaviour", () => {
 });
 
 describe("a sub-task of an open root", () => {
-  it("is not moved into a scoped department by assigning it to a scoped employee", () => {
+  it("is not moved into a scoped department: a scoped employee cannot be assigned it at all", () => {
     writeDepartmentFile("side-project", "name: side-project\nscope: scoped\n");
     loadOrg();
     const root = todoIn("platform");
     const child = createWorkItem({ title: "child", parentId: root.id });
-    expect(assign(child.id, "side-dev", "side-project")?.department).toBe("platform");
+    expect(() => assign(child.id, "side-dev", "side-project")).toThrow(DepartmentBoundaryError);
+    expect(getWorkItem(child.id)?.department).toBe("platform");
   });
 });
 
@@ -157,12 +161,13 @@ describe("under a closed department policy", () => {
   });
   afterEach(() => fs.rmSync(config, { force: true }));
 
-  it("still fills an empty department with the default when a scoped employee is assigned", () => {
+  it("still fills an empty department with the default, and still refuses a scoped employee on it", () => {
     // Created before the policy, so the Todo is still unclassified when it is assigned.
     const item = createWorkItem({ title: "unclassified" });
     expect(item.department).toBeNull();
     fs.writeFileSync(config, closedPolicy);
-    expect(assign(item.id, "side-dev", "side-project")?.department).toBe("general");
+    expect(() => assign(item.id, "side-dev", "side-project")).toThrow(DepartmentBoundaryError);
+    expect(assign(item.id, "eng-dev", "engineering")?.department).toBe("general");
   });
 });
 

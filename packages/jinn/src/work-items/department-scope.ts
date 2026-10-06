@@ -1,3 +1,5 @@
+import { OPERATOR_ASSIGNEE } from "./operator-assignee.js";
+
 /** How far a department confines its members and its Todos (`department.yaml`). */
 export type DepartmentScope = "open" | "scoped" | "dedicated";
 
@@ -29,8 +31,75 @@ export function isNonOpenDepartment(department: string | null | undefined): bool
 /** A Todo write that would cross a non-open department's boundary. */
 export class DepartmentBoundaryError extends Error {
   readonly code = "department-boundary";
-  constructor(message: string) {
+  /** The Todos and holders a stranding refusal names (FR-015), when it is one. */
+  readonly holders: ReadonlyArray<{ todo: string; assignee: string }>;
+  constructor(message: string, holders: ReadonlyArray<{ todo: string; assignee: string }> = []) {
     super(message);
     this.name = "DepartmentBoundaryError";
+    this.holders = holders;
   }
+}
+
+/**
+ * The department an employee belongs to, by name; `undefined` for a name that is not
+ * on the roster. Injected beside the scope resolver, because the work-items layer
+ * does not read the org either. With none injected nobody is on the roster, so every
+ * name counts as unscoped.
+ */
+export type EmployeeDepartmentResolver = (employee: string) => string | undefined;
+
+let employeeResolver: EmployeeDepartmentResolver | null = null;
+
+export function setEmployeeDepartmentResolver(next: EmployeeDepartmentResolver | null): void {
+  employeeResolver = next;
+}
+
+export function employeeDepartment(employee: string): string | undefined {
+  return employeeResolver?.(employee);
+}
+
+/** What `mayHoldTodo` reads; the stranding checks pass a hypothetical one. */
+export interface HoldLookups {
+  scopeOf: (department: string | null | undefined) => DepartmentScope;
+  departmentOf: (employee: string) => string | undefined;
+}
+
+export const LIVE_HOLD_LOOKUPS: HoldLookups = { scopeOf: departmentScope, departmentOf: employeeDepartment };
+
+/**
+ * FR-015: whether `assignee` may hold a Todo whose ROOT sits in `rootDepartment`.
+ * A scoped employee holds only its own department's Todos; anyone else holds any
+ * Todo outside a `dedicated` department; `@operator`, and no assignee at all, always
+ * pass. With no resolvers injected every department is open, so everything passes.
+ */
+export function mayHoldTodo(
+  assignee: string | null | undefined,
+  rootDepartment: string | null | undefined,
+  lookups: HoldLookups = LIVE_HOLD_LOOKUPS,
+): boolean {
+  if (!assignee || assignee === OPERATOR_ASSIGNEE) return true;
+  const own = lookups.departmentOf(assignee);
+  if (lookups.scopeOf(own) !== "open") return own === rootDepartment;
+  return lookups.scopeOf(rootDepartment) !== "dedicated";
+}
+
+/** Why `assignee` may not hold the Todo, for a refusal; null when it may. */
+export function holdRefusal(
+  assignee: string | null | undefined,
+  todoId: string,
+  rootDepartment: string | null | undefined,
+  lookups: HoldLookups = LIVE_HOLD_LOOKUPS,
+): string | null {
+  if (mayHoldTodo(assignee, rootDepartment, lookups)) return null;
+  const own = lookups.departmentOf(assignee!);
+  const where = rootDepartment ? `department "${rootDepartment}"` : "the company";
+  if (lookups.scopeOf(own) !== "open") return `${assignee} is confined to department "${own}" and cannot hold ${todoId}, which is in ${where}`;
+  return `${todoId} is in dedicated department "${rootDepartment}", which only its own members can hold; ${assignee} is not one`;
+}
+
+/** FR-007/FR-008: the department `employee` is confined to, or null when it is not scoped. */
+export function scopedDepartmentOf(employee: string | null | undefined): string | null {
+  if (!employee) return null;
+  const own = employeeDepartment(employee);
+  return own && departmentScope(own) !== "open" ? own : null;
 }

@@ -362,16 +362,16 @@ export interface Session {
   title: string | null;
   /** ≤140-char whitespace-flattened excerpt of the creation prompt — "what was asked". */
   promptExcerpt?: string | null;
-  /** Set when the operator hides this chat from normal lists; the session and
-   * transcript remain durable and searchable until explicitly unarchived. */
+  /** Set when the operator hides this chat from normal lists; the session and transcript stay searchable until unarchived. */
   archivedAt?: string | null;
   parentSessionId: string | null;
+  /** The department a scoped employee's session is bound to at creation (FR-008); null for every other session. */
+  scopeDepartment?: string | null;
   /** Why this session is linked to `workItemId`: `execute` (it is an execution
    *  attempt) or `review` (it was delegated the review of one). Null/undefined
    *  reads as `execute`. See work-items/link-role.ts. */
   workItemRole?: WorkItemLinkRole | null;
-  /** Forwarded SSO identity captured from an auth proxy (opt-in via
-   *  `gateway.userHeader`). Null/undefined for single-user installs. */
+  /** Forwarded SSO identity from an auth proxy (opt-in via `gateway.userHeader`); null for single-user installs. */
   userId?: string | null;
   status: "idle" | "running" | "error" | "waiting" | "interrupted";
   /** Durable terminal receipt for the latest execution attempt. Conversational

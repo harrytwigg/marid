@@ -9,6 +9,7 @@ import { ensureDepartmentRegistered, resolveTodoDepartments } from "../work-item
 import { departmentRecord, departmentSlugsWithFiles, type DepartmentRecord } from "./department-registry.js";
 import { DepartmentWriteError, readDepartmentPatch, writeDepartmentFile } from "./department-store.js";
 import { readJsonBody } from "./http-helpers.js";
+import { strandedByScopeChange, strandingMessage, type Holding } from "./department-scope/stranding.js";
 import { orgRegistry, refreshOrg } from "./org-registry.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import type { ApiContext } from "./api.js";
@@ -21,9 +22,8 @@ import type { ApiContext } from "./api.js";
  *   PATCH /api/departments/:slug  rewrite that department's `department.yaml` (operator only)
  *
  * Writes are operator-only: `control-plane-routes.ts` lists the PATCH and api.ts
- * enforces that table before any module is asked. Nothing here restricts what an
- * employee can see or do; a scope only changes how assignment and sub-tasks behave
- * until scoped employees are enforced.
+ * enforces that table before any module is asked. A scope change that would strand a
+ * Todo's holder is refused, naming them (FR-015).
  */
 
 export interface DepartmentDefinitionFields {
@@ -123,10 +123,12 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const WRITE_STATUS = { not_found: 404, conflict: 409, invalid: 400 } as const;
 
-/** Nothing enforces a non-open scope yet, so the API will not set one. Opening a department is always allowed; a scoped one is written in the YAML by hand. */
-function refuseNonOpenScope(slug: string, scope: DepartmentScope | undefined): void {
-  if (scope === undefined || scope === "open") return;
-  throw new DepartmentWriteError("invalid", `setting scope: ${scope} through the API is not available yet; write it in org/${slug}/department.yaml`);
+/** FR-015: a scope change that would leave a Todo with a holder who may no longer hold it is refused, naming them. */
+function strandingRefusal(slug: string, scope: DepartmentScope | undefined): { error: string; code: string; holders: Holding[] } | null {
+  if (scope === undefined || scope === departmentRecord(slug).scope) return null;
+  const holders = strandedByScopeChange(slug, scope);
+  if (holders.length === 0) return null;
+  return { error: strandingMessage(`Making ${slug} ${scope}`, holders), code: "department-boundary", holders };
 }
 
 async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: string, context: ApiContext): Promise<void> {
@@ -135,7 +137,8 @@ async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: stri
   if (!parsed.body || typeof parsed.body !== "object" || Array.isArray(parsed.body)) return badRequest(res, "update body must be a JSON object");
   try {
     const patch = readDepartmentPatch(parsed.body as Record<string, unknown>);
-    refuseNonOpenScope(slug, patch.scope);
+    const stranding = strandingRefusal(slug, patch.scope);
+    if (stranding) return json(res, stranding, 409);
     writeDepartmentFile(slug, patch);
   } catch (err) {
     if (!(err instanceof DepartmentWriteError)) throw err;
