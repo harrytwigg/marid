@@ -1,5 +1,6 @@
 import { declaredClaudeAccounts } from "../shared/claude-accounts-config.js";
 import { registerClaudeProfileDirs } from "../shared/claude-profile.js";
+import { setStageTrustSeeder } from "./department-stage/stage.js";
 import { seedTrust } from "../shared/claude-settings.js";
 import {
   accountForEmployee, registerEmployeeAccountResolver, registerRemoteAccountDefaults, registerSessionAccountResolver,
@@ -30,6 +31,8 @@ export function bootClaudeProfiles(getConfig: () => JinnConfig): void {
   } catch (err) {
     logger.warn(`Failed to seed Claude trust: ${err instanceof Error ? err.message : err}`);
   }
+  // A department's stage directory is a cwd of its own, so it needs the same seed (FR-020).
+  setStageTrustSeeder((stageDir) => seedTrust(claudeJsonPath(), stageDir));
   registerRemoteAccountDefaults(() => getConfig().remote);
   registerAccountRoster(() => orgRegistry().values());
   registerRemoteAccountReader(remoteAccountReader);

@@ -8,6 +8,7 @@ import { reconcilePluginWatchers } from "../plugins/watcher-supervisor.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
 import { setDepartmentChangeListener } from "./department-registry.js";
+import { syncDepartmentStages } from "./department-stage/stage.js";
 import type { WatcherCallbacks } from "./watcher.js";
 
 /** The two reloads that only the server can perform, since they own state it holds. */
@@ -26,7 +27,12 @@ export interface WatchDependencies {
 export function gatewayWatchCallbacks({ reloadConfig, getConfig, reloadOrg, emit }: WatchDependencies): WatcherCallbacks {
   // A department file edited, refused or deleted changes its scope badge and panel, so
   // clients refetch the department list.
-  setDepartmentChangeListener((slug) => emit("company:changed", { entity: "department", action: "changed", id: slug }));
+  setDepartmentChangeListener((slug) => {
+    emit("company:changed", { entity: "department", action: "changed", id: slug });
+    syncDepartmentStages(slug);
+  });
+  // Every scoped department's stage directory is brought up to date at boot, and again on the triggers below (FR-020a).
+  syncDepartmentStages();
   return {
     onConfigReload: () => {
       reloadConfig();
@@ -49,7 +55,9 @@ export function gatewayWatchCallbacks({ reloadConfig, getConfig, reloadOrg, emit
     onSkillsChange: () => {
       logger.info("Skills changed, notifying clients");
       emit("skills:changed", {});
+      syncDepartmentStages();
     },
+    onDepartmentInstructionsChange: () => syncDepartmentStages(),
     onPluginsChange: () => {
       // Rescanning here rather than only on request is what surfaces a broken
       // manifest in the log at the moment it is saved, instead of the next time

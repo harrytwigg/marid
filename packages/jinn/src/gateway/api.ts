@@ -81,6 +81,7 @@ export {
   normalizeBlockDeltaForTurn,
 } from "../sessions/partial-stream.js";
 import { forkEngineSession } from "../sessions/fork.js";
+import { spawnCwd } from "../sessions/session-cwd.js";
 import { claudeProfileForSession } from "./session-claude-profile.js";
 import { cleanUpDeletedSession } from "./session-cleanup.js";
 import { ptySnapshotStore } from "../engines/pty-snapshot.js";
@@ -2020,7 +2021,7 @@ export async function handleApiRequest(
               destinationSessionsRoot: path.join(CODEX_HOMES_DIR, newSession.id, "sessions"),
             }
           : undefined;
-        const forkResult = await forkEngineSession(source.engine, source.engineSessionId, JINN_HOME, { interactive, codex, claudeProfile: claudeProfileForSession(source) });
+        const forkResult = await forkEngineSession(source.engine, source.engineSessionId, spawnCwd(source), { interactive, codex, claudeProfile: claudeProfileForSession(source) });
 
         // 3. Store the new engine session ID
         recordEngineSessionId(newSession.id, newSession.engine, forkResult.engineSessionId, {
@@ -3365,7 +3366,7 @@ export async function handleApiRequest(
       // A named engine with no model resolves that engine's default, so the
       // previous engine's model is not carried across.
       const todoDispatch = typeof body.workItemId === "string" && isTodoId(body.workItemId.trim())
-        ? resolveTodoDispatch(body.workItemId.trim())
+        ? resolveTodoDispatch(body.workItemId.trim(), employeeName ?? null)
         : { ok: true as const, preamble: { prefix: "", engine: null, model: null } };
       if (!todoDispatch.ok) return json(res, { error: todoDispatch.error }, 409);
       const todoOverride = todoDispatch.preamble;

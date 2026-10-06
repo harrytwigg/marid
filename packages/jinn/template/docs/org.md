@@ -129,9 +129,9 @@ description: A friend's side project
 scope: scoped              # open (the default, also when absent) | scoped | dedicated
 workdirs:                  # scoped and dedicated departments only
   - ~/Projects/side-project
-skills: [review]           # company skills a scoped session is offered; [] or absent = none
+skills: [review]           # company skills copied into a scoped session's directory; [] or absent = none
 sharedNotes: [knowledge/shared/glossary.md]   # paths under knowledge/ or docs/ that the department may read
-instructions: department   # department | department+company
+instructions: department   # department | department+company: add the company CLAUDE.md to the department's own
 ```
 
 | `scope` | Its employees | Everyone else |
@@ -157,11 +157,18 @@ Every way of setting an assignee checks this (assigning, delegating, the metadat
 - Todos: lists and searches show only the department's; any other Todo answers exactly as an unknown one does; creates land in the department; relations to Todos outside it show only as a count. Wherever an answer would name a Todo or session outside the department (an event, a run, a comment's session), it shows `hidden` instead.
 - Sessions: it sees and messages only sessions bound to its department, plus a live reply to the session that asked it for work. Unscoped sessions, the COO's included, are invisible to it.
 - People: the org tools and its prompt show only the department's members, and it can assign, dispatch, delegate and spawn only to them (or assign to `@operator`).
-- Notes: its Notes are `knowledge/departments/<slug>/`, plus the department's `sharedNotes`, even when Notes are switched off. The company `knowledge/state.md`, `knowledge/employees/` and `docs/` are out of reach unless shared.
+- Notes: its Notes are `knowledge/departments/<slug>/`, plus the department's `sharedNotes`, even when Notes are switched off. Search and reads are rooted there, writes go only into the department's own folder, and the company `knowledge/state.md`, `knowledge/employees/` and `docs/` are out of reach unless shared. The department's own state file is `knowledge/departments/<slug>/state.md`: it is created by the department's first note write, as a title and a `## Current` section of keyed `- key: value` lines, and its sessions keep it through the note tools.
 - Files: it may attach or publish only files inside the department's `workdirs` or its stage directory, and cannot browse managed files.
 - Refused: cron, cost, connectors, configuration, global search, the skills API, sprint, label and department administration, and every live socket.
 
-A scoped employee must use the `claude` engine and cannot have a `remoteHost` yet; cron jobs cannot target one, and connectors (Telegram) cannot open a session for one. A session whose employee has since left the department, or whose department has been opened, or that was created before its department was scoped, can no longer act or start a turn; start a new one. Until the next release loads only the department's own instructions and skills, a scoped session still loads this instance's `CLAUDE.md`, skills and `knowledge/state.md`.
+A scoped employee must use the `claude` engine and cannot have a `remoteHost` yet; cron jobs cannot target one, and connectors (Telegram) cannot open a session for one. A session whose employee has since left the department, or whose department has been opened, or that was created before its department was scoped, can no longer act or start a turn; start a new one.
+
+**What a scoped session loads.** A scoped session does not run in the instance home. It runs in the department's stage directory, `<parent of the instance home>/.jinn-departments/<slug>/` (`~/.jinn-departments/<slug>/` for `~/.jinn`), which holds only:
+
+- `CLAUDE.md`, generated from `knowledge/departments/<slug>/INSTRUCTIONS.md` (the department's own instructions), then this instance's `CLAUDE.md` when the department says `instructions: department+company`, then a fixed paragraph saying the session is scoped to the department, uses the jinn tools for company state, does not read the instance home, other repositories or other sessions' transcripts with its shell, and keeps its state in `knowledge/departments/<slug>/state.md` through the note tools. With the default `instructions: department`, the company `CLAUDE.md` is not loaded at all.
+- `.claude/skills/<name>/`, a copy of each company skill in the department's `skills` list. No list means no company skills. A skill that contains a symlink is refused and logged, and copies nothing. The same list limits what `skills` a Todo in the department can request (set time and dispatch time), and the session's prompt names the skills it has.
+
+Do not edit the stage directory: it is regenerated, file by file, at boot, when a skill, the department's file or its `INSTRUCTIONS.md` changes, and before every scoped session starts, so an edit a session made to it is reverted by the next start, and so is any file a session leaves there: keep work in the department's `workdirs`, not in the session's starting directory. Its path never changes, so resume, fork and compaction keep finding the session's transcript. If it cannot be prepared the session is refused, never started in the instance home. A rate-limited scoped session never moves to another engine: it falls back only to a Claude account in its account's chain, and otherwise waits for its reset. What follows the Claude profile rather than the directory still loads: the profile's own user-level skills, plugins and settings, and its claude.ai connectors. On the default profile those are yours.
 
 **This is a guardrail, not a sandbox.** It is enforced in the gateway and the jinn tools. A scoped employee's sessions still run as your user with a shell, and a session that deliberately uses that shell can read the instance home, other repositories and credentials, and reach the gateway around the tools. Put nothing in a scoped department you would not trust its account with.
 

@@ -1,5 +1,5 @@
 import { initDb } from '../shared/db.js';
-import { installedSkillNames } from '../shared/skill-commands.js';
+import { offeredSkillNames, skillAllowListNote, skillsRootFor } from './dispatch-skills.js';
 import { logger } from '../shared/logger.js';
 import { getModelRegistry } from '../shared/models.js';
 import { validateNewSessionSelection } from '../sessions/session-patch.js';
@@ -57,7 +57,7 @@ function looksLikeMcpToolName(name: string): boolean {
   return name.includes('__');
 }
 
-function validateSkills(raw: unknown): { ok: true; skills: string[] } | { ok: false; error: string } {
+function validateSkills(raw: unknown, workItemId: string): { ok: true; skills: string[] } | { ok: false; error: string } {
   if (!Array.isArray(raw)) return { ok: false, error: 'skills must be an array of installed skill names' };
   if (raw.length > TODO_SKILLS_MAX) {
     return { ok: false, error: `skills accepts at most ${TODO_SKILLS_MAX} entries per Todo (got ${raw.length})` };
@@ -78,14 +78,14 @@ function validateSkills(raw: unknown): { ok: true; skills: string[] } | { ok: fa
     };
   }
 
-  const installed = installedSkillNames();
+  const installed = offeredSkillNames(workItemId);
   const unknown = skills.filter((name) => !installed.has(name));
   if (unknown.length > 0) {
     return {
       ok: false,
       error:
         `unknown skill${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')} — ` +
-        'a skill is a directory under skills/ holding a SKILL.md. GET /api/skills lists the installed ones.',
+        `a skill is a directory under skills/ holding a SKILL.md. GET /api/skills lists the installed ones${skillAllowListNote(workItemId)}.`,
     };
   }
   return { ok: true, skills };
@@ -188,7 +188,7 @@ export function setTodoDispatchConfig(
 
   const validated = input.skills === undefined
     ? { ok: true as const, skills: current?.skills ?? [] }
-    : validateSkills(input.skills);
+    : validateSkills(input.skills, id);
   if (!validated.ok) return validated;
   const skills = validated.skills;
 
@@ -250,13 +250,13 @@ export interface TodoDispatchPreamble {
  * different: the Todo asked to be worked with skills and none survived, so the
  * attempt would be something other than what was requested.
  */
-export function resolveTodoDispatch(workItemId: string):
+export function resolveTodoDispatch(workItemId: string, employee?: string | null):
   | { ok: true; preamble: TodoDispatchPreamble }
   | { ok: false; error: string } {
   const stored = getTodoDispatchConfig(workItemId);
   if (!stored) return { ok: true, preamble: { prefix: '', engine: null, model: null } };
 
-  const installed = installedSkillNames();
+  const installed = offeredSkillNames(workItemId);
   const present = stored.skills.filter((name) => installed.has(name));
   const missing = stored.skills.filter((name) => !installed.has(name));
 
@@ -265,7 +265,7 @@ export function resolveTodoDispatch(workItemId: string):
       ok: false,
       error:
         `Todo ${workItemId} requests skill${missing.length > 1 ? 's' : ''} ${missing.join(', ')}, ` +
-        'and none of them are installed. Install them under skills/, or clear the Todo\'s skills before dispatching.',
+        `and none of them are installed${skillAllowListNote(workItemId)}. Install them under skills/, or clear the Todo's skills before dispatching.`,
     };
   }
   if (missing.length > 0) {
@@ -275,10 +275,10 @@ export function resolveTodoDispatch(workItemId: string):
     );
   }
 
-  return { ok: true, preamble: { prefix: skillsPromptPrefix(present), engine: stored.engine, model: stored.model } };
+  return { ok: true, preamble: { prefix: skillsPromptPrefix(present, skillsRootFor(workItemId, employee)), engine: stored.engine, model: stored.model } };
 }
 
-function skillsPromptPrefix(skills: readonly string[]): string {
+function skillsPromptPrefix(skills: readonly string[], root: string): string {
   if (skills.length === 0) return '';
-  return `Read and follow ${skills.map((name) => `skills/${name}/SKILL.md`).join(', ')} before you start.\n\n`;
+  return `Read and follow ${skills.map((name) => `${root}/${name}/SKILL.md`).join(', ')} before you start.\n\n`;
 }
