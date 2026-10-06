@@ -87,7 +87,7 @@ function childrenInFlight(sessionId: string): Session[] {
   }
 }
 
-type Outcome = "compacted" | "unconfirmed" | "failed" | "rate-limited" | "preempted" | "not-planned";
+export type AutoCompactOutcome = "compacted" | "unconfirmed" | "failed" | "rate-limited" | "preempted" | "not-planned";
 
 /** One auto-compaction in progress: what was decided, and when it started. */
 interface Pending {
@@ -96,36 +96,52 @@ interface Pending {
   startedAt: number;
 }
 
-const field = (value: number | string | undefined): string => (value === undefined ? "" : String(value));
+/** A value for the log line; `-` when there is none. An empty value would let
+ *  the logger's secret scrubber take the next field as its value. */
+const field = (value: number | string | undefined): string => (value === undefined ? "-" : String(value));
 
 function resultFields(result: Pick<EngineResult, "compaction" | "cost"> | undefined): string[] {
   const stats = result?.compaction;
   return [
-    `preTokens=${field(stats?.preTokens)}`,
-    `postTokens=${field(stats?.postTokens)}`,
+    `pre=${field(stats?.preTokens)}`,
+    `post=${field(stats?.postTokens)}`,
     `costUsd=${field(result?.cost?.toFixed(4))}`,
   ];
 }
 
 function triggerFields(decision: AutoCompactGo): string[] {
   return decision.trigger === "budget"
-    ? [`trigger=budget`, `budgetTokens=${decision.budgetTokens}`]
+    ? [`trigger=budget`, `budget=${decision.budgetTokens}`]
     : [`trigger=cold`, `idleSec=${Math.round(decision.idleMs / 1000)}`, `windowSec=${decision.policy.cacheWindowSeconds}`];
 }
 
-/** One greppable line per auto-compaction, so the saving can be checked later
- *  against the spend ledger (the compaction's own cost is recorded there too). */
-function logAutoCompaction(pending: Pending, outcome: Outcome, result?: Pick<EngineResult, "compaction" | "cost" | "error">): void {
-  const { run, decision } = pending;
-  const line = "[auto-compact] " + [
-    `session=${run.input.session.id}`,
-    `engine=${run.plan.engineName}`,
-    `outcome=${outcome}`,
-    ...triggerFields(decision),
-    `contextTokens=${decision.contextTokens}`,
+/**
+ * One greppable line per auto-compaction, so the saving can be checked later
+ * against the spend ledger (the compaction's own cost is recorded there too).
+ * Sizes are in tokens. No key may contain "token": the logger's secret
+ * scrubber blanks any `…token…=` value, whatever its case.
+ */
+export function autoCompactLogLine(
+  fields: { sessionId: string; engine: string; outcome: AutoCompactOutcome; decision: AutoCompactGo; durationMs: number },
+  result?: Pick<EngineResult, "compaction" | "cost">,
+): string {
+  return "[auto-compact] " + [
+    `session=${fields.sessionId}`,
+    `engine=${fields.engine}`,
+    `outcome=${fields.outcome}`,
+    ...triggerFields(fields.decision),
+    `context=${fields.decision.contextTokens}`,
     ...resultFields(result),
-    `durationMs=${Date.now() - pending.startedAt}`,
+    `durationMs=${fields.durationMs}`,
   ].join(" ");
+}
+
+function logAutoCompaction(pending: Pending, outcome: AutoCompactOutcome, result?: Pick<EngineResult, "compaction" | "cost" | "error">): void {
+  const { run, decision } = pending;
+  const line = autoCompactLogLine(
+    { sessionId: run.input.session.id, engine: run.plan.engineName, outcome, decision, durationMs: Date.now() - pending.startedAt },
+    result,
+  );
   if (outcome === "compacted" || outcome === "preempted") logger.info(line);
   else logger.warn(`${line} error=${JSON.stringify((result?.error ?? "").slice(0, 300))}`);
 }

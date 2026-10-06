@@ -126,11 +126,11 @@ There is no handoff here, unlike `compact_session`. The session did not choose t
 Each auto-compaction writes one line to `logs/gateway.log`:
 
 ```
-[auto-compact] session=<id> engine=claude outcome=compacted trigger=cold idleSec=2520 windowSec=300 contextTokens=180000 preTokens=180000 postTokens=9000 costUsd=0.4210 durationMs=23015
-[auto-compact] session=<id> engine=opencode outcome=compacted trigger=budget budgetTokens=300000 contextTokens=320000 preTokens=320000 postTokens= costUsd=0.0200 durationMs=41230
+[auto-compact] session=<id> engine=claude outcome=compacted trigger=cold idleSec=2520 windowSec=300 context=180000 pre=180000 post=9000 costUsd=0.4210 durationMs=23015
+[auto-compact] session=<id> engine=opencode outcome=compacted trigger=budget budget=300000 context=320000 pre=320000 post=- costUsd=0.0200 durationMs=41230
 ```
 
-`outcome` is one of `compacted`, `unconfirmed`, `failed`, `rate-limited`, `preempted` or `not-planned`. Outcomes other than `compacted` and `preempted` are logged at `warn` level with the error. `grep '\[auto-compact\]'` lists every compaction. Compare the session's spend before and after in the ledger (`jinn limits`, or `cost_report`) to see the effect. A session left alone is logged at `debug` level with the reason (`context-small`, `cache-warm`, `budget-held`, …).
+`budget`, `context`, `pre` and `post` are sizes in tokens; `-` means the engine reported none (opencode reports no size after compacting). The keys avoid the word "token" because the logger redacts any `…token…=` value. `outcome` is one of `compacted`, `unconfirmed`, `failed`, `rate-limited`, `preempted` or `not-planned`. Outcomes other than `compacted` and `preempted` are logged at `warn` level with the error. `grep '\[auto-compact\]'` lists every compaction. Compare the session's spend before and after in the ledger (`jinn limits`, or `cost_report`) to see the effect. A session left alone is logged at `debug` level with the reason (`context-small`, `cache-warm`, `budget-held`, …).
 
 ## Limits
 
