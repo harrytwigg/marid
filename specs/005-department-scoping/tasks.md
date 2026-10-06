@@ -172,14 +172,9 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
 
 - [ ] T070 Confirm fact 4 on this Mac with a throwaway profile: list the Keychain service names,
   sign the throwaway profile in, list them again, and record the result in the PR. Repeat with
-  the same directory spelled with a trailing slash. Then, after T073, run a real session on the
-  throwaway profile with the gateway-built `--settings`, and record in the PR that: (1) the
-  bypass-consent dialog does not appear with FR-052a (and whether it appears without it);
-  (2) a commit and a PR body made in that session carry no Co-Authored-By or "Generated with"
-  line; (3) the PreToolUse hook fires. For any key that fails, apply FR-052a's fallback (write
-  it into `<profile>/settings.json` and add it to the FR-054 check) and record the re-run. Delete the throwaway entries afterwards. Then write red tests: an employee with `claudeConfigDir` spawns
-  without `CLAUDE_CONFIG_DIR`, and a remote employee's ordinary turn drops
-  `remoteClaudeConfigDir` (`sessions/turn/engine-run.ts:55`).
+  the same directory spelled with a trailing slash. Then write red tests: an employee with
+  `claudeConfigDir` spawns without `CLAUDE_CONFIG_DIR`, and a remote employee's ordinary turn
+  drops `remoteClaudeConfigDir` (`sessions/turn/engine-run.ts:55`).
 - [ ] T071 Parse and validate `claudeConfigDir` in `gateway/org.ts` beside the remote check
   (FR-050). Refuse it with `remoteHost`, and on a scoped employee until the stage dir is in
   use (FR-059). Add every `claudeConfigDir` to the file-read policy's protected Claude dirs.
@@ -190,6 +185,13 @@ gateway script from T031. The screenshots go on the PR with `gh pr comment --att
   `attribution`, `hooks.PreToolUse` and `skipDangerousModePermissionPrompt` into the session
   settings for named profiles, with a test per key (FR-052a). Remove an inherited
   `CLAUDE_SECURESTORAGE_CONFIG_DIR` for named profiles.
+- [ ] T073a Verify FR-052a end to end. Run a real session on the throwaway profile with the
+  gateway-built `--settings`, and record in the PR that: (1) the bypass-consent dialog does not
+  appear with FR-052a (and whether it appears without it); (2) a commit and a PR body made in
+  that session carry no Co-Authored-By or "Generated with" line, using a scratch repository or
+  a dry run, never a real PR on a client repository; (3) the PreToolUse hook fires. For any key
+  that fails, apply FR-052a's fallback (write it into `<profile>/settings.json` and add it to
+  the FR-054 check) and record the re-run. Delete the throwaway Keychain entries afterwards.
 - [ ] T074 Transcript readers (junior sub-Todo): give `findTranscriptForSession` and every
   FR-053 reader the session's profile, with a test per reader that finds a transcript under a
   fake profile.

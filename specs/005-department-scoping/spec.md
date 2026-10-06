@@ -563,7 +563,7 @@ scoped employee; D is that session's binding)
   A unit test only proves the file holds the keys. Claude Code may read some of them only from
   user or policy settings, not from `--settings`: the installed binary reads
   `skipDangerousModePermissionPrompt` from user and policy settings in at least one place. So
-  Phase 4 verifies each key end to end in a real session (T070). **Fallback:** a key that is not
+  Phase 4 verifies each key end to end in a real session (T073a). **Fallback:** a key that is not
   honoured from `--settings` is written into `<profile>/settings.json` instead, and the FR-054
   check also requires it to be there.
 - **FR-053**: **Transcripts.** Every local transcript reader MUST resolve the session's

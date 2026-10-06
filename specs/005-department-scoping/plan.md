@@ -300,7 +300,7 @@ The value is resolved once per run from the employee and passed down. It reaches
 - **Settings** (FR-052a): for a named profile, `buildSessionSettings`
   (`shared/claude-settings.ts:70`) copies `attribution`, `hooks.PreToolUse` and
   `skipDangerousModePermissionPrompt` from the default profile's `settings.json`, merging
-  `hooks` with the gateway's own. Each is verified end to end in a real session (T070). A key
+  `hooks` with the gateway's own. Each is verified end to end in a real session (T073a). A key
   Claude Code does not honour from `--settings` is written into `<profile>/settings.json`
   instead, and the signed-in check requires it.
 - **Environment hygiene**: for a named profile, `CLAUDE_SECURESTORAGE_CONFIG_DIR` is removed
