@@ -16,7 +16,8 @@ vi.mock("../../shared/models.js", async (importOriginal) => ({
 
 const { reg, recordingEngine, recordingSurface, configWith, coldSession, runOne, ENABLED, MINUTE } =
   await import("./helpers/auto-compact-harness.js");
-const { AUTO_COMPACT_BUDGET_HOLD_KEY } = await import("../auto-compaction.js");
+const { AUTO_COMPACT_BUDGET_HOLD_KEY } = await import("../../shared/auto-compact-config.js");
+const { beginEngineSubstitution } = await import("../engine-override.js");
 
 const BUDGET = { ...ENABLED, maxContextTokens: 300_000 };
 const budgetConfig = () => configWith(BUDGET, "opencode");
@@ -72,7 +73,7 @@ describe("the context budget through runTurn (opencode, server mode)", () => {
 
     await runOne(engine, sessionId, "first", recordingSurface().surface, budgetConfig());
     // opencode reports no size after a compaction: the floor waits for a reading.
-    expect(hold(sessionId)).toEqual({ floor: null });
+    expect(hold(sessionId)).toEqual({ floor: null, engine: "opencode" });
     await runOne(engine, sessionId, "second", recordingSurface().surface, budgetConfig());
 
     expect(calls.map((c) => c.prompt)).toEqual([expect.stringMatching(/^\/compact /), "first", "second"]);
@@ -89,7 +90,7 @@ describe("the context budget through runTurn (opencode, server mode)", () => {
     await runOne(engine, sessionId, "one", recordingSurface().surface, config);
     // 310k is the floor: no compaction in front of this turn, which reads 330k...
     await runOne(engine, sessionId, "two", recordingSurface().surface, config);
-    expect(hold(sessionId)).toEqual({ floor: 310_000 });
+    expect(hold(sessionId)).toEqual({ floor: 310_000, engine: "opencode" });
     // ...nor in front of this one (330k < 385k), which reads 400k.
     await runOne(engine, sessionId, "three", recordingSurface().surface, config);
     // 400k is past 310k + 75k: compact again, and this time it lands under.
@@ -110,6 +111,25 @@ describe("the context budget through runTurn (opencode, server mode)", () => {
 
     // 320k compacts; 310k holds (floor 310k); 400k compacts; 600k holds (floor 600k); 900k compacts.
     expect(promptsOf(calls)).toEqual(["/compact", "one", "two", "/compact", "three", "four", "/compact", "five"]);
+  });
+
+  it("on opencode, takes a heavy turn's reading as the floor, and lowers it when the session comes back down", async () => {
+    const sessionId = warmSession("web:budget-floor-down", 320_000);
+    const { engine, calls } = scriptedEngine([600_000, 320_000, 400_000, 50_000]);
+    const config = budgetConfig();
+
+    // Compacts; opencode reports no size, and the heavy message turn reads 600k: floor 600k.
+    await runOne(engine, sessionId, "one", recordingSurface().surface, config);
+    // Held at 600k; this turn comes back down to 320k (the engine's own compaction, say).
+    await runOne(engine, sessionId, "two", recordingSurface().surface, config);
+    expect(hold(sessionId)).toEqual({ floor: 600_000, engine: "opencode" });
+    // 320k lowers the floor; no compaction yet (320k < 395k). This turn reads 400k.
+    await runOne(engine, sessionId, "three", recordingSurface().surface, config);
+    expect(hold(sessionId)).toEqual({ floor: 320_000, engine: "opencode" });
+    // 400k is past 320k + 75k: compact.
+    await runOne(engine, sessionId, "four", recordingSurface().surface, config);
+
+    expect(promptsOf(calls)).toEqual(["/compact", "one", "two", "three", "/compact", "four"]);
   });
 
   it("sets no hold when the engine reports landing under the budget, so a heavy turn after it is compacted next time", async () => {
@@ -163,5 +183,23 @@ describe("the context budget through runTurn (opencode, server mode)", () => {
 
     await runOne(engine, sessionId, "second", recordingSurface().surface, budgetConfig());
     expect(calls.map((c) => c.prompt.startsWith("/compact") ? "/compact" : c.prompt)).toEqual(["/compact", "first", "/compact", "second"]);
+  });
+
+  it("keeps a hold written earlier in the turn when a rate limit hands the turn to another engine", () => {
+    const sessionId = warmSession("web:budget-fallback", 320_000);
+    const started = reg.beginSessionAttempt(sessionId)!;
+    // The turn's snapshot predates the hold its auto-compaction then wrote.
+    const snapshot = reg.getSession(sessionId)!;
+    reg.updateSession(sessionId, { transportMeta: { [AUTO_COMPACT_BUDGET_HOLD_KEY]: { floor: 310_000, engine: "opencode" } } });
+
+    const substituted = beginEngineSubstitution({
+      session: snapshot, attemptToken: started.attemptToken!, config: budgetConfig(), employee: undefined,
+      substitute: "claude", until: new Date(Date.now() + 60 * MINUTE), syncSince: new Date().toISOString(), lastError: "usage limit",
+    });
+
+    expect(substituted).toBeDefined();
+    const meta = reg.getSession(sessionId)!.transportMeta!;
+    expect(meta[AUTO_COMPACT_BUDGET_HOLD_KEY]).toEqual({ floor: 310_000, engine: "opencode" });
+    expect(meta.engineOverride).toMatchObject({ originalEngine: "opencode" });
   });
 });

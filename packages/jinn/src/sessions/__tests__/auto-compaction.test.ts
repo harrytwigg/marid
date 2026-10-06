@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { JinnConfig, Session } from "../../shared/types.js";
+import { AUTO_COMPACT_BUDGET_HOLD_KEY } from "../../shared/auto-compact-config.js";
 import {
-  AUTO_COMPACT_BUDGET_HOLD_KEY,
   autoCompactDoneNotice,
   autoCompactFailedNotice,
   autoCompactStatus,
@@ -85,7 +85,7 @@ describe("decideAutoCompaction", () => {
 
 describe("decideAutoCompaction — the context budget", () => {
   const BUDGET = { ...ON, maxContextTokens: 300_000 };
-  const held = (floor: number | null) => ({ transportMeta: { [AUTO_COMPACT_BUDGET_HOLD_KEY]: { floor } } as never });
+  const held = (floor: number | null, engine = "opencode") => ({ transportMeta: { [AUTO_COMPACT_BUDGET_HOLD_KEY]: { floor, engine } } as never });
   const opencode = (over: Partial<Session>, idleMs = MINUTE, policy: Record<string, unknown> = BUDGET) => input({
     config: config("opencode", policy), engine: "opencode", session: session("opencode", over, idleMs),
   });
@@ -132,7 +132,20 @@ describe("decideAutoCompaction — the context budget", () => {
 
   it("fills a pending floor from the first reading after the compaction", () => {
     expect(decideAutoCompaction(opencode({ lastContextTokens: 310_000, ...held(null) })))
-      .toEqual({ compact: false, skip: "budget-held", holdUpdate: { floor: 310_000 } });
+      .toEqual({ compact: false, skip: "budget-held", holdUpdate: { floor: 310_000, engine: "opencode" } });
+  });
+
+  it("lowers the floor to a lower reading still over the budget, and re-arms from there", () => {
+    // A manual or the engine's own compaction took a session held at 600k down to 320k.
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 320_000, ...held(600_000) })))
+      .toEqual({ compact: false, skip: "budget-held", holdUpdate: { floor: 320_000, engine: "opencode" } });
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 400_000, ...held(320_000) })))
+      .toMatchObject({ compact: true, trigger: "budget", holdUpdate: null });
+  });
+
+  it("ignores, and lifts, a hold another engine's compaction left", () => {
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 320_000, ...held(310_000, "claude") })))
+      .toMatchObject({ compact: true, trigger: "budget", holdUpdate: null });
   });
 
   it("lifts the hold on a reading under the budget, or when there is no budget", () => {
@@ -154,16 +167,16 @@ describe("the budget hold", () => {
   const policy = { ...ON, maxContextTokens: 300_000 };
 
   it("is left only by a compaction that did not get under the budget", () => {
-    expect(holdAfterCompaction(policy, 60_000)).toBeNull();
-    expect(holdAfterCompaction(policy, 310_000)).toEqual({ floor: 310_000 });
-    expect(holdAfterCompaction(policy, undefined)).toEqual({ floor: null });
-    expect(holdAfterCompaction({ ...ON }, 310_000)).toBeNull();
+    expect(holdAfterCompaction(policy, "claude", 60_000)).toBeNull();
+    expect(holdAfterCompaction(policy, "claude", 310_000)).toEqual({ floor: 310_000, engine: "claude" });
+    expect(holdAfterCompaction(policy, "opencode", undefined)).toEqual({ floor: null, engine: "opencode" });
+    expect(holdAfterCompaction({ ...ON }, "claude", 310_000)).toBeNull();
   });
 
   it("reads a floor, a pending floor, or nothing", () => {
     const meta = (value: unknown) => ({ transportMeta: { [AUTO_COMPACT_BUDGET_HOLD_KEY]: value } }) as never;
-    expect(readBudgetHold(meta({ floor: 310_000 }))).toEqual({ floor: 310_000 });
-    expect(readBudgetHold(meta({ floor: null }))).toEqual({ floor: null });
+    expect(readBudgetHold(meta({ floor: 310_000, engine: "claude" }))).toEqual({ floor: 310_000, engine: "claude" });
+    expect(readBudgetHold(meta({ floor: null, engine: "opencode" }))).toEqual({ floor: null, engine: "opencode" });
     expect(readBudgetHold(meta(true))).toBeUndefined();
     expect(readBudgetHold({ transportMeta: null } as never)).toBeUndefined();
   });

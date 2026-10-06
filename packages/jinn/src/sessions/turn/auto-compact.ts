@@ -2,8 +2,8 @@ import { opencodeMode } from "../../engines/opencode-server.js";
 import { logger } from "../../shared/logger.js";
 import { detectRateLimit } from "../../shared/rateLimit.js";
 import type { EngineResult, Session } from "../../shared/types.js";
+import { AUTO_COMPACT_BUDGET_HOLD_KEY } from "../../shared/auto-compact-config.js";
 import {
-  AUTO_COMPACT_BUDGET_HOLD_KEY,
   autoCompactDoneNotice,
   autoCompactFailedNotice,
   autoCompactStatus,
@@ -142,7 +142,7 @@ function wasPreempted(run: TurnRun, live: Session | undefined, result: EngineRes
 /** The session's `transportMeta` with its budget hold set, or lifted (`null`). */
 function withBudgetHold(current: Session, hold: BudgetHold | null): UpdateSessionFields {
   const { [AUTO_COMPACT_BUDGET_HOLD_KEY]: _previous, ...rest } = current.transportMeta ?? {};
-  return { transportMeta: hold ? { ...rest, [AUTO_COMPACT_BUDGET_HOLD_KEY]: { ...hold } } : rest };
+  return { transportMeta: hold ? { ...rest, [AUTO_COMPACT_BUDGET_HOLD_KEY]: hold } : rest };
 }
 
 /**
@@ -156,6 +156,7 @@ function withBudgetHold(current: Session, hold: BudgetHold | null): UpdateSessio
 function recordCompaction(run: TurnRun, compactPlan: TurnPlan, attempt: EngineAttempt, decision: AutoCompactGo): string | undefined {
   const { result } = attempt;
   const postTokens = result.compaction?.postTokens ?? result.contextTokens;
+  const meter = typeof postTokens === "number" ? postTokens : null;
   const sessionId = run.input.session.id;
   recordTurnAccounting(sessionId, { cost: result.cost, numTurns: result.numTurns, ...(compactPlan.model ? { model: compactPlan.model } : {}) });
   const nativeId = result.sessionId?.trim() || compactPlan.resumeNativeId;
@@ -168,8 +169,8 @@ function recordCompaction(run: TurnRun, compactPlan: TurnPlan, attempt: EngineAt
         lastSyncedAt: new Date().toISOString(),
       })
       : {}),
-    lastContextTokens: typeof result.contextTokens === "number" ? result.contextTokens : null,
-    ...withBudgetHold(current, holdAfterCompaction(decision.policy, postTokens)),
+    lastContextTokens: meter,
+    ...withBudgetHold(current, holdAfterCompaction(decision.policy, compactPlan.engineName, meter ?? undefined)),
   }));
   return nativeId;
 }

@@ -77,7 +77,15 @@ A compaction does not always get a session under its budget. The system prompt, 
 
 A compaction that reports landing under the budget sets no hold.
 
-While a session is on hold, the budget fires again only once the context reaches the higher of the budget and the floor, plus a quarter of the budget. With a 300k budget and a 310k floor, that is 385k. So growth always re-arms the budget, and a budget the session cannot get under costs at most one compaction per quarter-budget of growth. A reading under the budget lifts the hold. The hold never stops the cold-cache trigger. A skip while held is logged at `debug` level as `budget-held`.
+While a session is on hold, the budget fires again only once the context reaches the higher of the budget and the floor, plus a quarter of the budget. With a 300k budget and a 310k floor, that is 385k. So growth always re-arms the budget, and a budget the session cannot get under costs at most one compaction per quarter-budget of growth.
+
+Other readings also move the hold:
+
+- **A reading under the budget lifts it.**
+- **A lower reading that is still over the budget lowers the floor.** For example, an operator's `/compact` or the engine's own compaction brings a session held at 600k down to 320k. The floor becomes 320k, and the budget re-arms from there.
+- **A different engine ignores it and clears it.** The hold applies only to the engine whose compaction set it. If the session switches engines, the next decided turn ignores it and clears it.
+
+The hold never stops the cold-cache trigger. A skip while held is logged at `debug` level as `budget-held`.
 
 A failed compaction sets no hold, so the next turn tries again. A duplicated session does not inherit its source's hold.
 
@@ -130,4 +138,5 @@ Each auto-compaction writes one line to `logs/gateway.log`:
 - **A turn that failed before filing its conversation doesn't count as activity.** The session can then look colder than it is and compact one turn early.
 - **Claude turns typed into the terminal count once Jinn has synced them.** One typed moments before a message and not yet synced is missed.
 - **The meter is the last turn's input size, not the next turn's.** A session with a huge prompt waiting but a short history is not compacted.
+- **On opencode, a heavy turn straight after a compaction sets the floor.** opencode reports no size after compacting, so the floor is the reading at the end of the message turn the compaction ran in front of, and that includes the turn's own growth. If one turn takes a session from the compacted ~80k to 600k, the floor is 600k, and the budget waits until 675k. Claude reports the compacted size, so the same turn there is compacted on the next turn. The cost is bounded at a quarter of the budget past that reading, and it applies only when a single turn grows past the budget.
 - **The budget is checked between turns, not during one.** A single long agentic turn can grow well past the budget. Jinn compacts before the turn after it. Within the turn, the engine's own compaction still applies at the model's ceiling. On opencode that compaction does fire in server mode below the raw context limit, at `limit.context − maxOutput` (`engines/__tests__/opencode-native-compaction-e2e.test.ts`).

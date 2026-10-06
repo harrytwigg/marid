@@ -52,8 +52,7 @@ export function beginEngineSubstitution(opts: {
     from: session.engine, to: substitute, model: session.model,
   });
 
-  const transportMeta = { ...(session.transportMeta || {}) } as Record<string, unknown>;
-  transportMeta.engineOverride = {
+  const engineOverride = {
     originalEngine: session.engine,
     originalEngineSessionId: session.engineSessionId,
     // The pin comes off the row for the duration, so the record is the only place
@@ -63,7 +62,7 @@ export function beginEngineSubstitution(opts: {
     syncSince,
   };
 
-  const started = updateSessionForAttempt(session.id, attemptToken, {
+  const started = updateSessionForAttempt(session.id, attemptToken, (current) => ({
     // The limited engine's thread id moves to its own typed ref (the override record
     // keeps a second copy). The mirror belongs to whichever engine is actually running,
     // so it goes null until the substitute returns a thread id of its own.
@@ -71,11 +70,12 @@ export function beginEngineSubstitution(opts: {
     engine: substitute,
     engineSessionId: null,
     model: model ?? null,
-    transportMeta: transportMeta as never,
+    // The live row, not the snapshot: this turn may already have written to it.
+    transportMeta: { ...(current.transportMeta || {}), engineOverride } as never,
     status: "running",
     lastActivity: new Date().toISOString(),
     lastError,
-  });
+  }));
   if (!started) return undefined;
 
   return {

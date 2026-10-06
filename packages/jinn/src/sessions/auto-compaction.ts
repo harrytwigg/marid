@@ -76,26 +76,31 @@ export type AutoCompactTrigger = "cold" | "budget";
 
 /**
  * The budget hold: left on a session by an auto-compaction that did not get it
- * under its budget — a long system prompt and toolset, a large verbatim tail,
- * or a heavy turn straight after. `floor` is where the session landed: the
- * size the compaction reported, or, when the engine reports none (opencode),
- * null until the next turn's reading fills it in.
+ * under its budget — a long system prompt and toolset, a large verbatim tail.
+ * `floor` is where the session landed: the size the compaction reported, or,
+ * when the engine reports none (opencode), null until the next turn's reading
+ * fills it in. That reading includes the turn's own growth, so on opencode a
+ * heavy turn straight after a compaction raises the floor; the rearm bounds
+ * the cost at a quarter of the budget past it.
  *
  * While held, the budget fires again only once the context has grown
  * {@link BUDGET_REARM_FRACTION} of the budget past both the budget and the
  * floor. So a budget the session cannot compact below costs one compaction per
  * that much growth rather than one on every turn, and growth always re-arms
- * it. A reading under the budget lifts the hold. The cold-cache trigger
- * ignores it: a compaction resets the engine's activity, so that one cannot
- * repeat on its own.
+ * it. A lower reading still over the budget (an operator's `/compact`, the
+ * engine's own compaction) lowers the floor; one under the budget lifts the
+ * hold. The cold-cache trigger ignores it: a compaction resets the engine's
+ * activity, so that one cannot repeat on its own.
  */
-export interface BudgetHold { floor: number | null }
+export type BudgetHold = {
+  floor: number | null;
+  /** The engine whose compaction left it: another engine's context is not it. */
+  engine: string;
+};
 
 /** How far past `max(budget, floor)` a held session must grow, as a share of
  *  the budget, before the budget fires again. */
 export const BUDGET_REARM_FRACTION = 0.25;
-
-export { AUTO_COMPACT_BUDGET_HOLD_KEY };
 
 /** What a decision asks the runner to write back: a new hold, `null` to lift
  *  it, absent to leave it as it is. */
@@ -112,8 +117,8 @@ export type AutoCompactGo = Extract<AutoCompactDecision, { compact: true }>;
 export function readBudgetHold(session: Pick<Session, "transportMeta">): BudgetHold | undefined {
   const raw = session.transportMeta?.[AUTO_COMPACT_BUDGET_HOLD_KEY];
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
-  const floor = (raw as { floor?: unknown }).floor;
-  return { floor: typeof floor === "number" && positive(floor) ? floor : null };
+  const { floor, engine } = raw as { floor?: number; engine?: unknown };
+  return { floor: positive(floor) ? floor : null, engine: typeof engine === "string" ? engine : "" };
 }
 
 /** The context size at which a held session's budget fires again. */
@@ -126,11 +131,11 @@ export function budgetRearmTokens(budget: number, floor: number): number {
  * afterwards: none when there is no budget or it landed under it, the size
  * when it landed at or over, and a pending floor when it reported none.
  */
-export function holdAfterCompaction(policy: AutoCompactPolicy, postTokens: number | undefined): BudgetHold | null {
+export function holdAfterCompaction(policy: AutoCompactPolicy, engine: string, postTokens: number | undefined): BudgetHold | null {
   const budget = policy.maxContextTokens;
   if (budget === undefined) return null;
-  if (!positive(postTokens)) return { floor: null };
-  return postTokens < budget ? null : { floor: postTokens };
+  if (!positive(postTokens)) return { floor: null, engine };
+  return postTokens < budget ? null : { floor: postTokens, engine };
 }
 
 export interface AutoCompactInput {
@@ -180,8 +185,9 @@ function decideCold(input: AutoCompactInput, policy: AutoCompactPolicy, contextT
  * than the session row.
  *
  * A cold session compacts as cold whatever its size against the budget; a warm
- * one compacts when its context has reached the budget, unless the last
- * auto-compaction has not yet brought it back under (see the hold above).
+ * one compacts when its context has reached the budget — or, when the last
+ * auto-compaction left it held at a floor, once it has grown a quarter of the
+ * budget past the floor (see the hold above).
  */
 export function decideAutoCompaction(input: AutoCompactInput): AutoCompactDecision {
   const policy = resolveAutoCompactPolicy(input.config, input.engine);
@@ -193,7 +199,7 @@ export function decideAutoCompaction(input: AutoCompactInput): AutoCompactDecisi
   if (!positive(contextTokens)) return { compact: false, skip: "context-unknown" };
   const cold = decideCold(input, policy, contextTokens);
   if (cold.compact) return cold;
-  const { decision, holdUpdate } = decideBudget(input.session, policy, contextTokens);
+  const { decision, holdUpdate } = decideBudget(input, policy, contextTokens);
   return { ...(decision ?? cold), ...(holdUpdate !== undefined ? { holdUpdate } : {}) };
 }
 
@@ -202,19 +208,24 @@ export function decideAutoCompaction(input: AutoCompactInput): AutoCompactDecisi
  * no budget or the context is under it — the cold-cache answer then stands.
  */
 function decideBudget(
-  session: Pick<Session, "transportMeta">,
+  input: AutoCompactInput,
   policy: AutoCompactPolicy,
   contextTokens: number,
 ): { decision?: AutoCompactDecision } & HoldUpdate {
   const budget = policy.maxContextTokens;
-  const hold = readBudgetHold(session);
+  const found = readBudgetHold(input.session);
+  // Another engine's compaction says nothing about this engine's context.
+  const hold = found?.engine === input.engine ? found : undefined;
+  const lift = found ? { holdUpdate: null } : {};
   // Under the budget, or no budget at all: nothing to fire, nothing to hold.
-  if (budget === undefined || contextTokens < budget) return hold ? { holdUpdate: null } : {};
-  if (!hold) return { decision: { compact: true, trigger: "budget", contextTokens, budgetTokens: budget, policy } };
-  // The first reading since a compaction that reported no size is where it landed.
-  const floor = hold.floor ?? contextTokens;
-  const filled = hold.floor === null ? { holdUpdate: { floor } } : {};
-  if (contextTokens < budgetRearmTokens(budget, floor)) return { decision: { compact: false, skip: "budget-held" }, ...filled };
+  if (budget === undefined || contextTokens < budget) return lift;
+  if (!hold) return { decision: { compact: true, trigger: "budget", contextTokens, budgetTokens: budget, policy }, ...lift };
+  // The first reading since a compaction that reported no size is where it
+  // landed; a lower reading since (a manual or the engine's own compaction)
+  // is where it is now.
+  const floor = hold.floor === null ? contextTokens : Math.min(hold.floor, contextTokens);
+  const moved = floor !== hold.floor ? { holdUpdate: { floor, engine: hold.engine } } : {};
+  if (contextTokens < budgetRearmTokens(budget, floor)) return { decision: { compact: false, skip: "budget-held" }, ...moved };
   // Grown far enough past where it landed: compact again. A confirmed
   // compaction sets the next hold; a failed one leaves none, so the next turn retries.
   return { decision: { compact: true, trigger: "budget", contextTokens, budgetTokens: budget, policy }, holdUpdate: null };
