@@ -180,7 +180,12 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session
     hooks: rateLimitHooks(args),
   });
   if (outcome.kind !== "handback") return undefined;
-  await args.surface.waiting(false);
+  if (outcome.waited) {
+    // The parent and the operator channel were told this session paused; tell them it is moving again.
+    await args.surface.waiting(false);
+    notifyRateLimitResumed(outcome.session);
+    notifyOperatorChannel(`✅ ${describe(input.session)} back on its own Claude account and resumed.`);
+  }
   await args.surface.notice("↩️ Back on this session's own Claude account — continuing there.");
   return outcome.session;
 }

@@ -202,6 +202,11 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   // resets, so the wait ends there at the latest.
   const handBackAt = accountHandBackAt(session);
   const resumeAt = earlier(limitResetAt, handBackAt);
+  const threadFields = originalResult.sessionId?.trim() ? nextEngineSessionFields(session, session.engine, originalResult.sessionId) : {};
+  // The window closed while this turn ran: the own account has already reopened, so there is nothing to wait for.
+  if (handBackAt && Date.now() >= handBackAt.getTime()) {
+    return await handBack(session.id, attemptToken, hooks, { waited: false, fields: threadFields });
+  }
 
   logger.info(
     `Session ${session.id} hit ${engineLabel} usage limit — will auto-retry ${resumeAt ? `at ${resumeAt.toISOString()}` : `in ${Math.round(delayMs / 1000)}s`}`
@@ -209,7 +214,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   );
 
   const enteredWaiting = updateSessionForAttempt(session.id, attemptToken, {
-    ...(originalResult.sessionId?.trim() ? nextEngineSessionFields(session, session.engine, originalResult.sessionId) : {}),
+    ...threadFields,
     status: "waiting",
     lastActivity: new Date().toISOString(),
     lastError: resumeAt
@@ -238,7 +243,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     // back to being slept to rather than guessed at.
     let unstatedAttempts = 0;
 
-    while (Date.now() < deadlineMs) {
+    // Never give up before the hand-back: the own account reopens then at the latest.
+    const loopDeadlineMs = handBackAt ? Math.max(deadlineMs, handBackAt.getTime()) : deadlineMs;
+    while (Date.now() < loopDeadlineMs) {
       const stillWaiting = await waitWhileSessionWaiting(session.id, handBackAt ? Math.min(nextDelayMs, handBackAt.getTime() - Date.now()) : nextDelayMs);
       if (!stillWaiting) {
         const currentSession = getSession(session.id);
@@ -261,7 +268,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         return { kind: "cancelled" };
       }
 
-      if (handBackAt && Date.now() >= handBackAt.getTime()) return await handBack(session.id, attemptToken, hooks);
+      if (handBackAt && Date.now() >= handBackAt.getTime()) return await handBack(session.id, attemptToken, hooks, { waited: true });
 
       await hooks.onRetryAttempt?.({ attempt });
       logger.info(`Session ${session.id} retrying after usage limit (attempt ${attempt})`);
@@ -329,7 +336,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         }
 
         await hooks.onStillLimited?.({ attempt, resumeAt: nextResumeAt ?? null });
-        if (unstatedAttempts >= MAX_UNSTATED_PARK_ATTEMPTS) {
+        if (unstatedAttempts >= MAX_UNSTATED_PARK_ATTEMPTS && !handBackAt) {
           logger.warn(
             `Session ${session.id} stopping after ${unstatedAttempts} retries against a ${engineLabel} usage limit that never named a reset`,
           );
