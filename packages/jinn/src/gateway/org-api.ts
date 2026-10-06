@@ -26,7 +26,8 @@ function employeeView(node: OrgNode): Record<string, unknown> {
   };
 }
 
-async function getOrg(res: ServerResponse, context: ApiContext): Promise<void> {
+/** The `GET /api/org` body; the department-scope gate narrows it to one department's members. */
+export async function orgPayload(context: ApiContext) {
   const entries = fs.existsSync(ORG_DIR)
     ? fs.readdirSync(ORG_DIR, { withFileTypes: true })
     : [];
@@ -38,7 +39,7 @@ async function getOrg(res: ServerResponse, context: ApiContext): Promise<void> {
   const { resolveOrgHierarchy } = await import("./org-hierarchy.js");
   const hierarchy = resolveOrgHierarchy(orgRegistry(context.getConfig()));
 
-  json(res, {
+  return {
     departments,
     employees: hierarchy.sorted.map((name) => employeeView(hierarchy.nodes[name])),
     hierarchy: {
@@ -46,7 +47,11 @@ async function getOrg(res: ServerResponse, context: ApiContext): Promise<void> {
       sorted: hierarchy.sorted,
       warnings: hierarchy.warnings,
     },
-  });
+  };
+}
+
+async function getOrg(res: ServerResponse, context: ApiContext): Promise<void> {
+  json(res, await orgPayload(context));
 }
 
 async function getEmployee(res: ServerResponse, name: string, context: ApiContext): Promise<void> {

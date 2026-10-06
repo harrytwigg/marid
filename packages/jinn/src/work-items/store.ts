@@ -135,6 +135,8 @@ export interface ListWorkItemsFilter {
   parentId?: string;
   /** Whole family sharing this root Todo. */
   rootId?: string;
+  /** Only Todos whose root sits in this department: a Todo's scope is its root's (FR-002). */
+  rootDepartment?: string;
   /** Only tree roots (parentless items). */
   rootsOnly?: boolean;
   /** Board scopes — `kept`: pinned (ICI-1357). `home`: pinned OR operator-created (PLA-230). */
@@ -501,6 +503,10 @@ function workItemWhere(filter: ListWorkItemsFilter, textIds?: readonly string[])
   if (filter.rootId) {
     conditions.push('root_id = ?');
     values.push(parseTodoId(filter.rootId));
+  }
+  if (filter.rootDepartment) {
+    conditions.push('work_items.root_id IN (SELECT scope_root.id FROM work_items scope_root WHERE scope_root.department = ?)');
+    values.push(filter.rootDepartment);
   }
   if (filter.rootsOnly) conditions.push('parent_id IS NULL');
   if (filter.kept) conditions.push(KEPT_EXISTS_SQL);

@@ -70,7 +70,8 @@ function membersByDepartment(context: ApiContext): Map<string, string[]> {
   return byDepartment;
 }
 
-function listRows(context: ApiContext): DepartmentRow[] {
+/** The `GET /api/departments` rows; the department-scope gate narrows them to one. */
+export function listDepartmentRows(context: ApiContext): DepartmentRow[] {
   const policy = resolveTodoDepartments();
   // A department that has been given a scope is on the board before its first Todo,
   // like a department a closed policy allows.
@@ -157,7 +158,7 @@ async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: stri
 export async function handleDepartmentsApi(req: HttpRequest, res: ServerResponse, route: ParsedRoute, context: ApiContext): Promise<boolean> {
   const { method, pathname } = route;
   if (method === "GET" && pathname === "/api/departments") {
-    json(res, { departments: listRows(context) });
+    json(res, { departments: listDepartmentRows(context) });
     return true;
   }
   const params = matchRoute("/api/departments/:slug", pathname);

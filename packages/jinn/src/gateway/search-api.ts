@@ -41,7 +41,7 @@ export interface SearchApiOptions {
   resolveNeedsAttentionTarget: (requested: string) => NeedsAttentionTarget | undefined;
 }
 
-function messageSearchFilter(url: URL): ReadResult<MessageSearchFilter> {
+export function messageSearchFilter(url: URL): ReadResult<MessageSearchFilter> {
   const filter: MessageSearchFilter = {};
   for (const name of ["sessionId", "excludeSessionId", "employee", "engine"] as const) {
     const value = readCleanSearchParam(url, name);
@@ -98,7 +98,7 @@ function readSessionWindow(url: URL, filter: SearchSessionsFilter): string | und
   return undefined;
 }
 
-function sessionSearchFilter(url: URL): ReadResult<SearchSessionsFilter> {
+export function sessionSearchFilter(url: URL): ReadResult<SearchSessionsFilter> {
   const filter: SearchSessionsFilter = {};
   const text = readCleanSearchParam(url, "text");
   if (text) {

@@ -131,6 +131,7 @@ import { handleSkillsApi } from "./skills-api.js";
 import { handleSearchApi, type NeedsAttentionTarget } from "./search-api.js";
 import { operatorOnlyControlPlaneRoute } from "./control-plane-routes.js";
 import { refuseRemoteMcpRoute, remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
+import { handleScopedCaller, type ScopedGateDeps } from "./department-scope/gate.js";
 import { handlePluginsApi } from "./plugins-api.js";
 import QRCode from "qrcode";
 import { WhatsAppConnector } from "../connectors/whatsapp/index.js";
@@ -595,6 +596,15 @@ function terminalApiOptions(req: HttpRequest, context: ApiContext): TerminalApiO
     isOperator: () => scopedOperatorAuthenticated(req, context),
     serialize: (session) => serializeSessionResponse(session, context),
     onCreated: (session) => context.emit("session:created", { sessionId: session.id }),
+  };
+}
+
+function scopedGateDeps(context: ApiContext): ScopedGateDeps {
+  return {
+    context,
+    serializeSessions: (sessions) => serializeSessionList(sessions, context),
+    compactSessionSummary,
+    readSessionTree: (todoId) => readTodoSessionTree(todoId, (all) => sessionTreeActivity(buildSessionDelegatedActivityIndex(all, context), (session) => currentRuntimeActivity(session, context))),
   };
 }
 
@@ -1177,6 +1187,8 @@ export async function handleApiRequest(
     }
     // D4: ahead of every handler, a connector anchor reaches only its tool profile's routes.
     if (identifiedCaller && refuseRemoteMcpRoute(res, method, pathname, resolveScopedWriteCallerIdentity(req, context))) return;
+    // FR-010: a session of a department-scoped employee reaches only its department (department-scope/gate.ts).
+    if (identifiedCaller && await handleScopedCaller(req, res, { method, pathname, url }, resolveScopedWriteCallerIdentity(req, context), scopedGateDeps(context))) return;
     if (await handleTalkApi(req, res, { method, pathname, url }, {
       getConfig: context.getConfig, caller: resolveScopedWriteCallerIdentity(req, context),
       context,
