@@ -35,7 +35,22 @@ export interface DepartmentDefinition {
 
 export type ParsedDepartment =
   | { ok: true; definition: DepartmentDefinition; warnings: string[] }
-  | { ok: false; error: string };
+  /** `asksToConfine`: the refused text names a scope other than `open` (FR-001), so a department that has never loaded is held dedicated. */
+  | { ok: false; error: string; asksToConfine: boolean };
+
+/**
+ * A refused file asks to confine its department when it has a `scope:` key whose value is
+ * anything but `open`. An anchored line match catches it in the text, which a commented-out
+ * line does not satisfy; when the file parses, the key itself is read too, so a quoted
+ * value, a flow mapping, `Scoped` and a mistyped scope all count.
+ */
+const SCOPE_LINE = /^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S/im;
+
+function namesScopeOtherThanOpen(raw: string, doc: Record<string, unknown> | null): boolean {
+  if (SCOPE_LINE.test(raw)) return true;
+  const value = doc?.scope;
+  return value !== undefined && value !== null && String(value).trim().toLowerCase() !== "open";
+}
 
 export interface ParseContext {
   /** `$JINN_HOME`, where `skills/` lives. */
@@ -119,7 +134,7 @@ function readScope(value: unknown): { scope: DepartmentScope } | { error: string
 }
 
 /** The mapping a file holds, or why it is not one. An empty file is an empty definition. */
-function readDocument(raw: string): { doc: Record<string, unknown> } | { error: string } {
+function readDocument(raw: string): { doc: Record<string, unknown> } | { error: string; doc?: undefined } {
   let data: unknown;
   try {
     data = yaml.load(raw);
@@ -156,9 +171,12 @@ function readExtras(definition: DepartmentDefinition, doc: Record<string, unknow
 
 export function parseDepartmentYaml(slug: string, raw: string, ctx: ParseContext): ParsedDepartment {
   const read = readDocument(raw);
-  if ("error" in read) return { ok: false, error: read.error };
+  if ("error" in read) {
+    // Not a mapping at all (a list) names no scope; one that does not parse is judged by its text.
+    return { ok: false, error: read.error, asksToConfine: namesScopeOtherThanOpen(raw, null) };
+  }
   const identity = readIdentity(slug, read.doc);
-  if ("error" in identity) return { ok: false, error: identity.error };
+  if ("error" in identity) return { ok: false, error: identity.error, asksToConfine: namesScopeOtherThanOpen(raw, read.doc) };
   const warnings: string[] = [];
   const definition: DepartmentDefinition = {
     slug,

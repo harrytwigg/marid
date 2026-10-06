@@ -50,14 +50,6 @@ let signatures = new Map<string, string>();
 let notifyChange: ((slug: string) => void) | null = null;
 
 const DEPARTMENT_FILE = "department.yaml";
-/**
- * Whether a refused file's raw text has a `scope:` key whose value is anything but `open`.
- * Only such a file is held dedicated when it has never loaded (FR-001), so a typo such as
- * `scope: scopd` fails closed. Earlier templates described a `department.yaml` that nothing
- * read and never carried a `scope`, so an old file the parser refuses leaves its department
- * open and confines no one on upgrade.
- */
-const ASKS_FOR_CONFINEMENT = /^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S/im;
 const NEAR_MISS = /^departments?\.(ya?ml)$/i;
 
 /** One listener: called with a slug whenever its definition, scope or refusal changes after the first load. The gateway's watcher callbacks hand it the client broadcast. */
@@ -128,7 +120,7 @@ function readFileState(slug: string, orgDir: string, home: string, current: Set<
     return { definition: null, error: `the file cannot be read: ${(err as Error).message}`, asksToConfine: false, file, warnings: [] };
   }
   const parsed = parseDepartmentYaml(slug, raw, { home });
-  if (!parsed.ok) return { definition: null, error: parsed.error, asksToConfine: ASKS_FOR_CONFINEMENT.test(raw), file, warnings: [] };
+  if (!parsed.ok) return { definition: null, error: parsed.error, asksToConfine: parsed.asksToConfine, file, warnings: [] };
   return { definition: parsed.definition, error: null, asksToConfine: false, file, warnings: parsed.warnings };
 }
 

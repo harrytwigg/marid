@@ -423,7 +423,8 @@ and dark, with screenshots on the PR (FR-040).
     is treated as `dedicated` until the file loads **only if the file's raw text has a
     `scope:` key whose value is anything other than `open`**, meaning a line that matches
     `^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S` (multiline,
-    case-insensitive). So a file that asks for confinement, or that mistypes the scope
+    case-insensitive) or, when the text parses, whose parsed `scope` key is not `open`, so a
+    quoted value, a flow mapping and `Scoped` count, and a commented-out line does not. So a file that asks for confinement, or that mistypes the scope
     (`scope: scopd`), fails closed: its intended members are confined and nobody else can
     hold its Todos. A file with no `scope` key, or with `scope: open`, leaves the department
     `open`, which is today's behaviour: earlier templates described a `department.yaml` that
