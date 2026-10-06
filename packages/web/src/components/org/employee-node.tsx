@@ -43,8 +43,9 @@ export function EmployeeNode({ data, selected }: NodeProps) {
         >
           {employee.displayName || employee.name}
         </div>
-        <div className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] whitespace-nowrap overflow-hidden text-ellipsis">
+        <div className="flex items-center gap-[4px] min-w-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)] whitespace-nowrap overflow-hidden text-ellipsis">
           {roleLabel(employee)}
+          <ClaudeProfileBadge profile={employee.claudeProfile} />
         </div>
       </div>
 
@@ -53,7 +54,6 @@ export function EmployeeNode({ data, selected }: NodeProps) {
         <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] text-[var(--accent)] bg-[var(--accent-fill)] py-px px-[7px] rounded-[10px]">
           {employee.engine}
         </span>
-        <ClaudeProfileBadge profile={employee.claudeProfile} />
         {employee.model && (
           <span
             className={`text-[length:var(--text-caption2)] text-[var(--text-tertiary)] bg-[var(--fill-quaternary)] py-px px-[7px] rounded-[10px] transition-opacity duration-150 ${selected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}

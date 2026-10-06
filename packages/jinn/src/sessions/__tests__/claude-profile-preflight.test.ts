@@ -66,14 +66,14 @@ describe("preflight refuses a turn on a profile that cannot sign in (FR-054)", (
     const result = preflight({ claudeConfigDir: profileDir }, override);
     expect(result).toEqual({
       ok: false,
-      error: `The Claude profile ${profileDir} does not exist. To sign it in on this machine, run \`CLAUDE_CONFIG_DIR=${profileDir} claude\`, then \`/login\`.`,
+      error: `The Claude profile \`${profileDir}\` does not exist. To sign it in on this machine, run \`CLAUDE_CONFIG_DIR=${profileDir} claude\`, then \`/login\`.`,
     });
   });
 
   it.each([false, true])("a profile with no login in the Keychain (engine override: %s)", (override) => {
     fs.mkdirSync(profileDir, { recursive: true });
     const result = preflight({ claudeConfigDir: profileDir }, override);
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining(`The Claude profile ${profileDir} is not signed in.`) });
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining(`The Claude profile \`${profileDir}\` is not signed in.`) });
     expect(keychain.asked).toEqual([`Claude Code-credentials-${claudeProfileFromDir(profileDir).key}`]);
   });
 

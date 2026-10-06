@@ -44,12 +44,12 @@ export function verifyLocalClaudeProfile(
   try {
     isDir = fs.statSync(profile.dir).isDirectory();
   } catch { /* missing */ }
-  if (!isDir) return `The Claude profile ${profile.dir} does not exist. ${hint}`;
+  if (!isDir) return `The Claude profile \`${profile.dir}\` does not exist. ${hint}`;
   const platform = deps.platform ?? process.platform;
   const hasLogin = platform === "darwin"
     ? (deps.keychain ?? securityKeychainProbe)(claudeKeychainService(profile))
     : fileHasContent(path.join(profile.dir, ".credentials.json"));
-  if (!hasLogin) return `The Claude profile ${profile.dir} is not signed in. ${hint}`;
+  if (!hasLogin) return `The Claude profile \`${profile.dir}\` is not signed in. ${hint}`;
   signedIn.add(profile.dir);
   return undefined;
 }

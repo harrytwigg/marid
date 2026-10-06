@@ -143,7 +143,7 @@ describe("verifyLocalClaudeProfile (FR-054)", () => {
     const profile = claudeProfileFromDir(path.join(tmp, "missing"));
     const keychain = vi.fn(() => true);
     expect(verifyLocalClaudeProfile(profile, { platform: "darwin", keychain })).toBe(
-      `The Claude profile ${profile.dir} does not exist. To sign it in on this machine, run \`CLAUDE_CONFIG_DIR=${profile.dir} claude\`, then \`/login\`.`,
+      `The Claude profile \`${profile.dir}\` does not exist. To sign it in on this machine, run \`CLAUDE_CONFIG_DIR=${profile.dir} claude\`, then \`/login\`.`,
     );
     expect(keychain).not.toHaveBeenCalled();
   });

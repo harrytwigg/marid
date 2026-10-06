@@ -40,13 +40,20 @@ export function operatorSettingsCarry(
     return {};
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+  return { ...attributionOf(data), ...preToolUseOf(data), ...consentOf(data) };
+}
+
+function attributionOf(data: Record<string, unknown>): OperatorSettingsCarry {
+  return data.attribution === undefined ? {} : { attribution: data.attribution };
+}
+
+function preToolUseOf(data: Record<string, unknown>): OperatorSettingsCarry {
   const hooks = data.hooks as Record<string, unknown> | undefined;
-  const preToolUse = Array.isArray(hooks?.PreToolUse) ? hooks.PreToolUse as OperatorSettingsCarry["preToolUse"] : undefined;
-  return {
-    ...(data.attribution !== undefined ? { attribution: data.attribution } : {}),
-    ...(preToolUse?.length ? { preToolUse } : {}),
-    ...(typeof data.skipDangerousModePermissionPrompt === "boolean"
-      ? { skipDangerousModePermissionPrompt: data.skipDangerousModePermissionPrompt }
-      : {}),
-  };
+  const preToolUse = hooks && Array.isArray(hooks.PreToolUse) ? hooks.PreToolUse as OperatorSettingsCarry["preToolUse"] : undefined;
+  return preToolUse?.length ? { preToolUse } : {};
+}
+
+function consentOf(data: Record<string, unknown>): OperatorSettingsCarry {
+  const value = data.skipDangerousModePermissionPrompt;
+  return typeof value === "boolean" ? { skipDangerousModePermissionPrompt: value } : {};
 }

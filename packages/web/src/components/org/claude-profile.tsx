@@ -22,7 +22,7 @@ export function ClaudeProfileBadge({ profile }: { profile: Employee["claudeProfi
     <span
       data-testid="claude-profile-badge"
       title={`Runs on the Claude profile ${profile.path}`}
-      className="max-w-[88px] whitespace-nowrap overflow-hidden text-ellipsis text-[length:var(--text-caption2)] font-[var(--weight-semibold)] py-px px-[7px] rounded-[10px]"
+      className="min-w-0 whitespace-nowrap overflow-hidden text-ellipsis text-[length:var(--text-caption2)] font-[var(--weight-semibold)] py-px px-[6px] rounded-[10px]"
       style={PROFILE_TINT}
     >
       {claudeProfileLabel(profile)}
