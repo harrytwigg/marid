@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { RemoteExecutionConfig } from "../config-types.js";
 import {
+  ancestorMemoryExcludes,
   assertScopedRemoteSpawn, remotePathsOverlap, remoteDepartmentStageDir, scopedRemoteTargetProblem,
   type RemoteScope,
 } from "../remote-department.js";
-import { employeeRemoteTarget } from "../remote-target.js";
+import { employeeRemoteTarget, validateRemoteTarget } from "../remote-target.js";
 import type { Employee, SessionRemoteTarget } from "../types.js";
 import { remoteDepartmentEnv, remoteDepartmentFileRoots, scopedRemoteDepartment } from "../../engines/remote-department-stage.js";
 
@@ -139,5 +140,42 @@ describe("scopedRemoteDepartment and the helpers around it", () => {
   it("names the work area and the stage directory as a scoped session's file roots, and none otherwise", () => {
     expect(remoteDepartmentFileRoots(target)).toEqual(["/srv/root/work", STAGE]);
     expect(remoteDepartmentFileRoots({ remoteHost: "build-box", remoteCwd: "/srv/root/work" })).toEqual([]);
+  });
+});
+
+describe("ancestorMemoryExcludes", () => {
+  it("names every instruction file above the stage directory, under each spelling, and nothing inside it", () => {
+    const excludes = ancestorMemoryExcludes(["/srv/root/.jinn-departments/side-project", "/data/root/.jinn-departments/side-project"]);
+    for (const dir of ["/srv/root/.jinn-departments", "/srv/root", "/srv", "/data/root", "/data"]) {
+      expect(excludes).toEqual(expect.arrayContaining([`${dir}/CLAUDE.md`, `${dir}/CLAUDE.local.md`, `${dir}/.claude/CLAUDE.md`, `${dir}/.claude/rules/**`]));
+    }
+    expect(excludes).toEqual(expect.arrayContaining(["/CLAUDE.md", "/CLAUDE.local.md"]));
+    expect(excludes.some((pattern) => pattern.startsWith("/srv/root/.jinn-departments/side-project/"))).toBe(false);
+    expect(new Set(excludes).size).toBe(excludes.length);
+  });
+
+  it("escapes glob characters in a path, so it matches only itself", () => {
+    expect(ancestorMemoryExcludes(["/srv/my*root (1)/.jinn-departments/d"])).toContain("/srv/my\\*root \\(1\\)/CLAUDE.md");
+  });
+});
+
+describe("validateRemoteTarget and the department stage directories", () => {
+  const config = { root: "/srv/root", mount: "/mnt/jinn" } as RemoteExecutionConfig;
+  const target = (remoteCwd: string, remoteDepartment?: string) => ({ remoteHost: "build-box", remoteCwd, ...(remoteDepartment ? { remoteDepartment } : {}) });
+
+  it("refuses any employee whose remoteCwd is, or lies inside, the departments root", () => {
+    for (const cwd of ["/srv/root/.jinn-departments", "/srv/root/.jinn-departments/", "/srv/root/.jinn-departments/side-project", "/srv/root/.jinn-departments/side-project/x"]) {
+      expect(validateRemoteTarget(target(cwd), config)?.error, cwd).toMatch(/lies in "\/srv\/root\/\.jinn-departments"/);
+    }
+  });
+
+  it("allows remote.root itself, which contains the departments root", () => {
+    expect(validateRemoteTarget(target("/srv/root"), config)).toBeUndefined();
+  });
+
+  it("allows a scoped session's own stage directory, and no other department's", () => {
+    expect(validateRemoteTarget(target("/srv/root/.jinn-departments/side-project", "side-project"), config)).toBeUndefined();
+    expect(validateRemoteTarget(target("/srv/root/.jinn-departments/side-project/", "side-project"), config)).toBeUndefined();
+    expect(validateRemoteTarget(target("/srv/root/.jinn-departments/other", "side-project"), config)?.error).toMatch(/lies in/);
   });
 });

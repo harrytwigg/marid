@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { Employee, RemoteTarget } from "./types.js";
 import type { RemoteExecutionConfig } from "./config-types.js";
-import { remoteDepartmentStageDir, type RemoteScope, type SessionRemoteTarget } from "./remote-department.js";
+import { remoteDepartmentsRoot, remoteDepartmentStageDir, type RemoteScope, type SessionRemoteTarget } from "./remote-department.js";
 
 /**
  * Remote-execution containment.
@@ -101,8 +101,20 @@ export function validateRemoteTarget(
   }
   return validateDestination(host, user)
     ?? validateRemoteConfig(host, remote)
-    ?? validateRemoteCwd(host, cwd, remote!)
+    ?? validateRemoteCwd(host, cwd, remote!, (target as SessionRemoteTarget).remoteDepartment)
     ?? validateClaudeConfigDir(target, remote!);
+}
+
+/**
+ * Nobody runs in the department stage directories but the department's own scoped
+ * sessions, each in its own: an unscoped session there would have its farm link the
+ * company CLAUDE.md into a scoped session's cwd or one above it (FR-062).
+ */
+function validateOutsideDepartments(cwd: string, department: string | undefined, remote: RemoteExecutionConfig): RemoteTargetProblem | undefined {
+  const departments = remoteDepartmentsRoot(remote.root);
+  if (!isUnderRoot(cwd, departments)) return undefined;
+  if (department && path.posix.normalize(cwd).replace(/\/+$/, "") === remoteDepartmentStageDir(remote.root, department)) return undefined;
+  return { error: `remoteCwd "${cwd}" lies in "${departments}", where department-scoped employees' stage directories are synced` };
 }
 
 /**
@@ -165,6 +177,7 @@ function validateRemoteCwd(
   host: string,
   cwd: string,
   remote: RemoteExecutionConfig,
+  department: string | undefined,
 ): RemoteTargetProblem | undefined {
   if (!cwd) {
     return { error: `remoteHost "${host}" is set but remoteCwd is not` };
@@ -178,7 +191,7 @@ function validateRemoteCwd(
   if (!isUnderRoot(cwd, remote.root)) {
     return { error: `remoteCwd "${cwd}" does not resolve under the configured remote.root "${remote.root}"` };
   }
-  return undefined;
+  return validateOutsideDepartments(cwd, department, remote);
 }
 
 /**

@@ -120,7 +120,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     );
   }
   if (choice && substituteName && substituteEngine) {
-    const substituteCwd = spawnCwd(session); // a scoped session's stage directory, resolved before anything is flipped
+    const substituteCwd = spawnCwd(session, Boolean(remote)); // a scoped session's stage directory, resolved before anything is flipped
     const { resumeAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
     const until = resumeAt ?? new Date(Date.now() + 6 * 60 * 60_000);
     const syncSince = new Date().toISOString();
@@ -269,7 +269,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
         resumeSessionId: currentSession.engineSessionId ?? undefined,
         systemPrompt,
         platformContextRefresh,
-        cwd: spawnCwd(session),
+        cwd: spawnCwd(session, Boolean(remote)),
         bin: engineConfig.bin,
         model: currentSession.model ?? engineConfig.model,
         effortLevel,

@@ -79,9 +79,15 @@ describe("the org scan, with a remote block", () => {
     expect(logged.join("\n")).toMatch(/scan-mount-under\.yaml: .*remote\.mount .* overlaps "\/srv\/root\/\.jinn-departments"/);
   });
 
-  it("still loads an unscoped remote employee with the same work area", () => {
-    plant("engineering", "scan-unscoped", "/srv/root/.jinn-departments/anything");
-    expect(loaded("scan-unscoped")).toBe(true);
+  it("drops an unscoped remote employee whose remoteCwd is in the departments root too: its farm would link the company CLAUDE.md there", () => {
+    const logged = plant("engineering", "scan-unscoped", "/srv/root/.jinn-departments/anything");
+    expect(loaded("scan-unscoped")).toBe(false);
+    expect(logged.join("\n")).toMatch(/scan-unscoped\.yaml: remoteCwd "\/srv\/root\/\.jinn-departments\/anything" lies in "\/srv\/root\/\.jinn-departments"/);
+  });
+
+  it("still loads an unscoped remote employee whose work area is over the mount, as before", () => {
+    plant("engineering", "scan-unscoped-mount", "/srv/root/mnt/sub");
+    expect(loaded("scan-unscoped-mount")).toBe(true);
   });
 });
 

@@ -6,7 +6,7 @@ import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { engineHealthForTarget, readEngineHealth, resolveHealthyFallbackEngine, type EngineHealthReading } from "../shared/engine-health.js";
 import { engineAvailable, engineSupportsRemote, type EngineName } from "../shared/models.js";
 import { sshDestination } from "../shared/remote-target.js";
-import type { Employee, JinnConfig, RemoteTarget, Session } from "../shared/types.js";
+import type { Employee, JinnConfig, RemoteTarget, Session, SessionRemoteTarget } from "../shared/types.js";
 import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import { resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
 import { accountOverride } from "./session-account.js";
@@ -81,10 +81,14 @@ function accountSubstitute(input: ChooseSubstituteInput, health: EngineHealthRea
 /** Every other session: its engine's chain, as before accounts. */
 function engineSubstitute(input: ChooseSubstituteInput, health: EngineHealthReading): SubstituteChoice | undefined {
   const { config, engines, session, employee, remote } = input;
+  // A department-scoped session stays on claude (FR-026a): its stage directory is Claude's
+  // layout, and on a remote host the account entries that could keep it there do not apply,
+  // so it waits for its reset rather than move to another engine.
+  const scoped = Boolean(session.scopeDepartment ?? (input.remoteTarget as SessionRemoteTarget).remoteDepartment);
   // A remote employee's substitute has to be an engine that can ALSO run on that
   // host, and the usability question moves there with it: `engineAvailable`
   // probes the GATEWAY's PATH, which says nothing about another machine.
-  const isUsable = (candidate: EngineName) => engines.has(candidate) && (remote
+  const isUsable = (candidate: EngineName) => engines.has(candidate) && (!scoped || candidate === "claude") && (remote
     ? engineSupportsRemote(candidate) && remoteEngineAvailable(sshDestination(remote), candidate) !== false
     : engineAvailable(config, candidate));
   const name = resolveHealthyFallbackEngine(config, session.engine, isUsable, substituteHealth(health, employee));

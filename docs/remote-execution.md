@@ -474,7 +474,16 @@ An employee in a `scoped` or `dedicated` department (see the instance's
   home with `gateway.json`, `tmp/` and the stage marker only, keeps the reaping,
   the lock and the asset report, and removes any link a farm rebuild left there.
   No `CLAUDE.md` is linked anywhere. `FARM_SCRIPT` itself is unchanged.
-- **Its own `remoteCwd` is its work area**, named in the session's prompt. It
+- **Nothing above it is read.** Claude Code loads `CLAUDE.md`, `CLAUDE.local.md`
+  and `.claude/` instructions from every directory above its cwd, and an
+  unscoped colleague whose `remoteCwd` is `remote.root` has the company
+  `CLAUDE.md` linked there. The scoped session's settings list every such path
+  above the stage directory, as configured and as the host resolves it, in
+  `claudeMdExcludes`. The sync refuses a host whose Claude Code binary does not
+  know that setting. No remote employee, scoped or not, may have a `remoteCwd`
+  in `<remote.root>/.jinn-departments`.
+- **Its own `remoteCwd` is its work area**, named in the session's prompt and
+  created on the host if it is missing. It
   must not be, contain or lie inside `<remote.root>/.jinn-departments` or
   `remote.mount`, and the mount must not overlap the departments directory; the
   employee is refused at load otherwise. At spawn the work area and the stage

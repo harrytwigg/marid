@@ -76,8 +76,10 @@ beforeEach(() => {
   remote = { root: path.join(tmp, "root"), mount, claudeConfigDir: path.join(tmp, "host", "profile") } as RemoteExecutionConfig;
   facts = {
     home: path.join(tmp, "host"), stageDir: path.join(tmp, "host", ".jinn-remote-stage"), nodeBin: process.execPath,
-    claudeBin: "/bin/true", jinnVersion: "0.0.0", entryDir: path.join(tmp, "host", "entry"),
+    claudeBin: path.join(tmp, "host", "claude"), jinnVersion: "0.0.0", entryDir: path.join(tmp, "host", "entry"),
   };
+  // Stands in for a Claude Code that knows the setting the scoped settings rely on.
+  fs.writeFileSync(facts.claudeBin!, "#!/bin/sh\n# claudeMdExcludes\n", { mode: 0o755 });
   const home = resolveJinnHome();
   fs.mkdirSync(path.join(home, "knowledge", "departments", "side-project"), { recursive: true });
   fs.writeFileSync(path.join(home, "knowledge", "departments", "side-project", "INSTRUCTIONS.md"), "Side project rules.\n");
@@ -139,6 +141,39 @@ describe("a department-scoped employee on a remote host", { timeout: 60_000 }, (
     expect(fs.lstatSync(path.join(tmp, "root", "work", "CLAUDE.md")).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(tmp, "root", ".jinn-departments"))).toBe(false);
     expect(hoisted.ssh.some((command) => command.includes("remote department stage"))).toBe(false);
+  });
+
+  it("makes the work area, which the prompt sends the session to and the file tools hold paths to", async () => {
+    fs.rmSync(path.join(tmp, "root", "work"), { recursive: true });
+    await stage(employeeRemoteTarget(employee(), scoped()));
+    expect(fs.statSync(path.join(tmp, "root", "work")).isDirectory()).toBe(true);
+  });
+
+  it("does not load the company CLAUDE.md an unscoped colleague's farm links into remote.root above it", async () => {
+    // A colleague whose cwd is remote.root itself: valid, common, and its farm links the company rules there.
+    await stage(employeeRemoteTarget(employee({ name: "eng-dev", department: "engineering", remoteCwd: remote.root }), scoped()), "colleague");
+    expect(fs.readlinkSync(path.join(remote.root, "CLAUDE.md"))).toBe(path.join(remote.mount, "CLAUDE.md"));
+    const staging = await stage(employeeRemoteTarget(employee(), scoped()), "scoped");
+    const settings = JSON.parse(fs.readFileSync(staging.settingsPath, "utf-8"));
+    expect(settings.claudeMdExcludes).toEqual(expect.arrayContaining([
+      path.join(remote.root, "CLAUDE.md"),
+      path.join(remote.root, "CLAUDE.local.md"),
+      path.join(remote.root, ".jinn-departments", "CLAUDE.md"),
+      "/CLAUDE.md",
+    ]));
+    const stageDir = path.join(remote.root, ".jinn-departments", "side-project");
+    expect(settings.claudeMdExcludes.some((pattern: string) => pattern.startsWith(`${stageDir}/`))).toBe(false);
+  });
+
+  it("leaves an unscoped session's settings without exclusions", async () => {
+    const staging = await stage(employeeRemoteTarget(employee({ department: "engineering" }), scoped()));
+    expect(JSON.parse(fs.readFileSync(staging.settingsPath, "utf-8")).claudeMdExcludes).toBeUndefined();
+  });
+
+  it("is refused on a host whose Claude Code cannot be told to skip the CLAUDE.md files above it", async () => {
+    fs.writeFileSync(facts.claudeBin!, "#!/bin/sh\n");
+    await expect(stage(employeeRemoteTarget(employee(), scoped()))).rejects.toThrow(/cannot be told to skip the CLAUDE\.md files above the stage directory/);
+    expect(hoisted.ssh.some((command) => command.includes("remote-trust-seed.mjs' '"))).toBe(false);
   });
 
   it("is refused before anything is written when its work area overlaps the host's stage root", async () => {

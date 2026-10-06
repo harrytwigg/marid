@@ -5,6 +5,7 @@ import { refreshOrg } from "../../gateway/org-registry.js";
 import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile } from "../../gateway/__tests__/department-fixtures.js";
 import type { Employee, EngineResult, EngineRunOpts } from "../../shared/types.js";
 import { runEngineAttempt } from "../turn/engine-run.js";
+import { refuseScopedTurn } from "../turn/scoped-turn.js";
 import { makeSession } from "./helpers/session-fixture.js";
 
 /**
@@ -67,5 +68,20 @@ describe("a remote turn's engine target", () => {
   it("has no remote cwd for a scoped employee when remote.root is not configured, so the engine refuses it", async () => {
     const opts = await attempt(makeSession({ employee: "remote-side-dev", scopeDepartment: SLUG }), remoteEmployee("remote-side-dev"), {});
     expect("remoteCwd" in opts).toBe(false);
+  });
+
+  it("names the local stage directory without preparing it: the host's copy is the one the session runs in", async () => {
+    await attempt(makeSession({ employee: "remote-side-dev", scopeDepartment: SLUG }), remoteEmployee("remote-side-dev"));
+    expect(fs.existsSync(departmentStageDir(SLUG))).toBe(false);
+  });
+});
+
+describe("a remote scoped turn's preflight", () => {
+  it("does not prepare the local stage directory, and a local one still does", () => {
+    const session = makeSession({ employee: "remote-side-dev", scopeDepartment: SLUG, engine: "claude" });
+    expect(refuseScopedTurn(session, undefined, true)).toBeUndefined();
+    expect(fs.existsSync(departmentStageDir(SLUG))).toBe(false);
+    expect(refuseScopedTurn(session, undefined)).toBeUndefined();
+    expect(fs.existsSync(departmentStageDir(SLUG))).toBe(true);
   });
 });

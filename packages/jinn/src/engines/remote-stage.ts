@@ -7,6 +7,7 @@ import { logger } from "../shared/logger.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { FARM_FILTERED_DIRS, REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
 import { runLocalWakeCommand, sendWakeOnLan } from "./remote-wake.js";
+import { ancestorMemoryExcludes } from "../shared/remote-department.js";
 import { rebuildScopedHome, remoteDepartmentEnv, remoteDepartmentFileRoots, scopedRemoteDepartment, syncRemoteDepartmentStage } from "./remote-department-stage.js";
 import { parseVersionOutput } from "../shared/brand.js";
 import { getPackageVersion } from "../shared/version.js";
@@ -1172,7 +1173,7 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
   const sessionHome = remoteSessionHome(facts, jinnSessionId, engine);
   // Refused here, before anything is written, if it cannot be staged in scope.
   const department = scopedRemoteDepartment(target, remote, facts, engine);
-  await stageHostState(opts, destination, sessionHome, department);
+  const realStageDir = await stageHostState(opts, destination, sessionHome, department);
 
   const tunnelPort = await probeFreePort(destination, facts);
 
@@ -1198,7 +1199,9 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
     return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}) };
   }
 
-  const settingsPath = await stageSettings(destination, facts, sessionHome, jinnSessionId);
+  // A scoped session skips every CLAUDE.md above its stage directory (`ancestorMemoryExcludes`).
+  const excludes = department ? { claudeMdExcludes: ancestorMemoryExcludes([target.remoteCwd!, ...(realStageDir ? [realStageDir] : [])]) } : undefined;
+  const settingsPath = await stageSettings(destination, facts, sessionHome, jinnSessionId, excludes);
   const mcp = { resolved: opts.resolvedMcp, departmentFileRoots: remoteDepartmentFileRoots(target) };
   const mcpConfigPath = await stageMcpConfig(destination, facts, sessionHome, tunnelPort, mcp);
   return { ...base, engine, settingsPath, ...(mcpConfigPath ? { mcpConfigPath } : {}) };
@@ -1208,22 +1211,23 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
  * The steps that touch per-HOST state, serialized; everything else writes inside the
  * session's own directory and cannot collide. A scoped session gets a home with no farm,
  * then its department's stage directory is synced, before the trust seed's `mkdir -p`
- * could create it empty.
+ * could create it empty. Returns a scoped session's stage directory as the host resolves it.
  */
-async function stageHostState(opts: PrepareRemoteSessionOpts, destination: string, sessionHome: string, department: string | undefined): Promise<void> {
+async function stageHostState(opts: PrepareRemoteSessionOpts, destination: string, sessionHome: string, department: string | undefined): Promise<string | undefined> {
   const { target, remote, facts, engine } = opts;
-  await serializePerHost(destination, async () => {
+  return await serializePerHost(destination, async () => {
     const present = department
-      ? await rebuildScopedHome(destination, facts, sessionHome, SESSION_STAGE_TTL_DAYS)
+      ? await rebuildScopedHome(destination, facts, sessionHome, SESSION_STAGE_TTL_DAYS, target.remoteWorkArea)
       : await rebuildHomeFarm(destination, facts, remote.mount, sessionHome, target.remoteCwd);
     await ensureAssets(destination, facts, present);
-    if (department) await syncRemoteDepartmentStage(destination, facts, remote, department);
+    const realStageDir = department ? await syncRemoteDepartmentStage(destination, facts, remote, department) : undefined;
     // Claude Code's folder-trust dialog is the thing being pre-empted here, and
     // it is Claude Code's alone: `pi -p` reads its prompt from stdin and prints
     // JSON, with no first-run dialog to hang on and no `.claude.json` to write.
     if (engine === "claude") {
       await seedRemoteTrust(destination, facts, target.remoteCwd!, resolveRemoteClaudeConfigDir(target, remote));
     }
+    return realStageDir;
   });
 }
 
@@ -1304,6 +1308,8 @@ async function stageSettings(
   facts: RemoteFacts,
   sessionHome: string,
   jinnSessionId: string,
+  /** Keys a scoped session adds (`claudeMdExcludes`). */
+  extra: Record<string, unknown> = {},
 ): Promise<string> {
   const settingsPath = path.posix.join(sessionHome, "tmp", "settings.json");
   const settings = buildSessionSettings({
@@ -1313,7 +1319,7 @@ async function stageSettings(
     // cannot read from here. `claudeResetsAtSeconds()` simply returns undefined,
     // which the retry path already handles.
   });
-  await stageRemoteFile(destination, settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+  await stageRemoteFile(destination, settingsPath, `${JSON.stringify({ ...settings, ...extra }, null, 2)}\n`);
   return settingsPath;
 }
 

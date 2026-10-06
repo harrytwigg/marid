@@ -2,7 +2,8 @@ import { loadConfig } from "../shared/config.js";
 import { scanOrg } from "../gateway/org.js";
 import { employeeRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination, validateRemoteTarget } from "../shared/remote-target.js";
 import { ensureRemoteReady, sendWakeOnLan, clearRemoteFactsCache, remoteEngineBin } from "../engines/remote-stage.js";
-import type { Employee } from "../shared/types.js";
+import { setDepartmentScopeResolver, setEmployeeDepartmentResolver } from "../work-items/department-scope.js";
+import { remoteScopeFor } from "../sessions/session-cwd.js";
 import type { SessionRemoteTarget } from "../shared/remote-department.js";
 import { departmentScopeOf } from "../gateway/department-registry.js";
 import { engineSupportsRemote, REMOTE_ENGINE_NAMES } from "../shared/models.js";
@@ -56,9 +57,13 @@ interface RemoteEmployee {
 
 function remoteEmployees(config: ReturnType<typeof loadConfig>): RemoteEmployee[] {
   const out: RemoteEmployee[] = [];
-  // The roster and the scopes the gateway would use, so a scoped employee shows its department's stage directory.
-  const scope = { remoteRoot: config.remote?.root, departmentOf: (e: Employee) => (departmentScopeOf(e.department) === "open" ? null : e.department) };
-  for (const employee of scanOrg(config, departmentScopeOf).values()) {
+  // The roster and scopes the gateway would use, read through the same resolver, so a scoped
+  // employee shows its department's stage directory.
+  const roster = scanOrg(config, departmentScopeOf);
+  setDepartmentScopeResolver(departmentScopeOf);
+  setEmployeeDepartmentResolver((name) => roster.get(name)?.department);
+  const scope = remoteScopeFor(config.remote);
+  for (const employee of roster.values()) {
     const target = employeeRemoteTarget(employee, scope);
     if (!target) continue;
     out.push({

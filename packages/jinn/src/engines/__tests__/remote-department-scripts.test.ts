@@ -18,7 +18,7 @@ describe.skipIf(process.platform === "win32")("SCOPED_FARM_SCRIPT — run for re
   let root: string;
   let home: string;
 
-  const runFarm = (ttlDays = 7): string => execFileSync("sh", ["-c", SCOPED_FARM_SCRIPT, "sh", root, home, String(ttlDays)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const runFarm = (ttlDays = 7, ...workArea: string[]): string => execFileSync("sh", ["-c", SCOPED_FARM_SCRIPT, "sh", root, home, String(ttlDays), ...workArea], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
   /** Every path under `dir`, relative, directories with a trailing slash. */
   function walk(base: string, rel = ""): string[] {
@@ -83,6 +83,13 @@ describe.skipIf(process.platform === "win32")("SCOPED_FARM_SCRIPT — run for re
     runFarm(7);
     expect(fs.existsSync(path.join(sessions, "old"))).toBe(false);
     expect(fs.existsSync(path.join(sessions, "fresh"))).toBe(true);
+  });
+
+  it("makes the employee's work area when it is given, and nothing else outside the home", () => {
+    const work = path.join(path.dirname(root), "work", "nested");
+    runFarm(7, work);
+    expect(fs.statSync(work).isDirectory()).toBe(true);
+    expect(fs.readdirSync(work)).toEqual([]);
   });
 
   it("keeps the per-session lock block identical to FARM_SCRIPT's", () => {

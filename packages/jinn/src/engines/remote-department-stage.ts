@@ -37,14 +37,21 @@ const STALE_INCOMING_MINUTES = 60;
  * restages itself. It links nothing from the mount and nothing into any cwd, and it
  * removes what a farm rebuild left in this home from before the employee was scoped.
  *
- * Arguments: the per-host stage root, this session's home, the reaper's TTL in days.
+ * It also makes the employee's work area, which nothing else creates now that the trust
+ * seed runs in the stage directory: the prompt sends the session there, and the jinn
+ * tools on the host attach nothing from a root that does not exist.
+ *
+ * Arguments: the per-host stage root, this session's home, the reaper's TTL in days,
+ * and the work area (optional).
  */
 export const SCOPED_FARM_SCRIPT = `
 set -eu
 root=$1
 home=$2
 ttl=$3
+work=\${4:-}
 mkdir -p "$root" "$root/sessions" "$home" "$home/tmp"
+[ -z "$work" ] || mkdir -p "$work"
 chmod 700 "$root" "$root/sessions" "$home"
 # Reap dead session stages. Every spawn rewrites its own session's gateway.json,
 # so a live session's directory is never older than its last turn.
@@ -104,16 +111,25 @@ done
  * under it, or overlaps one of the forbidden trees (the mounted gateway home, the
  * per-host stage root), is refused before anything is changed.
  *
+ * Claude Code also loads the instructions in every directory above its cwd, and a
+ * colleague's farm links the company CLAUDE.md into its own cwd, which may be one of them.
+ * The session's settings exclude those files (`claudeMdExcludes`), so the sync refuses
+ * a host whose Claude Code cannot be told to: its binary must name the setting. It prints
+ * the stage directory's real path, whose ancestors the exclusions must also cover.
+ *
  * Arguments: the departments root (`<remote.root>/.jinn-departments`), the slug, the
- * incoming directory's name, then the forbidden trees.
+ * incoming directory's name, the host's Claude Code binary, then the forbidden trees.
  */
 export const STAGE_SYNC_SCRIPT = `
 set -eu
 root=$1
 slug=$2
 incoming_name=$3
-shift 3
+claude_bin=$4
+shift 4
 fail() { echo "remote department stage: $*" >&2; exit 1; }
+grep -q claudeMdExcludes "$claude_bin" 2>/dev/null \\
+  || fail "the Claude Code at \${claude_bin:-(none)} cannot be told to skip the CLAUDE.md files above the stage directory (claudeMdExcludes); update it"
 case "$slug" in ''|.*|*/*) fail "\\"$slug\\" is not a department name" ;; esac
 case "$incoming_name" in ".$slug".incoming-??????) ;; *) fail "\\"$incoming_name\\" is not an incoming directory name" ;; esac
 stage="$root/$slug"
@@ -185,13 +201,14 @@ while IFS= read -r line; do
   if [ -e "$stage/$rel" ] || [ -L "$stage/$rel" ]; then rm -rf "$stage/$rel"; removed=$((removed + 1)); fi
 done < "$lists/extras"
 printf 'written=%s removed=%s\\n' "$written" "$removed"
+printf 'real_stage=%s\\n' "$real_stage"
 `;
 
 // ── Over ssh ────────────────────────────────────────────────────────────────
 
 /** Rebuild a scoped session's `$JINN_HOME` (no farm), and return the per-host assets the script found. */
-export async function rebuildScopedHome(destination: string, facts: RemoteFacts, sessionHome: string, ttlDays: number): Promise<Set<string>> {
-  const command = ["sh", "-c", shq(SCOPED_FARM_SCRIPT), "sh", ...[facts.stageDir, sessionHome, String(ttlDays)].map(shq)].join(" ");
+export async function rebuildScopedHome(destination: string, facts: RemoteFacts, sessionHome: string, ttlDays: number, workArea?: string): Promise<Set<string>> {
+  const command = ["sh", "-c", shq(SCOPED_FARM_SCRIPT), "sh", ...[facts.stageDir, sessionHome, String(ttlDays), workArea ?? ""].map(shq)].join(" ");
   const res = await sshRun(destination, [command]);
   if (res.code !== 0) {
     throw new Error(`could not build the department-scoped remote JINN_HOME on ${destination}: ${res.stderr.trim() || `exit ${res.code}`}`);
@@ -206,7 +223,7 @@ export async function rebuildScopedHome(destination: string, facts: RemoteFacts,
 
 /** The ssh remote command that applies a tar stream on stdin to department `slug`'s stage directory. */
 export function buildStageSyncCommand(remote: RemoteExecutionConfig, facts: RemoteFacts, slug: string, incomingName: string): string {
-  const args = [remoteDepartmentsRoot(remote.root), slug, incomingName, remote.mount, facts.stageDir];
+  const args = [remoteDepartmentsRoot(remote.root), slug, incomingName, facts.claudeBin ?? "", remote.mount, facts.stageDir];
   return ["sh", "-c", shq(STAGE_SYNC_SCRIPT), "sh", ...args.map(shq)].join(" ");
 }
 
@@ -220,14 +237,17 @@ function incomingName(slug: string): string {
  * Sync department `slug`'s stage directory on a host to what its definition says now
  * (FR-060). Runs before every scoped spawn there, inside the per-host serialisation and
  * before the trust seed, whose `mkdir -p` would otherwise create an empty stage directory.
+ * Returns the stage directory's real path on the host.
  */
-export async function syncRemoteDepartmentStage(destination: string, facts: RemoteFacts, remote: RemoteExecutionConfig, slug: string): Promise<void> {
+export async function syncRemoteDepartmentStage(destination: string, facts: RemoteFacts, remote: RemoteExecutionConfig, slug: string): Promise<string | undefined> {
   const { files } = generateStageFileSet({ home: resolveJinnHome(), slug, definition: departmentRecord(slug).definition });
   const res = await sshRun(destination, [buildStageSyncCommand(remote, facts, slug, incomingName(slug))], { stdin: buildStageTar(files) });
   if (res.code !== 0) {
     throw new Error(`could not sync department "${slug}"'s stage directory on ${destination}: ${res.stderr.trim() || `exit ${res.code}`}`);
   }
-  logger.info(`remote: department "${slug}" stage directory synced on ${destination} (${res.stdout.trim()})`);
+  const lines = res.stdout.split("\n").map((line) => line.trim());
+  logger.info(`remote: department "${slug}" stage directory synced on ${destination} (${lines.find((line) => line.startsWith("written=")) ?? ""})`);
+  return lines.find((line) => line.startsWith("real_stage="))?.slice("real_stage=".length) || undefined;
 }
 
 // ── What a scoped spawn is staged with ──────────────────────────────────────

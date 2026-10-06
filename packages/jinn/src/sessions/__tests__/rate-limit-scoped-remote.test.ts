@@ -113,3 +113,41 @@ describe("a rate-limited scoped remote session (Branch B)", () => {
     expect(run.mock.calls[0]![0].remoteDepartment).toBeUndefined();
   });
 });
+
+describe("a rate-limited scoped remote session whose chain names another engine (FR-026a)", () => {
+  const withOpencode = (run: ReturnType<typeof vi.fn>, substitute: ReturnType<typeof vi.fn>, extra: Partial<RateLimitHandlerOpts> & { scoped?: boolean } = {}) => {
+    const base = opts(run, extra);
+    return {
+      ...base,
+      config: { ...base.config, engines: { claude: { bin: "claude", model: "opus", fallback: ["opencode"] }, opencode: { bin: "opencode", model: "m" } } } as unknown as RateLimitHandlerOpts["config"],
+      engines: new Map([["opencode", { name: "opencode", run: substitute } as never]]),
+    };
+  };
+
+  it("is not handed to opencode on its host: it waits and retries on claude in its stage directory", async () => {
+    const run = answered();
+    const substitute = vi.fn();
+    const outcome = await handleRateLimit(withOpencode(run, substitute, { employee: remoteEmployee }));
+    expect(outcome.kind).toBe("resumed");
+    expect(substitute).not.toHaveBeenCalled();
+    expect(run.mock.calls[0]![0]).toMatchObject({ remoteCwd: STAGE, remoteDepartment: SLUG });
+  });
+
+  it("still hands an unscoped remote session to opencode, as before", async () => {
+    const run = answered();
+    const substitute = vi.fn(async () => ({ result: "from opencode", sessionId: "oc-1" }) as EngineResult);
+    const outcome = await handleRateLimit(withOpencode(run, substitute, { ...REMOTE, scoped: false }));
+    expect(outcome.kind).toBe("fallback");
+    expect(substitute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a rate-limited local scoped session with no employee record", () => {
+  it("waits and retries in its stage directory, as it always has", async () => {
+    const run = answered();
+    const outcome = await handleRateLimit(opts(run));
+    expect(outcome.kind).toBe("resumed");
+    expect(run.mock.calls[0]![0].remoteHost).toBeUndefined();
+    expect(fs.realpathSync(run.mock.calls[0]![0].cwd!)).toBe(fs.realpathSync(departmentStageDir(SLUG)));
+  });
+});

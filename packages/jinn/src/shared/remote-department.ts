@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Employee } from "./types.js";
 import type { RemoteExecutionConfig } from "./config-types.js";
+import { isUnderRoot } from "./remote-target.js";
 
 /**
  * Department-scoped employees on remote hosts (FR-060 to FR-066): where their stage
@@ -28,19 +29,38 @@ export interface RemoteScope {
 
 export type { SessionRemoteTarget } from "./types.js";
 
-function normal(p: string): string {
-  return path.posix.normalize(p).replace(/\/+$/, "") || "/";
-}
-
-function within(child: string, parent: string): boolean {
-  const c = normal(child);
-  const p = normal(parent);
-  return c === p || c.startsWith(p === "/" ? "/" : `${p}/`);
-}
-
 /** Whether two remote paths are the same, or one lies inside the other. */
 export function remotePathsOverlap(a: string, b: string): boolean {
-  return within(a, b) || within(b, a);
+  return isUnderRoot(a, b) || isUnderRoot(b, a);
+}
+
+/** Where Claude Code looks for project and local instructions in a directory above its cwd. */
+const ANCESTOR_MEMORY = ["CLAUDE.md", "CLAUDE.local.md", ".claude/CLAUDE.md", ".claude/rules/**"] as const;
+
+function escapeGlob(p: string): string {
+  return p.replace(/[\\*?[\]{}()!+@]/g, "\\$&");
+}
+
+/**
+ * The `claudeMdExcludes` for a scoped session on a host: every instruction file Claude Code
+ * would load from a directory above the stage directory, under each spelling of its path
+ * (as configured, and as the host resolves it). Claude Code loads them from every ancestor
+ * of its cwd, and an unscoped colleague whose cwd is `remote.root` has the company
+ * CLAUDE.md linked into it, so without this a scoped session would read it. The stage
+ * directory's own files are not excluded. Verified against Claude Code 2.1.291 through
+ * `--settings`.
+ */
+export function ancestorMemoryExcludes(stageDirs: readonly string[]): string[] {
+  const out = new Set<string>();
+  for (const stageDir of stageDirs) {
+    let dir = path.posix.dirname(path.posix.normalize(stageDir));
+    for (;;) {
+      for (const name of ANCESTOR_MEMORY) out.add(`${escapeGlob(dir === "/" ? "" : dir)}/${name}`);
+      if (dir === "/" || dir === ".") break;
+      dir = path.posix.dirname(dir);
+    }
+  }
+  return [...out];
 }
 
 /** The directory holding every department's stage directory on a host. */

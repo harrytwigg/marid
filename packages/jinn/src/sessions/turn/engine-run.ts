@@ -45,7 +45,7 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     resumeSessionId: plan.resumeSessionId,
     systemPrompt: prepared.systemPrompt,
     platformContextRefresh: prepared.refresh,
-    cwd: spawnCwd(input.session),
+    cwd: spawnCwd(input.session, Boolean(input.employee?.remoteHost)),
     bin: plan.engineConfig.bin,
     model: args.model,
     effortLevel: plan.effortLevel,

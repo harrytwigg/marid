@@ -25,8 +25,11 @@ describe.skipIf(process.platform === "win32")("STAGE_SYNC_SCRIPT — run for rea
   let root: string;
   let stage: string;
 
-  function run(files: Files, opts: { slug?: string; incoming?: string; forbidden?: string[]; root?: string } = {}) {
-    const res = spawnSync("sh", ["-c", STAGE_SYNC_SCRIPT, "sh", opts.root ?? root, opts.slug ?? SLUG, opts.incoming ?? INCOMING, ...(opts.forbidden ?? [])], { input: buildStageTar(fileSet(files)), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
+  let claudeBin: string;
+
+  function run(files: Files, opts: { slug?: string; incoming?: string; forbidden?: string[]; root?: string; claudeBin?: string } = {}) {
+    const args = [opts.root ?? root, opts.slug ?? SLUG, opts.incoming ?? INCOMING, opts.claudeBin ?? claudeBin, ...(opts.forbidden ?? [])];
+    const res = spawnSync("sh", ["-c", STAGE_SYNC_SCRIPT, "sh", ...args], { input: buildStageTar(fileSet(files)), encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
     return { code: res.status, stdout: res.stdout, stderr: res.stderr };
   }
   function sync(files: Files, opts: Parameters<typeof run>[1] = {}) {
@@ -43,6 +46,9 @@ describe.skipIf(process.platform === "win32")("STAGE_SYNC_SCRIPT — run for rea
     dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "stage-sync-")));
     root = path.join(dir, ".jinn-departments");
     stage = path.join(root, SLUG);
+    // Stands in for the host's Claude Code: the sync requires one that knows claudeMdExcludes.
+    claudeBin = path.join(dir, "claude");
+    fs.writeFileSync(claudeBin, "#!/bin/sh\n# settings: claudeMdExcludes\n", { mode: 0o755 });
   });
   afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
 
@@ -53,6 +59,7 @@ describe.skipIf(process.platform === "win32")("STAGE_SYNC_SCRIPT — run for rea
     expect(fs.statSync(path.join(stage, ".claude/skills/a/run.sh")).mode & 0o100).toBe(0o100);
     expect(fs.statSync(path.join(stage, "CLAUDE.md")).mode & 0o100).toBe(0);
     expect(res.stdout).toMatch(/written=\d+ removed=\d+/);
+    expect(res.stdout).toContain(`real_stage=${stage}\n`);
     expect(names(root)).toEqual([SLUG]);
     expect(fs.existsSync(path.join(root, `${INCOMING}-lists`))).toBe(false);
   });
@@ -148,6 +155,17 @@ describe.skipIf(process.platform === "win32")("STAGE_SYNC_SCRIPT — run for rea
 
   describe("refusals", () => {
     const files = { "CLAUDE.md": "rules\n" };
+
+    it("refuses a host whose Claude Code cannot be told to skip the CLAUDE.md files above the stage, before creating anything", () => {
+      const old = path.join(dir, "old-claude");
+      fs.writeFileSync(old, "#!/bin/sh\n", { mode: 0o755 });
+      for (const bin of [old, path.join(dir, "missing"), ""]) {
+        const res = run(files, { claudeBin: bin });
+        expect(res.code, bin).not.toBe(0);
+        expect(res.stderr).toMatch(/cannot be told to skip the CLAUDE\.md files above the stage directory/);
+      }
+      expect(fs.existsSync(root)).toBe(false);
+    });
 
     it("refuses a departments root that is a symbolic link, writing nothing through it", () => {
       const real = path.join(dir, "real-root");

@@ -137,7 +137,7 @@ export function attachPtyWebSocket(
       engineSessionId: session ? getEngineSessionRef(session).id : undefined,
       model: session?.model ?? undefined,
       effortLevel: session?.effortLevel ?? undefined,
-      cwd: spawnCwd(session),
+      cwd: spawnCwd(session, Boolean(remote)),
       ...remote,
       claudeProfile: sessionClaudeProfile(session, employee),
       cols,
