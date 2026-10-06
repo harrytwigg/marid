@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { setTodoLiveEmitter } from "../../work-items/live-events.js";
 import { refreshOrg } from "../org-registry.js";
 import { createSession, getSession } from "../../sessions/registry.js";
 import { DepartmentBoundaryError } from "../../work-items/department-scope.js";
@@ -60,6 +61,21 @@ describe.each(WRITERS)("%s and the department boundary", (_name, write) => {
     write(root.id, { department: "engineering" });
     expect([root, child, grandchild].map((item) => getWorkItem(item.id)?.department)).toEqual(["engineering", "engineering", "engineering"]);
     expect(listWorkItemEvents(child.id).some((event) => event.kind === "note" && event.detail?.movedWithRoot === root.id)).toBe(true);
+  });
+
+  it("announces each sub-task that moved with its root", async () => {
+    const seen: string[] = [];
+    setTodoLiveEmitter((event) => seen.push(event.id));
+    try {
+      const root = createWorkItem({ title: "root", department: "side-project" });
+      const child = createWorkItem({ title: "child", parentId: root.id });
+      seen.length = 0;
+      write(root.id, { department: "engineering" });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(seen).toContain(child.id);
+    } finally {
+      setTodoLiveEmitter(null);
+    }
   });
 
   it("refuses moving a root when a sub-task already sits elsewhere and would straddle, naming it", () => {

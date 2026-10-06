@@ -1,6 +1,7 @@
 import type { initDb } from '../shared/db.js';
-import { DepartmentBoundaryError, employeeDepartment, holdRefusal, isNonOpenDepartment, LIVE_HOLD_LOOKUPS } from './department-scope.js';
-import type { AppendWorkItemEventInput, UpdateWorkItemInput, WorkItem } from './store.js';
+import { DepartmentBoundaryError, employeeDepartment, holdRefusal, isNonOpenDepartment, LIVE_HOLD_LOOKUPS, scopeDepartmentOfItem } from './department-scope.js';
+import { getWorkItem, type AppendWorkItemEventInput, type UpdateWorkItemInput, type WorkItem } from './store.js';
+import { notifyTodoChanged } from './live-events.js';
 
 /**
  * FR-004 and FR-015 at the store's writers, so every caller of them is covered: the
@@ -33,10 +34,8 @@ function where(department: string | null | undefined): string {
   return department ? `department "${department}"` : 'the company';
 }
 
-function rootDepartment(db: Db, item: WorkItem): string | null {
-  if (item.rootId === item.id) return item.department;
-  const root = db.prepare('SELECT department FROM work_items WHERE id = ?').get(item.rootId) as { department: string | null } | undefined;
-  return root ? root.department : item.department;
+function rootDepartment(db: Db, item: Pick<WorkItem, 'id' | 'rootId' | 'department'>): string | null {
+  return scopeDepartmentOfItem(item, (rootId) => db.prepare('SELECT department FROM work_items WHERE id = ?').get(rootId) as { department: string | null } | undefined);
 }
 
 /** Refuses `assignee` on a Todo whose root sits in `rootDept`. */
@@ -96,6 +95,17 @@ function applyRootMove(db: Db, move: RootMove, rootId: string, actor: string | n
     update.run(move.to, now, id);
     append({ workItemId: id, kind: 'note', actor: actor ?? null, detail: { updatedFields: ['department'], department: move.to, movedWithRoot: rootId }, versionEffect: 'companion' });
   }
+  // The route announces the Todo it edited; the sub-tasks that moved with it are announced
+  // here, once the write has returned, from the row as it then stands (a rolled-back move
+  // announces the unchanged row, which is still the truth).
+  if (move.cascade.length > 0) {
+    setImmediate(() => {
+      for (const id of move.cascade) {
+        const item = getWorkItem(id);
+        if (item) notifyTodoChanged(item, 'metadata-updated');
+      }
+    });
+  }
   if (!isNonOpenDepartment(move.from) || move.from === move.to) return;
   // A scoped session working one of these Todos loses sight of it on its next call (the
   // gateway answers 404). The turn finishes; the Todo records that it left the department.
@@ -147,7 +157,7 @@ export function assertSessionMayLink(db: Db, sessionId: string, todoId: string, 
   const item = db.prepare('SELECT id, root_id, department FROM work_items WHERE id = ?').get(todoId) as
     { id: string; root_id: string; department: string | null } | undefined;
   if (!session || !item) return;
-  const rootDept = rootDepartment(db, { id: item.id, rootId: item.root_id, department: item.department } as WorkItem);
+  const rootDept = rootDepartment(db, { id: item.id, rootId: item.root_id, department: item.department });
   if (session.scope_department !== null && session.scope_department !== rootDept) {
     throw new DepartmentBoundaryError(`session ${sessionId} is bound to department "${session.scope_department}" and cannot be linked to ${todoId}, which is in ${where(rootDept)}`);
   }

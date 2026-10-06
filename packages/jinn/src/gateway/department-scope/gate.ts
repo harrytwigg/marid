@@ -5,13 +5,14 @@ import { departmentPathRefusal, insideDepartmentRoots } from "../../shared/depar
 import { isTodoId } from "../../work-items/id.js";
 import { OPERATOR_ASSIGNEE } from "../../work-items/operator-assignee.js";
 import { getWorkItem, type WorkItem } from "../../work-items/store.js";
-import { employeeDepartment } from "../../work-items/department-scope.js";
+import { employeeDepartment, scopeDepartmentOfItem } from "../../work-items/department-scope.js";
 import type { ApiContext } from "../api.js";
 import { departmentRecord } from "../department-registry.js";
 import { badRequest, json, type ParsedRoute } from "../route-helpers.js";
 import type { SessionTreeResponse } from "../../sessions/session-tree.js";
 import type { CallerIdentity } from "../session-comm-guards.js";
 import { peekJsonObject, setPeekedBody } from "./body.js";
+import { departmentRedactor, redactResponses } from "./redact.js";
 import { resolveScopedCaller, type ScopedCaller } from "./caller.js";
 import { departmentFileRoots } from "./paths.js";
 import { serveTodoRead, serveTodoSessions } from "./todo-reads.js";
@@ -52,8 +53,7 @@ export interface GateRequest {
 
 /** The department a Todo's scope is decided by: its root's (FR-002). */
 export function scopeDepartmentOfTodo(item: WorkItem): string | null {
-  if (item.rootId === item.id) return item.department;
-  return getWorkItem(item.rootId)?.department ?? item.department;
+  return scopeDepartmentOfItem(item, getWorkItem);
 }
 
 export function todoInDepartment(id: string, department: string): boolean {
@@ -115,7 +115,8 @@ function narrowTodoList(g: GateRequest, emptyBody: Record<string, unknown>): boo
 
 async function createInDepartment(g: GateRequest): Promise<boolean> {
   const body = await peekJsonObject(g.req, g.res);
-  if (!body) return true;
+  if (body === null) return true;
+  if (!body) return false;
   if (body.sprint !== undefined) return forbid(g, "sprints are the operator's; a department-scoped session cannot place a Todo in one");
   const parentId = namedTodoOutside(body.parentId, g.caller.department);
   if (parentId) return badRequest(g.res, `parent Todo ${parentId} not found`), true;
@@ -123,22 +124,30 @@ async function createInDepartment(g: GateRequest): Promise<boolean> {
   return false;
 }
 
+/**
+ * FR-018 on the JSON `{path}` upload. The route reads any body that is not multipart as
+ * JSON, so the check runs on every such body, whatever its Content-Type says; and it runs
+ * before the Todo is looked up, so a refused path answers the same for a Todo outside D
+ * as for an unknown one.
+ */
 async function attachInDepartment(g: GateRequest): Promise<boolean> {
-  const held = holdTodo(g, g.rule.params.id);
-  if (held !== null) return held;
-  if (g.route.method !== "POST" || !String(g.req.headers["content-type"] ?? "").includes("application/json")) return false;
-  const body = await peekJsonObject(g.req, g.res);
-  if (!body) return true;
-  if (typeof body.path !== "string") return false;
-  const roots = departmentFileRoots(g.caller.department);
-  return insideDepartmentRoots(body.path, roots) ? false : forbid(g, departmentPathRefusal(body.path, roots));
+  if (g.route.method === "POST" && !String(g.req.headers["content-type"] ?? "").toLowerCase().includes("multipart/form-data")) {
+    const body = await peekJsonObject(g.req, g.res);
+    if (body === null) return true;
+    if (body && typeof body.path === "string") {
+      const roots = departmentFileRoots(g.caller.department);
+      if (!insideDepartmentRoots(body.path, roots)) return forbid(g, departmentPathRefusal(body.path, roots));
+    }
+  }
+  return holdTodo(g, g.rule.params.id) ?? false;
 }
 
 async function relateInDepartment(g: GateRequest): Promise<boolean> {
   const held = holdTodo(g, g.rule.params.id);
   if (held !== null) return held;
   const body = await peekJsonObject(g.req, g.res);
-  if (!body) return true;
+  if (body === null) return true;
+  if (!body) return false;
   // The other end, too, reads as unknown to the route.
   const other = namedTodoOutside(body.dstId, g.caller.department);
   if (other) setPeekedBody(g.req, { ...body, dstId: unknownTodoLike(other) });
@@ -149,7 +158,8 @@ async function assignInDepartment(g: GateRequest): Promise<boolean> {
   const held = holdTodo(g, g.rule.params.id);
   if (held !== null) return held;
   const body = await peekJsonObject(g.req, g.res);
-  if (!body) return true;
+  if (body === null) return true;
+  if (!body) return false;
   const assignee = typeof body.assignee === "string" ? body.assignee.trim() : body.assignee;
   if (assignee === OPERATOR_ASSIGNEE || isMember(assignee, g.caller.department)) return false;
   return memberRefusal(g, assignee, "assign Todos to");
@@ -168,7 +178,8 @@ async function dispatchConfigInDepartment(g: GateRequest): Promise<boolean> {
   const held = holdTodo(g, g.rule.params.id);
   if (held !== null) return held;
   const body = await peekJsonObject(g.req, g.res);
-  if (!body) return true;
+  if (body === null) return true;
+  if (!body) return false;
   const allowed = new Set(departmentRecord(g.caller.department).definition?.skills ?? []);
   const skills = Array.isArray(body.skills) ? body.skills : [];
   const refused = skills.filter((skill) => typeof skill === "string" && !allowed.has(skill));
@@ -183,7 +194,7 @@ function namedTodoOutside(value: unknown, department: string): string | null {
 }
 
 /** A parent the body names that exists outside D reads as unknown: the route then uses the caller itself. */
-function dropParentOutside(g: GateRequest, body: Record<string, unknown>): void {
+export function dropParentOutside(g: GateRequest, body: Record<string, unknown>): void {
   const parent = typeof body.parentSessionId === "string" ? getSession(body.parentSessionId) : undefined;
   if (!parent || parent.scopeDepartment === g.caller.department) return;
   const { parentSessionId: _dropped, ...rest } = body;
@@ -192,7 +203,10 @@ function dropParentOutside(g: GateRequest, body: Record<string, unknown>): void 
 
 async function delegateInDepartment(g: GateRequest): Promise<boolean> {
   const body = await peekJsonObject(g.req, g.res);
-  if (!body) return true;
+  if (body === null) return true;
+  if (!body) return false;
+  // With neither an employee nor an engine there is nothing to delegate to: the route refuses it.
+  if (body.employee === undefined && body.engine === undefined) return false;
   if (!isMember(body.employee, g.caller.department)) return memberRefusal(g, body.employee, "delegate to");
   const outside = namedTodoOutside(body.workItemId, g.caller.department);
   if (outside) return json(g.res, { error: `Todo ${outside} not found` }, 404), true;
@@ -240,6 +254,7 @@ export async function handleScopedCaller(
 ): Promise<boolean> {
   const caller = resolveScopedCaller(identity);
   if (!caller) return false;
+  redactResponses(res, departmentRedactor(caller));
   const { method, pathname } = route;
   if (caller.lost) {
     if (ownTranscriptRoute(method, pathname, caller.session.id)) return false;

@@ -1,5 +1,5 @@
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
-import { BodyTooLargeError, peekedBody, readBody } from "../http-helpers.js";
+import { BodyTooLargeError, PEEKED_BODY as PEEKED, peekedBody, readBody } from "../http-helpers.js";
 import { json } from "../route-helpers.js";
 
 /**
@@ -10,7 +10,7 @@ import { json } from "../route-helpers.js";
  * gate judged, so there is no second parse to disagree with the first.
  */
 
-const PEEKED = Symbol.for("jinn.department-scope.peeked-body");
+
 const PEEK_MAX_BYTES = 4 * 1024 * 1024;
 
 type Carrier = HttpRequest & { [PEEKED]?: string };
@@ -21,15 +21,15 @@ export function setPeekedBody(req: HttpRequest, body: Record<string, unknown>): 
 }
 
 /**
- * Read the body as a JSON object for a decision. A body that is not one is left for the
- * route to refuse in its own words: the gate then has nothing to judge and returns `{}`.
- * Answers 413 itself, and returns null, for a body over the cap.
+ * Read the body as a JSON object for a decision. Returns null once the gate has answered
+ * (413 for a body over the cap), and undefined when the body is not a JSON object: the
+ * route cannot act on such a body either, so the gate leaves it untouched for the route to
+ * refuse in its own words.
  */
-export async function peekJsonObject(req: HttpRequest, res: ServerResponse): Promise<Record<string, unknown> | null> {
-  const existing = peekedBody(req);
+export async function peekJsonObject(req: HttpRequest, res: ServerResponse): Promise<Record<string, unknown> | null | undefined> {
   let raw: string;
   try {
-    raw = existing ?? await readBody(req, { maxBytes: PEEK_MAX_BYTES });
+    raw = peekedBody(req) ?? await readBody(req, { maxBytes: PEEK_MAX_BYTES });
   } catch (err) {
     if (!(err instanceof BodyTooLargeError)) throw err;
     json(res, { error: "Payload too large" }, 413);
@@ -38,8 +38,8 @@ export async function peekJsonObject(req: HttpRequest, res: ServerResponse): Pro
   (req as Carrier)[PEEKED] = raw;
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
   } catch {
-    return {};
+    return undefined;
   }
 }

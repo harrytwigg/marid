@@ -124,3 +124,17 @@ export function lostBindingReason(session: { employee?: string | null; scopeDepa
   if (live === null) return `this session is bound to department "${bound}", which ${session.employee} is no longer confined to; start a new session`;
   return `this session is bound to department "${bound}", but ${session.employee} is now in department "${live}"; start a new session`;
 }
+
+/**
+ * FR-002: the department a Todo's scope is decided by, which is its ROOT's. Every scope
+ * decision reads this, never a sub-task's own column. `rootOf` looks the root up; a root
+ * that cannot be found falls back to the Todo's own department.
+ */
+export function scopeDepartmentOfItem(
+  item: { id: string; rootId: string; department: string | null },
+  rootOf: (rootId: string) => { department: string | null } | undefined,
+): string | null {
+  if (item.rootId === item.id) return item.department;
+  const root = rootOf(item.rootId);
+  return root ? root.department : item.department;
+}

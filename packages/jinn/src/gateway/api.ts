@@ -225,7 +225,7 @@ import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./wor
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
-import { DepartmentBoundaryError } from "../work-items/department-scope.js";
+import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
 import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
 import { assignWorkItem, changedStopCause, transition, TransitionError } from "../work-items/transitions.js";
@@ -3424,9 +3424,9 @@ export async function handleApiRequest(
               ? `delegate:${callerRef}:idempotency:${idempotencyDigest}`
               : `delegate:${callerRef}:${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
             assignee: employeeName ?? null,
-            // A closed department policy classifies by work, not by who does it:
-            // leave it to the store's default.
-            department: resolveTodoDepartments() ? undefined : delegateEmployee?.department ?? null,
+            // A closed department policy classifies by work, not by who does it: leave it to the
+            // store's default, except for a scoped delegate, whose Todo can only be in its department.
+            department: scopedDepartmentOf(employeeName) ?? (resolveTodoDepartments() ? undefined : delegateEmployee?.department ?? null),
             // Slice-5 decision 7: the DELEGATING caller is the creator — the
             // operator, or the delegating session's resolved employee slug
             // (`session:<uuid>` only when that session carries no employee).
@@ -3436,6 +3436,7 @@ export async function handleApiRequest(
           });
         } catch (mintErr) {
           if (mintErr instanceof DepartmentBoundaryError) throw mintErr; // 409 with the reason, like every other assignee writer
+          if (mintErr instanceof TodoDepartmentNotAllowedError) return badRequest(res, mintErr.message);
           logger.warn(`Delegation work-item mint failed: ${mintErr instanceof Error ? mintErr.message : mintErr}`);
           return json(res, { error: "delegation failed before any work started — the work item could not be minted; nothing was spawned" }, 500);
         }

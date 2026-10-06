@@ -1,4 +1,4 @@
-import { holdRefusal } from './department-scope.js';
+import { holdRefusal, scopeDepartmentOfItem } from './department-scope.js';
 import { getWorkItem, type WorkItem } from './store.js';
 
 /**
@@ -7,6 +7,5 @@ import { getWorkItem, type WorkItem } from './store.js';
  * outside the rules only exists after a hand edit, and nothing should start on it.
  */
 export function todoHoldRefusal(item: WorkItem): string | null {
-  const root = item.rootId === item.id ? item : getWorkItem(item.rootId) ?? item;
-  return holdRefusal(item.assignee, item.id, root.department);
+  return holdRefusal(item.assignee, item.id, scopeDepartmentOfItem(item, getWorkItem));
 }

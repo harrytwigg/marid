@@ -68,21 +68,20 @@ describe("delegation that creates an already-assigned Todo", () => {
     beforeEach(() => fs.writeFileSync(config, policy));
     afterEach(() => fs.rmSync(config, { force: true }));
 
-    it("refuses an employee who may not hold the default department's Todo, and mints nothing", async () => {
-      const before = listWorkItems({}).length;
-      const refused = await delegate("side-dev");
-      expect(refused.status).toBeGreaterThanOrEqual(400);
-      expect(refused.body.workItemId).toBeUndefined();
-      expect(listWorkItems({}).length).toBe(before);
-      expect((await delegate("eng-dev")).status).toBe(201);
+    it("mints a scoped delegate's Todo in the delegate's own department, and an unscoped one's in the default", async () => {
+      const scoped = await delegate("side-dev");
+      expect(scoped.status).toBe(201);
+      expect(getWorkItem(scoped.body.workItemId)).toMatchObject({ department: "side-project", assignee: "side-dev" });
+      const open = await delegate("eng-dev");
+      expect(getWorkItem(open.body.workItemId)).toMatchObject({ department: "general", assignee: "eng-dev" });
     });
 
-    // Finding: the refusal is a DepartmentBoundaryError, which the mint's catch turns into a
-    // 500 "the work item could not be minted", where every other writer route answers 409
-    // with `code: "department-boundary"` and the reason. Flips red when it is mapped.
-    it("answers it as the other entries do: 409 with the boundary code", async () => {
-      const refused = await delegate("side-dev");
-      expect({ status: refused.status, code: refused.body.code }).toEqual({ status: 409, code: "department-boundary" });
+    it("answers a scoped delegate whose department the policy does not allow with the policy's reason, and mints nothing", async () => {
+      const before = listWorkItems({}).length;
+      const refused = await delegate("other-dev");
+      expect(refused.status).toBe(400);
+      expect(refused.body.error).toMatch(/department "other-side" is not one of the configured Todo departments/);
+      expect(listWorkItems({}).length).toBe(before);
     });
   });
 });

@@ -69,3 +69,24 @@ export async function sessionOf(employee: string | null, extra: { parentSessionI
 export function as(sessionId: string) {
   return (method: string, url: string, body?: unknown) => call(method, url, body, sessionHeaders(sessionId));
 }
+
+/** Call the API with a raw body and exactly these headers (plus host and the bearer), for malformed-input cases. */
+export async function callRaw(method: string, url: string, raw: string, headers: Record<string, string | undefined>) {
+  const { Readable } = await import("node:stream");
+  const api = await import("../api.js");
+  let status = 200;
+  const chunks: Buffer[] = [];
+  const res = {
+    writeHead(next: number) { status = next; return this; },
+    setHeader() { return this; },
+    getHeader() { return undefined; },
+    end(chunk?: Buffer | string) { if (chunk) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)); },
+  };
+  const defined = Object.fromEntries(Object.entries(headers).filter(([, value]) => value !== undefined)) as Record<string, string>;
+  const request = Object.assign(Readable.from([Buffer.from(raw)]), { method, url, headers: { host: "localhost", authorization: "Bearer test-token", ...defined } });
+  await api.handleApiRequest(request as never, res as never, context);
+  const text = Buffer.concat(chunks).toString("utf-8");
+  let body: any = text;
+  try { body = JSON.parse(text); } catch { /* not JSON */ }
+  return { status, body };
+}

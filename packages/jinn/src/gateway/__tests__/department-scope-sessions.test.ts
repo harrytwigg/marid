@@ -99,14 +99,15 @@ describe("spawn and delegation (FR-016)", () => {
     }
   });
 
-  it("answers `unknown parentSessionId` to a spawn naming a parent outside D, and accepts one bound to D", async () => {
-    const refused = await as(self.id)("POST", "/api/sessions", { employee: "side-qa", prompt: "go", parentSessionId: otherUnscoped.id });
-    expect(refused.status).toBe(400);
-    expect(refused.body.error).toBe(`unknown parentSessionId "${otherUnscoped.id}"`);
+  it("answers a spawn naming a parent outside D as one naming an unknown parent (the caller becomes the parent), and keeps one bound to D", async () => {
+    const outside = await as(self.id)("POST", "/api/sessions", { employee: "side-qa", prompt: "go", parentSessionId: otherUnscoped.id });
+    const unknown = await as(self.id)("POST", "/api/sessions", { employee: "side-qa", prompt: "go", parentSessionId: "00000000-0000-4000-8000-000000000000" });
+    expect([outside.status, outside.body.parentSessionId]).toEqual([201, self.id]);
+    expect([unknown.status, unknown.body.parentSessionId]).toEqual([201, self.id]);
     const scopedOther = await as(self.id)("POST", "/api/sessions", { employee: "side-qa", prompt: "go", parentSessionId: otherScoped.id });
-    expect(scopedOther.status).toBe(400);
+    expect([scopedOther.status, scopedOther.body.parentSessionId]).toEqual([201, self.id]);
     const own = await as(self.id)("POST", "/api/sessions", { employee: "side-qa", prompt: "go", parentSessionId: peer.id });
-    expect(own.status).toBe(201);
+    expect([own.status, own.body.parentSessionId]).toEqual([201, peer.id]);
   });
 
   it("delegates only to D's members, and drops a named parent outside D", async () => {

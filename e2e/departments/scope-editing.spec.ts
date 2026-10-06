@@ -119,7 +119,16 @@ for (const theme of THEMES) {
         const { context, page } = await openPage(browser, theme, size, '/', { chatListOpen: true })
         await expect(page.getByTestId('session-department-badge')).toHaveCount(2)
         await page.getByRole('button', { name: /side-dev.*2 chats/ }).click()
+        // Expanding a group also opens its newest chat, which on a phone takes the screen:
+        // go back to the list, which keeps the group expanded.
+        if (size.name === 'phone') {
+          await page.getByRole('button', { name: 'Back to chats' }).click()
+          await expect(page.getByRole('button', { name: 'Back to chats' })).toBeHidden()
+        }
         await expect(page.getByTestId('session-department-badge')).toHaveCount(4)
+        // No pointer over a row (its menu would cover the time), and the list settled.
+        await page.mouse.move(size.width - 1, size.height - 1)
+        await page.waitForTimeout(500)
         await shoot(page, 'session-badge-team-group', theme, size)
         await context.close()
       })

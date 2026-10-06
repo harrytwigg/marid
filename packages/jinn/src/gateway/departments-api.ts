@@ -9,7 +9,8 @@ import { ensureDepartmentRegistered, resolveTodoDepartments } from "../work-item
 import { departmentRecord, departmentSlugsWithFiles, type DepartmentRecord } from "./department-registry.js";
 import { DepartmentWriteError, readDepartmentPatch, writeDepartmentFile } from "./department-store.js";
 import { readJsonBody } from "./http-helpers.js";
-import { strandedByScopeChange, strandingMessage, type Holding } from "./department-scope/stranding.js";
+import { strandedByScopeChange, strandingMessage } from "./department-scope/stranding.js";
+import { scopedEmployeeRefusal } from "./org-department-check.js";
 import { orgRegistry, refreshOrg } from "./org-registry.js";
 import { badRequest, json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
 import type { ApiContext } from "./api.js";
@@ -124,9 +125,24 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const WRITE_STATUS = { not_found: 404, conflict: 409, invalid: 400 } as const;
 
-/** FR-015: a scope change that would leave a Todo with a holder who may no longer hold it is refused, naming them. */
-function strandingRefusal(slug: string, scope: DepartmentScope | undefined): { error: string; code: string; holders: Holding[] } | null {
+/**
+ * Why a scope change is refused, as the 409 body, or null. FR-026: a member that could not
+ * be a scoped employee (another engine, a remote host) would be dropped from the roster by
+ * the next scan, so the change is refused naming them. FR-015: a change that would leave a
+ * Todo with a holder who may no longer hold it is refused naming them.
+ */
+function scopeChangeRefusal(slug: string, scope: DepartmentScope | undefined, context: ApiContext): Record<string, unknown> | null {
   if (scope === undefined || scope === departmentRecord(slug).scope) return null;
+  if (scope !== "open") {
+    const members = [...orgRegistry(context.getConfig()).values()]
+      .filter((employee) => employee.department === slug)
+      .map((employee) => ({ name: employee.name, reason: scopedEmployeeRefusal(employee, () => scope) }))
+      .filter((member): member is { name: string; reason: string } => member.reason !== null);
+    if (members.length > 0) {
+      const named = members.map((member) => `${member.name} (${member.reason})`).join("; ");
+      return { error: `Making ${slug} ${scope} would drop member(s) from the roster: ${named}. Change them first`, code: "department-members", members };
+    }
+  }
   const holders = strandedByScopeChange(slug, scope);
   if (holders.length === 0) return null;
   return { error: strandingMessage(`Making ${slug} ${scope}`, holders), code: "department-boundary", holders };
@@ -138,8 +154,8 @@ async function patchDepartment(req: HttpRequest, res: ServerResponse, slug: stri
   if (!parsed.body || typeof parsed.body !== "object" || Array.isArray(parsed.body)) return badRequest(res, "update body must be a JSON object");
   try {
     const patch = readDepartmentPatch(parsed.body as Record<string, unknown>);
-    const stranding = strandingRefusal(slug, patch.scope);
-    if (stranding) return json(res, stranding, 409);
+    const refused = scopeChangeRefusal(slug, patch.scope, context);
+    if (refused) return json(res, refused, 409);
     writeDepartmentFile(slug, patch);
   } catch (err) {
     if (!(err instanceof DepartmentWriteError)) throw err;

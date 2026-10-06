@@ -61,6 +61,8 @@ function knowledgeSearch(g: GateRequest): boolean {
 }
 
 function knowledgeRead(g: GateRequest): boolean {
+  // A path with control bytes is refused by the route before anything else; let it.
+  if (/[\x00-\x1f\x7f]/.test(g.route.url.searchParams.get("path") ?? "")) return false;
   const rel = readCleanSearchParam(g.route.url, "path");
   if (!rel || inDepartmentKnowledge(g.caller.department, rel)) return false;
   json(g.res, { error: `no such instance file: ${rel}` }, 404);

@@ -68,7 +68,7 @@ function hasDuplicateTopLevelObjectKeys(raw: string): boolean {
   return false;
 }
 
-const PEEKED_BODY = Symbol.for("jinn.department-scope.peeked-body");
+export const PEEKED_BODY = Symbol.for("jinn.department-scope.peeked-body");
 
 /** A body the department-scope gate already read and judged (department-scope/body.ts); the route reads it instead of the drained stream. */
 export function peekedBody(req: HttpRequest): string | undefined {
