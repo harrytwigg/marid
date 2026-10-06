@@ -20,7 +20,6 @@ import {
   groupsOf,
   materializeLayout,
   openDocTab,
-  newChatTabFor,
   openNewChatTab,
   openInFocusedGroup,
   pinTab,
@@ -34,7 +33,8 @@ import {
 } from './split-layout'
 import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
 import { fileTabId, type FileTabRef } from './file-tab'
-import { isChatTabId, todoTabId } from './tab-kind'
+import { isChatTabId, isNewChatTabId, todoTabId } from './tab-kind'
+import { forgetNewChatDraft } from '@/components/chat/use-chat-draft'
 import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
 import { applySplitDrop, type SplitDropContext } from './split-drop'
 import type { SplitDropHit } from './split-geometry'
@@ -81,10 +81,11 @@ export function hydrateSplitLayout(storage: Pick<Storage, 'getItem'>, liveIds: R
 
 const NO_IDS: ReadonlySet<string> = new Set()
 
-/** The focused pane has no chat (a document-only pane, a new chat's), so the route stays on the last one. */
+/** The focused pane shows no chat (a document-only pane, a new chat's, a new chat shown over a chat):
+ * the route may be on another pane's chat, and is not focused over it. */
 function chatlessFocused(layout: SplitLayout): boolean {
   const focused = focusedGroup(layout)
-  return focused !== null && !focused.tabs.some(isChatTabId)
+  return focused !== null && !isChatTabId(focused.activeTab)
 }
 
 /** The chats the stored layout holds that the session list no longer does: deleted while the page
@@ -113,14 +114,25 @@ export interface SplitLayoutControls {
 
 /**
  * The layout as shown: the URL's chat opened in it, ahead of the effect that commits that. A focused
- * pane with no chat (a document-only pane, a new chat's) leaves the route on the last chat while it
- * holds focus: the chat the URL names is already in the layout, and is not focused over it.
+ * pane showing no chat (a document-only pane, a new chat) may leave the route on another chat while
+ * it holds focus: the chat the URL names is already in the layout, and is not focused over it.
  */
 function useProjection(committedId: string | null, hydratedRef: { current: boolean }, deadRef: { current: ReadonlySet<string> }) {
   return useCallback((current: SplitLayout) => {
     if (!hydratedRef.current || !committedId || deadRef.current.has(committedId)) return current
     return chatlessFocused(current) && groupOfSession(current, committedId) ? current : openInFocusedGroup(current, committedId)
   }, [committedId, deadRef, hydratedRef])
+}
+
+/** A new chat tab's draft goes with the tab: closing it abandons the draft, as closing a browser tab
+ * would, and a later tab minted with the same id (ids restart with an emptied layout) starts blank. */
+function useForgetClosedNewChats(layout: SplitLayout) {
+  const previous = useRef<ReadonlySet<string>>(new Set())
+  useEffect(() => {
+    const open = new Set(groupsOf(layout).flatMap((group) => group.tabs).filter(isNewChatTabId))
+    for (const tabId of previous.current) if (!open.has(tabId)) forgetNewChatDraft(tabId)
+    previous.current = open
+  }, [layout])
 }
 
 /** Hydrates once the session list is known, then lets the URL drive the focused pane, exactly
@@ -163,6 +175,7 @@ function useLayoutSync(
   // The URL selection lands in the layout from an effect, a commit after the grid already
   // shows it (use-chat-grid-state.ts substitutes it synchronously). Rendering from the
   // projected layout keeps that one commit from laying the newcomer out as a stray column.
+  useForgetClosedNewChats(layout)
   const project = useProjection(committedId, hydratedRef, deadRef)
   const shown = useMemo(() => project(layout), [layout, project])
   const state = useMemo(() => workingSetFromLayout(shown), [shown])
@@ -220,8 +233,7 @@ function useTabOpeners(
    *  holds no chat to open it beside, or has yet to load, so the caller falls back to the route's own
    *  composer. */
   const openNewChat = useCallback((employee: string | null) => {
-    // Unchanged is success when the tab is already open (and shown, and focused): it is on screen.
-    if (!hydrated || (openNewChatTab(shown, employee) === shown && !newChatTabFor(shown, employee))) return false
+    if (!hydrated || !groupsOf(shown).some((group) => group.tabs.some(isChatTabId))) return false
     setLayout((current) => openNewChatTab(project(current), employee))
     return true
   }, [hydrated, project, shown])

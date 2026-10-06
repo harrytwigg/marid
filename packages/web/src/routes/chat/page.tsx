@@ -409,7 +409,7 @@ function ChatPage() {
   }, [chatTabs, navigate, openNewChatInLayout, releaseMobilePicker, startComposer])
 
   // ?employee=<name> deep-link: an INTENT (compose to that employee), consumed once (use-layout-tab-openers).
-  useEmployeeDeepLink(contactEmployee, !viewport.mobile && !workingSet.hydrated && !sessionsQuery.isError)
+  useEmployeeDeepLink(contactEmployee, !viewport.mobile && (!workingSet.hydrated || awaitingOpen) && !sessionsQuery.isError)
 
   // Back target for the phone file view's "back" button: the chat a file link
   // was clicked in. selectedIdRef is read at call time so the callback stays stable.

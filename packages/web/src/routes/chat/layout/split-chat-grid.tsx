@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode, type RefCallback } from 'react'
 import type { ChatGrid } from '../chat-grid'
 import { useChatGridMotion } from '../use-chat-grid-motion'
-import { focusedGroup, paneKeyOf, setVisibleSplitSizes } from './split-layout'
+import { focusedGroup, groupOfSession, paneKeyOf, routeSessionOf, setVisibleSplitSizes } from './split-layout'
 import { isChatTabId, isDocTabId } from './tab-kind'
 import { usePaneTabsDocPane } from '@/components/chat/pane-tabs-context'
 import { splitGeometry, type Rect, type SplitHandle } from './split-geometry'
@@ -110,8 +110,8 @@ export function SplitChatGrid(props: ChatGridProps) {
 /**
  * The grid's props with the panes that have no chat handled here: a document-only pane's key is its
  * document's tab id and a new chat's is its own, neither a session, so the page's focus handler never
- * sees one. Focusing such a pane focuses its group, keeping the tab it shows (the route stays on the
- * last chat), and while it holds focus it is the active pane, which the page's focused chat is not. A
+ * sees one. Focusing such a pane focuses its group, keeping the tab it shows; the route moves to a
+ * chat the group holds under it, else stays on the last chat, and while it holds focus it is the active pane, which the page's focused chat is not. A
  * document pane is rendered here; a new chat's is a composer, which the page renders.
  */
 function useChatlessPaneProps(props: ChatGridProps, split: SplitLayoutControls): Pick<ChatGridProps, 'focusedId' | 'onFocus' | 'renderPane'> {
@@ -121,8 +121,15 @@ function useChatlessPaneProps(props: ChatGridProps, split: SplitLayoutControls):
   const { onFocus, renderPane } = props
   return {
     focusedId: focusedPaneKey && !isChatTabId(focusedPaneKey) ? focusedPaneKey : props.focusedId,
-    // The key is the pane's tab when it was drawn; its strip may have just shown another one.
-    onFocus: (key) => (isChatTabId(key) ? onFocus(key) : split.focusPane(key)),
+    onFocus: (key) => {
+      if (isChatTabId(key)) return onFocus(key)
+      // The key is the pane's tab when it was drawn; its strip may have just shown another one.
+      split.focusPane(key)
+      // A new chat or document shown over a chat makes that chat the route's, as the chat's own pane does.
+      const owner = groupOfSession(split.layout, key)
+      const chat = owner ? routeSessionOf(owner, split.layout.focusHistory) : ''
+      if (chat) onFocus(chat)
+    },
     renderPane: (key, active) => (isDocTabId(key) ? renderDocPane(key) : renderPane(key, active)),
   }
 }

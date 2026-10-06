@@ -251,6 +251,33 @@ describe('the routed multi-pane surface', () => {
     expect(keys.some((key) => key?.startsWith('new:') && key.includes('employee=writer'))).toBe(true)
   })
 
+  it('makes a New chat over a chat of another pane active again, by a click or by New chat', async () => {
+    seedWorkingSet(['a', 'b'])
+    renderRoute('/?session=a')
+    await waitFor(() => expect(pane('b').textContent).toContain('transcript-b'))
+    const frameOf = (node: Element) => node.closest<HTMLElement>('[data-chat-grid-pane]')!
+    const active = () => document.querySelector('[data-grid-active="true"]')?.getAttribute('data-chat-grid-pane')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'New chat' })[0])
+    await waitFor(() => expect(pane('new')).toBeDefined())
+    const fresh = frameOf(pane('new')).getAttribute('data-chat-grid-pane')!
+    fireEvent.click(frameOf(pane('b')))
+    await waitFor(() => expect(screen.getByTestId('route-location').textContent).toBe('/?session=b'))
+    expect(active()).toBe('b')
+
+    // A click into the New chat's pane makes it active; the route follows the chat under it.
+    fireEvent.click(frameOf(pane('new')))
+    await waitFor(() => expect(active()).toBe(fresh))
+    await waitFor(() => expect(screen.getByTestId('route-location').textContent).toBe('/?session=a'))
+
+    // From the other pane, New chat brings the open one back to the front.
+    fireEvent.click(frameOf(pane('b')))
+    await waitFor(() => expect(active()).toBe('b'))
+    fireEvent.click(screen.getAllByRole('button', { name: 'New chat' })[0])
+    await waitFor(() => expect(active()).toBe(fresh))
+    expect(document.querySelectorAll('[data-pane-tab-kind="new-chat"]')).toHaveLength(1)
+  })
+
   it('renders exactly one composer pane when the working set is empty', async () => {
     sessionIds.length = 0
     localStorage.setItem(WORKING_SET_STORAGE_KEY, JSON.stringify({

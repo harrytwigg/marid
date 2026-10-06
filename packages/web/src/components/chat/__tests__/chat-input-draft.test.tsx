@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ChatInput } from '../chat-input'
 import { PaneTabIdContext } from '../pane-tabs-context'
+import { forgetNewChatDraft } from '../use-chat-draft'
 
 vi.mock('@/hooks/use-employees', () => { const data = { employees: [] }; return { useOrg: () => ({ data }) } })
 vi.mock('@/hooks/use-skills', () => { const data: never[] = []; const refetch = vi.fn(); return { useSkills: () => ({ data, refetch }) } })
@@ -140,4 +141,15 @@ it('keeps a separate draft for each new chat tab of the layout, apart from the r
   route.unmount()
   render(inTab('new:n=1'))
   expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('plain draft')
+})
+
+it('drops the draft of a new chat tab once the tab is gone, so an id minted again starts blank', () => {
+  const onSend = vi.fn()
+  const inTab = <PaneTabIdContext.Provider value="new:n=3"><ChatInput {...props} sessionId={null} onSend={onSend} /></PaneTabIdContext.Provider>
+  const first = render(inTab)
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'abandoned' } })
+  first.unmount()
+  forgetNewChatDraft('new:n=3')
+  render(inTab)
+  expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('')
 })

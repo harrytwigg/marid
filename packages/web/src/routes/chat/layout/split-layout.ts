@@ -455,7 +455,7 @@ export function openNewChatTab(layout: SplitLayout, employee: string | null = nu
 }
 
 /** The new chat tab addressed to `employee` (or to no one) the layout holds, if any. */
-export function newChatTabFor(layout: SplitLayout, employee: string | null): string | null {
+function newChatTabFor(layout: SplitLayout, employee: string | null): string | null {
   return groupsOf(layout).flatMap((g) => g.tabs).find((id) => parseNewChatTabId(id)?.employee === (employee || null)) ?? null
 }
 

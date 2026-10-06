@@ -13,7 +13,14 @@ type SplitWorkingSet = ReturnType<typeof useSplitWorkingSet>
  * which has no split layout, or when the layout holds no chat to open it beside.
  */
 export function useNewChatTabOpener(openNewChat: SplitWorkingSet['openNewChat'], mobile: boolean) {
-  return useCallback((employee: string | null) => !mobile && openNewChat(employee), [mobile, openNewChat])
+  return useCallback((employee: string | null) => {
+    if (mobile || !openNewChat(employee)) return false
+    // Ready to type, as the route composer is: the new chat's pane is the active one once it lands.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[data-chat-pane-active="true"] [data-chat-textarea]')?.focus()
+    }))
+    return true
+  }, [mobile, openNewChat])
 }
 
 /**
@@ -45,8 +52,9 @@ export function useNewChatTabHandlers(workingSet: SplitWorkingSet, onSessionCrea
  * The ?employee=<name> deep link: an INTENT (compose to that employee), not a location, so it is
  * consumed once and does not re-fire or stick. ?session= is never consumed: it IS the selection, and
  * resolveDeepLink's session-first precedence keeps a stray employee param inert beside it. While the
- * stored layout loads (`waitForLayout`, desktop) the intent is held, not dropped: the new chat may
- * open as a tab of it, and the route may move to a chat meanwhile, taking the param with it.
+ * stored layout loads and a bare `/` settles on its chat (`waitForLayout`, desktop) the intent is held,
+ * not dropped: the new chat may open as a tab of that layout, over that chat, and the route moving to
+ * the chat takes the param with it.
  */
 export function useEmployeeDeepLink(contactEmployee: (name: string) => void, waitForLayout: boolean) {
   const [searchParams, setSearchParams] = useSearchParams()

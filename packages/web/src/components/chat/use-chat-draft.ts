@@ -41,11 +41,20 @@ function useDraftAcknowledgment(owner: RefObject<DraftOwner>, updateValue: Dispa
   }, [key, storedAtRender, owner, updateValue])
 }
 
+function draftScope(): string {
+  return `jinn-chat-draft:${gatewayTransport().profile.origin}:`
+}
+
+/** Drops the draft of a new chat tab that left the layout (closed, evicted): its id may be minted again. */
+export function forgetNewChatDraft(tabId: string): void {
+  writeDraft(draftScope() + tabId, '')
+}
+
 /** Text survives pane/route remounts and reload in this tab, scoped to its gateway. A composer with
  *  no session yet keeps one shared draft, except a new chat tab of the layout, which keeps its own
  *  under its tab id: several can be open at once. */
 export function useChatDraft(sessionId: string | null) {
-  const scope = `jinn-chat-draft:${gatewayTransport().profile.origin}:`
+  const scope = draftScope()
   const blank = useContext(PaneTabIdContext) ?? 'new'
   const key = scope + (sessionId ?? blank)
   const [value, updateValue] = useState(() => readDraft(key) ?? '')
