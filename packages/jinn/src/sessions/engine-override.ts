@@ -30,9 +30,9 @@ function overrideRecord(session: Session, accounts: AccountSwap | undefined, unt
   const standing = accountOverride(session);
   if (standing) {
     const previous = (session.transportMeta as Record<string, Record<string, unknown>>).engineOverride;
+    // `until` is when the session goes back to its OWN account, so it stays the first swap's.
     return {
       ...previous,
-      until: until.toISOString(),
       ...(accounts
         ? { substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir }
         : { substituteAccount: undefined, substituteConfigDir: undefined, originalAccount: undefined }),
@@ -98,8 +98,8 @@ export function beginEngineSubstitution(opts: {
   const engineOverride = overrideRecord(session, accounts, until, syncSince);
 
   const started = updateSessionForAttempt(session.id, attemptToken, {
-    // The limited engine's thread id moves to its own typed ref (the override record
-    // keeps a second copy). The mirror belongs to whichever engine is actually running,
+    // The limited engine's thread id moves to its own typed ref (a first swap's record
+    // keeps a second copy; a nested one keeps the session's own). The mirror belongs to whichever engine is actually running,
     // so it goes null until the substitute returns a thread id of its own.
     ...(session.engineSessionId ? nextEngineSessionFields(session, session.engine, session.engineSessionId) : {}),
     engine: substitute,
@@ -162,6 +162,7 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
     next["claudeSyncSince"] = parked.syncSince;
     // The prompt's sync intro names what happened: another account, not another engine.
     if (session.engine === "claude") next["claudeSyncAccount"] = true;
+    else delete next["claudeSyncAccount"];
   }
   delete next["engineOverride"];
   return next;

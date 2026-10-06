@@ -209,3 +209,65 @@ describe("the sync intro after an account swap", () => {
     expect(syncPromptFor(after as never, "hello")).toMatch(/^We temporarily ran this session on another Claude account due to a usage limit\./);
   });
 });
+
+describe("a legacy row's first account-keyed write", () => {
+  it("moves the employee's own thread off `claude`, so a swap onto the default account starts fresh there", () => {
+    const s = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:legacy-swap", employee: "side-dev", model: "opus" });
+    reg.updateSession(s.id, { engineSessions: { claude: { id: "friend-own-old" } }, engineSessionId: "friend-own-old" } as never);
+    const sub = beginEngineSubstitution({
+      session: reg.getSession(s.id)!, attemptToken: running(s.id), config, employee: { name: "side-dev", claudeConfigDir: FRIEND } as never,
+      substitute: "claude", accounts: { original: FRIEND_ACCOUNT, substitute: "claude", substituteConfigDir: null },
+      until: new Date(Date.now() + 3600_000), syncSince: new Date().toISOString(), lastError: "limit",
+    });
+    // No resume id, so the substitute gets the history-carrying prompt on the default profile.
+    expect(sub?.resumeSessionId).toBeUndefined();
+    const refs = reg.getSession(s.id)!.engineSessions!;
+    expect(refs.claude).toBeUndefined();
+    expect(refs[FRIEND_ACCOUNT]?.id).toBe("friend-own-old");
+  });
+
+  it("an engine switch back to Claude moves it too", () => {
+    const s = reg.createSession({ engine: "codex", source: "web", sourceRef: "web:legacy-move", employee: "side-dev" });
+    reg.updateSession(s.id, { engineSessions: { claude: { id: "old-claude-thread" }, codex: { id: "c1" } }, engineSessionId: "c1" } as never);
+    const back = reg.switchSessionEngine(s.id, "claude")!;
+    expect(back.engineSessions?.claude).toBeUndefined();
+    expect(back.engineSessions?.[FRIEND_ACCOUNT]?.id).toBe("old-claude-thread");
+  });
+});
+
+describe("a nested swap's window", () => {
+  it("keeps the first swap's until: that is when the session goes back to its own account", () => {
+    const s = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:nested-until", model: "opus" });
+    reg.recordEngineSessionId(s.id, "claude", "a-thread");
+    const firstUntil = new Date(Date.now() + 2 * 3600_000);
+    beginEngineSubstitution({
+      session: reg.getSession(s.id)!, attemptToken: running(s.id), config, employee: undefined, substitute: "claude",
+      accounts: { original: "claude", substitute: FRIEND_ACCOUNT, substituteConfigDir: friend.dir },
+      until: firstUntil, syncSince: new Date().toISOString(), lastError: "limit",
+    });
+    beginEngineSubstitution({
+      session: reg.getSession(s.id)!, attemptToken: running(s.id), config, employee: undefined, substitute: "claude",
+      accounts: { original: FRIEND_ACCOUNT, substitute: THIRD_ACCOUNT, substituteConfigDir: third.dir },
+      until: new Date(Date.now() + 5 * 3600_000), syncSince: new Date().toISOString(), lastError: "limit",
+    });
+    const record = (reg.getSession(s.id)!.transportMeta as Record<string, Record<string, unknown>>).engineOverride;
+    expect(record.until).toBe(firstUntil.toISOString());
+    expect(record.substituteAccount).toBe(THIRD_ACCOUNT);
+  });
+});
+
+describe("an engine swap's revert after an account swap's sync marker was left behind", () => {
+  it("drops the account wording", () => {
+    const s = reg.createSession({ engine: "claude", source: "web", sourceRef: "web:marker", model: "opus" });
+    reg.recordEngineSessionId(s.id, "claude", "a-thread");
+    reg.updateSession(s.id, { transportMeta: { claudeSyncAccount: true } } as never);
+    beginEngineSubstitution({
+      session: reg.getSession(s.id)!, attemptToken: running(s.id), config, employee: undefined, substitute: "codex",
+      until: new Date(Date.now() + 3600_000), syncSince: new Date(Date.now() - 60_000).toISOString(), lastError: "limit",
+    });
+    expire(s.id);
+    const after = maybeRevertEngineOverride(reg.getSession(s.id)!);
+    expect((after.transportMeta as Record<string, unknown>).claudeSyncAccount).toBeUndefined();
+    expect(syncPromptFor(after as never, "hello")).toMatch(/^We temporarily switched to GPT/);
+  });
+});

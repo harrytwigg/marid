@@ -37,7 +37,7 @@ function runScript(dir: string): string {
 beforeEach(() => clearAccountReadings());
 
 describe("the token script, run on the host", () => {
-  it("prints only the access token and its expiry: the refresh token never leaves", () => {
+  it("prints only the access token and its expiry: the refresh token never leaves", { timeout: 30_000 }, () => {
     const expiresAt = Date.now() + 3600_000;
     const out = runScript(profileWith(expiresAt));
     expect(JSON.parse(out)).toEqual({ accessToken: ACCESS, expiresAt });
@@ -45,11 +45,12 @@ describe("the token script, run on the host", () => {
     expect(out).not.toContain("refresh");
   });
 
-  it("prints {} for a profile with no login", () => {
+  it("prints {} for a profile with no login", { timeout: 30_000 }, () => {
     expect(runScript(fs.mkdtempSync(path.join(os.tmpdir(), "jinn-remote-empty-")))).toBe("{}");
   });
 
-  it("takes the profile path as an argument, so a hostile path is data, not script", () => {
+  // These spawn node, which a loaded full-suite run can slow well past the default timeout.
+  it("takes the profile path as an argument, so a hostile path is data, not script", { timeout: 30_000 }, () => {
     const evil = path.join(os.tmpdir(), "x\"; require('fs').writeFileSync('/tmp/pwned-remote-account','1'); \"");
     expect(runScript(evil)).toBe("{}");
     expect(fs.existsSync("/tmp/pwned-remote-account")).toBe(false);

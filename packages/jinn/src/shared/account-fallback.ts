@@ -45,9 +45,10 @@ export interface AccountFallbackOptions {
   /** Only Claude-account entries apply: a session whose working layout is
    *  Claude's cannot move to another engine (FR-026a). */
   accountsOnly?: boolean;
-  /** The account a substituted session belongs to. The health-blind second
-   *  pass never hands the session back to it: that account was limited, and a
-   *  stale record must not bounce the session onto it again. */
+  /** The account a substituted session belongs to. Never a substitute target:
+   *  going back to it is the turn-start revert's job, at the override's `until`,
+   *  which restores its own thread and sync point; a swap onto it would replay
+   *  turns its thread already ran, and a health-blind one would land on a limit. */
   original?: string;
 }
 
@@ -83,8 +84,9 @@ export function resolveHealthyAccountFallback(
   health: EngineHealthReading,
   options: AccountFallbackOptions = {},
 ): FallbackTarget | null {
-  return resolveAccountFallback(config, from, (target) => isUsable(target) && !isEngineExhausted(health, target.account), options)
-    ?? resolveAccountFallback(config, from, (target) => isUsable(target) && target.account !== options.original, options);
+  const allowed = (target: FallbackTarget) => isUsable(target) && target.account !== options.original;
+  return resolveAccountFallback(config, from, (target) => allowed(target) && !isEngineExhausted(health, target.account), options)
+    ?? resolveAccountFallback(config, from, allowed, options);
 }
 
 /** Whether an account has a chain of its own to walk: the default account and

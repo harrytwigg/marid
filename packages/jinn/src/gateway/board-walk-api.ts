@@ -2,14 +2,14 @@ import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import { json, type ParsedRoute } from "./route-helpers.js";
 import type { ApiContext } from "./api.js";
 import { readTicks } from "../board-walk/store.js";
-import { countStarts, toStartedSession } from "../board-walk/started-sessions.js";
+import { countStarts, listStartedSessions, listStartedSessionsWith } from "../board-walk/started-sessions.js";
 import { readClaudeUsageHistory, usageHistoryPath } from "../shared/claude-usage-history.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import type { JinnConfig, Session } from "../shared/types.js";
 import { walkAccounts } from "../board-walk/accounts.js";
 import { sessionStartAccount } from "../board-walk/snapshot-accounts.js";
 import { rosterClaudeAccounts } from "../shared/engine-limits-accounts.js";
-import { getSession, listSessionsCreatedSince } from "../sessions/registry.js";
+import { getSession } from "../sessions/registry.js";
 import { verifySessionCapability } from "../mcp/identity.js";
 import { readJsonBody } from "./http-helpers.js";
 import { resolveCallerIdentity } from "./session-comm-guards.js";
@@ -97,9 +97,11 @@ function handleAutoDispatch(res: ServerResponse, route: ParsedRoute, context: Ap
   // the board walk, the dispatch button, a mention, cron or a chat.
   if (pathname === "/api/auto-dispatch/sessions") {
     const engine = url.searchParams.get("engine") || undefined;
-    const raw = listSessionsCreatedSince(new Date(since).toISOString(), { ...(engine ? { engine } : {}), limit: bounded(url, "limit", 500, 2000) });
+    const opts = { ...(engine ? { engine } : {}), limit: bounded(url, "limit", 500, 2000) };
     const accountOf = multi ? startAccountOf(context.getConfig()) : undefined;
-    const sessions = raw.map((session) => (accountOf ? { ...toStartedSession(session), account: accountOf(session) } : toStartedSession(session)));
+    const sessions = accountOf
+      ? listStartedSessionsWith(since, opts, (session) => ({ account: accountOf(session) }))
+      : listStartedSessions(since, opts);
     json(res, { sessions, counts: countStarts(sessions) });
     return true;
   }

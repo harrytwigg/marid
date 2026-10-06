@@ -86,8 +86,25 @@ export function threadSlot(session: SessionView, engine: string): string {
 export function legacyThreadRef<T>(session: SessionView & { engineSessions?: Record<string, T> | null }, engine: string): T | undefined {
   if (engine !== "claude" || threadSlot(session, engine) === engine || accountOverride(session)) return undefined;
   const refs = session.engineSessions ?? {};
-  if (Object.keys(refs).some((key) => key !== "claude" && key.startsWith("claude"))) return undefined;
+  if (Object.keys(refs).some((key) => key !== DEFAULT_CLAUDE_ACCOUNT && isClaudeAccount(key))) return undefined;
   return refs.claude;
+}
+
+/**
+ * The refs after writing `slot`, with a legacy `claude` slot MOVED to the
+ * account slot rather than copied: left in place it would read as the default
+ * account's thread the moment an override pointed the session there, and a
+ * substitute on the default profile would try to resume the employee's own
+ * conversation.
+ */
+export function withLegacySlotMoved<T>(
+  session: SessionView & { engineSessions?: Record<string, T> | null },
+  engine: string,
+  refs: Record<string, T>,
+): Record<string, T> {
+  if (legacyThreadRef(session, engine) === undefined) return refs;
+  const { claude: _legacy, ...rest } = refs;
+  return rest as Record<string, T>;
 }
 
 /** The session as it reads with no account override: its own account's slots. */

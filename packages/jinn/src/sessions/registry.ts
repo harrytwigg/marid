@@ -2,7 +2,7 @@ import { parseBlocksColumn, parseMetaColumn, rowToMessage, type MessageRow, type
 export type { MessageMedia, SessionMessage, MessagePage, MessagePageOptions } from './message-row.js';
 import { CALLBACK_DELIVERY_SELECT } from "./callback-delivery-query.js";
 import { pendingCompletionBatch } from "./completion-batching.js";
-import { legacyThreadRef, threadSlot, withoutAccountOverride } from "./session-account.js";
+import { legacyThreadRef, threadSlot, withLegacySlotMoved, withoutAccountOverride } from "./session-account.js";
 export { coalescePendingParentCompletionQueueItems } from "./completion-batching.js";
 export { shouldHoldParentCompletionQueueDispatch, listReleasableParentCompletionQueuesForSource } from "./completion-drain.js";
 import { randomUUID } from 'node:crypto';
@@ -976,7 +976,7 @@ export function nextEngineSessionFields(
   const id = nativeId.trim();
   if (!engine || !id) return {};
   const next = cleanEngineSessionRef({ ...getEngineSessionRef(session, engine), ...meta, id });
-  const updates: UpdateSessionFields = { engineSessions: { ...cleanEngineSessionRefs(session.engineSessions), [threadSlot(session, engine)]: next } };
+  const updates: UpdateSessionFields = { engineSessions: withLegacySlotMoved(session, engine, { ...cleanEngineSessionRefs(session.engineSessions), [threadSlot(session, engine)]: next }) };
   if (session.engine === engine) updates.engineSessionId = next.id ?? null;
   return updates;
 }
@@ -1040,6 +1040,7 @@ export function switchSessionEngine(
     effortLevel: nextEffort ?? undefined,
   });
   if (Object.keys(nextTarget).length > 0) refs[targetSlot] = nextTarget;
+  const movedRefs = withLegacySlotMoved(session, session.engine, withLegacySlotMoved({ ...own, engineSessions: session.engineSessions }, nextEngine, refs));
 
   const transportMeta = (session.transportMeta && typeof session.transportMeta === 'object' && !Array.isArray(session.transportMeta))
     ? { ...session.transportMeta }
@@ -1053,7 +1054,7 @@ export function switchSessionEngine(
   return updateSession(sessionId, {
     engine: nextEngine,
     engineSessionId: target.id ?? null,
-    engineSessions: refs,
+    engineSessions: movedRefs,
     status: "idle",
     model: nextModel ?? null,
     effortLevel: nextEffort ?? null,

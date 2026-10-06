@@ -132,14 +132,14 @@ describe("walking an account's chain", () => {
     expect(resolveAccountFallback(c, `claude:${claudeProfileFromDir("/Users/operator/.claude-quiet").key}`, yes)).toBeNull();
   });
 
-  it("never hands a substituted session back to its own limited account on the health-blind pass", () => {
+  it("never hands a substituted session back to its own account as a substitute", () => {
     const d = config({ accounts: { friend: { configDir: FRIEND, fallback: ["claude"] } } });
     const until = new Date(Date.now() + 3600_000).toISOString();
     const health = { claude: { state: "exhausted" as const, until, recheckAt: until } };
     expect(resolveHealthyAccountFallback(d, friendKey, yes, health, { original: "claude" })).toBeNull();
     // Without that, the blind pass would put it straight back on the spent default account.
     expect(resolveHealthyAccountFallback(d, friendKey, yes, health)).toEqual({ engine: "claude", account: "claude" });
-    // Once the own account has recovered, going back to it is a healthy answer.
-    expect(resolveHealthyAccountFallback(d, friendKey, yes, {}, { original: "claude" })).toEqual({ engine: "claude", account: "claude" });
+    // Even once it has recovered: going back is the turn-start revert's job, which restores its own thread.
+    expect(resolveHealthyAccountFallback(d, friendKey, yes, {}, { original: "claude" })).toBeNull();
   });
 });
