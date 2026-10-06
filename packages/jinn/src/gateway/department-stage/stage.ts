@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { logger } from "../../shared/logger.js";
+import { resolveClaudeConfigDir } from "../../shared/home.js";
 import { resolveJinnHome } from "../../shared/paths.js";
 import { departmentRecord, departmentScopeOf, departmentSlugsWithFiles } from "../department-registry.js";
 import { departmentStageDir } from "../department-scope/paths.js";
@@ -43,7 +44,8 @@ export function prepareDepartmentStage(slug: string): string {
   const { files } = generateStageFileSet({ home: resolveJinnHome(), slug, definition: departmentRecord(slug).definition });
   const dir = departmentStageDir(slug);
   try {
-    syncStageDir(dir, files);
+    // Never inside the instance home or the Claude profile: a stage directory there would load the company context, and the sync deletes extras.
+    syncStageDir(dir, files, Date.now(), [resolveJinnHome(), resolveClaudeConfigDir()]);
   } catch (err) {
     throw new Error(`the stage directory for department "${slug}" could not be prepared: ${err instanceof Error ? err.message : String(err)}`);
   }

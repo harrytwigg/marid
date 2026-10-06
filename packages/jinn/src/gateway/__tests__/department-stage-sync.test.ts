@@ -137,6 +137,35 @@ describe("syncing a stage directory", () => {
     expect(fs.existsSync(unrelated)).toBe(true);
   });
 
+  it("refuses a stage root that is a link, and deletes nothing through it", () => {
+    const home = path.join(root, "fake-home");
+    fs.mkdirSync(path.join(home, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(home, "docs", "org.md"), "company doc");
+    const linkedRoot = path.join(root, "links", ".jinn-departments");
+    fs.mkdirSync(path.dirname(linkedRoot), { recursive: true });
+    fs.symlinkSync(home, linkedRoot);
+    expect(() => syncStageDir(path.join(linkedRoot, "docs"), files({ "CLAUDE.md": "x" }))).toThrow(/is a symbolic link/);
+    expect(() => syncStageDir(path.join(linkedRoot, "sales"), files({ "CLAUDE.md": "x" }))).toThrow(/is a symbolic link/);
+    expect(fs.readFileSync(path.join(home, "docs", "org.md"), "utf-8")).toBe("company doc");
+    expect(fs.existsSync(path.join(home, "sales"))).toBe(false);
+  });
+
+  it("refuses a stage directory that resolves inside a forbidden tree, and one that is not directly under its root", () => {
+    const home = path.join(root, "fake-home");
+    fs.mkdirSync(path.join(home, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(home, "docs", "org.md"), "company doc");
+    // The root is real but the stage directory name is a link into the home (a session can make one with `ln -s`).
+    const realRoot = path.join(root, ".jinn-departments");
+    fs.mkdirSync(realRoot);
+    fs.symlinkSync(path.join(home, "docs"), path.join(realRoot, "docs"));
+    // A link is replaced by a real directory, which is fine and deletes nothing in the home.
+    syncStageDir(path.join(realRoot, "docs"), files({ "CLAUDE.md": "x" }), Date.now(), [home]);
+    expect(fs.readFileSync(path.join(home, "docs", "org.md"), "utf-8")).toBe("company doc");
+    // A root that lies inside a forbidden tree is refused.
+    const inside = path.join(home, "stage-root", "alpha");
+    expect(() => syncStageDir(inside, files({ "CLAUDE.md": "x" }), Date.now(), [home])).toThrow(/resolves inside/);
+  });
+
   it("leaves another department's stage directory alone", () => {
     const other = path.join(path.dirname(stage), "beta");
     syncStageDir(other, files({ "CLAUDE.md": "beta's" }));

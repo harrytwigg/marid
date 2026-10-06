@@ -119,14 +119,38 @@ function removeExtras(dir: string, prefix: string, files: StageFileSet, dirs: Re
   }
 }
 
-export function syncStageDir(stageDir: string, files: StageFileSet, now: number = Date.now()): SyncReport {
+function isWithin(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+/**
+ * The sync deletes extras and a session's cwd is whatever this resolves to, so a root that
+ * is a link, or a stage directory that lands anywhere but directly under the real root or
+ * inside a `forbidden` tree (the instance home, say), is refused rather than followed.
+ */
+function assertContained(root: string, stageDir: string, forbidden: readonly string[]): void {
+  const rootStat = lstatOrNull(root);
+  if (rootStat?.isSymbolicLink()) throw new Error(`${root} is a symbolic link`);
+  const realRoot = fs.realpathSync(root);
+  const realStage = fs.realpathSync(stageDir);
+  if (realStage !== path.join(realRoot, path.basename(stageDir))) throw new Error(`${stageDir} resolves to ${realStage}, outside ${realRoot}`);
+  for (const tree of forbidden) {
+    const real = lstatOrNull(tree) ? fs.realpathSync(tree) : path.resolve(tree);
+    if (isWithin(realStage, real) || isWithin(realRoot, real)) throw new Error(`${stageDir} resolves inside ${real}`);
+  }
+}
+
+export function syncStageDir(stageDir: string, files: StageFileSet, now: number = Date.now(), forbidden: readonly string[] = []): SyncReport {
   const report: SyncReport = { written: [], removed: [] };
   const root = path.dirname(stageDir);
+  if (lstatOrNull(root)?.isSymbolicLink()) throw new Error(`${root} is a symbolic link`);
   fs.mkdirSync(root, { recursive: true });
   // A link or a file where the directory belongs is not the directory: nothing is lost by replacing it.
   const existing = lstatOrNull(stageDir);
   if (existing && !existing.isDirectory()) fs.rmSync(stageDir, { recursive: true, force: true });
   fs.mkdirSync(stageDir, { recursive: true });
+  assertContained(root, stageDir, forbidden);
   reapStaleIncoming(root, now);
 
   const incoming = fs.mkdtempSync(path.join(root, `.${path.basename(stageDir)}.incoming-`));

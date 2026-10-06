@@ -53,6 +53,18 @@ describe("dispatching a Todo's skills", () => {
     expect(prefix(unscoped.id)).toBe("Read and follow skills/dev-workflow/SKILL.md before you start.\n\n");
   });
 
+  it("reads the skills from where the employee the session is for runs, not where the Todo's holder does (a delegation)", () => {
+    const heldByUnscoped = workItems.createWorkItem({ title: "delegated-in", department: "side-project", assignee: "eng-dev" });
+    const heldByScoped = workItems.createWorkItem({ title: "delegated-out", department: "side-project", assignee: "side-dev" });
+    set(heldByUnscoped.id, ["dev-workflow"]);
+    set(heldByScoped.id, ["dev-workflow"]);
+    const prefix = (id: string, employee?: string | null) => (dispatch.resolveTodoDispatch(id, employee) as { ok: true; preamble: { prefix: string } }).preamble.prefix;
+    expect(prefix(heldByUnscoped.id, "side-dev")).toContain(".claude/skills/dev-workflow/SKILL.md");
+    expect(prefix(heldByScoped.id, "eng-dev")).toContain("Read and follow skills/dev-workflow/SKILL.md");
+    expect(prefix(heldByScoped.id, null)).toContain("Read and follow skills/dev-workflow/SKILL.md");
+    expect(prefix(heldByScoped.id)).toContain(".claude/skills/dev-workflow/SKILL.md");
+  });
+
   it("refuses a Todo whose stored skills the department no longer offers", () => {
     const todo = workItems.createWorkItem({ title: "dispatch-dropped", department: "side-project", assignee: "side-dev" });
     set(todo.id, ["dev-workflow"]);

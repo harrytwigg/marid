@@ -250,7 +250,7 @@ export interface TodoDispatchPreamble {
  * different: the Todo asked to be worked with skills and none survived, so the
  * attempt would be something other than what was requested.
  */
-export function resolveTodoDispatch(workItemId: string):
+export function resolveTodoDispatch(workItemId: string, employee?: string | null):
   | { ok: true; preamble: TodoDispatchPreamble }
   | { ok: false; error: string } {
   const stored = getTodoDispatchConfig(workItemId);
@@ -275,7 +275,7 @@ export function resolveTodoDispatch(workItemId: string):
     );
   }
 
-  return { ok: true, preamble: { prefix: skillsPromptPrefix(present, skillsRootFor(workItemId)), engine: stored.engine, model: stored.model } };
+  return { ok: true, preamble: { prefix: skillsPromptPrefix(present, skillsRootFor(workItemId, employee)), engine: stored.engine, model: stored.model } };
 }
 
 function skillsPromptPrefix(skills: readonly string[], root: string): string {

@@ -28,10 +28,13 @@ export function skillAllowListNote(workItemId: string): string {
 }
 
 /**
- * Where the Todo's skills are read from in the prompt. A department-scoped assignee runs
- * in its stage directory, where the allowed skills are copied to `.claude/skills/`; anyone
- * else reads `skills/` in the Jinn home.
+ * Where the skills are read from in the prompt. A department-scoped employee runs in its
+ * stage directory, where the allowed skills are copied to `.claude/skills/`; anyone else
+ * reads `skills/` in the Jinn home. `employee` is who the session is for: a delegation
+ * resolves its brief before the Todo changes hands, so the Todo's current assignee is only
+ * the answer when nobody is named.
  */
-export function skillsRootFor(workItemId: string): string {
-  return scopedDepartmentOf(getWorkItem(workItemId)?.assignee) ? '.claude/skills' : 'skills';
+export function skillsRootFor(workItemId: string, employee?: string | null): string {
+  const runner = employee === undefined ? getWorkItem(workItemId)?.assignee : employee;
+  return scopedDepartmentOf(runner) ? '.claude/skills' : 'skills';
 }

@@ -73,7 +73,7 @@ describe("on a trigger", () => {
     try {
       expect(() => callbacks().onSkillsChange()).not.toThrow();
     } finally {
-      fs.rmSync(root, { force: true });
+      fs.unlinkSync(root);
     }
   });
 });
@@ -148,5 +148,46 @@ describe("the prompt's skill line", () => {
     prepareDepartmentStage(SLUG);
     expect(line()).toContain("Company skills available to you: review (in `.claude/skills/`)");
     expect(line()).not.toContain("risky");
+  });
+
+  it("names none when every listed skill was refused, although the generator then writes no .claude/skills", async () => {
+    const { departmentScopeSections } = await import("../../sessions/context/department-scope.js");
+    const { refreshOrg } = await import("../org-registry.js");
+    const { writeEmployeeFile } = await import("./department-fixtures.js");
+    const { prepareDepartmentStage } = await import("../department-stage/stage.js");
+    writeEmployeeFile(SLUG, "triggers-dev");
+    writeSkill("risky");
+    fs.symlinkSync(path.join(resolveJinnHome(), "skills", "review", "SKILL.md"), path.join(resolveJinnHome(), "skills", "risky", "link.md"));
+    writeDepartmentFile(SLUG, `name: ${SLUG}\nscope: scoped\nskills: [risky]\n`);
+    refreshOrg();
+    prepareDepartmentStage(SLUG);
+    expect(fs.existsSync(stage(".claude"))).toBe(false);
+    const content = departmentScopeSections({ employee: { name: "triggers-dev" } })[0]?.content ?? "";
+    expect(content).toContain("No company skills are offered to this department.");
+    expect(content).not.toContain("risky");
+  });
+});
+
+describe("a stage root that has been replaced by a link", () => {
+  it("is refused, so a scoped session never starts in the instance home and nothing there is deleted", async () => {
+    const { prepareDepartmentStage } = await import("../department-stage/stage.js");
+    const { spawnCwd } = await import("../../sessions/session-cwd.js");
+    const home = resolveJinnHome();
+    fs.mkdirSync(path.join(home, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(home, "docs", "keep.md"), "company doc");
+    const root = path.dirname(departmentStageDir(SLUG));
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.symlinkSync(home, root);
+    try {
+      expect(() => prepareDepartmentStage(SLUG)).toThrow(/could not be prepared.*is a symbolic link/);
+      expect(() => spawnCwd({ employee: "x", scopeDepartment: SLUG })).toThrow(/could not be prepared/);
+      writeDepartmentFile("docs", "name: docs\nscope: scoped\n");
+      refreshDepartments();
+      expect(() => prepareDepartmentStage("docs")).toThrow(/is a symbolic link/);
+      expect(fs.readFileSync(path.join(home, "docs", "keep.md"), "utf-8")).toBe("company doc");
+      expect(fs.existsSync(path.join(home, SLUG))).toBe(false);
+    } finally {
+      fs.unlinkSync(root);
+    }
   });
 });

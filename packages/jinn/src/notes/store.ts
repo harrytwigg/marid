@@ -4,6 +4,7 @@ import path from "node:path";
 import { JINN_HOME } from "../shared/paths.js";
 import { hasControlBytes, stripControlChars } from "../shared/sanitize.js";
 import { KNOWLEDGE_FILE_CHAR_CAP, type KnowledgeReadResult } from "../shared/knowledge-read.js";
+import { realSearchRoot } from "./search-roots.js";
 import type {
   NoteDocument,
   NoteFolder,
@@ -681,12 +682,8 @@ export function searchKnowledge(query: string, home: string = JINN_HOME, roots: 
   const hits: KnowledgeSearchHit[] = [];
   for (const label of roots) {
     const rootPath = path.join(home, label);
-    let realRoot: string;
-    try {
-      realRoot = fs.realpathSync(rootPath);
-    } catch {
-      continue;
-    }
+    const realRoot = realSearchRoot(home, label);
+    if (!realRoot) continue;
     walkMarkdown(rootPath, "", realRoot, (relativePath, absolutePath) => {
       const relPath = `${label}/${relativePath}`;
       const file = accept && !accept(relPath) ? null : openRegularFile(absolutePath);

@@ -45,6 +45,26 @@ describe("searching past the result cap", () => {
   });
 });
 
+describe("a root reached through a link", () => {
+  it("is not walked: a department folder or shared folder that is a link out of the instance returns nothing", async () => {
+    const outside = fs.mkdtempSync(`${home}-outside-`);
+    fs.writeFileSync(path.join(outside, "leak.md"), "# Leak\nlamprey outside the instance\n");
+    fs.rmSync(path.join(home, OWN), { recursive: true, force: true });
+    fs.symlinkSync(outside, path.join(home, OWN));
+    try {
+      expect(searchKnowledge("lamprey", home, [`knowledge/departments/side-project`])).toEqual([]);
+      expect(hits((await scoped("GET", "/api/knowledge/search?q=lamprey")).body)).toEqual([]);
+      // A top-level root is taken as it always was.
+      fs.unlinkSync(path.join(home, OWN));
+      fs.mkdirSync(path.join(home, OWN), { recursive: true });
+      expect(searchKnowledge("quokka", home, ["knowledge/company"]).length).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(path.join(home, OWN), { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("a shared file", () => {
   it("is shared alone: its siblings stay out of search and reads", async () => {
     make("shared", "Shared one", "narwhal here");
@@ -85,11 +105,20 @@ describe("the department's state file", () => {
     expect(fs.readFileSync(state(), "utf-8")).toContain("- focus: the launch");
   });
 
+  it("is one file however many writes follow: no write creates a second state file", async () => {
+    fs.rmSync(path.join(home, OWN), { recursive: true, force: true });
+    for (const title of ["One", "Two", "Three"]) expect((await scoped("POST", "/api/notes", { title, body: title })).status).toBe(201);
+    const first = (await scoped("GET", `/api/notes/read?path=${OWN}/one.md`)).body.note;
+    expect((await scoped("PUT", "/api/notes", { path: first.path, expectedRevision: first.revision, append: "more" })).status).toBe(200);
+    expect(fs.readdirSync(path.join(home, OWN)).sort()).toEqual(["one.md", "state.md", "three.md", "two.md"]);
+  });
+
   it("is not seeded over a state note the session created itself", async () => {
     fs.rmSync(path.join(home, OWN), { recursive: true, force: true });
     expect((await scoped("POST", "/api/notes", { title: "State", body: "my own shape" })).status).toBe(201);
     expect(fs.readFileSync(state(), "utf-8")).toContain("my own shape");
     expect(fs.readFileSync(state(), "utf-8")).not.toContain("## Current");
+    expect(fs.readdirSync(path.join(home, OWN))).toEqual(["state.md"]);
   });
 
   it("is never the company's state file, which stays out of reach", async () => {

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { createNote } from "../../notes/store.js";
 import type { NoteDocument } from "../../shared/types.js";
 import { resolveJinnHome } from "../../shared/paths.js";
@@ -27,8 +29,12 @@ function seedBody(slug: string): string {
   ].join("\n");
 }
 
-/** Create the department's state file when it does not exist yet; returns the note when it did. A file that is already there is left alone. */
+/** Create the department's state file when it does not exist yet; returns the note when it did. A file that is already there is left alone: `createNote` would pick a free suffix, not refuse. */
 export function seedDepartmentState(slug: string, home: string = resolveJinnHome()): NoteDocument | undefined {
+  try {
+    fs.lstatSync(path.join(home, "knowledge", departmentNotesFolder(slug), "state.md"));
+    return undefined;
+  } catch { /* absent: seed it */ }
   const result = createNote({ title: STATE_TITLE, body: seedBody(slug), folder: departmentNotesFolder(slug) }, home);
   return result.ok ? result.value : undefined;
 }

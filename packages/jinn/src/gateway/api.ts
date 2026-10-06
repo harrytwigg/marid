@@ -3366,7 +3366,7 @@ export async function handleApiRequest(
       // A named engine with no model resolves that engine's default, so the
       // previous engine's model is not carried across.
       const todoDispatch = typeof body.workItemId === "string" && isTodoId(body.workItemId.trim())
-        ? resolveTodoDispatch(body.workItemId.trim())
+        ? resolveTodoDispatch(body.workItemId.trim(), employeeName ?? null)
         : { ok: true as const, preamble: { prefix: "", engine: null, model: null } };
       if (!todoDispatch.ok) return json(res, { error: todoDispatch.error }, 409);
       const todoOverride = todoDispatch.preamble;

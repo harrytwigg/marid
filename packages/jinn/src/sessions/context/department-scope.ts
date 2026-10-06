@@ -48,12 +48,13 @@ export function withDepartmentScope<T extends ScopeInputs>(opts: T): T {
 
 /**
  * The skills the department offers (FR-027): its allow-list, narrowed to the copies the stage
- * directory actually holds once it exists (a skill the generator refused is not there).
+ * directory actually holds once it exists (a skill the generator refused is not there,
+ * and when every one was refused there is no `.claude/skills` at all).
  */
 function departmentSkills(department: string): readonly string[] {
   const allowed = departmentSkillAllowList(department) ?? [];
-  const copies = path.join(departmentStageDir(department), ".claude", "skills");
-  return fs.existsSync(copies) ? allowed.filter((name) => fs.existsSync(path.join(copies, name, "SKILL.md"))) : allowed;
+  const stage = departmentStageDir(department);
+  return fs.existsSync(stage) ? allowed.filter((name) => fs.existsSync(path.join(stage, ".claude", "skills", name, "SKILL.md"))) : allowed;
 }
 
 function departmentSkillsLine(department: string): string {
