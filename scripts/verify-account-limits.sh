@@ -78,6 +78,7 @@ trap 'exit 130' INT TERM
 
 mkdir -p "$HOST_HOME"
 env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" create "$INSTANCE" --port "$PORT" --build
+"$NODE_BIN" "$REPO/scripts/seed-account-limits.mjs" "$SANDBOX_HOME" "$HOST_HOME"
 # The sandbox must be bound by its own config.yaml, checked before the daemon reads it. This
 # is the other half of the scrub at the top: if an inherited JINN_PORT ever slips past it,
 # applyGatewayEnvOverrides() would silently rebind the gateway away from $PORT and the run

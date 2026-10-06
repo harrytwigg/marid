@@ -112,7 +112,7 @@ function base(nowMs: number): EngineLimitEngineSnapshot {
 function asleep(account: string): EngineLimitEngineSnapshot {
   const last = lastAccountReading(account);
   if (last) return { ...last.snapshot, stale: true };
-  return { ...base(Date.now()), refreshedAt: new Date(0).toISOString(), unsupportedReason: "The host is asleep or unreachable, and has not been read yet; it is not woken to be read." };
+  return { ...base(Date.now()), unsupportedReason: "The host is asleep or unreachable, and has not been read yet; it is not woken to be read." };
 }
 
 async function isAwake(deps: RemoteAccountUsageDeps, destination: string): Promise<boolean> {

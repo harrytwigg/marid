@@ -25,7 +25,8 @@ export function accountStatus(account: EngineLimitAccountSnapshot, now: number):
   if (account.hostUnreachable) {
     return {
       color: "var(--system-orange)",
-      label: account.refreshedAt ? `Host asleep · ${agoLabel(account.refreshedAt, now)}` : "Host asleep",
+      // The age is the last reading's; a host never read has none to show.
+      label: account.refreshedAt && account.windows?.length ? `Host asleep · ${agoLabel(account.refreshedAt, now)}` : "Host asleep",
       note: "The host is asleep or unreachable; showing the last reading.",
     }
   }

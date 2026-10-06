@@ -131,7 +131,7 @@ describe("LimitsPage — accounts", () => {
 
   it("says only 'Host asleep' when the host has no last reading", () => {
     show({
-      claude: [account("claude", "claude"), account("claude@u@h", "u@h", { location: { kind: "remote", host: "h" }, hostUnreachable: true, refreshedAt: "", windows: [] })],
+      claude: [account("claude", "claude"), account("claude@u@h", "u@h", { location: { kind: "remote", host: "h" }, hostUnreachable: true, refreshedAt: iso(0), windows: [] })],
     })
     expect(within(card("u@h")).getByText("Host asleep")).toBeTruthy()
   })

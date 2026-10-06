@@ -154,9 +154,22 @@ const UNROUTED_LIMIT = [
   "Todo can still land on one; it then waits for that account's own reset.",
 ];
 
+/** When the operator counts as live, about the default account. */
+function whoIsAround(policy: LegacyIdleCapacityPolicy): string[] {
+  const { idleMinutes, usageDeltaPercent } = policy.operatorActivity;
+  return [
+    "**Who is around.** The operator is live when the snapshot shows any of these",
+    `within the last ${plural(idleMinutes, "minute", "minutes")}: activity on a session they drive, a turn in a Jinn`,
+    `interactive Claude session, or the Claude five-hour usage rising by ${plural(usageDeltaPercent, "point", "points")} or`,
+    "more since the previous tick while no Jinn session ran. The quiet hours are",
+    `${policy.quietHours.start} to ${policy.quietHours.end} local time. The operator's activity is about the default`,
+    "account; an account only Jinn uses has the operator not live, unless its own",
+    "usage rose while none of its sessions ran.",
+  ];
+}
+
 /** The `## Dispatch` section of `board-walk.md`, stating `policy` in prose. */
 export function renderDispatchSection(policy: LegacyIdleCapacityPolicy): string {
-  const { idleMinutes, usageDeltaPercent } = policy.operatorActivity;
   const off = TIERS.filter((tier) => !policy.tiers[tier].enabled).map((tier) => SITUATIONS[tier].label.toLowerCase());
   const lines = [
     "## Dispatch",
@@ -167,13 +180,7 @@ export function renderDispatchSection(policy: LegacyIdleCapacityPolicy): string 
     "",
     ...PER_ACCOUNT,
     "",
-    "**Who is around.** The operator is live when the snapshot shows any of these",
-    `within the last ${plural(idleMinutes, "minute", "minutes")}: activity on a session they drive, a turn in a Jinn`,
-    `interactive Claude session, or the Claude five-hour usage rising by ${plural(usageDeltaPercent, "point", "points")} or`,
-    "more since the previous tick while no Jinn session ran. The quiet hours are",
-    `${policy.quietHours.start} to ${policy.quietHours.end} local time. The operator's activity is about the default`,
-    "account; an account only Jinn uses has the operator not live, unless its own",
-    "usage rose while none of its sessions ran.",
+    ...whoIsAround(policy),
     "",
     "**Three situations.** Pick the one that applies; the operator being live",
     "outranks the clock.",

@@ -141,3 +141,33 @@ for (const theme of THEMES) {
     })
   }
 }
+
+// One pass with nothing mocked: the sandbox's own gateway, seeded with a second local
+// account at its limit (scripts/seed-account-limits.mjs), answers /api/engine-limits.
+const seed = JSON.parse(fs.readFileSync(path.join(home, 'account-limits-seed.json'), 'utf8')) as { friend: string; account: string }
+
+test('the real gateway lists both local accounts, the named one at its limit', async ({ request }) => {
+  const res = await request.get('/api/engine-limits?engine=claude', { headers: { authorization: `Bearer ${token}` } })
+  expect(res.ok()).toBe(true)
+  const body = await res.json() as { accounts?: { claude?: Array<{ account: string; label: string; employees: string[]; exhausted?: { until?: string } }> } }
+  const accounts = body.accounts?.claude ?? []
+  expect(accounts.map((account) => account.account)).toEqual(['claude', seed.account])
+  expect(accounts[0]!.employees).toContain('eng-dev')
+  expect(accounts[1]).toMatchObject({ label: '.claude-friend', employees: ['side-dev'] })
+  expect(accounts[1]!.exhausted?.until).toBeTruthy()
+})
+
+for (const theme of THEMES) {
+  for (const viewport of Object.keys(VIEWPORTS) as Viewport[]) {
+    test(`Limits page on the real gateway, ${theme}, ${viewport}`, async ({ browser }) => {
+      const page = await open(browser, theme, viewport)
+      await page.goto('/limits', { waitUntil: 'networkidle' })
+      await expect(page.getByText('.claude-friend')).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByText('At limit')).toBeVisible()
+      await expect(page.getByText('Used by side-dev')).toBeVisible()
+      await page.waitForTimeout(600)
+      await shot(page, `limits-real-gateway-${theme}-${viewport}`)
+      await page.context().close()
+    })
+  }
+}
