@@ -423,14 +423,16 @@ and dark, with screenshots on the PR (FR-040).
     is treated as `dedicated` until the file loads **only if the file's `scope` is anything
     other than `open`**. A file that parses is judged by its parsed `scope` key alone: present
     and not exactly `open` means dedicated, including a quoted value other than `open`, a
-    capitalised or mistyped value, a list and a flow mapping; absent, empty or `open` means open, and `scope:` written inside a
-    description, or in a document that is not a mapping, does not count. A file that does not
+    capitalised or mistyped value, a list and a flow mapping. Absent or `open` means open, and
+    so does an empty `scope:` (or `scope: ~`), which YAML reads as null and which therefore
+    names no scope, as in a file that does not parse. `scope:` written inside a description,
+    or in a document that is not a mapping, does not count. A file that does not
     parse is judged by an anchored line match,
     `/^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S/m` (multiline, with no `i`
     flag: it is case-sensitive, as YAML is, so `scope: OPEN` is not `open` and a key spelled
     `Scope` is not the scope key), so a commented-out line or an empty `scope:` does not
-    count. A file that exists but cannot be read (a permissions error, say) is held
-    `dedicated`, since what it asks for cannot be known. A recorded last good scope always
+    count. A file that cannot be read (a permissions error on the file or on its department's
+    directory, say) is held `dedicated`, since what it asks for cannot be known. A recorded last good scope always
     wins over all three. So a file that asks
     for confinement, or that mistypes the scope (`scope: scopd`), fails closed: its intended
     members are confined and nobody else can hold its Todos. A file with no `scope`, or with

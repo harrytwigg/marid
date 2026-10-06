@@ -24,11 +24,17 @@ describe("a directory under org/ that cannot be listed", () => {
   it.skipIf(process.getuid?.() === 0)("does not stop the scan, so scopes still resolve and Todos can still be assigned", () => {
     writeDepartmentFile("side-project", "name: side-project\nscope: scoped\n");
     writeEmployeeFile("engineering", "eng-dev");
+    expect(refreshOrg().registry.has("eng-dev")).toBe(true);
     locked = path.join(resolveJinnHome(), "org", "locked");
     fs.mkdirSync(locked, { recursive: true });
     fs.chmodSync(locked, 0o000);
-    refreshOrg();
+    // The employee scan still fails on it, as it always has, and serves the last roster.
+    const read = refreshOrg();
+    expect(read.error).toMatch(/EACCES/);
+    expect(read.registry.has("eng-dev")).toBe(true);
     expect(departmentScopeOf("side-project")).toBe("scoped");
+    // Whether it holds a department.yaml cannot be known, so the department fails closed.
+    expect(departmentScopeOf("locked")).toBe("dedicated");
     const item = createWorkItem({ title: "in side-project", department: "side-project" });
     expect(assignWorkItem(item.id, "eng-dev", "engineering", "operator")?.department).toBe("side-project");
   });
