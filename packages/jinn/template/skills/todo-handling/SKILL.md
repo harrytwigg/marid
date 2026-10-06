@@ -18,6 +18,10 @@ Use this skill for deliberately authored, durable work ownership and status trac
 
 The statuses are backlog, executing, in_review, done, blocked, and cancelled. A Todo with an owner that has not started sits in backlog with its assignee set. Assigning a Todo, or moving it on the board, starts nothing: a dispatch does.
 
+## Departments that confine their people
+
+A Todo's department is its top-level Todo's. In a `scoped` or `dedicated` department (see `docs/org.md`), only some employees may hold its Todos: a scoped employee holds only its own department's Todos, and only members hold a `dedicated` department's. An assignment, delegation or create that breaks that is refused with the reason; choose someone who may hold it, or `@operator`. If your own session is scoped to a department, every Todo outside it reads as not found, your creates land in your department, and you assign and delegate only to its members.
+
 ## Who may move a Todo where
 
 Agent sessions work inside the open statuses: pick work up or put it down (backlog ↔ executing), hand it to review and take it back (executing ↔ in_review), and stop or resume it (any open status ↔ blocked, with a note saying why). Closing a Todo (`done`), cancelling it, reopening closed work and archiving are the operator's. The gateway refuses them to every agent session, reviewers included.

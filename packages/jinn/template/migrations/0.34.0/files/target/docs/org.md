@@ -142,15 +142,32 @@ instructions: department   # department | department+company
 
 `workdirs`, `skills`, `sharedNotes` and `instructions` are read only when the scope is not `open`. A working directory must sit inside a git work tree whose top is neither your home directory nor above it, and must not be, contain or lie inside the instance home, `~/.claude`, the gateway's own Claude profile (`CLAUDE_CONFIG_DIR`), any employee's Claude profile (`claudeConfigDir`), `~/.ssh`, `~/.config`, `~/.aws`, `~/.gnupg` or `~/Library`.
 
-**What a scope does today.** It changes how Todos move; it does not yet confine anyone:
+**Who holds a Todo.** A Todo's department is its root's: a sub-task is in whatever department its top-level Todo is in.
 
-- Assigning a Todo never moves it across a scoped or dedicated department's boundary, in either direction. A Todo whose root is in one keeps its department when it is assigned to an employee elsewhere, to `@operator`, or to an engine-only delegate; a Todo in an open department keeps its department when it is assigned to an employee of a scoped one. Refusing such an assignment outright comes with enforcing scoped employees.
-- A sub-task shares its root's department whenever either is scoped or dedicated, so a create that names another department under such a root is refused.
-- An employee in a scoped or dedicated department must have the department's directory, its immediate directory and its `department` field all agree, or the employee is refused at load and the log says why. `PATCH /api/org/employees/:name` will not move an employee into or out of such a department; move the file by hand.
+- A scoped employee (one in a `scoped` or `dedicated` department) holds only its own department's Todos.
+- Anyone else holds Todos in any department that is not `dedicated`; a `dedicated` department's Todos are held only by its members.
+- `@operator` holds anything.
+
+Every way of setting an assignee checks this (assigning, delegating, the metadata pen, creates from plugins and cron), and so does starting work: the Dispatcher, the board walk and a session linked to a Todo refuse a holder the rules do not allow. Assigning never moves a Todo across a scoped or dedicated department's boundary, in either direction. A sub-task shares its root's department whenever either is scoped or dedicated; moving a top-level Todo across such a boundary moves the sub-tasks that share its department with it, and is refused while a sub-task sits somewhere else. An employee in a scoped or dedicated department must have the department's directory, its immediate directory and its `department` field all agree, or the employee is refused at load and the log says why; move such an employee by moving its file.
+
+**Changes that would strand a holder are refused** and the refusal names each Todo and its holder: making a department `dedicated` while someone outside it holds one of its Todos, scoping a department whose members hold Todos elsewhere, moving a Todo where its holder may not follow, or moving an employee away from Todos it holds. Reassign them first. A hand edit to the YAML is not refused; the org scan logs the holdings it leaves outside the rules, and nothing starts on them.
+
+**What a scoped employee can reach.** A session of a scoped employee is bound to its department when it is created, and the gateway holds every request it makes through the jinn tools to that department:
+
+- Todos: lists and searches show only the department's; any other Todo answers as not found; creates land in the department; relations to Todos outside it show only as a count.
+- Sessions: it sees and messages only sessions bound to its department, plus a live reply to the session that asked it for work. Unscoped sessions, the COO's included, are invisible to it.
+- People: the org tools and its prompt show only the department's members, and it can assign, dispatch, delegate and spawn only to them (or assign to `@operator`).
+- Notes: its Notes are `knowledge/departments/<slug>/`, plus the department's `sharedNotes`, even when Notes are switched off. The company `knowledge/state.md`, `knowledge/employees/` and `docs/` are out of reach unless shared.
+- Files: it may attach or publish only files inside the department's `workdirs` or its stage directory, and cannot browse managed files.
+- Refused: cron, cost, connectors, configuration, global search, the skills API, sprint, label and department administration, and every live socket.
+
+A scoped employee must use the `claude` engine and cannot have a `remoteHost` yet; cron jobs cannot target one, and connectors (Telegram) cannot open a session for one. A session whose employee has since left the department, or whose department has been opened, or that was created before its department was scoped, can no longer act or start a turn; start a new one. Until the next release loads only the department's own instructions and skills, a scoped session still loads this instance's `CLAUDE.md`, skills and `knowledge/state.md`.
+
+**This is a guardrail, not a sandbox.** It is enforced in the gateway and the jinn tools. A scoped employee's sessions still run as your user with a shell, and a session that deliberately uses that shell can read the instance home, other repositories and credentials, and reach the gateway around the tools. Put nothing in a scoped department you would not trust its account with.
 
 **A broken file never opens a department.** Every successful load records the scope. A file that is refused (YAML that does not parse, a `name` that is not the directory's, an unknown `scope`, or a non-open scope on `system` or `org`) or deleted leaves the department at its last recorded scope; one that has never loaded is held as `dedicated` until it does, but only if its text has a `scope:` key with a value other than `open` (so `scope: scopd` counts), or if the file cannot be read at all; otherwise the department stays open, so an old `department.yaml` the parser refuses (earlier templates described one that nothing read) confines no one. The refusal is logged and shown on the department panel either way. Write `scope: open` to open a department. A bad entry in `workdirs`, `skills` or `sharedNotes` is dropped with a warning and the rest of the file still applies. A near-miss name such as `department.yml` is logged and not read.
 
-The org page shows a department's scope as a badge on its group box. Click the box to open the department panel: its details, scope, working directories, skills, shared Notes, instructions, members and the file to edit. The panel is read-only. `GET /api/departments` and `GET /api/departments/:slug` carry the same fields, and `PATCH /api/departments/:slug` (operator only) rewrites the file, keeping keys it does not know but dropping any comments in it; until scoped employees are enforced it will not set a scope other than `open`, so write `scope: scoped` in the file.
+The org page shows a department's scope as a badge on its group box. Click the box to open the department panel: its details, scope, working directories, skills, shared Notes, instructions, members and the file to edit. Its scope can be changed there; the rest is edited in the file. Sessions bound to a scoped department carry a badge with its name. `GET /api/departments` and `GET /api/departments/:slug` carry the same fields, and `PATCH /api/departments/:slug` (operator only) rewrites the file, keeping keys it does not know but dropping any comments in it, and refuses a scope change that would strand a holder.
 
 ### Todos
 
