@@ -31,7 +31,8 @@
 #
 # --seed leaves three idle web sessions titled "#1 - Chat layout QA", "#2 - Delegation flow" and
 # "#3 - Design pass" (source_ref sandbox:1..3). Every create also leaves cron/jobs.json with each job,
-# the board walk included, switched off, so a sandbox starts no scheduled engine turn. Exit codes: 0 ok, 1 an operation failed,
+# the board walk included, switched off, so a sandbox starts no scheduled engine turn, and the gateway and CLI run with
+# CLAUDE_CONFIG_DIR=$SANDBOX_HOME/.claude-sandbox (empty, so no engine turn can sign in as the operator). Exit codes: 0 ok, 1 an operation failed,
 # 2 bad usage or a refused request.
 set -euo pipefail
 
@@ -99,8 +100,13 @@ port_listening() { lsof -nP -iTCP:"$1" -sTCP:LISTEN -t >/dev/null 2>&1; }
 
 # Everything the Marid CLI runs sees the sandbox and nothing else. JINN_PORT is deliberately not
 # set: the sandbox's own config.yaml binds the gateway, and the verify scripts assert that.
+#
+# CLAUDE_CONFIG_DIR names an empty profile directory inside the sandbox. On macOS the Keychain
+# belongs to the user, not to $HOME, so a claude with no config dir finds the operator's own
+# "Claude Code-credentials" entry and runs on the operator's account. With an empty one an engine
+# turn a sandbox starts by accident cannot sign in, instead of spending real allowance.
 sandbox_env() {
-  env HOME="$HOST_HOME" JINN_HOME="$SANDBOX_HOME" JINN_REPO="$REPO" JINN_NO_OPEN=1 "$@"
+  env HOME="$HOST_HOME" JINN_HOME="$SANDBOX_HOME" JINN_REPO="$REPO" JINN_NO_OPEN=1 CLAUDE_CONFIG_DIR="$SANDBOX_HOME/.claude-sandbox" "$@"
 }
 
 jinn() { sandbox_env "$CLI_NODE_BIN" "$JINN_BIN" "$@"; }
@@ -264,6 +270,7 @@ cmd_create() {
   [[ -f "$SANDBOX_HOME/config.yaml" ]] || die "setup did not create config.yaml" 1
   patch_config "$port" || die "could not patch config.yaml" 1
   disable_scheduled_turns || die "could not switch off the sandbox's scheduled jobs" 1
+  mkdir -p "$SANDBOX_HOME/.claude-sandbox"
   (( seed )) && { [[ -f "$SANDBOX_HOME/sessions/registry.db" ]] || die "setup left no sessions/registry.db to seed" 1; seed_sessions; }
   CREATE_OK=1
   echo "Created sandbox '$INSTANCE' at $SANDBOX_HOME on port $port"
@@ -274,6 +281,7 @@ cmd_start() {
   require_sandbox
   local port; port="$(sandbox_port)"
   if port_listening "$port"; then die "port $port is already in use" 1; fi
+  mkdir -p "$SANDBOX_HOME/.claude-sandbox"
   jinn start --daemon --port "$port" </dev/null >"$SANDBOX_HOME/start.log" 2>&1 \
     || { cat "$SANDBOX_HOME/start.log" >&2; die "jinn start failed" 1; }
   if ! wait_healthy "$port"; then

@@ -109,9 +109,13 @@ test("the CLI is run with the sandbox's identity and none of the caller's", () =
       }))
       assert.equal(seen.JINN_HOME, fs.realpathSync(home))
       assert.equal(seen.HOME, host)
-      for (const key of ["JINN_PORT", "JINN_GATEWAY_URL", "JINN_GATEWAY_TOKEN", "JINN_INSTANCE", "JINN_SESSION_ID", "CLAUDE_CONFIG_DIR"]) {
+      for (const key of ["JINN_PORT", "JINN_GATEWAY_URL", "JINN_GATEWAY_TOKEN", "JINN_INSTANCE", "JINN_SESSION_ID"]) {
         assert.equal(seen[key], undefined, `${key} leaked into the CLI environment`)
       }
+      // Never the caller's Claude profile, and never none: an empty one inside the sandbox, so no
+      // engine turn can find the operator's Keychain login.
+      assert.equal(seen.CLAUDE_CONFIG_DIR, path.join(fs.realpathSync(home), ".claude-sandbox"))
+      assert.deepEqual(fs.readdirSync(seen.CLAUDE_CONFIG_DIR), [])
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -257,6 +261,19 @@ function createdJobs(setupJobs) {
 }
 
 const built = fs.existsSync(path.join(repo, "packages/jinn/dist/bin/jinn.js")) && fs.existsSync(path.join(repo, "packages/jinn/dist/src/shared/config-document.js"))
+
+test("create makes the empty Claude profile directory the gateway will be given", { skip: !built && "needs a built checkout" }, () => {
+  withHost((host) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-sandbox-helper-setup-"))
+    try {
+      const result = run(host, ["create", "profile", "--port", "8089"], { JINN_SANDBOX_NODE_BIN: setupStub(root), CLAUDE_CONFIG_DIR: "/live/claude" })
+      assert.equal(result.status, 0, result.stderr)
+      assert.deepEqual(fs.readdirSync(path.join(host, ".jinn-profile", ".claude-sandbox")), [])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
 
 test("a created sandbox starts no scheduled turn: the board walk is added switched off", { skip: !built && "needs a built checkout" }, () => {
   const jobs = createdJobs(null)
