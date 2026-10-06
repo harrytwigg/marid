@@ -173,8 +173,8 @@ describe("converting gateway.idleCapacity into prose", () => {
 
   it("states different concurrency per situation when the tiers differ", () => {
     const section = renderDispatchSection(resolveLegacyPolicy({ tiers: { overnight: { maxActiveSessions: 3 } } }));
-    expect(section).toContain("overnight: while 3 or more sessions already hold engine capacity");
-    expect(section).toContain("daytime: while any session already holds engine capacity");
+    expect(section).toContain("**Concurrency.** Start nothing on an account overnight: while 3 or more sessions on it already hold capacity");
+    expect(section).toContain("daytime: while any session on it already holds capacity");
   });
 
 

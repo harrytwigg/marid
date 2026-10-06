@@ -143,8 +143,7 @@ these rules apply from the next tick. A probe whose session ends before it
 refreshes the token leaves the account unread, so it may be probed again on a
 later tick.
 
-**Concurrency.** Start nothing on an account while any session on it already
-holds capacity (running, queued or waiting).
+**Concurrency.** Start nothing on an account while any session on it already holds capacity (running, queued or waiting).
 
 **How many.** At most one start per tick on each account. Count the starts in
 the account's current five-hour window from its sessions started by the board
