@@ -38,6 +38,8 @@ export interface DepartmentDefinitionWire {
   spendUsd: number
   /** Entries the scan dropped, each with its reason. */
   warnings: string[]
+  /** Skills the allow-list names that the stage directory refuses, each with why (a symlink inside one, say). They are not in `skills`. */
+  skillProblems?: Array<{ skill: string; reason: string }>
 }
 
 /** A Todo that would be stranded by a scope change: who holds it. */

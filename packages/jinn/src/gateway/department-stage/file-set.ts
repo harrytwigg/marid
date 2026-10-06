@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { logger } from "../../shared/logger.js";
+import { readSkill, SkillRefused } from "../../shared/skill-inspection.js";
 import type { InstructionsMode } from "../department-definition.js";
 import { departmentScopeParagraph } from "./scope-paragraph.js";
 
@@ -40,11 +41,7 @@ export interface StageInputs {
 
 export const STAGE_SKILLS_DIR = ".claude/skills";
 export const STAGE_CLAUDE_MD = "CLAUDE.md";
-/** A skill is a playbook, not a repository: past these it is refused rather than copied before every spawn. */
-const SKILL_MAX_FILES = 2000;
-const SKILL_MAX_BYTES = 20_000_000;
 const INSTRUCTIONS_MAX_BYTES = 256_000;
-const IGNORED_NAMES = new Set([".DS_Store"]);
 
 /** The text of a regular file, or null when it is missing, a link, or too large. */
 function readTextFile(file: string, label: string): string | null {
@@ -75,36 +72,6 @@ function claudeMd(input: StageInputs): string {
   }
   parts.push(departmentScopeParagraph(input.slug));
   return `${parts.join("\n\n")}\n`;
-}
-
-class SkillRefused extends Error {}
-
-/** Every file of one skill, as `relative path -> file`. Throws SkillRefused for a link, a special file or an oversize skill. */
-function readSkill(root: string): Map<string, StageFile> {
-  const out = new Map<string, StageFile>();
-  let bytes = 0;
-  const walk = (dir: string, prefix: string): void => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (IGNORED_NAMES.has(entry.name)) continue;
-      const absolute = path.join(dir, entry.name);
-      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isSymbolicLink()) throw new SkillRefused(`it contains a symlink (${relative})`);
-      if (entry.isDirectory()) {
-        walk(absolute, relative);
-      } else if (entry.isFile()) {
-        const stat = fs.statSync(absolute);
-        bytes += stat.size;
-        if (out.size >= SKILL_MAX_FILES || bytes > SKILL_MAX_BYTES) throw new SkillRefused(`it is over ${SKILL_MAX_FILES} files or ${SKILL_MAX_BYTES} bytes`);
-        out.set(relative, { content: fs.readFileSync(absolute), executable: (stat.mode & 0o100) !== 0 });
-      } else {
-        throw new SkillRefused(`it contains a file that is not a regular file (${relative})`);
-      }
-    }
-  };
-  if (!fs.lstatSync(root).isDirectory()) throw new SkillRefused("it is not a directory");
-  walk(root, "");
-  if (!out.has("SKILL.md")) throw new SkillRefused("it has no SKILL.md");
-  return out;
 }
 
 export function generateStageFileSet(input: StageInputs): StageFileSetResult {

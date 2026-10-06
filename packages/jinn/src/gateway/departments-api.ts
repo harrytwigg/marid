@@ -3,6 +3,7 @@ import path from "node:path";
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import { initDb } from "../shared/db.js";
 import { resolveJinnHome } from "../shared/paths.js";
+import { skillRefusal } from "../shared/skill-inspection.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
 import { departmentSpend, listDepartmentsWithCounts, type DepartmentSummary } from "../work-items/departments.js";
 import { ensureDepartmentRegistered, resolveTodoDepartments } from "../work-items/store.js";
@@ -49,6 +50,8 @@ export type DepartmentDefinitionWire = DepartmentDefinitionFields & {
   spendUsd: number;
   /** Entries the scan dropped, each with its reason. */
   warnings: string[];
+  /** Skills the allow-list names that the stage directory refuses (a symlink inside one, say), each with why. They are not in `skills`: no session is given them. */
+  skillProblems: Array<{ skill: string; reason: string }>;
 };
 
 function fields(record: DepartmentRecord, members: string[]): DepartmentDefinitionFields {
@@ -107,17 +110,23 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
   const db = initDb();
   const row = listDepartmentsWithCounts(db).find((candidate) => candidate.slug === slug);
   const extras = record.definition ?? { workdirs: [], skills: [], sharedNotes: [], instructions: "department" as const };
+  // Read from disk on every request: a skill changes while the gateway runs, and the panel should say so now.
+  const skillProblems = extras.skills.flatMap((skill) => {
+    const reason = skillRefusal(path.join(resolveJinnHome(), "skills", skill));
+    return reason ? [{ skill, reason }] : [];
+  });
   return {
     slug,
     prefix: row?.prefix ?? null,
     ...fields(record, membersByDepartment(context).get(slug) ?? []),
     workdirs: extras.workdirs,
-    skills: extras.skills,
+    skills: extras.skills.filter((skill) => !skillProblems.some((problem) => problem.skill === skill)),
     sharedNotes: extras.sharedNotes,
     instructions: extras.instructions,
     todoCount: row?.todoCount ?? 0,
     spendUsd: departmentSpend(db).get(slug) ?? 0,
     warnings: record.warnings,
+    skillProblems,
   };
 }
 

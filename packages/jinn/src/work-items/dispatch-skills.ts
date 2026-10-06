@@ -1,4 +1,7 @@
+import path from 'node:path';
+import { SKILLS_DIR } from '../shared/paths.js';
 import { installedSkillNames } from '../shared/skill-commands.js';
+import { skillRefusal } from '../shared/skill-inspection.js';
 import { departmentSkillAllowList, scopedDepartmentOf, scopeDepartmentOfItem } from './department-scope.js';
 import { getWorkItem } from './store.js';
 
@@ -13,11 +16,32 @@ function allowListOf(workItemId: string): readonly string[] | null {
   return item ? departmentSkillAllowList(scopeDepartmentOfItem(item, getWorkItem)) : null;
 }
 
-/** The skill names `workItemId` may request: the installed ones, narrowed to its department's allow-list. */
+/**
+ * Why a skill cannot go into a scoped department's stage directory (it holds a symlink, say),
+ * or null when it can. Read from disk each time: skills change while the gateway runs.
+ */
+function stageRefusal(name: string): string | null {
+  return skillRefusal(path.join(SKILLS_DIR, name));
+}
+
+/**
+ * The skills among `names` that `workItemId`'s department allows but cannot be given, each
+ * with why. A Todo outside a scoped department has none: its sessions read `skills/` itself.
+ */
+export function refusedDepartmentSkills(workItemId: string, names: readonly string[]): Array<{ skill: string; reason: string }> {
+  const allowed = allowListOf(workItemId);
+  if (!allowed) return [];
+  return names.flatMap((skill) => {
+    const reason = allowed.includes(skill) ? stageRefusal(skill) : null;
+    return reason ? [{ skill, reason }] : [];
+  });
+}
+
+/** The skill names `workItemId` may request: the installed ones, narrowed to its department's allow-list and to the skills its stage directory can hold. */
 export function offeredSkillNames(workItemId: string): Set<string> {
   const installed = installedSkillNames();
   const allowed = allowListOf(workItemId);
-  return allowed ? new Set(allowed.filter((name) => installed.has(name))) : installed;
+  return allowed ? new Set(allowed.filter((name) => installed.has(name) && !stageRefusal(name))) : installed;
 }
 
 /** A sentence for a refusal that says which skills the Todo's department offers; empty when it is not restricted. */

@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import yaml from "js-yaml";
 import { resolveJinnHome } from "../shared/paths.js";
+import { skillRefusal } from "../shared/skill-inspection.js";
 import { DEPARTMENT_SCOPES, INSTRUCTION_MODES, parseDepartmentYaml } from "./department-definition.js";
 import { departmentWorkdirOptions } from "./department-workdirs.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
@@ -107,6 +108,14 @@ export function departmentFilePath(slug: string): string {
   return path.join(resolveJinnHome(), "org", slug, "department.yaml");
 }
 
+/** A skill the stage directory refuses (a symlink inside it) is not offered, so it is not written into the list as if it were. */
+function refuseUnstageableSkills(home: string, skills: readonly string[]): void {
+  for (const skill of skills) {
+    const reason = skillRefusal(path.join(home, "skills", skill));
+    if (reason) invalid(`skills: "${skill}" cannot be copied to a stage directory: ${reason}`);
+  }
+}
+
 /** Merge `patch` into the department's file and replace it atomically. Throws {@link DepartmentWriteError}; writes nothing on any refusal. */
 export function writeDepartmentFile(slug: string, patch: DepartmentPatch): void {
   const home = resolveJinnHome();
@@ -127,6 +136,7 @@ export function writeDepartmentFile(slug: string, patch: DepartmentPatch): void 
   // Only what this write touches is refused; an entry that was already dropped is the operator's to fix by hand.
   const introduced = parsed.warnings.filter((warning) => Object.keys(patch).some((field) => warning.startsWith(`${field}:`)));
   if (introduced.length > 0) invalid(introduced.join("; "));
+  refuseUnstageableSkills(home, patch.skills ?? []);
   const temp = path.join(path.dirname(file), `.department.yaml.${crypto.randomBytes(6).toString("hex")}.tmp`);
   try {
     fs.writeFileSync(temp, text, { encoding: "utf-8", mode: 0o644 });
