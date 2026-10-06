@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import * as pty from "node-pty";
 import type { CompactionStats, InterruptibleEngine, EngineRunOpts, EngineResult, EngineRateLimitInfo, StreamDelta, TurnProgress } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
@@ -19,12 +18,12 @@ import { SsePtyProxy, MAIN_AGENT_SENTINEL, type SseDataEvent, type UpstreamActiv
 import { finishedTaskNotificationIds } from "./task-notifications.js";
 import { isCompactCommand, isNativeClaudeCommand, neutralizeForPaste } from "../shared/skill-commands.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
+import { findSessionTranscript } from "./claude-transcript-path.js";
 import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import { costOfUsage } from "../shared/model-pricing.js";
 import { claudeResetsAtSeconds } from "../shared/engine-reset-times.js";
 import { writeMcpConfigFile } from "../mcp/resolver.js";
 import { parsePermissionPrompt, chooseApproval, keystrokesToSelect } from "./claude-permission-prompt.js";
-import { resolveClaudeConfigDir } from "../shared/home.js";
 import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { assertRemoteTarget, isRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination } from "../shared/remote-target.js";
 import { mapAttachmentsForRemote, withRemoteAttachments } from "../shared/remote-attachments.js";
@@ -270,28 +269,7 @@ function turnTranscriptStart(promptWrittenAt: number, resolver: TurnResolver): n
   return Math.max(promptWrittenAt, resolver.backgroundRerunEndedAt ?? 0);
 }
 
-/** Claude Code stores per-project transcripts at
- *  ~/.claude/projects/<cwd-slug>/<claudeSessionId>.jsonl, where the slug is the
- *  cwd with every "/" and "." replaced by "-". Derive that path; fall back to a
- *  scan across project dirs if the slug heuristic misses (defensive). Exported
- *  for the transcript-recovery unit test. */
-export function findTranscriptForSession(
-  claudeSessionId: string,
-  homeDir: string = JINN_HOME,
-  projectsDir: string = path.join(resolveClaudeConfigDir(), "projects"),
-): string | undefined {
-  if (!claudeSessionId) return undefined;
-  const slug = homeDir.replace(/[/.]/g, "-");
-  const direct = path.join(projectsDir, slug, `${claudeSessionId}.jsonl`);
-  if (fs.existsSync(direct)) return direct;
-  try {
-    for (const d of fs.readdirSync(projectsDir)) {
-      const p = path.join(projectsDir, d, `${claudeSessionId}.jsonl`);
-      if (fs.existsSync(p)) return p;
-    }
-  } catch { /* projects dir missing — nothing to recover */ }
-  return undefined;
-}
+export { findTranscriptForSession } from "./claude-transcript-path.js";
 
 /** Last assistant text block from a Claude transcript — the turn's final
  *  message. Used to recover result text when the Stop hook (which normally
@@ -2116,7 +2094,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (resolver.isSettled || resolver.promptSubmittedAt !== undefined) return;
     if (!isRemoteTarget(opts)) {
       const sid = resolver.sessionId ?? opts.resumeSessionId;
-      const transcript = sid ? findTranscriptForSession(sid) : undefined;
+      const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
       if (transcript && transcriptHasPromptSince(transcript, pastedAt, opts.prompt)) {
         logger.warn(`InteractiveClaudeEngine: ${jinnSessionId}'s transcript has the prompt though no hook said so — not respawning, which would run it twice. Leaving the turn to the stall backstop.`);
         return;
@@ -2639,7 +2617,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // Only attempt recovery when we can identify THIS turn's transcript.
           // Transcripts share one project dir keyed by Claude session id, so
           // guessing by mtime could attach another session's answer.
-          const transcript = sid ? findTranscriptForSession(sid) : undefined;
+          const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
           let transcriptIsFresh = false;
           if (transcript) {
             try { transcriptIsFresh = fs.statSync(transcript).mtimeMs >= startedAt - 1000; } catch { /* unreadable */ }
@@ -2717,7 +2695,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (compactedBy && !result.error) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
       const hookPath = typeof compactedBy.transcript_path === "string" ? compactedBy.transcript_path : undefined;
-      const statsPath = hookPath ?? (sid ? findTranscriptForSession(sid) : undefined);
+      const statsPath = hookPath ?? (sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined);
       result.compaction = statsPath ? await awaitCompactionStats(statsPath, turnTranscriptFrom) : {};
       if (result.compaction.postTokens) result.contextTokens = result.compaction.postTokens;
       else delete result.contextTokens;
@@ -2731,7 +2709,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // genuine no-output API error — leave those alone.
     if (!nativeCommand && !result.error && !result.result?.trim() && !resolver.stopFailure) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
-      const recoveryPath = sid ? findTranscriptForSession(sid) : undefined;
+      const recoveryPath = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
       // Same floor as lost-Stop recovery: under the warm-PTY gate, transcript
       // text before our own UserPromptSubmit is a turn typed in the terminal,
       // and text before a background re-invocation's Stop is that re-run's.
