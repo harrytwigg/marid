@@ -513,9 +513,15 @@ nothing in this feature gives a remote employee a stage dir yet. The options are
 
 - (a) Phase 3 sets a scoped remote employee's `remoteCwd` to its stage dir, with trust seeded
   under its config dir (`shared/remote-target.ts:221` warns that the environment and the seed
-  must agree or the first turn hangs);
-- (b) Phase 3 refuses `remoteHost` on scoped employees, so another account is not usable until
-  (a) is built;
+  must agree or the first turn hangs). This is more than a cwd change: `remoteCwd` must
+  resolve under `config.remote.root` (`shared/config-types.ts:268`), so the stage dir has to
+  sit under that root, on this Mac or a host with it mounted. A remote session's `$JINN_HOME`
+  is also a link farm over the gateway's real knowledge, docs, org and skills
+  (`shared/config-types.ts:274`), so Phase 3 would have to say what that mount exposes to a
+  scoped session;
+- (b) Phase 3 refuses `remoteHost` on scoped employees, so no scoped employee can use another
+  account until (a) is built. An unscoped remote employee still could, which is what the rule
+  above warns against;
 - (c) the rule stays a manual check by the operator, not enforced.
 
 research.md keeps its findings on what assumes a single local account (the rows from
