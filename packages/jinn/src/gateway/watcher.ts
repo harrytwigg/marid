@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { watch, type FSWatcher } from "chokidar";
-import { CONFIG_PATH, CRON_JOBS, ORG_DIR, PLUGINS_DIR, SKILLS_DIR, CLAUDE_SKILLS_DIR, AGENTS_SKILLS_DIR } from "../shared/paths.js";
+import { CONFIG_PATH, CRON_JOBS, JINN_HOME, ORG_DIR, PLUGINS_DIR, SKILLS_DIR, CLAUDE_SKILLS_DIR, AGENTS_SKILLS_DIR } from "../shared/paths.js";
 import { logger } from "../shared/logger.js";
 
 export interface WatcherCallbacks {
@@ -9,6 +9,8 @@ export interface WatcherCallbacks {
   onCronReload: () => void;
   onOrgChange: () => void;
   onSkillsChange: () => void;
+  /** A department's `INSTRUCTIONS.md` was added, edited or removed: its stage directory is regenerated from it. */
+  onDepartmentInstructionsChange: () => void;
   onPluginsChange: () => void;
 }
 
@@ -100,6 +102,39 @@ export function isUnwatchedPluginPath(target: string): boolean {
     .some((segment) => UNWATCHED_PLUGIN_DIRS.has(segment));
 }
 
+/** Whether `target` is `knowledge/departments` itself, something inside it, or a parent of it: the paths the instructions watcher has to walk through. */
+export function isDepartmentInstructionsPath(target: string, departmentsDir: string): boolean {
+  const rel = path.relative(departmentsDir, target);
+  const walkingDown = path.relative(target, departmentsDir);
+  return (!rel.startsWith("..") && !path.isAbsolute(rel)) || (!walkingDown.startsWith("..") && !path.isAbsolute(walkingDown));
+}
+
+/**
+ * A department's instructions become its stage directory's CLAUDE.md (FR-029), so an edit
+ * to `knowledge/departments/<slug>/INSTRUCTIONS.md` regenerates it. Only that subtree is
+ * walked, and only that file triggers: a scoped session writing its own notes there is not
+ * a change. An instance with no `knowledge/` has nothing to watch; the stage directory is
+ * synced before every scoped spawn regardless.
+ */
+function watchDepartmentInstructions(onChange: () => void, debounceMs: number): FSWatcher | null {
+  const knowledgeDir = path.join(JINN_HOME, "knowledge");
+  if (!fs.existsSync(knowledgeDir)) return null;
+  const departmentsDir = path.join(knowledgeDir, "departments");
+  const changed = debounce(() => {
+    logger.info("A department's INSTRUCTIONS.md changed, regenerating its stage directory...");
+    onChange();
+  }, debounceMs);
+  const instructionsWatcher = watch(knowledgeDir, {
+    ignoreInitial: true,
+    depth: 2,
+    ignored: (target) => !isDepartmentInstructionsPath(target, departmentsDir),
+  });
+  instructionsWatcher.on("all", (_event, target) => {
+    if (path.basename(target) === "INSTRUCTIONS.md") changed();
+  });
+  return instructionsWatcher;
+}
+
 export function startWatchers(callbacks: WatcherCallbacks): void {
   const DEBOUNCE_MS = 500;
 
@@ -153,6 +188,8 @@ export function startWatchers(callbacks: WatcherCallbacks): void {
     }, DEBOUNCE_MS),
   );
 
+  const instructionsWatcher = watchDepartmentInstructions(callbacks.onDepartmentInstructionsChange, DEBOUNCE_MS);
+
   // Plugins arrive by having a directory dropped into the instance home, and
   // their code lives inside it — server.js at the plugin root, or wherever its
   // manifest points. So this one goes the whole way down, unlike skills/: an edit
@@ -169,7 +206,7 @@ export function startWatchers(callbacks: WatcherCallbacks): void {
   }, DEBOUNCE_MS);
   pluginsWatcher.on("all", pluginsDebounce);
 
-  watchers = [configWatcher, cronWatcher, orgWatcher, skillsWatcher, pluginsWatcher];
+  watchers = [configWatcher, cronWatcher, orgWatcher, skillsWatcher, ...(instructionsWatcher ? [instructionsWatcher] : []), pluginsWatcher];
   logger.info("File watchers started");
 }
 
