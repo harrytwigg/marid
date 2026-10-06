@@ -21,6 +21,8 @@ import { listWorkItems } from "../work-items/store.js";
 import { cachedResolver, ghResolver, type LinkResolver } from "./pr-state.js";
 import { BOARD_WALK_SESSION_KEY_PREFIX, BOARD_WALK_STARTED_BY } from "./started-sessions.js";
 import { appendTick, readState, readTicks, writeState, type BoardWalkState, type TickEntry, type TickRecord } from "./store.js";
+import { accountSnapshotInputs, exhaustedAdvice, walkAccounts } from "./accounts.js";
+import { recordAccountPriors } from "./snapshot-accounts.js";
 
 /**
  * The board walk: one pass over the board that decides what is ready and what
@@ -139,11 +141,15 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function dispatcherSuffix(decision: StartDecision): string {
+export function dispatcherSuffix(decision: StartDecision, exhausted: readonly string[] = []): string {
   const prefer = decision.engine
     ? ` It prefers engine ${decision.engine}${decision.model ? ` (model ${decision.model})` : ""}: route the Todo to an employee on that engine if one fits the work.`
     : "";
-  return `The board walk started this Todo. Its reason: ${decision.reason}${prefer}`;
+  // Advice, as the preferred engine is (FR-075): a Todo routed onto one of these waits for its reset.
+  const limited = exhausted.length > 0
+    ? ` These Claude accounts are recorded at their limit: ${exhausted.join(", ")}. Route the Todo to an employee on another account if one fits; on one of these it waits for that account's reset.`
+    : "";
+  return `The board walk started this Todo. Its reason: ${decision.reason}${prefer}${limited}`;
 }
 
 function flaggedSet(state: ReturnType<typeof readState>): Set<string> {
@@ -192,7 +198,7 @@ interface Walker {
 
 function defaultDispatch(deps: BoardWalkDeps): Walker["dispatch"] {
   return (item, decision) => startTodoDispatcher(item, deps.context, {
-    promptSuffix: dispatcherSuffix(decision),
+    promptSuffix: dispatcherSuffix(decision, exhaustedAdvice(deps.getConfig())),
     transportMeta: { startedBy: BOARD_WALK_STARTED_BY },
     ...(deps.emitProjectionEvent ? { emitProjectionEvent: deps.emitProjectionEvent } : {}),
   });
@@ -269,9 +275,11 @@ function finish(frame: TickFrame, record: Omit<TickRecord, "at" | "trigger">): T
  *  spend is then behind it, and is not mistaken for the operator's. */
 async function recordClaudeReading(w: Walker, config: JinnConfig, state: BoardWalkState): Promise<void> {
   try {
-    const fiveHour = claudeFiveHour(await w.collectClaude(config), w.now());
+    const reading = await w.collectClaude(config);
+    const fiveHour = claudeFiveHour(reading, w.now());
     if (fiveHour) state.priorFiveHour = fiveHour;
     else delete state.priorFiveHour;
+    await recordAccountPriors(state, config, reading, w.now());
   } catch {
     delete state.priorFiveHour;
   }
@@ -335,7 +343,7 @@ async function runAttempt(
   const { openIds, prompt, suffix } = attempt;
   const maxCalls = walkCallBudget(openIds.length);
   const tools = new WalkTools({
-    apply: { settings, state, dispatch: w.dispatch, now: w.now, resolveLink: w.resolveLink },
+    apply: { settings, state, dispatch: w.dispatch, now: w.now, resolveLink: w.resolveLink, accounts: walkAccounts({ config: w.getConfig(), now: w.now() }) },
     flagged: flaggedSet(state),
     openIds,
     maxCalls,
@@ -367,6 +375,7 @@ async function walkBoard(frame: TickFrame, rules: BoardWalkRules, state: BoardWa
   const snapshot = await buildCapacitySnapshot({
     config, timezone: walkTimezone(w), now: startedAt, sessions: w.sessions(), holdingCapacity: w.holding,
     ...(state.priorFiveHour ? { prior: state.priorFiveHour } : {}),
+    accounts: accountSnapshotInputs(config, startedAt, state),
     ...w.snapshot,
   });
   const maxCalls = walkCallBudget(openIds.length);

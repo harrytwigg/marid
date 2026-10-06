@@ -141,7 +141,8 @@ describe("the default profile and remote employees keep main's behaviour", () =>
     expect(codex).not.toHaveBeenCalled();
     expect(pi).toHaveBeenCalledTimes(1);
     expect(outcome.kind).toBe("fallback");
-    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("claude", "Claude usage limit", 1_900_000_000);
+    // Its limit is its own login's (FR-070, FR-072), not the default account's.
+    expect(recordEngineUnavailableMock).toHaveBeenCalledWith("claude@build-box:bee4991d", "Claude usage limit", 1_900_000_000);
   });
 });
 

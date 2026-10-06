@@ -120,7 +120,7 @@ export async function settleRateLimitedCompaction(run: TurnRun, resetsAtSeconds:
   logger.info(`Session ${sessionId}: /compact hit a usage limit; not retried or moved to another engine`);
   // Recorded as the rate-limit branch records it, so the next turn — here or
   // in any session — knows the limit without spending a spawn to find it.
-  const { account } = rateLimitAccount(run.plan.engineName, run.input.employee);
+  const { account } = rateLimitAccount(run.plan.engineName, run.input.employee, run.input.session);
   recordAccountRateLimit(account, run.plan.engineName, engineLabel, resetsAtSeconds);
   await run.surface.notice(text);
   await settleTurn({

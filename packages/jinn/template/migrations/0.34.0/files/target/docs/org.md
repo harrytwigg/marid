@@ -59,9 +59,47 @@ Before each turn the gateway checks that the profile exists and is signed in, by
 
 **What goes to that account.** Every prompt, tool output and file read in the employee's sessions goes to the profile's account. That includes the company context every unscoped session loads: this instance's `CLAUDE.md`, every skill and `knowledge/state.md`. A profile is independent of the employee's department, and setting one does not limit what the employee can reach. The profile's own user-level skills, plugins, settings and claude.ai connectors also load. The gateway carries three of your own settings into those sessions, because the profile cannot read them: `attribution`, your `PreToolUse` hooks and `skipDangerousModePermissionPrompt`.
 
-**Limits.** Each profile is its own account. Its usage limit and its login failures hold back only its own sessions, and yours hold back only yours. A profile's session has no fallback engine: when it hits its limit it waits for its own reset, whatever `engines.claude.fallback` says. The Limits page and the board walk still read only your own account.
+**Limits.** Each profile is its own account. Its usage limit and its login failures hold back only its own sessions, and yours hold back only yours. The Limits page shows it as its own card, and the board walk judges it on its own (see "Claude accounts"). A profile's session has no fallback unless the profile is declared under `engines.claude.accounts` with a chain of its own: otherwise, when it hits its limit, it waits for its own reset, whatever `engines.claude.fallback` says.
 
 Two employees may share one profile, and then they share its limits. `remoteClaudeConfigDir` is the remote equivalent, and the remote employee keeps the engine fallback chain.
+
+### Claude accounts
+
+An account is an engine plus the login it runs as. Claude has one per login:
+
+| Account | Key | Who runs on it |
+| --- | --- | --- |
+| The gateway's own profile | `claude` | Every local employee without `claudeConfigDir` |
+| A local named profile | `claude:<key>`, `<key>` the first 8 hex of sha256 of the path | Employees with that `claudeConfigDir` |
+| A remote host's login | `claude@<user>@<host>`, or `claude@<host>` with no `remoteUser`; plus `:<key>` for a named remote profile | Remote employees on that host, user and profile |
+
+Usage limits, engine health, the usage history and the rate-limit backoff are kept per account, so one account at its limit holds back only its own sessions. Departments play no part: two departments on one account share its limits.
+
+**The Limits page** shows one card per account, grouped by engine, the default first; each extra card names its employees. A local profile is read with its own login, never `$CLAUDE_CODE_OAUTH_TOKEN`. A remote login is read over SSH, only while its host is awake (it is never woken to be read): a small script on the host prints only the access token and its expiry, so the refresh token never leaves the host. The gateway never refreshes a token, so an idle account whose token has expired shows "no live reading" until a session on it refreshes it; a host that is asleep shows its last reading and its age. With one account the page is as before. The Auto-Dispatch usage card gains an account switcher.
+
+**The board walk** judges each account on its own: see `board-walk.md`, "Dispatch". A Todo runs on its assignee's account. A start on an account recorded at its limit is refused by the gateway, and the Dispatcher is told which accounts are spent when it routes an unassigned Todo.
+
+**Fallback chains per account.** Declare an account in `config.yaml` to give it a chain of its own, as if it were its own Claude installation:
+
+```yaml
+engines:
+  claude:
+    fallback: [codex]              # the default account's chain, unchanged
+    accounts:
+      friend:
+        configDir: /Users/<you>/.claude-friend
+        fallback: []               # wait for its own reset
+      work2:
+        configDir: /Users/<you>/.claude-work2
+        fallback: [claude, codex]  # the default account, then codex
+        fallbackModelMap: {}
+```
+
+- An employee's `claudeConfigDir` matches a declared account by its path. The name labels the account's card. The name is only an alias: renaming it keeps the account's history and limits.
+- A chain entry is an engine, `claude` (the default account) or `claude:<name>`. Unknown names and an account naming itself are refused; cycles are allowed.
+- A substitute on another account runs on that account's profile, as a fresh session with the recent history in its prompt (a transcript cannot be resumed across profiles). Further turns inside the limit's window stay on it and resume its thread; after the window the session goes back to its own account and thread.
+- **Naming `claude:<name>` in `engines.claude.fallback` moves the default account's sessions onto that account when yours is limited, company sessions included**, with everything they load. Only do that with an account that may see your company's context.
+- An undeclared profile, or a declared one with no `fallback`, has none. Remote employees keep their engine chain, limited to engines their host can run; account entries apply to local sessions only. A board walk turn never changes engine or account.
 
 ## Departments
 

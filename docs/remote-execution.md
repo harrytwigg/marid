@@ -200,6 +200,30 @@ applies to a Pi employee: Pi has no profile of its own to be signed out of, so
 the profile checks are skipped for it rather than refusing a host over a Claude
 Code install it never touches.
 
+### The remote login is its own account
+
+Each remote host, user and profile is its own Claude account
+(`claude@<user>@<host>`, or `claude@<host>` with no `remoteUser`, plus `:<key>`
+when a profile is named; see the shipped `docs/org.md`, "Claude accounts"). Its
+usage limit and engine health are recorded under that key, so a spent operator
+account does not move remote sessions and a spent remote login holds back only
+its own.
+
+The Limits page reads it over SSH on the same refresh as the local accounts,
+**only while the host answers**: a host that is asleep is never woken to be read,
+and its card shows the last reading and its age. The reading runs a small script
+with the host's own Node. The script reads the login where Claude Code keeps it
+for that profile (on a macOS host, the Keychain item named for the path; else
+`<profile>/.credentials.json`, or `~/.claude/.credentials.json` with no profile)
+and prints only the access token and its expiry, so the refresh token never
+crosses the network. The profile path is an argument, never part of the script.
+The gateway uses the token for one usage call, in memory, and drops it: it is
+never stored, logged, refreshed or put in an environment. The plan comes from
+`claude auth status` under the profile's `CLAUDE_CONFIG_DIR`. An expired token, or
+a locked Keychain on a macOS host, reads as "no live reading". The rate-limit
+backoff for a remote session takes its reset time from that account's last
+reading.
+
 ## Running Pi remotely
 
 Pi is the second engine that can be relocated, and the motivating case is the
@@ -525,8 +549,9 @@ because making that depend on somebody remembering to run a command would put
 - **A lost `Stop` hook cannot be recovered from the transcript** for the same
   reason, so a genuinely stalled remote turn fails rather than recovering its
   text.
-- **No `/usage` reset hints**, since the status-line recorder would write where
-  the gateway cannot read.
+- **No status-line readings**, since the recorder would write where the gateway
+  cannot read. The account's own usage reading over SSH (above) stands in for
+  them; a host asleep since boot has none.
 - **Attachments are refused** on remote turns: the paths are local to the
   gateway and would name nothing on the other machine.
 - **The write guardrail is defence in depth, not a sandbox.** The `PreToolUse`

@@ -38,6 +38,8 @@ export interface StartedSession {
   status: string
   createdAt: string
   startedBy: StartedBy
+  /** The Claude account it ran on (the default is "claude"); absent with a single account. */
+  account?: string
 }
 
 export type BoardWalkAction = "release" | "park" | "flagStuck" | "dispatch" | "comment"
@@ -106,8 +108,23 @@ export async function getStartedSessions(hours = 168, init?: RequestInit): Promi
   return (await get<{ sessions: StartedSession[] }>(`/api/auto-dispatch/sessions?hours=${hours}`, init)).sessions
 }
 
-export async function getUsageSamples(hours = 168, init?: RequestInit): Promise<UsageSample[]> {
-  return (await get<{ samples: UsageSample[] }>(`/api/auto-dispatch/usage?hours=${hours}`, init)).samples
+export interface UsageAccountOption {
+  account: string
+  label: string
+}
+
+export interface UsageResponse {
+  samples: UsageSample[]
+  /** The account the samples belong to; absent with a single Claude account. */
+  account?: string
+  /** Every Claude account, default first; absent with a single one. */
+  accounts?: UsageAccountOption[]
+}
+
+/** The usage read, whole: the samples and, with more than one Claude account, the accounts to pick from. */
+export function getUsageSamples(hours = 168, account?: string, init?: RequestInit): Promise<UsageResponse> {
+  const scope = account ? `&account=${encodeURIComponent(account)}` : ""
+  return get<UsageResponse>(`/api/auto-dispatch/usage?hours=${hours}${scope}`, init)
 }
 
 /** Whether a failed status read means "no board walk in this gateway" (503),

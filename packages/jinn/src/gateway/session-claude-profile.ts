@@ -1,5 +1,6 @@
-import { resolveEmployeeClaudeProfile, type ClaudeProfile } from "../shared/claude-profile.js";
-import type { JinnConfig } from "../shared/types.js";
+import type { ClaudeProfile } from "../shared/claude-profile.js";
+import type { JinnConfig, Session } from "../shared/types.js";
+import { sessionClaudeProfile } from "../sessions/session-account.js";
 import { orgRegistry } from "./org-registry.js";
 
 /**
@@ -11,9 +12,9 @@ import { orgRegistry } from "./org-registry.js";
  * that wrote that state.
  */
 export function claudeProfileForSession(
-  session: { employee?: string | null } | null | undefined,
+  session: { employee?: string | null; transportMeta?: Session["transportMeta"] } | null | undefined,
   config?: JinnConfig,
 ): ClaudeProfile {
-  if (!session?.employee) return null;
-  return resolveEmployeeClaudeProfile(orgRegistry(config).get(session.employee));
+  if (!session?.employee) return session ? sessionClaudeProfile(session, null) : null;
+  return sessionClaudeProfile(session, orgRegistry(config).get(session.employee));
 }

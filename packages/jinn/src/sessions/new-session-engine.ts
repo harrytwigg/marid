@@ -50,8 +50,8 @@ export function newSessionEngineSelection(
   // `remoteHost` would start the session on an engine whose every turn the
   // remote gate then refuses — a session that looks started and can never run.
   const remote = isRemoteTarget(preference.employee);
-  // A local named Claude profile is its own account with no fallback chain yet (FR-056): its
-  // session starts where it prefers, whatever the default account's health says.
+  // A local named Claude profile is its own account (FR-056): its session starts where it
+  // prefers, whatever the default account's health says; a rate limit then walks its own chain.
   const ownAccount = preferred === "claude" && resolveEmployeeClaudeProfile(preference.employee) !== null;
   const engine = named || ownAccount
     ? preferred

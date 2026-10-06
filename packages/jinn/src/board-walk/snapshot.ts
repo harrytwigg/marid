@@ -11,6 +11,7 @@ import { isLegacyWorkflowPhaseSession } from "../sessions/legacy-workflow-phase.
 import { projectWindow, type WindowProjection } from "./projection.js";
 import { countStarts, listStartedSessions, type StartCounts, type StartedSession } from "./started-sessions.js";
 import type { PriorFiveHour } from "./store.js";
+import { snapshotAccounts, type AccountSnapshotDeps, type SnapshotAccount } from "./snapshot-accounts.js";
 
 /**
  * The capacity snapshot: everything the board walk knows about capacity, in
@@ -70,6 +71,8 @@ export interface OperatorSignals {
 
 export interface CapacitySnapshot {
   now: string;
+  /** Per Claude account, only when there is more than one (snapshot-accounts.ts). */
+  accounts?: SnapshotAccount[];
   timezone: string;
   localTime: string;
   weekday: string;
@@ -87,6 +90,8 @@ export interface SnapshotDeps {
   sessions: readonly Session[];
   holdingCapacity: (sessions: readonly Session[]) => Session[];
   prior?: PriorFiveHour;
+  /** The tick's per-account inputs; absent, the snapshot carries no accounts. */
+  accounts?: Omit<AccountSnapshotDeps, "now" | "holding">;
   collect?: (config: JinnConfig) => Promise<EngineLimitsResponse>;
   usageHistory?: (sinceMs: number) => UsageSample[];
   statuslineMtime?: () => number | undefined;
@@ -246,6 +251,9 @@ function engineContext(deps: SnapshotDeps, holding: readonly Session[]): EngineC
   };
 }
 
+/** The accounts key only when there are accounts, so a single-account snapshot is byte-identical. */
+const withAccounts = (accounts: SnapshotAccount[] | undefined) => (accounts ? { accounts } : {});
+
 export async function buildCapacitySnapshot(deps: SnapshotDeps): Promise<CapacitySnapshot> {
   const limits = await (deps.collect ?? collectEngineLimits)(deps.config);
   const holding = deps.holdingCapacity(deps.sessions);
@@ -259,5 +267,6 @@ export async function buildCapacitySnapshot(deps: SnapshotDeps): Promise<Capacit
     enginesWithoutReadings: all.filter((engine) => !USABLE.has(engine.status) && engine.available).map(unusableNote),
     sessionsHoldingCapacityNow: holding.length,
     operator: operatorSignals(deps, limits.engines.claude, holding),
+    ...withAccounts(deps.accounts ? snapshotAccounts(limits.accounts?.claude, { ...deps.accounts, now: deps.now, holding }) : undefined),
   };
 }

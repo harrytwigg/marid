@@ -62,6 +62,7 @@ export function mergeTransportMeta(
   for (const key of [
     "engineOverride",
     "claudeSyncSince",
+    "claudeSyncAccount",
     "engineSyncTarget",
     "engineSyncSince",
     "transcriptSyncedThrough",

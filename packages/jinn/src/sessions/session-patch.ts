@@ -60,7 +60,7 @@ export function validateNewSessionSelection(
   // hands the preference back and the session starts where it would have.
   let defaultModel = defaults.model;
   let defaultEffortLevel = defaults.effortLevel;
-  // A local named Claude profile has no fallback chain yet (FR-056), so it is never reordered.
+  // A local named Claude profile is its own account (FR-056): never reordered off the default account's health.
   const ownAccount = engine === "claude" && Boolean(defaults.employee)
     && resolveEmployeeClaudeProfile(orgRegistry().get(defaults.employee!)) !== null;
   if (body.engine === undefined && body.model === undefined && isKnownEngine(engine) && !ownAccount) {

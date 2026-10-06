@@ -1,4 +1,5 @@
 import type { Employee, JinnConfig } from "../shared/types.js";
+import { accountForEmployee } from "../shared/engine-account.js";
 import { isEngineExhausted, readEngineHealth } from "../shared/engine-health.js";
 import { engineAvailable } from "../shared/models.js";
 import { getMessages, getSession } from "../sessions/registry.js";
@@ -75,15 +76,17 @@ export function lockedDownEmployee(employee: Employee, settings: BoardWalkSettin
 }
 
 /** Why the walk cannot run as configured, or null when it can. */
-function runnerRefusal(settings: BoardWalkSettings, config: JinnConfig): string | null {
+function runnerRefusal(settings: BoardWalkSettings, config: JinnConfig, runner?: Employee): string | null {
   if (!isWalkEngine(settings.engine)) {
     return `the board walk can only run on ${WALK_ENGINES.join(" or ")}, so that its turn has only the walk's tools; "${settings.engine}" cannot be confined to them`;
   }
   if (!engineAvailable(config, settings.engine)) {
     return `the board walk runs on ${settings.engine}, and it is not installed`;
   }
-  if (isEngineExhausted(readEngineHealth(), settings.engine)) {
-    return `${settings.engine} is recorded as exhausted; this tick is skipped`;
+  // The runner's own account (FR-076): its engine, and the Claude login it runs as.
+  const account = runner ? accountForEmployee(runner, settings.engine) : settings.engine;
+  if (isEngineExhausted(readEngineHealth(), account)) {
+    return `${account === settings.engine ? settings.engine : `the runner's ${settings.engine} account`} is recorded as exhausted; this tick is skipped`;
   }
   return null;
 }
@@ -94,9 +97,9 @@ export function routeTurn(deps: Pick<BoardWalkDeps, "getConfig" | "context">): (
   return async (turn) => {
     const config = deps.getConfig();
     const { settings } = turn;
-    const refusal = runnerRefusal(settings, config);
-    if (refusal) return { error: refusal };
     const configured = orgRegistry(config).get(settings.employee);
+    const refusal = runnerRefusal(settings, config, configured ? lockedDownEmployee(configured, settings, config) : undefined);
+    if (refusal) return { error: refusal };
     if (!configured) return { error: `employee ${settings.employee} named in board-walk.md does not exist` };
     const employee = lockedDownEmployee(configured, settings, config);
     const connector = new CronConnector(new Map());

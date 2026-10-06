@@ -40,6 +40,8 @@ export function validateEngineFallbackChains(engines: Record<string, unknown>): 
         problems.push(`engines.${name}.fallback[${index}] must be a string (got ${typeof entry})`);
       } else if (entry === name) {
         problems.push(`engines.${name}.fallback must not name ${name} itself`);
+      } else if (name === "claude" && entry.startsWith("claude:")) {
+        // An account entry: claude-accounts-config.ts checks it names a declared account.
       } else if (!isKnownEngine(entry)) {
         problems.push(`engines.${name}.fallback[${index}] "${entry}" is not a known engine (${KNOWN_ENGINES})`);
       }
@@ -163,8 +165,10 @@ export function applyLegacyFallbackMigration(
   );
 }
 
+/** An engine's chain, engines only: an account entry (`claude:<name>`) is walked
+ *  by the account walker (account-fallback.ts), never handed out as an engine. */
 function fallbackChain(config: JinnConfig, engine: string): EngineName[] {
-  return config.engines[engine as EngineName]?.fallback ?? [];
+  return (config.engines[engine as EngineName]?.fallback ?? []).filter((entry): entry is EngineName => isKnownEngine(entry));
 }
 
 /**

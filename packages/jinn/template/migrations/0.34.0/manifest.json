@@ -19,7 +19,7 @@
       "path": "board-walk.md",
       "operation": "add",
       "baseSha256": null,
-      "targetSha256": "874e11235b70e713e1244654ba1c8bf76d584aab41c15be6db3c2cd9aeb61aeb",
+      "targetSha256": "c19e0d1f18c36806852c7af4a2d42fe432aa4d4522929a9f73d8851a0f5302e3",
       "basePayload": null,
       "targetPayload": "files/target/board-walk.md"
     },
@@ -27,7 +27,7 @@
       "path": "docs/architecture.md",
       "operation": "modify",
       "baseSha256": "28643e780ed43adba88d85f6c21521be223b22de28d49d1e5488f32c451ba313",
-      "targetSha256": "c09a3a0412629e11096f3516c713367ab10b394027cef4577a12af0fd22c1e07",
+      "targetSha256": "c8dd597be3dc78bf5fe86180d627007a358e73830b7fc2f934c05aec59a70e11",
       "basePayload": "files/base/docs/architecture.md",
       "targetPayload": "files/target/docs/architecture.md"
     },
@@ -67,7 +67,7 @@
       "path": "docs/org.md",
       "operation": "modify",
       "baseSha256": "3ed3540abb2997cde6ef0d8cecf61281f4e96c0909807d51040fba1709f3a968",
-      "targetSha256": "a06cd19d22679ff5a27d69bc9bdada6ce94970a9b9f18b1615b75b2d1285e5e5",
+      "targetSha256": "709c5e8f906a2cf241d464900015a378fbf1dde0fa7a0ee95cee2b3c0cd4ef7c",
       "basePayload": "files/base/docs/org.md",
       "targetPayload": "files/target/docs/org.md"
     },

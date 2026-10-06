@@ -2,8 +2,13 @@ import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import { json, type ParsedRoute } from "./route-helpers.js";
 import type { ApiContext } from "./api.js";
 import { readTicks } from "../board-walk/store.js";
-import { countStarts, listStartedSessions } from "../board-walk/started-sessions.js";
-import { readClaudeUsageHistory } from "../shared/claude-usage-history.js";
+import { countStarts, listStartedSessions, listStartedSessionsWith } from "../board-walk/started-sessions.js";
+import { readClaudeUsageHistory, usageHistoryPath } from "../shared/claude-usage-history.js";
+import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
+import type { JinnConfig, Session } from "../shared/types.js";
+import { walkAccounts } from "../board-walk/accounts.js";
+import { sessionStartAccount } from "../board-walk/snapshot-accounts.js";
+import { rosterClaudeAccounts } from "../shared/engine-limits-accounts.js";
 import { getSession } from "../sessions/registry.js";
 import { verifySessionCapability } from "../mcp/identity.js";
 import { readJsonBody } from "./http-helpers.js";
@@ -35,6 +40,12 @@ function bounded(url: URL, key: string, fallback: number, max: number): number {
 }
 
 const TURN_TOOL_PREFIX = "/api/board-walk/turn/";
+
+/** The account a start counts on, as the walk counts it (snapshot-accounts.ts). */
+function startAccountOf(config: JinnConfig): (session: Session) => string {
+  const accounts = walkAccounts({ config, now: Date.now() });
+  return (session) => sessionStartAccount(session, (item) => accounts.of(item));
+}
 
 /** A walk tool's call: answered only for a caller that proves which session it
  *  is, and the walk then answers only its running tick's own session. */
@@ -75,14 +86,22 @@ async function handleWalk(res: ServerResponse, route: ParsedRoute, context: ApiC
   return false;
 }
 
-function handleAutoDispatch(res: ServerResponse, route: ParsedRoute): boolean {
+function handleAutoDispatch(res: ServerResponse, route: ParsedRoute, context: ApiContext): boolean {
   const { pathname, url } = route;
   const since = Date.now() - bounded(url, "hours", 168, 168) * 60 * 60_000;
+  // With more than one Claude account, both wires name accounts (FR-074); with
+  // one, they are exactly as before.
+  const accounts = rosterClaudeAccounts(context.getConfig());
+  const multi = accounts.length > 1;
   // Every session started on the engine in the window, whatever started it —
   // the board walk, the dispatch button, a mention, cron or a chat.
   if (pathname === "/api/auto-dispatch/sessions") {
     const engine = url.searchParams.get("engine") || undefined;
-    const sessions = listStartedSessions(since, { ...(engine ? { engine } : {}), limit: bounded(url, "limit", 500, 2000) });
+    const opts = { ...(engine ? { engine } : {}), limit: bounded(url, "limit", 500, 2000) };
+    const accountOf = multi ? startAccountOf(context.getConfig()) : undefined;
+    const sessions = accountOf
+      ? listStartedSessionsWith(since, opts, (session) => ({ account: accountOf(session) }))
+      : listStartedSessions(since, opts);
     json(res, { sessions, counts: countStarts(sessions) });
     return true;
   }
@@ -90,7 +109,20 @@ function handleAutoDispatch(res: ServerResponse, route: ParsedRoute): boolean {
   // projects from. Readings only — no projection leaves the gateway on this
   // wire, so nothing here can be mistaken for one.
   if (pathname === "/api/auto-dispatch/usage") {
-    json(res, { samples: readClaudeUsageHistory(since) });
+    if (!multi) {
+      json(res, { samples: readClaudeUsageHistory(since) });
+      return true;
+    }
+    const account = url.searchParams.get("account") || DEFAULT_CLAUDE_ACCOUNT;
+    if (!accounts.some((entry) => entry.key === account)) {
+      json(res, { error: `no Claude account ${JSON.stringify(account)}` }, 404);
+      return true;
+    }
+    json(res, {
+      samples: readClaudeUsageHistory(since, usageHistoryPath(account)),
+      account,
+      accounts: accounts.map((entry) => ({ account: entry.key, label: entry.label })),
+    });
     return true;
   }
   return false;
@@ -104,6 +136,6 @@ export async function handleBoardWalkApi(
 ): Promise<boolean> {
   if (route.method === "POST" && route.pathname.startsWith(TURN_TOOL_PREFIX)) return handleTurnTool(req, res, route, context);
   if (route.pathname.startsWith("/api/board-walk")) return handleWalk(res, route, context);
-  if (route.method === "GET" && route.pathname.startsWith("/api/auto-dispatch")) return handleAutoDispatch(res, route);
+  if (route.method === "GET" && route.pathname.startsWith("/api/auto-dispatch")) return handleAutoDispatch(res, route, context);
   return false;
 }

@@ -43,6 +43,13 @@ export const USAGE_HISTORY_MAX_SAMPLES = 2_500;
 
 export const USAGE_HISTORY_PATH = path.join(ENGINE_LIMITS_DIR, "claude-usage-history.json");
 
+/** Each account's own history (FR-071): the default account keeps today's
+ *  file; every other account gets one beside it, named by its account key. */
+export function usageHistoryPath(account = "claude"): string {
+  if (account === "claude") return USAGE_HISTORY_PATH;
+  return path.join(ENGINE_LIMITS_DIR, `claude-usage-history.${encodeURIComponent(account)}.json`);
+}
+
 /** The reading as a sample, or undefined when it is not one to keep: not a
  *  live reading (the statusline fallback names its own write time, not the
  *  read's), or no five-hour or weekly window with a reset. A window without

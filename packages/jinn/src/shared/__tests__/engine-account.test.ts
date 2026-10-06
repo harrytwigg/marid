@@ -55,12 +55,13 @@ afterEach(() => {
 });
 
 describe("account keys (FR-070)", () => {
-  it("keep `claude` for the default profile and every remote employee, and key a local named profile", () => {
+  it("keep `claude` for the default profile, and key a local named profile and each remote login", () => {
     expect(claudeAccountKey(null)).toBe("claude");
     expect(accountForEmployee(undefined)).toBe("claude");
     expect(accountForEmployee(local())).toBe("claude");
     expect(accountForEmployee(local({ claudeConfigDir: FRIEND }))).toBe(FRIEND_ACCOUNT);
-    expect(accountForEmployee(local({ remoteHost: "box", remoteClaudeConfigDir: "/h/.c" }))).toBe("claude");
+    expect(accountForEmployee(local({ remoteHost: "box", remoteClaudeConfigDir: "/h/.c" }))).toBe("claude@box:845232c3");
+    expect(accountForEmployee(local({ remoteHost: "box", remoteUser: "ops" }))).toBe("claude@ops@box");
     expect(accountForEmployee(local({ claudeConfigDir: FRIEND }), "codex")).toBe("codex");
   });
 });

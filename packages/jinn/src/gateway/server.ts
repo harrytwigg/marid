@@ -560,7 +560,7 @@ export async function startGateway(
     logger.warn(`Failed to copy hook-relay.mjs: ${err instanceof Error ? err.message : err}`);
   }
 
-  bootClaudeProfiles();
+  bootClaudeProfiles(() => currentConfig);
 
   // Orphan-PTY tracking spans all interactive engines.
   // Declared as a hoisted function so the lifecycle callbacks below can reference

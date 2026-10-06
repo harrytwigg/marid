@@ -1,5 +1,5 @@
 import { JINN_HOME } from "../../shared/paths.js";
-import { resolveEmployeeClaudeProfile } from "../../shared/claude-profile.js";
+import { sessionClaudeProfile } from "../session-account.js";
 import { logger } from "../../shared/logger.js";
 import { selectClaudeModelFallback } from "../../shared/model-fallback.js";
 import { getModelRegistry, refreshClaudeModels } from "../../shared/models.js";
@@ -57,7 +57,7 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     remoteUser: input.employee?.remoteUser,
     remoteCwd: input.employee?.remoteCwd,
     remoteClaudeConfigDir: input.employee?.remoteClaudeConfigDir,
-    claudeProfile: resolveEmployeeClaudeProfile(input.employee),
+    claudeProfile: sessionClaudeProfile(input.session, input.employee),
     mcpConfigPath: plan.mcpConfigPath,
     resolvedMcp: plan.resolvedMcp,
     attachments: input.attachments.length ? input.attachments : undefined,

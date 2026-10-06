@@ -11,6 +11,8 @@
 
 import { resolveEffort } from "../shared/effort.js";
 import { resolveSubstituteModel } from "../shared/engine-fallback.js";
+import { isSpellableModelId } from "../shared/model-id.js";
+import { accountOverride } from "./session-account.js";
 import { effortLevelsForModel, getModelRegistry } from "../shared/models.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import {
@@ -18,6 +20,45 @@ import {
 } from "./registry.js";
 
 /** Per-engine config as this module reads it; unconfigured engines resolve to {}. */
+type AccountSwap = { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };
+
+/** What the swap parks on the session, to be handed back when `until` passes.
+ *  A swap made while an account override stands (the substitute account was
+ *  limited too) keeps the first swap's originals: the account, thread, model and
+ *  sync point the session goes back to are still those of its own account. */
+function overrideRecord(session: Session, accounts: AccountSwap | undefined, until: Date, syncSince: string): Record<string, unknown> {
+  const standing = accountOverride(session);
+  if (standing) {
+    const previous = (session.transportMeta as Record<string, Record<string, unknown>>).engineOverride;
+    // `until` is when the session goes back to its OWN account, so it stays the first swap's.
+    return {
+      ...previous,
+      ...(accounts
+        ? { substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir }
+        : { substituteAccount: undefined, substituteConfigDir: undefined, originalAccount: undefined }),
+    };
+  }
+  return {
+    originalEngine: session.engine,
+    originalEngineSessionId: session.engineSessionId,
+    // The pin comes off the row for the duration, so the record is the only place
+    // it survives to be handed back from.
+    originalModel: session.model ?? null,
+    until: until.toISOString(),
+    syncSince,
+    ...(accounts ? { originalAccount: accounts.original, substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir } : {}),
+  };
+}
+
+/** A model id belongs to one provider, and an account swap stays on it: the pin
+ *  survives, through the original account's `fallbackModelMap` when it maps it. */
+function accountSwapModel(accounts: AccountSwap, model: string | null | undefined): string | undefined {
+  if (!model) return undefined;
+  const mapped = accounts.fallbackModelMap?.[model];
+  return typeof mapped === "string" && isSpellableModelId(mapped) ? mapped : model;
+}
+
+
 type EngineConfig = { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string };
 
 /** What the stand-in runs as, once the session row has been flipped onto it. */
@@ -41,30 +82,24 @@ export function beginEngineSubstitution(opts: {
   config: JinnConfig;
   employee: Employee | undefined;
   substitute: string;
+  /** Set when the substitute is another Claude account rather than an engine
+   *  (FR-079): the session keeps its engine and runs on that account's profile. */
+  accounts?: AccountSwap;
   until: Date;
   syncSince: string;
   lastError: string;
 }): EngineSubstitution | undefined {
-  const { session, attemptToken, config, employee, substitute, until, syncSince, lastError } = opts;
+  const { session, attemptToken, config, employee, substitute, accounts, until, syncSince, lastError } = opts;
 
   const engineConfig: EngineConfig = config.engines[substitute as keyof JinnConfig["engines"]] as EngineConfig ?? {};
-  const model = resolveSubstituteModel(config, getModelRegistry(config), {
-    from: session.engine, to: substitute, model: session.model,
-  });
-
-  const engineOverride = {
-    originalEngine: session.engine,
-    originalEngineSessionId: session.engineSessionId,
-    // The pin comes off the row for the duration, so the record is the only place
-    // it survives to be handed back from.
-    originalModel: session.model ?? null,
-    until: until.toISOString(),
-    syncSince,
-  };
+  const model = accounts
+    ? accountSwapModel(accounts, session.model)
+    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model });
+  const engineOverride = overrideRecord(session, accounts, until, syncSince);
 
   const started = updateSessionForAttempt(session.id, attemptToken, {
-    // The limited engine's thread id moves to its own typed ref (the override record
-    // keeps a second copy). The mirror belongs to whichever engine is actually running,
+    // The limited engine's thread id moves to its own typed ref (a first swap's record
+    // keeps a second copy; a nested one keeps the session's own). The mirror belongs to whichever engine is actually running,
     // so it goes null until the substitute returns a thread id of its own.
     ...(session.engineSessionId ? nextEngineSessionFields(session, session.engine, session.engineSessionId) : {}),
     engine: substitute,
@@ -82,7 +117,9 @@ export function beginEngineSubstitution(opts: {
     engineConfig,
     model,
     effortLevel: resolveEffort(engineConfig, session, employee, effortLevelsForModel(config, substitute, model ?? engineConfig.model)),
-    resumeSessionId: getEngineSessionRef(session, substitute).id,
+    // Read off the flipped row: an account substitute's thread lives in its own
+    // account's slot, which only the override record makes current.
+    resumeSessionId: getEngineSessionRef(accounts ? started : session, substitute).id,
   };
 }
 
@@ -119,8 +156,13 @@ function parkedOverride(override: Record<string, unknown>): ParkedOverride | nul
  *  sync marker in its place when the engine coming back is the one that needs it. */
 function revertedMeta(meta: Record<string, unknown>, session: Session, parked: ParkedOverride): Record<string, unknown> {
   const next = { ...meta };
-  if (parked.engine === "claude" && parked.syncSince && session.engine !== "claude") {
+  // An account swap kept the engine, but the original account's thread missed
+  // the substitute's turns all the same.
+  if (parked.engine === "claude" && parked.syncSince && (session.engine !== "claude" || accountOverride(session))) {
     next["claudeSyncSince"] = parked.syncSince;
+    // The prompt's sync intro names what happened: another account, not another engine.
+    if (session.engine === "claude") next["claudeSyncAccount"] = true;
+    else delete next["claudeSyncAccount"];
   }
   delete next["engineOverride"];
   return next;
@@ -143,10 +185,13 @@ export function maybeRevertEngineOverride(session: Session): Session {
     ? nextEngineSessionFields(session, session.engine, session.engineSessionId)
     : {};
 
+  // The original account's own slot, read without the record that points the
+  // session's Claude slot at the substitute account.
+  const unswapped: Session = { ...session, transportMeta: { ...meta, engineOverride: undefined } as never };
   return updateSession(session.id, {
     ...preserved,
     engine: parked.engine,
-    engineSessionId: parked.engineSessionId ?? getEngineSessionRef(session, parked.engine).id ?? null,
+    engineSessionId: parked.engineSessionId ?? getEngineSessionRef(unswapped, parked.engine).id ?? null,
     ...(parked.model !== undefined ? { model: parked.model } : {}),
     transportMeta: revertedMeta(meta, session, parked) as never,
     lastError: null,

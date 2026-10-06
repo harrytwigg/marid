@@ -4,7 +4,7 @@ import type { CompactionStats, InterruptibleEngine, EngineRunOpts, EngineResult,
 import { logger } from "../shared/logger.js";
 import { JINN_HOME, CLAUDE_SETTINGS_DIR } from "../shared/paths.js";
 import { cleanupSessionSettings } from "../shared/claude-settings.js";
-import { ensureClaudeProfileTrust, writeClaudeSessionSettings } from "./claude-profile-launch.js";
+import { claudeResetSource, ensureClaudeProfileTrust, writeClaudeSessionSettings } from "./claude-profile-launch.js";
 import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
@@ -21,7 +21,7 @@ import { buildPromptWithPlatformContext } from "./platform-context.js";
 import { findSessionTranscript } from "./claude-transcript-path.js";
 import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import { costOfUsage } from "../shared/model-pricing.js";
-import { claudeResetsAtSeconds } from "../shared/engine-reset-times.js";
+import { claudeResetsAtSeconds, type ClaudeResetSource } from "../shared/engine-reset-times.js";
 import { writeMcpConfigFile } from "../mcp/resolver.js";
 import { parsePermissionPrompt, chooseApproval, keystrokesToSelect } from "./claude-permission-prompt.js";
 import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
@@ -403,12 +403,12 @@ export function computeInteractiveCost(transcriptPath: string, model?: string, a
  * Map a StopFailure payload to an EngineRateLimitInfo in the shape ClaudeEngine
  * produces from `rate_limit_event` JSON, so detectRateLimit() and manager.ts's
  * wait-retry machinery work unchanged. The payload never names the reset, so a rate-limit failure asks the
- * usage source, which reads only the gateway's own account: a named profile states no reset and backs off instead.
+ * usage source of the account that hit it (FR-071, FR-072); undefined source is the default account.
  */
-export async function rateLimitFromStopFailure(payload: HookPayload | undefined, profile?: ClaudeProfile): Promise<EngineRateLimitInfo | null> {
+export async function rateLimitFromStopFailure(payload: HookPayload | undefined, source?: ClaudeResetSource): Promise<EngineRateLimitInfo | null> {
   if (!payload || payload.hook_event_name !== "StopFailure") return null;
   if (payload.error !== "rate_limit") return null;
-  const resetsAt = profile ? undefined : await claudeResetsAtSeconds();
+  const resetsAt = await claudeResetsAtSeconds(Date.now(), source);
   return { status: "rejected", rateLimitType: "interactive_detected", ...(resetsAt === undefined ? {} : { resetsAt }) };
 }
 
@@ -2724,7 +2724,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     }
     // Map a StopFailure rate-limit into result.rateLimit so manager.ts's
     // wait/retry/fallback machinery engages exactly as it does for `claude -p`.
-    const rl = await rateLimitFromStopFailure(resolver.stopFailure, opts.claudeProfile ?? undefined);
+    const rl = await rateLimitFromStopFailure(resolver.stopFailure, claudeResetSource(opts));
     if (rl) result.rateLimit = rl;
     // Turn settled as an API-error failure — the CLI may still be retrying.
     // Keep listening for a late Stop so a wrong "failed" verdict self-corrects.

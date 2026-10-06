@@ -26,7 +26,8 @@ import {
   claudeAuthRecoveredNotice,
   claudeRefreshExpiryWarning,
 } from "../shared/claude-auth-messages.js";
-import type { Employee } from "../shared/types.js";
+import type { Employee, Session } from "../shared/types.js";
+import { sessionClaudeProfile } from "./session-account.js";
 import { notifyOperatorChannel } from "./callbacks.js";
 
 /**
@@ -49,9 +50,10 @@ export function isClaudeAuthFailure(error: string | null | undefined): boolean {
  * `claude` on its own host with that host's login, so its failures are a
  * different outage from the gateway's — and one this host cannot inspect.
  */
-export function claudeAuthScope(employee: Employee | undefined): string {
-  // A local named profile is its own login on this host: `local:<profile key>` (FR-055).
-  const profile = resolveEmployeeClaudeProfile(employee);
+export function claudeAuthScope(employee: Employee | undefined, session?: { transportMeta?: Session["transportMeta"] } | null): string {
+  // A local named profile is its own login on this host: `local:<profile key>` (FR-055). A
+  // session moved onto another account runs on that account's login (FR-079).
+  const profile = session && !isRemoteTarget(employee) ? sessionClaudeProfile(session, employee) : resolveEmployeeClaudeProfile(employee);
   if (profile) return `${LOCAL_CLAUDE_AUTH_SCOPE}:${profile.key}`;
   if (!isRemoteTarget(employee)) return LOCAL_CLAUDE_AUTH_SCOPE;
   const user = employee.remoteUser ? `${employee.remoteUser}@` : "";
@@ -104,9 +106,11 @@ function tell(message: string, onResult?: (sent: boolean) => void): void {
  * rate limits, server errors, interruptions — says nothing about the login and
  * is ignored.
  */
-export function observeClaudeTurnOutcome(employee: Employee | undefined, error: string | null | undefined, now: Date = new Date()): void {
+export function observeClaudeTurnOutcome(
+  employee: Employee | undefined, error: string | null | undefined, now: Date = new Date(), session?: { transportMeta?: Session["transportMeta"] },
+): void {
   try {
-    const scope = claudeAuthScope(employee);
+    const scope = claudeAuthScope(employee, session);
     if (isClaudeAuthFailure(error)) {
       reportClaudeAuthFailure(scope, error as string, now);
     } else if (!error) {
@@ -197,9 +201,11 @@ function loggedInSince(outage: ClaudeAuthOutage | undefined, status: ClaudeCrede
  * different from the one that failed means someone logged in, and that closes
  * the outage before the turn even runs.
  */
-export function refuseClaudeLaunch(employee: Employee | undefined, now: Date = new Date()): string | undefined {
+export function refuseClaudeLaunch(
+  employee: Employee | undefined, now: Date = new Date(), session?: { transportMeta?: Session["transportMeta"] },
+): string | undefined {
   try {
-    const scope = claudeAuthScope(employee);
+    const scope = claudeAuthScope(employee, session);
     if (scope !== LOCAL_CLAUDE_AUTH_SCOPE) return undefined;
     const status = localStatus();
     if (!status) return undefined;

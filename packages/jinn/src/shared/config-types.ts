@@ -8,6 +8,7 @@ import type { TerminalConfig } from "./terminal-config.js";
 import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { AutoCompactConfig } from "./auto-compact-config.js";
+import type { ClaudeAccountConfig } from "./claude-accounts-config.js";
 import type { EngineName } from "./models.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
 import type {
@@ -90,8 +91,10 @@ export interface JinnConfig {
       /** Engines to try instead, in order of preference, when this one cannot serve a
        *  turn. An engine may not name itself, but two engines may name each other:
        *  cycles are tolerated at runtime by the walker's visited set. Absent = no
-       *  fallback, which is also what an explicit [] says. */
-      fallback?: EngineName[];
+       *  fallback, which is also what an explicit [] says. An entry may also name an
+       *  account: `claude:<name>` under `accounts` below (shared/claude-accounts-config.ts). */
+      fallback?: Array<EngineName | `claude:${string}`>;
+      accounts?: Record<string, ClaudeAccountConfig>;
       /** How this engine's pinned models translate onto whichever engine stands in
        *  for it, as `<model this engine serves>: <model the substitute serves>`. A
        *  model id belongs to one provider, so an unmapped pin is dropped and the

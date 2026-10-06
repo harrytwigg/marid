@@ -67,7 +67,16 @@ export function toStartedSession(session: Session): StartedSession {
 }
 
 export function listStartedSessions(sinceMs: number, opts: { engine?: string; limit?: number } = {}): StartedSession[] {
-  return listSessionsCreatedSince(new Date(sinceMs).toISOString(), opts).map(toStartedSession);
+  return listStartedSessionsWith(sinceMs, opts, () => ({}));
+}
+
+/** The same list, each row extended with what `extra` reads off the full session. */
+export function listStartedSessionsWith<E extends object>(
+  sinceMs: number,
+  opts: { engine?: string; limit?: number },
+  extra: (session: Session) => E,
+): Array<StartedSession & E> {
+  return listSessionsCreatedSince(new Date(sinceMs).toISOString(), opts).map((session) => ({ ...toStartedSession(session), ...extra(session) }));
 }
 
 export type StartCounts = Partial<Record<StartedBy, number>> & { total: number };

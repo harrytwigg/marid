@@ -1,4 +1,5 @@
-import type { StartedSession, UsageSample } from "@/lib/api-auto-dispatch"
+import { OptionPills } from "@/components/ui/option-pills"
+import type { StartedSession, UsageAccountOption, UsageSample } from "@/lib/api-auto-dispatch"
 import { UsageChart } from "./usage-chart"
 import { projectWindow, readout, weeklyVerdicts, type Projection } from "./usage-projection"
 
@@ -42,19 +43,40 @@ function Headline({ verdicts }: { verdicts: Array<{ name: string; projection: Pr
   )
 }
 
-export function UsageCard({ samples, starts, now, error }: {
+/** The Claude accounts to pick between, which the card shows only when there is more than one. */
+export interface AccountSwitch {
+  accounts: UsageAccountOption[]
+  account: string
+  onSelect: (account: string) => void
+}
+
+export function UsageCard({ samples, starts, now, error, switcher }: {
   samples: UsageSample[] | null
   /** Sessions started on Claude, whatever started them. */
   starts: StartedSession[]
   now: number
   error: string | null
+  switcher?: AccountSwitch
 }) {
   const all = samples ?? []
   const fiveHour = projectWindow(all, "5h", now)
   const weekly = weeklyVerdicts(all, now)
+  const label = switcher?.accounts.find((option) => option.account === switcher.account)?.label
   return (
     <section data-testid="usage" className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-5)] shadow-[var(--shadow-card)]">
-      <h2 className="text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)]">Where the Claude allowance is heading</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-[var(--space-3)] gap-y-[var(--space-2)]">
+        <h2 className="text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
+          Where the Claude allowance is heading{label ? ` — ${label}` : ""}
+        </h2>
+        {switcher && (
+          <OptionPills
+            label="Claude account"
+            options={switcher.accounts.map((option) => ({ value: option.account, label: option.label }))}
+            selected={switcher.account}
+            onSelect={switcher.onSelect}
+          />
+        )}
+      </div>
       <p className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">A straight line through this window's readings, nothing cleverer.</p>
       {error && <p role="alert" className="mt-[var(--space-2)] text-[length:var(--text-footnote)] text-[var(--system-red)]">{error}</p>}
       <div className="mt-[var(--space-3)]">

@@ -559,7 +559,7 @@ export interface EnsureReadyOpts {
 const defaultSleep = (ms: number) => new Promise<void>((r) => { const t = setTimeout(r, ms); t.unref?.(); });
 
 /** Is the host answering ssh at all? */
-async function probeReachable(destination: string): Promise<boolean> {
+export async function probeReachable(destination: string): Promise<boolean> {
   const res = await sshRun(destination, ["true"], {
     timeoutMs: (PROBE_CONNECT_TIMEOUT_S + 5) * 1000,
     connectTimeoutSeconds: PROBE_CONNECT_TIMEOUT_S,

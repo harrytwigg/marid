@@ -9,6 +9,8 @@ import type {
 import { createConfigApi } from "@/lib/api-config"
 import { createSttApi } from "@/lib/api-stt"
 import { createTodoCaptureApi } from "@/lib/api-todo-capture"
+import type { EngineLimitsResponse } from "@/lib/api-engine-limits"
+export type { EngineLimitAccountSnapshot, EngineLimitsResponse } from "@/lib/api-engine-limits"
 export type { TodoCaptureWire, TodoCaptureStageWire, TodoCaptureRouteWire } from "@/lib/api-todo-capture"
 import type { StaleChatPolicy } from "@/lib/stale-chat"
 import type { EnginesResponse, ModelInfo } from "@/lib/engine-registry"
@@ -327,12 +329,6 @@ export interface EngineLimitEngineSnapshot {
   unsupportedReason?: string;
   error?: string;
   stale?: boolean;
-}
-
-export interface EngineLimitsResponse {
-  generatedAt: string;
-  default: string;
-  engines: Record<string, EngineLimitEngineSnapshot>;
 }
 
 export type WorkItemStatusWire =
