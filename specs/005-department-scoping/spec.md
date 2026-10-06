@@ -591,7 +591,8 @@ scoped employee; D is that session's binding)
   dir's Claude layout, and in `$JINN_HOME` it would read the company `AGENTS.md`. So a scoped
   session MUST skip engine entries in any fallback chain, its account's own (FR-079) or
   `engines.claude.fallback`, and accept only Claude-account entries. With none left, it waits
-  for its reset. Until Phase 6, a scoped session skips engine fallback entirely.
+  for its reset. Until Phase 6, a scoped session skips engine fallback entirely. This applies
+  to remote scoped sessions too, and takes precedence over FR-056's remote inheritance.
 - **FR-026**: In v1 a scoped employee MUST use the `claude` engine, because the stage dir uses
   Claude's layout (`CLAUDE.md`, `.claude/skills/`). It MAY run locally or on a remote host
   (D5). Validation refuses another engine and says why. A scoped employee with a `remoteHost`

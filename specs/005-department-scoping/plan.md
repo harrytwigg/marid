@@ -100,8 +100,10 @@ PR (FR-043 to FR-045).
    - the per-profile trust seed;
    - the transcript readers;
    - the signed-in check;
-   - per-profile outage, health, rate-limit memory and limits;
-   - no cross-account fallback;
+   - per-account outage, health and rate-limit memory, and keeping the default limits reading
+     to default-account sessions (FR-055);
+   - no fallback for local named profiles until Phase 6 gives accounts their own chains
+     (FR-056);
    - the remote profile fix (FR-058);
    - web: the profile badge and the read-only profile row.
 5. **Phase 5: scoped employees on remote hosts.** This covers:
@@ -315,7 +317,8 @@ The value is resolved once per run from the employee and passed down. It reaches
   starts here, in Phase 4, with the local accounts). The default profile's keys are unchanged.
   The limits reading is Phase 6.
 - **Fallback**: the rate-limit handler skips engine fallback and profile substitution for a
-  named profile.
+  **local** named profile until Phase 6 (FR-056). Remote employees, `remoteClaudeConfigDir`
+  included, keep main's behaviour.
 - **Settings** (FR-052a): for a named profile, `buildSessionSettings`
   (`shared/claude-settings.ts:70`) copies `attribution`, `hooks.PreToolUse` and
   `skipDangerousModePermissionPrompt` from the default profile's `settings.json`, merging
@@ -454,7 +457,9 @@ Senior, because it touches auth, engine health and every launch path.
   snapshots written by default-account sessions. A test shows that a newer named-profile
   snapshot changes neither the default reading nor the reset time. The other accounts'
   readings are Phase 6.
-- No fallback for named profiles.
+- No fallback for local named profiles until Phase 6 (FR-056). A test pins that a remote
+  employee with `remoteClaudeConfigDir` still inherits the engine chain, limited to engines its
+  host can run, as on `main`.
 - FR-058, with a red test first.
 - FR-052a, with a test per key.
 - FR-059: no scope check on profiles. A test pins that an unscoped and a scoped employee with

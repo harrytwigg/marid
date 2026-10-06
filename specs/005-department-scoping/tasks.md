@@ -231,7 +231,9 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   snapshot changes neither the default reading nor the reset time (FR-055). Key the auth
   outage ledger, engine health and the rate-limit memory per account,
   leaving the default profile's keys unchanged (FR-055). The limits reading and the board walk
-  are Phase 6. Skip fallback and substitution for named profiles (FR-056). Test SC-006.
+  are Phase 6. Skip fallback and substitution for local named profiles (FR-056). Test SC-006, and that a
+  remote employee with `remoteClaudeConfigDir` still inherits the engine chain (only engines
+  its host can run), as on `main`.
 - [ ] T077 Web: the profile badge on the org tree and a read-only profile row in the employee
   panel. Capture both, and the "not signed in" refusal in chat, in light and dark.
 - [ ] T078 Docs and migration (FR-043, FR-044; add Phase 4's rationale paragraph, including how to opt in): how to create and sign in a profile, what goes to its account (including the
