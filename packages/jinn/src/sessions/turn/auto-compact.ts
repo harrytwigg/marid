@@ -2,18 +2,18 @@ import { opencodeMode } from "../../engines/opencode-server.js";
 import { logger } from "../../shared/logger.js";
 import { detectRateLimit } from "../../shared/rateLimit.js";
 import type { EngineResult, Session } from "../../shared/types.js";
-import { resolveAutoCompactPolicy } from "../../shared/auto-compact-config.js";
 import {
   AUTO_COMPACT_BUDGET_HOLD_KEY,
   autoCompactDoneNotice,
   autoCompactFailedNotice,
   autoCompactStatus,
-  budgetHoldReleased,
   buildAutoCompactCommand,
   decideAutoCompaction,
+  holdAfterCompaction,
   markAutoCompacting,
   type AutoCompactDecision,
   type AutoCompactGo,
+  type BudgetHold,
 } from "../auto-compaction.js";
 import type { PartialStreamWriter } from "../partial-stream.js";
 import {
@@ -139,17 +139,23 @@ function wasPreempted(run: TurnRun, live: Session | undefined, result: EngineRes
   return isTurnSuperseded(live.id, run.turnStartedAt);
 }
 
+/** The session's `transportMeta` with its budget hold set, or lifted (`null`). */
+function withBudgetHold(current: Session, hold: BudgetHold | null): UpdateSessionFields {
+  const { [AUTO_COMPACT_BUDGET_HOLD_KEY]: _previous, ...rest } = current.transportMeta ?? {};
+  return { transportMeta: hold ? { ...rest, [AUTO_COMPACT_BUDGET_HOLD_KEY]: { ...hold } } : rest };
+}
+
 /**
  * Record a confirmed compaction on the session, fenced to this attempt: its
  * cost, the engine session it compacted (so `lastSyncedAt` says the cache is
  * warm again), the meter's new reading — the size after, or nothing when
  * the engine reported none, so the meter never shows the pre-compaction size
- * as current — and the budget hold, so the budget cannot fire again until a
- * turn reads the context back under it. Returns the engine id the turn should
- * now resume.
+ * as current — and the budget hold, when the compaction did not get the
+ * session under its budget. Returns the engine id the turn should now resume.
  */
-function recordCompaction(run: TurnRun, compactPlan: TurnPlan, attempt: EngineAttempt): string | undefined {
+function recordCompaction(run: TurnRun, compactPlan: TurnPlan, attempt: EngineAttempt, decision: AutoCompactGo): string | undefined {
   const { result } = attempt;
+  const postTokens = result.compaction?.postTokens ?? result.contextTokens;
   const sessionId = run.input.session.id;
   recordTurnAccounting(sessionId, { cost: result.cost, numTurns: result.numTurns, ...(compactPlan.model ? { model: compactPlan.model } : {}) });
   const nativeId = result.sessionId?.trim() || compactPlan.resumeNativeId;
@@ -163,7 +169,7 @@ function recordCompaction(run: TurnRun, compactPlan: TurnPlan, attempt: EngineAt
       })
       : {}),
     lastContextTokens: typeof result.contextTokens === "number" ? result.contextTokens : null,
-    transportMeta: { ...(current.transportMeta ?? {}), [AUTO_COMPACT_BUDGET_HOLD_KEY]: true },
+    ...withBudgetHold(current, holdAfterCompaction(decision.policy, postTokens)),
   }));
   return nativeId;
 }
@@ -211,25 +217,13 @@ function judge(run: TurnRun, result: EngineResult): Verdict {
   return { outcome: "compacted" };
 }
 
-/** Lift the budget hold once a turn has read the context back under the
- *  budget; returns the row the decision should see. */
-function releaseBudgetHold(run: TurnRun, session: Session): Session {
-  if (!budgetHoldReleased(session, resolveAutoCompactPolicy(run.input.config, run.plan.engineName))) return session;
-  const withoutHold = (current: Session): UpdateSessionFields => {
-    const { [AUTO_COMPACT_BUDGET_HOLD_KEY]: _released, ...rest } = current.transportMeta ?? {};
-    return { transportMeta: rest };
-  };
-  return updateSessionForAttempt(session.id, run.input.attemptToken, withoutHold) ?? { ...session, ...withoutHold(session) };
-}
-
 function decide(run: TurnRun): AutoCompactDecision {
   const { input, plan } = run;
-  // The live row: an earlier turn's receipt has moved the meter and the
-  // engine ref since this turn's snapshot was taken.
-  const live = getSession(input.session.id) ?? input.session;
-  return decideAutoCompaction({
+  const decision = decideAutoCompaction({
     config: input.config,
-    session: releaseBudgetHold(run, live),
+    // The live row: an earlier turn's receipt has moved the meter and the
+    // engine ref since this turn's snapshot was taken.
+    session: getSession(input.session.id) ?? input.session,
     engine: plan.engineName,
     opencodeMode: opencodeMode(input.config.engines.opencode),
     prompt: input.prompt,
@@ -237,6 +231,13 @@ function decide(run: TurnRun): AutoCompactDecision {
     syncRequested: plan.syncRequested,
     now: Date.now(),
   });
+  // The decision moved the hold (filled its floor, or lifted it): write that
+  // back, fenced to this attempt like everything else the turn records.
+  if (decision.holdUpdate !== undefined) {
+    const hold = decision.holdUpdate;
+    updateSessionForAttempt(input.session.id, input.attemptToken, (current) => withBudgetHold(current, hold));
+  }
+  return decision;
 }
 
 /**
@@ -282,7 +283,7 @@ async function compactThenRun(pending: Pending): Promise<PreTurnCompaction> {
     await run.surface.notice(autoCompactFailedNotice(verdict.reason, decision.trigger));
     return { kind: "run", plan };
   }
-  const nativeId = recordCompaction(run, compactPlan, attempt);
+  const nativeId = recordCompaction(run, compactPlan, attempt, decision);
   await run.surface.notice(autoCompactDoneNotice(decision, attempt.result.compaction));
   return { kind: "run", plan: planAfterCompaction(plan, nativeId) };
 }

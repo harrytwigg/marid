@@ -23,6 +23,7 @@ import {
 } from "./registry.js";
 import { SessionQueue } from "./queue.js";
 import { logger } from "../shared/logger.js";
+import { AUTO_COMPACT_BUDGET_HOLD_KEY } from "../shared/auto-compact-config.js";
 import { loadJobs } from "../cron/jobs.js";
 import { setCronJobEnabled, triggerCronJob } from "../cron/scheduler.js";
 import { reconcileWorkItem } from "../work-items/reconcile.js";
@@ -67,6 +68,7 @@ export function mergeTransportMeta(
     "transcriptActivityAt",
     "delegationCompletionTracked",
     "delegationCompletionContract",
+    AUTO_COMPACT_BUDGET_HOLD_KEY,
   ]) {
     if (baseExisting[key] !== undefined) merged[key] = baseExisting[key];
   }

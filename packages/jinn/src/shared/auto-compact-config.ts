@@ -54,6 +54,13 @@ export const AUTO_COMPACT_DEFAULTS: Record<AutoCompactEngine, AutoCompactPolicy>
   opencode: { enabled: false, cacheWindowSeconds: 300, minContextTokens: 100_000 },
 };
 
+/**
+ * Where a session's budget hold lives in its `transportMeta` (see
+ * `sessions/auto-compaction.ts`). Named here, free of the registry, so the
+ * registry can drop it when it copies a session.
+ */
+export const AUTO_COMPACT_BUDGET_HOLD_KEY = "autoCompactBudgetHold";
+
 const MIN_CACHE_WINDOW_SECONDS = 1;
 const MIN_CONTEXT_TOKENS = 1_000;
 

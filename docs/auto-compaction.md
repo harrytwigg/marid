@@ -39,7 +39,7 @@ engines:
 | `minContextTokens` | `100000` | The cache-window trigger leaves sessions whose last turn read fewer tokens than this alone. At least 1000. |
 | `maxContextTokens` | none | The context budget. A session whose last turn read at least this many tokens is compacted before its next turn, whether its cache is warm or cold. At least 1000. Unset, warm sessions are left to the engine's own compaction. |
 
-Picking `maxContextTokens`: set it well above the size a session compacts down to. That size is the system prompt and tool definitions, plus the summary, plus whatever recent turns the engine keeps word for word. For a Jinn session on opencode that is often 50k–100k tokens. If the budget is below it, compaction cannot get the session under the budget. The hold described below keeps that to one compaction rather than one on every turn, but the budget is then doing nothing useful.
+Picking `maxContextTokens`: set it well above the size a session compacts down to. That size is the system prompt and tool definitions, plus the summary, plus whatever recent turns the engine keeps word for word. For a Jinn session on opencode that is often 50k–100k tokens. If the budget is below it, compaction cannot get the session under the budget. The hold described below then limits it to one compaction per quarter-budget of growth rather than one on every turn, but most of those compactions buy little.
 
 Picking `cacheWindowSeconds`:
 
@@ -70,11 +70,16 @@ Otherwise the turn runs exactly as it would without the feature. If both trigger
 
 ### The budget hold
 
-Every confirmed auto-compaction puts the session on hold for the budget. The hold lifts at the start of the first later turn whose meter reads below `maxContextTokens`. While the hold is on, the budget trigger does not fire. The cold-cache trigger still can.
+A compaction does not always get a session under its budget. The system prompt, the tool definitions and the turns the engine keeps verbatim may already add up to more, or a heavy turn may follow straight after. If the budget fired again on the next turn, it would compact on every turn and gain nothing. So an auto-compaction that leaves the session at or over the budget puts it on hold. The hold records the session's **floor**, the size it landed at:
 
-The hold handles a session that compaction cannot get under its budget. Without it, every turn would compact again and gain nothing. With it, Jinn compacts once and then leaves the session to the engine's own compaction, until something brings the context back under the budget: the engine's compaction, an operator's `/compact`, or a cold-cache compaction. The skip is logged at `debug` level as `budget-held`.
+- If the engine reported a size after the compaction, that size is the floor. Claude does this.
+- If it did not, the next turn's reading is the floor. opencode does not report one.
 
-A failed compaction sets no hold, so the next turn tries again.
+A compaction that reports landing under the budget sets no hold.
+
+While a session is on hold, the budget fires again only once the context reaches the higher of the budget and the floor, plus a quarter of the budget. With a 300k budget and a 310k floor, that is 385k. So growth always re-arms the budget, and a budget the session cannot get under costs at most one compaction per quarter-budget of growth. A reading under the budget lifts the hold. The hold never stops the cold-cache trigger. A skip while held is logged at `debug` level as `budget-held`.
+
+A failed compaction sets no hold, so the next turn tries again. A duplicated session does not inherit its source's hold.
 
 ## Where it runs
 
@@ -83,7 +88,7 @@ Inside the turn it precedes, between the turn's preflight and its engine run. Ev
 Because it runs inside the turn:
 
 - **Ordering is kept.** The turn already holds the session's queue slot, so nothing can run between the compaction and the message it was for. A message that arrives meanwhile waits behind both.
-- **It can't compact twice.** The decision is made once per turn. A confirmed compaction resets the context meter, marks the engine as just active, and puts the session on hold for the budget, so the next turn cannot fire it again, even if the message's own turn then fails.
+- **It can't compact twice.** The decision is made once per turn. A confirmed compaction resets the context meter and marks the engine as just active. If it left the session at or over its budget, it also puts the session on hold. Either way the next turn cannot fire it again, even if the message's own turn then fails.
 - **It is not a separate turn.** There is no extra receipt and no extra callback to a parent session. The turn it precedes reports as it always would. The compaction's cost is recorded in the session's spend ledger.
 
 ## What you see

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -34,6 +35,23 @@ const { reg, recordingSurface, configWith, runOne } = await import("./helpers/au
 const { OpencodeEngine } = await import("../../engines/opencode.js");
 const { OpencodeServerPool, basicAuthHeader } = await import("../../engines/opencode-server.js");
 const { PtyLifecycleManager } = await import("../../engines/pty-lifecycle.js");
+
+/** Whether the mock upstream is accepting connections yet. */
+function canConnect(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host: "127.0.0.1" }, () => { socket.destroy(); resolve(true); });
+    socket.on("error", () => resolve(false));
+    socket.setTimeout(300, () => { socket.destroy(); resolve(false); });
+  });
+}
+
+async function waitForPort(port: number, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await canConnect(port))) {
+    if (Date.now() > deadline) throw new Error(`mock upstream never listened on ${port}`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
 
 interface StoredMessage {
   info: { role: string; summary?: boolean };
@@ -72,7 +90,7 @@ describe.skipIf(!RUN)("the context budget against a real opencode server", { tim
     process.env.HOME = home;
     process.env.XDG_CONFIG_HOME = xdgConfig;
     process.env.XDG_DATA_HOME = xdgData;
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await waitForPort(port);
   });
 
   afterAll(async () => {
@@ -83,6 +101,7 @@ describe.skipIf(!RUN)("the context budget against a real opencode server", { tim
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+    fs.rmSync(home, { recursive: true, force: true });
   });
 
   it("compacts in front of the turn after the session crosses its budget, and the turn runs on the summary", async () => {

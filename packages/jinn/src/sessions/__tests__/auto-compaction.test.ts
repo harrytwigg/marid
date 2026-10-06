@@ -5,10 +5,12 @@ import {
   autoCompactDoneNotice,
   autoCompactFailedNotice,
   autoCompactStatus,
-  budgetHoldReleased,
+  budgetRearmTokens,
   buildAutoCompactCommand,
   decideAutoCompaction,
+  holdAfterCompaction,
   lastEngineActivityMs,
+  readBudgetHold,
   type AutoCompactInput,
 } from "../auto-compaction.js";
 
@@ -83,7 +85,7 @@ describe("decideAutoCompaction", () => {
 
 describe("decideAutoCompaction — the context budget", () => {
   const BUDGET = { ...ON, maxContextTokens: 300_000 };
-  const HELD = { transportMeta: { [AUTO_COMPACT_BUDGET_HOLD_KEY]: true } as never };
+  const held = (floor: number | null) => ({ transportMeta: { [AUTO_COMPACT_BUDGET_HOLD_KEY]: { floor } } as never });
   const opencode = (over: Partial<Session>, idleMs = MINUTE, policy: Record<string, unknown> = BUDGET) => input({
     config: config("opencode", policy), engine: "opencode", session: session("opencode", over, idleMs),
   });
@@ -118,27 +120,52 @@ describe("decideAutoCompaction — the context budget", () => {
     expect(decideAutoCompaction(opencode({ lastContextTokens: null }))).toEqual({ compact: false, skip: "context-unknown" });
   });
 
-  it("holds the budget after an auto-compaction until the context reads under it again", () => {
-    expect(decideAutoCompaction(opencode({ lastContextTokens: 320_000, ...HELD }))).toEqual({ compact: false, skip: "budget-held" });
-    // The hold is the budget's alone: a cold session still compacts.
-    expect(decideAutoCompaction(opencode({ lastContextTokens: 320_000, ...HELD }, 30 * MINUTE))).toMatchObject({ trigger: "cold" });
+  it("holds the budget at a floor until the context grows a quarter of the budget past it", () => {
+    // Landed at 310k against a 300k budget: re-arms at 310k + 75k.
+    expect(budgetRearmTokens(300_000, 310_000)).toBe(385_000);
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 384_999, ...held(310_000) }))).toEqual({ compact: false, skip: "budget-held" });
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 385_000, ...held(310_000) })))
+      .toEqual({ compact: true, trigger: "budget", contextTokens: 385_000, budgetTokens: 300_000, policy: BUDGET, holdUpdate: null });
+    // A floor under the budget re-arms from the budget.
+    expect(budgetRearmTokens(300_000, 60_000)).toBe(375_000);
+  });
+
+  it("fills a pending floor from the first reading after the compaction", () => {
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 310_000, ...held(null) })))
+      .toEqual({ compact: false, skip: "budget-held", holdUpdate: { floor: 310_000 } });
+  });
+
+  it("lifts the hold on a reading under the budget, or when there is no budget", () => {
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 290_000, ...held(310_000) }))).toEqual({ compact: false, skip: "cache-warm", holdUpdate: null });
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 290_000, ...held(null) }))).toEqual({ compact: false, skip: "cache-warm", holdUpdate: null });
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 900_000, ...held(310_000) }, MINUTE, ON))).toEqual({ compact: false, skip: "cache-warm", holdUpdate: null });
+  });
+
+  it("leaves the hold alone on a turn it does not decide, and to a cold compaction", () => {
+    expect(decideAutoCompaction({ ...opencode({ lastContextTokens: 290_000, ...held(310_000) }), compactionTurn: true }))
+      .toEqual({ compact: false, skip: "compaction-turn" });
+    expect(decideAutoCompaction({ ...opencode({ lastContextTokens: 290_000, ...held(310_000) }), syncRequested: true }))
+      .toEqual({ compact: false, skip: "engine-switch" });
+    expect(decideAutoCompaction(opencode({ lastContextTokens: 320_000, ...held(310_000) }, 30 * MINUTE))).not.toHaveProperty("holdUpdate");
   });
 });
 
-describe("budgetHoldReleased", () => {
+describe("the budget hold", () => {
   const policy = { ...ON, maxContextTokens: 300_000 };
-  const held = (lastContextTokens: number | null) => ({ lastContextTokens, transportMeta: { [AUTO_COMPACT_BUDGET_HOLD_KEY]: true } }) as never;
 
-  it("releases once the meter reads under the budget, or there is no budget", () => {
-    expect(budgetHoldReleased(held(80_000), policy)).toBe(true);
-    expect(budgetHoldReleased(held(320_000), { ...ON })).toBe(true);
-    expect(budgetHoldReleased(held(320_000), undefined)).toBe(true);
+  it("is left only by a compaction that did not get under the budget", () => {
+    expect(holdAfterCompaction(policy, 60_000)).toBeNull();
+    expect(holdAfterCompaction(policy, 310_000)).toEqual({ floor: 310_000 });
+    expect(holdAfterCompaction(policy, undefined)).toEqual({ floor: null });
+    expect(holdAfterCompaction({ ...ON }, 310_000)).toBeNull();
   });
 
-  it("keeps holding at or over the budget, on an unread meter, and has nothing to release when unheld", () => {
-    expect(budgetHoldReleased(held(300_000), policy)).toBe(false);
-    expect(budgetHoldReleased(held(null), policy)).toBe(false);
-    expect(budgetHoldReleased({ lastContextTokens: 80_000, transportMeta: null } as never, policy)).toBe(false);
+  it("reads a floor, a pending floor, or nothing", () => {
+    const meta = (value: unknown) => ({ transportMeta: { [AUTO_COMPACT_BUDGET_HOLD_KEY]: value } }) as never;
+    expect(readBudgetHold(meta({ floor: 310_000 }))).toEqual({ floor: 310_000 });
+    expect(readBudgetHold(meta({ floor: null }))).toEqual({ floor: null });
+    expect(readBudgetHold(meta(true))).toBeUndefined();
+    expect(readBudgetHold({ transportMeta: null } as never)).toBeUndefined();
   });
 });
 

@@ -1,5 +1,5 @@
 import { TRANSCRIPT_ACTIVITY_META_KEY } from "../gateway/external-turns.js";
-import { resolveAutoCompactPolicy, type AutoCompactPolicy } from "../shared/auto-compact-config.js";
+import { AUTO_COMPACT_BUDGET_HOLD_KEY, resolveAutoCompactPolicy, type AutoCompactPolicy } from "../shared/auto-compact-config.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
 import type { CompactionStats, JinnConfig, Session } from "../shared/types.js";
 import { formatTokens } from "./compact-command.js";
@@ -30,6 +30,8 @@ import { compactionUnsupported, type CompactionUnsupported } from "./self-compac
  * This module is the pure decision and the words; `turn/auto-compact.ts` runs
  * it, inside the turn it precedes.
  */
+
+const positive = (n: number | undefined): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 
 function isoMs(value: unknown): number | undefined {
   if (typeof value !== "string") return undefined;
@@ -72,34 +74,63 @@ export type AutoCompactSkip =
 /** Why a turn compacts first: its cache went cold, or its context passed the budget. */
 export type AutoCompactTrigger = "cold" | "budget";
 
-export type AutoCompactDecision =
+/**
+ * The budget hold: left on a session by an auto-compaction that did not get it
+ * under its budget — a long system prompt and toolset, a large verbatim tail,
+ * or a heavy turn straight after. `floor` is where the session landed: the
+ * size the compaction reported, or, when the engine reports none (opencode),
+ * null until the next turn's reading fills it in.
+ *
+ * While held, the budget fires again only once the context has grown
+ * {@link BUDGET_REARM_FRACTION} of the budget past both the budget and the
+ * floor. So a budget the session cannot compact below costs one compaction per
+ * that much growth rather than one on every turn, and growth always re-arms
+ * it. A reading under the budget lifts the hold. The cold-cache trigger
+ * ignores it: a compaction resets the engine's activity, so that one cannot
+ * repeat on its own.
+ */
+export interface BudgetHold { floor: number | null }
+
+/** How far past `max(budget, floor)` a held session must grow, as a share of
+ *  the budget, before the budget fires again. */
+export const BUDGET_REARM_FRACTION = 0.25;
+
+export { AUTO_COMPACT_BUDGET_HOLD_KEY };
+
+/** What a decision asks the runner to write back: a new hold, `null` to lift
+ *  it, absent to leave it as it is. */
+interface HoldUpdate { holdUpdate?: BudgetHold | null }
+
+export type AutoCompactDecision = HoldUpdate & (
   | { compact: false; skip: AutoCompactSkip }
   | { compact: true; trigger: "cold"; contextTokens: number; idleMs: number; policy: AutoCompactPolicy }
-  | { compact: true; trigger: "budget"; contextTokens: number; budgetTokens: number; policy: AutoCompactPolicy };
+  | { compact: true; trigger: "budget"; contextTokens: number; budgetTokens: number; policy: AutoCompactPolicy }
+);
 
 export type AutoCompactGo = Extract<AutoCompactDecision, { compact: true }>;
 
-/**
- * Set on a session by every confirmed auto-compaction, and cleared once a turn
- * reads its context below the budget again. While it is set the budget does
- * not fire, so a budget the session cannot compact below — a long system
- * prompt and toolset, a large verbatim tail — costs one compaction, not one on
- * every turn. The cold-cache trigger ignores it: a compaction resets the
- * engine's activity, so that one cannot repeat on its own.
- */
-export const AUTO_COMPACT_BUDGET_HOLD_KEY = "autoCompactBudgetHold";
-
-export function budgetHeld(session: Pick<Session, "transportMeta">): boolean {
-  return session.transportMeta?.[AUTO_COMPACT_BUDGET_HOLD_KEY] === true;
+export function readBudgetHold(session: Pick<Session, "transportMeta">): BudgetHold | undefined {
+  const raw = session.transportMeta?.[AUTO_COMPACT_BUDGET_HOLD_KEY];
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+  const floor = (raw as { floor?: unknown }).floor;
+  return { floor: typeof floor === "number" && positive(floor) ? floor : null };
 }
 
-/** Whether the session's hold has served its purpose: the meter now reads
- *  below the budget (or there is no budget). An unread meter proves nothing. */
-export function budgetHoldReleased(session: Pick<Session, "transportMeta" | "lastContextTokens">, policy: AutoCompactPolicy | undefined): boolean {
-  if (!budgetHeld(session)) return false;
-  const tokens = session.lastContextTokens;
-  if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0) return false;
-  return policy?.maxContextTokens === undefined || tokens < policy.maxContextTokens;
+/** The context size at which a held session's budget fires again. */
+export function budgetRearmTokens(budget: number, floor: number): number {
+  return Math.max(budget, floor) + Math.ceil(budget * BUDGET_REARM_FRACTION);
+}
+
+/**
+ * The hold a confirmed auto-compaction leaves, from the size it reported
+ * afterwards: none when there is no budget or it landed under it, the size
+ * when it landed at or over, and a pending floor when it reported none.
+ */
+export function holdAfterCompaction(policy: AutoCompactPolicy, postTokens: number | undefined): BudgetHold | null {
+  const budget = policy.maxContextTokens;
+  if (budget === undefined) return null;
+  if (!positive(postTokens)) return { floor: null };
+  return postTokens < budget ? null : { floor: postTokens };
 }
 
 export interface AutoCompactInput {
@@ -158,21 +189,35 @@ export function decideAutoCompaction(input: AutoCompactInput): AutoCompactDecisi
   const skip = turnSkip(input);
   if (skip) return { compact: false, skip };
 
-  const contextTokens = input.session.lastContextTokens;
-  if (typeof contextTokens !== "number" || !Number.isFinite(contextTokens) || contextTokens <= 0) {
-    return { compact: false, skip: "context-unknown" };
-  }
+  const contextTokens = input.session.lastContextTokens ?? undefined;
+  if (!positive(contextTokens)) return { compact: false, skip: "context-unknown" };
   const cold = decideCold(input, policy, contextTokens);
-  return cold.compact ? cold : decideBudget(input, policy, contextTokens) ?? cold;
+  if (cold.compact) return cold;
+  const { decision, holdUpdate } = decideBudget(input.session, policy, contextTokens);
+  return { ...(decision ?? cold), ...(holdUpdate !== undefined ? { holdUpdate } : {}) };
 }
 
-/** The budget trigger, or undefined when there is no budget or the context is
- *  under it — the cold-cache answer then stands. */
-function decideBudget(input: AutoCompactInput, policy: AutoCompactPolicy, contextTokens: number): AutoCompactDecision | undefined {
+/**
+ * The budget trigger, and what becomes of the hold. No decision when there is
+ * no budget or the context is under it — the cold-cache answer then stands.
+ */
+function decideBudget(
+  session: Pick<Session, "transportMeta">,
+  policy: AutoCompactPolicy,
+  contextTokens: number,
+): { decision?: AutoCompactDecision } & HoldUpdate {
   const budget = policy.maxContextTokens;
-  if (budget === undefined || contextTokens < budget) return undefined;
-  if (budgetHeld(input.session)) return { compact: false, skip: "budget-held" };
-  return { compact: true, trigger: "budget", contextTokens, budgetTokens: budget, policy };
+  const hold = readBudgetHold(session);
+  // Under the budget, or no budget at all: nothing to fire, nothing to hold.
+  if (budget === undefined || contextTokens < budget) return hold ? { holdUpdate: null } : {};
+  if (!hold) return { decision: { compact: true, trigger: "budget", contextTokens, budgetTokens: budget, policy } };
+  // The first reading since a compaction that reported no size is where it landed.
+  const floor = hold.floor ?? contextTokens;
+  const filled = hold.floor === null ? { holdUpdate: { floor } } : {};
+  if (contextTokens < budgetRearmTokens(budget, floor)) return { decision: { compact: false, skip: "budget-held" }, ...filled };
+  // Grown far enough past where it landed: compact again. A confirmed
+  // compaction sets the next hold; a failed one leaves none, so the next turn retries.
+  return { decision: { compact: true, trigger: "budget", contextTokens, budgetTokens: budget, policy }, holdUpdate: null };
 }
 
 /**
@@ -249,8 +294,6 @@ export function autoCompactStatus(decision: AutoCompactGo): string {
   return `🗜️ Session idle ${formatIdle(decision.idleMs)} with ${formatTokens(decision.contextTokens)} of context `
     + `(past its ${describeWindow(decision.policy)} cache window) — compacting it before the next message…`;
 }
-
-const positive = (n: number | undefined): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 
 /** What the chat is told once the compaction confirmed. */
 export function autoCompactDoneNotice(decision: AutoCompactGo, stats: CompactionStats | undefined): string {

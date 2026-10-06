@@ -11,6 +11,7 @@ import { logger } from '../shared/logger.js';
 import { initDb } from '../shared/db.js';
 import { recordEngineSpend } from './engine-spend.js';
 import { stripControlChars } from '../shared/sanitize.js';
+import { AUTO_COMPACT_BUDGET_HOLD_KEY } from '../shared/auto-compact-config.js';
 import { getMeta, setMeta, canonicalCallbackIdentityText, canonicalSessionDeliveryIdentity, sessionDeliveryFromRow, validateSessionDeliveryIdentity, type SessionDeliveryRow } from './migrate.js';
 import { parseTodoId } from '../work-items/id.js';
 import { toWorkItemLinkRole } from '../work-items/link-role.js';
@@ -1781,6 +1782,14 @@ export function getCostReport(filter: CostReportFilter = {}): CostReport {
   };
 }
 
+/** A session's `transportMeta` as a copy of it starts: without the budget hold,
+ *  which describes a compaction the copy never had. */
+function copiedTransportMeta(meta: JsonObject | null): string | null {
+  if (!meta) return null;
+  const { [AUTO_COMPACT_BUDGET_HOLD_KEY]: _hold, ...rest } = meta;
+  return JSON.stringify(rest);
+}
+
 /**
  * Duplicate a session and all its messages, returning a new session with a fresh ID.
  * Does NOT fork the engine session — the caller handles that separately.
@@ -1819,7 +1828,7 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       newSessionKey,
       source.replyContext ? JSON.stringify(source.replyContext) : null,
       source.messageId,
-      source.transportMeta ? JSON.stringify(source.transportMeta) : null,
+      copiedTransportMeta(source.transportMeta),
       source.employee,
       source.model,
       title,
