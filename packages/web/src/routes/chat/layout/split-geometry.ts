@@ -8,7 +8,7 @@ import {
   type SplitDirection,
   type SplitLayout,
 } from './split-layout'
-import { isFileTabId } from './file-tab'
+import { isChatTabId } from './tab-kind'
 
 /**
  * Where every pane and splitter sits, as one pure function of the layout and the grid's box.
@@ -170,7 +170,7 @@ function resolveKeys(input: GeometryInput): Array<{ key: string; groupId: string
   const groupByPaneKey = groupIdsByPaneKey(input.layout)
   return input.keys.map((key) => {
     // A file-only pane's key is its file tab id, which sessionForKey (chats and the composer) never maps.
-    const paneKey = isFileTabId(key) ? key : input.sessionForKey(key)
+    const paneKey = isChatTabId(key) ? input.sessionForKey(key) : key
     return { key, groupId: paneKey ? groupByPaneKey.get(paneKey) ?? null : null }
   })
 }

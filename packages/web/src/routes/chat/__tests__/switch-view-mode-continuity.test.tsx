@@ -90,7 +90,7 @@ vi.mock('@/hooks/use-chat-tabs', async (importOriginal) => {
         activeIndex,
         hydrated: true,
         openTab,
-        openFileTab: noop,
+        openDocTab: noop,
         closeTab: noop,
         switchTab: setActiveIndex,
         nextTab: noop,

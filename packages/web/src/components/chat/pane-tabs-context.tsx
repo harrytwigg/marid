@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import type { FileTabRef } from '@/routes/chat/layout/file-tab'
+import type { DocTabRef } from '@/routes/chat/layout/tab-kind'
 
 /**
  * How a pane's title bar gets its tab strip without ChatPane threading it through: whoever owns
@@ -11,15 +11,26 @@ export interface PaneTabsBinding {
   hasStrips: boolean
   /** The operator is working in this chat: keep its tab if it is a preview. */
   keep: (sessionId: string) => void
-  /** The file this chat's pane is showing in place of the chat (a file tab of its group), if any. */
-  shownFile: (sessionId: string) => FileTabRef | null
-  /** False for the layout's only chat when file tabs sit beside it: they would have nowhere to go. */
+  /** The document this pane is showing in place of its chat (a file or Todo tab of its group), if any. */
+  shownDoc: (paneTabId: string) => DocTabRef | null
+  /** False for the layout's only chat when other tabs sit beside it: they would have nowhere to go. */
   closable: (sessionId: string) => boolean
-  /** The body of a file-only pane (a file tab dragged out to a pane of its own), by its pane key. */
-  renderFilePane?: (paneKey: string) => ReactNode | null
+  /** The body of a document-only pane (a document dragged out to a pane of its own), by its pane key. */
+  renderDocPane?: (paneKey: string) => ReactNode | null
 }
 
 export const PaneTabsContext = createContext<PaneTabsBinding | null>(null)
+
+/**
+ * The layout tab a pane renders, when that is not its session: a new chat's composer has no session
+ * yet, but its tab id finds its strip and the document shown over it. Null everywhere else, where the
+ * pane's session id is its tab id.
+ */
+export const PaneTabIdContext = createContext<string | null>(null)
+
+export function usePaneTabId(sessionId: string | null): string | null {
+  return useContext(PaneTabIdContext) ?? sessionId
+}
 
 export function usePaneTabsStrip(sessionId: string): ReactNode | null {
   return useContext(PaneTabsContext)?.renderStrip(sessionId) ?? null
@@ -36,17 +47,17 @@ export function usePaneClosable(sessionId: string | null): boolean {
   return !sessionId || !binding || binding.closable(sessionId)
 }
 
-export function usePaneShownFile(sessionId: string | null): FileTabRef | null {
+export function usePaneShownDoc(paneTabId: string | null): DocTabRef | null {
   const binding = useContext(PaneTabsContext)
-  return sessionId && binding ? binding.shownFile(sessionId) : null
+  return paneTabId && binding ? binding.shownDoc(paneTabId) : null
 }
 
 export function usePaneTabsKeep(): (sessionId: string) => void {
   return useContext(PaneTabsContext)?.keep ?? NO_KEEP
 }
 
-export function usePaneTabsFilePane(): (paneKey: string) => ReactNode | null {
-  return useContext(PaneTabsContext)?.renderFilePane ?? NO_FILE_PANE
+export function usePaneTabsDocPane(): (paneKey: string) => ReactNode | null {
+  return useContext(PaneTabsContext)?.renderDocPane ?? NO_DOC_PANE
 }
 
-const NO_FILE_PANE = () => null
+const NO_DOC_PANE = () => null

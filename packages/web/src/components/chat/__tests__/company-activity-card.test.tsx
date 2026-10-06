@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { CompanyActivityCard } from '../company-activity-card'
 import { ChatBlockInline } from '../chat-blocks'
 import type { ChatBlock } from '@/lib/blocks'
+import { TodoOpenContext, type OpenTodo } from '@/components/chat/file-open-context'
+import { FileLinkSessionContext } from '@/components/chat/file-link-session-context'
 
 const CANON = 'JIN-42'
 
@@ -194,6 +196,33 @@ describe('CompanyActivityCard', () => {
     await user.click(screen.getByRole('button', { name: 'Open Prepare release todo' }))
     expect(router.state.location.pathname).toBe('/todos/JIN-7')
     expect(router.state.location.state).toBeNull()
+  })
+
+  it('opens the Todo as a tab beside its chat where the chat layout takes one, else its page', async () => {
+    const user = userEvent.setup()
+    const tabbed = vi.fn<OpenTodo>(() => true)
+    const router = createMemoryRouter(
+      [{ path: '*', element: (
+        <TodoOpenContext.Provider value={tabbed}>
+          <FileLinkSessionContext.Provider value="chat-a"><CompanyActivityCard block={todoBlock()} /></FileLinkSessionContext.Provider>
+        </TodoOpenContext.Provider>
+      ) }],
+      { initialEntries: ['/'] },
+    )
+    const view = render(<RouterProvider router={router} />)
+    await user.click(screen.getByRole('button', { name: 'Open Prepare release todo' }))
+    expect(tabbed).toHaveBeenCalledWith('JIN-7', 'chat-a')
+    expect(router.state.location.pathname).toBe('/')
+    view.unmount()
+
+    const refused = vi.fn<OpenTodo>(() => false)
+    const fallback = createMemoryRouter(
+      [{ path: '*', element: <TodoOpenContext.Provider value={refused}><CompanyActivityCard block={todoBlock()} /></TodoOpenContext.Provider> }],
+      { initialEntries: ['/'] },
+    )
+    render(<RouterProvider router={fallback} />)
+    await user.click(screen.getByRole('button', { name: 'Open Prepare release todo' }))
+    expect(fallback.state.location.pathname).toBe('/todos/JIN-7')
   })
 
   it('identifies a child Todo as a sub-task and exposes its parent', async () => {

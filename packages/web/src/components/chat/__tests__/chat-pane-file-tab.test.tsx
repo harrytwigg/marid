@@ -30,7 +30,7 @@ function binding(overrides: Partial<PaneTabsBinding> = {}): PaneTabsBinding {
     hasStrips: true,
     keep: () => undefined,
     closable: () => true,
-    shownFile: (sessionId) => (sessionId === 's1' ? { path: 'docs/report.md', sessionId: 's1' } : null),
+    shownDoc: (tabId) => (tabId === 's1' ? { kind: 'file', file: { path: 'docs/report.md', sessionId: 's1' } } : null),
     ...overrides,
   }
 }

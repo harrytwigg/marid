@@ -4,9 +4,9 @@ import { useSessions } from '@/hooks/use-sessions'
 import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
 import { PaneTabStrip } from './pane-tab-strip'
-import { closeSession, findGroup, focusedGroup, groupIdsByPaneKey, groupOfSession, hasTabbedGroup, isLastChatWithFiles, paneSessionOf, workingSetFromLayout, type LayoutGroup, type SplitLayout } from './split-layout'
-import { parseFileTabId } from './file-tab'
-import { FilePane } from './file-pane'
+import { closeSession, findGroup, focusedGroup, groupIdsByPaneKey, groupOfSession, hasTabbedGroup, isLastChatWithTabs, paneSessionOf, routeSessionOf, workingSetFromLayout, type LayoutGroup, type SplitLayout } from './split-layout'
+import { isNewChatTabId, parseDocTabId } from './tab-kind'
+import { DocPane } from './doc-pane'
 import type { SplitLayoutControls } from './use-split-working-set'
 
 interface SessionRow {
@@ -57,11 +57,11 @@ function useKeepRequests(layout: SplitLayoutControls['layout'], pin: (sessionId:
 /**
  * Closing the tab a pane shows hands the pane to the tab that takes its place, and the route follows
  * that pane's chat; the page's pane-close would consult the flat working set, which holds only the
- * chat of each group and so cannot name that neighbour. Closing a group's last chat closes the file
- * tabs beside it with it, and the route follows focus to wherever it lands.
+ * chat of each group and so cannot name that neighbour. Closing a group's last chat closes the
+ * documents beside it with it, and the route follows focus to wherever it lands.
  */
 /** Whether `sessionId` (a tab of `owner`) is the chat the route is on: its pane's, when that pane has
- * focus, or the working set's when a file-only pane has it instead. */
+ * focus, or the working set's when a pane with no chat has it instead. */
 function isRouteChat(layout: SplitLayout, owner: LayoutGroup, sessionId: string): boolean {
   const shownInFocused = layout.focusedGroupId === owner.id
     && (owner.activeTab === sessionId || paneSessionOf(owner, layout.focusHistory) === sessionId)
@@ -71,16 +71,16 @@ function isRouteChat(layout: SplitLayout, owner: LayoutGroup, sessionId: string)
 function useCloseTab(split: SplitLayoutControls, onSelect: (sessionId: string) => void) {
   const { layout } = split
   return useCallback((sessionId: string) => {
-    if (isLastChatWithFiles(layout, sessionId)) return
+    if (isLastChatWithTabs(layout, sessionId)) return
     const owner = groupOfSession(layout, sessionId)
-    // The route is the focused pane's chat, which a file tab shown over it does not change. With a
-    // file-only pane focused it is the working set's chat, so the route is that one's.
+    // The route is the focused pane's chat, which a document shown over it does not change. With a
+    // pane that has no chat focused it is the working set's chat, so the route is that one's.
     const wasRoute = owner !== null && isRouteChat(layout, owner, sessionId)
     split.close(sessionId)
     if (!owner || !wasRoute) return
     const next = closeSession(layout, sessionId)
     const pane = findGroup(next, owner.id) ?? focusedGroup(next)
-    const replacement = (pane ? paneSessionOf(pane, next.focusHistory) : '') || workingSetFromLayout(next).focusedId
+    const replacement = (pane ? routeSessionOf(pane, next.focusHistory) : '') || workingSetFromLayout(next).focusedId
     if (replacement) onSelect(replacement)
   }, [layout, onSelect, split])
 }
@@ -91,7 +91,10 @@ function useSelectTab(split: SplitLayoutControls, onSelect: (sessionId: string) 
   return useCallback((tabId: string, after: SplitLayout = layout) => selectTab(after, tabId, show, onSelect), [layout, onSelect, show])
 }
 
-/** Mounts a PaneTabStrip in the title bar of every pane whose group holds more than one tab. */
+/**
+ * Mounts a PaneTabStrip in the title bar of every pane whose group holds more than one tab, and of a
+ * new chat's pane even alone: the strip is what it is dragged by, as a lone document pane's is.
+ */
 export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProviderProps) {
   const sessions = useSessions().data as SessionRow[] | undefined
   const byId = useMemo(() => new Map((sessions ?? []).map((row) => [String(row.id ?? ''), row])), [sessions])
@@ -106,7 +109,7 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
     const groupStrip = (group: LayoutGroup) => (
       <PaneTabStrip
         groupId={group.id}
-        tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isLastChatWithFiles(layout, tab.id) ? { ...tab, closable: false } : tab))}
+        tabs={paneTabItems(group, (id) => tabSession(byId.get(id))).map((tab) => (isLastChatWithTabs(layout, tab.id) ? { ...tab, closable: false } : tab))}
         activeId={group.activeTab}
         focused={layout.focusedGroupId === group.id}
         {...paneTabHandlers(group.id, ops)}
@@ -115,20 +118,20 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
     return {
       hasStrips: hasTabbedGroup(layout),
       keep,
-      closable: (sessionId) => !isLastChatWithFiles(layout, sessionId),
-      shownFile: (sessionId) => {
-        const group = groupOfSession(layout, sessionId)
-        if (!group || paneSessionOf(group, layout.focusHistory) !== sessionId) return null
-        return parseFileTabId(group.activeTab)
+      closable: (sessionId) => !isLastChatWithTabs(layout, sessionId),
+      shownDoc: (paneTabId) => {
+        const group = groupOfSession(layout, paneTabId)
+        if (!group || paneSessionOf(group, layout.focusHistory) !== paneTabId) return null
+        return parseDocTabId(group.activeTab)
       },
-      renderStrip: (sessionId) => {
-        const group = groupOfSession(layout, sessionId)
-        return group && group.tabs.length >= 2 ? groupStrip(group) : null
+      renderStrip: (paneTabId) => {
+        const group = groupOfSession(layout, paneTabId)
+        return group && (group.tabs.length >= 2 || isNewChatTabId(paneTabId)) ? groupStrip(group) : null
       },
-      renderFilePane: (paneKey) => {
+      renderDocPane: (paneKey) => {
         const group = findGroup(layout, groupIdsByPaneKey(layout).get(paneKey) ?? '')
-        const file = group ? parseFileTabId(group.activeTab) : null
-        return group && file ? <FilePane file={file} strip={groupStrip(group)} active={layout.focusedGroupId === group.id} /> : null
+        const doc = group ? parseDocTabId(group.activeTab) : null
+        return group && doc ? <DocPane doc={doc} strip={groupStrip(group)} active={layout.focusedGroupId === group.id} /> : null
       },
     }
   }, [byId, closeTab, keep, layout, pin, selectChosenTab, split.place])

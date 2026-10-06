@@ -7,11 +7,11 @@ import {
   readChatSessionDrop,
 } from '../chat-session-dnd'
 import { capForViewport, layoutFor } from '../grid-layout'
-import { findGroup, focusedGroup, groupIdsByPaneKey, paneKeyOf, paneKeysFromLayout, paneSessionOf, type SplitLayout } from './split-layout'
+import { findGroup, focusedGroup, groupIdsByPaneKey, paneKeyOf, paneKeysFromLayout, routeSessionOf, type SplitLayout } from './split-layout'
 import { splitDropForPointer, type Rect, type SplitDropHit, type SplitDropRegion } from './split-geometry'
 import { applySplitDrop, previewSplitDrop, type SplitDropContext } from './split-drop'
-import { clearPaneTabDrag, fileTabDragId, isTabStripDropTarget, readPaneTabDrop } from './pane-tab-dnd'
-import { isFileTabId } from './file-tab'
+import { clearPaneTabDrag, tabOnlyDragId, isTabStripDropTarget, readPaneTabDrop } from './pane-tab-dnd'
+import { isChatTabId } from './tab-kind'
 
 type DropHandlers = Pick<HTMLAttributes<HTMLDivElement>, 'onDragEnter' | 'onDragLeave' | 'onDragOver' | 'onDrop'>
 type SelectSession = (id: string, options?: { navigateMobile?: boolean; replace?: boolean }) => void
@@ -39,12 +39,12 @@ interface SplitWorkingSet {
 
 /** A drag the pane surface takes: a chat (from the sidebar or a chat tab) or a file tab. */
 function hasSplitDrag(dataTransfer: DataTransfer): boolean {
-  return hasChatSessionDrag(dataTransfer) || fileTabDragId(dataTransfer) !== null
+  return hasChatSessionDrag(dataTransfer) || tabOnlyDragId(dataTransfer) !== null
 }
 
 /** The tab or chat being dragged, during a drag (the payload is unreadable until the drop). */
 function draggedId(dataTransfer: DataTransfer): string | null {
-  return readChatSessionDrop(dataTransfer) ?? activeChatSessionDrag() ?? fileTabDragId(dataTransfer)
+  return readChatSessionDrop(dataTransfer) ?? activeChatSessionDrag() ?? tabOnlyDragId(dataTransfer)
 }
 
 function eligibleDrop(event: DragEvent): boolean {
@@ -77,7 +77,7 @@ function measure(event: DragEvent, { layout, sessionId, context, sessionForKey }
   const groupByPaneKey = groupIdsByPaneKey(layout)
   const panes = Array.from(grid.querySelectorAll<HTMLElement>('[data-chat-grid-pane]')).map((pane) => {
     const key = pane.dataset.chatGridPane ?? ''
-    const paneKey = isFileTabId(key) ? key : sessionForKey(key)
+    const paneKey = isChatTabId(key) ? sessionForKey(key) : key
     const rect = pane.getBoundingClientRect()
     return { key, groupId: paneKey ? groupByPaneKey.get(paneKey) ?? null : null, rect, hitRect: aboveComposer(pane, rect) }
   })
@@ -151,9 +151,9 @@ interface DropHandlerDeps {
   onDrop: (sessionId: string, hit: SplitDropHit, mountedPanes: number) => void
 }
 
-function droppedFileTab(dataTransfer: DataTransfer): string | null {
-  const tabId = readPaneTabDrop(dataTransfer)?.tabId ?? fileTabDragId(dataTransfer)
-  return tabId !== undefined && tabId !== null && isFileTabId(tabId) ? tabId : null
+function droppedTabOnly(dataTransfer: DataTransfer): string | null {
+  const tabId = readPaneTabDrop(dataTransfer)?.tabId ?? tabOnlyDragId(dataTransfer)
+  return tabId !== undefined && tabId !== null && !isChatTabId(tabId) ? tabId : null
 }
 
 /** chat-grid-drop.tsx createDropHandlers, releasing into the split layout. */
@@ -190,7 +190,7 @@ function createSplitDropHandlers({ overlay, measureAt, onDrop }: DropHandlerDeps
     },
     onDrop: (event) => {
       if (!eligibleDrop(event)) return
-      const sessionId = readChatSessionDrop(event.dataTransfer) ?? droppedFileTab(event.dataTransfer)
+      const sessionId = readChatSessionDrop(event.dataTransfer) ?? droppedTabOnly(event.dataTransfer)
       const hit = overlay.placementRef.current?.hit ?? { region: 'end' as const, key: null, groupId: null }
       const mounted = event.currentTarget.querySelectorAll('[data-chat-grid-pane]').length
       overlay.finishDrag()
@@ -202,11 +202,12 @@ function createSplitDropHandlers({ overlay, measureAt, onDrop }: DropHandlerDeps
   }
 }
 
-/** The chat the focused pane belongs to once a file tab is dropped, or null (a file-only pane is focused). */
-function chatAfterFileDrop(layout: SplitLayout, fileTabId: string, hit: SplitDropHit, context: SplitDropContext): string | null {
-  const after = applySplitDrop(layout, fileTabId, hit, context)
+/** The chat the focused pane belongs to once a tab that is no chat is dropped, or null (the focused
+ * pane has none: a document-only pane, a new chat's). */
+function chatAfterTabDrop(layout: SplitLayout, tabId: string, hit: SplitDropHit, context: SplitDropContext): string | null {
+  const after = applySplitDrop(layout, tabId, hit, context)
   const focused = focusedGroup(after)
-  return (focused ? paneSessionOf(focused, after.focusHistory) : '') || null
+  return (focused ? routeSessionOf(focused, after.focusHistory) : '') || null
 }
 
 /**
@@ -223,7 +224,7 @@ export function useSplitGridAdd(
   const { add, drop: dropInto, split } = workingSet
   const { primaryPaneKey, committedSessionId, pickerPaneKey } = context
   const sessionForKey = useCallback((key: string): string | null => {
-    if (key === pickerPaneKey || isFileTabId(key)) return null
+    if (key === pickerPaneKey || !isChatTabId(key)) return null
     return key === primaryPaneKey ? committedSessionId : key
   }, [committedSessionId, pickerPaneKey, primaryPaneKey])
 
@@ -239,9 +240,9 @@ export function useSplitGridAdd(
     onDrop: (sessionId, hit, mountedPanes) => {
       const dropContextNow = dropContext(mountedPanes, context)
       dropInto(sessionId, hit, dropContextNow)
-      // A chat is the route. A file tab is not: the route follows the chat of the pane that ends up
-      // focused, and stays put when that is a file-only pane (it has none).
-      const routed = isFileTabId(sessionId) ? chatAfterFileDrop(split.layout, sessionId, hit, dropContextNow) : sessionId
+      // A chat is the route. A tab of another kind is not: the route follows the chat of the pane that
+      // ends up focused, and stays put when that pane has none.
+      const routed = isChatTabId(sessionId) ? sessionId : chatAfterTabDrop(split.layout, sessionId, hit, dropContextNow)
       if (routed && routed !== selectedId) selectSession(routed, { navigateMobile: false })
     },
   }), [context, dropInto, overlay, selectSession, selectedId, sessionForKey, split.layout])

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowUpRight, Check, ChevronDown, ListChecks, Play, Workflow } from 'lucide-react'
 import type { ChatBlock, JsonValue } from '@/lib/blocks'
 import { todoPath } from '@/lib/todo-id'
+import { useOpenTodo } from '@/components/chat/file-open-context'
+import { useFileLinkSession } from '@/components/chat/file-link-session-context'
 
 /* The company-activity object (plan Task 8). A quiet inline receipt — one soft
  * token surface showing the object's name + honest state, a Preview disclosure
@@ -155,6 +157,8 @@ function factsFor(block: ChatBlock): Fact[] {
 
 export function CompanyActivityCard({ block }: { block: ChatBlock }) {
   const navigate = useNavigate()
+  const openTodo = useOpenTodo()
+  const linkSession = useFileLinkSession()
   const [open, setOpen] = useState(false)
   const previewRef = useRef<HTMLButtonElement>(null)
   const regionId = useId()
@@ -176,8 +180,12 @@ export function CompanyActivityCard({ block }: { block: ChatBlock }) {
   const todoId = block.type === 'todo-activity' ? text(block.payload.todoId) : ''
 
   // Only a Todo has a page to open; the other receipts are history with no
-  // surface left behind them, so they offer a Preview and nothing else.
-  const openObject = block.type === 'todo-activity' ? () => navigate(todoPath(todoId)) : null
+  // surface left behind them, so they offer a Preview and nothing else. In the
+  // chat layout it opens as a tab beside this chat, as a Todo mention does;
+  // anywhere else (or on a phone) it is the Todo's page.
+  const openObject = block.type === 'todo-activity'
+    ? () => { if (!openTodo?.(todoId, linkSession)) navigate(todoPath(todoId)) }
+    : null
 
   return (
     // Reconciliation — live same-block patch vs. card replacement — remains

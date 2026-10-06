@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { paneTabHandlers, paneTabItems, selectTab, tabsOfGroup, type PaneTabOps } from '../pane-tab-ops'
 import { fileTabId } from '../file-tab'
 import {
-  closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, openFileTab, openInFocusedGroup, pinTab, placeTab, showTab, splitGroup, type SplitLayout,
+  closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, openDocTab, openInFocusedGroup, pinTab, placeTab, showTab, splitGroup, type SplitLayout,
 } from '../split-layout'
 
 const lookup = (id: string) => ({ a: { title: 'Alpha', employee: 'op', status: 'running' as const } })[id as 'a']
@@ -124,7 +124,7 @@ describe('paneTabHandlers routing (selectTab, as the provider wires it)', () => 
   const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
 
   it('routes to a sidebar chat dropped into a strip, though it was not in the layout yet', () => {
-    const start = openFileTab(createSplitLayout(['a'], 'a'), 'a', report)
+    const start = openDocTab(createSplitLayout(['a'], 'a'), 'a', report)
     const run = wired(start)
     paneTabHandlers(groupsOf(start)[0].id, run.ops).onDropSession!('n', 3)
     expect(run.route).toHaveBeenCalledWith('n')
@@ -132,7 +132,7 @@ describe('paneTabHandlers routing (selectTab, as the provider wires it)', () => 
   })
 
   it('routes a file moved into another strip to the chat of the pane it landed in', () => {
-    const start = focusSession(openFileTab(createSplitLayout(['a', 'b'], 'a'), 'a', report), 'b')
+    const start = focusSession(openDocTab(createSplitLayout(['a', 'b'], 'a'), 'a', report), 'b')
     const target = groupOfSession(start, 'b')!
     const run = wired(start)
     paneTabHandlers(target.id, run.ops).onMoveIn(groupOfSession(start, 'a')!.id, report, 1)

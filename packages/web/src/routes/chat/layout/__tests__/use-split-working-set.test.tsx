@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { act } from '@testing-library/react'
 import { fileTabId } from '../file-tab'
-import { createSplitLayout, focusSession, groupOfSession, groupsOf, materializeLayout, openFileTab, placeTab, splitGroup, workingSetFromLayout } from '../split-layout'
+import { createSplitLayout, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, placeTab, splitGroup, workingSetFromLayout } from '../split-layout'
 import { SPLIT_LAYOUT_STORAGE_KEY, serializeSplitLayout } from '../split-layout-storage'
 import { WORKING_SET_STORAGE_KEY, serializeWorkingSet } from '../../working-set'
 import { deletedWhileClosed, useSplitWorkingSet } from '../use-split-working-set'
@@ -73,7 +73,7 @@ describe('a file-only pane', () => {
   /** a | b arranged with the report split out to its own pane, as the page leaves it. */
   function storeFilePane() {
     const arranged = materializeLayout(createSplitLayout(['a', 'b'], 'a'), 2)
-    const withFile = openFileTab(arranged, 'a', report)
+    const withFile = openDocTab(arranged, 'a', report)
     const layout = splitGroup(withFile, groupOfSession(withFile, 'a')!.id, 'right', report)
     window.localStorage.setItem(SPLIT_LAYOUT_STORAGE_KEY, serializeSplitLayout(layout))
     window.localStorage.setItem(WORKING_SET_STORAGE_KEY, serializeWorkingSet(workingSetFromLayout(layout)))

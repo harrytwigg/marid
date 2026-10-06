@@ -1,6 +1,6 @@
 import { overflowForViewport } from '../grid-layout'
 import {
-  appendFileTab,
+  appendTabPane,
   appendSession,
   keepingFiles,
   closeSession,
@@ -18,7 +18,7 @@ import {
   type SplitSide,
 } from './split-layout'
 import { splitGeometry, type Rect, type SplitDropHit, type SplitMetrics } from './split-geometry'
-import { isFileTabId } from './file-tab'
+import { isChatTabId } from './tab-kind'
 
 export interface SplitDropContext {
   /** Columns the auto grid is showing, so an edge drop materializes what the operator sees. */
@@ -40,7 +40,7 @@ function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
  * grid appends. Capacity is spent afterwards, never on the group that was dropped onto.
  */
 export function applySplitDrop(layout: SplitLayout, sessionId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
-  if (isFileTabId(sessionId)) return applyFileDrop(layout, sessionId, hit, context)
+  if (!isChatTabId(sessionId)) return applyTabDrop(layout, sessionId, hit, context)
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
   if (!target || hit.region === 'end') return evictToCap(dropAtEnd(layout, sessionId), context.cap)
   if (hit.region === 'center') {
@@ -53,16 +53,17 @@ export function applySplitDrop(layout: SplitLayout, sessionId: string, hit: Spli
 }
 
 /**
- * A file tab's drag (pane-tab-dnd.ts) released on the grid, the same three ways: an edge splits it
- * out as a pane of its own, the middle moves it into that group as a tab, and the empty end moves
- * it out to a group at the end. A file tab not in the layout is no drop: it came from a tab.
+ * The drag of a tab that is no chat (a document, a new chat: pane-tab-dnd.ts) released on the grid,
+ * the same three ways: an edge splits it out as a pane of its own, the middle moves it into that
+ * group as a tab, and the empty end moves it out to a group at the end. Such a tab not in the layout
+ * is no drop: it came from a tab.
  */
-function applyFileDrop(layout: SplitLayout, fileTabId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
-  if (!groupOfSession(layout, fileTabId)) return layout
+function applyTabDrop(layout: SplitLayout, tabId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
+  if (!groupOfSession(layout, tabId)) return layout
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
-  if (!target || hit.region === 'end') return evictToCap(appendFileTab(layout, fileTabId), context.cap)
-  if (hit.region === 'center') return evictToCap(placeTab(layout, target.id, fileTabId), context.cap, target.tabs)
-  return splitAt(layout, target, hit.region, fileTabId, context)
+  if (!target || hit.region === 'end') return evictToCap(appendTabPane(layout, tabId), context.cap)
+  if (hit.region === 'center') return evictToCap(placeTab(layout, target.id, tabId), context.cap, target.tabs)
+  return splitAt(layout, target, hit.region, tabId, context)
 }
 
 /**
@@ -91,7 +92,7 @@ export interface SplitDropPreviewInput {
 /**
  * The rectangle the dropped pane will occupy, found by laying out the layout the drop produces
  * with the keys the grid will then mount. The dropped session becomes the route's pane, so every
- * key is its own session (a file-only pane's, its file tab id), and the picker (if open) keeps its
+ * key is its own session (a pane with no chat, its shown tab's id), and the picker (if open) keeps its
  * reserved trailing slot, as in chat-grid-drop.tsx simulateChatGridDrop.
  */
 export function previewSplitDrop(input: SplitDropPreviewInput): { layout: SplitLayout; rect: Rect } | null {
@@ -111,7 +112,7 @@ export function previewSplitDrop(input: SplitDropPreviewInput): { layout: SplitL
     viewport: input.viewport,
     metrics: input.metrics,
   })
-  // A file dropped on the middle of a chat's pane joins that group, whose pane is keyed by its chat.
+  // A document dropped on the middle of a chat's pane joins that group, whose pane is keyed by its chat.
   const holder = groupOfSession(next, input.sessionId)
   const pane = geometry.panes.find((entry) => entry.key === input.sessionId)
     ?? geometry.panes.find((entry) => holder !== null && entry.groupId === holder.id)

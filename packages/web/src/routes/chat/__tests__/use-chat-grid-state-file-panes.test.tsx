@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { fileTabId } from '../layout/file-tab'
-import { createSplitLayout, groupOfSession, materializeLayout, openFileTab, splitGroup, workingSetFromLayout } from '../layout/split-layout'
+import { createSplitLayout, groupOfSession, materializeLayout, openDocTab, splitGroup, workingSetFromLayout } from '../layout/split-layout'
 import { MAX_SIDEBAR_WIDTH } from '../sidebar-width'
 import { storeSidebarWidth } from '../sidebar-width-store'
 import { useChatGridState } from '../use-chat-grid-state'
@@ -11,7 +11,7 @@ const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
 /** The chats arranged, with the report split out beside the first. */
 function withFilePane(ids: string[]) {
   const arranged = materializeLayout(createSplitLayout(ids, ids[0]), ids.length)
-  const opened = openFileTab(arranged, ids[0], report)
+  const opened = openDocTab(arranged, ids[0], report)
   return splitGroup(opened, groupOfSession(opened, ids[0])!.id, 'right', report)
 }
 

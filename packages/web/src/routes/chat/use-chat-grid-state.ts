@@ -5,22 +5,24 @@ import { useChatTouchOrder, type ChatTouchOrder } from './use-chat-touch-order'
 import { capWindowWidth, useSavedSidebarWidth } from './sidebar-width-store'
 import { useChatViewport } from './use-chat-viewport'
 import type { ChatWorkingSet } from './working-set'
-import { isFileTabId } from './layout/file-tab'
-import { focusedGroup, paneKeyOf, paneKeysFromLayout, type SplitLayout } from './layout/split-layout'
+import { isChatTabId } from './layout/tab-kind'
+import { focusedGroup, groupOfSession, paneKeyOf, paneKeysFromLayout, type SplitLayout } from './layout/split-layout'
 
 /**
- * The working set with the layout's file-only panes in it, so capacity and overflow count them: a
- * file pane takes viewport like a chat. The chats keep their place in tree order and a newcomer the
- * URL has not landed in the layout yet goes last. With no file-only pane it is `base`, untouched.
+ * The working set with the layout's panes that hold no chat in it (document-only panes, new chats), so
+ * capacity and overflow count them: such a pane takes viewport like a chat. The chats keep their place
+ * in tree order and a newcomer the URL has not landed in the layout yet goes last. With no such pane
+ * it is `base`, untouched.
  */
-function withFilePanes(base: ChatWorkingSet, layout: SplitLayout | undefined): ChatWorkingSet {
+function withChatlessPanes(base: ChatWorkingSet, layout: SplitLayout | undefined): ChatWorkingSet {
   const paneKeys = layout ? paneKeysFromLayout(layout) : []
-  if (!layout || !paneKeys.some(isFileTabId)) return base
-  const keys = paneKeys.filter((key) => isFileTabId(key) || base.sessionIds.includes(key))
-  const sessionIds = [...keys, ...base.sessionIds.filter((id) => !keys.includes(id))]
+  if (!layout || paneKeys.every(isChatTabId)) return base
+  const keys = paneKeys.filter((key) => !isChatTabId(key) || base.sessionIds.includes(key))
+  // A chat a new chat's tab is shown over is held by that pane, not a newcomer to place.
+  const sessionIds = [...keys, ...base.sessionIds.filter((id) => !keys.includes(id) && !groupOfSession(layout, id))]
   const focused = focusedGroup(layout)
-  const focusedFile = focused ? paneKeyOf(focused, layout.focusHistory) : null
-  const focusedId = focusedFile && isFileTabId(focusedFile) ? focusedFile : base.focusedId
+  const focusedPane = focused ? paneKeyOf(focused, layout.focusHistory) : null
+  const focusedId = focusedPane && !isChatTabId(focusedPane) ? focusedPane : base.focusedId
   const seen = layout.focusHistory.filter((id) => sessionIds.includes(id))
   const focusHistory = [...sessionIds.filter((id) => !seen.includes(id)), ...seen.filter((id) => id !== focusedId), ...(focusedId ? [focusedId] : [])]
   return { sessionIds, focusedId, focusHistory }
@@ -51,7 +53,7 @@ function useVisibleWorkingSet(
   { width, height, reservedSlots }: { width: number; height: number; reservedSlots: number },
 ): ChatWorkingSet {
   return useMemo(
-    () => overflowForViewport(withFilePanes(base, layout), width, height, reservedSlots).visible,
+    () => overflowForViewport(withChatlessPanes(base, layout), width, height, reservedSlots).visible,
     [base, height, layout, reservedSlots, width],
   )
 }
@@ -87,7 +89,7 @@ export function useChatGridState({
   sessions: ReadonlyArray<{ id?: unknown }> | undefined
   pickerOpen?: boolean
   systemPrimedId?: string | null
-  /** The split layout, for the file-only panes it holds beyond the working set's chats. */
+  /** The split layout, for the panes with no chat it holds beyond the working set's chats. */
   layout?: SplitLayout
 }) {
   const viewport = useChatViewport()
@@ -106,9 +108,9 @@ export function useChatGridState({
     layout,
     { width: capWindowWidth(viewport.width, sidebarWidth), height: viewport.height, reservedSlots: reservedPaneSlots },
   )
-  // The chats on screen, and the panes (those chats and the file-only panes) the grid mounts. A phone
-  // shows one chat and no file-only pane.
-  const visibleChatIds = useMemo(() => visibleWorkingSet.sessionIds.filter((id) => !isFileTabId(id)), [visibleWorkingSet])
+  // The chats on screen, and the panes (those chats and the panes with no chat) the grid mounts. A
+  // phone shows one chat and no other pane.
+  const visibleChatIds = useMemo(() => visibleWorkingSet.sessionIds.filter(isChatTabId), [visibleWorkingSet])
   const mountedSessionIds = viewport.mobile
     ? (focusedSessionId ? [focusedSessionId] : [])
     : visibleChatIds

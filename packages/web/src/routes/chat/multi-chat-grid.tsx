@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from 'react'
 import { ChatPane } from '@/components/chat/chat-pane'
 import { resolvePaneTitle, safePaneTitle } from '@/components/chat/chat-pane-title-bar'
-import { usePaneTabsShown } from '@/components/chat/pane-tabs-context'
+import { PaneTabIdContext, usePaneTabsShown } from '@/components/chat/pane-tabs-context'
 import { FileLinkSessionContext } from '@/components/chat/file-link-session-context'
 import type { CommsPeekData } from '@/components/chat/thread-peek'
 import type { DelegatedActivity } from '@/lib/api'
@@ -10,7 +10,7 @@ import { ChatGrid } from './chat-grid'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { isTerminalSession } from '@/lib/terminal-session'
 import { deriveChatGridIds } from './grid-placement'
-import { isFileTabId } from './layout/file-tab'
+import { isDocTabId, isNewChatTabId, parseNewChatTabId } from './layout/tab-kind'
 import { useArrivedByTabSwitch } from '@/components/chat/tab-switch-mark'
 import { SessionPicker } from './session-picker'
 import type { SessionMeta } from './use-chat-pane-state'
@@ -62,13 +62,20 @@ interface MultiChatGridProps {
     onSessionCreated: NonNullable<PaneProps['onSessionCreated']>
     onClose: () => void
   }
+  /** The layout's new-chat tabs (layout/tab-kind.ts): a composer pane each, keyed by its tab id. */
+  newChat?: {
+    /** The tab's first send made a session: it becomes that chat's tab, in place. */
+    onSessionCreated: (tabId: string, sessionId: string, pending?: Parameters<NonNullable<PaneProps['onSessionCreated']>>[1]) => void
+    onClose: (tabId: string) => void
+  }
   /** Lays the panes out in place of ChatGrid, with the same props (layout/split-chat-grid.tsx). */
   grid?: ComponentType<ComponentProps<typeof ChatGrid>>
 }
 
 function sessionForGridId(props: MultiChatGridProps, gridId: string): string | null {
-  // A file-only pane's key is a file tab id: no session. The split grid handles those panes itself.
-  if (isFileTabId(gridId)) return null
+  // A document-only pane's key is a document tab id: no session. The split grid handles those panes
+  // itself. A new chat's pane is a composer, with no session until its first send.
+  if (isDocTabId(gridId) || isNewChatTabId(gridId)) return null
   if (gridId === props.primary.paneKey) return props.primary.sessionId
   return gridId === props.pickerPane?.paneKey ? null : gridId
 }
@@ -127,6 +134,10 @@ function removeGridPane(owner: MultiChatGridProps, gridId: string): void {
     owner.pickerPane.onClose()
     return
   }
+  if (isNewChatTabId(gridId)) {
+    owner.newChat?.onClose(gridId)
+    return
+  }
   const sessionId = sessionForGridId(owner, gridId)
   if (sessionId) owner.onRemove(sessionId)
   // The composer pane has no session to remove: closing it hands the route back
@@ -157,6 +168,12 @@ function GridChatPane({
   const tabbed = usePaneTabsShown()
   const primary = gridId === owner.primary.paneKey
   const pickerPane = gridId === owner.pickerPane?.paneKey ? owner.pickerPane : undefined
+  const newChatTab = parseNewChatTabId(gridId)
+  const onSessionCreated: PaneProps['onSessionCreated'] = primary
+    ? owner.primary.onSessionCreated
+    : newChatTab
+      ? (createdId, pending) => owner.newChat?.onSessionCreated(gridId, createdId, pending)
+      : pickerPane?.onSessionCreated
   const cliAvailable = paneCliAvailable(owner, sessionId)
   const pane = (
     <ChatPane
@@ -164,14 +181,14 @@ function GridChatPane({
       {...paneChrome(owner, sessionId)}
       sessionId={sessionId}
       initialScrollTop={paneScrollTop(owner, sessionId)}
-      initialEmployee={primary ? owner.primary.initialEmployee : undefined}
+      initialEmployee={primary ? owner.primary.initialEmployee : newChatTab?.employee ?? undefined}
       isActive={active}
       multiPane={multiPane || (tabbed && !owner.viewport.mobile)}
       {...paneIdentity(owner, sessionId)}
       paneTitle={titleForGridId(owner, gridId)}
       onClose={() => removeGridPane(owner, gridId)}
       onFocus={() => { if (sessionId) owner.onFocus(sessionId) }}
-      onSessionCreated={primary ? owner.primary.onSessionCreated : pickerPane?.onSessionCreated}
+      onSessionCreated={onSessionCreated}
       onNewChat={owner.onNewChat}
       onSessionMetaChange={(update) => updatePaneMeta(owner, sessionId, update)}
       onRefresh={owner.onRefresh}
@@ -186,9 +203,11 @@ function GridChatPane({
     />
   )
   return (
-    <FileLinkSessionContext.Provider value={sessionId}>
-      {pane}
-    </FileLinkSessionContext.Provider>
+    <PaneTabIdContext.Provider value={newChatTab ? gridId : null}>
+      <FileLinkSessionContext.Provider value={sessionId}>
+        {pane}
+      </FileLinkSessionContext.Provider>
+    </PaneTabIdContext.Provider>
   )
 }
 

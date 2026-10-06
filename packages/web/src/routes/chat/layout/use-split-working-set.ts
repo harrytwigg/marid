@@ -18,7 +18,8 @@ import {
   groupOfSession,
   groupsOf,
   materializeLayout,
-  openFileTab,
+  openDocTab,
+  openNewChatTab,
   openInFocusedGroup,
   pinTab,
   placeTab,
@@ -30,7 +31,8 @@ import {
   type SplitLayout,
 } from './split-layout'
 import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
-import { fileTabId, isFileTabId, type FileTabRef } from './file-tab'
+import { fileTabId, type FileTabRef } from './file-tab'
+import { isChatTabId, todoTabId } from './tab-kind'
 import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
 import { applySplitDrop, type SplitDropContext } from './split-drop'
 import type { SplitDropHit } from './split-geometry'
@@ -50,12 +52,12 @@ function sameOrder(a: readonly string[], b: readonly string[]): boolean {
  * upstream grid, a test seeding it — and then that list is the newer truth and the layout is
  * rebuilt from it, unarranged. An absent key is not a disagreement (cleared site data, a first
  * run): the layout stands, and neither is a session deleted since. The cap is left to
- * evictToCap so a window that shrank since does not count as disagreement either. File tabs are
- * not sessions and are kept; they go with their group if every chat in it was deleted.
+ * evictToCap so a window that shrank since does not count as disagreement either. Tabs of other
+ * kinds are not sessions and are kept; they go with their group if every chat in it was deleted.
  */
 export function hydrateSplitLayout(storage: Pick<Storage, 'getItem'>, liveIds: ReadonlySet<string>, cap: number): SplitLayout {
   const unpruned = loadSplitLayout(storage)
-  const stored = pruneSessions(unpruned, (id) => isFileTabId(id) || liveIds.has(id))
+  const stored = pruneSessions(unpruned, (id) => liveIds.has(id))
   let raw: string | null = null
   try {
     raw = storage.getItem(WORKING_SET_STORAGE_KEY)
@@ -77,15 +79,16 @@ export function hydrateSplitLayout(storage: Pick<Storage, 'getItem'>, liveIds: R
 
 const NO_IDS: ReadonlySet<string> = new Set()
 
-function fileOnlyFocused(layout: SplitLayout): boolean {
+/** The focused pane has no chat (a document-only pane, a new chat's), so the route stays on the last one. */
+function chatlessFocused(layout: SplitLayout): boolean {
   const focused = focusedGroup(layout)
-  return focused !== null && focused.tabs.every(isFileTabId)
+  return focused !== null && !focused.tabs.some(isChatTabId)
 }
 
 /** The chats the stored layout holds that the session list no longer does: deleted while the page
  * was closed, which is what hydration prunes them for. */
 export function deletedWhileClosed(storage: Pick<Storage, 'getItem'>, liveIds: ReadonlySet<string>): ReadonlySet<string> {
-  const dead = groupsOf(loadSplitLayout(storage)).flatMap((group) => group.tabs).filter((id) => !isFileTabId(id) && !liveIds.has(id))
+  const dead = groupsOf(loadSplitLayout(storage)).flatMap((group) => group.tabs).filter((id) => isChatTabId(id) && !liveIds.has(id))
   return dead.length ? new Set(dead) : NO_IDS
 }
 
@@ -106,13 +109,13 @@ export interface SplitLayoutControls {
 
 /**
  * The layout as shown: the URL's chat opened in it, ahead of the effect that commits that. A focused
- * file-only pane has no chat, so the route stays on the last one while the pane holds focus: the
- * chat the URL names is already in the layout, and is not focused over it.
+ * pane with no chat (a document-only pane, a new chat's) leaves the route on the last chat while it
+ * holds focus: the chat the URL names is already in the layout, and is not focused over it.
  */
 function useProjection(committedId: string | null, hydratedRef: { current: boolean }, deadRef: { current: ReadonlySet<string> }) {
   return useCallback((current: SplitLayout) => {
     if (!hydratedRef.current || !committedId || deadRef.current.has(committedId)) return current
-    return fileOnlyFocused(current) && groupOfSession(current, committedId) ? current : openInFocusedGroup(current, committedId)
+    return chatlessFocused(current) && groupOfSession(current, committedId) ? current : openInFocusedGroup(current, committedId)
   }, [committedId, deadRef, hydratedRef])
 }
 
@@ -224,12 +227,22 @@ export function useSplitWorkingSet(
    *  beside, or the stored layout has yet to load over this one, so the caller can fall back: until
    *  the session list first loads (or if it never does) links open in a browser tab, as they did
    *  before file tabs, rather than land in a layout hydration is about to replace. */
-  const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => {
-    const tabId = fileTabId(file)
-    if (!hydrated || (openFileTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId))) return false
-    setLayout((current) => openFileTab(project(current), ownerSessionId, tabId))
+  const openDoc = useCallback((ownerSessionId: string | null, tabId: string) => {
+    if (!hydrated || (openDocTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId))) return false
+    setLayout((current) => openDocTab(project(current), ownerSessionId, tabId))
+    return true
+  }, [hydrated, project, shown])
+  const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => openDoc(ownerSessionId, fileTabId(file)), [openDoc])
+  /** A Todo opened as a tab beside the chat that linked it, as openFile does for a file. */
+  const openTodo = useCallback((ownerSessionId: string | null, todoId: string) => openDoc(ownerSessionId, todoTabId(todoId)), [openDoc])
+  /** A new chat (addressed to `employee`, if given) as a tab of the focused pane. False when the layout
+   *  holds no chat to open it beside, or has yet to load, so the caller falls back to the route's own
+   *  composer. */
+  const openNewChat = useCallback((employee: string | null) => {
+    if (!hydrated || openNewChatTab(shown, employee) === shown) return false
+    setLayout((current) => openNewChatTab(project(current), employee))
     return true
   }, [hydrated, project, shown])
 
-  return { state, add, focus, remove, drop, split, afterRemove, openFile }
+  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openNewChat }
 }

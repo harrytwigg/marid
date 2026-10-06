@@ -193,34 +193,35 @@ describe('the routed multi-pane surface', () => {
     expect(document.querySelectorAll('[data-chat-grid-pane]')).toHaveLength(1)
   })
 
-  it('uses one capped pane for the composer and restores the folded member on dismiss and commit', async () => {
+  it('opens New chat as a tab of the focused pane, folding nothing, and commits it to its chat in place', async () => {
     sessionIds.splice(0, sessionIds.length, 'a', 'b', 'c', 'd', 'f', 'g')
     seedWorkingSet()
     renderRoute()
     await waitFor(() => expect(document.querySelectorAll('[data-chat-pane-session]')).toHaveLength(6))
+    const tabIds = (node: Element) => Array.from(node.closest('[data-chat-grid-pane]')!.querySelectorAll('[role="tab"]')).map((tab) => tab.getAttribute('data-pane-tab-kind') ?? tab.getAttribute('data-pane-tab-id'))
 
     fireEvent.click(screen.getAllByRole('button', { name: 'New chat' })[0])
 
+    // The composer is a tab beside the focused pane's chat, which it covers: no pane is added or folded.
     await waitFor(() => expect(pane('new')).toBeDefined())
-    expect(document.querySelectorAll('[data-chat-pane-session]')).toHaveLength(6)
-    expect(document.querySelector('[data-chat-pane-session="b"]')).toBeNull()
-    expect(JSON.parse(localStorage.getItem(WORKING_SET_STORAGE_KEY) ?? '{}').sessionIds).toEqual(sessionIds)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Test browser back' }))
-    await waitFor(() => expect(pane('a')).toBeDefined())
-    await waitFor(() => expect(document.querySelectorAll('[data-chat-pane-session]')).toHaveLength(6))
+    expect(document.querySelectorAll('[data-chat-grid-pane]')).toHaveLength(6)
+    expect(document.querySelector('[data-chat-pane-session="a"]')).toBeNull()
     expect(pane('b')).toBeDefined()
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'New chat' })[0])
-    await waitFor(() => expect(pane('new')).toBeDefined())
+    expect(tabIds(pane('new'))).toEqual(['a', 'new-chat'])
+    // The new chat is no session: the URL and the persisted working set never see it.
+    expect(screen.getByTestId('route-location').textContent).toContain('session=a')
+    expect(JSON.parse(localStorage.getItem(WORKING_SET_STORAGE_KEY) ?? '{}').sessionIds).toEqual(sessionIds)
 
     const textarea = pane('new').querySelector<HTMLTextAreaElement>('[data-chat-textarea]')!
     fireEvent.change(textarea, { target: { value: 'commit-composer' } })
     fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' })
 
+    // Its first send makes it that chat's tab, in the same slot, and the route moves to it.
     await waitFor(() => expect(apiMocks.createSession).toHaveBeenCalled())
     await waitFor(() => expect(pane('e').textContent).toContain('commit-composer'))
-    expect(document.querySelectorAll('[data-chat-pane-session]')).toHaveLength(6)
+    expect(document.querySelectorAll('[data-chat-grid-pane]')).toHaveLength(6)
+    expect(tabIds(pane('e'))).toEqual(['a', 'e'])
+    await waitFor(() => expect(screen.getByTestId('route-location').textContent).toContain('session=e'))
     expect(pane('b')).toBeDefined()
   })
 

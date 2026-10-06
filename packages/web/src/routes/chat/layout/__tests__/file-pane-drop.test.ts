@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { fileTabId } from '../file-tab'
 import {
-  appendFileTab,
+  appendTabPane,
   createSplitLayout,
   groupOfSession,
   groupsOf,
   materializeLayout,
-  openFileTab,
+  openDocTab,
   paneSetFromLayout,
   splitGroup,
   type SplitLayout,
@@ -24,7 +24,7 @@ const groupId = (layout: SplitLayout, tabId: string) => groupOfSession(layout, t
 /** a and b, arranged, with the report open beside a. */
 function chatsWithReport(): SplitLayout {
   const arranged = materializeLayout(createSplitLayout(['a', 'b'], 'b'), 2)
-  return openFileTab(arranged, 'a', report)
+  return openDocTab(arranged, 'a', report)
 }
 
 /** chatsWithReport with the report split out to the right of a, so it is a pane of its own. */
@@ -68,7 +68,7 @@ describe('applySplitDrop with a file tab', () => {
   })
 
   it('moves it out to the end of an unarranged grid too', () => {
-    const auto = openFileTab(createSplitLayout(['a', 'b'], 'b'), 'a', report)
+    const auto = openDocTab(createSplitLayout(['a', 'b'], 'b'), 'a', report)
     expect(auto.auto).toBe(true)
     const next = applySplitDrop(auto, report, { region: 'end', key: null, groupId: null }, context)
     expect(tabsOf(next)).toEqual([['a'], ['b'], [report]])
@@ -89,10 +89,10 @@ describe('applySplitDrop with a file tab', () => {
     expect(groupOfSession(next, 'b')).not.toBeNull()
   })
 
-  it('appendFileTab refuses a tab that is no file or not in the layout', () => {
+  it('appendTabPane refuses a tab that is no file or not in the layout', () => {
     const layout = chatsWithReport()
-    expect(appendFileTab(layout, 'a')).toBe(layout)
-    expect(appendFileTab(layout, notes)).toBe(layout)
+    expect(appendTabPane(layout, 'a')).toBe(layout)
+    expect(appendTabPane(layout, notes)).toBe(layout)
   })
 })
 
