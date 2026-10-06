@@ -138,6 +138,36 @@ describe("isColumnInStatusFilter", () => {
   })
 })
 
+describe("board column order and the To do label", () => {
+  /** The board renders its open columns left to right. Blocked — the exception
+   *  column a stalled card lands in — sits directly after To do (`backlog`),
+   *  not buried past review, and the first column is labelled To do while the
+   *  status stays `backlog`. */
+  it("draws To do, then Blocked, then In progress and In review, and labels the first column To do", async () => {
+    const byStatus: Partial<Record<WorkItemStatusWire, WorkItemCompactWire[]>> = {
+      backlog: [compact("PLA-1", "backlog")],
+      blocked: [compact("PLA-9", "blocked")],
+      executing: [compact("PLA-2", "executing")],
+      in_review: [compact("PLA-5", "in_review")],
+    }
+    listWorkItems.mockImplementation((params: { status?: WorkItemStatusWire }) => {
+      const items = byStatus[params.status!] ?? []
+      return Promise.resolve({ workItems: items, total: items.length, totals: { [params.status!]: items.length }, nextOffset: null })
+    })
+    renderBoard("/todos/b/everything")
+    await waitFor(() => expect(screen.getByTestId("board-card-PLA-1")).toBeTruthy())
+
+    const board = screen.getByTestId("todo-board-scroll")
+    const rendered = Array.from(board.querySelectorAll("[data-board-column]"))
+      .map((el) => el.getAttribute("data-board-column"))
+    expect(rendered).toEqual(["backlog", "blocked", "executing", "in_review"])
+
+    const first = screen.getByTestId("board-column-backlog")
+    expect(first.getAttribute("aria-label")).toBe("To do column, 1 items")
+    expect(first.textContent).toContain("To do")
+  })
+})
+
 describe("/todos/b/everything?status=executing", () => {
   it("renders only the executing column, and only asks the gateway for it", async () => {
     renderBoard("/todos/b/everything?status=executing")

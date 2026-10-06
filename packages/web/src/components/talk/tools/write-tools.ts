@@ -51,7 +51,7 @@ const commentTodo: TalkTool = {
 
 const createTodo: TalkTool = {
   name: "talk_create_todo",
-  description: "Create a Todo. It starts in the backlog with nobody assigned.",
+  description: "Create a Todo. It starts in To do (the `backlog` status) with nobody assigned.",
   parameters: params(
     {
       title: str("The Todo's title — one line, what the work is."),
@@ -100,7 +100,7 @@ const setTodoStatus: TalkTool = {
   parameters: params(
     {
       id: str("The full Todo id."),
-      status: str("The status to move it to.", STATUSES),
+      status: str("The status to move it to. The board shows `backlog` as \"To do\".", STATUSES),
       note: str("Why, when the move is to blocked or escalated."),
     },
     ["id", "status"],

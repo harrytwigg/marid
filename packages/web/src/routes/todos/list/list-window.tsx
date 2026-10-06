@@ -75,7 +75,7 @@ function WindowedRow({ row, handlers }: { row: TodoListVirtualRow; handlers: Tod
 
 /**
  * The list, windowed. Only the rows around the scroll position are mounted, so
- * a Backlog of five hundred costs what a Backlog of twenty does.
+ * a To do group of five hundred costs what a To do group of twenty does.
  */
 export function WindowedTodoList({
   rows,

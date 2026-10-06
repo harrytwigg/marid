@@ -13,6 +13,16 @@ export const BOARD_STATUS_ORDER: readonly WorkItemStatusWire[] = [
   ...PIPELINE_STATUSES, ...EXCEPTION_STATUSES, ...CLOSED_STATUSES,
 ]
 
+/** The board's open columns, left to right: To do (`backlog`), the exception
+ *  columns, then the rest of the pipeline. Blocked sits directly after To do —
+ *  the two columns an operator works first are adjacent, rather than the
+ *  exception buried past review. The exception columns still materialize only
+ *  when they hold a card or a drag could land in one; query order and the
+ *  header totals keep using {@link BOARD_STATUS_ORDER}. */
+export const OPEN_COLUMN_ORDER: readonly WorkItemStatusWire[] = [
+  PIPELINE_STATUSES[0], ...EXCEPTION_STATUSES, ...PIPELINE_STATUSES.slice(1),
+]
+
 /** Whether a column belongs on a board carrying this status filter. A URL that
  *  names one status (`?status=executing`, which is what the Talk orb's
  *  open_todos writes) is a board of that one column; `open` and `all` keep every

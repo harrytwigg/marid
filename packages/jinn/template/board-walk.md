@@ -62,8 +62,9 @@ When a Todo names no gate, it has none.
 
 ## Release
 
-Release a `blocked` Todo whose gates are all met: it goes back to `backlog`,
-keeping its assignee, with a comment giving the reason. Do not release a Todo
+Release a `blocked` Todo whose gates are all met: it goes back to `backlog`
+(shown as **To do** on the board), keeping its assignee, with a comment giving
+the reason. Do not release a Todo
 that is blocked on a person's decision unless that decision is recorded in its
 comments. Leave a Todo that is still gated where it is.
 

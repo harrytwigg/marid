@@ -15,7 +15,7 @@ export { isPositiveTodoVersion } from "./api"
 
 /** Human label for a raw status (sheet, people queue, sub-lines). */
 export const STATUS_LABEL: Record<WorkItemStatusWire, string> = {
-  backlog: "Backlog",
+  backlog: "To do",
   executing: "In progress",
   in_review: "In review",
   done: "Done",
