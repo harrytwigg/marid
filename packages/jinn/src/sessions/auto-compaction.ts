@@ -163,10 +163,14 @@ export function decideAutoCompaction(input: AutoCompactInput): AutoCompactDecisi
     return { compact: false, skip: "context-unknown" };
   }
   const cold = decideCold(input, policy, contextTokens);
-  if (cold.compact) return cold;
+  return cold.compact ? cold : decideBudget(input, policy, contextTokens) ?? cold;
+}
 
+/** The budget trigger, or undefined when there is no budget or the context is
+ *  under it — the cold-cache answer then stands. */
+function decideBudget(input: AutoCompactInput, policy: AutoCompactPolicy, contextTokens: number): AutoCompactDecision | undefined {
   const budget = policy.maxContextTokens;
-  if (budget === undefined || contextTokens < budget) return cold;
+  if (budget === undefined || contextTokens < budget) return undefined;
   if (budgetHeld(input.session)) return { compact: false, skip: "budget-held" };
   return { compact: true, trigger: "budget", contextTokens, budgetTokens: budget, policy };
 }

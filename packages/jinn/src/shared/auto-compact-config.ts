@@ -65,6 +65,11 @@ function isAutoCompactEngine(engine: string): engine is AutoCompactEngine {
   return (AUTO_COMPACT_ENGINES as readonly string[]).includes(engine);
 }
 
+/** A configured number raised to its floor, or undefined when it is not one. */
+function atLeast(value: unknown, minimum: number): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(minimum, value) : undefined;
+}
+
 /** The policy in force for an engine, defaults filled in. Undefined for an
  *  engine that cannot compact at all. */
 export function resolveAutoCompactPolicy(config: Pick<JinnConfig, "engines">, engine: string): AutoCompactPolicy | undefined {
@@ -72,17 +77,11 @@ export function resolveAutoCompactPolicy(config: Pick<JinnConfig, "engines">, en
   const engineConfig = (config.engines as unknown as Record<string, unknown>)[engine];
   const raw = isMapping(engineConfig) && isMapping(engineConfig.autoCompact) ? engineConfig.autoCompact : {};
   const defaults = AUTO_COMPACT_DEFAULTS[engine];
-  const budget = typeof raw.maxContextTokens === "number" && Number.isFinite(raw.maxContextTokens)
-    ? Math.max(MIN_CONTEXT_TOKENS, raw.maxContextTokens)
-    : undefined;
+  const budget = atLeast(raw.maxContextTokens, MIN_CONTEXT_TOKENS);
   return {
     enabled: raw.enabled === true,
-    cacheWindowSeconds: typeof raw.cacheWindowSeconds === "number" && Number.isFinite(raw.cacheWindowSeconds)
-      ? Math.max(MIN_CACHE_WINDOW_SECONDS, raw.cacheWindowSeconds)
-      : defaults.cacheWindowSeconds,
-    minContextTokens: typeof raw.minContextTokens === "number" && Number.isFinite(raw.minContextTokens)
-      ? Math.max(MIN_CONTEXT_TOKENS, raw.minContextTokens)
-      : defaults.minContextTokens,
+    cacheWindowSeconds: atLeast(raw.cacheWindowSeconds, MIN_CACHE_WINDOW_SECONDS) ?? defaults.cacheWindowSeconds,
+    minContextTokens: atLeast(raw.minContextTokens, MIN_CONTEXT_TOKENS) ?? defaults.minContextTokens,
     ...(budget !== undefined ? { maxContextTokens: budget } : {}),
   };
 }
