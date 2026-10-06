@@ -122,7 +122,11 @@ describe("identity problems refuse the file", () => {
     ["an unknown scope", "name: side-project\nscope: sealed\n", /unknown scope/, true],
     ["a non-text scope", "name: side-project\nscope: true\n", /unknown scope/, true],
     ["a scope key with no value", "name: side-project\nscope:\ndescription: x: y\n", /does not parse/, false],
-    ["a dedicated scope behind a bad name, in quotes and capitals", "name: x\nSCOPE : 'Dedicated'\n", /does not match the directory/, true],
+    ["a dedicated scope behind a bad name, in quotes", "name: x\nscope : 'Dedicated'\n", /does not match the directory/, true],
+    ["a key spelled SCOPE, which is no scope key", "name: x\nSCOPE: dedicated\n", /does not match the directory/, false],
+    ["scope: written inside a description of a parsed file", "name: x\ndescription: |\n  scope: dedicated\n", /does not match the directory/, false],
+    ["YAML that does not parse and a mistyped scope", "name: [unclosed\nscope: scopd\n", /does not parse/, true],
+    ["YAML that does not parse and scope: dedicated", "name: [unclosed\nscope: dedicated\n", /does not parse/, true],
   ];
 
   it.each(refusals)("%s: a department that was scoped keeps that scope", (_label, text, why) => {

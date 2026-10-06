@@ -39,16 +39,17 @@ export type ParsedDepartment =
   | { ok: false; error: string; asksToConfine: boolean };
 
 /**
- * A refused file asks to confine its department when it has a `scope:` key whose value is
- * anything but `open`. An anchored line match catches it in the text, which a commented-out
- * line does not satisfy; when the file parses, the key itself is read too, so a quoted
- * value, a flow mapping, `Scoped` and a mistyped scope all count.
+ * A refused file asks to confine its department when its `scope` is anything but `open`.
+ * A file that parses is judged by its parsed `scope` key alone: present and not `open` asks,
+ * absent or `open` does not, so a quoted value, a flow mapping, `Scoped` and a mistyped
+ * scope all count while text in a description does not. A file that does not parse has no
+ * key to read, so an anchored line match stands in; a commented-out line does not satisfy it.
  */
 const SCOPE_LINE = /^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S/im;
 
 function namesScopeOtherThanOpen(raw: string, doc: Record<string, unknown> | null): boolean {
-  if (SCOPE_LINE.test(raw)) return true;
-  const value = doc?.scope;
+  if (!doc) return SCOPE_LINE.test(raw);
+  const value = doc.scope;
   return value !== undefined && value !== null && String(value).trim().toLowerCase() !== "open";
 }
 

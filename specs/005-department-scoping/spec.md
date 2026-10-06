@@ -420,17 +420,19 @@ and dark, with screenshots on the PR (FR-040).
     keeps its recorded scope. So a typo or a deleted file never turns a scoped department
     open. The operator opens a department only by writing `scope: open`.
   - **A refused file with no recorded scope** (a file that has never loaded): the department
-    is treated as `dedicated` until the file loads **only if the file's raw text has a
-    `scope:` key whose value is anything other than `open`**, meaning a line that matches
-    `^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S` (multiline,
-    case-insensitive) or, when the text parses, whose parsed `scope` key is not `open`, so a
-    quoted value, a flow mapping and `Scoped` count, and a commented-out line does not. So a file that asks for confinement, or that mistypes the scope
-    (`scope: scopd`), fails closed: its intended members are confined and nobody else can
-    hold its Todos. A file with no `scope` key, or with `scope: open`, leaves the department
-    `open`, which is today's behaviour: earlier templates described a `department.yaml` that
-    nothing read and never carried a `scope`, so an instance may hold one the parser refuses,
-    and an upgrade must not confine or drop anyone. Either way the refusal is logged and shown
-    on the department panel, and the log line says which.
+    is treated as `dedicated` until the file loads **only if the file's `scope` is anything
+    other than `open`**. A file that parses is judged by its parsed `scope` key alone: present
+    and not `open` means dedicated; absent or `open` means open. A file that does not parse is
+    judged by an anchored, case-insensitive line match,
+    `^[ \t]*scope[ \t]*:[ \t]*(?!["']?open["']?[ \t]*(#.*)?$)\S` (multiline), so a
+    commented-out line, or `scope:` inside a description, does not count. So a file that asks
+    for confinement, or that mistypes the scope (`scope: scopd`), fails closed: its intended
+    members are confined and nobody else can hold its Todos. A file with no `scope`, or with
+    `scope: open`, leaves the department `open`, which is today's behaviour: earlier templates
+    described a `department.yaml` that nothing read and never carried a `scope`, so an
+    instance may hold one the parser refuses, and an upgrade must not confine or drop anyone.
+    Either way the refusal is logged and shown on the department panel, and the log line says
+    which.
 - **FR-002**: A Todo's department MUST remain `work_items.department`. No membership table is
   added and **no existing Todo is migrated**. **A Todo's scope department is its root's
   department.** Every scope decision in this spec (FR-003, FR-011, FR-015, the route table and
