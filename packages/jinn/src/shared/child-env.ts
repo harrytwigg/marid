@@ -56,6 +56,9 @@ const ENGINE_SCRUB_RULES: ReadonlyArray<{
  * `jinn` MCP server find the gateway with. Its own `JINN_SESSION_ID` and
  * `JINN_DEPARTMENT` are set on top by the engine.
  *
+ * This stops inheritance only. The session still runs as the gateway's OS user, so it
+ * can read the gateway's own environment (`/proc/<pid>/environ`) and its files.
+ *
  * Windows names are matched case-insensitively, as Windows itself does.
  */
 const SCOPED_SESSION_ENV_EXACT: ReadonlySet<string> = new Set([
@@ -76,6 +79,8 @@ const SCOPED_SESSION_ENV_EXACT: ReadonlySet<string> = new Set([
   "BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS", "BASH_MAX_OUTPUT_LENGTH", "USE_BUILTIN_RIPGREP",
   // Jinn: where the hook relay and the `jinn` MCP server find the gateway
   "JINN_HOME", "JINN_INSTANCE", "JINN_GATEWAY_URL", "JINN_GATEWAY_TOKEN",
+  // Which instance those belong to, so a `jinn` run against another home drops them (sandbox-env.ts)
+  "JINN_BINDING_HOME",
 ]);
 
 const SCOPED_SESSION_ENV_PREFIX: ReadonlyArray<string> = ["LC_", "XDG_", "DISABLE_"];

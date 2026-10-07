@@ -61,7 +61,7 @@ describe("buildEngineChildEnv", () => {
 describe("buildEngineChildEnv for a department-scoped session", () => {
   const gateway = {
     PATH: "/usr/bin", HOME: "/home/op", LANG: "C.UTF-8", LC_ALL: "C.UTF-8", XDG_RUNTIME_DIR: "/run/user/1",
-    https_proxy: "http://proxy.invalid:3128", JINN_HOME: "/srv/instance", JINN_GATEWAY_URL: "http://127.0.0.1:1",
+    https_proxy: "http://proxy.invalid:3128", JINN_HOME: "/srv/instance", JINN_GATEWAY_URL: "http://127.0.0.1:1", JINN_BINDING_HOME: "/srv/instance",
     CLAUDE_CONFIG_DIR: "/home/op/.claude", ANTHROPIC_MODEL: "sonnet", DISABLE_TELEMETRY: "1",
     ALPHA_API_KEY: "alpha-secret", GITHUB_TOKEN: "github-secret", ANTHROPIC_API_KEY: "api-secret", NODE_OPTIONS: "--inspect",
   };
@@ -69,7 +69,7 @@ describe("buildEngineChildEnv for a department-scoped session", () => {
   it("keeps only the allow-list, dropping every other variable the gateway holds", () => {
     const env = buildEngineChildEnv(gateway, { scopedSession: true });
     expect(Object.keys(env).sort()).toEqual([
-      "ANTHROPIC_MODEL", "CLAUDE_CONFIG_DIR", "DISABLE_TELEMETRY", "HOME", "JINN_GATEWAY_URL", "JINN_HOME",
+      "ANTHROPIC_MODEL", "CLAUDE_CONFIG_DIR", "DISABLE_TELEMETRY", "HOME", "JINN_BINDING_HOME", "JINN_GATEWAY_URL", "JINN_HOME",
       "LANG", "LC_ALL", "PATH", "XDG_RUNTIME_DIR", "https_proxy",
     ]);
   });
