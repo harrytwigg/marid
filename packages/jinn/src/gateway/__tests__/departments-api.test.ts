@@ -5,7 +5,7 @@ import { initDb } from "../../shared/db.js";
 import { resolveJinnHome } from "../../shared/paths.js";
 import { createWorkItem } from "../../work-items/store.js";
 import { refreshOrg } from "../org-registry.js";
-import { call, loadApi } from "./departments-api-harness.js";
+import { call, loadApi, setInstanceMcp } from "./departments-api-harness.js";
 import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile, writeSkill } from "./department-fixtures.js";
 
 /** GET /api/departments and GET /api/departments/:slug, driven through the real handler as the operator. */
@@ -19,6 +19,7 @@ afterAll(async () => {
   (await import("../../shared/db.js")).__closeDbForTest();
 });
 beforeEach(() => {
+  setInstanceMcp({ gateway: { enabled: true } });
   resetDepartmentFixtures();
   initDb().prepare("DELETE FROM departments").run();
 });
@@ -104,6 +105,47 @@ describe("GET /api/departments/:slug", () => {
       definitionError: null,
     });
     expect(body.department.warnings.join(" ")).toMatch(/missing/);
+  });
+
+  describe("mcp servers the allow-list names", () => {
+    const department = async () => (await call("GET", "/api/departments/side-project")).body.department;
+    const allow = (names: string) => {
+      writeDepartmentFile("side-project", `name: side-project\nscope: scoped\nmcp: [${names}]\n`);
+      refreshOrg();
+    };
+
+    it("flags a name no configured server answers to, and leaves it out of the list", async () => {
+      setInstanceMcp({ gateway: { enabled: true }, browser: { enabled: false }, custom: { docs: { command: "docs-mcp" } } });
+      allow("docs, browser, typo");
+      const body = await department();
+      expect(body.mcp).toEqual(["docs"]);
+      expect(body.mcpProblems).toEqual([
+        { server: "browser", reason: "no MCP server of that name is configured on this instance" },
+        { server: "typo", reason: "no MCP server of that name is configured on this instance" },
+      ]);
+    });
+
+    it("flags every name when the instance has no mcp section at all", async () => {
+      setInstanceMcp(undefined);
+      allow("docs, browser");
+      const body = await department();
+      expect(body.mcp).toEqual([]);
+      expect(body.mcpProblems.map((problem: any) => problem.server)).toEqual(["docs", "browser"]);
+    });
+
+    it("flags nothing when every name matches a configured server, built-in or custom, and never flags jinn", async () => {
+      setInstanceMcp({ gateway: { enabled: true }, custom: { docs: { url: "https://docs.invalid/mcp" } } });
+      allow("jinn, docs, browser");
+      const body = await department();
+      expect(body.mcp).toEqual(["jinn", "docs", "browser"]);
+      expect(body.mcpProblems).toEqual([]);
+    });
+
+    it("does not count a custom server that is switched off as configured", async () => {
+      setInstanceMcp({ gateway: { enabled: true }, custom: { docs: { command: "docs-mcp", enabled: false } } });
+      allow("docs");
+      expect((await department()).mcpProblems.map((problem: any) => problem.server)).toEqual(["docs"]);
+    });
   });
 
   it("answers for a department directory that has no file and no Todos", async () => {

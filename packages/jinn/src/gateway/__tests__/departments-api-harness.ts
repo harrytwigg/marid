@@ -1,6 +1,6 @@
 import type { ServerResponse } from "node:http";
 import { Readable } from "node:stream";
-import type { JinnConfig } from "../../shared/types.js";
+import type { JinnConfig, McpGlobalConfig } from "../../shared/types.js";
 import { refreshOrg } from "../org-registry.js";
 
 /** Drives the real API handler as the operator, for the department route suites. */
@@ -29,6 +29,11 @@ const config = {
   logging: { file: false, stdout: false, level: "error" },
   mcp: { gateway: { enabled: true } },
 } as unknown as JinnConfig;
+
+/** What the instance configures under `mcp:`; the default is the built-in gateway server alone. */
+export function setInstanceMcp(mcp: McpGlobalConfig | undefined): void {
+  config.mcp = mcp;
+}
 
 const context = {
   getConfig: () => config,
