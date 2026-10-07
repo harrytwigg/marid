@@ -185,6 +185,23 @@ describe("fork of a department-scoped session inherits only the scoped allow-lis
     expect(forkSpawn.ptyEnv?.CLAUDE_CODE_NO_FLICKER).toBe("1");
   });
 
+  it("the interactive fork finds the new transcript when the process clock runs ahead of the filesystem's", async () => {
+    const projectDir = claudeProjectDir("/work", null);
+    forkSpawn.onPtySpawn = () => {
+      fs.mkdirSync(projectDir, { recursive: true });
+      fs.writeFileSync(path.join(projectDir, "forked-skew.jsonl"), "{}\n");
+    };
+    const realNow = Date.now.bind(Date);
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => realNow() + 5_000);
+    try {
+      const interactive = { sourceJinnSessionId: "s1", engine: { kill() {} } as any };
+      await expect(forkEngineSession("claude", "src-1", "/work", { interactive }))
+        .resolves.toEqual({ engineSessionId: "forked-skew" });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it("an unscoped fork keeps the gateway's environment", async () => {
     await forkEngineSession("claude", "src-1", "/work");
     expect(forkSpawn.execEnv?.ALPHA_API_KEY).toBe("alpha-secret");
