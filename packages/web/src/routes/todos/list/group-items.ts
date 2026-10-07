@@ -9,7 +9,6 @@ export type TodoListColumns = Record<WorkItemStatusWire, TodoListColumnInput>
 
 export type TodoListGroupKey =
   | "recovering"
-  | "manager"
   | "executing"
   | "in-review"
   | "backlog"
@@ -26,7 +25,7 @@ export interface TodoListGroup {
 }
 
 const OPEN_GROUPS: Array<{
-  key: Exclude<TodoListGroupKey, "recovering" | "manager" | "closed">
+  key: Exclude<TodoListGroupKey, "recovering" | "closed">
   label: string
   status: WorkItemStatusWire
   omitWhenEmpty?: boolean
@@ -37,17 +36,9 @@ const OPEN_GROUPS: Array<{
   { key: "blocked", label: "Blocked", status: "blocked", omitWhenEmpty: true },
 ]
 
-function attentionGroup(key: Extract<TodoListGroupKey, "recovering" | "manager">, label: string, items: WorkItemCompactWire[]): TodoListGroup {
-  return { key, label, statuses: [], items, count: items.length }
-}
-
-function attentionGroups(hoisted: WorkItemCompactWire[]): TodoListGroup[] {
-  const recovering = hoisted.filter((item) => item.attentionLane === "recovering")
-  const manager = hoisted.filter((item) => item.attentionLane === "manager")
-  const groups: TodoListGroup[] = []
-  if (recovering.length > 0) groups.push(attentionGroup("recovering", "Recovering automatically", recovering))
-  if (manager.length > 0) groups.push(attentionGroup("manager", "Manager attention", manager))
-  return groups
+function recoveringGroups(items: WorkItemCompactWire[]): TodoListGroup[] {
+  if (items.length === 0) return []
+  return [{ key: "recovering", label: "Recovering automatically", statuses: [], items, count: items.length }]
 }
 
 export function groupTodoListItems(
@@ -58,17 +49,17 @@ export function groupTodoListItems(
    *  a zero — "To do 0" would claim something nobody asked the gateway. */
   statusInScope: (status: WorkItemStatusWire) => boolean = () => true,
 ): TodoListGroup[] {
-  // Only the lanes the operator is not the actor on are lifted out of their
-  // status column. Everything else, including blocked work waiting on the
-  // operator, stays under its own status.
-  const hoisted = needsAttention.filter((item) => item.attentionLane === "recovering" || item.attentionLane === "manager")
+  // Only recovering work, which nobody needs to act on, is lifted out of its
+  // status column. Everything else, including manager-lane work and blocked
+  // work waiting on the operator, stays under its own status as on the board.
+  const hoisted = needsAttention.filter((item) => item.attentionLane === "recovering")
   const attentionIds = new Set(hoisted.map(({ id }) => id))
   const hoistedByStatus = new Map<WorkItemStatusWire, number>()
   for (const item of hoisted) {
     hoistedByStatus.set(item.status, (hoistedByStatus.get(item.status) ?? 0) + 1)
   }
 
-  const groups: TodoListGroup[] = attentionGroups(hoisted)
+  const groups: TodoListGroup[] = recoveringGroups(hoisted)
 
   for (const definition of OPEN_GROUPS) {
     const column = columns[definition.status]
