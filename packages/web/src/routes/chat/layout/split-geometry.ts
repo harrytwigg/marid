@@ -4,6 +4,8 @@ import {
   groupIdsByPaneKey,
   groupsOf,
   materializeLayout,
+  workingSetFromLayout,
+  type LayoutGroup,
   type LayoutNode,
   type SplitDirection,
   type SplitLayout,
@@ -202,15 +204,22 @@ function arrangedPlacement(root: LayoutNode, input: GeometryInput): Placement {
   return out
 }
 
-/** Groups placed by a pruned tree, least recently focused first; the focused one never. */
+/**
+ * Groups placed by a pruned tree, least recently focused first; the focused one never. The group
+ * holding the route's chat goes last: with a pane that has no chat focused (a document, a new chat),
+ * the chat the URL names is the one the operator is still working in, so the others fold first.
+ */
 function foldCandidates(layout: SplitLayout, root: LayoutNode): string[] {
-  const recency = (sessionId: string) => layout.focusHistory.indexOf(sessionId)
-  const visible: Array<{ id: string; activeTab: string }> = []
+  const route = workingSetFromLayout(layout).focusedId
+  const recency = (group: LayoutGroup) => (route && group.tabs.includes(route)
+    ? Number.MAX_SAFE_INTEGER
+    : layout.focusHistory.indexOf(group.activeTab))
+  const visible: LayoutGroup[] = []
   const walk = (node: LayoutNode) => (node.type === 'group' ? visible.push(node) : node.children.forEach(walk))
   walk(root)
   return visible
     .filter((group) => group.id !== layout.focusedGroupId)
-    .sort((a, b) => recency(a.activeTab) - recency(b.activeTab))
+    .sort((a, b) => recency(a) - recency(b))
     .map((group) => group.id)
 }
 
