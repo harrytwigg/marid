@@ -13,6 +13,7 @@ import {
 } from '../tab-kind'
 import {
   appendSession,
+  appendTabPane,
   closeSession,
   createSplitLayout,
   focusSession,
@@ -188,5 +189,38 @@ describe('a Todo tab', () => {
   it('closes with the chat it sat beside, like a file', () => {
     const layout = closeSession(openDocTab(twoPanes(), 'a', todo), 'a')
     expect(groupOfSession(layout, todo)).toBeNull()
+  })
+})
+
+describe('moving the layout\'s only chat', () => {
+  const one = todoTabId('ACM-1')
+  const two = todoTabId('ACM-2')
+
+  /** The only chat beside two Todo panes and a new chat pane, unarranged. */
+  function onlyChatAmongPanes(): SplitLayout {
+    let layout = createSplitLayout(['a'], 'a')
+    layout = appendTabPane(openDocTab(layout, 'a', one), one)
+    layout = appendTabPane(openDocTab(layout, 'a', two), two)
+    const opened = openNewChatTab(layout)
+    return appendTabPane(opened, newChatOf(opened))
+  }
+
+  it('to the end of the grid moves it, never emptying the layout of the panes beside it', () => {
+    const layout = onlyChatAmongPanes()
+    const fresh = newChatOf(layout)
+    const moved = applySplitDrop(layout, 'a', { region: 'end', key: null, groupId: null }, { columns: 3, cap: 6 })
+    expect(groupsOf(moved).map((group) => group.tabs)).toEqual([[one], [two], [fresh], ['a']])
+  })
+
+  it('onto another pane\'s edge closes nothing, even in a window already over its cap', () => {
+    const layout = onlyChatAmongPanes()
+    const moved = applySplitDrop(layout, 'a', { region: 'right', key: two, groupId: groupOfSession(layout, two)!.id }, { columns: 3, cap: 2 })
+    expect(groupsOf(moved).flatMap((group) => group.tabs).sort()).toEqual(['a', one, two, newChatOf(layout)].sort())
+  })
+
+  it('a drop that adds a pane closes at most one, the least recent', () => {
+    const layout = onlyChatAmongPanes()
+    const added = applySplitDrop(layout, 'b', { region: 'right', key: two, groupId: groupOfSession(layout, two)!.id }, { columns: 3, cap: 2 })
+    expect(groupsOf(added)).toHaveLength(groupsOf(layout).length)
   })
 })

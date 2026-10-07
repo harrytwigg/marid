@@ -650,6 +650,17 @@ function appendGroup(layout: SplitLayout, sessionId: string): SplitLayout {
 }
 
 /**
+ * Moves a tab of the layout, of any kind, out to a group of its own at the end of the layout, focused:
+ * the auto grid's trailing cell ("last"). It is moved, never closed and re-added, so moving the
+ * layout's only chat does not empty the layout of the panes beside it (withRoot). A group's only chat
+ * takes its documents along.
+ */
+export function moveToEnd(layout: SplitLayout, tabId: string): SplitLayout {
+  if (!groupOfSession(layout, tabId)) return layout
+  return keepingFiles(layout, tabId, (current) => appendGroup(detach(current, tabId, false), tabId))
+}
+
+/**
  * Moves a tab of the layout that is no chat (a document, a new chat) out to a group of its own at the
  * end ("the empty end of the grid"), as appendSession does for a chat. A tab already alone in its
  * group is only shown. A new chat takes along the documents it would strand, as a chat does.

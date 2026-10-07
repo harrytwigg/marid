@@ -14,7 +14,7 @@ import { focusedGroup, groupOfSession, paneKeyOf, paneKeysFromLayout, type Split
  * in tree order and a newcomer the URL has not landed in the layout yet goes last. With no such pane
  * it is `base`, untouched.
  */
-function withChatlessPanes(base: ChatWorkingSet, layout: SplitLayout | undefined): ChatWorkingSet {
+export function withChatlessPanes(base: ChatWorkingSet, layout: SplitLayout | undefined): ChatWorkingSet {
   const paneKeys = layout ? paneKeysFromLayout(layout) : []
   if (!layout || paneKeys.every(isChatTabId)) return base
   const keys = paneKeys.filter((key) => !isChatTabId(key) || base.sessionIds.includes(key))
@@ -23,8 +23,12 @@ function withChatlessPanes(base: ChatWorkingSet, layout: SplitLayout | undefined
   const focused = focusedGroup(layout)
   const focusedPane = focused ? paneKeyOf(focused, layout.focusHistory) : null
   const focusedId = focusedPane && !isChatTabId(focusedPane) ? focusedPane : base.focusedId
-  const seen = layout.focusHistory.filter((id) => sessionIds.includes(id))
-  const focusHistory = [...sessionIds.filter((id) => !seen.includes(id)), ...seen.filter((id) => id !== focusedId), ...(focusedId ? [focusedId] : [])]
+  // The route's chat ranks just behind the focused pane, so a window too small for every pane folds a
+  // chatless one before it: the chat the URL names stays on screen.
+  const route = base.focusedId && base.focusedId !== focusedId && sessionIds.includes(base.focusedId) ? base.focusedId : null
+  const recent = [route, focusedId].filter((id): id is string => Boolean(id))
+  const seen = layout.focusHistory.filter((id) => sessionIds.includes(id) && !recent.includes(id))
+  const focusHistory = [...sessionIds.filter((id) => !seen.includes(id) && !recent.includes(id)), ...seen, ...recent]
   return { sessionIds, focusedId, focusHistory }
 }
 

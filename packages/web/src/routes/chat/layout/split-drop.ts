@@ -2,16 +2,17 @@ import { overflowForViewport } from '../grid-layout'
 import {
   appendTabPane,
   appendSession,
-  keepingFiles,
-  closeSession,
   evictToCap,
   findGroup,
   groupOfSession,
+  groupsOf,
+  moveToEnd,
   materializeLayout,
   paneSessionOf,
   paneSetFromLayout,
   placeTab,
   focusSession,
+  showTab,
   splitGroup,
   type LayoutGroup,
   type SplitLayout,
@@ -28,10 +29,17 @@ export interface SplitDropContext {
 
 function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
   // The auto grid's trailing cell means "last", as it did in the flat grid: a member moves there.
-  if (layout.auto && groupOfSession(layout, sessionId)) {
-    return keepingFiles(layout, sessionId, (current) => appendSession(closeSession(current, sessionId), sessionId))
-  }
-  return appendSession(layout, sessionId)
+  return layout.auto && groupOfSession(layout, sessionId) ? moveToEnd(layout, sessionId) : appendSession(layout, sessionId)
+}
+
+/**
+ * The cap a drop spends capacity against: the viewport's, but never below the panes there already
+ * are. A drop that adds no pane (a move, a tab into a strip) closes none; one that adds a pane closes
+ * at most one. Otherwise a window already over its cap would close an unrelated pane on any drop,
+ * and a document or new chat pane, unlike a chat, has nowhere it can be reopened from.
+ */
+function dropCap(layout: SplitLayout, context: SplitDropContext): number {
+  return Math.max(context.cap, groupsOf(layout).length)
 }
 
 /**
@@ -42,12 +50,12 @@ function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
 export function applySplitDrop(layout: SplitLayout, sessionId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
   if (!isChatTabId(sessionId)) return applyTabDrop(layout, sessionId, hit, context)
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
-  if (!target || hit.region === 'end') return evictToCap(dropAtEnd(layout, sessionId), context.cap)
+  if (!target || hit.region === 'end') return evictToCap(dropAtEnd(layout, sessionId), dropCap(layout, context))
   if (hit.region === 'center') {
     // A pane dropped back onto itself (its chat, though a file of its group may be shown) only focuses.
     const own = target.activeTab === sessionId || paneSessionOf(target, layout.focusHistory) === sessionId
     const next = own ? focusSession(layout, sessionId) : placeTab(layout, target.id, sessionId)
-    return evictToCap(next, context.cap, target.tabs)
+    return evictToCap(next, dropCap(layout, context), target.tabs)
   }
   return splitAt(layout, target, hit.region, sessionId, context)
 }
@@ -61,8 +69,10 @@ export function applySplitDrop(layout: SplitLayout, sessionId: string, hit: Spli
 function applyTabDrop(layout: SplitLayout, tabId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
   if (!groupOfSession(layout, tabId)) return layout
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
-  if (!target || hit.region === 'end') return evictToCap(appendTabPane(layout, tabId), context.cap)
-  if (hit.region === 'center') return evictToCap(placeTab(layout, target.id, tabId), context.cap, target.tabs)
+  if (!target || hit.region === 'end') return evictToCap(appendTabPane(layout, tabId), dropCap(layout, context))
+  // Dropped back onto its own pane (its only tab): it only focuses, as a chat's own pane does.
+  if (hit.region === 'center' && target.tabs.includes(tabId)) return target.tabs.length === 1 ? showTab(layout, tabId) : placeTab(layout, target.id, tabId)
+  if (hit.region === 'center') return evictToCap(placeTab(layout, target.id, tabId), dropCap(layout, context), target.tabs)
   return splitAt(layout, target, hit.region, tabId, context)
 }
 
@@ -75,7 +85,7 @@ function applyTabDrop(layout: SplitLayout, tabId: string, hit: SplitDropHit, con
 function splitAt(layout: SplitLayout, target: LayoutGroup, side: SplitSide, sessionId: string, context: SplitDropContext): SplitLayout {
   const materialized = materializeLayout(focusSession(layout, target.activeTab), context.columns)
   const next = splitGroup(materialized, target.id, side, sessionId)
-  return next === materialized ? layout : evictToCap(next, context.cap, target.tabs)
+  return next === materialized ? layout : evictToCap(next, dropCap(layout, context), target.tabs)
 }
 
 export interface SplitDropPreviewInput {

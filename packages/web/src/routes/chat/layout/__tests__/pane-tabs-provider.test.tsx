@@ -310,6 +310,29 @@ describe('PaneTabsProvider', () => {
     expect(screen.getByTestId('drag-a').textContent).toBe('true')
   })
 
+  it('gives a pane with a strip no title-bar drag, and starts the drag of a lone pane as its tab would', () => {
+    const tabbed = harness(twoTabs())
+    render(<PaneTabsProvider split={tabbed.controls()} onSelect={tabbed.onSelect}><TitleDragProbe tabId="x" /></PaneTabsProvider>)
+    expect(screen.getByTestId('drag-x').textContent).toBe('false')
+
+    const lone = harness(createSplitLayout(['a'], 'a'))
+    let drag: ReturnType<typeof usePaneTitleDrag> = null
+    function Capture() { drag = usePaneTitleDrag('a'); return null }
+    render(<PaneTabsProvider split={lone.controls()} onSelect={lone.onSelect}><Capture /></PaneTabsProvider>)
+    const data = new Map<string, string>()
+    const dataTransfer = { get types() { return [...data.keys()] }, setData: (type: string, value: string) => { data.set(type, value) }, effectAllowed: 'none' }
+    const bar = document.createElement('div')
+    drag!.onDragStart({ dataTransfer, currentTarget: bar, target: bar } as never)
+    expect(JSON.parse(data.get(PANE_TAB_DND_MIME)!)).toEqual({ groupId: groupsOf(lone.layout)[0].id, tabId: 'a' })
+    expect(data.get(CHAT_SESSION_DND_MIME)).toBe('a')
+    drag!.onDragEnd()
+
+    // A drag out of a portaled menu bubbles through the bar but did not start in it: no tab drag.
+    data.clear()
+    drag!.onDragStart({ dataTransfer, currentTarget: bar, target: document.createElement('div') } as never)
+    expect(data.size).toBe(0)
+  })
+
   it('shows a Todo tab over its chat, titled from the preview cache', () => {
     const h = harness(openDocTab(twoTabs(), 'x', todoTabId('ACM-1')))
     render(<Mount h={h} sessionId="x" />)

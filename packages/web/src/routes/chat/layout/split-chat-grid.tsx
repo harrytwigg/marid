@@ -127,7 +127,7 @@ function useChatlessPaneProps(props: ChatGridProps, split: SplitLayoutControls):
       split.focusPane(key)
       // A new chat or document shown over a chat makes that chat the route's, as the chat's own pane does.
       const chat = paneSessionForTab(split.layout, key)
-      if (chat && chat !== props.focusedId) onFocus(chat)
+      if (chat) onFocus(chat)
     },
     renderPane: (key, active) => (isDocTabId(key) ? renderDocPane(key) : renderPane(key, active)),
   }

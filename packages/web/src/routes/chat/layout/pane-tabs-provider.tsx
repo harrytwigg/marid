@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
-import { PaneTabsContext, type PaneTabsBinding } from '@/components/chat/pane-tabs-context'
+import { PaneTabsContext, type PaneTabsBinding, type PaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { useSessions } from '@/hooks/use-sessions'
 import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
@@ -92,13 +92,24 @@ function useSelectTab(split: SplitLayoutControls, onSelect: (sessionId: string) 
   return useCallback((tabId: string, after: SplitLayout = layout) => selectTab(after, tabId, show, onSelect), [layout, onSelect, show])
 }
 
+/** The drag a lone pane's title bar carries: its tab's, as the strip would start it. A drag that
+ *  starts in something portaled out of the bar (a menu) bubbles here through React, and is not one. */
+function titleDragFor(group: LayoutGroup, tabId: string): PaneTitleDrag {
+  const { onDragStart, onDragEnd } = paneTabDragProps({ groupId: group.id, tabId })
+  return {
+    draggable: true,
+    onDragStart: (event) => { if (event.currentTarget.contains(event.target as Node)) onDragStart(event) },
+    onDragEnd,
+  }
+}
+
 /** A document-only pane, by its pane key: under its strip, or alone under a title bar that drags it. */
 function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: LayoutGroup) => ReactNode, closeTab: (tabId: string) => void) {
   const group = findGroup(layout, groupIdsByPaneKey(layout).get(paneKey) ?? '')
   const doc = group ? parseDocTabId(group.activeTab) : null
   if (!group || !doc) return null
   const active = layout.focusedGroupId === group.id
-  const drag = { draggable: true as const, ...paneTabDragProps({ groupId: group.id, tabId: group.activeTab }) }
+  const drag = titleDragFor(group, group.activeTab)
   const header = group.tabs.length >= 2
     ? groupStrip(group)
     : <DocPaneTitle doc={doc} active={active} drag={drag} onClose={() => closeTab(group.activeTab)} />
@@ -145,7 +156,7 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
       },
       titleDrag: (paneTabId) => {
         const group = groupOfSession(layout, paneTabId)
-        return group && group.tabs.length === 1 ? { draggable: true, ...paneTabDragProps({ groupId: group.id, tabId: paneTabId }) } : null
+        return group && group.tabs.length === 1 ? titleDragFor(group, paneTabId) : null
       },
       renderDocPane: (paneKey) => docPane(layout, paneKey, groupStrip, closeTab),
     }

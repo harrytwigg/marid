@@ -1,10 +1,11 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { fileTabId } from '../layout/file-tab'
-import { createSplitLayout, groupOfSession, materializeLayout, openDocTab, splitGroup, workingSetFromLayout } from '../layout/split-layout'
+import { createSplitLayout, groupOfSession, materializeLayout, openDocTab, showTab, splitGroup, workingSetFromLayout } from '../layout/split-layout'
 import { MAX_SIDEBAR_WIDTH } from '../sidebar-width'
 import { storeSidebarWidth } from '../sidebar-width-store'
-import { useChatGridState } from '../use-chat-grid-state'
+import { useChatGridState, withChatlessPanes } from '../use-chat-grid-state'
+import { applyWorkingSetCap } from '../working-set'
 
 const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
 
@@ -83,4 +84,18 @@ describe('the grid state with a file-only pane in the layout', () => {
 
     expect(result.current.gridPaneKeys).toEqual(['a'])
   })
+
+  it('ranks the route chat just behind the focused pane, so folding takes a chatless pane first', () => {
+    const notes = fileTabId({ path: 'docs/notes.md', sessionId: 'a' })
+    let layout = withFilePane(['a'])
+    layout = openDocTab(layout, 'a', notes)
+    layout = splitGroup(layout, groupOfSession(layout, report)!.id, 'right', notes)
+    // Worked in the report pane after the chat, then in the notes pane: the chat is the least recent.
+    layout = showTab(showTab(layout, report), notes)
+    const shown = withChatlessPanes({ ...workingSetFromLayout(layout), focusedId: 'a' }, layout)
+    // The notes pane holds focus; the route's chat comes next, ahead of the older report pane.
+    expect(shown.focusHistory.slice(-2)).toEqual(['a', notes])
+    expect(applyWorkingSetCap(shown, 2).sessionIds).toEqual(['a', notes])
+  })
 })
+
