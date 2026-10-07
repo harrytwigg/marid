@@ -127,7 +127,7 @@ async function forkClaudeSessionInteractive(
   // Snapshot the transcripts that exist before the spawn. Comparing file
   // timestamps against Date.now() is unreliable: the filesystem clock can trail
   // it by a few ms, so a transcript written right after the spawn can look older.
-  const knownTranscripts = listJsonlNames(projectDir);
+  const knownTranscripts = snapshotJsonlNames(projectDir);
 
   const bin = resolveBin("claude", ctx.bin);
   const args = [
@@ -189,10 +189,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Names of the `.jsonl` transcripts currently in `projectDir` (empty when it does not exist). */
-export function listJsonlNames(projectDir: string): Set<string> {
+/**
+ * Names of the `.jsonl` transcripts currently in `projectDir`. Empty only when
+ * the directory does not exist; any other read failure (EACCES, EIO, ENOTDIR…)
+ * throws. Use this for the pre-spawn snapshot: an empty set that merely hides a
+ * read failure would make every existing transcript look new.
+ */
+export function snapshotJsonlNames(projectDir: string): Set<string> {
   try {
     return new Set(fs.readdirSync(projectDir).filter((name) => name.endsWith(".jsonl")));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return new Set();
+    throw err;
+  }
+}
+
+/** Like {@link snapshotJsonlNames}, but treats any read failure as an empty listing (for the poll loop). */
+function listJsonlNames(projectDir: string): Set<string> {
+  try {
+    return snapshotJsonlNames(projectDir);
   } catch {
     return new Set();
   }
