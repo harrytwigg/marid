@@ -92,8 +92,9 @@ export function EmployeeEditor({
 
   // Department + reportsTo option lists come from the live org.
   const [departments, setDepartments] = useState<string[]>([])
-  const [scopes, setScopes] = useState<Record<string, DepartmentScopeWire>>({})
-  const confined = (slug: string) => isConfined(scopes[slug])
+  // Null until the org loads: the control stays read-only until it is known which moves the API allows.
+  const [scopes, setScopes] = useState<Record<string, DepartmentScopeWire> | null>(null)
+  const confined = (slug: string) => isConfined(scopes?.[slug])
   const inConfined = !!employee.department && confined(employee.department)
   const offersConfined = departments.some(confined)
   const [employeeNames, setEmployeeNames] = useState<string[]>([])
@@ -211,6 +212,8 @@ export function EmployeeEditor({
         <Field label="Department">
           {isSystem ? (
             <ReadonlyValue testId="system-readonly-department">{department || "None"}</ReadonlyValue>
+          ) : !scopes ? (
+            <ReadonlyValue testId="pending-readonly-department">{department || "None"}</ReadonlyValue>
           ) : inConfined ? (
             <ReadonlyValue testId="confined-readonly-department">{department}</ReadonlyValue>
           ) : <Select value={department || NONE} onValueChange={(v) => setDepartment(v === NONE ? "" : v)}>

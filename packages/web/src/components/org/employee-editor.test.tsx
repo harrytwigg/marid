@@ -149,7 +149,7 @@ describe("EmployeeEditor department scope", () => {
   })
 
   async function departmentOptions() {
-    const trigger = screen.getByRole("combobox", { name: "Department" })
+    const trigger = await screen.findByRole("combobox", { name: "Department" })
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" })
     const options = await screen.findAllByRole("option")
     return options.map((option) => ({
@@ -200,6 +200,18 @@ describe("EmployeeEditor department scope", () => {
     await waitFor(() => expect(screen.getByTestId("confined-readonly-department").textContent).toBe("vault"))
     expect(screen.getByTestId("department-file-move-hint").textContent)
       .toBe("Scope follows the file location under org/vault; move the YAML by hand.")
+  })
+
+  it("keeps the department read-only until the org has loaded", async () => {
+    let resolveOrg: (org: unknown) => void = () => {}
+    getOrg.mockReturnValue(new Promise((resolve) => { resolveOrg = resolve }))
+    render(<EmployeeEditor employee={{ ...EMP, department: "studio" }} onCancel={() => {}} onSaved={() => {}} />)
+
+    expect(screen.getByTestId("pending-readonly-department").textContent).toBe("studio")
+    expect(screen.queryByRole("combobox", { name: "Department" })).toBeNull()
+
+    resolveOrg({ departments: ["content", "studio"], departmentScopes: { content: "open", studio: "scoped" }, employees: [] })
+    await waitFor(() => expect(screen.getByTestId("confined-readonly-department").textContent).toBe("studio"))
   })
 
   it("shows no hint when every department is open", async () => {
