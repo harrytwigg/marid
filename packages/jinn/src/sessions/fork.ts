@@ -66,10 +66,10 @@ export interface ForkClaudeOpts {
  *   (no `-p`) and polls the project's transcript directory for the new jsonl to
  *   discover the new session id. Bills as `cc_entrypoint=cli`.
  */
-export async function forkClaudeSession(opts: ForkClaudeOpts): Promise<ForkResult> {
+export async function forkClaudeSession(opts: ForkClaudeOpts, env: NodeJS.ProcessEnv = process.env): Promise<ForkResult> {
   const { engineSessionId, cwd, interactive, claudeProfile = null, scopedSession = false } = opts;
   assertClaudeProfileDirExists(claudeProfile);
-  if (interactive) return forkClaudeSessionInteractive(engineSessionId, cwd, interactive, { claudeProfile, scopedSession });
+  if (interactive) return forkClaudeSessionInteractive(engineSessionId, cwd, interactive, { claudeProfile, scopedSession, baseEnv: env });
 
   logger.info(`Forking Claude session ${engineSessionId} in ${cwd} (headless)`);
 
@@ -84,8 +84,8 @@ export async function forkClaudeSession(opts: ForkClaudeOpts): Promise<ForkResul
     encoding: "utf-8",
     timeout: 60_000,
     env: scopedSession
-      ? buildEngineChildEnv(process.env, { claudeProfile, scopedSession })
-      : applyClaudeProfileEnv({ ...process.env } as Record<string, string>, claudeProfile),
+      ? buildEngineChildEnv(env, { claudeProfile, scopedSession })
+      : applyClaudeProfileEnv({ ...env } as Record<string, string>, claudeProfile),
   });
 
   const lastLine = result.trim().split("\n").pop();
@@ -108,7 +108,7 @@ async function forkClaudeSessionInteractive(
   engineSessionId: string,
   cwd: string,
   ctx: InteractiveForkCtx,
-  { claudeProfile, scopedSession }: { claudeProfile: ClaudeProfile; scopedSession: boolean },
+  { claudeProfile, scopedSession, baseEnv }: { claudeProfile: ClaudeProfile; scopedSession: boolean; baseEnv: NodeJS.ProcessEnv },
 ): Promise<ForkResult> {
   logger.info(`Forking Claude session ${engineSessionId} in ${cwd} (interactive)`);
 
@@ -135,7 +135,7 @@ async function forkClaudeSessionInteractive(
 
   // Clean env: drop CLAUDE_CODE_* / CLAUDECODE inherited from gateway, add NO_FLICKER.
   const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) {
+  for (const [k, v] of Object.entries(baseEnv)) {
     if (k === "CLAUDECODE" || k.startsWith("CLAUDE_CODE_")) continue;
     if (scopedSession && !isScopedSessionEnvName(k)) continue;
     if (v !== undefined) env[k] = v;
