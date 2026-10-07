@@ -40,6 +40,7 @@ import { reconcileDepartmentRegistry } from "./departments.js";
 import { DEPARTMENT_SCOPES_DDL, DEPARTMENT_SCOPES_TABLE_DDL } from "./department-scopes-schema.js";
 import { DEPARTMENT_ARCHIVES_DDL, DEPARTMENT_ARCHIVES_TABLE_DDL } from "./department-archives-schema.js";
 import { SPRINTS_DDL, SPRINTS_TABLE_DDL, sprintRowsAreSound, WORK_ITEM_SPRINTS_DDL, WORK_ITEM_SPRINTS_TABLE_DDL } from "./sprints-schema.js";
+import { startDateRowsAreSound, WORK_ITEM_START_DATES_DDL, WORK_ITEM_START_DATES_TABLE_DDL } from "./start-date.js";
 import { CORRUPT_SESSIONS_DATABASE, isSqliteCorruption, UNSUPPORTED_PRERELEASE_TODO_DATA } from "./migrate-refusals.js";
 
 export { CORRUPT_SESSIONS_DATABASE, UNSUPPORTED_PRERELEASE_TODO_DATA } from "./migrate-refusals.js";
@@ -493,6 +494,7 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ["work_item_labels", WORK_ITEM_LABELS_TABLE_DDL],
   ["sprints", SPRINTS_TABLE_DDL],
   ["work_item_sprints", WORK_ITEM_SPRINTS_TABLE_DDL],
+  ["work_item_start_dates", WORK_ITEM_START_DATES_TABLE_DDL],
   ["work_item_approvals", WORK_ITEM_APPROVALS_TABLE_DDL],
   ["work_item_approval_choices", WORK_ITEM_APPROVAL_CHOICES_DDL],
   ["work_item_approval_operator_only", WORK_ITEM_APPROVAL_OPERATOR_ONLY_DDL],
@@ -538,6 +540,7 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "work_item_sprints", ddl: WORK_ITEM_SPRINTS_DDL },
   { name: "department_scopes", ddl: DEPARTMENT_SCOPES_DDL },
   { name: "department_archives", ddl: DEPARTMENT_ARCHIVES_DDL }, // after `departments`, which it references
+  { name: "work_item_start_dates", ddl: WORK_ITEM_START_DATES_DDL },
 ].concat(WORK_ITEM_RECOVERY_TABLES);
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,
@@ -746,6 +749,7 @@ export function verifyCurrentWorkItemSchema(db: DatabaseType): void {
     if (!byId.has(pair.work_item_id) || !labelIds.has(pair.label_id)) refusal();
   }
   if (!sprintRowsAreSound(db, (id) => byId.has(id))) refusal();
+  if (!startDateRowsAreSound(db, (id) => byId.has(id))) refusal();
   // Approvals: every row references a live item, and at most one PENDING row per
   // item. The partial unique index makes the latter unforgeable through SQL, but
   // the data is re-proven here anyway (belt and suspenders, house style).

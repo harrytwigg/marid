@@ -56,6 +56,7 @@ export function compactWorkItem(
     rootId: item.rootId,
     depth: item.depth,
     dueAt: item.dueAt,
+    startAt: item.startAt,
     source: item.source,
     sourceRef: item.sourceRef,
     rank: item.rank,

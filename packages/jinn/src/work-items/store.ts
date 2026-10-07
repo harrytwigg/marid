@@ -13,6 +13,7 @@ import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { sprintFilterCondition } from './sprints-schema.js';
+import { applyStartAtEdit, assertTodoDateOrder, START_AT_COLUMN_SQL, startAtInstant, writeWorkItemStartAt } from './start-date.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { WorkItemEventKind } from './event-log.js';
@@ -80,6 +81,8 @@ export interface WorkItem {
   rootId: string;
   depth: number;
   dueAt: string | null;
+  /** Nothing starts it before this ISO instant (start-date.ts). */
+  startAt: string | null;
   priority: number;
   /** Nullable manual order key. Lower ranked values render first. */
   rank: number | null;
@@ -109,6 +112,8 @@ export interface CreateWorkItemInput {
   parentId?: string | null;
   /** Optional ISO 8601 deadline. */
   dueAt?: string | null;
+  /** Optional ISO 8601 instant before which nothing starts it. */
+  startAt?: string | null;
   priority?: number;
   source?: WorkItemSource;
   /**
@@ -190,6 +195,7 @@ function rowToWorkItem(row: Record<string, unknown>): WorkItem {
     rootId: row.root_id as string,
     depth: (row.depth as number) ?? 0,
     dueAt: (row.due_at as string) ?? null,
+    startAt: (row.start_at as string) ?? null,
     priority: row.priority as number,
     rank: (row.rank as number) ?? null,
     version: row.version as number,
@@ -306,6 +312,9 @@ export type { WorkItemEventKind } from './event-log.js';
 export function createWorkItem(input: CreateWorkItemInput): WorkItem {
   const db = initDb();
   const now = new Date().toISOString();
+  // Before the allocator: a refused create must not burn a Todo number.
+  const startAt = startAtInstant(input.startAt);
+  assertTodoDateOrder(startAt, input.dueAt);
   // The burn commits before the create. An idempotent hit or a lost race discards the
   // claim and leaves a permanent gap in the company Todo sequence, which is valid by design.
   // A configless disposable/test home retains the historical JIN default. Once a
@@ -349,7 +358,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
 
   const selectExisting = (): WorkItem | undefined => {
     const row = db
-      .prepare('SELECT * FROM work_items WHERE source = ? AND source_ref = ?')
+      .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
       .get(source, sourceRef) as Record<string, unknown> | undefined;
     return row ? rowToWorkItem(row) : undefined;
   };
@@ -395,6 +404,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
       }
       throw err;
     }
+    if (startAt) writeWorkItemStartAt(db, id, startAt);
     appendWorkItemEvent({ workItemId: id, kind: 'created', toStatus: status, actor: source, detail: createdEventDetail(sourceRef, input.origin) });
     if (parent) {
       // Re-verify the parent under the write lock before auditing the link.
@@ -439,7 +449,7 @@ export function ensureDepartmentRegistered(slug: string | null | undefined): voi
 export function getWorkItem(id: string): WorkItem | undefined {
   const db = initDb();
   const todoId = parseTodoId(id);
-  const row = db.prepare('SELECT * FROM work_items WHERE id = ?').get(todoId) as Record<string, unknown> | undefined;
+  const row = db.prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE id = ?`).get(todoId) as Record<string, unknown> | undefined;
   return row ? rowToWorkItem(row) : undefined;
 }
 
@@ -451,7 +461,7 @@ export function getWorkItems(ids: readonly string[]): WorkItem[] {
   const db = initDb();
   const placeholders = requestedIds.map(() => '?').join(', ');
   const rows = db
-    .prepare(`SELECT * FROM work_items WHERE id IN (${placeholders})`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE id IN (${placeholders})`)
     .all(...requestedIds) as Record<string, unknown>[];
   const byId = new Map(rows.map(rowToWorkItem).map((item) => [item.id, item]));
   return requestedIds.flatMap((id) => {
@@ -465,7 +475,7 @@ export function getWorkItems(ids: readonly string[]): WorkItem[] {
 export function getWorkItemBySourceRef(source: WorkItemSource, sourceRef: string): WorkItem | undefined {
   const db = initDb();
   const row = db
-    .prepare('SELECT * FROM work_items WHERE source = ? AND source_ref = ?')
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE source = ? AND source_ref = ?`)
     .get(source, sourceRef) as Record<string, unknown> | undefined;
   return row ? rowToWorkItem(row) : undefined;
 }
@@ -568,7 +578,7 @@ export function queryWorkItems(filter: ListWorkItemsFilter = {}): WorkItemPage {
   const relevance = textIds ? '(SELECT key FROM json_each(?) WHERE value = work_items.id) ASC, ' : '';
   const orderValues = textIds ? [JSON.stringify(textIds)] : [];
   const rows = db
-    .prepare(`SELECT * FROM work_items ${where} ORDER BY ${relevance}(rank IS NULL) ASC, rank ASC, updated_at DESC, created_at DESC, id ASC LIMIT ? OFFSET ?`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items ${where} ORDER BY ${relevance}(rank IS NULL) ASC, rank ASC, updated_at DESC, created_at DESC, id ASC LIMIT ? OFFSET ?`)
     .all(...values, ...orderValues, limit, offset) as Record<string, unknown>[];
   const counts = db
     .prepare(`SELECT status, COUNT(*) AS total FROM work_items ${where} GROUP BY status`)
@@ -627,7 +637,7 @@ export function getWorkItemTrees(ids: readonly string[]): Record<string, WorkIte
   const placeholders = requestedIds.map(() => '?').join(', ');
   const requestedRoots = `SELECT root_id FROM work_items WHERE id IN (${placeholders})`;
   const family = (db
-    .prepare(`SELECT * FROM work_items WHERE root_id IN (${requestedRoots})`)
+    .prepare(`SELECT work_items.*, ${START_AT_COLUMN_SQL} FROM work_items WHERE root_id IN (${requestedRoots})`)
     .all(...requestedIds) as Record<string, unknown>[])
     .map(rowToWorkItem);
   if (family.length === 0) return {};
@@ -691,6 +701,8 @@ export interface UpdateWorkItemInput {
   rank?: number | null;
   /** Todos v2 slice 4 — the widened metadata pen also covers this. */
   dueAt?: string | null;
+  /** Held in its own table (start-date.ts), not a `work_items` column. */
+  startAt?: string | null;
 }
 
 export interface ConditionalWorkItemUpdateOptions {
@@ -763,14 +775,15 @@ export function updateWorkItemConditional(
 
     let item = current;
     if (updateChangesItem(current, input)) {
-      const fields = (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof UpdateWorkItemInput>)
+      const fields = (Object.keys(UPDATE_FIELD_COLUMNS) as Array<keyof typeof UPDATE_FIELD_COLUMNS>)
         .filter((key) => input[key] !== undefined)
         .map((key) => ({ column: UPDATE_FIELD_COLUMNS[key], name: key, value: input[key] }));
       guardWorkItemUpdate(db, current, input, opts.actor, appendWorkItemEvent);
+      const startDateEdited = applyStartAtEdit(db, current, input);
       if (typeof input.department === 'string') ensureDepartmentRegistered(input.department);
       const now = new Date().toISOString();
       const result = db
-        .prepare(`UPDATE work_items SET ${fields.map((field) => `${field.column} = ?`).join(', ')}, updated_at = ?, version = version + 1 WHERE id = ? AND version = ?`)
+        .prepare(`UPDATE work_items SET ${[...fields.map((field) => `${field.column} = ?`), 'updated_at = ?'].join(', ')}, version = version + 1 WHERE id = ? AND version = ?`)
         .run(...fields.map((field) => field.value), now, id, opts.expectedVersion);
       if (result.changes === 0) {
         const latest = getWorkItem(id);
@@ -783,7 +796,7 @@ export function updateWorkItemConditional(
         kind: 'metadata_edited',
         actor: opts.actor ?? null,
         detail: {
-          updatedFields: fields.map((field) => field.name),
+          updatedFields: [...fields.map((field) => field.name), ...(startDateEdited ? ['startAt'] : [])],
           ...(opts.origin ? { origin: opts.origin } : {}),
           ...(releasedSessions.length > 0 ? { releasedSessions } : {}),
         },

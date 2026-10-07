@@ -129,6 +129,8 @@ export const BoardCard = memo(function BoardCard({
   const employee = item.assignee ? byName.get(item.assignee) : undefined
   const assigneeName = employee?.displayName ?? item.assignee
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
+  // Shown only while it holds the Todo: a first start from the backlog, before the date.
+  const startsLater = item.status === "backlog" && !!item.startAt && Date.parse(item.startAt) > Date.now()
   const addSubTask = useCallback((title: string) => onAddSubTask(item.id, title), [item.id, onAddSubTask])
 
   return (
@@ -244,9 +246,14 @@ export const BoardCard = memo(function BoardCard({
         <span className="tabular-nums text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)" }}>
           ${spendUsd.toFixed(2)}
         </span>
+        {startsLater && (
+          <span data-testid="card-starts" className="ml-auto text-[var(--text-tertiary)]" title="Not started before this date">
+            Starts {formatDue(item.startAt!)}
+          </span>
+        )}
         {item.dueAt && (
-          <span className={`ml-auto ${overdue ? "text-[var(--system-red)]" : "text-[var(--text-tertiary)]"}`}>
-            {formatDue(item.dueAt)}
+          <span className={`${startsLater ? "" : "ml-auto "}${overdue ? "text-[var(--system-red)]" : "text-[var(--text-tertiary)]"}`}>
+            {startsLater ? "· due " : ""}{formatDue(item.dueAt)}
           </span>
         )}
       </div>

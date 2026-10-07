@@ -105,6 +105,18 @@ describe("the four rows, in order", () => {
     expect(rows[3].textContent).toBe("$4.20Aug 29")
   })
 
+  it("puts a start date that holds a backlog Todo beside the due date, and drops it once nothing is held", () => {
+    const ahead = renderCard(compact({ ...item, id: "PLA-11", status: "backlog", startAt: "2999-08-20T00:00:00.000Z" }), { enrichment })
+    expect(rowsOf(ahead.card)[3].textContent).toBe("$4.20Starts Aug 20· due Aug 29")
+    ahead.unmount()
+    // Work under way is not held by its start date, so its card does not claim it is.
+    const underWay = renderCard(compact({ ...item, id: "PLA-13", startAt: "2999-08-20T00:00:00.000Z" }), { enrichment })
+    expect(rowsOf(underWay.card)[3].textContent).toBe("$4.20Aug 29")
+    underWay.unmount()
+    const passed = renderCard(compact({ ...item, id: "PLA-12", startAt: "2000-08-20T00:00:00.000Z" }), { enrichment })
+    expect(rowsOf(passed.card)[3].textContent).toBe("$4.20Aug 29")
+  })
+
   it("carries exactly one assignee avatar, in row 1", () => {
     const { card } = renderCard(item, { enrichment })
     expect(card.querySelectorAll('[data-testid^="avatar-"]')).toHaveLength(1)

@@ -26,6 +26,7 @@ export interface WorkItemEditPatch {
   rank?: number
   /** Todos v2 slice 4 (optional: older gateways reject unknown fields). */
   dueAt?: string | null
+  startAt?: string | null
 }
 
 export interface WorkItemEditRequest {

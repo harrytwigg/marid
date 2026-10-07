@@ -107,7 +107,7 @@ export class WalkTools {
     const page = open.slice(offset, offset + Math.min(integer(args.limit, BOARD_PAGE) || BOARD_PAGE, 100));
     const lines = page.map((item) => {
       const account = this.accountOf(item);
-      return boardLine(item, { flagged: this.opts.flagged.has(item.id), decided: this.decided.get(item.id)?.outcome }) + (account ? ` · account ${account}` : "");
+      return boardLine(item, { flagged: this.opts.flagged.has(item.id), decided: this.decided.get(item.id)?.outcome, now: this.opts.apply.now() }) + (account ? ` · account ${account}` : "");
     });
     const decided = open.filter((item) => this.decided.has(item.id)).length;
     const head = `${open.length} open Todo${open.length === 1 ? "" : "s"}, ${decided} decided this tick; showing ${page.length === 0 ? "none" : `${offset + 1}–${offset + page.length}`}.`;
@@ -120,7 +120,7 @@ export class WalkTools {
     const item = id ? getWorkItem(id) : undefined;
     if (!item) return { ok: false, text: `there is no Todo ${JSON.stringify(id)}` };
     if (!OPEN.has(item.status)) return { ok: false, text: `${item.id} is ${item.status}; the walk only handles open Todos` };
-    const todo = await digestTodo(item, { resolveLink: this.opts.apply.resolveLink, flagged: this.opts.flagged });
+    const todo = await digestTodo(item, { resolveLink: this.opts.apply.resolveLink, flagged: this.opts.flagged, now: this.opts.apply.now() });
     const decided = this.decided.get(item.id);
     const account = this.accountOf(item);
     return { ok: true, text: renderTodo(todo) + (account ? `\naccount: ${account}` : "") + (decided ? `\nDECIDED this tick: ${decided.outcome}` : "") };

@@ -42,6 +42,8 @@ export interface IdempotentCreateResult {
 const CREATE_FINGERPRINT_FIELDS: ReadonlyArray<keyof CreateWorkItemInput> = [
   'title', 'body', 'status', 'department', 'assignee', 'createdBy', 'parentId',
   'dueAt', 'priority', 'source', 'sourceRef', 'budgetUsd',
+  // Appended, and present only when set, so receipts minted before it hash the same.
+  'startAt',
 ];
 
 /** What a create asks for beyond the row itself: applied after the row rather

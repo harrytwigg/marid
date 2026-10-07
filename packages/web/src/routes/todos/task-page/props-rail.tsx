@@ -1,4 +1,4 @@
-import { ArrowUpRight, Calendar, LoaderCircle, Send, UserRound } from "lucide-react"
+import { ArrowUpRight, Calendar, CalendarClock, LoaderCircle, Send, UserRound } from "lucide-react"
 import type { DepartmentSummaryWire, Employee, LinkedSessionWire, WorkItemDetailWire } from "@/lib/api"
 import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
@@ -23,7 +23,7 @@ import { displayNameOf, formatRelativeTime } from "../util"
 export interface RailPickers {
   /** Task 6 mounts the picker surfaces here, keyed by row. Absent = read row. */
   status?: React.ReactNode
-  rowFor?: (row: "status" | "priority" | "assignee" | "labels" | "department" | "due") => {
+  rowFor?: (row: "status" | "priority" | "assignee" | "labels" | "department" | "start" | "due") => {
     onOpen: () => void
     open: boolean
     picker: React.ReactNode
@@ -74,6 +74,7 @@ export function PropsRail({
   const assigneePick = pick("assignee")
   const labelsPick = pick("labels")
   const deptPick = pick("department")
+  const startPick = pick("start")
   const duePick = pick("due")
 
   return (
@@ -199,6 +200,17 @@ export function PropsRail({
         {deptPick?.picker}
       </div>
       <SprintRailRow detail={detail} editable={!!rowFor} />
+      <div className="relative">
+        <RailRow quiet testId="rail-start" label="Start date" onOpen={startPick?.onOpen} open={startPick?.open}>
+          <CalendarClock size={14} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
+          {item.startAt ? (
+            <span>Starts {formatDueLong(item.startAt)}</span>
+          ) : (
+            <span className="text-[var(--text-tertiary)]">No start date</span>
+          )}
+        </RailRow>
+        {startPick?.picker}
+      </div>
       <div className="relative">
         <RailRow quiet testId="rail-due" label="Due date" onOpen={duePick?.onOpen} open={duePick?.open}>
           <Calendar size={14} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-quaternary)]" />

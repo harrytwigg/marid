@@ -162,13 +162,18 @@ function monthDays(year: number, month: number): Array<number | null> {
   return [...Array.from({ length: lead }, () => null), ...Array.from({ length: count }, (_, i) => i + 1)]
 }
 
+/** The calendar for either of a Todo's dates: the due date (the default) or
+ *  the start date, which the Dispatcher holds the Todo to. */
 export function DuePickerContent({
   detail,
   commit,
   sheet,
   onDone,
-}: PickerContentProps & { commit: (dueAt: string | null) => void }) {
-  const current = detail.workItem.dueAt ? new Date(detail.workItem.dueAt) : null
+  field = "dueAt",
+}: PickerContentProps & { commit: (date: string | null) => void; field?: "dueAt" | "startAt" }) {
+  const value = detail.workItem[field]
+  const testPrefix = field === "dueAt" ? "due" : "start"
+  const current = value ? new Date(value) : null
   const [view, setView] = useState(() => {
     const base = current ?? new Date()
     return { year: base.getUTCFullYear(), month: base.getUTCMonth() }
@@ -190,7 +195,7 @@ export function DuePickerContent({
       return { year: next.getUTCFullYear(), month: next.getUTCMonth() }
     })
   return (
-    <div className="px-1" data-testid="due-picker">
+    <div className="px-1" data-testid={`${testPrefix}-picker`}>
       <div className="flex items-center justify-between px-1.5 py-1">
         <button
           type="button"
@@ -223,9 +228,11 @@ export function DuePickerContent({
             <button
               key={day}
               type="button"
-              data-testid={`due-day-${day}`}
+              data-testid={`${testPrefix}-day-${day}`}
               onClick={() => {
-                commit(new Date(Date.UTC(view.year, view.month, day, 12)).toISOString())
+                // A due date lands at midday; a start date at the start of the day, the
+                // same instant a date-only `startAt` means, so "Starts <today>" holds nothing.
+                commit(new Date(Date.UTC(view.year, view.month, day, field === "startAt" ? 0 : 12)).toISOString())
                 onDone()
               }}
               className={`grid ${sheet ? "h-10" : "h-8"} place-items-center rounded-lg text-[12.5px] tabular-nums outline-none focus-visible:bg-[var(--fill-tertiary)] ${
@@ -239,15 +246,15 @@ export function DuePickerContent({
           ),
         )}
       </div>
-      {detail.workItem.dueAt && (
+      {value && (
         <PickerRow
           sheet={sheet}
-          label={<span className="text-[var(--text-tertiary)]">Clear due date</span>}
+          label={<span className="text-[var(--text-tertiary)]">Clear {field === "dueAt" ? "due" : "start"} date</span>}
           onSelect={() => {
             commit(null)
             onDone()
           }}
-          testId="due-clear"
+          testId={`${testPrefix}-clear`}
         />
       )}
     </div>

@@ -108,7 +108,7 @@ describe("work-item tools — registry + schemas", () => {
   it("update schema allows manual start but leaves cancelling to archive", () => {
     const createProps = tool("create_work_item").inputSchema.properties;
     expect(Object.keys(createProps).sort()).toEqual(
-      ["autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "sprint", "title"].sort(),
+      ["autoStart", "body", "department", "dueAt", "idempotencyKey", "labels", "parentId", "priority", "sprint", "startAt", "title"].sort(),
     );
     const status = tool("update_work_item").inputSchema.properties.status as { enum: string[] };
     expect(status.enum).toEqual(["backlog", "executing", "in_review", "blocked", "done"]);
@@ -729,7 +729,7 @@ describe("work-item relation + label tools (Todos v2 slice 3)", () => {
     await expect(tool("edit_work_item").handler({ id: "JIN-1", body: "x", rank: 3 }, silent.ctx)).rejects.toThrow(/operator/);
     expect(silent.calls).toEqual([]);
     const props = Object.keys(tool("edit_work_item").inputSchema.properties);
-    expect(props.sort()).toEqual(["body", "dueAt", "id", "priority", "sprint", "title"]);
+    expect(props.sort()).toEqual(["body", "dueAt", "id", "priority", "sprint", "startAt", "title"]);
   });
 
   it("edit_work_item reads a fresh version and PATCHes with it", async () => {
