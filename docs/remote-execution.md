@@ -179,7 +179,7 @@ appear in front of a PTY with nobody at the keyboard, which hangs the turn. Jinn
 sets the variable itself and runs the plain binary, getting the profile without
 the collateral damage.
 
-Two consequences follow, both handled for you:
+Three consequences follow, all handled for you:
 
 - **The folder-trust seed runs under the same profile.** Claude Code keeps
   `.claude.json` *inside* `CLAUDE_CONFIG_DIR`, so seeding without it writes
@@ -195,11 +195,16 @@ Two consequences follow, both handled for you:
   one-time consent dialog on a profile that has never accepted it. When the
   gateway's own Claude `settings.json` sets `skipDangerousModePermissionPrompt:
   true`, that consent is copied into the session's staged `--settings`, as it is
-  for a local named profile. Otherwise the profile must hold it itself
-  (`skipDangerousModePermissionPrompt: true` in `<profile>/settings.json`, or
-  `bypassPermissionsModeAccepted` in `<profile>/.claude.json` from accepting the
-  dialog once), and a profile with neither is refused before the spawn with the
-  setting to add.
+  for a local named profile. Otherwise the host must hold it where Claude Code
+  looks for it: `skipDangerousModePermissionPrompt: true` in
+  `<profile>/settings.json`, in the session directory's
+  `.claude/settings.local.json` or in the host's managed settings
+  (`/etc/claude-code/managed-settings.json` or a drop-in under
+  `managed-settings.d/`), or `bypassPermissionsModeAccepted` in
+  `<profile>/.claude.json` from accepting the dialog once. A profile with none of
+  these is refused before the spawn with the setting to add. Managed settings a
+  claude.ai organisation delivers over the network are not on disk, so a profile
+  relying on those alone is refused too: add the setting to its `settings.json`.
 
 When no profile is configured, `CLAUDE_CONFIG_DIR` is actively *unset* for the
 session, so a stray value in the remote environment cannot silently choose the

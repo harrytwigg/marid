@@ -555,7 +555,7 @@ async function verifyEngineProfile(
   if (engine !== "claude") return undefined;
   const claudeConfigDir = resolveRemoteClaudeConfigDir(target, remote);
   const consentCarried = remoteOperatorSettingsCarry(claudeConfigDir)?.skipDangerousModePermissionPrompt === true;
-  return await verifyClaudeProfile(destination, claudeConfigDir, consentCarried);
+  return await verifyClaudeProfile(destination, claudeConfigDir, target.remoteCwd, consentCarried);
 }
 
 /** Hosts+profiles already seen ready. Only SUCCESS is cached: a profile that
@@ -586,36 +586,55 @@ export function clearRemoteProfileCache(): void {
 async function verifyClaudeProfile(
   destination: string,
   claudeConfigDir: string | undefined,
+  cwd: string | undefined,
   consentCarried: boolean,
 ): Promise<string | undefined> {
   if (!claudeConfigDir) return undefined;
-  const key = `${destination}:${claudeConfigDir}:${consentCarried}`;
+  const key = `${destination}:${claudeConfigDir}:${cwd ?? ""}:${consentCarried}`;
   if (authedProfiles.has(key)) return undefined;
-  const res = await sshRun(destination, [buildClaudeProfileProbe(claudeConfigDir)]);
+  const res = await sshRun(destination, [buildClaudeProfileProbe(claudeConfigDir, cwd)]);
   const problem = claudeProfileProblem(res.stdout, destination, claudeConfigDir, consentCarried);
   if (!problem) authedProfiles.add(key);
   return problem;
 }
 
+/** Where Claude Code reads managed (policy) settings on a Linux or macOS host:
+ *  `managed-settings.json` and the drop-ins under `managed-settings.d/`. */
+const MANAGED_SETTINGS_DIRS = ["/etc/claude-code", "/Library/Application Support/ClaudeCode"];
+
 /** Exported for tests: the remote command behind {@link verifyClaudeProfile}.
  *  Prints `dir`, `creds` and `consent` for each fact that holds. Consent is
- *  either key Claude Code itself reads: `skipDangerousModePermissionPrompt` in
- *  the profile's `settings.json`, or `bypassPermissionsModeAccepted` (written
- *  when someone accepts the dialog) in its `.claude.json`. */
-export function buildClaudeProfileProbe(claudeConfigDir: string): string {
+ *  wherever Claude Code itself looks before showing the dialog:
+ *  `skipDangerousModePermissionPrompt` in the profile's `settings.json`, the
+ *  session directory's `.claude/settings.local.json` or the host's managed
+ *  settings, or `bypassPermissionsModeAccepted` (an older record of accepting
+ *  the dialog, still honoured) in the profile's `.claude.json`. Managed settings
+ *  delivered from a claude.ai organisation are not on disk and cannot be seen. */
+export function buildClaudeProfileProbe(
+  claudeConfigDir: string,
+  cwd?: string,
+  managedSettingsDirs: readonly string[] = MANAGED_SETTINGS_DIRS,
+): string {
   const file = (name: string) => shq(path.posix.join(claudeConfigDir, name));
   const isTrue = (name: string) => shq(`"${name}"[[:space:]]*:[[:space:]]*true`);
+  const skipSources = [
+    file("settings.json"),
+    ...(cwd ? [shq(path.posix.join(cwd, ".claude", "settings.local.json"))] : []),
+    // The drop-in glob stays outside the quotes so the remote shell expands it;
+    // with no drop-ins it stays literal and `grep -s` passes over it.
+    ...managedSettingsDirs.flatMap((dir) => [shq(path.posix.join(dir, "managed-settings.json")), `${shq(path.posix.join(dir, "managed-settings.d"))}/*.json`]),
+  ];
   return [
     `test -d ${shq(claudeConfigDir)} && echo dir`,
     `test -s ${file(".credentials.json")} && echo creds`,
-    `{ grep -Eqs ${isTrue("skipDangerousModePermissionPrompt")} ${file("settings.json")} `
+    `{ grep -Eqs ${isTrue("skipDangerousModePermissionPrompt")} ${skipSources.join(" ")} `
       + `|| grep -Eqs ${isTrue("bypassPermissionsModeAccepted")} ${file(".claude.json")}; } && echo consent`,
     "true",
   ].join("; ");
 }
 
-/** Exported for tests: what is wrong with the profile, from the probe's output. */
-export function claudeProfileProblem(
+/** What is wrong with the profile, from the probe's output. */
+function claudeProfileProblem(
   probeOutput: string,
   destination: string,
   claudeConfigDir: string,

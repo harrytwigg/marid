@@ -90,7 +90,7 @@ afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-describe("a remote named Claude profile that never accepted bypass-permissions mode", { timeout: 30_000 }, () => {
+describe.skipIf(process.platform === "win32")("a remote named Claude profile that never accepted bypass-permissions mode", { timeout: 30_000 }, () => {
   it("is refused before spawning, with the setting that fixes it", async () => {
     writeJson(path.join(profile, "settings.json"), { theme: "dark" });
     writeJson(path.join(profile, ".claude.json"), { hasCompletedOnboarding: true });
@@ -124,6 +124,13 @@ describe("a remote named Claude profile that never accepted bypass-permissions m
     expect((await ready()).ready).toBe(true);
   });
 
+  it("runs on consent in the session directory's .claude/settings.local.json", async () => {
+    const local = path.join(tmp, "root", "work", ".claude");
+    fs.mkdirSync(local);
+    writeJson(path.join(local, "settings.local.json"), { skipDangerousModePermissionPrompt: true });
+    expect((await ready()).ready).toBe(true);
+  });
+
   it("still names a missing login before the consent", async () => {
     fs.rmSync(path.join(profile, ".credentials.json"));
     const readiness = await ready();
@@ -135,7 +142,7 @@ describe("a remote named Claude profile that never accepted bypass-permissions m
   });
 });
 
-describe("the operator's bypass consent travels into a remote named-profile session", { timeout: 60_000 }, () => {
+describe.skipIf(process.platform === "win32")("the operator's bypass consent travels into a remote named-profile session", { timeout: 60_000 }, () => {
   const stagedSettings = async (t = target()) => {
     const readiness = await ready(t);
     if (!readiness.ready) throw new Error(readiness.reason);
@@ -164,7 +171,7 @@ describe("the operator's bypass consent travels into a remote named-profile sess
   });
 });
 
-describe("buildClaudeProfileProbe", () => {
+describe.skipIf(process.platform === "win32")("buildClaudeProfileProbe", () => {
   it("survives a profile path a shell would otherwise split or expand", async () => {
     const odd = path.join(tmp, "it's a $HOME `profile`");
     fs.mkdirSync(odd);
@@ -173,5 +180,33 @@ describe("buildClaudeProfileProbe", () => {
     const { execFileSync } = await import("node:child_process");
     expect(execFileSync("sh", ["-c", buildClaudeProfileProbe(odd)], { encoding: "utf-8" }).split(/\s+/).filter(Boolean))
       .toEqual(["dir", "creds", "consent"]);
+  });
+
+  describe("reads the host's managed settings", () => {
+    const probe = async (managed: string) => {
+      const { execFileSync } = await import("node:child_process");
+      return execFileSync("sh", ["-c", buildClaudeProfileProbe(profile, undefined, [managed])], { encoding: "utf-8" })
+        .split(/\s+/).filter(Boolean);
+    };
+    let managed: string;
+    beforeEach(() => {
+      managed = path.join(tmp, "etc claude-code");
+      fs.mkdirSync(path.join(managed, "managed-settings.d"), { recursive: true });
+    });
+
+    it("finds consent in managed-settings.json", async () => {
+      writeJson(path.join(managed, "managed-settings.json"), { skipDangerousModePermissionPrompt: true });
+      expect(await probe(managed)).toContain("consent");
+    });
+
+    it("finds consent in a managed-settings.d drop-in", async () => {
+      writeJson(path.join(managed, "managed-settings.d", "10-bypass.json"), { skipDangerousModePermissionPrompt: true });
+      expect(await probe(managed)).toContain("consent");
+    });
+
+    it("finds none when the managed settings do not give it", async () => {
+      writeJson(path.join(managed, "managed-settings.json"), { skipDangerousModePermissionPrompt: false });
+      expect(await probe(managed)).not.toContain("consent");
+    });
   });
 });
