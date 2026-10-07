@@ -489,13 +489,17 @@ export interface WorkItemAttachmentWire {
 }
 
 /** One department row from GET /api/departments (Todos v2 slice 5). `selectable`
- *  is false outside a configured `gateway.todoDepartments` (JIN-1). */
+ *  is false for an archived department and outside a configured
+ *  `gateway.todoDepartments` (JIN-1). */
 export interface DepartmentSummaryWire {
   slug: string
   prefix: string
   createdAt: string
   todoCount: number
   selectable?: boolean
+  /** Archived: no new Todos, out of the pickers; its Todos stay as they are. */
+  archived?: boolean
+  archivedAt?: string | null
 }
 
 /** The GET /api/work-items/:id payload: full row + live-derived spend + audit.
@@ -776,7 +780,9 @@ export const api = {
     )
   },
   /** Todos v2 slice 6: the switcher's department boards. */
-  getDepartments: () => get<{ departments: DepartmentSummaryWire[] }>("/api/departments"),
+  // Every row, archived included: the prefixes parse Todo ids and a Todo in an archived
+  // department still shows where it lives. Each surface filters for itself.
+  getDepartments: () => get<{ departments: DepartmentSummaryWire[] }>("/api/departments?includeArchived=true"),
   /** GRS-021a: full Todo detail (property stack + live spend + audit). */
   getWorkItem: (id: string, signal?: AbortSignal) =>
     get<WorkItemDetailWire>(`/api/work-items/${encodeURIComponent(id)}`, signal ? { signal } : undefined),

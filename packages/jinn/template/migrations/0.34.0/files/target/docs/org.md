@@ -198,6 +198,8 @@ gateway:
 
 Then create and the operator's edit pen accept only those slugs, a Todo created without one lands in `default`, and assignment or delegation never changes a Todo's department. Todos already in another department keep it (and their ID) until the operator moves them.
 
+A department nobody should file into any more can be archived, from the `⋯` menu on its Todos page or with `POST /api/departments/:slug/archive` (operator only). An archived department takes no new Todos: a create into it is refused with an error naming it, whether it comes from the web UI, `create_work_item`, the HTTP API or a cron job, and so are a sub-task under one of its Todos and an edit that moves a Todo into it. Assignment never moves a Todo into it, and a delegation to one of its members files the new Todo in no department (one to a scoped department's member is refused, since that Todo could live nowhere else); a `gateway.todoDepartments.default` archived after the fact counts as no default. It leaves every department list and picker: the Todos page's department menu shows it only under "Show archived", and `list_departments` and `GET /api/departments` return it only with `includeArchived`, as `archived: true, selectable: false` (a scoped session's listing always includes its own department). Nothing in it changes: its Todos keep their IDs and stay readable, searchable and editable, and its ID prefix stays reserved, so no new department can take it. Archiving a department that still has members or open Todos is refused until it is confirmed (`confirm: true`, or the second click in the dialog), and the department `gateway.todoDepartments.default` names cannot be archived. `POST /api/departments/:slug/unarchive` brings it back.
+
 ## Ranks
 
 | Rank | Privileges |

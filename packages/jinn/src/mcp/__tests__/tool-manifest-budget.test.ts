@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4156;
+const MAX_MANIFEST_TOKENS = 4162;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -235,9 +235,15 @@ const ATTESTED = {
   // instead of a create followed by an edit. Its accepted values and refusals
   // are the ones edit_work_item already teaches, so it carries no prose. The
   // ceiling moves by exactly the 7 and Pi stays one under it.
-  rpc: { tokens: 3820, sha256: "a59a462df824d87a94ac9ca36ae54261133b6871ae570f4c8ee71e6c750e71c1" },
-  pi: { tokens: 4155, sha256: "03dbfb609c154740b183344e1cf00f81161a08755f7fa2bebf58320b8c4dbbb4" },
-  openai: { tokens: 3959, sha256: "10605f4f07512ce8b8de05006c5d26ebda937239f89ab898e73c3d8bc28a5aba" },
+  // Rebased for `includeArchived` on list_departments: a bare boolean, 6 tokens
+  // on Pi. Archived departments leave the default listing so a model picking a
+  // department to file into is never offered one that refuses new Todos; the
+  // flag is how it still finds one to search. Rung 1, no prose, and the
+  // tool's one-line description has nothing left to cut. The ceiling moves by
+  // exactly the 6 and Pi stays one under it.
+  rpc: { tokens: 3826, sha256: "80ba9c8019e2a302362c2baa274c187c845eadf3f60a2b517ae4d44ebac5a906" },
+  pi: { tokens: 4161, sha256: "22ec2494868c7def46b2b6cb4b7a18d186a204b0cf8ca69d9b250a8716683eb2" },
+  openai: { tokens: 3965, sha256: "5dd18b9498f7bece0b54b45298e075a1bbd70a00465b55fc8222df1bb7fb18ca" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

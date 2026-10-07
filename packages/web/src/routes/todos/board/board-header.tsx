@@ -2,7 +2,8 @@ import { Zap } from "lucide-react"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import type { DepartmentSummaryWire } from "@/lib/api"
 import type { BoardId } from "./board-route"
-import { BoardSwitcher } from "./board-switcher"
+import { ArchivedTag, BoardSwitcher } from "./board-switcher"
+import { DepartmentArchiveMenu } from "./department-archive-menu"
 
 type BoardCounts = {
   isAttention: boolean
@@ -17,6 +18,11 @@ type BoardHeaderProps = BoardCounts & {
   departments: DepartmentSummaryWire[] | undefined
   deptPrefix: string | undefined
   onQuickCapture: () => void
+}
+
+/** The department board's department, when there is one. */
+function boardDepartment(board: BoardId, departments: DepartmentSummaryWire[] | undefined): DepartmentSummaryWire | undefined {
+  return board.kind === "department" ? departments?.find((dept) => dept.slug === board.slug) : undefined
 }
 
 function Dot() {
@@ -47,14 +53,16 @@ function QuickCaptureButton({ onClick }: { onClick: () => void }) {
 
 function BoardSubtitle({
   deptPrefix,
+  archived,
   isAttention,
   attentionCount,
   openCount,
   blockedTotal,
-}: BoardCounts & { deptPrefix: string | undefined }) {
+}: BoardCounts & { deptPrefix: string | undefined; archived: boolean }) {
   return (
     <>
       <div className="flex items-center gap-2">
+        {archived && <ArchivedTag />}
         {deptPrefix && (
           <>
             <span className="text-[length:var(--text-caption1)] text-[var(--text-quaternary)]" style={{ fontFamily: "var(--font-code)", letterSpacing: ".04em" }}>
@@ -82,11 +90,17 @@ function BoardSubtitle({
 }
 
 export function BoardHeader({ board, title, departments, deptPrefix, onQuickCapture, ...counts }: BoardHeaderProps) {
+  const department = boardDepartment(board, departments)
   return (
     <LargeTitleHeader
       title={<BoardSwitcher board={board} title={title} departments={departments} attentionCount={counts.attentionCount} />}
-      subtitle={<BoardSubtitle deptPrefix={deptPrefix} {...counts} />}
-      trailing={<QuickCaptureButton onClick={onQuickCapture} />}
+      subtitle={<BoardSubtitle deptPrefix={deptPrefix} archived={department?.archived === true} {...counts} />}
+      trailing={
+        <div className="flex items-center gap-2">
+          {department && <DepartmentArchiveMenu slug={department.slug} prefix={department.prefix} archived={department.archived === true} />}
+          <QuickCaptureButton onClick={onQuickCapture} />
+        </div>
+      }
     />
   )
 }

@@ -40,6 +40,8 @@ export interface DepartmentDefinitionWire {
   warnings: string[]
   /** Skills the allow-list names that the stage directory refuses, each with why (a symlink inside one, say). They are not in `skills`. */
   skillProblems?: Array<{ skill: string; reason: string }>
+  archived?: boolean
+  archivedAt?: string | null
 }
 
 /** A Todo that would be stranded by a scope change: who holds it. */
@@ -67,7 +69,49 @@ function holdersOf(value: unknown): DepartmentHolderWire[] {
   return value.flatMap((row) => (row && typeof row.todo === "string" && typeof row.assignee === "string" ? [{ todo: row.todo, assignee: row.assignee }] : []))
 }
 
+/** An archive the gateway would not do as asked. `department-archive-confirm` means the
+ *  department still has members or open Todos, and the operator has to confirm it. */
+export class DepartmentArchiveError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+    readonly members: string[] = [],
+    readonly openTodos = 0,
+  ) {
+    super(message)
+    this.name = "DepartmentArchiveError"
+  }
+}
+
+async function postArchive(slug: string, action: "archive" | "unarchive", body: { confirm?: boolean }): Promise<DepartmentDefinitionWire> {
+  const res = await authFetch(`/api/departments/${encodeURIComponent(slug)}/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  const json = (await res.json().catch(() => null)) as ArchiveResponse | null
+  if (!res.ok || !json?.department) throw archiveErrorOf(res.status, json ?? {})
+  return json.department
+}
+
+type ArchiveResponse = { department?: DepartmentDefinitionWire; error?: unknown; code?: unknown; members?: unknown; openTodos?: unknown }
+
+function archiveErrorOf(status: number, body: ArchiveResponse): DepartmentArchiveError {
+  return new DepartmentArchiveError(
+    status,
+    typeof body.error === "string" ? body.error : `API error: ${status}`,
+    typeof body.code === "string" ? body.code : undefined,
+    Array.isArray(body.members) ? body.members.filter((name): name is string => typeof name === "string") : [],
+    typeof body.openTodos === "number" ? body.openTodos : 0,
+  )
+}
+
 export const departmentApi = {
+  /** Archives a department; `confirm` is needed while it has members or open Todos. Operator only. */
+  archive: (slug: string, confirm = false) => postArchive(slug, "archive", confirm ? { confirm: true } : {}),
+  /** Takes a department out of the archive. Operator only. */
+  unarchive: (slug: string) => postArchive(slug, "unarchive", {}),
   get: async (slug: string): Promise<DepartmentDefinitionWire> =>
     (await get<{ department: DepartmentDefinitionWire }>(`/api/departments/${encodeURIComponent(slug)}`)).department,
   /** Changes a department's scope. Operator only. */
