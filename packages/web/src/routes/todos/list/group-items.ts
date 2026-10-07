@@ -33,7 +33,7 @@ const OPEN_GROUPS: Array<{
 }> = [
   { key: "executing", label: "In progress", status: "executing" },
   { key: "in-review", label: "In review", status: "in_review" },
-  { key: "backlog", label: "Backlog", status: "backlog" },
+  { key: "backlog", label: "To do", status: "backlog" },
   { key: "blocked", label: "Blocked", status: "blocked", omitWhenEmpty: true },
 ]
 
@@ -55,7 +55,7 @@ export function groupTodoListItems(
   needsAttention: WorkItemCompactWire[],
   /** A URL that names one status scopes the view to it, and the columns outside
    *  that scope are never queried. Those groups are omitted rather than drawn as
-   *  a zero — "Backlog 0" would claim something nobody asked the gateway. */
+   *  a zero — "To do 0" would claim something nobody asked the gateway. */
   statusInScope: (status: WorkItemStatusWire) => boolean = () => true,
 ): TodoListGroup[] {
   // Only the lanes the operator is not the actor on are lifted out of their

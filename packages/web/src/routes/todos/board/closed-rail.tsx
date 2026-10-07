@@ -5,8 +5,8 @@ import { StateCircle } from "../state-glyph"
 /* Todos v2 slice 6 — the folded Closed rail (design-doc §2.1). Done and
  * Cancelled never occupy full columns at rest: one 44px vertical strip labeled
  * `Closed · N`, expanding on click into a closed-items column (Done group,
- * then Cancelled, true counts + show-more paging). Cards inside drag only to
- * Backlog — reopening. */
+ *  then Cancelled, true counts + show-more paging). Cards inside drag only to
+ *  To do — reopening. */
 
 export function ClosedRail({ count, onExpand }: { count: number; onExpand: () => void }) {
   return (

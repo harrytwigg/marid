@@ -7,9 +7,9 @@ import type { TodoListGroup } from "./group-items"
  * Windowing for the grouped Todo list.
  *
  * The list is sections of rows, and a section is not a unit the reader scrolls
- * past whole — a single Backlog can be the entire scroll. So the virtual row is
+ * past whole — a single To do group can be the entire scroll. So the virtual row is
  * one visible line: a group's header, one Todo, its empty caption, or its
- * "Show more". Flattening that way is what lets a 500-Todo Backlog cost the same
+ * "Show more". Flattening that way is what lets a 500-Todo To do group cost the same
  * as a 20-Todo one; virtualising per section would still mount every row inside
  * the section the reader is in.
  *

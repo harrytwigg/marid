@@ -154,7 +154,7 @@ describe("groupTodoListItems", () => {
       (status) => status === "executing",
     )
 
-    // "Backlog 0" would assert something nobody asked the gateway — the backlog
+    // "To do 0" would assert something nobody asked the gateway — the backlog
     // column is disabled on this URL, so its row is absent, not zeroed.
     expect(groups.map((group) => group.key)).toEqual(["executing"])
     expect(groups.find((group) => group.key === "executing")?.count).toBe(1)

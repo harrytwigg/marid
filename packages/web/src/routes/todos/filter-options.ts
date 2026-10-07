@@ -4,7 +4,7 @@ import type { DateFilter, DueFilter, StatusFilter } from "@/lib/todos"
 export const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "open", label: "Open" },
-  { value: "backlog", label: "Backlog" },
+  { value: "backlog", label: "To do" },
   { value: "executing", label: "In progress" },
   { value: "blocked", label: "Blocked" },
   { value: "in_review", label: "In review" },

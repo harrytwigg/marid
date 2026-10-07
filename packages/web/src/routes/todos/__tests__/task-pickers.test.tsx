@@ -117,7 +117,7 @@ describe("the status picker", () => {
     ])
     expect(screen.queryByTestId("status-option-backlog")).toBeNull()
     expect(picker.textContent).toContain("Only legal moves are listed")
-    expect(picker.textContent).toContain("Backlog isn't reachable from In review")
+    expect(picker.textContent).toContain("To do isn't reachable from In review")
   })
 
   it("renders a gated Cancelled disabled with the inline reason while a sub-task is open, and refuses the click", async () => {

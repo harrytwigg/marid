@@ -117,7 +117,7 @@ function CarryOptions({ planned, choice, onChoose, newName, onNewName }: {
         </span>
       </CarryOption>
       <CarryOption checked={choice.kind === "none"} onSelect={() => onChoose({ kind: "none" })}>
-        No sprint (back to the backlog)
+        No sprint (back to To do)
       </CarryOption>
     </div>
   )

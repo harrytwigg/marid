@@ -23,7 +23,7 @@ export const TODO_GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
   gateway("read_todo", "Read one Todo from the authoritative ledger. Always call this for an operator-requested Todo id, even when its prefix is unfamiliar; never infer that it is missing.",
     params({ id: string("The full Todo id.") }, ["id"]),
     "todos", { mutability: "read", verification: "todo-reread" }),
-  gateway("talk_create_todo", "Create a Todo. It starts in the backlog with nobody assigned. In the spoken confirmation, say the new full Todo id.", params({
+  gateway("talk_create_todo", "Create a Todo. It starts in To do (the `backlog` status) with nobody assigned. In the spoken confirmation, say the new full Todo id.", params({
     title: string("The Todo's title — one line, what the work is."),
     body: string("The detail, if the operator gave any."),
     parentId: string("The id of the Todo this belongs under, if it is a sub-task."),
@@ -37,7 +37,7 @@ export const TODO_GATEWAY_OPERATIONS: readonly TalkControlOperation[] = [
   }, ["id", "expectedVersion"]), "todos", { mutability: "write", verification: "todo-version-reread" }),
   gateway("talk_set_todo_status", "Move a Todo to another status. Cancelling is not available by voice.", params({
     id: string("The full Todo id."),
-    status: string("The status to move it to.", TALK_TODO_STATUSES),
+    status: string("The status to move it to. The board shows `backlog` as \"To do\".", TALK_TODO_STATUSES),
     note: string("Why, when the move is to blocked."),
   }, ["id", "status"]), "todos", { mutability: "write", verification: "todo-status-reread" }),
   gateway("talk_comment_todo", "Add one operator comment to a Todo.",

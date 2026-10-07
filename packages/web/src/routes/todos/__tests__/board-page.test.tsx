@@ -744,7 +744,7 @@ describe("the switcher-in-title", () => {
 })
 
 describe("quick add", () => {
-  it("offers + on Backlog only", async () => {
+  it("offers + on To do only", async () => {
     rows.backlog = [compact({ id: "PLA-1", status: "backlog" })]
     rows.blocked = [compact({ id: "PLA-9", status: "blocked" })]
     renderBoard("/todos/b/platform")
@@ -756,7 +756,7 @@ describe("quick add", () => {
     expect(screen.queryByTestId("board-quick-add-blocked")).toBeNull()
   })
 
-  it("creates in the board's department from the Backlog column, assigning nobody", async () => {
+  it("creates in the board's department from the To do column, assigning nobody", async () => {
     renderBoard("/todos/b/platform")
     await waitFor(() => expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy())
     createWorkItem.mockResolvedValue({ workItem: { ...emptyTree("PLA-20").root } })

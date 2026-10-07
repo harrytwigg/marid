@@ -144,7 +144,7 @@ Marid exposes a small set of building blocks and handles the machinery underneat
 **Todos** are the durable work ledger. They track assignee, priority, status, sub-tasks, discussion, approvals, and reviewer-owned completion across sessions.
 
 <div align="center">
-  <img src="assets/todos.png" alt="The Todos ledger - tickets assigned to AI employees across backlog, in-progress, review, and done" width="880" />
+  <img src="assets/todos.png" alt="The Todos ledger - tickets assigned to AI employees across To do, in-progress, review, and done" width="880" />
 </div>
 
 **Chat** operates the company. Delegations, callbacks, and Todo changes appear beside the conversation as durable activity receipts.

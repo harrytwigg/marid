@@ -36,7 +36,7 @@ import { ClosedColumnGroup, ClosedColumnHeader, ClosedRail } from "./closed-rail
 import { departmentTitle } from "./board-switcher"
 import { boardDetailIds, useBoardData, useBoardRank, useBoardTransition, useBoardTrees, useCreateSubTask, useKeepWorkItem } from "./use-board"
 import {
-  BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isColumnInStatusFilter, PIPELINE_STATUSES, visibleItemCount,
+  BOARD_STATUS_ORDER, CLOSED_STATUSES, EXCEPTION_STATUSES, isColumnInStatusFilter, OPEN_COLUMN_ORDER, PIPELINE_STATUSES, visibleItemCount,
 } from "./status-scope"
 import { useBoardDrag } from "./use-board-drag"
 import { boardKey, parseBoardParam } from "./board-route"
@@ -412,15 +412,21 @@ export default function TodoBoardPage() {
   const blockedTotal = countByStatus.blocked ?? 0
   const closedTotal = CLOSED_STATUSES.reduce((sum, status) => sum + (countByStatus[status] ?? 0), 0)
   const visibleStatuses: WorkItemStatusWire[] = useMemo(() => {
-    const exceptions = EXCEPTION_STATUSES.filter(
-      (status) =>
-        (countByStatus[status] ?? 0) > 0
-        || (itemsByStatus[status]?.length ?? 0) > 0
-        // States mock §6: an empty column doesn't render — EXCEPT the column
-        // a drag could legally land in, which materializes for the drop.
-        || (drag !== null && drag.legal.has(status)),
+    const materialized = new Set<WorkItemStatusWire>(
+      EXCEPTION_STATUSES.filter(
+        (status) =>
+          (countByStatus[status] ?? 0) > 0
+          || (itemsByStatus[status]?.length ?? 0) > 0
+          // States mock §6: an empty column doesn't render — EXCEPT the column
+          // a drag could legally land in, which materializes for the drop.
+          || (drag !== null && drag.legal.has(status)),
+      ),
     )
-    return [...PIPELINE_STATUSES, ...exceptions].filter((s) => isColumnInStatusFilter(filters.status, s))
+    return OPEN_COLUMN_ORDER.filter(
+      (status) =>
+        isColumnInStatusFilter(filters.status, status)
+        && (EXCEPTION_STATUSES.includes(status) ? materialized.has(status) : true),
+    )
   }, [countByStatus, itemsByStatus, drag, filters.status])
 
   // Filtered-empty (states mock §6): zero visible items with filters/search
