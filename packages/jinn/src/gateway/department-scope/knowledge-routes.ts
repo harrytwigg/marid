@@ -1,5 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
-import { createNote, listNotes, NOTE_FILE_MAX_BYTES, readNote, searchKnowledge, updateNote } from "../../notes/store.js";
+import { createNote, listNotes, NOTE_FILE_MAX_BYTES, readNote, searchKnowledge, slugify, updateNote } from "../../notes/store.js";
 import type { NoteStoreResult } from "../../shared/types.js";
 import { resolveJinnHome } from "../../shared/paths.js";
 import { hasControlBytes } from "../../shared/sanitize.js";
@@ -7,14 +8,17 @@ import { departmentRecord } from "../department-registry.js";
 import { readJsonBody } from "../http-helpers.js";
 import { badRequest, json } from "../route-helpers.js";
 import { readCleanSearchParam, SEARCH_QUERY_ROUTE_CHAR_CAP } from "../work-item-query.js";
+import { departmentNotesFolder, seedDepartmentState } from "./department-state.js";
 import { forbid, type GateRequest } from "./gate.js";
 
 /**
  * Notes and knowledge for a scoped session (FR-028): rooted at the department's own
  * folder, `knowledge/departments/<slug>/`, plus whatever the department shares
- * (`sharedNotes`). Writes go only into the department's folder. The company
- * `knowledge/state.md`, `knowledge/employees/` and `docs/` are out of reach unless
- * shared.
+ * (`sharedNotes`). Writes go only into the department's folder, and never to its
+ * `INSTRUCTIONS.md`: that file becomes the stage directory's `CLAUDE.md` (FR-029), so a
+ * session that could write it would write what every later session of the department
+ * loads (FR-029a). The company `knowledge/state.md`, `knowledge/employees/` and `docs/`
+ * are out of reach unless shared.
  *
  * The gate serves these routes itself, from the same stores the routes use, so a
  * scoped session has its Notes even where `gateway.notesEnabled` is off: the folder is
@@ -24,11 +28,6 @@ import { forbid, type GateRequest } from "./gate.js";
 
 const NOTES_BODY_MAX_BYTES = NOTE_FILE_MAX_BYTES * 6 + 64_000;
 const FAILURE_STATUS = { "invalid-path": 400, forbidden: 403, "not-found": 404, conflict: 409, "too-large": 413, "already-exists": 409 } as const;
-
-/** The department's own folder, relative to `knowledge/`. */
-export function departmentNotesFolder(slug: string): string {
-  return `departments/${slug}`;
-}
 
 function normal(relPath: string): string | null {
   const cleaned = path.posix.normalize(relPath.replace(/\\/g, "/")).replace(/^\.\//, "");
@@ -48,6 +47,62 @@ export function inDepartmentKnowledge(slug: string, relPath: string, { writable 
   });
 }
 
+const INSTRUCTIONS_FILE = "INSTRUCTIONS.md";
+
+function sameFile(a: string, b: string): boolean {
+  try {
+    const first = fs.statSync(a);
+    const second = fs.statSync(b);
+    return first.ino === second.ino && first.dev === second.dev;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether an instance-relative path (`knowledge/...`) is department `slug`'s
+ * `INSTRUCTIONS.md`. The name is judged in any case, and a file that is the same file on
+ * disk counts too: on a case-insensitive filesystem `Instructions.md`, or any spelling the
+ * filesystem folds to it, reaches the same file, and so does a hard link.
+ */
+export function isDepartmentInstructions(slug: string, relPath: string): boolean {
+  const target = normal(relPath);
+  if (!target) return false;
+  if (path.posix.basename(target).toLowerCase() === INSTRUCTIONS_FILE.toLowerCase()) return true;
+  return sameFile(path.join(resolveJinnHome(), target), path.join(resolveJinnHome(), "knowledge", departmentNotesFolder(slug), INSTRUCTIONS_FILE));
+}
+
+/** The refusal for a write to the department's instructions. */
+function refuseInstructions(g: GateRequest): true {
+  return forbid(g, `${INSTRUCTIONS_FILE} is set by the operator and cannot be written by a department-scoped session`);
+}
+
+function isDirectory(absolute: string): boolean {
+  try {
+    return fs.statSync(absolute).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The directories a scoped search walks (FR-028): the department's folder and what it
+ * shares. A shared file is reached through its own folder, and the search accepts it by
+ * name. A root inside another is dropped, so no file is found twice.
+ */
+export function departmentSearchRoots(slug: string): string[] {
+  const home = resolveJinnHome();
+  const shared = (departmentRecord(slug).definition?.sharedNotes ?? []).map((entry) => (isDirectory(path.join(home, entry)) ? entry : path.posix.dirname(entry)));
+  const roots = [...new Set([`knowledge/${departmentNotesFolder(slug)}`, ...shared])];
+  return roots.filter((root) => !roots.some((other) => other !== root && root.startsWith(`${other}/`)));
+}
+
+/** The first note a department writes also creates its state file; clients are told of both. */
+function seedState(g: GateRequest): void {
+  const seeded = seedDepartmentState(g.caller.department);
+  if (seeded) g.deps.context.emit("notes:changed", { path: seeded.path, revision: seeded.revision, action: "created" });
+}
+
 function failure(g: GateRequest, result: Extract<NoteStoreResult<unknown>, { ok: false }>): true {
   json(g.res, { error: result.detail, ...(result.currentRevision ? { currentRevision: result.currentRevision } : {}) }, FAILURE_STATUS[result.reason]);
   return true;
@@ -56,7 +111,8 @@ function failure(g: GateRequest, result: Extract<NoteStoreResult<unknown>, { ok:
 function knowledgeSearch(g: GateRequest): boolean {
   const q = readCleanSearchParam(g.route.url, "q");
   if (!q || q.length > SEARCH_QUERY_ROUTE_CHAR_CAP) return false; // the route refuses it in its own words
-  const results = searchKnowledge(q, resolveJinnHome()).filter((hit) => inDepartmentKnowledge(g.caller.department, hit.path));
+  const { department } = g.caller;
+  const results = searchKnowledge(q, resolveJinnHome(), departmentSearchRoots(department), (hit) => inDepartmentKnowledge(department, hit));
   json(g.res, { query: q, results });
   return true;
 }
@@ -128,9 +184,12 @@ async function notesCreate(g: GateRequest): Promise<boolean> {
   const own = departmentNotesFolder(g.caller.department);
   const folder = body.folder?.trim() || own;
   if (!inDepartmentKnowledge(g.caller.department, `knowledge/${folder}`, { writable: true })) return forbid(g, `Notes are written only under knowledge/${own}/`);
+  // The file a title gets is `<slug>.md`: a title that slugs to `instructions` would be the instructions file on a filesystem that folds case.
+  if (isDepartmentInstructions(g.caller.department, `knowledge/${folder}/${slugify(body.title!)}.md`)) return refuseInstructions(g);
   const result = createNote({ title: body.title!, ...present(body, ["body"]), folder }, resolveJinnHome());
   if (!result.ok) return failure(g, result);
   g.deps.context.emit("notes:changed", { path: result.value.path, revision: result.value.revision, action: "created" });
+  seedState(g);
   json(g.res, { note: result.value }, 201);
   return true;
 }
@@ -142,9 +201,11 @@ async function notesUpdate(g: GateRequest): Promise<boolean> {
   if (!inDepartmentKnowledge(g.caller.department, notePath, { writable: true })) {
     return forbid(g, `Notes are written only under knowledge/${departmentNotesFolder(g.caller.department)}/`);
   }
+  if (isDepartmentInstructions(g.caller.department, notePath)) return refuseInstructions(g);
   const result = updateNote({ path: body.path!, expectedRevision: body.expectedRevision!, ...present(body, ["title", "body", "append"]) }, resolveJinnHome());
   if (!result.ok) return failure(g, result);
   g.deps.context.emit("notes:changed", { path: result.value.path, revision: result.value.revision, action: "updated" });
+  seedState(g);
   json(g.res, { note: result.value });
   return true;
 }

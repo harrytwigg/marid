@@ -20,7 +20,7 @@ The statuses are backlog (shown as **To do** on the board), executing, in_review
 
 ## Departments that confine their people
 
-A Todo's department is its top-level Todo's. In a `scoped` or `dedicated` department (see `docs/org.md`), only some employees may hold its Todos: a scoped employee holds only its own department's Todos, and only members hold a `dedicated` department's. An assignment, delegation or create that breaks that is refused with the reason; choose someone who may hold it, or `@operator`. If your own session is scoped to a department, every Todo outside it reads as not found, your creates land in your department, and you assign and delegate only to its members.
+A Todo's department is its top-level Todo's. In a `scoped` or `dedicated` department (see `docs/org.md`), only some employees may hold its Todos: a scoped employee holds only its own department's Todos, and only members hold a `dedicated` department's. An assignment, delegation or create that breaks that is refused with the reason; choose someone who may hold it, or `@operator`. If your own session is scoped to a department, every Todo outside it reads as not found, your creates land in your department, and you assign and delegate only to its members. A Todo in such a department can name only the skills the department allows in its `skills`; a scoped assignee reads them from `.claude/skills/<name>/SKILL.md` in its own directory, not `skills/`.
 
 ## Who may move a Todo where
 

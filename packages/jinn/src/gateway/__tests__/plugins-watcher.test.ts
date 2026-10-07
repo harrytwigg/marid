@@ -51,6 +51,7 @@ function callbacks() {
     onCronReload: () => {},
     onOrgChange: () => {},
     onSkillsChange: () => {},
+    onDepartmentInstructionsChange: () => {},
     onPluginsChange: changes,
   };
 }

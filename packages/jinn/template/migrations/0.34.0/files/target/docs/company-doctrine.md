@@ -20,7 +20,7 @@ Fresh work should not ping the operator by default. Employees handle their lane,
 
 For company state, the Jinn MCP is the hands. Employees should use it to read and update org, sessions, Todos, Notes, cron, and reference material. Shell and filesystem access are for local implementation work or gaps the MCP does not cover.
 
-A department can confine its employees (`scope: scoped` or `dedicated` in its `department.yaml`, see `docs/org.md`). The gateway then holds a scoped employee's sessions to that department through these same tools: its Todos, its members, sessions bound to it and its own Notes, and nothing of the company's configuration. That is a guardrail on the tools, not a sandbox around the shell, so a scoped employee is told not to read around them.
+A department can confine its employees (`scope: scoped` or `dedicated` in its `department.yaml`, see `docs/org.md`). The gateway then holds a scoped employee's sessions to that department through these same tools: its Todos, its members, sessions bound to it and its own Notes, and nothing of the company's configuration. A scoped session also loads only its department's context: its own instructions and allowed skills in a stage directory, and its own state file under `knowledge/departments/<slug>/`, never the company `CLAUDE.md` unless the department opts in. That is a guardrail on the tools, not a sandbox around the shell, so a scoped employee is told not to read around them.
 
 ## 5. Uniform Contracts
 

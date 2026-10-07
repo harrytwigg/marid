@@ -9,6 +9,8 @@ export interface SessionSettingsOpts {
   appendSystemPrompt?: string;
   /** Named Claude profiles only: the operator's keys that profile cannot read itself (claude-profile-settings.ts). */
   carry?: OperatorSettingsCarry;
+  /** A department-scoped session: the instruction files above its stage directory, which it must not read. */
+  claudeMdExcludes?: string[];
 }
 
 interface HookCommand { type: "command"; command: string; }
@@ -44,6 +46,7 @@ export interface ClaudeSettings {
   appendSystemPrompt?: string;
   attribution?: unknown;
   skipDangerousModePermissionPrompt?: boolean;
+  claudeMdExcludes?: string[];
 }
 
 function shellQuote(value: string): string {
@@ -95,6 +98,7 @@ export function buildSessionSettings(opts: SessionSettingsOpts): ClaudeSettings 
     ...(opts.carry?.skipDangerousModePermissionPrompt !== undefined
       ? { skipDangerousModePermissionPrompt: opts.carry.skipDangerousModePermissionPrompt }
       : {}),
+    ...(opts.claudeMdExcludes?.length ? { claudeMdExcludes: opts.claudeMdExcludes } : {}),
   };
 }
 

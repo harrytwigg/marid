@@ -87,7 +87,7 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
               .map((s: any) => ({ name: s.name as string, description: s.description as string }))
             : undefined,
         };
-        const departmentProblem = departmentDisagreement(orgDir, fullPath, employee.department, scopeOf) ?? scopedEmployeeRefusal(employee, scopeOf);
+        const departmentProblem = departmentDisagreement(orgDir, fullPath, employee.department, scopeOf) ?? scopedEmployeeRefusal(employee, scopeOf, config?.remote);
         if (departmentProblem) {
           // Same containment as a bad remote target: this employee does not load, the
           // rest of the org does. A scoped department's members are confined by what

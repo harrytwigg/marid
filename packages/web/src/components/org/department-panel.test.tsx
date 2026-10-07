@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { DepartmentDefinitionWire } from "@/lib/department-api"
 import { DepartmentPanel } from "./department-panel"
@@ -94,6 +94,27 @@ describe("DepartmentPanel", () => {
     mount({ warnings: ["skills: dropped \"nope\", which is not an installed skill"] })
     await screen.findByTestId("department-panel")
     expect(text("department-warnings")).toContain("dropped \"nope\"")
+  })
+
+  it("warns, under the skills, of a skill the stage directory refuses, and does not list it as offered", async () => {
+    mount({ skills: ["review"], skillProblems: [{ skill: "speckit-plan", reason: "it contains a symlink (reference/guide.md)" }] })
+    await screen.findByTestId("department-panel")
+    expect(text("department-skills")).toContain("review")
+    const alert = within(screen.getByTestId("department-skills")).getByTestId("department-skill-problems")
+    expect(alert.textContent).toBe("speckit-plan is not offered to this department: it contains a symlink (reference/guide.md).")
+    expect(text("department-skills").split("speckit-plan").length - 1).toBe(1)
+  })
+
+  it("shows no skill warning when every skill can be offered, or when the gateway sends none", async () => {
+    mount({ skillProblems: [] })
+    await screen.findByTestId("department-panel")
+    expect(screen.queryByTestId("department-skill-problems")).toBeNull()
+  })
+
+  it("renders against an older gateway that sends no skillProblems", async () => {
+    mount({})
+    await screen.findByTestId("department-panel")
+    expect(screen.queryByTestId("department-skill-problems")).toBeNull()
   })
 
   it("opens a member's panel", async () => {

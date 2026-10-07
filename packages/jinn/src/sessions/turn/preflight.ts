@@ -1,6 +1,7 @@
 import { buildPlatformContextRefresh, fingerprintPlatformContext } from "../../engines/platform-context.js";
 import { isBudgetExhausted } from "../../gateway/budgets.js";
 import { refuseScopedTurn } from "./scoped-turn.js";
+import { isRemoteTarget } from "../../shared/remote-target.js";
 import { refuseClaudeLogin } from "./claude-login-refusal.js";
 import { resolveEffort } from "../../shared/effort.js";
 import { isCompactCommand, isRawEngineCommand } from "../../shared/skill-commands.js";
@@ -65,7 +66,7 @@ function refuseTurn(input: TurnInput): string | undefined {
 
 /** The department-scope gates (scoped-turn.ts), then the Claude login check. */
 function refuseScopedOrLogin(input: TurnInput): string | undefined {
-  return refuseScopedTurn(input.session, input.engineOverride?.name) ?? refuseClaudeLogin(input);
+  return refuseScopedTurn(input.session, input.engineOverride?.name, isRemoteTarget(input.employee), input.config.engines.claude?.bin) ?? refuseClaudeLogin(input);
 }
 
 function resolveTurnEffort(input: TurnInput, engineConfig: EngineConfig): string | undefined {

@@ -4,7 +4,7 @@ import { initDb } from "../shared/db.js";
 import { logger } from "../shared/logger.js";
 import { resolveJinnHome } from "../shared/paths.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
-import { setDepartmentScopeResolver } from "../work-items/department-scope.js";
+import { setDepartmentScopeResolver, setDepartmentSkillsResolver } from "../work-items/department-scope.js";
 import { parseDepartmentYaml, UNSCOPABLE_DEPARTMENTS, type DepartmentDefinition } from "./department-definition.js";
 import { reportStraddlingSubtasks } from "./department-straddle.js";
 import { departmentWorkdirOptions, type WorkdirOptions } from "./department-workdirs.js";
@@ -199,6 +199,7 @@ function notifyChanges(previous: Map<string, string>): void {
  */
 export function refreshDepartments(): void {
   setDepartmentScopeResolver(departmentScopeOf);
+  setDepartmentSkillsResolver(departmentSkills);
   const home = resolveJinnHome();
   let workdirOptions: WorkdirOptions | undefined;
   const pass: Pass = {
@@ -236,6 +237,11 @@ export function departmentScopeOf(slug: string): DepartmentScope {
   return state?.error && state.asksToConfine ? "dedicated" : "open";
 }
 
+/** The skills a scoped department offers (FR-027): its allow-list, nothing when it has none, no restriction when it is open. */
+function departmentSkills(slug: string): readonly string[] | null {
+  return departmentScopeOf(slug) === "open" ? null : departmentRecord(slug).definition?.skills ?? [];
+}
+
 export function departmentRecord(slug: string): DepartmentRecord {
   const state = loaded().get(slug);
   return {
@@ -260,4 +266,5 @@ export function resetDepartmentRegistryForTests(): void {
   signatures = new Map();
   notifyChange = null;
   setDepartmentScopeResolver(null);
+  setDepartmentSkillsResolver(null);
 }

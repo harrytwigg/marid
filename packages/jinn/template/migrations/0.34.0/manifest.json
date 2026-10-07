@@ -35,7 +35,7 @@
       "path": "docs/company-doctrine.md",
       "operation": "modify",
       "baseSha256": "7e7c6c9da3639492ba9b9ca5914546fdc9fa081cc0613d065698d130a6c25159",
-      "targetSha256": "b8f33488c54240155cd1074ed993b073f8b9a516298403212354241c305304e7",
+      "targetSha256": "45cc9dd6511772a6a36dbbecdcaa374af7969c55804f55f591d06321848d3d94",
       "basePayload": "files/base/docs/company-doctrine.md",
       "targetPayload": "files/target/docs/company-doctrine.md"
     },
@@ -67,7 +67,7 @@
       "path": "docs/org.md",
       "operation": "modify",
       "baseSha256": "3ed3540abb2997cde6ef0d8cecf61281f4e96c0909807d51040fba1709f3a968",
-      "targetSha256": "f149f2c51e03dbab242e6016794c54db92a023509a53c2f13c16fc0b862599f1",
+      "targetSha256": "cbd499f0dcb4a2ae2122948fb1bd6659535699c2f568d92780bca4b2e59e726c",
       "basePayload": "files/base/docs/org.md",
       "targetPayload": "files/target/docs/org.md"
     },
@@ -131,7 +131,7 @@
       "path": "skills/management/SKILL.md",
       "operation": "modify",
       "baseSha256": "a7ab4f21e35a12c4cd26d1620f1651323e887284579b29b6967a156670cd0de8",
-      "targetSha256": "a42a31ad2e206e0f5742aeda9aa0ceeb326ddfc9023365bde435764a9b721732",
+      "targetSha256": "a3d1b864e228806ec88af2adee22fd3c6c4db7d54f076528b47e6be162da47ef",
       "basePayload": "files/base/skills/management/SKILL.md",
       "targetPayload": "files/target/skills/management/SKILL.md"
     },
@@ -147,7 +147,7 @@
       "path": "skills/todo-handling/SKILL.md",
       "operation": "modify",
       "baseSha256": "07f721103523c7a5cf33489338ccb0afd4756d44905ba575119f575612b59456",
-      "targetSha256": "442bc27cac64e6145624e3662cdef28c7c926bed3cb1bafda142025306120843",
+      "targetSha256": "8a4b3dd5e6a8f4b803c0d9be7abee7ae222a43b8b5d7eee0b95a517d6fedd51c",
       "basePayload": "files/base/skills/todo-handling/SKILL.md",
       "targetPayload": "files/target/skills/todo-handling/SKILL.md"
     },

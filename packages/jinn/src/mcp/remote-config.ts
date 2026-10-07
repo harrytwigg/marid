@@ -3,6 +3,7 @@ import path from "node:path";
 import type { McpServerConfig, McpServerStdioConfig, ResolvedMcpConfig } from "../shared/types.js";
 import { MCP_GATEWAY_URL_ARG, MCP_HOME_ARG } from "./identity.js";
 import { SCRUB_ENTRY_BASENAME } from "./env-scrub.js";
+import { DEPARTMENT_FILE_ROOTS_ENV } from "../shared/department-file-roots.js";
 
 /**
  * Rewrite a resolved MCP server set so it can be staged on a REMOTE host.
@@ -56,6 +57,10 @@ export interface RemoteMcpRemapOpts {
   remoteHome: string;
   /** `http://127.0.0.1:<tunnelPort>` — the reverse tunnel back to the gateway. */
   gatewayUrl: string;
+  /** A department-scoped session's file roots ON THE REMOTE (FR-065). The gateway-side
+   *  roots a scoped server was resolved with name this machine's paths, so they are
+   *  always replaced: by these, or by none, which admits nothing. */
+  departmentFileRoots?: readonly string[];
 }
 
 /**
@@ -122,5 +127,6 @@ function remapEnv(env: Record<string, string>, opts: RemoteMcpRemapOpts): Record
   // server that never asked for it would hand it an instance pointer.
   if (JINN_HOME_ENV in out) out[JINN_HOME_ENV] = opts.remoteHome;
   if (JINN_GATEWAY_URL_ENV in out) out[JINN_GATEWAY_URL_ENV] = opts.gatewayUrl;
+  if (DEPARTMENT_FILE_ROOTS_ENV in out) out[DEPARTMENT_FILE_ROOTS_ENV] = JSON.stringify(opts.departmentFileRoots ?? []);
   return out;
 }

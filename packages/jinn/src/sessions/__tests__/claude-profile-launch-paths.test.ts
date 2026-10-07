@@ -43,7 +43,7 @@ function attempt(employee: Partial<Employee> | undefined): Promise<EngineRunOpts
   let seen: EngineRunOpts | undefined;
   const engine = { run: vi.fn(async (opts: EngineRunOpts) => { seen = opts; return { sessionId: "n1", result: "ok" } as EngineResult; }) };
   return runEngineAttempt({
-    input: { session: { id: "s1" }, attachments: [], employee, attemptToken: "t1" } as any,
+    input: { session: { id: "s1" }, attachments: [], employee, attemptToken: "t1", config: {} } as any,
     plan: {
       engine, engineConfig: {}, promptToRun: "hi", runtimeSource: "web",
       prepareContext: () => ({ systemPrompt: "sys", fingerprint: "f", refresh: undefined }),

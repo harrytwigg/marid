@@ -409,7 +409,7 @@ Senior, because it is the enforcement itself.
 
 ### Phase 3: scoped context (junior-developer, then senior QA)
 
-The stage dir lives at `<parent of home>/.jinn-departments/<slug>/`.
+The stage dir lives at `<parent of home>/.jinn-departments/.instances/<basename of home>/<slug>/` (the root is keyed by instance by the stage-hardening follow-up, below; Phase 3 as first built used `<parent of home>/.jinn-departments/<slug>/`).
 
 - **Contents.** It holds copies of the allowed skills and a generated `CLAUDE.md`. The
   `CLAUDE.md` is built from `INSTRUCTIONS.md`, plus the company `CLAUDE.md` if
@@ -437,6 +437,26 @@ The stage dir lives at `<parent of home>/.jinn-departments/<slug>/`.
 - **Docs.** The template docs explain scoped departments, department state through the note
   tools, and the fact that this is a guardrail, not a sandbox. They do not mention `mem`, which
   is instance-local.
+
+### Stage hardening (follow-up to Phases 3 and 5; junior-developer, then senior QA)
+
+Four residual risks from Phase 3, closed after Phase 5 merged:
+
+- **Per-instance stage root (FR-020, FR-020a).** The root is `<parent of home>/.jinn-departments/.instances/<basename of home>/`.
+  `prepareDepartmentStage` first runs `migrateLegacyStageDir` (`department-stage/legacy-stage.ts`): a
+  stage dir at the old path is renamed to the new one (inode kept), its Claude transcripts are moved to the
+  new project key in every profile, and it is never moved again. FR-033 protects the whole
+  `.jinn-departments/` directory. The remote path (`shared/remote-department.ts`) is deliberately **not**
+  re-keyed: `remote.root` is already the instance's own on a host, and re-keying would strand the existing
+  remote stage dirs and their transcripts.
+- **`INSTRUCTIONS.md` is the operator's (FR-029a).** The scoped note routes refuse a write to it, by name in any
+  case and by identity on disk.
+- **Skills the stage dir refuses (FR-020a, FR-027).** `shared/skill-inspection.ts` is the one judgement of
+  whether a skill can be copied; the generator, `dispatchConfig.skills` validation and the department panel
+  (`skillProblems`) all use it.
+- **One derivation of a session's department.** The rate-limit substitution decided a session was scoped from
+  its binding alone; it now asks `sessionScopeDepartment`, as the cwd, transcript, prompt and gate do, so a session
+  whose binding was lost still stays on Claude.
 
 ### Phase 4: per-employee Claude profiles (senior-developer; junior sub-Todo for the transcript readers and their tests; senior QA)
 

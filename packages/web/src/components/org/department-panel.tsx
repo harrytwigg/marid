@@ -50,6 +50,20 @@ function Chips({ items, empty }: { items: string[]; empty: string }) {
   )
 }
 
+/** Allow-listed skills the stage directory refuses. They are not offered to any session, so the operator is told here rather than finding a skill missing. */
+function SkillProblems({ problems }: { problems: Array<{ skill: string; reason: string }> }) {
+  if (problems.length === 0) return null
+  return (
+    <ul data-testid="department-skill-problems" className="m-0 mt-[var(--space-3)] flex list-none flex-col gap-1 p-0">
+      {problems.map(({ skill, reason }) => (
+        <li key={skill} className="text-[length:var(--text-caption1)] text-[var(--system-orange)]">
+          <span className={`${MONO} font-[var(--weight-semibold)]`}>{skill}</span> is not offered to this department: {reason}.
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function RefusedNotice({ error, scope }: { error: string; scope: DepartmentScopeWire }) {
   return (
     <div
@@ -72,6 +86,7 @@ function ScopedSections({ department }: { department: DepartmentDefinitionWire }
       </Section>
       <Section title="Skills" testId="department-skills">
         <Chips items={department.skills} empty="None. Scoped sessions get no company skills." />
+        <SkillProblems problems={department.skillProblems ?? []} />
       </Section>
       <Section title="Shared Notes" testId="department-shared-notes">
         <PathList items={department.sharedNotes} empty="None. Only the department's own Notes are shared." />

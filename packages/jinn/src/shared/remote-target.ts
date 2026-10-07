@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Employee, RemoteTarget } from "./types.js";
 import type { RemoteExecutionConfig } from "./config-types.js";
+import { remoteDepartmentsRoot, remoteDepartmentStageDir, type RemoteScope, type SessionRemoteTarget } from "./remote-department.js";
 
 /**
  * Remote-execution containment.
@@ -100,8 +101,20 @@ export function validateRemoteTarget(
   }
   return validateDestination(host, user)
     ?? validateRemoteConfig(host, remote)
-    ?? validateRemoteCwd(host, cwd, remote!)
+    ?? validateRemoteCwd(host, cwd, remote!, (target as SessionRemoteTarget).remoteDepartment)
     ?? validateClaudeConfigDir(target, remote!);
+}
+
+/**
+ * Nobody runs in the department stage directories but the department's own scoped
+ * sessions, each in its own: an unscoped session there would have its farm link the
+ * company CLAUDE.md into a scoped session's cwd or one above it (FR-062).
+ */
+function validateOutsideDepartments(cwd: string, department: string | undefined, remote: RemoteExecutionConfig): RemoteTargetProblem | undefined {
+  const departments = remoteDepartmentsRoot(remote.root);
+  if (!isUnderRoot(cwd, departments)) return undefined;
+  if (department && path.posix.normalize(cwd).replace(/\/+$/, "") === remoteDepartmentStageDir(remote.root, department)) return undefined;
+  return { error: `remoteCwd "${cwd}" lies in "${departments}", where department-scoped employees' stage directories are synced` };
 }
 
 /**
@@ -164,6 +177,7 @@ function validateRemoteCwd(
   host: string,
   cwd: string,
   remote: RemoteExecutionConfig,
+  department: string | undefined,
 ): RemoteTargetProblem | undefined {
   if (!cwd) {
     return { error: `remoteHost "${host}" is set but remoteCwd is not` };
@@ -177,7 +191,7 @@ function validateRemoteCwd(
   if (!isUnderRoot(cwd, remote.root)) {
     return { error: `remoteCwd "${cwd}" does not resolve under the configured remote.root "${remote.root}"` };
   }
-  return undefined;
+  return validateOutsideDepartments(cwd, department, remote);
 }
 
 /**
@@ -203,14 +217,27 @@ export function sshDestination(target: RemoteTarget & { remoteHost: string }): s
   return user ? `${user}@${target.remoteHost.trim()}` : target.remoteHost.trim();
 }
 
-/** The remote target carried by an employee, or undefined when it is local. */
-export function employeeRemoteTarget(employee: Employee | undefined): RemoteTarget | undefined {
+/**
+ * The remote target carried by an employee, or undefined when it is local.
+ *
+ * The one place a target is built from an employee (FR-061). A scoped employee's
+ * sessions run in its department's stage directory on the host, so `remoteCwd` is
+ * that directory and the employee's own `remoteCwd` becomes `remoteWorkArea`. With no
+ * `remote.root` there is no stage directory, and no `remoteCwd` either: the spawn is
+ * refused rather than run in the work area with the company home linked in. `scope`
+ * is required so no caller can build a target and forget it.
+ */
+export function employeeRemoteTarget(employee: Employee | undefined, scope: RemoteScope): SessionRemoteTarget | undefined {
   if (!employee || !isRemoteTarget(employee)) return undefined;
+  const department = scope.departmentOf(employee);
+  const workArea = employee.remoteCwd;
+  const remoteCwd = department ? (scope.remoteRoot ? remoteDepartmentStageDir(scope.remoteRoot, department) : undefined) : workArea;
   return {
     remoteHost: employee.remoteHost,
     ...(employee.remoteUser === undefined ? {} : { remoteUser: employee.remoteUser }),
-    ...(employee.remoteCwd === undefined ? {} : { remoteCwd: employee.remoteCwd }),
+    ...(remoteCwd === undefined ? {} : { remoteCwd }),
     ...(employee.remoteClaudeConfigDir === undefined ? {} : { remoteClaudeConfigDir: employee.remoteClaudeConfigDir }),
+    ...(department ? { remoteDepartment: department, ...(workArea === undefined ? {} : { remoteWorkArea: workArea }) } : {}),
   };
 }
 

@@ -1,5 +1,6 @@
-import { JINN_HOME } from "../../shared/paths.js";
 import { sessionClaudeProfile } from "../session-account.js";
+import { remoteScopeFor, spawnCwd } from "../session-cwd.js";
+import { employeeRemoteTarget, isRemoteTarget } from "../../shared/remote-target.js";
 import { logger } from "../../shared/logger.js";
 import { selectClaudeModelFallback } from "../../shared/model-fallback.js";
 import { getModelRegistry, refreshClaudeModels } from "../../shared/models.js";
@@ -44,19 +45,17 @@ export async function runEngineAttempt(args: EngineAttemptArgs): Promise<EngineA
     resumeSessionId: plan.resumeSessionId,
     systemPrompt: prepared.systemPrompt,
     platformContextRefresh: prepared.refresh,
-    cwd: JINN_HOME,
+    cwd: spawnCwd(input.session, isRemoteTarget(input.employee)),
     bin: plan.engineConfig.bin,
     model: args.model,
     effortLevel: plan.effortLevel,
     cliFlags: input.employee?.cliFlags,
-    // `cwd` above stays JINN_HOME: it is the gateway-side working directory and
-    // is meaningless on the remote host. The engine branches on `remoteHost` and
+    // `cwd` above is the gateway-side working directory (the Jinn home, or a scoped
+    // session's stage directory) and is meaningless on the remote host. The engine branches on `remoteHost` and
     // uses `remoteCwd` instead — passing both is what lets one code path serve
     // a local and a remote employee.
-    remoteHost: input.employee?.remoteHost,
-    remoteUser: input.employee?.remoteUser,
-    remoteCwd: input.employee?.remoteCwd,
-    remoteClaudeConfigDir: input.employee?.remoteClaudeConfigDir,
+    // A scoped employee's remote cwd is its department's stage directory on the host.
+    ...employeeRemoteTarget(input.employee, remoteScopeFor(input.config.remote, input.session)),
     claudeProfile: sessionClaudeProfile(input.session, input.employee),
     mcpConfigPath: plan.mcpConfigPath,
     resolvedMcp: plan.resolvedMcp,

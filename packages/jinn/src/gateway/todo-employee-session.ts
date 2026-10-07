@@ -80,7 +80,7 @@ function employeeDefaults(employee: Employee): { engine: string; model: string; 
  *  delegation, then the employee's. The Todo's skills prefix the prompt. */
 function planSpawn(context: ApiContext, input: WakeEmployeeInput): { ok: true; spawn: Spawn } | { ok: false; error: string } {
   const config = context.getConfig();
-  const dispatch = resolveTodoDispatch(input.workItemId);
+  const dispatch = resolveTodoDispatch(input.workItemId, input.employee.name);
   if (!dispatch.ok) return { ok: false, error: dispatch.error };
   const override = dispatch.preamble;
   const selection = validateNewSessionSelection(config, {

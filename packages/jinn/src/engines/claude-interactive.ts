@@ -69,6 +69,17 @@ interface TranscriptUsage {
   assistantTurns: number;
 }
 
+/** The profile a local PTY runs as, in the form `spawnParams` records it. */
+function profileKeyOf(profile: ClaudeProfile | undefined): string | null {
+  return profile?.key ?? null;
+}
+
+/** Whether a warm local PTY runs as a different Claude profile than the one
+ *  asked for now. A PTY with no recorded profile (a remote spawn) is never judged. */
+function warmProfileChanged(prev: { profileKey?: string | null } | undefined, profile: ClaudeProfile | undefined): boolean {
+  return prev?.profileKey !== undefined && prev.profileKey !== profileKeyOf(profile);
+}
+
 /**
  * Sum assistant-message usage from a Claude transcript.
  *
@@ -1608,8 +1619,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private terminalWaitCb?: (sessionId: string, waiting: boolean) => void;
   /** Model/effort the live PTY was spawned with, per session. `--model`/`--effort`
    *  apply only at spawn, so a mid-chat switch must cold-respawn rather than reuse
-   *  the warm PTY (which would keep running the old model). */
-  private spawnParams = new Map<string, { model?: string; effortLevel?: string; appendApplied?: boolean }>();
+   *  the warm PTY (which would keep running the old model). So does the Claude
+   *  profile (`profileKey`, local spawns only): a session moved onto another
+   *  account and back must not keep answering in the other account's process. */
+  private spawnParams = new Map<string, { model?: string; effortLevel?: string; appendApplied?: boolean; profileKey?: string | null }>();
   /** Sessions with a post-failure recovery listener armed (turn settled as an
    *  API error, but the CLI may still finish — a late Stop supersedes). */
   private lateRecovery = new Map<string, { timer: NodeJS.Timeout }>();
@@ -2095,7 +2108,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (resolver.isSettled || resolver.promptSubmittedAt !== undefined) return;
     if (!isRemoteTarget(opts)) {
       const sid = resolver.sessionId ?? opts.resumeSessionId;
-      const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
+      const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile, opts.cwd) : undefined;
       if (transcript && transcriptHasPromptSince(transcript, pastedAt, opts.prompt)) {
         logger.warn(`InteractiveClaudeEngine: ${jinnSessionId}'s transcript has the prompt though no hook said so — not respawning, which would run it twice. Leaving the turn to the stall backstop.`);
         return;
@@ -2322,8 +2335,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       // chat pane (the sentinel is what makes the SSE proxy tee). --resume preserves
       // the conversation.
       const missingPrompt = !prev || prev.appendApplied !== true;
-      if (modelOrEffortChanged || missingPrompt) {
-        logger.info(`InteractiveClaudeEngine: cold respawn for ${jinnSessionId} (${modelOrEffortChanged ? "model/effort changed" : "warm PTY missing --append-system-prompt"})`);
+      const profileChanged = warmProfileChanged(prev, opts.claudeProfile);
+      if (modelOrEffortChanged || missingPrompt || profileChanged) {
+        const why = profileChanged ? "Claude profile changed" : modelOrEffortChanged ? "model/effort changed" : "warm PTY missing --append-system-prompt";
+        logger.info(`InteractiveClaudeEngine: cold respawn for ${jinnSessionId} (${why})`);
         this.lifecycle.releaseSession(jinnSessionId);
         warm = undefined;
       }
@@ -2618,7 +2633,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           // Only attempt recovery when we can identify THIS turn's transcript.
           // Transcripts share one project dir keyed by Claude session id, so
           // guessing by mtime could attach another session's answer.
-          const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
+          const transcript = sid ? findSessionTranscript(sid, opts.claudeProfile, opts.cwd) : undefined;
           let transcriptIsFresh = false;
           if (transcript) {
             try { transcriptIsFresh = fs.statSync(transcript).mtimeMs >= startedAt - 1000; } catch { /* unreadable */ }
@@ -2696,7 +2711,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     if (compactedBy && !result.error) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
       const hookPath = typeof compactedBy.transcript_path === "string" ? compactedBy.transcript_path : undefined;
-      const statsPath = hookPath ?? (sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined);
+      const statsPath = hookPath ?? (sid ? findSessionTranscript(sid, opts.claudeProfile, opts.cwd) : undefined);
       result.compaction = statsPath ? await awaitCompactionStats(statsPath, turnTranscriptFrom) : {};
       if (result.compaction.postTokens) result.contextTokens = result.compaction.postTokens;
       else delete result.contextTokens;
@@ -2710,7 +2725,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // genuine no-output API error — leave those alone.
     if (!nativeCommand && !result.error && !result.result?.trim() && !resolver.stopFailure) {
       const sid = resolver.sessionId ?? opts.resumeSessionId ?? result.sessionId;
-      const recoveryPath = sid ? findSessionTranscript(sid, opts.claudeProfile) : undefined;
+      const recoveryPath = sid ? findSessionTranscript(sid, opts.claudeProfile, opts.cwd) : undefined;
       // Same floor as lost-Stop recovery: under the warm-PTY gate, transcript
       // text before our own UserPromptSubmit is a turn typed in the terminal,
       // and text before a background re-invocation's Stop is that re-run's.
@@ -3129,7 +3144,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       cwd: opts.cwd || JINN_HOME,
       env,
     });
-    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, appendApplied: true });
+    this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, appendApplied: true, profileKey: profileKeyOf(opts.claudeProfile) });
     return this.wireProcToStream(jinnSessionId, proc, port ? proxy : undefined);
   }
 
@@ -3140,8 +3155,15 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  Fire-and-forget (void): allocating the per-PTY SSE proxy is async, so the
    *  actual spawn happens after a microtask; `idleSpawning` guards re-entrancy. */
   ensureIdleSpawn(jinnSessionId: string, opts: PtyIdleSpawnOpts): void {
-    if (this.lifecycle.getWarm(jinnSessionId)) return;
     if (this.active.has(jinnSessionId)) return; // a turn is starting/running — let run() spawn
+    if (this.lifecycle.getWarm(jinnSessionId)) {
+      // A warm PTY on another Claude profile is the other account's conversation;
+      // attaching to it would put the operator in front of the wrong login. One
+      // the operator is typing a turn into is left alone, as run() leaves it.
+      if (this.terminalTurns.has(jinnSessionId) || !warmProfileChanged(this.spawnParams.get(jinnSessionId), opts.claudeProfile)) return;
+      logger.info(`InteractiveClaudeEngine: dropping ${jinnSessionId}'s idle PTY before attach (Claude profile changed)`);
+      this.lifecycle.releaseSession(jinnSessionId);
+    }
     if (this.idleSpawning.has(jinnSessionId)) return; // an idle spawn is already in flight
     this.idleSpawning.add(jinnSessionId);
 
@@ -3237,7 +3259,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         const handle = this.wireProcToStream(jinnSessionId, proc, port ? proxy : undefined);
         // Idle spawn carries no --append-system-prompt (the view-only PTY); mark it so
         // the first real turn through run() cold-respawns with the persona + sentinel.
-        this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false });
+        this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false, profileKey: profileKeyOf(opts.claudeProfile) });
         this.lifecycle.adopt(jinnSessionId, handle);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

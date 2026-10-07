@@ -437,7 +437,8 @@ operator owns:
   entirely. An untracked file dropped into a checkout would show up in
   `git status` and be deleted by `git clean -fdx`.
 
-Both cases are logged rather than passed over silently.
+Both cases are logged rather than passed over silently. A department-scoped
+employee gets none of this (see "Department-scoped employees" below).
 
 This is why **`remoteCwd` should be a workspace root, not a checkout**: point it
 at a directory that holds repositories in subfolders. The rules then sit beside
@@ -450,6 +451,58 @@ the file.
   some-service/               <- cloned here
   another-repo/               <- and here
 ```
+
+## Department-scoped employees
+
+An employee in a `scoped` or `dedicated` department (see the instance's
+`docs/org.md`) is staged differently, because the farm and the linked
+`CLAUDE.md` above would hand it the whole company home:
+
+- **Its working directory is its department's stage directory on the host**,
+  `<remote.root>/.jinn-departments/<slug>/`: the department's generated
+  `CLAUDE.md` and the skills it allows, the same content as the local stage
+  directory. Before every scoped spawn the gateway sends the file set as a tar
+  stream over ssh into `.jinn-departments/.<slug>.incoming-<random>/` and a
+  script applies it file by file: changed files are renamed over the old ones,
+  directories are made and never renamed over one that exists, extras go, and
+  incoming directories older than an hour are reaped. The directory itself is
+  never replaced, so its path (which the transcript slug and the trust key come
+  from) stays put. The path is not keyed by instance, unlike the local stage
+  directory: `remote.root` is the instance's own on a host, so two instances that
+  share a host need different `remote.root` values. Nothing is cached, so a wiped or edited copy is restored by
+  the next spawn. The sync runs inside the per-host lock, after the session's
+  home and the assets and before the folder-trust seed.
+- **Its instance home links nothing.** A variant of the farm script makes the
+  home with `gateway.json`, `tmp/` and the stage marker only, keeps the reaping,
+  the lock and the asset report, and removes any link a farm rebuild left there.
+  No `CLAUDE.md` is linked anywhere. `FARM_SCRIPT` itself is unchanged.
+- **Nothing above it is read.** Claude Code loads `CLAUDE.md`, `CLAUDE.local.md`
+  and `.claude/` instructions from every directory above its cwd, and an
+  unscoped colleague whose `remoteCwd` is `remote.root` has the company
+  `CLAUDE.md` linked there. The scoped session's settings list every such path
+  above the stage directory, as configured and as the host resolves it, in
+  `claudeMdExcludes`. A scoped spawn is refused on a host whose `claude --version`
+  is older than 2.1.288, the oldest build verified to honour it (asked once per
+  host and binary), and when the sync does not report the real path. The
+  exclusions cover every directory above the stage directory, so with no
+  Claude profile configured and `remote.root` under the remote user's home, that
+  user's `~/.claude/CLAUDE.md` and `~/.claude/rules/` are skipped as well; a
+  profile's own `CLAUDE.md` lives in the profile and still loads. No remote employee, scoped or not, may have a `remoteCwd`
+  in `<remote.root>/.jinn-departments`.
+- **Its own `remoteCwd` is its work area**, named in the session's prompt and
+  created on the host if it is missing. It
+  must not be, contain or lie inside `<remote.root>/.jinn-departments` or
+  `remote.mount`, and the mount must not overlap the departments directory; the
+  employee is refused at load otherwise. At spawn the work area and the stage
+  directory must also stay clear of the host's own stage directory
+  (`~/.jinn-remote-stage`), which holds every session's gateway token; if that is
+  not known, the spawn is refused.
+- **The scope is the gateway's**, exactly as for a local scoped session. The
+  environment file carries `JINN_DEPARTMENT`, and the jinn MCP server on the
+  host attaches files only from the work area and the stage directory.
+
+This is the same guardrail as locally, not a sandbox: the session's shell can
+still reach the mounted instance home.
 
 ## The sandbox root
 

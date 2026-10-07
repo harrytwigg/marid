@@ -52,12 +52,31 @@ write(path.join(org, 'side-project', 'department.yaml'), [
   'scope: scoped',
   'workdirs:',
   `  - ${workdir}`,
-  'skills: [management, delegation, no-such-skill]',
+  'skills: [management, delegation, linked-skill, no-such-skill]',
   'sharedNotes: [knowledge/shared/glossary.md]',
   'instructions: department+company',
 ])
 employee('side-project', 'side-lead', 'manager')
 employee('side-project', 'side-dev', 'employee', ['reportsTo: side-lead'])
+
+// Phase 3: what the stage directory is generated from. The department's own instructions, a company
+// note and a company-only term (so the scoped search can be shown not to reach it), and a skill that
+// contains a symlink (which the stage directory refuses).
+write(path.join(sandboxHome, 'knowledge', 'departments', 'side-project', 'INSTRUCTIONS.md'), [
+  '# Side project instructions',
+  '',
+  'Work only on the side project. Keep changes small and say what you changed.',
+])
+write(path.join(sandboxHome, 'knowledge', 'company-heron-plan.md'), ['# Company heron plan', '', 'heron: the company-only plan the side project must not see.'])
+const linked = path.join(sandboxHome, 'skills', 'linked-skill')
+write(path.join(linked, 'SKILL.md'), ['---', 'name: linked-skill', 'description: A skill that contains a symlink.', '---'])
+fs.symlinkSync(path.join(sandboxHome, 'CLAUDE.md'), path.join(linked, 'company.md'))
+// Notes are off by default; the operator's Notes page is part of the evidence.
+const configFile = path.join(sandboxHome, 'config.yaml')
+const config = fs.readFileSync(configFile, 'utf8')
+fs.writeFileSync(configFile, /^\s+notesEnabled:/m.test(config)
+  ? config.replace(/^(\s+)notesEnabled:.*$/m, '$1notesEnabled: true')
+  : config.replace(/^gateway:\s*$/m, 'gateway:\n  notesEnabled: true'))
 
 // dedicated.
 write(path.join(org, 'friend-lab', 'department.yaml'), [
@@ -112,4 +131,12 @@ const sessions = {}
   sessions[key] = id
 })
 db.close()
-fs.writeFileSync(path.join(sandboxHome, 'departments-seed.json'), JSON.stringify({ sessions }, null, 2))
+
+// A stage directory as an earlier build made it, at the old path (before each instance had its own
+// stage root). The gateway moves it at boot; its inode is recorded so the run can show it was a rename.
+const legacyStage = path.join(path.dirname(sandboxHome), '.jinn-departments', 'side-project')
+write(path.join(legacyStage, 'CLAUDE.md'), ['An earlier build generated this file.'])
+write(path.join(legacyStage, '.claude', 'skills', 'management', 'SKILL.md'), ['---', 'name: management', 'description: stale copy', '---'])
+const legacyStageIno = fs.statSync(legacyStage).ino
+
+fs.writeFileSync(path.join(sandboxHome, 'departments-seed.json'), JSON.stringify({ sessions, legacyStage, legacyStageIno }, null, 2))
