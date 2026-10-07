@@ -1399,8 +1399,9 @@ async function stageSettings(
   facts: RemoteFacts,
   sessionHome: string,
   jinnSessionId: string,
-  /** A named profile's carried bypass consent (`remoteOperatorSettingsCarry`), and
-   *  the CLAUDE.md files a scoped session skips. */
+  /** What a named profile carries from the operator's settings: `attribution` and
+   *  a true-only bypass consent (`remoteOperatorSettingsCarry`), and the CLAUDE.md
+   *  files a scoped session skips. */
   keys: Pick<SessionSettingsOpts, "carry" | "claudeMdExcludes">,
 ): Promise<string> {
   const settingsPath = path.posix.join(sessionHome, "tmp", "settings.json");

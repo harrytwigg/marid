@@ -61,7 +61,7 @@ Before each turn the gateway checks that the profile exists and is signed in, by
 
 **Limits.** Each profile is its own account. Its usage limit and its login failures hold back only its own sessions, and yours hold back only yours. The Limits page shows it as its own card, and the board walk judges it on its own (see "Claude accounts"). A profile's session has no fallback unless the profile is declared under `engines.claude.accounts` with a chain of its own: otherwise, when it hits its limit, it waits for its own reset, whatever `engines.claude.fallback` says.
 
-Two employees may share one profile, and then they share its limits. `remoteClaudeConfigDir` is the remote equivalent, and the remote employee keeps the engine fallback chain.
+Two employees may share one profile, and then they share its limits. `remoteClaudeConfigDir` is the remote equivalent, and the remote employee keeps the engine fallback chain. A remote profile is carried only `attribution` and a true `skipDangerousModePermissionPrompt`, not your `PreToolUse` hooks, whose commands name files on this host: put a guard the remote session needs in that profile's own `settings.json` on the remote host.
 
 ### Claude accounts
 
