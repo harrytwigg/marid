@@ -21,6 +21,7 @@ import {
   stripReasoningMarkup,
   toolNameFromGrokUpdate,
 } from "./grok-json.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 export const GROK_SESSIONS_DIR = path.join(os.homedir(), ".grok", "sessions");
 
@@ -776,6 +777,7 @@ export class GrokEngine implements InterruptibleEngine {
   private buildCleanEnv(sessionId?: string): Record<string, string> {
     const cleanEnv = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true });
     if (sessionId) cleanEnv.JINN_SESSION_ID = sessionId;
+    Object.assign(cleanEnv, employeeSessionEnv(sessionId));
     cleanEnv.GROK_CLAUDE_MCPS_ENABLED = "false";
     cleanEnv.GROK_CURSOR_MCPS_ENABLED = "false";
     // GRS-012c: grok's OpenTelemetry trace exporter TLS-fails against its traces

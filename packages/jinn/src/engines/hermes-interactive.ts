@@ -7,6 +7,7 @@ import { buildEngineChildEnv } from "../shared/child-env.js";
 import { PtyLifecycleManager } from "./pty-lifecycle.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 // ── Pure helpers (exported for testing) ──────────────────────────────────────
 
@@ -113,6 +114,7 @@ export class HermesInteractiveEngine implements InterruptibleEngine, PtyViewEngi
     const env = buildEngineChildEnv(process.env);
     env.TERM = "xterm-256color";
     if (sessionId) env.JINN_SESSION_ID = sessionId;
+    Object.assign(env, employeeSessionEnv(sessionId));
     env.HERMES_YOLO_MODE = "1";
     env.HERMES_ACCEPT_HOOKS = "1";
     return env;

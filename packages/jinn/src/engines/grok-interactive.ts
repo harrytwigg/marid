@@ -19,6 +19,7 @@ import {
 } from "./grok.js";
 import { processStartFailure } from "../shared/process-start.js";
 import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
 const DONE_DEBOUNCE_MS = 60_000;
@@ -394,6 +395,7 @@ export class GrokInteractiveEngine implements InterruptibleEngine, PtyViewEngine
     const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true });
     env.TERM = "xterm-256color";
     if (sessionId) env.JINN_SESSION_ID = sessionId;
+    Object.assign(env, employeeSessionEnv(sessionId));
     // The TUI blocks prompt execution while inherited MCP compatibility servers
     // initialize. Jinn exposes its own MCP/connectors; keep the Grok PTY clean
     // and deterministic unless the operator explicitly opts back in.

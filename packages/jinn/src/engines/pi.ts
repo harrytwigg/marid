@@ -25,6 +25,7 @@ import {
   type RemoteEngineHandle,
   type RemoteRun,
 } from "./remote-stage.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 interface LiveProcess extends RemoteRun {
   proc: ChildProcess;
@@ -671,6 +672,7 @@ export class PiEngine implements InterruptibleEngine {
   private buildCleanEnv(sessionId?: string): Record<string, string> {
     const cleanEnv = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true });
     if (sessionId) cleanEnv.JINN_SESSION_ID = sessionId;
+    Object.assign(cleanEnv, employeeSessionEnv(sessionId));
     return cleanEnv;
   }
 

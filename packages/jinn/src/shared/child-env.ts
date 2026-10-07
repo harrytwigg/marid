@@ -21,6 +21,8 @@ export interface EngineChildEnvOptions {
 const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set([
   "JINN_HOME_IDENTITY",
   "JINN_TAKE_PORT",
+  // Per session, set by the engine; a gateway started from inside an employee's session must not hand its employee to others.
+  "JINN_EMPLOYEE",
 ]);
 
 /** Per-engine scrub rules. `exact` names and `prefix` families are stripped

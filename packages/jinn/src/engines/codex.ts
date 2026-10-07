@@ -17,6 +17,7 @@ import {
   CODEX_SESSIONS_DIR,
   codexRateLimitFor,
 } from "./codex-transcript.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 
 // Hard backstop so a genuinely stuck turn (no terminal event ever) can't hang
@@ -469,6 +470,7 @@ export function codexChildEnv(
 ): Record<string, string> {
   const env = buildEngineChildEnv(baseEnv, { scrubClaudeCode: true, scrubCodex: true });
   if (sessionId) env.JINN_SESSION_ID = sessionId;
+  Object.assign(env, employeeSessionEnv(sessionId));
   if (codexHome) env.CODEX_HOME = codexHome;
   return env;
 }

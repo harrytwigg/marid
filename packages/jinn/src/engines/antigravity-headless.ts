@@ -21,6 +21,7 @@ export {
   type AntigravityParsedLine,
 } from "./antigravity-headless-protocol.js";
 import { buildAntigravityHeadlessArgs } from "./antigravity-headless-protocol.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 function buildPrompt(opts: EngineRunOpts): string {
   let prompt = opts.prompt;
@@ -40,6 +41,7 @@ function spawnHeadless(opts: EngineRunOpts): ChildProcess {
     cwd: opts.cwd,
     env: {
       ...buildEngineChildEnv(process.env),
+      ...employeeSessionEnv(opts.sessionId),
       ...antigravityJinnSessionEnv(opts.resolvedMcp),
     },
     stdio: ["pipe", "pipe", "pipe"],

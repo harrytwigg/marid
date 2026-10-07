@@ -24,6 +24,7 @@ import { remapMcpConfigForRemote } from "../mcp/remote-config.js";
 import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.js";
 import { piJinnMcpAttachable, piJinnSessionEnv, remotePiExtensionSource } from "./pi-mcp.js";
 import { buildOpencodeSessionConfig, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 /**
  * Everything the gateway does to a remote host that is NOT the interactive
@@ -1273,7 +1274,10 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
     destination,
     sessionHome,
     tunnelPort,
-    engine === "pi" ? piJinnSessionEnv(resolvedMcp) : { ...opts.sessionEnv, ...remoteDepartmentEnv(department) },
+    {
+      ...(engine === "pi" ? piJinnSessionEnv(resolvedMcp) : { ...opts.sessionEnv, ...remoteDepartmentEnv(department) }),
+      ...employeeSessionEnv(jinnSessionId),
+    },
   );
   const base = { destination, tunnelPort, sessionHome, envFilePath };
 

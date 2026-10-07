@@ -27,6 +27,7 @@ import {
   ensureAntigravityJinnMcpConfig,
   type AntigravityMcpConfigHandle,
 } from "./antigravity-mcp.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 /**
  * Antigravity (`agy`) interactive PTY adapter, modeled on InteractiveClaudeEngine.
@@ -587,6 +588,7 @@ export function buildAntigravityPtyEnv(sessionId?: string, resolvedMcp?: EngineR
   const env = buildEngineChildEnv(process.env);
   env.TERM = "xterm-256color";
   if (sessionId) env.JINN_SESSION_ID = sessionId;
+  Object.assign(env, employeeSessionEnv(sessionId));
   Object.assign(env, antigravityJinnSessionEnv(resolvedMcp));
   return env;
 }

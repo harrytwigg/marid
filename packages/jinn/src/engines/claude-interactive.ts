@@ -42,6 +42,7 @@ import {
   type RemoteFacts,
   type RemoteClaudeStaging,
 } from "./remote-stage.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 export type { PtyControlEvent } from "./pty-view-engine.js";
 
@@ -2789,7 +2790,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     // and only accepts 100_000..1_000_000, so asking for 1M is safe for every model:
     // a haiku-4-5 turn clamps back to its real 200K window. scrubClaudeCode strips any inherited value, so read the gateway's own.
     env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW || "1000000";
-    if (sessionId) Object.assign(env, { JINN_SESSION_ID: sessionId }, departmentSessionEnv(sessionId));
+    if (sessionId) Object.assign(env, { JINN_SESSION_ID: sessionId }, departmentSessionEnv(sessionId), employeeSessionEnv(sessionId));
     if (proxyPort) {
       env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}`;
       // The proxy forwards every request UNCHANGED to api.anthropic.com, so this
