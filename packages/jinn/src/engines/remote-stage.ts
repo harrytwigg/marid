@@ -20,6 +20,7 @@ import type { RemoteTarget, ResolvedMcpConfig, SessionRemoteTarget } from "../sh
 import type { RemoteEngineName } from "../shared/models.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import { remapMcpConfigForRemote } from "../mcp/remote-config.js";
+import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.js";
 import { piJinnMcpAttachable, piJinnSessionEnv, remotePiExtensionSource } from "./pi-mcp.js";
 import { buildOpencodeSessionConfig, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
 
@@ -1176,6 +1177,9 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
   // Refused here, before anything is written, if it cannot be staged in scope.
   const department = scopedRemoteDepartment(target, remote, facts, engine);
   if (department) await assertRemoteClaudeSkipsAncestors(destination, facts);
+  // The caller resolved this set already confined; staging confines it again, so no
+  // other server's spec (and the credentials it carries) is written to a scoped stage.
+  const resolvedMcp = confineMcpToDepartment(opts.resolvedMcp, department);
   const realStageDir = await stageHostState(opts, destination, sessionHome, department);
 
   const tunnelPort = await probeFreePort(destination, facts);
@@ -1187,25 +1191,25 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
     destination,
     sessionHome,
     tunnelPort,
-    engine === "pi" ? piJinnSessionEnv(opts.resolvedMcp) : { ...opts.sessionEnv, ...remoteDepartmentEnv(department) },
+    engine === "pi" ? piJinnSessionEnv(resolvedMcp) : { ...opts.sessionEnv, ...remoteDepartmentEnv(department) },
   );
   const base = { destination, tunnelPort, sessionHome, envFilePath };
 
   if (engine === "pi") {
     const piSessionDir = await stagePiSessionDir(destination, sessionHome);
-    const piExtensionPath = await stagePiExtension(destination, facts, sessionHome, jinnSessionId, opts.resolvedMcp);
+    const piExtensionPath = await stagePiExtension(destination, facts, sessionHome, jinnSessionId, resolvedMcp);
     return { ...base, engine, piSessionDir, ...(piExtensionPath ? { piExtensionPath } : {}) };
   }
 
   if (engine === "opencode") {
-    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, opts.resolvedMcp);
+    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, resolvedMcp);
     return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}) };
   }
 
   // A scoped session skips every CLAUDE.md above its stage directory (`ancestorMemoryExcludes`).
   const excludes = department ? { claudeMdExcludes: ancestorMemoryExcludes([target.remoteCwd!, realStageDir!]) } : undefined;
   const settingsPath = await stageSettings(destination, facts, sessionHome, jinnSessionId, excludes);
-  const mcp = { resolved: opts.resolvedMcp, departmentFileRoots: remoteDepartmentFileRoots(target) };
+  const mcp = { resolved: resolvedMcp, departmentFileRoots: remoteDepartmentFileRoots(target) };
   const mcpConfigPath = await stageMcpConfig(destination, facts, sessionHome, tunnelPort, mcp);
   return { ...base, engine, settingsPath, ...(mcpConfigPath ? { mcpConfigPath } : {}) };
 }

@@ -148,3 +148,45 @@ describe("fork runs on the source session's profile (FR-051)", () => {
     expect(forkSpawn.execEnv?.CLAUDE_CONFIG_DIR).toBe(process.env.CLAUDE_CONFIG_DIR);
   });
 });
+
+describe("fork of a department-scoped session inherits only the scoped allow-list", () => {
+  let configDir: string;
+  beforeEach(() => {
+    configDir = path.join(JINN_HOME, "..", `claude-default-${process.pid}`);
+    vi.stubEnv("CLAUDE_CONFIG_DIR", configDir);
+    vi.stubEnv("ALPHA_API_KEY", "alpha-secret");
+    forkSpawn.execEnv = undefined;
+    forkSpawn.ptyEnv = undefined;
+    forkSpawn.onPtySpawn = undefined;
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    fs.rmSync(configDir, { recursive: true, force: true });
+  });
+
+  it("the headless fork", async () => {
+    await forkEngineSession("claude", "src-1", "/work", { scopedSession: true });
+    expect(forkSpawn.execEnv).not.toHaveProperty("ALPHA_API_KEY");
+    expect(forkSpawn.execEnv?.PATH).toBe(process.env.PATH);
+    expect(forkSpawn.execEnv?.CLAUDE_CONFIG_DIR).toBe(configDir);
+  });
+
+  it("the interactive fork", async () => {
+    const projectDir = claudeProjectDir("/work", null);
+    forkSpawn.onPtySpawn = () => {
+      fs.mkdirSync(projectDir, { recursive: true });
+      fs.writeFileSync(path.join(projectDir, "forked-3.jsonl"), "{}\n");
+    };
+    const interactive = { sourceJinnSessionId: "s1", engine: { kill() {} } as any };
+    expect(projectDir.startsWith(configDir)).toBe(true);
+    await expect(forkEngineSession("claude", "src-1", "/work", { interactive, scopedSession: true }))
+      .resolves.toEqual({ engineSessionId: "forked-3" });
+    expect(forkSpawn.ptyEnv).not.toHaveProperty("ALPHA_API_KEY");
+    expect(forkSpawn.ptyEnv?.CLAUDE_CODE_NO_FLICKER).toBe("1");
+  });
+
+  it("an unscoped fork keeps the gateway's environment", async () => {
+    await forkEngineSession("claude", "src-1", "/work");
+    expect(forkSpawn.execEnv?.ALPHA_API_KEY).toBe("alpha-secret");
+  });
+});

@@ -18,6 +18,7 @@ import type { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { HermesRpc } from "../engines/hermes-jsonrpc.js";
 import { applyClaudeProfileEnv, claudeConfigDirFor, type ClaudeProfile } from "../shared/claude-profile.js";
 import { assertClaudeProfileDirExists } from "../engines/claude-profile-launch.js";
+import { buildEngineChildEnv, isScopedSessionEnvName } from "../shared/child-env.js";
 import { claudeProjectSlug } from "../engines/claude-transcript-path.js";
 
 export interface ForkResult {
@@ -50,6 +51,8 @@ export interface ForkClaudeOpts {
   /** When set, the fork uses interactive (no -p) and releases the source PTY first. */
   interactive?: InteractiveForkCtx;
   claudeProfile?: ClaudeProfile; // the source's named Claude profile: the fork runs, and finds its transcript, there
+  /** The source is a department-scoped session: the fork inherits only the scoped allow-list environment. */
+  scopedSession?: boolean;
 }
 
 /**
@@ -63,10 +66,10 @@ export interface ForkClaudeOpts {
  *   (no `-p`) and polls the project's transcript directory for the new jsonl to
  *   discover the new session id. Bills as `cc_entrypoint=cli`.
  */
-export async function forkClaudeSession(opts: ForkClaudeOpts): Promise<ForkResult> {
-  const { engineSessionId, cwd, interactive, claudeProfile = null } = opts;
+export async function forkClaudeSession(opts: ForkClaudeOpts, env: NodeJS.ProcessEnv = process.env): Promise<ForkResult> {
+  const { engineSessionId, cwd, interactive, claudeProfile = null, scopedSession = false } = opts;
   assertClaudeProfileDirExists(claudeProfile);
-  if (interactive) return forkClaudeSessionInteractive(engineSessionId, cwd, interactive, claudeProfile);
+  if (interactive) return forkClaudeSessionInteractive(engineSessionId, cwd, interactive, { claudeProfile, scopedSession, baseEnv: env });
 
   logger.info(`Forking Claude session ${engineSessionId} in ${cwd} (headless)`);
 
@@ -80,7 +83,9 @@ export async function forkClaudeSession(opts: ForkClaudeOpts): Promise<ForkResul
     cwd,
     encoding: "utf-8",
     timeout: 60_000,
-    env: applyClaudeProfileEnv({ ...process.env } as Record<string, string>, claudeProfile),
+    env: scopedSession
+      ? buildEngineChildEnv(env, { claudeProfile, scopedSession })
+      : applyClaudeProfileEnv({ ...env } as Record<string, string>, claudeProfile),
   });
 
   const lastLine = result.trim().split("\n").pop();
@@ -103,7 +108,7 @@ async function forkClaudeSessionInteractive(
   engineSessionId: string,
   cwd: string,
   ctx: InteractiveForkCtx,
-  claudeProfile: ClaudeProfile = null,
+  { claudeProfile, scopedSession, baseEnv }: { claudeProfile: ClaudeProfile; scopedSession: boolean; baseEnv: NodeJS.ProcessEnv },
 ): Promise<ForkResult> {
   logger.info(`Forking Claude session ${engineSessionId} in ${cwd} (interactive)`);
 
@@ -130,8 +135,9 @@ async function forkClaudeSessionInteractive(
 
   // Clean env: drop CLAUDE_CODE_* / CLAUDECODE inherited from gateway, add NO_FLICKER.
   const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(process.env)) {
+  for (const [k, v] of Object.entries(baseEnv)) {
     if (k === "CLAUDECODE" || k.startsWith("CLAUDE_CODE_")) continue;
+    if (scopedSession && !isScopedSessionEnvName(k)) continue;
     if (v !== undefined) env[k] = v;
   }
   env.CLAUDE_CODE_NO_FLICKER = "1";
@@ -348,11 +354,11 @@ export async function forkEngineSession(
   engine: string,
   engineSessionId: string,
   cwd: string,
-  opts: { interactive?: InteractiveForkCtx; codex?: ForkCodexOpts; claudeProfile?: ClaudeProfile } = {},
+  opts: { interactive?: InteractiveForkCtx; codex?: ForkCodexOpts; claudeProfile?: ClaudeProfile; scopedSession?: boolean } = {},
 ): Promise<ForkResult> {
   switch (engine) {
     case "claude":
-      return forkClaudeSession({ engineSessionId, cwd, interactive: opts.interactive, claudeProfile: opts.claudeProfile });
+      return forkClaudeSession({ engineSessionId, cwd, interactive: opts.interactive, claudeProfile: opts.claudeProfile, scopedSession: opts.scopedSession });
     case "codex":
       return forkCodexSession(engineSessionId, opts.codex);
     case "hermes":

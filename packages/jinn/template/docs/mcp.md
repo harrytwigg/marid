@@ -36,4 +36,4 @@ mcp:
         PROJECT_TOKEN: ${PROJECT_TOKEN}
 ```
 
-Employees may opt out of every server with `mcp: false` or select server ids with an `mcp:` list. Use environment-variable references for secrets; never put literal credentials in this file or `config.yaml`.
+Employees may opt out of every server with `mcp: false` or select server ids with an `mcp:` list. An employee in a scoped or dedicated department gets only `jinn` and the servers its department's `mcp` list names, whatever its own list says (see `org.md`). Use environment-variable references for secrets; never put literal credentials in this file or `config.yaml`.

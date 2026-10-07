@@ -29,6 +29,8 @@ export interface DepartmentDefinition {
   description: string | null;
   workdirs: string[];
   skills: string[];
+  /** The instance MCP servers its sessions get beside the built-in `jinn` server; none when empty. */
+  mcp: string[];
   sharedNotes: string[];
   instructions: InstructionsMode;
 }
@@ -166,6 +168,9 @@ function readIdentity(slug: string, doc: Record<string, unknown>): { scope: Depa
 function readExtras(definition: DepartmentDefinition, doc: Record<string, unknown>, ctx: ParseContext, warnings: string[]): void {
   definition.workdirs = keepWorkdirs(stringList(doc.workdirs, "workdirs", warnings), ctx, warnings);
   definition.skills = keepSkills(stringList(doc.skills, "skills", warnings), ctx, warnings);
+  // Names are only matched against the instance's servers, so any text is kept: `mcp.custom`
+  // keys are free-form, and a name `config.yaml` does not configure simply attaches nothing.
+  definition.mcp = [...new Set(stringList(doc.mcp, "mcp", warnings))];
   definition.sharedNotes = keepSharedNotes(stringList(doc.sharedNotes, "sharedNotes", warnings), warnings);
   if (doc.instructions === undefined || doc.instructions === null) return;
   if ((INSTRUCTION_MODES as readonly unknown[]).includes(doc.instructions)) definition.instructions = doc.instructions as InstructionsMode;
@@ -188,10 +193,11 @@ export function parseDepartmentYaml(slug: string, raw: string, ctx: ParseContext
     description: optionalText(read.doc.description),
     workdirs: [],
     skills: [],
+    mcp: [],
     sharedNotes: [],
     instructions: "department",
   };
-  // Working directories, skills, shared Notes and the instructions mode only mean
+  // Working directories, skills, MCP servers, shared Notes and the instructions mode only mean
   // something to a scoped session, so an open department does not read them.
   if (identity.scope !== "open" || ctx.judgeExtrasWhenOpen) readExtras(definition, read.doc, ctx, warnings);
   return { ok: true, definition, warnings };
