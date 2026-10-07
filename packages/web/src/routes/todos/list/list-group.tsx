@@ -20,7 +20,7 @@ export function TodoListGroupHeader({
   onToggle?: () => void
   onQuickAdd: () => void
 }) {
-  const headerGlyph = group.key === "manager" || group.key === "recovering"
+  const headerGlyph = group.key === "recovering"
     ? <StatusCircle status="blocked" size={16} />
     : group.key === "closed"
       ? <StatusCircle status="done" size={16} />

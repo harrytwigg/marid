@@ -26,7 +26,7 @@ function item(id: string, status: WorkItemStatusWire): WorkItemCompactWire {
 }
 
 describe("groupTodoListItems", () => {
-  it("splits recovering and manager lanes out of Blocked and leaves operator-lane items in it", () => {
+  it("splits only the recovering lane out of Blocked and leaves manager and operator lane items in it", () => {
     const recovering = { ...item("PLA-1", "blocked"), attentionLane: "recovering" as const }
     const manager = { ...item("PLA-2", "blocked"), attentionLane: "manager" as const }
     const operator = { ...item("PLA-3", "blocked"), attentionLane: "operator" as const }
@@ -40,12 +40,14 @@ describe("groupTodoListItems", () => {
       [recovering, manager, operator],
     )
     expect(groups.find((group) => group.key === "recovering")?.items.map(({ id }) => id)).toEqual(["PLA-1"])
-    expect(groups.find((group) => group.key === "manager")?.items.map(({ id }) => id)).toEqual(["PLA-2"])
-    expect(groups.find((group) => group.key === "blocked")?.items.map(({ id }) => id)).toEqual(["PLA-3"])
+    expect(groups.map((group) => group.key)).not.toContain("manager")
+    const blocked = groups.find((group) => group.key === "blocked")
+    expect(blocked?.items.map(({ id }) => id)).toEqual(["PLA-2", "PLA-3"])
+    expect(blocked?.count).toBe(2)
     expect(groups.map((group) => group.key)).not.toContain("needs-you")
   })
 
-  it("an in_review leftover with attentionLane manager reaches Manager attention, and the operator gate stays in Blocked", () => {
+  it("an in_review leftover with attentionLane manager stays under In review, and the operator gate stays in Blocked", () => {
     const leftover = {
       ...item("QPR-4", "in_review"),
       attentionLane: "manager" as const,
@@ -63,9 +65,11 @@ describe("groupTodoListItems", () => {
       },
       feed,
     )
-    expect(groups.find((group) => group.key === "manager")?.items.map(({ id }) => id)).toEqual(["QPR-4"])
+    expect(groups.map((group) => group.key)).not.toContain("manager")
     expect(groups.find((group) => group.key === "blocked")?.items.map(({ id }) => id)).toEqual(["QAP-10"])
-    expect(groups.find((group) => group.key === "in-review")?.items.map(({ id }) => id)).not.toContain("QPR-4")
+    const inReview = groups.find((group) => group.key === "in-review")
+    expect(inReview?.items.map(({ id }) => id)).toEqual(["QPR-4"])
+    expect(inReview?.count).toBe(1)
   })
 
   it("a recovering API row reaches Recovering automatically and the operator gate stays in Blocked", () => {
@@ -86,8 +90,19 @@ describe("groupTodoListItems", () => {
     expect(groups.find((group) => group.key === "blocked")?.items.map(({ id }) => id)).toEqual(["QAP-10"])
   })
 
-  it("hoists an attention item outside the loaded status page", () => {
-    const needsReview = { ...item("PLA-21", "in_review"), attentionLane: "manager" as const }
+  it("keeps an unloaded manager-lane item in its status count rather than a separate group", () => {
+    const needsReview = { ...item("PLA-22", "in_review"), attentionLane: "manager" as const }
+    const empty = { items: [], total: 0 }
+    const groups = groupTodoListItems(
+      { backlog: empty, executing: empty, in_review: { items: [], total: 21 }, blocked: empty, done: empty, cancelled: empty },
+      [needsReview],
+    )
+    expect(groups.map((group) => group.key)).not.toContain("manager")
+    expect(groups.find((group) => group.key === "in-review")?.count).toBe(21)
+  })
+
+  it("hoists a recovering item outside the loaded status page", () => {
+    const needsReview = { ...item("PLA-21", "in_review"), attentionLane: "recovering" as const }
     const groups = groupTodoListItems(
       {
         backlog: { items: [], total: 0 },
@@ -100,7 +115,7 @@ describe("groupTodoListItems", () => {
       [needsReview],
     )
 
-    expect(groups.find((group) => group.key === "manager")?.items.map(({ id }) => id)).toEqual(["PLA-21"])
+    expect(groups.find((group) => group.key === "recovering")?.items.map(({ id }) => id)).toEqual(["PLA-21"])
     expect(groups.find((group) => group.key === "in-review")?.items).toEqual([])
     expect(groups.find((group) => group.key === "in-review")?.count).toBe(20)
     expect(groups.flatMap((group) => group.items).filter(({ id }) => id === "PLA-21")).toHaveLength(1)
