@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import path from "node:path";
-import { buildEngineChildEnv } from "../child-env.js";
+import { buildEngineChildEnv, isScopedSessionEnvName } from "../child-env.js";
 
 describe("buildEngineChildEnv", () => {
   // The gateway resolves CLAUDE_CONFIG_DIR against its own cwd; the engine is spawned
@@ -55,5 +55,32 @@ describe("buildEngineChildEnv", () => {
       OPENCODE_DISABLE_AUTOUPDATE: base.OPENCODE_DISABLE_AUTOUPDATE,
       KEEP: "yes",
     });
+  });
+});
+
+describe("buildEngineChildEnv for a department-scoped session", () => {
+  const gateway = {
+    PATH: "/usr/bin", HOME: "/home/op", LANG: "C.UTF-8", LC_ALL: "C.UTF-8", XDG_RUNTIME_DIR: "/run/user/1",
+    https_proxy: "http://proxy.invalid:3128", JINN_HOME: "/srv/instance", JINN_GATEWAY_URL: "http://127.0.0.1:1",
+    CLAUDE_CONFIG_DIR: "/home/op/.claude", ANTHROPIC_MODEL: "sonnet", DISABLE_TELEMETRY: "1",
+    ALPHA_API_KEY: "alpha-secret", GITHUB_TOKEN: "github-secret", ANTHROPIC_API_KEY: "api-secret", NODE_OPTIONS: "--inspect",
+  };
+
+  it("keeps only the allow-list, dropping every other variable the gateway holds", () => {
+    const env = buildEngineChildEnv(gateway, { scopedSession: true });
+    expect(Object.keys(env).sort()).toEqual([
+      "ANTHROPIC_MODEL", "CLAUDE_CONFIG_DIR", "DISABLE_TELEMETRY", "HOME", "JINN_GATEWAY_URL", "JINN_HOME",
+      "LANG", "LC_ALL", "PATH", "XDG_RUNTIME_DIR", "https_proxy",
+    ]);
+  });
+
+  it("leaves an unscoped session's environment whole", () => {
+    expect(buildEngineChildEnv(gateway)).toEqual(gateway);
+  });
+
+  it("matches names case-insensitively, as Windows does", () => {
+    expect(isScopedSessionEnvName("Path")).toBe(true);
+    expect(isScopedSessionEnvName("SystemRoot")).toBe(true);
+    expect(isScopedSessionEnvName("Alpha_Api_Key")).toBe(false);
   });
 });

@@ -8,7 +8,7 @@ import { assertClaudeProfileDirExists, claudeResetSource, ensureClaudeProfileTru
 import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
-import { departmentSessionEnv } from "../gateway/department-scope/session-env.js";
+import { departmentSessionEnv, isScopedSession } from "../gateway/department-scope/session-env.js";
 import { PtyLifecycleManager, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
 import { processStartFailure } from "../shared/process-start.js";
 import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
@@ -2755,11 +2755,16 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  enables fullscreen rendering. Shared by spawn() and ensureIdleSpawn().
    *  When `proxyPort` is given, points ANTHROPIC_BASE_URL at the per-PTY SSE
    *  forward proxy on 127.0.0.1 — subscription OAuth token is passed separately
-   *  by claude, so this stays cc_entrypoint=cli / subsidy-safe (verified Item A). */
-  private buildPtyEnv(proxyPort?: number, sessionId?: string, claudeProfile?: ClaudeProfile): Record<string, string> {
+   *  by claude, so this stays cc_entrypoint=cli / subsidy-safe (verified Item A).
+   *  A department-scoped session's local claude inherits only the scoped
+   *  allow-list (`shared/child-env.ts`); the ssh client of a remote one
+   *  (`sshClient`) keeps the gateway's env, which never crosses to the host. */
+  private buildPtyEnv(sessionId: string | undefined, opts: { proxyPort?: number; claudeProfile?: ClaudeProfile; sshClient?: boolean } = {}): Record<string, string> {
+    const { proxyPort, claudeProfile } = opts;
     const env = buildEngineChildEnv(process.env, {
       claudeProfile,
       scrubClaudeCode: true,
+      scopedSession: !opts.sshClient && isScopedSession(sessionId),
       // Belt-and-suspenders: a stray API key/token would flip the child to metered
       // API billing instead of the Max subscription. Strip both so the PTY session
       // always resolves to subscription auth (cc_entrypoint=cli).
@@ -3088,7 +3093,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       // The LOCAL cwd of the ssh client — irrelevant to the session, whose
       // working directory is set by the `cd` inside the remote command.
       cwd: JINN_HOME,
-      env: this.buildPtyEnv(undefined, jinnSessionId),
+      env: this.buildPtyEnv(jinnSessionId, { sshClient: true }),
     });
     this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: opts.effortLevel, appendApplied: true });
     // No proxy argument: a remote session runs without the SSE forward proxy, so
@@ -3132,7 +3137,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       proxy.stop();
       return undefined;
     }
-    const env = this.buildPtyEnv(port || undefined, jinnSessionId, opts.claudeProfile);
+    const env = this.buildPtyEnv(jinnSessionId, { proxyPort: port || undefined, claudeProfile: opts.claudeProfile });
     ensureClaudeProfileTrust(opts.claudeProfile, opts.cwd || JINN_HOME);
     const bin = resolveBin("claude", opts.bin);
     const geom = this.lastGeom.get(jinnSessionId);
@@ -3230,7 +3235,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
             + `${staging.destination} (resume ${opts.engineSessionId || "none — fresh"}, geom ${cols}×${rows})`,
           );
           const proc = pty.spawn(resolveBin("ssh"), sshArgs, {
-            name: "xterm-256color", cols, rows, cwd: JINN_HOME, env: this.buildPtyEnv(undefined, jinnSessionId),
+            name: "xterm-256color", cols, rows, cwd: JINN_HOME, env: this.buildPtyEnv(jinnSessionId, { sshClient: true }),
           });
           const handle = this.wireProcToStream(jinnSessionId, proc);
           this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false });
@@ -3246,7 +3251,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           proxy.stop();
           return;
         }
-        const env = this.buildPtyEnv(port || undefined, jinnSessionId, opts.claudeProfile);
+        const env = this.buildPtyEnv(jinnSessionId, { proxyPort: port || undefined, claudeProfile: opts.claudeProfile });
         ensureClaudeProfileTrust(opts.claudeProfile, opts.cwd || JINN_HOME);
         logger.info(`InteractiveClaudeEngine ensureIdleSpawn for session ${jinnSessionId} (resume ${opts.engineSessionId || "none — fresh"}, geom ${cols}×${rows}, sseProxy: ${port || "off"})`);
         const proc = pty.spawn(bin, args, {

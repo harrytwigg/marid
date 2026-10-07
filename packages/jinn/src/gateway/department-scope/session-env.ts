@@ -1,4 +1,5 @@
 import { getSession } from "../../sessions/registry.js";
+import { sessionScopeDepartment } from "../../sessions/session-scope.js";
 import { DEPARTMENT_FILE_ROOTS_ENV } from "../../shared/department-file-roots.js";
 import { departmentFileRoots } from "./paths.js";
 
@@ -9,6 +10,15 @@ export const JINN_DEPARTMENT_ENV = "JINN_DEPARTMENT";
 export function departmentSessionEnv(sessionId: string | undefined): Record<string, string> {
   const department = sessionId ? getSession(sessionId)?.scopeDepartment : null;
   return department ? { [JINN_DEPARTMENT_ENV]: department } : {};
+}
+
+/**
+ * Whether a session's local processes get the scoped allow-list environment
+ * (`shared/child-env.ts`): the same derivation as its cwd and turn gate, its binding
+ * else its employee's scoped department.
+ */
+export function isScopedSession(sessionId: string | undefined): boolean {
+  return Boolean(sessionId && sessionScopeDepartment(getSession(sessionId)));
 }
 
 /**

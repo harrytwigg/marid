@@ -193,7 +193,7 @@ and the decision. This reading was matched by content in minified code, so Phase
 | --- | --- | --- |
 | `sessions/turn/engine-run.ts:46` | Local engines always run with `cwd: JINN_HOME` | FR-020: scoped sessions get the stage dir |
 | `gateway/server.ts:504` | Exports `JINN_GATEWAY_TOKEN` to every engine | Deferred to the sandbox work |
-| `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | Deferred, not built: an allow-list builder |
+| `shared/child-env.ts:41` | `buildEngineChildEnv` passes on `process.env` minus a short deny list | Built for local scoped sessions (`scopedSession`, `isScopedSessionEnvName`), keeping `JINN_GATEWAY_TOKEN`; the allow-list without it is deferred to the sandbox work |
 | `engines/claude-interactive.ts:451` | Claude argv: `--chrome` (`:451`, the operator's own browser), `--dangerously-skip-permissions` (`:454`), the gateway-written `--settings` under `tmp/` (`:456`), and `--mcp-config` without `--strict-mcp-config` (`:459`) | Deferred to the sandbox work |
 | `shared/claude-settings.ts:70` | `buildSessionSettings` writes hooks and a status line only | Deferred, not built: sandbox and deny blocks |
 | `board-walk/route-turn.ts:48` | `CLAUDE_WALK_FLAGS`: `--no-chrome --tools "" --strict-mcp-config` | The only existing locked-down Claude turn |

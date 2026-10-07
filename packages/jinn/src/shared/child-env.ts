@@ -14,6 +14,8 @@ export interface EngineChildEnvOptions {
   denyExact?: Iterable<string>;
   /** A named Claude profile sets `CLAUDE_CONFIG_DIR` (claude-profile.ts); null/unset keeps today's env. */
   claudeProfile?: ClaudeProfile;
+  /** A department-scoped session: keep only {@link isScopedSessionEnvName} variables, not the gateway's whole environment. */
+  scopedSession?: boolean;
 }
 
 const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set([
@@ -41,6 +43,49 @@ const ENGINE_SCRUB_RULES: ReadonlyArray<{
   },
 ];
 
+/**
+ * What a department-scoped session's processes keep of the gateway's environment.
+ *
+ * The gateway's environment holds every credential the instance needs: config.yaml
+ * refers to an MCP server's key as `${VAR}`, which resolves from it, and a service
+ * unit may load a whole secrets directory into it. A scoped session may use only the
+ * MCP servers its department allow-lists, and those reach it with their values already
+ * resolved into its MCP config, so it inherits none of those variables, only these:
+ * the login basics, locale, terminal and temp dirs, outbound proxy and CA settings,
+ * Claude Code's own model and feature switches, and the Jinn variables its hooks and
+ * `jinn` MCP server find the gateway with. Its own `JINN_SESSION_ID` and
+ * `JINN_DEPARTMENT` are set on top by the engine.
+ *
+ * Windows names are matched case-insensitively, as Windows itself does.
+ */
+const SCOPED_SESSION_ENV_EXACT: ReadonlySet<string> = new Set([
+  // POSIX login
+  "HOME", "USER", "LOGNAME", "SHELL", "PATH", "TERM", "COLORTERM", "LANG", "LANGUAGE", "TZ",
+  "TMPDIR", "TMP", "TEMP", "SSH_AUTH_SOCK",
+  // Windows login
+  "USERPROFILE", "USERNAME", "USERDOMAIN", "COMPUTERNAME", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA",
+  "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMW6432", "COMMONPROGRAMFILES", "COMMONPROGRAMFILES(X86)",
+  "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+  // Outbound network
+  "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR",
+  // Claude Code (its CLAUDE_CODE_* switches are the engine's to set; its API key and base URL are never inherited)
+  "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR",
+  "ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  "MAX_THINKING_TOKENS", "MAX_MCP_OUTPUT_TOKENS", "MCP_TIMEOUT", "MCP_TOOL_TIMEOUT",
+  "BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS", "BASH_MAX_OUTPUT_LENGTH", "USE_BUILTIN_RIPGREP",
+  // Jinn: where the hook relay and the `jinn` MCP server find the gateway
+  "JINN_HOME", "JINN_INSTANCE", "JINN_GATEWAY_URL", "JINN_GATEWAY_TOKEN",
+]);
+
+const SCOPED_SESSION_ENV_PREFIX: ReadonlyArray<string> = ["LC_", "XDG_", "DISABLE_"];
+
+/** Whether a department-scoped session keeps the gateway's variable `key`. */
+export function isScopedSessionEnvName(key: string): boolean {
+  const name = key.toUpperCase();
+  return SCOPED_SESSION_ENV_EXACT.has(name) || SCOPED_SESSION_ENV_PREFIX.some((prefix) => name.startsWith(prefix));
+}
+
 export function buildEngineChildEnv(
   baseEnv: NodeJS.ProcessEnv = process.env,
   options: EngineChildEnvOptions = {},
@@ -65,6 +110,7 @@ function shouldScrubEngineChildEnv(
   denyExact: ReadonlySet<string>,
 ): boolean {
   if (ENGINE_CHILD_ENV_DENY_EXACT.has(key) || denyExact.has(key)) return true;
+  if (options.scopedSession && !isScopedSessionEnvName(key)) return true;
   return ENGINE_SCRUB_RULES.some(
     (rule) => Boolean(options[rule.option])
       && (rule.exact.includes(key) || rule.prefix.some((prefix) => key.startsWith(prefix))),
