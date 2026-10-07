@@ -67,6 +67,27 @@ describe("DepartmentPanel", () => {
     expect(text("department-mcp")).toBe("MCP serversNone. Scoped sessions get only the jinn server.")
   })
 
+  it("warns, under the MCP servers, of a name this instance configures no server for", async () => {
+    mount({ mcp: ["docs"], mcpProblems: [{ server: "browsr", reason: "no MCP server of that name is configured on this instance" }] })
+    await screen.findByTestId("department-panel")
+    expect(text("department-mcp")).toContain("docs")
+    const alert = within(screen.getByTestId("department-mcp")).getByTestId("department-mcp-problems")
+    expect(alert.textContent).toBe("browsr is not offered to this department: no MCP server of that name is configured on this instance.")
+    expect(text("department-mcp").split("browsr").length - 1).toBe(1)
+  })
+
+  it("shows no MCP warning when every name matches", async () => {
+    mount({ mcpProblems: [] })
+    await screen.findByTestId("department-panel")
+    expect(screen.queryByTestId("department-mcp-problems")).toBeNull()
+  })
+
+  it("renders against an older gateway that sends no mcpProblems", async () => {
+    mount({})
+    await screen.findByTestId("department-panel")
+    expect(screen.queryByTestId("department-mcp-problems")).toBeNull()
+  })
+
   it("says what a dedicated department means", async () => {
     mount({ scope: "dedicated" })
     await screen.findByTestId("department-panel")

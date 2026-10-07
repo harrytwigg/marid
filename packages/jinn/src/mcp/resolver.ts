@@ -83,6 +83,16 @@ export function resolveMcpServers(
 }
 
 /**
+ * The names of the instance MCP servers `mcp:` in the config enables, beside the built-in
+ * `jinn`: what a department's `mcp` allow-list can match. Nothing is configured without an
+ * `mcp:` section.
+ */
+export function configuredMcpServerNames(globalMcp: McpGlobalConfig | undefined): string[] {
+  if (!globalMcp) return [];
+  return Object.keys(buildAvailableServers(globalMcp, false));
+}
+
+/**
  * The built-in `jinn` MCP server spec — command = the same node running the
  * gateway; args = the compiled entry that sits next to this module in dist
  * (`import.meta.url` resolves it robustly across worktree/dist without a

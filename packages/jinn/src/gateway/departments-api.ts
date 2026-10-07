@@ -3,6 +3,7 @@ import path from "node:path";
 import type { IncomingMessage as HttpRequest, ServerResponse } from "node:http";
 import { initDb } from "../shared/db.js";
 import { resolveJinnHome } from "../shared/paths.js";
+import { configuredMcpServerNames } from "../mcp/resolver.js";
 import { skillRefusal } from "../shared/skill-inspection.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
 import { departmentSpend, listDepartmentsWithCounts, type DepartmentSummary } from "../work-items/departments.js";
@@ -61,6 +62,8 @@ export type DepartmentDefinitionWire = DepartmentDefinitionFields & {
   warnings: string[];
   /** Skills the allow-list names that the stage directory refuses (a symlink inside one, say), each with why. They are not in `skills`: no session is given them. */
   skillProblems: Array<{ skill: string; reason: string }>;
+  /** MCP servers the allow-list names that this instance does not configure, each with why. They are not in `mcp`. */
+  mcpProblems: Array<{ server: string; reason: string }>;
 };
 
 function fields(record: DepartmentRecord, members: string[]): DepartmentDefinitionFields {
@@ -130,18 +133,24 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
     const reason = skillRefusal(path.join(resolveJinnHome(), "skills", skill));
     return reason ? [{ skill, reason }] : [];
   });
+  // The built-in `jinn` server is always there; any other name must match a configured server.
+  const configured = new Set(configuredMcpServerNames(context.getConfig().mcp));
+  const mcpProblems = extras.mcp.flatMap((server) =>
+    server === "jinn" || configured.has(server) ? [] : [{ server, reason: "no MCP server of that name is configured on this instance" }],
+  );
   return {
     slug,
     ...registryFields(row),
     ...fields(record, membersByDepartment(context).get(slug) ?? []),
     workdirs: extras.workdirs,
     skills: extras.skills.filter((skill) => !skillProblems.some((problem) => problem.skill === skill)),
-    mcp: extras.mcp,
+    mcp: extras.mcp.filter((server) => !mcpProblems.some((problem) => problem.server === server)),
     sharedNotes: extras.sharedNotes,
     instructions: extras.instructions,
     spendUsd: departmentSpend(db).get(slug) ?? 0,
     warnings: record.warnings,
     skillProblems,
+    mcpProblems,
   };
 }
 

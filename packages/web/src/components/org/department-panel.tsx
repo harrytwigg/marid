@@ -64,6 +64,19 @@ function SkillProblems({ problems }: { problems: Array<{ skill: string; reason: 
   )
 }
 
+function McpProblems({ problems }: { problems: Array<{ server: string; reason: string }> }) {
+  if (problems.length === 0) return null
+  return (
+    <ul data-testid="department-mcp-problems" className="m-0 mt-[var(--space-3)] flex list-none flex-col gap-1 p-0">
+      {problems.map(({ server, reason }) => (
+        <li key={server} className="text-[length:var(--text-caption1)] text-[var(--system-orange)]">
+          <span className={`${MONO} font-[var(--weight-semibold)]`}>{server}</span> is not offered to this department: {reason}.
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function RefusedNotice({ error, scope }: { error: string; scope: DepartmentScopeWire }) {
   return (
     <div
@@ -90,6 +103,7 @@ function ScopedSections({ department }: { department: DepartmentDefinitionWire }
       </Section>
       <Section title="MCP servers" testId="department-mcp">
         <Chips items={department.mcp} empty="None. Scoped sessions get only the jinn server." />
+        <McpProblems problems={department.mcpProblems ?? []} />
       </Section>
       <Section title="Shared Notes" testId="department-shared-notes">
         <PathList items={department.sharedNotes} empty="None. Only the department's own Notes are shared." />
