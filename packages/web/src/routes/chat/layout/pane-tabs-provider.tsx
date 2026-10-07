@@ -5,8 +5,9 @@ import { safePaneTitle } from '@/components/chat/chat-pane-title-bar'
 import { paneTabHandlers, paneTabItems, selectTab, type PaneTabSession } from './pane-tab-ops'
 import { PaneTabStrip } from './pane-tab-strip'
 import { closeSession, findGroup, focusedGroup, groupIdsByPaneKey, groupOfSession, hasTabbedGroup, isLastChatWithTabs, paneSessionOf, routeSessionOf, workingSetFromLayout, type LayoutGroup, type SplitLayout } from './split-layout'
-import { isNewChatTabId, parseDocTabId } from './tab-kind'
-import { DocPane } from './doc-pane'
+import { parseDocTabId } from './tab-kind'
+import { DocPane, DocPaneTitle } from './doc-pane'
+import { paneTabDragProps } from './pane-tab-dnd'
 import type { SplitLayoutControls } from './use-split-working-set'
 
 interface SessionRow {
@@ -91,9 +92,23 @@ function useSelectTab(split: SplitLayoutControls, onSelect: (sessionId: string) 
   return useCallback((tabId: string, after: SplitLayout = layout) => selectTab(after, tabId, show, onSelect), [layout, onSelect, show])
 }
 
+/** A document-only pane, by its pane key: under its strip, or alone under a title bar that drags it. */
+function docPane(layout: SplitLayout, paneKey: string, groupStrip: (group: LayoutGroup) => ReactNode, closeTab: (tabId: string) => void) {
+  const group = findGroup(layout, groupIdsByPaneKey(layout).get(paneKey) ?? '')
+  const doc = group ? parseDocTabId(group.activeTab) : null
+  if (!group || !doc) return null
+  const active = layout.focusedGroupId === group.id
+  const drag = { draggable: true as const, ...paneTabDragProps({ groupId: group.id, tabId: group.activeTab }) }
+  const header = group.tabs.length >= 2
+    ? groupStrip(group)
+    : <DocPaneTitle doc={doc} active={active} drag={drag} onClose={() => closeTab(group.activeTab)} />
+  return <DocPane doc={doc} header={header} active={active} />
+}
+
 /**
- * Mounts a PaneTabStrip in the title bar of every pane whose group holds more than one tab, and of a
- * new chat's pane even alone: the strip is what it is dragged by, as a lone document pane's is.
+ * Mounts a PaneTabStrip in the title bar of every pane whose group holds more than one tab, and only
+ * those: a pane holding one tab (a chat, a new chat, a document) shows its plain title bar instead,
+ * which drags that tab as a strip would.
  */
 export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProviderProps) {
   const sessions = useSessions().data as SessionRow[] | undefined
@@ -126,13 +141,13 @@ export function PaneTabsProvider({ split, onSelect, children }: PaneTabsProvider
       },
       renderStrip: (paneTabId) => {
         const group = groupOfSession(layout, paneTabId)
-        return group && (group.tabs.length >= 2 || isNewChatTabId(paneTabId)) ? groupStrip(group) : null
+        return group && group.tabs.length >= 2 ? groupStrip(group) : null
       },
-      renderDocPane: (paneKey) => {
-        const group = findGroup(layout, groupIdsByPaneKey(layout).get(paneKey) ?? '')
-        const doc = group ? parseDocTabId(group.activeTab) : null
-        return group && doc ? <DocPane doc={doc} strip={groupStrip(group)} active={layout.focusedGroupId === group.id} /> : null
+      titleDrag: (paneTabId) => {
+        const group = groupOfSession(layout, paneTabId)
+        return group && group.tabs.length === 1 ? { draggable: true, ...paneTabDragProps({ groupId: group.id, tabId: paneTabId }) } : null
       },
+      renderDocPane: (paneKey) => docPane(layout, paneKey, groupStrip, closeTab),
     }
   }, [byId, closeTab, keep, layout, pin, selectChosenTab, split.place])
 

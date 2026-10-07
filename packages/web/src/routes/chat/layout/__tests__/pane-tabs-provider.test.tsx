@@ -1,7 +1,7 @@
 import { useReducer } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { PaneTabsContext, usePaneTabsDocPane, usePaneTabsKeep, usePaneTabsStrip } from '@/components/chat/pane-tabs-context'
+import { PaneTabsContext, usePaneTabsDocPane, usePaneTabsKeep, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { PaneTabsProvider } from '../pane-tabs-provider'
 import { closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, openInFocusedGroup, openNewChatTab, pinTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
 import { isNewChatTabId, todoTabId } from '../tab-kind'
@@ -71,6 +71,10 @@ function Probe({ sessionId, keepId }: { sessionId: string; keepId?: string }) {
       <button type="button" onClick={() => keepId && keep(keepId)}>work</button>
     </div>
   )
+}
+
+function TitleDragProbe({ tabId }: { tabId: string }) {
+  return <output data-testid={`drag-${tabId}`}>{String(usePaneTitleDrag(tabId)?.draggable ?? false)}</output>
 }
 
 function Mount({ h, sessionId, keepId }: { h: ReturnType<typeof harness>; sessionId: string; keepId?: string }) {
@@ -230,13 +234,23 @@ describe('PaneTabsProvider', () => {
       )
     }
 
-    it('renders the file under a strip of its own, even for a lone file tab', async () => {
+    it('renders a lone file under a plain title bar, no strip, which drags it like its tab', async () => {
       const h = harness(splitOut())
       render(<MountFile h={h} paneKey={report} />)
       expect((await screen.findByTestId('file-view')).textContent).toBe('docs/report.md')
-      const strip = screen.getByTestId('pane-tab-strip')
-      expect(strip.querySelectorAll('[role="tab"]')).toHaveLength(1)
-      expect(strip.querySelector('[data-pane-tab-kind="file"]')).not.toBeNull()
+      expect(screen.queryByTestId('pane-tab-strip')).toBeNull()
+      const title = screen.getByTestId('doc-pane-title')
+      expect(title.textContent).toContain('report.md')
+      expect(title.getAttribute('draggable')).toBe('true')
+    })
+
+    it('shows a strip once the pane holds a second document', () => {
+      const notes = fileTabId({ path: 'docs/notes.md', sessionId: 'a' })
+      const layout = splitOut()
+      const h = harness(placeTab(openDocTab(layout, 'a', notes), groupOfSession(layout, report)!.id, notes))
+      render(<MountFile h={h} paneKey={notes} />)
+      expect(screen.getByTestId('pane-tab-strip').querySelectorAll('[role="tab"]')).toHaveLength(2)
+      expect(screen.queryByTestId('doc-pane-title')).toBeNull()
     })
 
     it('renders nothing for a pane key that is no file-only pane', () => {
@@ -248,7 +262,7 @@ describe('PaneTabsProvider', () => {
     it('closing its tab closes the pane and leaves the route where it was', () => {
       const h = harness(splitOut())
       render(<MountFile h={h} paneKey={report} />)
-      fireEvent.click(screen.getByLabelText('Close tab report.md'))
+      fireEvent.click(screen.getByLabelText('Close report.md'))
       expect(groupOfSession(h.layout, report)).toBeNull()
       expect(h.onSelect).not.toHaveBeenCalledWith(report)
     })
@@ -284,12 +298,16 @@ describe('PaneTabsProvider', () => {
     expect(screen.queryByTestId('pane-tab-strip')).toBeNull()
   })
 
-  it('gives the lone pane of a new chat a strip to drag it by, labelled New chat', () => {
+  it('shows no strip for the lone pane of a new chat, whose title bar drags it instead', () => {
     const layout = openNewChatTab(createSplitLayout(['a'], 'a'))
     const fresh = groupsOf(layout)[0].tabs.find(isNewChatTabId)!
     const h = harness(splitGroup(layout, groupsOf(layout)[0].id, 'right', fresh))
     render(<Mount h={h} sessionId={fresh} />)
-    expect(screen.getAllByRole('tab').map((tab) => [tab.getAttribute('data-pane-tab-kind'), tab.textContent])).toEqual([['new-chat', 'New chat']])
+    expect(screen.queryByTestId('pane-tab-strip')).toBeNull()
+    render(<PaneTabsProvider split={h.controls()} onSelect={h.onSelect}><TitleDragProbe tabId={fresh} /><TitleDragProbe tabId="a" /></PaneTabsProvider>)
+    expect(screen.getByTestId(`drag-${fresh}`).textContent).toBe('true')
+    // A lone chat's pane drags by its title bar too; a pane with a strip drags by its tabs.
+    expect(screen.getByTestId('drag-a').textContent).toBe('true')
   })
 
   it('shows a Todo tab over its chat, titled from the preview cache', () => {

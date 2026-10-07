@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, type DragEvent, type ReactNode } from 'react'
 import type { DocTabRef } from '@/routes/chat/layout/tab-kind'
 
 /**
@@ -17,6 +17,15 @@ export interface PaneTabsBinding {
   closable: (sessionId: string) => boolean
   /** The body of a document-only pane (a document dragged out to a pane of its own), by its pane key. */
   renderDocPane?: (paneKey: string) => ReactNode | null
+  /** For a pane holding one tab, which shows no strip: its title bar drags that tab, as its strip
+   *  would. Null when the pane has a strip (its tabs are dragged there) or is not in the layout. */
+  titleDrag?: (paneTabId: string) => PaneTitleDrag | null
+}
+
+export interface PaneTitleDrag {
+  draggable: true
+  onDragStart: (event: DragEvent) => void
+  onDragEnd: () => void
 }
 
 export const PaneTabsContext = createContext<PaneTabsBinding | null>(null)
@@ -36,6 +45,13 @@ export function usePaneTabId(sessionId: string | null): string | null {
 export function usePaneTabsStrip(sessionId: string): ReactNode | null {
   const tabId = useContext(PaneTabIdContext) ?? sessionId
   return useContext(PaneTabsContext)?.renderStrip(tabId) ?? null
+}
+
+/** The drag a lone pane's title bar carries in place of a strip (PaneTabsBinding.titleDrag), if any:
+ *  never beside a strip, which a pane only has with more than one tab. */
+export function usePaneTitleDrag(sessionId: string): PaneTitleDrag | null {
+  const tabId = useContext(PaneTabIdContext) ?? sessionId
+  return useContext(PaneTabsContext)?.titleDrag?.(tabId) ?? null
 }
 
 export function usePaneTabsShown(): boolean {
