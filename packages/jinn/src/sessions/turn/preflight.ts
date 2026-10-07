@@ -13,6 +13,7 @@ import type { EngineSessionRef, ResolvedMcpConfig, Session } from "../../shared/
 import { buildContext, buildPlatformContextSnapshot, runtimeSessionSource, type BuildContextOptions } from "../context.js";
 import { resolveEngineRunMcp } from "../engine-run-mcp.js";
 import { getEngineSessionRef, getMessages } from "../registry.js";
+import { openTurnMessages } from "../queue-item-registry.js";
 import { isRemoteMcpSession } from "../remote-mcp-session.js";
 import { isTerminalSession, TERMINAL_REFUSES_MESSAGES } from "../../terminals/session.js";
 import { readUnseenInterruptedPrompts } from "./superseded.js";
@@ -307,18 +308,22 @@ export function resolveSyncPrompt(
  * carries the session's recent messages, then any message an interrupt kept
  * from the lost conversation, then the current message.
  *
- * The transcript ends where this turn's own message was logged, which is the
- * last logged message carrying its text: anything after it is queued behind
- * this turn and will get its own. Tool-call rows and live partial blocks are
- * left out; messages from other sessions are kept, in full, since an agent's
- * briefs and verdicts arrive that way.
+ * The transcript leaves out this turn's own message and anything queued behind
+ * it, which gets its own turn: the messages the session's open queue items
+ * carry, known by id where the queue links them, else by their text appearing
+ * in a queued prompt (which frames another session's message around it).
+ * Tool-call rows and live partial blocks are left out; messages from other
+ * sessions are kept, in full, since an agent's briefs and verdicts arrive that
+ * way.
  */
 export function resolveLostConversationPrompt(
   session: Session,
   prompt: string,
 ): Pick<TurnPlan, "promptToRun" | "carriedInterruptedPrompts"> {
   const unseen = readUnseenInterruptedPrompts(session);
-  const lines = transcriptLines(getMessages(session.id), prompt, unseen);
+  const open = openTurnMessages(session.id);
+  const pending = { messageIds: open.messageIds, prompts: [prompt, ...open.prompts] };
+  const lines = transcriptLines(getMessages(session.id).filter((message) => !isOpenTurnMessage(message, pending)), unseen);
   const carriedInterruptedPrompts = unseen.length > 0;
   if (lines.length === 0) return { promptToRun: withInterruptedPrompts(prompt, unseen), carriedInterruptedPrompts };
   const intro = "The conversation this Jinn session was running could not be resumed, so this is a new one. "
@@ -335,15 +340,21 @@ function engineText(message: LoggedMessage): string {
   return typeof full === "string" && full.trim() ? full : message.content;
 }
 
-/** The newest transcript lines before this turn's own message, oldest first, within budget. */
-function transcriptLines(messages: LoggedMessage[], prompt: string, unseen: string[]): string[] {
-  let own = messages.length - 1;
-  while (own >= 0 && messages[own]!.content !== prompt && engineText(messages[own]!) !== prompt) own--;
-  const before = own === -1 ? messages : messages.slice(0, own);
+/** Whether a logged message is one an open turn (this one, or one queued) will answer. */
+function isOpenTurnMessage(message: LoggedMessage, open: { messageIds: Set<string>; prompts: string[] }): boolean {
+  if (open.messageIds.has(message.id)) return true;
+  if (open.prompts.includes(message.content)) return true;
+  if (message.role !== "notification") return false;
+  const text = engineText(message);
+  return open.prompts.some((prompt) => prompt === text || `\n${prompt}\n`.includes(`\n${text}\n`));
+}
+
+/** The newest transcript lines, oldest first, within budget. */
+function transcriptLines(messages: LoggedMessage[], unseen: string[]): string[] {
   const lines: string[] = [];
   let bytes = 0;
-  for (let i = before.length - 1; i >= 0 && lines.length < SYNC_TRANSCRIPT_MESSAGES; i--) {
-    const line = transcriptLine(before[i]!, unseen);
+  for (let i = messages.length - 1; i >= 0 && lines.length < SYNC_TRANSCRIPT_MESSAGES; i--) {
+    const line = transcriptLine(messages[i]!, unseen);
     if (!line) continue;
     const size = Buffer.byteLength(line) + 2;
     if (bytes + size > LOST_TRANSCRIPT_MAX_BYTES) break;

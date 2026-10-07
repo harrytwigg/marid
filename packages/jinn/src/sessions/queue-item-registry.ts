@@ -205,6 +205,26 @@ export function listPendingQueueItemIdsForSession(sessionId: string): string[] {
   return rows.map((row) => row.id);
 }
 
+/**
+ * What a session's queued and running turns are carrying: their prompts, and
+ * the ids of the logged messages they will answer, from their own rows and
+ * from the callback deliveries batched into them.
+ */
+export function openTurnMessages(sessionId: string): { prompts: string[]; messageIds: Set<string> } {
+  const db = initDb();
+  const items = db.prepare(
+    "SELECT id, prompt, message_id AS messageId FROM queue_items WHERE session_id = ? AND status IN ('pending', 'running')",
+  ).all(sessionId) as Array<{ id: string; prompt: string; messageId: string | null }>;
+  const messageIds = new Set(items.flatMap((item) => (item.messageId ? [item.messageId] : [])));
+  if (items.length > 0) {
+    const delivered = db.prepare(
+      `SELECT message_id AS messageId FROM callback_deliveries WHERE message_id IS NOT NULL AND queue_item_id IN (${items.map(() => "?").join(", ")})`,
+    ).all(...items.map((item) => item.id)) as Array<{ messageId: string }>;
+    for (const { messageId } of delivered) messageIds.add(messageId);
+  }
+  return { prompts: items.map((item) => item.prompt), messageIds };
+}
+
 export function listAllPendingQueueItems(): QueueItem[] {
   const db = initDb();
   const rows = db.prepare(

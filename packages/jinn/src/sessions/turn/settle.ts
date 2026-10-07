@@ -1,4 +1,5 @@
 import { logger } from "../../shared/logger.js";
+import { isProcessStartFailure } from "../../shared/process-start.js";
 import { markTranscriptSyncedThrough } from "../../gateway/external-turns.js";
 import {
   clearEngineSessionRefs,
@@ -244,7 +245,7 @@ function answeredReceipt(
     durationMs: result.durationMs,
     accounting: { cost: result.cost, numTurns: result.numTurns, ...(model ? { model } : {}) },
     ...(filesEngineSession ? filedEngineSession(run, attempt, model, quietPreempted) : {}),
-    fields: buildTerminalFields(run, meteredContextTokens(run, result), verdict, Boolean(result.error)),
+    fields: buildTerminalFields(run, meteredContextTokens(run, result), verdict, Boolean(result.error && isProcessStartFailure(result.error))),
     employee: run.input.employee,
     // An interrupted turn stays silent upward: whoever interrupted it reports.
     notifyParent: !quietPreempted,
@@ -314,7 +315,7 @@ function meteredContextTokens(run: TurnRun, result: EngineResult): number | null
   return undefined;
 }
 
-function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefined, verdict: TurnVerdict, failed: boolean): UpdateSessionFields {
+function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefined, verdict: TurnVerdict, neverStarted: boolean): UpdateSessionFields {
   const fields: UpdateSessionFields = { ...run.terminalFields() };
   if (contextTokens !== undefined) fields.lastContextTokens = contextTokens;
   const clearSyncMarkers = run.plan.syncRequested && !verdict.quietPreempted;
@@ -324,8 +325,10 @@ function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefi
   if (clearSyncMarkers || clearCarriedPrompts) {
     let meta: unknown = fields.transportMeta ?? getSession(run.input.session.id)?.transportMeta;
     // A lost conversation's transcript is owed until a turn carrying it
-    // actually ran: a failed one leaves it for the next.
-    if (clearSyncMarkers) meta = withSyncMarkersCleared(meta, { keepLostConversation: failed });
+    // reaches the engine: one whose process never started leaves it for the
+    // next. Any later failure leaves it in the new conversation, which the
+    // session now resumes.
+    if (clearSyncMarkers) meta = withSyncMarkersCleared(meta, { keepLostConversation: neverStarted });
     if (clearCarriedPrompts) meta = withUnseenInterruptedPromptsCleared(meta);
     fields.transportMeta = meta as UpdateSessionFields["transportMeta"];
   }
@@ -337,13 +340,13 @@ function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefi
  * so the next attempt starts a fresh engine session instead of retrying a dead one,
  * and drop any rate-limit override that would otherwise restore the dead id.
  */
-export function clearDeadEngineSession(sessionId: string, engineName: string): void {
+export function clearDeadEngineSession(sessionId: string, engineName: string, opts: { lostConversation: boolean }): void {
   logger.warn(`Dead session detected for ${sessionId} — clearing stale engine IDs`);
   const meta = { ...(getSession(sessionId)?.transportMeta || {}) } as Record<string, unknown>;
   delete meta["engineOverride"];
-  // Whatever runs next on this engine starts a fresh conversation; this has it
-  // handed the session so far rather than nothing.
-  meta[LOST_CONVERSATION_META_KEY] = engineName;
+  // A conversation that had been running is gone: whatever runs next on this
+  // engine starts a fresh one, and this has it handed the session so far.
+  if (opts.lostConversation) meta[LOST_CONVERSATION_META_KEY] = engineName;
   clearEngineSessionRefs(sessionId, engineName);
   updateSession(sessionId, { transportMeta: meta as UpdateSessionFields["transportMeta"] });
 }

@@ -138,7 +138,7 @@ async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAt
   const sessionId = run.input.session.id;
   const lostId = run.plan.resumeSessionId;
   logger.warn(`Session ${sessionId}: ${run.plan.engineName} has no conversation ${lostId} to resume; starting a fresh one with the session's recent messages`);
-  clearDeadEngineSession(sessionId, run.plan.engineName);
+  clearDeadEngineSession(sessionId, run.plan.engineName, { lostConversation: true });
   deletePartialMessages(sessionId);
   updateSession(sessionId, { lastError: null });
   run.plan = {
@@ -269,7 +269,7 @@ async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string 
   // A stale engine-session id can carry text like "429" that would otherwise
   // read as a rate limit, so dead sessions are cleared before that check.
   const dead = !quietPreempted && isDeadSessionError(result);
-  if (dead) clearDeadEngineSession(sessionId, run.plan.engineName);
+  if (dead) clearDeadEngineSession(sessionId, run.plan.engineName, { lostConversation: Boolean(run.plan.resumeSessionId) });
   const rateLimit = !quietPreempted && !dead ? detectRateLimit(result) : { limited: false as const };
   noteClaudeLogin(run, result, quietPreempted || dead || rateLimit.limited);
 

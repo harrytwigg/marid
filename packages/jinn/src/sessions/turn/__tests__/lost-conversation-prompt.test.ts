@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "../../../shared/types.js";
 
 /**
@@ -10,10 +10,17 @@ import type { Session } from "../../../shared/types.js";
  * command-line argument alongside a remote session's system prompt.
  */
 
-const messages = vi.hoisted(() => ({ rows: [] as Array<Record<string, unknown>> }));
+const messages = vi.hoisted(() => ({
+  rows: [] as Array<Record<string, unknown>>,
+  open: { prompts: [] as string[], messageIds: new Set<string>() },
+}));
 vi.mock("../../registry.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../registry.js")>()),
   getMessages: vi.fn(() => messages.rows),
+}));
+vi.mock("../../queue-item-registry.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../queue-item-registry.js")>()),
+  openTurnMessages: vi.fn(() => messages.open),
 }));
 
 import { LOST_CONVERSATION_META_KEY, resolveLostConversationPrompt, resolveTurnPrompt, withSyncMarkersCleared } from "../preflight.js";
@@ -24,7 +31,14 @@ const INTRO = "The conversation this Jinn session was running could not be resum
 const at = (n: number) => Date.parse("2026-10-01T09:00:00Z") + n * 1000;
 const session = (transportMeta: Record<string, unknown> = {}) => ({ id: "s1", engine: "claude", transportMeta }) as unknown as Session;
 
+/** A message from another session, framed for the engine as a lateral send frames it. */
+const framed = (raw: string) => `📨 Message from session abc (qa) [hop 1/12]:\n\n${raw}\n\nTo reply: send_to_session { sessionId: "abc" }.`;
+
 describe("resolveLostConversationPrompt", () => {
+  beforeEach(() => {
+    messages.open = { prompts: [], messageIds: new Set() };
+  });
+
   it("carries the conversation so far, with other sessions' messages in full, and no tool rows or partial blocks", () => {
     messages.rows = [
       { role: "user", content: "fix the parser", timestamp: at(1) },
@@ -50,16 +64,33 @@ describe("resolveLostConversationPrompt", () => {
     expect(carriedInterruptedPrompts).toBe(false);
   });
 
-  it("ends the transcript at this turn's own message, leaving out what is queued behind it", () => {
+  it("leaves out this turn's own message from another session, and anything queued behind it", () => {
+    const verdict = "QA verdict: pass, merge it.";
     messages.rows = [
-      { role: "user", content: "A", timestamp: at(1) },
-      { role: "assistant", content: "ok", timestamp: at(2) },
-      { role: "notification", content: "B banner", meta: { fullMessage: "B" }, timestamp: at(3) },
-      { role: "user", content: "C", timestamp: at(4) },
+      { id: "m1", role: "user", content: "fix the parser", timestamp: at(1) },
+      { id: "m2", role: "assistant", content: "Asked QA.", timestamp: at(2) },
+      { id: "m3", role: "notification", content: `📨 From qa: ${verdict}`, meta: { fullMessage: verdict }, timestamp: at(3) },
+      { id: "m4", role: "user", content: "queued: also bump the version", timestamp: at(4) },
+      { id: "m5", role: "notification", content: "📩 dev replied\nshort banner", timestamp: at(5) },
     ];
+    // m4 is a queued web message (its queue row links it); m5 is a callback batched into a pending item.
+    messages.open = { prompts: [framed(verdict), "queued: also bump the version", "📩 framed callback"], messageIds: new Set(["m4", "m5"]) };
+    const { promptToRun } = resolveLostConversationPrompt(session(), framed(verdict));
+
+    expect(promptToRun).toBe([INTRO, "USER: fix the parser", "ASSISTANT: Asked QA.", `CURRENT MESSAGE:\n${framed(verdict)}`].join("\n\n"));
+  });
+
+  it("keeps an earlier turn's reply that was logged after a message queued during that turn", () => {
+    messages.rows = [
+      { id: "m1", role: "user", content: "A", timestamp: at(1) },
+      { id: "m2", role: "user", content: "B", timestamp: at(2) },
+      { id: "m3", role: "user", content: "C", timestamp: at(3) },
+      { id: "m4", role: "assistant", content: "answer to A", timestamp: at(4) },
+    ];
+    messages.open = { prompts: ["B", "C"], messageIds: new Set(["m2", "m3"]) };
     const { promptToRun } = resolveLostConversationPrompt(session(), "B");
 
-    expect(promptToRun).toBe([INTRO, "USER: A", "ASSISTANT: ok", "CURRENT MESSAGE:\nB"].join("\n\n"));
+    expect(promptToRun).toBe([INTRO, "USER: A", "ASSISTANT: answer to A", "CURRENT MESSAGE:\nB"].join("\n\n"));
   });
 
   it("stays within its budget however long the history, keeping the newest messages", () => {

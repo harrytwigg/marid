@@ -125,6 +125,17 @@ describe("a resumed turn whose process never started its session", () => {
     expect(recovered.transportMeta?.["lostConversationEngine"]).toBeUndefined();
   });
 
+  it("counts the transcript delivered once the fresh conversation started, even if its turn then failed", async () => {
+    const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
+    const { session } = await twoTurns(
+      engineResult({ sessionId: "native-1", error }),
+      engineResult({ sessionId: "native-2", error: "claude exited mid-turn (code 1)", cost: 0.01, numTurns: 1 }),
+    );
+
+    expect(session).toMatchObject({ status: "error" });
+    expect(session.transportMeta?.["lostConversationEngine"]).toBeUndefined();
+  });
+
   it("does not re-run /compact in a fresh conversation, which would have nothing to compact", async () => {
     const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
     const claude = scriptedEngine("claude", [
