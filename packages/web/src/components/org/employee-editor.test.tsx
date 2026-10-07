@@ -166,8 +166,8 @@ describe("EmployeeEditor department scope", () => {
       { label: "None", disabled: false },
       { label: "content", disabled: false },
       { label: "design", disabled: false },
-      { label: "studio· scoped", disabled: true },
-      { label: "vault· dedicated", disabled: true },
+      { label: "studio · scoped", disabled: true },
+      { label: "vault · dedicated", disabled: true },
     ])
     expect(screen.getByTestId("department-file-move-hint").textContent)
       .toBe("Scope follows the file location under org/<slug>; move the YAML by hand.")

@@ -221,7 +221,7 @@ export function EmployeeEditor({
               <SelectItem value={NONE}>None</SelectItem>
               {departments.map((d) => confined(d) ? (
                 <SelectItem key={d} value={d} disabled>
-                  {d}
+                  {d}{" "}
                   <span className="text-[var(--text-tertiary)]">· {scopes[d]}</span>
                 </SelectItem>
               ) : (
