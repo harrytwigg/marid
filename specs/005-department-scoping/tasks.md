@@ -331,13 +331,15 @@ The screenshots go on the PR, and senior QA reviews them as part of the review.
   Test that the token never reaches a log, a file or a child environment, that a named
   account's read skips `$CLAUDE_CODE_OAUTH_TOKEN`, and that nothing refreshes a token. Check
   once, on T070's throwaway profile, that reading the suffixed Keychain entry with
-  `security -w` does not prompt, and record it in the PR.
+  `security -w` does not prompt, and record it in the PR. (Shipped as a simulated Keychain write and
+  read-back under a suffixed name, not a real second login, per PR #106.)
 - [x] T092a Remote readings (FR-072): on the host, with its Node, parse `.credentials.json` (or
   read the Keychain entry named for that path on a macOS host) and print only the access token
   and its expiry. Run `claude auth status` over SSH, only when the host is reachable. Keep the
   token in memory for the one call. Test that the captured output holds no refresh token, that
   nothing stores or logs the token, that nothing wakes a host, and that a sleeping host shows
-  its last reading and its age.
+  its last reading and its age. (Remote readings were verified with mocks and a local token
+  script, not against a real host, per PR #106.)
 - [x] T093 Board walk (FR-075 to FR-077): per-account snapshot fields and `priorFiveHour`,
   candidate accounts, the `startTodo` code gate, exhausted accounts in `dispatcherSuffix`,
   the per-account rewrite of `template/board-walk.md`, the `noReading` flag with one probing

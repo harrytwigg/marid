@@ -8,8 +8,9 @@ scope, and asked for scoped employees on remote hosts (D1 to D5).
 
 **Status**: Implemented. Phase 1 shipped in PR #105, Phase 2 in #107, Phase 3 in #109,
 Phase 4 in #103, Phase 5 in #112, Phase 6 in #106, and the stage hardening in #115, with a
-remote capability fix in #119. The instance migration for all of it is the 0.34.0 bundle
-(`packages/jinn/template/migrations/0.34.0`). The one open item is F1 in tasks.md, instance
+remote capability fix in #119. All of it is merged to `main`. The instance migration for it is the 0.34.0
+bundle (`packages/jinn/template/migrations/0.34.0`), which is unreleased: the package is
+still at 0.33.3. The one open item is F1 in tasks.md, instance
 work outside this repository. The operator's decisions are recorded below and folded into
 the text.
 
