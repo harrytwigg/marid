@@ -60,7 +60,7 @@ function expectDoctrineIntact(text: string): void {
   expect(text).toContain("gateway");
   expect(text).toContain("Todo");
   expect(text).toContain("in_review");
-  expect(text).toContain("a change asked on it sends it back to executing");
+  expect(text).toMatch(/in_review \([^)]*change[^)]*back to executing/);
 }
 
 describe("what the brief tells the orb before anyone speaks", () => {
