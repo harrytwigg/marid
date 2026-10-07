@@ -10,6 +10,19 @@ vi.mock("../../shared/models.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../shared/models.js")>()),
   engineAvailable: () => true,
 }));
+// The login gates read this machine's real Claude state, which these
+// auto-compaction tests are not about — and one of them reports a refused
+// login on purpose, which the real watch would turn into a host-wide outage
+// that then refuses every later turn's launch in this file.
+vi.mock("../../shared/claude-profile-signin.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../shared/claude-profile-signin.js")>()),
+  verifyLocalClaudeProfile: () => undefined,
+}));
+vi.mock("../claude-auth-watch.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../claude-auth-watch.js")>()),
+  refuseClaudeLaunch: () => undefined,
+  observeClaudeTurnOutcome: () => {},
+}));
 
 const { reg, isAutoCompacting, supersedeRunningTurn, readUnseenInterruptedPrompts, recordingEngine, recordingSurface, configWith, coldSession, runOne, answered, ENABLED, MINUTE } =
   await import("./helpers/auto-compact-harness.js");
