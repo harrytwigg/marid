@@ -44,6 +44,8 @@ export type DepartmentDefinitionWire = DepartmentDefinitionFields & {
   prefix: string | null;
   workdirs: string[];
   skills: string[];
+  /** Instance MCP servers its scoped sessions get beside `jinn`. */
+  mcp: string[];
   sharedNotes: string[];
   instructions: "department" | "department+company";
   todoCount: number;
@@ -109,7 +111,7 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
   const record = departmentRecord(slug);
   const db = initDb();
   const row = listDepartmentsWithCounts(db).find((candidate) => candidate.slug === slug);
-  const extras = record.definition ?? { workdirs: [], skills: [], sharedNotes: [], instructions: "department" as const };
+  const extras = record.definition ?? { workdirs: [], skills: [], mcp: [], sharedNotes: [], instructions: "department" as const };
   // Read from disk on every request: a skill changes while the gateway runs, and the panel should say so now.
   const skillProblems = extras.skills.flatMap((skill) => {
     const reason = skillRefusal(path.join(resolveJinnHome(), "skills", skill));
@@ -121,6 +123,7 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
     ...fields(record, membersByDepartment(context).get(slug) ?? []),
     workdirs: extras.workdirs,
     skills: extras.skills.filter((skill) => !skillProblems.some((problem) => problem.skill === skill)),
+    mcp: extras.mcp,
     sharedNotes: extras.sharedNotes,
     instructions: extras.instructions,
     todoCount: row?.todoCount ?? 0,

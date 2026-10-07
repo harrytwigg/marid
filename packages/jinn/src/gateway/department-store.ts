@@ -30,12 +30,13 @@ export interface DepartmentPatch {
   description?: string | null;
   workdirs?: string[];
   skills?: string[];
+  mcp?: string[];
   sharedNotes?: string[];
   instructions?: (typeof INSTRUCTION_MODES)[number];
 }
 
 const TEXT_FIELDS = ["displayName", "description"] as const;
-const LIST_FIELDS = ["workdirs", "skills", "sharedNotes"] as const;
+const LIST_FIELDS = ["workdirs", "skills", "mcp", "sharedNotes"] as const;
 
 function invalid(message: string): never {
   throw new DepartmentWriteError("invalid", message);

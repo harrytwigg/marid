@@ -18,7 +18,7 @@ import type { RemoteExecutionConfig } from "../../shared/config-types.js";
  * into its remoteCwd.
  */
 
-const hoisted = vi.hoisted(() => ({ ssh: [] as string[], rewrite: undefined as ((command: string) => string) | undefined }));
+const hoisted = vi.hoisted(() => ({ ssh: [] as string[], rewrite: undefined as ((command: string) => string) | undefined, mcp: [] as string[] }));
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -39,7 +39,7 @@ vi.mock("../../gateway/gateway-info.js", () => ({
 
 vi.mock("../../gateway/department-registry.js", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  departmentRecord: (slug: string) => ({ slug, scope: "scoped", definition: { skills: ["helper"], instructions: "department" }, definitionError: null, definitionFile: null, warnings: [] }),
+  departmentRecord: (slug: string) => ({ slug, scope: "scoped", definition: { skills: ["helper"], mcp: hoisted.mcp, instructions: "department" }, definitionError: null, definitionFile: null, warnings: [] }),
 }));
 
 const { prepareRemoteSession, clearRemoteStagingCache } = await import("../remote-stage.js");
@@ -65,6 +65,7 @@ async function stage(target: ReturnType<typeof employeeRemoteTarget>, jinnSessio
 
 beforeEach(() => {
   hoisted.ssh.length = 0;
+  hoisted.mcp = [];
   hoisted.rewrite = undefined;
   clearRemoteStagingCache();
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "remote-dept-")));
@@ -208,5 +209,49 @@ describe("a department-scoped employee on a remote host", { timeout: 60_000 }, (
     expect(target.remoteCwd).toBeUndefined();
     await expect(stage(target)).rejects.toThrow(/Refusing to spawn a remote session/);
     expect(hoisted.ssh).toEqual([]);
+  });
+});
+
+describe("a department-scoped remote session's MCP servers", { timeout: 60_000 }, () => {
+  const SECRET = "instance-server-secret-value";
+  // What the resolver hands over for an instance with extra servers: the belt, a browser,
+  // a stdio server keyed in its env and a URL server keyed in its headers.
+  const instanceMcp = () => ({
+    mcpServers: {
+      browser: { command: "npx", args: ["-y", "@playwright/mcp@latest"] },
+      jinn: { command: process.execPath, args: [path.join(facts.entryDir!, "server-entry.js")], env: { JINN_HOME: "/home" } },
+      alpha: { command: "npx", args: ["alpha-mcp"], env: { ALPHA_API_KEY: SECRET } },
+      beta: { type: "sse", url: "https://beta.invalid/mcp", headers: { Authorization: `Bearer ${SECRET}` } },
+    },
+  }) as unknown as import("../../shared/types.js").ResolvedMcpConfig;
+
+  async function stageMcp(target: ReturnType<typeof employeeRemoteTarget>) {
+    const staging = await prepareRemoteSession({ target: target!, remote, facts, engine: "claude", jinnSessionId: "s1", gatewayPort: 40123, resolvedMcp: instanceMcp() });
+    return { staging, text: fs.readFileSync(staging.mcpConfigPath!, "utf-8") };
+  }
+
+  function stagedText(dir: string): string {
+    return fs.readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => fs.readFileSync(path.join(entry.parentPath, entry.name), "utf-8"))
+      .join("\n");
+  }
+
+  it("stages the jinn server alone, and no other server's credentials anywhere in the stage", async () => {
+    const { staging, text } = await stageMcp(employeeRemoteTarget(employee(), scoped()));
+    expect(Object.keys(JSON.parse(text).mcpServers)).toEqual(["jinn"]);
+    expect(stagedText(staging.sessionHome)).not.toContain(SECRET);
+  });
+
+  it("stages the servers its department allow-lists beside jinn, and only those", async () => {
+    hoisted.mcp = ["alpha", "not-configured"];
+    const { text } = await stageMcp(employeeRemoteTarget(employee(), scoped()));
+    expect(Object.keys(JSON.parse(text).mcpServers).sort()).toEqual(["alpha", "jinn"]);
+    expect(text).not.toContain("beta.invalid");
+  });
+
+  it("leaves an unscoped remote session's servers as resolved", async () => {
+    const { text } = await stageMcp(employeeRemoteTarget(employee({ department: "engineering" }), scoped()));
+    expect(Object.keys(JSON.parse(text).mcpServers).sort()).toEqual(["alpha", "beta", "browser", "jinn"]);
   });
 });

@@ -13,7 +13,8 @@ import { normalisedWorkdir, workdirRefusal, type WorkdirOptions } from "./depart
  *    department that cannot be scoped. The department then keeps its last good scope.
  *  - **Content** problems drop only the bad entry and leave a warning: a missing
  *    skill, a working directory that fails FR-033, a shared-notes path outside
- *    `knowledge/` and `docs/`, an unknown instructions mode.
+ *    `knowledge/` and `docs/`, an MCP server name that is not one, an unknown
+ *    instructions mode.
  */
 
 export const DEPARTMENT_SCOPES: readonly DepartmentScope[] = ["open", "scoped", "dedicated"];
@@ -29,6 +30,8 @@ export interface DepartmentDefinition {
   description: string | null;
   workdirs: string[];
   skills: string[];
+  /** The instance MCP servers its sessions get beside the built-in `jinn` server; none when empty. */
+  mcp: string[];
   sharedNotes: string[];
   instructions: InstructionsMode;
 }
@@ -86,6 +89,23 @@ function keepSkills(names: string[], ctx: ParseContext, warnings: string[]): str
       if (!kept.includes(name)) kept.push(name);
     } else {
       warnings.push(`skills: dropped "${name}", which is not an installed skill`);
+    }
+  }
+  return kept;
+}
+
+/**
+ * The MCP allow-list. Whether a name is configured is not judged here: `config.yaml`
+ * can change without the file being re-read, and a name it does not configure simply
+ * attaches nothing.
+ */
+function keepMcpServers(names: string[], warnings: string[]): string[] {
+  const kept: string[] = [];
+  for (const name of names) {
+    if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
+      if (!kept.includes(name)) kept.push(name);
+    } else {
+      warnings.push(`mcp: dropped "${name}", which is not an MCP server name`);
     }
   }
   return kept;
@@ -166,6 +186,7 @@ function readIdentity(slug: string, doc: Record<string, unknown>): { scope: Depa
 function readExtras(definition: DepartmentDefinition, doc: Record<string, unknown>, ctx: ParseContext, warnings: string[]): void {
   definition.workdirs = keepWorkdirs(stringList(doc.workdirs, "workdirs", warnings), ctx, warnings);
   definition.skills = keepSkills(stringList(doc.skills, "skills", warnings), ctx, warnings);
+  definition.mcp = keepMcpServers(stringList(doc.mcp, "mcp", warnings), warnings);
   definition.sharedNotes = keepSharedNotes(stringList(doc.sharedNotes, "sharedNotes", warnings), warnings);
   if (doc.instructions === undefined || doc.instructions === null) return;
   if ((INSTRUCTION_MODES as readonly unknown[]).includes(doc.instructions)) definition.instructions = doc.instructions as InstructionsMode;
@@ -188,10 +209,11 @@ export function parseDepartmentYaml(slug: string, raw: string, ctx: ParseContext
     description: optionalText(read.doc.description),
     workdirs: [],
     skills: [],
+    mcp: [],
     sharedNotes: [],
     instructions: "department",
   };
-  // Working directories, skills, shared Notes and the instructions mode only mean
+  // Working directories, skills, MCP servers, shared Notes and the instructions mode only mean
   // something to a scoped session, so an open department does not read them.
   if (identity.scope !== "open" || ctx.judgeExtrasWhenOpen) readExtras(definition, read.doc, ctx, warnings);
   return { ok: true, definition, warnings };
