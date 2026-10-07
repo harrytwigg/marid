@@ -82,6 +82,7 @@ export {
 } from "../sessions/partial-stream.js";
 import { forkEngineSession } from "../sessions/fork.js";
 import { spawnCwd } from "../sessions/session-cwd.js";
+import { sessionScopeDepartment } from "../sessions/session-scope.js";
 import { claudeProfileForSession } from "./session-claude-profile.js";
 import { cleanUpDeletedSession } from "./session-cleanup.js";
 import { ptySnapshotStore } from "../engines/pty-snapshot.js";
@@ -2025,7 +2026,7 @@ export async function handleApiRequest(
               destinationSessionsRoot: path.join(CODEX_HOMES_DIR, newSession.id, "sessions"),
             }
           : undefined;
-        const forkResult = await forkEngineSession(source.engine, source.engineSessionId, spawnCwd(source), { interactive, codex, claudeProfile: claudeProfileForSession(source) });
+        const forkResult = await forkEngineSession(source.engine, source.engineSessionId, spawnCwd(source), { interactive, codex, claudeProfile: claudeProfileForSession(source), scopedSession: Boolean(sessionScopeDepartment(source)) });
 
         // 3. Store the new engine session ID
         recordEngineSessionId(newSession.id, newSession.engine, forkResult.engineSessionId, {

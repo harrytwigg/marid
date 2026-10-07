@@ -12,9 +12,9 @@ import { InteractiveClaudeEngine } from "../claude-interactive.js";
  *  prototype so this stays a pure env test with no PTY/proxy setup. */
 function buildPtyEnv(proxyPort?: number): Record<string, string> {
   const engine = Object.create(InteractiveClaudeEngine.prototype) as {
-    buildPtyEnv(proxyPort?: number, sessionId?: string): Record<string, string>;
+    buildPtyEnv(sessionId: string | undefined, opts: { proxyPort?: number }): Record<string, string>;
   };
-  return engine.buildPtyEnv(proxyPort);
+  return engine.buildPtyEnv(undefined, { proxyPort });
 }
 
 const ORIGINAL = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
