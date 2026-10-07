@@ -8,6 +8,7 @@ import {
   searchSessionsFiltered,
 } from "../../sessions/registry.js";
 import type { Session } from "../../shared/types.js";
+import { departmentScopeOf } from "../department-registry.js";
 import { listDepartmentRows } from "../departments-api.js";
 import { employeePayload, orgPayload } from "../org-api.js";
 import { badRequest, json, notFound } from "../route-helpers.js";
@@ -137,6 +138,7 @@ async function serveOrg(g: GateRequest): Promise<boolean> {
   const members = new Set(payload.employees.filter((employee) => isMember(employee.name, g.caller.department)).map((employee) => String(employee.name)));
   json(g.res, {
     departments: [g.caller.department],
+    departmentScopes: { [g.caller.department]: departmentScopeOf(g.caller.department) },
     employees: payload.employees.filter((employee) => members.has(String(employee.name))).map((employee) => narrowEmployee(employee, members)),
     hierarchy: {
       root: payload.hierarchy.root && members.has(payload.hierarchy.root) ? payload.hierarchy.root : null,

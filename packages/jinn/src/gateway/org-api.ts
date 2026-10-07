@@ -42,6 +42,8 @@ export async function orgPayload(context: ApiContext) {
 
   return {
     departments,
+    // The scope the department-change check reads, so the editor offers only moves it allows.
+    departmentScopes: Object.fromEntries(departments.map((slug) => [slug, departmentScopeOf(slug)])),
     employees: hierarchy.sorted.map((name) => employeeView(hierarchy.nodes[name])),
     hierarchy: {
       root: hierarchy.root,

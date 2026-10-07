@@ -481,7 +481,9 @@ and dark, with screenshots on the PR (FR-040).
   directory, its immediate directory or its `department` field disagree and any of them is a
   non-open department. `PATCH
   /api/org/employees/:name` changing `department` into or out of a non-open department is
-  subject to the stranding refusals in FR-015.
+  refused through the API, because the API edits the field and not the file's place; the
+  move is made by hand, by moving the YAML under `org/<slug>`. The web editor does not offer
+  it.
 - **FR-008**: A session of a scoped employee MUST be bound to its department when it is
   created. A linked Todo outside that department refuses the spawn. The binding is stored on
   the session and never changes.

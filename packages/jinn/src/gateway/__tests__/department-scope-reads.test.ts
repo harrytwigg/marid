@@ -133,6 +133,13 @@ describe("org and departments", () => {
     expect((await call("GET", "/api/org")).body.employees.length).toBeGreaterThan(2);
   });
 
+  it("gives each department's scope to the operator, and only D's to D", async () => {
+    const operator = (await call("GET", "/api/org")).body;
+    expect(operator.departmentScopes).toMatchObject({ "side-project": "scoped", "other-side": "dedicated", engineering: "open" });
+    expect(Object.keys(operator.departmentScopes).sort()).toEqual([...operator.departments].sort());
+    expect((await scoped("GET", "/api/org")).body.departmentScopes).toEqual({ "side-project": "scoped" });
+  });
+
   // Finding: the member rows keep `reportsTo`, `parentName` and `chain` as the org scan
   // resolved them, so a manager outside D (here eng-dev) is named. The prompt roster strips
   // it (`departmentHierarchy`); the API does not. Flips red when the rows are narrowed too.

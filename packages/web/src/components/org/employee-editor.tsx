@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { api } from "@/lib/api"
 import type { Employee, EmployeeUpdate } from "@/lib/api"
+import { isConfined, type DepartmentScopeWire } from "@/lib/department-api"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -15,6 +16,13 @@ import { ModelSelectorRow, type SelectorValue } from "@/components/chat/model-se
 
 const RANKS = ["executive", "manager", "senior", "employee"] as const
 const NONE = "__none__"
+
+/* The API edits an employee's `department:` field, not where its file sits, and a
+ * scoped or dedicated department's members are the files under org/<slug>. A move
+ * into or out of one is refused, so the editor does not offer it. */
+function fileMoveHint(slug: string): string {
+  return `Scope follows the file location under org/${slug}; move the YAML by hand.`
+}
 
 function firstReportsTo(rt: Employee["reportsTo"]): string {
   if (!rt) return ""
@@ -84,6 +92,11 @@ export function EmployeeEditor({
 
   // Department + reportsTo option lists come from the live org.
   const [departments, setDepartments] = useState<string[]>([])
+  // Null until the org loads: the control stays read-only until it is known which moves the API allows.
+  const [scopes, setScopes] = useState<Record<string, DepartmentScopeWire> | null>(null)
+  const confined = (slug: string) => isConfined(scopes?.[slug])
+  const inConfined = !!employee.department && confined(employee.department)
+  const offersConfined = departments.some(confined)
   const [employeeNames, setEmployeeNames] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -91,6 +104,7 @@ export function EmployeeEditor({
   useEffect(() => {
     api.getOrg().then((o) => {
       setDepartments(o.departments)
+      setScopes(o.departmentScopes ?? {})
       setEmployeeNames(o.employees.map((e) => e.name).filter((n) => n !== employee.name))
     }).catch(() => {})
   }, [employee.name])
@@ -198,13 +212,22 @@ export function EmployeeEditor({
         <Field label="Department">
           {isSystem ? (
             <ReadonlyValue testId="system-readonly-department">{department || "None"}</ReadonlyValue>
+          ) : !scopes ? (
+            <ReadonlyValue testId="pending-readonly-department">{department || "None"}</ReadonlyValue>
+          ) : inConfined ? (
+            <ReadonlyValue testId="confined-readonly-department">{department}</ReadonlyValue>
           ) : <Select value={department || NONE} onValueChange={(v) => setDepartment(v === NONE ? "" : v)}>
-            <SelectTrigger>
+            <SelectTrigger aria-label="Department">
               <SelectValue placeholder="None" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>None</SelectItem>
-              {departments.map((d) => (
+              {departments.map((d) => confined(d) ? (
+                <SelectItem key={d} value={d} disabled>
+                  {d}{" "}
+                  <span className="text-[var(--text-tertiary)]">· {scopes[d]}</span>
+                </SelectItem>
+              ) : (
                 <SelectItem key={d} value={d}>{d}</SelectItem>
               ))}
               {department && !departments.includes(department) && (
@@ -213,6 +236,15 @@ export function EmployeeEditor({
             </SelectContent>
           </Select>}
         </Field>
+
+        {!isSystem && (inConfined || offersConfined) && (
+          <span
+            data-testid="department-file-move-hint"
+            className="col-span-2 -mt-[var(--space-2)] text-[length:var(--text-caption2)] text-[var(--text-quaternary)]"
+          >
+            {fileMoveHint(inConfined ? employee.department! : "<slug>")}
+          </span>
+        )}
       </div>
 
       <Field label="Reports to" hint="Changing this re-parents the node on the map.">
