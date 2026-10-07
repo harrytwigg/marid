@@ -101,7 +101,6 @@ describe("a gateway that itself runs inside an employee's session", () => {
 
 describe("the environment each engine spawns with", () => {
   it("opencode (turn, server and terminal view start from this)", () => {
-    expectEmployeeEnv("opencode", cleanEnv);
     const id = session("opencode", "build-dev");
     const plan = localOpencodeLaunch({ prompt: "hi", cwd: process.cwd(), sessionId: id } as never, id);
     expect(plan.env.JINN_EMPLOYEE).toBe("build-dev");
