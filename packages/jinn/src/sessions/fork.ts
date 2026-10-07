@@ -124,7 +124,10 @@ async function forkClaudeSessionInteractive(
   await sleep(150);
 
   const projectDir = claudeProjectDir(cwd, claudeProfile);
-  const spawnedAfter = Date.now();
+  // Snapshot the transcripts that exist before the spawn. Comparing file
+  // timestamps against Date.now() is unreliable: the filesystem clock can trail
+  // it by a few ms, so a transcript written right after the spawn can look older.
+  const knownTranscripts = listJsonlNames(projectDir);
 
   const bin = resolveBin("claude", ctx.bin);
   const args = [
@@ -154,7 +157,7 @@ async function forkClaudeSessionInteractive(
 
   let newSessionId: string | null = null;
   try {
-    newSessionId = await findNewJsonlSince(projectDir, spawnedAfter, 60_000);
+    newSessionId = await findNewJsonl(projectDir, knownTranscripts, 60_000);
   } finally {
     // Always kill the interactive TUI — it doesn't exit on its own after the
     // one-turn fork-prompt is submitted.
@@ -186,36 +189,34 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Names of the `.jsonl` transcripts currently in `projectDir` (empty when it does not exist). */
+export function listJsonlNames(projectDir: string): Set<string> {
+  try {
+    return new Set(fs.readdirSync(projectDir).filter((name) => name.endsWith(".jsonl")));
+  } catch {
+    return new Set();
+  }
+}
+
 /**
- * Poll a Claude project transcript directory for a new `.jsonl` file whose
- * mtime is after `sinceMs`. Returns the basename without `.jsonl` (the session
- * id) or `null` on timeout. Async polling with 250ms beats — never blocks the
- * gateway event loop (a chat duplicate would otherwise freeze all WS/HTTP/cron).
+ * Poll a Claude project transcript directory for a non-empty `.jsonl` file that
+ * was not in `known` (the listing taken before the spawn). Returns the basename
+ * without `.jsonl` (the session id) or `null` on timeout. Async polling with
+ * 250ms beats — never blocks the gateway event loop (a chat duplicate would
+ * otherwise freeze all WS/HTTP/cron).
  */
-async function findNewJsonlSince(projectDir: string, sinceMs: number, timeoutMs: number): Promise<string | null> {
+export async function findNewJsonl(projectDir: string, known: ReadonlySet<string>, timeoutMs: number): Promise<string | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (fs.existsSync(projectDir)) {
+    for (const name of listJsonlNames(projectDir)) {
+      if (known.has(name)) continue;
       try {
-        const entries = fs.readdirSync(projectDir);
-        for (const name of entries) {
-          if (!name.endsWith(".jsonl")) continue;
-          const full = path.join(projectDir, name);
-          let st: fs.Stats;
-          try { st = fs.statSync(full); } catch { continue; }
-          // Use birthtime if available, else mtime — either being after sinceMs
-          // indicates a new transcript file created by the fork.
-          const birth = st.birthtimeMs || 0;
-          const mtime = st.mtimeMs || 0;
-          if (birth >= sinceMs || mtime >= sinceMs) {
-            // Heuristic safety: require the file is non-empty (Claude writes
-            // at least the summary/init lines almost immediately).
-            if (st.size > 0) {
-              return name.slice(0, -".jsonl".length);
-            }
-          }
+        // Heuristic safety: require the file is non-empty (Claude writes
+        // at least the summary/init lines almost immediately).
+        if (fs.statSync(path.join(projectDir, name)).size > 0) {
+          return name.slice(0, -".jsonl".length);
         }
-      } catch { /* keep polling */ }
+      } catch { /* vanished between listing and stat; keep polling */ }
     }
     await sleep(250);
   }
