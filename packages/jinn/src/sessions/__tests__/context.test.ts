@@ -317,13 +317,38 @@ describe("buildContext — Jinn MCP usage directive", () => {
     expect(companyBlock).not.toContain("You are QA Engineer");
     expect(companyBlock).not.toContain("You report to Ops Director");
     expect(out).toContain("Your hands are the attached Jinn MCP");
-    expect(out).toContain("Todos are your live work ledger - find and update your Todo; when it is finished, move it to in_review yourself");
+    expect(out).toContain("Todos are your live work ledger - find and update your Todo");
+    expect(companyBlock).toMatch(/in_review[^.]*summary in note/);
     expect(out).toContain("Use cron for scheduled or recurring prompts; split multi-step work into a root Todo with child Todos and delegation");
     expect(out).toContain("One employee may run multiple child sessions");
     expect(out).toContain("Questions and approvals route to your manager/COO by default");
     expect(out).toContain("aCEO/operator is the exception");
     expect(out).not.toContain("## COO Company Anchor");
     expect(out).not.toContain("Use it extensively before asking the operator or carrying state in prose.");
+  });
+
+  it("spells out the Todo status lifecycle, including the change-requested round trip", () => {
+    const out = buildContext({ ...baseOpts, employee: qa, hierarchy, jinnMcpAttached: true });
+    const companyBlock = out.slice(out.indexOf("## Company Identity"), out.indexOf("\n## ", out.indexOf("## Company Identity") + 3));
+
+    for (const status of ["backlog", "executing", "in_review", "blocked"]) {
+      expect(companyBlock).toContain(status);
+    }
+    expect(companyBlock).toMatch(/in_review Todo[^.]*executing[^.]*in_review/);
+    expect(companyBlock).toMatch(/never set done or cancelled/i);
+  });
+
+  it("keeps the change-requested round trip when the budget trims the company identity block", () => {
+    const config = {
+      gateway: { host: "127.0.0.1", port: 7799 },
+      engines: { default: "claude", claude: { model: "opus" } },
+      context: { maxChars: 1500 },
+    } as unknown as JinnConfig;
+    const out = buildContext({ ...baseOpts, employee: qa, hierarchy, jinnMcpAttached: true, config });
+
+    expect(out).toContain("## Company Identity");
+    expect(out).not.toContain("Todos are your live work ledger");
+    expect(out).toMatch(/in_review[^.;]*back to executing[^.;]*change/);
   });
 
   it("does not emit the company identity block for employee sessions without Jinn MCP attached", () => {
