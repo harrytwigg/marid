@@ -12,7 +12,8 @@ import { assertRemoteClaudeSkipsAncestors, clearRemoteClaudeCheckCache } from ".
 import { rebuildScopedHome, remoteDepartmentEnv, remoteDepartmentFileRoots, scopedRemoteDepartment, syncRemoteDepartmentStage } from "./remote-department-stage.js";
 import { parseVersionOutput } from "../shared/brand.js";
 import { getPackageVersion } from "../shared/version.js";
-import { buildSessionSettings } from "../shared/claude-settings.js";
+import { remoteOperatorSettingsCarry } from "../shared/claude-profile-settings.js";
+import { buildSessionSettings, type SessionSettingsOpts } from "../shared/claude-settings.js";
 import { readGatewayInfo } from "../gateway/gateway-info.js";
 import { GATEWAY_INFO_FILE } from "../shared/paths.js";
 import { assertRemoteTarget, MOUNT_SENTINEL, resolveRemoteClaudeConfigDir, sshDestination, REMOTE_STAGE_DIR_NAME } from "../shared/remote-target.js";
@@ -552,10 +553,12 @@ async function verifyEngineProfile(
   engine: RemoteEngineName,
 ): Promise<string | undefined> {
   if (engine !== "claude") return undefined;
-  return await verifyClaudeProfile(destination, resolveRemoteClaudeConfigDir(target, remote));
+  const claudeConfigDir = resolveRemoteClaudeConfigDir(target, remote);
+  const consentCarried = remoteOperatorSettingsCarry(claudeConfigDir)?.skipDangerousModePermissionPrompt === true;
+  return await verifyClaudeProfile(destination, claudeConfigDir, consentCarried);
 }
 
-/** Hosts+profiles already seen signed in. Only SUCCESS is cached: a profile that
+/** Hosts+profiles already seen ready. Only SUCCESS is cached: a profile that
  *  failed may have been signed in since, and re-checking a failure costs one ssh
  *  round trip against a turn that was going to fail anyway. */
 const authedProfiles = new Set<string>();
@@ -566,12 +569,15 @@ export function clearRemoteProfileCache(): void {
 }
 
 /**
- * Refuse a profile that is not signed in.
+ * Refuse a profile that is not signed in, or that has never accepted
+ * bypass-permissions mode while the gateway carries no consent for it.
  *
  * Claude Code answers an unauthenticated start with an interactive login
- * prompt. In a gateway PTY there is nobody to answer it, so the turn would hang
- * with no hook, no notification and no error — the same silent-hang class as the
- * folder-trust dialog, and worth the same explicit guard rather than a mystery.
+ * prompt, and `--dangerously-skip-permissions` on a profile that never accepted
+ * it with a consent dialog. In a gateway PTY there is nobody to answer either,
+ * so the turn would hang with no hook, no notification and no error — the same
+ * silent-hang class as the folder-trust dialog, and worth the same explicit
+ * guard rather than a mystery.
  *
  * Only checked when a profile is named: the remote user's default profile is
  * whatever `claude` would use interactively, and second-guessing it here would
@@ -580,21 +586,55 @@ export function clearRemoteProfileCache(): void {
 async function verifyClaudeProfile(
   destination: string,
   claudeConfigDir: string | undefined,
+  consentCarried: boolean,
 ): Promise<string | undefined> {
   if (!claudeConfigDir) return undefined;
-  const key = `${destination}:${claudeConfigDir}`;
+  const key = `${destination}:${claudeConfigDir}:${consentCarried}`;
   if (authedProfiles.has(key)) return undefined;
-  const creds = path.posix.join(claudeConfigDir, ".credentials.json");
-  const res = await sshRun(destination, [`test -d ${shq(claudeConfigDir)} && echo dir; test -s ${shq(creds)} && echo creds; true`]);
-  const out = res.stdout;
-  if (!out.includes("dir")) {
+  const res = await sshRun(destination, [buildClaudeProfileProbe(claudeConfigDir)]);
+  const problem = claudeProfileProblem(res.stdout, destination, claudeConfigDir, consentCarried);
+  if (!problem) authedProfiles.add(key);
+  return problem;
+}
+
+/** Exported for tests: the remote command behind {@link verifyClaudeProfile}.
+ *  Prints `dir`, `creds` and `consent` for each fact that holds. Consent is
+ *  either key Claude Code itself reads: `skipDangerousModePermissionPrompt` in
+ *  the profile's `settings.json`, or `bypassPermissionsModeAccepted` (written
+ *  when someone accepts the dialog) in its `.claude.json`. */
+export function buildClaudeProfileProbe(claudeConfigDir: string): string {
+  const file = (name: string) => shq(path.posix.join(claudeConfigDir, name));
+  const isTrue = (name: string) => shq(`"${name}"[[:space:]]*:[[:space:]]*true`);
+  return [
+    `test -d ${shq(claudeConfigDir)} && echo dir`,
+    `test -s ${file(".credentials.json")} && echo creds`,
+    `{ grep -Eqs ${isTrue("skipDangerousModePermissionPrompt")} ${file("settings.json")} `
+      + `|| grep -Eqs ${isTrue("bypassPermissionsModeAccepted")} ${file(".claude.json")}; } && echo consent`,
+    "true",
+  ].join("; ");
+}
+
+/** Exported for tests: what is wrong with the profile, from the probe's output. */
+export function claudeProfileProblem(
+  probeOutput: string,
+  destination: string,
+  claudeConfigDir: string,
+  consentCarried: boolean,
+): string | undefined {
+  const found = new Set(probeOutput.split(/\s+/));
+  if (!found.has("dir")) {
     return `the Claude profile directory ${claudeConfigDir} does not exist on ${destination}`;
   }
-  if (!out.includes("creds")) {
+  if (!found.has("creds")) {
     return `the Claude profile at ${claudeConfigDir} on ${destination} is not signed in `
       + `(no .credentials.json) — claude would open a login prompt in front of a PTY with nobody at the keyboard`;
   }
-  authedProfiles.add(key);
+  if (!consentCarried && !found.has("consent")) {
+    return `the Claude profile at ${claudeConfigDir} on ${destination} has never accepted bypass-permissions mode `
+      + `— claude would open its consent dialog in front of a PTY with nobody at the keyboard. `
+      + `Set "skipDangerousModePermissionPrompt": true in ${path.posix.join(claudeConfigDir, "settings.json")} on that host, `
+      + `or in the gateway's own Claude settings.json, which the gateway carries into remote sessions on a named profile`;
+  }
   return undefined;
 }
 
@@ -1206,9 +1246,11 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
     return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}) };
   }
 
-  // A scoped session skips every CLAUDE.md above its stage directory (`ancestorMemoryExcludes`).
-  const excludes = department ? { claudeMdExcludes: ancestorMemoryExcludes([target.remoteCwd!, realStageDir!]) } : undefined;
-  const settingsPath = await stageSettings(destination, facts, sessionHome, jinnSessionId, excludes);
+  const settingsPath = await stageSettings(destination, facts, sessionHome, jinnSessionId, {
+    carry: remoteOperatorSettingsCarry(resolveRemoteClaudeConfigDir(target, remote)),
+    // A scoped session skips every CLAUDE.md above its stage directory (`ancestorMemoryExcludes`).
+    ...(department ? { claudeMdExcludes: ancestorMemoryExcludes([target.remoteCwd!, realStageDir!]) } : {}),
+  });
   const mcp = { resolved: resolvedMcp, departmentFileRoots: remoteDepartmentFileRoots(target) };
   const mcpConfigPath = await stageMcpConfig(destination, facts, sessionHome, tunnelPort, mcp);
   return { ...base, engine, settingsPath, ...(mcpConfigPath ? { mcpConfigPath } : {}) };
@@ -1315,18 +1357,20 @@ async function stageSettings(
   facts: RemoteFacts,
   sessionHome: string,
   jinnSessionId: string,
-  /** Keys a scoped session adds (`claudeMdExcludes`). */
-  extra: Record<string, unknown> = {},
+  /** A named profile's carried bypass consent (`remoteOperatorSettingsCarry`), and
+   *  the CLAUDE.md files a scoped session skips. */
+  keys: Pick<SessionSettingsOpts, "carry" | "claudeMdExcludes">,
 ): Promise<string> {
   const settingsPath = path.posix.join(sessionHome, "tmp", "settings.json");
   const settings = buildSessionSettings({
+    ...keys,
     sessionId: jinnSessionId,
     relayScript: remoteRelayScript(facts),
     // No statusLineDir: the recorder would write engine-limit JSON the gateway
     // cannot read from here. `claudeResetsAtSeconds()` simply returns undefined,
     // which the retry path already handles.
   });
-  await stageRemoteFile(destination, settingsPath, `${JSON.stringify({ ...settings, ...extra }, null, 2)}\n`);
+  await stageRemoteFile(destination, settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
   return settingsPath;
 }
 

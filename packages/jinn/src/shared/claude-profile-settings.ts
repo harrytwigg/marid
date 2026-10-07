@@ -30,17 +30,39 @@ export function operatorSettingsCarry(
   settingsFile: string = path.join(resolveClaudeConfigDir(), "settings.json"),
 ): OperatorSettingsCarry | undefined {
   if (!profile) return undefined;
-  let data: Record<string, unknown>;
+  const data = readOperatorSettings(settingsFile, profile.dir);
+  return data ? { ...attributionOf(data), ...preToolUseOf(data), ...consentOf(data) } : {};
+}
+
+/**
+ * The carry for a remote session on a named profile (`claudeConfigDir`):
+ * undefined for the remote user's default profile, as locally.
+ *
+ * Only the bypass consent travels, and only when the operator gave it. The
+ * PreToolUse hooks name commands on the gateway's host, and a carried `false`
+ * would outrank the profile's own consent (`--settings` beats the profile's
+ * `settings.json`) and could only put the dialog back in front of the PTY.
+ */
+export function remoteOperatorSettingsCarry(
+  claudeConfigDir: string | undefined,
+  settingsFile: string = path.join(resolveClaudeConfigDir(), "settings.json"),
+): OperatorSettingsCarry | undefined {
+  if (!claudeConfigDir) return undefined;
+  const data = readOperatorSettings(settingsFile, claudeConfigDir);
+  return data?.skipDangerousModePermissionPrompt === true ? { skipDangerousModePermissionPrompt: true } : {};
+}
+
+function readOperatorSettings(settingsFile: string, profileDir: string): Record<string, unknown> | undefined {
+  let data: unknown;
   try {
     data = JSON.parse(fs.readFileSync(settingsFile, "utf-8"));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      logger.warn(`Could not read ${settingsFile} to carry its settings into a session on ${profile.dir}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(`Could not read ${settingsFile} to carry its settings into a session on ${profileDir}: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return {};
+    return undefined;
   }
-  if (!data || typeof data !== "object" || Array.isArray(data)) return {};
-  return { ...attributionOf(data), ...preToolUseOf(data), ...consentOf(data) };
+  return data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : undefined;
 }
 
 function attributionOf(data: Record<string, unknown>): OperatorSettingsCarry {

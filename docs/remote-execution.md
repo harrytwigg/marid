@@ -190,6 +190,16 @@ Two consequences follow, both handled for you:
 - **An unsigned-in profile is refused up front.** A profile directory with no
   `.credentials.json` makes `claude` open a login prompt nothing can answer, so
   the spawn is refused with that reason instead of hanging.
+- **Bypass-permissions consent travels, or the turn is refused.** Every session
+  runs with `--dangerously-skip-permissions`, which Claude Code answers with a
+  one-time consent dialog on a profile that has never accepted it. When the
+  gateway's own Claude `settings.json` sets `skipDangerousModePermissionPrompt:
+  true`, that consent is copied into the session's staged `--settings`, as it is
+  for a local named profile. Otherwise the profile must hold it itself
+  (`skipDangerousModePermissionPrompt: true` in `<profile>/settings.json`, or
+  `bypassPermissionsModeAccepted` in `<profile>/.claude.json` from accepting the
+  dialog once), and a profile with neither is refused before the spawn with the
+  setting to add.
 
 When no profile is configured, `CLAUDE_CONFIG_DIR` is actively *unset* for the
 session, so a stray value in the remote environment cannot silently choose the
