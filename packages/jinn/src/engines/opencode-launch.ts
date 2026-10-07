@@ -24,6 +24,7 @@ import {
   type RemoteFacts,
   type RemoteOpencodeStaging,
 } from "./remote-stage.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 /**
  * Where one opencode turn runs, and what it is spawned with.
@@ -76,6 +77,7 @@ export const REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "JINN_HO
 export function cleanEnv(sessionId: string): Record<string, string> {
   const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true });
   env.JINN_SESSION_ID = sessionId;
+  Object.assign(env, employeeSessionEnv(sessionId));
   // A self-upgrade between two turns of one session would swap the binary under
   // a conversation opencode is still holding in its own store.
   env.OPENCODE_DISABLE_AUTOUPDATE = "1";

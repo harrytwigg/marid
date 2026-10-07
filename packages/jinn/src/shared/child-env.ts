@@ -21,6 +21,8 @@ export interface EngineChildEnvOptions {
 const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set([
   "JINN_HOME_IDENTITY",
   "JINN_TAKE_PORT",
+  // Per session, set by the engine; a gateway started from inside an employee's session must not hand its employee to others.
+  "JINN_EMPLOYEE",
 ]);
 
 /** Per-engine scrub rules. `exact` names and `prefix` families are stripped
@@ -54,7 +56,7 @@ const ENGINE_SCRUB_RULES: ReadonlyArray<{
  * the login basics, locale, terminal and temp dirs, outbound proxy and CA settings,
  * Claude Code's own model and feature switches, and the Jinn variables its hooks and
  * `jinn` MCP server find the gateway with. Its own `JINN_SESSION_ID` and
- * `JINN_DEPARTMENT` are set on top by the engine.
+ * `JINN_DEPARTMENT` and `JINN_EMPLOYEE` are set on top by the engine.
  *
  * This stops inheritance only. The session still runs as the gateway's OS user, so it
  * can read the gateway's own environment (`/proc/<pid>/environ`) and its files.

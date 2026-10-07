@@ -23,6 +23,7 @@ import { extractActivityReceiptId } from "../shared/activity-receipts.js";
 import { costOfUsage } from "../shared/model-pricing.js";
 import { processStartFailure } from "../shared/process-start.js";
 import { argumentLimitApplies, assertArgumentsFit, describeMessage } from "./argv-limit.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 const CODEX_SESSIONS_DIR = path.join(os.homedir(), ".codex", "sessions");
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
@@ -513,6 +514,7 @@ export class CodexInteractiveEngine implements InterruptibleEngine, PtyViewEngin
     const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true });
     env.TERM = "xterm-256color";
     if (sessionId) env.JINN_SESSION_ID = sessionId;
+    Object.assign(env, employeeSessionEnv(sessionId));
     return env;
   }
 

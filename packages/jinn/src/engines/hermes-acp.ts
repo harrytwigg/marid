@@ -7,6 +7,7 @@ import { HermesRpc } from "./hermes-jsonrpc.js";
 import { mapSessionUpdate, extractPromptText, reduceAgentText, isFinalMessageUpdate, initAdvertisesFinalMarker } from "./hermes-protocol.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
 import { buildAcpMcpServers } from "./hermes-mcp.js";
+import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
 const HANDSHAKE_TIMEOUT_MS = 60_000;
@@ -41,13 +42,16 @@ export class HermesAcpEngine implements InterruptibleEngine {
 
   /** Test seam — overridden in unit tests to inject a fake server. */
   protected spawnProc(bin: string, cwd: string, jinnSessionId?: string): ProcHandle {
+    // The gateway's own JINN_EMPLOYEE (if it was started inside an employee's session) is not this session's.
+    const { JINN_EMPLOYEE: _gatewayEmployee, ...inheritedEnv } = process.env;
     const child: ChildProcess = spawn(bin, ["acp"], {
       stdio: ["pipe", "pipe", "ignore"],
       cwd,
       detached: process.platform !== "win32",
       env: {
-        ...process.env,
+        ...inheritedEnv,
         ...(jinnSessionId ? { JINN_SESSION_ID: jinnSessionId } : {}),
+        ...employeeSessionEnv(jinnSessionId),
         HERMES_YOLO_MODE: "1",
         HERMES_ACCEPT_HOOKS: "1",
       },
