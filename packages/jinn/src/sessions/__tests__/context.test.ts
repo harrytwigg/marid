@@ -340,7 +340,7 @@ describe("buildContext — Jinn MCP usage directive", () => {
 
   it("keeps the change-requested round trip when the budget trims the company identity block", () => {
     const config = {
-      gateway: { host: "127.0.0.1", port: 7777 },
+      gateway: { host: "127.0.0.1", port: 7799 },
       engines: { default: "claude", claude: { model: "opus" } },
       context: { maxChars: 1500 },
     } as unknown as JinnConfig;
