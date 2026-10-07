@@ -28,6 +28,13 @@ vi.mock("../../gateway/todo-dispatch.js", () => ({
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-single-account-parity-"));
 process.env.JINN_HOME = home;
 delete process.env.JINN_CLAUDE_USAGE_API;
+// Hermetic /api/engine-limits: the Claude collector only calls the (stubbed) usage API when it
+// finds an OAuth token, and otherwise reads the host's Claude files (the credentials file under
+// the config dir, the macOS Keychain). This pins the one input that decides live vs. static:
+// a fake token in the environment, which outranks every file, and an empty config dir so no
+// host credentials file or settings are read. The statusline snapshots live under JINN_HOME above.
+process.env.CLAUDE_CODE_OAUTH_TOKEN = "parity-test-token";
+process.env.CLAUDE_CONFIG_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-single-account-parity-claude-"));
 const EXPECTED = path.join(__dirname, "__fixtures__", "single-account-parity.json");
 
 const NOW = Date.parse("2026-10-06T13:20:00Z");
