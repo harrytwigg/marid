@@ -63,12 +63,12 @@ describe("restart-stable MCP session capability authority", () => {
     expect(resolveCallerIdentity({
       [identity.TOOL_CALL_HEADER]: identity.TOOL_CALL_HEADER_VALUE,
       [identity.CALLER_SESSION_HEADER]: "session-a",
-    }, options)).toEqual({ kind: "unidentified-tool" });
+    }, options)).toEqual({ kind: "unidentified-tool", reason: "missing-capability" });
     expect(resolveCallerIdentity({
       [identity.TOOL_CALL_HEADER]: identity.TOOL_CALL_HEADER_VALUE,
       [identity.CALLER_SESSION_HEADER]: "deleted-session",
       [identity.CALLER_SESSION_CAPABILITY_HEADER]: capabilityA,
-    }, options)).toEqual({ kind: "unidentified-tool" });
+    }, options)).toEqual({ kind: "unidentified-tool", reason: "unknown-session" });
   });
 
   it("accepts only the exact canonical capability encoding", async () => {

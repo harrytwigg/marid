@@ -159,6 +159,23 @@ export function ensureSessionCapability(sessionId: string, keyFile = resolveMcpS
   return deriveSessionCapability(sessionId, ensureSessionCapabilityKey(keyFile)).toString("base64url");
 }
 
+/**
+ * The capability for a session from a key that ALREADY exists at `keyFile`, or
+ * undefined when it is absent, unreadable or malformed. Never creates the key:
+ * only the gateway mints it ({@link ensureSessionCapability}). A key created
+ * anywhere else is one the gateway does not hold, so whatever it signs is
+ * refused — which is how a department-scoped remote session, whose stage
+ * deliberately has no path to the gateway's home, lost every tool call.
+ */
+export function deriveExistingSessionCapability(sessionId: string, keyFile: string): string | undefined {
+  if (!sessionId) return undefined;
+  try {
+    return deriveSessionCapability(sessionId, readSessionCapabilityKey(keyFile)).toString("base64url");
+  } catch {
+    return undefined;
+  }
+}
+
 export function verifySessionCapability(sessionId: string, capability: string, keyFile = resolveMcpSessionCapabilityKeyFile()): boolean {
   if (!sessionId || !BASE64URL_256_PATTERN.test(capability)) return false;
   try {
