@@ -114,8 +114,8 @@ persona: ...
   `remoteHost` (FR-050). It is canonicalised at load: no trailing slash, no `.` or `..`. It
   does not depend on the employee's department (FR-059).
 - A cron job cannot target a scoped employee.
-- A PATCH that changes `department` into or out of a non-open department is refused while the
-  employee holds a Todo it could no longer hold (FR-015).
+- A PATCH that changes `department` into or out of a non-open department is refused through
+  the API; the move is made by hand, by moving the YAML under `org/<slug>` (FR-007).
 
 `claudeConfigDir` is not added to `WRITABLE_FIELDS` (`packages/jinn/src/gateway/org.ts:170`).
 The department field already is.

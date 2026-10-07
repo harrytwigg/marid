@@ -42,6 +42,7 @@ describe("org routes still answer identically through handleOrgApi", () => {
     // Every employee carries its read-only Claude profile: null for the gateway's own.
     expect(r.body).toEqual({
       departments: ["platform"],
+      departmentScopes: { platform: "open" },
       employees: [
         { ...WORKER, role: "Does platform work", ...EDGES, claudeProfile: null },
         { ...DISPATCHER, claudeProfile: null },

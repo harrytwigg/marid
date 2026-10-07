@@ -114,6 +114,8 @@ export interface OrgHierarchy {
 
 export interface OrgData {
   departments: string[];
+  /** Each department's scope; older gateways omit it, and a department missing from it is open. */
+  departmentScopes?: Record<string, "open" | "scoped" | "dedicated">;
   employees: Employee[];
   hierarchy: OrgHierarchy;
 }

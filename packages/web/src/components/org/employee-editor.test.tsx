@@ -131,3 +131,82 @@ describe("EmployeeEditor", () => {
     }))
   })
 })
+
+describe("EmployeeEditor department scope", () => {
+  // Radix Select measures and captures the pointer; jsdom implements neither.
+  beforeEach(() => {
+    Element.prototype.hasPointerCapture ??= () => false
+    Element.prototype.releasePointerCapture ??= () => {}
+    Element.prototype.scrollIntoView ??= () => {}
+  })
+
+  beforeEach(() => {
+    getOrg.mockResolvedValue({
+      departments: ["content", "design", "studio", "vault"],
+      departmentScopes: { content: "open", studio: "scoped", vault: "dedicated" },
+      employees: [],
+    })
+  })
+
+  async function departmentOptions() {
+    const trigger = screen.getByRole("combobox", { name: "Department" })
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" })
+    const options = await screen.findAllByRole("option")
+    return options.map((option) => ({
+      label: option.textContent,
+      disabled: option.getAttribute("aria-disabled") === "true",
+    }))
+  }
+
+  it("offers open departments and shows scoped and dedicated ones disabled, with the reason", async () => {
+    render(<EmployeeEditor employee={EMP} onCancel={() => {}} onSaved={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId("department-file-move-hint")).toBeTruthy())
+
+    expect(await departmentOptions()).toEqual([
+      { label: "None", disabled: false },
+      { label: "content", disabled: false },
+      { label: "design", disabled: false },
+      { label: "studio· scoped", disabled: true },
+      { label: "vault· dedicated", disabled: true },
+    ])
+    expect(screen.getByTestId("department-file-move-hint").textContent)
+      .toBe("Scope follows the file location under org/<slug>; move the YAML by hand.")
+  })
+
+  it("moves an employee between open departments as before", async () => {
+    updateEmployee.mockResolvedValue({ status: "ok", employee: { ...EMP, department: "design" } })
+    render(<EmployeeEditor employee={EMP} onCancel={() => {}} onSaved={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId("department-file-move-hint")).toBeTruthy())
+
+    await departmentOptions()
+    fireEvent.click(screen.getByRole("option", { name: "design" }))
+    fireEvent.click(saveBtn())
+
+    await waitFor(() => expect(updateEmployee).toHaveBeenCalledWith("content-writer", { department: "design" }))
+  })
+
+  it("makes the department read-only for a member of a scoped department", async () => {
+    render(<EmployeeEditor employee={{ ...EMP, department: "studio" }} onCancel={() => {}} onSaved={() => {}} />)
+
+    await waitFor(() => expect(screen.getByTestId("confined-readonly-department").textContent).toBe("studio"))
+    expect(screen.queryByRole("combobox", { name: "Department" })).toBeNull()
+    expect(screen.getByTestId("department-file-move-hint").textContent)
+      .toBe("Scope follows the file location under org/studio; move the YAML by hand.")
+  })
+
+  it("makes the department read-only for a member of a dedicated department", async () => {
+    render(<EmployeeEditor employee={{ ...EMP, department: "vault" }} onCancel={() => {}} onSaved={() => {}} />)
+
+    await waitFor(() => expect(screen.getByTestId("confined-readonly-department").textContent).toBe("vault"))
+    expect(screen.getByTestId("department-file-move-hint").textContent)
+      .toBe("Scope follows the file location under org/vault; move the YAML by hand.")
+  })
+
+  it("shows no hint when every department is open", async () => {
+    getOrg.mockResolvedValue({ departments: ["content", "design"], departmentScopes: { content: "open", design: "open" }, employees: [] })
+    render(<EmployeeEditor employee={EMP} onCancel={() => {}} onSaved={() => {}} />)
+
+    expect((await departmentOptions()).every((option) => !option.disabled)).toBe(true)
+    expect(screen.queryByTestId("department-file-move-hint")).toBeNull()
+  })
+})
