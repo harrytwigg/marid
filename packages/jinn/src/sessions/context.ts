@@ -500,7 +500,8 @@ function buildCompanyIdentityBlock(
     "## Company Identity",
     mcpLine,
     "Pick colleagues by role/persona fit. One employee may run multiple child sessions in parallel; reuse the fit instead of spreading to unrelated employees. If none fits, propose a hire.",
-    "Todos are your live work ledger - find and update your Todo; when it is finished, move it to in_review yourself with a summary in note, which is posted as a comment (a run ending does not); create one only for durable work you own.",
+    "Todos are your live work ledger - find and update your Todo; create one only for durable work you own. Keep its status true to the work: backlog (not started), executing (you are working on it), in_review (finished; the operator has it), blocked (stopped; say on what and on whom in note).",
+    "Move your Todo to executing when you start. When it is finished, move it to in_review yourself with a summary in note, which is posted as a comment (a run ending does not). A change asked on an in_review Todo sends it back: move it to executing while you make the change, then back to in_review with a note saying what changed. Never set done or cancelled; the operator closes Todos.",
     "Use cron for scheduled or recurring prompts; split multi-step work into a root Todo with child Todos and delegation.",
     "You have autonomy in your lane; end your turn when waiting on another employee.",
     "Do NOT bombard the operator. Questions and approvals route to your manager/COO by default; the aCEO/operator is the exception (money, irreversible, public, legal/security, or explicit COO escalation).",
@@ -512,7 +513,7 @@ function buildCompanyIdentitySummary(engine: string | undefined): string {
   return [
     "## Company Identity",
     `Use the attached Jinn MCP${engineName} for company state and delegation.`,
-    "Track durable work in Todos; use cron for scheduled or recurring prompts.",
+    "Track durable work in Todos: executing while you work, in_review with a summary when finished, back to executing while you make a change asked on it; use cron for scheduled or recurring prompts.",
     "Route ordinary questions and approvals through your manager/COO.",
   ].join("\n");
 }

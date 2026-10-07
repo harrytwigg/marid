@@ -317,13 +317,23 @@ describe("buildContext — Jinn MCP usage directive", () => {
     expect(companyBlock).not.toContain("You are QA Engineer");
     expect(companyBlock).not.toContain("You report to Ops Director");
     expect(out).toContain("Your hands are the attached Jinn MCP");
-    expect(out).toContain("Todos are your live work ledger - find and update your Todo; when it is finished, move it to in_review yourself");
+    expect(out).toContain("Todos are your live work ledger - find and update your Todo");
+    expect(out).toContain("When it is finished, move it to in_review yourself with a summary in note");
     expect(out).toContain("Use cron for scheduled or recurring prompts; split multi-step work into a root Todo with child Todos and delegation");
     expect(out).toContain("One employee may run multiple child sessions");
     expect(out).toContain("Questions and approvals route to your manager/COO by default");
     expect(out).toContain("aCEO/operator is the exception");
     expect(out).not.toContain("## COO Company Anchor");
     expect(out).not.toContain("Use it extensively before asking the operator or carrying state in prose.");
+  });
+
+  it("spells out the Todo status lifecycle, including the change-requested round trip", () => {
+    const out = buildContext({ ...baseOpts, employee: qa, hierarchy, jinnMcpAttached: true });
+
+    expect(out).toContain("backlog (not started), executing (you are working on it), in_review (finished; the operator has it), blocked (stopped;");
+    expect(out).toContain("Move your Todo to executing when you start.");
+    expect(out).toContain("A change asked on an in_review Todo sends it back: move it to executing while you make the change, then back to in_review with a note saying what changed.");
+    expect(out).toContain("Never set done or cancelled; the operator closes Todos.");
   });
 
   it("does not emit the company identity block for employee sessions without Jinn MCP attached", () => {

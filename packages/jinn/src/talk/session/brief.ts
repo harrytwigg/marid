@@ -69,7 +69,7 @@ function identity(config: Pick<JinnConfig, "portal">): string {
     `This instance is ${configured.slice(0, COMPANY_NAME_CHARS)}. `
     + `Its Todos are numbered ${prefix}-1, ${prefix}-2 and so on, and they move through six statuses: `
     + "backlog (shown as To do on the board; not started, and it may already have an owner), executing (in progress), "
-    + "in_review (the producer is finished and the operator has it), done (closed by the operator, never by the producer), "
+    + "in_review (the producer is finished and the operator has it; a change asked on it sends it back to executing until the producer returns it), done (closed by the operator, never by the producer), "
     + "blocked (stopped, waiting on something or someone), cancelled (dropped)."
   );
 }
