@@ -26,9 +26,12 @@
         "$TURBO_ROOT$/packages/gateway-events/dist/index.d.ts"
       ]
     },
+    // CLAUDE_CONFIG_DIR passes through so a direct vitest run and `pnpm test` see the
+    // same environment: packages/jinn's test setup replaces it with a temp dir in every
+    // worker either way. Stripping it here only changed which real profile a test reached.
     "test": {
       "dependsOn": ["^build"],
-      "passThroughEnv": ["JINN_TEST_MAX_CONCURRENT"],
+      "passThroughEnv": ["JINN_TEST_MAX_CONCURRENT", "CLAUDE_CONFIG_DIR"],
       "cache": false
     },
     "coverage": {

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { claudeProjectSlug, findSessionTranscript, findTranscriptForSession } from "../../engines/claude-transcript-path.js";
 import { findTranscriptOfSession } from "../../gateway/session-claude-profile.js";
 import { departmentStageDir } from "../../gateway/department-scope/paths.js";
@@ -20,9 +20,12 @@ import { spawnCwd } from "../session-cwd.js";
 const SLUG = "transcript-dept";
 const ID = "11111111-2222-3333-4444-555555555555";
 const projects = () => claudeProjectsDirFor(null);
+/** The project-key directories this file made: the only ones it may remove from the config dir. */
+const projectDirs = new Set<string>();
 
 function transcript(cwd: string, id = ID): string {
   const file = path.join(projects(), claudeProjectSlug(cwd), `${id}.jsonl`);
+  projectDirs.add(path.dirname(file));
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, '{"type":"user"}\n');
   return file;
@@ -30,12 +33,16 @@ function transcript(cwd: string, id = ID): string {
 
 beforeEach(() => {
   resetDepartmentFixtures();
-  fs.rmSync(projects(), { recursive: true, force: true });
   fs.rmSync(departmentStageDir(SLUG), { recursive: true, force: true });
   writeDepartmentFile(SLUG, `name: ${SLUG}\nscope: scoped\n`);
   writeEmployeeFile(SLUG, "transcript-dev");
   writeEmployeeFile("engineering", "transcript-eng");
   refreshOrg();
+});
+
+afterEach(() => {
+  for (const dir of projectDirs) fs.rmSync(dir, { recursive: true, force: true });
+  projectDirs.clear();
 });
 
 describe("the project slug", () => {

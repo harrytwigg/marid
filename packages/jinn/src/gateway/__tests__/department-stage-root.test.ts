@@ -22,6 +22,14 @@ const SLUG = "stage-root-dept";
 const ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 const projects = () => claudeProjectsDirFor(null);
 const legacyDir = () => path.join(departmentStagesContainer(), SLUG);
+/** The project-key directories this file made or had moved: the only ones it may remove from the config dir. */
+const projectDirs = new Set<string>();
+
+function projectDir(cwd: string): string {
+  const dir = path.join(projects(), claudeProjectSlug(cwd));
+  projectDirs.add(dir);
+  return dir;
+}
 
 /** A stage directory as the old layout left it. */
 function writeLegacyStage(dir: string): void {
@@ -31,7 +39,7 @@ function writeLegacyStage(dir: string): void {
 }
 
 function writeTranscript(cwd: string, id = ID): string {
-  const file = path.join(projects(), claudeProjectSlug(cwd), `${id}.jsonl`);
+  const file = path.join(projectDir(cwd), `${id}.jsonl`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, '{"type":"user"}\n');
   return file;
@@ -41,11 +49,15 @@ beforeEach(() => {
   resetDepartmentFixtures();
   fs.rmSync(legacyDir(), { recursive: true, force: true });
   fs.rmSync(departmentStageDir(SLUG), { recursive: true, force: true });
-  fs.rmSync(projects(), { recursive: true, force: true });
   writeSkill("review");
   writeDepartmentFile(SLUG, `name: ${SLUG}\nscope: scoped\nskills: [review]\n`);
   writeEmployeeFile(SLUG, "stage-root-dev");
   refreshOrg();
+});
+
+afterEach(() => {
+  for (const dir of projectDirs) fs.rmSync(dir, { recursive: true, force: true });
+  projectDirs.clear();
 });
 
 describe("the stage root", () => {
@@ -124,7 +136,7 @@ describe("a stage directory made at the old path", () => {
     const oldKey = fs.realpathSync(legacyDir());
     const old = writeTranscript(oldKey);
     const stage = prepareDepartmentStage(SLUG);
-    const moved = path.join(projects(), claudeProjectSlug(stage), `${ID}.jsonl`);
+    const moved = path.join(projectDir(stage), `${ID}.jsonl`);
     expect(fs.existsSync(moved)).toBe(true);
     expect(fs.readFileSync(moved, "utf-8")).toBe('{"type":"user"}\n');
     expect(fs.existsSync(old)).toBe(false);
@@ -136,7 +148,7 @@ describe("a stage directory made at the old path", () => {
     const oldKey = fs.realpathSync(legacyDir());
     writeTranscript(oldKey, ID);
     writeTranscript(oldKey, "11111111-1111-1111-1111-111111111111");
-    const newKeyDir = path.join(projects(), claudeProjectSlug(path.join(fs.realpathSync(departmentStagesContainer()), ".instances", path.basename(departmentStageRoot()), SLUG)));
+    const newKeyDir = projectDir(path.join(fs.realpathSync(departmentStagesContainer()), ".instances", path.basename(departmentStageRoot()), SLUG));
     fs.mkdirSync(newKeyDir, { recursive: true });
     fs.writeFileSync(path.join(newKeyDir, `${ID}.jsonl`), "newer\n");
     prepareDepartmentStage(SLUG);
