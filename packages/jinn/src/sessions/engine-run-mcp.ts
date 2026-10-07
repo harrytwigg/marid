@@ -2,8 +2,9 @@ import type { Employee, JinnConfig, ResolvedMcpConfig, Session } from "../shared
 import { attachSessionIdentity } from "../mcp/identity.js";
 import { departmentMcpEnv } from "../gateway/department-scope/session-env.js";
 import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.js";
+import { logger } from "../shared/logger.js";
 import { getSession } from "./registry.js";
-import { scopedDepartmentOf } from "../work-items/department-scope.js";
+import { sessionScopeDepartment } from "./session-scope.js";
 import { buildJinnServerSpec, isMcpCapableEngine, resolveMcpServers, writeMcpConfigFile } from "../mcp/resolver.js";
 
 export interface EngineRunMcp {
@@ -21,13 +22,13 @@ export function resolveEngineRunMcp(opts: {
 
   // A department-scoped session gets `jinn` and only the instance servers its
   // department allow-lists; the binding, else the employee's live scope, decides.
-  const department = getSession(opts.sessionId)?.scopeDepartment ?? scopedDepartmentOf(opts.employee?.name);
+  const department = sessionScopeDepartment(getSession(opts.sessionId) ?? { employee: opts.employee?.name });
   // A purpose-built toolset is the turn's entire MCP surface: no custom server,
   // no company belt, and no attachment gate, which decides the belt alone. The
   // server keeps the name `jinn` so it is bound to the session like the belt.
   const mcpConfig = opts.employee?.toolset
     ? { mcpServers: { jinn: buildJinnServerSpec(opts.employee.toolset) } }
-    : confineMcpToDepartment(resolveMcpServers(opts.config.mcp, opts.employee, opts.engine), department);
+    : confinedForDepartment(resolveMcpServers(opts.config.mcp, opts.employee, opts.engine), department, opts.employee);
   if (Object.keys(mcpConfig.mcpServers).length === 0) return {};
 
   // A department-scoped session's server offers the scoped tool profile and holds file paths to its roots.
@@ -36,6 +37,19 @@ export function resolveEngineRunMcp(opts: {
     resolvedMcp,
     ...(opts.engine === "claude" ? { mcpConfigPath: writeMcpConfigFile(resolvedMcp, opts.sessionId) } : {}),
   };
+}
+
+/** Confine to the department, naming any server the employee's own `mcp` list asked for that the department does not allow. */
+function confinedForDepartment(resolved: ResolvedMcpConfig, department: string | null, employee: Employee | undefined): ResolvedMcpConfig {
+  const confined = confineMcpToDepartment(resolved, department);
+  if (department && Array.isArray(employee?.mcp)) {
+    for (const name of employee.mcp) {
+      if (resolved.mcpServers[name] && !confined.mcpServers[name]) {
+        logger.warn(`Employee ${employee.name} requests MCP server "${name}" but department "${department}" does not allow it (add it to the department's mcp list)`);
+      }
+    }
+  }
+  return confined;
 }
 
 /**

@@ -59,7 +59,7 @@
       "path": "docs/mcp.md",
       "operation": "modify",
       "baseSha256": "e28e1beb9a6838624e72526ae4f81ed27d2d96d6efc554bcb262b02cf836760f",
-      "targetSha256": "3511cf64cab1b78e4076decb95a1e5051abb2c2fa98fa0da692e302cb96215fc",
+      "targetSha256": "509213bbc5596882458076fa537e52e40d5d12e3cf345ba70040767b1979dd47",
       "basePayload": "files/base/docs/mcp.md",
       "targetPayload": "files/target/docs/mcp.md"
     },
@@ -67,7 +67,7 @@
       "path": "docs/org.md",
       "operation": "modify",
       "baseSha256": "3ed3540abb2997cde6ef0d8cecf61281f4e96c0909807d51040fba1709f3a968",
-      "targetSha256": "51fda107a74f05bda35ccb6759fb0e980830736940473d53bc28406a3c41cce8",
+      "targetSha256": "93bafa6c7469318832519e4b93bc152931fdb48ec552d91dba859c3254085a77",
       "basePayload": "files/base/docs/org.md",
       "targetPayload": "files/target/docs/org.md"
     },

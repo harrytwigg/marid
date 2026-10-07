@@ -1,10 +1,12 @@
 import fs from "node:fs";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setJinnAttachGate } from "../../mcp/attachment.js";
 import { createSession } from "../../sessions/registry.js";
 import { resolveEngineRunMcp } from "../../sessions/engine-run-mcp.js";
 import type { Employee, JinnConfig, McpGlobalConfig } from "../../shared/types.js";
-import { departmentRecord } from "../department-registry.js";
+import { logger } from "../../shared/logger.js";
+import { departmentRecord, refreshDepartments } from "../department-registry.js";
+import { readDepartmentPatch, writeDepartmentFile as patchDepartmentFile } from "../department-store.js";
 import { refreshOrg } from "../org-registry.js";
 import { resetDepartmentFixtures, writeDepartmentFile, writeEmployeeFile } from "./department-fixtures.js";
 
@@ -46,14 +48,25 @@ beforeEach(() => {
   setJinnAttachGate({ ok: true });
 });
 
-afterEach(() => setJinnAttachGate(null));
+afterEach(() => {
+  setJinnAttachGate(null);
+  vi.restoreAllMocks();
+});
 
 describe("the mcp allow-list in department.yaml", () => {
-  it("is read for a scoped department, keeping each server name once and dropping what is not one", () => {
-    loadOrg("mcp: [alpha, 'not a name', alpha]\n");
+  it("is read for a scoped department, keeping each server name once, whatever characters a custom key uses", () => {
+    loadOrg("mcp: [alpha, github/copilot, _internal, alpha, 3]\n");
     const record = departmentRecord("side-project");
-    expect(record.definition?.mcp).toEqual(["alpha"]);
-    expect(record.warnings).toContain('mcp: dropped "not a name", which is not an MCP server name');
+    expect(record.definition?.mcp).toEqual(["alpha", "github/copilot", "_internal"]);
+    expect(record.warnings).toContain("mcp: ignored a non-text entry");
+  });
+
+  it("is written by a department PATCH and read back", () => {
+    loadOrg();
+    patchDepartmentFile("side-project", readDepartmentPatch({ mcp: [" alpha ", "beta"] }));
+    refreshDepartments();
+    expect(departmentRecord("side-project").definition?.mcp).toEqual(["alpha", "beta"]);
+    expect(() => readDepartmentPatch({ mcp: "alpha" })).toThrow(/mcp must be a list of text/);
   });
 
   it("is empty when absent", () => {
@@ -90,6 +103,15 @@ describe("a department-scoped session's MCP servers", () => {
   it("are confined by the employee's scope when the session carries no binding", () => {
     loadOrg();
     expect(serverNames(run("side-dev", "side-project", "no-such-session"))).toEqual(["jinn"]);
+  });
+
+  it("name a server the employee's own mcp list asks for that the department does not allow", () => {
+    loadOrg();
+    const warn = vi.spyOn(logger, "warn");
+    const session = createSession({ engine: "claude", source: "web", sourceRef: "web:own", employee: "side-dev" });
+    const result = resolveEngineRunMcp({ config, employee: { ...employee("side-dev", "side-project"), mcp: ["jinn", "beta"] }, engine: "claude", sessionId: session.id });
+    expect(serverNames(result)).toEqual(["jinn"]);
+    expect(warn.mock.calls.map((call) => call[0]).join("\n")).toMatch(/side-dev requests MCP server "beta" but department "side-project" does not allow it/);
   });
 
   it("leave an unscoped session with every instance server", () => {
