@@ -41,10 +41,11 @@ export function resolveMcpServerBootstrap(argv: readonly string[], env: NodeJS.P
  * The one the gateway stamped on the server's env for that same session wins: it
  * was minted with the gateway's key, which is the only key the gateway verifies
  * against. Only when an engine stripped the env does the server derive it from
- * `--jinn-home`'s key, and then read-only — a home with no key (a department-
- * scoped remote stage has no path to the gateway's) yields no capability, and
- * the tools fail closed with a message saying so, rather than minting a key of
- * their own and presenting a capability the gateway can never verify.
+ * `--jinn-home`'s key, and then read-only. A home with no key (a department-
+ * scoped remote stage has no path to the gateway's) yields nothing here, and the
+ * server falls back to whatever its env carries: none, and the tools refuse
+ * locally; another session's, and the gateway refuses it. It never mints a key
+ * of its own and presents a capability the gateway can never verify.
  */
 function boundCapability(sessionId: string, jinnHome: string | undefined, env: NodeJS.ProcessEnv): string | undefined {
   const stamped = env[JINN_SESSION_CAPABILITY_ENV]?.trim();
