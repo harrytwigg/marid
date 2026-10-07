@@ -15,7 +15,7 @@ import { createPartialStreamWriter } from "../partial-stream.js";
 import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./engine-run.js";
 import { compactColdSessionFirst, settlePreemptedBeforeEngine } from "./auto-compact.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
-import { preflightTurn, resolveLostConversationPrompt, warnIfNearUsageLimit } from "./preflight.js";
+import { preflightTurn, resolveTurnPrompt, warnIfNearUsageLimit } from "./preflight.js";
 import { isMissingConversationOutput, isProcessStartFailure } from "../../shared/process-start.js";
 import { isRawEngineCommand } from "../../shared/skill-commands.js";
 import { ensureRemoteHostReady } from "./remote-ready.js";
@@ -128,7 +128,8 @@ async function compactFirstIfCold(run: TurnRun): Promise<boolean> {
  * longer exists, run the turn once more in a fresh conversation that is handed
  * the session's recent messages. Without this the turn fails at birth, the
  * message it carried is never answered, and the session sits in `error` until
- * someone sends it something else.
+ * someone sends it something else. If the second run fails too, the transcript
+ * stays owed to the session's next turn.
  */
 async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAttempt; model: string | undefined }> {
   const first = await runEngineWithModelFallback(run);
@@ -144,7 +145,9 @@ async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAt
     ...run.plan,
     resumeSessionId: undefined,
     resumeNativeId: undefined,
-    ...resolveLostConversationPrompt(getSession(sessionId) ?? run.input.session, run.input.prompt),
+    // clearDeadEngineSession marked the conversation lost, so this is the
+    // lost-conversation prompt, owed until a turn settles cleanly with it.
+    ...resolveTurnPrompt(getSession(sessionId) ?? run.input.session, run.plan.engineName, run.input.prompt, false),
   };
   return await runEngineWithModelFallback(run);
 }

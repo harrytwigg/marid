@@ -12,7 +12,7 @@ import {
 import { isRemoteMcpSession } from "../remote-mcp-session.js";
 import { settleTurn, type SettleTurnInput } from "./completion.js";
 import type { EngineAttempt } from "./engine-run.js";
-import { withSyncMarkersCleared } from "./preflight.js";
+import { LOST_CONVERSATION_META_KEY, withSyncMarkersCleared } from "./preflight.js";
 import {
   clearSupersededTurnMeta,
   retainUnseenInterruptedPrompt,
@@ -244,7 +244,7 @@ function answeredReceipt(
     durationMs: result.durationMs,
     accounting: { cost: result.cost, numTurns: result.numTurns, ...(model ? { model } : {}) },
     ...(filesEngineSession ? filedEngineSession(run, attempt, model, quietPreempted) : {}),
-    fields: buildTerminalFields(run, meteredContextTokens(run, result), verdict),
+    fields: buildTerminalFields(run, meteredContextTokens(run, result), verdict, Boolean(result.error)),
     employee: run.input.employee,
     // An interrupted turn stays silent upward: whoever interrupted it reports.
     notifyParent: !quietPreempted,
@@ -314,7 +314,7 @@ function meteredContextTokens(run: TurnRun, result: EngineResult): number | null
   return undefined;
 }
 
-function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefined, verdict: TurnVerdict): UpdateSessionFields {
+function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefined, verdict: TurnVerdict, failed: boolean): UpdateSessionFields {
   const fields: UpdateSessionFields = { ...run.terminalFields() };
   if (contextTokens !== undefined) fields.lastContextTokens = contextTokens;
   const clearSyncMarkers = run.plan.syncRequested && !verdict.quietPreempted;
@@ -323,7 +323,9 @@ function buildTerminalFields(run: TurnRun, contextTokens: number | null | undefi
   const clearCarriedPrompts = run.plan.carriedInterruptedPrompts && verdict.enginePromptRead;
   if (clearSyncMarkers || clearCarriedPrompts) {
     let meta: unknown = fields.transportMeta ?? getSession(run.input.session.id)?.transportMeta;
-    if (clearSyncMarkers) meta = withSyncMarkersCleared(meta);
+    // A lost conversation's transcript is owed until a turn carrying it
+    // actually ran: a failed one leaves it for the next.
+    if (clearSyncMarkers) meta = withSyncMarkersCleared(meta, { keepLostConversation: failed });
     if (clearCarriedPrompts) meta = withUnseenInterruptedPromptsCleared(meta);
     fields.transportMeta = meta as UpdateSessionFields["transportMeta"];
   }
@@ -339,6 +341,9 @@ export function clearDeadEngineSession(sessionId: string, engineName: string): v
   logger.warn(`Dead session detected for ${sessionId} — clearing stale engine IDs`);
   const meta = { ...(getSession(sessionId)?.transportMeta || {}) } as Record<string, unknown>;
   delete meta["engineOverride"];
+  // Whatever runs next on this engine starts a fresh conversation; this has it
+  // handed the session so far rather than nothing.
+  meta[LOST_CONVERSATION_META_KEY] = engineName;
   clearEngineSessionRefs(sessionId, engineName);
   updateSession(sessionId, { transportMeta: meta as UpdateSessionFields["transportMeta"] });
 }

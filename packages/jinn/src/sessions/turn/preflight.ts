@@ -22,6 +22,22 @@ export { warnIfNearUsageLimit } from "./usage-warning.js";
 /** How many prior messages a synthesized engine-switch transcript carries. */
 const SYNC_TRANSCRIPT_MESSAGES = 20;
 
+/**
+ * Marks a session whose conversation on this engine was found gone: its next
+ * turn without a resume id starts a fresh one handed a transcript, and the
+ * marker clears when such a turn settles cleanly.
+ */
+export const LOST_CONVERSATION_META_KEY = "lostConversationEngine";
+
+/**
+ * The lost-conversation transcript's budget. It travels in one command-line
+ * argument, and a remote session's system prompt shares that argument
+ * (argv-limit.ts), so it stays well short of the 128 KiB limit. Each message is
+ * clipped first, so a single long one cannot crowd out the rest.
+ */
+const LOST_TRANSCRIPT_MAX_BYTES = 24_000;
+const LOST_TRANSCRIPT_MESSAGE_MAX_BYTES = 4_000;
+
 type EngineConfig = { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string };
 
 /** Org hierarchy for the system prompt, or the reason this turn has none. */
@@ -137,7 +153,7 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
 
   const baseContextOptions = contextOptionsFor(input, effortLevel, resolvedMcp, runtimeSource);
   const rawCommand = isRawEngineCommand(engineName, input.prompt);
-  const turnPrompt = rawCommand ? verbatimTurnPrompt(input.prompt) : resolveTurnPrompt(session, engineName, input.prompt);
+  const turnPrompt = rawCommand ? verbatimTurnPrompt(input.prompt) : resolveTurnPrompt(session, engineName, input.prompt, Boolean(resumeRef.id));
 
   return {
     ok: true,
@@ -194,17 +210,22 @@ function contextPreparer(
 }
 
 /**
- * The prompt this turn actually sends, once the two things a turn may owe the
- * engine are folded in: a transcript of what it missed on another engine, and
- * any message an interrupt kept from it. A sync transcript is rebuilt from the
- * message log, which already holds the interrupted messages, so it delivers
- * them on its own and the prefix would only repeat them.
+ * The prompt this turn actually sends, once the things a turn may owe the engine
+ * are folded in: a transcript of a conversation the engine lost, or of what it
+ * missed on another engine, and any message an interrupt kept from it. A sync
+ * transcript is rebuilt from the message log, which already holds the
+ * interrupted messages, so it delivers them on its own and the prefix would
+ * only repeat them.
  */
-function resolveTurnPrompt(
+export function resolveTurnPrompt(
   session: Session,
   engineName: string,
   prompt: string,
+  resuming: boolean,
 ): Pick<TurnPlan, "promptToRun" | "syncRequested" | "carriedInterruptedPrompts"> {
+  if (!resuming && session.transportMeta?.[LOST_CONVERSATION_META_KEY] === engineName) {
+    return { ...resolveLostConversationPrompt(session, prompt), syncRequested: true };
+  }
   const { promptToRun, syncRequested } = resolveSyncPrompt(session, engineName, prompt);
   const unseen = readUnseenInterruptedPrompts(session);
   return {
@@ -281,40 +302,90 @@ export function resolveSyncPrompt(
 }
 
 /**
- * The prompt for a turn whose engine no longer has the conversation it was asked
- * to resume, sent instead to a fresh one. That conversation has no memory of
- * this session, so the prompt carries its recent messages, then any message an
- * interrupt kept from the lost one, then the current message. Tool-call rows are
- * left out: they name a tool and nothing more.
+ * The prompt for a turn whose engine no longer has the conversation this
+ * session was running, sent to a fresh one with no memory of the session. It
+ * carries the session's recent messages, then any message an interrupt kept
+ * from the lost conversation, then the current message.
+ *
+ * The transcript ends where this turn's own message was logged, which is the
+ * last logged message carrying its text: anything after it is queued behind
+ * this turn and will get its own. Tool-call rows and live partial blocks are
+ * left out; messages from other sessions are kept, in full, since an agent's
+ * briefs and verdicts arrive that way.
  */
 export function resolveLostConversationPrompt(
   session: Session,
   prompt: string,
 ): Pick<TurnPlan, "promptToRun" | "carriedInterruptedPrompts"> {
   const unseen = readUnseenInterruptedPrompts(session);
-  const messages = getMessages(session.id)
-    .filter((message) => !message.partial && !message.toolCall && (message.role === "user" || message.role === "assistant"));
-  const latest = messages.at(-1);
-  const earlier = latest?.role === "user" && latest.content === prompt ? messages.slice(0, -1) : messages;
-  const transcript = earlier
-    .filter((message) => !(message.role === "user" && unseen.includes(message.content)))
-    .slice(-SYNC_TRANSCRIPT_MESSAGES)
-    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
-    .join("\n\n");
+  const lines = transcriptLines(getMessages(session.id), prompt, unseen);
   const carriedInterruptedPrompts = unseen.length > 0;
-  if (!transcript) return { promptToRun: withInterruptedPrompts(prompt, unseen), carriedInterruptedPrompts };
+  if (lines.length === 0) return { promptToRun: withInterruptedPrompts(prompt, unseen), carriedInterruptedPrompts };
   const intro = "The conversation this Jinn session was running could not be resumed, so this is a new one. "
     + "Sync your context with this transcript of the session (most recent last), then respond to the current message.";
   const current = carriedInterruptedPrompts ? withInterruptedPrompts(prompt, unseen) : prompt.trim() ? `CURRENT MESSAGE:\n${prompt}` : "";
-  return { promptToRun: [intro, transcript, current].filter(Boolean).join("\n\n"), carriedInterruptedPrompts };
+  return { promptToRun: [intro, lines.join("\n\n"), current].filter(Boolean).join("\n\n"), carriedInterruptedPrompts };
 }
 
-/** Strip the engine-switch sync markers a cleanly settled synced turn consumed. */
-export function withSyncMarkersCleared(meta: unknown): Record<string, unknown> {
+type LoggedMessage = ReturnType<typeof getMessages>[number];
+
+/** A logged message as the engine would have read it: a notification's full text, not its banner. */
+function engineText(message: LoggedMessage): string {
+  const full = message.meta?.["fullMessage"];
+  return typeof full === "string" && full.trim() ? full : message.content;
+}
+
+/** The newest transcript lines before this turn's own message, oldest first, within budget. */
+function transcriptLines(messages: LoggedMessage[], prompt: string, unseen: string[]): string[] {
+  let own = messages.length - 1;
+  while (own >= 0 && messages[own]!.content !== prompt && engineText(messages[own]!) !== prompt) own--;
+  const before = own === -1 ? messages : messages.slice(0, own);
+  const lines: string[] = [];
+  let bytes = 0;
+  for (let i = before.length - 1; i >= 0 && lines.length < SYNC_TRANSCRIPT_MESSAGES; i--) {
+    const line = transcriptLine(before[i]!, unseen);
+    if (!line) continue;
+    const size = Buffer.byteLength(line) + 2;
+    if (bytes + size > LOST_TRANSCRIPT_MAX_BYTES) break;
+    bytes += size;
+    lines.unshift(line);
+  }
+  return lines;
+}
+
+/** One message as a transcript line, or nothing for a row the transcript leaves out. */
+function transcriptLine(message: LoggedMessage, unseen: string[]): string | undefined {
+  if (message.partial || message.toolCall) return undefined;
+  const label = TRANSCRIPT_LABELS.get(message.role);
+  const text = engineText(message);
+  // A held interrupted prompt is asked for after the transcript instead.
+  if (!label || (message.role === "user" && unseen.includes(text))) return undefined;
+  return `${label}: ${clipToBytes(text, LOST_TRANSCRIPT_MESSAGE_MAX_BYTES)}`;
+}
+
+const TRANSCRIPT_LABELS = new Map([
+  ["user", "USER"],
+  ["assistant", "ASSISTANT"],
+  ["notification", "MESSAGE FROM ANOTHER SESSION"],
+]);
+
+/** `text` cut to at most `max` UTF-8 bytes, marked where it was cut. */
+function clipToBytes(text: string, max: number): string {
+  if (Buffer.byteLength(text) <= max) return text;
+  const marker = " […clipped]";
+  let clipped = Buffer.from(text).subarray(0, max - Buffer.byteLength(marker)).toString("utf8");
+  // A cut through a multi-byte character decodes to U+FFFD; drop it.
+  clipped = clipped.replace(/\uFFFD$/, "");
+  return `${clipped}${marker}`;
+}
+
+/** Strip the sync markers a settled synced turn consumed; `keepLostConversation` leaves a lost conversation's owed. */
+export function withSyncMarkersCleared(meta: unknown, opts: { keepLostConversation?: boolean } = {}): Record<string, unknown> {
   const base = meta && typeof meta === "object" && !Array.isArray(meta) ? { ...(meta as Record<string, unknown>) } : {};
   delete base["claudeSyncSince"];
   delete base["claudeSyncAccount"];
   delete base["engineSyncTarget"];
   delete base["engineSyncSince"];
+  if (!opts.keepLostConversation) delete base[LOST_CONVERSATION_META_KEY];
   return base;
 }
