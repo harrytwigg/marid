@@ -61,16 +61,10 @@ describe("DepartmentPanel", () => {
     expect(screen.queryByTestId("department-definition-error")).toBeNull()
   })
 
-  it("says jinn is the only MCP server when the department lists none, or an older gateway sends no list", async () => {
+  it("says jinn is the only MCP server when the department lists none", async () => {
     mount({ mcp: [] })
     await screen.findByTestId("department-panel")
-    expect(text("department-mcp")).toBe("MCP serversNone: jinn only.")
-  })
-
-  it("treats a missing mcp list as empty", async () => {
-    mount({ mcp: undefined })
-    await screen.findByTestId("department-panel")
-    expect(text("department-mcp")).toBe("MCP serversNone: jinn only.")
+    expect(text("department-mcp")).toBe("MCP serversNone. Scoped sessions get only the jinn server.")
   })
 
   it("says what a dedicated department means", async () => {

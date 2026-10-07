@@ -50,7 +50,7 @@ const PANEL_STATES: PanelState[] = [
     check: async (page) => {
       await expect(panelBadge(page)).toHaveText('Dedicated')
       await expect(page.getByTestId('department-scope')).toContainText('only they can hold its Todos')
-      await expect(page.getByTestId('department-mcp')).toContainText('None: jinn only.')
+      await expect(page.getByTestId('department-mcp')).toContainText('None. Scoped sessions get only the jinn server.')
     },
   },
   {

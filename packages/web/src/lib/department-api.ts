@@ -32,8 +32,8 @@ export interface DepartmentDefinitionWire {
   definitionError: string | null
   workdirs: string[]
   skills: string[]
-  /** Instance MCP servers the department's sessions get beside `jinn`. Absent from an older gateway. */
-  mcp?: string[]
+  /** Instance MCP servers the department's sessions get beside `jinn`. */
+  mcp: string[]
   sharedNotes: string[]
   instructions: "department" | "department+company"
   todoCount: number
