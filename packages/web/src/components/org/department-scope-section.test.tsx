@@ -23,6 +23,7 @@ const base: DepartmentDefinitionWire = {
   definitionError: null,
   workdirs: [],
   skills: [],
+  mcp: [],
   sharedNotes: [],
   instructions: "department",
   todoCount: 2,

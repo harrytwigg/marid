@@ -53,6 +53,7 @@ write(path.join(org, 'side-project', 'department.yaml'), [
   'workdirs:',
   `  - ${workdir}`,
   'skills: [management, delegation, linked-skill, no-such-skill]',
+  'mcp: [docs, browser]',
   'sharedNotes: [knowledge/shared/glossary.md]',
   'instructions: department+company',
 ])

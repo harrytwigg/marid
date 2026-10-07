@@ -32,6 +32,8 @@ export interface DepartmentDefinitionWire {
   definitionError: string | null
   workdirs: string[]
   skills: string[]
+  /** Instance MCP servers the department's sessions get beside `jinn`. */
+  mcp: string[]
   sharedNotes: string[]
   instructions: "department" | "department+company"
   todoCount: number
@@ -40,6 +42,8 @@ export interface DepartmentDefinitionWire {
   warnings: string[]
   /** Skills the allow-list names that the stage directory refuses, each with why (a symlink inside one, say). They are not in `skills`. */
   skillProblems?: Array<{ skill: string; reason: string }>
+  /** MCP servers the allow-list names that this instance does not configure, each with why. They are not in `mcp`. */
+  mcpProblems?: Array<{ server: string; reason: string }>
   archived?: boolean
   archivedAt?: string | null
 }

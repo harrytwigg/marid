@@ -64,6 +64,19 @@ function SkillProblems({ problems }: { problems: Array<{ skill: string; reason: 
   )
 }
 
+function McpProblems({ problems }: { problems: Array<{ server: string; reason: string }> }) {
+  if (problems.length === 0) return null
+  return (
+    <ul data-testid="department-mcp-problems" className="m-0 mt-[var(--space-3)] flex list-none flex-col gap-1 p-0">
+      {problems.map(({ server, reason }) => (
+        <li key={server} className="text-[length:var(--text-caption1)] text-[var(--system-orange)]">
+          <span className={`${MONO} font-[var(--weight-semibold)]`}>{server}</span> is not offered to this department: {reason}.
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function RefusedNotice({ error, scope }: { error: string; scope: DepartmentScopeWire }) {
   return (
     <div
@@ -87,6 +100,10 @@ function ScopedSections({ department }: { department: DepartmentDefinitionWire }
       <Section title="Skills" testId="department-skills">
         <Chips items={department.skills} empty="None. Scoped sessions get no company skills." />
         <SkillProblems problems={department.skillProblems ?? []} />
+      </Section>
+      <Section title="MCP servers" testId="department-mcp">
+        <Chips items={department.mcp} empty="None. Scoped sessions get only the jinn server." />
+        <McpProblems problems={department.mcpProblems ?? []} />
       </Section>
       <Section title="Shared Notes" testId="department-shared-notes">
         <PathList items={department.sharedNotes} empty="None. Only the department's own Notes are shared." />
@@ -181,14 +198,14 @@ function Definition({ department }: { department: DepartmentDefinitionWire }) {
   if (department.definitionError) {
     return (
       <p className={MUTED} data-testid="department-settings-unknown">
-        Working directories, skills, shared Notes and instructions are unknown while the file is refused.
+        Working directories, skills, MCP servers, shared Notes and instructions are unknown while the file is refused.
       </p>
     )
   }
   if (isConfined(department.scope)) return <ScopedSections department={department} />
   return (
     <p className={MUTED} data-testid="department-open-note">
-      Working directories, skills, shared Notes and instructions apply once a department is scoped.
+      Working directories, skills, MCP servers, shared Notes and instructions apply once a department is scoped.
     </p>
   )
 }
