@@ -280,6 +280,35 @@ export function resolveSyncPrompt(
   };
 }
 
+/**
+ * The prompt for a turn whose engine no longer has the conversation it was asked
+ * to resume, sent instead to a fresh one. That conversation has no memory of
+ * this session, so the prompt carries its recent messages, then any message an
+ * interrupt kept from the lost one, then the current message. Tool-call rows are
+ * left out: they name a tool and nothing more.
+ */
+export function resolveLostConversationPrompt(
+  session: Session,
+  prompt: string,
+): Pick<TurnPlan, "promptToRun" | "carriedInterruptedPrompts"> {
+  const unseen = readUnseenInterruptedPrompts(session);
+  const messages = getMessages(session.id)
+    .filter((message) => !message.partial && !message.toolCall && (message.role === "user" || message.role === "assistant"));
+  const latest = messages.at(-1);
+  const earlier = latest?.role === "user" && latest.content === prompt ? messages.slice(0, -1) : messages;
+  const transcript = earlier
+    .filter((message) => !(message.role === "user" && unseen.includes(message.content)))
+    .slice(-SYNC_TRANSCRIPT_MESSAGES)
+    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+    .join("\n\n");
+  const carriedInterruptedPrompts = unseen.length > 0;
+  if (!transcript) return { promptToRun: withInterruptedPrompts(prompt, unseen), carriedInterruptedPrompts };
+  const intro = "The conversation this Jinn session was running could not be resumed, so this is a new one. "
+    + "Sync your context with this transcript of the session (most recent last), then respond to the current message.";
+  const current = carriedInterruptedPrompts ? withInterruptedPrompts(prompt, unseen) : prompt.trim() ? `CURRENT MESSAGE:\n${prompt}` : "";
+  return { promptToRun: [intro, transcript, current].filter(Boolean).join("\n\n"), carriedInterruptedPrompts };
+}
+
 /** Strip the engine-switch sync markers a cleanly settled synced turn consumed. */
 export function withSyncMarkersCleared(meta: unknown): Record<string, unknown> {
   const base = meta && typeof meta === "object" && !Array.isArray(meta) ? { ...(meta as Record<string, unknown>) } : {};

@@ -4572,7 +4572,13 @@ export async function handleApiRequest(
         hook.session_id
       ) {
         const existing = getSession(jinnSessionId);
-        if (existing && getEngineSessionRef(existing, "claude").id !== hook.session_id) {
+        const previous = existing ? getEngineSessionRef(existing, "claude").id : undefined;
+        if (existing && previous !== hook.session_id) {
+          // Logged because the next turn resumes this id: a conversation that
+          // is later missing is traced back to the hook that filed it.
+          const source = typeof hook.source === "string" ? ` (${hook.source})` : "";
+          const where = hook.transcript_path ? `, transcript ${hook.transcript_path}` : "";
+          logger.info(`Session ${jinnSessionId}: claude ${hook.hook_event_name}${source} filed conversation ${hook.session_id} in place of ${previous ?? "none"}${where}`);
           recordEngineSessionId(jinnSessionId, "claude", hook.session_id);
         }
       }
