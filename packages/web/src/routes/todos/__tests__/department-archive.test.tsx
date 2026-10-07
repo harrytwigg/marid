@@ -24,6 +24,7 @@ afterEach(() => authFetch.mockReset())
 const rows: DepartmentRowWire[] = [
   { slug: "engineering", prefix: "ENG", createdAt: "2026-07-01", todoCount: 3, selectable: true, archived: false },
   { slug: "old-catchall", prefix: "OLD", createdAt: "2026-07-01", todoCount: 40, selectable: false, archived: true, archivedAt: "2026-10-07T00:00:00.000Z" },
+  { slug: "older-still", prefix: "OST", createdAt: "2026-06-01", todoCount: 5, selectable: false, archived: true, archivedAt: "2026-10-06T00:00:00.000Z" },
 ]
 
 function withClient(node: React.ReactNode) {
@@ -48,15 +49,27 @@ describe("the board switcher", () => {
     expect(screen.getByTestId("board-menu-engineering")).toBeTruthy()
     expect(screen.queryByTestId("board-menu-old-catchall")).toBeNull()
 
+    expect(screen.getByTestId("board-menu-show-archived").textContent).toContain("Show archived (2)")
     fireEvent.click(screen.getByTestId("board-menu-show-archived"))
     const revealed = await screen.findByTestId("board-menu-old-catchall")
     expect(within(revealed).getByTestId("department-archived-tag")).toBeTruthy()
     expect(screen.getByTestId("board-menu-show-archived").textContent).toContain("Hide archived")
   })
 
-  it("lists an archived department while its own board is open", async () => {
+  it("lists only the archived department whose board is open, and can still reveal the rest", async () => {
     await openSwitcher({ kind: "department", slug: "old-catchall" })
     expect(screen.getByTestId("board-menu-old-catchall")).toBeTruthy()
+    expect(screen.queryByTestId("board-menu-older-still")).toBeNull()
+    expect(screen.getByTestId("board-menu-show-archived").textContent).toContain("Show archived (1)")
+  })
+
+  it("counts open Todos only for the departments it lists", async () => {
+    const { api } = await import("@/lib/api")
+    vi.mocked(api.listWorkItems).mockClear()
+    await openSwitcher()
+    await waitFor(() => expect(vi.mocked(api.listWorkItems)).toHaveBeenCalled())
+    const asked = vi.mocked(api.listWorkItems).mock.calls.map(([params]) => (params as { department?: string }).department).filter(Boolean)
+    expect(asked).toEqual(["engineering"])
   })
 })
 
@@ -108,6 +121,23 @@ describe("the archive dialog", () => {
     expect(authFetch.mock.calls[1]![0]).toBe("/api/departments/engineering/archive")
     expect(JSON.parse(authFetch.mock.calls[1]![1].body)).toEqual({ confirm: true })
     await waitFor(() => expect(screen.queryByTestId("department-archive-submit")).toBeNull())
+  })
+
+  it("keeps the confirmation when Archive anyway fails for another reason", async () => {
+    authFetch
+      .mockResolvedValueOnce(respond(409, { error: "engineering still has…", code: "department-archive-confirm", members: [], openTodos: 1 }))
+      .mockResolvedValueOnce(respond(500, { error: "disk full" }))
+      .mockResolvedValueOnce(respond(200, { department: archivedDefinition }))
+    fireEvent.click(await openArchiveDialog())
+    await screen.findByTestId("department-archive-confirm")
+    fireEvent.click(screen.getByTestId("department-archive-submit"))
+    expect((await screen.findByTestId("department-archive-error")).textContent).toContain("disk full")
+    expect(screen.getByTestId("department-archive-confirm")).toBeTruthy()
+    expect(screen.getByTestId("department-archive-submit").textContent).toBe("Archive anyway")
+
+    fireEvent.click(screen.getByTestId("department-archive-submit"))
+    await waitFor(() => expect(authFetch).toHaveBeenCalledTimes(3))
+    expect(JSON.parse(authFetch.mock.calls[2]![1].body)).toEqual({ confirm: true })
   })
 
   it("shows any other refusal as an error and does not offer to force it", async () => {

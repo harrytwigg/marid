@@ -16,15 +16,17 @@ export class DepartmentArchivedError extends Error {
   }
 }
 
-/** Every archived department, slug → when it was archived. */
-export function archivedDepartments(db: DatabaseType): Map<string, string> {
-  const rows = db.prepare("SELECT slug, archived_at FROM department_archives").all() as Array<{ slug: string; archived_at: string }>;
-  return new Map(rows.map((row) => [row.slug, row.archived_at]));
-}
-
 export function isDepartmentArchived(db: DatabaseType, department: string | null | undefined): boolean {
   if (!department) return false;
   return !!db.prepare("SELECT 1 FROM department_archives WHERE slug = ?").get(department);
+}
+
+/** The configured default department, unless it has been archived since. An archived
+ *  default is no default: a create or an assignment that would have filled it leaves the
+ *  Todo unclassified instead, so config set after an archive cannot make every
+ *  department-less create fail. */
+export function usableDefaultDepartment(db: DatabaseType, defaultDepartment: string | null | undefined): string | null {
+  return defaultDepartment && !isDepartmentArchived(db, defaultDepartment) ? defaultDepartment : null;
 }
 
 /** Refuse a write that would put a Todo into an archived department. */

@@ -1,7 +1,7 @@
 import { initDb } from '../shared/db.js';
 import { isNonOpenDepartment, scopeDepartmentOfItem } from './department-scope.js';
 import { assertMayHold } from './department-guard.js';
-import { isDepartmentArchived } from './department-archive.js';
+import { isDepartmentArchived, usableDefaultDepartment } from './department-archive.js';
 import type { WriteOrigin } from './origin.js';
 import {
   appendWorkItemEvent,
@@ -87,7 +87,7 @@ function departmentAfterAssignment(item: WorkItem, assigneeDepartment: string | 
   // Todo stays where it is, and the assignee works it from there.
   const db = initDb();
   // Under a closed policy the department is a classification: an empty one is filled with the default, even for a scoped assignee.
-  if (policy) return item.department ?? (isDepartmentArchived(db, policy.defaultDepartment) ? null : policy.defaultDepartment);
+  if (policy) return item.department ?? usableDefaultDepartment(db, policy.defaultDepartment);
   return isNonOpenDepartment(assigneeDepartment) || isDepartmentArchived(db, assigneeDepartment) ? item.department : assigneeDepartment;
 }
 

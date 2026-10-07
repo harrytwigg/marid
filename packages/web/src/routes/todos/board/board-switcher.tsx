@@ -41,8 +41,10 @@ export interface BoardSwitcherProps {
 export function BoardSwitcher({ board, title, departments, attentionCount }: BoardSwitcherProps) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const counts = useBoardMenuCounts(departments, open)
   const archive = useArchivedRows(board, departments)
+  // Counts only for the rows the menu shows: every archived department would otherwise
+  // cost a request each time the menu opens.
+  const counts = useBoardMenuCounts(departments && archive.listed, open)
 
   const go = (target: BoardId) => {
     if (!isSameBoard(board, target)) navigate(boardPath(target))
@@ -113,17 +115,17 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
 }
 
 /** Which department rows the menu lists. Archived ones wait behind "Show archived",
- *  except on an archived department's own board, where the list shows where you are. */
+ *  except the one whose board is open, which is listed so the menu shows where you are. */
 function useArchivedRows(board: BoardId, departments: DepartmentRowWire[] | undefined) {
   const [shown, setShown] = useState(false)
   const rows = departments ?? []
-  const count = rows.filter((dept) => dept.archived).length
-  const onArchived = board.kind === "department" && rows.some((dept) => dept.slug === board.slug && dept.archived)
+  const current = board.kind === "department" ? board.slug : null
+  const hidden = rows.filter((dept) => dept.archived && dept.slug !== current).length
   return {
-    listed: rows.filter((dept) => !dept.archived || shown || onArchived),
-    count,
+    listed: rows.filter((dept) => !dept.archived || shown || dept.slug === current),
+    count: hidden,
     shown,
-    toggleable: count > 0 && !onArchived,
+    toggleable: hidden > 0,
     toggle: () => setShown((value) => !value),
   }
 }

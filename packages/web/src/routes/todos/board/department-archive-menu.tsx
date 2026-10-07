@@ -78,9 +78,16 @@ function Failure({ error }: { error: unknown }) {
 
 function ArchiveDialog({ slug, prefix, stage, onClose }: { slug: string; prefix: string | undefined; stage: Exclude<Stage, "closed">; onClose: () => void }) {
   const change = useArchiveChange(slug, onClose)
-  const refusal = confirmationOf(change.error)
+  // Held in state, not read off the latest error: an "Archive anyway" that fails for some
+  // other reason (a 500, the network) must not drop back to an unconfirmed archive.
+  const [refusal, setRefusal] = useState<DepartmentArchiveError | null>(null)
   const text = dialogText(stage, departmentTitle(slug), prefix)
-  const submit = () => change.mutate({ archived: stage === "archive", confirm: refusal !== null })
+  const submit = () =>
+    change.mutate(
+      { archived: stage === "archive", confirm: refusal !== null },
+      { onError: (error) => setRefusal((held) => confirmationOf(error) ?? held) },
+    )
+  const failure = change.error != null && !confirmationOf(change.error) ? change.error : null
 
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
@@ -88,7 +95,7 @@ function ArchiveDialog({ slug, prefix, stage, onClose }: { slug: string; prefix:
         <DialogTitle>{text.title}</DialogTitle>
         <DialogDescription>{text.body}</DialogDescription>
         {refusal && <StillThere refusal={refusal} />}
-        {change.error != null && !refusal && <Failure error={change.error} />}
+        {failure != null && <Failure error={failure} />}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onClose} className={DIALOG_CANCEL_CLASS}>
             Cancel

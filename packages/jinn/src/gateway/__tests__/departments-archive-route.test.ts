@@ -112,12 +112,12 @@ describe("archiving a department", () => {
     expect(assigned.body.workItem.department).toBe("still-open");
   });
 
-  it("refuses a delegation that would mint a Todo in the delegate's archived department", async () => {
-    const before = store.listWorkItems({ department: "platform" }).length;
-    const refused = await call("POST", "/api/delegations", { employee: "platform-worker", task: "do it", title: "do it", model: "gpt-5.5" });
-    expect(refused.status).toBe(409);
-    expect(refused.body.code).toBe("todo_department_archived");
-    expect(store.listWorkItems({ department: "platform" }).length).toBe(before);
+  it("mints a delegation to a member of an archived department with no department, as assignment would", async () => {
+    const refused = await call("POST", "/api/delegations", { employee: "platform-worker", task: "do it", title: "delegated while archived", model: "gpt-5.5" });
+    expect(refused.status).not.toBe(409);
+    const minted = store.listWorkItems({}).find((item) => item.title === "delegated while archived");
+    expect(minted?.department).toBeNull();
+    expect(minted?.assignee).toBe("platform-worker");
   });
 
   it("keeps its prefix reserved from any new department", async () => {
