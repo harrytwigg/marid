@@ -13,6 +13,7 @@ import type { EngineSessionRef, ResolvedMcpConfig, Session } from "../../shared/
 import { buildContext, buildPlatformContextSnapshot, runtimeSessionSource, type BuildContextOptions } from "../context.js";
 import { resolveEngineRunMcp } from "../engine-run-mcp.js";
 import { getEngineSessionRef, getMessages } from "../registry.js";
+import { openTurnMessages } from "../queue-item-registry.js";
 import { isRemoteMcpSession } from "../remote-mcp-session.js";
 import { isTerminalSession, TERMINAL_REFUSES_MESSAGES } from "../../terminals/session.js";
 import { readUnseenInterruptedPrompts } from "./superseded.js";
@@ -21,6 +22,22 @@ export { warnIfNearUsageLimit } from "./usage-warning.js";
 
 /** How many prior messages a synthesized engine-switch transcript carries. */
 const SYNC_TRANSCRIPT_MESSAGES = 20;
+
+/**
+ * Marks a session whose conversation on this engine was found gone: its next
+ * turn without a resume id starts a fresh one handed a transcript, and the
+ * marker clears when such a turn settles cleanly.
+ */
+export const LOST_CONVERSATION_META_KEY = "lostConversationEngine";
+
+/**
+ * The lost-conversation transcript's budget. It travels in one command-line
+ * argument, and a remote session's system prompt shares that argument
+ * (argv-limit.ts), so it stays well short of the 128 KiB limit. Each message is
+ * clipped first, so a single long one cannot crowd out the rest.
+ */
+const LOST_TRANSCRIPT_MAX_BYTES = 24_000;
+const LOST_TRANSCRIPT_MESSAGE_MAX_BYTES = 4_000;
 
 type EngineConfig = { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string };
 
@@ -137,7 +154,7 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
 
   const baseContextOptions = contextOptionsFor(input, effortLevel, resolvedMcp, runtimeSource);
   const rawCommand = isRawEngineCommand(engineName, input.prompt);
-  const turnPrompt = rawCommand ? verbatimTurnPrompt(input.prompt) : resolveTurnPrompt(session, engineName, input.prompt);
+  const turnPrompt = rawCommand ? verbatimTurnPrompt(input.prompt) : resolveTurnPrompt(session, engineName, input.prompt, Boolean(resumeRef.id));
 
   return {
     ok: true,
@@ -194,17 +211,22 @@ function contextPreparer(
 }
 
 /**
- * The prompt this turn actually sends, once the two things a turn may owe the
- * engine are folded in: a transcript of what it missed on another engine, and
- * any message an interrupt kept from it. A sync transcript is rebuilt from the
- * message log, which already holds the interrupted messages, so it delivers
- * them on its own and the prefix would only repeat them.
+ * The prompt this turn actually sends, once the things a turn may owe the engine
+ * are folded in: a transcript of a conversation the engine lost, or of what it
+ * missed on another engine, and any message an interrupt kept from it. A sync
+ * transcript is rebuilt from the message log, which already holds the
+ * interrupted messages, so it delivers them on its own and the prefix would
+ * only repeat them.
  */
-function resolveTurnPrompt(
+export function resolveTurnPrompt(
   session: Session,
   engineName: string,
   prompt: string,
+  resuming: boolean,
 ): Pick<TurnPlan, "promptToRun" | "syncRequested" | "carriedInterruptedPrompts"> {
+  if (!resuming && session.transportMeta?.[LOST_CONVERSATION_META_KEY] === engineName) {
+    return { ...resolveLostConversationPrompt(session, prompt), syncRequested: true };
+  }
   const { promptToRun, syncRequested } = resolveSyncPrompt(session, engineName, prompt);
   const unseen = readUnseenInterruptedPrompts(session);
   return {
@@ -280,12 +302,108 @@ export function resolveSyncPrompt(
   };
 }
 
-/** Strip the engine-switch sync markers a cleanly settled synced turn consumed. */
-export function withSyncMarkersCleared(meta: unknown): Record<string, unknown> {
+/**
+ * The prompt for a turn whose engine no longer has the conversation this
+ * session was running, sent to a fresh one with no memory of the session. It
+ * carries the session's recent messages, then any message an interrupt kept
+ * from the lost conversation, then the current message.
+ *
+ * The transcript leaves out this turn's own message and anything queued behind
+ * it, which gets its own turn: the messages the session's open queue items
+ * carry, known by id where the queue links them, else by their text appearing
+ * in a queued prompt (which frames another session's message around it).
+ * Tool-call rows and live partial blocks are left out; messages from other
+ * sessions are kept, in full, since an agent's briefs and verdicts arrive that
+ * way.
+ */
+export function resolveLostConversationPrompt(
+  session: Session,
+  prompt: string,
+): Pick<TurnPlan, "promptToRun" | "carriedInterruptedPrompts"> {
+  const unseen = readUnseenInterruptedPrompts(session);
+  const open = openTurnMessages(session.id);
+  const pending = { messageIds: open.messageIds, prompts: [prompt, ...open.prompts] };
+  const lines = transcriptLines(getMessages(session.id).filter((message) => !isOpenTurnMessage(message, pending)), unseen);
+  const carriedInterruptedPrompts = unseen.length > 0;
+  if (lines.length === 0) return { promptToRun: withInterruptedPrompts(prompt, unseen), carriedInterruptedPrompts };
+  const intro = "The conversation this Jinn session was running could not be resumed, so this is a new one. "
+    + "Sync your context with this transcript of the session (most recent last), then respond to the current message.";
+  const current = carriedInterruptedPrompts ? withInterruptedPrompts(prompt, unseen) : prompt.trim() ? `CURRENT MESSAGE:\n${prompt}` : "";
+  return { promptToRun: [intro, lines.join("\n\n"), current].filter(Boolean).join("\n\n"), carriedInterruptedPrompts };
+}
+
+type LoggedMessage = ReturnType<typeof getMessages>[number];
+
+/** A logged message as the engine would have read it: a notification's full text, not its banner. */
+function engineText(message: LoggedMessage): string {
+  const full = message.meta?.["fullMessage"];
+  return typeof full === "string" && full.trim() ? full : message.content;
+}
+
+/** Whether a logged message is one an open turn (this one, or one queued) will answer. */
+function isOpenTurnMessage(message: LoggedMessage, open: { messageIds: Set<string>; prompts: string[] }): boolean {
+  if (open.messageIds.has(message.id)) return true;
+  if (open.prompts.includes(message.content)) return true;
+  if (message.role !== "notification") return false;
+  const text = engineText(message);
+  return open.prompts.some((prompt) => prompt === text || `\n${prompt}\n`.includes(`\n${text}\n`));
+}
+
+/** The newest transcript lines, oldest first, within budget. */
+function transcriptLines(messages: LoggedMessage[], unseen: string[]): string[] {
+  const lines: string[] = [];
+  let bytes = 0;
+  for (let i = messages.length - 1; i >= 0 && lines.length < SYNC_TRANSCRIPT_MESSAGES; i--) {
+    const line = transcriptLine(messages[i]!, unseen);
+    if (!line) continue;
+    const size = Buffer.byteLength(line) + 2;
+    if (bytes + size > LOST_TRANSCRIPT_MAX_BYTES) break;
+    bytes += size;
+    lines.unshift(line);
+  }
+  return lines;
+}
+
+/** One message as a transcript line, or nothing for a row the transcript leaves out. */
+function transcriptLine(message: LoggedMessage, unseen: string[]): string | undefined {
+  if (message.partial || message.toolCall) return undefined;
+  const label = message.role === "notification" ? notificationLabel(message) : TRANSCRIPT_LABELS.get(message.role);
+  const text = engineText(message);
+  // A held interrupted prompt is asked for after the transcript instead.
+  if (!label || (message.role === "user" && unseen.includes(text))) return undefined;
+  return `${label}: ${clipToBytes(text, LOST_TRANSCRIPT_MESSAGE_MAX_BYTES)}`;
+}
+
+const TRANSCRIPT_LABELS = new Map([
+  ["user", "USER"],
+  ["assistant", "ASSISTANT"],
+]);
+
+/** Notification kinds that are a message from another session; any other is the gateway's own notice. */
+const FROM_ANOTHER_SESSION = new Set(["agent-relay", "child-reply", "child-error"]);
+
+function notificationLabel(message: LoggedMessage): string {
+  const kind = message.meta?.["kind"];
+  return typeof kind === "string" && FROM_ANOTHER_SESSION.has(kind) ? "MESSAGE FROM ANOTHER SESSION" : "NOTICE";
+}
+
+/** `text` cut to at most `max` UTF-8 bytes, marked where it was cut. */
+function clipToBytes(text: string, max: number): string {
+  if (Buffer.byteLength(text) <= max) return text;
+  const marker = " […clipped]";
+  let clipped = Buffer.from(text).subarray(0, max - Buffer.byteLength(marker)).toString("utf8");
+  // A cut through a multi-byte character decodes to U+FFFD; drop it.
+  clipped = clipped.replace(/\uFFFD$/, "");
+  return `${clipped}${marker}`;
+}
+
+/** Strip the sync markers a settled synced turn consumed; `keepLostConversation` leaves a lost conversation's owed. */
+export function withSyncMarkersCleared(meta: unknown, opts: { keepLostConversation?: boolean } = {}): Record<string, unknown> {
   const base = meta && typeof meta === "object" && !Array.isArray(meta) ? { ...(meta as Record<string, unknown>) } : {};
   delete base["claudeSyncSince"];
   delete base["claudeSyncAccount"];
   delete base["engineSyncTarget"];
   delete base["engineSyncSince"];
+  if (!opts.keepLostConversation) delete base[LOST_CONVERSATION_META_KEY];
   return base;
 }
