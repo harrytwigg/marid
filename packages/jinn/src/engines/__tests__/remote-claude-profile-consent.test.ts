@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Employee } from "../../shared/types.js";
 import type { RemoteExecutionConfig } from "../../shared/config-types.js";
@@ -39,7 +40,10 @@ vi.mock("../../gateway/gateway-info.js", () => ({
   readGatewayInfo: () => ({ port: 40123, secret: "hook-secret", token: "bearer-token" }),
 }));
 
-const { ensureRemoteReady, prepareRemoteSession, buildClaudeProfileProbe, clearRemoteFactsCache, clearRemoteProfileCache, clearRemoteStagingCache } = await import("../remote-stage.js");
+const {
+  ensureRemoteReady, prepareRemoteSession, buildClaudeProfileProbe, setManagedSettingsDirsForTests,
+  clearRemoteFactsCache, clearRemoteProfileCache, clearRemoteStagingCache,
+} = await import("../remote-stage.js");
 const { employeeRemoteTarget } = await import("../../shared/remote-target.js");
 const { resolveJinnHome } = await import("../../shared/paths.js");
 const { getPackageVersion } = await import("../../shared/version.js");
@@ -83,9 +87,12 @@ beforeEach(() => {
   operatorClaudeDir = path.join(tmp, "operator-claude");
   fs.mkdirSync(operatorClaudeDir);
   vi.stubEnv("CLAUDE_CONFIG_DIR", operatorClaudeDir);
+  // Managed settings this machine may have must not decide any result here.
+  setManagedSettingsDirsForTests([path.join(tmp, "no-managed-settings")]);
 });
 
 afterEach(() => {
+  setManagedSettingsDirsForTests(null);
   vi.unstubAllEnvs();
   fs.rmSync(tmp, { recursive: true, force: true });
 });
@@ -131,6 +138,14 @@ describe.skipIf(process.platform === "win32")("a remote named Claude profile tha
     expect((await ready()).ready).toBe(true);
   });
 
+  it("runs on consent in .claude/settings.local.json at the git root above the session directory", async () => {
+    const repo = path.join(tmp, "root");
+    execFileSync("git", ["init", "-q", repo]);
+    fs.mkdirSync(path.join(repo, ".claude"));
+    writeJson(path.join(repo, ".claude", "settings.local.json"), { skipDangerousModePermissionPrompt: true });
+    expect((await ready()).ready).toBe(true);
+  });
+
   it("still names a missing login before the consent", async () => {
     fs.rmSync(path.join(profile, ".credentials.json"));
     const readiness = await ready();
@@ -171,42 +186,61 @@ describe.skipIf(process.platform === "win32")("the operator's bypass consent tra
   });
 });
 
+/** Run the probe as ssh would: the command string handed to a login shell. */
+const runProbe = (command: string, shell: string[] = ["sh", "-c"]) =>
+  execFileSync(shell[0]!, [...shell.slice(1), command], { encoding: "utf-8" }).split(/\s+/).filter(Boolean);
+
+const hasZsh = (() => {
+  try {
+    execFileSync("zsh", ["-fc", "true"]);
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 describe.skipIf(process.platform === "win32")("buildClaudeProfileProbe", () => {
-  it("survives a profile path a shell would otherwise split or expand", async () => {
+  it("survives a profile path a shell would otherwise split or expand", () => {
     const odd = path.join(tmp, "it's a $HOME `profile`");
     fs.mkdirSync(odd);
     fs.writeFileSync(path.join(odd, ".credentials.json"), "x");
     writeJson(path.join(odd, "settings.json"), { skipDangerousModePermissionPrompt: true });
-    const { execFileSync } = await import("node:child_process");
-    expect(execFileSync("sh", ["-c", buildClaudeProfileProbe(odd)], { encoding: "utf-8" }).split(/\s+/).filter(Boolean))
-      .toEqual(["dir", "creds", "consent"]);
+    expect(runProbe(buildClaudeProfileProbe(odd))).toEqual(["dir", "creds", "consent"]);
+  });
+
+  it("runs its script under sh, whatever the remote login shell is", () => {
+    expect(buildClaudeProfileProbe(profile).startsWith("sh -c '")).toBe(true);
+  });
+
+  // zsh, a Mac's default login shell, aborts a command whose glob matches
+  // nothing, which the absent managed-settings.d drop-ins always are.
+  it.skipIf(!hasZsh)("finds the profile's consent when the login shell is zsh and no drop-ins exist", () => {
+    writeJson(path.join(profile, "settings.json"), { skipDangerousModePermissionPrompt: true });
+    expect(runProbe(buildClaudeProfileProbe(profile), ["zsh", "-f", "-c"])).toEqual(["dir", "creds", "consent"]);
   });
 
   describe("reads the host's managed settings", () => {
-    const probe = async (managed: string) => {
-      const { execFileSync } = await import("node:child_process");
-      return execFileSync("sh", ["-c", buildClaudeProfileProbe(profile, undefined, [managed])], { encoding: "utf-8" })
-        .split(/\s+/).filter(Boolean);
-    };
+    const probe = () => runProbe(buildClaudeProfileProbe(profile));
     let managed: string;
     beforeEach(() => {
       managed = path.join(tmp, "etc claude-code");
       fs.mkdirSync(path.join(managed, "managed-settings.d"), { recursive: true });
+      setManagedSettingsDirsForTests([path.join(tmp, "absent"), managed]);
     });
 
-    it("finds consent in managed-settings.json", async () => {
+    it("finds consent in managed-settings.json", () => {
       writeJson(path.join(managed, "managed-settings.json"), { skipDangerousModePermissionPrompt: true });
-      expect(await probe(managed)).toContain("consent");
+      expect(probe()).toContain("consent");
     });
 
-    it("finds consent in a managed-settings.d drop-in", async () => {
+    it("finds consent in a managed-settings.d drop-in", () => {
       writeJson(path.join(managed, "managed-settings.d", "10-bypass.json"), { skipDangerousModePermissionPrompt: true });
-      expect(await probe(managed)).toContain("consent");
+      expect(probe()).toContain("consent");
     });
 
-    it("finds none when the managed settings do not give it", async () => {
+    it("finds none when the managed settings do not give it", () => {
       writeJson(path.join(managed, "managed-settings.json"), { skipDangerousModePermissionPrompt: false });
-      expect(await probe(managed)).not.toContain("consent");
+      expect(probe()).not.toContain("consent");
     });
   });
 });

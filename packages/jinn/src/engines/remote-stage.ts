@@ -600,37 +600,60 @@ async function verifyClaudeProfile(
 
 /** Where Claude Code reads managed (policy) settings on a Linux or macOS host:
  *  `managed-settings.json` and the drop-ins under `managed-settings.d/`. */
-const MANAGED_SETTINGS_DIRS = ["/etc/claude-code", "/Library/Application Support/ClaudeCode"];
+const MANAGED_SETTINGS_DIRS: readonly string[] = ["/etc/claude-code", "/Library/Application Support/ClaudeCode"];
+let managedSettingsDirs = MANAGED_SETTINGS_DIRS;
+
+/** Exported for tests: probe these managed-settings directories instead of the
+ *  real ones, so a test host's own policy cannot decide the result. `null` restores them. */
+export function setManagedSettingsDirsForTests(dirs: readonly string[] | null): void {
+  managedSettingsDirs = dirs ?? MANAGED_SETTINGS_DIRS;
+}
+
+/**
+ * The probe, run as `sh -c` so the remote login shell (zsh on a Mac) never
+ * sees the drop-in glob: zsh aborts a command whose glob matches nothing.
+ * Arguments: the profile, the session directory (may be empty), then each
+ * managed-settings directory.
+ *
+ * Claude Code reads `.claude/settings.local.json` at the canonical git root of
+ * the session directory (the main worktree's root for a linked worktree), and
+ * at the directory itself as a legacy fallback, so all three are searched.
+ * An unmatched glob stays literal and `grep -s` passes over it; with `-q`, a
+ * match wins over a missing file.
+ */
+const CLAUDE_PROFILE_PROBE_SCRIPT = `
+profile=$1; cwd=$2; shift 2
+test -d "$profile" && echo dir
+test -s "$profile/.credentials.json" && echo creds
+n=$#; i=0
+while [ "$i" -lt "$n" ]; do
+  d=$1; shift
+  set -- "$@" "$d/managed-settings.json" "$d"/managed-settings.d/*.json
+  i=$((i + 1))
+done
+set -- "$profile/settings.json" "$@"
+if [ -n "$cwd" ]; then
+  set -- "$@" "$cwd/.claude/settings.local.json"
+  top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ] && set -- "$@" "$top/.claude/settings.local.json"
+  common=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && [ -n "$common" ] \\
+    && set -- "$@" "$(dirname "$common")/.claude/settings.local.json"
+fi
+{ grep -Eqs '"skipDangerousModePermissionPrompt"[[:space:]]*:[[:space:]]*true' "$@" \\
+  || grep -Eqs '"bypassPermissionsModeAccepted"[[:space:]]*:[[:space:]]*true' "$profile/.claude.json"; } && echo consent
+true
+`;
 
 /** Exported for tests: the remote command behind {@link verifyClaudeProfile}.
  *  Prints `dir`, `creds` and `consent` for each fact that holds. Consent is
  *  wherever Claude Code itself looks before showing the dialog:
  *  `skipDangerousModePermissionPrompt` in the profile's `settings.json`, the
- *  session directory's `.claude/settings.local.json` or the host's managed
- *  settings, or `bypassPermissionsModeAccepted` (an older record of accepting
- *  the dialog, still honoured) in the profile's `.claude.json`. Managed settings
- *  delivered from a claude.ai organisation are not on disk and cannot be seen. */
-export function buildClaudeProfileProbe(
-  claudeConfigDir: string,
-  cwd?: string,
-  managedSettingsDirs: readonly string[] = MANAGED_SETTINGS_DIRS,
-): string {
-  const file = (name: string) => shq(path.posix.join(claudeConfigDir, name));
-  const isTrue = (name: string) => shq(`"${name}"[[:space:]]*:[[:space:]]*true`);
-  const skipSources = [
-    file("settings.json"),
-    ...(cwd ? [shq(path.posix.join(cwd, ".claude", "settings.local.json"))] : []),
-    // The drop-in glob stays outside the quotes so the remote shell expands it;
-    // with no drop-ins it stays literal and `grep -s` passes over it.
-    ...managedSettingsDirs.flatMap((dir) => [shq(path.posix.join(dir, "managed-settings.json")), `${shq(path.posix.join(dir, "managed-settings.d"))}/*.json`]),
-  ];
-  return [
-    `test -d ${shq(claudeConfigDir)} && echo dir`,
-    `test -s ${file(".credentials.json")} && echo creds`,
-    `{ grep -Eqs ${isTrue("skipDangerousModePermissionPrompt")} ${skipSources.join(" ")} `
-      + `|| grep -Eqs ${isTrue("bypassPermissionsModeAccepted")} ${file(".claude.json")}; } && echo consent`,
-    "true",
-  ].join("; ");
+ *  session's `.claude/settings.local.json` or the host's managed settings, or
+ *  `bypassPermissionsModeAccepted` (an older record of accepting the dialog,
+ *  still honoured) in the profile's `.claude.json`. Managed settings delivered
+ *  from a claude.ai organisation or a macOS MDM profile are not in those files
+ *  and cannot be seen. */
+export function buildClaudeProfileProbe(claudeConfigDir: string, cwd?: string): string {
+  return ["sh", "-c", shq(CLAUDE_PROFILE_PROBE_SCRIPT), "sh", ...[claudeConfigDir, cwd ?? "", ...managedSettingsDirs].map(shq)].join(" ");
 }
 
 /** What is wrong with the profile, from the probe's output. */
