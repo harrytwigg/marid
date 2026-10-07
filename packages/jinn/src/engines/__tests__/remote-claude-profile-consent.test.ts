@@ -166,12 +166,9 @@ describe.skipIf(process.platform === "win32")("the operator's bypass consent tra
   };
 
   it("runs the profile and stages the consent in its --settings", async () => {
-    writeJson(path.join(operatorClaudeDir, "settings.json"), { skipDangerousModePermissionPrompt: true, attribution: { commit: "" } });
+    writeJson(path.join(operatorClaudeDir, "settings.json"), { skipDangerousModePermissionPrompt: true });
     expect((await ready()).ready).toBe(true);
-    const settings = await stagedSettings();
-    expect(settings.skipDangerousModePermissionPrompt).toBe(true);
-    // Only the consent: the operator's other keys describe the gateway's host.
-    expect(settings).not.toHaveProperty("attribution");
+    expect((await stagedSettings()).skipDangerousModePermissionPrompt).toBe(true);
   });
 
   it("never carries a false, which would outrank the profile's own consent", async () => {
@@ -183,6 +180,54 @@ describe.skipIf(process.platform === "win32")("the operator's bypass consent tra
   it("carries nothing into a session on the remote user's default profile", async () => {
     writeJson(path.join(operatorClaudeDir, "settings.json"), { skipDangerousModePermissionPrompt: true });
     expect(await stagedSettings(target({ remoteClaudeConfigDir: undefined }))).not.toHaveProperty("skipDangerousModePermissionPrompt");
+  });
+});
+
+describe.skipIf(process.platform === "win32")("the operator's attribution travels into a remote named-profile session", { timeout: 60_000 }, () => {
+  const attribution = { commit: "", pr: "", sessionUrl: false };
+  const guard = { matcher: "Bash", hooks: [{ type: "command", command: "/gateway-host/hooks/guard.sh" }] };
+
+  const stagedSettings = async (t = target()) => {
+    const readiness = await ready(t);
+    if (!readiness.ready) throw new Error(readiness.reason);
+    const staging = await prepareRemoteSession({ target: t, remote, facts: readiness.facts, engine: "claude", jinnSessionId: "s1", gatewayPort: 40123 });
+    return JSON.parse(fs.readFileSync(staging.settingsPath, "utf-8"));
+  };
+
+  beforeEach(() => {
+    writeJson(path.join(operatorClaudeDir, "settings.json"), {
+      attribution, skipDangerousModePermissionPrompt: true, hooks: { PreToolUse: [guard] }, theme: "dark",
+    });
+  });
+
+  it("stages the operator's attribution in the profile's --settings", async () => {
+    expect((await stagedSettings()).attribution).toEqual(attribution);
+  });
+
+  it("carries it when the profile holds its own consent and the operator gives none", async () => {
+    writeJson(path.join(operatorClaudeDir, "settings.json"), { attribution });
+    writeJson(path.join(profile, "settings.json"), { skipDangerousModePermissionPrompt: true });
+    const settings = await stagedSettings();
+    expect(settings.attribution).toEqual(attribution);
+    expect(settings).not.toHaveProperty("skipDangerousModePermissionPrompt");
+  });
+
+  it("carries an attribution that keeps the trailers, as the operator wrote it", async () => {
+    const custom = { commit: "Co-Authored-By: Example <bot@example.com>" };
+    writeJson(path.join(operatorClaudeDir, "settings.json"), { attribution: custom, skipDangerousModePermissionPrompt: true });
+    expect((await stagedSettings()).attribution).toEqual(custom);
+  });
+
+  it("does not carry the operator's PreToolUse hooks, whose commands name the gateway's host", async () => {
+    const settings = await stagedSettings();
+    expect(settings.hooks.PreToolUse).toHaveLength(1);
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain("s1");
+    expect(JSON.stringify(settings)).not.toContain("guard.sh");
+    expect(settings).not.toHaveProperty("theme");
+  });
+
+  it("carries nothing into a session on the remote user's default profile", async () => {
+    expect(await stagedSettings(target({ remoteClaudeConfigDir: undefined }))).not.toHaveProperty("attribution");
   });
 });
 

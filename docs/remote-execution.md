@@ -179,7 +179,7 @@ appear in front of a PTY with nobody at the keyboard, which hangs the turn. Jinn
 sets the variable itself and runs the plain binary, getting the profile without
 the collateral damage.
 
-Three consequences follow, all handled for you:
+Four consequences follow, all handled for you:
 
 - **The folder-trust seed runs under the same profile.** Claude Code keeps
   `.claude.json` *inside* `CLAUDE_CONFIG_DIR`, so seeding without it writes
@@ -206,6 +206,18 @@ Three consequences follow, all handled for you:
   claude.ai organisation delivers over the network, or a macOS MDM profile
   (`com.anthropic.claudecode`), are not in those files, so a profile relying on
   those alone is refused too: add the setting to its `settings.json`.
+- **Your `attribution` travels; your `PreToolUse` hooks do not.** A local
+  named profile gets three of the gateway's own Claude settings in its
+  `--settings`. A remote one gets two: `attribution` (so commits and PRs carry
+  no Co-Authored-By trailer or "Generated with" line unless you ask for them)
+  and the consent above. `hooks.PreToolUse` stays behind on purpose. Its
+  commands name files on the gateway's host, and Claude Code treats a hook that
+  cannot run (exit 127, command not found) as a non-blocking error, so a carried
+  guard would fail open on every call while looking like protection. A guard
+  you want on the remote belongs in that profile's own `settings.json` on the
+  host, with a command that exists there; the profile's own hooks run alongside
+  the gateway's relay. The remote user's default profile gets none of these: it
+  runs on that user's own settings.
 
 When no profile is configured, `CLAUDE_CONFIG_DIR` is actively *unset* for the
 session, so a stray value in the remote environment cannot silently choose the

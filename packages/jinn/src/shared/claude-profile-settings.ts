@@ -7,8 +7,9 @@ import { logger } from "./logger.js";
 /**
  * The operator's `settings.json` keys a gateway session relies on without
  * carrying them itself. The default profile reads them from the operator's own
- * file; a named profile reads its own directory's file instead, so for it the
- * gateway copies them into the session's `--settings`:
+ * file; a named profile reads its own directory's file instead, so for a local
+ * one the gateway copies them into the session's `--settings` (a remote one gets
+ * only some of them, see `remoteOperatorSettingsCarry`):
  *
  * - `attribution`: no Co-Authored-By trailer or "Generated with" line in
  *   commits and PRs;
@@ -38,10 +39,14 @@ export function operatorSettingsCarry(
  * The carry for a remote session on a named profile (`claudeConfigDir`):
  * undefined for the remote user's default profile, as locally.
  *
- * Only the bypass consent travels, and only when the operator gave it. The
- * PreToolUse hooks name commands on the gateway's host, and a carried `false`
- * would outrank the profile's own consent (`--settings` beats the profile's
- * `settings.json`) and could only put the dialog back in front of the PTY.
+ * `attribution` travels as it does locally: it is text, not a path, and means
+ * the same on any host. The bypass consent travels only when the operator gave
+ * it, since a carried `false` would outrank the profile's own consent
+ * (`--settings` beats the profile's `settings.json`) and could only put the
+ * dialog back in front of the PTY. The PreToolUse hooks do not travel: their
+ * commands name files on the gateway's host, and a guard whose command is
+ * missing on the remote fails open, so carrying it would look like protection
+ * it does not give. The profile's own hooks still run.
  */
 export function remoteOperatorSettingsCarry(
   claudeConfigDir: string | undefined,
@@ -49,7 +54,11 @@ export function remoteOperatorSettingsCarry(
 ): OperatorSettingsCarry | undefined {
   if (!claudeConfigDir) return undefined;
   const data = readOperatorSettings(settingsFile, claudeConfigDir);
-  return data?.skipDangerousModePermissionPrompt === true ? { skipDangerousModePermissionPrompt: true } : {};
+  if (!data) return {};
+  return {
+    ...attributionOf(data),
+    ...(data.skipDangerousModePermissionPrompt === true ? { skipDangerousModePermissionPrompt: true } : {}),
+  };
 }
 
 function readOperatorSettings(settingsFile: string, profileDir: string): Record<string, unknown> | undefined {
