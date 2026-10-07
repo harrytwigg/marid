@@ -53,6 +53,23 @@ describe("Todo routes under gateway.todoDepartments", () => {
     expect(moved.body.workItem.id).toBe(item.id);
   });
 
+  it("will not archive the default department every unclassified create lands in", async () => {
+    const refused = await call("POST", "/api/departments/general/archive", { confirm: true });
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe("department-default");
+  });
+
+  it("an archived allowed department is unselectable and refuses creates", async () => {
+    expect((await call("POST", "/api/departments/labs/archive", { confirm: true })).status).toBe(200);
+    const listed = await call("GET", "/api/departments?includeArchived=true");
+    const labs = (listed.body.departments as Array<{ slug: string; selectable: boolean; archived: boolean }>).find((d) => d.slug === "labs");
+    expect(labs).toMatchObject({ selectable: false, archived: true });
+    const refused = await call("POST", "/api/work-items", { title: "into labs", department: "labs" });
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe("todo_department_archived");
+    expect((await call("POST", "/api/departments/labs/unarchive")).status).toBe(200);
+  });
+
   it("the department listing offers every configured slug, used or not", async () => {
     const listed = await call("GET", "/api/departments");
     expect(listed.status).toBe(200);

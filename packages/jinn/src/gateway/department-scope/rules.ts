@@ -123,6 +123,8 @@ export const REFUSED_ROUTES: Readonly<Record<string, string>> = {
   "/api/work-items/:id/sprint": "sprint administration",
   "/api/work-items/:id/archive": "archiving",
   "/api/departments/:slug": "department administration",
+  "/api/departments/:slug/archive": "department administration",
+  "/api/departments/:slug/unarchive": "department administration",
   "/api/org*": "org administration",
   "/api/plugins*": "plugins",
   "/api/talk*": "talk control",

@@ -75,9 +75,13 @@ export interface DepartmentSummary extends DepartmentRecord {
   /** Live count of Todos currently IN the department (items keep their birth
    *  prefix when moved, so this counts membership, not the ID namespace). */
   todoCount: number;
-  /** False for a registered department outside `gateway.todoDepartments`:
-   *  its Todos still carry its prefix, but nothing new may be put in it. */
+  /** False for an archived department, or a registered one outside
+   *  `gateway.todoDepartments`: its Todos still carry its prefix, but nothing
+   *  new may be put in it. */
   selectable: boolean;
+  /** Archived departments take no new Todos and leave the pickers (department-archive.ts). */
+  archived: boolean;
+  archivedAt: string | null;
 }
 
 /** The `GET /api/departments` surface: registry rows + one GROUP BY count.
@@ -86,20 +90,26 @@ export function listDepartmentsWithCounts(db: DatabaseType, allowed?: readonly s
   return (
     db
       .prepare(
-        `SELECT d.slug, d.prefix, d.created_at, COUNT(w.id) AS todo_count
+        `SELECT d.slug, d.prefix, d.created_at, a.archived_at, COUNT(w.id) AS todo_count
          FROM departments d
+         LEFT JOIN department_archives a ON a.slug = d.slug
          LEFT JOIN work_items w ON w.department = d.slug
          GROUP BY d.slug
          ORDER BY d.slug`,
       )
       .all() as Array<Record<string, unknown>>
-  ).map((row) => ({
-    slug: row.slug as string,
-    prefix: row.prefix as string,
-    createdAt: row.created_at as string,
-    todoCount: Number(row.todo_count),
-    selectable: !allowed || allowed.includes(row.slug as string),
-  }));
+  ).map((row) => {
+    const archivedAt = (row.archived_at as string | null) ?? null;
+    return {
+      slug: row.slug as string,
+      prefix: row.prefix as string,
+      createdAt: row.created_at as string,
+      todoCount: Number(row.todo_count),
+      selectable: archivedAt === null && (!allowed || allowed.includes(row.slug as string)),
+      archived: archivedAt !== null,
+      archivedAt,
+    };
+  });
 }
 
 /** Live spend per department: `SUM(total_cost)` over the sessions linked to its Todos. A Todo's department is its root's (FR-002), so a sub-task counts toward its root's department. */

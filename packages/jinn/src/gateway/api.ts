@@ -226,6 +226,7 @@ import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./wor
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
+import { DepartmentArchivedError } from "../work-items/department-archive.js";
 import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
 import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
@@ -733,6 +734,12 @@ function persistTodoMutationActivity(
  * always rewrite the Todo row itself, but the web surfaces still need a change
  * signal to refetch live. One valueless event per affected item; the client
  * responds by invalidating that item's cached projections. */
+/** A write that would put a Todo into an archived department: a conflict with the
+ *  department's state, not a malformed request, and the same answer on every route. */
+function departmentArchivedRefusal(res: ServerResponse, err: DepartmentArchivedError): void {
+  json(res, { error: err.message, code: "todo_department_archived", department: err.department }, 409);
+}
+
 export function emitTodoProjectionEvent(context: ApiContext, id: string, action: string): void {
   const item = getWorkItem(id);
   if (!item) return;
@@ -2287,6 +2294,7 @@ export async function handleApiRequest(
         if (err instanceof WorkItemCreateIdempotencyConflictError) {
           return json(res, { error: err.message, code: "todo_create_idempotency_conflict", workItemId: err.workItemId }, 409);
         }
+        if (err instanceof DepartmentArchivedError) return departmentArchivedRefusal(res, err);
         return badRequest(res, err instanceof Error ? err.message : String(err));
       }
     }
@@ -2480,6 +2488,7 @@ export async function handleApiRequest(
         if (err instanceof TodoDepartmentNotAllowedError) {
           return todoEditValidationError(res, err.message, "todo_invalid_department");
         }
+        if (err instanceof DepartmentArchivedError) return departmentArchivedRefusal(res, err);
         throw err;
       }
     }
@@ -3173,7 +3182,7 @@ export async function handleApiRequest(
       return json(res, { labels: listLabels() });
     }
 
-    // GET /api/departments, GET and PATCH /api/departments/:slug: registry rows and their definitions.
+    // GET /api/departments, GET and PATCH /api/departments/:slug, POST .../archive and .../unarchive.
     if (await handleDepartmentsApi(req, res, { method, pathname, url }, context)) return;
 
     // POST /api/labels — create a label (operator or a manager: an employee
@@ -3442,6 +3451,7 @@ export async function handleApiRequest(
         } catch (mintErr) {
           if (mintErr instanceof DepartmentBoundaryError) throw mintErr; // 409 with the reason, like every other assignee writer
           if (mintErr instanceof TodoDepartmentNotAllowedError) return badRequest(res, mintErr.message);
+          if (mintErr instanceof DepartmentArchivedError) return departmentArchivedRefusal(res, mintErr);
           logger.warn(`Delegation work-item mint failed: ${mintErr instanceof Error ? mintErr.message : mintErr}`);
           return json(res, { error: "delegation failed before any work started — the work item could not be minted; nothing was spawned" }, 500);
         }

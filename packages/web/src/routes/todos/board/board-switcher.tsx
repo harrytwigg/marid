@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, Globe } from "lucide-react"
+import { Archive, Bell, ChevronDown, Globe } from "lucide-react"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
@@ -21,7 +21,10 @@ import { useBoardMenuCounts } from "./use-board"
  * and the departments follow under their own group label. Order is the whole
  * point: Everything used to sit last, so at fourteen departments the operator
  * had to scroll the menu to reach it. Open counts load lazily
- * when the menu opens. */
+ * when the menu opens.
+ *
+ * Archived departments take no new Todos, so they stay out of the list until
+ * "Show archived" asks for them; their boards and Todos are unchanged. */
 
 const MENU_CLASS =
   "w-[min(300px,calc(100vw-24px))] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
@@ -38,7 +41,12 @@ export interface BoardSwitcherProps {
 export function BoardSwitcher({ board, title, departments, attentionCount }: BoardSwitcherProps) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
   const counts = useBoardMenuCounts(departments, open)
+  const archivedCount = departments?.filter((dept) => dept.archived).length ?? 0
+  // On an archived department's own board the list shows where you are.
+  const onArchived = board.kind === "department" && departments?.some((dept) => dept.slug === board.slug && dept.archived)
+  const listed = departments?.filter((dept) => !dept.archived || showArchived || onArchived) ?? []
 
   const go = (target: BoardId) => {
     if (!isSameBoard(board, target)) navigate(boardPath(target))
@@ -82,7 +90,7 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
             <DropdownMenuLabel className="px-2.5 pb-1 pt-2.5 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
               Departments
             </DropdownMenuLabel>
-            {departments!.map((dept) => (
+            {listed.map((dept) => (
               <DropdownMenuItem
                 key={dept.slug}
                 className={ROW_CLASS}
@@ -95,15 +103,41 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
                 >
                   {dept.prefix}
                 </span>
-                <span className="truncate">{departmentTitle(dept.slug)}</span>
-                <DepartmentScopeBadge scope={dept.scope} />
+                <span className={`truncate ${dept.archived ? "text-[var(--text-tertiary)]" : ""}`}>{departmentTitle(dept.slug)}</span>
+                {dept.archived ? <ArchivedTag /> : <DepartmentScopeBadge scope={dept.scope} />}
                 {countOf(counts.data?.byDepartment[dept.slug])}
               </DropdownMenuItem>
             ))}
+            {archivedCount > 0 && !onArchived && (
+              <DropdownMenuItem
+                className={`${ROW_CLASS} text-[var(--text-secondary)]`}
+                data-testid="board-menu-show-archived"
+                // Keep the menu open: the rows it reveals are what the operator came for.
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setShowArchived((shown) => !shown)
+                }}
+              >
+                <LensIcon of={Archive} />
+                {showArchived ? "Hide archived" : `Show archived (${archivedCount})`}
+              </DropdownMenuItem>
+            )}
           </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/** Marks an archived department wherever one is listed. */
+export function ArchivedTag() {
+  return (
+    <span
+      data-testid="department-archived-tag"
+      className="flex-none rounded-full bg-[var(--fill-tertiary)] px-1.5 py-px text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]"
+    >
+      Archived
+    </span>
   )
 }
 
