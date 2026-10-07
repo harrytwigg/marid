@@ -1,11 +1,17 @@
-import { assertIsolatedTestHome, createIsolatedTestFileHome } from './vitest.test-home.js';
+import {
+  assertIsolatedClaudeConfigDir,
+  assertIsolatedTestHome,
+  createIsolatedTestFileHome,
+} from './vitest.test-home.js';
 
 // setupFiles execute inside each worker before its test module is evaluated.
 // Abort loudly if the pre-worker global setup ever stops propagating its home.
 assertIsolatedTestHome(process.env.JINN_HOME);
 // A safe run-level home still shares SQLite state across forks. Allocate before
 // static imports freeze paths; global teardown removes every file subtree.
+// It also replaces CLAUDE_CONFIG_DIR, so no test reaches the real transcripts.
 createIsolatedTestFileHome();
+assertIsolatedClaudeConfigDir(process.env.CLAUDE_CONFIG_DIR);
 
 /**
  * Scrub gateway/engine env that leaks in when the suite runs from inside a live

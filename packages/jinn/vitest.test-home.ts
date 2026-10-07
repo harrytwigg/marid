@@ -62,6 +62,32 @@ export function assertIsolatedTestHome(home: string | undefined): string {
 }
 
 /**
+ * Fail closed unless Claude Code's config dir is a temp directory of the run's own.
+ *
+ * `CLAUDE_CONFIG_DIR` (else `~/.claude`) holds the operator's credentials and every
+ * transcript Claude Code has written, so a test that cleans a fixture under it
+ * would otherwise clean the real one. A temp path that is still the real home's
+ * `.claude*` (a temp root inside the home) is refused as well.
+ */
+export function assertIsolatedClaudeConfigDir(dir: string | undefined): string {
+  if (!dir) {
+    throw new Error('refusing to run tests with an unset CLAUDE_CONFIG_DIR');
+  }
+
+  const canonicalDir = canonicalPath(dir);
+  const realHome = canonicalPath(os.homedir());
+  const [topLevel] = path.relative(realHome, canonicalDir).split(path.sep);
+  if (isWithin(realHome, canonicalDir) && topLevel.startsWith('.claude')) {
+    throw new Error(`refusing to run tests against the real Claude config dir CLAUDE_CONFIG_DIR=${dir}`);
+  }
+  if (!isTempPath(canonicalDir)) {
+    throw new Error(`refusing to run tests against non-temp CLAUDE_CONFIG_DIR=${dir}`);
+  }
+
+  return canonicalDir;
+}
+
+/**
  * Establish one safe home for the Vitest run. Existing temp homes are accepted
  * for focused/CI runs; unset, production, and other non-temp homes are replaced.
  */
@@ -99,6 +125,15 @@ export function ensureIsolatedTestHome(
  * The home is created beneath the run's temp root, so global teardown removes
  * it with the rest of the run; TMPDIR/TMP/TEMP are repointed inside it so
  * fixture scratch dirs stay in the same cleanup-owned subtree.
+ *
+ * `CLAUDE_CONFIG_DIR` gets the same treatment, whatever the launch environment
+ * set it to: a directory beside the home, so transcripts, skills and
+ * `.claude.json` a test writes or removes are this file's and never the
+ * operator's. It sits outside the home because a profile inside the instance
+ * home is one the gateway refuses. Its `.credentials.json` holds no OAuth pair,
+ * which the launch preflight reads as "cannot tell" and lets through: no test
+ * depends on whether the machine running it is signed in, and none can read a
+ * real token. A test about the login gives itself its own directory.
  */
 export function createIsolatedTestFileHome(env: NodeJS.ProcessEnv = process.env): string {
   assertIsolatedTestHome(env.JINN_HOME);
@@ -111,7 +146,12 @@ export function createIsolatedTestFileHome(env: NodeJS.ProcessEnv = process.env)
   fs.mkdirSync(home);
   const temp = path.join(home, 'tmp');
   fs.mkdirSync(temp);
+  const claudeConfigDir = path.join(base, 'claude');
+  fs.mkdirSync(claudeConfigDir);
+  fs.writeFileSync(path.join(claudeConfigDir, '.credentials.json'), '{}\n');
   env.JINN_HOME = home;
+  env.CLAUDE_CONFIG_DIR = claudeConfigDir;
+  assertIsolatedClaudeConfigDir(env.CLAUDE_CONFIG_DIR);
   for (const key of ['TMPDIR', 'TMP', 'TEMP']) env[key] = temp;
   return home;
 }

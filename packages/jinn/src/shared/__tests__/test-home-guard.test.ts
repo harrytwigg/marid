@@ -4,6 +4,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  assertIsolatedClaudeConfigDir,
   assertIsolatedTestHome,
   canonicalPath,
   createIsolatedTestFileHome,
@@ -15,6 +16,8 @@ import setupVitest from '../../../vitest.global-setup.js';
 import { JINN_HOME, SESSIONS_DB, assertTestRunIsIsolated } from '../paths.js';
 import { assertNotProductionGateway } from '../sandbox-env.js';
 import { initDb } from '../db.js';
+import { claudeProjectsDirFor } from '../claude-profile.js';
+import { readClaudeCredentialStatus } from '../claude-auth.js';
 import { createWorkItem } from '../../work-items/store.js';
 
 const createdHomes: string[] = [];
@@ -146,6 +149,57 @@ describe('Vitest JINN_HOME guard', () => {
 
     expect(row).toEqual({ title: 'test-home guard integration' });
     expect(fs.existsSync(SESSIONS_DB)).toBe(true);
+  });
+});
+
+/**
+ * Claude Code keeps every transcript under `CLAUDE_CONFIG_DIR/projects` (else
+ * `~/.claude/projects`). A test that cleared its fixtures there by removing the
+ * whole directory deleted every conversation on the machine that ran the suite,
+ * and turbo's strict env mode strips CLAUDE_CONFIG_DIR, so `pnpm test` always
+ * reached `~/.claude`. Each worker now gets its own, whatever it was launched with.
+ */
+describe('Vitest CLAUDE_CONFIG_DIR guard', () => {
+  it('points the worker at a temp config dir beside its own home', () => {
+    const configDir = process.env.CLAUDE_CONFIG_DIR!;
+
+    expect(assertIsolatedClaudeConfigDir(configDir)).toBe(canonicalPath(configDir));
+    expect(path.dirname(configDir)).toBe(path.dirname(process.env.JINN_HOME!));
+    expect(claudeProjectsDirFor(null)).toBe(path.join(configDir, 'projects'));
+  });
+
+  it('does not depend on whether the machine running the suite is signed in', () => {
+    expect(readClaudeCredentialStatus({ env: {} })).toEqual({
+      state: 'unknown',
+      path: path.join(process.env.CLAUDE_CONFIG_DIR!, '.credentials.json'),
+    });
+  });
+
+  it('replaces an inherited config dir with a fresh one of its own', () => {
+    const inherited = fs.mkdtempSync(path.join(os.tmpdir(), 'inherited-claude-'));
+    fs.mkdirSync(path.join(inherited, 'projects', '-sentinel'), { recursive: true });
+    const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_CONFIG_DIR: inherited };
+
+    createdHomes.push(createIsolatedTestFileHome(env), inherited);
+
+    expect(env.CLAUDE_CONFIG_DIR).not.toBe(inherited);
+    expect(fs.readdirSync(env.CLAUDE_CONFIG_DIR!)).toEqual(['.credentials.json']);
+    expect(fs.existsSync(path.join(inherited, 'projects', '-sentinel'))).toBe(true);
+  });
+
+  it.each(['.claude', '.claude-friend', path.join('.claude', 'projects')])(
+    'loudly rejects the real home\'s ~/%s',
+    (dir) => {
+      expect(() => assertIsolatedClaudeConfigDir(path.join(os.homedir(), dir)))
+        .toThrow(/refusing to run tests against the real Claude config dir/);
+    },
+  );
+
+  it('loudly rejects an unset or non-temp config dir', () => {
+    expect(() => assertIsolatedClaudeConfigDir(undefined))
+      .toThrow('refusing to run tests with an unset CLAUDE_CONFIG_DIR');
+    expect(() => assertIsolatedClaudeConfigDir(path.join(os.homedir(), 'claude-profile')))
+      .toThrow(/refusing to run tests against non-temp CLAUDE_CONFIG_DIR/);
   });
 });
 
