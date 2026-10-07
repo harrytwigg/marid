@@ -129,8 +129,8 @@ export const BoardCard = memo(function BoardCard({
   const employee = item.assignee ? byName.get(item.assignee) : undefined
   const assigneeName = employee?.displayName ?? item.assignee
   const overdue = !!item.dueAt && Date.parse(item.dueAt) < Date.now()
-  // Shown only while it holds the Todo: a start date that has passed changes nothing.
-  const startsLater = !!item.startAt && Date.parse(item.startAt) > Date.now()
+  // Shown only while it holds the Todo: a first start from the backlog, before the date.
+  const startsLater = item.status === "backlog" && !!item.startAt && Date.parse(item.startAt) > Date.now()
   const addSubTask = useCallback((title: string) => onAddSubTask(item.id, title), [item.id, onAddSubTask])
 
   return (
