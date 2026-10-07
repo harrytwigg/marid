@@ -60,6 +60,11 @@ export function useBoardDrag(
   itemsRef.current = itemsByStatus
   const callbacksRef = useRef(callbacks)
   callbacksRef.current = callbacks
+  // Read through a ref like the callbacks above: `openChildrenOf` changes whenever the
+  // trees query lands, and a lift handler that changed with it would re-render every
+  // memoised card on the board for data none of them shows.
+  const openChildrenRef = useRef(openChildrenOf)
+  openChildrenRef.current = openChildrenOf
 
   const reducedMotion = useMemo(
     () => typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -132,7 +137,7 @@ export function useBoardDrag(
         selectionFeedback()
         const from = item.status
         const legal = new Set<WorkItemStatusWire>([from])
-        const ctx = { openChildren: openChildrenOf(item.id) }
+        const ctx = { openChildren: openChildrenRef.current(item.id) }
         for (const status of Object.keys(itemsRef.current) as WorkItemStatusWire[]) {
           if (canDropOn(from, status, ctx)) legal.add(status)
         }
@@ -235,7 +240,7 @@ export function useBoardDrag(
       window.addEventListener("pointercancel", onCancel)
       window.addEventListener("keydown", onKey)
     },
-    [finishDrag, measure, openChildrenOf],
+    [finishDrag, measure],
   )
 
   useEffect(() => () => {

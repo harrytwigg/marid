@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { api, ctx, makeReq, makeRes, operatorHeaders, store } from "./helpers/work-items-route-harness.js";
+import { api, ctx, dbModule, makeReq, makeRes, operatorHeaders, store } from "./helpers/work-items-route-harness.js";
+import { setDepartmentArchived } from "../../work-items/department-archive.js";
 
 // JIN-1: the routes under a closed `gateway.todoDepartments` policy. The
 // harness's workers sit in org departments `platform` / `marketing`, neither
@@ -51,6 +52,38 @@ describe("Todo routes under gateway.todoDepartments", () => {
     expect(moved.status).toBe(200);
     expect(moved.body.workItem.department).toBe("jinn");
     expect(moved.body.workItem.id).toBe(item.id);
+  });
+
+  it("will not archive the default department every unclassified create lands in", async () => {
+    const refused = await call("POST", "/api/departments/general/archive", { confirm: true });
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe("department-default");
+  });
+
+  it("treats a default archived behind the route's back as no default, for create and assignment alike", async () => {
+    // Config can name a default after it was archived; the route's refusal cannot see that.
+    setDepartmentArchived(dbModule.initDb(), "general", true, "JIN");
+    try {
+      const created = await call("POST", "/api/work-items", { title: "unclassified while general is archived" });
+      expect(created.status).toBe(201);
+      expect(created.body.workItem.department).toBeNull();
+      const assigned = await call("POST", `/api/work-items/${created.body.workItem.id}/assign`, { assignee: "platform-worker" });
+      expect(assigned.status).toBe(200);
+      expect(assigned.body.workItem.department).toBeNull();
+    } finally {
+      setDepartmentArchived(dbModule.initDb(), "general", false, "JIN");
+    }
+  });
+
+  it("an archived allowed department is unselectable and refuses creates", async () => {
+    expect((await call("POST", "/api/departments/labs/archive", { confirm: true })).status).toBe(200);
+    const listed = await call("GET", "/api/departments?includeArchived=true");
+    const labs = (listed.body.departments as Array<{ slug: string; selectable: boolean; archived: boolean }>).find((d) => d.slug === "labs");
+    expect(labs).toMatchObject({ selectable: false, archived: true });
+    const refused = await call("POST", "/api/work-items", { title: "into labs", department: "labs" });
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe("todo_department_archived");
+    expect((await call("POST", "/api/departments/labs/unarchive")).status).toBe(200);
   });
 
   it("the department listing offers every configured slug, used or not", async () => {

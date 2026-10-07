@@ -38,6 +38,7 @@ import {
 } from "./frozen-schemas.js";
 import { reconcileDepartmentRegistry } from "./departments.js";
 import { DEPARTMENT_SCOPES_DDL, DEPARTMENT_SCOPES_TABLE_DDL } from "./department-scopes-schema.js";
+import { DEPARTMENT_ARCHIVES_DDL, DEPARTMENT_ARCHIVES_TABLE_DDL } from "./department-archives-schema.js";
 import { SPRINTS_DDL, SPRINTS_TABLE_DDL, sprintRowsAreSound, WORK_ITEM_SPRINTS_DDL, WORK_ITEM_SPRINTS_TABLE_DDL } from "./sprints-schema.js";
 import { CORRUPT_SESSIONS_DATABASE, isSqliteCorruption, UNSUPPORTED_PRERELEASE_TODO_DATA } from "./migrate-refusals.js";
 
@@ -510,6 +511,7 @@ const REQUIRED_TABLE_SQL = new Map<string, string>([
   ...WORK_ITEM_RECOVERY_TABLES.map((table) => [table.name, table.ddl] as [string, string]),
   ["departments", DEPARTMENTS_TABLE_DDL],
   ["department_scopes", DEPARTMENT_SCOPES_TABLE_DDL],
+  ["department_archives", DEPARTMENT_ARCHIVES_TABLE_DDL],
 ]);
 
 /** Tables added additively AFTER the v2 rebuild first shipped, in ship order. A v2 database whose
@@ -535,6 +537,7 @@ const V2_ADDITIVE_TABLES: ReadonlyArray<{ name: string; ddl: string }> = [
   { name: "sprints", ddl: SPRINTS_DDL }, // before its membership, which references it
   { name: "work_item_sprints", ddl: WORK_ITEM_SPRINTS_DDL },
   { name: "department_scopes", ddl: DEPARTMENT_SCOPES_DDL },
+  { name: "department_archives", ddl: DEPARTMENT_ARCHIVES_DDL }, // after `departments`, which it references
 ].concat(WORK_ITEM_RECOVERY_TABLES);
 /**
  * Copy a shadow-column table's `approval_*` values into `work_item_approvals`,

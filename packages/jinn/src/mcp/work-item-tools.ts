@@ -592,10 +592,10 @@ export function buildWorkItemTools(): JinnMcpTool[] {
   const departments: JinnMcpTool = {
     name: "list_departments",
     description: "List departments with Todo prefixes and counts.",
-    inputSchema: { type: "object", properties: {} },
-    handler: async (_args, ctx) => {
+    inputSchema: { type: "object", properties: { includeArchived: { type: "boolean" } } },
+    handler: async (args, ctx) => {
       assertIdentity(ctx);
-      const { status, body } = await gatewayRequest(ctx, "GET", "/api/departments");
+      const { status, body } = await gatewayRequest(ctx, "GET", args.includeArchived === true ? "/api/departments?includeArchived=true" : "/api/departments");
       if (status >= 400) throw gatewayFailure("listing departments", status, body);
       return body;
     },

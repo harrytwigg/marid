@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { initDb } from '../shared/db.js';
 import { loadConfig } from '../shared/config.js';
 import { CONFIG_PATH } from '../shared/paths.js';
+import { assertDepartmentTakesNewTodos, usableDefaultDepartment } from './department-archive.js';
 import { assertTodoDepartmentAllowed, resolveTodoDepartmentPolicy, type TodoDepartmentPolicy } from '../shared/todo-departments-config.js';
 import { parseTodoId, resolveTodoIdPrefix } from './id.js';
 import { resolveDepartmentPrefix, resolveSubtaskDepartment } from './departments.js';
@@ -331,7 +332,10 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
   // policy with a default, nothing lands unclassified in the company namespace.
   if (input.department !== undefined) assertTodoDepartmentAllowed(departmentPolicy, input.department);
   const named = resolveSubtaskDepartment(parent, input.department, getWorkItem);
-  const department = named ?? departmentPolicy?.defaultDepartment ?? null;
+  const department = named ?? usableDefaultDepartment(db, departmentPolicy?.defaultDepartment);
+  // Every create path lands here — routes, MCP, delegation, cron, plugins — and a
+  // sub-task inheriting an archived parent's department is a new Todo in it too.
+  assertDepartmentTakesNewTodos(db, department);
   assertCreateMayHold(db, parent, department, input.assignee);
   const prefix = department ? resolveDepartmentPrefix(db, department, companyPrefix) : companyPrefix;
   const claim = allocateWorkItemId(db, now, prefix);
@@ -754,6 +758,7 @@ export function updateWorkItemConditional(
     // Leaving a pre-policy department in place is not a reclassification.
     if (typeof input.department === 'string' && input.department !== current.department) {
       assertTodoDepartmentAllowed(resolveTodoDepartments(), input.department);
+      assertDepartmentTakesNewTodos(db, input.department);
     }
 
     let item = current;

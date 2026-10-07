@@ -227,6 +227,7 @@ import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./wor
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
 import { fullWorkItemPayload, openWorkItemPayload, workItemPagePayload } from "./work-item-payload.js";
 import { TodoDepartmentNotAllowedError } from "../shared/todo-departments-config.js";
+import { DepartmentArchivedError, isDepartmentArchived } from "../work-items/department-archive.js";
 import { DepartmentBoundaryError, scopedDepartmentOf } from "../work-items/department-scope.js";
 import { parseStatusUpdateFields } from "./work-item-status-fields.js";
 import { hasOperatorLane, resolveStatusLane, WORK_ITEM_STATUSES } from "./work-item-status-lane.js";
@@ -728,6 +729,17 @@ function persistTodoMutationActivity(
       },
     } : {}),
   });
+}
+
+/** A write that would put a Todo into an archived department: a conflict with the
+ *  department's state, not a malformed request, and the same answer on every route. */
+function departmentArchivedRefusal(res: ServerResponse, err: DepartmentArchivedError): void {
+  json(res, { error: err.message, code: "todo_department_archived", department: err.department }, 409);
+}
+
+/** A delegate's department, or none once it is archived. */
+function unarchivedDepartment(department: string | null | undefined): string | null {
+  return department && !isDepartmentArchived(initDb(), department) ? department : null;
 }
 
 /** ICI-570 — projection lanes (comments, attachments, relations, labels) don't
@@ -2288,6 +2300,7 @@ export async function handleApiRequest(
         if (err instanceof WorkItemCreateIdempotencyConflictError) {
           return json(res, { error: err.message, code: "todo_create_idempotency_conflict", workItemId: err.workItemId }, 409);
         }
+        if (err instanceof DepartmentArchivedError) return departmentArchivedRefusal(res, err);
         return badRequest(res, err instanceof Error ? err.message : String(err));
       }
     }
@@ -2481,6 +2494,7 @@ export async function handleApiRequest(
         if (err instanceof TodoDepartmentNotAllowedError) {
           return todoEditValidationError(res, err.message, "todo_invalid_department");
         }
+        if (err instanceof DepartmentArchivedError) return departmentArchivedRefusal(res, err);
         throw err;
       }
     }
@@ -3174,7 +3188,7 @@ export async function handleApiRequest(
       return json(res, { labels: listLabels() });
     }
 
-    // GET /api/departments, GET and PATCH /api/departments/:slug: registry rows and their definitions.
+    // GET /api/departments, GET and PATCH /api/departments/:slug, POST .../archive and .../unarchive.
     if (await handleDepartmentsApi(req, res, { method, pathname, url }, context)) return;
 
     // POST /api/labels — create a label (operator or a manager: an employee
@@ -3432,7 +3446,9 @@ export async function handleApiRequest(
             assignee: employeeName ?? null,
             // A closed department policy classifies by work, not by who does it: leave it to the
             // store's default, except for a scoped delegate, whose Todo can only be in its department.
-            department: scopedDepartmentOf(employeeName) ?? (resolveTodoDepartments() ? undefined : delegateEmployee?.department ?? null),
+            // An archived delegate department leaves the Todo unclassified, as assignment does; a
+            // scoped one still refuses, since its Todos cannot live anywhere else.
+            department: scopedDepartmentOf(employeeName) ?? (resolveTodoDepartments() ? undefined : unarchivedDepartment(delegateEmployee?.department)),
             // Slice-5 decision 7: the DELEGATING caller is the creator — the
             // operator, or the delegating session's resolved employee slug
             // (`session:<uuid>` only when that session carries no employee).
@@ -3443,6 +3459,7 @@ export async function handleApiRequest(
         } catch (mintErr) {
           if (mintErr instanceof DepartmentBoundaryError) throw mintErr; // 409 with the reason, like every other assignee writer
           if (mintErr instanceof TodoDepartmentNotAllowedError) return badRequest(res, mintErr.message);
+          if (mintErr instanceof DepartmentArchivedError) return departmentArchivedRefusal(res, mintErr);
           logger.warn(`Delegation work-item mint failed: ${mintErr instanceof Error ? mintErr.message : mintErr}`);
           return json(res, { error: "delegation failed before any work started — the work item could not be minted; nothing was spawned" }, 500);
         }
