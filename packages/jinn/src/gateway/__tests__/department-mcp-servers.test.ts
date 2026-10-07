@@ -105,6 +105,13 @@ describe("a department-scoped session's MCP servers", () => {
     expect(serverNames(run("side-dev", "side-project", "no-such-session"))).toEqual(["jinn"]);
   });
 
+  it("are confined by the turn's employee when the session record names no employee and carries no binding", () => {
+    loadOrg();
+    const session = createSession({ engine: "claude", source: "web", sourceRef: "web:anonymous" });
+    expect(session.scopeDepartment).toBeNull();
+    expect(serverNames(run("side-dev", "side-project", session.id))).toEqual(["jinn"]);
+  });
+
   it("name a server the employee's own mcp list asks for that the department does not allow", () => {
     loadOrg();
     const warn = vi.spyOn(logger, "warn");

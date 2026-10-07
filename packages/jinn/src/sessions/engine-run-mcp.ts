@@ -5,6 +5,7 @@ import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.
 import { logger } from "../shared/logger.js";
 import { getSession } from "./registry.js";
 import { sessionScopeDepartment } from "./session-scope.js";
+import { scopedDepartmentOf } from "../work-items/department-scope.js";
 import { buildJinnServerSpec, isMcpCapableEngine, resolveMcpServers, writeMcpConfigFile } from "../mcp/resolver.js";
 
 export interface EngineRunMcp {
@@ -21,8 +22,10 @@ export function resolveEngineRunMcp(opts: {
   if (!isMcpCapableEngine(opts.engine)) return {};
 
   // A department-scoped session gets `jinn` and only the instance servers its
-  // department allow-lists; the binding, else the employee's live scope, decides.
-  const department = sessionScopeDepartment(getSession(opts.sessionId) ?? { employee: opts.employee?.name });
+  // department allow-lists. The session's department (its binding, else its own
+  // employee's scope) decides, and failing that the scope of the employee this
+  // turn runs as: a session record with neither must not lift the confinement.
+  const department = sessionScopeDepartment(getSession(opts.sessionId)) ?? scopedDepartmentOf(opts.employee?.name);
   // A purpose-built toolset is the turn's entire MCP surface: no custom server,
   // no company belt, and no attachment gate, which decides the belt alone. The
   // server keeps the name `jinn` so it is bound to the session like the belt.
