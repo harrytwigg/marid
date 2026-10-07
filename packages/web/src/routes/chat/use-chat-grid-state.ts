@@ -23,8 +23,8 @@ export function withChatlessPanes(base: ChatWorkingSet, layout: SplitLayout | un
   const focused = focusedGroup(layout)
   const focusedPane = focused ? paneKeyOf(focused, layout.focusHistory) : null
   const focusedId = focusedPane && !isChatTabId(focusedPane) ? focusedPane : base.focusedId
-  // The route's chat ranks just behind the focused pane, so a window too small for every pane folds a
-  // chatless one before it: the chat the URL names stays on screen.
+  // The route's chat (the working set's focused one) ranks just behind the focused pane, so a window too
+  // small for every pane folds a chatless one before it.
   const route = base.focusedId && base.focusedId !== focusedId && sessionIds.includes(base.focusedId) ? base.focusedId : null
   const recent = [route, focusedId].filter((id): id is string => Boolean(id))
   const seen = layout.focusHistory.filter((id) => sessionIds.includes(id) && !recent.includes(id))

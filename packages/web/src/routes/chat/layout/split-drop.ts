@@ -70,8 +70,8 @@ function applyTabDrop(layout: SplitLayout, tabId: string, hit: SplitDropHit, con
   if (!groupOfSession(layout, tabId)) return layout
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
   if (!target || hit.region === 'end') return evictToCap(appendTabPane(layout, tabId), dropCap(layout, context))
-  // Dropped back onto its own pane (its only tab): it only focuses, as a chat's own pane does.
-  if (hit.region === 'center' && target.tabs.includes(tabId)) return target.tabs.length === 1 ? showTab(layout, tabId) : placeTab(layout, target.id, tabId)
+  // Dropped back onto the pane showing it: it only focuses, as a chat's own pane does.
+  if (hit.region === 'center' && target.activeTab === tabId) return showTab(layout, tabId)
   if (hit.region === 'center') return evictToCap(placeTab(layout, target.id, tabId), dropCap(layout, context), target.tabs)
   return splitAt(layout, target, hit.region, tabId, context)
 }

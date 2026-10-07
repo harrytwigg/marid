@@ -206,8 +206,9 @@ function arrangedPlacement(root: LayoutNode, input: GeometryInput): Placement {
 
 /**
  * Groups placed by a pruned tree, least recently focused first; the focused one never. The group
- * holding the route's chat goes last: with a pane that has no chat focused (a document, a new chat),
- * the chat the URL names is the one the operator is still working in, so the others fold first.
+ * holding the route's chat (the working set's focused one) goes last: with a pane that has no chat
+ * focused (a document, a new chat), that chat is the one the operator is still working in, so the
+ * others fold first.
  */
 function foldCandidates(layout: SplitLayout, root: LayoutNode): string[] {
   const route = workingSetFromLayout(layout).focusedId

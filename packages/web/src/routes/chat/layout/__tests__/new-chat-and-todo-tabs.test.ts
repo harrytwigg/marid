@@ -28,6 +28,7 @@ import {
   pruneSessions,
   replaceSession,
   routeSessionOf,
+  showTab,
   splitGroup,
   workingSetFromLayout,
   type SplitLayout,
@@ -223,4 +224,14 @@ describe('moving the layout\'s only chat', () => {
     const added = applySplitDrop(layout, 'b', { region: 'right', key: two, groupId: groupOfSession(layout, two)!.id }, { columns: 3, cap: 2 })
     expect(groupsOf(added)).toHaveLength(groupsOf(layout).length)
   })
+})
+
+it('a document dropped on the middle of the pane showing it keeps its strip order', () => {
+  const one = todoTabId('ACM-1')
+  const two = todoTabId('ACM-2')
+  const layout = showTab(openDocTab(openDocTab(createSplitLayout(['a'], 'a'), 'a', one), 'a', two), one)
+  const group = groupOfSession(layout, one)!
+  const dropped = applySplitDrop(layout, one, { region: 'center', key: 'a', groupId: group.id }, { columns: 1, cap: 4 })
+  expect(groupOfSession(dropped, one)!.tabs).toEqual(group.tabs)
+  expect(groupOfSession(dropped, one)!.activeTab).toBe(one)
 })
