@@ -125,15 +125,62 @@ describe("a resumed turn whose process never started its session", () => {
     expect(recovered.transportMeta?.["lostConversationEngine"]).toBeUndefined();
   });
 
-  it("counts the transcript delivered once the fresh conversation started, even if its turn then failed", async () => {
-    const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
-    const { session } = await twoTurns(
-      engineResult({ sessionId: "native-1", error }),
-      engineResult({ sessionId: "native-2", error: "claude exited mid-turn (code 1)", cost: 0.01, numTurns: 1 }),
-    );
+  describe("a fresh conversation's turn that fails after starting", () => {
+    const lost = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
 
-    expect(session).toMatchObject({ status: "error" });
-    expect(session.transportMeta?.["lostConversationEngine"]).toBeUndefined();
+    /** "one" answers, "two" loses native-1 and its retry gets `retry`, then "three" is sent. */
+    async function afterRetry(retry: EngineResult | ((sessionId: string) => EngineResult)) {
+      let sessionId = "";
+      const results: Array<EngineResult | ((sessionId: string) => EngineResult)> = [
+        engineResult({ sessionId: "native-1", result: "hello", cost: 0.01, numTurns: 1 }),
+        engineResult({ sessionId: "native-1", error: lost }),
+        retry,
+        engineResult({ sessionId: "native-3", result: "back", cost: 0.01, numTurns: 1 }),
+      ];
+      const calls: Array<{ resume?: string; prompt: string }> = [];
+      const claude = scriptedEngine("claude", []);
+      claude.run = async (opts: { sessionId?: string; resumeSessionId?: string; prompt?: string }) => {
+        claude.runs += 1;
+        calls.push({ resume: opts.resumeSessionId, prompt: opts.prompt ?? "" });
+        const next = results.shift()!;
+        return typeof next === "function" ? next(sessionId) : next;
+      };
+      const manager = new ManagerClass(testConfig(), new Map([["claude", claude]]) as never, "start-failure-boot");
+      const key = `stub:start-failure-${Math.random().toString(16).slice(2)}`;
+      const first = await manager.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
+      sessionId = first!.sessionId;
+      await manager.route(connectorMessage(key, "two"), connectorStub(), { employee: employee as never });
+      const afterTwo = registry.getSession(sessionId)!;
+      await manager.route(connectorMessage(key, "three"), connectorStub(), { employee: employee as never });
+      return { afterTwo, third: calls[3]! };
+    }
+
+    it("still owes the transcript when it did no work", async () => {
+      const { afterTwo, third } = await afterRetry(engineResult({ error: "Interactive engine: a turn is already running for this session" }));
+
+      expect(afterTwo.transportMeta?.["lostConversationEngine"]).toBe("claude");
+      expect(third.resume).toBeUndefined();
+      expect(third.prompt).toContain("could not be resumed");
+      expect(third.prompt).toMatch(/CURRENT MESSAGE:\nthree$/);
+    });
+
+    it("still owes the transcript when nothing filed the conversation it started", async () => {
+      const { afterTwo, third } = await afterRetry(engineResult({ sessionId: "native-2", error: "exited mid-turn (code 1)", cost: 0.01, numTurns: 1 }));
+
+      expect(afterTwo.transportMeta?.["lostConversationEngine"]).toBe("claude");
+      expect(third.resume).toBeUndefined();
+      expect(third.prompt).toContain("could not be resumed");
+    });
+
+    it("has delivered it once the conversation it started is filed, as Claude Code's SessionStart hook files it", async () => {
+      const { afterTwo, third } = await afterRetry((sessionId) => {
+        registry.recordEngineSessionId(sessionId, "claude", "native-2");
+        return engineResult({ sessionId: "native-2", error: "exited mid-turn (code 1)", cost: 0.01, numTurns: 1 });
+      });
+
+      expect(afterTwo.transportMeta?.["lostConversationEngine"]).toBeUndefined();
+      expect(third).toEqual({ resume: "native-2", prompt: "three" });
+    });
   });
 
   it("does not re-run /compact in a fresh conversation, which would have nothing to compact", async () => {

@@ -367,7 +367,7 @@ function transcriptLines(messages: LoggedMessage[], unseen: string[]): string[] 
 /** One message as a transcript line, or nothing for a row the transcript leaves out. */
 function transcriptLine(message: LoggedMessage, unseen: string[]): string | undefined {
   if (message.partial || message.toolCall) return undefined;
-  const label = TRANSCRIPT_LABELS.get(message.role);
+  const label = message.role === "notification" ? notificationLabel(message) : TRANSCRIPT_LABELS.get(message.role);
   const text = engineText(message);
   // A held interrupted prompt is asked for after the transcript instead.
   if (!label || (message.role === "user" && unseen.includes(text))) return undefined;
@@ -377,8 +377,15 @@ function transcriptLine(message: LoggedMessage, unseen: string[]): string | unde
 const TRANSCRIPT_LABELS = new Map([
   ["user", "USER"],
   ["assistant", "ASSISTANT"],
-  ["notification", "MESSAGE FROM ANOTHER SESSION"],
 ]);
+
+/** Notification kinds that are a message from another session; any other is the gateway's own notice. */
+const FROM_ANOTHER_SESSION = new Set(["agent-relay", "child-reply", "child-error"]);
+
+function notificationLabel(message: LoggedMessage): string {
+  const kind = message.meta?.["kind"];
+  return typeof kind === "string" && FROM_ANOTHER_SESSION.has(kind) ? "MESSAGE FROM ANOTHER SESSION" : "NOTICE";
+}
 
 /** `text` cut to at most `max` UTF-8 bytes, marked where it was cut. */
 function clipToBytes(text: string, max: number): string {

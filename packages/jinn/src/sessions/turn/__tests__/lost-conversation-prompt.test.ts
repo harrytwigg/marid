@@ -39,13 +39,13 @@ describe("resolveLostConversationPrompt", () => {
     messages.open = { prompts: [], messageIds: new Set() };
   });
 
-  it("carries the conversation so far, with other sessions' messages in full, and no tool rows or partial blocks", () => {
+  it("carries the conversation so far, with other sessions' messages in full and the gateway's notices as such, and no tool rows or partial blocks", () => {
     messages.rows = [
       { role: "user", content: "fix the parser", timestamp: at(1) },
       { role: "assistant", content: "Used Bash", toolCall: "Bash", timestamp: at(2) },
       { role: "assistant", content: "Asked QA.", timestamp: at(3) },
-      { role: "notification", content: "QA replied", meta: { fullMessage: "Changes required: parser.ts:12 drops the last token." }, timestamp: at(4) },
-      { role: "notification", content: "a reminder with no full text", timestamp: at(5) },
+      { role: "notification", content: "QA replied", meta: { kind: "agent-relay", fullMessage: "Changes required: parser.ts:12 drops the last token." }, timestamp: at(4) },
+      { role: "notification", content: "Compaction confirmed.", timestamp: at(5) },
       { role: "assistant", content: "half a thought", partial: true, timestamp: at(6) },
       { role: "assistant", content: "Fixed parser.ts:12 as QA asked.", timestamp: at(7) },
       { role: "user", content: "now open the PR", timestamp: at(8) },
@@ -57,7 +57,7 @@ describe("resolveLostConversationPrompt", () => {
       "USER: fix the parser",
       "ASSISTANT: Asked QA.",
       "MESSAGE FROM ANOTHER SESSION: Changes required: parser.ts:12 drops the last token.",
-      "MESSAGE FROM ANOTHER SESSION: a reminder with no full text",
+      "NOTICE: Compaction confirmed.",
       "ASSISTANT: Fixed parser.ts:12 as QA asked.",
       "CURRENT MESSAGE:\nnow open the PR",
     ].join("\n\n"));
