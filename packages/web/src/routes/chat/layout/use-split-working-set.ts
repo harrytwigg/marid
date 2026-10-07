@@ -14,11 +14,13 @@ import {
   equalizeSplit,
   evictToCap,
   focusedGroup,
+  focusGroupOfTab,
   focusSession,
   groupOfSession,
   groupsOf,
   materializeLayout,
-  openFileTab,
+  openDocTab,
+  openNewChatTab,
   openInFocusedGroup,
   pinTab,
   placeTab,
@@ -30,7 +32,9 @@ import {
   type SplitLayout,
 } from './split-layout'
 import { loadSplitLayout, persistSplitLayout } from './split-layout-storage'
-import { fileTabId, isFileTabId, type FileTabRef } from './file-tab'
+import { fileTabId, type FileTabRef } from './file-tab'
+import { isChatTabId, isNewChatTabId, todoTabId } from './tab-kind'
+import { forgetNewChatDraft } from '@/components/chat/use-chat-draft'
 import { capWindowWidth, savedSidebarWidth } from '../sidebar-width-store'
 import { applySplitDrop, type SplitDropContext } from './split-drop'
 import type { SplitDropHit } from './split-geometry'
@@ -50,12 +54,12 @@ function sameOrder(a: readonly string[], b: readonly string[]): boolean {
  * upstream grid, a test seeding it — and then that list is the newer truth and the layout is
  * rebuilt from it, unarranged. An absent key is not a disagreement (cleared site data, a first
  * run): the layout stands, and neither is a session deleted since. The cap is left to
- * evictToCap so a window that shrank since does not count as disagreement either. File tabs are
- * not sessions and are kept; they go with their group if every chat in it was deleted.
+ * evictToCap so a window that shrank since does not count as disagreement either. Tabs of other
+ * kinds are not sessions and are kept; they go with their group if every chat in it was deleted.
  */
 export function hydrateSplitLayout(storage: Pick<Storage, 'getItem'>, liveIds: ReadonlySet<string>, cap: number): SplitLayout {
   const unpruned = loadSplitLayout(storage)
-  const stored = pruneSessions(unpruned, (id) => isFileTabId(id) || liveIds.has(id))
+  const stored = pruneSessions(unpruned, (id) => liveIds.has(id))
   let raw: string | null = null
   try {
     raw = storage.getItem(WORKING_SET_STORAGE_KEY)
@@ -77,15 +81,17 @@ export function hydrateSplitLayout(storage: Pick<Storage, 'getItem'>, liveIds: R
 
 const NO_IDS: ReadonlySet<string> = new Set()
 
-function fileOnlyFocused(layout: SplitLayout): boolean {
+/** The focused pane shows no chat (a document-only pane, a new chat's, a new chat shown over a chat):
+ * the route may be on another pane's chat, and is not focused over it. */
+function chatlessFocused(layout: SplitLayout): boolean {
   const focused = focusedGroup(layout)
-  return focused !== null && focused.tabs.every(isFileTabId)
+  return focused !== null && !isChatTabId(focused.activeTab)
 }
 
 /** The chats the stored layout holds that the session list no longer does: deleted while the page
  * was closed, which is what hydration prunes them for. */
 export function deletedWhileClosed(storage: Pick<Storage, 'getItem'>, liveIds: ReadonlySet<string>): ReadonlySet<string> {
-  const dead = groupsOf(loadSplitLayout(storage)).flatMap((group) => group.tabs).filter((id) => !isFileTabId(id) && !liveIds.has(id))
+  const dead = groupsOf(loadSplitLayout(storage)).flatMap((group) => group.tabs).filter((id) => isChatTabId(id) && !liveIds.has(id))
   return dead.length ? new Set(dead) : NO_IDS
 }
 
@@ -102,18 +108,31 @@ export interface SplitLayoutControls {
   pin: (sessionId: string) => void
   /** Shows a tab in its group, file or chat; focusing a chat would keep a file shown over it. */
   show: (tabId: string) => void
+  /** Focuses the pane holding a tab without changing the tab it shows (a pane with no chat). */
+  focusPane: (tabId: string) => void
 }
 
 /**
  * The layout as shown: the URL's chat opened in it, ahead of the effect that commits that. A focused
- * file-only pane has no chat, so the route stays on the last one while the pane holds focus: the
- * chat the URL names is already in the layout, and is not focused over it.
+ * pane showing no chat (a document-only pane, a new chat) may leave the route on another chat while
+ * it holds focus: the chat the URL names is already in the layout, and is not focused over it.
  */
 function useProjection(committedId: string | null, hydratedRef: { current: boolean }, deadRef: { current: ReadonlySet<string> }) {
   return useCallback((current: SplitLayout) => {
     if (!hydratedRef.current || !committedId || deadRef.current.has(committedId)) return current
-    return fileOnlyFocused(current) && groupOfSession(current, committedId) ? current : openInFocusedGroup(current, committedId)
+    return chatlessFocused(current) && groupOfSession(current, committedId) ? current : openInFocusedGroup(current, committedId)
   }, [committedId, deadRef, hydratedRef])
+}
+
+/** A new chat tab's draft goes with the tab: closing it abandons the draft, as closing a browser tab
+ * would, and a later tab minted with the same id (ids restart with an emptied layout) starts blank. */
+function useForgetClosedNewChats(layout: SplitLayout) {
+  const previous = useRef<ReadonlySet<string>>(new Set())
+  useEffect(() => {
+    const open = new Set(groupsOf(layout).flatMap((group) => group.tabs).filter(isNewChatTabId))
+    for (const tabId of previous.current) if (!open.has(tabId)) forgetNewChatDraft(tabId)
+    previous.current = open
+  }, [layout])
 }
 
 /** Hydrates once the session list is known, then lets the URL drive the focused pane, exactly
@@ -156,6 +175,7 @@ function useLayoutSync(
   // The URL selection lands in the layout from an effect, a commit after the grid already
   // shows it (use-chat-grid-state.ts substitutes it synchronously). Rendering from the
   // projected layout keeps that one commit from laying the newcomer out as a stray column.
+  useForgetClosedNewChats(layout)
   const project = useProjection(committedId, hydratedRef, deadRef)
   const shown = useMemo(() => project(layout), [layout, project])
   const state = useMemo(() => workingSetFromLayout(shown), [shown])
@@ -185,7 +205,40 @@ function useSplitControls(
   const close = useCallback((sessionId: string) => setLayout((current) => closeSession(current, sessionId)), [setLayout])
   const pin = useCallback((sessionId: string) => setLayout((current) => pinTab(current, sessionId)), [setLayout])
   const show = useCallback((tabId: string) => setLayout((current) => showTab(current, tabId)), [setLayout])
-  return useMemo(() => ({ layout, resize, equalize, place, close, pin, show }), [close, equalize, layout, pin, place, resize, show])
+  const focusPane = useCallback((tabId: string) => setLayout((current) => focusGroupOfTab(current, tabId)), [setLayout])
+  return useMemo(() => ({ layout, resize, equalize, place, close, pin, show, focusPane }), [close, equalize, focusPane, layout, pin, place, resize, show])
+}
+
+/** The page's openers for tabs other than the route's chat: a file or a Todo beside a chat, a new chat. */
+function useTabOpeners(
+  shown: SplitLayout,
+  hydrated: boolean,
+  project: (layout: SplitLayout) => SplitLayout,
+  setLayout: Dispatch<SetStateAction<SplitLayout>>,
+) {
+  /** Opens a file preview as a tab beside `ownerSessionId`'s chat (else the focused one), on the
+   *  layout as shown (the URL's chat in it). False when there is no chat on screen to open it
+   *  beside, or the stored layout has yet to load over this one, so the caller can fall back: until
+   *  the session list first loads (or if it never does) links open in a browser tab, as they did
+   *  before file tabs, rather than land in a layout hydration is about to replace. */
+  const openDoc = useCallback((ownerSessionId: string | null, tabId: string) => {
+    if (!hydrated || (openDocTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId))) return false
+    setLayout((current) => openDocTab(project(current), ownerSessionId, tabId))
+    return true
+  }, [hydrated, project, shown])
+  const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => openDoc(ownerSessionId, fileTabId(file)), [openDoc])
+  /** A Todo opened as a tab beside the chat that linked it, as openFile does for a file. */
+  const openTodo = useCallback((ownerSessionId: string | null, todoId: string) => openDoc(ownerSessionId, todoTabId(todoId)), [openDoc])
+  /** A new chat (addressed to `employee`, if given) as a tab of the focused pane. False when the layout
+   *  holds no chat to open it beside, or has yet to load, so the caller falls back to the route's own
+   *  composer. */
+  const openNewChat = useCallback((employee: string | null) => {
+    if (!hydrated || !groupsOf(shown).some((group) => group.tabs.some(isChatTabId))) return false
+    setLayout((current) => openNewChatTab(project(current), employee))
+    return true
+  }, [hydrated, project, shown])
+
+  return { openFile, openTodo, openNewChat }
 }
 
 /**
@@ -219,17 +272,7 @@ export function useSplitWorkingSet(
    * prediction (removeWorkingSetSession on `state`) cannot see a group's hidden tabs, which is
    * what the pane falls back to. */
   const afterRemove = useCallback((sessionId: string) => workingSetFromLayout(closeSession(shown, sessionId)), [shown])
-  /** Opens a file preview as a tab beside `ownerSessionId`'s chat (else the focused one), on the
-   *  layout as shown (the URL's chat in it). False when there is no chat on screen to open it
-   *  beside, or the stored layout has yet to load over this one, so the caller can fall back: until
-   *  the session list first loads (or if it never does) links open in a browser tab, as they did
-   *  before file tabs, rather than land in a layout hydration is about to replace. */
-  const openFile = useCallback((ownerSessionId: string | null, file: FileTabRef) => {
-    const tabId = fileTabId(file)
-    if (!hydrated || (openFileTab(shown, ownerSessionId, tabId) === shown && !groupOfSession(shown, tabId))) return false
-    setLayout((current) => openFileTab(project(current), ownerSessionId, tabId))
-    return true
-  }, [hydrated, project, shown])
+  const { openFile, openTodo, openNewChat } = useTabOpeners(shown, hydrated, project, setLayout)
 
-  return { state, add, focus, remove, drop, split, afterRemove, openFile }
+  return { state, add, focus, remove, drop, split, afterRemove, openFile, openTodo, openNewChat, hydrated }
 }

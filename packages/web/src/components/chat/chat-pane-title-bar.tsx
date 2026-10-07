@@ -1,6 +1,6 @@
 import { ChevronLeft, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { usePaneTabsStrip } from '@/components/chat/pane-tabs-context'
+import { usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { ChatPaneSessionMenu } from '@/components/chat/chat-pane-session-menu'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { splitTitleId } from '@/components/chat/chat-tabs'
@@ -135,10 +135,12 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
   const visibleTitle = renamedTitle ?? title
   const { id, rest } = splitTitleId(visibleTitle)
   const tabs = usePaneTabsStrip(session.id)
+  const drag = usePaneTitleDrag(session.id)
 
   return (
     <div
       data-testid="chat-pane-title-bar"
+      {...drag}
       className={`flex h-[34px] shrink-0 items-center gap-2 px-[8px] pl-[12px] transition-colors duration-[var(--duration-fast)] ${active ? 'bg-[var(--fill-secondary)]' : 'bg-transparent'}`}
     >
       {backTo ? (

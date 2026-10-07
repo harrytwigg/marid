@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode, type RefCallback } from 'react'
 import type { ChatGrid } from '../chat-grid'
 import { useChatGridMotion } from '../use-chat-grid-motion'
-import { focusedGroup, paneKeyOf, setVisibleSplitSizes } from './split-layout'
-import { isFileTabId } from './file-tab'
-import { usePaneTabsFilePane } from '@/components/chat/pane-tabs-context'
+import { focusedGroup, paneKeyOf, paneSessionForTab, setVisibleSplitSizes } from './split-layout'
+import { isChatTabId, isDocTabId } from './tab-kind'
+import { usePaneTabsDocPane } from '@/components/chat/pane-tabs-context'
 import { splitGeometry, type Rect, type SplitHandle } from './split-geometry'
 import { PaneTabsProvider } from './pane-tabs-provider'
 import { useTabSwitchedIn } from './pane-tab-switch'
@@ -108,20 +108,28 @@ export function SplitChatGrid(props: ChatGridProps) {
 }
 
 /**
- * The grid's props with the file-only panes handled here: a file pane's key is a file tab id, no
- * session, so the page's chat renderer and focus handler never see one. Focusing it shows its tab
- * and focuses its group (the route stays on the last chat), and while it holds focus it is the
- * active pane, which the page's focused chat is not.
+ * The grid's props with the panes that have no chat handled here: a document-only pane's key is its
+ * document's tab id and a new chat's is its own, neither a session, so the page's focus handler never
+ * sees one. Focusing such a pane focuses its group, keeping the tab it shows; the route moves to a
+ * chat the group holds under it, else stays on the last chat, and while it holds focus it is the active pane, which the page's focused chat is not. A
+ * document pane is rendered here; a new chat's is a composer, which the page renders.
  */
-function useFilePaneProps(props: ChatGridProps, split: SplitLayoutControls): Pick<ChatGridProps, 'focusedId' | 'onFocus' | 'renderPane'> {
-  const renderFilePane = usePaneTabsFilePane()
+function useChatlessPaneProps(props: ChatGridProps, split: SplitLayoutControls): Pick<ChatGridProps, 'focusedId' | 'onFocus' | 'renderPane'> {
+  const renderDocPane = usePaneTabsDocPane()
   const focused = focusedGroup(split.layout)
   const focusedPaneKey = focused ? paneKeyOf(focused, split.layout.focusHistory) : null
   const { onFocus, renderPane } = props
   return {
-    focusedId: focusedPaneKey && isFileTabId(focusedPaneKey) ? focusedPaneKey : props.focusedId,
-    onFocus: (key) => (isFileTabId(key) ? split.show(key) : onFocus(key)),
-    renderPane: (key, active) => (isFileTabId(key) ? renderFilePane(key) : renderPane(key, active)),
+    focusedId: focusedPaneKey && !isChatTabId(focusedPaneKey) ? focusedPaneKey : props.focusedId,
+    onFocus: (key) => {
+      if (isChatTabId(key)) return onFocus(key)
+      // The key is the pane's tab when it was drawn; its strip may have just shown another one.
+      split.focusPane(key)
+      // A new chat or document shown over a chat makes that chat the route's, as the chat's own pane does.
+      const chat = paneSessionForTab(split.layout, key)
+      if (chat) onFocus(chat)
+    },
+    renderPane: (key, active) => (isDocTabId(key) ? renderDocPane(key) : renderPane(key, active)),
   }
 }
 
@@ -181,7 +189,7 @@ function SplitHandles({ handles, columns, split, setDrag }: {
 }
 
 function SplitLayoutGrid(binding: ChatGridProps & SplitGridBinding) {
-  const props = { ...binding, ...useFilePaneProps(binding, binding.split) }
+  const props = { ...binding, ...useChatlessPaneProps(binding, binding.split) }
   const { sessionIds, focusedId, onFocus, renderPane, split } = props
   const motion = useChatGridMotion(sessionIds)
   const grid = useGridNode(motion.gridRef)

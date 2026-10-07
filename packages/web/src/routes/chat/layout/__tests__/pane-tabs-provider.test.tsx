@@ -1,9 +1,10 @@
 import { useReducer } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { PaneTabsContext, usePaneTabsFilePane, usePaneTabsKeep, usePaneTabsStrip } from '@/components/chat/pane-tabs-context'
+import { PaneTabsContext, usePaneTabsDocPane, usePaneTabsKeep, usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { PaneTabsProvider } from '../pane-tabs-provider'
-import { closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openFileTab, openInFocusedGroup, pinTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
+import { closeSession, createSplitLayout, findGroup, focusSession, groupOfSession, groupsOf, materializeLayout, openDocTab, openInFocusedGroup, openNewChatTab, pinTab, placeTab, showTab, splitGroup, type SplitLayout } from '../split-layout'
+import { isNewChatTabId, todoTabId } from '../tab-kind'
 import { fileTabId } from '../file-tab'
 import { CHAT_SESSION_DND_MIME } from '../../chat-session-dnd'
 import { PANE_TAB_DND_MIME } from '../pane-tab-dnd'
@@ -15,11 +16,19 @@ function dropOn(target: Element, data: Record<string, string>) {
   Object.assign(event, { dataTransfer, clientX: 10_000 })
   act(() => { target.dispatchEvent(event) })
 }
-import { usePaneShownFile } from '@/components/chat/pane-tabs-context'
+import { usePaneShownDoc } from '@/components/chat/pane-tabs-context'
 import type { SplitLayoutControls } from '../use-split-working-set'
 
 vi.mock('@/components/chat/file-view', () => ({
   FileView: ({ path }: { path: string }) => <div data-testid="file-view">{path}</div>,
+}))
+
+vi.mock('@/components/peek/todo-tab-view', () => ({
+  TodoTabView: ({ todoId }: { todoId: string }) => <div data-testid="todo-view">{todoId}</div>,
+}))
+
+vi.mock('@/lib/todo-preview', () => ({
+  useTodoPreview: () => ({ data: { workItem: { title: 'Write the notes' } } }),
 }))
 
 vi.mock('@/hooks/use-sessions', () => ({
@@ -45,6 +54,7 @@ function harness(start: SplitLayout) {
     close: (id) => set(closeSession(layout, id)),
     pin: (id) => { if (pinTab(layout, id) !== layout) set(pinTab(layout, id)) },
     show: (id) => { if (showTab(layout, id) !== layout) set(showTab(layout, id)) },
+    focusPane: vi.fn(),
   } as SplitLayoutControls)
   return { onSelect, controls, set, get layout() { return layout }, bind: (fn: () => void) => { rerender = fn } }
 }
@@ -52,14 +62,19 @@ function harness(start: SplitLayout) {
 function Probe({ sessionId, keepId }: { sessionId: string; keepId?: string }) {
   const strip = usePaneTabsStrip(sessionId)
   const keep = usePaneTabsKeep()
-  const file = usePaneShownFile(sessionId)
+  const file = usePaneShownDoc(sessionId)
   return (
     <div>
       {strip}
-      {file ? <output data-testid="shown-file">{file.path}</output> : null}
+      {file?.kind === 'file' ? <output data-testid="shown-file">{file.file.path}</output> : null}
+      {file?.kind === 'todo' ? <output data-testid="shown-todo">{file.todoId}</output> : null}
       <button type="button" onClick={() => keepId && keep(keepId)}>work</button>
     </div>
   )
+}
+
+function TitleDragProbe({ tabId }: { tabId: string }) {
+  return <output data-testid={`drag-${tabId}`}>{String(usePaneTitleDrag(tabId)?.draggable ?? false)}</output>
 }
 
 function Mount({ h, sessionId, keepId }: { h: ReturnType<typeof harness>; sessionId: string; keepId?: string }) {
@@ -141,7 +156,7 @@ describe('PaneTabsProvider', () => {
   it('shows a file tab beside its chat, the chat staying the route', () => {
     const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
     // Opened from chat a, which is shown beside the file even though x was the shown tab.
-    const h = harness(openFileTab(twoTabs(), 'a', report))
+    const h = harness(openDocTab(twoTabs(), 'a', report))
     expect(groupsOf(h.layout)[0].tabs).toEqual(['a', report, 'x'])
     render(<Mount h={h} sessionId="a" />)
 
@@ -169,7 +184,7 @@ describe('PaneTabsProvider', () => {
 
   it('closing the chat a file is shown over moves the route to the chat left in the pane', () => {
     const report = fileTabId({ path: 'docs/report.md', sessionId: 'x' })
-    const h = harness(openFileTab(twoTabs(), 'x', report))
+    const h = harness(openDocTab(twoTabs(), 'x', report))
     render(<Mount h={h} sessionId="x" />)
     fireEvent.click(screen.getByLabelText('Close tab Xray'))
     expect(groupsOf(h.layout)[0].tabs).toEqual(['a', report])
@@ -178,7 +193,7 @@ describe('PaneTabsProvider', () => {
 
   it('a sidebar chat dropped into the strip is shown and becomes the route', () => {
     const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
-    const h = harness(openFileTab(createSplitLayout(['a'], 'a'), 'a', report))
+    const h = harness(openDocTab(createSplitLayout(['a'], 'a'), 'a', report))
     render(<Mount h={h} sessionId="a" />)
     dropOn(screen.getByTestId('pane-tab-strip'), { [CHAT_SESSION_DND_MIME]: 'x' })
     expect(groupsOf(h.layout)[0]).toMatchObject({ tabs: ['a', report, 'x'], activeTab: 'x' })
@@ -187,7 +202,7 @@ describe('PaneTabsProvider', () => {
 
   it('a file tab dragged into another pane routes to that pane\'s chat', () => {
     const report = fileTabId({ path: 'docs/report.md', sessionId: 'a' })
-    const start = focusSession(openFileTab(createSplitLayout(['a', 'x'], 'a'), 'a', report), 'x')
+    const start = focusSession(openDocTab(createSplitLayout(['a', 'x'], 'a'), 'a', report), 'x')
     const h = harness(placeTab(start, groupsOf(start)[1].id, 'b'))
     const [source, target] = groupsOf(h.layout)
     render(<Mount h={h} sessionId="b" />)
@@ -201,12 +216,12 @@ describe('PaneTabsProvider', () => {
 
     /** a | x arranged, the report split out between them. */
     function splitOut() {
-      const arranged = openFileTab(materializeLayout(createSplitLayout(['a', 'x'], 'a'), 2), 'a', report)
+      const arranged = openDocTab(materializeLayout(createSplitLayout(['a', 'x'], 'a'), 2), 'a', report)
       return splitGroup(arranged, groupOfSession(arranged, 'a')!.id, 'right', report)
     }
 
     function FilePaneProbe({ paneKey }: { paneKey: string }) {
-      return <div>{usePaneTabsFilePane()(paneKey)}</div>
+      return <div>{usePaneTabsDocPane()(paneKey)}</div>
     }
 
     function MountFile({ h, paneKey }: { h: ReturnType<typeof harness>; paneKey: string }) {
@@ -219,13 +234,23 @@ describe('PaneTabsProvider', () => {
       )
     }
 
-    it('renders the file under a strip of its own, even for a lone file tab', async () => {
+    it('renders a lone file under a plain title bar, no strip, which drags it like its tab', async () => {
       const h = harness(splitOut())
       render(<MountFile h={h} paneKey={report} />)
       expect((await screen.findByTestId('file-view')).textContent).toBe('docs/report.md')
-      const strip = screen.getByTestId('pane-tab-strip')
-      expect(strip.querySelectorAll('[role="tab"]')).toHaveLength(1)
-      expect(strip.querySelector('[data-pane-tab-kind="file"]')).not.toBeNull()
+      expect(screen.queryByTestId('pane-tab-strip')).toBeNull()
+      const title = screen.getByTestId('doc-pane-title')
+      expect(title.textContent).toContain('report.md')
+      expect(title.getAttribute('draggable')).toBe('true')
+    })
+
+    it('shows a strip once the pane holds a second document', () => {
+      const notes = fileTabId({ path: 'docs/notes.md', sessionId: 'a' })
+      const layout = splitOut()
+      const h = harness(placeTab(openDocTab(layout, 'a', notes), groupOfSession(layout, report)!.id, notes))
+      render(<MountFile h={h} paneKey={notes} />)
+      expect(screen.getByTestId('pane-tab-strip').querySelectorAll('[role="tab"]')).toHaveLength(2)
+      expect(screen.queryByTestId('doc-pane-title')).toBeNull()
     })
 
     it('renders nothing for a pane key that is no file-only pane', () => {
@@ -237,14 +262,14 @@ describe('PaneTabsProvider', () => {
     it('closing its tab closes the pane and leaves the route where it was', () => {
       const h = harness(splitOut())
       render(<MountFile h={h} paneKey={report} />)
-      fireEvent.click(screen.getByLabelText('Close tab report.md'))
+      fireEvent.click(screen.getByLabelText('Close report.md'))
       expect(groupOfSession(h.layout, report)).toBeNull()
       expect(h.onSelect).not.toHaveBeenCalledWith(report)
     })
 
     it('closing the route\'s chat tab while the file pane holds focus still moves the route on', () => {
       const tabbed = openInFocusedGroup(createSplitLayout(['a'], 'a'), 'x')
-      const withFile = openFileTab(tabbed, 'x', report)
+      const withFile = openDocTab(tabbed, 'x', report)
       const h = harness(splitGroup(materializeLayout(withFile, 1), groupOfSession(withFile, 'x')!.id, 'right', report))
       expect(h.layout.focusedGroupId).toBe(groupOfSession(h.layout, report)!.id)
       render(<Mount h={h} sessionId="x" />)
@@ -271,5 +296,47 @@ describe('PaneTabsProvider', () => {
     )
     fireEvent.click(screen.getByText('work'))
     expect(screen.queryByTestId('pane-tab-strip')).toBeNull()
+  })
+
+  it('shows no strip for the lone pane of a new chat, whose title bar drags it instead', () => {
+    const layout = openNewChatTab(createSplitLayout(['a'], 'a'))
+    const fresh = groupsOf(layout)[0].tabs.find(isNewChatTabId)!
+    const h = harness(splitGroup(layout, groupsOf(layout)[0].id, 'right', fresh))
+    render(<Mount h={h} sessionId={fresh} />)
+    expect(screen.queryByTestId('pane-tab-strip')).toBeNull()
+    render(<PaneTabsProvider split={h.controls()} onSelect={h.onSelect}><TitleDragProbe tabId={fresh} /><TitleDragProbe tabId="a" /></PaneTabsProvider>)
+    expect(screen.getByTestId(`drag-${fresh}`).textContent).toBe('true')
+    // A lone chat's pane drags by its title bar too; a pane with a strip drags by its tabs.
+    expect(screen.getByTestId('drag-a').textContent).toBe('true')
+  })
+
+  it('gives a pane with a strip no title-bar drag, and starts the drag of a lone pane as its tab would', () => {
+    const tabbed = harness(twoTabs())
+    render(<PaneTabsProvider split={tabbed.controls()} onSelect={tabbed.onSelect}><TitleDragProbe tabId="x" /></PaneTabsProvider>)
+    expect(screen.getByTestId('drag-x').textContent).toBe('false')
+
+    const lone = harness(createSplitLayout(['a'], 'a'))
+    let drag: ReturnType<typeof usePaneTitleDrag> = null
+    function Capture() { drag = usePaneTitleDrag('a'); return null }
+    render(<PaneTabsProvider split={lone.controls()} onSelect={lone.onSelect}><Capture /></PaneTabsProvider>)
+    const data = new Map<string, string>()
+    const dataTransfer = { get types() { return [...data.keys()] }, setData: (type: string, value: string) => { data.set(type, value) }, effectAllowed: 'none' }
+    const bar = document.createElement('div')
+    drag!.onDragStart({ dataTransfer, currentTarget: bar, target: bar } as never)
+    expect(JSON.parse(data.get(PANE_TAB_DND_MIME)!)).toEqual({ groupId: groupsOf(lone.layout)[0].id, tabId: 'a' })
+    expect(data.get(CHAT_SESSION_DND_MIME)).toBe('a')
+    drag!.onDragEnd()
+
+    // A drag out of a portaled menu bubbles through the bar but did not start in it: no tab drag.
+    data.clear()
+    drag!.onDragStart({ dataTransfer, currentTarget: bar, target: document.createElement('div') } as never)
+    expect(data.size).toBe(0)
+  })
+
+  it('shows a Todo tab over its chat, titled from the preview cache', () => {
+    const h = harness(openDocTab(twoTabs(), 'x', todoTabId('ACM-1')))
+    render(<Mount h={h} sessionId="x" />)
+    expect(screen.getByTestId('shown-todo').textContent).toBe('ACM-1')
+    expect(screen.getByRole('tab', { name: /ACM-1/ }).textContent).toBe('ACM-1 Write the notes')
   })
 })

@@ -1,11 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo, Suspense, lazy } from 'react'
-import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { api } from '@/lib/api'
 import {
   initialMobileView,
   parseSelectedSession,
   parseThreadOrigin,
-  resolveDeepLink,
   selectedDelegatedActivityFromList,
   sessionPath,
   threadOriginLabel,
@@ -28,7 +27,7 @@ import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
 import { useChatPaneState } from './use-chat-pane-state'
 import { historyRecord, parseHistoryPreview } from './chat-history'
-import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, isFileTabId, isLastChatWithFiles, selectTab, useSplitGridAdd, useSplitGridWorkspace } from './layout'
+import { SplitChatGrid, SplitDropOverlay, SplitGridContext, focusedGroupTabs, hasTabbedGroup, isChatTabId, isLastChatWithTabs, selectTab, useSplitGridAdd, useSplitGridWorkspace } from './layout'
 import { ChatPageHeader } from './chat-page-header'
 import { SidebarColumn } from './sidebar-column'
 import { formatMessage } from '@/components/chat/chat-messages'
@@ -44,7 +43,8 @@ import { useSessionLifecycleActions } from './use-session-lifecycle-actions'
 const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
-import { FileOpenContext, type OpenFile } from '@/components/chat/file-open-context'
+import { FileOpenContext, TodoOpenContext, type OpenFile } from '@/components/chat/file-open-context'
+import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
 import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
 import { useChatTabs, type ChatTab } from '@/hooks/use-chat-tabs'
@@ -373,7 +373,9 @@ function ChatPage() {
     paneState.bumpFocus(selectedId)
   }, [paneState.bumpFocus, selectedId])
 
+  const openNewChatInLayout = useNewChatTabOpener(workingSet.openNewChat, viewport.mobile)
   const handleNewChat = useCallback(() => {
+    if (openNewChatInLayout(null)) return
     newChatIntentRef.current = true; releaseMobilePicker()
     startComposer()
     setPendingEmployee(null)
@@ -386,12 +388,13 @@ function ChatPage() {
       pendingNavRef.current = null
       navigate('/')
     }
-  }, [chatTabs, navigate, releaseMobilePicker, startComposer])
+  }, [chatTabs, navigate, openNewChatInLayout, releaseMobilePicker, startComposer])
 
   // Start a new chat with a specific employee preselected — used when contacting
   // a session-less employee from the sidebar roster or via an ?employee= deep-link.
   // The actual session is created on first send (ChatPane → buildNewSessionParams).
   const contactEmployee = useCallback((name: string) => {
+    if (openNewChatInLayout(name)) return
     newChatIntentRef.current = true; releaseMobilePicker()
     startComposer()
     setPendingEmployee(name)
@@ -403,22 +406,10 @@ function ChatPage() {
       pendingNavRef.current = null
       navigate('/')
     }
-  }, [chatTabs, navigate, releaseMobilePicker, startComposer])
+  }, [chatTabs, navigate, openNewChatInLayout, releaseMobilePicker, startComposer])
 
-  // ?employee=<name> deep-link: an INTENT (compose to that employee), not a
-  // location — consumed once so it doesn't re-fire or stick. ?session= is NOT
-  // consumed any more: it IS the selection (see the URL model above);
-  // resolveDeepLink's session-first precedence keeps a stray employee param
-  // inert next to a session link.
-  const [searchParams, setSearchParams] = useSearchParams()
-  useEffect(() => {
-    const link = resolveDeepLink(searchParams)
-    if (link?.kind !== 'employee') return
-    contactEmployee(link.name)
-    const next = new URLSearchParams(searchParams)
-    next.delete('employee')
-    setSearchParams(next, { replace: true })
-  }, [searchParams, contactEmployee, setSearchParams])
+  // ?employee=<name> deep-link: an INTENT (compose to that employee), consumed once (use-layout-tab-openers).
+  useEmployeeDeepLink(contactEmployee, !viewport.mobile && (!workingSet.hydrated || awaitingOpen) && !sessionsQuery.isError)
 
   // Back target for the phone file view's "back" button: the chat a file link
   // was clicked in. selectedIdRef is read at call time so the callback stays stable.
@@ -435,6 +426,7 @@ function ChatPage() {
     setMobileView('chat')
     return true
   }, [chatTabs, viewport.mobile, workingSet])
+  const openTodo = useTodoTabOpener(workingSet.openTodo, viewport.mobile)
 
   // Mobile-only: back from the file view to the chat it was opened from (closing the
   // file tab, so they do not pile up into the open-chats cap), or to the chat list
@@ -540,15 +532,18 @@ function ChatPage() {
   }, [chatTabs, navigate, qc])
 
   // ChatPane callbacks
-  const handleSessionCreated = useCallback((newId: string, pending?: Message) => {
+  const handleSessionCreated = useCallback((newId: string, pending?: Message, history: 'replace' | 'push' = 'replace') => {
     adoptSession(newId, pending)
     chatTabs.openTab({ sessionId: newId, label: 'New Chat', status: 'running', unread: false, pinned: true })
     // REPLACE — the composer entry BECOMES the created session (same
-    // conversation); back should skip the empty composer, not revisit it.
+    // conversation); back should skip the empty composer, not revisit it. A
+    // new chat tab never had an entry (the route stayed on the chat it opened
+    // over), so it pushes: back returns to that chat.
     pendingNavRef.current = newId
-    navigate(sessionPath(newId), { replace: true })
+    navigate(sessionPath(newId), { replace: history === 'replace' })
     qc.invalidateQueries({ queryKey: queryKeys.sessions.all })
   }, [adoptSession, chatTabs, qc, navigate])
+  const newChatTabs = useNewChatTabHandlers(workingSet, handleSessionCreated)
 
   // Tag incoming meta with the sessionId it belongs to so consumers (e.g.
   // the tab-label effect) can ignore stale meta from a previous session.
@@ -700,9 +695,9 @@ function ChatPage() {
   // The strip's shown tab as the operator last chose it: the switch in flight, then the route. The
   // layout follows the URL a commit or more later, so a quick second key would otherwise act on the
   // tab the first one left.
-  // A file tab is shown by the layout directly, never through the route, so nothing is in flight.
+  // A tab that is no chat is shown by the layout directly, never through the route, so nothing is in flight.
   const groupShownTab = useCallback((tabs: string[], active: string) => (
-    isFileTabId(active) ? active : [pendingNavRef.current, selectedIdRef.current].find((id): id is string => typeof id === 'string' && tabs.includes(id)) ?? active
+    !isChatTabId(active) ? active : [pendingNavRef.current, selectedIdRef.current].find((id): id is string => typeof id === 'string' && tabs.includes(id)) ?? active
   ), [])
   // A strip tab chosen by shortcut: shown, then the route follows its pane's chat (selectTab).
   const selectGroupTab = useCallback((tabId: string) => {
@@ -748,7 +743,7 @@ function ChatPage() {
       'keyboard-shortcuts': { action: () => setShowShortcutOverlay(v => !v) },
       'close-tab': { action: () => {
         const shown = groupTabs ? groupShownTab(groupTabs.tabs, groupTabs.active) : null
-        if (shown) { if (!isLastChatWithFiles(workingSet.split.layout, shown)) handleRemovePane(shown) }
+        if (shown) { if (!isLastChatWithTabs(workingSet.split.layout, shown)) handleRemovePane(shown) }
         else if (chatTabs.activeIndex >= 0) chatTabs.closeTab(chatTabs.activeIndex)
       } },
       'prev-tab': { action: () => cycleTab(-1) },
@@ -852,6 +847,7 @@ function ChatPage() {
   const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
     <FileOpenContext.Provider value={openFile}>
+    <TodoOpenContext.Provider value={openTodo}>
     <PeekProvider>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">
@@ -985,6 +981,7 @@ function ChatPage() {
                 onContentReady={handlePaneContentReady}
                 onStartFreshChat={handleStartFreshChat}
                 pickerPane={pickerPane}
+                newChat={newChatTabs}
               />
               </SplitGridContext.Provider>
             )}
@@ -1039,6 +1036,7 @@ function ChatPage() {
       `}</style>
     </PageLayout>
     </PeekProvider>
+    </TodoOpenContext.Provider>
     </FileOpenContext.Provider>
   )
 }

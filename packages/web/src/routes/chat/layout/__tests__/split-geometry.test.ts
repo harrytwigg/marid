@@ -12,7 +12,8 @@ import { applySplitDrop, previewSplitDrop } from '../split-drop'
 import { hydrateSplitLayout } from '../use-split-working-set'
 import { SPLIT_LAYOUT_STORAGE_KEY, serializeSplitLayout } from '../split-layout-storage'
 import { WORKING_SET_STORAGE_KEY, serializeWorkingSet } from '../../working-set'
-import { workingSetFromLayout } from '../split-layout'
+import { openDocTab, paneKeysFromLayout, showTab, workingSetFromLayout } from '../split-layout'
+import { todoTabId } from '../tab-kind'
 
 const VIEWPORT = { width: 1440, height: 900 }
 const BOX = { left: 100, top: 50, width: 1200, height: 800 }
@@ -91,6 +92,22 @@ describe('split geometry', () => {
     expect(result.panes.filter((pane) => pane.folded).map((pane) => pane.key)).toEqual(['a'])
     expect(result.panes.filter((pane) => !pane.folded).every((pane) => pane.rect.width >= MIN_PANE_WIDTH)).toBe(true)
     expect(result.handles).toHaveLength(2)
+  })
+
+  it('folds a chatless pane before the route\'s chat when a pane with no chat holds focus', () => {
+    // The chat beside three Todo panes, worked in after it: four side by side do not fit 1184px. The
+    // chat is the least recent, but it is the route's, so the oldest Todo pane folds instead.
+    let layout = arranged(['a'])
+    const todos = ['ACM-1', 'ACM-2', 'ACM-3'].map(todoTabId)
+    let beside = groupId(layout, 'a')
+    for (const todo of todos) {
+      layout = splitGroup(openDocTab(layout, 'a', todo), beside, 'right', todo)
+      beside = groupOfSession(layout, todo)!.id
+    }
+    for (const todo of todos) layout = showTab(layout, todo)
+    expect(workingSetFromLayout(layout).focusedId).toBe('a')
+    const result = geometry(layout, paneKeysFromLayout(layout))
+    expect(result.panes.filter((pane) => pane.folded).map((pane) => pane.key)).toEqual([todos[0]])
   })
 
   it('resizes a split with a folded child without losing the folded child\'s share', () => {

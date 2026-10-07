@@ -6,6 +6,8 @@ import { TodoPrefixContext } from "@/components/chat/todo-prefix-context"
 import { formatMessage } from "@/components/chat/chat-messages"
 import { PeekProvider, usePeekStack, type PeekEntry } from "@/components/peek/peek-stack"
 import { forgetTodoPreview } from "@/lib/todo-preview"
+import { TodoOpenContext, type OpenTodo } from "@/components/chat/file-open-context"
+import { FileLinkSessionContext } from "@/components/chat/file-link-session-context"
 
 const getWorkItems = vi.fn()
 
@@ -144,10 +146,14 @@ function Stack() {
   return <span data-testid="stack">{opened.map((entry: PeekEntry) => entry.id).join(",")}</span>
 }
 
-async function renderMention(withProvider: boolean) {
+async function renderMention(withProvider: boolean, openTodo: OpenTodo | null = null) {
   const message = (
     <TodoPrefixContext.Provider value={LIVE_PREFIXES}>
-      <div data-testid="message">{formatMessage("Open ICI-7001")}</div>
+      <TodoOpenContext.Provider value={openTodo}>
+        <FileLinkSessionContext.Provider value="chat-a">
+          <div data-testid="message">{formatMessage("Open ICI-7001")}</div>
+        </FileLinkSessionContext.Provider>
+      </TodoOpenContext.Provider>
       <Location />
       <Stack />
     </TodoPrefixContext.Provider>
@@ -197,5 +203,39 @@ describe("TodoMention click", () => {
     fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
 
     expect(screen.getByTestId("path").textContent).toBe("/todos/ICI-7001")
+  })
+})
+
+describe("TodoMention click in the chat layout", () => {
+  it("opens the Todo as a tab beside the chat it was clicked in, not in the panel", async () => {
+    const openTodo = vi.fn<OpenTodo>(() => true)
+    await renderMention(true, openTodo)
+
+    const notPrevented = fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
+
+    expect(notPrevented).toBe(false)
+    expect(openTodo).toHaveBeenCalledWith("ICI-7001", "chat-a")
+    expect(screen.getByTestId("stack").textContent).toBe("")
+    expect(screen.getByTestId("path").textContent).toBe("/chat")
+  })
+
+  it("falls back to the panel when the layout cannot take a tab", async () => {
+    const openTodo = vi.fn<OpenTodo>(() => false)
+    await renderMention(true, openTodo)
+
+    fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
+
+    expect(openTodo).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId("stack").textContent).toBe("ICI-7001")
+  })
+
+  it("leaves a modified click to the browser, so the full page is still one ctrl-click away", async () => {
+    const openTodo = vi.fn<OpenTodo>(() => true)
+    await renderMention(true, openTodo)
+
+    const notPrevented = fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { ctrlKey: true })
+
+    expect(notPrevented).toBe(true)
+    expect(openTodo).not.toHaveBeenCalled()
   })
 })

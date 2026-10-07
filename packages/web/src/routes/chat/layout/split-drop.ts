@@ -1,24 +1,25 @@
 import { overflowForViewport } from '../grid-layout'
 import {
-  appendFileTab,
+  appendTabPane,
   appendSession,
-  keepingFiles,
-  closeSession,
   evictToCap,
   findGroup,
   groupOfSession,
+  groupsOf,
+  moveToEnd,
   materializeLayout,
   paneSessionOf,
   paneSetFromLayout,
   placeTab,
   focusSession,
+  showTab,
   splitGroup,
   type LayoutGroup,
   type SplitLayout,
   type SplitSide,
 } from './split-layout'
 import { splitGeometry, type Rect, type SplitDropHit, type SplitMetrics } from './split-geometry'
-import { isFileTabId } from './file-tab'
+import { isChatTabId } from './tab-kind'
 
 export interface SplitDropContext {
   /** Columns the auto grid is showing, so an edge drop materializes what the operator sees. */
@@ -28,10 +29,17 @@ export interface SplitDropContext {
 
 function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
   // The auto grid's trailing cell means "last", as it did in the flat grid: a member moves there.
-  if (layout.auto && groupOfSession(layout, sessionId)) {
-    return keepingFiles(layout, sessionId, (current) => appendSession(closeSession(current, sessionId), sessionId))
-  }
-  return appendSession(layout, sessionId)
+  return layout.auto && groupOfSession(layout, sessionId) ? moveToEnd(layout, sessionId) : appendSession(layout, sessionId)
+}
+
+/**
+ * The cap a drop spends capacity against: the viewport's, but never below the panes there already
+ * are. A drop that adds no pane (a move, a tab into a strip) closes none; one that adds a pane closes
+ * at most one. Otherwise a window already over its cap would close an unrelated pane on any drop,
+ * and a document or new chat pane, unlike a chat, has nowhere it can be reopened from.
+ */
+function dropCap(layout: SplitLayout, context: SplitDropContext): number {
+  return Math.max(context.cap, groupsOf(layout).length)
 }
 
 /**
@@ -40,29 +48,32 @@ function dropAtEnd(layout: SplitLayout, sessionId: string): SplitLayout {
  * grid appends. Capacity is spent afterwards, never on the group that was dropped onto.
  */
 export function applySplitDrop(layout: SplitLayout, sessionId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
-  if (isFileTabId(sessionId)) return applyFileDrop(layout, sessionId, hit, context)
+  if (!isChatTabId(sessionId)) return applyTabDrop(layout, sessionId, hit, context)
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
-  if (!target || hit.region === 'end') return evictToCap(dropAtEnd(layout, sessionId), context.cap)
+  if (!target || hit.region === 'end') return evictToCap(dropAtEnd(layout, sessionId), dropCap(layout, context))
   if (hit.region === 'center') {
     // A pane dropped back onto itself (its chat, though a file of its group may be shown) only focuses.
     const own = target.activeTab === sessionId || paneSessionOf(target, layout.focusHistory) === sessionId
     const next = own ? focusSession(layout, sessionId) : placeTab(layout, target.id, sessionId)
-    return evictToCap(next, context.cap, target.tabs)
+    return evictToCap(next, dropCap(layout, context), target.tabs)
   }
   return splitAt(layout, target, hit.region, sessionId, context)
 }
 
 /**
- * A file tab's drag (pane-tab-dnd.ts) released on the grid, the same three ways: an edge splits it
- * out as a pane of its own, the middle moves it into that group as a tab, and the empty end moves
- * it out to a group at the end. A file tab not in the layout is no drop: it came from a tab.
+ * The drag of a tab that is no chat (a document, a new chat: pane-tab-dnd.ts) released on the grid,
+ * the same three ways: an edge splits it out as a pane of its own, the middle moves it into that
+ * group as a tab, and the empty end moves it out to a group at the end. Such a tab not in the layout
+ * is no drop: it came from a tab.
  */
-function applyFileDrop(layout: SplitLayout, fileTabId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
-  if (!groupOfSession(layout, fileTabId)) return layout
+function applyTabDrop(layout: SplitLayout, tabId: string, hit: SplitDropHit, context: SplitDropContext): SplitLayout {
+  if (!groupOfSession(layout, tabId)) return layout
   const target = hit.groupId ? findGroup(layout, hit.groupId) : null
-  if (!target || hit.region === 'end') return evictToCap(appendFileTab(layout, fileTabId), context.cap)
-  if (hit.region === 'center') return evictToCap(placeTab(layout, target.id, fileTabId), context.cap, target.tabs)
-  return splitAt(layout, target, hit.region, fileTabId, context)
+  if (!target || hit.region === 'end') return evictToCap(appendTabPane(layout, tabId), dropCap(layout, context))
+  // Dropped back onto the pane showing it: it only focuses, as a chat's own pane does.
+  if (hit.region === 'center' && target.activeTab === tabId) return showTab(layout, tabId)
+  if (hit.region === 'center') return evictToCap(placeTab(layout, target.id, tabId), dropCap(layout, context), target.tabs)
+  return splitAt(layout, target, hit.region, tabId, context)
 }
 
 /**
@@ -74,7 +85,7 @@ function applyFileDrop(layout: SplitLayout, fileTabId: string, hit: SplitDropHit
 function splitAt(layout: SplitLayout, target: LayoutGroup, side: SplitSide, sessionId: string, context: SplitDropContext): SplitLayout {
   const materialized = materializeLayout(focusSession(layout, target.activeTab), context.columns)
   const next = splitGroup(materialized, target.id, side, sessionId)
-  return next === materialized ? layout : evictToCap(next, context.cap, target.tabs)
+  return next === materialized ? layout : evictToCap(next, dropCap(layout, context), target.tabs)
 }
 
 export interface SplitDropPreviewInput {
@@ -91,7 +102,7 @@ export interface SplitDropPreviewInput {
 /**
  * The rectangle the dropped pane will occupy, found by laying out the layout the drop produces
  * with the keys the grid will then mount. The dropped session becomes the route's pane, so every
- * key is its own session (a file-only pane's, its file tab id), and the picker (if open) keeps its
+ * key is its own session (a pane with no chat, its shown tab's id), and the picker (if open) keeps its
  * reserved trailing slot, as in chat-grid-drop.tsx simulateChatGridDrop.
  */
 export function previewSplitDrop(input: SplitDropPreviewInput): { layout: SplitLayout; rect: Rect } | null {
@@ -111,7 +122,7 @@ export function previewSplitDrop(input: SplitDropPreviewInput): { layout: SplitL
     viewport: input.viewport,
     metrics: input.metrics,
   })
-  // A file dropped on the middle of a chat's pane joins that group, whose pane is keyed by its chat.
+  // A document dropped on the middle of a chat's pane joins that group, whose pane is keyed by its chat.
   const holder = groupOfSession(next, input.sessionId)
   const pane = geometry.panes.find((entry) => entry.key === input.sessionId)
     ?? geometry.panes.find((entry) => holder !== null && entry.groupId === holder.id)

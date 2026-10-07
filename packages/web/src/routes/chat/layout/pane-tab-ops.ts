@@ -1,6 +1,7 @@
 import type { PaneTabItem, PaneTabStripProps } from './pane-tab-strip'
 import { findGroup, paneSessionForTab, placeTab, type LayoutGroup, type SplitLayout } from './split-layout'
 import { fileTabTitle, parseFileTabId } from './file-tab'
+import { isNewChatTabId, parseTodoTabId } from './tab-kind'
 
 /** What the strip shows for one session; supplied by whoever knows the session list. */
 export interface PaneTabSession {
@@ -15,7 +16,11 @@ export type PaneTabSessionLookup = (sessionId: string) => PaneTabSession | undef
 export function paneTabItems(group: LayoutGroup, lookup: PaneTabSessionLookup): PaneTabItem[] {
   return group.tabs.map((sessionId) => {
     const file = parseFileTabId(sessionId)
-    if (file) return { id: sessionId, title: fileTabTitle(file.path), filePath: file.path }
+    if (file) return { id: sessionId, kind: 'file', title: fileTabTitle(file.path), filePath: file.path }
+    // The label reads the Todo's title from the mention preview cache (pane-kind-tab-label.tsx).
+    const todoId = parseTodoTabId(sessionId)
+    if (todoId) return { id: sessionId, kind: 'todo', title: todoId }
+    if (isNewChatTabId(sessionId)) return { id: sessionId, kind: 'new-chat', title: 'New chat' }
     const session = lookup(sessionId)
     return { id: sessionId, ...session, title: session?.title || 'Chat', preview: group.previewTab === sessionId || undefined }
   })
@@ -29,9 +34,10 @@ export function tabsOfGroup(layout: SplitLayout, groupId: string, lookup: PaneTa
 
 /**
  * Shows a tab, then moves the route to its pane's chat: the tab itself for a chat, the chat it sits
- * beside for a file. The chat is resolved on `after`, the layout once the tab is where it is going,
- * so a tab placed a moment ago (not yet committed) is found where it landed. Showing comes first for
- * both kinds: focusing a chat whose pane shows a file over it would keep the file.
+ * beside for a document or a new chat, and nowhere when its pane holds no chat. The chat is resolved
+ * on `after`, the layout once the tab is where it is going, so a tab placed a moment ago (not yet
+ * committed) is found where it landed. Showing comes first for every kind: focusing a chat whose pane
+ * shows another tab over it would keep that tab.
  */
 export function selectTab(after: SplitLayout, tabId: string, show: (tabId: string) => void, route: (sessionId: string) => void): void {
   const chat = paneSessionForTab(after, tabId)

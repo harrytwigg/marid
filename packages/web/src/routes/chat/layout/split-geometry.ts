@@ -4,11 +4,13 @@ import {
   groupIdsByPaneKey,
   groupsOf,
   materializeLayout,
+  workingSetFromLayout,
+  type LayoutGroup,
   type LayoutNode,
   type SplitDirection,
   type SplitLayout,
 } from './split-layout'
-import { isFileTabId } from './file-tab'
+import { isChatTabId } from './tab-kind'
 
 /**
  * Where every pane and splitter sits, as one pure function of the layout and the grid's box.
@@ -169,8 +171,9 @@ function autoColumns(count: number, viewport: GeometryInput['viewport']): { colu
 function resolveKeys(input: GeometryInput): Array<{ key: string; groupId: string | null }> {
   const groupByPaneKey = groupIdsByPaneKey(input.layout)
   return input.keys.map((key) => {
-    // A file-only pane's key is its file tab id, which sessionForKey (chats and the composer) never maps.
-    const paneKey = isFileTabId(key) ? key : input.sessionForKey(key)
+    // A pane with no chat is keyed by its own tab id (a document's, a new chat's), which sessionForKey
+    // (chats and the route composer) never maps.
+    const paneKey = isChatTabId(key) ? input.sessionForKey(key) : key
     return { key, groupId: paneKey ? groupByPaneKey.get(paneKey) ?? null : null }
   })
 }
@@ -201,15 +204,23 @@ function arrangedPlacement(root: LayoutNode, input: GeometryInput): Placement {
   return out
 }
 
-/** Groups placed by a pruned tree, least recently focused first; the focused one never. */
+/**
+ * Groups placed by a pruned tree, least recently focused first; the focused one never. The group
+ * holding the route's chat (the working set's focused one) goes last: with a pane that has no chat
+ * focused (a document, a new chat), that chat is the one the operator is still working in, so the
+ * others fold first.
+ */
 function foldCandidates(layout: SplitLayout, root: LayoutNode): string[] {
-  const recency = (sessionId: string) => layout.focusHistory.indexOf(sessionId)
-  const visible: Array<{ id: string; activeTab: string }> = []
+  const route = workingSetFromLayout(layout).focusedId
+  const recency = (group: LayoutGroup) => (route && group.tabs.includes(route)
+    ? Number.MAX_SAFE_INTEGER
+    : layout.focusHistory.indexOf(group.activeTab))
+  const visible: LayoutGroup[] = []
   const walk = (node: LayoutNode) => (node.type === 'group' ? visible.push(node) : node.children.forEach(walk))
   walk(root)
   return visible
     .filter((group) => group.id !== layout.focusedGroupId)
-    .sort((a, b) => recency(a.activeTab) - recency(b.activeTab))
+    .sort((a, b) => recency(a) - recency(b))
     .map((group) => group.id)
 }
 

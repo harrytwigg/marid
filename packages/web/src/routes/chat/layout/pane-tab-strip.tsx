@@ -5,7 +5,8 @@ import { StatusDot } from '@/components/chat/session-signals'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import { emojiForName } from '@/lib/emoji-pool'
 import { activeChatSessionDrag, hasChatSessionDrag, readChatSessionDrop } from '../chat-session-dnd'
-import { PaneFileTabLabel } from './pane-file-tab-label'
+import { PaneKindTabLabel } from './pane-kind-tab-label'
+import type { PaneTabKind } from './tab-kind'
 import {
   activePaneTabDrag,
   clearPaneTabDrag,
@@ -23,6 +24,8 @@ export interface PaneTabItem {
   status?: 'running' | 'error'
   /** VS Code preview tab: italic, replaced by the next preview open until pinned. */
   preview?: boolean
+  /** Set on a tab that is no chat: what it is, which picks its glyph. */
+  kind?: Exclude<PaneTabKind, 'chat'>
   /** Set on a file preview tab: the path it shows, in full. */
   filePath?: string
   /** False for a tab that cannot be closed: no close button, and middle-click and Delete do nothing. */
@@ -210,7 +213,7 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate,
       tabIndex={tabStop ? 0 : -1}
       draggable
       data-pane-tab-id={tab.id}
-      data-pane-tab-kind={tab.filePath !== undefined ? 'file' : undefined}
+      data-pane-tab-kind={tab.kind}
       {...tabFlags(tab, active, dropEdge)}
       title={tab.filePath ?? tab.title}
       {...paneTabDragProps({ groupId, tabId: tab.id })}
@@ -221,7 +224,7 @@ function PaneTab({ tab, groupId, active, focused, tabStop, dropEdge, onActivate,
       className={`${TAB_CLASS} ${active ? 'bg-[var(--fill-tertiary)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]'}`}
     >
       {active && focused ? <span aria-hidden data-pane-tab-marker className="absolute inset-x-0 top-0 h-[2px] bg-[var(--text-primary)]" /> : null}
-      {tab.filePath !== undefined ? <PaneFileTabLabel title={tab.title} active={active} /> : <PaneTabLabel tab={tab} active={active} />}
+      {tab.kind ? <PaneKindTabLabel kind={tab.kind} title={tab.title} active={active} /> : <PaneTabLabel tab={tab} active={active} />}
       {tab.closable === false ? null : <TabCloseButton title={tab.title} active={active} onClose={onClose} />}
     </div>
   )

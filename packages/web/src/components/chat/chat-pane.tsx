@@ -18,13 +18,13 @@ import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/ch
 import { useFileDrop } from '@/hooks/use-file-drop'
 import { FileDropOverlay } from '@/components/ui/file-drop-overlay'
 import { ChatPaneTitleBar, paneTitleBarState, paneViewControls } from '@/components/chat/chat-pane-title-bar'
-import { usePaneClosable, usePaneShownFile, usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
+import { usePaneClosable, usePaneShownDoc, usePaneTabId, usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
+import { DocView } from '@/components/chat/doc-view'
 import { ChatCopyToast } from '@/components/chat/chat-copy-toast'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
 
 const CliTerminal = lazy(() => import('@/components/cli-terminal').then(m => ({ default: m.CliTerminal })))
-const FileView = lazy(() => import('@/components/chat/file-view').then(m => ({ default: m.FileView })))
 import type { CliTerminalHandle } from '@/components/cli-terminal'
 import { buildNewSessionParams, resolveNewSessionSelector, shouldPersistNewSessionSelector } from '@/components/chat/new-chat-helpers'
 import { readNewSessionSelector, writeNewSessionSelector } from '@/components/chat/new-session-selector'
@@ -434,11 +434,12 @@ export function ChatPane({
   const paneDelegatedActivity = (titleBarState.session.delegatedActivity as DelegatedActivity | null | undefined) ?? null
   // A terminal session is its shell and nothing else: no transcript, no composer.
   const terminalPane = sessionId && (terminal || isTerminalSession(currentSession)) ? sessionId : null
-  // A file tab of this pane's group is showing: it covers the chat, which stays mounted (scroll,
-  // draft and stream intact) but inert until its own tab is shown again. Only beside the title
-  // bar, whose tab strip is the way back; a phone shows no strip, so it shows the chat.
+  // A document tab of this pane's group is showing (a file, a Todo): it covers the chat, which stays
+  // mounted (scroll, draft and stream intact) but inert until its own tab is shown again. Only beside
+  // the title bar, whose tab strip is the way back; a phone shows no strip, so it shows the chat.
   const titleBar = multiPane && onClose
-  const shownFile = usePaneShownFile(titleBar ? sessionId : null)
+  const paneTabId = usePaneTabId(sessionId)
+  const shownFile = usePaneShownDoc(titleBar ? paneTabId : null)
   const closable = usePaneClosable(sessionId)
 
   return (
@@ -573,10 +574,8 @@ export function ChatPane({
       </>)}
       </div>
       {shownFile ? (
-        <div data-testid="pane-file-view" className="absolute inset-0 z-[6] flex flex-col">
-          <Suspense fallback={<div className="flex-1" />}>
-            <FileView path={shownFile.path} sessionId={shownFile.sessionId} embedded />
-          </Suspense>
+        <div data-testid={shownFile.kind === 'file' ? 'pane-file-view' : 'pane-todo-view'} className="absolute inset-0 z-[6] flex flex-col bg-[var(--bg)]">
+          <DocView doc={shownFile} />
         </div>
       ) : null}
       </div>

@@ -8,9 +8,9 @@ import {
   groupIdsByPaneKey,
   groupOfSession,
   groupsOf,
-  isLastChatWithFiles,
+  isLastChatWithTabs,
   materializeLayout,
-  openFileTab,
+  openDocTab,
   openInFocusedGroup,
   paneKeyOf,
   paneKeysFromLayout,
@@ -34,7 +34,7 @@ const groupId = (layout: SplitLayout, tabId: string) => groupOfSession(layout, t
 /** a and b, arranged, with the report open beside a. */
 function chatsWithReport(): SplitLayout {
   const arranged = materializeLayout(createSplitLayout(['a', 'b'], 'b'), 2)
-  return openFileTab(arranged, 'a', report)
+  return openDocTab(arranged, 'a', report)
 }
 
 /** chatsWithReport with the report split out to the right of a, so it is a pane of its own. */
@@ -110,14 +110,14 @@ describe('closing, moving and pruning around a file-only pane', () => {
   })
 
   it('takes a chat\'s own file tabs with it, but not another group\'s', () => {
-    const layout = showTab(openFileTab(reportSplitOut(), 'b', notes), notes)
+    const layout = showTab(openDocTab(reportSplitOut(), 'b', notes), notes)
     expect(tabsOf(layout)).toEqual([['a'], [report], ['b', notes]])
     expect(tabsOf(closeSession(layout, 'b'))).toEqual([['a'], [report]])
   })
 
   it('closes the whole layout with its last chat, file panes and all', () => {
-    const lone = openFileTab(createSplitLayout(['a'], 'a'), 'a', report)
-    const wide = splitGroup(materializeLayout(openFileTab(lone, 'a', notes), 1), groupId(lone, 'a'), 'right', report)
+    const lone = openDocTab(createSplitLayout(['a'], 'a'), 'a', report)
+    const wide = splitGroup(materializeLayout(openDocTab(lone, 'a', notes), 1), groupId(lone, 'a'), 'right', report)
     expect(tabsOf(wide)).toEqual([['a', notes], [report]])
     const closed = closeSession(wide, 'a')
     expect(closed.root).toBeNull()
@@ -138,7 +138,7 @@ describe('closing, moving and pruning around a file-only pane', () => {
   })
 
   it('carries a lone chat\'s files along when it moves, without leaving them behind', () => {
-    const lone = openFileTab(chatsWithReport(), 'a', notes)
+    const lone = openDocTab(chatsWithReport(), 'a', notes)
     const moved = placeTab(lone, groupId(lone, 'b'), 'a', 0)
     expect(groupsOf(moved)).toHaveLength(1)
     expect(new Set(groupsOf(moved)[0].tabs)).toEqual(new Set(['a', 'b', report, notes]))
@@ -159,7 +159,7 @@ describe('closing, moving and pruning around a file-only pane', () => {
 describe('moving the only chat while a file-only pane stands beside it', () => {
   /** a (the only chat) beside the report's own pane. */
   function lone() {
-    const base = openFileTab(materializeLayout(createSplitLayout(['a'], 'a'), 1), 'a', report)
+    const base = openDocTab(materializeLayout(createSplitLayout(['a'], 'a'), 1), 'a', report)
     return splitGroup(base, groupId(base, 'a'), 'right', report)
   }
 
@@ -189,15 +189,15 @@ describe('opening a chat while a file-only pane has focus', () => {
   })
 })
 
-describe('isLastChatWithFiles with a file-only pane', () => {
+describe('isLastChatWithTabs with a file-only pane', () => {
   it('holds for the only chat while a file tab is open anywhere in the layout', () => {
     const lone = createSplitLayout(['a'], 'a')
-    expect(isLastChatWithFiles(lone, 'a')).toBe(false)
-    const layout = splitGroup(materializeLayout(openFileTab(lone, 'a', report), 1), groupId(lone, 'a'), 'right', report)
+    expect(isLastChatWithTabs(lone, 'a')).toBe(false)
+    const layout = splitGroup(materializeLayout(openDocTab(lone, 'a', report), 1), groupId(lone, 'a'), 'right', report)
     expect(tabsOf(layout)).toEqual([['a'], [report]])
-    expect(isLastChatWithFiles(layout, 'a')).toBe(true)
-    expect(isLastChatWithFiles(layout, report)).toBe(false)
-    expect(isLastChatWithFiles(reportSplitOut(), 'a')).toBe(false)
+    expect(isLastChatWithTabs(layout, 'a')).toBe(true)
+    expect(isLastChatWithTabs(layout, report)).toBe(false)
+    expect(isLastChatWithTabs(reportSplitOut(), 'a')).toBe(false)
   })
 })
 
