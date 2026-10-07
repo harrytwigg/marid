@@ -146,7 +146,7 @@ import { resolveMessageAudiences, speechContextApplies } from "./speech-context.
 import { isJsonMediaType } from "./media-type.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
-import { clipSessionMessage, sessionCommGuards, prepareLateralSend, isDescendantOf, resolveCallerIdentity, type CallerIdentity } from "./session-comm-guards.js";
+import { clipSessionMessage, sessionCommGuards, prepareLateralSend, isDescendantOf, resolveCallerIdentity, describeUnidentifiedTool, headerString, type CallerIdentity } from "./session-comm-guards.js";
 import { originMatchesAuthority, parseRequestAuthority, requestHeaderValues, singleRequestHeader, type RequestAuthority } from "./request-authority.js";
 import {
   ACTIVITY_OPERATION_HEADER,
@@ -855,6 +855,10 @@ function rejectUnverifiedIdentifiedApiCaller(req: HttpRequest, res: ServerRespon
     if (!mutating || allowsUnauthenticatedMutation(method, pathname)) return false;
   } else if (identity.kind !== "unidentified-tool") {
     return false;
+  } else {
+    // The caller sees only the generic refusal; the reason is the gateway's to know.
+    const claimed = headerString(req.headers[CALLER_SESSION_HEADER]);
+    logger.warn(`Refused identified tool call ${method} ${pathname}${claimed ? ` from session ${JSON.stringify(claimed.slice(0, 80))}` : ""}: ${describeUnidentifiedTool(identity.reason)}`);
   }
   const proxiedWithoutAuth = identity.kind === "unauthenticated"
     && !shouldRequireGatewayAuth(context.getConfig())

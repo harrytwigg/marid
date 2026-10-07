@@ -320,8 +320,29 @@ function hasHeader(headers: Record<string, string | string[] | undefined>, name:
 export type CallerIdentity =
   | { kind: "operator" }
   | { kind: "session"; callerId: string }
-  | { kind: "unidentified-tool" }
+  | { kind: "unidentified-tool"; reason: UnidentifiedToolReason }
   | { kind: "unauthenticated" };
+
+/** Why a request was judged `unidentified-tool` — for the gateway's log, never the response. */
+export type UnidentifiedToolReason =
+  | "empty-header"
+  | "no-caller-session"
+  | "unknown-session"
+  | "missing-capability"
+  | "capability-mismatch";
+
+const UNIDENTIFIED_TOOL_REASONS: Record<UnidentifiedToolReason, string> = {
+  "empty-header": "an identity header is present but empty",
+  "no-caller-session": "the tool-call marker came without a caller session header",
+  "unknown-session": "the caller session header names no session this gateway knows",
+  "missing-capability": "the caller session header came without a session capability",
+  "capability-mismatch": "the session capability does not verify for that session against this gateway's key",
+};
+
+/** One line naming why an identified call was refused, for the gateway's log. */
+export function describeUnidentifiedTool(reason: UnidentifiedToolReason): string {
+  return UNIDENTIFIED_TOOL_REASONS[reason];
+}
 
 export interface CallerIdentityOptions {
   sessionExists?: (sessionId: string) => boolean;
@@ -340,17 +361,18 @@ export function resolveCallerIdentity(
   const toolMarker = headerString(headers[TOOL_CALL_HEADER]);
   const callerId = headerString(headers[CALLER_SESSION_HEADER]);
   if ((toolHeaderPresent && !toolMarker) || (callerHeaderPresent && !callerId)) {
-    return { kind: "unidentified-tool" };
+    return { kind: "unidentified-tool", reason: "empty-header" };
   }
   const isToolCall = !!toolMarker;
   if (callerId) {
-    if (opts.sessionExists && !opts.sessionExists(callerId)) return { kind: "unidentified-tool" };
+    if (opts.sessionExists && !opts.sessionExists(callerId)) return { kind: "unidentified-tool", reason: "unknown-session" };
     if (opts.requireCapability) {
       const capability = headerString(headers[CALLER_SESSION_CAPABILITY_HEADER]);
-      if (!capability || !opts.verifySessionCapability?.(callerId, capability)) return { kind: "unidentified-tool" };
+      if (!capability) return { kind: "unidentified-tool", reason: "missing-capability" };
+      if (!opts.verifySessionCapability?.(callerId, capability)) return { kind: "unidentified-tool", reason: "capability-mismatch" };
     }
     return { kind: "session", callerId };
   }
-  if (isToolCall) return { kind: "unidentified-tool" };
+  if (isToolCall) return { kind: "unidentified-tool", reason: "no-caller-session" };
   return opts.operatorAuthenticated ? { kind: "operator" } : { kind: "unauthenticated" };
 }

@@ -302,8 +302,8 @@ describe("resolveCallerIdentity — the tool-origin discriminator (GRS-017 findi
     const verifySessionCapability = (sessionId: string, capability: string) => sessionId === "s-1" && capability === "cap-s-1";
     const opts = { sessionExists: (id: string) => id === "s-1", verifySessionCapability, requireCapability: true };
 
-    expect(resolveCallerIdentity({ [CALLER_SESSION_HEADER]: "s-1" }, opts)).toEqual({ kind: "unidentified-tool" });
-    expect(resolveCallerIdentity({ [CALLER_SESSION_HEADER]: "s-1", [CALLER_SESSION_CAPABILITY_HEADER]: "cap-other" }, opts)).toEqual({ kind: "unidentified-tool" });
+    expect(resolveCallerIdentity({ [CALLER_SESSION_HEADER]: "s-1" }, opts)).toEqual({ kind: "unidentified-tool", reason: "missing-capability" });
+    expect(resolveCallerIdentity({ [CALLER_SESSION_HEADER]: "s-1", [CALLER_SESSION_CAPABILITY_HEADER]: "cap-other" }, opts)).toEqual({ kind: "unidentified-tool", reason: "capability-mismatch" });
     expect(resolveCallerIdentity({ [CALLER_SESSION_HEADER]: "s-1", [CALLER_SESSION_CAPABILITY_HEADER]: "cap-s-1" }, opts)).toEqual({ kind: "session", callerId: "s-1" });
     expect(
       resolveCallerIdentity(
@@ -313,37 +313,37 @@ describe("resolveCallerIdentity — the tool-origin discriminator (GRS-017 findi
     ).toEqual({ kind: "session", callerId: "s-1" });
     expect(
       resolveCallerIdentity({ [CALLER_SESSION_HEADER]: "s-1", [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE }, opts),
-    ).toEqual({ kind: "unidentified-tool" });
+    ).toEqual({ kind: "unidentified-tool", reason: "missing-capability" });
     expect(
       resolveCallerIdentity(
         { [CALLER_SESSION_HEADER]: "s-1", [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE, [CALLER_SESSION_CAPABILITY_HEADER]: "cap-other" },
         opts,
       ),
-    ).toEqual({ kind: "unidentified-tool" });
+    ).toEqual({ kind: "unidentified-tool", reason: "capability-mismatch" });
     expect(
       resolveCallerIdentity(
         { [CALLER_SESSION_HEADER]: "ghost", [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE, [CALLER_SESSION_CAPABILITY_HEADER]: "cap-s-1" },
         opts,
       ),
-    ).toEqual({ kind: "unidentified-tool" });
+    ).toEqual({ kind: "unidentified-tool", reason: "unknown-session" });
   });
 
   it("marker present + identity ABSENT → unidentified-tool: the fail-closed case, never operator", () => {
-    expect(resolveCallerIdentity({ [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE })).toEqual({ kind: "unidentified-tool" });
+    expect(resolveCallerIdentity({ [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE })).toEqual({ kind: "unidentified-tool", reason: "no-caller-session" });
     // an empty/whitespace caller header is malformed identity input, not the operator path
     expect(
       resolveCallerIdentity({ [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE, [CALLER_SESSION_HEADER]: "  " }),
-    ).toEqual({ kind: "unidentified-tool" });
+    ).toEqual({ kind: "unidentified-tool", reason: "empty-header" });
     // any non-empty marker value counts — the value is documentation, presence is the signal
-    expect(resolveCallerIdentity({ [TOOL_CALL_HEADER]: "anything" })).toEqual({ kind: "unidentified-tool" });
+    expect(resolveCallerIdentity({ [TOOL_CALL_HEADER]: "anything" })).toEqual({ kind: "unidentified-tool", reason: "no-caller-session" });
   });
 
   it("present-but-empty identity headers fail closed instead of normalizing to operator", () => {
     const opts = { sessionExists: (id: string) => id === "s-1", verifySessionCapability: () => false, requireCapability: true };
 
     for (const value of ["", "   "]) {
-      expect(resolveCallerIdentity({ [TOOL_CALL_HEADER]: value }, opts)).toEqual({ kind: "unidentified-tool" });
-      expect(resolveCallerIdentity({ [CALLER_SESSION_HEADER]: value }, opts)).toEqual({ kind: "unidentified-tool" });
+      expect(resolveCallerIdentity({ [TOOL_CALL_HEADER]: value }, opts)).toEqual({ kind: "unidentified-tool", reason: "empty-header" });
+      expect(resolveCallerIdentity({ [CALLER_SESSION_HEADER]: value }, opts)).toEqual({ kind: "unidentified-tool", reason: "empty-header" });
     }
   });
 
