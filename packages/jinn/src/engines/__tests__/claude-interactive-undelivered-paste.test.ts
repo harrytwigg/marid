@@ -395,7 +395,7 @@ describe("InteractiveClaudeEngine — a paste the TUI never took (JIN-3)", () =>
     const cfg = fs.mkdtempSync(path.join(os.tmpdir(), "jin3-cfg-"));
     const proj = path.join(cfg, "projects", "x");
     fs.mkdirSync(proj, { recursive: true });
-    process.env.CLAUDE_CONFIG_DIR = cfg;
+    vi.stubEnv("CLAUDE_CONFIG_DIR", cfg);
     try {
       await warmSession("s-lost-hook");
       void engine.run({ sessionId: "s-lost-hook", prompt: "second", cwd: "/tmp", resumeSessionId: "c1" } as any);
@@ -404,7 +404,7 @@ describe("InteractiveClaudeEngine — a paste the TUI never took (JIN-3)", () =>
       fs.writeFileSync(path.join(proj, "c1.jsonl"), JSON.stringify({ type: "user", timestamp: new Date().toISOString(), message: { content: "second" } }) + "\n");
       await vi.advanceTimersByTimeAsync(PAST_SUBMIT_RETRIES_MS);
       expect(ptys).toHaveLength(1);
-    } finally { delete process.env.CLAUDE_CONFIG_DIR; }
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it("still respawns when the only new transcript entry is somebody else's (a background re-run)", async () => {
@@ -412,7 +412,7 @@ describe("InteractiveClaudeEngine — a paste the TUI never took (JIN-3)", () =>
     const cfg = fs.mkdtempSync(path.join(os.tmpdir(), "jin3-cfg-"));
     const proj = path.join(cfg, "projects", "x");
     fs.mkdirSync(proj, { recursive: true });
-    process.env.CLAUDE_CONFIG_DIR = cfg;
+    vi.stubEnv("CLAUDE_CONFIG_DIR", cfg);
     try {
       await warmSession("s-other-entry");
       void engine.run({ sessionId: "s-other-entry", prompt: "second", cwd: "/tmp", resumeSessionId: "c1" } as any);
@@ -420,7 +420,7 @@ describe("InteractiveClaudeEngine — a paste the TUI never took (JIN-3)", () =>
       fs.writeFileSync(path.join(proj, "c1.jsonl"), JSON.stringify({ type: "user", timestamp: new Date().toISOString(), message: { content: "<task-notification>done</task-notification>" } }) + "\n");
       await vi.advanceTimersByTimeAsync(PAST_SUBMIT_RETRIES_MS);
       expect(ptys).toHaveLength(2);
-    } finally { delete process.env.CLAUDE_CONFIG_DIR; }
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it("the old PTY exiting mid-respawn does not interrupt the turn", async () => {

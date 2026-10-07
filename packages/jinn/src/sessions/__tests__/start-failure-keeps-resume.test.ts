@@ -15,7 +15,9 @@ import type { EngineResult } from "../../shared/types.js";
  * hop that drops, a crash on boot, an exec refusal) fails, and says why. It
  * must not also cost the session its conversation: the resume id is as good
  * as it was, so the next message picks the same conversation back up. Only
- * the CLI saying that conversation is gone (Claude Code, codex) clears it.
+ * the CLI saying that conversation is gone (Claude Code, codex) clears it, and
+ * then the turn is run once more in a fresh conversation handed the session's
+ * recent messages, so the message it carried is still answered.
  */
 
 createTestHome("jinn-start-failure-resume-");
@@ -36,19 +38,24 @@ beforeEach(() => {
 
 const employee = { name: EMPLOYEE, engine: "claude", persona: "Start failure fixture" };
 
-/** Two turns on one session: the first answers and files `native-1`, the second gets `second`. */
-async function twoTurns(second: EngineResult) {
-  const claude = scriptedEngine("claude", [engineResult({ sessionId: "native-1", result: "hello", cost: 0.01, numTurns: 1 }), second]);
+/** Two turns on one session: the first answers and files `native-1`, the second gets `second`, then `rest`. */
+async function twoTurns(second: EngineResult, ...rest: EngineResult[]) {
+  const claude = scriptedEngine("claude", [engineResult({ sessionId: "native-1", result: "hello", cost: 0.01, numTurns: 1 }), second, ...rest]);
   const resumedWith: Array<string | undefined> = [];
+  const prompts: string[] = [];
   const run = claude.run.bind(claude);
-  claude.run = async (opts: { sessionId?: string; resumeSessionId?: string }) => { resumedWith.push(opts.resumeSessionId); return run(opts); };
+  claude.run = async (opts: { sessionId?: string; resumeSessionId?: string; prompt?: string }) => {
+    resumedWith.push(opts.resumeSessionId);
+    prompts.push(opts.prompt ?? "");
+    return run(opts);
+  };
   const manager = new ManagerClass(testConfig(), new Map([["claude", claude]]) as never, "start-failure-boot");
   const key = `stub:start-failure-${Math.random().toString(16).slice(2)}`;
   // route() resolves once the queued turn has settled.
   const first = await manager.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
   const id = first!.sessionId;
   await manager.route(connectorMessage(key, "two"), connectorStub(), { employee: employee as never });
-  return { session: registry.getSession(id)!, resumedWith };
+  return { session: registry.getSession(id)!, resumedWith, prompts, messages: registry.getMessages(id) };
 }
 
 describe("a resumed turn whose process never started its session", () => {
@@ -61,11 +68,137 @@ describe("a resumed turn whose process never started its session", () => {
     expect(registry.getEngineSessionRef(session, "claude").id).toBe("native-1");
   });
 
-  it("drops the conversation when Claude Code says it no longer has it", async () => {
-    const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
-    const { session } = await twoTurns(engineResult({ sessionId: "native-1", error }));
+  it("answers in a fresh conversation, given the session so far, when Claude Code no longer has the one it resumed", async () => {
+    const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1 Connection to build-box closed.");
+    const { session, resumedWith, prompts, messages } = await twoTurns(
+      engineResult({ sessionId: "native-1", error }),
+      engineResult({ sessionId: "native-2", result: "answered afresh", cost: 0.01, numTurns: 1 }),
+    );
 
+    expect(resumedWith).toEqual([undefined, "native-1", undefined]);
+    expect(prompts[2]).toContain("could not be resumed");
+    expect(prompts[2]).toContain("USER: one");
+    expect(prompts[2]).toContain("ASSISTANT: hello");
+    expect(prompts[2]).toMatch(/CURRENT MESSAGE:\ntwo$/);
+    expect(prompts[2]).not.toContain("USER: two");
+    expect(session).toMatchObject({ status: "idle", lastError: null });
+    expect(registry.getEngineSessionRef(session, "claude").id).toBe("native-2");
+    expect(session.transportMeta?.["lostConversationEngine"]).toBeUndefined();
+    expect(messages.map((message) => message.content)).toContain("answered afresh");
+    expect(messages.some((message) => message.content.includes("did not start"))).toBe(false);
+  });
+
+  it("tries a fresh conversation only once, and hands the session's next message the transcript", async () => {
+    const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
+    const stillDown = processStartFailure("claude", { exitCode: 255, signal: 0 }, "ssh: connect to host build-box port 22: Connection refused");
+    const claude = scriptedEngine("claude", [
+      engineResult({ sessionId: "native-1", result: "hello", cost: 0.01, numTurns: 1 }),
+      engineResult({ sessionId: "native-1", error }),
+      engineResult({ error: stillDown }),
+      engineResult({ sessionId: "native-3", result: "back", cost: 0.01, numTurns: 1 }),
+    ]);
+    const calls: Array<{ resume?: string; prompt: string }> = [];
+    const run = claude.run.bind(claude);
+    claude.run = async (opts: { sessionId?: string; resumeSessionId?: string; prompt?: string }) => {
+      calls.push({ resume: opts.resumeSessionId, prompt: opts.prompt ?? "" });
+      return run(opts);
+    };
+    const manager = new ManagerClass(testConfig(), new Map([["claude", claude]]) as never, "start-failure-boot");
+    const key = `stub:start-failure-${Math.random().toString(16).slice(2)}`;
+    const first = await manager.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
+    const id = first!.sessionId;
+    await manager.route(connectorMessage(key, "two"), connectorStub(), { employee: employee as never });
+
+    expect(calls.map((call) => call.resume)).toEqual([undefined, "native-1", undefined]);
+    const failed = registry.getSession(id)!;
+    expect(failed).toMatchObject({ status: "error", lastError: stillDown });
+    expect(registry.getEngineSessionRef(failed, "claude").id).toBeUndefined();
+
+    await manager.route(connectorMessage(key, "three"), connectorStub(), { employee: employee as never });
+    expect(calls[3]!.resume).toBeUndefined();
+    expect(calls[3]!.prompt).toContain("could not be resumed");
+    expect(calls[3]!.prompt).toContain("USER: one\n\nASSISTANT: hello\n\nUSER: two");
+    expect(calls[3]!.prompt).toMatch(/CURRENT MESSAGE:\nthree$/);
+    const recovered = registry.getSession(id)!;
+    expect(recovered).toMatchObject({ status: "idle" });
+    expect(registry.getEngineSessionRef(recovered, "claude").id).toBe("native-3");
+    expect(recovered.transportMeta?.["lostConversationEngine"]).toBeUndefined();
+  });
+
+  describe("a fresh conversation's turn that fails after starting", () => {
+    const lost = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
+
+    /** "one" answers, "two" loses native-1 and its retry gets `retry`, then "three" is sent. */
+    async function afterRetry(retry: EngineResult | ((sessionId: string) => EngineResult)) {
+      let sessionId = "";
+      const results: Array<EngineResult | ((sessionId: string) => EngineResult)> = [
+        engineResult({ sessionId: "native-1", result: "hello", cost: 0.01, numTurns: 1 }),
+        engineResult({ sessionId: "native-1", error: lost }),
+        retry,
+        engineResult({ sessionId: "native-3", result: "back", cost: 0.01, numTurns: 1 }),
+      ];
+      const calls: Array<{ resume?: string; prompt: string }> = [];
+      const claude = scriptedEngine("claude", []);
+      claude.run = async (opts: { sessionId?: string; resumeSessionId?: string; prompt?: string }) => {
+        claude.runs += 1;
+        calls.push({ resume: opts.resumeSessionId, prompt: opts.prompt ?? "" });
+        const next = results.shift()!;
+        return typeof next === "function" ? next(sessionId) : next;
+      };
+      const manager = new ManagerClass(testConfig(), new Map([["claude", claude]]) as never, "start-failure-boot");
+      const key = `stub:start-failure-${Math.random().toString(16).slice(2)}`;
+      const first = await manager.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
+      sessionId = first!.sessionId;
+      await manager.route(connectorMessage(key, "two"), connectorStub(), { employee: employee as never });
+      const afterTwo = registry.getSession(sessionId)!;
+      await manager.route(connectorMessage(key, "three"), connectorStub(), { employee: employee as never });
+      return { afterTwo, third: calls[3]! };
+    }
+
+    it("still owes the transcript when it did no work", async () => {
+      const { afterTwo, third } = await afterRetry(engineResult({ error: "Interactive engine: a turn is already running for this session" }));
+
+      expect(afterTwo.transportMeta?.["lostConversationEngine"]).toBe("claude");
+      expect(third.resume).toBeUndefined();
+      expect(third.prompt).toContain("could not be resumed");
+      expect(third.prompt).toMatch(/CURRENT MESSAGE:\nthree$/);
+    });
+
+    it("still owes the transcript when nothing filed the conversation it started", async () => {
+      const { afterTwo, third } = await afterRetry(engineResult({ sessionId: "native-2", error: "exited mid-turn (code 1)", cost: 0.01, numTurns: 1 }));
+
+      expect(afterTwo.transportMeta?.["lostConversationEngine"]).toBe("claude");
+      expect(third.resume).toBeUndefined();
+      expect(third.prompt).toContain("could not be resumed");
+    });
+
+    it("has delivered it once the conversation it started is filed, as Claude Code's SessionStart hook files it", async () => {
+      const { afterTwo, third } = await afterRetry((sessionId) => {
+        registry.recordEngineSessionId(sessionId, "claude", "native-2");
+        return engineResult({ sessionId: "native-2", error: "exited mid-turn (code 1)", cost: 0.01, numTurns: 1 });
+      });
+
+      expect(afterTwo.transportMeta?.["lostConversationEngine"]).toBeUndefined();
+      expect(third).toEqual({ resume: "native-2", prompt: "three" });
+    });
+  });
+
+  it("does not re-run /compact in a fresh conversation, which would have nothing to compact", async () => {
+    const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
+    const claude = scriptedEngine("claude", [
+      engineResult({ sessionId: "native-1", result: "hello", cost: 0.01, numTurns: 1 }),
+      engineResult({ sessionId: "native-1", error }),
+    ]);
+    const manager = new ManagerClass(testConfig(), new Map([["claude", claude]]) as never, "start-failure-boot");
+    const key = `stub:start-failure-${Math.random().toString(16).slice(2)}`;
+    const first = await manager.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
+    await manager.route(connectorMessage(key, "/compact"), connectorStub(), { employee: employee as never });
+    const session = registry.getSession(first!.sessionId)!;
+
+    expect(claude.runs).toBe(2);
     expect(registry.getEngineSessionRef(session, "claude").id).toBeUndefined();
+    // Still owed: the next ordinary message gets the transcript.
+    expect(session.transportMeta?.["lostConversationEngine"]).toBe("claude");
   });
 
   it("drops the conversation when codex says it no longer has it", async () => {

@@ -15,7 +15,9 @@ import { createPartialStreamWriter } from "../partial-stream.js";
 import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./engine-run.js";
 import { compactColdSessionFirst, settlePreemptedBeforeEngine } from "./auto-compact.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
-import { preflightTurn, warnIfNearUsageLimit } from "./preflight.js";
+import { preflightTurn, resolveTurnPrompt, warnIfNearUsageLimit } from "./preflight.js";
+import { isMissingConversationOutput, isProcessStartFailure } from "../../shared/process-start.js";
+import { isRawEngineCommand } from "../../shared/skill-commands.js";
 import { ensureRemoteHostReady } from "./remote-ready.js";
 import { runRateLimitTurn } from "./rate-limit-turn.js";
 import {
@@ -91,7 +93,7 @@ async function runTurnOnce(input: TurnInput, surface: TurnSurface): Promise<Turn
 async function runPlannedTurn(run: TurnRun): Promise<TurnInput | undefined> {
   try {
     if (!await compactFirstIfCold(run)) return undefined;
-    const { attempt, model } = await runEngineWithModelFallback(run);
+    const { attempt, model } = await runEngineOrStartAfresh(run);
     run.heartbeat.stop();
     const handedBack = await concludeTurn(run, attempt, model);
     return handedBack ? { ...run.input, session: handedBack } : undefined;
@@ -119,6 +121,49 @@ async function compactFirstIfCold(run: TurnRun): Promise<boolean> {
   run.heartbeat.stop();
   if (claimSettleableSession(run, "result")) await settlePreemptedBeforeEngine(run);
   return false;
+}
+
+/**
+ * Run the engine; if the CLI says the conversation it was asked to resume no
+ * longer exists, run the turn once more in a fresh conversation that is handed
+ * the session's recent messages. Without this the turn fails at birth, the
+ * message it carried is never answered, and the session sits in `error` until
+ * someone sends it something else. If the second run fails too, the transcript
+ * stays owed to the session's next turn.
+ */
+async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAttempt; model: string | undefined }> {
+  const first = await runEngineWithModelFallback(run);
+  if (!lostResumedConversation(run, first.attempt.result)) return first;
+
+  const sessionId = run.input.session.id;
+  const lostId = run.plan.resumeSessionId;
+  logger.warn(`Session ${sessionId}: ${run.plan.engineName} has no conversation ${lostId} to resume; starting a fresh one with the session's recent messages`);
+  clearDeadEngineSession(sessionId, run.plan.engineName, { lostConversation: true });
+  deletePartialMessages(sessionId);
+  updateSession(sessionId, { lastError: null });
+  run.plan = {
+    ...run.plan,
+    resumeSessionId: undefined,
+    resumeNativeId: undefined,
+    // clearDeadEngineSession marked the conversation lost, so this is the
+    // lost-conversation prompt, owed until a turn settles cleanly with it.
+    ...resolveTurnPrompt(getSession(sessionId) ?? run.input.session, run.plan.engineName, run.input.prompt, false),
+  };
+  return await runEngineWithModelFallback(run);
+}
+
+/**
+ * Whether this attempt's process never started because the CLI no longer has
+ * the conversation the turn resumed, with the turn still this attempt's to run.
+ * An engine-native command (`/compact` and the like) is not re-run: in a new,
+ * empty conversation it has nothing to act on.
+ */
+function lostResumedConversation(run: TurnRun, result: EngineResult): boolean {
+  const { plan, input } = run;
+  if (!plan.resumeSessionId || !result.error || plan.compaction || isRawEngineCommand(plan.engineName, input.prompt)) return false;
+  if (!isProcessStartFailure(result.error) || !isMissingConversationOutput(result.error, plan.resumeSessionId)) return false;
+  const live = getSession(input.session.id);
+  return live?.attemptToken === input.attemptToken && live.status === "running" && live.engine === plan.engineName;
 }
 
 /** Run the engine, retrying once on a model Claude has since withdrawn. */
@@ -224,7 +269,7 @@ async function concludeTurn(run: TurnRun, attempt: EngineAttempt, model: string 
   // A stale engine-session id can carry text like "429" that would otherwise
   // read as a rate limit, so dead sessions are cleared before that check.
   const dead = !quietPreempted && isDeadSessionError(result);
-  if (dead) clearDeadEngineSession(sessionId, run.plan.engineName);
+  if (dead) clearDeadEngineSession(sessionId, run.plan.engineName, { lostConversation: Boolean(run.plan.resumeSessionId) });
   const rateLimit = !quietPreempted && !dead ? detectRateLimit(result) : { limited: false as const };
   noteClaudeLogin(run, result, quietPreempted || dead || rateLimit.limited);
 
