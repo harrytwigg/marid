@@ -266,7 +266,8 @@ describe("the other pickers", () => {
     fireEvent.click(screen.getByTestId("rail-start"))
     fireEvent.click(await screen.findByTestId("start-day-4"))
     await waitFor(() => expect(updateWorkItem).toHaveBeenCalled())
-    expect(updateWorkItem.mock.calls[0][1].patch).toEqual({ startAt: expect.stringContaining("2026-08-04") })
+    // The start of the day, as a date-only `startAt` means; a due date lands at midday.
+    expect(updateWorkItem.mock.calls[0][1].patch).toEqual({ startAt: "2026-08-04T00:00:00.000Z" })
   })
 
   it("department rows carry the mono prefix and the birth-prefix footnote", async () => {

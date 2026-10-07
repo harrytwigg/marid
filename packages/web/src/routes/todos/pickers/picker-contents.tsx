@@ -230,7 +230,9 @@ export function DuePickerContent({
               type="button"
               data-testid={`${testPrefix}-day-${day}`}
               onClick={() => {
-                commit(new Date(Date.UTC(view.year, view.month, day, 12)).toISOString())
+                // A due date lands at midday; a start date at the start of the day, the
+                // same instant a date-only `startAt` means, so "Starts <today>" holds nothing.
+                commit(new Date(Date.UTC(view.year, view.month, day, field === "startAt" ? 0 : 12)).toISOString())
                 onDone()
               }}
               className={`grid ${sheet ? "h-10" : "h-8"} place-items-center rounded-lg text-[12.5px] tabular-nums outline-none focus-visible:bg-[var(--fill-tertiary)] ${

@@ -120,7 +120,7 @@ export class WalkTools {
     const item = id ? getWorkItem(id) : undefined;
     if (!item) return { ok: false, text: `there is no Todo ${JSON.stringify(id)}` };
     if (!OPEN.has(item.status)) return { ok: false, text: `${item.id} is ${item.status}; the walk only handles open Todos` };
-    const todo = await digestTodo(item, { resolveLink: this.opts.apply.resolveLink, flagged: this.opts.flagged });
+    const todo = await digestTodo(item, { resolveLink: this.opts.apply.resolveLink, flagged: this.opts.flagged, now: this.opts.apply.now() });
     const decided = this.decided.get(item.id);
     const account = this.accountOf(item);
     return { ok: true, text: renderTodo(todo) + (account ? `\naccount: ${account}` : "") + (decided ? `\nDECIDED this tick: ${decided.outcome}` : "") };

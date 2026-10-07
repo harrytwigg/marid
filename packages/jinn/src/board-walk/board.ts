@@ -12,6 +12,7 @@ import { readBlockRecord } from "../work-items/blocks.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
 import { OPERATOR_ASSIGNEE } from "../work-items/assignment.js";
 import { findLinks, type LinkResolver, type LinkState } from "./pr-state.js";
+import { startDateHold } from "../work-items/start-date.js";
 
 /**
  * The board as the walk reads it: every open Todo with what its gates could
@@ -52,6 +53,8 @@ export interface BoardTodo {
   dueAt: string | null;
   /** Nothing starts it before this; the Dispatcher refuses until then. */
   startAt: string | null;
+  /** The start date holds it now (a backlog Todo whose date is still ahead). */
+  startHeld?: boolean;
   body?: string;
   comments: Array<{ author: string; authorKind: string; at: string; body: string }>;
   commentsTotal: number;
@@ -114,6 +117,7 @@ export interface DigestOptions {
   resolveLink: LinkResolver;
   /** Todo ids whose current stuck episode is already flagged. */
   flagged?: ReadonlySet<string>;
+  now?: number;
 }
 
 /** Present keys only: an absent optional reads as absent, not as `undefined`. */
@@ -150,7 +154,8 @@ export async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<B
     relations: listRelations(item.id).map((relation) => ({ kind: relation.kind, direction: relation.direction, other: relation.other })),
     sessions: sessionsOn(item),
     links,
-    ...optional<Pick<BoardTodo, "body" | "stop" | "noAutoStart" | "dispatchEngine" | "flaggedStuck">>({
+    ...optional<Pick<BoardTodo, "body" | "stop" | "noAutoStart" | "dispatchEngine" | "flaggedStuck" | "startHeld">>({
+      startHeld: startDateHold(item, opts.now ?? Date.now()) !== undefined,
       body: truncate(item.body, BODY_CHARS),
       stop: stopOf(item),
       noAutoStart: noAutoStartReason(item),

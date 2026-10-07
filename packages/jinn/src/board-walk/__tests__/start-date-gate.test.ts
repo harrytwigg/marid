@@ -56,7 +56,10 @@ describe("the start date gate in the board walk", () => {
     expect(m.render.boardLine(ahead, { flagged: false, now: NOW })).toContain("not before its start date 2026-10-08T00:00Z");
     expect(m.render.boardLine(passed, { flagged: false, now: NOW })).not.toContain("start date");
 
-    const full = m.render.renderTodo(await m.board.digestTodo(ahead, { resolveLink: vi.fn() }));
-    expect(full).toContain("starts 2026-10-08T00:00Z · due 2026-10-09T00:00Z");
+    const full = m.render.renderTodo(await m.board.digestTodo(ahead, { resolveLink: vi.fn(), now: NOW }));
+    expect(full).toContain("starts 2026-10-08T00:00Z (holds it: not started before then) · due 2026-10-09T00:00Z");
+    const passedFull = m.render.renderTodo(await m.board.digestTodo(passed, { resolveLink: vi.fn(), now: NOW }));
+    expect(passedFull).toContain("starts 2026-10-01T00:00Z");
+    expect(passedFull).not.toContain("holds it");
   });
 });

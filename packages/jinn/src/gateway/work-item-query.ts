@@ -56,8 +56,9 @@ export const ISO_DATE_OR_INSTANT = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?
 
 /** `startAt` in a create or edit body: absent, null (none, or clear on edit),
  *  or an ISO date or timezone-qualified instant, normalized to an ISO instant. */
-export function readStartAtField(body: Record<string, unknown>): { ok: true; value?: string | null } | { ok: false; error: string } {
+export function readStartAtField(body: Record<string, unknown>, opts: { blankIsNone?: boolean } = {}): { ok: true; value?: string | null } | { ok: false; error: string } {
   if (!Object.prototype.hasOwnProperty.call(body, 'startAt') || body.startAt === null) return { ok: true, value: body.startAt as null | undefined };
+  if (opts.blankIsNone && typeof body.startAt === 'string' && !body.startAt.trim()) return { ok: true, value: null };
   const raw = typeof body.startAt === 'string' ? body.startAt.trim() : '';
   if (!ISO_DATE_OR_INSTANT.test(raw) || Number.isNaN(Date.parse(raw))) return { ok: false, error: 'startAt must be an ISO 8601 timestamp or null' };
   return { ok: true, value: new Date(raw).toISOString() };

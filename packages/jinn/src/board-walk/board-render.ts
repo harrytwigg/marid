@@ -57,7 +57,7 @@ function sessionsLine(sessions: BoardTodo["sessions"]): string | undefined {
 
 function datesLine(todo: BoardTodo): string {
   const dates = [`created ${minute(todo.createdAt)}`, `updated ${minute(todo.updatedAt)}`];
-  if (todo.startAt) dates.push(`starts ${minute(todo.startAt)}`);
+  if (todo.startAt) dates.push(`starts ${minute(todo.startAt)}${todo.startHeld ? " (holds it: not started before then)" : ""}`);
   if (todo.dueAt) dates.push(`due ${minute(todo.dueAt)}`);
   return dates.join(" · ");
 }
@@ -124,7 +124,7 @@ export function boardLine(item: WorkItem, opts: { flagged: boolean; decided?: st
     `updated ${minute(item.updatedAt)}`,
     stop ? `stopped: ${stopLine(stop)}` : undefined,
     optOut ? `no auto-start (${optOut})` : undefined,
-    item.startAt && startDateHold(item, opts.now) ? `not before its start date ${minute(item.startAt)}` : undefined,
+    startDateHold(item, opts.now) ? `not before its start date ${minute(item.startAt!)}` : undefined,
     sessions.running > 0 ? `${sessions.running} session${sessions.running === 1 ? "" : "s"} running` : undefined,
     opts.flagged ? "already flagged stuck" : undefined,
     opts.decided ? `DECIDED this tick: ${opts.decided}` : undefined,

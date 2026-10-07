@@ -285,14 +285,15 @@ describe("POST /api/work-items/:id/dispatch", () => {
     const item = workItems.createWorkItem({ title: "Not before its start date", source: "human", startAt: "2999-01-01T00:00:00.000Z" });
     const sessionsBefore = registry.countSessions();
     const held = await call("POST", `/api/work-items/${item.id}/dispatch`, {});
-    expect(held.status).toBe(409);
-    expect(held.body).toMatchObject({ code: "TODO_START_DATE_AHEAD", workItemId: item.id });
+    expect(held).toMatchObject({ status: 409, body: { code: "TODO_START_DATE_AHEAD", workItemId: item.id } });
     expect(held.body.error).toContain("2999-01-01T00:00:00.000Z");
     expect(registry.countSessions()).toBe(sessionsBefore);
 
-    // Moving the date into the past is all it takes; the Todo itself never moved.
     const moved = await call("PATCH", `/api/work-items/${item.id}`, { startAt: "2000-01-01", expectedVersion: item.version });
     expect(moved.body.workItem).toMatchObject({ startAt: "2000-01-01T00:00:00.000Z", status: "backlog" });
     expect((await call("POST", `/api/work-items/${item.id}/dispatch`, {})).status).toBe(201);
+    // Only a first start is held: work already under way is restarted whatever its start date says.
+    const underWay = workItems.createWorkItem({ title: "Already under way", source: "human", status: "executing", startAt: "2999-01-01" });
+    expect((await call("POST", `/api/work-items/${underWay.id}/dispatch`, {})).status).toBe(201);
   });
 });

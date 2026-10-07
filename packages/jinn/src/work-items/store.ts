@@ -13,7 +13,7 @@ import { allocateWorkItemId, useWorkItemAllocationClaim } from './migrate.js';
 import { createdEventDetail, type WriteOrigin } from './origin.js';
 import { HOME_SCOPE_SQL, KEPT_EXISTS_SQL } from './kept.js';
 import { sprintFilterCondition } from './sprints-schema.js';
-import { applyStartAtEdit, assertTodoDateOrder, START_AT_COLUMN_SQL, writeWorkItemStartAt } from './start-date.js';
+import { applyStartAtEdit, assertTodoDateOrder, START_AT_COLUMN_SQL, startAtInstant, writeWorkItemStartAt } from './start-date.js';
 import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { WorkItemEventKind } from './event-log.js';
@@ -312,6 +312,9 @@ export type { WorkItemEventKind } from './event-log.js';
 export function createWorkItem(input: CreateWorkItemInput): WorkItem {
   const db = initDb();
   const now = new Date().toISOString();
+  // Before the allocator: a refused create must not burn a Todo number.
+  const startAt = startAtInstant(input.startAt);
+  assertTodoDateOrder(startAt, input.dueAt);
   // The burn commits before the create. An idempotent hit or a lost race discards the
   // claim and leaves a permanent gap in the company Todo sequence, which is valid by design.
   // A configless disposable/test home retains the historical JIN default. Once a
@@ -360,7 +363,6 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
     return row ? rowToWorkItem(row) : undefined;
   };
 
-  assertTodoDateOrder(input.startAt, input.dueAt);
   const txn = db.transaction((): WorkItem => {
     if (sourceRef !== null) {
       const existing = selectExisting();
@@ -402,7 +404,7 @@ export function createWorkItem(input: CreateWorkItemInput): WorkItem {
       }
       throw err;
     }
-    if (input.startAt) writeWorkItemStartAt(db, id, input.startAt);
+    if (startAt) writeWorkItemStartAt(db, id, startAt);
     appendWorkItemEvent({ workItemId: id, kind: 'created', toStatus: status, actor: source, detail: createdEventDetail(sourceRef, input.origin) });
     if (parent) {
       // Re-verify the parent under the write lock before auditing the link.

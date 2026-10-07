@@ -209,8 +209,8 @@ export function startTodoDispatcher(
   // FR-015: a holding a hand edit left outside the department rules starts nothing.
   const held = todoHoldRefusal(item);
   if (held) return { ok: false, status: 409, body: { error: held } };
-  // Every start comes through here (the button, the board walk, the stall
-  // sweep), so a start date still ahead holds them all in one place.
+  // Every start comes through here (the button, the board walk), so a start
+  // date still ahead holds a first start in one place; restarts are not held.
   const notYet = startDateHold(item, Date.now());
   if (notYet) return { ok: false, status: 409, body: { error: notYet, code: TODO_START_DATE_AHEAD, workItemId: item.id } };
   const planned = planDispatcher(item, context, opts.promptSuffix);

@@ -2194,7 +2194,7 @@ export async function handleApiRequest(
         }
         dueAt = new Date(dueAt).toISOString();
       }
-      const startAt = readStartAtField(body);
+      const startAt = readStartAtField(body, { blankIsNone: true }); // like dueAt: blank on create is no date
       if (!startAt.ok) return badRequest(res, startAt.error);
       let priority: number | undefined;
       if (body.priority !== undefined) {
