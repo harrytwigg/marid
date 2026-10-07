@@ -234,10 +234,12 @@ export async function handleDepartmentsApi(req: HttpRequest, res: ServerResponse
     json(res, { departments: listDepartmentRows(context, { includeArchived: route.url.searchParams.get("includeArchived") === "true" }) });
     return true;
   }
-  const action = matchRoute("/api/departments/:slug/:action", pathname);
-  if (action && method === "POST" && (action.action === "archive" || action.action === "unarchive")) {
-    if (!SLUG.test(action.slug) || !knownDepartment(action.slug, context)) notFound(res);
-    else await archiveDepartment(req, res, action.slug, action.action === "archive", context);
+  const archive = matchRoute("/api/departments/:slug/archive", pathname);
+  const unarchive = matchRoute("/api/departments/:slug/unarchive", pathname);
+  const target = archive ?? unarchive;
+  if (target && method === "POST") {
+    if (!SLUG.test(target.slug) || !knownDepartment(target.slug, context)) notFound(res);
+    else await archiveDepartment(req, res, target.slug, archive !== null, context);
     return true;
   }
   const params = matchRoute("/api/departments/:slug", pathname);
