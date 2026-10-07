@@ -69,6 +69,8 @@ function summarize(item: Record<string, unknown>): Record<string, unknown> {
     rootId: item.rootId ?? item.id ?? null,
     depth: item.depth ?? 0,
     version: item.version,
+    // Dates only when set: most rows carry neither, and every row is context.
+    ...(item.startAt ? { startAt: item.startAt } : {}), ...(item.dueAt ? { dueAt: item.dueAt } : {}),
     updatedAt: item.updatedAt ?? null,
   };
 }
@@ -217,6 +219,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         parentId: TODO_ID_SCHEMA,
         priority: { type: "number", enum: [0, 1, 2, 3] },
         dueAt: { type: "string" },
+        startAt: { type: "string" },
         labels: { type: "array", items: { type: "string" } },
         idempotencyKey: { type: "string" },
         autoStart: { type: "boolean", description: "false: the board walk never starts it." },
@@ -243,8 +246,8 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         }
         body.priority = args.priority;
       }
-      const dueAt = optionalString(args, "dueAt", 64);
-      if (dueAt !== undefined) body.dueAt = dueAt;
+      const dates = { dueAt: optionalString(args, "dueAt", 64), startAt: optionalString(args, "startAt", 64) };
+      for (const [key, v] of Object.entries(dates)) if (v !== undefined) body[key] = v;
       if (args.labels !== undefined) body.labels = requireLabelRefs(args);
       if (args.autoStart !== undefined) {
         if (typeof args.autoStart !== "boolean") throw new JinnMcpToolError("autoStart must be a boolean");
@@ -328,6 +331,7 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         body: { type: "string" },
         priority: { type: "number", enum: [0, 1, 2, 3] },
         dueAt: { type: ["string", "null"] },
+        startAt: { type: ["string", "null"] },
         sprint: { type: ["string", "null"] },
       },
       required: ["id"],
@@ -362,17 +366,15 @@ export function buildWorkItemTools(): JinnMcpTool[] {
         }
         patch.priority = args.priority;
       }
-      // Explicit null CLEARS dueAt (slice-4 review F3), passing through to the
-      // route's existing null support.
-      if (args.dueAt === null) {
-        patch.dueAt = null;
-      } else {
-        const dueAt = optionalString(args, "dueAt", 64);
-        if (dueAt !== undefined) patch.dueAt = dueAt;
+      // Explicit null CLEARS a date (slice-4 review F3), passing through to the
+      // route's null support.
+      for (const key of ["dueAt", "startAt"] as const) {
+        const v = args[key] === null ? null : optionalString(args, key, 64);
+        if (v !== undefined) patch[key] = v;
       }
       const sprint = optionalSprintRef(args);
       if (Object.keys(patch).length === 0 && sprint === undefined) {
-        throw new JinnMcpToolError("pass at least one editable field (title, body, priority, dueAt, sprint)");
+        throw new JinnMcpToolError("pass at least one editable field (title, body, priority, dueAt, startAt, sprint)");
       }
       if (sprint === undefined) return mutationResult(await patchWorkItem(ctx, id, patch, `editing work item "${id}"`), "Todo metadata edited.");
       return editWithSprintMove(ctx, id, sprint, patch, (edit) => patchWorkItem(ctx, id, edit, `editing work item "${id}"`));

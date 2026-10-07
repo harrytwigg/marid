@@ -54,6 +54,15 @@ const WORK_ITEM_PAGE_DEFAULT_LIMIT = 20;
 const WORK_ITEM_PAGE_MAX_LIMIT = 100;
 export const ISO_DATE_OR_INSTANT = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2}))?$/;
 
+/** `startAt` in a create or edit body: absent, null (none, or clear on edit),
+ *  or an ISO date or timezone-qualified instant, normalized to an ISO instant. */
+export function readStartAtField(body: Record<string, unknown>): { ok: true; value?: string | null } | { ok: false; error: string } {
+  if (!Object.prototype.hasOwnProperty.call(body, 'startAt') || body.startAt === null) return { ok: true, value: body.startAt as null | undefined };
+  const raw = typeof body.startAt === 'string' ? body.startAt.trim() : '';
+  if (!ISO_DATE_OR_INSTANT.test(raw) || Number.isNaN(Date.parse(raw))) return { ok: false, error: 'startAt must be an ISO 8601 timestamp or null' };
+  return { ok: true, value: new Date(raw).toISOString() };
+}
+
 function readWorkItemIntegerParam(
   url: URL,
   name: 'limit' | 'offset',

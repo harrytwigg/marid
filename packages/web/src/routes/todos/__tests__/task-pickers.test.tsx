@@ -257,6 +257,18 @@ describe("the other pickers", () => {
     expect(request.patch.dueAt).toContain("2026-08-09")
   })
 
+  it("the start picker commits startAt on its own row, beside the due date", async () => {
+    const item = full("PLA-12", { startAt: "2026-08-03T12:00:00.000Z", dueAt: "2026-08-08T12:00:00.000Z" })
+    getWorkItem.mockResolvedValue(detailOf(item))
+    updateWorkItem.mockResolvedValue({ workItem: { ...item, version: 4 }, replayed: false })
+    renderTask()
+    expect((await screen.findByTestId("rail-start")).textContent).toContain("Starts Aug 3")
+    fireEvent.click(screen.getByTestId("rail-start"))
+    fireEvent.click(await screen.findByTestId("start-day-4"))
+    await waitFor(() => expect(updateWorkItem).toHaveBeenCalled())
+    expect(updateWorkItem.mock.calls[0][1].patch).toEqual({ startAt: expect.stringContaining("2026-08-04") })
+  })
+
   it("department rows carry the mono prefix and the birth-prefix footnote", async () => {
     getWorkItem.mockResolvedValue(detailOf(full("PLA-12")))
     renderTask()

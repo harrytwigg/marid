@@ -254,8 +254,10 @@ import {
 import { createWorkItemIdempotent, WorkItemCreateIdempotencyConflictError } from "../work-items/create-idempotency.js";
 import { resolveTodoDispatch, setTodoDispatchConfig } from "../work-items/dispatch-config.js";
 import { writeAutoStartRow } from "../work-items/auto-start.js";
+import { TodoDateOrderError } from "../work-items/start-date.js";
 import {
   ISO_DATE_OR_INSTANT,
+  readStartAtField,
   readCleanSearchParam,
   readWorkItemQueryParams,
   SEARCH_QUERY_ROUTE_CHAR_CAP,
@@ -2192,6 +2194,8 @@ export async function handleApiRequest(
         }
         dueAt = new Date(dueAt).toISOString();
       }
+      const startAt = readStartAtField(body);
+      if (!startAt.ok) return badRequest(res, startAt.error);
       let priority: number | undefined;
       if (body.priority !== undefined) {
         if (typeof body.priority !== 'number' || !Number.isInteger(body.priority) || body.priority < 0 || body.priority > 3) {
@@ -2252,6 +2256,7 @@ export async function handleApiRequest(
           : null,
         parentId,
         dueAt,
+        ...(startAt.value ? { startAt: startAt.value } : {}),
         ...(priority !== undefined ? { priority } : {}),
         // Slice-5 decision 7: a session with a resolved employee creates AS
         // that employee (the comments identity model); `session:<uuid>` remains
@@ -2370,7 +2375,7 @@ export async function handleApiRequest(
       }
       const retired = retiredTodoFieldError(body);
       if (retired) return todoEditValidationError(res, retired);
-      const metadataFields = ["title", "body", "assignee", "department", "priority", "rank", "dueAt"] as const;
+      const metadataFields = ["title", "body", "assignee", "department", "priority", "rank", "dueAt", "startAt"] as const;
       const allowed = new Set([...metadataFields, "expectedVersion", "idempotencyKey"]);
       const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
       if (unsupported.length > 0) {
@@ -2456,6 +2461,9 @@ export async function handleApiRequest(
           patch.dueAt = null;
         }
       }
+      const startAt = readStartAtField(body);
+      if (!startAt.ok) return todoEditValidationError(res, startAt.error);
+      if (startAt.value !== undefined) patch.startAt = startAt.value;
 
       const item = getWorkItem(params.id);
       if (!item) return notFound(res);
@@ -2494,6 +2502,7 @@ export async function handleApiRequest(
         if (err instanceof TodoDepartmentNotAllowedError) {
           return todoEditValidationError(res, err.message, "todo_invalid_department");
         }
+        if (err instanceof TodoDateOrderError) return todoEditValidationError(res, err.message);
         if (err instanceof DepartmentArchivedError) return departmentArchivedRefusal(res, err);
         throw err;
       }

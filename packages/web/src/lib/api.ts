@@ -385,6 +385,7 @@ export interface WorkItemCompactWire extends TodoStopCauseWire {
   rootId?: string
   depth?: number
   dueAt?: string | null
+  startAt?: string | null
   /** Board wire data (optional: older gateways omit them). `blocked` is true
    *  while an incoming `blocks` relation originates from an open Todo; `kept`
    *  is true while the Todo sits on the operator's Home board. */
@@ -433,6 +434,7 @@ export interface WorkItemFullWire {
   rootId?: string
   depth?: number
   dueAt?: string | null
+  startAt?: string | null
   createdAt: string
   updatedAt: string
   closedAt: string | null

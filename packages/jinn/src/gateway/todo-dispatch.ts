@@ -1,5 +1,6 @@
 import { createSession, insertMessage, listSessionsByWorkItem, updateSession } from "../sessions/registry.js";
 import { todoHoldRefusal } from "../work-items/todo-hold.js";
+import { startDateHold } from "../work-items/start-date.js";
 import { enqueueQueueItem } from "../sessions/queue-item-registry.js";
 import { linkSession, type WorkItem } from "../work-items/store.js";
 import { isExecutionAttempt } from "../work-items/link-role.js";
@@ -33,6 +34,9 @@ export interface TodoDispatchStarted {
   status: string;
   reused: boolean;
 }
+
+/** The refusal code for a Todo whose start date has not come yet. */
+export const TODO_START_DATE_AHEAD = "TODO_START_DATE_AHEAD";
 
 export type StartTodoDispatcherResult =
   | { ok: true; status: 200 | 201; body: TodoDispatchStarted }
@@ -205,6 +209,10 @@ export function startTodoDispatcher(
   // FR-015: a holding a hand edit left outside the department rules starts nothing.
   const held = todoHoldRefusal(item);
   if (held) return { ok: false, status: 409, body: { error: held } };
+  // Every start comes through here (the button, the board walk, the stall
+  // sweep), so a start date still ahead holds them all in one place.
+  const notYet = startDateHold(item, Date.now());
+  if (notYet) return { ok: false, status: 409, body: { error: notYet, code: TODO_START_DATE_AHEAD, workItemId: item.id } };
   const planned = planDispatcher(item, context, opts.promptSuffix);
   if (!planned.ok) return planned.result;
   const { plan } = planned;

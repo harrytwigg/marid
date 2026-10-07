@@ -12,6 +12,7 @@ import type { Gate, StartDecision, TodoDecision } from "./decisions.js";
 import { findLinks, type LinkResolver } from "./pr-state.js";
 import { UNROUTED, type WalkAccounts } from "./accounts.js";
 import { namesDate } from "./dates.js";
+import { startDateHold } from "../work-items/start-date.js";
 import { listComments } from "../work-items/comments.js";
 import { listRelations } from "../work-items/relations.js";
 import { listWorkItemEvents } from "../work-items/event-log.js";
@@ -263,6 +264,7 @@ export function startTodo(deps: ApplyDeps, decision: StartDecision): TickEntry {
   if (item.status !== "backlog") return { ...entry, kind: "refused", outcome: `only a backlog Todo is started; this one is ${item.status}` };
   const optOut = noAutoStartReason(item);
   if (optOut) return { ...entry, kind: "refused", outcome: `it refuses automatic starts (${optOut})` };
+  if (startDateHold(item, deps.now())) return { ...entry, kind: "refused", outcome: `it is held until its start date, ${item.startAt}` };
   const limited = exhaustedAccountRefusal(deps.accounts, item);
   if (limited) return { ...entry, kind: "refused", outcome: limited };
   let result: StartTodoDispatcherResult;

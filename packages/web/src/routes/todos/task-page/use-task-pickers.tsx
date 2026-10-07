@@ -33,13 +33,14 @@ import { offeredDepartments } from "../pickers/department-filters"
  * chips, law 4). Commits are optimistic; a server refusal snaps the value back
  * (cache invalidation) and surfaces the gateway's words via `announce`. */
 
-export type PickerKey = "status" | "priority" | "assignee" | "labels" | "due" | "department"
+export type PickerKey = "status" | "priority" | "assignee" | "labels" | "start" | "due" | "department"
 
 const PICKER_TITLE: Record<PickerKey, string> = {
   status: "Status",
   priority: "Priority",
   assignee: "Assignee",
   labels: "Labels",
+  start: "Start date",
   due: "Due date",
   department: "Department",
 }
@@ -169,6 +170,8 @@ export function useTaskPickers({
           return <AssigneePickerContent {...shared} employees={employees} commit={commitAssignee} />
         case "labels":
           return <LabelsPickerContent {...shared} commit={commitLabels} />
+        case "start":
+          return <DuePickerContent {...shared} field="startAt" commit={(startAt) => patchField({ startAt })} />
         case "due":
           return <DuePickerContent {...shared} commit={(dueAt) => patchField({ dueAt })} />
         case "department":

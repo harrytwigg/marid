@@ -280,4 +280,19 @@ describe("POST /api/work-items/:id/dispatch", () => {
       defaultEngine = "codex";
     }
   });
+
+  it("holds a Todo whose start date is ahead, naming the date, and starts it once the date has passed", async () => {
+    const item = workItems.createWorkItem({ title: "Not before its start date", source: "human", startAt: "2999-01-01T00:00:00.000Z" });
+    const sessionsBefore = registry.countSessions();
+    const held = await call("POST", `/api/work-items/${item.id}/dispatch`, {});
+    expect(held.status).toBe(409);
+    expect(held.body).toMatchObject({ code: "TODO_START_DATE_AHEAD", workItemId: item.id });
+    expect(held.body.error).toContain("2999-01-01T00:00:00.000Z");
+    expect(registry.countSessions()).toBe(sessionsBefore);
+
+    // Moving the date into the past is all it takes; the Todo itself never moved.
+    const moved = await call("PATCH", `/api/work-items/${item.id}`, { startAt: "2000-01-01", expectedVersion: item.version });
+    expect(moved.body.workItem).toMatchObject({ startAt: "2000-01-01T00:00:00.000Z", status: "backlog" });
+    expect((await call("POST", `/api/work-items/${item.id}/dispatch`, {})).status).toBe(201);
+  });
 });

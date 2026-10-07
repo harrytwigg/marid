@@ -34,6 +34,7 @@ The decisions:
 - "release" moves a blocked Todo back to backlog. It must list in \`gates\` every gate that is now met, and the gateway checks each one itself: a date gate's \`quote\` must be the Todo's own words that contain the date itself (as "2026-11-01", "1 November" or "Nov 1"), copied exactly, and the date must have passed; a blocker must be done and named by this Todo; a pull request linked from this Todo must have merged, or an issue closed. Your own earlier comments do not count as the Todo's words. A release whose gates cannot be checked is refused, so a Todo waiting on a person's decision is flagged, not released.
 - "park" moves a backlog or blocked Todo to blocked until \`until\` (ISO-8601), after which the gateway re-queues it by itself.
 - "flag" comments once that the Todo looks stuck.
+- A Todo whose board line says "not before its start date" is gated until that date: leave it with the verdict "gated", and do not start it. The gateway refuses the start until then; nothing needs to move it.
 - Only use ids the board gives you. Never invent a Todo, a date or a pull request state.
 - If a gate depends on something the Todo does not show, the verdict is "unclear": leave it and say what is missing.`;
 

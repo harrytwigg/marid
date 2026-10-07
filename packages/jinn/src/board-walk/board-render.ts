@@ -1,6 +1,7 @@
 import type { WorkItem } from "../work-items/store.js";
 import type { LinkState } from "./pr-state.js";
 import { noAutoStartReason, sessionsOn, statusSince, stopOf, truncate, type BoardTodo } from "./board.js";
+import { startDateHold } from "../work-items/start-date.js";
 
 /**
  * The board as text for the walk's model: one line per Todo for going through
@@ -54,6 +55,13 @@ function sessionsLine(sessions: BoardTodo["sessions"]): string | undefined {
   return `sessions: ${sessions.running} running${newest}`;
 }
 
+function datesLine(todo: BoardTodo): string {
+  const dates = [`created ${minute(todo.createdAt)}`, `updated ${minute(todo.updatedAt)}`];
+  if (todo.startAt) dates.push(`starts ${minute(todo.startAt)}`);
+  if (todo.dueAt) dates.push(`due ${minute(todo.dueAt)}`);
+  return dates.join(" · ");
+}
+
 /** The facts the walk's rules hang on, one labelled line each. */
 function factLines(todo: BoardTodo): string[] {
   const lines = [
@@ -64,7 +72,7 @@ function factLines(todo: BoardTodo): string[] {
       todo.department ? `department ${todo.department}` : undefined,
       todo.parentId ? `parent ${todo.parentId}` : undefined,
     ].filter(Boolean).join(" · "),
-    [`created ${minute(todo.createdAt)}`, `updated ${minute(todo.updatedAt)}`, todo.dueAt ? `due ${minute(todo.dueAt)}` : undefined].filter(Boolean).join(" · "),
+    datesLine(todo),
   ];
   const optionalLines = [
     todo.labels.length > 0 ? `labels: ${todo.labels.join(", ")}` : undefined,
@@ -104,7 +112,7 @@ export function renderTodo(todo: BoardTodo): string {
 /** One open Todo as a single line: enough to go through the board, and to
  *  leave alone a Todo that plainly has nothing to decide, without reading it
  *  in full. `decided` is what this tick already did with it. */
-export function boardLine(item: WorkItem, opts: { flagged: boolean; decided?: string }): string {
+export function boardLine(item: WorkItem, opts: { flagged: boolean; decided?: string; now: number }): string {
   const stop = stopOf(item);
   const sessions = sessionsOn(item);
   const optOut = noAutoStartReason(item);
@@ -116,6 +124,7 @@ export function boardLine(item: WorkItem, opts: { flagged: boolean; decided?: st
     `updated ${minute(item.updatedAt)}`,
     stop ? `stopped: ${stopLine(stop)}` : undefined,
     optOut ? `no auto-start (${optOut})` : undefined,
+    item.startAt && startDateHold(item, opts.now) ? `not before its start date ${minute(item.startAt)}` : undefined,
     sessions.running > 0 ? `${sessions.running} session${sessions.running === 1 ? "" : "s"} running` : undefined,
     opts.flagged ? "already flagged stuck" : undefined,
     opts.decided ? `DECIDED this tick: ${opts.decided}` : undefined,

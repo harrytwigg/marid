@@ -7,7 +7,7 @@ import type { UpdateWorkItemInput } from '../work-items/store.js';
 import { workItemActor, type WorkItemCaller } from './work-item-arming.js';
 
 /** What a Todo SAYS: open to every authenticated session, like its status. */
-const TODO_CONTENT_FIELDS: ReadonlyArray<keyof UpdateWorkItemInput> = ['title', 'body', 'priority', 'dueAt'];
+const TODO_CONTENT_FIELDS: ReadonlyArray<keyof UpdateWorkItemInput> = ['title', 'body', 'priority', 'dueAt', 'startAt'];
 
 /** Who a Todo BELONGS to: the operator's alone. */
 const TODO_OWNERSHIP_FIELDS: ReadonlyArray<keyof UpdateWorkItemInput> = ['assignee', 'department', 'rank'];

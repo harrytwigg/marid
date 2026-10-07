@@ -50,6 +50,8 @@ export interface BoardTodo {
   createdAt: string;
   updatedAt: string;
   dueAt: string | null;
+  /** Nothing starts it before this; the Dispatcher refuses until then. */
+  startAt: string | null;
   body?: string;
   comments: Array<{ author: string; authorKind: string; at: string; body: string }>;
   commentsTotal: number;
@@ -142,6 +144,7 @@ export async function digestTodo(item: WorkItem, opts: DigestOptions): Promise<B
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     dueAt: item.dueAt,
+    startAt: item.startAt,
     comments,
     commentsTotal: tail.total,
     relations: listRelations(item.id).map((relation) => ({ kind: relation.kind, direction: relation.direction, other: relation.other })),
