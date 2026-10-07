@@ -189,28 +189,28 @@ session".
 
 | Route(s) | Scoped behaviour | Where |
 | --- | --- | --- |
-| `GET /api/work-items` (both the `ids=` and query forms), `/api/work-items/trees`, `/api/search/work-items` | Only D's Todos (by root). `ids=` drops non-D ids silently. A `department` other than D returns an empty page | read-routes |
+| `GET /api/work-items` (both the `ids=` and query forms), `/api/work-items/trees`, `/api/search/work-items` | Only D's Todos (by root). `ids=` drops non-D ids silently. A `department` other than D returns an empty page | gate (`narrowTodoList`) |
 | `POST /api/work-items` | Lands in D, whatever it names. A `parentId` outside D returns 404 | gate check, then handler |
 | `GET/PATCH /api/work-items/:id`, `/status`, `/tree`, `/kept`, `/comments` (+ sub-routes), `/attachments` (multipart, + sub-routes) | Todo must be in D, otherwise 404. The existing standing rules then apply | gate |
 | `POST /api/work-items/:id/attachments` with JSON `{path}` | As above, plus the FR-018 path check | gate |
 | `publish_attachment` and path-based `attach_to_work_item` (MCP tools that read the file themselves and upload the bytes, never through the JSON `{path}` route) | The FR-018 path check, against roots from the scoped session's MCP config | tool |
-| `GET /api/work-items/:id/sessions` | Todo in D. Lists only sessions bound to D, plus `hiddenCount` | read-routes |
+| `GET /api/work-items/:id/sessions` | Todo in D. Lists only sessions bound to D, plus `hiddenCount` | `todo-reads` |
 | `POST /api/work-items/:id/assign`, `/dispatch`, `POST /api/delegations` | Todo in D. The target must be a member of D (FR-016). `mayHoldTodo` also runs inside `assignWorkItem` | gate + core |
 | `PATCH /api/work-items/:id` setting `assignee` | `mayHoldTodo` | store |
 | `PUT /api/work-items/:id/dispatch-config` | Todo in D, and every skill must be on D's allow-list | gate |
-| `/api/work-items/:id/relations` | Both ends in D. Reads report other relations as a hidden count | gate + read-routes |
+| `/api/work-items/:id/relations` | Both ends in D. Reads report other relations as a hidden count | gate + `todo-reads` |
 | `POST /api/work-items/:id/capture-landing` (`land_on_work_item`) | Todo in D | gate |
 | `PUT /api/work-items/:id/labels`, `GET /api/labels` | Existing labels only | gate |
 | `/sprint`, `/archive`, label create, any department change | Refused | — |
-| `GET /api/sessions` (every branch), `/api/search/sessions`, `/api/search/messages`, message context | Only sessions bound to D | read-routes |
+| `GET /api/sessions` (every branch), `/api/search/sessions`, `/api/search/messages`, message context | Only sessions bound to D | `session-routes` |
 | `GET /api/sessions/:id` (+ `/messages`, `/children`, `/transcript`, `/context`) | Session must be bound to D, otherwise 404 | gate |
 | `POST /api/sessions` (spawn) | Target a member of D. The child is bound to D. A named parent must be bound to D | gate + `spawnSession` |
 | `POST /api/sessions/:id/message` | Target bound to D, **or** the caller's own `parent_session_id` (FR-013, live send-only, Q10-a) | gate |
 | `POST /api/sessions/:id/stop`, `POST /api/compactions` | Target bound to D. Stop is limited to own descendants, as today. Compaction is limited to own session | gate |
 | `POST /api/sessions/:self/attachments` (`publish_attachment`) | Own session only. The FR-018 path check runs in the MCP tool | gate + tool |
-| `GET /api/org`, `GET /api/org/employees/:name` | D's members only. Anyone else returns 404 | read-routes |
-| `GET /api/departments` | Only D | read-routes |
-| `GET /api/knowledge/search`, `/api/knowledge/read`, `GET /api/notes*`, `POST/PUT /api/notes` | Rooted per FR-028. Writes go only under the department folder | read-routes |
+| `GET /api/org`, `GET /api/org/employees/:name` | D's members only. Anyone else returns 404 | `session-routes` |
+| `GET /api/departments` | Only D | `session-routes` |
+| `GET /api/knowledge/search`, `/api/knowledge/read`, `GET /api/notes*`, `POST/PUT /api/notes` | Rooted per FR-028. Writes go only under the department folder | `knowledge-routes` |
 | Heartbeat routes | Own session only (as today) | gate |
 | Engine-internal routes (`isPublicIdentifiedCallerRoute`, the hook endpoint, the status line) | Unchanged | — |
 | WebSocket upgrades (`/ws`, `/ws/pty/:sessionId`, plugin events) | Refused for scoped callers. They are outside `handleApiRequest`, so the check sits in the upgrade guards (`gateway/upgrade-guards.ts`) | upgrade guard |
@@ -221,7 +221,7 @@ classifies each one. The enumeration test (SC-001) keeps the table complete from
 
 ### `mayHoldTodo` (FR-015, Q8-a)
 
-`department-scope/assignee.ts` defines `mayHoldTodo(employee, rootDepartment)`. Its input is
+`work-items/department-scope.ts` defines `mayHoldTodo(employee, rootDepartment)`. Its input is
 always the department of the Todo's **root** (FR-002): every caller resolves the root first,
 and no caller passes a sub-task's own column. It returns true when any of these holds:
 
@@ -376,8 +376,8 @@ Senior, because it is the enforcement itself.
   effective scope.
 - `sessions.scope_department` and the binding in `spawnSession`. Connector sessions for scoped
   employees are refused.
-- `gateway/department-scope/{caller,rules,read-routes,paths,assignee}.ts`, the gate line, and
-  the upgrade-guard refusal.
+- `gateway/department-scope/{caller,rules,paths,gate,todo-reads,session-routes,knowledge-routes}.ts`,
+  the gate line, and the upgrade-guard refusal.
 - `mayHoldTodo` and the guard at every SQL writer of `assignee`, with the stranding refusals.
   Non-open scope writes through `PATCH /api/departments/:slug` are enabled here.
 - FR-018 path checks. `list_files` and `read_file` are refused.
