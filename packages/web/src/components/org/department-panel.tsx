@@ -88,6 +88,9 @@ function ScopedSections({ department }: { department: DepartmentDefinitionWire }
         <Chips items={department.skills} empty="None. Scoped sessions get no company skills." />
         <SkillProblems problems={department.skillProblems ?? []} />
       </Section>
+      <Section title="MCP servers" testId="department-mcp">
+        <Chips items={department.mcp ?? []} empty="None: jinn only." />
+      </Section>
       <Section title="Shared Notes" testId="department-shared-notes">
         <PathList items={department.sharedNotes} empty="None. Only the department's own Notes are shared." />
       </Section>
@@ -181,14 +184,14 @@ function Definition({ department }: { department: DepartmentDefinitionWire }) {
   if (department.definitionError) {
     return (
       <p className={MUTED} data-testid="department-settings-unknown">
-        Working directories, skills, shared Notes and instructions are unknown while the file is refused.
+        Working directories, skills, MCP servers, shared Notes and instructions are unknown while the file is refused.
       </p>
     )
   }
   if (isConfined(department.scope)) return <ScopedSections department={department} />
   return (
     <p className={MUTED} data-testid="department-open-note">
-      Working directories, skills, shared Notes and instructions apply once a department is scoped.
+      Working directories, skills, MCP servers, shared Notes and instructions apply once a department is scoped.
     </p>
   )
 }

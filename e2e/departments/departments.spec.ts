@@ -37,6 +37,8 @@ const PANEL_STATES: PanelState[] = [
       await expect(page.getByTestId('department-warnings')).toContainText('no-such-skill')
       // linked-skill is on the allow-list but holds a symlink: it is not offered, and the panel says why under the skills.
       await expect(page.getByTestId('department-skill-problems')).toContainText('linked-skill is not offered to this department: it contains a symlink (company.md).')
+      await expect(page.getByTestId('department-mcp')).toContainText('docs')
+      await expect(page.getByTestId('department-mcp')).toContainText('browser')
       await expect(page.getByTestId('department-instructions')).toContainText("then the company's")
       await expect(page.getByTestId('department-yaml')).toContainText('org/side-project/department.yaml')
     },
@@ -48,6 +50,7 @@ const PANEL_STATES: PanelState[] = [
     check: async (page) => {
       await expect(panelBadge(page)).toHaveText('Dedicated')
       await expect(page.getByTestId('department-scope')).toContainText('only they can hold its Todos')
+      await expect(page.getByTestId('department-mcp')).toContainText('None: jinn only.')
     },
   },
   {

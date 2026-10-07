@@ -21,6 +21,7 @@ const base: DepartmentDefinitionWire = {
   definitionError: null,
   workdirs: ["/work/side-project"],
   skills: ["review", "speckit-plan"],
+  mcp: ["browser", "docs"],
   sharedNotes: ["knowledge/shared/glossary.md"],
   instructions: "department+company",
   todoCount: 4,
@@ -52,11 +53,24 @@ describe("DepartmentPanel", () => {
     expect(screen.getByRole("radiogroup", { name: "Scope" })).toBeTruthy()
     expect(text("department-workdirs")).toContain("/work/side-project")
     expect(text("department-skills")).toBe("Skillsreviewspeckit-plan")
+    expect(text("department-mcp")).toBe("MCP serversbrowserdocs")
     expect(text("department-shared-notes")).toContain("knowledge/shared/glossary.md")
     expect(text("department-instructions")).toMatch(/then the company's/)
     expect(text("department-work")).toBe("Work4 Todos · $1.50 spent")
     expect(text("department-yaml")).toContain("org/side-project/department.yaml")
     expect(screen.queryByTestId("department-definition-error")).toBeNull()
+  })
+
+  it("says jinn is the only MCP server when the department lists none, or an older gateway sends no list", async () => {
+    mount({ mcp: [] })
+    await screen.findByTestId("department-panel")
+    expect(text("department-mcp")).toBe("MCP serversNone: jinn only.")
+  })
+
+  it("treats a missing mcp list as empty", async () => {
+    mount({ mcp: undefined })
+    await screen.findByTestId("department-panel")
+    expect(text("department-mcp")).toBe("MCP serversNone: jinn only.")
   })
 
   it("says what a dedicated department means", async () => {
