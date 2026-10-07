@@ -112,6 +112,12 @@ function knownDepartment(slug: string, context: ApiContext): boolean {
   }
 }
 
+/** What the registry knows of a department; a department with no row yet has no prefix and no Todos. */
+function registryFields(row: DepartmentSummary | undefined): Pick<DepartmentDefinitionWire, "prefix" | "todoCount" | "archived" | "archivedAt"> {
+  if (!row) return { prefix: null, todoCount: 0, archived: false, archivedAt: null };
+  return { prefix: row.prefix, todoCount: row.todoCount, archived: row.archived, archivedAt: row.archivedAt };
+}
+
 function definitionWire(slug: string, context: ApiContext): DepartmentDefinitionWire {
   const record = departmentRecord(slug);
   const db = initDb();
@@ -124,16 +130,13 @@ function definitionWire(slug: string, context: ApiContext): DepartmentDefinition
   });
   return {
     slug,
-    prefix: row?.prefix ?? null,
+    ...registryFields(row),
     ...fields(record, membersByDepartment(context).get(slug) ?? []),
     workdirs: extras.workdirs,
     skills: extras.skills.filter((skill) => !skillProblems.some((problem) => problem.skill === skill)),
     sharedNotes: extras.sharedNotes,
     instructions: extras.instructions,
-    todoCount: row?.todoCount ?? 0,
     spendUsd: departmentSpend(db).get(slug) ?? 0,
-    archived: row?.archived ?? false,
-    archivedAt: row?.archivedAt ?? null,
     warnings: record.warnings,
     skillProblems,
   };
@@ -205,26 +208,54 @@ function archiveConfirmation(slug: string, context: ApiContext): Record<string, 
   };
 }
 
-async function archiveDepartment(req: HttpRequest, res: ServerResponse, slug: string, archived: boolean, context: ApiContext): Promise<void> {
-  const parsed = await readJsonBody(req, res, { allowEmpty: true });
-  if (!parsed.ok) return;
-  const body = parsed.body ?? {};
-  if (typeof body !== "object" || Array.isArray(body)) return badRequest(res, "body must be a JSON object");
-  const { confirm } = body as { confirm?: unknown };
-  if (confirm !== undefined && typeof confirm !== "boolean") return badRequest(res, "confirm must be a boolean");
-  if (archived && !isDepartmentArchived(initDb(), slug)) {
-    // Every create that names no department lands in the configured default, so archiving
-    // it would refuse them all.
-    if (resolveTodoDepartments()?.defaultDepartment === slug) {
-      return json(res, { error: `${slug} is gateway.todoDepartments.default: change the default before archiving it`, code: "department-default" }, 409);
-    }
-    const confirmation = confirm === true ? null : archiveConfirmation(slug, context);
-    if (confirmation) return json(res, confirmation, 409);
+/** Why an archive is refused as asked, as the 409 body, or null. */
+function archiveRefusal(slug: string, confirmed: boolean, context: ApiContext): Record<string, unknown> | null {
+  if (isDepartmentArchived(initDb(), slug)) return null;
+  // Every create that names no department lands in the configured default, so archiving
+  // it would refuse them all.
+  if (resolveTodoDepartments()?.defaultDepartment === slug) {
+    return { error: `${slug} is gateway.todoDepartments.default: change the default before archiving it`, code: "department-default" };
   }
+  return confirmed ? null : archiveConfirmation(slug, context);
+}
+
+/** The archive body's `confirm`, or null once a 400 has been sent. Empty means no confirmation. */
+async function readConfirm(req: HttpRequest, res: ServerResponse): Promise<boolean | null> {
+  const parsed = await readJsonBody(req, res, { allowEmpty: true });
+  if (!parsed.ok) return null;
+  const body = parsed.body ?? {};
+  if (typeof body !== "object" || Array.isArray(body)) {
+    badRequest(res, "body must be a JSON object");
+    return null;
+  }
+  const { confirm } = body as { confirm?: unknown };
+  if (confirm !== undefined && typeof confirm !== "boolean") {
+    badRequest(res, "confirm must be a boolean");
+    return null;
+  }
+  return confirm === true;
+}
+
+async function archiveDepartment(req: HttpRequest, res: ServerResponse, slug: string, archived: boolean, context: ApiContext): Promise<void> {
+  const confirmed = await readConfirm(req, res);
+  if (confirmed === null) return;
+  const refused = archived ? archiveRefusal(slug, confirmed, context) : null;
+  if (refused) return json(res, refused, 409);
   if (setDepartmentArchived(initDb(), slug, archived, resolveCompanyPrefix())) {
     context.emit?.("company:changed", { entity: "department", action: archived ? "archived" : "unarchived", id: slug });
   }
   json(res, { department: definitionWire(slug, context) });
+}
+
+/** POST .../archive and .../unarchive; `false` when the path is neither. */
+async function handleArchiveRoutes(req: HttpRequest, res: ServerResponse, { method, pathname }: ParsedRoute, context: ApiContext): Promise<boolean> {
+  if (method !== "POST") return false;
+  const archive = matchRoute("/api/departments/:slug/archive", pathname);
+  const target = archive ?? matchRoute("/api/departments/:slug/unarchive", pathname);
+  if (!target) return false;
+  if (!SLUG.test(target.slug) || !knownDepartment(target.slug, context)) notFound(res);
+  else await archiveDepartment(req, res, target.slug, archive !== null, context);
+  return true;
 }
 
 /** Handles the department routes; `false` leaves the request to api.ts. */
@@ -234,14 +265,7 @@ export async function handleDepartmentsApi(req: HttpRequest, res: ServerResponse
     json(res, { departments: listDepartmentRows(context, { includeArchived: route.url.searchParams.get("includeArchived") === "true" }) });
     return true;
   }
-  const archive = matchRoute("/api/departments/:slug/archive", pathname);
-  const unarchive = matchRoute("/api/departments/:slug/unarchive", pathname);
-  const target = archive ?? unarchive;
-  if (target && method === "POST") {
-    if (!SLUG.test(target.slug) || !knownDepartment(target.slug, context)) notFound(res);
-    else await archiveDepartment(req, res, target.slug, archive !== null, context);
-    return true;
-  }
+  if (await handleArchiveRoutes(req, res, route, context)) return true;
   const params = matchRoute("/api/departments/:slug", pathname);
   if (!params || (method !== "GET" && method !== "PATCH")) return false;
   if (!SLUG.test(params.slug) || !knownDepartment(params.slug, context)) {

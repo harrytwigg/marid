@@ -41,12 +41,8 @@ export interface BoardSwitcherProps {
 export function BoardSwitcher({ board, title, departments, attentionCount }: BoardSwitcherProps) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const [showArchived, setShowArchived] = useState(false)
   const counts = useBoardMenuCounts(departments, open)
-  const archivedCount = departments?.filter((dept) => dept.archived).length ?? 0
-  // On an archived department's own board the list shows where you are.
-  const onArchived = board.kind === "department" && departments?.some((dept) => dept.slug === board.slug && dept.archived)
-  const listed = departments?.filter((dept) => !dept.archived || showArchived || onArchived) ?? []
+  const archive = useArchivedRows(board, departments)
 
   const go = (target: BoardId) => {
     if (!isSameBoard(board, target)) navigate(boardPath(target))
@@ -90,7 +86,7 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
             <DropdownMenuLabel className="px-2.5 pb-1 pt-2.5 text-[length:var(--text-caption1)] font-semibold uppercase tracking-[0.06em] text-[var(--text-tertiary)]">
               Departments
             </DropdownMenuLabel>
-            {listed.map((dept) => (
+            {archive.listed.map((dept) => (
               <DropdownMenuItem
                 key={dept.slug}
                 className={ROW_CLASS}
@@ -108,24 +104,44 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
                 {countOf(counts.data?.byDepartment[dept.slug])}
               </DropdownMenuItem>
             ))}
-            {archivedCount > 0 && !onArchived && (
-              <DropdownMenuItem
-                className={`${ROW_CLASS} text-[var(--text-secondary)]`}
-                data-testid="board-menu-show-archived"
-                // Keep the menu open: the rows it reveals are what the operator came for.
-                onSelect={(event) => {
-                  event.preventDefault()
-                  setShowArchived((shown) => !shown)
-                }}
-              >
-                <LensIcon of={Archive} />
-                {showArchived ? "Hide archived" : `Show archived (${archivedCount})`}
-              </DropdownMenuItem>
-            )}
+            {archive.toggleable && <ShowArchivedRow shown={archive.shown} count={archive.count} onToggle={archive.toggle} />}
           </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+/** Which department rows the menu lists. Archived ones wait behind "Show archived",
+ *  except on an archived department's own board, where the list shows where you are. */
+function useArchivedRows(board: BoardId, departments: DepartmentRowWire[] | undefined) {
+  const [shown, setShown] = useState(false)
+  const rows = departments ?? []
+  const count = rows.filter((dept) => dept.archived).length
+  const onArchived = board.kind === "department" && rows.some((dept) => dept.slug === board.slug && dept.archived)
+  return {
+    listed: rows.filter((dept) => !dept.archived || shown || onArchived),
+    count,
+    shown,
+    toggleable: count > 0 && !onArchived,
+    toggle: () => setShown((value) => !value),
+  }
+}
+
+function ShowArchivedRow({ shown, count, onToggle }: { shown: boolean; count: number; onToggle: () => void }) {
+  return (
+    <DropdownMenuItem
+      className={`${ROW_CLASS} text-[var(--text-secondary)]`}
+      data-testid="board-menu-show-archived"
+      // Keep the menu open: the rows it reveals are what the operator came for.
+      onSelect={(event) => {
+        event.preventDefault()
+        onToggle()
+      }}
+    >
+      <LensIcon of={Archive} />
+      {shown ? "Hide archived" : `Show archived (${count})`}
+    </DropdownMenuItem>
   )
 }
 

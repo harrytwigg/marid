@@ -55,36 +55,46 @@ function StillThere({ refusal }: { refusal: DepartmentArchiveError }) {
   )
 }
 
+/** The dialog's words for each stage; the submit label follows the request's progress. */
+function dialogText(stage: Exclude<Stage, "closed">, title: string, prefix: string | undefined) {
+  if (stage === "unarchive") {
+    return { title: `Un-archive ${title}?`, body: "It comes back to the department lists and takes new Todos again.", label: () => "Un-archive", pending: "Restoring…" }
+  }
+  return {
+    title: `Archive ${title}?`,
+    body: `It leaves the department lists and no new Todos can be filed in it. Its Todos keep their ${prefix ?? ""} ids and stay open, searchable and editable. You can un-archive it at any time.`,
+    label: (confirming: boolean) => (confirming ? "Archive anyway" : "Archive"),
+    pending: "Archiving…",
+  }
+}
+
+function Failure({ error }: { error: unknown }) {
+  return (
+    <div role="alert" data-testid="department-archive-error" className={`${NOTICE_CLASS} text-[var(--system-red)]`} style={{ background: "color-mix(in srgb, var(--system-red) 8%, transparent)" }}>
+      {error instanceof Error ? error.message : "The department could not be changed."}
+    </div>
+  )
+}
+
 function ArchiveDialog({ slug, prefix, stage, onClose }: { slug: string; prefix: string | undefined; stage: Exclude<Stage, "closed">; onClose: () => void }) {
   const change = useArchiveChange(slug, onClose)
   const refusal = confirmationOf(change.error)
-  const failure = change.error && !refusal ? change.error : null
-  const title = departmentTitle(slug)
-  const archiving = stage === "archive"
-  const submit = () => change.mutate({ archived: archiving, confirm: refusal !== null })
-  const label = change.isPending ? (archiving ? "Archiving…" : "Restoring…") : archiving ? (refusal ? "Archive anyway" : "Archive") : "Un-archive"
+  const text = dialogText(stage, departmentTitle(slug), prefix)
+  const submit = () => change.mutate({ archived: stage === "archive", confirm: refusal !== null })
 
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onClose() }}>
       <DialogContent className="max-w-[400px] border-0" overlayClassName="bg-[var(--scrim)]" showCloseButton={false}>
-        <DialogTitle>{archiving ? `Archive ${title}?` : `Un-archive ${title}?`}</DialogTitle>
-        <DialogDescription>
-          {archiving
-            ? `It leaves the department lists and no new Todos can be filed in it. Its Todos keep their ${prefix ?? ""} ids and stay open, searchable and editable. You can un-archive it at any time.`
-            : "It comes back to the department lists and takes new Todos again."}
-        </DialogDescription>
+        <DialogTitle>{text.title}</DialogTitle>
+        <DialogDescription>{text.body}</DialogDescription>
         {refusal && <StillThere refusal={refusal} />}
-        {failure != null && (
-          <div role="alert" data-testid="department-archive-error" className={`${NOTICE_CLASS} text-[var(--system-red)]`} style={{ background: "color-mix(in srgb, var(--system-red) 8%, transparent)" }}>
-            {failure instanceof Error ? failure.message : "The department could not be changed."}
-          </div>
-        )}
+        {change.error != null && !refusal && <Failure error={change.error} />}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onClose} className={DIALOG_CANCEL_CLASS}>
             Cancel
           </button>
           <button type="button" autoFocus disabled={change.isPending} onClick={submit} data-testid="department-archive-submit" className={DIALOG_ACTION_CLASS}>
-            {label}
+            {change.isPending ? text.pending : text.label(refusal !== null)}
           </button>
         </div>
       </DialogContent>

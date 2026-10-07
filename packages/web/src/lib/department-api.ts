@@ -90,17 +90,21 @@ async function postArchive(slug: string, action: "archive" | "unarchive", body: 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   })
-  const json = (await res.json().catch(() => null)) as { department?: DepartmentDefinitionWire; error?: unknown; code?: unknown; members?: unknown; openTodos?: unknown } | null
-  if (!res.ok || !json?.department) {
-    throw new DepartmentArchiveError(
-      res.status,
-      typeof json?.error === "string" ? json.error : `API error: ${res.status}`,
-      typeof json?.code === "string" ? json.code : undefined,
-      Array.isArray(json?.members) ? json.members.filter((name): name is string => typeof name === "string") : [],
-      typeof json?.openTodos === "number" ? json.openTodos : 0,
-    )
-  }
+  const json = (await res.json().catch(() => null)) as ArchiveResponse | null
+  if (!res.ok || !json?.department) throw archiveErrorOf(res.status, json ?? {})
   return json.department
+}
+
+type ArchiveResponse = { department?: DepartmentDefinitionWire; error?: unknown; code?: unknown; members?: unknown; openTodos?: unknown }
+
+function archiveErrorOf(status: number, body: ArchiveResponse): DepartmentArchiveError {
+  return new DepartmentArchiveError(
+    status,
+    typeof body.error === "string" ? body.error : `API error: ${status}`,
+    typeof body.code === "string" ? body.code : undefined,
+    Array.isArray(body.members) ? body.members.filter((name): name is string => typeof name === "string") : [],
+    typeof body.openTodos === "number" ? body.openTodos : 0,
+  )
 }
 
 export const departmentApi = {
