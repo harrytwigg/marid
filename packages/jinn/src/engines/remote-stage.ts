@@ -635,7 +635,7 @@ set -- "$profile/settings.json" "$@"
 if [ -n "$cwd" ]; then
   set -- "$@" "$cwd/.claude/settings.local.json"
   top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) && [ -n "$top" ] && set -- "$@" "$top/.claude/settings.local.json"
-  common=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && [ -n "$common" ] \\
+  common=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) && [ -d "$common" ] \\
     && set -- "$@" "$(dirname "$common")/.claude/settings.local.json"
 fi
 { grep -Eqs '"skipDangerousModePermissionPrompt"[[:space:]]*:[[:space:]]*true' "$@" \\
