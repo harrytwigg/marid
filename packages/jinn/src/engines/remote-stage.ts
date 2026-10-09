@@ -440,6 +440,14 @@ export type RemoteReadiness =
   | { ready: true; facts: RemoteFacts }
   | { ready: false; reason: string };
 
+export interface WaitStartInfo {
+  destination: string;
+  waking: boolean;
+  /** What is being waited for: the host to answer (the default), or, once it
+   *  has, the instance-home mount to come up on it. */
+  waitingFor?: "host" | "mount";
+}
+
 export interface EnsureReadyOpts {
   /** Which agent the session will run there. Decides which CLI must be present
    *  and whether the Claude profile check applies — asked HERE, on the path that
@@ -451,7 +459,7 @@ export interface EnsureReadyOpts {
   allowWake: boolean;
   /** Called once when the host is not up and we are about to wait, so the turn
    *  path can move the session to "waiting" and tell the operator. */
-  onWaitStart?: (info: { destination: string; waking: boolean }) => void;
+  onWaitStart?: (info: WaitStartInfo) => void;
   /** Polled while waiting; returning true abandons the wait (session stopped).
    *  Only consulted once {@link onWaitStart} has fired. */
   shouldAbort?: () => boolean;
@@ -519,7 +527,12 @@ export async function ensureRemoteReady(
     }
     const facts = await gatherFacts(destination);
     requireRemoteEngineBin(destination, facts, opts.engine);
-    const mountProblem = await verifyMount(destination, remote, mountWait(remote, opts, { now, sleep }, () => announced));
+    const mountProblem = await verifyMount(destination, remote, mountWait(remote, opts, { now, sleep }, {
+      // A host already announced as offline is reported once; the mount wait
+      // then continues under the same `waiting` status.
+      onWaitStart: () => { if (!announced) onWaitStart({ destination, waking: false, waitingFor: "mount" }); },
+      announced: () => announced,
+    }));
     if (mountProblem) return { ready: false, reason: mountProblem };
     const profileProblem = await verifyEngineProfile(destination, target, remote, opts.engine);
     if (profileProblem) return { ready: false, reason: profileProblem };
@@ -529,20 +542,22 @@ export async function ensureRemoteReady(
   }
 }
 
-/** How {@link verifyMount} may wait for this caller. The turn path's abort test
- *  reads the `waiting` status its announcement set, so before an announcement
- *  it would read every running session as stopped: it is only asked after one. */
+/** How {@link verifyMount} may wait for this caller. The wait is announced like
+ *  a host wait, which is what moves the turn to `waiting`. The turn path's abort
+ *  test reads that status, so before an announcement it would read every running
+ *  session as stopped: it is only asked after one. */
 function mountWait(
   remote: RemoteExecutionConfig,
   opts: EnsureReadyOpts,
   clock: Pick<MountWait, "now" | "sleep">,
-  announced: () => boolean,
+  wait: { onWaitStart: () => void; announced: () => boolean },
 ): MountWait {
   return {
     ...clock,
     waitMs: opts.waitForMount ? remote.mountWaitMs ?? DEFAULT_MOUNT_WAIT_MS : 0,
     intervalMs: remote.probeIntervalMs ?? DEFAULT_PROBE_INTERVAL_MS,
-    aborted: () => announced() && opts.shouldAbort?.() === true,
+    onWaitStart: wait.onWaitStart,
+    aborted: () => wait.announced() && opts.shouldAbort?.() === true,
   };
 }
 
@@ -712,7 +727,7 @@ async function wakeAndWait(
   sleep: (ms: number) => Promise<void>,
 ): Promise<string | undefined> {
   const canWake = opts.allowWake && Boolean(remote.wakeCommand || remote.wakeMac);
-  opts.onWaitStart?.({ destination, waking: canWake });
+  opts.onWaitStart?.({ destination, waking: canWake, waitingFor: "host" });
 
   // The dashboard's idle PTY passes allowWake:false. Opening a terminal tab
   // must never boot someone's desktop.
@@ -773,16 +788,11 @@ export function clearRemoteStagingCache(): void {
 const stagingQueues = new Map<string, Promise<unknown>>();
 
 function serializePerHost<T>(destination: string, work: () => Promise<T>): Promise<T> {
-  return serializeOn(stagingQueues, destination, work);
-}
-
-/** Run `work` after everything already queued under `key`. */
-export function serializeOn<T>(queues: Map<string, Promise<unknown>>, key: string, work: () => Promise<T>): Promise<T> {
-  const prior = queues.get(key) ?? Promise.resolve();
-  // `catch` before chaining so one failed step does not poison the queue for
-  // every later caller on that key.
+  const prior = stagingQueues.get(destination) ?? Promise.resolve();
+  // `catch` before chaining so one failed prepare does not poison the queue for
+  // every later session on that host.
   const next = prior.catch(() => undefined).then(work);
-  queues.set(key, next.catch(() => undefined));
+  stagingQueues.set(destination, next.catch(() => undefined));
   return next;
 }
 

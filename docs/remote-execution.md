@@ -609,19 +609,25 @@ turn proceeds; on timeout the turn fails with a message naming the host.
 
 A host that has just booted usually answers ssh before its sshfs has connected,
 so a turn then waits up to `mountWaitMs` (default two minutes) for the mount,
-checking every `probeIntervalMs`. While sshfs is still connecting the mountpoint
-is already a live FUSE mount and a read on it blocks, so each sentinel read is
-cut short on the host after a few seconds and counted as "not ready yet". When
-the sentinel is missing, `remountCommand` is run, at most once per check; it is
-not re-run over a mount that is only slow to answer. Turns starting together on
-one host queue for the check, so the first remounts and the rest find the mount
-up. A sentinel that belongs to some other
-directory fails the turn at once, since waiting will not change what is mounted
-there. The failure says which it was: timed out, missing or mismatched.
+checking every `probeIntervalMs`. Like a host wait, this moves the session to
+`waiting` and tells the operator, and stopping the session ends it. While sshfs
+is still connecting the mountpoint is already a live FUSE mount and a read on it
+blocks, so each sentinel read is cut short on the host after a few seconds and
+counted as "not ready yet". When the sentinel is missing, `remountCommand` is
+run, at most once per check. It is not run over a mount that is only slow to
+answer, except once when reads have hung for the whole wait, so a command that
+clears a dead mount before remounting can still heal it. Turns that start while
+a check is in flight on the same host share its answer: one remount and one wait
+between them. A sentinel that belongs to some other directory fails the turn at
+once, since waiting will not change what is mounted there. The failure says which
+it was: timed out, missing or mismatched. A check under way when the wait runs
+out is finished first, so a turn can run past `mountWaitMs` by up to about a
+minute and a half when reads hang and remounts are slow.
 
-The gateway kills `remountCommand` after 60 seconds, so give the command its own
-connect timeout (for sshfs, `-o ConnectTimeout=20`) rather than letting it hang
-on a network that is not up yet; its exit code and stderr are logged either way.
+The gateway kills `remountCommand` after 60 seconds (less near the end of a wait,
+but never under 15), so give the command its own connect timeout (for sshfs,
+`-o ConnectTimeout=20`) rather than letting it hang on a network that is not up
+yet; its exit code and stderr are logged either way.
 
 Two deliberate asymmetries:
 

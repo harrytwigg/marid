@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Employee } from "../../shared/types.js";
 import type { RemoteExecutionConfig } from "../../shared/config-types.js";
+import type { WaitStartInfo } from "../remote-stage.js";
 
 /**
  * The mount check before a remote spawn. A freshly booted host answers ssh
@@ -48,6 +49,7 @@ let remote: RemoteExecutionConfig;
 let clock: number;
 let sleeps: number;
 let onSleep: (n: number) => void;
+let announcements: WaitStartInfo[];
 
 function target() {
   return employeeRemoteTarget({
@@ -66,6 +68,7 @@ function ready(opts: { waitForMount?: boolean; shouldAbort?: () => boolean } = {
       sleeps += 1;
       onSleep(sleeps);
     },
+    onWaitStart: (info) => { announcements.push(info); },
     ...opts,
   });
 }
@@ -96,6 +99,7 @@ beforeEach(() => {
   clock = 0;
   sleeps = 0;
   onSleep = () => {};
+  announcements = [];
   setSentinelReadTimeoutForTests(1);
 });
 
@@ -105,13 +109,22 @@ afterEach(() => {
 });
 
 describe.skipIf(process.platform === "win32")("the remote mount check", { timeout: 30_000 }, () => {
-  it("waits for a mount that comes up a few polls later", async () => {
+  it("waits for a mount that comes up a few polls later, announcing the wait once", async () => {
     onSleep = (n) => { if (n === 3) mountIt(); };
     const readiness = await ready();
     expect(reasonOf(readiness)).toBe("");
     expect(readiness.ready).toBe(true);
     expect(sleeps).toBe(3);
     expect(clock).toBeLessThanOrEqual(60_000);
+    // A reachable host whose mount is not up is announced, so the turn reads as
+    // `waiting` (which the status reconciler leaves alone) rather than `running`.
+    expect(announcements).toEqual([{ destination: "box", waking: false, waitingFor: "mount" }]);
+  });
+
+  it("announces nothing when the mount is already up", async () => {
+    mountIt();
+    expect((await ready()).ready).toBe(true);
+    expect(announcements).toEqual([]);
   });
 
   it("gives up once mountWaitMs is spent, saying the sentinel is missing", async () => {
@@ -125,6 +138,7 @@ describe.skipIf(process.platform === "win32")("the remote mount check", { timeou
     const readiness = await ready({});
     expect(reasonOf(readiness)).toContain("(sentinel missing)");
     expect(sleeps).toBe(0);
+    expect(announcements).toEqual([]);
   });
 
   it("cuts a hung read short on the host and keeps polling", async () => {
@@ -138,15 +152,27 @@ describe.skipIf(process.platform === "win32")("the remote mount check", { timeou
     expect(Date.now() - startedAt).toBeLessThan(10_000);
   });
 
-  it("reports a mount that stays hung as timed out, without remounting over it", async () => {
+  it("reports a mount that stays hung as timed out, remounting only once the wait is spent", async () => {
     hangIt();
     remote = { ...remote, mountWaitMs: 10_000, remountCommand: `echo run >> '${remounts}'` };
     const readiness = await ready();
-    expect(reasonOf(readiness)).toContain("reading the sentinel timed out after 1s, so the mount is hung or still connecting");
+    expect(reasonOf(readiness)).toContain(
+      "reading the sentinel timed out after 1s, so the mount is hung or still connecting; remountCommand did not clear it",
+    );
     expect(reasonOf(readiness)).not.toContain("unreadable");
-    expect(remountCount()).toBe(0);
-    // Reads at 0, 5s and 10s.
+    // Not over a mount that might only be slow: once, after the reads at 0, 5s and 10s.
+    expect(remountCount()).toBe(1);
     expect(sleeps).toBe(2);
+  });
+
+  it("lets a remountCommand clear a mount that hung for the whole wait", async () => {
+    hangIt();
+    const source = path.join(tmp, "sentinel-source");
+    fs.writeFileSync(source, `${localSentinelValue()}\n`);
+    remote = { ...remote, mountWaitMs: 5_000, remountCommand: `echo run >> '${remounts}'; rm -f '${sentinel}'; cp '${source}' '${sentinel}'` };
+    const readiness = await ready();
+    expect(reasonOf(readiness)).toBe("");
+    expect(remountCount()).toBe(1);
   });
 
   it("refuses some other directory's sentinel after one remount, without waiting", async () => {
@@ -176,11 +202,20 @@ describe.skipIf(process.platform === "win32")("the remote mount check", { timeou
     expect(remountCount()).toBe(1);
   });
 
-  it("does not take an unannounced mount wait for a stopped session", async () => {
-    // The turn path's abort test reads the `waiting` status that only the
-    // host-offline announcement sets; a reachable host never announces.
-    onSleep = (n) => { if (n === 2) mountIt(); };
+  it("ends an announced mount wait when the session is stopped", async () => {
     const readiness = await ready({ waitForMount: true, shouldAbort: () => true });
-    expect(readiness.ready).toBe(true);
+    expect(reasonOf(readiness)).toBe("cancelled while waiting for the remote host's mount");
+    expect(announcements).toHaveLength(1);
+    expect(sleeps).toBe(0);
+  });
+
+  it("gives turns arriving during a wait the same answer instead of a wait each", async () => {
+    remote = { ...remote, remountCommand: `echo run >> '${remounts}'; exit 1` };
+    const [a, b] = await Promise.all([ready(), ready()]);
+    expect([a.ready, b.ready]).toEqual([false, false]);
+    expect(reasonOf(b)).toBe(reasonOf(a));
+    // One shared 60s wait, not one after the other; both turns were told.
+    expect(clock).toBe(60_000);
+    expect(announcements).toHaveLength(2);
   });
 });

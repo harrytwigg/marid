@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const hoisted = vi.hoisted(() => ({
   readiness: { ready: true } as any,
-  waitStart: undefined as undefined | ((info: { destination: string; waking: boolean }) => void),
+  waitStart: undefined as undefined | ((info: { destination: string; waking: boolean; waitingFor?: "host" | "mount" }) => void),
   notifications: [] as string[],
   updates: [] as { fields: any; expected?: readonly string[] }[],
   /** Statuses `updateSessionForAttempt` will accept, i.e. the DB's fence. */
@@ -122,6 +122,20 @@ describe("ensureRemoteHostReady", () => {
     await ensureRemoteHostReady(input(), "claude");
     expect(hoisted.updates[0].fields.status).toBe("waiting");
     expect(hoisted.notifications[0]).toContain("offline");
+    expect(hoisted.updates[1].fields.status).toBe("running");
+  });
+
+  it("moves a turn waiting on the mount of a reachable host to waiting, and says so", async () => {
+    const { ensureRemoteReady } = await import("../../../engines/remote-stage.js");
+    (ensureRemoteReady as any).mockImplementationOnce(async (_t: any, _r: any, opts: any) => {
+      expect(opts.waitForMount).toBe(true);
+      opts.onWaitStart?.({ destination: "builder@build-box", waking: false, waitingFor: "mount" });
+      return { ready: true };
+    });
+    await ensureRemoteHostReady(input(), "claude");
+    expect(hoisted.updates[0].fields).toMatchObject({ status: "waiting", lastError: "builder@build-box is up — waiting for the instance-home mount" });
+    expect(hoisted.notifications[0]).toContain("instance-home mount is not ready yet");
+    expect(hoisted.notifications[0]).not.toContain("offline");
     expect(hoisted.updates[1].fields.status).toBe("running");
   });
 
