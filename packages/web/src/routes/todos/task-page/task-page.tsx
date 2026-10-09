@@ -409,7 +409,6 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                     sessionTree={sessionTree}
                     dispatchPending={dispatchTodo.isPending}
                     onDispatch={() => dispatchTodo.mutate()}
-                    onOpenRailSession={(sessionId) => navigate(`/?session=${encodeURIComponent(sessionId)}`)}
                   />
                 </div>
               )}
@@ -436,7 +435,6 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                   sessionTree={sessionTree}
                   dispatchPending={dispatchTodo.isPending}
                   onDispatch={() => dispatchTodo.mutate()}
-                  onOpenRailSession={(sessionId) => navigate(`/?session=${encodeURIComponent(sessionId)}`)}
                 />
               </aside>
             )}

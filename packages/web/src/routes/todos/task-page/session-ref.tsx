@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react"
-import { useNavigate } from "react-router-dom"
 import { ArrowUpRight } from "lucide-react"
 import type { Employee } from "@/lib/api"
+import { useOpenSession } from "@/components/chat/file-open-context"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { sessionIdFromActor, type SessionDirectoryEntryWire } from "@/lib/session-tree-api"
 import { displayNameOf } from "../util"
@@ -141,11 +141,11 @@ function RefState({ entry }: { entry: SessionDirectoryEntryWire | undefined }) {
 }
 
 export function SessionRef({ sessionId, byName, inline, label: labelOverride }: SessionRefProps) {
-  const navigate = useNavigate()
+  const openSession = useOpenSession()
   const directory = useSessionDirectory()
   const entry = directory?.[sessionId]
   const label = labelOverride ?? sessionRefLabel(sessionId, directory, byName)
-  const onOpen = () => navigate(`/?session=${encodeURIComponent(sessionId)}`)
+  const onOpen = () => openSession(sessionId)
 
   if (entry?.missing) return <MissingRef sessionId={sessionId} label={label} />
   if (inline) return <InlineRef sessionId={sessionId} label={label} onOpen={onOpen} />
