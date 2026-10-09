@@ -11,6 +11,7 @@ import { gatewayTransport } from "@/lib/gateway-transport"
 import { todoPath } from "@/lib/todo-id"
 import { copyText as platformCopyText } from "@/platform"
 import { KeepToggle } from "../board/keep-control"
+import type { OpenTodoFromClick } from "./task-frame"
 
 /* Todos v2 slice 6 — the task page's breadcrumb bar (design-doc §7.1, mock
  * task-detail.html). Board context › ancestor IDs › current ID + title. The
@@ -52,7 +53,7 @@ export function CrumbBar({
   ancestors: CrumbAncestor[]
   id: string
   title: string
-  onOpenAncestor: (id: string) => void
+  onOpenAncestor: OpenTodoFromClick
   onCopyId: () => void
   mobile: boolean
   /** ICI-1357: whether this Todo is on the operator's Home board. */
@@ -99,7 +100,7 @@ export function CrumbBar({
               <button
                 type="button"
                 data-testid={`task-crumb-${ancestor.id}`}
-                onClick={() => onOpenAncestor(ancestor.id)}
+                onClick={(event) => onOpenAncestor(ancestor.id, event)}
                 title={ancestor.title}
                 className="focus-ring -mx-1 rounded-md px-1 text-[11.5px] tracking-[.04em] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
                 style={{ fontFamily: "var(--font-code)" }}

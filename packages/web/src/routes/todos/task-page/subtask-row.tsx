@@ -6,6 +6,7 @@ import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle, StatusCircle } from "../state-glyph"
 import { PickerPopover, PickerRow } from "../pickers/picker-shell"
 import { AssigneePickerContent } from "../pickers/picker-contents"
+import type { OpenTodoFromClick } from "./task-frame"
 
 /* One row of the task page's sub-tasks list (design-doc §7.2.8, mock
  * task-detail.html): clean at rest, GROWING its quick actions on hover — the
@@ -32,7 +33,7 @@ type SubTaskRowProps = Omit<PickerProps, "onClose"> & {
   mobile: boolean
   picking: PickerKind | null
   onPick: (kind: PickerKind | null) => void
-  onOpenChild: (id: string) => void
+  onOpenChild: OpenTodoFromClick
 }
 
 export function SubTaskRow({ child, employees, mobile, picking, onPick, onOpenChild, ...write }: SubTaskRowProps) {
@@ -61,7 +62,7 @@ export function SubTaskRow({ child, employees, mobile, picking, onPick, onOpenCh
       </span>
       <button
         type="button"
-        onClick={() => onOpenChild(child.id)}
+        onClick={(event) => onOpenChild(child.id, event)}
         className={`focus-ring min-w-0 flex-1 truncate text-left outline-none ${
           closed ? "font-normal text-[var(--text-tertiary)]" : "font-medium text-[var(--text-primary)]"
         }`}
@@ -93,7 +94,7 @@ function QuickActions({
   id: string
   mobile: boolean
   onAssign: () => void
-  onOpen: (id: string) => void
+  onOpen: OpenTodoFromClick
 }) {
   return (
     <span
@@ -104,7 +105,7 @@ function QuickActions({
       <button type="button" aria-label={`Assign ${id}`} data-testid={`subtask-assign-${id}`} onClick={onAssign} className={ICON_BUTTON}>
         <UserRound size={14} strokeWidth={2} aria-hidden />
       </button>
-      <button type="button" aria-label={`Open ${id}`} data-testid={`subtask-open-${id}`} onClick={() => onOpen(id)} className={ICON_BUTTON}>
+      <button type="button" aria-label={`Open ${id}`} data-testid={`subtask-open-${id}`} onClick={(event) => onOpen(id, event)} className={ICON_BUTTON}>
         <ArrowUpRight size={14} strokeWidth={2} aria-hidden />
       </button>
     </span>
