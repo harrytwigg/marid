@@ -84,8 +84,13 @@ function NodeTodo({ id, todoId }: { id: string; todoId: string }) {
     <button
       type="button"
       data-testid={`session-tree-todo-${id}`}
-      onClick={() => {
-        if (openTab?.(todoId, sessionId)) return
+      onClick={(event) => {
+        if (openTab?.(todoId, sessionId)) {
+          // The pane the tree sits in would take focus back on this click's way up, from the Todo's
+          // tab where it is open in another pane.
+          event.stopPropagation()
+          return
+        }
         void navigate(`/todos/${encodeURIComponent(todoId)}`)
       }}
       className="focus-ring group/todo flex min-w-0 flex-none items-center gap-[3px] rounded-[5px] text-[11.5px] text-[var(--text-tertiary)] outline-none hover:text-[var(--text-secondary)]"

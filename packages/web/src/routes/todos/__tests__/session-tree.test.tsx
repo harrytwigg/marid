@@ -128,11 +128,14 @@ describe("the session tree", () => {
   it("opens that Todo as a tab when the tree sits in the chat layout, without leaving it", () => {
     navigate.mockClear()
     const openTab = vi.fn<OpenTodo>(() => true)
+    const pane = vi.fn()
     const child = node({ id: "s-2", workItemId: "TST-83", isRootLink: false })
     mount(
       <TodoOpenContext.Provider value={openTab}>
         <FileLinkSessionContext.Provider value="chat-1">
-          <SessionTreePanel tree={tree({ roots: [node({ id: "s-1", children: [child] })] })} byName={byName} todoId="TST-81" />
+          <div onClick={pane}>
+            <SessionTreePanel tree={tree({ roots: [node({ id: "s-1", children: [child] })] })} byName={byName} todoId="TST-81" />
+          </div>
         </FileLinkSessionContext.Provider>
       </TodoOpenContext.Provider>,
     )
@@ -140,6 +143,8 @@ describe("the session tree", () => {
     fireEvent.click(screen.getByTestId("session-tree-todo-s-2"))
     expect(openTab).toHaveBeenCalledWith("TST-83", "chat-1")
     expect(navigate).not.toHaveBeenCalled()
+    // The pane it sits in must not see the click, or it takes focus back from the Todo's tab.
+    expect(pane).not.toHaveBeenCalled()
   })
 
   it("goes to the Todo's page when the layout cannot take a tab", () => {
