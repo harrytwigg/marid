@@ -626,7 +626,7 @@ minute and a half when reads hang and remounts are slow.
 
 The gateway kills `remountCommand` after 60 seconds (less near the end of a wait,
 but never under 15), so give the command its own connect timeout (for sshfs,
-`-o ConnectTimeout=20`) rather than letting it hang on a network that is not up
+`-o ConnectTimeout=10`) rather than letting it hang on a network that is not up
 yet; its exit code and stderr are logged either way.
 
 Two deliberate asymmetries:
