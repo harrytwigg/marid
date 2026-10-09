@@ -4,7 +4,7 @@ import { forgetTodoPreview } from "@/lib/todo-preview"
 /* Which React Query roots hold a copy of a Todo, written down once. React Query
  * compares keys element-wise, so ['work-item-preview'] is NOT prefix-matched by
  * ['work-item'] — a write lane that names only the latter leaves the mention
- * glance strip and the peek panel showing the pre-write value. */
+ * glance strip showing the pre-write value. */
 
 /** Every root a Todo row can be found under, for snapshot/patch/invalidate. */
 export const TODO_CACHE_ROOTS: readonly QueryKey[] = [

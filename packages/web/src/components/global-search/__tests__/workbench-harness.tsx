@@ -1,6 +1,6 @@
 import { fireEvent, screen } from "@testing-library/react"
 import type { Employee, WorkItemDetailWire, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/api"
-import { detailOf } from "@/components/peek/__tests__/peek-fixtures"
+import { detailOf } from "./todo-fixtures"
 
 /* How the workbench is mounted and driven. What it is supposed to do lives next
  * door in workbench.test.tsx; this is only the harness and its fixtures. */

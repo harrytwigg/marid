@@ -21,7 +21,7 @@ const TALK = "talk" as const
  *  them now still depends on its sub-tasks, and is checked when the call comes. */
 const UNBLOCK_TARGETS: readonly WorkItemStatusWire[] = legalTargets("blocked").map((target) => target.status)
 
-/** The close gate's pre-check, read the way the Todo peek reads it: a failed
+/** The close gate's pre-check, read the way the quick pickers read it: a failed
  *  read is reported rather than counted as zero, because defaulting to zero
  *  would offer a close the gateway is about to refuse and blame the move for a
  *  read that never landed. */

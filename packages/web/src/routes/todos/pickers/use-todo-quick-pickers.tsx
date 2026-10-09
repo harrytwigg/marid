@@ -11,7 +11,7 @@ import {
 import { TODO_WRITE_KEY } from '@/lib/query-keys'
 import { operatorSafeTodoError } from '@/lib/todos'
 import { closeGateCounts, type CloseGateCounts } from '@/lib/legal-targets'
-import { PickerInline, PickerNote, PickerPopover, PickerSheet } from './picker-shell'
+import { PickerInline, PickerNote } from './picker-shell'
 import { AssigneePickerContent } from './picker-contents'
 import { StatusPickerContent } from './status-picker-content'
 import {
@@ -22,32 +22,27 @@ import {
 } from '../todo-edit-request'
 import { useSetWorkItemStatus } from '../use-todos'
 
-/* Status and owner for the surfaces that are not the task page — the peek rail
- * and the search workbench. The shells and the picker contents are the task
+/* Status and owner for the surface that is not the task page — the search
+ * workbench. The shells and the picker contents are the task
  * page's own — one picker grammar for the whole app — so every guard, every
  * gated reason and every refusal string is the task page's too, by
  * construction. What lives here is only what those surfaces do differently: one
  * picker at a time out of two rather than seven, no live region to announce
  * into (each panel shows the refusal inline), a status menu of moves only
  * because these shells cover no anchor row to superimpose, and the child count
- * the close gate needs fetched on demand, because neither surface's detail
- * payload carries one. */
+ * the close gate needs fetched on demand, because its detail payload
+ * carries none. */
 
 export type TodoQuickPickerKey = 'status' | 'assignee'
-
-/** Which shell the surface opens its picker in. `popover` superimposes the
- *  anchor (desktop rail), `sheet` rises from the phone's edge, and `inline`
- *  discloses in flow — the only form that survives a panel which scrolls its
- *  own body and sits inside a modal that traps focus. */
-export type TodoQuickPickerShell = 'popover' | 'sheet' | 'inline'
 
 const PICKER_TITLE: Record<TodoQuickPickerKey, string> = { status: 'Status', assignee: 'Assignee' }
 
 export interface TodoQuickPickerRow {
   onOpen: () => void
   open: boolean
-  /** The picker itself, for the surface to render beside its anchor row. Null
-   *  in the `sheet` shell, where the one sheet is portalled at panel level. */
+  /** The picker itself, disclosed in flow beside its anchor row: the workbench
+   *  scrolls its own body inside a modal that traps focus, which only an inline
+   *  picker survives. */
   picker: ReactNode
 }
 
@@ -109,7 +104,7 @@ function useAssignLane(detail: WorkItemDetailWire | undefined, refusal: Refusal)
 
   const showAssignee = useCallback((assignee: string | null) => {
     if (!id) return
-    // Both roots a Todo is read from here: the peek's preview copy and the
+    // Both roots a Todo is read from here: the mention preview copy and the
     // canonical detail the task page and the search workbench hold. An absent
     // root is left absent — the updater returning `undefined` writes nothing.
     for (const root of ['work-item-preview', 'work-item']) {
@@ -175,9 +170,9 @@ function usePickerContent({ detail, employees, close, children, transitionTo, co
   transitionTo: (status: WorkItemStatusWire, options?: { cascade?: boolean }) => void
   commitAssignee: (assignee: string | null) => void
 }) {
-  return useCallback((key: TodoQuickPickerKey, inSheet: boolean): ReactNode => {
+  return useCallback((key: TodoQuickPickerKey): ReactNode => {
     if (!detail) return null
-    const shared = { detail, sheet: inSheet, onDone: close }
+    const shared = { detail, onDone: close }
     if (key === 'assignee') {
       return <AssigneePickerContent {...shared} employees={employees} commit={commitAssignee} />
     }
@@ -198,16 +193,15 @@ function usePickerContent({ detail, employees, close, children, transitionTo, co
 }
 
 /** One anchor row's contract: how to open it, whether it is open, and the
- *  picker to render beside it in whichever shell this surface asked for. */
-function usePickerRows({ open, setOpen, ready, shell, prefix, close, contentFor }: {
+ *  picker to render beside it. */
+function usePickerRows({ open, setOpen, ready, prefix, close, contentFor }: {
   open: TodoQuickPickerKey | null
   setOpen: Dispatch<SetStateAction<TodoQuickPickerKey | null>>
   /** The detail is loaded, so there is something for a picker to act on. */
   ready: boolean
-  shell: TodoQuickPickerShell
   prefix: string
   close: () => void
-  contentFor: (key: TodoQuickPickerKey, inSheet: boolean) => ReactNode
+  contentFor: (key: TodoQuickPickerKey) => ReactNode
 }) {
   return useCallback((key: TodoQuickPickerKey): TodoQuickPickerRow => {
     const shared = {
@@ -221,18 +215,14 @@ function usePickerRows({ open, setOpen, ready, shell, prefix, close, contentFor 
     return {
       onOpen: () => setOpen((current) => (current === key ? null : key)),
       open: open === key,
-      picker: !showing ? null
-        : shell === 'popover' ? <PickerPopover {...shared}>{contentFor(key, false)}</PickerPopover>
-        : shell === 'inline' ? <PickerInline {...shared}>{contentFor(key, false)}</PickerInline>
-        : null,
+      picker: showing ? <PickerInline {...shared}>{contentFor(key)}</PickerInline> : null,
     }
-  }, [open, setOpen, ready, shell, prefix, close, contentFor])
+  }, [open, setOpen, ready, prefix, close, contentFor])
 }
 
-export function useTodoQuickPickers({ detail, employees, shell, prefix, onOpenChange }: {
+export function useTodoQuickPickers({ detail, employees, prefix, onOpenChange }: {
   detail: WorkItemDetailWire | undefined
   employees: Employee[]
-  shell: TodoQuickPickerShell
   /** Names this surface's own anchors and pickers: `<prefix>-row-<key>` is the
    *  anchor focus returns to, `<prefix>-picker-<key>` the picker itself. */
   prefix: string
@@ -255,20 +245,14 @@ export function useTodoQuickPickers({ detail, employees, shell, prefix, onOpenCh
   const commitAssignee = useAssignLane(detail, refusal)
   const close = useCloseToAnchor(setOpen, prefix)
   const contentFor = usePickerContent({ detail, employees, close, children, transitionTo, commitAssignee })
-  const rowFor = usePickerRows({ open, setOpen, ready: Boolean(detail), shell, prefix, close, contentFor })
+  const rowFor = usePickerRows({ open, setOpen, ready: Boolean(detail), prefix, close, contentFor })
 
   // The surface above may own Escape and a Tab ring; while a picker is up it
   // has to stand down, so it needs to know.
   useEffect(() => onOpenChange?.(open !== null), [open, onOpenChange])
 
 
-  const pickerSheet = shell === 'sheet' && open && detail ? (
-    <PickerSheet title={PICKER_TITLE[open]} onClose={close} testId={`${prefix}-picker-sheet-${open}`}>
-      {contentFor(open, true)}
-    </PickerSheet>
-  ) : null
-
   // The refusal channel goes back out whole: a surface with a write of its own
   // (the workbench's comment) reports through the same one line these do.
-  return { rowFor, pickerSheet, refusal }
+  return { rowFor, refusal }
 }

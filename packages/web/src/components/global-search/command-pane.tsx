@@ -13,7 +13,7 @@ import type { Verb } from "./verbs"
 /* The preview pane, in command mode. It says which verb is armed and what it is
  * pointed at before it offers a control, so nothing here can act on a Todo the
  * operator cannot see the name of. Assign and move are the workbench's own
- * fields — the same lane the peek rail and the task page write through. */
+ * fields — the same lanes the task page writes through. */
 
 const PANE = "px-[22px] py-5"
 const KICKER = "text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--text-quaternary)]"

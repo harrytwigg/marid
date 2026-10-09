@@ -21,14 +21,13 @@ const TOUCHED = [
   "routes/todos/todo-dialog.tsx",
   "routes/todos/new-todo-dialog.tsx",
   "routes/todos/todo-filter-sheet.tsx",
-  "components/peek/peek-panel.tsx",
   "components/pill-nav.tsx",
   "components/chat/mobile-tab-bar.tsx",
   "components/chat/chat-tabs.tsx",
 ]
 
 /** The subset of those that open and close, and so owe both halves. */
-const OVERLAYS = TOUCHED.slice(0, 8)
+const OVERLAYS = TOUCHED.slice(0, 7)
 
 const DURATION_TOKENS = ["--duration-instant", "--duration-fast", "--duration-base", "--duration-slow"]
 
@@ -110,7 +109,7 @@ describe("motion tokens", () => {
   it("animates the overlay keyframes on opacity and the independent transform properties only", () => {
     // A keyframe writing `transform` would overwrite the Tailwind translate that
     // centres a dialog and throw it into a corner mid-animation.
-    for (const name of ["jinn-overlay-in", "jinn-overlay-out", "jinn-pop-in", "jinn-pop-out", "jinn-sheet-in", "jinn-sheet-out", "jinn-rail-in", "jinn-rail-out"]) {
+    for (const name of ["jinn-overlay-in", "jinn-overlay-out", "jinn-pop-in", "jinn-pop-out", "jinn-sheet-in", "jinn-sheet-out"]) {
       const body = keyframeBody(name)
       expect(body, name).not.toContain("transform:")
       for (const property of body.matchAll(/([a-z-]+):/g)) {

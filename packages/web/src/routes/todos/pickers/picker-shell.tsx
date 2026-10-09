@@ -147,8 +147,8 @@ export function PickerSheet({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   usePickerKeyboard(ref, onClose)
-  // Above the peek panel's own phone sheet (z-100): a picker opened from inside
-  // it is the sheet you are answering, so it has to be the one on top.
+  // Above the app's other phone sheets (z-100): a picker opened from inside one
+  // is the sheet you are answering, so it has to be the one on top.
   return createPortal(
     <div className="fixed inset-0 z-[120]" role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" aria-label="Dismiss" onClick={onClose} className="absolute inset-0 bg-[var(--scrim,rgba(0,0,0,0.35))]" />

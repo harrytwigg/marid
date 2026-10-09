@@ -12,8 +12,8 @@ import {
 import type { SearchRow } from "./rows"
 
 /* Everything the workbench can do to the selected Todo, and nothing it can do
- * to anything else. Status and owner come from the quick-picker lane the peek
- * rail already writes through, and the comment from the lane the task page's
+ * to anything else. Status and owner come from the shared quick-picker lane,
+ * and the comment from the lane the task page's
  * own composer sends on — so this surface adds a place to act from, never a
  * second copy of the acting. A row of any other kind resolves to `undefined`
  * here, which is what keeps the preview read-only for it. */
@@ -100,7 +100,6 @@ export function useTodoWorkbench(
   const pickers = useTodoQuickPickers({
     detail,
     employees,
-    shell: "inline",
     prefix: WORKBENCH_PREFIX,
     onOpenChange: onPickerOpenChange,
   })

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemOpenDetailWire, WorkItemStatusWire } from "@/lib/api"
 import { TodoPrefixContext } from "@/components/chat/todo-prefix-context"
-import { PeekProvider, usePeekStack } from "@/components/peek/peek-stack"
+import { TodoOpenContext } from "@/components/chat/file-open-context"
 import { TodoMention } from "@/components/todo-mention"
 import { forgetTodoPreview } from "@/lib/todo-preview"
 
@@ -26,24 +26,19 @@ const rows = new Map<string, { title: string; status: WorkItemStatusWire }>()
 
 let queryClient: QueryClient
 
-/** Stands in for the panel's own close control, so a case can put the stack back
- *  the way it was without mounting the panel itself. */
-function ClosePeek() {
-  const peek = usePeekStack()
-  return <button onClick={() => peek?.close()}>close peek</button>
-}
+/** The chat layout taking every Todo the mention opens as a tab. */
+const openAsTab = () => true
 
-function renderMentions(ids: string[], prefixes: ReadonlySet<string> = LIVE_PREFIXES, withPeek = false) {
+function renderMentions(ids: string[], prefixes: ReadonlySet<string> = LIVE_PREFIXES, inLayout = false) {
   const mentions = (
     <TodoPrefixContext.Provider value={prefixes}>
       {ids.map((id) => <TodoMention key={id} id={id} />)}
-      {withPeek && <ClosePeek />}
     </TodoPrefixContext.Provider>
   )
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/chat"]}>
-        {withPeek ? <PeekProvider>{mentions}</PeekProvider> : mentions}
+        <TodoOpenContext.Provider value={inLayout ? openAsTab : null}>{mentions}</TodoOpenContext.Provider>
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -180,12 +175,12 @@ describe("the hover glance on a Todo mention", () => {
     expect(document.activeElement).toBe(link)
   })
 
-  // The strip portals to the body, so the panel opening beside it takes nothing
+  // The strip portals to the body, so the tab opening beside it takes nothing
   // away, and a hover card has no reason of its own to close on a click that
   // leaves the cursor exactly where it was. Left alone, both stay on screen
   // saying the same thing, the strip lying across the transcript.
-  it("takes the strip away when the click opens the peek panel instead", async () => {
-    rows.set("ICI-7109", { title: "Peek takes it from here", status: "executing" })
+  it("takes the strip away when the click opens the Todo as a tab instead", async () => {
+    rows.set("ICI-7109", { title: "The tab takes it from here", status: "executing" })
     renderMentions(["ICI-7109"], LIVE_PREFIXES, true)
     await openGlance("ICI-7109")
 
@@ -210,13 +205,14 @@ describe("the hover glance on a Todo mention", () => {
     expect(document.querySelector(".todo-glance")).toBeNull()
   })
 
-  it("shows the strip again once the panel has moved off that Todo", async () => {
+  it("shows the strip again once the cursor comes back to the mention", async () => {
     rows.set("ICI-7111", { title: "Back for a second look", status: "backlog" })
     renderMentions(["ICI-7111"], LIVE_PREFIXES, true)
     await openGlance("ICI-7111")
-    fireEvent.click(screen.getByRole("link", { name: "ICI-7111" }), { button: 0 })
+    const link = screen.getByRole("link", { name: "ICI-7111" })
+    fireEvent.click(link, { button: 0 })
 
-    fireEvent.click(screen.getByRole("button", { name: "close peek" }))
+    fireEvent.pointerEnter(link)
     await openGlance("ICI-7111")
 
     expect(stripFor("Back for a second look")).toBeTruthy()

@@ -23,8 +23,8 @@ vi.mock('@/components/chat/file-view', () => ({
   FileView: ({ path }: { path: string }) => <div data-testid="file-view">{path}</div>,
 }))
 
-vi.mock('@/components/peek/todo-tab-view', () => ({
-  TodoTabView: ({ todoId }: { todoId: string }) => <div data-testid="todo-view">{todoId}</div>,
+vi.mock('@/routes/todos/task-page/task-page', () => ({
+  TaskView: ({ todoId }: { todoId: string }) => <div data-testid="todo-view">{todoId}</div>,
 }))
 
 vi.mock('@/lib/todo-preview', () => ({

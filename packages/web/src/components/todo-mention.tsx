@@ -4,7 +4,6 @@ import { HoverCard } from 'radix-ui'
 import { isTodoId, todoPath } from '@/lib/todo-id'
 import { requestTodoPreview, useTodoPreview } from '@/lib/todo-preview'
 import { useKnownTodoPrefixes } from '@/components/chat/todo-prefix-context'
-import { usePeekStack } from '@/components/peek/peek-stack'
 import { useOpenTodo } from '@/components/chat/file-open-context'
 import { useFileLinkSession } from '@/components/chat/file-link-session-context'
 import { useHoverGlanceEnabled } from '@/hooks/use-hover-glance'
@@ -17,10 +16,12 @@ const OPEN_DELAY_MS = 120
  *  strip, short enough that a neighbouring mention's strip never opens before
  *  this one has gone — which is what would read as flicker. */
 const CLOSE_DELAY_MS = 80
+/** Followed to the full page, a phone's back chevron returns to the mention rather than to a board. */
+const MENTION_ROUTE_STATE = { returnBack: true }
 
 /** A click the browser is meant to keep: a new tab, a new window, a download,
- *  or the middle button. The Todo tab and the peek panel live inside one browser
- *  tab, so these always stay navigation. */
+ *  or the middle button. The Todo tab lives inside one browser tab, so these
+ *  always stay navigation. */
 function isBrowserNavigation(event: React.MouseEvent): boolean {
   return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
 }
@@ -29,9 +30,8 @@ function isBrowserNavigation(event: React.MouseEvent): boolean {
  *  Todo. Rendering the id also warms its preview, so the hover glance built on
  *  top of this has the row already in hand instead of opening a request. Hovering
  *  reads the Todo on a strip; a plain left click opens it as a tab beside the
- *  chat it was clicked in where the chat layout can take one, else in the peek
- *  panel where one is mounted; everywhere else — and for every modified click —
- *  the anchor navigates to the full page as it always has. An id whose prefix belongs to no live company
+ *  chat it was clicked in where the chat layout can take one; everywhere else —
+ *  and for every modified click — the anchor navigates to the full page. An id whose prefix belongs to no live company
  *  board is not a mention: it stays the caller's fallback (or plain text) and
  *  asks the gateway nothing. */
 export function TodoMention({ id, fallback }: { id: string; fallback?: React.ReactNode }) {
@@ -51,22 +51,17 @@ export function TodoMention({ id, fallback }: { id: string; fallback?: React.Rea
 }
 
 /** What a plain left click on a live mention does: open the Todo as a tab beside the chat it was
- *  clicked in where the chat layout can take one, else in the peek panel where one is mounted; a
- *  modified click, or a surface with neither, stays navigation. Also whether the hover strip may
- *  open, which it may not while the Todo is already on screen because of this mention. */
+ *  clicked in where the chat layout can take one; a modified click, or a surface without the layout,
+ *  stays navigation to the full page. Also whether the hover strip may open, which it may not while
+ *  the Todo is already on screen because of this mention. */
 function useMentionOpen(id: string) {
-  const peek = usePeekStack()
   const openTodo = useOpenTodo()
   const sessionId = useFileLinkSession()
   const [glanceOpen, setGlanceOpen] = useState(false)
-  // The panel is already showing this Todo, so the strip has nothing left to
-  // say about it. Merely closing the strip on click is not enough: the click
-  // leaves the cursor on the mention, so the trigger stays engaged and asks to
-  // open again the moment its delay elapses. Reading the panel rather than
-  // latching on the click means the answer holds however often it asks.
-  const peekingThis = peek?.entries.at(-1)?.id === id
-  // Opened as a tab, the Todo is on screen beside the mention, so the strip stays shut for the same
-  // reason until the cursor next comes back to the mention: the tab is not something it can read.
+  // Opened as a tab, the Todo is on screen beside the mention, so the strip has nothing left to say
+  // about it until the cursor next comes back to the mention. Merely closing the strip on click is
+  // not enough: the click leaves the cursor on the mention, so the trigger stays engaged and asks to
+  // open again the moment its delay elapses.
   const [openedHere, setOpenedHere] = useState(false)
 
   const onClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -78,23 +73,19 @@ function useMentionOpen(id: string) {
       event.stopPropagation()
       setGlanceOpen(false)
       setOpenedHere(true)
-      return
     }
-    if (!peek) return
-    event.preventDefault()
-    peek.open({ kind: 'todo', id }, event.currentTarget)
   }
 
   return {
     onClick,
-    glanceOpen: glanceOpen && !peekingThis && !openedHere,
+    glanceOpen: glanceOpen && !openedHere,
     setGlanceOpen,
     onPointerEnter: () => setOpenedHere(false),
   }
 }
 
 /** The anchor itself, and the two affordances layered on it: the strip that
- *  reads the Todo on hover, and the click that opens it in a tab (or the panel).
+ *  reads the Todo on hover, and the click that opens it in a tab.
  *  Mounted only for an id that names a live Todo, so a plain word never pays for
  *  either. */
 function LiveTodoMention({ id }: { id: string }) {
@@ -104,6 +95,7 @@ function LiveTodoMention({ id }: { id: string }) {
   const link = (
     <Link
       to={todoPath(id)}
+      state={MENTION_ROUTE_STATE}
       title={`Open ${id}`}
       onClick={mention.onClick}
       className="text-[var(--system-blue)] underline decoration-[var(--system-blue)]/40 hover:decoration-[var(--system-blue)] underline-offset-2 font-[family-name:var(--font-code)] text-[0.88em]"
