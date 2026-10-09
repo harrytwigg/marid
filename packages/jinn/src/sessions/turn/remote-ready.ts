@@ -2,7 +2,7 @@ import { logger } from "../../shared/logger.js";
 import { employeeRemoteTarget } from "../../shared/remote-target.js";
 import { remoteScopeFor } from "../session-cwd.js";
 import { engineSupportsRemote, REMOTE_ENGINE_NAMES, type RemoteEngineName } from "../../shared/models.js";
-import { ensureRemoteReady } from "../../engines/remote-stage.js";
+import { ensureRemoteReady, type WaitStartInfo } from "../../engines/remote-stage.js";
 import { getSession, updateSessionForAttempt } from "../registry.js";
 import { notifyOperatorChannel } from "../callbacks.js";
 import type { TurnInput } from "./types.js";
@@ -70,6 +70,21 @@ function restoreAfterWait(
   return { ok: true };
 }
 
+/** What the session and the operator are told when a wait starts. */
+function waitNotice(info: WaitStartInfo, who: string): { status: string; operator: string } {
+  const { destination, waking } = info;
+  if (info.waitingFor === "mount") {
+    return {
+      status: `${destination} is up — waiting for the instance-home mount`,
+      operator: `🔌 ${destination} is up but the instance-home mount is not ready yet. Waiting for it before ${who} can start.`,
+    };
+  }
+  return {
+    status: `${destination} is offline — ${waking ? "waking it" : "waiting for it"}`,
+    operator: `🔌 ${destination} is offline. ${waking ? "Waking it" : "Waiting for it"} before ${who} can start.`,
+  };
+}
+
 export async function ensureRemoteHostReady(
   input: TurnInput,
   engineName: string,
@@ -89,18 +104,20 @@ export async function ensureRemoteHostReady(
     // that host — a Pi box need not carry Claude Code, and vice versa.
     engine: engineName as RemoteEngineName,
     allowWake: true,
-    onWaitStart: ({ destination, waking }) => {
-      announced = destination;
+    // A host that has just booted answers ssh before its sshfs has connected.
+    waitForMount: true,
+    onWaitStart: (info) => {
+      announced = info.destination;
+      const notice = waitNotice(info, input.employee?.displayName ?? "the employee");
       // Move to `waiting` BEFORE the wait, so the UI never shows a turn as
-      // running against a host that is still booting.
+      // running against a host that is still booting, and the status
+      // reconciler never takes a long wait for a dead turn.
       updateSessionForAttempt(sessionId, input.attemptToken, {
         status: "waiting",
         lastActivity: new Date().toISOString(),
-        lastError: `${destination} is offline — ${waking ? "waking it" : "waiting for it"}`,
+        lastError: notice.status,
       });
-      notifyOperatorChannel(
-        `🔌 ${destination} is offline. ${waking ? "Waking it" : "Waiting for it"} before ${input.employee?.displayName ?? "the employee"} can start.`,
-      );
+      notifyOperatorChannel(notice.operator);
     },
     // The operator stopping the session is the one thing that should end the
     // wait early. `waiting` is the status this gate set; anything else means

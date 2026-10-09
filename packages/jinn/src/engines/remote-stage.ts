@@ -1,14 +1,13 @@
 import { spawn } from "node:child_process";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { logger } from "../shared/logger.js";
-import { JINN_HOME } from "../shared/paths.js";
 import { FARM_FILTERED_DIRS, REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
 import { runLocalWakeCommand, sendWakeOnLan } from "./remote-wake.js";
 import { ancestorMemoryExcludes } from "../shared/remote-department.js";
 import { assertRemoteClaudeSkipsAncestors, clearRemoteClaudeCheckCache } from "./remote-claude-check.js";
+import { clearRemoteMountQueue, DEFAULT_MOUNT_WAIT_MS, verifyMount, type MountWait } from "./remote-mount.js";
 import { rebuildScopedHome, remoteDepartmentEnv, remoteDepartmentFileRoots, scopedRemoteDepartment, syncRemoteDepartmentStage } from "./remote-department-stage.js";
 import { parseVersionOutput } from "../shared/brand.js";
 import { getPackageVersion } from "../shared/version.js";
@@ -16,7 +15,7 @@ import { remoteOperatorSettingsCarry } from "../shared/claude-profile-settings.j
 import { buildSessionSettings, type SessionSettingsOpts } from "../shared/claude-settings.js";
 import { readGatewayInfo } from "../gateway/gateway-info.js";
 import { GATEWAY_INFO_FILE } from "../shared/paths.js";
-import { assertRemoteTarget, MOUNT_SENTINEL, resolveRemoteClaudeConfigDir, sshDestination, REMOTE_STAGE_DIR_NAME } from "../shared/remote-target.js";
+import { assertRemoteTarget, resolveRemoteClaudeConfigDir, sshDestination, REMOTE_STAGE_DIR_NAME } from "../shared/remote-target.js";
 import type { RemoteTarget, ResolvedMcpConfig, SessionRemoteTarget } from "../shared/types.js";
 import type { RemoteEngineName } from "../shared/models.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
@@ -433,27 +432,6 @@ export async function gatherFacts(destination: string): Promise<RemoteFacts> {
   return facts;
 }
 
-// ── Mount liveness ───────────────────────────────────────────────────────────
-
-/** Read (creating on first use) the gateway-side sentinel value.
- *  Its only job is to be a value the remote can only see THROUGH the mount. */
-function localSentinelValue(): string {
-  const file = path.join(JINN_HOME, MOUNT_SENTINEL);
-  try {
-    const existing = fs.readFileSync(file, "utf-8").trim();
-    if (existing) return existing;
-  } catch { /* first use */ }
-  const value = crypto.randomBytes(16).toString("hex");
-  fs.mkdirSync(JINN_HOME, { recursive: true });
-  fs.writeFileSync(file, `${value}\n`, { mode: 0o600 });
-  return value;
-}
-
-async function readRemoteSentinel(destination: string, mount: string): Promise<string> {
-  const res = await sshRun(destination, [`cat ${shq(path.posix.join(mount, MOUNT_SENTINEL))} 2>/dev/null || true`]);
-  return res.stdout.trim();
-}
-
 export { runLocalWakeCommand, sendWakeOnLan };
 
 // ── Readiness ────────────────────────────────────────────────────────────────
@@ -461,6 +439,14 @@ export { runLocalWakeCommand, sendWakeOnLan };
 export type RemoteReadiness =
   | { ready: true; facts: RemoteFacts }
   | { ready: false; reason: string };
+
+export interface WaitStartInfo {
+  destination: string;
+  waking: boolean;
+  /** What is being waited for: the host to answer (the default), or, once it
+   *  has, the instance-home mount to come up on it. */
+  waitingFor?: "host" | "mount";
+}
 
 export interface EnsureReadyOpts {
   /** Which agent the session will run there. Decides which CLI must be present
@@ -473,9 +459,14 @@ export interface EnsureReadyOpts {
   allowWake: boolean;
   /** Called once when the host is not up and we are about to wait, so the turn
    *  path can move the session to "waiting" and tell the operator. */
-  onWaitStart?: (info: { destination: string; waking: boolean }) => void;
-  /** Polled while waiting; returning true abandons the wait (session stopped). */
+  onWaitStart?: (info: WaitStartInfo) => void;
+  /** Polled while waiting; returning true abandons the wait (session stopped).
+   *  Only consulted once {@link onWaitStart} has fired. */
   shouldAbort?: () => boolean;
+  /** Wait up to `remote.mountWaitMs` for a mount that is not live yet, instead
+   *  of checking it once. For the turn path and an explicit wake; a spawn that
+   *  follows a turn's own check, or a status report, checks once. */
+  waitForMount?: boolean;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -523,15 +514,25 @@ export async function ensureRemoteReady(
   const destination = sshDestination(target as RemoteTarget & { remoteHost: string });
   const now = opts.now ?? (() => Date.now());
   const sleep = opts.sleep ?? defaultSleep;
+  let announced = false;
+  const onWaitStart: EnsureReadyOpts["onWaitStart"] = (info) => {
+    announced = true;
+    opts.onWaitStart?.(info);
+  };
 
   try {
     if (!await probeReachable(destination)) {
-      const problem = await wakeAndWait(destination, remote, opts, now, sleep);
+      const problem = await wakeAndWait(destination, remote, { ...opts, onWaitStart }, now, sleep);
       if (problem) return { ready: false, reason: problem };
     }
     const facts = await gatherFacts(destination);
     requireRemoteEngineBin(destination, facts, opts.engine);
-    const mountProblem = await verifyMount(destination, remote);
+    const mountProblem = await verifyMount(destination, remote, mountWait(remote, opts, { now, sleep }, {
+      // A host already announced as offline is reported once; the mount wait
+      // then continues under the same `waiting` status.
+      onWaitStart: () => { if (!announced) onWaitStart({ destination, waking: false, waitingFor: "mount" }); },
+      announced: () => announced,
+    }));
     if (mountProblem) return { ready: false, reason: mountProblem };
     const profileProblem = await verifyEngineProfile(destination, target, remote, opts.engine);
     if (profileProblem) return { ready: false, reason: profileProblem };
@@ -539,6 +540,25 @@ export async function ensureRemoteReady(
   } catch (err) {
     return { ready: false, reason: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/** How {@link verifyMount} may wait for this caller. The wait is announced like
+ *  a host wait, which is what moves the turn to `waiting`. The turn path's abort
+ *  test reads that status, so before an announcement it would read every running
+ *  session as stopped: it is only asked after one. */
+function mountWait(
+  remote: RemoteExecutionConfig,
+  opts: EnsureReadyOpts,
+  clock: Pick<MountWait, "now" | "sleep">,
+  wait: { onWaitStart: () => void; announced: () => boolean },
+): MountWait {
+  return {
+    ...clock,
+    waitMs: opts.waitForMount ? remote.mountWaitMs ?? DEFAULT_MOUNT_WAIT_MS : 0,
+    intervalMs: remote.probeIntervalMs ?? DEFAULT_PROBE_INTERVAL_MS,
+    onWaitStart: wait.onWaitStart,
+    aborted: () => wait.announced() && opts.shouldAbort?.() === true,
+  };
 }
 
 /** The profile half of readiness, which only one engine has.
@@ -707,7 +727,7 @@ async function wakeAndWait(
   sleep: (ms: number) => Promise<void>,
 ): Promise<string | undefined> {
   const canWake = opts.allowWake && Boolean(remote.wakeCommand || remote.wakeMac);
-  opts.onWaitStart?.({ destination, waking: canWake });
+  opts.onWaitStart?.({ destination, waking: canWake, waitingFor: "host" });
 
   // The dashboard's idle PTY passes allowWake:false. Opening a terminal tab
   // must never boot someone's desktop.
@@ -741,35 +761,6 @@ async function pollUntilReachable(
   return `${destination} did not come up within ${Math.round(waitMs / 1000)}s of being woken`;
 }
 
-/**
- * Confirm the gateway's instance home is genuinely mounted on the remote host.
- *
- * The failure this exists for is a SILENTLY unmounted sshfs: the symlink farm
- * then points into an empty directory, the session's writes to knowledge/ and
- * docs/ succeed locally, and the org quietly diverges with no error anywhere.
- * A reboot does not bring sshfs back, so a host that just woke normally lands
- * here with a dead mount — which is why the remount attempt is on this path.
- */
-async function verifyMount(
-  destination: string,
-  remote: RemoteExecutionConfig,
-): Promise<string | undefined> {
-  const expected = localSentinelValue();
-  let seen = await readRemoteSentinel(destination, remote.mount);
-  if (seen !== expected && remote.remountCommand) {
-    logger.info(`remote: ${remote.mount} on ${destination} is not live — running remountCommand`);
-    const res = await sshRun(destination, [remote.remountCommand]);
-    if (res.code !== 0) {
-      logger.warn(`remote remountCommand on ${destination} exited ${res.code}: ${res.stderr.trim()}`);
-    }
-    seen = await readRemoteSentinel(destination, remote.mount);
-  }
-  if (seen === expected) return undefined;
-  return `the gateway's instance home is not mounted at ${remote.mount} on ${destination} `
-    + `(sentinel ${seen ? "mismatched" : "unreadable"}) — without it the session's writes to `
-    + `knowledge/, docs/ and org/ would land on the remote host instead of reaching the org`;
-}
-
 // ── Per-host staging ─────────────────────────────────────────────────────────
 
 const seededTrust = new Set<string>();
@@ -778,6 +769,7 @@ const seededTrust = new Set<string>();
 export function clearRemoteStagingCache(): void {
   seededTrust.clear();
   clearRemoteClaudeCheckCache();
+  clearRemoteMountQueue();
   stagingQueues.clear();
 }
 
