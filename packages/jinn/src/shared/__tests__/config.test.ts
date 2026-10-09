@@ -107,6 +107,18 @@ describe("validateConfigShape", () => {
     expect(validateConfigShape({ ...base, context: { alwaysInclude: [1] } })).toEqual(["context.alwaysInclude must be a list of instance-relative file paths"]);
   });
 
+  it("accepts context.boardReminder as a string or false, and nothing else", () => {
+    const base = { engines: { claude: {} } };
+    for (const boardReminder of ["Board: custom.", "", false]) {
+      expect(validateConfigShape({ ...base, context: { boardReminder } })).toEqual([]);
+    }
+    expect(validateConfigShape({ ...base, context: { boardReminder: true } })).toEqual(["context.boardReminder must be a string or false (got boolean)"]);
+    expect(validateConfigShape({ ...base, context: { alwaysInclude: [1], boardReminder: 3 } })).toEqual([
+      "context.alwaysInclude must be a list of instance-relative file paths",
+      "context.boardReminder must be a string or false (got number)",
+    ]);
+  });
+
   it("accepts a minimal valid config", () => {
     expect(validateConfigShape({ engines: { claude: { bin: "claude", model: "opus" } } })).toEqual([]);
   });

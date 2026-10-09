@@ -8,6 +8,7 @@ import type { TerminalConfig } from "./terminal-config.js";
 import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { AutoCompactConfig } from "./auto-compact-config.js";
+import type { ContextConfig } from "./context-config.js";
 import type { ClaudeAccountConfig } from "./claude-accounts-config.js";
 import type { EngineName } from "./models.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
@@ -191,17 +192,7 @@ export interface JinnConfig {
    */
   workflows?: unknown;
   portal?: PortalConfig;
-  context?: {
-    /** Max characters for the built system prompt. Defaults to 100000. */
-    maxChars?: number;
-    /**
-     * Instance-relative files whose contents are injected into every session
-     * prompt (e.g. a small current-truth file). Each is capped and marked when
-     * cut; a path that escapes the instance home or cannot be read is skipped.
-     * Absent or empty adds nothing.
-     */
-    alwaysInclude?: string[];
-  };
+  context?: ContextConfig;
   /**
    * Steers agents that search the instance's knowledge. Absent leaves the
    * built-in wording untouched.

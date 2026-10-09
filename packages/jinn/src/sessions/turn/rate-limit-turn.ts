@@ -9,6 +9,7 @@ import { employeeRemoteTarget } from "../../shared/remote-target.js";
 import { settleTurn, type SettleTurnInput } from "./completion.js";
 import { formatResumeTime, turnDisplayText } from "./text.js";
 import type { TurnInput, TurnPlan, TurnSurface } from "./types.js";
+import { withBoardReminder } from "./board-reminder.js";
 
 export interface RateLimitTurnArgs {
   input: TurnInput;
@@ -161,7 +162,7 @@ export async function runRateLimitTurn(args: RateLimitTurnArgs): Promise<Session
   const outcome = await handleRateLimit({
     session: input.session,
     attemptToken: input.attemptToken,
-    prompt: input.prompt,
+    prompt: withBoardReminder(input.prompt, plan.boardReminder),
     systemPrompt: args.systemPrompt,
     platformContextRefresh: args.platformContextRefresh,
     engineConfig: plan.engineConfig,

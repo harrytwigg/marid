@@ -113,6 +113,8 @@ export interface TurnPlan {
   syncRequested: boolean;
   /** True when the prompt carries messages an interrupt kept from the engine. */
   carriedInterruptedPrompts: boolean;
+  /** Appended to the prompt when the engine is called (board-reminder.ts); undefined carries none. */
+  boardReminder?: string;
   /** This turn is `/compact`: the engine's own compaction, not a prompt. */
   compaction: boolean;
   /** Built per model attempt, because a model fallback re-fingerprints context. */
