@@ -203,6 +203,7 @@ export async function remoteWake(name?: string): Promise<void> {
     // about the agent this employee actually runs.
     engine: engineSupportsRemote(employee.engine) ? employee.engine : "claude",
     allowWake: true,
+    waitForMount: true,
   });
   if (readiness.ready) {
     console.log(`${GREEN}✓ ${employee.destination} is ready.${RESET}`);

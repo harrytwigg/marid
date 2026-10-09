@@ -89,6 +89,8 @@ export async function ensureRemoteHostReady(
     // that host — a Pi box need not carry Claude Code, and vice versa.
     engine: engineName as RemoteEngineName,
     allowWake: true,
+    // A host that has just booted answers ssh before its sshfs has connected.
+    waitForMount: true,
     onWaitStart: ({ destination, waking }) => {
       announced = destination;
       // Move to `waiting` BEFORE the wait, so the UI never shows a turn as

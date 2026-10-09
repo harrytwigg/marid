@@ -307,8 +307,13 @@ export interface RemoteExecutionConfig {
    *  Bounded on purpose: a box that is off for the weekend must fail the turn,
    *  not pin it at "waiting" forever. */
   waitMs?: number;
-  /** Interval between reachability probes while waiting, in ms. Default 10000. */
+  /** Interval between reachability probes, and between mount checks, while
+   *  waiting, in ms. Default 10000. */
   probeIntervalMs?: number;
+  /** Bound on waiting for the instance-home mount once the host answers, in ms.
+   *  Default 120000. Separate from {@link waitMs}: a freshly booted host can
+   *  answer ssh well before its sshfs has connected. */
+  mountWaitMs?: number;
 }
 
 /**

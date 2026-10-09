@@ -125,6 +125,8 @@ remote:
   wakeTimeoutMs: 300000
   # Bound on waiting for an unreachable host. Default 240000 (4 minutes).
   waitMs: 300000
+  # Bound on waiting for the mount once the host answers. Default 120000 (2 minutes).
+  mountWaitMs: 120000
 ```
 
 In the employee's YAML under `<instance home>/org/<department>/<name>.yaml`:
@@ -604,6 +606,22 @@ land between the state read and the press, so nothing wakes and the turn simply
 times out. Give the command room to complete rather than backgrounding it, so
 its exit code and stderr are still yours to read when it fails. On success the
 turn proceeds; on timeout the turn fails with a message naming the host.
+
+A host that has just booted usually answers ssh before its sshfs has connected,
+so a turn then waits up to `mountWaitMs` (default two minutes) for the mount,
+checking every `probeIntervalMs`. While sshfs is still connecting the mountpoint
+is already a live FUSE mount and a read on it blocks, so each sentinel read is
+cut short on the host after a few seconds and counted as "not ready yet". When
+the sentinel is missing, `remountCommand` is run, at most once per check; it is
+not re-run over a mount that is only slow to answer. Turns starting together on
+one host queue for the check, so the first remounts and the rest find the mount
+up. A sentinel that belongs to some other
+directory fails the turn at once, since waiting will not change what is mounted
+there. The failure says which it was: timed out, missing or mismatched.
+
+The gateway kills `remountCommand` after 60 seconds, so give the command its own
+connect timeout (for sshfs, `-o ConnectTimeout=20`) rather than letting it hang
+on a network that is not up yet; its exit code and stderr are logged either way.
 
 Two deliberate asymmetries:
 
