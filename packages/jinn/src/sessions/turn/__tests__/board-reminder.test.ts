@@ -42,6 +42,7 @@ import {
   DEFAULT_BOARD_REMINDER,
   resolveBoardReminder,
   withBoardReminder,
+  withoutBoardReminder,
 } from "../board-reminder.js";
 
 const LINE = `${BOARD_REMINDER_LABEL} ${DEFAULT_BOARD_REMINDER}`;
@@ -98,33 +99,45 @@ describe("board reminder text", () => {
   });
 
   it("uses the built-in text when the instance sets none", () => {
-    expect(resolveBoardReminder(configWith(), { jinnMcpAttached: true, rawCommand: false })).toBe(DEFAULT_BOARD_REMINDER);
+    expect(resolveBoardReminder(configWith(), true)).toBe(DEFAULT_BOARD_REMINDER);
   });
 
   it("takes an instance's own text in place of the default", () => {
     const config = configWith({ boardReminder: "Board: QA before in_review." });
-    expect(resolveBoardReminder(config, { jinnMcpAttached: true, rawCommand: false })).toBe("Board: QA before in_review.");
+    expect(resolveBoardReminder(config, true)).toBe("Board: QA before in_review.");
   });
 
   it("lets an instance extend the default through {{default}}", () => {
     const config = configWith({ boardReminder: "{{default}} Open a PR before in_review." });
-    expect(resolveBoardReminder(config, { jinnMcpAttached: true, rawCommand: false }))
+    expect(resolveBoardReminder(config, true))
       .toBe(`${DEFAULT_BOARD_REMINDER} Open a PR before in_review.`);
   });
 
   it.each([false, "", "   "] as const)("is off when the instance sets %j", (boardReminder) => {
-    expect(resolveBoardReminder(configWith({ boardReminder }), { jinnMcpAttached: true, rawCommand: false })).toBeUndefined();
+    expect(resolveBoardReminder(configWith({ boardReminder }), true)).toBeUndefined();
   });
 
-  it("is never carried by an engine-native command or a session without the jinn MCP server", () => {
-    expect(resolveBoardReminder(configWith(), { jinnMcpAttached: true, rawCommand: true })).toBeUndefined();
-    expect(resolveBoardReminder(configWith(), { jinnMcpAttached: false, rawCommand: false })).toBeUndefined();
+  it("is never carried by a session without the jinn MCP server", () => {
+    expect(resolveBoardReminder(configWith(), false)).toBeUndefined();
   });
 
   it("appends one labelled line after the message, or stands alone when the message is empty", () => {
     expect(withBoardReminder("hello", "R")).toBe(`hello\n\n${BOARD_REMINDER_LABEL} R`);
     expect(withBoardReminder("  ", "R")).toBe(`${BOARD_REMINDER_LABEL} R`);
     expect(withBoardReminder("hello", undefined)).toBe("hello");
+  });
+
+  it.each(["/compact", "/init", "/code-review high", "  /review 12"])("leaves the slash command %j alone", (command) => {
+    expect(withBoardReminder(command, "R")).toBe(command);
+  });
+
+  it("takes the appended line back off a prompt read from a transcript, and nothing else", () => {
+    expect(withoutBoardReminder(withBoardReminder("hello\n\nthere", DEFAULT_BOARD_REMINDER))).toBe("hello\n\nthere");
+    expect(withoutBoardReminder(withBoardReminder("hello", "Board: custom.\nSecond line."))).toBe("hello");
+    expect(withoutBoardReminder(withBoardReminder("", DEFAULT_BOARD_REMINDER))).toBe("");
+    expect(withoutBoardReminder("hello")).toBe("hello");
+    const quoted = `the line reads ${BOARD_REMINDER_LABEL} and so on`;
+    expect(withoutBoardReminder(quoted)).toBe(quoted);
   });
 });
 
@@ -163,7 +176,10 @@ describe("board reminder in the engine prompt", () => {
     ["claude", "/compact keep the Todo ids"],
     ["opencode", "/compact"],
     ["claude", "/clear"],
-  ])("leaves %s's native command %j exactly as written", async (engine, command) => {
+    ["claude", "/init"],
+    ["claude", "/code-review high"],
+    ["codex", "/review"],
+  ])("leaves %s's slash command %j exactly as written", async (engine, command) => {
     const opts = await engineOpts(input(engine, command));
     expect(opts.prompt).toBe(command);
   });

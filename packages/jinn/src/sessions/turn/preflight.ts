@@ -170,7 +170,7 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
     resolvedMcp,
     runtimeSource,
     ...turnPrompt,
-    boardReminder: resolveBoardReminder(input.config, { jinnMcpAttached: baseContextOptions.jinnMcpAttached === true, rawCommand }),
+    boardReminder: resolveBoardReminder(input.config, baseContextOptions.jinnMcpAttached === true),
     compaction,
     prepareContext: contextPreparer(baseContextOptions, resumeRef, rawCommand),
   };

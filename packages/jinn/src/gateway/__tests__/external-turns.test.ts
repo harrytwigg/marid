@@ -435,6 +435,32 @@ describe("syncExternalTurn", () => {
     expect(events).toEqual([{ event: "session:external-turn", payload: { sessionId: id } }]);
   });
 
+  it("keeps the board reminder the gateway appended out of a reconciled user row", async () => {
+    const { withBoardReminder, DEFAULT_BOARD_REMINDER } = await import("../../sessions/turn/board-reminder.js");
+    const id = makeSession();
+    reg.insertMessage(id, "user", "please look at the Todo");
+    reg.insertMessage(id, "assistant", "On it.");
+    const future = (ms: number) => new Date(Date.now() + ms).toISOString();
+    const file = writeTranscript([
+      { type: "user", text: withBoardReminder("please look at the Todo", DEFAULT_BOARD_REMINDER), ts: future(1_000) },
+      { type: "assistant", text: "On it. Done.", ts: future(2_000) },
+    ]);
+    const n = ext.syncExternalTurn(id, emit, { hook_event_name: "Stop", transcript_path: file, last_assistant_message: "On it. Done." });
+    expect(n).toBe(0);
+    expect(reg.getMessages(id).map((m) => [m.role, m.content])).toEqual([
+      ["user", "please look at the Todo"],
+      ["assistant", "On it. Done."],
+    ]);
+  });
+
+  it("reads a user transcript entry without the board reminder, and an entry that was only the reminder as nothing", async () => {
+    const { withBoardReminder, DEFAULT_BOARD_REMINDER } = await import("../../sessions/turn/board-reminder.js");
+    const entry = (text: string) => ({ type: "user", message: { role: "user", content: [{ type: "text", text }] } });
+    expect(ext.transcriptEntryText(entry(withBoardReminder("line one\n\nline two", DEFAULT_BOARD_REMINDER))))
+      .toEqual({ role: "user", content: "line one\n\nline two" });
+    expect(ext.transcriptEntryText(entry(withBoardReminder("", DEFAULT_BOARD_REMINDER)))).toBeNull();
+  });
+
   it("does not import an internal child callback prompt as a user message", () => {
     const id = makeSession();
     reg.insertMessage(id, "notification", "📩 worker replied in child session child-1");
