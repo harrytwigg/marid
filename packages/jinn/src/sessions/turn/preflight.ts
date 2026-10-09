@@ -17,6 +17,7 @@ import { openTurnMessages } from "../queue-item-registry.js";
 import { isRemoteMcpSession } from "../remote-mcp-session.js";
 import { isTerminalSession, TERMINAL_REFUSES_MESSAGES } from "../../terminals/session.js";
 import { readUnseenInterruptedPrompts } from "./superseded.js";
+import { resolveBoardReminder } from "./board-reminder.js";
 import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight } from "./types.js";
 export { warnIfNearUsageLimit } from "./usage-warning.js";
 
@@ -169,6 +170,7 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
     resolvedMcp,
     runtimeSource,
     ...turnPrompt,
+    boardReminder: resolveBoardReminder(input.config, { jinnMcpAttached: baseContextOptions.jinnMcpAttached === true, rawCommand }),
     compaction,
     prepareContext: contextPreparer(baseContextOptions, resumeRef, rawCommand),
   };

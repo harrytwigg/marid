@@ -144,12 +144,15 @@ function validateRealtime(realtime: unknown): string[] {
 function validateContextShape(context: unknown): string[] {
   if (context === undefined || context === null) return [];
   if (typeof context !== "object" || Array.isArray(context)) return ["context must be a mapping"];
-  const files = (context as Record<string, unknown>).alwaysInclude;
-  if (files === undefined) return [];
-  if (!Array.isArray(files) || files.some((f) => typeof f !== "string")) {
-    return ["context.alwaysInclude must be a list of instance-relative file paths"];
+  const { alwaysInclude: files, boardReminder } = context as Record<string, unknown>;
+  const problems: string[] = [];
+  if (files !== undefined && (!Array.isArray(files) || files.some((f) => typeof f !== "string"))) {
+    problems.push("context.alwaysInclude must be a list of instance-relative file paths");
   }
-  return [];
+  if (boardReminder !== undefined && boardReminder !== false && typeof boardReminder !== "string") {
+    problems.push(`context.boardReminder must be a string or false (got ${typeof boardReminder})`);
+  }
+  return problems;
 }
 
 function validateKnowledgeShape(knowledge: unknown): string[] {

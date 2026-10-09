@@ -307,6 +307,7 @@ logging:
 - **Fallback chains** — `engines.<name>.fallback` names the engines to try, in order of preference, when that one cannot serve a turn. Two engines may name each other; an engine may not name itself.
 - **`sessions.rateLimitStrategy` and `sessions.fallbackEngine` are deprecated** in favour of `engines.claude.fallback`. They still work: the loader maps them forward and warns once.
 - **Auto-compaction** — `engines.claude.autoCompact` and `engines.opencode.autoCompact` (`enabled`, default `false`; `cacheWindowSeconds`, default `300`; `minContextTokens`, default `100000`; `maxContextTokens`, no default) compact a long, cache-cold session before its next turn, and, with `maxContextTokens` set, any session whose context has reached that budget. See [`docs/auto-compaction.md`](docs/auto-compaction.md).
+- **Todo board reminder** — every turn of a session with the built-in company tools ends with one fixed line restating the Todo status procedure (about 60 tokens), so it survives long and compacted conversations. It is added when the engine is called, never to the stored message. `context.boardReminder` replaces the text (`{{default}}` stands for the built-in line, to extend it); `false` turns it off.
 - **Models** form an extensible per-engine capability registry. CLI discovery can replace fallback entries at runtime.
 - **MCP servers** are optional; enable `mcp.gateway` for the built-in company tools.
 - **Cron, employees, and skills** live in `~/.jinn/cron/jobs.json`, `~/.jinn/org/`, and `~/.jinn/skills/`.

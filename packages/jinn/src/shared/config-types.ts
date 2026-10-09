@@ -201,6 +201,13 @@ export interface JinnConfig {
      * Absent or empty adds nothing.
      */
     alwaysInclude?: string[];
+    /**
+     * The Todo board line appended to every turn's prompt for sessions with
+     * the built-in jinn MCP server (sessions/turn/board-reminder.ts). Absent
+     * uses the built-in text; a string replaces it, with `{{default}}` standing
+     * for the built-in text; `false` or "" turns it off.
+     */
+    boardReminder?: string | false;
   };
   /**
    * Steers agents that search the instance's knowledge. Absent leaves the
