@@ -1,5 +1,6 @@
 import { ArrowUpRight, Calendar, CalendarClock, LoaderCircle, Send, UserRound } from "lucide-react"
 import type { DepartmentSummaryWire, Employee, LinkedSessionWire, WorkItemDetailWire } from "@/lib/api"
+import { useOpenSession } from "@/components/chat/file-open-context"
 import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StatusCircle } from "../state-glyph"
@@ -45,7 +46,6 @@ export function PropsRail({
   railSession,
   dispatchPending,
   onDispatch,
-  onOpenRailSession,
   sessionTree,
 }: {
   detail: WorkItemDetailWire
@@ -55,9 +55,9 @@ export function PropsRail({
   railSession?: LinkedSessionWire
   dispatchPending?: boolean
   onDispatch?: () => void
-  onOpenRailSession?: (sessionId: string) => void
   sessionTree?: SessionTreeWire
 }) {
+  const openSession = useOpenSession()
   const item = detail.workItem
   const labels = detail.labels ?? []
   const dept = item.department ? departments?.find((d) => d.slug === item.department) : undefined
@@ -127,7 +127,7 @@ export function PropsRail({
           type="button"
           data-testid="rail-dispatch-session"
           data-session-id={railSession.id}
-          onClick={() => onOpenRailSession?.(railSession.id)}
+          onClick={() => openSession(railSession.id)}
           className="focus-ring group/dispatch relative -mx-2.5 flex min-h-[34px] w-[calc(100%+20px)] items-center gap-[9px] rounded-[9px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-primary)] outline-none hover:bg-[var(--fill-quaternary)]"
         >
           {/* The pulse says "working", so it is spent only on a session that is:

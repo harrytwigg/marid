@@ -41,7 +41,7 @@ import { useSessionLifecycleActions } from './use-session-lifecycle-actions'
 const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
-import { FileOpenContext, TodoOpenContext, type OpenFile } from '@/components/chat/file-open-context'
+import { LayoutOpenProviders, type OpenFile } from '@/components/chat/file-open-context'
 import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
 import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
@@ -844,8 +844,7 @@ function ChatPage() {
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
   const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
-    <FileOpenContext.Provider value={openFile}>
-    <TodoOpenContext.Provider value={openTodo}>
+    <LayoutOpenProviders file={openFile} todo={openTodo} session={handleOpenChat}>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">
         {/* Desktop keeps the slim nav ribbon while its chat list folds.
@@ -1026,7 +1025,6 @@ function ChatPage() {
         }
       `}</style>
     </PageLayout>
-    </TodoOpenContext.Provider>
-    </FileOpenContext.Provider>
+    </LayoutOpenProviders>
   )
 }
