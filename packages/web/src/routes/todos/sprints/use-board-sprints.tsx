@@ -1,12 +1,15 @@
-import { useCallback, useMemo, useState } from "react"
+import { lazy, Suspense, useCallback, useMemo, useState } from "react"
 import type { WorkItemStatusWire } from "@/lib/api"
 import type { TodoFilters } from "@/lib/todos"
 import type { BoardColumnData } from "../board/use-board"
 import { BOARD_STATUS_ORDER } from "../board/status-scope"
 import { useSprintCardMenu } from "./sprint-card-menu"
 import { SprintStrip } from "./sprint-strip"
-import { SprintsDialog } from "./sprints-dialog"
 import { sprintErrorMessage, useSprints } from "./use-sprints"
+
+/* The planner is only needed once someone opens it, so it stays out of the
+ * board chunk and loads on first open. */
+const SprintsDialog = lazy(() => import("./sprints-dialog").then((module) => ({ default: module.SprintsDialog })))
 
 /* Everything the board needs for sprints, in one place: the strip under the
  * filter row while a sprint filter is set, the planner dialog, and the card
@@ -44,15 +47,19 @@ export function useBoardSprints({ filters, setFilters, columns, mobile, announce
   const overlays = (
     <>
       {cardMenu.menu}
-      <SprintsDialog
-        open={planner !== null}
-        onOpenChange={(open) => { if (!open) setPlanner(null) }}
-        completing={planner?.completing ?? null}
-        onShowOnBoard={(sprintId) => {
-          setPlanner(null)
-          setFilters({ ...filters, sprint: sprintId })
-        }}
-      />
+      {planner !== null && (
+        <Suspense fallback={null}>
+          <SprintsDialog
+            open
+            onOpenChange={(open) => { if (!open) setPlanner(null) }}
+            completing={planner.completing ?? null}
+            onShowOnBoard={(sprintId) => {
+              setPlanner(null)
+              setFilters({ ...filters, sprint: sprintId })
+            }}
+          />
+        </Suspense>
+      )}
     </>
   )
   return { strip, overlays, openPlanner, onContextMenu: cardMenu.onContextMenu }
