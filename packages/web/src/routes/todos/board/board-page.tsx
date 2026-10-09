@@ -23,7 +23,7 @@ import {
   useOrg,
 } from "../use-todos"
 import { FilterBar } from "../filter-bar"
-import { TodoFilterSheet } from "../todo-filter-sheet"
+import { LazyTodoFilterSheet } from "../todo-filter-sheet-lazy"
 import { NeedsYouView } from "../needs-you-view"
 import { NewTodoDialog } from "../new-todo-dialog"
 import { QuickCaptureBar } from "../quick-add/capture-bar"
@@ -746,7 +746,7 @@ export default function TodoBoardPage() {
       {/* Mobile filtering entry (F5): the Active pill's glyph opens the same
           filter grammar as the desktop chips, scoped like FilterBar. */}
       {mobile && mobileFilterOpen && (
-        <TodoFilterSheet
+        <LazyTodoFilterSheet
           filters={filters}
           onChange={setFilters}
           employees={org.data?.employees ?? []}

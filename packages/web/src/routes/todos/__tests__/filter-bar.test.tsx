@@ -150,7 +150,7 @@ describe("Todo progressive filters", () => {
     expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull()
   })
 
-  it("uses an accessible bottom sheet instead of a popover on mobile", () => {
+  it("uses an accessible bottom sheet instead of a popover on mobile", async () => {
     setMobile(true)
     render(
       <FilterBar
@@ -163,7 +163,7 @@ describe("Todo progressive filters", () => {
     )
 
     fireEvent.click(screen.getByRole("button", { name: "Filter todos" }))
-    const sheet = screen.getByRole("dialog", { name: "Filter todos" })
+    const sheet = await screen.findByRole("dialog", { name: "Filter todos" })
     expect(sheet.className).toContain("bottom-0")
     expect(screen.getByRole("button", { name: "Status" })).toBeTruthy()
     expect(screen.getByRole("button", { name: "Person" })).toBeTruthy()
@@ -173,7 +173,7 @@ describe("Todo progressive filters", () => {
     expect(screen.queryByRole("menu")).toBeNull()
   })
 
-  it("switches to the bottom sheet when a resize crosses the mobile breakpoint", () => {
+  it("switches to the bottom sheet when a resize crosses the mobile breakpoint", async () => {
     setMobile(false)
     render(
       <FilterBar filters={{ status: "open" }} onChange={vi.fn()} employees={[]} departments={[]} byName={new Map()} />,
@@ -181,7 +181,7 @@ describe("Todo progressive filters", () => {
 
     act(() => mobileListener?.({ matches: true } as MediaQueryListEvent))
     fireEvent.click(screen.getByRole("button", { name: "Filter todos" }))
-    expect(screen.getByRole("dialog", { name: "Filter todos" })).toBeTruthy()
+    expect(await screen.findByRole("dialog", { name: "Filter todos" })).toBeTruthy()
     expect(screen.queryByRole("menu")).toBeNull()
   })
 
@@ -192,7 +192,7 @@ describe("Todo progressive filters", () => {
     )
 
     fireEvent.click(screen.getByRole("button", { name: "Filter todos" }))
-    expect(screen.getByRole("dialog", { name: "Filter todos" })).toBeTruthy()
+    expect(await screen.findByRole("dialog", { name: "Filter todos" })).toBeTruthy()
 
     act(() => mobileListener?.({ matches: false } as MediaQueryListEvent))
     expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull()
@@ -227,7 +227,7 @@ describe("Todo progressive filters", () => {
     const mobileTrigger = screen.getByRole("button", { name: "Filter todos" })
     mobileTrigger.focus()
     fireEvent.click(mobileTrigger)
-    expect(screen.getByRole("dialog", { name: "Filter todos" })).toBeTruthy()
+    expect(await screen.findByRole("dialog", { name: "Filter todos" })).toBeTruthy()
 
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Filter todos" }), { key: "Escape" })
     await act(async () => Promise.resolve())

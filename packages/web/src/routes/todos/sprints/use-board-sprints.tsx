@@ -1,12 +1,16 @@
-import { useCallback, useMemo, useState } from "react"
+import { lazy, Suspense, useCallback, useMemo, useState } from "react"
 import type { WorkItemStatusWire } from "@/lib/api"
 import type { TodoFilters } from "@/lib/todos"
 import type { BoardColumnData } from "../board/use-board"
 import { BOARD_STATUS_ORDER } from "../board/status-scope"
 import { useSprintCardMenu } from "./sprint-card-menu"
 import { SprintStrip } from "./sprint-strip"
-import { SprintsDialog } from "./sprints-dialog"
 import { sprintErrorMessage, useSprints } from "./use-sprints"
+
+/* The planner is only needed once someone opens it, so it stays out of the
+ * board chunk and loads on first open. It then stays mounted, closed, so the
+ * dialog plays its exit animation. */
+const SprintsDialog = lazy(() => import("./sprints-dialog").then((module) => ({ default: module.SprintsDialog })))
 
 /* Everything the board needs for sprints, in one place: the strip under the
  * filter row while a sprint filter is set, the planner dialog, and the card
@@ -21,7 +25,7 @@ export function useBoardSprints({ filters, setFilters, columns, mobile, announce
   mobile: boolean
   announce: (message: string) => void
 }) {
-  const [planner, setPlanner] = useState<null | { completing?: string }>(null)
+  const [planner, setPlanner] = useState<null | { open: boolean; completing?: string }>(null)
   const sprints = useSprints(!mobile)
   const openSprints = useMemo(() => (sprints.data ?? []).filter((sprint) => sprint.status !== "closed"), [sprints.data])
   const onMoveError = useCallback(
@@ -36,23 +40,28 @@ export function useBoardSprints({ filters, setFilters, columns, mobile, announce
     return undefined
   }, [columns])
   const cardMenu = useSprintCardMenu({ itemById, sprints: openSprints, enabled: !mobile, onError: onMoveError })
-  const openPlanner = useCallback(() => setPlanner({}), [])
+  const openPlanner = useCallback(() => setPlanner({ open: true }), [])
+  const closePlanner = useCallback(() => setPlanner((current) => (current ? { ...current, open: false } : current)), [])
 
   const strip = filters.sprint
-    ? <SprintStrip filter={filters.sprint} onManage={openPlanner} onComplete={(id) => setPlanner({ completing: id })} />
+    ? <SprintStrip filter={filters.sprint} onManage={openPlanner} onComplete={(id) => setPlanner({ open: true, completing: id })} />
     : null
   const overlays = (
     <>
       {cardMenu.menu}
-      <SprintsDialog
-        open={planner !== null}
-        onOpenChange={(open) => { if (!open) setPlanner(null) }}
-        completing={planner?.completing ?? null}
-        onShowOnBoard={(sprintId) => {
-          setPlanner(null)
-          setFilters({ ...filters, sprint: sprintId })
-        }}
-      />
+      {planner !== null && (
+        <Suspense fallback={null}>
+          <SprintsDialog
+            open={planner.open}
+            onOpenChange={(open) => { if (!open) closePlanner() }}
+            completing={planner.completing ?? null}
+            onShowOnBoard={(sprintId) => {
+              closePlanner()
+              setFilters({ ...filters, sprint: sprintId })
+            }}
+          />
+        </Suspense>
+      )}
     </>
   )
   return { strip, overlays, openPlanner, onContextMenu: cardMenu.onContextMenu }

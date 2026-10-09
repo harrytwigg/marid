@@ -126,14 +126,14 @@ describe("the Assignee filter offers the operator and Unassigned", () => {
     expect(onChange).toHaveBeenCalledWith({ status: "open", assignee: undefined, q: undefined })
   })
 
-  it("the mobile Person panel offers both choices and the root row reads the current one", () => {
+  it("the mobile Person panel offers both choices and the root row reads the current one", async () => {
     setMobile(true)
     const onChange = vi.fn()
     const { rerender } = render(
       <FilterBar filters={{ status: "open" }} onChange={onChange} employees={[employee]} departments={[]} byName={byName} />,
     )
     fireEvent.click(screen.getByRole("button", { name: "Filter todos" }))
-    fireEvent.click(screen.getByRole("button", { name: "Person" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Person" }))
     fireEvent.click(screen.getByRole("button", { name: /^Assigned to me/ }))
     expect(onChange).toHaveBeenLastCalledWith({ status: "open", assignee: OPERATOR_ASSIGNEE, q: undefined })
 

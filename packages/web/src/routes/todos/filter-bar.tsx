@@ -19,7 +19,7 @@ import { useLabelRegistry } from "./use-todos"
 import { sprintFilterLabel, useSprints } from "./sprints/use-sprints"
 import { SprintFilterItems } from "./sprints/sprint-filter-items"
 import { SearchLauncher } from "./search-launcher"
-import { TodoFilterSheet } from "./todo-filter-sheet"
+import { LazyTodoFilterSheet } from "./todo-filter-sheet-lazy"
 import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./util"
 import { ActiveChip, BoardActiveChip, MenuCheck, SUBMENU_CLASS, ValueChip } from "./filter-chips"
 
@@ -436,7 +436,7 @@ export function FilterBar({
       )}
 
       {mobile && mobileOpen && (
-        <TodoFilterSheet
+        <LazyTodoFilterSheet
           filters={filters}
           onChange={onChange}
           employees={employees}
