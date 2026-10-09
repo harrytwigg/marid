@@ -45,6 +45,7 @@ export function CrumbBar({
   mobile,
   kept,
   onKeep,
+  pageSlots = true,
 }: {
   boardLabel: string
   onBack: () => void
@@ -57,6 +58,9 @@ export function CrumbBar({
   /** ICI-1357: whether this Todo is on the operator's Home board. */
   kept?: boolean
   onKeep?: (vars: { id: string; kept: boolean }) => void
+  /** Plugin actions are page-scoped (a contribution reads its Todo from the URL), so a Todo shown
+   *  as a tab of the chat layout renders none. */
+  pageSlots?: boolean
 }) {
   const copyText = (text: string) => void platformCopyText(text)
   return (
@@ -124,11 +128,11 @@ export function CrumbBar({
             stay where the muscle memory expects them, at the bar's edge. However
             many a plugin adds, they scroll within their own strip rather than
             pushing the app's two buttons off a 390px bar. */}
-        <Slot
+        {pageSlots && <Slot
           area={AREAS.todoDetailActions}
           variant="chip"
           className="flex min-w-0 items-center gap-0.5 overflow-x-auto"
-        />
+        />}
         {/* Absent while the Todo is still loading: no state to toggle yet. */}
         {kept !== undefined && onKeep && <KeepToggle id={id} kept={kept} onToggle={onKeep} className="size-[34px] rounded-[10px]" />}
         <button

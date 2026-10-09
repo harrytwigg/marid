@@ -1539,7 +1539,7 @@
       ]
     },
     "packages/web/src/routes/todos/task-page/task-page.tsx": {
-      "lines": 452,
+      "lines": 461,
       "exempt": [
         "@typescript-eslint/no-floating-promises",
         "complexity",

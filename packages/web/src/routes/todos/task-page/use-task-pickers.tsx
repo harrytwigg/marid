@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useState, type RefObject } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { selectionFeedback } from "@/platform"
 import {
@@ -55,12 +55,15 @@ export function useTaskPickers({
   openDescendants,
   mobile,
   announce,
+  root,
 }: {
   detail: WorkItemDetailWire | undefined
   employees: Employee[]
   departments: DepartmentSummaryWire[]
   mobile: boolean
   announce: (message: string) => void
+  /** This view's own subtree: two Todos can be open side by side, each with its own rail. */
+  root: RefObject<HTMLElement | null>
 } & CloseGateCounts) {
   const qc = useQueryClient()
   const [openPicker, setOpenPicker] = useState<PickerKey | null>(null)
@@ -68,9 +71,9 @@ export function useTaskPickers({
 
   const close = useCallback(() => setOpenPicker((current) => {
     // Esc/commit returns focus to the anchor row (§7.3 keyboard contract).
-    if (current) queueMicrotask(() => document.querySelector<HTMLElement>(`[data-testid="rail-${current}"]`)?.focus())
+    if (current) queueMicrotask(() => root.current?.querySelector<HTMLElement>(`[data-testid="rail-${current}"]`)?.focus())
     return null
-  }), [])
+  }), [root])
 
   // ── Commit lanes ──────────────────────────────────────────────────────────
 

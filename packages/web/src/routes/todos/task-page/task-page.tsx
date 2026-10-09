@@ -74,6 +74,10 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   const location = useLocation()
   const routeState = (location.state ?? {}) as TaskRouteState
   const mobile = useIsTaskMobile()
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // The layout follows the view's own width, so it fits a narrow pane. A phone lays out by its own
+  // classes and keeps no query container above its fixed comment bar.
+  const scrollClass = `${mobile ? "" : "@container "}min-h-0 flex-1 overflow-y-auto`
   const { theme } = useTheme()
   const isDark = useMemo(() => {
     if (typeof document !== "undefined") {
@@ -135,6 +139,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     ...closeGate,
     mobile,
     announce,
+    root: scrollRef,
   })
 
   // ── Section mutations (sub-tasks; attachments have their own hook) ──
@@ -191,19 +196,21 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
   ))
 
   const working = detail ? workingElapsed(detail) : null
+  // A tab's own close is the way out of it; leaving for the Todos page would take the chat with it.
+  const backToTodos = embedded ? undefined : () => navigate("/todos")
 
   // ── Not found / loading ───────────────────────────────────────────────────
   if (!id) {
     return (
       <TaskFrame embedded={embedded}>
-        <TaskEmpty message="That's not a Todo ID." onBack={() => navigate("/todos")} />
+        <TaskEmpty message="That's not a Todo ID." onBack={backToTodos} />
       </TaskFrame>
     )
   }
   if (detailQuery.isSuccess && detailQuery.data === null) {
     return (
       <TaskFrame embedded={embedded}>
-        <TaskEmpty message={`${id} doesn't exist (anymore).`} onBack={() => navigate("/todos")} />
+        <TaskEmpty message={`${id} doesn't exist (anymore).`} onBack={backToTodos} />
       </TaskFrame>
     )
   }
@@ -235,7 +242,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     return (
       <TaskFrame embedded={embedded} hideMobileTabBar={mobile}>
         <div className="flex h-full min-h-0 flex-col">
-          <div className="@container min-h-0 flex-1 overflow-y-auto" data-scrollable data-testid="task-page-scroll">
+          <div className={scrollClass} data-scrollable data-testid="task-page-scroll">
             <CrumbBar
               boardLabel={boardLabel}
               onBack={goBack}
@@ -245,6 +252,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
               onOpenAncestor={openTodo}
               onCopyId={copyId}
               mobile={mobile}
+              pageSlots={!embedded}
             />
             <div
               data-testid="task-page-grid"
@@ -273,7 +281,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
     <SessionDirectoryProvider directory={sessionTree?.directory}>
     <TaskFrame embedded={embedded} hideMobileTabBar={mobile}>
       <AttachmentDropSurface className="flex h-full min-h-0 flex-col" onUpload={(files) => attachments.upload.mutate(files)}>
-        <div className="@container min-h-0 flex-1 overflow-y-auto" data-scrollable data-testid="task-page-scroll">
+        <div ref={scrollRef} className={scrollClass} data-scrollable data-testid="task-page-scroll">
           <CrumbBar
             boardLabel={boardLabel}
             onBack={goBack}
@@ -285,6 +293,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
             onOpenAncestor={openTodo}
             onCopyId={copyId}
             mobile={mobile}
+            pageSlots={!embedded}
           />
 
           <div
@@ -387,7 +396,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
               {/* Contributed sections close the document, after the app's own
                   sections and before the properties rail and Activity — the
                   same reading order a reviewer already walks. */}
-              <Slot area={AREAS.todoDetailSections} variant="pane" className="mt-8 flex flex-col gap-4" />
+              {!embedded && <Slot area={AREAS.todoDetailSections} variant="pane" className="mt-8 flex flex-col gap-4" />}
 
               {mobile && detail && (
                 <div className="mt-8 border-t border-[var(--separator)] pt-5">

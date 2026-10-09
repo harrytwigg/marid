@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { MemoryRouter, Route, Routes, useLocation, type InitialEntry } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemFullWire, WorkItemTreeNodeWire } from "@/lib/api"
 import { TodoOpenContext, type OpenTodo } from "@/components/chat/file-open-context"
 import { FileLinkSessionContext } from "@/components/chat/file-link-session-context"
+import { AREAS } from "@/contrib/types"
+import { contributeProbes } from "@/contrib/__tests__/hosted-area"
 import TaskPage, { TaskView } from "../task-page/task-page"
 
 /* The one Todo view, in both places it is shown: as a tab of the chat layout,
@@ -58,13 +60,13 @@ function client() {
   return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
 }
 
-function renderTab(openTodo: OpenTodo | null) {
+function renderTab(openTodo: OpenTodo | null, ids: string[] = ["PLA-12"]) {
   return render(
     <QueryClientProvider client={client()}>
       <MemoryRouter initialEntries={["/chat"]}>
         <TodoOpenContext.Provider value={openTodo}>
           <FileLinkSessionContext.Provider value="chat-a">
-            <TaskView todoId="PLA-12" embedded />
+            {ids.map((id) => <div key={id} data-testid={`pane-${id}`}><TaskView todoId={id} embedded /></div>)}
           </FileLinkSessionContext.Provider>
         </TodoOpenContext.Provider>
         <Location />
@@ -141,6 +143,53 @@ describe("a Todo opened as a tab", () => {
 
     expect(openTodo).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId("path").textContent).toBe("/todos/PLA-13")
+  })
+})
+
+describe("two Todos open side by side", () => {
+  it("returns focus to the row in the view whose picker closed, not the other one", async () => {
+    renderTab(null, ["PLA-12", "PLA-13"])
+    const second = within(screen.getByTestId("pane-PLA-13"))
+    await within(screen.getByTestId("pane-PLA-12")).findByTestId("rail-status")
+    const row = await second.findByTestId("rail-status")
+
+    fireEvent.click(row)
+    fireEvent.keyDown(await second.findByTestId("picker-status"), { key: "Escape" })
+
+    await waitFor(() => expect(second.queryByTestId("picker-status")).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(row))
+  })
+})
+
+describe("what a tab leaves to the page", () => {
+  it("renders no page-scoped plugin contributions, which read their Todo from the URL", async () => {
+    const dispose = [
+      contributeProbes(AREAS.todoDetailActions, [{ id: "action" }]),
+      contributeProbes(AREAS.todoDetailSections, [{ id: "section" }]),
+    ]
+    try {
+      const page = renderRoute(["/todos/PLA-12"])
+      await screen.findByTestId("task-title")
+      expect(screen.getByTestId("probe-action")).toBeTruthy()
+      expect(screen.getByTestId("probe-section")).toBeTruthy()
+      page.unmount()
+
+      renderTab(null)
+      await screen.findByTestId("task-title")
+      expect(screen.queryByTestId("probe-action")).toBeNull()
+      expect(screen.queryByTestId("probe-section")).toBeNull()
+    } finally {
+      for (const disposer of dispose) disposer()
+    }
+  })
+
+  it("offers no way out to the Todos page for a deleted Todo, since that would leave the chat", async () => {
+    getWorkItem.mockRejectedValue(Object.assign(new Error("not found"), { status: 404 }))
+    renderTab(null)
+
+    expect(await screen.findByText("PLA-12 doesn't exist (anymore).")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Back to Todos" })).toBeNull()
+    expect(screen.getByTestId("path").textContent).toBe("/chat")
   })
 })
 

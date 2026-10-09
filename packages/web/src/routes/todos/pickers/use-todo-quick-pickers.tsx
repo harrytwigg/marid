@@ -172,7 +172,7 @@ function usePickerContent({ detail, employees, close, children, transitionTo, co
 }) {
   return useCallback((key: TodoQuickPickerKey): ReactNode => {
     if (!detail) return null
-    const shared = { detail, sheet: false, onDone: close }
+    const shared = { detail, onDone: close }
     if (key === 'assignee') {
       return <AssigneePickerContent {...shared} employees={employees} commit={commitAssignee} />
     }
