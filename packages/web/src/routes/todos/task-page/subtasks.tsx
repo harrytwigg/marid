@@ -3,6 +3,7 @@ import { ChevronDown, Plus } from "lucide-react"
 import type { Employee, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/api"
 import { PendingSubTaskRow, SubTaskRow } from "./subtask-row"
 import { PENDING_SUBTASK_PREFIX } from "./use-subtask-mutations"
+import type { OpenTodoFromClick } from "./task-frame"
 
 /* Todos v2 slice 6 — the task page's sub-tasks section (design-doc §7.2.8,
  * mock task-detail.html). ICI-1437 gives the group Linear's shape: the header
@@ -43,7 +44,7 @@ export function SubTasksSection({
   employees: Employee[]
   byName: Map<string, Employee>
   mobile: boolean
-  onOpenChild: (id: string) => void
+  onOpenChild: OpenTodoFromClick
   onChildStatus: (childId: string, status: WorkItemStatusWire, cascade?: boolean) => void
   onChildAssign: (childId: string, assignee: string) => void
   onAddSubTask: (title: string) => void
