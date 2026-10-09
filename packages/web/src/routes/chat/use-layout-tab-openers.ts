@@ -25,7 +25,7 @@ export function useNewChatTabOpener(openNewChat: SplitWorkingSet['openNewChat'],
 
 /**
  * A Todo mention opened as a tab beside the chat that mentions it. False on a phone, or with no chat
- * on screen to open it beside, which hands the click back to the mention's peek panel.
+ * on screen to open it beside, which hands the click back to the mention's link to the Todo's page.
  */
 export function useTodoTabOpener(openTodo: SplitWorkingSet['openTodo'], mobile: boolean): OpenTodo {
   return useCallback((todoId, sessionId) => !mobile && openTodo(sessionId, todoId), [mobile, openTodo])

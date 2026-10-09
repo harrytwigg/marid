@@ -18,8 +18,6 @@ import { NavRibbon } from '@/components/pill-nav'
 import { MobileTabBar } from '@/components/chat/mobile-tab-bar'
 import type { FreshChatSourceSession } from '@/components/chat/chat-pane'
 import { ThreadPeek, type CommsPeekData } from '@/components/chat/thread-peek'
-import { PeekPanel } from '@/components/peek/peek-panel'
-import { PeekProvider } from '@/components/peek/peek-stack'
 import { ChatErrorBoundary } from './chat-error-boundary'
 import { ChatHeaderMenu } from './chat-header-menu'
 import { MultiChatGrid } from './multi-chat-grid'
@@ -848,7 +846,6 @@ function ChatPage() {
   return (
     <FileOpenContext.Provider value={openFile}>
     <TodoOpenContext.Provider value={openTodo}>
-    <PeekProvider>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">
         {/* Desktop keeps the slim nav ribbon while its chat list folds.
@@ -998,12 +995,6 @@ function ChatPage() {
             renderContent={(text) => inFileLinkSession(threadPreview?.sessionId, formatMessage(text))}
           />
         </div>
-
-        {/* A sibling of the thread column, not a child of it: the rail takes its
-            372px from the row so the thread reflows narrower instead of being
-            covered, and the floating header pills stay over the thread. On the
-            phone it portals out as a bottom sheet and occupies nothing here. */}
-        <PeekPanel />
       </div>
 
       {/* Mobile bottom tab bar — persistent nav on the chat-list screen; hidden on
@@ -1035,7 +1026,6 @@ function ChatPage() {
         }
       `}</style>
     </PageLayout>
-    </PeekProvider>
     </TodoOpenContext.Provider>
     </FileOpenContext.Provider>
   )

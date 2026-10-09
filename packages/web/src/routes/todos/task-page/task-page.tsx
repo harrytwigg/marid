@@ -1,24 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-  api,
-  ApiError,
-  type WorkItemDetailWire,
-  type WorkItemTreeNodeWire,
-} from "@/lib/api"
+import { api, ApiError } from "@/lib/api"
 import { operatorSafeTodoError } from "@/lib/todos"
 import { isTodoId, todoPath } from "@/lib/todo-id"
 import { closeGateCounts } from "@/lib/legal-targets"
 import { copyText } from "@/platform"
 import { useDepartments } from "@/hooks/use-departments"
-import { PageLayout } from "@/components/page-layout"
 import { useTheme } from "@/routes/providers"
 import { useEmployeesByName, useOrg, useSetWorkItemStatus, useTodoById } from "../use-todos"
 import { useKeepWorkItem } from "../board/use-board"
 import { parseBoardParam, boardPath, boardKey } from "../board/board-route"
 import { departmentTitle } from "../board/board-switcher"
-import { CrumbBar, type CrumbAncestor } from "./crumb-bar"
+import { CrumbBar } from "./crumb-bar"
+import { ancestorsOf, nodeOf, workingElapsed } from "./task-tree"
+import { TaskTitle } from "./task-title"
+import { TaskFrame, useOpenTodoInPlace } from "./task-frame"
 import { TaskBanner } from "./banner"
 import { PropsRail } from "./props-rail"
 import { SessionDirectoryProvider } from "./session-ref"
@@ -56,57 +53,22 @@ function useIsTaskMobile(): boolean {
   return mobile
 }
 
-/** Walk the root tree to the item: the crumb bar's ancestor trail. */
-export function ancestorsOf(root: WorkItemTreeNodeWire | undefined, id: string): CrumbAncestor[] {
-  if (!root) return []
-  const path: CrumbAncestor[] = []
-  const walk = (node: WorkItemTreeNodeWire, trail: CrumbAncestor[]): CrumbAncestor[] | null => {
-    if (node.id === id) return trail
-    for (const child of node.children ?? []) {
-      const found = walk(child, [...trail, { id: node.id, title: node.title }])
-      if (found) return found
-    }
-    return null
-  }
-  return walk(root, path) ?? []
-}
-
-/** Find the item's own node inside the root tree (sub-tasks, roll-ups). */
-export function nodeOf(root: WorkItemTreeNodeWire | undefined, id: string): WorkItemTreeNodeWire | undefined {
-  if (!root) return undefined
-  if (root.id === id) return root
-  for (const child of root.children ?? []) {
-    const found = nodeOf(child, id)
-    if (found) return found
-  }
-  return undefined
-}
-
 interface TaskRouteState {
   fromBoard?: string
+  /** Opened from a mention: on a phone, the back chevron returns there rather than to a board. */
+  returnBack?: boolean
   focusBannerReason?: boolean
   bannerExpected?: boolean
 }
 
-function workingElapsed(detail: WorkItemDetailWire): string | null {
-  if (detail.workItem.status !== "executing") return null
-  let startedAt: string | undefined
-  for (let i = detail.events.length - 1; i >= 0; i--) {
-    if (detail.events[i].toStatus === "executing") {
-      startedAt = detail.events[i].createdAt
-      break
-    }
-  }
-  const start = Date.parse(startedAt ?? detail.workItem.updatedAt)
-  if (Number.isNaN(start)) return null
-  const mins = Math.max(0, Math.round((Date.now() - start) / 60_000))
-  if (mins < 60) return `${mins}m`
-  const hours = Math.floor(mins / 60)
-  return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`
-}
-
 export default function TaskPage() {
   const { todoId } = useParams()
+  return <TaskView todoId={todoId} />
+}
+
+/** The Todo itself: the task page's content, at its route or (`embedded`) as a tab of the chat
+ *  layout, where opening another Todo opens it as a tab beside this one. */
+export function TaskView({ todoId, embedded = false }: { todoId: string | undefined; embedded?: boolean }) {
   const id = isTodoId(todoId) ? todoId : null
   const navigate = useNavigate()
   const location = useLocation()
@@ -217,36 +179,39 @@ export default function TaskPage() {
     // Arriving from a board leaves it one POP away — going back that way
     // restores the board's cached scroll position. Otherwise push its path.
     if (routeState.fromBoard && window.history.length > 1) navigate(-1)
+    // A phone's chevron says only "back", so it returns to the mention that opened it: an in-app
+    // push, so there is always an entry to return to.
+    else if (mobile && routeState.returnBack) navigate(-1)
     else navigate(boardPath(board))
-  }, [routeState.fromBoard, navigate, board])
+  }, [routeState.fromBoard, routeState.returnBack, mobile, navigate, board])
 
-  const openTodo = useCallback(
+  const openTodo = useOpenTodoInPlace(embedded, useCallback(
     (nextId: string) => navigate(todoPath(nextId), { state: { fromBoard: boardKey(board) } }),
     [navigate, board],
-  )
+  ))
 
   const working = detail ? workingElapsed(detail) : null
 
   // ── Not found / loading ───────────────────────────────────────────────────
   if (!id) {
     return (
-      <PageLayout>
+      <TaskFrame embedded={embedded}>
         <TaskEmpty message="That's not a Todo ID." onBack={() => navigate("/todos")} />
-      </PageLayout>
+      </TaskFrame>
     )
   }
   if (detailQuery.isSuccess && detailQuery.data === null) {
     return (
-      <PageLayout>
+      <TaskFrame embedded={embedded}>
         <TaskEmpty message={`${id} doesn't exist (anymore).`} onBack={() => navigate("/todos")} />
-      </PageLayout>
+      </TaskFrame>
     )
   }
   // A transport/server failure is retryable — never masquerade as deletion
   // (only a canonical 404 means missing; useTodoById maps that to null).
   if (detailQuery.isError) {
     return (
-      <PageLayout>
+      <TaskFrame embedded={embedded}>
         <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center" data-testid="task-load-error">
           <div className="text-[20px] font-bold tracking-[-0.41px] text-[var(--text-primary)]">
             Couldn&rsquo;t load {id}.
@@ -263,14 +228,14 @@ export default function TaskPage() {
             Retry
           </button>
         </div>
-      </PageLayout>
+      </TaskFrame>
     )
   }
   if (detailQuery.isPending) {
     return (
-      <PageLayout hideMobileTabBar={mobile}>
+      <TaskFrame embedded={embedded} hideMobileTabBar={mobile}>
         <div className="flex h-full min-h-0 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto" data-scrollable data-testid="task-page-scroll">
+          <div className="@container min-h-0 flex-1 overflow-y-auto" data-scrollable data-testid="task-page-scroll">
             <CrumbBar
               boardLabel={boardLabel}
               onBack={goBack}
@@ -286,7 +251,7 @@ export default function TaskPage() {
               className={
                 mobile
                   ? "flex flex-col px-4 pb-[calc(96px+var(--safe-bottom,0px))] pt-1.5"
-                  : "mx-auto w-full max-w-[1080px] px-10 pb-8 pt-2"
+                  : "mx-auto w-full max-w-[1080px] px-6 pb-8 pt-2 @2xl:px-10"
               }
             >
               <TaskPageSkeleton
@@ -296,7 +261,7 @@ export default function TaskPage() {
             </div>
           </div>
         </div>
-      </PageLayout>
+      </TaskFrame>
     )
   }
 
@@ -306,9 +271,9 @@ export default function TaskPage() {
     // The directory rides a context because the surfaces that resolve a session
     // id — rail, audit whisper, comment author — sit at unrelated depths.
     <SessionDirectoryProvider directory={sessionTree?.directory}>
-    <PageLayout hideMobileTabBar={mobile}>
+    <TaskFrame embedded={embedded} hideMobileTabBar={mobile}>
       <AttachmentDropSurface className="flex h-full min-h-0 flex-col" onUpload={(files) => attachments.upload.mutate(files)}>
-        <div className="min-h-0 flex-1 overflow-y-auto" data-scrollable data-testid="task-page-scroll">
+        <div className="@container min-h-0 flex-1 overflow-y-auto" data-scrollable data-testid="task-page-scroll">
           <CrumbBar
             boardLabel={boardLabel}
             onBack={goBack}
@@ -327,11 +292,11 @@ export default function TaskPage() {
             className={
               mobile
                 ? "flex flex-col px-4 pb-[calc(96px+var(--safe-bottom,0px))] pt-1.5"
-                : "mx-auto grid w-full max-w-[1080px] grid-cols-1 gap-x-9 px-10 pb-8 pt-2 lg:grid-cols-[minmax(0,1fr)_260px]"
+                : "mx-auto grid w-full max-w-[1080px] grid-cols-1 gap-x-9 px-6 pb-8 pt-2 @2xl:px-10 @4xl:grid-cols-[minmax(0,1fr)_260px]"
             }
           >
             {detail && (
-              <div className={mobile ? "" : "lg:col-span-2"}>
+              <div className={mobile ? "" : "@4xl:col-span-2"}>
                 <TaskBanner
                     detail={detail}
                     byName={byName}
@@ -452,7 +417,7 @@ export default function TaskPage() {
             </main>
 
             {!mobile && detail && (
-              <aside className="min-w-0 pt-1 lg:sticky lg:top-3 lg:self-start">
+              <aside className="min-w-0 pt-1 @4xl:sticky @4xl:top-3 @4xl:self-start">
                 <PropsRail
                   detail={detail}
                   byName={byName}
@@ -481,69 +446,7 @@ export default function TaskPage() {
           {callout}
         </div>
       )}
-    </PageLayout>
+    </TaskFrame>
     </SessionDirectoryProvider>
-  )
-}
-
-/** Inline title edit — borderless, Notes pattern: tap to edit, Enter commits,
- *  Esc reverts. An emptied title reverts rather than committing. */
-function TaskTitle({
-  title,
-  mobile,
-  onCommit,
-}: {
-  title: string | null
-  mobile: boolean
-  onCommit: (title: string) => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState("")
-  const sizing = mobile
-    ? "text-[26px] font-bold leading-[1.2] tracking-[-0.41px]"
-    : "text-[28px] font-bold leading-[1.2] tracking-[-0.41px]"
-  const bleed = mobile ? "" : "-mx-2 rounded-[10px] px-2 py-0.5"
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        data-testid="task-title-edit"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          setEditing(false)
-          const next = draft.trim()
-          if (next && next !== title) onCommit(next)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur()
-          if (e.key === "Escape") {
-            e.preventDefault()
-            setDraft(title ?? "")
-            setEditing(false)
-          }
-        }}
-        aria-label="Todo title"
-        className={`${sizing} ${bleed} w-full border-0 bg-[var(--fill-quaternary)] text-[var(--text-primary)] outline-none`}
-      />
-    )
-  }
-  return (
-    <h1 className={mobile ? "" : "min-w-0"}>
-      <button
-        type="button"
-        data-testid="task-title"
-        aria-label="Edit title"
-        onClick={() => {
-          if (title === null) return
-          setDraft(title)
-          setEditing(true)
-        }}
-        className={`${sizing} ${bleed} w-full cursor-text text-left text-[var(--text-primary)] outline-none transition-colors hover:bg-[var(--fill-quaternary)]`}
-      >
-        {title ?? "…"}
-      </button>
-    </h1>
   )
 }

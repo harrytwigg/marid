@@ -16,7 +16,7 @@ export function useOpenFile(): OpenFile | null {
 /**
  * Opens a Todo mention inside the chat layout: as a tab beside the chat it was clicked in, on desktop.
  * Provided by the chat page. Returns false when it could not (a phone, a layout not yet loaded, no
- * chat on screen), so the mention falls back to the peek panel; without a provider every one does.
+ * chat on screen), so the mention falls back to its own href, the Todo's page; without a provider every one does.
  */
 export type OpenTodo = (todoId: string, sessionId: string | null) => boolean
 

@@ -146,8 +146,8 @@ function restoreTodoCaches(
   }
 }
 
-/** Shared status-write lane for the task surfaces, board drag and the peek
- *  rail. Every cache root that holds a Todo moves together, so a write from one
+/** Shared status-write lane for the task surfaces, board drag and the search
+ *  workbench. Every cache root that holds a Todo moves together, so a write from one
  *  surface never leaves another showing the pre-write value. */
 export function todoStatusMutationOptions(queryClient: QueryClient, mutationFn: TodoStatusMutationFn) {
   return {

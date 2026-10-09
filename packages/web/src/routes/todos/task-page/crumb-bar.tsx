@@ -65,7 +65,7 @@ export function CrumbBar({
       className={
         mobile
           ? "flex min-h-[52px] items-center gap-2 px-3.5 pb-2 pt-[calc(10px+var(--safe-top,0px))]"
-          : "mx-auto flex min-h-[56px] w-full max-w-[1080px] items-center gap-2 px-10 pb-2 pt-3.5"
+          : "mx-auto flex min-h-[56px] w-full max-w-[1080px] items-center gap-2 px-6 pb-2 pt-3.5 @2xl:px-10"
       }
     >
       {mobile ? (

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemDetailWire, WorkItemFullWire, WorkItemTreeNodeWire } from "@/lib/api"
-import TaskPage, { ancestorsOf, nodeOf } from "../task-page/task-page"
+import TaskPage from "../task-page/task-page"
 
 /* Todos v2 slice 6 stage B — the task page (design-doc §7, task-detail.html).
  * Anatomy: breadcrumb trail from the root tree, banner precedence
@@ -142,26 +142,6 @@ beforeEach(() => {
 afterEach(() => {
   delete (window as { matchMedia?: unknown }).matchMedia
   delete (navigator as { clipboard?: unknown }).clipboard
-})
-
-describe("ancestor helpers", () => {
-  const root = treeNode(full("PLA-1"), [
-    treeNode(full("PLA-2", { parentId: "PLA-1", depth: 1 }), [
-      treeNode(full("PLA-4", { parentId: "PLA-2", depth: 2 })),
-    ]),
-    treeNode(full("PLA-3", { parentId: "PLA-1", depth: 1 })),
-  ])
-
-  it("derives the ancestor trail root-first", () => {
-    expect(ancestorsOf(root, "PLA-4").map((a) => a.id)).toEqual(["PLA-1", "PLA-2"])
-    expect(ancestorsOf(root, "PLA-1")).toEqual([])
-    expect(ancestorsOf(root, "PLA-9")).toEqual([])
-  })
-
-  it("finds the item's own node", () => {
-    expect(nodeOf(root, "PLA-4")?.id).toBe("PLA-4")
-    expect(nodeOf(root, "PLA-9")).toBeUndefined()
-  })
 })
 
 describe("the task page", () => {

@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemOpenDetailWire } from "@/lib/api"
 import { TodoPrefixContext } from "@/components/chat/todo-prefix-context"
 import { formatMessage } from "@/components/chat/chat-messages"
-import { PeekProvider, usePeekStack, type PeekEntry } from "@/components/peek/peek-stack"
 import { forgetTodoPreview } from "@/lib/todo-preview"
 import { TodoOpenContext, type OpenTodo } from "@/components/chat/file-open-context"
 import { FileLinkSessionContext } from "@/components/chat/file-link-session-context"
@@ -134,19 +133,14 @@ describe("TodoMention preview batching", () => {
   })
 })
 
-/** Reports where the router went, so a click that navigates is distinguishable
- *  from one the panel intercepted. */
+/** Reports where the router went, and what the mention asked of the page it opened. */
 function Location() {
-  return <span data-testid="path">{useLocation().pathname}</span>
+  const location = useLocation()
+  const returnBack = (location.state as { returnBack?: boolean } | null)?.returnBack === true
+  return <span data-testid="path" data-return-back={String(returnBack)}>{location.pathname}</span>
 }
 
-/** Reports the stack the mention pushed into, without mounting the panel. */
-function Stack() {
-  const opened = usePeekStack()?.entries ?? []
-  return <span data-testid="stack">{opened.map((entry: PeekEntry) => entry.id).join(",")}</span>
-}
-
-async function renderMention(withProvider: boolean, openTodo: OpenTodo | null = null) {
+async function renderMention(openTodo: OpenTodo | null = null) {
   const message = (
     <TodoPrefixContext.Provider value={LIVE_PREFIXES}>
       <TodoOpenContext.Provider value={openTodo}>
@@ -155,13 +149,12 @@ async function renderMention(withProvider: boolean, openTodo: OpenTodo | null = 
         </FileLinkSessionContext.Provider>
       </TodoOpenContext.Provider>
       <Location />
-      <Stack />
     </TodoPrefixContext.Provider>
   )
   const view = render(
     <MemoryRouter initialEntries={["/chat"]}>
       <Routes>
-        <Route path="*" element={withProvider ? <PeekProvider>{message}</PeekProvider> : message} />
+        <Route path="*" element={message} />
       </Routes>
     </MemoryRouter>,
   )
@@ -170,13 +163,15 @@ async function renderMention(withProvider: boolean, openTodo: OpenTodo | null = 
 }
 
 describe("TodoMention click", () => {
-  it("opens the panel instead of navigating on a plain left click", async () => {
-    await renderMention(true)
+  it("opens the full Todo page on a plain left click where no chat layout can take a tab", async () => {
+    await renderMention()
 
     fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
 
-    expect(screen.getByTestId("stack").textContent).toBe("ICI-7001")
-    expect(screen.getByTestId("path").textContent).toBe("/chat")
+    const path = screen.getByTestId("path")
+    expect(path.textContent).toBe("/todos/ICI-7001")
+    // A phone's back chevron on that page returns to this mention, not to a board.
+    expect(path.getAttribute("data-return-back")).toBe("true")
   })
 
   it.each([
@@ -184,58 +179,40 @@ describe("TodoMention click", () => {
     ["ctrlKey", { ctrlKey: true }],
     ["shiftKey", { shiftKey: true }],
     ["the middle button", { button: 1 }],
-  ])("leaves %s to the browser rather than opening the panel", async (_name, modifier) => {
-    await renderMention(true)
+  ])("leaves %s to the browser", async (_name, modifier) => {
+    const openTodo = vi.fn<OpenTodo>(() => true)
+    await renderMention(openTodo)
     const link = screen.getByRole("link", { name: "ICI-7001" })
 
     // Nothing calls preventDefault, so the browser performs its own navigation
-    // (new tab / new window) exactly as it did before the panel existed.
+    // (new tab / new window) to the full page.
     const notPrevented = fireEvent.click(link, modifier)
 
     expect(notPrevented).toBe(true)
-    expect(screen.getByTestId("stack").textContent).toBe("")
+    expect(openTodo).not.toHaveBeenCalled()
     expect(link.getAttribute("href")).toBe("/todos/ICI-7001")
-  })
-
-  it("navigates on a surface that mounted no provider", async () => {
-    await renderMention(false)
-
-    fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
-
-    expect(screen.getByTestId("path").textContent).toBe("/todos/ICI-7001")
   })
 })
 
 describe("TodoMention click in the chat layout", () => {
-  it("opens the Todo as a tab beside the chat it was clicked in, not in the panel", async () => {
+  it("opens the Todo as a tab beside the chat it was clicked in", async () => {
     const openTodo = vi.fn<OpenTodo>(() => true)
-    await renderMention(true, openTodo)
+    await renderMention(openTodo)
 
     const notPrevented = fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
 
     expect(notPrevented).toBe(false)
     expect(openTodo).toHaveBeenCalledWith("ICI-7001", "chat-a")
-    expect(screen.getByTestId("stack").textContent).toBe("")
     expect(screen.getByTestId("path").textContent).toBe("/chat")
   })
 
-  it("falls back to the panel when the layout cannot take a tab", async () => {
+  it("opens the full Todo page when the layout cannot take a tab", async () => {
     const openTodo = vi.fn<OpenTodo>(() => false)
-    await renderMention(true, openTodo)
+    await renderMention(openTodo)
 
     fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { button: 0 })
 
     expect(openTodo).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId("stack").textContent).toBe("ICI-7001")
-  })
-
-  it("leaves a modified click to the browser, so the full page is still one ctrl-click away", async () => {
-    const openTodo = vi.fn<OpenTodo>(() => true)
-    await renderMention(true, openTodo)
-
-    const notPrevented = fireEvent.click(screen.getByRole("link", { name: "ICI-7001" }), { ctrlKey: true })
-
-    expect(notPrevented).toBe(true)
-    expect(openTodo).not.toHaveBeenCalled()
+    expect(screen.getByTestId("path").textContent).toBe("/todos/ICI-7001")
   })
 })

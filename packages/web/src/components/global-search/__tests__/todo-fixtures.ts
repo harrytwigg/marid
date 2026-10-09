@@ -1,7 +1,7 @@
 import type { WorkItemDetailWire, WorkItemEventWire } from "@/lib/api"
 
 /** Five distinct whispers, oldest first — the order the gateway sends. */
-export const EVENTS: WorkItemEventWire[] = [
+const EVENTS: WorkItemEventWire[] = [
   ["created", "created this todo"],
   ["label_changed", "changed the labels"],
   ["relation_added", "linked a related todo"],
@@ -18,8 +18,6 @@ export const EVENTS: WorkItemEventWire[] = [
   createdAt: `2026-08-0${index + 1}T00:00:00.000Z`,
 }))
 
-export const BODY = "A body long enough to want clamping across three lines."
-
 export function detailOf(
   id: string,
   overrides: Partial<WorkItemDetailWire["workItem"]> = {},
@@ -29,7 +27,7 @@ export function detailOf(
       id,
       version: 4,
       title: `Title of ${id}`,
-      body: BODY,
+      body: "A body.",
       status: "executing",
       department: null,
       assignee: "a-lead",
@@ -40,8 +38,7 @@ export function detailOf(
 
       rounds: 0,
       budgetUsd: null,
-      // Only ICI-1 has a parent, so following it does not loop back on itself.
-      parentId: id === "ICI-1" ? "ICI-9" : null,
+      parentId: null,
       createdAt: "2026-08-01T00:00:00.000Z",
       updatedAt: "2026-08-05T00:00:00.000Z",
       closedAt: null,

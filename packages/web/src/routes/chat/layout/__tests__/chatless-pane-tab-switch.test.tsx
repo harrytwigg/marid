@@ -23,8 +23,8 @@ import type { SplitLayoutControls } from '../use-split-working-set'
 
 vi.mock('@/hooks/use-sessions', () => ({ useSessions: () => ({ data: [{ id: 'a', title: 'Alpha' }, { id: 'b', title: 'Bravo' }] }) }))
 vi.mock('@/lib/todo-preview', () => ({ useTodoPreview: () => ({ data: undefined }) }))
-vi.mock('@/components/peek/todo-tab-view', () => ({
-  TodoTabView: ({ todoId }: { todoId: string }) => <div data-testid="todo-view">{todoId}</div>,
+vi.mock('@/routes/todos/task-page/task-page', () => ({
+  TaskView: ({ todoId }: { todoId: string }) => <div data-testid="todo-view">{todoId}</div>,
 }))
 
 /** A pane the page would render: here only its strip, found by its tab id as a new chat's title bar does. */
@@ -79,7 +79,7 @@ describe('a tab chosen in the strip of a pane with no chat', () => {
     expect(groupOfSession(latest.current, fresh)!.tabs).toEqual(['b', fresh])
   })
 
-  it('switches between two documents in a document-only pane', () => {
+  it('switches between two documents in a document-only pane', async () => {
     const one = todoTabId('ACM-1')
     const two = todoTabId('ACM-2')
     let layout = openDocTab(appendSession(createSplitLayout(['a'], 'a'), 'b'), 'a', one)
@@ -93,6 +93,7 @@ describe('a tab chosen in the strip of a pane with no chat', () => {
     fireEvent.click(tab(one))
 
     expect(groupOfSession(latest.current, one)!.activeTab).toBe(one)
-    expect(screen.getByTestId('todo-view').textContent).toBe('ACM-1')
+    // The Todo view is its own chunk, so it arrives a tick after the tab switches.
+    expect((await screen.findByTestId('todo-view')).textContent).toBe('ACM-1')
   })
 })
