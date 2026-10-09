@@ -6,6 +6,8 @@ import type { SessionDirectoryEntryWire, SessionTreeNodeWire, SessionTreeWire } 
 import { SessionRef, SessionDirectoryProvider } from "../task-page/session-ref"
 import { answerCaption, pendingWork } from "@/components/chat/pending-work"
 import { SessionTreePanel } from "../task-page/session-tree"
+import { TodoOpenContext, type OpenTodo } from "@/components/chat/file-open-context"
+import { FileLinkSessionContext } from "@/components/chat/file-link-session-context"
 import { hasLiveWorker, isLiveSession, pickRailSession } from "../task-page/use-todo-sessions"
 
 /* The Todo page used to dead-end: `createdBy` printed as `session:<uuid>`, the
@@ -120,6 +122,38 @@ describe("the session tree", () => {
 
     expect(screen.queryByTestId("session-tree-todo-s-1")).toBeNull()
     fireEvent.click(screen.getByTestId("session-tree-todo-s-2"))
+    expect(navigate).toHaveBeenCalledWith("/todos/TST-83")
+  })
+
+  it("opens that Todo as a tab when the tree sits in the chat layout, without leaving it", () => {
+    navigate.mockClear()
+    const openTab = vi.fn<OpenTodo>(() => true)
+    const child = node({ id: "s-2", workItemId: "TST-83", isRootLink: false })
+    mount(
+      <TodoOpenContext.Provider value={openTab}>
+        <FileLinkSessionContext.Provider value="chat-1">
+          <SessionTreePanel tree={tree({ roots: [node({ id: "s-1", children: [child] })] })} byName={byName} todoId="TST-81" />
+        </FileLinkSessionContext.Provider>
+      </TodoOpenContext.Provider>,
+    )
+
+    fireEvent.click(screen.getByTestId("session-tree-todo-s-2"))
+    expect(openTab).toHaveBeenCalledWith("TST-83", "chat-1")
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it("goes to the Todo's page when the layout cannot take a tab", () => {
+    navigate.mockClear()
+    const openTab = vi.fn<OpenTodo>(() => false)
+    const child = node({ id: "s-2", workItemId: "TST-83", isRootLink: false })
+    mount(
+      <TodoOpenContext.Provider value={openTab}>
+        <SessionTreePanel tree={tree({ roots: [node({ id: "s-1", children: [child] })] })} byName={byName} todoId="TST-81" />
+      </TodoOpenContext.Provider>,
+    )
+
+    fireEvent.click(screen.getByTestId("session-tree-todo-s-2"))
+    expect(openTab).toHaveBeenCalledWith("TST-83", null)
     expect(navigate).toHaveBeenCalledWith("/todos/TST-83")
   })
 

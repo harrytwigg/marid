@@ -4,6 +4,8 @@ import type { Employee } from "@/lib/api"
 import type { SessionTreeNodeWire, SessionTreeWire } from "@/lib/session-tree-api"
 import { pendingCaption, usePendingWork, type PendingWork } from "@/components/chat/pending-work"
 import { SessionDepartmentBadge } from "@/components/session-department-badge"
+import { useOpenTodo } from "@/components/chat/file-open-context"
+import { useFileLinkSession } from "@/components/chat/file-link-session-context"
 import { SessionRef } from "./session-ref"
 
 /**
@@ -71,14 +73,21 @@ function ConsultBadge({ id }: { id: string }) {
   )
 }
 
-/** The Todo a node minted, named only when it is not the page you are on. */
+/** The Todo a node minted, named only when it is not the page you are on. Inside the chat layout
+ *  (a Todo shown as a tab) it opens as a tab too, as a crumb or a mention there does; where the
+ *  layout cannot take one, and at the route, which has no layout opener, it is the Todo's page. */
 function NodeTodo({ id, todoId }: { id: string; todoId: string }) {
   const navigate = useNavigate()
+  const openTab = useOpenTodo()
+  const sessionId = useFileLinkSession()
   return (
     <button
       type="button"
       data-testid={`session-tree-todo-${id}`}
-      onClick={() => navigate(`/todos/${encodeURIComponent(todoId)}`)}
+      onClick={() => {
+        if (openTab?.(todoId, sessionId)) return
+        void navigate(`/todos/${encodeURIComponent(todoId)}`)
+      }}
       className="focus-ring group/todo flex min-w-0 flex-none items-center gap-[3px] rounded-[5px] text-[11.5px] text-[var(--text-tertiary)] outline-none hover:text-[var(--text-secondary)]"
     >
       {todoId}
