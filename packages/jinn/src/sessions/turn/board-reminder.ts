@@ -6,14 +6,16 @@ import type { JinnConfig } from "../../shared/types.js";
  * compacted conversation stops attending to them, and a session woken by a
  * comment or a message is the one most likely to work feedback on an
  * `in_review` Todo without moving it, or to leave a Todo that needs a person in
- * `executing`. One fixed line: 60 o200k_base tokens with its label, pinned by
+ * `executing`. One fixed paragraph: at most 120 o200k_base tokens with its label, pinned by
  * board-reminder.test.ts. Each turn's copy stays in the engine's history, so a
  * conversation of N turns holds N of them until it is compacted.
  */
 export const DEFAULT_BOARD_REMINDER =
   "Todo board: check status with get_work_item before changing it. "
-  + "Working on it (feedback on in_review too): executing. "
-  + "Waiting on someone: blocked + note (who, what); operator decision: assign @operator. "
+  + "`executing` means you are working the Todo right now (feedback on in_review too). "
+  + "NEVER end a turn, or wait on a person or dependency, with the Todo in `executing`. "
+  + "Waiting, or ending your turn with a question or decision for the operator: first move it to `blocked`, "
+  + "keep the assignee, note who, what and your recommendation, and @mention the operator for a decision. "
   + "Unblocked: executing. "
   + "Finished: in_review + note.";
 

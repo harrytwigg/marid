@@ -94,8 +94,17 @@ beforeEach(() => {
 });
 
 describe("board reminder text", () => {
-  it("keeps the default line, label included, under 60 o200k_base tokens", () => {
-    expect(new Tiktoken(o200k).encode(LINE).length).toBeLessThanOrEqual(60);
+  it("keeps the default line, label included, under 120 o200k_base tokens", () => {
+    expect(new Tiktoken(o200k).encode(LINE).length).toBeLessThanOrEqual(120);
+  });
+
+  it("forbids leaving a Todo in executing while waiting, and never assigns a blocked Todo to the operator", () => {
+    expect(DEFAULT_BOARD_REMINDER).toContain("`executing` means you are working the Todo right now");
+    expect(DEFAULT_BOARD_REMINDER).toContain("NEVER end a turn, or wait on a person or dependency, with the Todo in `executing`");
+    expect(DEFAULT_BOARD_REMINDER).toContain("ending your turn with a question or decision for the operator: first move it to `blocked`");
+    expect(DEFAULT_BOARD_REMINDER).toContain("keep the assignee");
+    expect(DEFAULT_BOARD_REMINDER).toContain("@mention the operator");
+    expect(DEFAULT_BOARD_REMINDER).not.toMatch(/assign @operator/i);
   });
 
   it("uses the built-in text when the instance sets none", () => {
