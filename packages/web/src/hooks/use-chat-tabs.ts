@@ -256,8 +256,11 @@ export function useChatTabs() {
   }, [])
 
   /**
-   * Reconcile persisted tabs against an authoritative session list:
-   * - Drop any tab whose sessionId no longer exists.
+   * Reconcile persisted tabs against the session list:
+   * - Keep a tab whose session the list does not carry. The list holds only
+   *   unarchived chats, and only the newest of those, so absence says nothing
+   *   about whether a chat exists; dropping the tab would move the active tab
+   *   and drag the URL after it. A deleted chat's tab is closed by id instead.
    * - Normalize stale `status: 'running'` to match the server-side status
    *   when the server reports the session as `idle` or `error` (cleans up
    *   after daemon restarts / external state changes).
@@ -271,15 +274,11 @@ export function useChatTabs() {
       const byId = new Map(sessions.map((s) => [s.id, s]))
       setState((current) => {
         if (current.tabs.length === 0) return current
-        const nextTabs: ChatTab[] = []
-        for (const tab of current.tabs) {
-          // File tabs are never orphaned by the session list — keep unchanged.
-          if (tab.kind === 'file') {
-            nextTabs.push(tab)
-            continue
-          }
-          const session = byId.get(tab.sessionId)
-          if (!session) continue // orphan — drop
+        let changed = false
+        const nextTabs = current.tabs.map((tab): ChatTab => {
+          // File tabs are not sessions, and an unlisted session keeps its tab.
+          const session = tab.kind === 'session' ? byId.get(tab.sessionId) : undefined
+          if (tab.kind === 'file' || !session) return tab
           let updated: SessionTab = tab
           // Normalize stale 'running' if server says otherwise
           if (
@@ -298,27 +297,11 @@ export function useChatTabs() {
           if (session.employee && session.employee !== tab.employeeName) {
             updated = { ...updated, employeeName: session.employee }
           }
-          nextTabs.push(updated)
-        }
-        if (nextTabs.length === current.tabs.length) {
-          // No structural change — only commit if any field actually changed
-          const unchanged = nextTabs.every((t, i) => {
-            const o = current.tabs[i]
-            if (t.kind === 'session' && o.kind === 'session') {
-              return t.label === o.label && t.status === o.status && t.employeeName === o.employeeName
-            }
-            return t.label === o.label
-          })
-          if (unchanged) return current
-        }
-        let nextActive = current.activeIndex
-        if (nextActive >= 0) {
-          const activeTab = current.tabs[nextActive]
-          const activeKey = activeTab ? tabKey(activeTab) : null
-          nextActive = activeKey ? nextTabs.findIndex((t) => tabKey(t) === activeKey) : -1
-          if (nextActive < 0) nextActive = nextTabs.length > 0 ? 0 : -1
-        }
-        return { tabs: nextTabs, activeIndex: nextActive }
+          if (updated !== tab) changed = true
+          return updated
+        })
+        // Only commit when a field actually changed: the route re-runs this on every list refetch.
+        return changed ? { ...current, tabs: nextTabs } : current
       })
     },
     []

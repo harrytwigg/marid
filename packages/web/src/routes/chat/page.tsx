@@ -36,6 +36,7 @@ import { adjacentSessionId } from './session-navigation'
 import { usePaneSessionActions } from './use-pane-session-actions'
 import { useCopyFeedback } from './use-copy-feedback'
 import { useSessionLifecycleActions } from './use-session-lifecycle-actions'
+import { useChatTabSync } from './use-chat-tab-sync'
 // Lazy so the file viewer's syntax-highlighter grammars + react-markdown are
 // fetched only when a file tab is actually opened — not on the landing route.
 const FileView = lazy(() =>
@@ -119,13 +120,6 @@ function ChatPage() {
   // Which pane the route shows, when it may show it, and the optimistic bubble handed to the session the pane creates.
   const { paneKey, committedId, awaitingOpen, pendingMessage, paneSlotRef, revealSelection, adoptSession, startComposer } = usePaneIdentity(selectedId, pendingEmployee, { newChatIntent: newChatIntentRef.current, sessionsPending: sessionsQuery.isPending, sessionCount: sessionsQuery.data?.length ?? 0 })
   const { workingSet, gridPicker, gridState, releaseMobilePicker } = useSplitGridWorkspace(committedId, sessionsQuery.data, systemPrimedId)
-  const removeWorkingSetPane = workingSet.remove
-  // Bulk archive/delete removes many sessions at once. Per-id navigation is not
-  // wanted (the operator is culling a list, not switching chats), but a pane
-  // still holding a removed session would go stale, so drop each one.
-  const handleSessionsRemoved = useCallback((ids: string[]) => {
-    for (const id of ids) removeWorkingSetPane(id)
-  }, [removeWorkingSetPane])
   const { viewport, focusedSessionId, gridPaneKeys } = gridState
   const paneState = useChatPaneState(committedId, focusedSessionId)
   const sessionMeta = paneState.meta
@@ -164,6 +158,15 @@ function ChatPage() {
   const { events, connectionSeq, skillsVersion, subscribe } = useGateway()
   const { data: engineRegistry } = useModelRegistry() // PTY capability per engine — drives the CLI view toggle
   const chatTabs = useChatTabs()
+  const removeWorkingSetPane = workingSet.remove
+  const closeSessionTab = chatTabs.closeTabBySessionId
+  // Bulk archive/delete removes many sessions at once. Per-id navigation is not
+  // wanted (the operator is culling a list, not switching chats), but a pane or
+  // tab still holding a removed session would go stale, so close each one; the
+  // route follows the active tab if it was among them.
+  const handleSessionsRemoved = useCallback((ids: string[]) => {
+    for (const id of ids) { removeWorkingSetPane(id); closeSessionTab(id) }
+  }, [closeSessionTab, removeWorkingSetPane])
   const duplicateSessionMutation = useDuplicateSession()
   const focusedDelegatedActivity = useMemo(
     () => selectedDelegatedActivityFromList(sessionsQuery.data, focusedSessionId),
@@ -205,7 +208,7 @@ function ChatPage() {
   // Guarded by `sessionMeta.sessionId === selectedId` so we never cross-write
   // the previous session's meta onto the newly active tab during a switch
   // (a switch remounts ChatPane, which re-emits meta).
-  const { updateTabStatus, closeTabBySessionId, reconcileTabs } = chatTabs
+  const { updateTabStatus, closeTabBySessionId } = chatTabs
   useEffect(() => {
     if (!selectedId || !sessionMeta) return
     if (sessionMeta.sessionId !== selectedId) return
@@ -256,18 +259,8 @@ function ChatPage() {
     return unsub
   }, [subscribe, updateTabStatus, closeTabBySessionId])
 
-  // Reconcile persisted tabs against the authoritative sessions list:
-  //   - drop orphan tabs whose sessions were deleted while the app was closed
-  //     (or by another client before our WS reconnected)
-  //   - normalize stale `status: 'running'` (persists across reloads otherwise)
-  //   - pick up renames the WS event didn't carry a title for
-  useEffect(() => {
-    const sessions = sessionsQuery.data as
-      | Array<{ id: string; title?: string; status?: string; employee?: string }>
-      | undefined
-    if (!sessions) return
-    reconcileTabs(sessions)
-  }, [sessionsQuery.data, reconcileTabs])
+  // Tabs follow the list's status and titles; a tab the list does not carry is looked up, not dropped.
+  useChatTabSync(chatTabs, sessionsQuery.data as Parameters<typeof useChatTabSync>[1])
 
   const handleEmployeeSessionsAvailable = useCallback(
     (sessions: Array<{ id: string; title?: string; lastActivity?: string; createdAt?: string }>) => {
