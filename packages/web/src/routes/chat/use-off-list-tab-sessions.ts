@@ -5,6 +5,7 @@ export interface TabSession {
   id?: unknown
   title?: unknown
   employee?: unknown
+  status?: unknown
 }
 
 /**

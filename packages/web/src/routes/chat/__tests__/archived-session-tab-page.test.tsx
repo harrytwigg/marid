@@ -88,8 +88,8 @@ function renderRoute(entry = '/?session=a') {
 }
 
 const location = () => screen.getByTestId('route-location').textContent
-const storedTabIds = () => (JSON.parse(localStorage.getItem('jinn-chat-tabs') ?? '{"tabs":[]}') as { tabs: Array<{ sessionId?: string }> })
-  .tabs.map((tab) => tab.sessionId)
+const storedTabs = () => (JSON.parse(localStorage.getItem('jinn-chat-tabs') ?? '{"tabs":[]}') as { tabs: Array<{ sessionId?: string; label?: string; status?: string }> }).tabs
+const storedTabIds = () => storedTabs().map((tab) => tab.sessionId)
 
 async function refetchSessionList() {
   await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.sessions.all }) })
@@ -151,6 +151,20 @@ describe('a chat the session list does not carry', () => {
 
     expect(location()).toBe('/?session=z')
     expect(storedTabIds()).toEqual(['a', 'z'])
+  })
+
+  it('takes its title and status from the lookup when it is not the open chat', async () => {
+    localStorage.setItem('jinn-chat-tabs', JSON.stringify({
+      tabs: [
+        { kind: 'session', sessionId: 'a', label: 'A', status: 'idle', unread: false, pinned: true },
+        { kind: 'session', sessionId: 'z', label: 'Loading...', status: 'running', unread: false, pinned: true },
+      ],
+      activeIndex: 0,
+    }))
+    renderRoute('/?session=a')
+
+    await waitFor(() => expect(storedTabs().find((tab) => tab.sessionId === 'z')).toMatchObject({ label: 'Title z', status: 'idle' }))
+    expect(location()).toBe('/?session=a')
   })
 
   it('loses its tab once the gateway reports it deleted, and the route follows', async () => {
