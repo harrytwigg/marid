@@ -157,4 +157,21 @@ describe('useChatTabs — file tabs (openFileTab)', () => {
     expect(result.current.tabs).toHaveLength(2)
     expect(result.current.tabs.some(t => t.kind === 'file' && t.path === 'docs/foo.md')).toBe(true)
   })
+
+  it('reconcileTabs keeps an unlisted session tab and the active tab with it', () => {
+    const { result } = renderHook(() => useChatTabs())
+    act(() => result.current.openTab({ sessionId: 's1', label: 'A', status: 'idle', unread: false, pinned: true }))
+    act(() => result.current.openTab({ sessionId: 'archived', label: 'Loading...', status: 'running', unread: false, pinned: true }))
+    const before = result.current.tabs
+
+    // The list carries s1 only: the archived chat is absent, not deleted.
+    act(() => result.current.reconcileTabs([{ id: 's1', title: 'A', status: 'idle' }]))
+    expect(result.current.tabs).toBe(before)
+    expect(result.current.activeTab).toMatchObject({ kind: 'session', sessionId: 'archived', status: 'running' })
+
+    act(() => result.current.reconcileTabs([{ id: 's1', title: 'Renamed', status: 'idle' }]))
+    expect(result.current.tabs.map(tabKey)).toEqual(['s1', 'archived'])
+    expect(result.current.tabs[0].label).toBe('Renamed')
+    expect(result.current.activeIndex).toBe(1)
+  })
 })
