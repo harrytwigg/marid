@@ -20,11 +20,13 @@ export function useChatTabSync(chatTabs: Tabs, sessions: ListedSession[] | undef
   const listedIds = useMemo(() => (sessions ? new Set(sessions.map((session) => session.id)) : null), [sessions])
   const found = useOffListTabSessions(tabIds, listedIds, closeTabBySessionId, { keepArchived: true })
 
-  // A looked-up chat brings its title and status to its tab as a listed one does.
-  const known = useMemo(
-    () => (sessions ? [...sessions, ...Object.entries(found).map(([id, session]) => asListed(id, session))] : undefined),
-    [found, sessions],
-  )
+  // A looked-up chat brings its title and status to its tab as a listed one does, until the list
+  // carries it: the lookup is a snapshot that is never refreshed, so the list wins.
+  const known = useMemo(() => {
+    if (!sessions || !listedIds) return undefined
+    const unlisted = Object.entries(found).filter(([id]) => !listedIds.has(id))
+    return [...sessions, ...unlisted.map(([id, session]) => asListed(id, session))]
+  }, [found, listedIds, sessions])
   useEffect(() => {
     if (known) reconcileTabs(known)
   }, [known, reconcileTabs])
