@@ -170,6 +170,7 @@ vi.mock("../../shared/logger.js", () => ({
 }));
 
 import { OpencodeEngine } from "../opencode.js";
+import type { OpencodeServerPool } from "../opencode-server.js";
 import { REMOTE_KILL_SCRIPT } from "../remote-stage.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts } from "../../shared/types.js";
@@ -268,6 +269,28 @@ describe("OpencodeEngine — a remote employee's turn runs on the other machine"
     expect(command).toContain("'run' '--format' 'json' '--dangerously-skip-permissions'");
     expect(command).toContain("'-m' 'anthropic/claude-sonnet-5'");
     expect(command).toContain("'-s' 'ses_earlier'");
+  });
+
+  it("adds --standalone when the host's server was refused as OpenCode 2, and not for another host", async () => {
+    const pool = (standaloneHost: string) => ({
+      acquire: async () => { throw new Error("server mode is off for this host: OpenCode 2 is not supported by server mode"); },
+      stop: async () => {},
+      size: () => 0,
+      runNeedsStandalone: (hostKey: string) => hostKey === standaloneHost,
+    }) as unknown as OpencodeServerPool;
+    const viaPool = (host: string) => new OpencodeEngine({
+      mode: () => "server",
+      servers: pool(host),
+      remote: () => REMOTE_CONFIG,
+      gatewayPort: () => GATEWAY_PORT,
+    });
+
+    await viaPool("build-box").run(runOpts());
+    expect(remoteCommand()).toContain("'--dangerously-skip-permissions' '--standalone'");
+
+    hoisted.spawns.length = 0;
+    await viaPool("another-box").run(runOpts());
+    expect(remoteCommand()).not.toContain("--standalone");
   });
 
   it("points opencode at the staged config and this session's home", async () => {

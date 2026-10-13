@@ -84,8 +84,13 @@ export function cleanEnv(sessionId: string): Record<string, string> {
   return env;
 }
 
+/** Per-host facts that change a `run` turn's argv (see `buildOpencodeArgs`). */
+export interface OpencodeRunFlags {
+  standalone?: boolean;
+}
+
 /** A turn on the gateway's own machine. */
-export function localOpencodeLaunch(opts: EngineRunOpts, trackingId: string): OpencodeLaunchPlan {
+export function localOpencodeLaunch(opts: EngineRunOpts, trackingId: string, run: OpencodeRunFlags = {}): OpencodeLaunchPlan {
   const bin = resolveBin("opencode", opts.bin);
   const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId);
 
@@ -96,7 +101,7 @@ export function localOpencodeLaunch(opts: EngineRunOpts, trackingId: string): Op
 
   return {
     bin,
-    args: buildOpencodeArgs(opts),
+    args: buildOpencodeArgs(opts, run),
     env: {
       ...cleanEnv(trackingId),
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
@@ -114,7 +119,7 @@ function opencodeSshArgs(
   opts: EngineRunOpts,
   trackingId: string,
   gatewayPort: number,
-  host: { facts: RemoteFacts; staging: RemoteOpencodeStaging; remote: RemoteEngineHandle },
+  host: { facts: RemoteFacts; staging: RemoteOpencodeStaging; remote: RemoteEngineHandle; run: OpencodeRunFlags },
 ): string[] {
   const { facts, staging, remote } = host;
   return buildSshSpawnArgs({
@@ -141,7 +146,7 @@ function opencodeSshArgs(
     // do for a Claude or Pi session.
     pathPrepend: [remoteNodeDir(facts), remoteSessionBinDir(staging.sessionHome)],
     bin: remote.bin,
-    args: buildOpencodeArgs(opts),
+    args: buildOpencodeArgs(opts, host.run),
     // No remote tty: opencode's stdout is a JSON stream the engine parses line
     // by line, and a tty would interleave the remote stderr into it.
     allocateTty: false,
@@ -178,7 +183,7 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
 export async function remoteOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: { remote: RemoteExecutionConfig | undefined; gatewayPort: number },
+  ctx: { remote: RemoteExecutionConfig | undefined; gatewayPort: number; run?: OpencodeRunFlags },
 ): Promise<OpencodeLaunchPlan> {
   assertRemoteTarget(opts, ctx.remote);
   // Without a real gateway port the reverse forward would be built as
@@ -203,7 +208,7 @@ export async function remoteOpencodeLaunch(
 
   const remote = remoteHandle(facts, staging);
   await reapStaleRemoteEngine(remote, "opencode");
-  const args = opencodeSshArgs(opts, trackingId, ctx.gatewayPort, { facts, staging, remote });
+  const args = opencodeSshArgs(opts, trackingId, ctx.gatewayPort, { facts, staging, remote, run: ctx.run ?? {} });
 
   logger.info(
     `opencode engine starting REMOTE on ${staging.destination}:${opts.remoteCwd} — ${describeOpencodeLaunch(opts)} `

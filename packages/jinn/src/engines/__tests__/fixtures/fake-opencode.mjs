@@ -59,7 +59,10 @@
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
 // FAKE_OPENCODE_VERSION sets the version /global/health reports (default
-// 1.18.31, "none" for no version); FAKE_OPENCODE_SERVE_LOG names a file each
+// 1.18.31, "none" for no version, "v2:<version>" for an OpenCode 2 server:
+// every v1 route answers 200 text/html, as its SPA fallback does, and only
+// GET /api/info reports the version); FAKE_OPENCODE_RUN_LOG names a file each
+// `run` appends its argv to as one JSON line; FAKE_OPENCODE_SERVE_LOG names a file each
 // `serve` start appends a line to; FAKE_OPENCODE_CREATE_DELAY_MS delays the
 // answer to POST /session; FAKE_OPENCODE_HISTORY_DELAY_MS delays the answer
 // to GET /session/<id>/message?limit=N; FAKE_OPENCODE_PATCH_FAIL=1 makes
@@ -294,6 +297,17 @@ function serve() {
     for await (const chunk of req) raw += chunk;
     const json = raw ? JSON.parse(raw) : {};
     const url = req.url ?? "";
+    if (reported.startsWith("v2:")) {
+      // OpenCode 2: /api/* only; everything else is the web UI's fallback page.
+      if (url === "/api/info") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ version: reported.slice(3) }));
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end("<!doctype html><html><body>opencode</body></html>");
+      return;
+    }
     if (url !== "/global/health" && !url.startsWith("/test/")) {
       bootstrapped ??= new Promise((resolve) => setTimeout(resolve, Number(process.env.FAKE_OPENCODE_BOOTSTRAP_MS ?? 0)));
       await bootstrapped;
@@ -453,6 +467,7 @@ if (verb === "serve") {
   serve();
 } else if (verb === "run") {
   const prompt = await readStdin();
+  if (process.env.FAKE_OPENCODE_RUN_LOG) fs.appendFileSync(process.env.FAKE_OPENCODE_RUN_LOG, `${JSON.stringify(argv)}\n`);
   emitLine({ type: "text", sessionID: flag("-s") ?? "ses_plain", part: { type: "text", text: `plain:${prompt}` } });
 } else if (verb === "attach") {
   process.stdout.write(`ATTACHED ${flag("-s") ?? "none"} pw=${process.env.OPENCODE_SERVER_PASSWORD ? "yes" : "no"}\r\n`);

@@ -15,7 +15,7 @@ import {
 } from "./opencode-launch.js";
 import type { OpencodeMode } from "../shared/config-types.js";
 import { JINN_HOME } from "../shared/paths.js";
-import { type OpencodeServer, type OpencodeServerPool, type OpencodeServerSpec } from "./opencode-server.js";
+import { serverHostKey, type OpencodeServer, type OpencodeServerPool, type OpencodeServerSpec } from "./opencode-server.js";
 import { OpencodeServerTurn } from "./opencode-server-turn.js";
 import { OpencodeServerCompaction } from "./opencode-server-compaction.js";
 import { isCompactCommand } from "../shared/skill-commands.js";
@@ -174,12 +174,17 @@ export class OpencodeEngine implements InterruptibleEngine {
     trackingId: string,
     onStream: ((delta: StreamDelta) => void) | null,
   ): Promise<EngineResult> {
+    // A host whose server was refused as OpenCode 2 runs its turns with
+    // `--standalone`, so no background service is left behind. Plain `run`
+    // mode never asks the pool: it has not looked at the host's server.
+    const run = { standalone: this.readMode() === "server" && this.servers?.runNeedsStandalone(serverHostKey(opts)) === true };
     if (!isRemoteTarget(opts)) {
-      return await this.launch(localOpencodeLaunch(opts, trackingId), trackingId, onStream);
+      return await this.launch(localOpencodeLaunch(opts, trackingId, run), trackingId, onStream);
     }
     const plan = await remoteOpencodeLaunch(opts, trackingId, {
       remote: this.readRemoteConfig(),
       gatewayPort: this.readGatewayPort(),
+      run,
     });
     return await this.launch(plan, trackingId, onStream);
   }

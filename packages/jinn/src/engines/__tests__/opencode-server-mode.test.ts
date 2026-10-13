@@ -26,6 +26,7 @@ import {
   MIN_OPENCODE_SERVER_VERSION,
   opencodeMode,
   serverFingerprint,
+  UNSUPPORTED_RETRY_MS,
   unsupportedVersionReason,
 } from "../opencode-server.js";
 import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
@@ -1064,6 +1065,8 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     expect(unsupportedVersionReason("1.18.31")).toBeUndefined();
     expect(unsupportedVersionReason("1.17.9")).toMatch(/older than 1\.18\.31/);
     expect(unsupportedVersionReason(undefined)).toMatch(/did not report its version/);
+    expect(unsupportedVersionReason("2.0.28")).toMatch(/OpenCode 2 \(2\.0\.28\) is not supported by server mode/);
+    expect(unsupportedVersionReason("v3.1.0")).toMatch(/OpenCode 3 \(v3\.1\.0\) is not supported by server mode/);
   });
 
   it("refuses a server older than the pin: the turn runs plain, and the host stays on run without restarting servers", async () => {
@@ -1082,6 +1085,75 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     const h = harness();
     expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
     expect(h.pool.unsupportedReason("local")).toMatch(/did not report its version/);
+  });
+
+  describe("OpenCode 2", () => {
+    const runLog = () => path.join(JINN_HOME, "run-args.log");
+    const runs = () => (fs.existsSync(runLog()) ? fs.readFileSync(runLog(), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as string[]) : []);
+    const lingering = () => fs.existsSync(serveLog()) ? fs.readFileSync(serveLog(), "utf8").trim().split("\n").filter(Boolean).length : 0;
+
+    beforeEach(() => {
+      fs.rmSync(runLog(), { force: true });
+      fs.rmSync(serveLog(), { force: true });
+      process.env.FAKE_OPENCODE_VERSION = "v2:2.0.28";
+      process.env.FAKE_OPENCODE_RUN_LOG = runLog();
+      process.env.FAKE_OPENCODE_SERVE_LOG = serveLog();
+    });
+    afterEach(() => { delete process.env.FAKE_OPENCODE_RUN_LOG; });
+
+    it("names OpenCode 2 as the reason when the health answer is a web page and /api/info says 2.x", async () => {
+      const h = harness();
+      await h.engine.run(runOpts());
+      const reason = h.pool.unsupportedReason("local");
+      expect(reason).toMatch(/OpenCode 2 \(2\.0\.28\) is not supported by server mode/);
+      expect(reason).not.toMatch(/did not report its version/);
+    });
+
+    it("runs the turns of a refused OpenCode 2 host as `run --standalone`, once, and leaves no server", async () => {
+      const h = harness();
+      expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      const argvs = runs();
+      expect(argvs).toHaveLength(2);
+      for (const argv of argvs) {
+        expect(argv.slice(0, 3)).toEqual(["run", "--format", "json"]);
+        expect(argv.filter((a) => a === "--standalone")).toHaveLength(1);
+      }
+      // One refused start, no retry inside the window, nothing left running.
+      expect(lingering()).toBe(1);
+      expect(h.pool.size()).toBe(0);
+      expect(h.pool.runNeedsStandalone("local")).toBe(true);
+    });
+
+    it("does not add --standalone twice when cliFlags already carry it", async () => {
+      const h = harness();
+      await h.engine.run(runOpts({ cliFlags: ["--standalone"] }));
+      expect(runs()[0]!.filter((a) => a === "--standalone")).toHaveLength(1);
+    });
+
+    it("refuses a non-JSON health answer that /api/info does not explain, without --standalone", async () => {
+      process.env.FAKE_OPENCODE_VERSION = "v2:";
+      const h = harness();
+      expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      expect(h.pool.unsupportedReason("local")).toMatch(/something other than JSON.*OpenCode 2 is not supported by server mode/);
+      expect(h.pool.runNeedsStandalone("local")).toBe(false);
+      expect(runs()[0]).not.toContain("--standalone");
+    });
+
+    it("leaves a 1.x host's run turns without the flag", async () => {
+      process.env.FAKE_OPENCODE_VERSION = "1.17.0";
+      const h = harness();
+      await h.engine.run(runOpts());
+      expect(h.pool.runNeedsStandalone("local")).toBe(false);
+      expect(runs()[0]).not.toContain("--standalone");
+    });
+
+    it("stops adding the flag once the retry window has passed", () => {
+      const h = harness();
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", now: 1000 });
+      expect(h.pool.runNeedsStandalone("local", 1000 + UNSUPPORTED_RETRY_MS - 1)).toBe(true);
+      expect(h.pool.runNeedsStandalone("local", 1000 + UNSUPPORTED_RETRY_MS)).toBe(false);
+    });
   });
 
   it("recovers an answer the stream never delivered from the server's store, and takes the host off server mode", async () => {

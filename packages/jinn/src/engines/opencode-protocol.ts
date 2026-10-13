@@ -44,8 +44,12 @@ export function buildOpencodePrompt(opts: EngineRunOpts): string {
  * own opencode config still has that honoured. Forcing a `permission` block in
  * the staged config would silently take that away.
  */
-export function buildOpencodeArgs(opts: EngineRunOpts): string[] {
+export function buildOpencodeArgs(opts: EngineRunOpts, run: { standalone?: boolean } = {}): string[] {
   const args = ["run", "--format", "json", "--dangerously-skip-permissions"];
+  // OpenCode 2's CLI starts (or joins) a background `serve --service` daemon
+  // unless told not to. Older CLIs reject the flag, so only a host known to run
+  // 2.x gets it; an operator who already put it in `cliFlags` gets it once.
+  if (run.standalone && !opts.cliFlags?.includes("--standalone")) args.push("--standalone");
   if (opts.model) args.push("-m", opts.model);
   // opencode assigns its own session ids, so a resume names one it gave us on a
   // previous turn — unlike pi, where the id is ours and the same on every turn.
