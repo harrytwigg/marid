@@ -177,7 +177,7 @@ export class OpencodeEngine implements InterruptibleEngine {
     // A host whose server was refused as OpenCode 2 runs its turns with
     // `--standalone`, so no background service is left behind. Plain `run`
     // mode never asks the pool: it has not looked at the host's server.
-    const run = { standalone: this.readMode() === "server" && this.servers?.runNeedsStandalone(serverHostKey(opts)) === true };
+    const run = { standalone: this.readMode() === "server" && this.servers?.runNeedsStandalone(serverHostKey(opts), opts.bin) === true };
     if (!isRemoteTarget(opts)) {
       return await this.launch(localOpencodeLaunch(opts, trackingId, run), trackingId, onStream);
     }

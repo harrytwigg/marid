@@ -61,8 +61,8 @@
 // FAKE_OPENCODE_VERSION sets the version /global/health reports (default
 // 1.18.31, "none" for no version, "v2:<version>" for an OpenCode 2 server:
 // every v1 route answers 200 text/html, as its SPA fallback does, and only
-// GET /api/info reports the version); FAKE_OPENCODE_RUN_LOG names a file each
-// `run` appends its argv to as one JSON line; FAKE_OPENCODE_SERVE_LOG names a file each
+// GET /api/info reports the version);
+// FAKE_OPENCODE_RUN_LOG names a file each `run` appends its argv to as one JSON line; FAKE_OPENCODE_SERVE_LOG names a file each
 // `serve` start appends a line to; FAKE_OPENCODE_CREATE_DELAY_MS delays the
 // answer to POST /session; FAKE_OPENCODE_HISTORY_DELAY_MS delays the answer
 // to GET /session/<id>/message?limit=N; FAKE_OPENCODE_PATCH_FAIL=1 makes

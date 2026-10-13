@@ -1150,9 +1150,31 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
 
     it("stops adding the flag once the retry window has passed", () => {
       const h = harness();
-      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", now: 1000 });
-      expect(h.pool.runNeedsStandalone("local", 1000 + UNSUPPORTED_RETRY_MS - 1)).toBe(true);
-      expect(h.pool.runNeedsStandalone("local", 1000 + UNSUPPORTED_RETRY_MS)).toBe(false);
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE, now: 1000 });
+      expect(h.pool.runNeedsStandalone("local", FAKE, 1000 + UNSUPPORTED_RETRY_MS - 1)).toBe(true);
+      expect(h.pool.runNeedsStandalone("local", FAKE, 1000 + UNSUPPORTED_RETRY_MS)).toBe(false);
+    });
+
+    it("the verdict is the binary's: a turn naming another binary on the same host gets no flag", async () => {
+      const h = harness();
+      await h.engine.run(runOpts());
+      expect(h.pool.runNeedsStandalone("local", FAKE)).toBe(true);
+      expect(h.pool.runNeedsStandalone("local", "/opt/opencode-1/bin/opencode")).toBe(false);
+      expect(h.pool.runNeedsStandalone("local")).toBe(true);
+    });
+
+    it("a later refusal that learned no version (API drift) keeps the recorded OpenCode 2 version", () => {
+      const h = harness();
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE });
+      h.pool.markUnsupported("local", "opencode local server API drift: x");
+      expect(h.pool.unsupportedReason("local")).toMatch(/API drift/);
+      expect(h.pool.runNeedsStandalone("local", FAKE)).toBe(true);
+    });
+
+    it("does not add --standalone when cliFlags carry it with a value", async () => {
+      const h = harness();
+      await h.engine.run(runOpts({ cliFlags: ["--standalone=true"] }));
+      expect(runs()[0]!.some((a) => a === "--standalone")).toBe(false);
     });
   });
 

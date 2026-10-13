@@ -13,19 +13,16 @@
 /** The newest major whose HTTP API server mode speaks. */
 export const MAX_OPENCODE_SERVER_MAJOR = 1;
 
-/** The first major that needs `--standalone` for a `run` turn to leave no
- *  background service behind. */
-export const OPENCODE_STANDALONE_MAJOR = 2;
-
 /** The major of a dotted version (`v2.0.28` → 2), or undefined when it has none. */
 export function opencodeMajor(version: string | undefined): number | undefined {
   const major = Number.parseInt((version ?? "").replace(/^v/, "").split(".")[0] ?? "", 10);
   return Number.isFinite(major) ? major : undefined;
 }
 
-/** Whether a `run` turn against this version needs `--standalone`. */
+/** Whether a `run` turn against this version needs `--standalone`: OpenCode 2's
+ *  CLI otherwise leaves a background service behind, and a 1.x CLI rejects the flag. */
 export function needsStandalone(version: string | undefined): boolean {
-  return (opencodeMajor(version) ?? 0) >= OPENCODE_STANDALONE_MAJOR;
+  return (opencodeMajor(version) ?? 0) > MAX_OPENCODE_SERVER_MAJOR;
 }
 
 /** The refusal for a server that is OpenCode 2 or newer. */

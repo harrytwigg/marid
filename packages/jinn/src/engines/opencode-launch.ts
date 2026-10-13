@@ -6,7 +6,7 @@ import { JINN_HOME } from "../shared/paths.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { assertRemoteTarget } from "../shared/remote-target.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
-import { buildOpencodeArgs, buildOpencodePrompt, describeOpencodeLaunch } from "./opencode-protocol.js";
+import { buildOpencodeArgs, buildOpencodePrompt, describeOpencodeLaunch, type OpencodeRunFlags } from "./opencode-protocol.js";
 import {
   writeOpencodeSessionConfig,
   type OpencodeConfigHandle,
@@ -82,11 +82,6 @@ export function cleanEnv(sessionId: string): Record<string, string> {
   // a conversation opencode is still holding in its own store.
   env.OPENCODE_DISABLE_AUTOUPDATE = "1";
   return env;
-}
-
-/** Per-host facts that change a `run` turn's argv (see `buildOpencodeArgs`). */
-export interface OpencodeRunFlags {
-  standalone?: boolean;
 }
 
 /** A turn on the gateway's own machine. */

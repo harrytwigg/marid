@@ -236,7 +236,7 @@ export class OpencodeServerPool {
   private holds = new Map<string, number>();
   /** Hosts whose server was found unusable, and when: their turns use `run`
    *  mode until {@link UNSUPPORTED_RETRY_MS} has passed. */
-  private unsupported = new Map<string, { reason: string; at: number; version?: string }>();
+  private unsupported = new Map<string, { reason: string; at: number; version?: string; bin?: string }>();
   private remoteKills = new RemoteKills("opencode server");
   private startedListeners: Array<(server: OpencodeServer) => void> = [];
   private releasedListeners: Array<(sessionId: string) => void> = [];
@@ -345,20 +345,28 @@ export class OpencodeServerPool {
    * run` (a server that will not start is the `run` fallback in the engine)
    * rather than risk silently dropping events, until the retry window passes.
    */
-  markUnsupported(hostKey: string, reason: string, opts: { now?: number; version?: string } = {}): void {
-    if (!this.unsupported.has(hostKey)) {
+  markUnsupported(hostKey: string, reason: string, opts: { now?: number; version?: string; bin?: string } = {}): void {
+    const previous = this.unsupported.get(hostKey);
+    if (!previous) {
       logger.warn(`opencode server mode disabled for host ${hostKey} for ${Math.round(UNSUPPORTED_RETRY_MS / 60000)} minutes: ${reason}`);
     }
-    this.unsupported.set(hostKey, { reason, at: opts.now ?? Date.now(), ...(opts.version ? { version: opts.version } : {}) });
+    // A later refusal that learned no version (API drift) keeps what an earlier one found.
+    const version = opts.version ?? previous?.version;
+    const bin = opts.bin ?? previous?.bin;
+    this.unsupported.set(hostKey, { reason, at: opts.now ?? Date.now(), ...(version ? { version } : {}), ...(bin ? { bin } : {}) });
   }
 
-  /** Whether `run` turns on this host need `--standalone`: its server was
-   *  refused as OpenCode 2 or newer, whose CLI otherwise leaves a background
-   *  service running. Only a host the pool has seen refuse says so; a host in
-   *  plain `run` mode is never probed, and its operator passes the flag in
-   *  `cliFlags`. */
-  runNeedsStandalone(hostKey: string, now = Date.now()): boolean {
-    return this.unsupportedReason(hostKey, now) !== undefined && needsStandalone(this.unsupported.get(hostKey)?.version);
+  /** Whether a `run` turn on this host with this binary needs `--standalone`:
+   *  that binary's server was refused as OpenCode 2 or newer, whose CLI
+   *  otherwise leaves a background service running. The verdict is the
+   *  binary's, not the host's: a turn naming another binary on the same host is
+   *  not covered, since a 1.x CLI rejects the flag. Only a host the pool has
+   *  seen refuse says so; a host in plain `run` mode is never probed, and its
+   *  operator passes the flag in `cliFlags`. */
+  runNeedsStandalone(hostKey: string, turnBin?: string, now = Date.now()): boolean {
+    if (this.unsupportedReason(hostKey, now) === undefined) return false;
+    const entry = this.unsupported.get(hostKey);
+    return needsStandalone(entry?.version) && (entry?.bin ?? "") === (turnBin || this.deps.bin?.() || "");
   }
 
   /** Why server mode is currently off for this host, if it is. */
@@ -545,7 +553,7 @@ export class OpencodeServerPool {
     this.lifecycle.adopt(sessionId, this.handleFor(server), { turnRunning: true });
     this.armSweep();
 
-    await this.checkHealth(sessionId, server);
+    await this.checkHealth(sessionId, server, spec);
     const bootstrapStart = Date.now();
     try {
       await this.waitBootstrapped(server, this.bootstrapTimeoutMs());
@@ -566,7 +574,7 @@ export class OpencodeServerPool {
   }
 
   /** Wait for the server's health check and refuse a server of an unusable version. */
-  private async checkHealth(sessionId: string, server: OpencodeServer): Promise<void> {
+  private async checkHealth(sessionId: string, server: OpencodeServer, spec: OpencodeServerSpec): Promise<void> {
     let health: HealthReading;
     try {
       health = await this.waitHealthy(server, this.startTimeoutMs());
@@ -578,7 +586,10 @@ export class OpencodeServerPool {
     }
     const refusal = healthRefusal(health);
     if (refusal) {
-      this.markUnsupported(server.hostKey, refusal, health.version ? { version: health.version } : {});
+      this.markUnsupported(server.hostKey, refusal, {
+        ...(health.version ? { version: health.version } : {}),
+        bin: spec.bin || this.deps.bin?.() || "",
+      });
       await this.stop(sessionId);
       throw new Error(`opencode server refused: ${refusal}`);
     }
