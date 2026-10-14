@@ -1256,16 +1256,18 @@ const COORDINATOR_SOURCES: ReadonlySet<string> = new Set(["web", "talk", "slack"
 
 /**
  * True only for a coordinator chat the operator started: portal-shaped, opened
- * from one of {@link COORDINATOR_SOURCES}, and neither a cron run nor an
- * engine-only delegation (`delegation:` key), which are portal-shaped too but
- * are work the operator scheduled or handed off, not the operator talking.
- * Narrower than {@link isPortalAgentSession}, which still answers for root
- * standing; this answers for acting AS the operator.
+ * from one of {@link COORDINATOR_SOURCES}, and neither a cron run, an
+ * engine-only delegation (`delegation:` key) nor a root session the gateway
+ * started on a Todo for an `@mention` (`todo:` key). Those are portal-shaped
+ * too, but they are work the operator scheduled, handed off or tagged, not the
+ * operator talking — and a Todo's thread, where employees write, keeps reaching
+ * the root session afterwards. Narrower than {@link isPortalAgentSession},
+ * which still answers for root standing; this answers for acting AS the operator.
  */
 export function isCoordinatorSession(session: Session): boolean {
   if (!isPortalAgentSession(session) || !COORDINATOR_SOURCES.has(session.source)) return false;
   const keys = [session.sourceRef, session.sessionKey];
-  return !keys.some((key) => key?.startsWith("cron:") || key?.startsWith("delegation:"));
+  return !keys.some((key) => key?.startsWith("cron:") || key?.startsWith("delegation:") || key?.startsWith("todo:"));
 }
 
 // Build the CASE that maps a row to its sidebar group. When a portalSlug is

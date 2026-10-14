@@ -4,6 +4,7 @@ import { ArrowUp, ChevronRight, FileText, Image as ImageIcon, Paperclip, X } fro
 import {
   api,
   type Employee,
+  type MentionRoot,
   type WorkItemAttachmentWire,
   type WorkItemCommentWire,
   type WorkItemDetailWire,
@@ -12,6 +13,7 @@ import { commentAuthorLabel, operatorSafeTodoError } from "@/lib/todos"
 import { MarkdownView } from "@/components/markdown-view"
 import { EmployeeAvatar, OPERATOR_DEFAULT_EMOJI } from "@/components/ui/employee-avatar"
 import { useMentionPicker } from "@/components/mention-picker"
+import { withMentionRoot } from "@/lib/mentions"
 import { invalidateTodoComments, useAddTodoComment } from "../use-todo-comment"
 import { commentHeadRequest, mergeCommentPages } from "./comment-window"
 import { displayNameOf, formatRelativeTime } from "../util"
@@ -43,6 +45,7 @@ function commentAuthor(comment: WorkItemCommentWire, byName: Map<string, Employe
 function CommentBlock({
   comment,
   byName,
+  mentionByName,
   isDark,
   attachments,
   workItemId,
@@ -55,6 +58,8 @@ function CommentBlock({
 }: {
   comment: WorkItemCommentWire
   byName: Map<string, Employee>
+  /** Who an `@name` in the body names: `byName`, and the portal when it is the org root. */
+  mentionByName: Map<string, Employee>
   isDark: boolean
   attachments: WorkItemAttachmentWire[]
   workItemId: string
@@ -137,10 +142,10 @@ function CommentBlock({
               data-testid={`activity-preview-${comment.id}`}
               className="line-clamp-3 break-words text-[var(--text-tertiary)] [&_.jinn-markdown]:text-[var(--text-tertiary)] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
             >
-              <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={byName} />
+              <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={mentionByName} />
             </div>
           ) : (
-            <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={byName} />
+            <MarkdownView content={stripCommentMarkers(comment.body)} isDark={isDark} density="compact" mentions employees={mentionByName} />
           )}
           {collapsible && (
             <button
@@ -208,12 +213,15 @@ interface PendingFile {
 export function ActivitySection({
   detail,
   byName,
+  mentionRoot,
   mobile,
   isDark = true,
   announce,
 }: {
   detail: WorkItemDetailWire
   byName: Map<string, Employee>
+  /** The portal, when it is the org root and a comment can `@mention` it. */
+  mentionRoot?: MentionRoot | null
   mobile: boolean
   isDark?: boolean
   announce: (message: string) => void
@@ -264,8 +272,9 @@ export function ActivitySection({
   const invalidate = () => invalidateTodoComments(qc, id)
 
   const send = useAddTodoComment(id)
-  const allEmployees = useMemo(() => [...byName.values()], [byName])
-  const picker = useMentionPicker({ value: draft, setValue: setDraft, employees: allEmployees, textareaRef: composerRef })
+  const mentionables = useMemo(() => withMentionRoot([...byName.values()], mentionRoot), [byName, mentionRoot])
+  const mentionByName = useMemo(() => new Map(mentionables.map((e) => [e.name, e])), [mentionables])
+  const picker = useMentionPicker({ value: draft, setValue: setDraft, employees: mentionables, textareaRef: composerRef })
 
   // Comment edit/delete carried over from the retired sheet (stage-B review
   // disposition b): edit only what the operator authored, delete anything —
@@ -447,6 +456,7 @@ export function ActivitySection({
                 <CommentBlock
                   comment={block.node.comment}
                   byName={byName}
+                  mentionByName={mentionByName}
                   isDark={isDark}
                   attachments={attachmentsByComment.get(block.node.comment.id) ?? []}
                   workItemId={id}
@@ -459,6 +469,7 @@ export function ActivitySection({
                     key={replyComment.id}
                     comment={replyComment}
                     byName={byName}
+                    mentionByName={mentionByName}
                     isDark={isDark}
                     attachments={attachmentsByComment.get(replyComment.id) ?? []}
                     workItemId={id}

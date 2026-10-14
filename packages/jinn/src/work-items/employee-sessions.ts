@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { Database as DatabaseType } from 'better-sqlite3';
 import { initDb } from '../shared/db.js';
 import type { Session } from '../shared/types.js';
@@ -82,14 +83,37 @@ export function getEmployeeSessionRecord(workItemId: string, employee: string): 
 }
 
 /**
+ * The record's name for the org root's session on a Todo: the virtual root is
+ * no employee, so its sessions carry none, and `@` keeps the name out of any
+ * employee's way. Its session key says whose it is.
+ */
+export const ROOT_SESSION_SLOT = '@root';
+
+/** A key for a new root session on the Todo. Only the gateway mints one, so
+ *  the key is what marks an employee-less session as the root's. */
+export function rootTodoSessionKey(workItemId: string): string {
+  return `todo:${workItemId}:${ROOT_SESSION_SLOT}:${crypto.randomUUID()}`;
+}
+
+/** Whose session this is on its Todo: its employee, or the root slot for a
+ *  root session the gateway started on it. */
+function holderOf(session: Session): string | undefined {
+  if (session.employee) return session.employee;
+  return session.workItemId && session.sessionKey?.startsWith(`todo:${session.workItemId}:${ROOT_SESSION_SLOT}:`)
+    ? ROOT_SESSION_SLOT
+    : undefined;
+}
+
+/**
  * Whether `session` counts as `employee`'s session on this Todo: linked to it,
- * that employee's, and it can still be messaged. Idle, waiting and interrupted
- * all count — a session from days ago is resumed on purpose, so the employee
- * keeps the Todo's context and is never started twice.
+ * that employee's (or the root's, for {@link ROOT_SESSION_SLOT}), and it can
+ * still be messaged. Idle, waiting and interrupted all count — a session from
+ * days ago is resumed on purpose, so the employee keeps the Todo's context and
+ * is never started twice.
  */
 export function isLiveEmployeeSession(session: Session | undefined, workItemId: string, employee: string): session is Session {
   return !!session
-    && session.employee === employee
+    && holderOf(session) === employee
     && session.workItemId === workItemId
     && canMessageSession(session)
     && !isLegacyWorkflowPhaseSession(session);

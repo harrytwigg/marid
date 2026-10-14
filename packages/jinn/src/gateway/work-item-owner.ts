@@ -62,6 +62,32 @@ export function resolveOrgRoot(): OrgRoot | null {
   return portalRoot(registry);
 }
 
+/** A name as an `@mention` reads it: lowercased, each run of characters a
+ *  mention cannot hold as one `-`, and no leading or trailing punctuation. So a
+ *  portal named "Portal COO" is `@portal-coo`. */
+function mentionSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^[-_]+|[-_]+$/g, "");
+}
+
+export interface RootMention {
+  /** The root's name, as the portal shows it. */
+  name: string;
+  /** The lowercased slug an `@mention` names it by. */
+  mention: string;
+}
+
+/** How a comment `@mention`s the org root, when it is the virtual portal root
+ *  and no employee answers to the same mention. An employee root is mentioned
+ *  as the employee it is, and an employee named like the portal keeps its name. */
+export function virtualRootMention(): RootMention | null {
+  const root = resolveOrgRoot();
+  if (root?.kind !== "virtual") return null;
+  const mention = mentionSlug(root.name);
+  if (!mention) return null;
+  const taken = [...orgRegistry().keys()].some((name) => name.toLowerCase() === mention);
+  return taken ? null : { name: root.name, mention };
+}
+
 /** The session that produced this Todo, read off its provenance.
  *
  *  Exported because quick capture needs the SAME answer the owner walk uses:

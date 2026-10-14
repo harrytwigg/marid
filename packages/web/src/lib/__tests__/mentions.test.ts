@@ -6,6 +6,7 @@ import {
   scanMentions,
   insertMention,
   mentionRoster,
+  withMentionRoot,
 } from "../mentions"
 
 const names = (text: string) => scanMentions(text).map((t) => t.name)
@@ -80,5 +81,20 @@ describe("the picker's lookups", () => {
       value: "hi @test-lead  and more",
       caret: 14,
     })
+  })
+})
+
+describe("withMentionRoot", () => {
+  const staff = [emp("build-lead", "Build Lead")]
+
+  it("adds the portal as an entry named by its mention", () => {
+    const roster = withMentionRoot(staff, { name: "Portal COO", mention: "portal-coo" })
+    expect(roster.map((e) => [e.name, e.displayName])).toEqual([["build-lead", "Build Lead"], ["portal-coo", "Portal COO"]])
+    expect(filterMentionCandidates(mentionRoster(roster), "portal").map((e) => e.name)).toEqual(["portal-coo"])
+  })
+
+  it("leaves the roster alone with no root, or when an employee answers to the mention", () => {
+    expect(withMentionRoot(staff, null)).toBe(staff)
+    expect(withMentionRoot(staff, { name: "Build-Lead", mention: "build-lead" })).toBe(staff)
   })
 })

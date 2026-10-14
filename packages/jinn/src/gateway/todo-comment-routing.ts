@@ -7,7 +7,8 @@ import { canMessageSession } from "../work-items/employee-sessions.js";
 import { parseMentions } from "../work-items/mentions.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
 import { orgRegistry } from "./org-registry.js";
-import { deliverIntoSession, wakeEmployeeOnTodo } from "./todo-employee-session.js";
+import { deliverIntoSession, wakeEmployeeOnTodo, wakeRootOnTodo, type WakeEmployeeResult } from "./todo-employee-session.js";
+import { virtualRootMention, type RootMention } from "./work-item-owner.js";
 import type { ApiContext } from "./api.js";
 
 /**
@@ -16,6 +17,14 @@ import type { ApiContext } from "./api.js";
  * - Each `@employee` it mentions, on this Todo: into the session that employee
  *   already has on it, or a new one linked as a consultation. A mention never
  *   takes the Todo's claim, so the employee doing the work keeps it.
+ * - The virtual org root, when the operator mentions it by the portal's name
+ *   (`@coo`): into the root session already on this Todo, or a new portal
+ *   session linked as a consultation. Only the operator can: a root session
+ *   holds the root's standing over every Todo, which an employee's comment
+ *   must not be able to mint (an employee escalates by blocking the Todo).
+ * - When the operator mentions a name that is nobody's, a system reply says
+ *   so. An employee's stray `@word` is left alone: agents write `@operator`
+ *   and the like often enough that replying would only add noise.
  * - When it replies to a comment a session wrote, that session, even when the
  *   reply was stored flattened against an operator-authored thread root: the
  *   comment it actually answered is in its meta.
@@ -98,39 +107,62 @@ function reportFailedWake(comment: WorkItemComment, name: string, error: string)
   });
 }
 
-function wakeOne(context: ApiContext, item: WorkItem, comment: WorkItemComment, employee: Employee): CommentWake | undefined {
-  let woke: ReturnType<typeof wakeEmployeeOnTodo>;
+/** Wake one mentioned employee, or the root when `employee` is null. */
+function wakeOne(context: ApiContext, item: WorkItem, comment: WorkItemComment, employee: Employee | null, name: string): CommentWake | undefined {
+  let woke: WakeEmployeeResult;
   try {
-    woke = wakeEmployeeOnTodo(context, {
+    const input = {
       workItemId: item.id,
-      employee,
-      role: "consult",
+      role: "consult" as const,
       actor: comment.sessionId ? `session:${comment.sessionId}` : comment.author,
       title: `Tagged on ${item.id}: ${item.title}`,
       sourceAttempt: `mention:${comment.id}`,
       deliveryKind: "todo-mention",
       message: mentionPrompt(item, comment),
       displayMessage: `🏷️ ${item.id} · ${comment.author}\n${comment.body}`,
-    });
+    };
+    woke = employee ? wakeEmployeeOnTodo(context, { ...input, employee }) : wakeRootOnTodo(context, input);
   } catch (error) {
     woke = { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
-  if (woke.ok) return { employee: employee.name, sessionId: woke.session.id, kind: "mention", started: woke.started };
-  reportFailedWake(comment, employee.name, woke.error);
+  if (woke.ok) return { employee: employee?.name ?? null, sessionId: woke.session.id, kind: "mention", started: woke.started };
+  reportFailedWake(comment, name, woke.error);
   return undefined;
+}
+
+/** A mention no employee answers to: the root's, or a name that is nobody's. */
+function wakeUnrostered(context: ApiContext, item: WorkItem, comment: WorkItemComment, name: string, root: RootMention | null): CommentWake | undefined {
+  const byOperator = comment.authorKind === "operator";
+  if (root?.mention !== name) {
+    if (byOperator) reportFailedWake(comment, name, `No employee or org root is named "${name}".`);
+    return undefined;
+  }
+  if (!byOperator) {
+    reportFailedWake(comment, name, `Only the operator can tag the org root, ${root.name}. `
+      + `To put something in front of the operator, block the Todo with a note saying what is needed.`);
+    return undefined;
+  }
+  return wakeOne(context, item, comment, null, name);
 }
 
 function wakeMentioned(context: ApiContext, item: WorkItem, comment: WorkItemComment, authorEmployee: string | undefined, roster: Roster): CommentWake[] {
   const wakes: CommentWake[] = [];
+  let root: RootMention | null | undefined;
   for (const name of parseMentions(comment.body)) {
     const employee = roster.get(name);
-    if (!employee || employee.system || employee.name === authorEmployee) continue;
+    if (!employee) {
+      if (root === undefined) root = virtualRootMention();
+      const wake = wakeUnrostered(context, item, comment, name, root);
+      if (wake) wakes.push(wake);
+      continue;
+    }
+    if (employee.system || employee.name === authorEmployee) continue;
     const refused = scopedMentionRefusal(comment, employee);
     if (refused) {
       reportFailedWake(comment, employee.name, refused);
       continue;
     }
-    const wake = wakeOne(context, item, comment, employee);
+    const wake = wakeOne(context, item, comment, employee, employee.name);
     if (wake) wakes.push(wake);
   }
   return wakes;

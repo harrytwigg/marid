@@ -417,6 +417,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
                 <ActivitySection
                   detail={detail}
                   byName={byName}
+                  mentionRoot={org.data?.virtualRoot}
                   mobile={mobile}
                   isDark={isDark}
                   announce={announce}
