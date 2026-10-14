@@ -80,6 +80,22 @@ export function isEngineExhausted(health: EngineHealthReading, engine: string, n
   return Number.isFinite(recheckAt) && recheckAt > now.getTime();
 }
 
+/** How long a spent engine is stepped around when its record names no moment to
+ *  look again: the same guess a mid-turn fallback makes about an unstated reset. */
+const UNSTATED_RETURN_MS = 6 * 60 * 60_000;
+
+/** When an engine a dispatcher stepped around should be offered turns again: the
+ *  moment {@link isEngineExhausted} stops answering yes for it. A session moved
+ *  off it carries this as the end of its swap, so the swap is never permanent. */
+export function exhaustedEngineReturnsAt(health: EngineHealthReading, engine: string, now: Date = new Date()): Date {
+  const record = health[engine];
+  for (const stamp of [record?.recheckAt, record?.until]) {
+    const ms = stamp === undefined ? NaN : Date.parse(stamp);
+    if (Number.isFinite(ms) && ms > now.getTime()) return new Date(ms);
+  }
+  return new Date(now.getTime() + UNSTATED_RETURN_MS);
+}
+
 /** How long a stated reopening is taken on trust before the engine is offered a
  *  probing turn regardless. A weekly window is real and is displayed as stated;
  *  a misparse that reads as one still self-corrects inside this. */

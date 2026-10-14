@@ -2,6 +2,7 @@ import { logger } from "../shared/logger.js";
 import type { JinnConfig, Session } from "../shared/types.js";
 import { createSession, insertMessage, updateSession, enqueueQueueItem } from "../sessions/registry.js";
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
+import { reroutedSessionMeta, type SessionReroute } from "../sessions/engine-override.js";
 import { fileIdsToMedia, rehomeAttachmentsToSession } from "./files.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
@@ -68,7 +69,7 @@ function defaultProvenance(): SpawnProvenance {
  *  gateway-default session. */
 type SpawnSelection =
   | { ok: false; error: string }
-  | { ok: true; engineName: string; model?: string; effortLevel?: string };
+  | { ok: true; engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute };
 
 async function resolveSelection(
   config: JinnConfig,
@@ -100,6 +101,7 @@ async function resolveSelection(
     engineName: selection.engine || config.engines.default,
     model: selection.model,
     effortLevel: selection.effortLevel,
+    reroute: selection.reroute,
   };
 }
 
@@ -197,6 +199,7 @@ export async function spawnSession(
     // scaffolded prompt pass the verbatim ask so list UIs show that instead).
     promptExcerpt: input.promptExcerpt,
     portalName: config.portal?.portalName,
+    transportMeta: reroutedSessionMeta(selection.reroute),
   });
   logger.info(`Web session created: ${session.id} (model=${selection.model || "default"})`);
   // First-message attachments were uploaded before the session existed (FILES_DIR).

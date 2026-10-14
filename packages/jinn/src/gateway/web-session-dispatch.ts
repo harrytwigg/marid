@@ -9,6 +9,7 @@ import {
 } from "../sessions/registry.js";
 import { FILES_DIR } from "../shared/paths.js";
 import { settleTurn } from "../sessions/turn/completion.js";
+import { maybeRevertEngineOverride } from "../sessions/engine-override.js";
 import { resolveTurnHierarchy } from "../sessions/turn/preflight.js";
 import { orgRegistry } from "./org-registry.js";
 import { runTurn } from "../sessions/turn/runner.js";
@@ -173,11 +174,17 @@ async function runWebSession(
   context: ApiContext,
   request: WebTurnRequest,
 ): Promise<void> {
-  const currentSession = getSession(session.id);
-  if (!currentSession) {
+  const liveSession = getSession(session.id);
+  if (!liveSession) {
     logger.info(`Skipping deleted web session ${session.id} before run start`);
     return;
   }
+  // A session moved onto a stand-in by a spent allowance goes back to the engine
+  // it left once that window has passed. Checked here, when the queue lets the
+  // turn through, because every web entry point reaches this one — a message,
+  // a callback, a Todo wake, a reused delegate — and the engine below is picked
+  // from the row as it stands after it.
+  const currentSession = maybeRevertEngineOverride(liveSession);
 
   // CLI-mode sends run against the PTY-backed view of the engine so the user
   // sees the turn stream into their live xterm; everything else takes the

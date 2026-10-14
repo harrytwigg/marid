@@ -151,7 +151,11 @@ describe("validateNewSessionSelection — engine selection under a spent allowan
       { engine: "codex", model: "gpt-5.6-sol", effortLevel: "xhigh", employee: "a-worker" },
     );
 
-    expect(selection).toEqual({ ok: true, engine: "claude", model: undefined, effortLevel: undefined });
+    expect(selection).toEqual({
+      ok: true, engine: "claude", model: undefined, effortLevel: undefined,
+      // What it moved off, so the session goes back once codex's allowance returns.
+      reroute: { from: "codex", model: "gpt-5.6-sol", until: expect.any(Date) },
+    });
   });
 
   it("runs the engine the request named, spent allowance or not", () => {

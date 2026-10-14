@@ -10,11 +10,12 @@
  */
 
 import { resolveEffort } from "../shared/effort.js";
+import { logger } from "../shared/logger.js";
 import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { isSpellableModelId } from "../shared/model-id.js";
 import { accountOverride } from "./session-account.js";
 import { effortLevelsForModel, getModelRegistry } from "../shared/models.js";
-import type { Employee, JinnConfig, Session } from "../shared/types.js";
+import type { Employee, JinnConfig, JsonObject, Session } from "../shared/types.js";
 import {
   getEngineSessionRef, getSession, nextEngineSessionFields, updateSession, updateSessionForAttempt,
 } from "./registry.js";
@@ -48,6 +49,42 @@ function overrideRecord(session: Session, accounts: AccountSwap | undefined, unt
     until: until.toISOString(),
     syncSince,
     ...(accounts ? { originalAccount: accounts.original, substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir } : {}),
+  };
+}
+
+/** A new session started on a stand-in because its preferred engine was out of
+ *  allowance when it was created: the engine and model it would otherwise have
+ *  run, and when that engine may serve turns again. */
+export interface SessionReroute {
+  from: string;
+  model: string | null;
+  until: Date;
+}
+
+/**
+ * The transport meta a session rerouted at creation starts with: the same record
+ * a mid-turn swap parks, so the revert hands the session back to the engine it
+ * preferred once `until` passes. Without it, nothing remembers the preference and
+ * the session runs on the stand-in for good.
+ *
+ * Nothing ran on the preferred engine yet, so there is no thread to park, and the
+ * sync point is the session's birth: the first turn back carries everything.
+ */
+export function reroutedSessionMeta(
+  reroute: SessionReroute | undefined,
+  meta?: JsonObject | null,
+  now: Date = new Date(),
+): JsonObject | undefined {
+  if (!reroute) return meta ?? undefined;
+  return {
+    ...(meta ?? {}),
+    engineOverride: {
+      originalEngine: reroute.from,
+      originalEngineSessionId: null,
+      originalModel: reroute.model,
+      until: reroute.until.toISOString(),
+      syncSince: now.toISOString(),
+    },
   };
 }
 
@@ -170,7 +207,7 @@ function parkedOverride(override: Record<string, unknown>): ParkedOverride | nul
 
 /** The transport meta a restored session carries: the spent record gone, and the
  *  sync marker in its place when the engine coming back is the one that needs it. */
-function revertedMeta(meta: Record<string, unknown>, session: Session, parked: ParkedOverride): Record<string, unknown> {
+function revertedMeta(meta: Record<string, unknown>, session: Session, parked: ParkedOverride, thread: string | null): Record<string, unknown> {
   const next = { ...meta };
   // Whatever the session ran on in between (another engine, another account, or
   // claude itself handed the turn back by an exhausted chain), claude's own thread
@@ -180,6 +217,12 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
     // The prompt's sync intro names what happened: another account, not another engine.
     if (accountOverride(session)) next["claudeSyncAccount"] = true;
     else delete next["claudeSyncAccount"];
+  } else if (parked.syncSince && !thread) {
+    // Any other engine coming back with no thread of its own — a session that
+    // was started on the stand-in never ran on it — would open a blank
+    // conversation, so it gets the same transcript an engine switch does.
+    next["engineSyncTarget"] = parked.engine;
+    next["engineSyncSince"] = parked.syncSince;
   }
   delete next["engineOverride"];
   return next;
@@ -213,12 +256,17 @@ export function maybeRevertEngineOverride(session: Session): Session {
     ? nextEngineSessionFields(session, session.engine, session.engineSessionId)
     : {};
 
+  const thread = restoredThread(session, meta, parked);
+  logger.info(
+    `Session ${session.id}: ${parked.engine}'s stand-in window ended at ${parked.until.toISOString()} — `
+    + `moving back from ${session.engine} to ${parked.engine}${parked.model ? ` (model: ${parked.model})` : ""}`,
+  );
   return updateSession(session.id, {
     ...preserved,
     engine: parked.engine,
-    engineSessionId: restoredThread(session, meta, parked),
+    engineSessionId: thread,
     ...(parked.model !== undefined ? { model: parked.model } : {}),
-    transportMeta: revertedMeta(meta, session, parked) as never,
+    transportMeta: revertedMeta(meta, session, parked, thread) as never,
     lastError: null,
   }) ?? session;
 }

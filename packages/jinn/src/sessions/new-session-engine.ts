@@ -1,9 +1,13 @@
-import type { Employee, Engine, JinnConfig } from "../shared/types.js";
+import type { Employee, Engine, JinnConfig, JsonObject } from "../shared/types.js";
 import { engineAvailable, engineSupportsRemote, type EngineName } from "../shared/models.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { substituteHealth } from "./rate-limit-account.js";
-import { engineHealthForTarget, preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
+import {
+  engineHealthForTarget, exhaustedEngineReturnsAt, preferHealthySessionEngine, readEngineHealth, type EngineHealthReading,
+} from "../shared/engine-health.js";
+import { logger } from "../shared/logger.js";
+import { reroutedSessionMeta } from "./engine-override.js";
 
 /** What a routed turn brought with it about where the session should run. */
 export interface NewSessionEnginePreference {
@@ -31,38 +35,64 @@ function inheritedDefaults(
 }
 
 /**
- * The engine, model and effort level a NEW routed session starts on.
- *
- * An engine the caller named wins, and so does a named model — a model belongs
- * to exactly one engine. Anything else is a preference, so an engine whose
- * allowance is spent gives way to the first member of its chain that can serve
- * the turn.
+ * The engine a session that preferred `preferred` should start on, and the
+ * health reading that decided it. An engine the caller named wins, and so does
+ * a named model — a model belongs to exactly one engine — so neither is reordered.
  */
-export function newSessionEngineSelection(
+function healthyStart(
   config: JinnConfig,
   engines: Map<string, Engine>,
   preference: NewSessionEnginePreference,
-): { engine: EngineName; model?: string; effortLevel?: string } {
-  const preferred = (preference.engine ?? preference.employee?.engine ?? config.engines.default) as EngineName;
+  preferred: EngineName,
+): { engine: EngineName; health: EngineHealthReading } {
   const named = preference.engine !== undefined || preference.model !== undefined;
+  // A local named Claude profile is its own account (FR-056): its session starts where it
+  // prefers, whatever the default account's health says; a rate limit then walks its own chain.
+  const ownAccount = preferred === "claude" && resolveEmployeeClaudeProfile(preference.employee) !== null;
+  if (named || ownAccount) return { engine: preferred, health: {} };
   // A remote employee's preference may only be reordered within the engines that
   // can actually run on its host. Rerouting it onto one that ignores
   // `remoteHost` would start the session on an engine whose every turn the
   // remote gate then refuses — a session that looks started and can never run.
   const remote = isRemoteTarget(preference.employee);
-  // A local named Claude profile is its own account (FR-056): its session starts where it
-  // prefers, whatever the default account's health says; a rate limit then walks its own chain.
-  const ownAccount = preferred === "claude" && resolveEmployeeClaudeProfile(preference.employee) !== null;
-  const engine = named || ownAccount
-    ? preferred
-    : preferHealthySessionEngine(
-      config,
-      preferred,
-      (candidate) => engines.has(candidate) && engineAvailable(config, candidate)
-        && (!remote || engineSupportsRemote(candidate)),
-      // Scoped to the machine this session will actually run on: a login that
-      // died on the gateway is no reason to move a remote employee's session.
-      substituteHealth(engineHealthForTarget(readEngineHealth(), preference.employee), preference.employee),
-    );
-  return { engine, ...inheritedDefaults(preference, engine !== preferred) };
+  // Scoped to the machine this session will actually run on: a login that
+  // died on the gateway is no reason to move a remote employee's session.
+  const health = substituteHealth(engineHealthForTarget(readEngineHealth(), preference.employee), preference.employee);
+  const engine = preferHealthySessionEngine(
+    config,
+    preferred,
+    (candidate) => engines.has(candidate) && engineAvailable(config, candidate)
+      && (!remote || engineSupportsRemote(candidate)),
+    health,
+  );
+  return { engine, health };
+}
+
+/**
+ * The engine, model and effort level a NEW routed session starts on.
+ *
+ * Anything the caller did not name is a preference, so an engine whose
+ * allowance is spent gives way to the first member of its chain that can serve
+ * the turn — and the session remembers what it preferred, so it goes back once
+ * that allowance returns instead of staying on the stand-in.
+ */
+export function newSessionEngineSelection(
+  config: JinnConfig,
+  engines: Map<string, Engine>,
+  preference: NewSessionEnginePreference,
+  transportMeta?: JsonObject | null,
+): { engine: EngineName; model?: string; effortLevel?: string; transportMeta?: JsonObject } {
+  const preferred = (preference.engine ?? preference.employee?.engine ?? config.engines.default) as EngineName;
+  const { engine, health } = healthyStart(config, engines, preference, preferred);
+  if (engine === preferred) {
+    return { engine, ...inheritedDefaults(preference, false), ...(transportMeta ? { transportMeta } : {}) };
+  }
+  const until = exhaustedEngineReturnsAt(health, preferred);
+  logger.info(`Engine "${preferred}" is out of allowance — starting this session on "${engine}" instead, until ${until.toISOString()}`);
+  const model = inheritedDefaults(preference, false).model ?? null;
+  return {
+    engine,
+    ...inheritedDefaults(preference, true),
+    transportMeta: reroutedSessionMeta({ from: preferred, model, until }, transportMeta),
+  };
 }

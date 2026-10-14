@@ -128,14 +128,15 @@ export class SessionManager {
     if (!session && refuseScopedConnectorSession(msg, opts.employee?.name, connector)) return;
     if (!session) {
       session = createSession({
-        ...newSessionEngineSelection(this.config, this.engines, opts),
+        // The selection carries the transport meta: a session rerouted off a
+        // spent engine starts with the record that takes it back again.
+        ...newSessionEngineSelection(this.config, this.engines, opts, msg.transportMeta),
         source: msg.source,
         sourceRef: msg.sessionKey,
         connector: msg.connector,
         sessionKey: msg.sessionKey,
         replyContext: msg.replyContext,
         messageId: msg.messageId,
-        transportMeta: msg.transportMeta,
         employee: opts.employee?.name ?? undefined,
         title: opts.title,
         prompt: msg.text,
