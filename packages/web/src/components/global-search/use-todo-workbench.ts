@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type { Employee, WorkItemStatusWire } from "@/lib/api"
+import { withMentionRoot } from "@/lib/mentions"
 import { useAddTodoComment } from "@/routes/todos/use-todo-comment"
 import { useEmployeesByName, useOrg, useTodoById } from "@/routes/todos/use-todos"
 import { displayNameOf } from "@/routes/todos/util"
@@ -37,7 +38,8 @@ export interface TodoWorkbench {
   loading: boolean
   /** The gateway has answered, and there is no such Todo any more. */
   missing: boolean
-  /** The org's employees, for the composer's @mention picker. */
+  /** Who the composer's @mention picker offers: the org's employees, and the
+   *  portal when it is the org root. */
   employees: Employee[]
   /** The composer's @mention list is a picker too: it tells the overlay while it
    *  is up, so one Escape closes the list and nothing else. */
@@ -97,6 +99,7 @@ export function useTodoWorkbench(
   const org = useOrg()
   const employees = employeesOf(org.data)
   const byName = useEmployeesByName(employees)
+  const mentionables = useMemo(() => withMentionRoot(employees, org.data?.virtualRoot), [employees, org.data?.virtualRoot])
   const pickers = useTodoQuickPickers({
     detail,
     employees,
@@ -113,7 +116,7 @@ export function useTodoWorkbench(
     assignee: assignee ? displayNameOf(assignee, byName) : assignee,
     loading: detailQuery.isPending,
     missing: !detailQuery.isPending && !detail,
-    employees,
+    employees: mentionables,
     onPickerOpenChange,
     rowFor: pickers.rowFor,
     error: pickers.refusal.message,

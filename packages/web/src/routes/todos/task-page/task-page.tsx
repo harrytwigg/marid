@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/api"
 import { operatorSafeTodoError } from "@/lib/todos"
 import { isTodoId, todoPath } from "@/lib/todo-id"
 import { closeGateCounts } from "@/lib/legal-targets"
+import { withMentionRootByName } from "@/lib/mentions"
 import { copyText } from "@/platform"
 import { useDepartments } from "@/hooks/use-departments"
 import { useTheme } from "@/routes/providers"
@@ -416,7 +417,7 @@ export function TaskView({ todoId, embedded = false }: { todoId: string | undefi
               {detail && (
                 <ActivitySection
                   detail={detail}
-                  byName={byName}
+                  byName={withMentionRootByName(byName, org.data?.virtualRoot)}
                   mobile={mobile}
                   isDark={isDark}
                   announce={announce}

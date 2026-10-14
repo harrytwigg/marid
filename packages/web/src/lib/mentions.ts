@@ -1,4 +1,4 @@
-import type { Employee } from "@/lib/api"
+import type { Employee, MentionRoot } from "@/lib/api"
 
 /* The @mention token rule. The gateway wakes an employee from a comment by this
  * same rule, so the picker and the chip renderer read it from here and the page
@@ -45,6 +45,33 @@ export function scanMentions(prose: string): MentionToken[] {
 /** The people a mention can name: the org's employees, system ones left out. */
 export function mentionRoster(employees: Iterable<Employee>): Employee[] {
   return [...employees].filter((e) => !e.system)
+}
+
+/** The roster entry that stands for the portal when it is the org root: `name`
+ *  is the mention that wakes it, `displayName` is the portal's own name. */
+function mentionRootEntry(root: MentionRoot): Employee {
+  return { name: root.mention, displayName: root.name, department: "", rank: "executive", engine: "", model: "", persona: "" }
+}
+
+/** `employees` and, when the portal is the org root, the portal too, as a
+ *  roster entry named by its mention so the picker inserts it and the chip
+ *  renderer shows its name. An employee who answers to the same mention keeps
+ *  it — the gateway wakes the employee — so the root is left out then. */
+export function withMentionRoot(employees: Employee[], root: MentionRoot | null | undefined): Employee[] {
+  if (!root || employees.some((e) => e.name.toLowerCase() === root.mention)) return employees
+  return [...employees, mentionRootEntry(root)]
+}
+
+/** `byName` and, when the portal is the org root, the portal too under its
+ *  mention, so a comment body's `@` chips and the picker resolve it. For the
+ *  surfaces that already hold a name map rather than a list. */
+export function withMentionRootByName(
+  byName: Map<string, Employee>,
+  root: MentionRoot | null | undefined,
+): Map<string, Employee> {
+  if (!root || byName.has(root.mention)) return byName
+  const entry = mentionRootEntry(root)
+  return new Map([...byName, [entry.name, entry]])
 }
 
 /** The `@prefix` being typed at the caret, if any. `start` is the `@`. The

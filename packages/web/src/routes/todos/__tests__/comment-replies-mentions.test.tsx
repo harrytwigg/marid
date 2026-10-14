@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { Employee, WorkItemCommentWire, WorkItemDetailWire, WorkItemFullWire } from "@/lib/api"
+import type { Employee, MentionRoot, WorkItemCommentWire, WorkItemDetailWire, WorkItemFullWire } from "@/lib/api"
+import { withMentionRootByName } from "@/lib/mentions"
 import { comment } from "./fixtures/task-wire"
 
 /* Replying to any comment, the line that says whom a flattened reply answered,
@@ -47,7 +48,7 @@ const roster = new Map<string, Employee>(
   ].map((e) => [e.name, e]),
 )
 
-function renderThread(comments: WorkItemCommentWire[]) {
+function renderThread(comments: WorkItemCommentWire[], mentionRoot?: MentionRoot | null) {
   const detail = {
     workItem: item,
     spendUsd: 0,
@@ -57,7 +58,7 @@ function renderThread(comments: WorkItemCommentWire[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <ActivitySection detail={detail} byName={roster} mobile={false} announce={vi.fn()} />
+      <ActivitySection detail={detail} byName={withMentionRootByName(roster, mentionRoot)} mobile={false} announce={vi.fn()} />
     </QueryClientProvider>,
   )
 }
@@ -241,5 +242,30 @@ describe("mention chips in a comment body", () => {
   it("matches case-insensitively", async () => {
     renderThread([comment("c", "@Test-Lead?", T1)])
     expect((await screen.findByTestId("employee-mention")).textContent).toBe("Test Lead")
+  })
+})
+
+describe("the virtual org root", () => {
+  const coo = { name: "COO", mention: "coo" }
+
+  it("is offered by the picker under its mention, and chips under the portal's name", async () => {
+    const user = userEvent.setup()
+    renderThread([comment("c", "@coo can you look?", T1)], coo)
+    await user.type(await screen.findByTestId("composer-input"), "@c")
+
+    const options = within(screen.getByTestId("mention-picker")).getAllByRole("option")
+    expect(options.map((o) => o.getAttribute("data-testid"))).toEqual(["mention-option-coo"])
+    await user.keyboard("{Enter}")
+    expect((screen.getByTestId("composer-input") as HTMLTextAreaElement).value).toBe("@coo ")
+
+    const row = await screen.findByTestId("activity-comment-c")
+    expect(within(row).getByTestId("employee-mention").textContent).toBe("COO")
+  })
+
+  it("is not offered when the gateway names no virtual root", async () => {
+    const user = userEvent.setup()
+    renderThread([], null)
+    await user.type(await screen.findByTestId("composer-input"), "@c")
+    expect(screen.queryByTestId("mention-picker")).toBeNull()
   })
 })

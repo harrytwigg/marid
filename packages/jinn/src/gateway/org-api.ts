@@ -38,6 +38,7 @@ export async function orgPayload(context: ApiContext) {
 
   const { orgRegistry } = await import("./org-registry.js");
   const { resolveOrgHierarchy } = await import("./org-hierarchy.js");
+  const { virtualRootMention } = await import("./work-item-owner.js");
   const hierarchy = resolveOrgHierarchy(orgRegistry(context.getConfig()));
 
   return {
@@ -50,6 +51,8 @@ export async function orgPayload(context: ApiContext) {
       sorted: hierarchy.sorted,
       warnings: hierarchy.warnings,
     },
+    // The portal, when it is the org root, as a comment can `@mention` it; null otherwise.
+    virtualRoot: virtualRootMention(),
   };
 }
 

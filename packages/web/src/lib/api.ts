@@ -112,12 +112,21 @@ export interface OrgHierarchy {
   warnings: OrgWarning[];
 }
 
+/** The portal as a comment `@mention`s it, when it is the org root: `name` as
+ *  the portal shows it, `mention` the lowercased slug that wakes it. */
+export interface MentionRoot {
+  name: string;
+  mention: string;
+}
+
 export interface OrgData {
   departments: string[];
   /** Each department's scope; older gateways omit it, and a department missing from it is open. */
   departmentScopes?: Record<string, "open" | "scoped" | "dedicated">;
   employees: Employee[];
   hierarchy: OrgHierarchy;
+  /** Absent from older gateways and from a department-scoped view. */
+  virtualRoot?: MentionRoot | null;
 }
 
 export class ApiError extends Error {
