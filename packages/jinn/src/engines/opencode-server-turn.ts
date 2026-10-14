@@ -823,12 +823,20 @@ export class OpencodeServerTurn {
     }
     const lines = runLinesFromMessages(messages, this.sessionId, this.userMessageId);
     const answer = lines.some(isAnswerLine);
-    // A reply left open is a dropped turn whatever it wrote, so it is settled
-    // (and its leftovers stopped) rather than reported as one that answered nothing.
-    const left = Boolean(this.ownReply) && !replyEnded(this.ownReply);
-    if (!answer && !this.missedIdle && !left) return;
+    if (!answer && !this.missedIdle && !(!unanswered && this.replyLeftOpen())) return;
     for (const line of lines) if (this.firstReport(line)) this.turn.readLine(line, this.onStream);
     await this.settleRecovered(answer);
+  }
+
+  /** Whether the turn's newest stored reply never completed and holds no error:
+   *  a dropped turn whether or not it wrote anything, so it is settled and its
+   *  leftovers stopped rather than reported as one that answered nothing. Only
+   *  the store can say so (a reply seen on the stream alone may belong to a
+   *  prompt still queued behind a busy session), and a reply that completed
+   *  without finishing its turn (a provider cut-off) keeps its own diagnostics. */
+  private replyLeftOpen(): boolean {
+    const reply = this.ownReply;
+    return Boolean(reply) && !record(reply!.time)?.completed && !reply!.error;
   }
 
   /** What a recovered turn's newest stored reply makes of it: a dropped turn,
@@ -837,7 +845,7 @@ export class OpencodeServerTurn {
     // The server says the session is idle, yet the turn's newest reply never
     // ended: the server dropped the turn (its instance was disposed or
     // restarted under it). Text the reply holds is a step's narration ("let me
-    // check …"), not an answer. That is a failed turn, not evidence the stream
+    // check …"), not an answer, and a reply with no text is that same dropped turn. That is a failed turn, not evidence the stream
     // changed shape, so the host keeps server mode and its server.
     if (!replyEnded(this.ownReply)) {
       this.failure = "the opencode server stopped running the turn before its reply finished";

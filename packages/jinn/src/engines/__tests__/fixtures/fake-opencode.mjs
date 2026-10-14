@@ -43,6 +43,8 @@
 //   IGNORENOTICE  with EARLIER: take the previous request up even so
 //   ORPHAN      the reply is left as a server killed mid-reply leaves it: never
 //               completed, no error; the session goes idle
+//   CUTOFF      the reply is completed by the provider cutting it off: finish
+//               "unknown", no text, no output tokens
 //   NARRATE     the reply first says what it is about to do and runs a tool
 //               (with ORPHAN: the narration a dropped turn leaves behind)
 //   DROPSTREAM  the turn narrates a step, then the host goes away: every event
@@ -191,6 +193,11 @@ function serve() {
       part(sessionID, turn, { type: "tool", callID: `call_${turn.userId}_narrate`, tool: "read", state: { status: "completed", input: { filePath: "config.yaml" }, output: "ok" } });
     }
     if (text.includes("ORPHAN")) return;
+    if (text.includes("CUTOFF")) {
+      part(sessionID, turn, { type: "step-finish", reason: "unknown", tokens: { input: 5, output: 0, cache: { read: 0, write: 0 } }, cost: 0 });
+      turn.cutOff = true;
+      return;
+    }
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
     if (text.includes("TOOLONLY")) {
@@ -290,7 +297,7 @@ function serve() {
       await runTurn(sessionID, turn);
       if (turn.reply && !turn.text.includes("ORPHAN") && !turn.endedItself) {
         turn.reply.info.time.completed = Date.now();
-        if (!turn.aborted && !turn.reply.info.error) turn.reply.info.finish = "stop";
+        if (!turn.aborted && !turn.reply.info.error) turn.reply.info.finish = turn.cutOff ? "unknown" : "stop";
         if (!turn.text.includes("NOIDLE") && !turn.text.includes("NOCOMPLETE")) messageUpdated(sessionID, turn.reply);
       }
       s.running = null;
