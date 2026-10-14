@@ -33,7 +33,7 @@ function cacheKey(bin: string): string | undefined {
 function probe(bin: string): Promise<string | undefined> {
   return new Promise((resolve) => {
     try {
-      execFile(bin, ["--version"], { timeout: PROBE_TIMEOUT_MS, env: { ...process.env, OPENCODE_DISABLE_AUTOUPDATE: "1" } }, (err, stdout) => {
+      execFile(bin, ["--version"], { timeout: PROBE_TIMEOUT_MS }, (err, stdout) => {
         resolve(err ? undefined : parseOpencodeVersion(String(stdout)));
       });
     } catch {
