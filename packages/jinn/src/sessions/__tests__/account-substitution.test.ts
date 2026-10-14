@@ -268,6 +268,6 @@ describe("an engine swap's revert after an account swap's sync marker was left b
     expire(s.id);
     const after = maybeRevertEngineOverride(reg.getSession(s.id)!);
     expect((after.transportMeta as Record<string, unknown>).claudeSyncAccount).toBeUndefined();
-    expect(syncPromptFor(after as never, "hello")).toMatch(/^We temporarily switched to GPT/);
+    expect(syncPromptFor(after as never, "hello")).toMatch(/^We temporarily ran this session on another engine/);
   });
 });

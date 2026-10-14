@@ -4,6 +4,7 @@ import type { Employee, Session, WorkItemLinkRole } from "../shared/types.js";
 import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
 import { claimSessionDelivery, claimSessionDeliveryWithinSourceLimit, createSession, enqueueQueueItem, insertMessage, updateSession } from "../sessions/registry.js";
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
+import { reroutedSessionMeta, type SessionReroute } from "../sessions/engine-override-window.js";
 import { resolveTodoDispatch } from "../work-items/dispatch-config.js";
 import { liveEmployeeSession, resolveEmployeeSession } from "../work-items/employee-sessions.js";
 import { linkSession } from "../work-items/store.js";
@@ -70,7 +71,7 @@ export type WakeEmployeeResult =
   | { ok: true; session: Session; started: boolean }
   | { ok: false; error: string };
 
-interface Spawn { engineName: string; model?: string; effortLevel?: string; prompt: string }
+interface Spawn { engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute; prompt: string }
 
 function employeeDefaults(employee: Employee): { engine: string; model: string; employee: string; effortLevel?: string } {
   return { engine: employee.engine, model: employee.model, employee: employee.name, ...(employee.effortLevel ? { effortLevel: employee.effortLevel } : {}) };
@@ -96,6 +97,7 @@ function planSpawn(context: ApiContext, input: WakeEmployeeInput): { ok: true; s
       engineName,
       model: selection.model,
       effortLevel: selection.effortLevel,
+      reroute: selection.reroute,
       prompt: override.prefix + input.message,
     },
   };
@@ -116,6 +118,7 @@ function createLinkedSession(context: ApiContext, input: WakeEmployeeInput, spaw
     prompt: spawn.prompt,
     title: input.title.slice(0, 200),
     portalName: context.getConfig().portal?.portalName,
+    transportMeta: reroutedSessionMeta(spawn.reroute),
   });
   linkSession(input.workItemId, session.id, input.actor, input.role);
   return session;

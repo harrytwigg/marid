@@ -128,14 +128,13 @@ export class SessionManager {
     if (!session && refuseScopedConnectorSession(msg, opts.employee?.name, connector)) return;
     if (!session) {
       session = createSession({
-        ...newSessionEngineSelection(this.config, this.engines, opts),
+        ...newSessionEngineSelection(this.config, this.engines, opts, msg.transportMeta),
         source: msg.source,
         sourceRef: msg.sessionKey,
         connector: msg.connector,
         sessionKey: msg.sessionKey,
         replyContext: msg.replyContext,
         messageId: msg.messageId,
-        transportMeta: msg.transportMeta,
         employee: opts.employee?.name ?? undefined,
         title: opts.title,
         prompt: msg.text,
@@ -156,7 +155,7 @@ export class SessionManager {
       }) ?? session;
     }
 
-    session = maybeRevertEngineOverride(session);
+    session = maybeRevertEngineOverride(session, opts.employee);
     this.queue.clearCancelled(msg.sessionKey);
 
     const target = connector.reconstructTarget(msg.replyContext);

@@ -1,6 +1,7 @@
 import type { JinnConfig } from "../shared/types.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
-import { preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
+import { exhaustedEngineReturnsAt, preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
+import type { SessionReroute } from "./engine-override-window.js";
 import { logger } from "../shared/logger.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { orgRegistry } from "../gateway/org-registry.js";
@@ -28,6 +29,10 @@ export interface NewSessionSelectionResult {
   engine?: string;
   model?: string;
   effortLevel?: string;
+  /** Set when a spent allowance moved the session off the engine it preferred:
+   *  the caller folds it into the new session's transport meta with
+   *  `reroutedSessionMeta`, so the session goes back once the window passes. */
+  reroute?: SessionReroute;
   error?: string;
 }
 
@@ -60,6 +65,7 @@ export function validateNewSessionSelection(
   // hands the preference back and the session starts where it would have.
   let defaultModel = defaults.model;
   let defaultEffortLevel = defaults.effortLevel;
+  let reroute: SessionReroute | undefined;
   // A local named Claude profile is its own account (FR-056): never reordered off the default account's health.
   const ownAccount = engine === "claude" && Boolean(defaults.employee)
     && resolveEmployeeClaudeProfile(orgRegistry().get(defaults.employee!)) !== null;
@@ -70,14 +76,19 @@ export function validateNewSessionSelection(
     // threaded through this path's four callers it also cannot apply the
     // remote-capability filter `newSessionEngineSelection` has — the same
     // missing argument, and the same fix.
+    const health = readEngineHealth();
     const healthy = preferHealthySessionEngine(
       config,
       engine,
       (candidate) => registry[candidate]?.available === true,
-      readEngineHealth(),
+      health,
     );
     if (healthy !== engine) {
-      logger.info(`Engine "${engine}" is out of allowance — starting this session on "${healthy}" instead`);
+      reroute = { from: engine, model: defaultModel?.trim() || null, until: exhaustedEngineReturnsAt(health, engine) };
+      logger.info(
+        `Engine "${engine}" is out of allowance — starting this session on "${healthy}" instead, `
+        + `until ${reroute.until.toISOString()}`,
+      );
       engine = healthy;
       // The model and effort level came with the engine we just moved off and
       // mean nothing on this one; the substitute runs on its own configured
@@ -164,7 +175,7 @@ export function validateNewSessionSelection(
     }
   }
 
-  return { ok: true, engine, model, effortLevel };
+  return { ok: true, engine, model, effortLevel, ...(reroute ? { reroute } : {}) };
 }
 
 export function validateSessionPatch(

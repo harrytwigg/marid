@@ -10,9 +10,11 @@
  */
 
 import { resolveEffort } from "../shared/effort.js";
+import { logger } from "../shared/logger.js";
 import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { isSpellableModelId } from "../shared/model-id.js";
 import { accountOverride } from "./session-account.js";
+import { extendSpentWindow } from "./engine-override-window.js";
 import { effortLevelsForModel, getModelRegistry } from "../shared/models.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import {
@@ -170,19 +172,38 @@ function parkedOverride(override: Record<string, unknown>): ParkedOverride | nul
 
 /** The transport meta a restored session carries: the spent record gone, and the
  *  sync marker in its place when the engine coming back is the one that needs it. */
-function revertedMeta(meta: Record<string, unknown>, session: Session, parked: ParkedOverride): Record<string, unknown> {
+function revertedMeta(meta: Record<string, unknown>, session: Session, parked: ParkedOverride, thread: string | null): Record<string, unknown> {
   const next = { ...meta };
   // Whatever the session ran on in between (another engine, another account, or
   // claude itself handed the turn back by an exhausted chain), claude's own thread
   // was left at the first swap, so it is caught up from there.
   if (parked.engine === "claude" && parked.syncSince) {
-    next["claudeSyncSince"] = parked.syncSince;
+    next["claudeSyncSince"] = earliestPending(meta["claudeSyncSince"], parked.syncSince);
     // The prompt's sync intro names what happened: another account, not another engine.
     if (accountOverride(session)) next["claudeSyncAccount"] = true;
     else delete next["claudeSyncAccount"];
+  } else if (parked.syncSince && !thread) {
+    // Any other engine coming back with no thread of its own — a session that
+    // was started on the stand-in never ran on it — would open a blank
+    // conversation, so it gets the same transcript an engine switch does.
+    const pending = meta["engineSyncTarget"] === parked.engine ? meta["engineSyncSince"] : undefined;
+    next["engineSyncTarget"] = parked.engine;
+    next["engineSyncSince"] = earliestPending(pending, parked.syncSince);
   }
   delete next["engineOverride"];
   return next;
+}
+
+/**
+ * The sync point an engine coming back is owed: the earlier of the one this swap
+ * parked and one an earlier return left unconsumed. A marker still on the row was
+ * never settled by a clean synced turn — the engine went back, was still limited,
+ * and the session swapped away again — so everything since it is still missing
+ * from the engine's conversation, not only what happened since the latest swap.
+ */
+function earliestPending(pending: unknown, parked: string): string {
+  const pendingMs = typeof pending === "string" ? Date.parse(pending) : NaN;
+  return Number.isFinite(pendingMs) && pendingMs < Date.parse(parked) ? pending as string : parked;
 }
 
 /** The thread the restored engine resumes. A chain that handed the turn back to
@@ -197,8 +218,9 @@ function restoredThread(session: Session, meta: Record<string, unknown>, parked:
 }
 
 /** Restore the pre-rate-limit engine, and the model that belonged to it, once the
- *  override window has expired. */
-export function maybeRevertEngineOverride(session: Session): Session {
+ *  override window has expired — or move the window out, when the engine is
+ *  known to be spent still. */
+export function maybeRevertEngineOverride(session: Session, employee?: Employee): Session {
   const meta = (session.transportMeta || {}) as Record<string, unknown>;
   const override = meta["engineOverride"] as Record<string, unknown> | undefined;
   if (!override) return session;
@@ -207,18 +229,26 @@ export function maybeRevertEngineOverride(session: Session): Session {
   if (!parked) return session;
   if (parked.until.getTime() > Date.now()) return session;
 
+  const extended = extendSpentWindow(session, meta, override, parked.engine, employee);
+  if (extended) return extended;
+
   // Park the fallback engine's own thread id under its typed ref before handing
   // the mirror back to the engine being restored.
   const preserved = session.engineSessionId
     ? nextEngineSessionFields(session, session.engine, session.engineSessionId)
     : {};
 
+  const thread = restoredThread(session, meta, parked);
+  logger.info(
+    `Session ${session.id}: ${parked.engine}'s stand-in window ended at ${parked.until.toISOString()} — `
+    + `moving back from ${session.engine} to ${parked.engine}${parked.model ? ` (model: ${parked.model})` : ""}`,
+  );
   return updateSession(session.id, {
     ...preserved,
     engine: parked.engine,
-    engineSessionId: restoredThread(session, meta, parked),
+    engineSessionId: thread,
     ...(parked.model !== undefined ? { model: parked.model } : {}),
-    transportMeta: revertedMeta(meta, session, parked) as never,
+    transportMeta: revertedMeta(meta, session, parked, thread) as never,
     lastError: null,
   }) ?? session;
 }

@@ -296,7 +296,7 @@ export function resolveSyncPrompt(
     ? "We switched engines in this Jinn session. Sync your context with this transcript (most recent last), then respond to the current message."
     : sync.accountSwap
       ? "We temporarily ran this session on another Claude account due to a usage limit. Sync your context with this transcript (most recent last), then respond to the current message."
-      : "We temporarily switched to GPT due to a Claude usage limit. Sync your context with this transcript (most recent last), then respond to the current message.";
+      : "We temporarily ran this session on another engine due to a Claude usage limit. Sync your context with this transcript (most recent last), then respond to the current message.";
 
   return {
     promptToRun: [intro, transcript, currentPrompt].filter(Boolean).join("\n\n"),
