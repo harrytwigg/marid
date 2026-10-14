@@ -49,6 +49,8 @@ describe("org routes still answer identically through handleOrgApi", () => {
         { ...SHAPER, claudeProfile: null },
       ],
       hierarchy: { root: null, sorted: ["worker", "todo-dispatcher", "todo-shaper"], warnings: [] },
+      // No executive, so the portal is the root, under the default portal name.
+      virtualRoot: { name: "Jinn", mention: "jinn" },
     });
   });
 
