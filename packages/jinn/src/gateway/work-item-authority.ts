@@ -3,7 +3,7 @@ import { isOrgAncestor, resolveOrgHierarchy } from "./org-hierarchy.js";
 import { orgRegistry } from "./org-registry.js";
 import type { WorkItemCaller } from "./work-item-arming.js";
 import { resolveOrgRoot, resolveWorkItemOwner } from "./work-item-owner.js";
-import { isPortalAgentSession } from "../sessions/registry.js";
+import { isPortalAgentSession, listSessionsByWorkItem } from "../sessions/registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
 import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
@@ -107,6 +107,9 @@ function isDispatcherRoutingTodo(session: Session, item: WorkItem): boolean {
  * hands that Todo on: another Todo, a second hand-off, or any other action goes
  * through the ordinary rule.
  *
+ * A hand-off that never started is not spent either: a caller whose own
+ * delegate on this Todo failed before its first turn may hand the Todo on again.
+ *
  * Whether the Todo is free to take is a separate question, answered by the
  * claim the delegation takes next, so none of these callers can start a second
  * attempt on top of a live one.
@@ -118,5 +121,22 @@ export function authorizeWorkItemDelegation(
   const created = item.sourceRef?.startsWith(`session:${caller.callerId}:`)
     || item.sourceRef?.startsWith(`delegate:${caller.callerId}:`);
   if (created || isDispatcherRoutingTodo(caller.session, item)) return { ok: true };
+  if (handedOffStillborn(caller.callerId, item)) return { ok: true };
   return authorizeWorkItemOwnerManagerOrRoot(caller, item, "delegate");
+}
+
+/**
+ * The Todo's latest execution attempt is this caller's own delegate, and it
+ * failed before completing a single turn, which is what a first turn refused
+ * at the gate leaves (an engine its department does not run, a missing
+ * binary, a spent budget). Such an attempt did no work, so it
+ * does not use up the caller's standing to hand the Todo on. An attempt that
+ * completed any turn, is still alive, or was superseded by somebody else's is
+ * the ordinary case, and the ordinary rule decides.
+ */
+function handedOffStillborn(callerId: string, item: WorkItem): boolean {
+  const latest = listSessionsByWorkItem(item.id)
+    .filter((session) => session.workItemRole !== 'review')
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  return latest?.parentSessionId === callerId && latest.status === 'error' && latest.totalTurns === 0;
 }
