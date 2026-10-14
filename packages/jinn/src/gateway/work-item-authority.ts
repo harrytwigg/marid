@@ -9,6 +9,8 @@ import { TODO_DISPATCHER_NAME } from "./system-employees.js";
 import type { Employee, Session } from "../shared/types.js";
 import { getWorkItemClaim } from "../work-items/claims.js";
 import type { WorkItem } from "../work-items/store.js";
+import { isExecutionAttempt } from "../work-items/link-role.js";
+import { neverReachedEngine } from "../sessions/engine-reach.js";
 
 /**
  * Who may act on a Todo when the caller is not the operator.
@@ -108,7 +110,8 @@ function isDispatcherRoutingTodo(session: Session, item: WorkItem): boolean {
  * through the ordinary rule.
  *
  * A hand-off that never started is not spent either: a caller whose own
- * delegate on this Todo failed before its first turn may hand the Todo on again.
+ * delegate on this Todo was refused before its engine ever ran may hand the
+ * Todo on again, once.
  *
  * Whether the Todo is free to take is a separate question, answered by the
  * claim the delegation takes next, so none of these callers can start a second
@@ -126,17 +129,23 @@ export function authorizeWorkItemDelegation(
 }
 
 /**
- * The Todo's latest execution attempt is this caller's own delegate, and it
- * failed before completing a single turn, which is what a first turn refused
- * at the gate leaves (an engine its department does not run, a missing
- * binary, a spent budget). Such an attempt did no work, so it
- * does not use up the caller's standing to hand the Todo on. An attempt that
- * completed any turn, is still alive, or was superseded by somebody else's is
- * the ordinary case, and the ordinary rule decides.
+ * A hand-off the caller may make again: the Todo's latest execution attempt is
+ * this caller's own delegate, every turn it ran was refused before its engine
+ * started (an engine its department does not run, a missing binary, a spent
+ * budget), so it did no work, and the Todo still sits with that delegate. Only
+ * once per caller and Todo: a second refused delegate means the cause persists,
+ * and retrying again would only loop.
+ *
+ * A delegate whose engine ran at all, even a turn that then threw, may have done
+ * work; that, a live delegate, a Todo reassigned since, or a later attempt by
+ * someone else is the ordinary case, and the ordinary rule decides.
  */
 function handedOffStillborn(callerId: string, item: WorkItem): boolean {
-  const latest = listSessionsByWorkItem(item.id)
-    .filter((session) => session.workItemRole !== 'review')
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-  return latest?.parentSessionId === callerId && latest.status === 'error' && latest.totalTurns === 0;
+  const attempts = listSessionsByWorkItem(item.id)
+    .filter(isExecutionAttempt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+  const latest = attempts[0];
+  if (!latest || latest.parentSessionId !== callerId || latest.status !== 'error') return false;
+  if (!neverReachedEngine(latest) || item.assignee !== latest.employee) return false;
+  return attempts.filter((session) => session.parentSessionId === callerId && neverReachedEngine(session)).length === 1;
 }

@@ -33,11 +33,13 @@ let registry: typeof import("../../sessions/registry.js");
 let workItems: typeof import("../../work-items/store.js");
 let dispatchConfig: typeof import("../../work-items/dispatch-config.js");
 let refreshOrg: typeof import("../org-registry.js").refreshOrg;
+let assignWorkItem: typeof import("../../work-items/assignment.js").assignWorkItem;
 
-/** Never answers: these tests read the rows a delegation writes, not a turn. */
+/** Never answers by default: most tests read the rows a delegation writes, not a turn. */
+let engineRun: () => Promise<never> = () => new Promise(() => {});
 const engineStub = {
   name: "stub",
-  run: () => new Promise(() => {}),
+  run: () => engineRun(),
   isAlive: () => false,
   kill: () => {},
   killAll: () => {},
@@ -119,9 +121,9 @@ function delegate(callerSessionId: string, workItemId: string, extra: Record<str
   return call("/api/delegations", { workItemId, employee: "lab-dev", task: BRIEF, ...extra }, callerSessionId);
 }
 
-/** The operator presses Dispatch on a Todo assigned to the scoped employee. */
-async function dispatchedTodo(title: string): Promise<{ id: string; dispatcherId: string }> {
-  const item = workItems.createWorkItem({ title, source: "human", status: "backlog", assignee: "lab-dev", department: "lab" });
+/** The operator presses Dispatch on a Todo assigned to the scoped employee, or to `assignee`. */
+async function dispatchedTodo(title: string, assignee = "lab-dev", department = "lab"): Promise<{ id: string; dispatcherId: string }> {
+  const item = workItems.createWorkItem({ title, source: "human", status: "backlog", assignee, department });
   const dispatched = await call(`/api/work-items/${item.id}/dispatch`, {});
   expect(dispatched.status).toBe(201);
   return { id: item.id, dispatcherId: dispatched.body.sessionId as string };
@@ -151,10 +153,12 @@ beforeAll(async () => {
   workItems = await import("../../work-items/store.js");
   dispatchConfig = await import("../../work-items/dispatch-config.js");
   ({ refreshOrg } = await import("../org-registry.js"));
+  ({ assignWorkItem } = await import("../../work-items/assignment.js"));
   dbModule.initDb();
   resetDepartmentFixtures();
   writeDepartmentFile("lab", "name: lab\nscope: scoped\n");
   writeEmployeeFile("lab", "lab-dev", { department: "lab" });
+  writeEmployeeFile("lab", "lab-lead", { department: "lab" });
   writeEmployeeFile("platform", "open-dev", { department: "platform" });
   refreshOrg();
   const { setJinnAttachGate } = await import("../../mcp/attachment.js");
@@ -168,6 +172,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   fs.rmSync(HEALTH_PATH, { force: true });
+  engineRun = () => new Promise(() => {});
 });
 
 describe("delegating to a department-scoped employee", () => {
@@ -219,19 +224,42 @@ describe("delegating to a department-scoped employee", () => {
   });
 });
 
-describe("a delegate that dies before its first turn", () => {
+describe("a delegate refused before its engine ever ran", () => {
   it("leaves the Todo re-delegatable by the same caller", async () => {
     const { id, dispatcherId } = await dispatchedTodo("Delegate refused at start");
     const first = await delegate(dispatcherId, id);
     expect(first.status).toBe(201);
     const dead = await settledInError(first.body.sessionId);
-    expect(dead.totalTurns).toBe(0);
+    expect(dead.transportMeta).toMatchObject({ engineReach: "never" });
 
     const again = await delegate(dispatcherId, id);
 
     expect(again.status).toBe(201);
     expect(again.body.sessionId).not.toBe(first.body.sessionId);
     expect(registry.getSession(again.body.sessionId)).toMatchObject({ employee: "lab-dev", parentSessionId: dispatcherId, workItemId: id });
+  });
+
+  it("is judged on the latest execution attempt, whatever consult sessions a mention linked since", async () => {
+    const { id, dispatcherId } = await dispatchedTodo("Delegate refused, then a mention");
+    const first = await delegate(dispatcherId, id);
+    await settledInError(first.body.sessionId);
+    const consulted = registry.createSession({ engine: "claude", source: "web", sourceRef: "consult:1", connector: "web", employee: "lab-lead", prompt: "x" });
+    workItems.linkSession(id, consulted.id, "test", "consult");
+
+    expect((await delegate(dispatcherId, id)).status).toBe(201);
+  });
+
+  it("gives that second chance once: a second refused delegate means the cause persists", async () => {
+    const { id, dispatcherId } = await dispatchedTodo("Delegate refused twice");
+    await settledInError((await delegate(dispatcherId, id)).body.sessionId);
+    const retried = await delegate(dispatcherId, id);
+    expect(retried.status).toBe(201);
+    await settledInError(retried.body.sessionId);
+
+    const third = await delegate(dispatcherId, id);
+
+    expect(third.status).toBe(403);
+    expect(third.body.error).toMatch(/employee "todo-dispatcher" does not own Todo/);
   });
 
   it("does not hand that second chance to anyone else", async () => {
@@ -246,13 +274,27 @@ describe("a delegate that dies before its first turn", () => {
     expect(refused.body.error).toMatch(/does not own Todo/);
   });
 
-  it("keeps the one-shot rule once the delegate has completed a turn", async () => {
-    const { id, dispatcherId } = await dispatchedTodo("Delegate ran a turn, then failed");
-    const first = await delegate(dispatcherId, id);
-    await settledInError(first.body.sessionId);
-    registry.accumulateSessionCost(first.body.sessionId, 0, 1);
+  it("does not override a reassignment made since", async () => {
+    const { id, dispatcherId } = await dispatchedTodo("Delegate refused, then reassigned");
+    await settledInError((await delegate(dispatcherId, id)).body.sessionId);
+    assignWorkItem(id, "lab-lead", "lab", "operator");
 
     const again = await delegate(dispatcherId, id);
+
+    expect(again.status).toBe(403);
+    expect(workItems.getWorkItem(id)?.assignee).toBe("lab-lead");
+  });
+
+  it("keeps the one-shot rule for a delegate whose engine ran, even when its first turn threw", async () => {
+    const { id, dispatcherId } = await dispatchedTodo("Delegate ran, then threw", "open-dev", "platform");
+    engineRun = () => Promise.reject(new Error("engine process exited unexpectedly"));
+    const first = await call("/api/delegations", { workItemId: id, employee: "open-dev", task: BRIEF }, dispatcherId);
+    expect(first.status).toBe(201);
+    const dead = await settledInError(first.body.sessionId);
+    expect(dead.totalTurns).toBe(0);
+    expect(dead.transportMeta).toMatchObject({ engineReach: "reached" });
+
+    const again = await call("/api/delegations", { workItemId: id, employee: "open-dev", task: BRIEF }, dispatcherId);
 
     expect(again.status).toBe(403);
     expect(again.body.error).toMatch(/employee "todo-dispatcher" does not own Todo/);

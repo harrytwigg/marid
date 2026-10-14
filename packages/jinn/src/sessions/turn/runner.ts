@@ -31,6 +31,7 @@ import {
 import { COMPACT_STARTED_STATUS } from "../compact-command.js";
 import { clearSupersededTurnMeta, isTurnSuperseded } from "./superseded.js";
 import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
+import { recordEngineReached } from "../engine-reach.js";
 
 /**
  * Run one turn, from preflight to terminal receipt, for every transport.
@@ -71,6 +72,7 @@ async function runTurnOnce(input: TurnInput, surface: TurnSurface): Promise<Turn
   }
 
   logger.info(`Session ${sessionId} running engine "${plan.engineName}" (model: ${plan.model || "default"})`);
+  recordEngineReached(sessionId);
   await surface.started();
   // A compaction streams nothing the chat shows, so say what is happening.
   if (plan.compaction) surface.delta({ type: "status", content: COMPACT_STARTED_STATUS });
