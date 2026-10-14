@@ -170,6 +170,8 @@ const ABORT_SETTLE_MS = 15_000;
 const ABORT_CONFIRM_MS = 1_500;
 const ABORT_POLL_MS = 150;
 const OUTPUT_MAX = 4 * 1024;
+/** How long after its MCP servers connect a 2.x server is first used (see v2WaitMcpReady). */
+const V2_MCP_SETTLE_MS = 1_000;
 
 /** The mode `engines.opencode.mode` names. Anything but `server` is `run`, so a
  *  typo falls back to the behaviour that existed before the option did. */
@@ -660,7 +662,7 @@ export class OpencodeServerPool {
     if (server.api !== 2 || !server.stagedApi) return;
     const names = Object.keys(buildOpencodeSessionConfig(spec.resolvedMcp)?.mcp ?? {});
     const left = Math.max(1_000, this.bootstrapTimeoutMs() - (Date.now() - since));
-    const missing = await v2WaitMcpReady(server, names, left);
+    const missing = await v2WaitMcpReady(server, names, { timeoutMs: left, settleMs: V2_MCP_SETTLE_MS });
     if (missing.length) logger.warn(`opencode server for session ${server.sessionId}: MCP server(s) not connected: ${missing.join(", ")}`);
   }
 

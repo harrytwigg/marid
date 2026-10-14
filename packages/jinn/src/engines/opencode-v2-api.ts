@@ -126,7 +126,7 @@ export async function v2AbortTurn(
   const deadline = Date.now() + timing.settleMs;
   let quietSince = 0;
   for (;;) {
-    await new Promise((resolve) => setTimeout(resolve, timing.pollMs));
+    await sleep(timing.pollMs);
     if ((await v2RunningSessions(server)).includes(target.engineSessionId)) {
       quietSince = 0;
       await v2Interrupt(server, target.engineSessionId);
@@ -145,20 +145,31 @@ export async function v2AbortTurn(
  * that asks about them: `GET /api/mcp` answers `[]` first, then `pending`,
  * then `connected` (2.0.29, about a second for a stdio server). A prompt sent
  * before that runs without their tools, so a server is not handed to a turn
- * until each one has connected, or failed, or the bound has passed. Returns
+ * until each one has connected, or failed, or the bound has passed, and then
+ * `settleMs` more: `connected` can come a moment before a new session's tools
+ * include the server's (a prompt straight after it went out without them in
+ * about 1 run in 12 on 2.0.28 and 2.0.29; with a 1 s settle, 0 in 15). Returns
  * the servers that did not connect.
  */
-export async function v2WaitMcpReady(server: V2Endpoint, names: string[], timeoutMs: number, pollMs = 200): Promise<string[]> {
-  const deadline = Date.now() + timeoutMs;
-  let notConnected = names;
+export async function v2WaitMcpReady(
+  server: V2Endpoint,
+  names: string[],
+  timing: { timeoutMs: number; settleMs: number; pollMs?: number },
+): Promise<string[]> {
+  const deadline = Date.now() + timing.timeoutMs;
   for (;;) {
     const listed = await v2Request(server, "GET", "/api/mcp").catch(() => []);
     const status = new Map((Array.isArray(listed) ? listed : []).map((m) => [str(record(m)?.name), str(record(record(m)?.status)?.status)]));
-    notConnected = names.filter((name) => status.get(name) !== "connected");
+    const notConnected = names.filter((name) => status.get(name) !== "connected");
     const settled = names.every((name) => status.has(name) && status.get(name) !== "pending");
+    if (settled && notConnected.length < names.length) await sleep(timing.settleMs);
     if (settled || Date.now() > deadline) return notConnected;
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
+    await sleep(timing.pollMs ?? 200);
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Change the notes Jinn keeps on a session (see opencode-v2-history.ts):

@@ -6,7 +6,7 @@
  *   MCPCALL   the same with the `jinn_echo` MCP tool (when it is offered)
  *   SLOW      streams forty words, 250 ms apart (time to stop the turn)
  *   E400ONCE  answers the first request 400 `{"model":…}` (a pre-stream 400)
- *   E429      answers 429 on the provider named by MOCK_LIMITED (default all)
+ *   E429      answers 429 under the URL prefix MOCK_LIMITED (default: everywhere)
  * Anything else answers "hello from mock". A compaction request answers with
  * a summary in the template opencode asks for; a request without tools (the
  * title) answers "Mock title".
