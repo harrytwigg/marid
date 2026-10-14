@@ -110,7 +110,7 @@ async function waitDelivered(h: Harness): Promise<void> {
   await new Promise((r) => setTimeout(r, 200));
 }
 
-const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS"];
+const ENV_HOOKS = ["FAKE_V2_OPERATOR_BUSY_MS", "FAKE_V2_LOG", "FAKE_V2_VERSION", "FAKE_V2_CLI_VERSION", "FAKE_V2_SERVE_FAIL", "FAKE_V2_HEARTBEAT_MS"];
 
 beforeEach(() => {
   for (const name of ENV_HOOKS) delete process.env[name];
@@ -419,6 +419,57 @@ describe("a prompt queued behind the operator's own input", { timeout: 30_000 },
   });
 });
 
+describe("an operator input that arrives while the turn runs", { timeout: 30_000 }, () => {
+  /** A first turn, so the session and its server exist for the operator to post into. */
+  async function sessionWithServer(h: Harness): Promise<string> {
+    const first = await h.engine.run(runOpts({ prompt: "hello" }));
+    expect(first.error).toBeUndefined();
+    return first.sessionId!;
+  }
+
+  it("steered in mid-turn (the default delivery) leaves the turn its own answer", async () => {
+    const h = harness();
+    const id = await sessionWithServer(h);
+    const turn = streamed(h, { resumeSessionId: id, prompt: "run it SLOWTOOL" });
+    await waitDelivered(h);
+    // As the terminal does: no delivery, which the server stores as a steer.
+    await call(h, `/api/session/${id}/prompt`, { method: "POST", body: { text: "operator aside" } });
+    const { result, deltas } = await turn;
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("tool done");
+    expect(result.numTurns).toBe(2);
+    expect(deltas.some((d) => d.type === "tool_result")).toBe(true);
+    // The operator's input was delivered inside the turn's execution, between its steps.
+    const items = (await call(h, `/api/session/${id}/message?limit=10&order=desc`)).body.data as any[];
+    const order = [...items].reverse().map((m) => (m.type === "user" ? `user:${m.text}` : m.type));
+    expect(order.slice(-5)).toEqual(["user:run it SLOWTOOL", "assistant", "user:operator aside", "assistant", "idle"]);
+  });
+
+  it("queued behind the turn is not taken for the turn's answer", async () => {
+    const h = harness();
+    const id = await sessionWithServer(h);
+    const turn = h.engine.run(runOpts({ resumeSessionId: id, prompt: "run it SLOWTOOL" }));
+    await waitDelivered(h);
+    await call(h, `/api/session/${id}/prompt`, { method: "POST", body: { text: "operator next", delivery: "queue" } });
+    const result = await turn;
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("tool done");
+  });
+
+  it("takes no part in the operator's own provider retries while the turn's prompt waits behind them", async () => {
+    SERVER_TURN_TIMING.retryGraceMs = 200;
+    const h = harness();
+    const id = await sessionWithServer(h);
+    // The operator's input is retrying its provider, far off, before the turn subscribes.
+    await call(h, `/api/session/${id}/prompt`, { method: "POST", body: { text: "RETRYLOOP" } });
+    await waitFor(async () => (await running(h)).length === 1);
+    const result = await h.engine.run(runOpts({ resumeSessionId: id, prompt: "after the operator" }));
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("fake:after the operator");
+    expect(result.rateLimit).toBeUndefined();
+  });
+});
+
 describe("what a turn answers to the server's questions", { timeout: 30_000 }, () => {
   it("grants a permission its own step asks for, once", async () => {
     const h = harness();
@@ -586,6 +637,20 @@ describe("/compact on an OpenCode 2 server", { timeout: 30_000 }, () => {
     expect(await sessionMetadata(h, first.sessionId!)).toBeUndefined();
   });
 
+  it("keeps a re-seed a turn without a system prompt could not send, for the next turn that can", async () => {
+    const h = harness();
+    const first = await h.engine.run(runOpts({ systemPrompt: "You are Ada." }));
+    await h.engine.run(runOpts({ resumeSessionId: first.sessionId, prompt: "/compact", systemPrompt: "You are Ada." }));
+    const bare = await h.engine.run(runOpts({ resumeSessionId: first.sessionId, prompt: "no system prompt" }));
+    expect(bare.result).toBe("fake:no system prompt");
+    expect(promptsOf(await logOf(h)).at(-1)!.body!.text).toBe("no system prompt");
+    expect(await sessionMetadata(h, first.sessionId!)).toEqual({ jinn: { reseed: true } });
+
+    await h.engine.run(runOpts({ resumeSessionId: first.sessionId, prompt: "with it", systemPrompt: "You are Ada." }));
+    expect(promptsOf(await logOf(h)).at(-1)!.body!.text).toBe(`${RESEED_PREAMBLE}\n\nYou are Ada.\n\n---\n\nwith it`);
+    expect(await sessionMetadata(h, first.sessionId!)).toBeUndefined();
+  });
+
   it("notes no re-seed when the turn has no system prompt", async () => {
     const h = harness();
     const first = await h.engine.run(runOpts());
@@ -688,6 +753,25 @@ describe("the config staged for an OpenCode 2 server", { timeout: 30_000 }, () =
     await streamed(h);
     expect((await logOf(h)).some((e) => e.path === "/api/mcp")).toBe(false);
     expect((await call(h, "/test/info")).body.config).toBeNull();
+  });
+});
+
+describe("a server whose API is not the one its config was staged for", { timeout: 30_000 }, () => {
+  it("is stopped and started again with the config in the shape of the API it speaks", async () => {
+    // `--version` cannot be read, so the binary counts as 1.x, but its server speaks 2.x.
+    process.env.FAKE_V2_CLI_VERSION = "none";
+    const log = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fake-v2-log-")), "verbs.log");
+    process.env.FAKE_V2_LOG = log;
+    const h = harness();
+    const { result } = await streamed(h, { resolvedMcp: COMPANY_MCP });
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("fake:build it");
+    const serves = fs.readFileSync(log, "utf8").split("\n").filter((l) => l.startsWith("serve"));
+    expect(serves).toHaveLength(2);
+    const server = h.pool.get("sess-1")!;
+    expect(server.api).toBe(2);
+    expect(server.stagedApi).toBe(2);
+    expect((await call(h, "/test/info")).body.config.mcp.servers.jinn).toMatchObject({ codemode: false });
   });
 });
 

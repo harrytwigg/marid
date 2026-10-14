@@ -104,6 +104,9 @@ export class OpencodeV2ServerTurn {
   private notes: JinnSessionNotes = { stopped: [], reseed: false };
   /** The input the session runs now is one of the turn's prompts. */
   private ownInput = false;
+  /** Inputs someone else queued (delivery `queue`) after the turn subscribed:
+   *  the ones whose delivery ends the turn's input (see onDelivered). */
+  private readonly queuedByOthers = new Set<string>();
   /** One of the turn's prompts has been delivered. */
   private delivered = false;
   /** Assistant messages (one per step) answering the turn. */
@@ -349,7 +352,7 @@ export class OpencodeV2ServerTurn {
       metadata: { ...JINN_V2_PROMPT_METADATA, ...(notices.length ? { notice: true } : {}) },
       delivery: "queue",
     });
-    if (this.notes.stopped.length || this.notes.reseed) await this.clearNotes();
+    await this.clearNotes(notices.length > 0);
   }
 
   /** What goes in front of the prompt: the system prompt again after a
@@ -362,10 +365,18 @@ export class OpencodeV2ServerTurn {
     ];
   }
 
-  /** The notes are in the prompt now. Best effort: kept, they are said again. */
-  private async clearNotes(): Promise<void> {
+  /** The notes this prompt carried are said now: clear those, and only those
+   *  (a re-seed a turn without a system prompt could not send stays due, as
+   *  does a stop noted since the turn read them). Best effort: kept, a note is
+   *  said again. */
+  private async clearNotes(sentAny: boolean): Promise<void> {
+    const sent = { stopped: this.notes.stopped, reseed: this.notes.reseed && Boolean(this.opts.systemPrompt) };
+    if (!sentAny || (!sent.stopped.length && !sent.reseed)) return;
     try {
-      await v2UpdateSessionNotes(this.server, this.sessionId, () => ({ stopped: [], reseed: false }));
+      await v2UpdateSessionNotes(this.server, this.sessionId, (notes) => ({
+        stopped: notes.stopped.filter((request) => !sent.stopped.includes(request)),
+        reseed: notes.reseed && !sent.reseed,
+      }));
     } catch (err) {
       logger.warn(`opencode server turn could not clear its notes on ${this.sessionId}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -495,7 +506,9 @@ export class OpencodeV2ServerTurn {
    *  fallback re-sent it, and its replies are the turn's. */
   private onEnqueued(data: Record<string, unknown>): void {
     const id = str(data.inboxID);
-    if (!id || this.prompts.has(id) || !this.posted || this.lastAnswer === "text" || !this.repeatsPrompt(record(data.item))) return;
+    const item = record(data.item);
+    if (id && !this.prompts.has(id) && item?.delivery === "queue") this.queuedByOthers.add(id);
+    if (!id || this.prompts.has(id) || !this.posted || this.lastAnswer === "text" || !this.repeatsPrompt(item)) return;
     this.prompts.add(id);
     this.currentPrompt = id;
     this.settle.cancel();
@@ -509,11 +522,33 @@ export class OpencodeV2ServerTurn {
       && record(payload?.metadata)?.jinn === undefined;
   }
 
-  /** The session started on an input: the steps after it answer that input. */
+  /**
+   * The session took up an input: the steps after it answer that input. Two
+   * deliveries do not move the session off the turn's input while it runs:
+   *
+   * - one steered in (`delivery: steer`, what a terminal or a client sending
+   *   no delivery uses): 2.x adds it to the running input at the next step,
+   *   and the model answers both there (verified on 2.0.29: a steer during a
+   *   tool call, then one reply after it, in the same execution);
+   * - one the turn never saw queued: anything queued before the turn's prompt
+   *   is delivered before it, so a foreign input delivered after it can only
+   *   have been steered.
+   *
+   * Only an input someone else queued after the turn's own ends it: that runs
+   * once the turn's reply is done.
+   */
   private onDelivered(data: Record<string, unknown>): void {
     const id = str(data.inboxID) ?? "";
-    this.ownInput = this.prompts.has(id);
-    if (this.ownInput) this.delivered = true;
+    if (this.prompts.has(id)) {
+      this.ownInput = true;
+      this.delivered = true;
+      return;
+    }
+    if (this.ownInput && !this.queuedByOthers.has(id)) {
+      logger.info(`opencode server turn in ${this.sessionId} continues with an input steered into it (${id})`);
+      return;
+    }
+    this.ownInput = false;
   }
 
   private onStepStarted(data: Record<string, unknown>): void {
@@ -578,8 +613,11 @@ export class OpencodeV2ServerTurn {
     if (this.settle.pending !== "idle") this.settle.arm("done", SERVER_TURN_TIMING.closeWaitMs);
   }
 
+  /** The session is running the turn's input: a session-wide event (a
+   *  retry, a failed execution) is the turn's. Not before its prompt is
+   *  delivered, when the session may be running someone else's. */
   private runsOwnReply(): boolean {
-    return !this.activeAssistant || this.own.has(this.activeAssistant) || this.ownInput;
+    return this.ownInput || this.own.has(this.activeAssistant);
   }
 
   private onSettled(kind: SettleKind): void {

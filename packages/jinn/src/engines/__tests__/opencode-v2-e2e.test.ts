@@ -149,6 +149,23 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
     expect(deltas.some((d) => d.type === "tool_result" && d.toolName === "jinn_echo" && d.content.includes("ECHO:staged-env"))).toBe(true);
   }, 120_000);
 
+  it("keeps its answer when the operator steers a message in while its tool runs", async () => {
+    const args = Buffer.from(JSON.stringify({ command: "sleep 3", description: "wait" })).toString("base64");
+    const running = turn(`wait CALLTOOL=shell ARGS64=${args}`);
+    await new Promise((r) => setTimeout(r, 1500));
+    // As the terminal sends it: no delivery, which 2.x takes as a steer.
+    const server = pool.get(sessionId)!;
+    const res = await fetch(`${server.apiUrl}/api/session/${resume}/prompt`, {
+      method: "POST",
+      headers: { authorization: `Basic ${Buffer.from(`opencode:${server.password}`).toString("base64")}`, "content-type": "application/json" },
+      body: JSON.stringify({ text: "operator aside" }),
+    });
+    expect(res.ok).toBe(true);
+    const { result } = await running;
+    expect(result.error).toBeUndefined();
+    expect(result.result).not.toBe("");
+  }, 60_000);
+
   it("switches the session's model when a turn names another", async () => {
     const { result } = await turn("which model", { model: "mock/m2" });
     expect(result.error).toBeUndefined();

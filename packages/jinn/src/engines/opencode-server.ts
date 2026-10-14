@@ -581,11 +581,14 @@ export class OpencodeServerPool {
 
   // ── Starting ─────────────────────────────────────────────────────────────
 
-  private async start(sessionId: string, spec: OpencodeServerSpec, fingerprint: string, restaged = false): Promise<OpencodeServer> {
+  /** `knownApi`: a restage (see stagedForAnotherApi), with the API the first
+   *  server reported. A local config is staged for it outright; a remote one
+   *  follows the host's facts, read again. */
+  private async start(sessionId: string, spec: OpencodeServerSpec, fingerprint: string, knownApi?: OpencodeApi): Promise<OpencodeServer> {
     const password = crypto.randomBytes(24).toString("base64url");
     const server = isRemoteTarget(spec)
       ? await this.spawnRemote(sessionId, spec, fingerprint, password)
-      : await this.spawnLocal(sessionId, spec, fingerprint, password);
+      : await this.spawnLocal(sessionId, spec, fingerprint, password, knownApi);
     this.servers.set(sessionId, server);
     // Adopted as busy, so neither cap can stop it while it is still starting.
     // A remote server is bounded by `maxIdleByHost` alone; only a local one also
@@ -599,7 +602,7 @@ export class OpencodeServerPool {
 
     await this.checkHealth(sessionId, server);
     if (await this.stagedForAnotherApi(server)) {
-      if (!restaged) return await this.start(sessionId, spec, fingerprint, true);
+      if (knownApi === undefined) return await this.start(sessionId, spec, fingerprint, server.api);
       throw new Error("opencode server did not start: its config could not be staged for the API it speaks");
     }
     const bootstrapStart = Date.now();
@@ -643,9 +646,10 @@ export class OpencodeServerPool {
   }
 
   /**
-   * The binary changed between the version read and the start (a remote host's
-   * facts are cached, and its opencode was upgraded since), so the config is in
-   * the other API's shape: the server is stopped and the host read again.
+   * The config is in the other API's shape: the version read before the start
+   * was wrong. A remote host's facts are cached, and its opencode may have been
+   * upgraded since; a local `--version` may have failed (read as 1.x). The
+   * server is stopped, and a remote host's facts read again.
    */
   private async stagedForAnotherApi(server: OpencodeServer): Promise<boolean> {
     if (!server.stagedApi || server.stagedApi === server.api) return false;
@@ -685,13 +689,14 @@ export class OpencodeServerPool {
     spec: OpencodeServerSpec,
     fingerprint: string,
     password: string,
+    knownApi?: OpencodeApi,
   ): Promise<OpencodeServer> {
     const bin = resolveBin("opencode", spec.bin || this.deps.bin?.());
     const port = await freeLocalPort();
     // A directory of its own, apart from the one a `run` turn stages: the
     // server reads it for its whole life, and a `run` turn deletes its copy
     // when it settles.
-    const api = opencodeApiOf(await localOpencodeVersion(bin));
+    const api = knownApi ?? opencodeApiOf(await localOpencodeVersion(bin));
     const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`, api);
     const env = {
       ...cleanEnv(sessionId, { disableFff: this.disableFff() }),

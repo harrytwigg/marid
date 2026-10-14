@@ -313,6 +313,7 @@ verified against 2.0.28 and 2.0.29:
   - The prompt goes to `POST /api/session/<id>/prompt` under an id the turn makes, with `delivery: queue`. If the operator's own prompt is running in the session, the turn's waits for it.
 - **Ownership.**
   - 2.x names the input each step answers: `session.inbox.delivered` gives the input, and every step event gives its assistant message. The steps after the turn's prompt is delivered are the turn's.
+  - An input steered in while the turn runs keeps the turn going. That is what the terminal sends, and what a client gets with no `delivery` at all. 2.x hands it to the running input at its next step, and the model answers both there, so the turn's answer can address it too. Only an input someone else queued after the turn's prompt ends the turn's ownership, and that runs once the turn's reply is done.
   - An execution ends with an explicit outcome: `session.execution.succeeded`, `failed` or `interrupted`. That plays the role of 1.x's idle, with the same short settle wait for a turn that has no text answer yet.
   - The 30-second status poll reads `GET /api/session/active`.
 - **Approvals and questions.**

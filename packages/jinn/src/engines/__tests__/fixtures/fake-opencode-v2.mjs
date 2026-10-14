@@ -31,12 +31,15 @@
 // Turn behaviour is steered by the directive words in the prompt text AFTER ITS
 // LAST `---` (Jinn puts its notices and the system prompt before it):
 //   TOOL        one shell tool step (finish tool-calls), then the text "tool done"
+//   SLOWTOOL    the same, with a tool that runs 1.5 s (time to steer an input in)
 //   SLOW        a text step that takes 2 s
 //   HANG        the step runs until interrupted
 //   FAIL        step.failed and execution.failed {type: provider.invalid-request, status: 400}
 //   RETRY       retry.scheduled 200 ms ahead, then a successful step on the same
 //               assistantMessageID
 //   RETRYFAR    retry.scheduled with `at` an hour ahead, then nothing until interrupted
+//   RETRYLOOP   five retry.scheduled an hour ahead, 200 ms apart, then the step
+//               ends and the text `fake:retryloop` answers
 //   FALLBACK    session.model.selected (a fallback model), retry.scheduled, a step
 //               on the fallback model with the same assistantMessageID that answers,
 //               execution.succeeded, then model.selected back
@@ -60,6 +63,8 @@
 //   FAKE_V2_LOG               a file each verb appends `<verb> <args>` to
 //   FAKE_V2_HEARTBEAT_MS      how often the event stream sends its `: heartbeat` comment (default 10 s)
 //   FAKE_V2_VERSION           what --version and /api/info report (default 2.0.29)
+//   FAKE_V2_CLI_VERSION       what --version alone reports instead ("none": it
+//                             fails, as an unreadable binary does)
 //   FAKE_V2_SERVE_FAIL=1      `serve` exits at once
 // GET /test/log returns the requests the server saw ({at, method, path, body}),
 // GET /test/info how it was started (argv, the OPENCODE_CONFIG file's contents).
@@ -76,7 +81,9 @@ const flag = (name) => {
 if (process.env.FAKE_V2_LOG) fs.appendFileSync(process.env.FAKE_V2_LOG, `${`${verb} ${argv.slice(1).join(" ")}`.trim()}\n`);
 
 if (verb === "--version") {
-  process.stdout.write(`opencode v${VERSION}\n`);
+  const cli = process.env.FAKE_V2_CLI_VERSION ?? VERSION;
+  if (cli === "none") process.exit(1);
+  process.stdout.write(`opencode v${cli}\n`);
   process.exit(0);
 }
 if (verb !== "serve") {
@@ -383,9 +390,22 @@ function serve() {
     return await textStep(s, "fake:noidle", { noEnd: true });
   }
 
-  async function toolTurn(s) {
-    const first = await toolStep(s, {});
-    return first === "ok" ? await textStep(s, "tool done") : first;
+  /** Inputs steered in while an input runs join it at the next step: they
+   *  are delivered there, and the steps after answer them as well (2.0.29). */
+  function deliverSteered(s) {
+    while (s.inbox[0]?.delivery === "steer") {
+      const item = s.inbox.shift();
+      s.items.push({ id: item.id, time: { created: now() }, type: "user", text: item.payload.text });
+      publish("session.inbox.delivered", { sessionID: s.id, inboxID: item.id });
+    }
+  }
+
+  async function toolTurn(s, d) {
+    const slow = has(d, "SLOWTOOL");
+    const first = await toolStep(s, slow ? { during: async () => { await sleep(s, 1500); } } : {});
+    if (first !== "ok") return first;
+    deliverSteered(s);
+    return await textStep(s, "tool done");
   }
 
   async function hangTurn(s) {
@@ -395,14 +415,26 @@ function serve() {
     return failAborted(s, item);
   }
 
+  async function retryLoopTurn(s) {
+    const item = startStep(s);
+    for (let attempt = 2; attempt < 7; attempt++) {
+      publish("session.retry.scheduled", { sessionID: s.id, assistantMessageID: item.id, attempt, at: Date.now() + 3_600_000, error: RATE_LIMIT });
+      if (await sleep(s, 200)) return failAborted(s, item);
+    }
+    endStep(s, item, "stop");
+    return await textStep(s, "fake:retryloop");
+  }
+
   /** The directives, in the order they are tried. */
   const DIRECTIVES = [
     ["TOOL", toolTurn],
+    ["SLOWTOOL", toolTurn],
     ["SLOW", (s) => textStep(s, "fake:slow", { waitMs: 2000 })],
     ["HANG", hangTurn],
     ["FAIL", failTurn],
     ["RETRY", retryTurn],
     ["RETRYFAR", retryFarTurn],
+    ["RETRYLOOP", retryLoopTurn],
     ["FALLBACK", fallbackTurn],
     ["PERMISSION", permissionTurn],
     ["QUESTION", questionTurn],
@@ -517,7 +549,8 @@ function serve() {
         id: body.id,
         type: "user",
         payload: { text: body.text, ...(body.metadata ? { metadata: body.metadata } : {}) },
-        delivery: body.delivery === "steer" ? "steer" : "queue",
+        // 2.0.29 stores a prompt posted with no delivery as a steer.
+        delivery: body.delivery === "queue" ? "queue" : "steer",
       });
       setImmediate(() => void execution(s));
       return data(res, inboxInfo(s, item));
