@@ -63,6 +63,8 @@
 // every v1 route answers 200 text/html, as its SPA fallback does, and only
 // GET /api/info reports the version; FAKE_OPENCODE_API_INFO_DROP=1 drops the
 // first /api/info connection unanswered);
+// FAKE_OPENCODE_ENV_LOG names a file each `serve`, `run` and `attach` appends
+// `<verb> <OPENCODE_DISABLE_FFF or empty>` to;
 // FAKE_OPENCODE_RUN_LOG names a file each `run` appends its argv to as one JSON line; FAKE_OPENCODE_SERVE_LOG names a file each
 // `serve` start appends a line to; FAKE_OPENCODE_CREATE_DELAY_MS delays the
 // answer to POST /session; FAKE_OPENCODE_HISTORY_DELAY_MS delays the answer
@@ -82,6 +84,7 @@ const flag = (name) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : undefined;
 };
+if (process.env.FAKE_OPENCODE_ENV_LOG) fs.appendFileSync(process.env.FAKE_OPENCODE_ENV_LOG, `${verb} ${process.env.OPENCODE_DISABLE_FFF ?? ""}\n`);
 const emitLine = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
 async function readStdin() {

@@ -58,11 +58,22 @@ engines:
     bin: opencode          # optional — PATH-resolved when absent
     model: anthropic/claude-sonnet-5
     fallback: [pi]         # engines to try when opencode cannot serve a turn
+    disableFff: true       # default; false lets opencode run its file indexer
 ```
 
 Model ids are opencode's own `provider/model` form, exactly as `opencode models` prints them. The model half may contain further slashes (`openrouter/meta-llama/llama-4`); only the first one is structural.
 
 **No effort levels.** opencode has a `--variant` flag for provider-specific reasoning effort, but reports no list of which models accept which variants — so jinn offers no effort picker for opencode rather than offering one that silently does nothing.
+
+### The file indexer (`disableFff`)
+
+opencode bundles an fff file indexer and watcher that pegs a CPU on a work root with many nested repos or worktrees (anomalyco/opencode#50719; still present on opencode 1.19.0). By default (`disableFff` true, or absent) Marid sets `OPENCODE_DISABLE_FFF=1` on every opencode process it starts: `run` turns and servers in server mode, the terminal view's attach client, locally and over SSH. A host wrapper script around the `opencode` binary that exports the variable is no longer needed (and `opencode upgrade` overwrites such a wrapper anyway).
+
+`disableFff: false` means only that Marid does not set the variable. One that the gateway inherits from its own environment is not stripped, since Marid's environment scrub leaves operator `OPENCODE_DISABLE_*` settings alone.
+
+The option is read each time a process is spawned, so a hot reload applies to the next process. A server that is already running keeps the environment it started with until it is restarted (it stops when it goes idle, or when you stop the session's server).
+
+The option can be dropped once opencode bundles `@ff-labs/fff-bun` >= 0.11, or anomalyco/opencode#50719 is fixed.
 
 ### Usage limits
 

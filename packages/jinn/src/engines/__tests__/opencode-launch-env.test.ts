@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { cleanEnv, localOpencodeLaunch } from "../opencode-launch.js";
+import { cleanEnv, localOpencodeLaunch, opencodeProcessEnv } from "../opencode-launch.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 
 /**
@@ -37,7 +37,7 @@ describe("cleanEnv — opencode's inherited session env", () => {
   it("drops the parent session's config, password and pid, then stamps its own", () => {
     for (const [key, value] of Object.entries(PARENT)) vi.stubEnv(key, value);
 
-    const env = cleanEnv("sess-B");
+    const env = cleanEnv("sess-B", { disableFff: true });
 
     for (const key of Object.keys(PARENT)) expect(env[key], key).toBeUndefined();
     expect(env.JINN_SESSION_ID).toBe("sess-B");
@@ -49,7 +49,7 @@ describe("cleanEnv — opencode's inherited session env", () => {
     vi.stubEnv("OPENCODE_CONFIG_DIR", "/home/me/.config/opencode");
     vi.stubEnv("OPENCODE_CONFIG", PARENT.OPENCODE_CONFIG);
 
-    const env = cleanEnv("sess-B");
+    const env = cleanEnv("sess-B", { disableFff: true });
 
     expect(env.OPENCODE_CONFIG_DIR).toBe("/home/me/.config/opencode");
     expect(env.OPENCODE_CONFIG).toBeUndefined();
@@ -62,7 +62,7 @@ describe("localOpencodeLaunch — a staged config wins over an inherited one", (
   it("leaves OPENCODE_CONFIG unset for a session with no MCP servers", () => {
     vi.stubEnv("OPENCODE_CONFIG", PARENT.OPENCODE_CONFIG);
 
-    expect(localOpencodeLaunch(baseOpts(), "sess-B").env.OPENCODE_CONFIG).toBeUndefined();
+    expect(localOpencodeLaunch(baseOpts(), "sess-B", { disableFff: true }).env.OPENCODE_CONFIG).toBeUndefined();
   });
 
   it("sets the session's own staged path when it has servers", () => {
@@ -71,10 +71,31 @@ describe("localOpencodeLaunch — a staged config wins over an inherited one", (
     const plan = localOpencodeLaunch(
       baseOpts({ resolvedMcp: { mcpServers: { jinn: { command: "node", args: ["server.js"] } } } as never }),
       "sess-B",
+      { disableFff: true },
     );
 
     expect(plan.configHandle?.staged).toBe(true);
     expect(plan.env.OPENCODE_CONFIG).toBe(plan.configHandle?.staged ? plan.configHandle.configPath : undefined);
     expect(plan.env.OPENCODE_CONFIG).not.toBe(PARENT.OPENCODE_CONFIG);
+  });
+});
+
+describe("OPENCODE_DISABLE_FFF", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("is set when disableFff is on and not when it is off", () => {
+    expect(opencodeProcessEnv({ disableFff: true })).toEqual({ OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_FFF: "1" });
+    expect(opencodeProcessEnv({ disableFff: false })).toEqual({ OPENCODE_DISABLE_AUTOUPDATE: "1" });
+  });
+
+  it("reaches a local run's env only when on", () => {
+    expect(localOpencodeLaunch(baseOpts(), "sess-B", { disableFff: true }).env.OPENCODE_DISABLE_FFF).toBe("1");
+    expect(localOpencodeLaunch(baseOpts(), "sess-B", { disableFff: false }).env.OPENCODE_DISABLE_FFF).toBeUndefined();
+  });
+
+  it("is not stripped from the gateway's own environment when off", () => {
+    vi.stubEnv("OPENCODE_DISABLE_FFF", "1");
+
+    expect(cleanEnv("sess-B", { disableFff: false }).OPENCODE_DISABLE_FFF).toBe("1");
   });
 });
