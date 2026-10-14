@@ -427,3 +427,28 @@ describe("a remote host whose opencode was upgraded since its facts were read", 
     expect(pool.size()).toBe(0);
   });
 });
+
+describe("the command ceiling on a remote server", () => {
+  function poolWith(commandTimeoutMs: number) {
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, commandTimeoutMs: () => commandTimeoutMs });
+    return new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool, commandTimeoutMs: () => commandTimeoutMs });
+  }
+  const serverCommand = () => hoisted.spawns.find((s) => s.kind === "server")!.args.at(-1)!;
+
+  it("has the plugin staged on the host and passes the ceiling to the server it starts there", async () => {
+    const result = await poolWith(900_000).run(runOpts());
+    expect(result.error).toBeUndefined();
+    // The host's own staging lists the plugin (its shape: remote-employee-env.test.ts).
+    expect(hoisted.prepareCalls[0]).toMatchObject({ opencodeCommandTimeout: true });
+    expect(serverCommand()).toContain("JINN_OPENCODE_COMMAND_TIMEOUT_MS='900000'");
+  });
+
+  it("stages no plugin and passes no ceiling when it is off", async () => {
+    const result = await poolWith(0).run(runOpts());
+    expect(result.error).toBeUndefined();
+    expect(hoisted.prepareCalls[0]).not.toHaveProperty("opencodeCommandTimeout");
+    expect(serverCommand()).not.toContain("JINN_OPENCODE_COMMAND_TIMEOUT_MS");
+  });
+});
+
