@@ -205,6 +205,8 @@ beforeEach(() => {
         publish("message.part.updated", { sessionID: id, part: { sessionID: id, messageID: reply, type: "step-start" } });
         if (hoisted.hangTurn) return;
         publish("message.part.updated", { sessionID: id, part: { sessionID: id, messageID: reply, type: "text", text: "done over there", time: { start: 1, end: 2 } } });
+        // The reply finishes before the session goes idle, as opencode's does.
+        publish("message.updated", { sessionID: id, info: { id: reply, sessionID: id, role: "assistant", parentID, time: { created: 1, completed: 2 }, finish: "stop" } });
         hoisted.busy.delete(id);
         publish("session.status", { sessionID: id, status: { type: "idle" } });
         publish("session.idle", { sessionID: id });
@@ -287,6 +289,15 @@ describe("opencode server mode on a remote host", () => {
     const post = hoisted.fetches.find((f) => f.url.endsWith("/prompt_async"));
     expect(post?.body).toContain(`${REMOTE_HOME}/uploads/2026-10-02/sess-1/diagram.png`);
     expect(post?.body).not.toContain(JINN_HOME);
+  });
+
+  it("a turn whose attachment cannot be staged releases its hold on the server", async () => {
+    const { engine, pool } = setup();
+    const missing = path.join(JINN_HOME, "uploads", "2026-10-02", "sess-1", "gone.png");
+    await expect(engine.run(runOpts({ attachments: [missing] }))).rejects.toThrow();
+    expect(pool.get("sess-1")).toBeDefined();
+    // A hold left behind would keep the next turn for another spec waiting.
+    expect(pool.holdCount("sess-1", "turn")).toBe(0);
   });
 
   it("stages the password into the 0600 env file and never onto a command line", async () => {

@@ -43,6 +43,8 @@
 //   IGNORENOTICE  with EARLIER: take the previous request up even so
 //   ORPHAN      the reply is left as a server killed mid-reply leaves it: never
 //               completed, no error; the session goes idle
+//   NARRATE     the reply first says what it is about to do and runs a tool
+//               (with ORPHAN: the narration a dropped turn leaves behind)
 //   DROPSTREAM  the turn narrates a step, then the host goes away: every event
 //               stream it was serving ends and nothing more is delivered
 //   FAILSTART   the prompt fails with a session.error before any reply exists
@@ -54,7 +56,8 @@
 //               1.18.34 emit for a pre-stream 400: session.error, idle, the
 //               failed reply's message.updated (completed, error, no finish),
 //               idle again. ORDER=<err|idle|msg,...> emits those instead, in
-//               the order given.
+//               the order given. LAGSTORE: the store does not hold the
+//               failure yet (the reply stays open there).
 // Directives are read from the prompt's own text only, never from a synthetic
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
@@ -183,6 +186,10 @@ function serve() {
       turn.endedItself = true;
       return;
     }
+    if (text.includes("NARRATE")) {
+      part(sessionID, turn, { type: "text", text: "Let me check the config first.", time: { start: 1, end: 2 } });
+      part(sessionID, turn, { type: "tool", callID: `call_${turn.userId}_narrate`, tool: "read", state: { status: "completed", input: { filePath: "config.yaml" }, output: "ok" } });
+    }
     if (text.includes("ORPHAN")) return;
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
@@ -258,8 +265,10 @@ function serve() {
     part(sessionID, turn, { type: "text", text: "Let me verify x before y.", time: { start: 1, end: 2 } });
     toolRound(sessionID, turn, 1);
     const error = { name: "APIError", data: { message: 'Bad Request: {"model":"mock-model"}', statusCode: 400, isRetryable: false } };
-    turn.reply.info.error = error;
-    turn.reply.info.time.completed = Date.now();
+    if (!turn.text.includes("LAGSTORE")) {
+      turn.reply.info.error = error;
+      turn.reply.info.time.completed = Date.now();
+    }
     turn.endedItself = true;
     const emit = {
       err: () => publish("session.error", { sessionID, error }),

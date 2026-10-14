@@ -211,6 +211,21 @@ export function noAnswerReason(reply: Record<string, unknown> | undefined): stri
   return `${base} (${finish ? `its reply finished "${finish}"` : "its reply never finished"}${written})`;
 }
 
+/** Whether a reply has ended: finished its turn, or failed. A reply completed
+ *  between steps (finish "tool-calls") has not: its next step never came. */
+function replyEnded(reply: Record<string, unknown> | undefined): boolean {
+  return Boolean(reply && (replyIsDone(reply) || record(reply.error)));
+}
+
+/** What makes a `run` line a repeat: a tool part at the same status, or a
+ *  text part with the same text. Other lines are never repeats. */
+function reportKey(line: { type: string; part?: Record<string, unknown> }): string | undefined {
+  const part = line.part;
+  if (line.type === "tool_use") return `tool:${str(part?.callID) ?? str(part?.id)}:${str(record(part?.state)?.status)}`;
+  if (line.type === "text") return `text:${str(part?.id)}:${str(part?.text)}`;
+  return undefined;
+}
+
 /** A line that answers the turn: its text, or its error. */
 function isAnswerLine(line: string): boolean {
   return /^\{"type":"(text|error)"/.test(line);
@@ -514,15 +529,18 @@ export class OpencodeServerTurn {
   private settled = false;
   private resolveDone!: () => void;
   private readonly done = new Promise<void>((resolve) => { this.resolveDone = resolve; });
-  /** Tool calls already reported at a given status, so a part re-sent at the
-   *  same status (the server resends on every metadata change) is not doubled. */
-  private readonly toolSeen = new Set<string>();
+  /** Tool calls already reported at a given status, and text parts already
+   *  reported, so a part re-sent unchanged (the server resends on every
+   *  metadata change) is not doubled. */
+  private readonly seen = new Set<string>();
   private interrupting?: Promise<void>;
   /** The prompt's POST, while in flight; `posted` once the server has it. */
   private posting?: Promise<unknown>;
   private posted = false;
   /** A text or error line reached the parser from the stream. */
   private answered = false;
+  /** An error line did: the turn's own error, whatever its reply's state. */
+  private streamErred = false;
   /** The status poll, not the stream, noticed the turn end. */
   private missedIdle = false;
   private statusPoll?: NodeJS.Timeout;
@@ -596,7 +614,17 @@ export class OpencodeServerTurn {
     if (this.statusPoll) clearInterval(this.statusPoll);
     // The stream dropped mid-turn: the server may still be working on it.
     if (this.failure && !this.terminationReason) await this.stopOnServer();
-    if (!this.failure && !this.terminationReason && (!this.answered || this.missedIdle)) await this.recover();
+    if (!this.failure && !this.terminationReason && this.needsStore()) await this.recover();
+  }
+
+  /** The stream alone cannot say how the turn ended: it carried no answer, it
+   *  never said the turn ended, or it ended on the idle with the turn's newest
+   *  reply still open — any text it carried is then an earlier step's
+   *  narration unless the store shows the reply finished. An error it carried
+   *  settles that: opencode stores a failed reply's error after the idle, so
+   *  the store may not hold it yet. */
+  private needsStore(): boolean {
+    return !this.answered || this.missedIdle || (this.newestOwnOpen && !this.streamErred);
   }
 
   private async fail(err: unknown): Promise<void> {
@@ -797,17 +825,30 @@ export class OpencodeServerTurn {
     const answer = lines.some(isAnswerLine);
     if (!answer && !this.missedIdle) return;
     for (const line of lines) if (this.firstReport(line)) this.turn.readLine(line, this.onStream);
-    // The server says the session is idle, yet the reply holds neither an
-    // answer nor an error: the server dropped the turn (its instance was
-    // disposed or restarted under it). That is a failed turn, not evidence the
-    // stream changed shape, so the host keeps server mode and its server.
-    if (!answer) {
+    await this.settleRecovered(answer);
+  }
+
+  /** What a recovered turn's newest stored reply makes of it: a dropped turn,
+   *  its own error, or an answer the stream missed. */
+  private async settleRecovered(answer: boolean): Promise<void> {
+    // The server says the session is idle, yet the turn's newest reply never
+    // ended: the server dropped the turn (its instance was disposed or
+    // restarted under it). Text the reply holds is a step's narration ("let me
+    // check …"), not an answer. That is a failed turn, not evidence the stream
+    // changed shape, so the host keeps server mode and its server.
+    if (!replyEnded(this.ownReply)) {
       this.failure = "the opencode server stopped running the turn before its reply finished";
       // Whatever of the prompt is still queued or running over there must not
       // carry on unattended beside the session's next turn.
       await this.stopOnServer();
       return;
     }
+    // Drift is a finished reply's answer the stream did not carry, or a turn
+    // end it never announced. A reply that failed is the turn's error, and a
+    // reply's last update can simply arrive after the idle's grace period
+    // (see onIdle), so a stream that did carry the answer is not drift.
+    const streamMissedIt = !this.answered || this.missedIdle;
+    if (!answer || !streamMissedIt || !replyIsDone(this.ownReply!)) return;
     this.deps.onProtocolDrift?.(
       this.missedIdle
         ? "the turn ended without the stream saying so"
@@ -973,6 +1014,7 @@ export class OpencodeServerTurn {
   private feed(line: string | undefined): void {
     if (!line || !this.firstReport(line)) return;
     if (isAnswerLine(line)) this.answered = true;
+    if (line.startsWith('{"type":"error"')) this.streamErred = true;
     this.turn.readLine(line, this.onStream);
   }
 
@@ -1004,13 +1046,14 @@ export class OpencodeServerTurn {
     void this.answer(`${base}/${encodeURIComponent(requestId)}${verb}`, body);
   }
 
-  /** False for a tool part already reported at this status. */
+  /** False for a tool part already reported at this status, or a text part
+   *  already reported with this text (the stream resends parts, and a
+   *  recovery reads back what the stream carried). */
   private firstReport(line: string): boolean {
-    const parsed = JSON.parse(line) as { type: string; part?: Record<string, unknown> };
-    if (parsed.type !== "tool_use") return true;
-    const key = `${str(parsed.part?.callID) ?? str(parsed.part?.id)}:${str(record(parsed.part?.state)?.status)}`;
-    if (this.toolSeen.has(key)) return false;
-    this.toolSeen.add(key);
+    const key = reportKey(JSON.parse(line) as { type: string; part?: Record<string, unknown> });
+    if (key === undefined) return true;
+    if (this.seen.has(key)) return false;
+    this.seen.add(key);
     return true;
   }
 
