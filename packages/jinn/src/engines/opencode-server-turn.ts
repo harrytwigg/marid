@@ -823,7 +823,10 @@ export class OpencodeServerTurn {
     }
     const lines = runLinesFromMessages(messages, this.sessionId, this.userMessageId);
     const answer = lines.some(isAnswerLine);
-    if (!answer && !this.missedIdle) return;
+    // A reply left open is a dropped turn whatever it wrote, so it is settled
+    // (and its leftovers stopped) rather than reported as one that answered nothing.
+    const left = Boolean(this.ownReply) && !replyEnded(this.ownReply);
+    if (!answer && !this.missedIdle && !left) return;
     for (const line of lines) if (this.firstReport(line)) this.turn.readLine(line, this.onStream);
     await this.settleRecovered(answer);
   }
