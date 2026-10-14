@@ -122,10 +122,11 @@ import type { EngineRunOpts } from "../../shared/types.js";
 const REMOTE_CONFIG = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
 const GATEWAY_PORT = 8722;
 
-function setup() {
+function setup(disableFff?: () => boolean) {
+  const fff = disableFff ? { disableFff } : {};
   const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
-  const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT });
-  const engine = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool });
+  const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, ...fff });
+  const engine = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool, ...fff });
   return { pool, engine };
 }
 
@@ -256,6 +257,16 @@ describe("opencode server mode on a remote host", () => {
       expect(f.auth).toBe(auth);
     }
     expect(pool.get("sess-1")?.hostKey).toBe("build-box");
+  });
+
+  it("starts the remote server with OPENCODE_DISABLE_FFF by default", async () => {
+    await setup().engine.run(runOpts());
+    expect(hoisted.spawns.find((s) => s.kind === "server")!.args.at(-1)).toContain("OPENCODE_DISABLE_FFF='1'");
+  });
+
+  it("starts the remote server without OPENCODE_DISABLE_FFF when the option is off", async () => {
+    await setup(() => false).engine.run(runOpts());
+    expect(hoisted.spawns.find((s) => s.kind === "server")!.args.at(-1)).not.toContain("OPENCODE_DISABLE_FFF");
   });
 
   it("names an attachment by the path the server's host sees it at, not the gateway's", async () => {

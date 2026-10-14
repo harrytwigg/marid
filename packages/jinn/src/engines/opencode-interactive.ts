@@ -11,7 +11,7 @@ import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyVie
 import type { OpencodeEngine } from "./opencode.js";
 import type { OpencodeServer, OpencodeServerPool, OpencodeServerSpec } from "./opencode-server.js";
 import { buildOpencodeViewArgs } from "./opencode-protocol.js";
-import { cleanEnv, REMOTE_ENV_DENY } from "./opencode-launch.js";
+import { cleanEnv, opencodeProcessEnv, REMOTE_ENV_DENY } from "./opencode-launch.js";
 import { buildSshSpawnArgs, remoteNodeDir, remoteSessionBinDir } from "./remote-stage.js";
 
 /** Why the view refuses in `run` mode. The dashboard hides the toggle then
@@ -44,6 +44,8 @@ export interface OpencodeInteractiveDeps {
   resolveMcp?: (sessionId: string) => ResolvedMcpConfig | undefined;
   /** `engines.opencode.bin`. */
   bin?: () => string | undefined;
+  /** `engines.opencode.disableFff`, read per spawn. Absent means on. */
+  disableFff?: () => boolean;
 }
 
 /**
@@ -380,13 +382,14 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
       `OpenCode terminal attaching for session ${sessionId} to ${server.hostKey} ${server.hostUrl} `
       + `(opencode session: ${engineSessionId ?? "none yet"})`,
     );
+    const disableFff = this.deps.disableFff?.() ?? true;
     const where = server.remote;
     if (!where) {
       return pty.spawn(server.bin, args, {
         name: "xterm-256color",
         ...size,
         cwd: server.cwd,
-        env: { ...cleanEnv(sessionId), TERM: "xterm-256color", OPENCODE_SERVER_PASSWORD: server.password },
+        env: { ...cleanEnv(sessionId, { disableFff }), TERM: "xterm-256color", OPENCODE_SERVER_PASSWORD: server.password },
       });
     }
     const sshArgs = buildSshSpawnArgs({
@@ -395,7 +398,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
       gatewayPort: 0,
       reverseTunnel: false,
       remoteCwd: where.remoteCwd,
-      remoteEnv: { JINN_HOME: where.staging.sessionHome, JINN_SESSION_ID: sessionId, OPENCODE_DISABLE_AUTOUPDATE: "1" },
+      remoteEnv: { JINN_HOME: where.staging.sessionHome, JINN_SESSION_ID: sessionId, ...opencodeProcessEnv({ disableFff }) },
       // Carries OPENCODE_SERVER_PASSWORD, staged when the server started.
       envFile: where.staging.envFilePath,
       unsetRemoteEnv: REMOTE_ENV_DENY,
@@ -408,7 +411,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
       name: "xterm-256color",
       ...size,
       cwd: JINN_HOME,
-      env: { ...cleanEnv(sessionId), TERM: "xterm-256color" },
+      env: { ...cleanEnv(sessionId, { disableFff }), TERM: "xterm-256color" },
     });
   }
 

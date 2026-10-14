@@ -1,3 +1,4 @@
+import http from "node:http";
 import type { CompactionStats, EngineResult, EngineRunOpts } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { basicAuthHeader, type OpencodeServer } from "./opencode-server.js";
@@ -100,11 +101,15 @@ export class OpencodeServerCompaction {
 
   async run(): Promise<EngineResult> {
     const sessionId = this.opts.resumeSessionId || "";
+    // Once summarize is out the server has the session, so a failure from here
+    // on did not lose the conversation. numTurns says so: zero turns and zero
+    // cost is what `isDeadSessionError` reads as a stale resume id.
+    const kept = () => (this.posted ? { numTurns: 1 } : {});
     try {
       return await this.compact(sessionId);
     } catch (err) {
-      if (this.terminationReason) return { sessionId, result: "", error: this.terminationReason };
-      return { sessionId, result: "", error: `opencode compaction failed: ${err instanceof Error ? err.message : String(err)}` };
+      if (this.terminationReason) return { sessionId, result: "", error: this.terminationReason, ...kept() };
+      return { sessionId, result: "", error: `opencode compaction failed: ${err instanceof Error ? err.message : String(err)}`, ...kept() };
     } finally {
       this.settled = true;
     }
@@ -119,7 +124,7 @@ export class OpencodeServerCompaction {
     if (this.terminationReason) return { sessionId, result: "", error: this.terminationReason };
 
     this.posted = true;
-    const done = await this.request("POST", `${route}/summarize`, { ...model, auto: false },
+    const done = await postAwaitingAnswer(this.server, `${route}/summarize`, { ...model, auto: false },
       AbortSignal.any([this.controller.signal, AbortSignal.timeout(COMPACTION_TIMEOUT_MS)]));
     if (done !== true) throw new Error(`summarize answered ${JSON.stringify(done)?.slice(0, 200)}`);
     logger.info(`opencode compaction summarized session ${sessionId} (${model.providerID}/${model.modelID})`);
@@ -212,4 +217,43 @@ export class OpencodeServerCompaction {
     if (!text) return undefined;
     try { return JSON.parse(text); } catch { return text; }
   }
+}
+
+/**
+ * A POST whose answer only comes once the server has finished the work —
+ * summarize answers when the summary is written, which on a long session with
+ * a slow model takes minutes. Not `fetch`: Node's fetch gives up on any
+ * response whose headers take longer than 300 s ("fetch failed"), whatever
+ * signal it is given, and a summarize that took longer was reported as failed
+ * while the server went on to finish it. `signal` is the only bound.
+ */
+export function postAwaitingAnswer(server: OpencodeServer, route: string, body: unknown, signal: AbortSignal): Promise<unknown> {
+  const payload = JSON.stringify(body);
+  return new Promise((resolve, reject) => {
+    const req = http.request(`${server.apiUrl}${route}`, {
+      method: "POST",
+      headers: {
+        authorization: basicAuthHeader(server.password),
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(payload),
+      },
+      signal,
+    }, (res) => {
+      let text = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk: string) => { text += chunk; });
+      res.on("error", reject);
+      res.on("end", () => {
+        const status = res.statusCode ?? 0;
+        if (status < 200 || status >= 300) {
+          reject(new Error(`POST ${route} answered ${status}${text ? `: ${text.slice(0, 300)}` : ""}`));
+          return;
+        }
+        if (!text) return resolve(undefined);
+        try { resolve(JSON.parse(text)); } catch { resolve(text); }
+      });
+    });
+    req.on("error", reject);
+    req.end(payload);
+  });
 }

@@ -93,7 +93,7 @@ describe("a gateway that itself runs inside an employee's session", () => {
   });
 
   it("gives each engine's session its own employee, or none", () => {
-    expectEmployeeEnv("opencode", cleanEnv);
+    expectEmployeeEnv("opencode", (id) => cleanEnv(id, { disableFff: true }));
     expectEmployeeEnv("codex", (id) => codexChildEnv(process.env, id));
     expectEmployeeEnv("claude", (id) => (new InteractiveClaudeEngine(lifecycle, { register() {}, unregister() {} } as never) as any).buildPtyEnv(id));
   });
@@ -102,7 +102,7 @@ describe("a gateway that itself runs inside an employee's session", () => {
 describe("the environment each engine spawns with", () => {
   it("opencode (turn, server and terminal view start from this)", () => {
     const id = session("opencode", "build-dev");
-    const plan = localOpencodeLaunch({ prompt: "hi", cwd: process.cwd(), sessionId: id } as never, id);
+    const plan = localOpencodeLaunch({ prompt: "hi", cwd: process.cwd(), sessionId: id } as never, id, { disableFff: true });
     expect(plan.env.JINN_EMPLOYEE).toBe("build-dev");
   });
 

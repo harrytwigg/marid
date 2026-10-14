@@ -26,9 +26,11 @@ import {
   MIN_OPENCODE_SERVER_VERSION,
   opencodeMode,
   serverFingerprint,
+  UNSUPPORTED_RETRY_MS,
   unsupportedVersionReason,
 } from "../opencode-server.js";
-import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
+import { noAnswerReason, SERVER_TURN_TIMING } from "../opencode-server-turn.js";
+import { needsStandalone } from "../opencode-version.js";
 import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
 import { HELD_FOR_TURN_NOTICE, OpencodeInteractiveEngine, OPENCODE_VIEW_NEEDS_SERVER_MODE } from "../opencode-interactive.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
@@ -56,11 +58,11 @@ interface Harness {
 
 let harnesses: Harness[] = [];
 
-function harness(limits: OpencodeServerConfig = {}): Harness {
+function harness(limits: OpencodeServerConfig = {}, disableFff?: () => boolean): Harness {
   let mode: OpencodeMode = "server";
   const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
-  const pool = new OpencodeServerPool(lifecycle, { limits: () => limits, bin: () => FAKE });
-  const engine = new OpencodeEngine({ mode: () => mode, servers: pool });
+  const pool = new OpencodeServerPool(lifecycle, { limits: () => limits, bin: () => FAKE, ...(disableFff ? { disableFff } : {}) });
+  const engine = new OpencodeEngine({ mode: () => mode, servers: pool, ...(disableFff ? { disableFff } : {}) });
   const h = { lifecycle, pool, engine, setMode: (m: OpencodeMode) => { mode = m; }, limits };
   harnesses.push(h);
   return h;
@@ -96,6 +98,7 @@ beforeEach(() => {
   delete process.env.FAKE_OPENCODE_SERVE_FAIL;
   delete process.env.FAKE_OPENCODE_VERSION;
   delete process.env.FAKE_OPENCODE_SERVE_LOG;
+  delete process.env.FAKE_OPENCODE_ENV_LOG;
   delete process.env.FAKE_OPENCODE_CREATE_DELAY_MS;
   delete process.env.FAKE_OPENCODE_HISTORY_DELAY_MS;
   delete process.env.FAKE_OPENCODE_PATCH_FAIL;
@@ -570,7 +573,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     await waitFor(async () => (await stored()).length === 4);
     // Jinn's own reply ends with no text, so the error would be all it reported.
     const result = await h.engine.run(runOpts({ prompt: "TOOLONLY jinn", resumeSessionId: first.sessionId }));
-    expect(result.error).toBe("opencode exited successfully without a final assistant response");
+    expect(result.error).toMatch(/^the opencode server ended the turn without a final assistant response \(/);
     expect(result.numTurns).toBe(2);
     // Only meaningful if the operator's reply failed while the turn listened:
     // the turn subscribes before it posts, so its post must precede that failure.
@@ -584,7 +587,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     // It may yet run (QA round 2 ): PromptNotRun is only for an idle session.
     const h = harness();
     const result = await h.engine.run(runOpts({ prompt: "GHOSTIDLE jinn" }));
-    expect(result.error).toBe("opencode exited successfully without a final assistant response");
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response (no reply to its prompt)");
   });
 
   it("an interrupt while a resumed turn reads the history posts nothing", async () => {
@@ -783,10 +786,10 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
       expect(deltas.filter((d) => d.type === "tool_result").map((d) => d.content)).toEqual(["out-1", "out-2"]);
     });
 
-    it("ends a turn whose last step is a tool call with no text, as `opencode run` reports it", async () => {
+    it("ends a turn whose last step is a tool call with no text as a turn without an answer", async () => {
       const h = harness();
       const result = await h.engine.run(runOpts({ prompt: "TOOLONLY work" }));
-      expect(result.error).toBe("opencode exited successfully without a final assistant response");
+      expect(result.error).toBe("the opencode server ended the turn without a final assistant response (its reply finished \"stop\")");
       expect(result.numTurns).toBe(2);
       expect(h.pool.unsupportedReason("local")).toBeUndefined();
     });
@@ -944,6 +947,57 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
   });
 });
 
+describe("OPENCODE_DISABLE_FFF on a spawned opencode", { timeout: 20_000 }, () => {
+  const envLog = () => path.join(JINN_HOME, "fff-env.log");
+  const seen = () => (fs.existsSync(envLog()) ? fs.readFileSync(envLog(), "utf8").split("\n").filter(Boolean) : []);
+
+  beforeEach(() => {
+    fs.rmSync(envLog(), { force: true });
+    process.env.FAKE_OPENCODE_ENV_LOG = envLog();
+    vi.stubEnv("OPENCODE_DISABLE_FFF", undefined);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("a run turn and a server carry it by default", async () => {
+    const h = harness();
+    await h.engine.run(runOpts());
+    h.setMode("run");
+    await h.engine.run(runOpts({ sessionId: "sess-2" }));
+    expect(seen().sort()).toEqual(["run 1", "serve 1"]);
+  });
+
+  it("neither carries it when the option is off, read for each spawn", async () => {
+    let on = false;
+    const h = harness({}, () => on);
+    await h.engine.run(runOpts());
+    h.setMode("run");
+    await h.engine.run(runOpts({ sessionId: "sess-2" }));
+    expect(seen().sort()).toEqual(["run ", "serve "]);
+
+    on = true;
+    await h.engine.run(runOpts({ sessionId: "sess-3" }));
+    expect(seen().at(-1)).toBe("run 1");
+  });
+
+  it("the terminal view's client carries it by default and not when off", async () => {
+    for (const [on, expected] of [[true, "attach 1"], [false, "attach "]] as const) {
+      fs.rmSync(envLog(), { force: true });
+      const h = harness({}, () => on);
+      const v = new OpencodeInteractiveEngine(h.engine, h.pool, { mode: () => "server", bin: () => FAKE, resolveMcp: () => MCP_A, disableFff: () => on });
+      const sub = v.subscribeWithSnapshot("sess-1", () => {}, () => {});
+      sub.start();
+      await h.engine.run(runOpts({ resolvedMcp: MCP_A }));
+      v.ensureIdleSpawn("sess-1", { cwd: JINN_HOME, cols: 100, rows: 30 });
+      await waitFor(() => seen().some((l) => l.startsWith("attach")));
+      expect(seen().filter((l) => l.startsWith("attach"))).toEqual([expected]);
+      v.killAll();
+      sub.unsubscribe();
+      h.engine.killAll();
+      await h.pool.stopAll();
+    }
+  });
+});
+
 describe("OpencodeEngine in server mode — /compact", { timeout: 20_000 }, () => {
   type LogEntry = { method: string; url: string; body: Record<string, unknown> };
   type Stored = { info: { role: string; summary?: boolean }; parts: Array<{ type: string; text?: string; synthetic?: boolean; metadata?: Record<string, unknown> }> };
@@ -1051,6 +1105,85 @@ describe("OpencodeEngine in server mode — /compact", { timeout: 20_000 }, () =
   });
 });
 
+describe("a server lost under a turn: a clear failure, and the conversation survives", { timeout: 20_000 }, () => {
+  const dead = async (result: Awaited<ReturnType<OpencodeEngine["run"]>>) =>
+    (await import("../../shared/rateLimit.js")).isDeadSessionError(result);
+
+  it("a server stopped mid-turn (reaped, replaced, killed) fails the turn and keeps its resume id", async () => {
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const turn = h.engine.run(runOpts({ prompt: "HANG work", resumeSessionId: first.sessionId }));
+    await waitFor(async () => (await api<Record<string, unknown>>(h.pool, "sess-1", "/session/status")).body?.[first.sessionId] !== undefined);
+    await h.pool.stop("sess-1");
+    const result = await turn;
+    expect(result.error).toMatch(/event stream/);
+    expect(result.sessionId).toBe(first.sessionId);
+    expect(await dead(result)).toBe(false);
+  });
+
+  it("a reply the server left unfinished is reported as such, not as a process that exited successfully", async () => {
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const result = await h.engine.run(runOpts({ prompt: "ORPHAN work", resumeSessionId: first.sessionId }));
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response (its reply never finished)");
+    expect(await dead(result)).toBe(false);
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
+  });
+
+  it("a session the status calls idle with its reply unfinished and no answer stored is a failed turn, not API drift", async () => {
+    SERVER_TURN_TIMING.statusPollMs = 100;
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    // The pool's abort loop is tested on its own; here only that it is asked.
+    const abort = vi.spyOn(h.pool, "abortTurn").mockResolvedValue();
+    const result = await h.engine.run(runOpts({ prompt: "ORPHAN NOIDLE work", resumeSessionId: first.sessionId }));
+    expect(result.error).toBe("the opencode server stopped running the turn before its reply finished");
+    expect(await dead(result)).toBe(false);
+    // What was left of the prompt over there is stopped, not left unattended,
+    // and the host keeps server mode.
+    expect(abort).toHaveBeenCalledWith("sess-1", expect.objectContaining({ engineSessionId: first.sessionId }));
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
+  });
+
+  it("says how a reply that answered nothing ended, so an empty provider response is visible", () => {
+    expect(noAnswerReason({ finish: "stop", tokens: { output: 0 } }))
+      .toBe("the opencode server ended the turn without a final assistant response (its reply finished \"stop\" with 0 output tokens)");
+    expect(noAnswerReason({ time: { created: 1 } })).toMatch(/\(its reply never finished\)$/);
+    expect(noAnswerReason(undefined)).toMatch(/\(no reply to its prompt\)$/);
+  });
+
+  it("a compaction slower than fetch's wait for response headers still completes", async () => {
+    // Node's fetch gives up on headers after 300 s; shrink that so a slow
+    // summarize outlasts it here.
+    const key = Symbol.for("undici.globalDispatcher.1");
+    const slots = globalThis as unknown as Record<symbol, { constructor: new (o: object) => unknown } | undefined>;
+    process.env.FAKE_OPENCODE_SUMMARIZE_DELAY_MS = "1000";
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const original = slots[key]!;
+    slots[key] = new original.constructor({ headersTimeout: 300 }) as typeof original;
+    try {
+      const compacted = await h.engine.run(runOpts({ prompt: "/compact", resumeSessionId: first.sessionId }));
+      expect(compacted.error).toBeUndefined();
+      expect(compacted.compaction).toBeDefined();
+    } finally {
+      slots[key] = original;
+    }
+  });
+
+  it("a compaction whose server goes away after summarize was sent keeps the resume id", async () => {
+    process.env.FAKE_OPENCODE_SUMMARIZE_DELAY_MS = "10000";
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const turn = h.engine.run(runOpts({ prompt: "/compact", resumeSessionId: first.sessionId }));
+    await waitFor(async () => (await api<Array<{ url: string }>>(h.pool, "sess-1", "/test/log")).body.some((e) => e.url.endsWith("/summarize")));
+    await h.pool.stop("sess-1");
+    const compacted = await turn;
+    expect(compacted.error).toMatch(/^opencode compaction failed: /);
+    expect(await dead(compacted)).toBe(false);
+  });
+});
+
 describe("coupling to the server API: a version pin, and drift degrades to run", { timeout: 20_000 }, () => {
   const serveLog = () => path.join(JINN_HOME, "serve-starts.log");
   const starts = () => (fs.existsSync(serveLog()) ? fs.readFileSync(serveLog(), "utf8").trim().split("\n").filter(Boolean).length : 0);
@@ -1064,6 +1197,8 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     expect(unsupportedVersionReason("1.18.31")).toBeUndefined();
     expect(unsupportedVersionReason("1.17.9")).toMatch(/older than 1\.18\.31/);
     expect(unsupportedVersionReason(undefined)).toMatch(/did not report its version/);
+    expect(unsupportedVersionReason("2.0.28")).toMatch(/OpenCode 2 \(2\.0\.28\) is not supported by server mode/);
+    expect(unsupportedVersionReason("v3.1.0")).toMatch(/OpenCode 3 \(v3\.1\.0\) is not supported by server mode/);
   });
 
   it("refuses a server older than the pin: the turn runs plain, and the host stays on run without restarting servers", async () => {
@@ -1082,6 +1217,152 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     const h = harness();
     expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
     expect(h.pool.unsupportedReason("local")).toMatch(/did not report its version/);
+  });
+
+  describe("OpenCode 2", () => {
+    const runLog = () => path.join(JINN_HOME, "run-args.log");
+    const runs = () => (fs.existsSync(runLog()) ? fs.readFileSync(runLog(), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as string[]) : []);
+    const lingering = () => fs.existsSync(serveLog()) ? fs.readFileSync(serveLog(), "utf8").trim().split("\n").filter(Boolean).length : 0;
+
+    beforeEach(() => {
+      fs.rmSync(runLog(), { force: true });
+      fs.rmSync(serveLog(), { force: true });
+      process.env.FAKE_OPENCODE_VERSION = "v2:2.0.28";
+      process.env.FAKE_OPENCODE_RUN_LOG = runLog();
+      process.env.FAKE_OPENCODE_SERVE_LOG = serveLog();
+    });
+    afterEach(() => { delete process.env.FAKE_OPENCODE_RUN_LOG; });
+
+    it("names OpenCode 2 as the reason when the health answer is a web page and /api/info says 2.x", async () => {
+      const h = harness();
+      await h.engine.run(runOpts());
+      const reason = h.pool.unsupportedReason("local");
+      expect(reason).toMatch(/OpenCode 2 \(2\.0\.28\) is not supported by server mode/);
+      expect(reason).not.toMatch(/did not report its version/);
+    });
+
+    it("runs the turns of a refused OpenCode 2 host as `run --standalone`, once, and leaves no server", async () => {
+      const h = harness();
+      expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      const argvs = runs();
+      expect(argvs).toHaveLength(2);
+      for (const argv of argvs) {
+        expect(argv.slice(0, 3)).toEqual(["run", "--format", "json"]);
+        expect(argv.filter((a) => a === "--standalone")).toHaveLength(1);
+      }
+      // One refused start, no retry inside the window, nothing left running.
+      expect(lingering()).toBe(1);
+      expect(h.pool.size()).toBe(0);
+      expect(h.pool.runNeedsStandalone({})).toBe(true);
+    });
+
+    it("does not add --standalone twice when cliFlags already carry it", async () => {
+      const h = harness();
+      await h.engine.run(runOpts({ cliFlags: ["--standalone"] }));
+      expect(runs()[0]!.filter((a) => a === "--standalone")).toHaveLength(1);
+    });
+
+    it("refuses a non-JSON health answer that /api/info does not explain, without --standalone", async () => {
+      process.env.FAKE_OPENCODE_VERSION = "v2:";
+      const h = harness();
+      expect((await h.engine.run(runOpts())).result).toBe("plain:build it");
+      expect(h.pool.unsupportedReason("local")).toMatch(/something other than JSON.*OpenCode 2 is not supported by server mode/);
+      expect(h.pool.runNeedsStandalone({})).toBe(false);
+      expect(runs()[0]).not.toContain("--standalone");
+    });
+
+    it("leaves a 1.x host's run turns without the flag", async () => {
+      process.env.FAKE_OPENCODE_VERSION = "1.17.0";
+      const h = harness();
+      await h.engine.run(runOpts());
+      expect(h.pool.runNeedsStandalone({})).toBe(false);
+      expect(runs()[0]).not.toContain("--standalone");
+    });
+
+    it("stops adding the flag once the retry window has passed", () => {
+      const h = harness();
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE, now: 1000 });
+      expect(h.pool.runNeedsStandalone({ bin: FAKE }, 1000 + UNSUPPORTED_RETRY_MS - 1)).toBe(true);
+      expect(h.pool.runNeedsStandalone({ bin: FAKE }, 1000 + UNSUPPORTED_RETRY_MS)).toBe(false);
+    });
+
+    it("the verdict is the binary's: a turn naming another binary on the same host gets no flag", async () => {
+      const h = harness();
+      await h.engine.run(runOpts());
+      expect(h.pool.runNeedsStandalone({ bin: FAKE })).toBe(true);
+      expect(h.pool.runNeedsStandalone({ bin: "/opt/opencode-1/bin/opencode" })).toBe(false);
+      expect(h.pool.runNeedsStandalone({})).toBe(true);
+    });
+
+    it("a later refusal that learned no version (API drift) keeps the recorded OpenCode 2 version", () => {
+      const h = harness();
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE });
+      h.pool.markUnsupported("local", "opencode local server API drift: x");
+      expect(h.pool.unsupportedReason("local")).toMatch(/API drift/);
+      expect(h.pool.runNeedsStandalone({ bin: FAKE })).toBe(true);
+    });
+
+    it("a refusal of another binary with no version does not hand it the first binary's OpenCode 2 verdict", () => {
+      const h = harness();
+      const other = "/opt/opencode-1/bin/opencode";
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE });
+      h.pool.markUnsupported("local", "the server did not report its version", { bin: other });
+      expect(h.pool.unsupportedReason("local")).toMatch(/did not report its version/);
+      expect(h.pool.runNeedsStandalone({ bin: other })).toBe(false);
+    });
+
+    it("a concurrent refusal of the same binary that learned no version keeps the OpenCode 2 verdict", () => {
+      const h = harness();
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE });
+      h.pool.markUnsupported("local", "the server answered /global/health with something other than JSON", { bin: FAKE });
+      expect(h.pool.unsupportedReason("local")).toMatch(/other than JSON/);
+      expect(h.pool.runNeedsStandalone({ bin: FAKE })).toBe(true);
+    });
+
+    it("an expired verdict is not carried into a later refusal", () => {
+      const h = harness();
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE, now: 1000 });
+      const later = 1000 + UNSUPPORTED_RETRY_MS;
+      h.pool.markUnsupported("local", "opencode local server API drift: x", { now: later });
+      expect(h.pool.unsupportedReason("local", later)).toMatch(/API drift/);
+      expect(h.pool.runNeedsStandalone({ bin: FAKE }, later)).toBe(false);
+    });
+
+    it("a remote verdict belongs to the ssh user whose binary was refused", () => {
+      const h = harness();
+      const target = { remoteHost: "build-box", remoteUser: "alice" };
+      h.pool.markUnsupported("build-box", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: h.pool.binKey(target) });
+      expect(h.pool.runNeedsStandalone(target)).toBe(true);
+      expect(h.pool.runNeedsStandalone({ ...target, bin: "/elsewhere/opencode" })).toBe(true);
+      expect(h.pool.runNeedsStandalone({ remoteHost: "build-box", remoteUser: "bob" })).toBe(false);
+    });
+
+    it("adds --standalone only for OpenCode 2, not for a later major", () => {
+      expect(needsStandalone("2.0.28")).toBe(true);
+      expect(needsStandalone("v2.1.0")).toBe(true);
+      expect(needsStandalone("1.19.0")).toBe(false);
+      expect(needsStandalone("3.0.0")).toBe(false);
+      expect(needsStandalone(undefined)).toBe(false);
+    });
+
+    it("asks /api/info once more when the first request is dropped", async () => {
+      process.env.FAKE_OPENCODE_API_INFO_DROP = "1";
+      try {
+        const h = harness();
+        await h.engine.run(runOpts());
+        expect(h.pool.unsupportedReason("local")).toMatch(/OpenCode 2 \(2\.0\.28\) is not supported by server mode/);
+        expect(h.pool.runNeedsStandalone({})).toBe(true);
+      } finally {
+        delete process.env.FAKE_OPENCODE_API_INFO_DROP;
+      }
+    });
+
+    it.each(["--standalone=true", "--standalone=false", "--no-standalone"])("leaves --standalone to the operator when cliFlags carry %s", async (flag) => {
+      const h = harness();
+      await h.engine.run(runOpts({ cliFlags: [flag] }));
+      expect(runs()[0]!.some((a) => a === "--standalone")).toBe(false);
+    });
   });
 
   it("recovers an answer the stream never delivered from the server's store, and takes the host off server mode", async () => {
