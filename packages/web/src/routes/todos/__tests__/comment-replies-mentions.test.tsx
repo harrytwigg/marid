@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { Employee, MentionRoot, WorkItemCommentWire, WorkItemDetailWire, WorkItemFullWire } from "@/lib/api"
+import { withMentionRootByName } from "@/lib/mentions"
 import { comment } from "./fixtures/task-wire"
 
 /* Replying to any comment, the line that says whom a flattened reply answered,
@@ -57,7 +58,7 @@ function renderThread(comments: WorkItemCommentWire[], mentionRoot?: MentionRoot
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <ActivitySection detail={detail} byName={roster} mentionRoot={mentionRoot} mobile={false} announce={vi.fn()} />
+      <ActivitySection detail={detail} byName={withMentionRootByName(roster, mentionRoot)} mobile={false} announce={vi.fn()} />
     </QueryClientProvider>,
   )
 }
