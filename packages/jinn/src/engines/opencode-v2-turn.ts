@@ -95,16 +95,15 @@ export class OpencodeV2ServerTurn {
   private lines = new V2RunLines("");
   /** The id the turn's prompt is posted under. */
   private readonly promptId = newMessageId();
-  private readonly prompts = new Set([this.promptId]);
   private promptText = "";
   /** What the session's metadata held for this turn to say (see opencode-v2-history.ts). */
   private notes: JinnSessionNotes = { stopped: [], reseed: false };
-  /** The input the session runs now is one of the turn's prompts. */
+  /** The input the session runs now is the turn's prompt. */
   private ownInput = false;
   /** Inputs someone else queued (delivery `queue`) after the turn subscribed:
    *  the ones whose delivery ends the turn's input (see onDelivered). */
   private readonly queuedByOthers = new Set<string>();
-  /** One of the turn's prompts has been delivered. */
+  /** The turn's prompt has been delivered. */
   private delivered = false;
   /** Assistant messages (one per step) answering the turn. */
   private readonly own = new Set<string>();
@@ -398,7 +397,7 @@ export class OpencodeV2ServerTurn {
   /** The stream did not say how the turn ended: read its replies from the store. */
   private async recover(): Promise<void> {
     const history = await v2Messages(this.server, this.sessionId, HISTORY_LIMIT);
-    const replies = ownStoredReplies(history, this.prompts);
+    const replies = ownStoredReplies(history, new Set([this.promptId]));
     if (replies.length) this.ownReply = replies.at(-1);
     if (!replies.length && !(await this.mayStillRun())) {
       this.turn.readLine(JSON.stringify({ type: "error", sessionID: this.sessionId, error: PROMPT_NOT_RUN }), this.onStream);
@@ -470,6 +469,7 @@ export class OpencodeV2ServerTurn {
   private readonly handlers: Record<string, (data: Record<string, unknown>, event: V2Event) => void> = {
     "session.inbox.enqueued": (data) => this.onEnqueued(data),
     "session.inbox.delivered": (data) => this.onDelivered(data),
+    "session.inbox.delivery.changed": (data) => this.onDeliveryChanged(data),
     "session.step.started": (data) => this.onStepStarted(data),
     "session.step.ended": (data, event) => this.onStepEnded(data, event),
     "session.step.failed": (data, event) => this.onStepFailed(data, event),
@@ -502,7 +502,16 @@ export class OpencodeV2ServerTurn {
   /** Note which inputs others queue (see onDelivered). */
   private onEnqueued(data: Record<string, unknown>): void {
     const id = str(data.inboxID);
-    if (id && !this.prompts.has(id) && record(data.item)?.delivery === "queue") this.queuedByOthers.add(id);
+    if (id && id !== this.promptId && record(data.item)?.delivery === "queue") this.queuedByOthers.add(id);
+  }
+
+  /** An input waiting in the inbox was switched between steer and queue (the
+   *  2.x terminal's per-item toggle): it is taken by its delivery now. */
+  private onDeliveryChanged(data: Record<string, unknown>): void {
+    const id = str(data.inboxID);
+    if (!id || id === this.promptId) return;
+    if (data.delivery === "queue") this.queuedByOthers.add(id);
+    else this.queuedByOthers.delete(id);
   }
 
   /**
@@ -522,7 +531,7 @@ export class OpencodeV2ServerTurn {
    */
   private onDelivered(data: Record<string, unknown>): void {
     const id = str(data.inboxID) ?? "";
-    if (this.prompts.has(id)) {
+    if (id === this.promptId) {
       this.ownInput = true;
       this.delivered = true;
       return;

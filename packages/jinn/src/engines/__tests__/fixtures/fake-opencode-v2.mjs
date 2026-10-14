@@ -38,6 +38,7 @@
 //   RETRY       retry.scheduled 200 ms ahead, then a successful step on the same
 //               assistantMessageID
 //   RETRYFAR    retry.scheduled with `at` an hour ahead, then nothing until interrupted
+//   NOTEXT      a step that runs 1.5 s and ends "stop" with no text
 //   RETRYSLOW   retry.scheduled an hour ahead, then 100 ms later a new attempt
 //               (step.started, same assistantMessageID) whose text takes 800 ms
 //   RETRYLOOP   five retry.scheduled an hour ahead, 200 ms apart, then the step
@@ -417,6 +418,14 @@ function serve() {
     return failAborted(s, item);
   }
 
+  async function noTextTurn(s) {
+    const item = startStep(s);
+    if (await sleep(s, 1500)) return failAborted(s, item);
+    streamed(s, item);
+    endStep(s, item, "stop");
+    return "ok";
+  }
+
   async function retrySlowTurn(s) {
     const item = startStep(s);
     publish("session.retry.scheduled", { sessionID: s.id, assistantMessageID: item.id, attempt: 2, at: Date.now() + 3_600_000, error: RATE_LIMIT });
@@ -451,6 +460,7 @@ function serve() {
     ["RETRYFAR", retryFarTurn],
     ["RETRYLOOP", retryLoopTurn],
     ["RETRYSLOW", retrySlowTurn],
+    ["NOTEXT", noTextTurn],
     ["FALLBACK", fallbackTurn],
     ["PERMISSION", permissionTurn],
     ["QUESTION", questionTurn],
@@ -591,6 +601,17 @@ function serve() {
     }
     if (rest === "/inbox" && method === "GET") return data(res, s.inbox.map((item) => inboxInfo(s, item)));
     const inboxItem = /^\/inbox\/([^/]+)$/.exec(rest);
+    if (inboxItem && method === "PATCH") {
+      // The terminal's per-item steer/queue toggle: a steer goes to the front.
+      const at = s.inbox.findIndex((item) => item.id === decodeURIComponent(inboxItem[1]));
+      if (at < 0) return json(res, 404, { _tag: "InboxItemNotFoundError", message: "no such inbox item" });
+      const [item] = s.inbox.splice(at, 1);
+      item.delivery = body?.delivery === "steer" ? "steer" : "queue";
+      if (item.delivery === "steer") s.inbox.unshift(item);
+      else s.inbox.push(item);
+      publish("session.inbox.delivery.changed", { sessionID: s.id, inboxID: item.id, delivery: item.delivery });
+      return noContent(res);
+    }
     if (inboxItem && method === "DELETE") {
       const at = s.inbox.findIndex((item) => item.id === decodeURIComponent(inboxItem[1]));
       if (at < 0) return json(res, 404, { _tag: "InboxItemNotFoundError", message: "no such inbox item" });

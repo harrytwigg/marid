@@ -456,6 +456,32 @@ describe("an operator input that arrives while the turn runs", { timeout: 30_000
     expect(result.result).toBe("tool done");
   });
 
+  it("queued, then switched to steer while it waits, leaves the turn its own answer", async () => {
+    const h = harness();
+    const id = await sessionWithServer(h);
+    const turn = h.engine.run(runOpts({ resumeSessionId: id, prompt: "run it SLOWTOOL" }));
+    await waitDelivered(h);
+    const posted = await call(h, `/api/session/${id}/prompt`, { method: "POST", body: { text: "operator aside", delivery: "queue" } });
+    await call(h, `/api/session/${id}/inbox/${posted.body.data.id}`, { method: "PATCH", body: { delivery: "steer" } });
+    const result = await turn;
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("tool done");
+  });
+
+  it("steered, then switched to queue while it waits, is not taken for the turn's answer", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 1_000;
+    const h = harness();
+    const id = await sessionWithServer(h);
+    // The turn's reply ends with no text, so it waits a moment for more.
+    const turn = h.engine.run(runOpts({ resumeSessionId: id, prompt: "NOTEXT" }));
+    await waitDelivered(h);
+    const posted = await call(h, `/api/session/${id}/prompt`, { method: "POST", body: { text: "operator next" } });
+    await call(h, `/api/session/${id}/inbox/${posted.body.data.id}`, { method: "PATCH", body: { delivery: "queue" } });
+    const result = await turn;
+    expect(result.result).toBe("");
+    expect(result.error).toMatch(/without a final assistant response/);
+  });
+
   it("takes no part in the operator's own provider retries while the turn's prompt waits behind them", async () => {
     SERVER_TURN_TIMING.retryGraceMs = 200;
     const h = harness();

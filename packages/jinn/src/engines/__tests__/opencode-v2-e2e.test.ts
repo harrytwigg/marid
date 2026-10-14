@@ -166,6 +166,23 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
     expect(result.result).not.toBe("");
   }, 60_000);
 
+  it("keeps its answer when the operator queues a message and then switches it to steer", async () => {
+    const args = Buffer.from(JSON.stringify({ command: "sleep 3", description: "wait" })).toString("base64");
+    const running = turn(`wait CALLTOOL=shell ARGS64=${args}`);
+    await new Promise((r) => setTimeout(r, 1500));
+    const server = pool.get(sessionId)!;
+    const headers = { authorization: `Basic ${Buffer.from(`opencode:${server.password}`).toString("base64")}`, "content-type": "application/json" };
+    const posted = await fetch(`${server.apiUrl}/api/session/${resume}/prompt`, { method: "POST", headers, body: JSON.stringify({ text: "operator aside", delivery: "queue" }) });
+    const item = (await posted.json()) as { data: { id: string } };
+    await new Promise((r) => setTimeout(r, 300));
+    // The terminal's per-item toggle.
+    const patched = await fetch(`${server.apiUrl}/api/session/${resume}/inbox/${item.data.id}`, { method: "PATCH", headers, body: JSON.stringify({ delivery: "steer" }) });
+    expect(patched.ok).toBe(true);
+    const { result } = await running;
+    expect(result.error).toBeUndefined();
+    expect(result.result).not.toBe("");
+  }, 60_000);
+
   it("switches the session's model when a turn names another", async () => {
     const { result } = await turn("which model", { model: "mock/m2" });
     expect(result.error).toBeUndefined();
