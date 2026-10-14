@@ -22,7 +22,9 @@ import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import { remapMcpConfigForRemote } from "../mcp/remote-config.js";
 import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.js";
 import { piJinnMcpAttachable, piJinnSessionEnv, remotePiExtensionSource } from "./pi-mcp.js";
-import { buildOpencodeSessionConfig, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
+import { buildOpencodeSessionConfigFor, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
+import { opencodeApiOf } from "./opencode-version.js";
+import { parseOpencodeVersion } from "../shared/opencode-bin-version.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
 
 /**
@@ -206,6 +208,8 @@ export interface RemoteFacts {
   claudeBin?: string;
   piBin?: string;
   opencodeBin?: string;
+  /** What that opencode's `--version` said: which config shape it reads. */
+  opencodeVersion?: string;
   jinnVersion: string;
   /** Directory holding the remote install's `server-entry.js` / `scrub-entry.js`. */
   entryDir: string;
@@ -252,6 +256,9 @@ printf 'node=%s\\n' "$(command -v node 2>/dev/null || true)"
 printf 'claude=%s\\n' "$(command -v claude 2>/dev/null || true)"
 printf 'pi=%s\\n' "$(command -v pi 2>/dev/null || true)"
 printf 'opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
+if command -v opencode >/dev/null 2>&1; then
+  printf 'opencodeversion=%s\\n' "$(OPENCODE_DISABLE_AUTOUPDATE=1 opencode --version 2>/dev/null | tr -d '\\r' | head -n 1)"
+fi
 jinnbin=$(command -v jinn 2>/dev/null || true)
 if [ -n "$jinnbin" ]; then
   printf 'jinnversion=%s\\n' "$(jinn --version 2>/dev/null | tr -d '\\r' | head -n 1)"
@@ -277,6 +284,12 @@ const factsCache = new Map<string, RemoteFacts>();
 /** Exported for tests: drop cached host facts. */
 export function clearRemoteFactsCache(): void {
   factsCache.clear();
+}
+
+/** Drop one host's cached facts: what was installed there has changed (an
+ *  opencode upgraded while the gateway ran), and the next probe reads it again. */
+export function forgetRemoteFacts(destination: string): void {
+  factsCache.delete(destination);
 }
 
 /**
@@ -395,6 +408,17 @@ export function assertRemoteVersion(destination: string, versionLine: string, lo
   return remote;
 }
 
+/** The agent CLIs the facts script found, and what the opencode one is. */
+function engineFacts(kv: Record<string, string>): Pick<RemoteFacts, "claudeBin" | "piBin" | "opencodeBin" | "opencodeVersion"> {
+  const opencodeVersion = parseOpencodeVersion(kv.opencodeversion ?? "");
+  return {
+    ...(kv.claude ? { claudeBin: kv.claude } : {}),
+    ...(kv.pi ? { piBin: kv.pi } : {}),
+    ...(kv.opencode ? { opencodeBin: kv.opencode } : {}),
+    ...(opencodeVersion ? { opencodeVersion } : {}),
+  };
+}
+
 export async function gatherFacts(destination: string): Promise<RemoteFacts> {
   const cached = factsCache.get(destination);
   if (cached) return cached;
@@ -422,9 +446,7 @@ export async function gatherFacts(destination: string): Promise<RemoteFacts> {
     home: kv.home,
     stageDir: path.posix.join(kv.home, REMOTE_STAGE_DIR),
     nodeBin: kv.node,
-    ...(kv.claude ? { claudeBin: kv.claude } : {}),
-    ...(kv.pi ? { piBin: kv.pi } : {}),
-    ...(kv.opencode ? { opencodeBin: kv.opencode } : {}),
+    ...engineFacts(kv),
     jinnVersion: remoteVersion,
     entryDir: kv.entrydir,
   };
@@ -1488,7 +1510,7 @@ async function stageOpencodeConfig(
     remoteHome: sessionHome,
     gatewayUrl: `http://127.0.0.1:${tunnelPort}`,
   });
-  const config = buildOpencodeSessionConfig(remapped);
+  const config = buildOpencodeSessionConfigFor(remapped, opencodeApiOf(facts.opencodeVersion));
   if (!config) return undefined;
   const configPath = path.posix.join(sessionHome, "tmp", "opencode.json");
   await stageRemoteFile(destination, configPath, serializeOpencodeSessionConfig(config));

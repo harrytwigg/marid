@@ -7,6 +7,7 @@ import { buildEngineChildEnv } from "../shared/child-env.js";
 import { assertRemoteTarget } from "../shared/remote-target.js";
 import type { RemoteExecutionConfig } from "../shared/config-types.js";
 import { buildOpencodeArgs, buildOpencodePrompt, describeOpencodeLaunch, type OpencodeRunFlags } from "./opencode-protocol.js";
+import { opencodeApiOf, type OpencodeApi } from "./opencode-version.js";
 import {
   writeOpencodeSessionConfig,
   type OpencodeConfigHandle,
@@ -101,14 +102,22 @@ export function cleanEnv(sessionId: string, opts: { disableFff: boolean }): Reco
   return env;
 }
 
-/** A turn on the gateway's own machine. */
+/** What a binary of this API needs on its `run` argv: OpenCode 2's CLI starts
+ *  (and leaves) a background service unless told `--standalone`, which a 1.x
+ *  CLI rejects. */
+export function runFlagsFor(api: OpencodeApi): OpencodeRunFlags {
+  return { standalone: api === 2 };
+}
+
+/** A turn on the gateway's own machine. `api` is the binary's, from its version. */
 export function localOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: { run?: OpencodeRunFlags; disableFff: boolean },
+  ctx: { api?: OpencodeApi; disableFff: boolean },
 ): OpencodeLaunchPlan {
   const bin = resolveBin("opencode", opts.bin);
-  const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId);
+  const api = ctx.api ?? 1;
+  const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId, api);
 
   logger.info(
     `opencode engine starting: ${bin} ${describeOpencodeLaunch(opts)} `
@@ -117,7 +126,7 @@ export function localOpencodeLaunch(
 
   return {
     bin,
-    args: buildOpencodeArgs(opts, ctx.run ?? {}),
+    args: buildOpencodeArgs(opts, runFlagsFor(api)),
     env: {
       ...cleanEnv(trackingId, ctx),
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
@@ -199,7 +208,7 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
 export async function remoteOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: { remote: RemoteExecutionConfig | undefined; gatewayPort: number; run?: OpencodeRunFlags; disableFff: boolean },
+  ctx: { remote: RemoteExecutionConfig | undefined; gatewayPort: number; disableFff: boolean },
 ): Promise<OpencodeLaunchPlan> {
   assertRemoteTarget(opts, ctx.remote);
   // Without a real gateway port the reverse forward would be built as
@@ -224,7 +233,8 @@ export async function remoteOpencodeLaunch(
 
   const remote = remoteHandle(facts, staging);
   await reapStaleRemoteEngine(remote, "opencode");
-  const args = opencodeSshArgs(opts, trackingId, ctx.gatewayPort, { facts, staging, remote, run: ctx.run ?? {}, disableFff: ctx.disableFff });
+  const run = runFlagsFor(opencodeApiOf(facts.opencodeVersion));
+  const args = opencodeSshArgs(opts, trackingId, ctx.gatewayPort, { facts, staging, remote, run, disableFff: ctx.disableFff });
 
   logger.info(
     `opencode engine starting REMOTE on ${staging.destination}:${opts.remoteCwd} — ${describeOpencodeLaunch(opts)} `

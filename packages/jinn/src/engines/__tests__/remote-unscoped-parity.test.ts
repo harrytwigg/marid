@@ -38,10 +38,12 @@ const {
 
 const sha256 = (text: string): string => crypto.createHash("sha256").update(text).digest("hex");
 
-/** Hashes computed on origin/main 5587f6cb. */
+/** Hashes computed on origin/main 5587f6cb, except `factsScript`: the facts
+ *  probe has since learned to read the host's `opencode --version` (OpenCode 2
+ *  support), a deliberate change for every session, scoped or not. */
 const MAIN = {
   farmScript: "e5b74a0bedc2ea64111a00392827e9c883deeff711f4cf3640f74fb65a1548e5",
-  factsScript: "a330a967f5ec9db60d0c546df32bc9fd95793e259d9bcb01fed1267ba8cf1d98",
+  factsScript: "e848138e6d35d773025c04f16140b4b60a8844d85d9e42d50153ae34567b4a7e",
   killScript: "d400383f3c8c055691322b6513249351035165e2aae839d87bb95c250e89eaf6",
   trustSeedCommand: "b6a9b06cc4e07add49ef443da653c3c546950dbd0564ddc29e4a2c9833c61b7c",
   sessionEnvFile: "1d350a33a74a0752f1540ecad76daddd0ab98a6686742ed01cad801bc230d910",
