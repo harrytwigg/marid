@@ -115,7 +115,10 @@ function serve() {
   let mcpCalls = 0;
   let config = null;
   try { config = process.env.OPENCODE_CONFIG ? JSON.parse(fs.readFileSync(process.env.OPENCODE_CONFIG, "utf8")) : null; } catch { config = "unreadable"; }
-  const info = { pid: process.pid, cwd: process.cwd(), argv, config, jinnSessionId: process.env.JINN_SESSION_ID ?? null, hasPassword: Boolean(password) };
+  const info = {
+    pid: process.pid, cwd: process.cwd(), argv, config, jinnSessionId: process.env.JINN_SESSION_ID ?? null, hasPassword: Boolean(password),
+    commandTimeoutMs: process.env.JINN_OPENCODE_COMMAND_TIMEOUT_MS ?? null,
+  };
 
   const newId = (prefix) => `${prefix}_test${String(++seq).padStart(6, "0")}`;
   const now = () => Date.now();

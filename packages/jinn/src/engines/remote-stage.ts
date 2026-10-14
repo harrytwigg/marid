@@ -24,6 +24,7 @@ import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.
 import { piJinnMcpAttachable, piJinnSessionEnv, remotePiExtensionSource } from "./pi-mcp.js";
 import { buildOpencodeSessionConfigFor, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
 import { opencodeApiOf } from "./opencode-version.js";
+import { commandTimeoutPluginEntry, remoteAssetsDir } from "./opencode-command-timeout.js";
 import { parseOpencodeVersion } from "../shared/opencode-bin-version.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
 
@@ -1204,6 +1205,9 @@ export interface PrepareRemoteSessionOpts {
    *  authenticate without the secret ever reaching a remote command line. Pi's
    *  own belt is computed below and ignores this. */
   sessionEnv?: Record<string, string>;
+  /** opencode only: list Marid's command-timeout plugin in the staged config
+   *  (opencode-command-timeout.ts), from this host's own jinn-cli install. */
+  opencodeCommandTimeout?: boolean;
 }
 
 interface RemoteSessionStagingBase {
@@ -1302,7 +1306,7 @@ export async function prepareRemoteSession(opts: PrepareRemoteSessionOpts): Prom
   }
 
   if (engine === "opencode") {
-    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, resolvedMcp);
+    const opencodeConfigPath = await stageOpencodeConfig(destination, facts, sessionHome, tunnelPort, { resolvedMcp, commandTimeout: opts.opencodeCommandTimeout === true });
     return { ...base, engine, ...(opencodeConfigPath ? { opencodeConfigPath } : {}) };
   }
 
@@ -1501,16 +1505,22 @@ async function stageOpencodeConfig(
   facts: RemoteFacts,
   sessionHome: string,
   tunnelPort: number,
-  resolvedMcp: ResolvedMcpConfig | undefined,
+  staged: { resolvedMcp: ResolvedMcpConfig | undefined; commandTimeout: boolean },
 ): Promise<string | undefined> {
-  if (!resolvedMcp || Object.keys(resolvedMcp.mcpServers ?? {}).length === 0) return undefined;
-  const remapped = remapMcpConfigForRemote(resolvedMcp, {
-    remoteNode: facts.nodeBin,
-    remoteEntryDir: facts.entryDir,
-    remoteHome: sessionHome,
-    gatewayUrl: `http://127.0.0.1:${tunnelPort}`,
-  });
-  const config = buildOpencodeSessionConfigFor(remapped, opencodeApiOf(facts.opencodeVersion));
+  const { resolvedMcp } = staged;
+  const hasMcp = Boolean(resolvedMcp && Object.keys(resolvedMcp.mcpServers ?? {}).length > 0);
+  if (!hasMcp && !staged.commandTimeout) return undefined;
+  const remapped = hasMcp
+    ? remapMcpConfigForRemote(resolvedMcp!, {
+      remoteNode: facts.nodeBin,
+      remoteEntryDir: facts.entryDir,
+      remoteHome: sessionHome,
+      gatewayUrl: `http://127.0.0.1:${tunnelPort}`,
+    })
+    : undefined;
+  const api = opencodeApiOf(facts.opencodeVersion);
+  const plugins = staged.commandTimeout ? [commandTimeoutPluginEntry(api, remoteAssetsDir(facts.entryDir), path.posix.join)] : [];
+  const config = buildOpencodeSessionConfigFor(remapped, api, plugins);
   if (!config) return undefined;
   const configPath = path.posix.join(sessionHome, "tmp", "opencode.json");
   await stageRemoteFile(destination, configPath, serializeOpencodeSessionConfig(config));

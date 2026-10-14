@@ -810,6 +810,28 @@ describe("the config staged for an OpenCode 2 server", { timeout: 30_000 }, () =
   });
 });
 
+describe("the command ceiling on an OpenCode 2 server", { timeout: 30_000 }, () => {
+  it("is passed to the server, with the plugin that enforces it listed in its config", async () => {
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const pool = new OpencodeServerPool(lifecycle, { limits: () => ({}), bin: () => FAKE_V2, commandTimeoutMs: () => 5000 });
+    const h = { lifecycle, pool, engine: new OpencodeEngine({ mode: () => "server", servers: pool }) };
+    harnesses.push(h);
+    const { result } = await streamed(h);
+    expect(result.error).toBeUndefined();
+    const info = (await call(h, "/test/info")).body;
+    expect(info.commandTimeoutMs).toBe("5000");
+    expect(info.config.plugins).toEqual([expect.stringMatching(/^file:\/.*\/assets\/opencode\/command-timeout\/v2$/)]);
+  });
+
+  it("is off when not configured: no plugin, nothing in the environment", async () => {
+    const h = harness();
+    await streamed(h);
+    const info = (await call(h, "/test/info")).body;
+    expect(info.commandTimeoutMs).toBeNull();
+    expect(info.config).toBeNull();
+  });
+});
+
 describe("a server whose API is not the one its config was staged for", { timeout: 30_000 }, () => {
   it("is stopped and started again with the config in the shape of the API it speaks", async () => {
     // `--version` cannot be read, so the binary counts as 1.x, but its server speaks 2.x.

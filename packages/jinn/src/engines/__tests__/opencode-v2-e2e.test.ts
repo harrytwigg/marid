@@ -230,4 +230,26 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
     const last = mainRequests().slice(-2);
     expect(last.map((r) => r.url.split("/")[1])).toEqual(["primary", "primary"]);
   }, 120_000);
+
+  it("caps a shell command the model gave no timeout at the command ceiling, and the turn carries on", async () => {
+    const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
+    const capped = new OpencodeServerPool(lifecycle, { bin: () => BIN, limits: () => ({ startTimeoutMs: 120_000 }), commandTimeoutMs: () => 2000 });
+    const cappedEngine = new OpencodeEngine({ mode: () => "server", servers: capped, commandTimeoutMs: () => 2000 });
+    try {
+      const args = Buffer.from(JSON.stringify({ command: "sleep 30", description: "wait", timeout: 0 })).toString("base64");
+      const deltas: StreamDelta[] = [];
+      const started = Date.now();
+      const result = await cappedEngine.run({
+        prompt: `wait CALLTOOL=shell ARGS64=${args}`, cwd: path.join(home, "work"), sessionId: `${sessionId}-capped`, bin: BIN, model: "mock/m1",
+        onStream: (d) => deltas.push(d),
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.result).toBe("tool done");
+      expect(Date.now() - started).toBeLessThan(25_000);
+      expect(deltas.some((d) => d.type === "tool_result" && /exceeded timeout of 2000 ms/.test(d.content))).toBe(true);
+    } finally {
+      cappedEngine.killAll();
+      await capped.stopAll();
+    }
+  }, 120_000);
 });

@@ -287,6 +287,18 @@ describe("OpencodeEngine — a remote employee's turn runs on the other machine"
     }
   });
 
+  it("passes the command ceiling to the remote opencode and has its plugin staged", async () => {
+    const withCeiling = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, commandTimeoutMs: () => 900_000 });
+    await withCeiling.run(runOpts());
+    expect(remoteCommand()).toContain("JINN_OPENCODE_COMMAND_TIMEOUT_MS='900000'");
+    expect(hoisted.prepareCalls.at(-1)).toMatchObject({ opencodeCommandTimeout: true });
+
+    hoisted.spawns.length = 0;
+    await engine().run(runOpts());
+    expect(remoteCommand()).not.toContain("JINN_OPENCODE_COMMAND_TIMEOUT_MS");
+    expect(hoisted.prepareCalls.at(-1)).toMatchObject({ opencodeCommandTimeout: false });
+  });
+
   it("points opencode at the staged config and this session's home", async () => {
     await engine().run(runOpts());
 

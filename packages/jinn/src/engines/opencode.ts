@@ -87,6 +87,7 @@ export class OpencodeEngine implements InterruptibleEngine {
   /** `engines.opencode.disableFff`, read live so a hot reload applies to the next
    *  process. Absent means on. */
   private readDisableFff: () => boolean;
+  private readCommandTimeoutMs: () => number;
   private servers?: OpencodeServerPool;
 
   constructor(opts: {
@@ -94,12 +95,15 @@ export class OpencodeEngine implements InterruptibleEngine {
     gatewayPort?: () => number;
     mode?: () => OpencodeMode;
     disableFff?: () => boolean;
+    /** `engines.opencode.commandTimeoutMs`, resolved, read per turn; absent or 0: no ceiling. */
+    commandTimeoutMs?: () => number;
     servers?: OpencodeServerPool;
   } = {}) {
     this.readRemoteConfig = opts.remote ?? (() => undefined);
     this.readGatewayPort = opts.gatewayPort ?? (() => 0);
     this.readMode = opts.mode ?? (() => "run");
     this.readDisableFff = opts.disableFff ?? (() => true);
+    this.readCommandTimeoutMs = opts.commandTimeoutMs ?? (() => 0);
     this.servers = opts.servers;
   }
 
@@ -187,15 +191,16 @@ export class OpencodeEngine implements InterruptibleEngine {
     // The binary's version decides the staged config's shape and whether the
     // turn needs `--standalone` (opencode-launch.ts); a remote host's comes
     // with its facts.
-    const disableFff = this.readDisableFff();
+    const commandTimeoutMs = this.readCommandTimeoutMs();
+    const processOptions = { disableFff: this.readDisableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}) };
     if (!isRemoteTarget(opts)) {
       const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", opts.bin)));
-      return await this.launch(localOpencodeLaunch(opts, trackingId, { api, disableFff }), trackingId, onStream);
+      return await this.launch(localOpencodeLaunch(opts, trackingId, { api, ...processOptions }), trackingId, onStream);
     }
     const plan = await remoteOpencodeLaunch(opts, trackingId, {
       remote: this.readRemoteConfig(),
       gatewayPort: this.readGatewayPort(),
-      disableFff,
+      ...processOptions,
     });
     return await this.launch(plan, trackingId, onStream);
   }

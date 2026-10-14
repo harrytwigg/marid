@@ -96,6 +96,8 @@ export type OpencodeMcpServer = OpencodeLocalMcpServer | OpencodeRemoteMcpServer
 export interface OpencodeSessionConfig {
   $schema: string;
   mcp: Record<string, OpencodeMcpServer>;
+  /** Plugins Marid adds to the operator's own (opencode-command-timeout.ts). */
+  plugin?: string[];
   /** Only for a purpose-built toolset session: the confined agent below. */
   agent?: Record<string, OpencodeConfinedAgent>;
 }
@@ -199,6 +201,7 @@ export interface OpencodeV2PermissionRule {
 export interface OpencodeV2SessionConfig {
   $schema: string;
   mcp: { servers: Record<string, Omit<OpencodeMcpServer, "enabled"> & { codemode: false }> };
+  plugins?: string[];
   agents?: Record<string, { mode: "primary"; permissions: OpencodeV2PermissionRule[] }>;
 }
 
@@ -213,16 +216,25 @@ export function toOpencodeV2SessionConfig(config: OpencodeSessionConfig): Openco
       permissions: Object.entries(agent.permission).map(([action, effect]) => ({ action, resource: "*", effect: effect as OpencodeV2PermissionRule["effect"] })),
     }]))
     : undefined;
-  return { $schema: config.$schema, mcp: { servers }, ...(agents ? { agents } : {}) };
+  return {
+    $schema: config.$schema,
+    mcp: { servers },
+    ...(config.plugin?.length ? { plugins: config.plugin } : {}),
+    ...(agents ? { agents } : {}),
+  };
 }
 
-/** The config file for a session in the shape its binary's API reads. */
+/** The config file for a session in the shape its binary's API reads, with
+ *  `plugins` added to the operator's own (staged even without MCP servers). */
 export function buildOpencodeSessionConfigFor(
   resolvedMcp: ResolvedMcpConfig | undefined,
   api: OpencodeApi,
+  plugins: string[] = [],
 ): OpencodeSessionConfig | OpencodeV2SessionConfig | undefined {
-  const config = buildOpencodeSessionConfig(resolvedMcp);
-  return config && api === 2 ? toOpencodeV2SessionConfig(config) : config;
+  const base = buildOpencodeSessionConfig(resolvedMcp) ?? (plugins.length ? { $schema: OPENCODE_CONFIG_SCHEMA, mcp: {} } : undefined);
+  if (!base) return undefined;
+  const config = plugins.length ? { ...base, plugin: plugins } : base;
+  return api === 2 ? toOpencodeV2SessionConfig(config) : config;
 }
 
 /** Serialize the staged config exactly as both transports write it. */
@@ -235,8 +247,9 @@ export function writeOpencodeSessionConfig(
   resolvedMcp: ResolvedMcpConfig | undefined,
   sessionId: string,
   api: OpencodeApi = 1,
+  plugins: string[] = [],
 ): OpencodeConfigHandle {
-  const config = buildOpencodeSessionConfigFor(resolvedMcp, api);
+  const config = buildOpencodeSessionConfigFor(resolvedMcp, api, plugins);
   if (!config) return { staged: false };
 
   const configDir = path.join(JINN_HOME, "tmp", "opencode", safeSessionId(sessionId));

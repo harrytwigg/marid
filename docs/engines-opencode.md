@@ -80,6 +80,7 @@ engines:
     model: anthropic/claude-sonnet-5
     fallback: [pi]         # engines to try when opencode cannot serve a turn
     disableFff: true       # default; false lets opencode run its file indexer
+    commandTimeoutMs: 1800000  # default (30 min): the longest one shell command may run; 0 turns it off
 ```
 
 Model ids are opencode's own `provider/model` form, exactly as `opencode models` prints them. The model half may contain further slashes (`openrouter/meta-llama/llama-4`); only the first one is structural.
@@ -95,6 +96,27 @@ opencode bundles an fff file indexer and watcher that pegs a CPU on a work root 
 The option is read each time a process is spawned, so a hot reload applies to the next process. A server that is already running keeps the environment it started with until it is restarted (it stops when it goes idle, or when you stop the session's server).
 
 The option can be dropped once opencode bundles `@ff-labs/fff-bun` >= 0.11, or anomalyco/opencode#50719 is fixed.
+
+### Command timeout (`commandTimeoutMs`)
+
+opencode's shell tool (`bash` on 1.x, `shell` on 2.x) runs a command for as long as the model asks:
+
+- **1.x** has a 2 min default, but takes any `timeout` the model passes.
+- **2.x** defaults to 120 s in the foreground and takes `0` for none. Background commands have no timeout at all.
+
+So a hung command, or one waiting for input, can hold a turn indefinitely. Upgrading to 2.x does not change that.
+
+`commandTimeoutMs` (default 30 minutes; `0` turns it off) is a hard ceiling:
+
+- **Where it applies:** every shell command an opencode turn runs, on 1.x and 2.x, locally and on remote hosts.
+- **What happens:** a command that asks for more, for `0`, or for no timeout gets the ceiling. opencode stops it there and tells the model (`Command exceeded timeout of … ms`), and the turn carries on. A smaller timeout the model asks for is kept.
+- **Background commands:** 2.x background commands (`background: true`, such as a dev server) are not capped. They do not hold the turn.
+
+**How it is enforced:** a small opencode plugin in this package (`assets/opencode/command-timeout/`) caps each shell call's timeout before it runs. Marid lists it in the config it stages for each session, beside the operator's own plugins: as a module on 1.x (`plugin`) and as a package on 2.x (`plugins`). The ceiling travels in `JINN_OPENCODE_COMMAND_TIMEOUT_MS`.
+
+- A remote host uses the plugin from its own `jinn-cli` install, so it needs no setup.
+- The value is read each time a process starts, as for `disableFff`. A server already running keeps the ceiling it started with.
+- An opencode run by hand in a terminal does not get the ceiling.
 
 ### Usage limits
 

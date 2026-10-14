@@ -16,7 +16,8 @@ import {
   type OpencodeConfigHandle,
 } from "./opencode-mcp.js";
 import { buildOpencodeServeArgs } from "./opencode-protocol.js";
-import { cleanEnv, opencodeProcessEnv, REMOTE_ENV_DENY } from "./opencode-launch.js";
+import { cleanEnv, opencodeProcessEnv, REMOTE_ENV_DENY, type OpencodeProcessOptions } from "./opencode-launch.js";
+import { localCommandTimeoutPlugins } from "./opencode-command-timeout.js";
 import {
   buildSshSpawnArgs,
   ensureRemoteReady,
@@ -137,6 +138,9 @@ export interface OpencodeServerPoolDeps {
   /** `engines.opencode.disableFff`, read per spawn. Absent means on. A server
    *  already running keeps the environment it started with. */
   disableFff?: () => boolean;
+  /** `engines.opencode.commandTimeoutMs`, resolved, read per spawn; absent or
+   *  0: no ceiling (see opencode-command-timeout.ts). */
+  commandTimeoutMs?: () => number;
 }
 
 /**
@@ -684,6 +688,12 @@ export class OpencodeServerPool {
     return this.deps.disableFff?.() ?? true;
   }
 
+  /** What Marid's settings put on the server's process (opencode-launch.ts). */
+  private processOptions(): OpencodeProcessOptions {
+    const commandTimeoutMs = this.deps.commandTimeoutMs?.() ?? 0;
+    return { disableFff: this.disableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}) };
+  }
+
   private async spawnLocal(
     sessionId: string,
     spec: OpencodeServerSpec,
@@ -697,9 +707,11 @@ export class OpencodeServerPool {
     // server reads it for its whole life, and a `run` turn deletes its copy
     // when it settles.
     const api = knownApi ?? opencodeApiOf(await localOpencodeVersion(bin));
-    const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`, api);
+    const processOptions = this.processOptions();
+    const plugins = localCommandTimeoutPlugins(api, processOptions.commandTimeoutMs ?? 0);
+    const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`, api, plugins);
     const env = {
-      ...cleanEnv(sessionId, { disableFff: this.disableFff() }),
+      ...cleanEnv(sessionId, processOptions),
       OPENCODE_SERVER_PASSWORD: password,
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
     };
@@ -752,8 +764,8 @@ export class OpencodeServerPool {
 
     const serverPort = await probeFreePort(staging.destination, facts);
     const localPort = await freeLocalPort();
-    const disableFff = this.disableFff();
-    const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile, disableFff });
+    const processOptions = this.processOptions();
+    const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile, processOptions });
     logger.info(
       `opencode server starting REMOTE for session ${sessionId} on ${staging.destination}:${spec.remoteCwd} `
       + `(port ${serverPort}, forwarded from 127.0.0.1:${localPort}, tunnel ${staging.tunnelPort}→${gatewayPort}, `
@@ -761,7 +773,7 @@ export class OpencodeServerPool {
     );
     const proc = spawn(resolveBin("ssh"), args, {
       cwd: JINN_HOME,
-      env: cleanEnv(sessionId, { disableFff }),
+      env: cleanEnv(sessionId, processOptions),
       stdio: ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
@@ -805,6 +817,7 @@ export class OpencodeServerPool {
       gatewayPort,
       ...(spec.resolvedMcp ? { resolvedMcp: spec.resolvedMcp } : {}),
       sessionEnv: { OPENCODE_SERVER_PASSWORD: password },
+      ...((this.deps.commandTimeoutMs?.() ?? 0) > 0 ? { opencodeCommandTimeout: true } : {}),
     });
     return { staging, facts: readiness.facts, gatewayPort };
   }
@@ -1010,7 +1023,7 @@ function remoteServeSshArgs(o: {
   serverPort: number;
   localPort: number;
   pidFile: string;
-  disableFff: boolean;
+  processOptions: OpencodeProcessOptions;
 }): string[] {
   return buildSshSpawnArgs({
     destination: o.staging.destination,
@@ -1020,7 +1033,7 @@ function remoteServeSshArgs(o: {
     remoteEnv: {
       JINN_HOME: o.staging.sessionHome,
       JINN_SESSION_ID: o.sessionId,
-      ...opencodeProcessEnv(o),
+      ...opencodeProcessEnv(o.processOptions),
       ...(o.staging.opencodeConfigPath ? { OPENCODE_CONFIG: o.staging.opencodeConfigPath } : {}),
     },
     envFile: o.staging.envFilePath,
