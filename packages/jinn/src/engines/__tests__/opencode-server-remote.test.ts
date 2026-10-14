@@ -199,6 +199,8 @@ beforeEach(() => {
         publish("message.part.updated", { sessionID: id, part: { sessionID: id, messageID: reply, type: "step-start" } });
         if (hoisted.hangTurn) return;
         publish("message.part.updated", { sessionID: id, part: { sessionID: id, messageID: reply, type: "text", text: "done over there", time: { start: 1, end: 2 } } });
+        // The reply finishes before the session goes idle, as opencode's does.
+        publish("message.updated", { sessionID: id, info: { id: reply, sessionID: id, role: "assistant", parentID, time: { created: 1, completed: 2 }, finish: "stop" } });
         hoisted.busy.delete(id);
         publish("session.status", { sessionID: id, status: { type: "idle" } });
         publish("session.idle", { sessionID: id });
