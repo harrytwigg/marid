@@ -61,7 +61,7 @@
 //   FAKE_V2_HEARTBEAT_MS      how often the event stream sends its `: heartbeat` comment (default 10 s)
 //   FAKE_V2_VERSION           what --version and /api/info report (default 2.0.29)
 //   FAKE_V2_SERVE_FAIL=1      `serve` exits at once
-// GET /test/log returns the requests the server saw ({method, path, body}),
+// GET /test/log returns the requests the server saw ({at, method, path, body}),
 // GET /test/info how it was started (argv, the OPENCODE_CONFIG file's contents).
 import http from "node:http";
 import fs from "node:fs";
@@ -576,7 +576,7 @@ function serve() {
       return json(res, 404, {});
     }
     const body = req.method === "GET" || req.method === "DELETE" ? undefined : await readBody(req);
-    const entry = { method: req.method, path: url.pathname + url.search, ...(body === undefined ? {} : { body }) };
+    const entry = { at: now(), method: req.method, path: url.pathname + url.search, ...(body === undefined ? {} : { body }) };
     requests.push(entry);
 
     // ServerInfo and the interrupt answer are bare, as on the real server.
