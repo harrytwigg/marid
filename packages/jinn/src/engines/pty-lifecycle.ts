@@ -81,7 +81,9 @@ export interface PtyLifecycleOpts {
   onCleanup?: (sessionId: string) => void;
   /** Called after adoption or state changes may have changed global idle-cap pressure. */
   onIdleStateChange?: () => void;
-  /** Default true. Server-managed lifecycles disable this and enforce one global cap. */
+  /** Default true. Server-managed lifecycles disable this and enforce one global cap.
+   *  Left on, this manager caps every host at `maxLivePtys` and ignores
+   *  `maxLivePtysByHost`, which only the global enforcement (gateway/server.ts) reads. */
   enforceLocalCap?: boolean;
 }
 
