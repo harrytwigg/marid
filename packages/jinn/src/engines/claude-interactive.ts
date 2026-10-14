@@ -9,7 +9,7 @@ import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { departmentSessionEnv, isScopedSession } from "../gateway/department-scope/session-env.js";
-import { PtyLifecycleManager, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
+import { PtyLifecycleManager, ptyHostKey, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
 import { processStartFailure } from "../shared/process-start.js";
 import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
@@ -2153,7 +2153,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       handle.kill("SIGTERM");
       return;
     }
-    this.lifecycle.adopt(jinnSessionId, handle, { turnRunning: true });
+    this.lifecycle.adopt(jinnSessionId, handle, { turnRunning: true, hostKey: ptyHostKey(opts) });
     this.lifecycle.turnStarted(jinnSessionId);
     entry.boundProc = (handle as any)._proc as pty.IPty | undefined;
     entry.promptSubmitted = true;
@@ -2561,7 +2561,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         }
       } else {
         const handle = await this.spawn(jinnSessionId, opts, settingsPath);
-        this.lifecycle.adopt(jinnSessionId, handle, { turnRunning: true });
+        this.lifecycle.adopt(jinnSessionId, handle, { turnRunning: true, hostKey: ptyHostKey(opts) });
         this.lifecycle.turnStarted(jinnSessionId);
         turnMarkedStarted = true;
         entry.boundProc = (handle as any)._proc as pty.IPty | undefined;
@@ -3240,7 +3240,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
           });
           const handle = this.wireProcToStream(jinnSessionId, proc);
           this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false });
-          this.lifecycle.adopt(jinnSessionId, handle);
+          this.lifecycle.adopt(jinnSessionId, handle, { hostKey: ptyHostKey(opts) });
           return;
         }
         assertClaudeProfileDirExists(opts.claudeProfile);
@@ -3266,7 +3266,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         // Idle spawn carries no --append-system-prompt (the view-only PTY); mark it so
         // the first real turn through run() cold-respawns with the persona + sentinel.
         this.spawnParams.set(jinnSessionId, { model: opts.model, effortLevel: undefined, appendApplied: false, profileKey: profileKeyOf(opts.claudeProfile) });
-        this.lifecycle.adopt(jinnSessionId, handle);
+        this.lifecycle.adopt(jinnSessionId, handle, { hostKey: ptyHostKey(opts) });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.warn(`ensureIdleSpawn failed for session ${jinnSessionId}: ${message}`);

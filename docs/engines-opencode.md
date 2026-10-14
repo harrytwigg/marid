@@ -222,7 +222,30 @@ opencode is client/server: its TUI is a client of an HTTP server with a document
 
 **Remote employees.** The server runs on the employee's host, staged the same way a remote `run` turn is. It uses one long-lived `ssh -tt` that holds the reverse tunnel its MCP servers reach the gateway through, plus a `-L` forward on the gateway's loopback for the server's API. Turns, aborts and health checks all go through that forward, so a turn needs no ssh of its own. The terminal view runs `opencode attach` over its own ssh on that host, with no tunnel. The password is written to the session's 0600 env file and never appears on a command line. The server's pid is recorded (`tmp/opencode-server.pid`) so a deliberate stop can end the server and its tools. A dropped link also hangs the server up, because it has a tty.
 
-**Resources.** A warm server is a full opencode process: about 650 MB RSS on build-host (opencode 1.18.31), plus its MCP servers. An attached terminal adds about 310 MB while it's open. Idle servers are limited per host (`maxIdle` / `maxIdleByHost`) and by age (`idleTtlMs`), and they count toward `engines.claude.maxLivePtys`, the gateway-wide idle cap every interactive engine shares. A server that is serving a turn or is attached to a terminal is never counted or reaped. A terminal is closed 60 seconds after the last browser socket on it goes away.
+**Resources.** A warm server is a full opencode process: about 650 MB RSS on build-host (opencode 1.18.31), plus its MCP servers. An attached terminal adds about 310 MB while it's open. Idle servers are limited per host (`maxIdle` / `maxIdleByHost`) and by age (`idleTtlMs`), and a server on the gateway host also counts toward `engines.claude.maxLivePtys` (see below for which cap applies to which host). A server that is serving a turn or is attached to a terminal is never counted or reaped. A terminal is closed 60 seconds after the last browser socket on it goes away.
+
+**Which idle cap applies to which host.** Idle limits are scoped per host. A running turn or an attached terminal is never counted.
+
+| Process | Gateway host (`local`) | Remote host |
+|---|---|---|
+| opencode warm server | `server.maxIdleByHost.local` (else `maxIdle`) **and** `engines.claude.maxLivePtys` | `server.maxIdleByHost.<remoteHost>` (else `maxIdle`) only |
+| Claude and other interactive PTYs | `engines.claude.maxLivePtys` | `engines.claude.maxLivePtysByHost.<remoteHost>`, else `maxLivePtys` again, counted for that host alone |
+
+The host key is the employee's `remoteHost` exactly as written. `maxLivePtys` (default 8) protects the gateway host's memory, so a remote host's idle processes no longer use it up, and raising a remote host's budget never lets the gateway host hold more local idle processes.
+
+```yaml
+engines:
+  claude:
+    maxLivePtys: 2              # the gateway host: at most 2 idle processes
+    maxLivePtysByHost:          # optional; a remote host not listed gets maxLivePtys
+      build-box: 6
+  opencode:
+    server:
+      maxIdleByHost:
+        build-box: 8            # remote opencode servers: this count alone
+```
+
+**Upgrading.** A config with no `maxLivePtysByHost` keeps its limits on the gateway host. What changes is a remote host. Its idle opencode servers no longer count toward `maxLivePtys`, so only `maxIdleByHost` bounds them. Its idle Claude PTYs used to share the one gateway-wide count with everything else; each remote host now has a count of its own (`maxLivePtys` unless `maxLivePtysByHost` names it), so the total across hosts can be higher than before. Set `maxLivePtysByHost` for a remote host to keep it lower.
 
 **Switching back** to `mode: run` stops every warm server before the next turn runs as a plain `opencode run`, so two processes never write one session.
 

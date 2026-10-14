@@ -146,6 +146,17 @@ persona: |
   working directory. Build and test there; record findings as Notes.
 ```
 
+### Idle process limits per host
+
+A warm process that is not serving a turn or watched in a terminal is an idle
+one, and idle ones are capped per host. `engines.claude.maxLivePtys` (default 8)
+caps the gateway host's own. A remote host has its own count, so its idle
+processes never use up the gateway host's: `engines.claude.maxLivePtysByHost`
+sets it per `remoteHost` (as written on the employee), and a host not listed
+gets `maxLivePtys` for itself. Warm opencode servers on a remote host are
+bounded by `engines.opencode.server.maxIdleByHost` alone. The table and the
+upgrade notes are in [engines-opencode.md](engines-opencode.md#server-mode-and-the-terminal-view).
+
 These three fields are YAML-only on purpose — they are **not** editable through
 the employee-edit API. Being able to repoint where an unattended
 `--dangerously-skip-permissions` session executes is not a dashboard-sized
