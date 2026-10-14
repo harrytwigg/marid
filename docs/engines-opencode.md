@@ -69,6 +69,8 @@ Model ids are opencode's own `provider/model` form, exactly as `opencode models`
 
 opencode bundles an fff file indexer and watcher that pegs a CPU on a work root with many nested repos or worktrees (anomalyco/opencode#50719; still present on opencode 1.19.0). By default (`disableFff` true, or absent) Marid sets `OPENCODE_DISABLE_FFF=1` on every opencode process it starts: `run` turns and servers in server mode, the terminal view's attach client, locally and over SSH. A host wrapper script around the `opencode` binary that exports the variable is no longer needed (and `opencode upgrade` overwrites such a wrapper anyway).
 
+The option is read each time a process starts. A session's server that is already running keeps the environment it started with, so a change reaches that session's turns only once its server is replaced (stopped when idle, or on a gateway restart).
+
 `disableFff: false` means only that Marid does not set the variable. One that the gateway inherits from its own environment is not stripped, since Marid's environment scrub leaves operator `OPENCODE_DISABLE_*` settings alone.
 
 The option is read each time a process is spawned, so a hot reload applies to the next process. A server that is already running keeps the environment it started with until it is restarted (it stops when it goes idle, or when you stop the session's server).

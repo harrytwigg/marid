@@ -1134,12 +1134,15 @@ describe("a server lost under a turn: a clear failure, and the conversation surv
     SERVER_TURN_TIMING.statusPollMs = 100;
     const h = harness();
     const first = await h.engine.run(runOpts());
+    // The pool's abort loop is tested on its own; here only that it is asked.
+    const abort = vi.spyOn(h.pool, "abortTurn").mockResolvedValue();
     const result = await h.engine.run(runOpts({ prompt: "ORPHAN NOIDLE work", resumeSessionId: first.sessionId }));
     expect(result.error).toBe("the opencode server stopped running the turn before its reply finished");
     expect(await dead(result)).toBe(false);
-    // Neither the host's server mode nor the session's server is taken away.
+    // What was left of the prompt over there is stopped, not left unattended,
+    // and the host keeps server mode.
+    expect(abort).toHaveBeenCalledWith("sess-1", expect.objectContaining({ engineSessionId: first.sessionId }));
     expect(h.pool.unsupportedReason("local")).toBeUndefined();
-    expect(h.pool.get("sess-1")).toBeDefined();
   });
 
   it("says how a reply that answered nothing ended, so an empty provider response is visible", () => {

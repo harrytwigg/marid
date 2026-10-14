@@ -80,8 +80,9 @@ export interface ServerTurnDeps {
   onSessionId?: (engineSessionId: string) => void;
   /** Told when the server's events stopped matching what this turn reads: a
    *  finished turn whose answer is in the server's store but never arrived on
-   *  the stream, or an idle that never arrived. The engine takes the host off
-   *  server mode, so later turns use `run` rather than lose events silently. */
+   *  the stream, whether the stream or only the status poll saw the turn end.
+   *  The engine takes the host off server mode, so later turns use `run`
+   *  rather than lose events silently. */
   onProtocolDrift?: (reason: string) => void;
 }
 
@@ -802,6 +803,9 @@ export class OpencodeServerTurn {
     // stream changed shape, so the host keeps server mode and its server.
     if (!answer) {
       this.failure = "the opencode server stopped running the turn before its reply finished";
+      // Whatever of the prompt is still queued or running over there must not
+      // carry on unattended beside the session's next turn.
+      await this.stopOnServer();
       return;
     }
     this.deps.onProtocolDrift?.(
