@@ -845,8 +845,9 @@ export class OpencodeServerTurn {
     // The server says the session is idle, yet the turn's newest reply never
     // ended: the server dropped the turn (its instance was disposed or
     // restarted under it). Text the reply holds is a step's narration ("let me
-    // check …"), not an answer, and a reply with no text is that same dropped turn. That is a failed turn, not evidence the stream
-    // changed shape, so the host keeps server mode and its server.
+    // check …"), not an answer, and a reply with no text is that same dropped
+    // turn. That is a failed turn, not evidence the stream changed shape, so the
+    // host keeps server mode and its server.
     if (!replyEnded(this.ownReply)) {
       this.failure = "the opencode server stopped running the turn before its reply finished";
       // Whatever of the prompt is still queued or running over there must not
