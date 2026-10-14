@@ -198,6 +198,18 @@ export function replyIsDone(info: Record<string, unknown>): boolean {
   return Boolean(record(info.time)?.completed) && Boolean(finish) && finish !== "tool-calls" && finish !== "unknown";
 }
 
+/** Why a server turn that ended without an answer had none, as far as its
+ *  newest reply says: how it finished and how much it wrote. A reply that
+ *  finished at once with nothing written points at the provider. */
+export function noAnswerReason(reply: Record<string, unknown> | undefined): string {
+  const base = "the opencode server ended the turn without a final assistant response";
+  if (!reply) return `${base} (no reply to its prompt)`;
+  const output = record(reply.tokens)?.output;
+  const written = typeof output === "number" ? ` with ${output} output tokens` : "";
+  const finish = str(reply.finish);
+  return `${base} (${finish ? `its reply finished "${finish}"` : "its reply never finished"}${written})`;
+}
+
 /** A line that answers the turn: its text, or its error. */
 function isAnswerLine(line: string): boolean {
   return /^\{"type":"(text|error)"/.test(line);
@@ -489,6 +501,8 @@ export class OpencodeServerTurn {
    *  nor failed. */
   private newestOwn = "";
   private newestOwnOpen = false;
+  /** The newest of those replies as last seen, for a turn that ends without an answer. */
+  private ownReply?: Record<string, unknown>;
   /** The session went idle while that reply was still open (see onIdle). */
   private closeWait?: NodeJS.Timeout;
   /** Sub-sessions this turn's replies spawned (a subagent's), transitively. */
@@ -563,7 +577,7 @@ export class OpencodeServerTurn {
       // The stream went away mid-turn: settle it failed even if a step had
       // already spoken, rather than let the narration pass for an answer.
       failure: this.failure ?? undefined,
-      noAnswer: "the opencode server ended the turn without a final assistant response",
+      noAnswer: noAnswerReason(this.ownReply),
     });
     // The server accepted the prompt into this session, so the session exists
     // whatever happened next: a lost server or stream is not a lost
@@ -768,7 +782,7 @@ export class OpencodeServerTurn {
    */
   private async recover(): Promise<void> {
     const messages = await this.messages();
-    const unanswered = !messages.some((m) => m.info?.role === "assistant" && m.info.parentID === this.userMessageId);
+    const unanswered = !this.noteStoredReplies(messages);
     // Unless the session is still busy (the prompt may yet run), a prompt with
     // no reply at all was dropped: an abort drops every prompt queued behind
     // the one it stops (verified on 1.18.32), and the turn — which leaves that
@@ -795,6 +809,14 @@ export class OpencodeServerTurn {
         ? "the turn ended without the stream saying so"
         : "a finished turn's answer is in the server's store but never arrived on the event stream",
     );
+  }
+
+  /** Whether the store holds a reply to this turn's prompt; the newest is the
+   *  one a turn without an answer describes. */
+  private noteStoredReplies(messages: StoredMessage[]): boolean {
+    const replies = messages.filter((m) => m.info?.role === "assistant" && m.info.parentID === this.userMessageId);
+    if (replies.length) this.ownReply = replies[replies.length - 1]!.info;
+    return replies.length > 0;
   }
 
   private async createSession(): Promise<string> {
@@ -913,6 +935,7 @@ export class OpencodeServerTurn {
   private onOwnReply(id: string, info: Record<string, unknown>): void {
     if (id >= this.newestOwn) {
       this.newestOwn = id;
+      this.ownReply = info;
       this.newestOwnOpen = !record(info.time)?.completed && !info.error;
     }
     const error = record(info.error);

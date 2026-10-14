@@ -29,7 +29,7 @@ import {
   UNSUPPORTED_RETRY_MS,
   unsupportedVersionReason,
 } from "../opencode-server.js";
-import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
+import { noAnswerReason, SERVER_TURN_TIMING } from "../opencode-server-turn.js";
 import { needsStandalone } from "../opencode-version.js";
 import { USER_MESSAGE_INTERRUPTION_REASON, USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
 import { HELD_FOR_TURN_NOTICE, OpencodeInteractiveEngine, OPENCODE_VIEW_NEEDS_SERVER_MODE } from "../opencode-interactive.js";
@@ -573,7 +573,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     await waitFor(async () => (await stored()).length === 4);
     // Jinn's own reply ends with no text, so the error would be all it reported.
     const result = await h.engine.run(runOpts({ prompt: "TOOLONLY jinn", resumeSessionId: first.sessionId }));
-    expect(result.error).toBe("the opencode server ended the turn without a final assistant response");
+    expect(result.error).toMatch(/^the opencode server ended the turn without a final assistant response \(/);
     expect(result.numTurns).toBe(2);
     // Only meaningful if the operator's reply failed while the turn listened:
     // the turn subscribes before it posts, so its post must precede that failure.
@@ -587,7 +587,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     // It may yet run (QA round 2 ): PromptNotRun is only for an idle session.
     const h = harness();
     const result = await h.engine.run(runOpts({ prompt: "GHOSTIDLE jinn" }));
-    expect(result.error).toBe("the opencode server ended the turn without a final assistant response");
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response (no reply to its prompt)");
   });
 
   it("an interrupt while a resumed turn reads the history posts nothing", async () => {
@@ -789,7 +789,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     it("ends a turn whose last step is a tool call with no text as a turn without an answer", async () => {
       const h = harness();
       const result = await h.engine.run(runOpts({ prompt: "TOOLONLY work" }));
-      expect(result.error).toBe("the opencode server ended the turn without a final assistant response");
+      expect(result.error).toBe("the opencode server ended the turn without a final assistant response (its reply finished \"stop\")");
       expect(result.numTurns).toBe(2);
       expect(h.pool.unsupportedReason("local")).toBeUndefined();
     });
@@ -1125,7 +1125,7 @@ describe("a server lost under a turn: a clear failure, and the conversation surv
     const h = harness();
     const first = await h.engine.run(runOpts());
     const result = await h.engine.run(runOpts({ prompt: "ORPHAN work", resumeSessionId: first.sessionId }));
-    expect(result.error).toBe("the opencode server ended the turn without a final assistant response");
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response (its reply never finished)");
     expect(await dead(result)).toBe(false);
     expect(h.pool.unsupportedReason("local")).toBeUndefined();
   });
@@ -1140,6 +1140,13 @@ describe("a server lost under a turn: a clear failure, and the conversation surv
     // Neither the host's server mode nor the session's server is taken away.
     expect(h.pool.unsupportedReason("local")).toBeUndefined();
     expect(h.pool.get("sess-1")).toBeDefined();
+  });
+
+  it("says how a reply that answered nothing ended, so an empty provider response is visible", () => {
+    expect(noAnswerReason({ finish: "stop", tokens: { output: 0 } }))
+      .toBe("the opencode server ended the turn without a final assistant response (its reply finished \"stop\" with 0 output tokens)");
+    expect(noAnswerReason({ time: { created: 1 } })).toMatch(/\(its reply never finished\)$/);
+    expect(noAnswerReason(undefined)).toMatch(/\(no reply to its prompt\)$/);
   });
 
   it("a compaction slower than fetch's wait for response headers still completes", async () => {
