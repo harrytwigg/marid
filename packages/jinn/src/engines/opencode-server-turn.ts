@@ -1007,7 +1007,7 @@ export class OpencodeServerTurn {
       if (this.terminationReason) return; // our own abort
       // Only while this turn's reply is the one running (or before any reply):
       // an error in the operator's prompt is not this turn's.
-      if (this.activeAssistant && !this.own.has(this.activeAssistant)) return;
+      if (!this.runsOwnReply()) return;
       this.feed(runLineForEvent({ type: "session.error", properties: props }, this.sessionId));
     },
     "permission.asked": (props) => this.answerFor(props, "/permission", "/reply", { reply: "once" }),
@@ -1032,19 +1032,32 @@ export class OpencodeServerTurn {
     this.settle.arm("idle", this.providerRetry ? SERVER_TURN_TIMING.fallbackWaitMs : SERVER_TURN_TIMING.closeWaitMs);
   }
 
-  /** The session is busy, or retrying its provider: either way the turn is
-   *  not over, whatever ended before. A retry due too far off to wait for ends
-   *  the turn with the provider's words, unless something moves first. */
+  /**
+   * The session is busy, or retrying its provider. A status is the session's,
+   * not the turn's, so it counts for the turn only while the turn's own reply
+   * runs (or none has started): the session may be running someone else's
+   * prompt. Then a new attempt ends a wait on a far-off retry, and a retry
+   * keeps the turn open and names the provider's error; one due too far off
+   * ends the turn with it unless something moves first. A busy never takes up
+   * an idle or a finished reply: only a newer reply of the turn's, or its
+   * re-sent prompt, does that.
+   */
   private onBusy(status: Record<string, unknown> | undefined): void {
     this.sawBusy = true;
-    this.settle.cancel("idle", "retry");
+    if (!this.runsOwnReply()) return;
+    this.settle.cancel("retry");
     const retry = providerRetryOf(status);
     if (!retry) return;
     this.providerRetry = retry;
-    this.settle.cancel("done");
+    this.settle.cancel("idle", "done");
     if (retry.next && retry.next - Date.now() > SERVER_TURN_TIMING.retryWaitCapMs) {
       this.settle.arm("retry", SERVER_TURN_TIMING.retryGraceMs);
     }
+  }
+
+  /** The reply running in the session is the turn's own, or none is yet. */
+  private runsOwnReply(): boolean {
+    return !this.activeAssistant || this.own.has(this.activeAssistant);
   }
 
   private onSettled(kind: SettleKind): void {

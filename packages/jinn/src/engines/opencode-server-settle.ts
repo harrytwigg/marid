@@ -7,10 +7,10 @@
  * provider's message (verified on 1.18.35 and 1.19.0 with a provider answering
  * 429 "Go usage limit exceeded": retry, busy, retry, … then, out of attempts,
  * session.error, idle, the failed reply's message.updated). A plugin or
- * provider can also fall back to another model, which starts a new step: the
- * session goes busy again, or a newer reply to the turn's prompt opens. So an
- * idle, or a finished reply with no text, is only the end of a turn that has
- * no answer once nothing has resumed it for a short while.
+ * provider can also fall back to another model: a newer reply to the turn's
+ * prompt opens, or the prompt is re-sent (see repeatsPrompt). So an idle, or
+ * a finished reply with no text, is only the end of a turn that has no answer
+ * once nothing has taken the turn up again for a short while.
  */
 
 function str(value: unknown): string | undefined {
@@ -64,10 +64,10 @@ export function repeatsPrompt(part: Record<string, unknown>, promptText: string)
 /**
  * Why the turn is waiting to end:
  * - `idle`: the session went idle without a text answer (or with its newest
- *   reply still open). A busy or retry status, or a newer reply, means opencode
- *   took the turn up again.
- * - `done`: one of the turn's replies finished without a text answer. A retry
- *   status or a newer reply means it is not the last.
+ *   reply still open). A newer reply of the turn's, its re-sent prompt, or a
+ *   retry of its own reply means opencode took the turn up again.
+ * - `done`: one of the turn's replies finished without a text answer. The same
+ *   signs mean it is not the last.
  * - `retry`: opencode will not retry the provider for longer than a turn
  *   waits. Anything that shows the turn moving on cancels it.
  */

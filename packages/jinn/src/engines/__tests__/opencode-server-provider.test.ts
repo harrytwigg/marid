@@ -120,6 +120,28 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
     expect((await serverLog(pool)).some((e) => /^\/session\/[^/]+\/abort$/.test(e.url))).toBe(true);
   });
 
+  it("leaves a retry of someone else's prompt in the session to them: not the turn's error, nothing aborted", async () => {
+    SERVER_TURN_TIMING.retryWaitCapMs = 60_000;
+    SERVER_TURN_TIMING.retryGraceMs = 300;
+    const { pool, engine } = harness();
+    const first = await engine.run(runOpts("first"));
+    const turn = engine.run({ ...runOpts("SLOWSTART TOOLONLY jinn"), resumeSessionId: first.sessionId });
+    const server = pool.get("sess-1")!;
+    for (let i = 0; i < 200 && (await serverLog(pool)).filter((e) => e.url.endsWith("/prompt_async")).length < 2; i++) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    // The operator's prompt queues behind the turn's and hits a usage limit an hour off.
+    await fetch(`${server.apiUrl}/session/${first.sessionId}/prompt_async`, {
+      method: "POST",
+      headers: { authorization: basicAuthHeader(server.password), "content-type": "application/json" },
+      body: JSON.stringify({ parts: [{ type: "text", text: "OPERATOR PROVIDERWAIT" }] }),
+    });
+    const result = await turn;
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response (its reply finished \"stop\")");
+    expect(result.rateLimit).toBeUndefined();
+    expect((await serverLog(pool)).some((e) => e.url.endsWith("/abort"))).toBe(false);
+  });
+
   it("waits out a provider retry that is due within the cap", async () => {
     SERVER_TURN_TIMING.retryWaitCapMs = 2 * 3_600_000; // the fake's retry is an hour off
     SERVER_TURN_TIMING.retryGraceMs = 300;
