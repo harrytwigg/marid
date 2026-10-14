@@ -4,7 +4,7 @@ import { OpencodeTurn } from "./opencode-turn.js";
 import { buildOpencodePrompt } from "./opencode-protocol.js";
 import { basicAuthHeader, type OpencodeServer } from "./opencode-server.js";
 import { USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
-import { abandonedRetryError, providerFailureReason, providerRetryOf, SettleWait, type ProviderRetry, type SettleKind } from "./opencode-server-settle.js";
+import { abandonedRetryError, providerFailureReason, providerRetryOf, repeatsPrompt, SettleWait, type ProviderRetry, type SettleKind } from "./opencode-server-settle.js";
 
 /**
  * One Jinn turn, sent straight to the session's opencode server over HTTP.
@@ -93,10 +93,19 @@ export interface ServerTurnDeps {
  *  budget covers only opening the stream: the pool hands out a server once its
  *  instance has bootstrapped, which is the slow part. `closeWaitMs` is how long
  *  a turn without a text answer waits, after an idle or a finished reply, for
- *  opencode to take it up again (see opencode-server-settle.ts). A provider
- *  retry due further off than `retryWaitCapMs` ends the turn once it has stood
- *  for `retryGraceMs` with nothing else happening. */
-export const SERVER_TURN_TIMING = { statusPollMs: 30_000, connectMs: 15_000, closeWaitMs: 2_000, retryWaitCapMs: 120_000, retryGraceMs: 15_000 };
+ *  opencode to take it up again (see opencode-server-settle.ts); an idle that
+ *  comes while opencode was retrying the provider waits `fallbackWaitMs`, as a
+ *  fallback plugin re-prompts then (about 0.5 s later in production). A
+ *  provider retry due further off than `retryWaitCapMs` ends the turn once it
+ *  has stood for `retryGraceMs` with nothing else happening. */
+export const SERVER_TURN_TIMING = {
+  statusPollMs: 30_000,
+  connectMs: 15_000,
+  closeWaitMs: 2_000,
+  fallbackWaitMs: 5_000,
+  retryWaitCapMs: 120_000,
+  retryGraceMs: 15_000,
+};
 
 /** A parsed SSE event from the server's `/event` stream. */
 interface ServerEvent {
@@ -266,10 +275,10 @@ export function newMessageId(now = Date.now()): string {
 export function runLinesFromMessages(
   messages: StoredMessage[],
   sessionId: string,
-  userMessageId: string,
+  prompts: string | ReadonlySet<string>,
 ): string[] {
   const lines: string[] = [];
-  for (const message of messages.filter((m) => m.info?.role === "assistant" && m.info.parentID === userMessageId)) {
+  for (const message of messages.filter((m) => answersPrompt(m, prompts))) {
     for (const part of message.parts ?? []) {
       const line = runLineForEvent({ type: "message.part.updated", properties: { part } }, sessionId);
       if (line) lines.push(line);
@@ -281,6 +290,12 @@ export function runLinesFromMessages(
 }
 
 type StoredMessage = { info?: Record<string, unknown>; parts?: unknown[] };
+
+/** An assistant message answering one of the turn's prompts. */
+function answersPrompt(message: StoredMessage, prompts: string | ReadonlySet<string>): boolean {
+  const parent = str(message.info?.parentID) ?? "";
+  return message.info?.role === "assistant" && (typeof prompts === "string" ? parent === prompts : prompts.has(parent));
+}
 
 function textParts(message: StoredMessage): Array<Record<string, unknown>> {
   return (message.parts ?? []).map(record).filter((p): p is Record<string, unknown> => p?.type === "text");
@@ -514,6 +529,15 @@ export class OpencodeServerTurn {
   private sessionId = "";
   /** The id this turn's prompt is posted under; its replies name it as parent. */
   private readonly userMessageId = newMessageId();
+  /** The turn's prompts: its own, and copies a fallback re-sent (see
+   *  repeatsPrompt). Replies to any of them are the turn's. */
+  private readonly prompts = new Set([this.userMessageId]);
+  /** The newest of them: the one a stop has to stop. */
+  private currentPrompt = this.userMessageId;
+  /** The prompt text the turn posted, to know a re-sent copy of it. */
+  private promptText = "";
+  /** User messages in the session the turn did not post. */
+  private readonly otherPrompts = new Set<string>();
   /** Assistant messages answering this turn, and ones answering someone else. */
   private readonly own = new Set<string>();
   private readonly foreign = new Set<string>();
@@ -676,7 +700,7 @@ export class OpencodeServerTurn {
   private async stopOnServer(): Promise<void> {
     if (this.posting) await this.posting.catch(() => undefined);
     if (!this.posted) return;
-    await this.deps.abort({ engineSessionId: this.sessionId, userMessageId: this.userMessageId }).catch(() => undefined);
+    await this.deps.abort({ engineSessionId: this.sessionId, userMessageId: this.currentPrompt }).catch(() => undefined);
   }
 
   /**
@@ -857,7 +881,7 @@ export class OpencodeServerTurn {
       this.turn.readLine(JSON.stringify({ type: "error", sessionID: this.sessionId, error: PROMPT_NOT_RUN }), this.onStream);
       return;
     }
-    const lines = runLinesFromMessages(messages, this.sessionId, this.userMessageId);
+    const lines = runLinesFromMessages(messages, this.sessionId, this.prompts);
     const answer = lines.some(isAnswerLine);
     if (!answer && !this.missedIdle && !(!unanswered && this.replyLeftOpen())) return;
     for (const line of lines) if (this.firstReport(line)) this.turn.readLine(line, this.onStream);
@@ -907,7 +931,7 @@ export class OpencodeServerTurn {
   /** Whether the store holds a reply to this turn's prompt; the newest is the
    *  one a turn without an answer describes. */
   private noteStoredReplies(messages: StoredMessage[]): boolean {
-    const replies = messages.filter((m) => m.info?.role === "assistant" && m.info.parentID === this.userMessageId);
+    const replies = messages.filter((m) => answersPrompt(m, this.prompts));
     if (replies.length) this.ownReply = replies[replies.length - 1]!.info;
     return replies.length > 0;
   }
@@ -935,7 +959,7 @@ export class OpencodeServerTurn {
         ...(found.stopped.length
           ? [{ type: "text", text: stoppedRequestsNotice(found.stopped), synthetic: true, metadata: JINN_STOPPED_NOTICE_METADATA }]
           : []),
-        { type: "text", text: buildOpencodePrompt(this.opts), metadata: JINN_PROMPT_METADATA },
+        { type: "text", text: (this.promptText = buildOpencodePrompt(this.opts)), metadata: JINN_PROMPT_METADATA },
       ],
       ...(model ? { model } : {}),
       ...(agent ? { agent } : {}),
@@ -1005,7 +1029,7 @@ export class OpencodeServerTurn {
   private onIdle(): void {
     if (!this.sawBusy || !this.posting) return;
     if (this.lastAnswer === "text" && !this.newestOwnOpen) return this.finish();
-    this.settle.arm("idle", SERVER_TURN_TIMING.closeWaitMs);
+    this.settle.arm("idle", this.providerRetry ? SERVER_TURN_TIMING.fallbackWaitMs : SERVER_TURN_TIMING.closeWaitMs);
   }
 
   /** The session is busy, or retrying its provider: either way the turn is
@@ -1037,12 +1061,19 @@ export class OpencodeServerTurn {
     this.handlers[event.type]?.(record(event.properties) ?? {});
   }
 
-  /** Learn whose an assistant message is, and release its waiting parts. */
+  /** A message of the session: an assistant one is classified, and a user
+   *  message the turn did not post is noted (it may be a re-sent copy). */
   private onMessage(info: Record<string, unknown>): void {
     const id = str(info.id);
-    if (!id || info.sessionID !== this.sessionId || info.role !== "assistant") return;
+    if (!id || info.sessionID !== this.sessionId) return;
+    if (info.role === "assistant") this.onAssistant(id, info);
+    else if (info.role === "user" && !this.prompts.has(id)) this.otherPrompts.add(id);
+  }
+
+  /** Learn whose an assistant message is, and release its waiting parts. */
+  private onAssistant(id: string, info: Record<string, unknown>): void {
     if (id > this.activeAssistant) this.activeAssistant = id;
-    if (!this.own.has(id) && !this.foreign.has(id)) this.classify(id, info.parentID === this.userMessageId);
+    if (!this.own.has(id) && !this.foreign.has(id)) this.classify(id, this.prompts.has(str(info.parentID) ?? ""));
     if (this.own.has(id)) this.onOwnReply(id, info);
   }
 
@@ -1082,7 +1113,8 @@ export class OpencodeServerTurn {
     const part = record(props.part);
     if (!part || part.sessionID !== this.sessionId) return;
     const messageId = str(part.messageID) ?? "";
-    if (messageId === this.userMessageId || this.foreign.has(messageId)) return;
+    if (this.otherPrompts.has(messageId)) return this.adoptIfRepeated(messageId, part);
+    if (this.prompts.has(messageId) || this.foreign.has(messageId)) return;
     if (!this.own.has(messageId)) {
       // Its message has not said whose it is yet; hold it until it does.
       const waiting = this.pendingParts.get(messageId) ?? [];
@@ -1091,6 +1123,17 @@ export class OpencodeServerTurn {
       return;
     }
     this.feed(runLineForEvent({ type: "message.part.updated", properties: props }, this.sessionId));
+  }
+
+  /** Someone else's prompt that repeats this turn's, while the turn has no
+   *  answer: a fallback re-sent it, and its replies are the turn's. */
+  private adoptIfRepeated(messageId: string, part: Record<string, unknown>): void {
+    if (!this.posted || this.lastAnswer === "text" || !repeatsPrompt(part, this.promptText)) return;
+    this.otherPrompts.delete(messageId);
+    this.prompts.add(messageId);
+    this.currentPrompt = messageId;
+    this.settle.cancel();
+    logger.info(`opencode server turn follows its prompt re-sent as ${messageId} in ${this.sessionId} (a provider fallback)`);
   }
 
   private feed(line: string | undefined): void {

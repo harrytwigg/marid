@@ -46,6 +46,22 @@ export function abandonedRetryError(retry: ProviderRetry, now = Date.now()): { n
 }
 
 /**
+ * Whether a part of a user message the turn did not post repeats the turn's
+ * prompt word for word: a fallback re-sending it on another model. The
+ * opencode-rate-limit plugin (1.4.0) does exactly that: on a rate-limit retry
+ * or error it aborts the session and posts the last user message's text parts
+ * again, without their metadata, as a new message on its fallback model (the
+ * abort leaves the turn's reply completed, with no error and nothing written,
+ * and the session idle; verified with opencode 1.19.0). The answer to that
+ * copy is the turn's answer. A Jinn prompt always carries Jinn metadata, so
+ * another Jinn turn's prompt is never taken for a copy.
+ */
+export function repeatsPrompt(part: Record<string, unknown>, promptText: string): boolean {
+  const metadata = part.metadata && typeof part.metadata === "object" ? part.metadata as Record<string, unknown> : undefined;
+  return part.type === "text" && Boolean(promptText) && part.text === promptText && metadata?.jinn === undefined;
+}
+
+/**
  * Why the turn is waiting to end:
  * - `idle`: the session went idle without a text answer (or with its newest
  *   reply still open). A busy or retry status, or a newer reply, means opencode

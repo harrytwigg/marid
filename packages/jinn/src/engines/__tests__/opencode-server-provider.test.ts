@@ -18,7 +18,7 @@ vi.mock("../../shared/logger.js", () => ({
 import { OpencodeEngine } from "../opencode.js";
 import { OpencodeServerPool, basicAuthHeader } from "../opencode-server.js";
 import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
-import { abandonedRetryError, providerRetryOf, SettleWait } from "../opencode-server-settle.js";
+import { abandonedRetryError, providerRetryOf, repeatsPrompt, SettleWait } from "../opencode-server-settle.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts } from "../../shared/types.js";
@@ -99,6 +99,14 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
     expect(result.result).toContain("answer:FALLBACKREPLY build it");
   });
 
+  it("takes the answer to the prompt a fallback plugin re-sent after aborting the turn as this turn's answer", async () => {
+    const { pool, engine } = harness();
+    const result = await engine.run(runOpts("FALLBACKPROMPT build it"));
+    expect(result.error).toBeUndefined();
+    expect(result.result).toContain("answer:FALLBACKPROMPT build it");
+    expect((await serverLog(pool)).filter((e) => e.url.endsWith("/abort"))).toEqual([]); // nothing of it was stopped
+  });
+
   it("ends a turn whose provider retry is too far off, with the provider's words and when it resets, and stops the retry on the server", async () => {
     SERVER_TURN_TIMING.retryWaitCapMs = 60_000;
     SERVER_TURN_TIMING.retryGraceMs = 300;
@@ -125,6 +133,14 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
 });
 
 describe("opencode-server-settle", () => {
+  it("knows a re-sent copy of the prompt: the same text, with no Jinn metadata", () => {
+    expect(repeatsPrompt({ type: "text", text: "build it" }, "build it")).toBe(true);
+    expect(repeatsPrompt({ type: "text", text: "build it", metadata: { jinn: "prompt" } }, "build it")).toBe(false);
+    expect(repeatsPrompt({ type: "text", text: "build it again" }, "build it")).toBe(false);
+    expect(repeatsPrompt({ type: "file", text: "build it" }, "build it")).toBe(false);
+    expect(repeatsPrompt({ type: "text", text: "" }, "")).toBe(false);
+  });
+
   it("reads a retry status, and nothing else", () => {
     expect(providerRetryOf({ type: "retry", attempt: 1, message: "Go usage limit exceeded", next: 5 })).toEqual({ message: "Go usage limit exceeded", next: 5 });
     expect(providerRetryOf({ type: "retry" })).toEqual({ message: "the provider failed and opencode is retrying it" });

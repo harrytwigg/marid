@@ -75,6 +75,11 @@
 //               reply to the same prompt, which answers
 //   FALLBACKREPLY   the first reply finishes "stop" with nothing written; 300 ms
 //               later a new reply to the same prompt opens and answers
+//   FALLBACKPROMPT  what the opencode-rate-limit plugin (1.4.0) does on 1.19.0:
+//               a retry status an hour off, then its abort (the reply closes
+//               with nothing written and no error; idle), then 300 ms later
+//               a new user message repeating the prompt's text parts without
+//               their metadata, whose reply answers
 // Directives are read from the prompt's own text only, never from a synthetic
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
@@ -329,12 +334,35 @@ function serve() {
       setStatus(sessionID, "busy");
       newReply(sessionID, turn);
     }
+    if (text.includes("FALLBACKPROMPT")) {
+      retry(1, 3_600_000);
+      await sleep(100);
+      closeEmpty();
+      setStatus(sessionID, "idle");
+      await sleep(300);
+      repostPrompt(sessionID, turn);
+      setStatus(sessionID, "busy");
+      newReply(sessionID, turn);
+    }
     if (text.includes("FALLBACKREPLY")) {
       closeEmpty("stop");
       await sleep(300);
       newReply(sessionID, turn);
     }
     return false;
+  }
+
+  /** FALLBACKPROMPT: the plugin posts the last user message's text parts again,
+   *  without metadata, and the turn's next reply answers that copy. */
+  function repostPrompt(sessionID, turn) {
+    const userId = newId("msg");
+    const parts = (turn.body.parts ?? []).filter((p) => p.type === "text")
+      .map((p) => ({ id: newId("prt"), type: "text", text: p.text, messageID: userId, sessionID }));
+    const user = { info: { id: userId, sessionID, role: "user", time: { created: Date.now() } }, parts };
+    sessions.get(sessionID).messages.push(user);
+    messageUpdated(sessionID, user);
+    for (const p of parts) publish("message.part.updated", { sessionID, part: p, time: Date.now() });
+    turn.userId = userId;
   }
 
   /** MIDFAIL: the turn ends itself, in the order its prompt asks for. */
