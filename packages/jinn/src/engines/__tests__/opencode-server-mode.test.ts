@@ -1302,6 +1302,14 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
       expect(h.pool.runNeedsStandalone({ bin: other })).toBe(false);
     });
 
+    it("a concurrent refusal of the same binary that learned no version keeps the OpenCode 2 verdict", () => {
+      const h = harness();
+      h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE });
+      h.pool.markUnsupported("local", "the server answered /global/health with something other than JSON", { bin: FAKE });
+      expect(h.pool.unsupportedReason("local")).toMatch(/other than JSON/);
+      expect(h.pool.runNeedsStandalone({ bin: FAKE })).toBe(true);
+    });
+
     it("an expired verdict is not carried into a later refusal", () => {
       const h = harness();
       h.pool.markUnsupported("local", "OpenCode 2 is not supported by server mode", { version: "2.0.28", bin: FAKE, now: 1000 });

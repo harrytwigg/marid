@@ -232,6 +232,21 @@ function healthRefusal(health: HealthReading): string | undefined {
   return unsupportedVersionReason(health.version);
 }
 
+/**
+ * The binary a refusal is about and the version its server reported: one fact,
+ * never mixed across two refusals. A refusal that names no binary (API drift),
+ * or the same binary without learning its version (a concurrent start that
+ * lost /api/info), keeps what the live earlier one found; one that names
+ * another binary records only what it learned about that one.
+ */
+function refusedBinary(
+  previous: { version?: string; bin?: string } | undefined,
+  next: { version?: string; bin?: string },
+): { version?: string; bin?: string } {
+  const keep = next.bin === undefined || (next.bin === previous?.bin && next.version === undefined);
+  return keep && previous ? previous : next;
+}
+
 export class OpencodeServerPool {
   private servers = new Map<string, OpencodeServer>();
   private starting = new Map<string, Promise<OpencodeServer>>();
@@ -355,10 +370,7 @@ export class OpencodeServerPool {
     if (!previous) {
       logger.warn(`opencode server mode disabled for host ${hostKey} for ${Math.round(UNSUPPORTED_RETRY_MS / 60000)} minutes: ${reason}`);
     }
-    // The version and binary are one fact: what that binary's server said it
-    // was. A refusal that names no binary (API drift) keeps what an earlier one
-    // found; one that names a binary records only what it learned about it.
-    const { version, bin } = opts.bin === undefined ? (previous ?? {}) : opts;
+    const { version, bin } = refusedBinary(previous, opts);
     this.unsupported.set(hostKey, { reason, at: now, ...(version ? { version } : {}), ...(bin ? { bin } : {}) });
   }
 
@@ -836,8 +848,9 @@ export class OpencodeServerPool {
   }
 
   /** The version an OpenCode 2 server reports on `/api/info`, or undefined when
-   *  there is no such route. A request that fails outright is tried once more:
-   *  a server that has only just answered its health check can drop one. */
+   *  there is no such route. A request that fails (no answer, or a non-2xx
+   *  status) is tried once more: a server that has only just answered its
+   *  health check can drop one. */
   private async apiInfoVersion(server: OpencodeServer): Promise<string | undefined> {
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0) await sleep(HEALTH_POLL_MS);
