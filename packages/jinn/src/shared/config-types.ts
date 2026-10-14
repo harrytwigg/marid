@@ -77,8 +77,15 @@ export interface JinnConfig {
       model: string;
       effortLevel?: string;
       childEffortOverride?: string;
-      /** Max concurrent live PTYs across all sessions (CLI/xterm view only). Default 8. */
+      /** Max idle warm processes (interactive PTYs, local opencode servers) on the
+       *  gateway host itself; running or viewed ones never count. Default 8. A remote
+       *  host's processes do not count toward it: see {@link maxLivePtysByHost}. */
       maxLivePtys?: number;
+      /** Idle cap for the interactive processes on one remote host. Keys are an
+       *  employee's `remoteHost` exactly as written on the employee. A remote
+       *  host not listed gets {@link maxLivePtys} for itself. Opencode servers on a
+       *  remote host are bounded by `engines.opencode.server.maxIdleByHost` instead. */
+      maxLivePtysByHost?: Record<string, number>;
       /** Model ids shown by default in the picker (before "More models…"). Defaults
        *  to the three latest alias families (opus/sonnet/fable). Explicit [] = none. */
       featuredModels?: string[];
@@ -242,8 +249,10 @@ export type OpencodeMode = "run" | "server";
  * A warm server holds a full opencode process (~650 MB on build-host) plus its
  * MCP servers, so idle ones are bounded two ways: by COUNT per host, and by
  * AGE. Servers serving a turn or watched in the terminal are never counted or
- * reaped. Warm servers also count toward `engines.claude.maxLivePtys`, the
- * gateway-wide idle cap every interactive engine shares.
+ * reaped. A warm server on the gateway host also counts toward
+ * `engines.claude.maxLivePtys`, the idle cap it shares with the interactive
+ * engines' local PTYs; a server on a remote host is bounded by the per-host
+ * count alone.
  */
 export interface OpencodeServerConfig {
   /** Idle warm servers kept per host. Default 2. */

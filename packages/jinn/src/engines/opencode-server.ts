@@ -8,7 +8,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { assertRemoteTarget, isRemoteTarget } from "../shared/remote-target.js";
 import type { RemoteTarget, ResolvedMcpConfig } from "../shared/types.js";
 import type { OpencodeMode, OpencodeServerConfig, RemoteExecutionConfig } from "../shared/config-types.js";
-import type { PtyHandle, PtyLifecycleManager } from "./pty-lifecycle.js";
+import { LOCAL_HOST_KEY, type PtyHandle, type PtyLifecycleManager } from "./pty-lifecycle.js";
 import {
   buildOpencodeSessionConfig,
   cleanupOpencodeSessionConfig,
@@ -52,7 +52,8 @@ import { needsStandalone, newerMajorReason, notJsonHealthReason, opencodeMajor, 
  * server loads one MCP set for everything it serves.
  *
  * Lifetime. A server is registered with a {@link PtyLifecycleManager}, so it
- * counts toward the gateway-wide idle cap every interactive engine shares, and
+ * counts toward the gateway's idle cap (`maxLivePtys`, local servers only: a remote
+ * host's servers are bounded by the per-host count alone), and
  * a running turn or an attached viewer keeps it alive. On top of that this
  * pool stops idle servers past a per-host count and past an age, because a warm
  * server is a full opencode process (~650 MB) plus its MCP servers.
@@ -579,7 +580,13 @@ export class OpencodeServerPool {
       : await this.spawnLocal(sessionId, spec, fingerprint, password);
     this.servers.set(sessionId, server);
     // Adopted as busy, so neither cap can stop it while it is still starting.
-    this.lifecycle.adopt(sessionId, this.handleFor(server), { turnRunning: true });
+    // A remote server is bounded by `maxIdleByHost` alone; only a local one also
+    // counts toward the gateway's `maxLivePtys`.
+    this.lifecycle.adopt(sessionId, this.handleFor(server), {
+      turnRunning: true,
+      hostKey: server.hostKey,
+      selfCapped: server.hostKey !== LOCAL_HOST_KEY,
+    });
     this.armSweep();
 
     await this.checkHealth(sessionId, server, spec);

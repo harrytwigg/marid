@@ -115,19 +115,25 @@ vi.mock("../../shared/logger.js", () => ({
 
 import { OpencodeEngine } from "../opencode.js";
 import { OpencodeServerPool } from "../opencode-server.js";
-import { PtyLifecycleManager } from "../pty-lifecycle.js";
+import { enforcePtyIdleCap, ptyIdleCapForHost, PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME } from "../../shared/paths.js";
+import type { OpencodeServerConfig } from "../../shared/config-types.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 
 const REMOTE_CONFIG = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
 const GATEWAY_PORT = 8722;
 
-function setup(disableFff?: () => boolean) {
+function setup(disableFff?: () => boolean, limits?: OpencodeServerConfig) {
   const fff = disableFff ? { disableFff } : {};
   const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
-  const pool = new OpencodeServerPool(lifecycle, { remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, ...fff });
+  const pool = new OpencodeServerPool(lifecycle, {
+    remote: () => REMOTE_CONFIG,
+    gatewayPort: () => GATEWAY_PORT,
+    ...(limits ? { limits: () => limits } : {}),
+    ...fff,
+  });
   const engine = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, mode: () => "server", servers: pool, ...fff });
-  return { pool, engine };
+  return { pool, engine, lifecycle };
 }
 
 function runOpts(over: Partial<EngineRunOpts> = {}): EngineRunOpts {
@@ -318,5 +324,34 @@ describe("opencode server mode on a remote host", () => {
     // Nothing was killed over ssh: the server survives, only the turn stopped.
     expect(hoisted.controls).toHaveLength(0);
     expect(pool.get("sess-1")).toBeDefined();
+  });
+});
+
+// Each server start waits out the pool's instance bootstrap, so a test that starts
+// several takes seconds.
+describe("opencode servers on a remote host and the gateway's idle PTY cap", { timeout: 60_000 }, () => {
+  it("keeps eight idle remote servers under maxLivePtys: 2, while local idle PTYs stay capped at 2", async () => {
+    const { engine, pool, lifecycle } = setup(undefined, { maxIdleByHost: { "build-box": 8 } });
+    const sessions = Array.from({ length: 8 }, (_, i) => `remote-${i}`);
+    for (const sessionId of sessions) {
+      const result = await engine.run(runOpts({ sessionId }));
+      expect(result.error).toBeUndefined();
+    }
+
+    const local = new PtyLifecycleManager({ maxLivePtys: 2, enforceLocalCap: false });
+    const handles = Array.from({ length: 4 }, () => ({ pid: 1, killed: false, kill() { this.killed = true; } }));
+    handles.forEach((handle, i) => local.adopt(`local-${i}`, handle));
+
+    enforcePtyIdleCap([local, lifecycle], (hostKey) => ptyIdleCapForHost({ maxLivePtys: 2 }, hostKey));
+
+    expect(sessions.every((id) => pool.get(id) !== undefined)).toBe(true);
+    expect(lifecycle.idleCandidates()).toHaveLength(8);
+    expect(handles.filter((h) => h.killed)).toHaveLength(2);
+  });
+
+  it("still stops remote servers over the host's own maxIdleByHost count", async () => {
+    const { engine, pool } = setup(undefined, { maxIdleByHost: { "build-box": 2 } });
+    for (const sessionId of ["a", "b", "c"]) await engine.run(runOpts({ sessionId }));
+    expect(["a", "b", "c"].filter((id) => pool.get(id) !== undefined)).toHaveLength(2);
   });
 });

@@ -24,7 +24,7 @@ import { initDb } from "../shared/db.js";
 import { SessionManager, type RouteOptions } from "../sessions/manager.js";
 import { recoverSessionDeliveryStateOnStartup } from "../sessions/callbacks.js";
 import { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
-import { enforcePtyIdleCap, PtyLifecycleManager, type PtyLifecycleOpts } from "../engines/pty-lifecycle.js";
+import { enforcePtyIdleCap, ptyIdleCapForHost, PtyLifecycleManager, type PtyLifecycleOpts } from "../engines/pty-lifecycle.js";
 import { CodexEngine, startCodexSessionHomeSweeps } from "../engines/codex.js";
 import { CodexInteractiveEngine } from "../engines/codex-interactive.js";
 import { createAntigravityEnginePair } from "../engines/antigravity-runtime.js";
@@ -591,7 +591,7 @@ export async function startGateway(
     if (enforcingGlobalIdleCap) return;
     enforcingGlobalIdleCap = true;
     try {
-      enforcePtyIdleCap(ptyLifecycles, claudeCfg.maxLivePtys!);
+      enforcePtyIdleCap(ptyLifecycles, (hostKey) => ptyIdleCapForHost(claudeCfg, hostKey));
     } finally {
       enforcingGlobalIdleCap = false;
     }
@@ -662,8 +662,9 @@ export async function startGateway(
     gatewayPort: () => port,
   });
   // opencode server mode (engines.opencode.mode: server): one `opencode serve`
-  // per session, registered like a warm PTY so it shares the gateway-wide idle
-  // cap, with its own per-host count and idle age on top. Nothing starts until
+  // per session, registered like a warm PTY: a local server counts toward the
+  // gateway's idle cap, a remote one only toward its host's own count, and
+  // each host has an idle age on top. Nothing starts until
   // the mode is flipped; in the default `run` mode the pool stays empty.
   opencodeServerLifecycle = createPtyLifecycle({
     onAdopt: () => refreshPtyPids(),

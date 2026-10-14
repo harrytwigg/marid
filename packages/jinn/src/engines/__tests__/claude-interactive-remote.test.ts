@@ -388,6 +388,16 @@ describe("InteractiveClaudeEngine — remote branch", () => {
       expect(lifecycle.getWarm(SID)).toBeDefined();
     });
 
+    it("files an idle PTY under the host it runs on", async () => {
+      engine.ensureIdleSpawn(SID, { ...TARGET } as any);
+      engine.ensureIdleSpawn("local-idle", { cwd: "/tmp" } as any);
+      await vi.waitFor(() => expect(lifecycle.idleCandidates()).toHaveLength(2));
+      const hostOf = (id: string) => lifecycle.idleCandidates().find((c) => c.sessionId === id)?.hostKey;
+      expect(hostOf(SID)).toBe("build-box");
+      expect(hostOf("local-idle")).toBe("local");
+      cleanupSessionSettings(CLAUDE_SETTINGS_DIR, "local-idle");
+    });
+
     it("stages NOTHING when a turn claims the session mid-preparation", async () => {
       // The guards at the top of ensureIdleSpawn are synchronous; this covers
       // the multi-second staging window they cannot see into. Staging probes a

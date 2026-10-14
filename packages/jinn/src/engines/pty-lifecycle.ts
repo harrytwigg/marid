@@ -7,8 +7,37 @@ import type { IPty } from "node-pty";
  *     sit idle for days and wake themselves later.
  *   - maxLivePtys is an IDLE warm-PTY cap. Running turns and actively viewed
  *     terminals are never counted against it or killed to satisfy it.
- *   - When the idle cap is exceeded, the stalest idle/unviewed PTY is released.
+ *   - The cap is per host. `maxLivePtys` bounds the gateway's own processes;
+ *     a remote host's idle processes are counted against that host alone
+ *     (`maxLivePtysByHost`, else `maxLivePtys` again), so they never use up the
+ *     gateway host's budget. A process whose pool applies its own per-host cap
+ *     (opencode servers on a remote host) is left out of this one.
+ *   - When a host's idle cap is exceeded, its stalest idle/unviewed PTY is released.
  */
+
+/** The host key of the gateway itself. A remote host's key is the employee's
+ *  `remoteHost` exactly as written, the same keys `maxIdleByHost` uses. */
+export const LOCAL_HOST_KEY = "local";
+
+/** The idle-cap host key for a session's target: `local`, or its `remoteHost`. */
+export function ptyHostKey(target: { remoteHost?: string } | undefined): string {
+  const host = target?.remoteHost;
+  return typeof host === "string" && host.trim().length > 0 ? host : LOCAL_HOST_KEY;
+}
+
+/** The idle PTY cap for one host: `maxLivePtys` for the gateway, and for a
+ *  remote host its `maxLivePtysByHost` entry, else `maxLivePtys` again. */
+export function ptyIdleCapForHost(
+  cfg: { maxLivePtys?: number; maxLivePtysByHost?: Record<string, number> },
+  hostKey: string,
+): number {
+  const base = typeof cfg.maxLivePtys === "number" ? cfg.maxLivePtys : DEFAULT_MAX_LIVE_PTYS;
+  const byHost = hostKey === LOCAL_HOST_KEY ? undefined : cfg.maxLivePtysByHost?.[hostKey];
+  const cap = typeof byHost === "number" ? byHost : base;
+  return Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : DEFAULT_MAX_LIVE_PTYS;
+}
+
+export const DEFAULT_MAX_LIVE_PTYS = 8;
 
 export interface PtyHandle {
   pid: number;
@@ -52,7 +81,9 @@ export interface PtyLifecycleOpts {
   onCleanup?: (sessionId: string) => void;
   /** Called after adoption or state changes may have changed global idle-cap pressure. */
   onIdleStateChange?: () => void;
-  /** Default true. Server-managed lifecycles disable this and enforce one global cap. */
+  /** Default true. Server-managed lifecycles disable this and enforce one global cap.
+   *  Left on, this manager caps every host at `maxLivePtys` and ignores
+   *  `maxLivePtysByHost`, which only the global enforcement (gateway/server.ts) reads. */
   enforceLocalCap?: boolean;
 }
 
@@ -61,6 +92,10 @@ export interface PtyAdoptState {
   turnRunning?: boolean;
   /** Optional initial viewer count for a terminal-born PTY. */
   viewerCount?: number;
+  /** Where the process runs: {@link LOCAL_HOST_KEY} (default) or a `remoteHost`. */
+  hostKey?: string;
+  /** The owning pool bounds this process itself, so the idle PTY cap leaves it out. */
+  selfCapped?: boolean;
 }
 
 interface Entry {
@@ -70,24 +105,38 @@ interface Entry {
   viewerCount: number;
   viewingEndedAt: number; // epoch ms; 0 while at least one viewer is attached
   lastTurnEndedAt: number; // epoch ms; 0 if no turn has completed yet
+  hostKey: string;
+  selfCapped: boolean;
 }
 
 export interface PtyIdleCandidate {
   manager: PtyLifecycleManager;
   sessionId: string;
   idleSince: number;
+  hostKey: string;
+  selfCapped: boolean;
 }
 
-export function enforcePtyIdleCap(managers: PtyLifecycleManager[], maxIdlePtys: number): void {
-  const max = Math.max(0, maxIdlePtys);
-  const candidates = managers
-    .flatMap((manager) => manager.idleCandidates())
-    .sort((a, b) => a.idleSince - b.idleSince);
-
-  while (candidates.length > max) {
-    const victim = candidates.shift();
-    if (!victim) return;
-    victim.manager.releaseSession(victim.sessionId);
+/** Release the stalest idle PTYs on every host that is over its cap. A number
+ *  caps each host at that many; a function gives each host its own cap. */
+export function enforcePtyIdleCap(
+  managers: PtyLifecycleManager[],
+  maxIdlePtys: number | ((hostKey: string) => number),
+): void {
+  const capFor = typeof maxIdlePtys === "function" ? maxIdlePtys : () => maxIdlePtys;
+  const byHost = new Map<string, PtyIdleCandidate[]>();
+  for (const candidate of managers.flatMap((manager) => manager.idleCandidates())) {
+    if (candidate.selfCapped) continue;
+    const list = byHost.get(candidate.hostKey) ?? [];
+    list.push(candidate);
+    byHost.set(candidate.hostKey, list);
+  }
+  for (const [hostKey, list] of byHost) {
+    const max = Math.max(0, capFor(hostKey));
+    const stalestFirst = list.sort((a, b) => a.idleSince - b.idleSince);
+    for (const victim of stalestFirst.slice(0, Math.max(0, stalestFirst.length - max))) {
+      victim.manager.releaseSession(victim.sessionId);
+    }
   }
 }
 
@@ -107,6 +156,8 @@ export class PtyLifecycleManager {
       viewerCount,
       viewingEndedAt: viewerCount > 0 ? 0 : Date.now(),
       lastTurnEndedAt: turnRunning ? 0 : Date.now(),
+      hostKey: state.hostKey ?? LOCAL_HOST_KEY,
+      selfCapped: state.selfCapped === true,
     });
     this.opts.onAdopt?.(sessionId);
     this.enforceLocalIdleCap();
@@ -117,6 +168,7 @@ export class PtyLifecycleManager {
     return this.entries.get(sessionId)?.handle;
   }
 
+  /** Whether the gateway's own idle PTYs have reached `maxLivePtys`. */
   isAtCapacity(): boolean {
     return this.idleWarmCount() >= this.opts.maxLivePtys;
   }
@@ -204,11 +256,7 @@ export class PtyLifecycleManager {
   }
 
   private idleWarmCount(): number {
-    let count = 0;
-    for (const e of this.entries.values()) {
-      if (!e.turnRunning && !e.runtimeActive && e.viewerCount === 0) count++;
-    }
-    return count;
+    return this.idleCandidates().filter((c) => c.hostKey === LOCAL_HOST_KEY && !c.selfCapped).length;
   }
 
   idleCandidates(): PtyIdleCandidate[] {
@@ -219,6 +267,8 @@ export class PtyLifecycleManager {
         manager: this,
         sessionId,
         idleSince: Math.max(e.viewingEndedAt, e.lastTurnEndedAt),
+        hostKey: e.hostKey,
+        selfCapped: e.selfCapped,
       });
     }
     return candidates;
