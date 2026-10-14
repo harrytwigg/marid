@@ -321,7 +321,7 @@ verified against 2.0.28 and 2.0.29:
   - Sessions the turn creates deny the `question` tool, which takes it out of the tool list. A question that still arrives (a form) is dismissed.
 - **Provider retries and fallbacks.**
   - opencode reports a retry as `session.retry.scheduled {attempt, at, error}`, and the 1.x rules apply: wait, name the provider's error, and give up on a retry more than 2 minutes away.
-  - A fallback plugin on 2.x switches the session's model from the retry hook, so the fallback answer arrives inside the same turn (see `examples/opencode-plugins`). A 1.x-style plugin that re-posts the prompt has its copy adopted as on 1.x.
+  - A fallback plugin on 2.x switches the session's model from the retry hook, so the fallback answer arrives inside the same turn (see `examples/opencode-plugins`). 1.x plugins, which re-post the prompt instead, do not load on 2.x.
 - **Stops.**
   - A turn whose prompt is still waiting in the inbox is taken back out (`DELETE …/inbox/<id>`), and the operator's execution is not touched.
   - Otherwise the session is interrupted (`POST …/interrupt`), and interrupted again until it has stayed idle for 1.5 s. After 15 s the server is stopped instead.

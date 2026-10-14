@@ -38,6 +38,8 @@
 //   RETRY       retry.scheduled 200 ms ahead, then a successful step on the same
 //               assistantMessageID
 //   RETRYFAR    retry.scheduled with `at` an hour ahead, then nothing until interrupted
+//   RETRYSLOW   retry.scheduled an hour ahead, then 100 ms later a new attempt
+//               (step.started, same assistantMessageID) whose text takes 800 ms
 //   RETRYLOOP   five retry.scheduled an hour ahead, 200 ms apart, then the step
 //               ends and the text `fake:retryloop` answers
 //   FALLBACK    session.model.selected (a fallback model), retry.scheduled, a step
@@ -415,6 +417,19 @@ function serve() {
     return failAborted(s, item);
   }
 
+  async function retrySlowTurn(s) {
+    const item = startStep(s);
+    publish("session.retry.scheduled", { sessionID: s.id, assistantMessageID: item.id, attempt: 2, at: Date.now() + 3_600_000, error: RATE_LIMIT });
+    if (await sleep(s, 100)) return failAborted(s, item);
+    publish("session.step.started", { sessionID: s.id, agent: item.agent, model: item.model, assistantMessageID: item.id, snapshot: "0".repeat(40), started: now() });
+    startText(s, item);
+    if (await sleep(s, 800)) return failAborted(s, item);
+    endText(s, item, "fake:retryslow");
+    streamed(s, item);
+    endStep(s, item, "stop");
+    return "ok";
+  }
+
   async function retryLoopTurn(s) {
     const item = startStep(s);
     for (let attempt = 2; attempt < 7; attempt++) {
@@ -435,6 +450,7 @@ function serve() {
     ["RETRY", retryTurn],
     ["RETRYFAR", retryFarTurn],
     ["RETRYLOOP", retryLoopTurn],
+    ["RETRYSLOW", retrySlowTurn],
     ["FALLBACK", fallbackTurn],
     ["PERMISSION", permissionTurn],
     ["QUESTION", questionTurn],

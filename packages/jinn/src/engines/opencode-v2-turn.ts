@@ -44,8 +44,8 @@ import { RESEED_PREAMBLE } from "./opencode-server-compaction.js";
  * Approval matches 1.x: a permission this turn's steps ask for is granted
  * once; the `question` tool is denied on the sessions the turn creates (which
  * takes it out of the tool list), and a question that still comes is
- * dismissed. A fallback plugin that re-posts the turn's prompt (the same
- * text, without Jinn's metadata) has its copy adopted as the turn's.
+ * dismissed. A provider fallback on 2.x switches the session's model in
+ * place (see examples/opencode-plugins), so its answer is the turn's own steps.
  */
 
 /** The turn's error when its execution ended without ever delivering the prompt. */
@@ -95,10 +95,7 @@ export class OpencodeV2ServerTurn {
   private lines = new V2RunLines("");
   /** The id the turn's prompt is posted under. */
   private readonly promptId = newMessageId();
-  /** The turn's prompts: its own, and copies a fallback re-sent. */
   private readonly prompts = new Set([this.promptId]);
-  /** The newest of them: the one a stop has to stop. */
-  private currentPrompt = this.promptId;
   private promptText = "";
   /** What the session's metadata held for this turn to say (see opencode-v2-history.ts). */
   private notes: JinnSessionNotes = { stopped: [], reseed: false };
@@ -226,7 +223,7 @@ export class OpencodeV2ServerTurn {
   private async stopOnServer(): Promise<void> {
     if (this.posting) await this.posting.catch(() => undefined);
     if (!this.posted) return;
-    await this.deps.abort({ engineSessionId: this.sessionId, userMessageId: this.currentPrompt }).catch(() => undefined);
+    await this.deps.abort({ engineSessionId: this.sessionId, userMessageId: this.promptId }).catch(() => undefined);
   }
 
   /**
@@ -420,7 +417,7 @@ export class OpencodeV2ServerTurn {
   private async mayStillRun(): Promise<boolean> {
     try {
       const running = (await v2RunningSessions(this.server)).includes(this.sessionId);
-      return running && !(await v2InInbox(this.server, this.sessionId, this.currentPrompt));
+      return running && !(await v2InInbox(this.server, this.sessionId, this.promptId));
     } catch {
       return true;
     }
@@ -502,24 +499,10 @@ export class OpencodeV2ServerTurn {
     if (data.sessionID === this.sessionId && this.own.has(str(data.assistantMessageID) ?? "")) this.feed(this.lines.lineFor(event));
   }
 
-  /** A user message someone else queued that repeats the turn's prompt: a
-   *  fallback re-sent it, and its replies are the turn's. */
+  /** Note which inputs others queue (see onDelivered). */
   private onEnqueued(data: Record<string, unknown>): void {
     const id = str(data.inboxID);
-    const item = record(data.item);
-    if (id && !this.prompts.has(id) && item?.delivery === "queue") this.queuedByOthers.add(id);
-    if (!id || this.prompts.has(id) || !this.posted || this.lastAnswer === "text" || !this.repeatsPrompt(item)) return;
-    this.prompts.add(id);
-    this.currentPrompt = id;
-    this.settle.cancel();
-    logger.info(`opencode server turn follows its prompt re-sent as ${id} in ${this.sessionId} (a provider fallback)`);
-  }
-
-  /** A queued user message with the turn's prompt text and no Jinn metadata. */
-  private repeatsPrompt(item: Record<string, unknown> | undefined): boolean {
-    const payload = record(item?.payload);
-    return item?.type === "user" && Boolean(this.promptText) && payload?.text === this.promptText
-      && record(payload?.metadata)?.jinn === undefined;
+    if (id && !this.prompts.has(id) && record(data.item)?.delivery === "queue") this.queuedByOthers.add(id);
   }
 
   /**

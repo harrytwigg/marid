@@ -539,6 +539,34 @@ describe("a turn that goes wrong", { timeout: 40_000 }, () => {
     await waitFor(async () => (await running(h)).length === 0);
   });
 
+  it("lets a new attempt after a far-off retry run past the retry grace, and answers", async () => {
+    SERVER_TURN_TIMING.retryGraceMs = 300;
+    const h = harness();
+    const result = await h.engine.run(runOpts({ prompt: "RETRYSLOW" }));
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("fake:retryslow");
+    expect(result.rateLimit).toBeUndefined();
+  });
+
+  it("reports a prompt the session never ran, and takes it back out of the inbox", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 300;
+    process.env.FAKE_V2_OPERATOR_BUSY_MS = "5000";
+    const h = harness();
+    const turn = h.engine.run(runOpts({ prompt: "never runs" }));
+    await waitFor(async () => promptsOf(await logOf(h)).length === 1);
+    await waitFor(async () => (await running(h)).length === 1);
+    const id = promptsOf(await logOf(h))[0]!.path.split("/")[3]!;
+    const promptId = promptsOf(await logOf(h))[0]!.body!.id as string;
+    // The operator stops their own input: the execution ends interrupted, and
+    // the turn's prompt is left in the inbox with nothing running.
+    await call(h, `/api/session/${id}/interrupt`, { method: "POST" });
+    const result = await turn;
+    expect(result.error).toMatch(/without running this turn's prompt/);
+    const log = await logOf(h);
+    expect(log.some((e) => e.method === "DELETE" && e.path === `/api/session/${id}/inbox/${promptId}`)).toBe(true);
+    expect((await call(h, `/api/session/${id}/inbox`)).body.data).toEqual([]);
+  });
+
   it("recovers a turn the stream never ended through the status poll, and reports the drift", async () => {
     SERVER_TURN_TIMING.statusPollMs = 100;
     const h = harness();
