@@ -20,12 +20,17 @@ export function recordEngineReached(sessionId: string): void {
   `).run(sessionId);
 }
 
-/** A turn was refused before its engine ran. Never overwrites a session that already reached one. */
+/**
+ * A turn was refused before its engine ran. Never marks a session that already
+ * reached one, nor one with a recorded turn: that covers a session from before
+ * the key existed, and a "reached" lost to a stale meta write.
+ */
 export function recordRefusedBeforeEngine(sessionId: string): void {
   initDb().prepare(`
     UPDATE sessions
     SET transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.${ENGINE_REACH_META_KEY}', 'never')
-    WHERE id = ? AND COALESCE(json_extract(transport_meta, '$.${ENGINE_REACH_META_KEY}'), '') <> 'reached'
+    WHERE id = ? AND total_turns = 0
+      AND COALESCE(json_extract(transport_meta, '$.${ENGINE_REACH_META_KEY}'), '') <> 'reached'
   `).run(sessionId);
 }
 
