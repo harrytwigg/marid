@@ -235,8 +235,15 @@ export class OpencodeEngine implements InterruptibleEngine {
    */
   private async serverForTurn(slot: ServerTurnSlot, opts: EngineRunOpts, trackingId: string): Promise<OpencodeServer | Error | undefined> {
     const servers = this.servers!;
-    const interrupted = new Promise<undefined>((resolve) => { slot.wake = () => resolve(undefined); });
-    const acquiring = servers.acquire(trackingId, serverSpecFor(opts)).catch((err: unknown) => err as Error);
+    // An interrupt also ends a wait for another turn to release the server.
+    const waiting = new AbortController();
+    const interrupted = new Promise<undefined>((resolve) => {
+      slot.wake = () => {
+        waiting.abort();
+        resolve(undefined);
+      };
+    });
+    const acquiring = servers.acquire(trackingId, serverSpecFor(opts), { signal: waiting.signal }).catch((err: unknown) => err as Error);
     const server = await Promise.race([acquiring, interrupted]);
     if (!slot.interrupted) return server;
     void acquiring.then((started) => { if (!(started instanceof Error)) servers.release(trackingId); });
@@ -274,23 +281,25 @@ export class OpencodeEngine implements InterruptibleEngine {
     // operator may type it.
     if (isCompactCommand(opts.prompt)) return await this.runServerCompaction(server, slot, opts, trackingId);
     let drifted = false;
-    // A remote server's session sees the gateway's files through its staged
-    // home, so the turn names them there rather than by their gateway paths.
-    const turnOpts = server.remote ? withRemoteAttachments(opts, server.remote.staging.sessionHome, trackingId) : opts;
-    const turn = new OpencodeServerTurn(server, turnOpts, onStream, {
-      abort: (target) => servers.abortTurn(trackingId, target),
-      onSessionId: (id) => servers.noteEngineSession(trackingId, id),
-      onProtocolDrift: (reason) => {
-        drifted = true;
-        servers.markUnsupported(server.hostKey, `opencode ${server.hostKey} server API drift: ${reason}`);
-      },
-    });
-    slot.turn = turn;
-    logger.info(
-      `opencode engine starting on the session's server (${server.hostKey} ${server.apiUrl}): ${describeOpencodeLaunch(opts)} `
-      + `(resume: ${opts.resumeSessionId || "none"})`,
-    );
+    // Everything from here on is inside the try: a hold left behind would keep
+    // the next turn for another spec waiting on this server for good.
     try {
+      // A remote server's session sees the gateway's files through its staged
+      // home, so the turn names them there rather than by their gateway paths.
+      const turnOpts = server.remote ? withRemoteAttachments(opts, server.remote.staging.sessionHome, trackingId) : opts;
+      const turn = new OpencodeServerTurn(server, turnOpts, onStream, {
+        abort: (target) => servers.abortTurn(trackingId, target),
+        onSessionId: (id) => servers.noteEngineSession(trackingId, id),
+        onProtocolDrift: (reason) => {
+          drifted = true;
+          servers.markUnsupported(server.hostKey, `opencode ${server.hostKey} server API drift: ${reason}`);
+        },
+      });
+      slot.turn = turn;
+      logger.info(
+        `opencode engine starting on the session's server (${server.hostKey} ${server.apiUrl}): ${describeOpencodeLaunch(opts)} `
+        + `(resume: ${opts.resumeSessionId || "none"})`,
+      );
       const result = await turn.run();
       if (result.error) logger.error(result.error);
       return result;
@@ -309,10 +318,10 @@ export class OpencodeEngine implements InterruptibleEngine {
     opts: EngineRunOpts,
     trackingId: string,
   ): Promise<EngineResult> {
-    const compaction = new OpencodeServerCompaction(server, opts);
-    slot.turn = compaction;
-    logger.info(`opencode engine compacting session ${opts.resumeSessionId || "(none yet)"} on its server (${server.hostKey})`);
     try {
+      const compaction = new OpencodeServerCompaction(server, opts);
+      slot.turn = compaction;
+      logger.info(`opencode engine compacting session ${opts.resumeSessionId || "(none yet)"} on its server (${server.hostKey})`);
       const result = await compaction.run();
       if (result.error) logger.error(result.error);
       return result;

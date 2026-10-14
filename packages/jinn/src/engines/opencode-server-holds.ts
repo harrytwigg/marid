@@ -41,13 +41,22 @@ export class ServerHolds {
     return kind ? counts[kind] : counts.turn + counts.view;
   }
 
-  /** Resolves once no turn holds the session's server, or it has none. */
-  turnHoldsDropped(sessionId: string): Promise<void> {
-    if (!this.count(sessionId, "turn")) return Promise.resolve();
+  /** Resolves once no turn holds the session's server, it has none, or
+   *  `signal` aborts. */
+  turnHoldsDropped(sessionId: string, signal?: AbortSignal): Promise<void> {
+    if (!this.count(sessionId, "turn") || signal?.aborted) return Promise.resolve();
     return new Promise((resolve) => {
       const waiters = this.turnWaiters.get(sessionId) ?? [];
-      waiters.push(resolve);
+      const done = () => {
+        signal?.removeEventListener("abort", done);
+        const left = this.turnWaiters.get(sessionId)?.filter((wake) => wake !== done);
+        if (left?.length) this.turnWaiters.set(sessionId, left);
+        else this.turnWaiters.delete(sessionId);
+        resolve();
+      };
+      waiters.push(done);
       this.turnWaiters.set(sessionId, waiters);
+      signal?.addEventListener("abort", done, { once: true });
     });
   }
 

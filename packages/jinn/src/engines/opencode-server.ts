@@ -316,17 +316,20 @@ export class OpencodeServerPool {
    * already has: it only watches, and replacing a server mid-turn to suit a
    * viewer would kill the turn. With `existingOnly` it starts nothing either,
    * and fails when the session has no server running or starting.
+   *
+   * `signal` ends a turn's wait for another turn's hold: the acquire then
+   * fails, holding nothing.
    */
   async acquire(
     sessionId: string,
     spec: OpencodeServerSpec,
-    opts: { reuseAny?: boolean; existingOnly?: boolean } = {},
+    opts: { reuseAny?: boolean; existingOnly?: boolean; signal?: AbortSignal } = {},
   ): Promise<OpencodeServer> {
     const off = this.unsupportedReason(serverHostKey(spec));
     if (off) throw new Error(`server mode is off for this host: ${off}`);
     if (opts.existingOnly) return this.hold(sessionId, "view", await this.existingServer(sessionId));
     // Held in the same step that finds it, so no other acquire can see it unheld.
-    return await this.acquireServer(sessionId, spec, opts.reuseAny ? "view" : "turn");
+    return await this.acquireServer(sessionId, spec, opts.reuseAny ? "view" : "turn", opts.signal);
   }
 
   /** Drop one hold taken by {@link acquire}: a terminal view's (`reuseAny` or
@@ -416,7 +419,12 @@ export class OpencodeServerPool {
   }
 
   /** The server for an acquire, held as `kind`. A view takes any server. */
-  private async acquireServer(sessionId: string, spec: OpencodeServerSpec, kind: HoldKind): Promise<OpencodeServer> {
+  private async acquireServer(
+    sessionId: string,
+    spec: OpencodeServerSpec,
+    kind: HoldKind,
+    signal?: AbortSignal,
+  ): Promise<OpencodeServer> {
     const fingerprint = serverFingerprint(spec);
     const fits = (server: OpencodeServer) => kind === "view" || server.fingerprint === fingerprint;
     for (;;) {
@@ -428,7 +436,8 @@ export class OpencodeServerPool {
       if (!this.get(sessionId)) break;
       if (this.holdCount(sessionId, "turn")) {
         logger.info(`opencode server for session ${sessionId} was started for a different spec, and a turn still holds it; waiting for that turn to end`);
-        await this.holds.turnHoldsDropped(sessionId);
+        await this.holds.turnHoldsDropped(sessionId, signal);
+        if (signal?.aborted) throw new Error("stopped while waiting for another turn to release the session's opencode server");
         continue;
       }
       logger.info(`opencode server for session ${sessionId} was started for a different spec (MCP set, host or cwd); replacing it`);

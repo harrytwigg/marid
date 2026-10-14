@@ -539,6 +539,8 @@ export class OpencodeServerTurn {
   private posted = false;
   /** A text or error line reached the parser from the stream. */
   private answered = false;
+  /** An error line did: the turn's own error, whatever its reply's state. */
+  private streamErred = false;
   /** The status poll, not the stream, noticed the turn end. */
   private missedIdle = false;
   private statusPoll?: NodeJS.Timeout;
@@ -618,9 +620,11 @@ export class OpencodeServerTurn {
   /** The stream alone cannot say how the turn ended: it carried no answer, it
    *  never said the turn ended, or it ended on the idle with the turn's newest
    *  reply still open — any text it carried is then an earlier step's
-   *  narration unless the store shows the reply finished. */
+   *  narration unless the store shows the reply finished. An error it carried
+   *  settles that: opencode stores a failed reply's error after the idle, so
+   *  the store may not hold it yet. */
   private needsStore(): boolean {
-    return !this.answered || this.missedIdle || this.newestOwnOpen;
+    return !this.answered || this.missedIdle || (this.newestOwnOpen && !this.streamErred);
   }
 
   private async fail(err: unknown): Promise<void> {
@@ -1010,6 +1014,7 @@ export class OpencodeServerTurn {
   private feed(line: string | undefined): void {
     if (!line || !this.firstReport(line)) return;
     if (isAnswerLine(line)) this.answered = true;
+    if (line.startsWith('{"type":"error"')) this.streamErred = true;
     this.turn.readLine(line, this.onStream);
   }
 

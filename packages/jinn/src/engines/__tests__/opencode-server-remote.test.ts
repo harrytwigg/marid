@@ -285,6 +285,15 @@ describe("opencode server mode on a remote host", () => {
     expect(post?.body).not.toContain(JINN_HOME);
   });
 
+  it("a turn whose attachment cannot be staged releases its hold on the server", async () => {
+    const { engine, pool } = setup();
+    const missing = path.join(JINN_HOME, "uploads", "2026-10-02", "sess-1", "gone.png");
+    await expect(engine.run(runOpts({ attachments: [missing] }))).rejects.toThrow();
+    expect(pool.get("sess-1")).toBeDefined();
+    // A hold left behind would keep the next turn for another spec waiting.
+    expect(pool.holdCount("sess-1", "turn")).toBe(0);
+  });
+
   it("stages the password into the 0600 env file and never onto a command line", async () => {
     const { engine } = setup();
     await engine.run(runOpts());

@@ -219,6 +219,36 @@ describe("OpencodeServerPool", { timeout: 20_000 }, () => {
     h.pool.release("sess-1");
   });
 
+  it("an interrupt ends a turn's wait for a held server: it fails holding nothing, and the held server stays", async () => {
+    const { pool } = harness();
+    const a = await pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_A });
+    const stop = new AbortController();
+    const waiting = pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_B }, { signal: stop.signal });
+    await new Promise((r) => setTimeout(r, 100));
+    stop.abort();
+    await expect(waiting).rejects.toThrow(/stopped while waiting for another turn/);
+    pool.release("sess-1");
+    // Nothing left waiting replaces the server once it is released.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(a.exited).toBe(false);
+    expect(pool.get("sess-1")).toBe(a);
+    expect(pool.holdCount("sess-1")).toBe(0);
+  });
+
+  it("an engine turn stopped while it waits for a held server returns, and starts nothing", async () => {
+    const h = harness();
+    const a = await h.pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_A });
+    const turn = h.engine.run(runOpts({ resolvedMcp: MCP_B }));
+    await new Promise((r) => setTimeout(r, 200));
+    h.engine.kill("sess-1", USER_STOP_INTERRUPTION_REASON);
+    const result = await turn;
+    expect(result.error).toBeDefined();
+    h.pool.release("sess-1");
+    await new Promise((r) => setTimeout(r, 300));
+    expect(h.pool.get("sess-1")).toBe(a);
+    expect(h.pool.holdCount("sess-1")).toBe(0);
+  });
+
   it("two turns waiting on a held server for different specs do not both replace it", async () => {
     const { pool } = harness();
     const a = await pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_A });
@@ -1483,6 +1513,17 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     // ended on the idle and reads the error from the store.
     const result = await h.engine.run(runOpts({ prompt: "MIDFAIL ORDER=idle" }));
     expect(result.error).toMatch(/Bad Request/);
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
+  });
+
+  it("a provider error the stream carried stays the turn's error while the store has not caught up", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 50;
+    const h = harness();
+    const abort = vi.spyOn(h.pool, "abortTurn").mockResolvedValue();
+    // session.error, then idle; the failed reply is still open in the store.
+    const result = await h.engine.run(runOpts({ prompt: "MIDFAIL LAGSTORE ORDER=err,idle" }));
+    expect(result.error).toMatch(/Bad Request/);
+    expect(abort).not.toHaveBeenCalled();
     expect(h.pool.unsupportedReason("local")).toBeUndefined();
   });
 
