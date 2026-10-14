@@ -32,6 +32,7 @@ import {
   type RemoteOpencodeStaging,
 } from "./remote-stage.js";
 import { needsStandalone, newerMajorReason, notJsonHealthReason, opencodeMajor, MAX_OPENCODE_SERVER_MAJOR } from "./opencode-version.js";
+import { ServerHolds, type HoldKind } from "./opencode-server-holds.js";
 
 /**
  * opencode server mode: one `opencode serve` per Jinn session.
@@ -250,8 +251,8 @@ function refusedBinary(
 export class OpencodeServerPool {
   private servers = new Map<string, OpencodeServer>();
   private starting = new Map<string, Promise<OpencodeServer>>();
-  /** Callers currently using each session's server (turns and terminal views). */
-  private holds = new Map<string, number>();
+  /** Callers currently using each session's server: turns, and terminal views. */
+  private holds = new ServerHolds();
   /** Hosts whose server was found unusable, and when: their turns use `run`
    *  mode until {@link UNSUPPORTED_RETRY_MS} has passed. */
   private unsupported = new Map<string, { reason: string; at: number; version?: string; bin?: string }>();
@@ -305,9 +306,11 @@ export class OpencodeServerPool {
    * A turn (`reuseAny` false) needs the server its spec describes, and replaces
    * one started for a different spec — stopping the old one first, because two
    * opencode processes writing one session is the failure this mode exists to
-   * remove. Turns on one session are serialized by the session queue, so the
-   * only thing a replacement can cut off is a terminal view or a prompt the
-   * operator typed there.
+   * remove. A server another turn still holds is never replaced: the turn
+   * waits for that hold to drop (turns on one session are serialized by the
+   * session queue, so this is the short overlap of one ending as the next
+   * begins). What a replacement can cut off is a terminal view, which follows
+   * the new server, or a prompt the operator typed there.
    *
    * The terminal view (`reuseAny` true) takes whatever server the session
    * already has: it only watches, and replacing a server mid-turn to suit a
@@ -321,22 +324,15 @@ export class OpencodeServerPool {
   ): Promise<OpencodeServer> {
     const off = this.unsupportedReason(serverHostKey(spec));
     if (off) throw new Error(`server mode is off for this host: ${off}`);
-    const server = opts.existingOnly
-      ? await this.existingServer(sessionId)
-      : await this.acquireServer(sessionId, spec, opts.reuseAny === true);
-    this.hold(sessionId);
-    return server;
+    if (opts.existingOnly) return this.hold(sessionId, "view", await this.existingServer(sessionId));
+    // Held in the same step that finds it, so no other acquire can see it unheld.
+    return await this.acquireServer(sessionId, spec, opts.reuseAny ? "view" : "turn");
   }
 
-  /** Drop one hold taken by {@link acquire}. A no-op once the server is gone. */
-  release(sessionId: string): void {
-    const count = this.holds.get(sessionId);
-    if (!count) return;
-    if (count > 1) {
-      this.holds.set(sessionId, count - 1);
-      return;
-    }
-    this.holds.delete(sessionId);
+  /** Drop one hold taken by {@link acquire}: a terminal view's (`reuseAny` or
+   *  `existingOnly`) or a turn's. A no-op once the server is gone. */
+  release(sessionId: string, kind: HoldKind = "turn"): void {
+    if (!this.holds.drop(sessionId, kind) || this.holds.count(sessionId)) return;
     // Stamp the moment it went idle: the lifecycle measures idleness from the
     // end of the last turn, and a hold is this pool's notion of a turn.
     this.lifecycle.turnStarted(sessionId);
@@ -345,16 +341,17 @@ export class OpencodeServerPool {
     this.enforceIdleLimits();
   }
 
-  holdCount(sessionId: string): number {
-    return this.holds.get(sessionId) ?? 0;
+  holdCount(sessionId: string, kind?: HoldKind): number {
+    return this.holds.count(sessionId, kind);
   }
 
-  private hold(sessionId: string): void {
-    this.holds.set(sessionId, (this.holds.get(sessionId) ?? 0) + 1);
+  private hold(sessionId: string, kind: HoldKind, server: OpencodeServer): OpencodeServer {
+    this.holds.take(sessionId, kind);
     this.lifecycle.setRuntimeActive(sessionId, true);
     // `start` adopts with turnRunning so nothing can take the server while it
     // comes up; the hold protects it from here on.
     this.lifecycle.turnEnded(sessionId);
+    return server;
   }
 
   /**
@@ -418,16 +415,22 @@ export class OpencodeServerPool {
     return server;
   }
 
-  private async acquireServer(sessionId: string, spec: OpencodeServerSpec, reuseAny: boolean): Promise<OpencodeServer> {
+  /** The server for an acquire, held as `kind`. A view takes any server. */
+  private async acquireServer(sessionId: string, spec: OpencodeServerSpec, kind: HoldKind): Promise<OpencodeServer> {
     const fingerprint = serverFingerprint(spec);
-    const pending = this.starting.get(sessionId);
-    if (pending) {
-      const started = await pending.catch(() => undefined);
-      if (started && !started.exited && (reuseAny || started.fingerprint === fingerprint)) return started;
-    }
-    const live = this.get(sessionId);
-    if (live && (reuseAny || live.fingerprint === fingerprint)) return live;
-    if (live) {
+    const fits = (server: OpencodeServer) => kind === "view" || server.fingerprint === fingerprint;
+    for (;;) {
+      const found = await this.fittingServer(sessionId, fits);
+      if (found) return this.hold(sessionId, kind, found);
+      // Every await in here lets another acquire in, so each one is followed
+      // by a fresh look: another start may have begun meanwhile.
+      if (this.starting.has(sessionId)) continue;
+      if (!this.get(sessionId)) break;
+      if (this.holdCount(sessionId, "turn")) {
+        logger.info(`opencode server for session ${sessionId} was started for a different spec, and a turn still holds it; waiting for that turn to end`);
+        await this.holds.turnHoldsDropped(sessionId);
+        continue;
+      }
       logger.info(`opencode server for session ${sessionId} was started for a different spec (MCP set, host or cwd); replacing it`);
       await this.stop(sessionId);
     }
@@ -435,7 +438,16 @@ export class OpencodeServerPool {
       if (this.starting.get(sessionId) === start) this.starting.delete(sessionId);
     });
     this.starting.set(sessionId, start);
-    return await start;
+    return this.hold(sessionId, kind, await start);
+  }
+
+  /** The session's server, once any start in flight has finished, if it fits. */
+  private async fittingServer(sessionId: string, fits: (server: OpencodeServer) => boolean): Promise<OpencodeServer | undefined> {
+    const pending = this.starting.get(sessionId);
+    const started = pending ? await pending.catch(() => undefined) : undefined;
+    if (started && !started.exited && fits(started)) return started;
+    const live = this.get(sessionId);
+    return live && fits(live) ? live : undefined;
   }
 
   /** Stop the session's server, and wait (bounded) for it to be gone. */
@@ -807,7 +819,7 @@ export class OpencodeServerPool {
     const server = this.servers.get(sessionId);
     if (!server) return;
     this.servers.delete(sessionId);
-    this.holds.delete(sessionId);
+    this.holds.clear(sessionId);
     cleanupOpencodeSessionConfig(server.configHandle);
     for (const listener of this.releasedListeners) listener(sessionId);
     if (this.servers.size === 0) this.disarmSweep();

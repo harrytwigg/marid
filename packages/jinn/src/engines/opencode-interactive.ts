@@ -286,7 +286,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
       logger.warn(`OpenCode terminal for session ${sessionId} could not start: ${message}`);
       this.streams.reportError(sessionId, `failed to start terminal: ${message}`);
     } finally {
-      if (held) this.pool.release(sessionId);
+      if (held) this.pool.release(sessionId, "view");
     }
     return "done";
   }
@@ -314,7 +314,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
       const view = this.views.get(sessionId);
       if (view?.proc !== proc) return;
       this.views.delete(sessionId);
-      this.pool.release(sessionId);
+      this.pool.release(sessionId, "view");
       this.streams.onPtyExit(sessionId, event ?? { exitCode: 0, signal: 0 });
     });
   }
@@ -437,7 +437,7 @@ export class OpencodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
     const view = this.views.get(sessionId);
     if (!view) return;
     this.views.delete(sessionId);
-    this.pool.release(sessionId);
+    this.pool.release(sessionId, "view");
     try { view.proc.kill(); } catch { /* gone */ }
   }
 

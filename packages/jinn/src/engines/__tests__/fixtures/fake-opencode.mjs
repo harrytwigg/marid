@@ -43,6 +43,8 @@
 //   IGNORENOTICE  with EARLIER: take the previous request up even so
 //   ORPHAN      the reply is left as a server killed mid-reply leaves it: never
 //               completed, no error; the session goes idle
+//   NARRATE     the reply first says what it is about to do and runs a tool
+//               (with ORPHAN: the narration a dropped turn leaves behind)
 //   DROPSTREAM  the turn narrates a step, then the host goes away: every event
 //               stream it was serving ends and nothing more is delivered
 //   FAILSTART   the prompt fails with a session.error before any reply exists
@@ -182,6 +184,10 @@ function serve() {
       clients.clear();
       turn.endedItself = true;
       return;
+    }
+    if (text.includes("NARRATE")) {
+      part(sessionID, turn, { type: "text", text: "Let me check the config first.", time: { start: 1, end: 2 } });
+      part(sessionID, turn, { type: "tool", callID: `call_${turn.userId}_narrate`, tool: "read", state: { status: "completed", input: { filePath: "config.yaml" }, output: "ok" } });
     }
     if (text.includes("ORPHAN")) return;
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);

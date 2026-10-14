@@ -174,10 +174,65 @@ describe("OpencodeServerPool", { timeout: 20_000 }, () => {
     pool.release("sess-1");
     const viewed = await pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_B }, { reuseAny: true });
     expect(viewed).toBe(a);
-    pool.release("sess-1");
+    // A view still holding it does not stop the replacement: it follows the new server.
+    expect(pool.holdCount("sess-1", "view")).toBe(1);
     const b = await pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_B });
     expect(b).not.toBe(a);
     expect(a.exited).toBe(true);
+    // The view's late release does not take the turn's hold on the new server.
+    pool.release("sess-1", "view");
+    expect(pool.holdCount("sess-1", "turn")).toBe(1);
+    pool.release("sess-1");
+  });
+
+  it("never replaces a server a turn still holds: a turn for another spec waits for it to be released", async () => {
+    const { pool } = harness();
+    const a = await pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_A });
+    let b: Awaited<ReturnType<OpencodeServerPool["acquire"]>> | undefined;
+    const second = pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_B }).then((server) => { b = server; });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(b).toBeUndefined();
+    expect(a.exited).toBe(false);
+    pool.release("sess-1");
+    await second;
+    expect(b).not.toBe(a);
+    expect(a.exited).toBe(true);
+    expect(pool.holdCount("sess-1", "turn")).toBe(1);
+    pool.release("sess-1");
+  });
+
+  it("a running turn keeps its server while an acquire for another MCP set waits, which then gets a fresh one", async () => {
+    const h = harness();
+    const turn = h.engine.run(runOpts({ prompt: "SLOW work", resolvedMcp: MCP_A }));
+    await waitFor(() => h.pool.holdCount("sess-1", "turn") === 1);
+    const held = h.pool.get("sess-1")!;
+    let turnDone = false;
+    const settled = turn.then((result) => { turnDone = true; return result; });
+    const next = h.pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_B }).then((server) => ({ server, turnDone }));
+    const result = await settled;
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("answer:SLOW work model=opencode-go/deepseek-v4.1-flash");
+    const { server, turnDone: afterTurn } = await next;
+    expect(afterTurn).toBe(true);
+    expect(server).not.toBe(held);
+    expect(held.exited).toBe(true);
+    h.pool.release("sess-1");
+  });
+
+  it("two turns waiting on a held server for different specs do not both replace it", async () => {
+    const { pool } = harness();
+    const a = await pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_A });
+    const both = Promise.all([
+      pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_B }),
+      pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_B }),
+    ]);
+    pool.release("sess-1");
+    const [b1, b2] = await both;
+    expect(b1).toBe(b2);
+    expect(a.exited).toBe(true);
+    expect(b1.exited).toBe(false);
+    expect(pool.holdCount("sess-1", "turn")).toBe(2);
+    pool.release("sess-1");
     pool.release("sess-1");
   });
 
@@ -1145,6 +1200,40 @@ describe("a server lost under a turn: a clear failure, and the conversation surv
     expect(h.pool.unsupportedReason("local")).toBeUndefined();
   });
 
+  it("a dropped turn whose reply narrated before it stopped is a failed turn, not an answer or API drift", async () => {
+    SERVER_TURN_TIMING.statusPollMs = 100;
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const abort = vi.spyOn(h.pool, "abortTurn").mockResolvedValue();
+    // The reply says what it is about to do and runs a tool, then is left open
+    // and the session goes idle with nothing on the stream: the status poll ends it.
+    const result = await h.engine.run(runOpts({ prompt: "NARRATE ORPHAN NOIDLE work", resumeSessionId: first.sessionId }));
+    expect(result.error).toBe("the opencode server stopped running the turn before its reply finished");
+    expect(await dead(result)).toBe(false);
+    expect(abort).toHaveBeenCalledWith("sess-1", expect.objectContaining({ engineSessionId: first.sessionId }));
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
+    expect(h.pool.get("sess-1")).toBeDefined();
+  });
+
+  it("a turn the stream ends with its reply still open is not answered by that reply's narration", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 50;
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const abort = vi.spyOn(h.pool, "abortTurn").mockResolvedValue();
+    const deltas: string[] = [];
+    // The stream says idle; the reply narrated and was never finished.
+    const result = await h.engine.run(runOpts({
+      prompt: "NARRATE ORPHAN work",
+      resumeSessionId: first.sessionId,
+      onStream: (d) => { if (d.type === "text") deltas.push(d.content); },
+    }));
+    expect(result.error).toBe("the opencode server stopped running the turn before its reply finished");
+    expect(abort).toHaveBeenCalled();
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
+    // Read back from the store, the narration is not streamed a second time.
+    expect(deltas).toEqual(["Let me check the config first."]);
+  });
+
   it("says how a reply that answered nothing ended, so an empty provider response is visible", () => {
     expect(noAnswerReason({ finish: "stop", tokens: { output: 0 } }))
       .toBe("the opencode server ended the turn without a final assistant response (its reply finished \"stop\" with 0 output tokens)");
@@ -1385,6 +1474,16 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
     const result = await h.engine.run(runOpts({ prompt: "NOIDLE please" }));
     expect(result.result).toBe("answer:NOIDLE please model=opencode-go/deepseek-v4.1-flash");
     expect(h.pool.unsupportedReason("local")).toMatch(/ended without the stream saying so/);
+  });
+
+  it("a reply that failed after the idle's grace period is the turn's error, not drift", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 50;
+    const h = harness();
+    // The failed reply's update comes long after the idle: the turn has already
+    // ended on the idle and reads the error from the store.
+    const result = await h.engine.run(runOpts({ prompt: "MIDFAIL ORDER=idle" }));
+    expect(result.error).toMatch(/Bad Request/);
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
   });
 
   it("a turn that legitimately answers nothing is not mistaken for drift", async () => {
