@@ -61,7 +61,8 @@
 // FAKE_OPENCODE_VERSION sets the version /global/health reports (default
 // 1.18.31, "none" for no version, "v2:<version>" for an OpenCode 2 server:
 // every v1 route answers 200 text/html, as its SPA fallback does, and only
-// GET /api/info reports the version);
+// GET /api/info reports the version; FAKE_OPENCODE_API_INFO_DROP=1 drops the
+// first /api/info connection unanswered);
 // FAKE_OPENCODE_RUN_LOG names a file each `run` appends its argv to as one JSON line; FAKE_OPENCODE_SERVE_LOG names a file each
 // `serve` start appends a line to; FAKE_OPENCODE_CREATE_DELAY_MS delays the
 // answer to POST /session; FAKE_OPENCODE_HISTORY_DELAY_MS delays the answer
@@ -287,6 +288,7 @@ function serve() {
     setStatus(sessionID, "idle", end);
   }
 
+  let apiInfoDropped = false;
   const server = http.createServer(async (req, res) => {
     const expected = password ? `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}` : undefined;
     if (expected && req.headers.authorization !== expected) {
@@ -299,6 +301,12 @@ function serve() {
     const url = req.url ?? "";
     if (reported.startsWith("v2:")) {
       // OpenCode 2: /api/* only; everything else is the web UI's fallback page.
+      if (url === "/api/info" && process.env.FAKE_OPENCODE_API_INFO_DROP === "1" && !apiInfoDropped) {
+        // Drops the first /api/info connection without an answer.
+        apiInfoDropped = true;
+        req.socket.destroy();
+        return;
+      }
       if (url === "/api/info") {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ version: reported.slice(3) }));

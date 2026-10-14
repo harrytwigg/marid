@@ -276,7 +276,7 @@ describe("OpencodeEngine — a remote employee's turn runs on the other machine"
       acquire: async () => { throw new Error("server mode is off for this host: OpenCode 2 is not supported by server mode"); },
       stop: async () => {},
       size: () => 0,
-      runNeedsStandalone: (hostKey: string) => hostKey === standaloneHost,
+      runNeedsStandalone: (target: { remoteHost?: string }) => target.remoteHost === standaloneHost,
     }) as unknown as OpencodeServerPool;
     const viaPool = (host: string) => new OpencodeEngine({
       mode: () => "server",

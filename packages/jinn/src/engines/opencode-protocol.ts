@@ -37,6 +37,11 @@ export interface OpencodeRunFlags {
   standalone?: boolean;
 }
 
+/** `--standalone` in any spelling: bare, with a value, or negated. */
+function isStandaloneFlag(flag: string): boolean {
+  return flag === "--standalone" || flag === "--no-standalone" || flag.startsWith("--standalone=");
+}
+
 /**
  * opencode's argv, minus the prompt.
  *
@@ -53,8 +58,8 @@ export function buildOpencodeArgs(opts: EngineRunOpts, run: OpencodeRunFlags = {
   const args = ["run", "--format", "json", "--dangerously-skip-permissions"];
   // OpenCode 2's CLI starts (or joins) a background `serve --service` daemon
   // unless told not to. Older CLIs reject the flag, so only a host known to run
-  // 2.x gets it; an operator who already put it in `cliFlags` gets it once.
-  if (run.standalone && !opts.cliFlags?.some((f) => f === "--standalone" || f.startsWith("--standalone="))) args.push("--standalone");
+  // 2.x gets it. Whatever the operator's `cliFlags` say about it wins.
+  if (run.standalone && !opts.cliFlags?.some(isStandaloneFlag)) args.push("--standalone");
   if (opts.model) args.push("-m", opts.model);
   // opencode assigns its own session ids, so a resume names one it gave us on a
   // previous turn — unlike pi, where the id is ours and the same on every turn.

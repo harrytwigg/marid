@@ -33,11 +33,18 @@ opencode models
 | Mode | opencode 1.x | OpenCode 2 (2.x) |
 | --- | --- | --- |
 | `run` (default) | Supported. | Turns run (checked on 2.0.28), but pass `--standalone` yourself with `cliFlags: [--standalone]`: without it the v2 CLI starts and reuses a background `serve --service` daemon that outlives the turn. 1.x CLIs reject the flag, so Marid never adds it unasked in plain `run` mode. |
-| `server` | Supported from **1.18.31** (older, or one that reports no version, is refused). | **Not supported.** Refused with "OpenCode 2 is not supported by server mode"; that host's turns run in `run` mode, with `--standalone` added for you. |
+| `server` | Supported from **1.18.31** (older, or one that reports no version, is refused). | **Not supported.** Refused with "OpenCode 2 is not supported by server mode"; that host's turns run in `run` mode, with `--standalone` added for you (see below for what that covers). |
 
 OpenCode 2 (`opencode upgrade --major`, which removes OpenCode 1) replaces the HTTP API server mode speaks with `/api/*` routes. A v2 server answers every v1 route (`/global/health`, `/event`, `/session/...`) with 200 `text/html`, its web UI's fallback page, so it looks alive but reports no version there. Marid reads that non-JSON health answer, asks `/api/info` for the real version, and names OpenCode 2 in the refusal. The host then stays on `run` mode for an hour before server mode is tried again, and is refused again if the binary is still 2.x. To stop the hourly retry, set `engines.opencode.mode: run`.
 
 `opencode run --format json` keeps its 1.x event lines on 2.x (`step_start`, `text` with `sessionID` and `part`, ...), so the parser reads them unchanged. A host that server mode has refused as OpenCode 2 runs `opencode run --format json --dangerously-skip-permissions --standalone ...`, so no background service is left behind. A host in plain `run` mode is never probed; that is why the flag is the operator's there.
+
+What the automatic `--standalone` does not cover:
+
+- **Only after a refusal.** The flag is added once a server start on that host has been refused as 2.x, and only for the binary that was refused (locally `engines.opencode.bin`, resolved as a server start resolves it; remotely, the binary the host's probe finds for that ssh user). A server-mode turn with no session id never starts a server, so on a host nothing has probed yet it runs without the flag.
+- **Only OpenCode 2.** A later major is refused by server mode too, but its CLI is not assumed to take the flag.
+- **The operator's `cliFlags` win.** Any `--standalone`, `--standalone=<value>` or `--no-standalone` there is passed as written and Marid adds nothing, so `--standalone=false` leaves the background service running.
+- **One verdict per host.** If two binaries on one host are refused within the hour, the later refusal decides; a binary whose version was not learned gets no flag.
 
 opencode plugins written for 1.x (a default-exported `Plugin` factory) do not load on 2.x (`Plugin must export a default definition with an id and an effect or setup function`); a plugin used with OpenCode 2 needs the v2 definition shape.
 

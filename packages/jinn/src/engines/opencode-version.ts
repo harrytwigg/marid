@@ -20,9 +20,10 @@ export function opencodeMajor(version: string | undefined): number | undefined {
 }
 
 /** Whether a `run` turn against this version needs `--standalone`: OpenCode 2's
- *  CLI otherwise leaves a background service behind, and a 1.x CLI rejects the flag. */
+ *  CLI otherwise leaves a background service behind, and a 1.x CLI rejects the
+ *  flag. Only 2.x is known to take it; a later major is left as it is. */
 export function needsStandalone(version: string | undefined): boolean {
-  return (opencodeMajor(version) ?? 0) > MAX_OPENCODE_SERVER_MAJOR;
+  return opencodeMajor(version) === 2;
 }
 
 /** The refusal for a server that is OpenCode 2 or newer. */

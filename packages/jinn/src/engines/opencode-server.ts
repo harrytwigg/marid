@@ -346,27 +346,41 @@ export class OpencodeServerPool {
    * rather than risk silently dropping events, until the retry window passes.
    */
   markUnsupported(hostKey: string, reason: string, opts: { now?: number; version?: string; bin?: string } = {}): void {
-    const previous = this.unsupported.get(hostKey);
+    const now = opts.now ?? Date.now();
+    // Only a live verdict carries over: an expired one is gone, as for a turn.
+    const previous = this.unsupportedReason(hostKey, now) === undefined ? undefined : this.unsupported.get(hostKey);
     if (!previous) {
       logger.warn(`opencode server mode disabled for host ${hostKey} for ${Math.round(UNSUPPORTED_RETRY_MS / 60000)} minutes: ${reason}`);
     }
-    // A later refusal that learned no version (API drift) keeps what an earlier one found.
-    const version = opts.version ?? previous?.version;
-    const bin = opts.bin ?? previous?.bin;
-    this.unsupported.set(hostKey, { reason, at: opts.now ?? Date.now(), ...(version ? { version } : {}), ...(bin ? { bin } : {}) });
+    // The version and binary are one fact: what that binary's server said it
+    // was. A refusal that names no binary (API drift) keeps what an earlier one
+    // found; one that names a binary records only what it learned about it.
+    const { version, bin } = opts.bin === undefined ? (previous ?? {}) : opts;
+    this.unsupported.set(hostKey, { reason, at: now, ...(version ? { version } : {}), ...(bin ? { bin } : {}) });
   }
 
-  /** Whether a `run` turn on this host with this binary needs `--standalone`:
-   *  that binary's server was refused as OpenCode 2 or newer, whose CLI
-   *  otherwise leaves a background service running. The verdict is the
-   *  binary's, not the host's: a turn naming another binary on the same host is
-   *  not covered, since a 1.x CLI rejects the flag. Only a host the pool has
-   *  seen refuse says so; a host in plain `run` mode is never probed, and its
-   *  operator passes the flag in `cliFlags`. */
-  runNeedsStandalone(hostKey: string, turnBin?: string, now = Date.now()): boolean {
+  /** Whether a `run` turn for this target needs `--standalone`: its binary's
+   *  server was refused as OpenCode 2, whose CLI otherwise leaves a background
+   *  service running. The verdict is the binary's, not the host's: a turn
+   *  naming another binary on the same host is not covered, since a 1.x CLI
+   *  rejects the flag. Only a host the pool has seen refuse says so; a host in
+   *  plain `run` mode is never probed, and its operator passes the flag in
+   *  `cliFlags`. */
+  runNeedsStandalone(target: RemoteTarget & { bin?: string }, now = Date.now()): boolean {
+    const hostKey = serverHostKey(target);
     if (this.unsupportedReason(hostKey, now) === undefined) return false;
     const entry = this.unsupported.get(hostKey);
-    return needsStandalone(entry?.version) && (entry?.bin ?? "") === (turnBin || this.deps.bin?.() || "");
+    return needsStandalone(entry?.version) && entry?.bin === this.binKey(target);
+  }
+
+  /** Which opencode binary a server or `run` turn for this target uses. Local:
+   *  the configured binary, resolved as a server start resolves it. Remote: the
+   *  binary the host's facts probe finds for that user, which a turn's `bin`
+   *  does not change. */
+  binKey(target: RemoteTarget & { bin?: string }): string {
+    return isRemoteTarget(target)
+      ? `remote:${target.remoteUser ?? ""}`
+      : resolveBin("opencode", target.bin || this.deps.bin?.());
   }
 
   /** Why server mode is currently off for this host, if it is. */
@@ -588,7 +602,7 @@ export class OpencodeServerPool {
     if (refusal) {
       this.markUnsupported(server.hostKey, refusal, {
         ...(health.version ? { version: health.version } : {}),
-        bin: spec.bin || this.deps.bin?.() || "",
+        bin: this.binKey(spec),
       });
       await this.stop(sessionId);
       throw new Error(`opencode server refused: ${refusal}`);
@@ -813,15 +827,22 @@ export class OpencodeServerPool {
     throw new Error(`no healthy answer within ${timeoutMs}ms (${last})`);
   }
 
-  /** The version an OpenCode 2 server reports on `/api/info`, or undefined when there is no such route. */
+  /** The version an OpenCode 2 server reports on `/api/info`, or undefined when
+   *  there is no such route. A request that fails outright is tried once more:
+   *  a server that has only just answered its health check can drop one. */
   private async apiInfoVersion(server: OpencodeServer): Promise<string | undefined> {
-    try {
-      const info = await this.request(server, "/api/info", { method: "GET" });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await sleep(HEALTH_POLL_MS);
+      let info: unknown;
+      try {
+        info = await this.request(server, "/api/info", { method: "GET" });
+      } catch {
+        continue;
+      }
       const version = info && typeof info === "object" ? (info as { version?: unknown }).version : undefined;
       return typeof version === "string" && version ? version : undefined;
-    } catch {
-      return undefined;
     }
+    return undefined;
   }
 
   /**
