@@ -80,9 +80,9 @@ export function isEngineExhausted(health: EngineHealthReading, engine: string, n
   return Number.isFinite(recheckAt) && recheckAt > now.getTime();
 }
 
-/** How long a spent engine is stepped around when its record names no moment to
- *  look again: the same guess a mid-turn fallback makes about an unstated reset. */
-const UNSTATED_RETURN_MS = 6 * 60 * 60_000;
+/** How long a session stays on a stand-in when the limit that moved it there named
+ *  no reset: the one guess both a mid-turn fallback and a reroute at creation make. */
+export const UNSTATED_RESET_WINDOW_MS = 6 * 60 * 60_000;
 
 /** When an engine a dispatcher stepped around should be offered turns again: the
  *  moment {@link isEngineExhausted} stops answering yes for it. A session moved
@@ -93,7 +93,7 @@ export function exhaustedEngineReturnsAt(health: EngineHealthReading, engine: st
     const ms = stamp === undefined ? NaN : Date.parse(stamp);
     if (Number.isFinite(ms) && ms > now.getTime()) return new Date(ms);
   }
-  return new Date(now.getTime() + UNSTATED_RETURN_MS);
+  return new Date(now.getTime() + UNSTATED_RESET_WINDOW_MS);
 }
 
 /** How long a stated reopening is taken on trust before the engine is offered a

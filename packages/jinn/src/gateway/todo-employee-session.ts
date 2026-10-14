@@ -4,7 +4,7 @@ import type { Employee, Session, WorkItemLinkRole } from "../shared/types.js";
 import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
 import { claimSessionDelivery, claimSessionDeliveryWithinSourceLimit, createSession, enqueueQueueItem, insertMessage, updateSession } from "../sessions/registry.js";
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
-import { reroutedSessionMeta, type SessionReroute } from "../sessions/engine-override.js";
+import { reroutedSessionMeta, type SessionReroute } from "../sessions/engine-override-window.js";
 import { resolveTodoDispatch } from "../work-items/dispatch-config.js";
 import { liveEmployeeSession, resolveEmployeeSession } from "../work-items/employee-sessions.js";
 import { linkSession } from "../work-items/store.js";

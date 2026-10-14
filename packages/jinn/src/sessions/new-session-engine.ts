@@ -7,7 +7,7 @@ import {
   engineHealthForTarget, exhaustedEngineReturnsAt, preferHealthySessionEngine, readEngineHealth, type EngineHealthReading,
 } from "../shared/engine-health.js";
 import { logger } from "../shared/logger.js";
-import { reroutedSessionMeta } from "./engine-override.js";
+import { reroutedSessionMeta } from "./engine-override-window.js";
 
 /** What a routed turn brought with it about where the session should run. */
 export interface NewSessionEnginePreference {
@@ -89,7 +89,8 @@ export function newSessionEngineSelection(
   }
   const until = exhaustedEngineReturnsAt(health, preferred);
   logger.info(`Engine "${preferred}" is out of allowance — starting this session on "${engine}" instead, until ${until.toISOString()}`);
-  const model = inheritedDefaults(preference, false).model ?? null;
+  // Not a caller-named model (that would have pinned the engine), so the employee's own.
+  const model = preference.employee?.model ?? null;
   return {
     engine,
     ...inheritedDefaults(preference, true),

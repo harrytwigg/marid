@@ -184,7 +184,8 @@ async function runWebSession(
   // turn through, because every web entry point reaches this one — a message,
   // a callback, a Todo wake, a reused delegate — and the engine below is picked
   // from the row as it stands after it.
-  const currentSession = maybeRevertEngineOverride(liveSession);
+  const employee = liveSession.employee ? orgRegistry(context.getConfig()).get(liveSession.employee) : undefined;
+  const currentSession = maybeRevertEngineOverride(liveSession, employee);
 
   // CLI-mode sends run against the PTY-backed view of the engine so the user
   // sees the turn stream into their live xterm; everything else takes the
@@ -192,11 +193,6 @@ async function runWebSession(
   const preferredPtyView = context.ptyViewEngines?.[session.engine] === request.engine;
   const runtimeEngine = (preferredPtyView ? context.ptyViewEngines?.[currentSession.engine] : undefined)
     ?? context.sessionManager.getEngine(currentSession.engine);
-
-  let employee: import("../shared/types.js").Employee | undefined;
-  if (currentSession.employee) {
-    employee = orgRegistry(context.getConfig()).get(currentSession.employee);
-  }
 
   await runTurn({
     session: currentSession,

@@ -14,8 +14,9 @@ import { logger } from "../shared/logger.js";
 import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { isSpellableModelId } from "../shared/model-id.js";
 import { accountOverride } from "./session-account.js";
+import { extendSpentWindow } from "./engine-override-window.js";
 import { effortLevelsForModel, getModelRegistry } from "../shared/models.js";
-import type { Employee, JinnConfig, JsonObject, Session } from "../shared/types.js";
+import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import {
   getEngineSessionRef, getSession, nextEngineSessionFields, updateSession, updateSessionForAttempt,
 } from "./registry.js";
@@ -49,42 +50,6 @@ function overrideRecord(session: Session, accounts: AccountSwap | undefined, unt
     until: until.toISOString(),
     syncSince,
     ...(accounts ? { originalAccount: accounts.original, substituteAccount: accounts.substitute, substituteConfigDir: accounts.substituteConfigDir } : {}),
-  };
-}
-
-/** A new session started on a stand-in because its preferred engine was out of
- *  allowance when it was created: the engine and model it would otherwise have
- *  run, and when that engine may serve turns again. */
-export interface SessionReroute {
-  from: string;
-  model: string | null;
-  until: Date;
-}
-
-/**
- * The transport meta a session rerouted at creation starts with: the same record
- * a mid-turn swap parks, so the revert hands the session back to the engine it
- * preferred once `until` passes. Without it, nothing remembers the preference and
- * the session runs on the stand-in for good.
- *
- * Nothing ran on the preferred engine yet, so there is no thread to park, and the
- * sync point is the session's birth: the first turn back carries everything.
- */
-export function reroutedSessionMeta(
-  reroute: SessionReroute | undefined,
-  meta?: JsonObject | null,
-  now: Date = new Date(),
-): JsonObject | undefined {
-  if (!reroute) return meta ?? undefined;
-  return {
-    ...(meta ?? {}),
-    engineOverride: {
-      originalEngine: reroute.from,
-      originalEngineSessionId: null,
-      originalModel: reroute.model,
-      until: reroute.until.toISOString(),
-      syncSince: now.toISOString(),
-    },
   };
 }
 
@@ -213,7 +178,7 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
   // claude itself handed the turn back by an exhausted chain), claude's own thread
   // was left at the first swap, so it is caught up from there.
   if (parked.engine === "claude" && parked.syncSince) {
-    next["claudeSyncSince"] = parked.syncSince;
+    next["claudeSyncSince"] = earliestPending(meta["claudeSyncSince"], parked.syncSince);
     // The prompt's sync intro names what happened: another account, not another engine.
     if (accountOverride(session)) next["claudeSyncAccount"] = true;
     else delete next["claudeSyncAccount"];
@@ -221,11 +186,24 @@ function revertedMeta(meta: Record<string, unknown>, session: Session, parked: P
     // Any other engine coming back with no thread of its own — a session that
     // was started on the stand-in never ran on it — would open a blank
     // conversation, so it gets the same transcript an engine switch does.
+    const pending = meta["engineSyncTarget"] === parked.engine ? meta["engineSyncSince"] : undefined;
     next["engineSyncTarget"] = parked.engine;
-    next["engineSyncSince"] = parked.syncSince;
+    next["engineSyncSince"] = earliestPending(pending, parked.syncSince);
   }
   delete next["engineOverride"];
   return next;
+}
+
+/**
+ * The sync point an engine coming back is owed: the earlier of the one this swap
+ * parked and one an earlier return left unconsumed. A marker still on the row was
+ * never settled by a clean synced turn — the engine went back, was still limited,
+ * and the session swapped away again — so everything since it is still missing
+ * from the engine's conversation, not only what happened since the latest swap.
+ */
+function earliestPending(pending: unknown, parked: string): string {
+  const pendingMs = typeof pending === "string" ? Date.parse(pending) : NaN;
+  return Number.isFinite(pendingMs) && pendingMs < Date.parse(parked) ? pending as string : parked;
 }
 
 /** The thread the restored engine resumes. A chain that handed the turn back to
@@ -240,8 +218,9 @@ function restoredThread(session: Session, meta: Record<string, unknown>, parked:
 }
 
 /** Restore the pre-rate-limit engine, and the model that belonged to it, once the
- *  override window has expired. */
-export function maybeRevertEngineOverride(session: Session): Session {
+ *  override window has expired — or move the window out, when the engine is
+ *  known to be spent still. */
+export function maybeRevertEngineOverride(session: Session, employee?: Employee): Session {
   const meta = (session.transportMeta || {}) as Record<string, unknown>;
   const override = meta["engineOverride"] as Record<string, unknown> | undefined;
   if (!override) return session;
@@ -249,6 +228,9 @@ export function maybeRevertEngineOverride(session: Session): Session {
   const parked = parkedOverride(override);
   if (!parked) return session;
   if (parked.until.getTime() > Date.now()) return session;
+
+  const extended = extendSpentWindow(session, meta, override, parked.engine, employee);
+  if (extended) return extended;
 
   // Park the fallback engine's own thread id under its typed ref before handing
   // the mirror back to the engine being restored.

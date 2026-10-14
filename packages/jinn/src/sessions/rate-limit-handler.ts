@@ -29,6 +29,7 @@ import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { spawnCwd } from "./session-cwd.js";
 import { logger } from "../shared/logger.js";
+import { UNSTATED_RESET_WINDOW_MS } from "../shared/engine-health.js";
 import { REMOTE_ENGINE_NAMES, type EngineName } from "../shared/models.js";
 import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
@@ -123,7 +124,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   if (choice && substituteName && substituteEngine) {
     const substituteCwd = spawnCwd(session, Boolean(remote)); // a scoped session's stage directory, resolved before anything is flipped
     const { resumeAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
-    const until = resumeAt ?? new Date(Date.now() + 6 * 60 * 60_000);
+    const until = resumeAt ?? new Date(Date.now() + UNSTATED_RESET_WINDOW_MS);
     const syncSince = new Date().toISOString();
     const substituteLabel = choice.accounts ? `the ${choice.accounts.substitute} Claude account` : rateLimitEngineLabel(substituteName);
 

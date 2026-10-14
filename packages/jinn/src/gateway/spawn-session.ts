@@ -2,7 +2,7 @@ import { logger } from "../shared/logger.js";
 import type { JinnConfig, Session } from "../shared/types.js";
 import { createSession, insertMessage, updateSession, enqueueQueueItem } from "../sessions/registry.js";
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
-import { reroutedSessionMeta, type SessionReroute } from "../sessions/engine-override.js";
+import { reroutedSessionMeta, type SessionReroute } from "../sessions/engine-override-window.js";
 import { fileIdsToMedia, rehomeAttachmentsToSession } from "./files.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";

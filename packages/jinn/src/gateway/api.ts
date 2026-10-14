@@ -28,7 +28,7 @@ import { effectiveSessionStatus, isBackgroundWorkLive, runtimeTransportRunning, 
 import { readTodoSessionTree } from "../sessions/session-tree.js";
 import { sessionTreeActivity } from "./session-tree-activity.js";
 import { maybeRevertEngineOverride, type SessionManager } from "../sessions/manager.js";
-import { reroutedSessionMeta } from "../sessions/engine-override.js";
+import { reroutedSessionMeta } from "../sessions/engine-override-window.js";
 import { stripControlChars, hasControlBytes } from "../shared/sanitize.js";
 import { CONNECTOR_ID_REQUIREMENTS, isValidConnectorId } from "../shared/connector-id.js";
 import { initDb } from "../shared/db.js";

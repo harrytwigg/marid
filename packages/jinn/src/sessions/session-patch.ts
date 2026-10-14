@@ -1,7 +1,7 @@
 import type { JinnConfig } from "../shared/types.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
 import { exhaustedEngineReturnsAt, preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
-import type { SessionReroute } from "./engine-override.js";
+import type { SessionReroute } from "./engine-override-window.js";
 import { logger } from "../shared/logger.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { orgRegistry } from "../gateway/org-registry.js";

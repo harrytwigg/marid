@@ -128,8 +128,6 @@ export class SessionManager {
     if (!session && refuseScopedConnectorSession(msg, opts.employee?.name, connector)) return;
     if (!session) {
       session = createSession({
-        // The selection carries the transport meta: a session rerouted off a
-        // spent engine starts with the record that takes it back again.
         ...newSessionEngineSelection(this.config, this.engines, opts, msg.transportMeta),
         source: msg.source,
         sourceRef: msg.sessionKey,
@@ -157,7 +155,7 @@ export class SessionManager {
       }) ?? session;
     }
 
-    session = maybeRevertEngineOverride(session);
+    session = maybeRevertEngineOverride(session, opts.employee);
     this.queue.clearCancelled(msg.sessionKey);
 
     const target = connector.reconstructTarget(msg.replyContext);
