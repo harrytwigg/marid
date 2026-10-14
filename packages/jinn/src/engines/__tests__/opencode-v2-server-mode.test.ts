@@ -64,7 +64,7 @@ function runOpts(over: Partial<EngineRunOpts> = {}): EngineRunOpts {
   return { prompt: "build it", cwd: JINN_HOME, sessionId: "sess-1", bin: FAKE_V2, model: MODEL, ...over };
 }
 
-interface LogEntry { method: string; path: string; body?: Record<string, any>; answered?: string[] }
+interface LogEntry { at: number; method: string; path: string; body?: Record<string, any>; answered?: string[] }
 
 /** One call to the fake's HTTP API, as the pool would make it. */
 async function call<T = any>(h: Harness, route: string, init: { method?: string; body?: unknown } = {}): Promise<{ status: number; body: T }> {
@@ -676,7 +676,10 @@ describe("the config staged for an OpenCode 2 server", { timeout: 30_000 }, () =
     const lastMcp = order.lastIndexOf("/api/mcp");
     const create = order.indexOf("/api/session");
     expect(lastMcp).toBeLessThan(create);
-    expect(lastMcp).toBeLessThan(log.findIndex((e) => /\/prompt$/.test(e.path)));
+    const promptAt = log.findIndex((e) => /\/prompt$/.test(e.path));
+    expect(lastMcp).toBeLessThan(promptAt);
+    // And it let them settle: the server is not used the moment they report connected.
+    expect(log[promptAt]!.at - log[lastMcp]!.at).toBeGreaterThanOrEqual(900);
     expect(h.pool.get("sess-1")!.ready).toBe(true);
   });
 
