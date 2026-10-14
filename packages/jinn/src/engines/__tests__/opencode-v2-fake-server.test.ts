@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { basicAuthHeader } from "../opencode-server.js";
 import { parseSseEvent } from "../opencode-v2-turn.js";
 import type { V2Event } from "../opencode-v2-events.js";
 
@@ -22,6 +23,7 @@ let proc: ChildProcess;
 let base = "";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "fake-opencode-v2-"));
 const logFile = path.join(dir, "verbs.log");
+const versionLog = path.join(dir, "version.log");
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -37,7 +39,7 @@ function freePort(): Promise<number> {
 async function http(method: string, route: string, body?: unknown): Promise<{ status: number; type: string; text: string; json: any }> {
   const res = await fetch(`${base}${route}`, {
     method,
-    headers: { authorization: `Basic ${Buffer.from(`opencode:${PASSWORD}`).toString("base64")}`, ...(body === undefined ? {} : { "content-type": "application/json" }) },
+    headers: { authorization: basicAuthHeader(PASSWORD), ...(body === undefined ? {} : { "content-type": "application/json" }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await res.text();
@@ -64,7 +66,7 @@ async function readBlocks(body: ReadableStream<Uint8Array>, onBlock: (block: str
 async function subscribe(): Promise<{ events: V2Event[]; comments: string[]; stop: () => void }> {
   const controller = new AbortController();
   const res = await fetch(`${base}/api/event`, {
-    headers: { authorization: `Basic ${Buffer.from(`opencode:${PASSWORD}`).toString("base64")}`, accept: "text/event-stream" },
+    headers: { authorization: basicAuthHeader(PASSWORD), accept: "text/event-stream" },
     signal: controller.signal,
   });
   const events: V2Event[] = [];
@@ -115,12 +117,13 @@ afterAll(() => {
 describe("the fake OpenCode 2 server", { timeout: 20_000 }, () => {
   it("prints its version", async () => {
     const out = await new Promise<string>((resolve) => {
-      const child = spawn(FAKE_V2, ["--version"], { stdio: ["ignore", "pipe", "ignore"] });
+      const child = spawn(FAKE_V2, ["--version"], { env: { ...process.env, FAKE_V2_LOG: versionLog }, stdio: ["ignore", "pipe", "ignore"] });
       let text = "";
       child.stdout.on("data", (d) => { text += d; });
       child.on("close", () => resolve(text));
     });
     expect(out).toBe("opencode v2.0.29\n");
+    expect(fs.readFileSync(versionLog, "utf8")).toBe("--version\n");
     expect(fs.readFileSync(logFile, "utf8")).toContain("serve --port");
   });
 
