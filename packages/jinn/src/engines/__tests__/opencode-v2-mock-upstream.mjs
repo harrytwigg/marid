@@ -4,6 +4,8 @@
  * Directives in the newest user message pick the answer:
  *   TOOLCALL  first step calls the `shell` tool, the next answers "tool done"
  *   MCPCALL   the same with the `jinn_echo` MCP tool (when it is offered)
+ *   CALLTOOL=<name>  the same with the named tool, and the arguments in
+ *             ARGS64=<base64 JSON> (none without it)
  *   SLOW      streams forty words, 250 ms apart (time to stop the turn)
  *   E400ONCE  answers the first request 400 `{"model":…}` (a pre-stream 400)
  *   E429      answers 429 under the URL prefix MOCK_LIMITED (default: everywhere)
@@ -83,6 +85,9 @@ function answer(req, res, body) {
   }
   if (lastUser.includes("TOOLCALL") && last?.role !== "tool") return toolCall(res, "shell", { command: "echo hi-from-tool", description: "echo" });
   if (lastUser.includes("MCPCALL") && last?.role !== "tool" && tools.includes("jinn_echo")) return toolCall(res, "jinn_echo", {});
+  const named = /CALLTOOL=([A-Za-z0-9_-]+)/.exec(lastUser)?.[1];
+  const args64 = /ARGS64=([A-Za-z0-9+/=]+)/.exec(lastUser)?.[1];
+  if (named && last?.role !== "tool") return toolCall(res, named, args64 ? JSON.parse(Buffer.from(args64, "base64").toString()) : {});
   if (last?.role === "tool") return text(res, ["tool done"], 0);
   if (lastUser.includes("SLOW")) return text(res, Array.from({ length: 40 }, (_, i) => `w${i} `), 250);
   return text(res, ["hello from mock"], 0);
