@@ -98,6 +98,29 @@ describe("an @mention of the virtual org root", () => {
     expect(reply.body).toContain("Only the operator can tag the org root, COO.");
   });
 
+  it("counts the operator's remote MCP connector as the operator", async () => {
+    // The connector posts through an employee-less anchor, so its comment is
+    // authorKind "employee", not "operator": the wake has to key off the
+    // session's remote-mcp source, and the operator's own name-typo reply on it
+    // has to fire too. Regression: a2bbe75d, whose branch shipped untested.
+    const { ensureRemoteMcpAnchor } = await import("../remote-mcp/principal.js");
+    const anchor = ensureRemoteMcpAnchor("operator@example.com", "codex");
+    const item = h.store.createWorkItem({ title: "connector tags the root" });
+
+    const asked = await h.comment(item.id, "@coo please take a look", { as: anchor.id });
+    expect(comments.listComments(item.id).comments.find((c) => c.id === asked.id)).toMatchObject({
+      authorKind: "employee",
+      sessionId: anchor.id,
+    });
+    expect(rootSessions(item.id).filter((s) => s.id !== anchor.id)).toHaveLength(1);
+    expect(systemReplies(item.id, asked.id)).toEqual([]);
+
+    const typo = await h.comment(item.id, "@alhpa over to you", { as: anchor.id });
+    expect(systemReplies(item.id, typo.id).map((c) => c.body)).toEqual([
+      '**@alhpa was not woken.** No employee or org root is named "alhpa".',
+    ]);
+  });
+
   it("follows the portal's name, as a mention spells it", async () => {
     writePortalName("Portal COO");
     expect(owner.virtualRootMention()).toEqual({ name: "Portal COO", mention: "portal-coo" });
