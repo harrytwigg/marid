@@ -2,6 +2,7 @@ import { logger } from "../shared/logger.js";
 import { scopedMentionRefusal, scopedReplyAllowed } from "./department-scope/comments.js";
 import type { Employee, Session } from "../shared/types.js";
 import { getSession } from "../sessions/registry.js";
+import { isRemoteMcpSession } from "../sessions/remote-mcp-session.js";
 import { addComment, getComment, setTodoCommentListener, type WorkItemComment } from "../work-items/comments.js";
 import { canMessageSession } from "../work-items/employee-sessions.js";
 import { parseMentions } from "../work-items/mentions.js";
@@ -132,7 +133,8 @@ function wakeOne(context: ApiContext, item: WorkItem, comment: WorkItemComment, 
 
 /** A mention no employee answers to: the root's, or a name that is nobody's. */
 function wakeUnrostered(context: ApiContext, item: WorkItem, comment: WorkItemComment, name: string, root: RootMention | null): CommentWake | undefined {
-  const byOperator = comment.authorKind === "operator";
+  // The remote MCP connector is the operator's own door, though its comments carry its session.
+  const byOperator = comment.authorKind === "operator" || isRemoteMcpSession(comment.sessionId ? getSession(comment.sessionId) : undefined);
   if (root?.mention !== name) {
     if (byOperator) reportFailedWake(comment, name, `No employee or org root is named "${name}".`);
     return undefined;
