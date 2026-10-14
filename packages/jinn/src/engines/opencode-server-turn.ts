@@ -4,6 +4,7 @@ import { OpencodeTurn } from "./opencode-turn.js";
 import { buildOpencodePrompt } from "./opencode-protocol.js";
 import { basicAuthHeader, type OpencodeServer } from "./opencode-server.js";
 import { USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
+import { abandonedRetryError, providerFailureReason, providerRetryOf, repeatsPrompt, SettleWait, type ProviderRetry, type SettleKind } from "./opencode-server-settle.js";
 
 /**
  * One Jinn turn, sent straight to the session's opencode server over HTTP.
@@ -91,8 +92,20 @@ export interface ServerTurnDeps {
  *  prompt has had time to start, are needed before it counts. The connect
  *  budget covers only opening the stream: the pool hands out a server once its
  *  instance has bootstrapped, which is the slow part. `closeWaitMs` is how long
- *  an idle session waits for the turn's newest reply to close (see onIdle). */
-export const SERVER_TURN_TIMING = { statusPollMs: 30_000, connectMs: 15_000, closeWaitMs: 2_000 };
+ *  a turn without a text answer waits, after an idle or a finished reply, for
+ *  opencode to take it up again (see opencode-server-settle.ts); an idle that
+ *  comes while opencode was retrying the provider waits `fallbackWaitMs`, as a
+ *  fallback plugin re-prompts then (about 0.5 s later in production). A
+ *  provider retry due further off than `retryWaitCapMs` ends the turn once it
+ *  has stood for `retryGraceMs` with nothing else happening. */
+export const SERVER_TURN_TIMING = {
+  statusPollMs: 30_000,
+  connectMs: 15_000,
+  closeWaitMs: 2_000,
+  fallbackWaitMs: 5_000,
+  retryWaitCapMs: 120_000,
+  retryGraceMs: 15_000,
+};
 
 /** A parsed SSE event from the server's `/event` stream. */
 interface ServerEvent {
@@ -228,7 +241,11 @@ function reportKey(line: { type: string; part?: Record<string, unknown> }): stri
 
 /** A line that answers the turn: its text, or its error. */
 function isAnswerLine(line: string): boolean {
-  return /^\{"type":"(text|error)"/.test(line);
+  return answerKind(line) !== undefined;
+}
+
+function answerKind(line: string): "text" | "error" | undefined {
+  return /^\{"type":"(text|error)"/.exec(line)?.[1] as "text" | "error" | undefined;
 }
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -258,10 +275,10 @@ export function newMessageId(now = Date.now()): string {
 export function runLinesFromMessages(
   messages: StoredMessage[],
   sessionId: string,
-  userMessageId: string,
+  prompts: string | ReadonlySet<string>,
 ): string[] {
   const lines: string[] = [];
-  for (const message of messages.filter((m) => m.info?.role === "assistant" && m.info.parentID === userMessageId)) {
+  for (const message of messages.filter((m) => answersPrompt(m, prompts))) {
     for (const part of message.parts ?? []) {
       const line = runLineForEvent({ type: "message.part.updated", properties: { part } }, sessionId);
       if (line) lines.push(line);
@@ -273,6 +290,12 @@ export function runLinesFromMessages(
 }
 
 type StoredMessage = { info?: Record<string, unknown>; parts?: unknown[] };
+
+/** An assistant message answering one of the turn's prompts. */
+function answersPrompt(message: StoredMessage, prompts: string | ReadonlySet<string>): boolean {
+  const parent = str(message.info?.parentID) ?? "";
+  return message.info?.role === "assistant" && (typeof prompts === "string" ? parent === prompts : prompts.has(parent));
+}
 
 function textParts(message: StoredMessage): Array<Record<string, unknown>> {
   return (message.parts ?? []).map(record).filter((p): p is Record<string, unknown> => p?.type === "text");
@@ -506,6 +529,17 @@ export class OpencodeServerTurn {
   private sessionId = "";
   /** The id this turn's prompt is posted under; its replies name it as parent. */
   private readonly userMessageId = newMessageId();
+  /** The turn's prompts: its own, and copies a fallback re-sent (see
+   *  repeatsPrompt). Replies to any of them are the turn's. */
+  private readonly prompts = new Set([this.userMessageId]);
+  /** The newest of them: the one a stop has to stop. */
+  private currentPrompt = this.userMessageId;
+  /** The prompt text the turn posted, to know a re-sent copy of it. */
+  private promptText = "";
+  /** Marking the newest adopted copy as a Jinn prompt, while in flight. */
+  private markingCopy?: Promise<void>;
+  /** User messages in the session the turn did not post. */
+  private readonly otherPrompts = new Set<string>();
   /** Assistant messages answering this turn, and ones answering someone else. */
   private readonly own = new Set<string>();
   private readonly foreign = new Set<string>();
@@ -519,8 +553,14 @@ export class OpencodeServerTurn {
   private newestOwnOpen = false;
   /** The newest of those replies as last seen, for a turn that ends without an answer. */
   private ownReply?: Record<string, unknown>;
-  /** The session went idle while that reply was still open (see onIdle). */
-  private closeWait?: NodeJS.Timeout;
+  /** A pending end of a turn with no text answer yet (see opencode-server-settle.ts). */
+  private readonly settle = new SettleWait((kind) => this.onSettled(kind));
+  /** The provider retry opencode last reported, until the turn's reply streams again. */
+  private providerRetry?: ProviderRetry;
+  /** The turn ended on a retry too far off to wait for; it is still pending on the server. */
+  private abandonedRetry?: ProviderRetry;
+  /** The kind of the newest answer line: text, or an error after it. */
+  private lastAnswer?: "text" | "error";
   /** Sub-sessions this turn's replies spawned (a subagent's), transitively. */
   private readonly children = new Set<string>();
   private sawBusy = false;
@@ -586,24 +626,40 @@ export class OpencodeServerTurn {
     } finally {
       clearTimeout(timeout);
       if (this.statusPoll) clearInterval(this.statusPoll);
-      clearTimeout(this.closeWait);
+      this.settle.cancel();
       this.controller.abort();
     }
-    const result = this.turn.result({
+    return this.failedTurn(this.turn.result({
       code: this.failure ? 1 : 0,
       terminationReason: this.terminationReason,
       stderr: this.failure ?? "",
       // The stream went away mid-turn: settle it failed even if a step had
       // already spoken, rather than let the narration pass for an answer.
       failure: this.failure ?? undefined,
-      noAnswer: noAnswerReason(this.ownReply),
-    });
+      noAnswer: this.noAnswer(),
+    }));
+  }
+
+  /** What a failed turn adds to its result: when a usage window ends, and that
+   *  the conversation exists. */
+  private failedTurn(result: EngineResult): EngineResult {
+    if (!result.error) return result;
+    // A usage window: say when it ends, so the gateway waits or falls back.
+    const next = this.abandonedRetry?.next;
+    if (next) return { ...result, numTurns: result.numTurns || 1, rateLimit: { status: "rejected", resetsAt: Math.ceil(next / 1000) } };
     // The server accepted the prompt into this session, so the session exists
     // whatever happened next: a lost server or stream is not a lost
     // conversation. Zero turns and zero cost is what `isDeadSessionError` reads
     // as a stale resume id, and the next turn would start afresh.
-    if (result.error && this.posted && !result.numTurns) return { ...result, numTurns: 1 };
+    if (this.posted && !result.numTurns) return { ...result, numTurns: 1 };
     return result;
+  }
+
+  /** Why the turn has no answer: the provider's own words, when opencode was
+   *  retrying it, and how the turn's newest reply ended. */
+  private noAnswer(): string {
+    const reason = noAnswerReason(this.ownReply);
+    return this.providerRetry ? providerFailureReason(this.providerRetry, reason) : reason;
   }
 
   private async drive(): Promise<void> {
@@ -612,9 +668,15 @@ export class OpencodeServerTurn {
     await this.done;
     if (this.interrupting) await this.interrupting;
     if (this.statusPoll) clearInterval(this.statusPoll);
-    // The stream dropped mid-turn: the server may still be working on it.
-    if (this.failure && !this.terminationReason) await this.stopOnServer();
-    if (!this.failure && !this.terminationReason && this.needsStore()) await this.recover();
+    await this.afterTurn();
+  }
+
+  private async afterTurn(): Promise<void> {
+    if (this.terminationReason) return;
+    // The stream dropped mid-turn, or the turn gave up on a retry that is still
+    // pending: the server may still be working on it.
+    if (this.failure || this.abandonedRetry) await this.stopOnServer();
+    if (!this.failure && this.needsStore()) await this.recover();
   }
 
   /** The stream alone cannot say how the turn ended: it carried no answer, it
@@ -640,7 +702,7 @@ export class OpencodeServerTurn {
   private async stopOnServer(): Promise<void> {
     if (this.posting) await this.posting.catch(() => undefined);
     if (!this.posted) return;
-    await this.deps.abort({ engineSessionId: this.sessionId, userMessageId: this.userMessageId }).catch(() => undefined);
+    await this.deps.abort({ engineSessionId: this.sessionId, userMessageId: this.currentPrompt }).catch(() => undefined);
   }
 
   /**
@@ -655,7 +717,10 @@ export class OpencodeServerTurn {
    */
   private async markStoppedByUser(): Promise<void> {
     if (!this.posted) return;
-    const route = `/session/${encodeURIComponent(this.sessionId)}/message/${encodeURIComponent(this.userMessageId)}`;
+    // After a fallback re-sent the prompt, the copy is what the next turn's
+    // history walk meets first, so it carries the mark (once it is a Jinn prompt).
+    await this.markingCopy;
+    const route = `/session/${encodeURIComponent(this.sessionId)}/message/${encodeURIComponent(this.currentPrompt)}`;
     const signal = AbortSignal.timeout(MARK_TIMEOUT_MS); // the read and the write together
     try {
       const message = record(await this.request("GET", route, undefined, signal)) as StoredMessage | undefined;
@@ -821,7 +886,7 @@ export class OpencodeServerTurn {
       this.turn.readLine(JSON.stringify({ type: "error", sessionID: this.sessionId, error: PROMPT_NOT_RUN }), this.onStream);
       return;
     }
-    const lines = runLinesFromMessages(messages, this.sessionId, this.userMessageId);
+    const lines = runLinesFromMessages(messages, this.sessionId, this.prompts);
     const answer = lines.some(isAnswerLine);
     if (!answer && !this.missedIdle && !(!unanswered && this.replyLeftOpen())) return;
     for (const line of lines) if (this.firstReport(line)) this.turn.readLine(line, this.onStream);
@@ -871,7 +936,7 @@ export class OpencodeServerTurn {
   /** Whether the store holds a reply to this turn's prompt; the newest is the
    *  one a turn without an answer describes. */
   private noteStoredReplies(messages: StoredMessage[]): boolean {
-    const replies = messages.filter((m) => m.info?.role === "assistant" && m.info.parentID === this.userMessageId);
+    const replies = messages.filter((m) => answersPrompt(m, this.prompts));
     if (replies.length) this.ownReply = replies[replies.length - 1]!.info;
     return replies.length > 0;
   }
@@ -899,7 +964,7 @@ export class OpencodeServerTurn {
         ...(found.stopped.length
           ? [{ type: "text", text: stoppedRequestsNotice(found.stopped), synthetic: true, metadata: JINN_STOPPED_NOTICE_METADATA }]
           : []),
-        { type: "text", text: buildOpencodePrompt(this.opts), metadata: JINN_PROMPT_METADATA },
+        { type: "text", text: (this.promptText = buildOpencodePrompt(this.opts)), metadata: JINN_PROMPT_METADATA },
       ],
       ...(model ? { model } : {}),
       ...(agent ? { agent } : {}),
@@ -934,10 +999,11 @@ export class OpencodeServerTurn {
     "session.updated": (props) => this.adoptChild(props),
     "session.status": (props) => {
       if (props.sessionID !== this.sessionId) return;
-      const status = str(record(props.status)?.type);
-      if (status && status !== "idle") this.sawBusy = true;
+      const status = record(props.status);
+      const type = str(status?.type);
       // `opencode run` itself ends on this, not on session.idle.
-      else if (status === "idle") this.onIdle();
+      if (type === "idle") this.onIdle();
+      else if (type) this.onBusy(status);
     },
     "session.idle": (props) => {
       if (props.sessionID === this.sessionId) this.onIdle();
@@ -946,7 +1012,7 @@ export class OpencodeServerTurn {
       if (this.terminationReason) return; // our own abort
       // Only while this turn's reply is the one running (or before any reply):
       // an error in the operator's prompt is not this turn's.
-      if (this.activeAssistant && !this.own.has(this.activeAssistant)) return;
+      if (!this.runsOwnReply()) return;
       this.feed(runLineForEvent({ type: "session.error", properties: props }, this.sessionId));
     },
     "permission.asked": (props) => this.answerFor(props, "/permission", "/reply", { reply: "once" }),
@@ -958,18 +1024,54 @@ export class OpencodeServerTurn {
    * and the session has been busy. An idle before the prompt is sent ends
    * someone else's busy period, not one this turn's prompt is part of.
    *
-   * If the turn's newest reply is still open, the turn waits (briefly) for it
-   * to close first: opencode closes a failed reply AFTER the idle. For a
-   * provider error on a later step, 1.18.32 and 1.18.34 emit session.error,
-   * idle, and only then the reply's message.updated carrying the error — so
-   * that update, not the idle, is the turn's last word whenever the
-   * session.error is missing or comes late.
+   * A turn with its text answer and its replies closed ends here. Any other
+   * waits (briefly; see opencode-server-settle.ts): opencode closes a failed
+   * reply AFTER the idle (1.18.32, 1.18.34 and 1.19.0 emit session.error, idle,
+   * and only then the reply's message.updated carrying the error, so that
+   * update is the turn's last word whenever the session.error is missing or
+   * late), and a fallback to another provider can take the turn up again.
    */
   private onIdle(): void {
     if (!this.sawBusy || !this.posting) return;
-    if (!this.newestOwnOpen) return this.finish();
-    this.closeWait ??= setTimeout(() => this.finish(), SERVER_TURN_TIMING.closeWaitMs);
-    this.closeWait.unref?.();
+    if (this.lastAnswer === "text" && !this.newestOwnOpen) return this.finish();
+    this.settle.arm("idle", this.providerRetry ? SERVER_TURN_TIMING.fallbackWaitMs : SERVER_TURN_TIMING.closeWaitMs);
+  }
+
+  /**
+   * The session is busy, or retrying its provider. A status is the session's,
+   * not the turn's, so it counts for the turn only while the turn's own reply
+   * runs (or none has started): the session may be running someone else's
+   * prompt. Then a new attempt ends a wait on a far-off retry, and a retry
+   * keeps the turn open and names the provider's error; one due too far off
+   * ends the turn with it unless something moves first. A busy never takes up
+   * an idle or a finished reply: only a newer reply of the turn's, or its
+   * re-sent prompt, does that.
+   */
+  private onBusy(status: Record<string, unknown> | undefined): void {
+    this.sawBusy = true;
+    if (!this.runsOwnReply()) return;
+    this.settle.cancel("retry");
+    const retry = providerRetryOf(status);
+    if (!retry) return;
+    this.providerRetry = retry;
+    this.settle.cancel("idle", "done");
+    if (retry.next && retry.next - Date.now() > SERVER_TURN_TIMING.retryWaitCapMs) {
+      this.settle.arm("retry", SERVER_TURN_TIMING.retryGraceMs);
+    }
+  }
+
+  /** The reply running in the session is the turn's own, or none is yet. */
+  private runsOwnReply(): boolean {
+    return !this.activeAssistant || this.own.has(this.activeAssistant);
+  }
+
+  private onSettled(kind: SettleKind): void {
+    if (this.settled) return;
+    if (kind === "retry" && this.providerRetry) {
+      this.abandonedRetry = this.providerRetry;
+      this.feed(JSON.stringify({ type: "error", sessionID: this.sessionId, error: abandonedRetryError(this.providerRetry) }));
+    }
+    this.finish();
   }
 
   private onEvent(event: ServerEvent): void {
@@ -977,12 +1079,19 @@ export class OpencodeServerTurn {
     this.handlers[event.type]?.(record(event.properties) ?? {});
   }
 
-  /** Learn whose an assistant message is, and release its waiting parts. */
+  /** A message of the session: an assistant one is classified, and a user
+   *  message the turn did not post is noted (it may be a re-sent copy). */
   private onMessage(info: Record<string, unknown>): void {
     const id = str(info.id);
-    if (!id || info.sessionID !== this.sessionId || info.role !== "assistant") return;
+    if (!id || info.sessionID !== this.sessionId) return;
+    if (info.role === "assistant") this.onAssistant(id, info);
+    else if (info.role === "user" && !this.prompts.has(id)) this.otherPrompts.add(id);
+  }
+
+  /** Learn whose an assistant message is, and release its waiting parts. */
+  private onAssistant(id: string, info: Record<string, unknown>): void {
     if (id > this.activeAssistant) this.activeAssistant = id;
-    if (!this.own.has(id) && !this.foreign.has(id)) this.classify(id, info.parentID === this.userMessageId);
+    if (!this.own.has(id) && !this.foreign.has(id)) this.classify(id, this.prompts.has(str(info.parentID) ?? ""));
     if (this.own.has(id)) this.onOwnReply(id, info);
   }
 
@@ -990,6 +1099,8 @@ export class OpencodeServerTurn {
    *  error — the same one session.error carries, which the stream does not
    *  promise to deliver first (or at all, before the idle). */
   private onOwnReply(id: string, info: Record<string, unknown>): void {
+    // A newer reply: a next step, or a fallback's. The turn goes on.
+    if (id > this.newestOwn) this.settle.cancel();
     if (id >= this.newestOwn) {
       this.newestOwn = id;
       this.ownReply = info;
@@ -997,7 +1108,15 @@ export class OpencodeServerTurn {
     }
     const error = record(info.error);
     if (error && !this.terminationReason) this.feed(JSON.stringify({ type: "error", sessionID: this.sessionId, error }));
-    if (replyIsDone(info) || (this.closeWait && !this.newestOwnOpen)) this.finish();
+    if (replyIsDone(info) || (this.settle.pending === "idle" && !this.newestOwnOpen)) this.onReplyEnded();
+  }
+
+  /** One of the turn's replies finished, or the idle session's newest one
+   *  closed. With a text answer that is the end; without one, opencode may
+   *  still retry or fall back, so the turn waits a moment. */
+  private onReplyEnded(): void {
+    if (this.lastAnswer === "text") return this.finish();
+    if (this.settle.pending !== "idle") this.settle.arm("done", SERVER_TURN_TIMING.closeWaitMs);
   }
 
   private classify(messageId: string, mine: boolean): void {
@@ -1012,7 +1131,8 @@ export class OpencodeServerTurn {
     const part = record(props.part);
     if (!part || part.sessionID !== this.sessionId) return;
     const messageId = str(part.messageID) ?? "";
-    if (messageId === this.userMessageId || this.foreign.has(messageId)) return;
+    if (this.otherPrompts.has(messageId)) return this.adoptIfRepeated(messageId, part);
+    if (this.prompts.has(messageId) || this.foreign.has(messageId)) return;
     if (!this.own.has(messageId)) {
       // Its message has not said whose it is yet; hold it until it does.
       const waiting = this.pendingParts.get(messageId) ?? [];
@@ -1023,10 +1143,49 @@ export class OpencodeServerTurn {
     this.feed(runLineForEvent({ type: "message.part.updated", properties: props }, this.sessionId));
   }
 
+  /** Someone else's prompt that repeats this turn's, while the turn has no
+   *  answer: a fallback re-sent it, and its replies are the turn's. */
+  private adoptIfRepeated(messageId: string, part: Record<string, unknown>): void {
+    if (!this.posted || this.lastAnswer === "text" || !repeatsPrompt(part, this.promptText)) return;
+    this.otherPrompts.delete(messageId);
+    this.prompts.add(messageId);
+    this.currentPrompt = messageId;
+    this.settle.cancel();
+    this.markingCopy = this.markAsJinnPrompt(messageId, part);
+    logger.info(`opencode server turn follows its prompt re-sent as ${messageId} in ${this.sessionId} (a provider fallback)`);
+  }
+
+  /**
+   * Give an adopted copy's prompt part the metadata every Jinn prompt carries:
+   * the fallback strips it, and without it a later turn's history walk would
+   * read the copy as the operator's own request (cancelled, if the turn was
+   * stopped, and quoted with whatever system prompt the text carries). A stop
+   * by the user can then mark it as one. Best effort.
+   */
+  private async markAsJinnPrompt(messageId: string, part: Record<string, unknown>): Promise<void> {
+    const partId = str(part.id);
+    if (!partId) return;
+    const route = `/session/${encodeURIComponent(this.sessionId)}/message/${encodeURIComponent(messageId)}/part/${encodeURIComponent(partId)}`;
+    try {
+      await this.request("PATCH", route, { ...part, metadata: { ...record(part.metadata), ...JINN_PROMPT_METADATA } }, AbortSignal.timeout(MARK_TIMEOUT_MS));
+    } catch (err) {
+      logger.warn(`opencode server turn could not mark its re-sent prompt in ${this.sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private feed(line: string | undefined): void {
     if (!line || !this.firstReport(line)) return;
-    if (isAnswerLine(line)) this.answered = true;
-    if (line.startsWith('{"type":"error"')) this.streamErred = true;
+    const kind = answerKind(line);
+    if (kind) {
+      this.answered = true;
+      this.lastAnswer = kind;
+    }
+    if (kind === "error") this.streamErred = true;
+    else {
+      // The turn's reply is streaming again: the provider came back.
+      this.providerRetry = undefined;
+      this.settle.cancel("retry");
+    }
     this.turn.readLine(line, this.onStream);
   }
 
@@ -1080,7 +1239,7 @@ export class OpencodeServerTurn {
   private finish(): void {
     if (this.settled) return;
     this.settled = true;
-    clearTimeout(this.closeWait);
+    this.settle.cancel();
     this.resolveDone();
   }
 

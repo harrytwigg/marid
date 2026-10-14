@@ -60,6 +60,26 @@
 //               idle again. ORDER=<err|idle|msg,...> emits those instead, in
 //               the order given. LAGSTORE: the store does not hold the
 //               failure yet (the reply stays open there).
+//   PROVIDERRETRY   the provider refuses the first request ("Go usage limit
+//               exceeded"): a retry status, as real 1.18.35 and 1.19.0 report
+//               one, then busy again, and the retried step answers
+//   PROVIDERGIVEUP  retries twice, then gives up as real 1.19.0 does:
+//               session.error, idle, the reply's message.updated (completed,
+//               error, no finish)
+//   PROVIDERDROP    a retry status, then the reply closes with nothing written
+//               and no error, and the session goes idle
+//   PROVIDERWAIT    a retry status whose next attempt is an hour away; the
+//               session stays in it until aborted
+//   FALLBACKIDLE    the first reply closes with nothing written and the
+//               session goes idle; 300 ms later it is busy again with a new
+//               reply to the same prompt, which answers
+//   FALLBACKREPLY   the first reply finishes "stop" with nothing written; 300 ms
+//               later a new reply to the same prompt opens and answers
+//   FALLBACKPROMPT  what the opencode-rate-limit plugin (1.4.0) does on 1.19.0:
+//               a retry status an hour off, then its abort (the reply closes
+//               with nothing written and no error; idle), then 300 ms later
+//               a new user message repeating the prompt's text parts without
+//               their metadata, whose reply answers
 // Directives are read from the prompt's own text only, never from a synthetic
 // part (which may quote another prompt's directives).
 // Test hooks: FAKE_OPENCODE_SERVE_FAIL=1 makes `serve` exit at once;
@@ -199,6 +219,7 @@ function serve() {
       return;
     }
     if (text.includes("MIDFAIL")) return midTurnFailure(sessionID, turn);
+    if (/PROVIDER|FALLBACK/.test(text) && await providerTrouble(sessionID, turn)) return;
     if (text.includes("MULTISTEP")) { toolRound(sessionID, turn, 1); toolRound(sessionID, turn, 2); }
     if (text.includes("TOOLONLY")) {
       toolRound(sessionID, turn, 1);
@@ -265,6 +286,83 @@ function serve() {
     // The stored message carries its usage too, as the real server's does:
     // system prompt and tools included, cached or not.
     turn.reply.info.tokens = { input: 1200, output: 2, cache: { read: 20000, write: 600 } };
+  }
+
+  /** The PROVIDER* and FALLBACK* directives. True when the turn is over. */
+  async function providerTrouble(sessionID, turn) {
+    const { text } = turn;
+    const retry = (attempt, inMs) => publish("session.status", {
+      sessionID,
+      status: { type: "retry", attempt, message: "Go usage limit exceeded", next: Date.now() + inMs },
+    });
+    const closeEmpty = (finish) => {
+      turn.reply.info.time.completed = Date.now();
+      turn.reply.info.tokens = { input: 0, output: 0, cache: { read: 0, write: 0 } };
+      if (finish) turn.reply.info.finish = finish;
+      messageUpdated(sessionID, turn.reply);
+    };
+    if (text.includes("PROVIDERWAIT")) {
+      retry(1, 3_600_000);
+      while (!turn.aborted) await sleep(20);
+      return true;
+    }
+    for (let attempt = 1; attempt <= (text.includes("PROVIDERGIVEUP") ? 2 : 1) && !text.includes("FALLBACK"); attempt++) {
+      retry(attempt, 100);
+      await sleep(100);
+      if (!text.includes("PROVIDERDROP")) setStatus(sessionID, "busy");
+    }
+    if (text.includes("PROVIDERGIVEUP")) {
+      const error = { name: "APIError", data: { message: "Go usage limit exceeded", statusCode: 429, isRetryable: true } };
+      turn.reply.info.error = error;
+      turn.reply.info.time.completed = Date.now();
+      turn.endedItself = true;
+      publish("session.error", { sessionID, error });
+      setStatus(sessionID, "idle");
+      messageUpdated(sessionID, turn.reply);
+      return true;
+    }
+    if (text.includes("PROVIDERDROP")) {
+      closeEmpty();
+      turn.endedItself = true;
+      setStatus(sessionID, "idle");
+      return true;
+    }
+    if (text.includes("FALLBACKIDLE")) {
+      closeEmpty();
+      setStatus(sessionID, "idle");
+      await sleep(300);
+      setStatus(sessionID, "busy");
+      newReply(sessionID, turn);
+    }
+    if (text.includes("FALLBACKPROMPT")) {
+      retry(1, 3_600_000);
+      await sleep(100);
+      closeEmpty();
+      setStatus(sessionID, "idle");
+      await sleep(300);
+      repostPrompt(sessionID, turn);
+      setStatus(sessionID, "busy");
+      newReply(sessionID, turn);
+    }
+    if (text.includes("FALLBACKREPLY")) {
+      closeEmpty("stop");
+      await sleep(300);
+      newReply(sessionID, turn);
+    }
+    return false;
+  }
+
+  /** FALLBACKPROMPT: the plugin posts the last user message's text parts again,
+   *  without metadata, and the turn's next reply answers that copy. */
+  function repostPrompt(sessionID, turn) {
+    const userId = newId("msg");
+    const parts = (turn.body.parts ?? []).filter((p) => p.type === "text")
+      .map((p) => ({ id: newId("prt"), type: "text", text: p.text, messageID: userId, sessionID }));
+    const user = { info: { id: userId, sessionID, role: "user", time: { created: Date.now() } }, parts };
+    sessions.get(sessionID).messages.push(user);
+    messageUpdated(sessionID, user);
+    for (const p of parts) publish("message.part.updated", { sessionID, part: p, time: Date.now() });
+    turn.userId = userId;
   }
 
   /** MIDFAIL: the turn ends itself, in the order its prompt asks for. */

@@ -670,6 +670,8 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
 
   it("a turn with no reply to its prompt does not claim the prompt was dropped while the session still reads busy", async () => {
     // It may yet run (QA round 2 ): PromptNotRun is only for an idle session.
+    // The fake reads busy for 1.5 s; the settle after the idle must end first.
+    SERVER_TURN_TIMING.closeWaitMs = 200;
     const h = harness();
     const result = await h.engine.run(runOpts({ prompt: "GHOSTIDLE jinn" }));
     expect(result.error).toBe("the opencode server ended the turn without a final assistant response (no reply to its prompt)");
