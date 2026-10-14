@@ -132,6 +132,16 @@ export interface JinnConfig {
       mode?: OpencodeMode;
       /** Server-mode tuning; ignored in `run` mode. */
       server?: OpencodeServerConfig;
+      /**
+       * Default true: Marid sets `OPENCODE_DISABLE_FFF=1` on every opencode process
+       * it starts (run and server, local and remote), which turns off opencode's
+       * bundled fff file indexer. On a work root with many nested repos or worktrees
+       * that indexer pegs a CPU (anomalyco/opencode#50719). Set false to let opencode
+       * run it. false only means Marid does not set the variable: one the gateway
+       * inherits from its own environment is not stripped. Drop this option once
+       * opencode bundles `@ff-labs/fff-bun` >= 0.11 or #50719 is fixed.
+       */
+      disableFff?: boolean;
       /** meter jinn's own opencode spend against the provider's
        *  windowed allowance, since opencode publishes none to read. Absent =
        *  unmetered, exactly as before. See docs/engines-opencode.md. */

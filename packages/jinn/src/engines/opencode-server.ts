@@ -16,7 +16,7 @@ import {
   type OpencodeConfigHandle,
 } from "./opencode-mcp.js";
 import { buildOpencodeServeArgs } from "./opencode-protocol.js";
-import { cleanEnv, REMOTE_ENV_DENY } from "./opencode-launch.js";
+import { cleanEnv, opencodeProcessEnv, REMOTE_ENV_DENY } from "./opencode-launch.js";
 import {
   buildSshSpawnArgs,
   ensureRemoteReady,
@@ -115,6 +115,9 @@ export interface OpencodeServerPoolDeps {
   limits?: () => OpencodeServerConfig | undefined;
   /** `engines.opencode.bin`, for a server started without a turn's opts. */
   bin?: () => string | undefined;
+  /** `engines.opencode.disableFff`, read per spawn. Absent means on. A server
+   *  already running keeps the environment it started with. */
+  disableFff?: () => boolean;
 }
 
 /**
@@ -619,6 +622,10 @@ export class OpencodeServerPool {
     return typeof ms === "number" && ms > 0 ? ms : DEFAULT_SERVER_BOOTSTRAP_TIMEOUT_MS;
   }
 
+  private disableFff(): boolean {
+    return this.deps.disableFff?.() ?? true;
+  }
+
   private async spawnLocal(
     sessionId: string,
     spec: OpencodeServerSpec,
@@ -632,7 +639,7 @@ export class OpencodeServerPool {
     // when it settles.
     const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`);
     const env = {
-      ...cleanEnv(sessionId),
+      ...cleanEnv(sessionId, { disableFff: this.disableFff() }),
       OPENCODE_SERVER_PASSWORD: password,
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
     };
@@ -684,7 +691,8 @@ export class OpencodeServerPool {
 
     const serverPort = await probeFreePort(staging.destination, facts);
     const localPort = await freeLocalPort();
-    const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile });
+    const disableFff = this.disableFff();
+    const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile, disableFff });
     logger.info(
       `opencode server starting REMOTE for session ${sessionId} on ${staging.destination}:${spec.remoteCwd} `
       + `(port ${serverPort}, forwarded from 127.0.0.1:${localPort}, tunnel ${staging.tunnelPort}→${gatewayPort}, `
@@ -692,7 +700,7 @@ export class OpencodeServerPool {
     );
     const proc = spawn(resolveBin("ssh"), args, {
       cwd: JINN_HOME,
-      env: cleanEnv(sessionId),
+      env: cleanEnv(sessionId, { disableFff }),
       stdio: ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
@@ -938,6 +946,7 @@ function remoteServeSshArgs(o: {
   serverPort: number;
   localPort: number;
   pidFile: string;
+  disableFff: boolean;
 }): string[] {
   return buildSshSpawnArgs({
     destination: o.staging.destination,
@@ -947,7 +956,7 @@ function remoteServeSshArgs(o: {
     remoteEnv: {
       JINN_HOME: o.staging.sessionHome,
       JINN_SESSION_ID: o.sessionId,
-      OPENCODE_DISABLE_AUTOUPDATE: "1",
+      ...opencodeProcessEnv(o),
       ...(o.staging.opencodeConfigPath ? { OPENCODE_CONFIG: o.staging.opencodeConfigPath } : {}),
     },
     envFile: o.staging.envFilePath,

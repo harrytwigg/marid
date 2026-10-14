@@ -58,11 +58,11 @@ interface Harness {
 
 let harnesses: Harness[] = [];
 
-function harness(limits: OpencodeServerConfig = {}): Harness {
+function harness(limits: OpencodeServerConfig = {}, disableFff?: () => boolean): Harness {
   let mode: OpencodeMode = "server";
   const lifecycle = new PtyLifecycleManager({ maxLivePtys: 8, enforceLocalCap: false });
-  const pool = new OpencodeServerPool(lifecycle, { limits: () => limits, bin: () => FAKE });
-  const engine = new OpencodeEngine({ mode: () => mode, servers: pool });
+  const pool = new OpencodeServerPool(lifecycle, { limits: () => limits, bin: () => FAKE, ...(disableFff ? { disableFff } : {}) });
+  const engine = new OpencodeEngine({ mode: () => mode, servers: pool, ...(disableFff ? { disableFff } : {}) });
   const h = { lifecycle, pool, engine, setMode: (m: OpencodeMode) => { mode = m; }, limits };
   harnesses.push(h);
   return h;
@@ -98,6 +98,7 @@ beforeEach(() => {
   delete process.env.FAKE_OPENCODE_SERVE_FAIL;
   delete process.env.FAKE_OPENCODE_VERSION;
   delete process.env.FAKE_OPENCODE_SERVE_LOG;
+  delete process.env.FAKE_OPENCODE_ENV_LOG;
   delete process.env.FAKE_OPENCODE_CREATE_DELAY_MS;
   delete process.env.FAKE_OPENCODE_HISTORY_DELAY_MS;
   delete process.env.FAKE_OPENCODE_PATCH_FAIL;
@@ -943,6 +944,57 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     const result = await h.engine.run(runOpts());
     expect(result.result).toBe("plain:build it");
     await waitFor(() => server.exited);
+  });
+});
+
+describe("OPENCODE_DISABLE_FFF on a spawned opencode", { timeout: 20_000 }, () => {
+  const envLog = () => path.join(JINN_HOME, "fff-env.log");
+  const seen = () => (fs.existsSync(envLog()) ? fs.readFileSync(envLog(), "utf8").split("\n").filter(Boolean) : []);
+
+  beforeEach(() => {
+    fs.rmSync(envLog(), { force: true });
+    process.env.FAKE_OPENCODE_ENV_LOG = envLog();
+    vi.stubEnv("OPENCODE_DISABLE_FFF", undefined);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("a run turn and a server carry it by default", async () => {
+    const h = harness();
+    await h.engine.run(runOpts());
+    h.setMode("run");
+    await h.engine.run(runOpts({ sessionId: "sess-2" }));
+    expect(seen().sort()).toEqual(["run 1", "serve 1"]);
+  });
+
+  it("neither carries it when the option is off, read for each spawn", async () => {
+    let on = false;
+    const h = harness({}, () => on);
+    await h.engine.run(runOpts());
+    h.setMode("run");
+    await h.engine.run(runOpts({ sessionId: "sess-2" }));
+    expect(seen().sort()).toEqual(["run ", "serve "]);
+
+    on = true;
+    await h.engine.run(runOpts({ sessionId: "sess-3" }));
+    expect(seen().at(-1)).toBe("run 1");
+  });
+
+  it("the terminal view's client carries it by default and not when off", async () => {
+    for (const [on, expected] of [[true, "attach 1"], [false, "attach "]] as const) {
+      fs.rmSync(envLog(), { force: true });
+      const h = harness({}, () => on);
+      const v = new OpencodeInteractiveEngine(h.engine, h.pool, { mode: () => "server", bin: () => FAKE, resolveMcp: () => MCP_A, disableFff: () => on });
+      const sub = v.subscribeWithSnapshot("sess-1", () => {}, () => {});
+      sub.start();
+      await h.engine.run(runOpts({ resolvedMcp: MCP_A }));
+      v.ensureIdleSpawn("sess-1", { cwd: JINN_HOME, cols: 100, rows: 30 });
+      await waitFor(() => seen().some((l) => l.startsWith("attach")));
+      expect(seen().filter((l) => l.startsWith("attach"))).toEqual([expected]);
+      v.killAll();
+      sub.unsubscribe();
+      h.engine.killAll();
+      await h.pool.stopAll();
+    }
   });
 });
 

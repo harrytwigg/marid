@@ -71,21 +71,42 @@ export interface OpencodeLaunchPlan {
  */
 export const REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "JINN_HOME_IDENTITY", "JINN_TAKE_PORT"];
 
+/**
+ * What Marid itself sets on every opencode process, local or remote.
+ *
+ * `OPENCODE_DISABLE_FFF` turns off opencode's bundled file indexer and watcher,
+ * which pegs a CPU on a work root with many nested repos or worktrees
+ * (anomalyco/opencode#50719). With `disableFff: false` the variable is simply
+ * not set: an inherited one is not stripped, because `buildEngineChildEnv`
+ * scrubs only a few exact `OPENCODE_*` names and leaves `OPENCODE_DISABLE_*`
+ * alone for the operator.
+ */
+export function opencodeProcessEnv(opts: { disableFff: boolean }): Record<string, string> {
+  return {
+    // A self-upgrade between two turns of one session would swap the binary under
+    // a conversation opencode is still holding in its own store.
+    OPENCODE_DISABLE_AUTOUPDATE: "1",
+    ...(opts.disableFff ? { OPENCODE_DISABLE_FFF: "1" } : {}),
+  };
+}
+
 /** The environment every gateway-spawned opencode process starts from. Exported
  *  for the server mode, whose server, client and view must start from exactly
  *  the environment a `run` turn does. */
-export function cleanEnv(sessionId: string): Record<string, string> {
+export function cleanEnv(sessionId: string, opts: { disableFff: boolean }): Record<string, string> {
   const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true });
   env.JINN_SESSION_ID = sessionId;
   Object.assign(env, employeeSessionEnv(sessionId));
-  // A self-upgrade between two turns of one session would swap the binary under
-  // a conversation opencode is still holding in its own store.
-  env.OPENCODE_DISABLE_AUTOUPDATE = "1";
+  Object.assign(env, opencodeProcessEnv(opts));
   return env;
 }
 
 /** A turn on the gateway's own machine. */
-export function localOpencodeLaunch(opts: EngineRunOpts, trackingId: string, run: OpencodeRunFlags = {}): OpencodeLaunchPlan {
+export function localOpencodeLaunch(
+  opts: EngineRunOpts,
+  trackingId: string,
+  ctx: { run?: OpencodeRunFlags; disableFff: boolean },
+): OpencodeLaunchPlan {
   const bin = resolveBin("opencode", opts.bin);
   const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId);
 
@@ -96,9 +117,9 @@ export function localOpencodeLaunch(opts: EngineRunOpts, trackingId: string, run
 
   return {
     bin,
-    args: buildOpencodeArgs(opts, run),
+    args: buildOpencodeArgs(opts, ctx.run ?? {}),
     env: {
-      ...cleanEnv(trackingId),
+      ...cleanEnv(trackingId, ctx),
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
     },
     cwd: opts.cwd,
@@ -114,7 +135,7 @@ function opencodeSshArgs(
   opts: EngineRunOpts,
   trackingId: string,
   gatewayPort: number,
-  host: { facts: RemoteFacts; staging: RemoteOpencodeStaging; remote: RemoteEngineHandle; run: OpencodeRunFlags },
+  host: { facts: RemoteFacts; staging: RemoteOpencodeStaging; remote: RemoteEngineHandle; run: OpencodeRunFlags; disableFff: boolean },
 ): string[] {
   const { facts, staging, remote } = host;
   return buildSshSpawnArgs({
@@ -128,7 +149,7 @@ function opencodeSshArgs(
       // built-in jinn server resolves its bearer from.
       JINN_HOME: staging.sessionHome,
       JINN_SESSION_ID: trackingId,
-      OPENCODE_DISABLE_AUTOUPDATE: "1",
+      ...opencodeProcessEnv(host),
       ...(staging.opencodeConfigPath ? { OPENCODE_CONFIG: staging.opencodeConfigPath } : {}),
     },
     // The bearer and the gateway URL, as a sourced 0600 file rather than argv:
@@ -178,7 +199,7 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
 export async function remoteOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: { remote: RemoteExecutionConfig | undefined; gatewayPort: number; run?: OpencodeRunFlags },
+  ctx: { remote: RemoteExecutionConfig | undefined; gatewayPort: number; run?: OpencodeRunFlags; disableFff: boolean },
 ): Promise<OpencodeLaunchPlan> {
   assertRemoteTarget(opts, ctx.remote);
   // Without a real gateway port the reverse forward would be built as
@@ -203,7 +224,7 @@ export async function remoteOpencodeLaunch(
 
   const remote = remoteHandle(facts, staging);
   await reapStaleRemoteEngine(remote, "opencode");
-  const args = opencodeSshArgs(opts, trackingId, ctx.gatewayPort, { facts, staging, remote, run: ctx.run ?? {} });
+  const args = opencodeSshArgs(opts, trackingId, ctx.gatewayPort, { facts, staging, remote, run: ctx.run ?? {}, disableFff: ctx.disableFff });
 
   logger.info(
     `opencode engine starting REMOTE on ${staging.destination}:${opts.remoteCwd} — ${describeOpencodeLaunch(opts)} `
@@ -214,7 +235,7 @@ export async function remoteOpencodeLaunch(
   return {
     bin: resolveBin("ssh"),
     args,
-    env: cleanEnv(trackingId),
+    env: cleanEnv(trackingId, ctx),
     // The ssh client's own cwd, irrelevant to the session: the remote command
     // opens with a `cd` into remoteCwd.
     cwd: JINN_HOME,

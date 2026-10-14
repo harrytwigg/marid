@@ -178,8 +178,8 @@ import type { EngineRunOpts } from "../../shared/types.js";
 const REMOTE_CONFIG = { root: "/srv/jinn-work", mount: "/mnt/jinn-home" };
 const GATEWAY_PORT = 8722;
 
-function engine(gatewayPort = GATEWAY_PORT): OpencodeEngine {
-  return new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => gatewayPort });
+function engine(gatewayPort = GATEWAY_PORT, disableFff?: () => boolean): OpencodeEngine {
+  return new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => gatewayPort, ...(disableFff ? { disableFff } : {}) });
 }
 
 function runOpts(over: Partial<EngineRunOpts> = {}): EngineRunOpts {
@@ -302,6 +302,16 @@ describe("OpencodeEngine — a remote employee's turn runs on the other machine"
     // A self-upgrade mid-session would swap the binary under a conversation
     // opencode is still holding in its own store on that host.
     expect(command).toContain("OPENCODE_DISABLE_AUTOUPDATE='1'");
+  });
+
+  it("sets OPENCODE_DISABLE_FFF by default and leaves it out when disableFff is off", async () => {
+    await engine().run(runOpts());
+    expect(remoteCommand()).toContain("OPENCODE_DISABLE_FFF='1'");
+
+    hoisted.spawns = [];
+    await engine(GATEWAY_PORT, () => false).run(runOpts());
+    expect(remoteCommand()).not.toContain("OPENCODE_DISABLE_FFF");
+    expect(remoteCommand()).toContain("OPENCODE_DISABLE_AUTOUPDATE='1'");
   });
 
   it("sets no OPENCODE_CONFIG when the session staged none", async () => {

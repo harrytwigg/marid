@@ -674,6 +674,7 @@ export async function startGateway(
     gatewayPort: () => port,
     limits: () => currentConfig.engines.opencode?.server,
     bin: () => currentConfig.engines.opencode?.bin,
+    disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
   });
   const opencodeEngine = new OpencodeEngine({
     // The same two live readers, for the same reason: opencode is the third
@@ -681,11 +682,13 @@ export async function startGateway(
     remote: () => currentConfig.remote,
     gatewayPort: () => port,
     mode: () => opencodeMode(currentConfig.engines.opencode),
+    disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
     servers: opencodeServers,
   });
   const opencodeInteractiveEngine = new OpencodeInteractiveEngine(opencodeEngine, opencodeServers, {
     mode: () => opencodeMode(currentConfig.engines.opencode),
     bin: () => currentConfig.engines.opencode?.bin,
+    disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
     // The MCP set a turn of this session would get, so a server the terminal
     // starts is the one the next turn reuses rather than replaces.
     resolveMcp: (sessionId) => {

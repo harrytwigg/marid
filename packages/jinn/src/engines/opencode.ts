@@ -79,17 +79,22 @@ export class OpencodeEngine implements InterruptibleEngine {
    *  means `run`: the engine then behaves exactly as it did before server mode
    *  existed, which matters because it is every claude employee's fallback. */
   private readMode: () => OpencodeMode;
+  /** `engines.opencode.disableFff`, read live so a hot reload applies to the next
+   *  process. Absent means on. */
+  private readDisableFff: () => boolean;
   private servers?: OpencodeServerPool;
 
   constructor(opts: {
     remote?: () => RemoteExecutionConfig | undefined;
     gatewayPort?: () => number;
     mode?: () => OpencodeMode;
+    disableFff?: () => boolean;
     servers?: OpencodeServerPool;
   } = {}) {
     this.readRemoteConfig = opts.remote ?? (() => undefined);
     this.readGatewayPort = opts.gatewayPort ?? (() => 0);
     this.readMode = opts.mode ?? (() => "run");
+    this.readDisableFff = opts.disableFff ?? (() => true);
     this.servers = opts.servers;
   }
 
@@ -178,13 +183,15 @@ export class OpencodeEngine implements InterruptibleEngine {
     // `--standalone`, so no background service is left behind. Plain `run`
     // mode never asks the pool: it has not looked at the host's server.
     const run = { standalone: this.readMode() === "server" && this.servers?.runNeedsStandalone(opts) === true };
+    const disableFff = this.readDisableFff();
     if (!isRemoteTarget(opts)) {
-      return await this.launch(localOpencodeLaunch(opts, trackingId, run), trackingId, onStream);
+      return await this.launch(localOpencodeLaunch(opts, trackingId, { run, disableFff }), trackingId, onStream);
     }
     const plan = await remoteOpencodeLaunch(opts, trackingId, {
       remote: this.readRemoteConfig(),
       gatewayPort: this.readGatewayPort(),
       run,
+      disableFff,
     });
     return await this.launch(plan, trackingId, onStream);
   }
