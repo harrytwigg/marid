@@ -556,14 +556,21 @@ export class OpencodeServerTurn {
       clearTimeout(this.closeWait);
       this.controller.abort();
     }
-    return this.turn.result({
+    const result = this.turn.result({
       code: this.failure ? 1 : 0,
       terminationReason: this.terminationReason,
       stderr: this.failure ?? "",
       // The stream went away mid-turn: settle it failed even if a step had
       // already spoken, rather than let the narration pass for an answer.
       failure: this.failure ?? undefined,
+      noAnswer: "the opencode server ended the turn without a final assistant response",
     });
+    // The server accepted the prompt into this session, so the session exists
+    // whatever happened next: a lost server or stream is not a lost
+    // conversation. Zero turns and zero cost is what `isDeadSessionError` reads
+    // as a stale resume id, and the next turn would start afresh.
+    if (result.error && this.posted && !result.numTurns) return { ...result, numTurns: 1 };
+    return result;
   }
 
   private async drive(): Promise<void> {
@@ -772,8 +779,17 @@ export class OpencodeServerTurn {
       return;
     }
     const lines = runLinesFromMessages(messages, this.sessionId, this.userMessageId);
-    if (!lines.some(isAnswerLine) && !this.missedIdle) return;
+    const answer = lines.some(isAnswerLine);
+    if (!answer && !this.missedIdle) return;
     for (const line of lines) if (this.firstReport(line)) this.turn.readLine(line, this.onStream);
+    // The server says the session is idle, yet the reply holds neither an
+    // answer nor an error: the server dropped the turn (its instance was
+    // disposed or restarted under it). That is a failed turn, not evidence the
+    // stream changed shape, so the host keeps server mode and its server.
+    if (!answer) {
+      this.failure = "the opencode server stopped running the turn before its reply finished";
+      return;
+    }
     this.deps.onProtocolDrift?.(
       this.missedIdle
         ? "the turn ended without the stream saying so"

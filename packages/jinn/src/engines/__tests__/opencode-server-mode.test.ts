@@ -572,7 +572,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     await waitFor(async () => (await stored()).length === 4);
     // Jinn's own reply ends with no text, so the error would be all it reported.
     const result = await h.engine.run(runOpts({ prompt: "TOOLONLY jinn", resumeSessionId: first.sessionId }));
-    expect(result.error).toBe("opencode exited successfully without a final assistant response");
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response");
     expect(result.numTurns).toBe(2);
     // Only meaningful if the operator's reply failed while the turn listened:
     // the turn subscribes before it posts, so its post must precede that failure.
@@ -586,7 +586,7 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
     // It may yet run (QA round 2 ): PromptNotRun is only for an idle session.
     const h = harness();
     const result = await h.engine.run(runOpts({ prompt: "GHOSTIDLE jinn" }));
-    expect(result.error).toBe("opencode exited successfully without a final assistant response");
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response");
   });
 
   it("an interrupt while a resumed turn reads the history posts nothing", async () => {
@@ -785,10 +785,10 @@ describe("OpencodeEngine in server mode", { timeout: 20_000 }, () => {
       expect(deltas.filter((d) => d.type === "tool_result").map((d) => d.content)).toEqual(["out-1", "out-2"]);
     });
 
-    it("ends a turn whose last step is a tool call with no text, as `opencode run` reports it", async () => {
+    it("ends a turn whose last step is a tool call with no text as a turn without an answer", async () => {
       const h = harness();
       const result = await h.engine.run(runOpts({ prompt: "TOOLONLY work" }));
-      expect(result.error).toBe("opencode exited successfully without a final assistant response");
+      expect(result.error).toBe("the opencode server ended the turn without a final assistant response");
       expect(result.numTurns).toBe(2);
       expect(h.pool.unsupportedReason("local")).toBeUndefined();
     });
@@ -1050,6 +1050,75 @@ describe("OpencodeEngine in server mode — /compact", { timeout: 20_000 }, () =
     h.setMode("run");
     const plain = await h.engine.run(runOpts({ prompt: "/compact" }));
     expect(plain.result).toBe("plain:/compact");
+  });
+});
+
+describe("a server lost under a turn: a clear failure, and the conversation survives", { timeout: 20_000 }, () => {
+  const dead = async (result: Awaited<ReturnType<OpencodeEngine["run"]>>) =>
+    (await import("../../shared/rateLimit.js")).isDeadSessionError(result);
+
+  it("a server stopped mid-turn (reaped, replaced, killed) fails the turn and keeps its resume id", async () => {
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const turn = h.engine.run(runOpts({ prompt: "HANG work", resumeSessionId: first.sessionId }));
+    await waitFor(async () => (await api<Record<string, unknown>>(h.pool, "sess-1", "/session/status")).body?.[first.sessionId] !== undefined);
+    await h.pool.stop("sess-1");
+    const result = await turn;
+    expect(result.error).toMatch(/event stream/);
+    expect(result.sessionId).toBe(first.sessionId);
+    expect(await dead(result)).toBe(false);
+  });
+
+  it("a reply the server left unfinished is reported as such, not as a process that exited successfully", async () => {
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const result = await h.engine.run(runOpts({ prompt: "ORPHAN work", resumeSessionId: first.sessionId }));
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response");
+    expect(await dead(result)).toBe(false);
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
+  });
+
+  it("a session the status calls idle with its reply unfinished and no answer stored is a failed turn, not API drift", async () => {
+    SERVER_TURN_TIMING.statusPollMs = 100;
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const result = await h.engine.run(runOpts({ prompt: "ORPHAN NOIDLE work", resumeSessionId: first.sessionId }));
+    expect(result.error).toBe("the opencode server stopped running the turn before its reply finished");
+    expect(await dead(result)).toBe(false);
+    // Neither the host's server mode nor the session's server is taken away.
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
+    expect(h.pool.get("sess-1")).toBeDefined();
+  });
+
+  it("a compaction slower than fetch's wait for response headers still completes", async () => {
+    // Node's fetch gives up on headers after 300 s; shrink that so a slow
+    // summarize outlasts it here.
+    const key = Symbol.for("undici.globalDispatcher.1");
+    const slots = globalThis as unknown as Record<symbol, { constructor: new (o: object) => unknown } | undefined>;
+    process.env.FAKE_OPENCODE_SUMMARIZE_DELAY_MS = "1000";
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const original = slots[key]!;
+    slots[key] = new original.constructor({ headersTimeout: 300 }) as typeof original;
+    try {
+      const compacted = await h.engine.run(runOpts({ prompt: "/compact", resumeSessionId: first.sessionId }));
+      expect(compacted.error).toBeUndefined();
+      expect(compacted.compaction).toBeDefined();
+    } finally {
+      slots[key] = original;
+    }
+  });
+
+  it("a compaction whose server goes away after summarize was sent keeps the resume id", async () => {
+    process.env.FAKE_OPENCODE_SUMMARIZE_DELAY_MS = "10000";
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const turn = h.engine.run(runOpts({ prompt: "/compact", resumeSessionId: first.sessionId }));
+    await waitFor(async () => (await api<Array<{ url: string }>>(h.pool, "sess-1", "/test/log")).body.some((e) => e.url.endsWith("/summarize")));
+    await h.pool.stop("sess-1");
+    const compacted = await turn;
+    expect(compacted.error).toMatch(/^opencode compaction failed: /);
+    expect(await dead(compacted)).toBe(false);
   });
 });
 

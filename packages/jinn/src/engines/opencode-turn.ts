@@ -138,7 +138,7 @@ export class OpencodeTurn {
    * narration, and a lost turn must not pass for an answer, or the session
    * settles `completed` with no error and nothing resumes the work.
    */
-  result(outcome: { code: number | null; terminationReason: string | null; stderr: string; failure?: string }): EngineResult {
+  result(outcome: { code: number | null; terminationReason: string | null; stderr: string; failure?: string; noAnswer?: string }): EngineResult {
     const accounting = this.accounting();
 
     if (outcome.terminationReason) {
@@ -177,11 +177,12 @@ export class OpencodeTurn {
   /** Why a turn that produced no accepted answer failed: whatever opencode
    *  reported, or — having reported nothing — why ending without one is still a
    *  failure. A transport `failure` is passed in separately; it is not
-   *  something opencode reported. */
-  private outcomeError(outcome: { code: number | null; stderr: string }): string {
+   *  something opencode reported. `noAnswer` names the end of a turn that no
+   *  process exit ended (a server turn). */
+  private outcomeError(outcome: { code: number | null; stderr: string; noAnswer?: string }): string {
     return this.turnError
       || (outcome.code === 0
-        ? "opencode exited successfully without a final assistant response"
+        ? outcome.noAnswer ?? "opencode exited successfully without a final assistant response"
         : `opencode exited with code ${outcome.code}: ${outcome.stderr.slice(0, 500)}`);
   }
 }
