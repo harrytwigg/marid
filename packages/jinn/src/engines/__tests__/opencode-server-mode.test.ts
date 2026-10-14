@@ -1207,10 +1207,14 @@ describe("a server lost under a turn: a clear failure, and the conversation surv
   });
 
   it("a reply the server left unfinished is reported as such, not as a process that exited successfully", async () => {
+    SERVER_TURN_TIMING.closeWaitMs = 50;
     const h = harness();
     const first = await h.engine.run(runOpts());
+    const abort = vi.spyOn(h.pool, "abortTurn").mockResolvedValue();
     const result = await h.engine.run(runOpts({ prompt: "ORPHAN work", resumeSessionId: first.sessionId }));
-    expect(result.error).toBe("the opencode server ended the turn without a final assistant response (its reply never finished)");
+    // The same outcome as a reply that narrated first: a dropped turn, stopped.
+    expect(result.error).toBe("the opencode server stopped running the turn before its reply finished");
+    expect(abort).toHaveBeenCalledWith("sess-1", expect.objectContaining({ engineSessionId: first.sessionId }));
     expect(await dead(result)).toBe(false);
     expect(h.pool.unsupportedReason("local")).toBeUndefined();
   });
@@ -1262,6 +1266,16 @@ describe("a server lost under a turn: a clear failure, and the conversation surv
     expect(h.pool.unsupportedReason("local")).toBeUndefined();
     // Read back from the store, the narration is not streamed a second time.
     expect(deltas).toEqual(["Let me check the config first."]);
+  });
+
+  it("a reply the provider cut off keeps its own diagnostics and is not taken for a dropped turn", async () => {
+    const h = harness();
+    const first = await h.engine.run(runOpts());
+    const abort = vi.spyOn(h.pool, "abortTurn").mockResolvedValue();
+    const result = await h.engine.run(runOpts({ prompt: "CUTOFF work", resumeSessionId: first.sessionId }));
+    expect(result.error).toBe("the opencode server ended the turn without a final assistant response (its reply finished \"unknown\")");
+    expect(abort).not.toHaveBeenCalled();
+    expect(h.pool.unsupportedReason("local")).toBeUndefined();
   });
 
   it("says how a reply that answered nothing ended, so an empty provider response is visible", () => {
