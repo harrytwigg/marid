@@ -17,7 +17,8 @@ vi.mock("../../shared/logger.js", () => ({
 
 import { OpencodeEngine } from "../opencode.js";
 import { OpencodeServerPool, basicAuthHeader } from "../opencode-server.js";
-import { SERVER_TURN_TIMING } from "../opencode-server-turn.js";
+import { cancelledRequests, SERVER_TURN_TIMING } from "../opencode-server-turn.js";
+import { USER_STOP_INTERRUPTION_REASON } from "../../sessions/interruption-reasons.js";
 import { abandonedRetryError, providerRetryOf, repeatsPrompt, SettleWait } from "../opencode-server-settle.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { JINN_HOME } from "../../shared/paths.js";
@@ -105,6 +106,26 @@ describe("a provider error in a server turn", { timeout: 20_000 }, () => {
     expect(result.error).toBeUndefined();
     expect(result.result).toContain("answer:FALLBACKPROMPT build it");
     expect((await serverLog(pool)).filter((e) => e.url.endsWith("/abort"))).toEqual([]); // nothing of it was stopped
+  });
+
+  it("makes a re-sent prompt a Jinn prompt, so a stop after the fallback is named once, by its request", async () => {
+    const { pool, engine } = harness();
+    // A first turn: the prompt's text carries the system prompt, which a notice must never quote.
+    const turn = engine.run({ ...runOpts("FALLBACKPROMPT HANG build it"), systemPrompt: "You are Ada." });
+    const marked = async () => Boolean(pool.get("sess-1")) && (await serverLog(pool)).some((e) => e.method === "PATCH");
+    for (let i = 0; i < 400 && !(await marked()); i++) await new Promise((r) => setTimeout(r, 25));
+    engine.kill("sess-1", USER_STOP_INTERRUPTION_REASON);
+    const result = await turn;
+    expect(result.error).toBe(USER_STOP_INTERRUPTION_REASON);
+
+    const server = pool.get("sess-1")!;
+    const stored = await (await fetch(`${server.apiUrl}/session/${result.sessionId}/message`, {
+      headers: { authorization: basicAuthHeader(server.password) },
+    })).json() as Array<{ info: Record<string, unknown>; parts: Array<{ text?: string; metadata?: Record<string, unknown> }> }>;
+    const prompts = stored.filter((m) => m.info.role === "user");
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]!.parts[0]!.metadata).toEqual({ jinn: "prompt", stopped: "user", request: "FALLBACKPROMPT HANG build it" });
+    expect(cancelledRequests(stored, false)).toEqual({ cancelled: [], stopped: ["FALLBACKPROMPT HANG build it"] });
   });
 
   it("ends a turn whose provider retry is too far off, with the provider's words and when it resets, and stops the retry on the server", async () => {

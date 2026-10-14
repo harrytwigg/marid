@@ -536,6 +536,8 @@ export class OpencodeServerTurn {
   private currentPrompt = this.userMessageId;
   /** The prompt text the turn posted, to know a re-sent copy of it. */
   private promptText = "";
+  /** Marking the newest adopted copy as a Jinn prompt, while in flight. */
+  private markingCopy?: Promise<void>;
   /** User messages in the session the turn did not post. */
   private readonly otherPrompts = new Set<string>();
   /** Assistant messages answering this turn, and ones answering someone else. */
@@ -715,7 +717,10 @@ export class OpencodeServerTurn {
    */
   private async markStoppedByUser(): Promise<void> {
     if (!this.posted) return;
-    const route = `/session/${encodeURIComponent(this.sessionId)}/message/${encodeURIComponent(this.userMessageId)}`;
+    // After a fallback re-sent the prompt, the copy is what the next turn's
+    // history walk meets first, so it carries the mark (once it is a Jinn prompt).
+    await this.markingCopy;
+    const route = `/session/${encodeURIComponent(this.sessionId)}/message/${encodeURIComponent(this.currentPrompt)}`;
     const signal = AbortSignal.timeout(MARK_TIMEOUT_MS); // the read and the write together
     try {
       const message = record(await this.request("GET", route, undefined, signal)) as StoredMessage | undefined;
@@ -1146,7 +1151,26 @@ export class OpencodeServerTurn {
     this.prompts.add(messageId);
     this.currentPrompt = messageId;
     this.settle.cancel();
+    this.markingCopy = this.markAsJinnPrompt(messageId, part);
     logger.info(`opencode server turn follows its prompt re-sent as ${messageId} in ${this.sessionId} (a provider fallback)`);
+  }
+
+  /**
+   * Give an adopted copy's prompt part the metadata every Jinn prompt carries:
+   * the fallback strips it, and without it a later turn's history walk would
+   * read the copy as the operator's own request (cancelled, if the turn was
+   * stopped, and quoted with whatever system prompt the text carries). A stop
+   * by the user can then mark it as one. Best effort.
+   */
+  private async markAsJinnPrompt(messageId: string, part: Record<string, unknown>): Promise<void> {
+    const partId = str(part.id);
+    if (!partId) return;
+    const route = `/session/${encodeURIComponent(this.sessionId)}/message/${encodeURIComponent(messageId)}/part/${encodeURIComponent(partId)}`;
+    try {
+      await this.request("PATCH", route, { ...part, metadata: { ...record(part.metadata), ...JINN_PROMPT_METADATA } }, AbortSignal.timeout(MARK_TIMEOUT_MS));
+    } catch (err) {
+      logger.warn(`opencode server turn could not mark its re-sent prompt in ${this.sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private feed(line: string | undefined): void {
