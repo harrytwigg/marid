@@ -21,6 +21,10 @@ const mcp = vi.hoisted(() => ({ jinn: true }));
 vi.mock("../../engine-run-mcp.js", () => ({
   resolveEngineRunMcp: vi.fn(() => ({ mcpConfigPath: undefined, resolvedMcp: { mcpServers: mcp.jinn ? { jinn: {} } : { other: {} } } })),
 }));
+const delegations = vi.hoisted(() => ({ open: false }));
+vi.mock("../../../work-items/open-delegations.js", () => ({
+  sessionHasOpenDelegations: vi.fn(() => delegations.open),
+}));
 const rateLimit = vi.hoisted(() => ({ prompt: undefined as string | undefined }));
 vi.mock("../../rate-limit-handler.js", () => ({
   handleRateLimit: vi.fn(async (args: { prompt: string }) => {
@@ -40,6 +44,7 @@ import { buildResumeMessage } from "../../self-compaction.js";
 import {
   BOARD_REMINDER_LABEL,
   DEFAULT_BOARD_REMINDER,
+  PARENT_WAITING_BOARD_REMINDER,
   resolveBoardReminder,
   withBoardReminder,
   withoutBoardReminder,
@@ -90,6 +95,7 @@ function count(haystack: string, needle: string): number {
 
 beforeEach(() => {
   mcp.jinn = true;
+  delegations.open = false;
   rateLimit.prompt = undefined;
 });
 
@@ -105,6 +111,27 @@ describe("board reminder text", () => {
     expect(DEFAULT_BOARD_REMINDER).toContain("keep the assignee");
     expect(DEFAULT_BOARD_REMINDER).toContain("@mention the operator");
     expect(DEFAULT_BOARD_REMINDER).not.toMatch(/assign @operator/i);
+  });
+
+  it("keeps the parent's text under 120 o200k_base tokens and out of the blocked instruction while its own work runs", () => {
+    expect(new Tiktoken(o200k).encode(`${BOARD_REMINDER_LABEL} ${PARENT_WAITING_BOARD_REMINDER}`).length).toBeLessThanOrEqual(120);
+    expect(PARENT_WAITING_BOARD_REMINDER).toContain("leave the Todo `executing` and end your turn");
+    expect(PARENT_WAITING_BOARD_REMINDER).not.toContain("NEVER end a turn");
+    expect(PARENT_WAITING_BOARD_REMINDER).not.toMatch(/wait on a person or dependency/);
+    expect(PARENT_WAITING_BOARD_REMINDER).toContain("outside your delegation tree");
+    expect(PARENT_WAITING_BOARD_REMINDER).toContain("first move it to `blocked`");
+    expect(PARENT_WAITING_BOARD_REMINDER).toContain("Finished: in_review + note.");
+  });
+
+  it("uses the parent's text only while the session's own work is in flight", () => {
+    expect(resolveBoardReminder(configWith(), true, true)).toBe(PARENT_WAITING_BOARD_REMINDER);
+    expect(resolveBoardReminder(configWith(), true, false)).toBe(DEFAULT_BOARD_REMINDER);
+  });
+
+  it("puts the parent's text where an instance's {{default}} stands, and sends its own text as written", () => {
+    expect(resolveBoardReminder(configWith({ boardReminder: "{{default}} Extra." }), true, true))
+      .toBe(`${PARENT_WAITING_BOARD_REMINDER} Extra.`);
+    expect(resolveBoardReminder(configWith({ boardReminder: "Board: custom." }), true, true)).toBe("Board: custom.");
   });
 
   it("uses the built-in text when the instance sets none", () => {
@@ -165,6 +192,13 @@ describe("board reminder in the engine prompt", () => {
     expect(sent.endsWith(`please look at the Todo\n\n${LINE}`)).toBe(true);
     expect(count(sent, BOARD_REMINDER_LABEL)).toBe(1);
     expect(sent.startsWith("SYSTEM\n\n---\n\n")).toBe(!resuming);
+  });
+
+  it("plans the parent's reminder when the session has open sub-tasks or in-flight delegations, and the default otherwise", () => {
+    delegations.open = true;
+    expect((preflightTurn(input("claude", "hello")) as TurnPlan).boardReminder).toBe(PARENT_WAITING_BOARD_REMINDER);
+    delegations.open = false;
+    expect((preflightTurn(input("claude", "hello")) as TurnPlan).boardReminder).toBe(DEFAULT_BOARD_REMINDER);
   });
 
   it("is added when the engine is called, not to the planned prompt the turn records", () => {

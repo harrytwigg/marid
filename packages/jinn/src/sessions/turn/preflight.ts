@@ -18,6 +18,7 @@ import { isRemoteMcpSession } from "../remote-mcp-session.js";
 import { isTerminalSession, TERMINAL_REFUSES_MESSAGES } from "../../terminals/session.js";
 import { readUnseenInterruptedPrompts } from "./superseded.js";
 import { resolveBoardReminder } from "./board-reminder.js";
+import { sessionHasOpenDelegations } from "../../work-items/open-delegations.js";
 import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight } from "./types.js";
 export { warnIfNearUsageLimit } from "./usage-warning.js";
 
@@ -125,6 +126,11 @@ function contextOptionsFor(
   };
 }
 
+/** The board reminder for this turn: the parent's text while the session's own work is still running. */
+function reminderFor(input: TurnInput, jinnMcpAttached: boolean): string | undefined {
+  return resolveBoardReminder(input.config, jinnMcpAttached, jinnMcpAttached && sessionHasOpenDelegations(input.session));
+}
+
 /** Resolve everything `engine.run` needs, or the reason the turn cannot run. */
 export function preflightTurn(input: TurnInput): TurnPreflight {
   const refusal = refuseTurn(input);
@@ -170,7 +176,7 @@ export function preflightTurn(input: TurnInput): TurnPreflight {
     resolvedMcp,
     runtimeSource,
     ...turnPrompt,
-    boardReminder: resolveBoardReminder(input.config, baseContextOptions.jinnMcpAttached === true),
+    boardReminder: reminderFor(input, baseContextOptions.jinnMcpAttached === true),
     compaction,
     prepareContext: contextPreparer(baseContextOptions, resumeRef, rawCommand),
   };

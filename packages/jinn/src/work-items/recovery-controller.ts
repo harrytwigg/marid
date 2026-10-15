@@ -15,6 +15,7 @@ import { appendWorkItemEvent, listWorkItems, type WorkItem } from "./store.js";
 import { initDb } from "../shared/db.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
 import { hasLiveBackgroundWork } from "../sessions/background-work.js";
+import { isSessionInFlight, todoHasOpenDelegations } from "./open-delegations.js";
 import type { AvailabilityRearmResult } from "./availability-resume.js";
 
 export type TodoRecoveryMode = "off" | "classify-only" | "auto";
@@ -48,12 +49,13 @@ export function sessionInFlight(sessionId: string): boolean {
   return row?.status === "running" || row?.status === "waiting" || (row?.status === "idle" && hasLiveBackgroundWork(sessionId));
 }
 
-/** Newest-first, as the registry lists them; review links never count. */
+/** Newest-first, as the registry lists them; review links never count. A parent
+ *  waiting on its own sub-tasks or on sessions it started is in flight too: its
+ *  turn ended, its work did not. */
 export function attemptActivity(workItemId: string): AttemptActivity {
   const attempts = listSessionsByWorkItem(workItemId).filter(isExecutionAttempt);
   return {
-    inFlight: attempts.some((session) => session.status === "running" || session.status === "waiting"
-      || (session.status === "idle" && hasLiveBackgroundWork(session.id))),
+    inFlight: attempts.some(isSessionInFlight) || todoHasOpenDelegations(workItemId),
     lastActivityAt: attempts[0]?.lastActivity ?? null,
     executingSince: listWorkItemEvents(workItemId)
       .filter((event) => event.kind === "status_change" && event.toStatus === "executing").at(-1)?.createdAt ?? null,
