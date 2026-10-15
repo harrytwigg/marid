@@ -384,3 +384,32 @@ attaches before/after sheets.
 parallel once their dependency lands; the screen passes can run in parallel with each
 other. "Chromium check" means the headless Chromium hang is fixed, or the
 slice is verified in Chromium or WebKit some other way.
+
+---
+
+## 7. Renaming the product
+
+A product rename is decided and sequenced separately from these slices. The
+identity here takes the name from one place (`lib/brand.ts`), so no slice
+waits on it. When a name is chosen, the rename replaces every "Jinn" and
+"Marid" reference in the repository, the internal codename included, with
+three exceptions:
+
+- the fork attribution in `NOTICE`/`LICENSE`, which the MIT licence requires;
+- links to the upstream repository;
+- released changelog and migration entries.
+
+It lands as separate pull requests:
+
+1. **A compatibility layer first:** environment variables are read under
+   both names, existing homes and browser settings migrate in place, and the
+   MCP server answers to both names for one release.
+2. **The user-visible name.**
+3. **A rerunnable codemod** with a CI guard against the old names.
+4. **The docs.**
+5. **The published package, binary and images.**
+6. **Removal of the compatibility layer** two minor releases later.
+
+The cost is that upstream changes can no longer be merged, only ported by
+hand.
+
