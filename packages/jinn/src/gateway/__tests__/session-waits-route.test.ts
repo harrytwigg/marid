@@ -98,6 +98,21 @@ describe("GET /api/sessions/:id/waits", () => {
   });
 });
 
+describe("a session the registry lists no longer", () => {
+  it("still lists its finished children once it is archived", async () => {
+    const parent = await sessionOf("eng-dev");
+    registry.updateSession(parent.id, { lastActivity: "2026-10-15T09:00:00.000Z" });
+    const done = await sessionOf("eng-dev", { parentSessionId: parent.id });
+    registry.updateSession(done.id, { status: "idle", lastActivity: "2026-10-15T09:30:00.000Z" });
+    expect((await waits(parent.id)).body.items).toHaveLength(1);
+
+    registry.updateSession(parent.id, { archivedAt: "2026-10-15T09:40:00.000Z" });
+
+    const items = (await waits(parent.id)).body.items;
+    expect(items).toEqual([expect.objectContaining({ kind: "session", sessionId: done.id, active: false })]);
+  });
+});
+
 describe("a scoped caller", () => {
   it("cannot read the waits of a session outside its department, which answers as an unknown id does", async () => {
     const self = await sessionOf("side-dev");

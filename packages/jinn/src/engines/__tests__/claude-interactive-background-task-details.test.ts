@@ -109,6 +109,17 @@ describe("InteractiveClaudeEngine — background task details", () => {
       expect(events.at(-1)).toBeNull();
     });
 
+    it("does not read a <status> in a Monitor's own output as the Monitor ending", () => {
+      launchMonitor("mon-1");
+      notify(eventNotice("mon-1", "<status>ok</status> hello"));
+
+      expect(tasks().map((task) => task.id)).toEqual(["mon-1"]);
+      expect(tasks()[0]!.lastOutput!.line).toBe("<status>ok</status> hello");
+
+      notify(endNotice("mon-1"));
+      expect(tasks()).toEqual([]);
+    });
+
     it("drops a Monitor whose timeout elapsed, which the CLI announces as one more event", () => {
       launchMonitor("mon-1");
       notify(eventNotice("mon-1", "[Monitor expired after 600s with 3 events delivered. Re-arm it if you still need the watch.]"));

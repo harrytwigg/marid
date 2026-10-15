@@ -46,9 +46,10 @@ function relationOf(session: Session): DelegatedSessionWait["relation"] {
   return role === "review" ? "review" : role === "consult" ? "session" : "delegated";
 }
 
-/** The active sessions that report, directly or through others, to `rootId`, each with the session it
- *  reports to. The walk and its cycle containment are `buildDelegatedActivityIndex`'s: an active
- *  session counts for an ancestor reached before the chain closes on itself, and never for itself. */
+/** The active sessions that report, directly or through others, to the session, each with the session it
+ *  reports to. The same walk and cycle containment as `buildDelegatedActivityIndex`: an active session
+ *  counts for an ancestor reached before the chain closes on itself, and never for itself. The two are
+ *  kept apart because this one needs the edge, not a count; a parity test pins them together. */
 function activeBelow(input: SessionWaitsInput, parentOf: (s: Session) => string | null): Map<string, string> {
   const byId = new Map(input.sessions.map((session) => [session.id, session]));
   const below = new Map<string, string>();

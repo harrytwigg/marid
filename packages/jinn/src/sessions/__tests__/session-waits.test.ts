@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Heartbeat } from "../../heartbeats/types.js";
 import type { Session } from "../../shared/types.js";
+import { buildDelegatedActivityIndex } from "../delegated-activity.js";
 import { buildSessionWaits, type SessionWaitsInput } from "../session-waits.js";
 
 const NOW = Date.parse("2026-10-15T12:00:00.000Z");
@@ -210,5 +211,20 @@ describe("buildSessionWaits", () => {
   it("is empty for a session with nothing to wait on, and for an engine that reports nothing", () => {
     expect(build([session("root")]).items).toEqual([]);
     expect(build([session("root")], { engine: { tasks: [] } }).items).toEqual([]);
+  });
+
+  it("finds the same active sessions below each session as the delegated-activity count, on random graphs with cycles", () => {
+    let seed = 12345;
+    const next = (n: number) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+    for (let round = 0; round < 200; round++) {
+      const size = 3 + next(8);
+      const sessions = Array.from({ length: size }, (_, i) => session(`s${i}`, { parentSessionId: next(4) === 0 ? null : `s${next(size)}` }));
+      const active = new Set(sessions.filter(() => next(2) === 0).map((s) => s.id));
+      const index = buildDelegatedActivityIndex(sessions, active);
+      for (const { id } of sessions) {
+        const listed = sessionItems(build(sessions, { sessionId: id, activeSessionIds: active })).filter((item) => item.active);
+        expect({ round, id, count: listed.length }).toEqual({ round, id, count: index.get(id)?.activeSessions ?? 0 });
+      }
+    }
   });
 });

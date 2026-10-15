@@ -35,12 +35,13 @@ function engineReport(session: Session, deps: SessionWaitsDeps): BackgroundTasks
   return reported ? merged : null;
 }
 
-/** The sessions the walk passes through: every unarchived session, plus the session's own children
- *  (archived ones included, so a child archived after it finished still reads as finished). */
-function walkedSessions(sessionId: string): Session[] {
+/** The sessions the walk passes through: every unarchived session, plus the session itself and its own
+ *  children (archived ones included, so a child archived after it finished still reads as finished, and
+ *  an archived or workflow-phase session still has its own last activity to measure them against). */
+function walkedSessions(session: Session): Session[] {
   const all = listSessions();
-  const known = new Set(all.map((session) => session.id));
-  return [...all, ...listChildSessions(sessionId).filter((session) => !known.has(session.id))];
+  const known = new Set(all.map((listed) => listed.id));
+  return [...all, ...[session, ...listChildSessions(session.id)].filter((extra) => !known.has(extra.id))];
 }
 
 /**
@@ -59,7 +60,7 @@ export function handleSessionWaitsApi(res: ServerResponse, route: ParsedRoute, d
     notFound(res);
     return true;
   }
-  const sessions = walkedSessions(session.id);
+  const sessions = walkedSessions(session);
   json(res, buildSessionWaits({
     sessionId: session.id,
     now: Date.now(),
