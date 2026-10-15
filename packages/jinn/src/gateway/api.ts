@@ -1227,10 +1227,7 @@ export async function handleApiRequest(
       resolveCaller: () => resolveScopedWriteCallerIdentity(req, context),
       opencodeMode: () => context.getConfig().engines.opencode?.mode,
     })) return;
-    if (await handleSessionContextApi(req, res, { method, pathname, url }, {
-      getConfig: context.getConfig,
-      resolveCaller: () => resolveScopedWriteCallerIdentity(req, context),
-    })) return;
+    if (await handleSessionContextApi(req, res, { method, pathname, url }, { getConfig: context.getConfig, resolveCaller: () => resolveScopedWriteCallerIdentity(req, context) })) return;
     if (pathname.startsWith("/api/terminals") && await handleTerminalApi(req, res, { method, pathname, url }, terminalApiOptions(req, context))) return;
 
     if (method === "GET" && pathname === "/api/features") {
