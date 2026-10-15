@@ -90,7 +90,7 @@ export class MusecodeEngine implements InterruptibleEngine {
     /* no-op */
   }
 
-  /** Whether a turn is in flight on the session, from the moment `run` is entered until it has finished and its host is gone. */
+  /** Whether a turn is in flight on the session: from the moment `run` is entered until the turn has ended (its host may still be exiting, which is harmless: the turn is over). */
   hasLiveRun(sessionId: string): boolean {
     return this.live.has(sessionId);
   }
