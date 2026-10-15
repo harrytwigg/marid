@@ -219,6 +219,11 @@ export function delegationLoopError(workItemId: string, reused: Session, delegat
       + `this delegation there would make the two report to each other. Ask that session, or the operator, instead.`;
 }
 
+/** What a session was started with, as a delegation answer reports it. */
+function storedChoices(session: Session): JsonObject {
+  return { model: session.model ?? null, effortLevel: session.effortLevel ?? null, fallbackMode: session.fallbackMode ?? null };
+}
+
 /** The route's answer for a retry whose key a first call already used. */
 export function delegationReplayBody(replay: Session, reused: boolean): JsonObject {
   const replayItem = replay.workItemId ? getWorkItem(replay.workItemId) : undefined;
@@ -227,8 +232,7 @@ export function delegationReplayBody(replay: Session, reused: boolean): JsonObje
     sessionId: replay.id,
     employee: replay.employee ?? null,
     engine: replay.engine,
-    model: replay.model ?? null,
-    effortLevel: replay.effortLevel ?? null,
+    ...storedChoices(replay),
     status: replay.status,
     title: replayItem?.title ?? replay.title ?? null,
     replayed: true,
@@ -255,7 +259,7 @@ export function reusedDelegationBody(workItemId: string, reused: Session, title:
   const differs = JSON.stringify(kept) !== JSON.stringify(asked);
   if (differs) logger.info(`Delegation ${workItemId}: session ${reused.id} keeps ${JSON.stringify(kept)}; the delegation resolved to ${JSON.stringify(asked)}`);
   return {
-    workItemId, sessionId: reused.id, employee: current.employee ?? null, ...kept, status: current.status, title, reused: true,
+    workItemId, sessionId: reused.id, employee: current.employee ?? null, ...kept, fallbackMode: current.fallbackMode ?? null, status: current.status, title, reused: true,
     ...(differs ? { selectionIgnored: asked } : {}),
   };
 }

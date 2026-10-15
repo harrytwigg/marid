@@ -4,9 +4,11 @@ import { dispatchWebSessionRun } from "../../gateway/web-session-dispatch.js";
 import { claimIncomingTurn } from "../../sessions/incoming-turn.js";
 import {
   createSession,
+  getSession,
   getSessionBySessionKey,
   updateSession,
 } from "../../sessions/registry.js";
+import { childFallbackMode } from "../../sessions/session-fallback.js";
 import { initDb } from "../../shared/db.js";
 import type { Session } from "../../shared/types.js";
 import { assignWorkItem } from "../../work-items/assignment.js";
@@ -74,6 +76,7 @@ function delegateSession(input: TalkDelegationInput, key: string, existing: Sess
     model: input.employee.model,
     effortLevel: input.employee.effortLevel,
     parentSessionId: input.sourceSessionId,
+    fallbackMode: childFallbackMode(input.context.getConfig(), getSession(input.sourceSessionId)),
     prompt: input.prompt,
     title: `Delegate ${input.todoId}`,
   });

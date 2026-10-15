@@ -157,4 +157,22 @@ describe("a Talk delegation", () => {
     h.handoff.startDelegatedTurn(h.registry.getSession(consult.id)!, claimed.queueItemId);
     expect(h.delegation.reportingParentSessionId(h.registry.getSession(consult.id)!)).toBe(talk.id);
   });
+
+  it("starts a new session with the child's fallback mode when the employee has none on the Todo", async () => {
+    const { claimTalkDelegation } = await import("../../talk/control/delegation-adapter.js");
+    const item = h.store.createWorkItem({ title: "by voice, fresh" });
+    const talk = h.employeeSession("org-root");
+    h.registry.updateSession(talk.id, { fallbackMode: "fallback-children" });
+
+    const claimed = claimTalkDelegation({
+      context: h.context,
+      sourceSessionId: talk.id,
+      todoId: item.id,
+      prompt: "Take this Todo.",
+      employee: { name: "alpha", department: "platform", engine: "codex", model: "gpt-5.5" },
+      call: { talkSessionId: "talk-2", providerCallId: "call-2", idempotencyKey: "talk-delegate-2" } as never,
+    });
+
+    expect(h.registry.getSession(claimed.session.id)?.fallbackMode).toBe("fallback-children");
+  });
 });

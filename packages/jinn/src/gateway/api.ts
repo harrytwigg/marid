@@ -23,6 +23,8 @@ import {
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
+import { parseFallbackModeParam, withFallbackView } from "./session-fallback-api.js";
+import { childFallbackMode } from "../sessions/session-fallback.js";
 import { scopedSwitchRefusal } from "../sessions/scoped-engine.js";
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
 import { effectiveSessionStatus, isBackgroundWorkLive, runtimeTransportRunning, serializeRuntimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
@@ -1814,11 +1816,11 @@ export async function handleApiRequest(
         });
       }
 
-      return json(res, {
+      return json(res, withFallbackView({
         ...serializeSessionResponse(session, context),
         ...(includeMessages ? { messages } : {}),
         ...(page ? { messagesPage: { hasOlder: page.hasOlder } } : {}),
-      });
+      }, session, context));
     }
 
     // PUT|PATCH /api/sessions/:id — update title and/or mid-chat model/effort
@@ -1836,6 +1838,9 @@ export async function handleApiRequest(
         if (!trimmed) return badRequest(res, "title must not be empty");
         updates.title = trimmed.slice(0, 200);
       }
+      const fallbackPatch = parseFallbackModeParam(body.fallbackMode);
+      if (!fallbackPatch.ok) return badRequest(res, fallbackPatch.error);
+      if (fallbackPatch.mode) updates.fallbackMode = fallbackPatch.mode;
       const configForPatch = context.getConfig();
       let requestedEngine: string | undefined;
       if (body.engine !== undefined) {
@@ -1864,11 +1869,11 @@ export async function handleApiRequest(
           effortLevel: selection.effortLevel ?? null,
         });
         if (!switched) return notFound(res);
-        if (updates.title !== undefined) {
-          switched = updateSession(params.id, { title: updates.title }) ?? switched;
+        if (Object.keys(updates).length > 0) {
+          switched = updateSession(params.id, updates) ?? switched;
         }
         context.emit("session:updated", { sessionId: params.id });
-        return json(res, serializeSessionResponse(switched, context));
+        return json(res, withFallbackView(serializeSessionResponse(switched, context), switched, context));
       }
 
       // Mid-chat model / effort switch (applies from the next turn). Validated
@@ -1889,7 +1894,7 @@ export async function handleApiRequest(
       const updated = updateSession(params.id, updates);
       if (!updated) return notFound(res);
       context.emit("session:updated", { sessionId: params.id });
-      return json(res, serializeSessionResponse(updated, context));
+      return json(res, withFallbackView(serializeSessionResponse(updated, context), updated, context));
     }
 
     // DELETE /api/sessions/:id
@@ -3353,6 +3358,8 @@ export async function handleApiRequest(
       }
       const delegateAsRoot = spawnAsRootRefusal(delegationCaller, employeeName);
       if (delegateAsRoot) return json(res, { error: delegateAsRoot }, 403);
+      const fallbackParam = parseFallbackModeParam(body.fallbackMode);
+      if (!fallbackParam.ok) return badRequest(res, fallbackParam.error);
       let attachments: string[] | undefined;
       if (body.attachments !== undefined) {
         if (!Array.isArray(body.attachments) || body.attachments.length > 20) {
@@ -3402,11 +3409,12 @@ export async function handleApiRequest(
         : { ok: true as const, preamble: { prefix: "", engine: null, model: null } };
       if (!todoDispatch.ok) return json(res, { error: todoDispatch.error }, 409);
       const todoOverride = todoDispatch.preamble;
+      const fallbackMode = childFallbackMode(config, delegatorSession, fallbackParam.mode);
       const selection = validateNewSessionSelection(config, {
         engine: todoOverride.engine ?? body.engine,
         model: todoOverride.engine ? todoOverride.model ?? undefined : body.model,
         effortLevel: body.effortLevel,
-      }, todoOverride.engine ? { employee: employeeName } : employeeDefaults);
+      }, { ...(todoOverride.engine ? { employee: employeeName } : employeeDefaults), ...(fallbackMode ? { fallbackMode } : {}) });
       if (!selection.ok) return badRequest(res, selection.error || "invalid engine/model/effort");
       // The Todo's skills are preloaded by prefixing the brief the delegate reads.
       const brief = todoOverride.prefix + task;
@@ -3545,6 +3553,7 @@ export async function handleApiRequest(
           parentSessionId,
           model: selection.model,
           effortLevel: selection.effortLevel,
+          fallbackMode,
           prompt: brief,
           title,
           portalName: config.portal?.portalName,
@@ -3564,6 +3573,7 @@ export async function handleApiRequest(
             engine: replay.engine,
             model: replay.model ?? null,
             effortLevel: replay.effortLevel ?? null,
+            fallbackMode: replay.fallbackMode ?? null,
             status: replay.status,
             title: getWorkItem(replay.workItemId)?.title ?? replay.title ?? null,
             replayed: true,
@@ -3637,6 +3647,7 @@ export async function handleApiRequest(
         engine: engineName,
         model: selection.model ?? null,
         effortLevel: selection.effortLevel ?? null,
+        fallbackMode: session.fallbackMode ?? null,
         status: session.status,
         title,
       }, 201);
@@ -3685,6 +3696,7 @@ export async function handleApiRequest(
         engine: body.engine,
         model: body.model,
         effortLevel: body.effortLevel,
+        fallbackMode: body.fallbackMode,
         parentSessionId: body.parentSessionId,
         promptExcerpt: typeof body.promptExcerpt === "string" ? body.promptExcerpt : undefined,
         userId,
@@ -3703,7 +3715,7 @@ export async function handleApiRequest(
       let session = getSession(params.id);
       if (!session) return notFound(res);
       if (isTerminalSession(session)) return json(res, { error: TERMINAL_REFUSES_MESSAGES }, 409);
-      session = maybeRevertEngineOverride(session);
+      session = maybeRevertEngineOverride(session, undefined, context.getConfig());
       const _parsed = await readJsonBody(req, res);
       if (!_parsed.ok) return;
       const body = _parsed.body as any;

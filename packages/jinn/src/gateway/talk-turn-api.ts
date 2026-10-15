@@ -11,7 +11,8 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { JinnConfig, Session } from "../shared/types.js";
 import type { RealtimeUsage } from "../shared/voice.js";
-import { createSession, insertMessage } from "../sessions/registry.js";
+import { createSession, getSession, insertMessage } from "../sessions/registry.js";
+import { childFallbackMode } from "../sessions/session-fallback.js";
 import { priceTurn } from "../talk/session/pricing.js";
 import type { TalkSessionRegistry } from "../talk/session/registry.js";
 import type { TalkActionRecord, TalkSession, VisualCaptureReceipt } from "../talk/session/types.js";
@@ -232,6 +233,7 @@ export async function handOff(
     connector: "web",
     replyContext: { source: "web" },
     parentSessionId: session.sessionId,
+    fallbackMode: childFallbackMode(config, getSession(session.sessionId)),
     prompt,
   });
   insertMessage(spawned.id, "user", prompt);

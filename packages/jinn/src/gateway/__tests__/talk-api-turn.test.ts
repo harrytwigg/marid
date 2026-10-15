@@ -158,6 +158,8 @@ describe("handoff to a text session", () => {
     expect(spawned).toBeDefined();
     expect(spawned!.parentSessionId).toBe(parentSessionId);
     expect(res.body.parentSessionId).toBe(parentSessionId);
+    // A child gets the child rule: the talk session has no mode, so the default (fallback) gives auto-resume.
+    expect(spawned!.fallbackMode).toBe("auto-resume");
   });
 
   it("rejects an empty prompt with 400", async () => {
