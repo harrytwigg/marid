@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { MuseUsageSnapshot } from "../../engines/musecode-turn.js";
-import { MUSECODE_USAGE_FILE, readMusecodeUsage, writeMusecodeUsage } from "../musecode-usage.js";
+import { musecodeUsageFile, readMusecodeUsage, writeMusecodeUsage } from "../musecode-usage.js";
 
 const usage = (observedAtMs: number, used = 42): MuseUsageSnapshot => ({
   observedAtMs,
@@ -22,7 +22,7 @@ describe("the Muse Code usage snapshot file", () => {
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   it("lives at tmp/musecode-usage.json under the instance home", () => {
-    expect(MUSECODE_USAGE_FILE.split(path.sep).slice(-2)).toEqual(["tmp", "musecode-usage.json"]);
+    expect(musecodeUsageFile().split(path.sep).slice(-2)).toEqual(["tmp", "musecode-usage.json"]);
   });
 
   it("writes the snapshot whole, owner-only, with the host's observedAtMs, and leaves no temp file", () => {

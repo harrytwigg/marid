@@ -13,7 +13,10 @@ import type { MuseUsageSnapshot } from "../engines/musecode-turn.js";
  * "no data", a write that fails is skipped.
  */
 
-export const MUSECODE_USAGE_FILE = path.join(JINN_HOME, "tmp", "musecode-usage.json");
+/** The snapshot file. A function, not a constant: this module sits behind the model registry, which loads before anything has a chance to mock or set the home. */
+export function musecodeUsageFile(): string {
+  return path.join(JINN_HOME, "tmp", "musecode-usage.json");
+}
 
 function isSnapshot(value: unknown): value is MuseUsageSnapshot {
   const v = value as Partial<MuseUsageSnapshot> | null;
@@ -23,7 +26,7 @@ function isSnapshot(value: unknown): value is MuseUsageSnapshot {
     && !!v.weekly && Number.isFinite(v.weekly.usedPercent) && Number.isFinite(v.weekly.resetsAtMs);
 }
 
-export function readMusecodeUsage(file: string = MUSECODE_USAGE_FILE): MuseUsageSnapshot | undefined {
+export function readMusecodeUsage(file: string = musecodeUsageFile()): MuseUsageSnapshot | undefined {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, "utf-8")) as unknown;
     return isSnapshot(parsed) ? parsed : undefined;
@@ -37,7 +40,7 @@ export function readMusecodeUsage(file: string = MUSECODE_USAGE_FILE): MuseUsage
  * renamed into place, owner-only. Turns run concurrently, so one that
  * observed an older state than the file already holds does not replace it.
  */
-export function writeMusecodeUsage(usage: MuseUsageSnapshot, file: string = MUSECODE_USAGE_FILE): void {
+export function writeMusecodeUsage(usage: MuseUsageSnapshot, file: string = musecodeUsageFile()): void {
   try {
     const held = readMusecodeUsage(file);
     if (held && held.observedAtMs > usage.observedAtMs) return;

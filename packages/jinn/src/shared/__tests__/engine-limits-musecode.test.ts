@@ -16,7 +16,7 @@ import { collectEngineLimits } from "../engine-limits.js";
 import { collectMusecodeLimits, MUSECODE_NO_USAGE_REASON } from "../engine-limits-musecode.js";
 import { invalidateModelRegistry } from "../models.js";
 import { preferHealthySessionEngine, readEngineHealth } from "../engine-health.js";
-import { writeMusecodeUsage, MUSECODE_USAGE_FILE } from "../musecode-usage.js";
+import { writeMusecodeUsage, musecodeUsageFile } from "../musecode-usage.js";
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "engines", "__tests__", "fixtures", "fake-muse.mjs");
 const NOW = Date.now();
@@ -63,7 +63,7 @@ describe("collectMusecodeLimits", () => {
   it("marks a snapshot stale once its window has reset, and once it is older than six hours", async () => {
     writeMusecodeUsage(usage({ resetsInMs: -HOUR, observedAtMs: NOW - 2 * HOUR }));
     expect((collectMusecodeLimits(config())).stale).toBe(true);
-    fs.rmSync(MUSECODE_USAGE_FILE);
+    fs.rmSync(musecodeUsageFile());
     writeMusecodeUsage(usage({ observedAtMs: NOW - 7 * HOUR, resetsInMs: 20 * HOUR }));
     expect((collectMusecodeLimits(config())).stale).toBe(true);
   });
@@ -114,7 +114,7 @@ describe("collectEngineLimits for Muse Code", () => {
     expect(readEngineHealth().musecode).toMatchObject({ state: "exhausted", window: "weekly" });
 
     fs.rmSync(path.join(TEST_HOME, "tmp", "engine-health.json"), { force: true });
-    fs.rmSync(MUSECODE_USAGE_FILE);
+    fs.rmSync(musecodeUsageFile());
     writeMusecodeUsage({ ...usage({ used: 100 }), window: { usedPercent: 100, windowDurationMins: 300, resetsAtMs: NOW - HOUR } });
     await collectEngineLimits(config(), { engine: "musecode" });
     expect(readEngineHealth().musecode).toBeUndefined();

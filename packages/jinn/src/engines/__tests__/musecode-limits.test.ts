@@ -14,7 +14,7 @@ vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: () => ({}
 
 import { MusecodeEngine } from "../musecode.js";
 import { musecodeModelCost, refreshMusecodeModels, invalidateModelRegistry } from "../../shared/models.js";
-import { MUSECODE_USAGE_FILE, readMusecodeUsage, writeMusecodeUsage } from "../../shared/musecode-usage.js";
+import { musecodeUsageFile, readMusecodeUsage, writeMusecodeUsage } from "../../shared/musecode-usage.js";
 import { FAKE, opts, useFakeMuse } from "./helpers/fake-muse-harness.js";
 
 useFakeMuse();
@@ -31,12 +31,12 @@ describe("usage/changed during a turn", () => {
     const kept = readMusecodeUsage();
     expect(kept).toMatchObject({ tier: "everyday", window: { usedPercent: 42, windowDurationMins: 300 }, weekly: { usedPercent: 17 } });
     expect(kept!.observedAtMs).toBeGreaterThanOrEqual(before);
-    expect(fs.statSync(MUSECODE_USAGE_FILE).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(musecodeUsageFile()).mode & 0o777).toBe(0o600);
   });
 
   it("writes nothing for a turn the host reported no usage on", async () => {
     await wired().run(opts());
-    expect(fs.existsSync(MUSECODE_USAGE_FILE)).toBe(false);
+    expect(fs.existsSync(musecodeUsageFile())).toBe(false);
   });
 });
 

@@ -15,7 +15,7 @@ vi.mock("../../shared/paths.js", async (importOriginal) => ({
 import type { JinnConfig } from "../../shared/types.js";
 import { MusecodeEngine } from "../musecode.js";
 import { discoverMusecodeModels } from "../../shared/musecode-models.js";
-import { MUSECODE_USAGE_FILE, readMusecodeUsage, writeMusecodeUsage } from "../../shared/musecode-usage.js";
+import { musecodeUsageFile, readMusecodeUsage, writeMusecodeUsage } from "../../shared/musecode-usage.js";
 import { collectMusecodeLimits } from "../../shared/engine-limits-musecode.js";
 import { invalidateModelRegistry } from "../../shared/models.js";
 
@@ -103,7 +103,7 @@ describe.skipIf(!ENABLED)("Muse Code models and usage (real binary)", () => {
 
     const kept = readMusecodeUsage();
     expect(kept).toMatchObject({ tier: "everyday", window: { usedPercent: 42, windowDurationMins: 300 }, weekly: { usedPercent: 17 } });
-    expect(fs.statSync(MUSECODE_USAGE_FILE).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(musecodeUsageFile()).mode & 0o777).toBe(0o600);
 
     const config = { engines: { default: "claude", musecode: { bin: BIN } } } as unknown as JinnConfig;
     const snap = collectMusecodeLimits(config);
