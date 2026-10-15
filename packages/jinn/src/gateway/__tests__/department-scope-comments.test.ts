@@ -5,6 +5,7 @@ import { listComments, type WorkItemComment } from "../../work-items/comments.js
 import { routeTodoComment } from "../todo-comment-routing.js";
 import type { Session } from "../../shared/types.js";
 import type { WorkItem } from "../../work-items/store.js";
+import { initDb } from "../../shared/db.js";
 
 /**
  * A comment can wake an employee (an @mention) or deliver into another session (a reply).
@@ -63,6 +64,26 @@ describe("a mention from a scoped session", () => {
     const comment = say(item, scopedAuthor, "@side-qa and @eng-dev and @other-dev");
     expect(routeTodoComment(context, comment).map((wake) => wake.employee)).toEqual(["side-qa"]);
     expect(notices(item, comment)).toHaveLength(2);
+  });
+});
+
+describe("a mention from a scoped session of the employee who created the Todo", () => {
+  const createdBy = (owner: Session): WorkItem =>
+    workItems.createWorkItem({ title: `owned-${seq++}`, department: "side-project", source: "session", sourceRef: `session:${owner.id}:owned` });
+
+  it("is delivered into the creating session when it is bound to the department", async () => {
+    const owner = await sessionOf("side-qa");
+    const wakes = routeTodoComment(context, say(createdBy(owner), scopedAuthor, "@side-qa what did you mean?"));
+    expect(wakes.map((wake) => [wake.sessionId, wake.started])).toEqual([[owner.id, false]]);
+  });
+
+  it("starts a consultation instead when the creating session predates the department's scope", async () => {
+    const owner = await sessionOf("side-qa");
+    initDb().prepare("UPDATE sessions SET scope_department = NULL WHERE id = ?").run(owner.id);
+    const wakes = routeTodoComment(context, say(createdBy(owner), scopedAuthor, "@side-qa what did you mean?"));
+    expect(wakes).toHaveLength(1);
+    expect(wakes[0]).toMatchObject({ employee: "side-qa", started: true });
+    expect(registry.getSession(wakes[0]!.sessionId)?.scopeDepartment).toBe("side-project");
   });
 });
 
