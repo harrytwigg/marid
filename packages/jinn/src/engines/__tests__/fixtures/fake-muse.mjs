@@ -5,16 +5,13 @@
 //
 // It models what the adapter relies on:
 //   - nothing answers before `initialize` + `initialized` (`notInitialized`);
-//   - a session's `config.mcpServers` is refused (`capabilityRequired`) unless
-//     the client asked for the `sessionMcp` capability in `initialize`, as the
-//     real binary does;
+//   - `config.mcpServers` is refused (`capabilityRequired`) without the
+//     `sessionMcp` capability requested in `initialize`, as the real binary does;
 //   - sessions live in a state directory shared by every process, so a later
-//     process can resume what an earlier one started (`FAKE_MUSE_STATE_DIR`,
-//     default <tmp>/fake-muse-state), and an unknown id is `sessionNotFound`;
-//   - `turn/start` answers at once and the turn then runs on its own: the
-//     answer streams as `item/delta`, `turn/foregroundCompleted` arrives while
-//     a blocking reminder child is still running, and only `turn/completed`
-//     ends the turn;
+//     process can resume them (`FAKE_MUSE_STATE_DIR`); an unknown id is `sessionNotFound`;
+//   - `turn/start` answers at once; the answer streams as `item/delta`,
+//     `turn/foregroundCompleted` arrives while a reminder child still runs, and
+//     only `turn/completed` ends the turn;
 //   - closing stdin ends the host (exit 0), as the real one does.
 //
 // Turn behaviour is steered by directive words after the prompt's LAST `---`
@@ -43,10 +40,10 @@
 //   FAKE_MUSE_STATE_DIR  where sessions are kept; FAKE_MUSE_RESET_MS the reset QUOTA reports
 //   FAKE_MUSE_RESUME_FAIL  a message: every `session/resume` fails with it (invalid params)
 //   FAKE_MUSE_BOOT_EXIT  exit with this code before reading anything (a host that cannot start)
-//   FAKE_MUSE_NO_GRANT   grant no capability, whatever is asked for
+//   FAKE_MUSE_NO_GRANT   grant no capability. (A `required` MCP server under /nonexistent fails the turn, as on the real host.)
 import fs from "node:fs";
 import readline from "node:readline";
-import { fail, log, notify, out, readSession, reply, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
+import { fail, log, notify, out, readSession, reply, requiredServerThatCannotStart, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
 
 if (process.env.FAKE_MUSE_BOOT_EXIT) {
   process.stderr.write("fake muse: cannot start (boot refused)\n");
@@ -56,7 +53,8 @@ if (process.env.FAKE_MUSE_BOOT_EXIT) {
 const rl = readline.createInterface({ input: process.stdin, terminal: false });
 let initialized = false;
 let granted = [];
-let interruptTurn = null; // set while a turn is waiting on an interrupt
+let brokenServer; // a required MCP server that cannot start
+let interruptTurn = null; // set while a turn waits on an interrupt
 const serverReplies = new Map(); // server-request id -> resolver
 const commands = new Map(); // method -> resolver of the next such command
 let nextServerId = 1;
@@ -116,6 +114,7 @@ function needsMcpCapability(id, params) {
 
 function startSession(id, params) {
   if (needsMcpCapability(id, params)) return;
+  brokenServer = requiredServerThatCannotStart(params.config);
   const session = { sessionId: uuid7(), modelId: params.modelId, workspaceRoot: params.workspaceRoot, turns: 0 };
   writeSession(session);
   const view = sessionView(session);
@@ -125,6 +124,7 @@ function startSession(id, params) {
 
 function resumeSession(id, params) {
   if (needsMcpCapability(id, params)) return;
+  brokenServer = requiredServerThatCannotStart(params.config);
   if (process.env.FAKE_MUSE_RESUME_FAIL) return fail(id, -32602, process.env.FAKE_MUSE_RESUME_FAIL, { kind: "invalidParams" });
   const session = readSession(params.sessionId);
   if (!session) {
@@ -151,7 +151,6 @@ function interrupt(id, params) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 function directivesOf(text) {
   const tail = text.split(/\n---\n/).at(-1) ?? "";
   return new Set(tail.split(/\s+/).filter(Boolean));
@@ -167,7 +166,6 @@ function startTurn(id, params) {
 }
 
 const item = (turnId, fields) => ({ turnId, revision: 1, ...fields });
-
 async function runTurn({ session, turnId, text, params }) {
   const sessionId = session.sessionId;
   const directives = directivesOf(text);
@@ -186,6 +184,10 @@ async function runTurn({ session, turnId, text, params }) {
       notify("turn/modelRetryScheduled", { ...base, turnId, attempt, nextAttempt: attempt + 1, maxAttempts: 10, retryDelayMs: 1000, errorKind: "rate_limited", httpStatus: 429, system: "meta" });
       await sleep(20);
     }
+  }
+  if (brokenServer) {
+    const message = `invalid run configuration: Required MCP server \`${brokenServer}\` failed during startup: the configured command is unavailable.`;
+    return finish(base, turnId, { terminal: "failed", error: { kind: "configError", message, retryable: false } });
   }
   if (directives.has("AUTH")) return finish(base, turnId, { terminal: "failed", error: { kind: "authRequired", message: "Not signed in to Meta", retryable: false } });
   if (directives.has("QUOTA")) {

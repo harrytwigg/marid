@@ -149,7 +149,7 @@ describe("MCP", () => {
     expect(sent("session/start")[0]!.config).toEqual({
       mcpServers: {
         jinn: { transport: "stdio", command: "node", args: ["/x/mcp.js"], env: { JINN_SESSION_ID: "s1", JINN_MCP_CAPABILITY: "secret-capability" }, mode: "optional" },
-        docs: { transport: "streamableHttp", url: "https://docs.example.test/mcp", headers: { Authorization: "Bearer docs-token" } },
+        docs: { transport: "streamableHttp", url: "https://docs.example.test/mcp", headers: { Authorization: "Bearer docs-token" }, mode: "optional" },
       },
     });
     expect(JSON.stringify(starts()[0]!.argv)).not.toMatch(/secret-capability|docs-token/);
@@ -159,6 +159,13 @@ describe("MCP", () => {
     const first = await ctx.engine.run(opts());
     await ctx.engine.run(opts({ resolvedMcp, resumeSessionId: first.sessionId }));
     expect(Object.keys(sent("session/resume")[0]!.config.mcpServers)).toEqual(["jinn", "docs"]);
+  });
+
+  it("marks every server optional, so one that cannot start does not fail the turn", async () => {
+    const broken = { mcpServers: { jinn: { command: "node" }, other: { command: "/nonexistent/other-mcp" } } } as unknown as EngineRunOpts["resolvedMcp"];
+    const result = await ctx.engine.run(opts({ resolvedMcp: broken }));
+    expect(result.error).toBeUndefined();
+    expect(Object.values(sent("session/start")[0]!.config.mcpServers).map((s) => (s as { mode: string }).mode)).toEqual(["optional", "optional"]);
   });
 
   it("sends no config when the session has no servers", async () => {

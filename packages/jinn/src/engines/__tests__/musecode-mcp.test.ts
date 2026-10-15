@@ -7,44 +7,47 @@ import { buildMuseSessionConfig, projectMuseMcpServer } from "../musecode-mcp.js
 
 describe("projectMuseMcpServer", () => {
   it("projects a stdio server with its args and env", () => {
-    expect(projectMuseMcpServer("docs", { command: "node", args: ["a.js"], env: { K: "v" } })).toEqual({
-      transport: "stdio", command: "node", args: ["a.js"], env: { K: "v" },
+    expect(projectMuseMcpServer({ command: "node", args: ["a.js"], env: { K: "v" } })).toEqual({
+      transport: "stdio", command: "node", args: ["a.js"], env: { K: "v" }, mode: "optional",
     });
   });
 
   it("leaves out empty args and env", () => {
-    expect(projectMuseMcpServer("docs", { command: "node", args: [], env: {} })).toEqual({ transport: "stdio", command: "node" });
+    expect(projectMuseMcpServer({ command: "node", args: [], env: {} })).toEqual({ transport: "stdio", command: "node", mode: "optional" });
   });
 
   it("projects a URL server as streamableHttp with its headers", () => {
-    expect(projectMuseMcpServer("docs", { url: "https://x.test/mcp", headers: { Authorization: "Bearer t" } })).toEqual({
-      transport: "streamableHttp", url: "https://x.test/mcp", headers: { Authorization: "Bearer t" },
+    expect(projectMuseMcpServer({ url: "https://x.test/mcp", headers: { Authorization: "Bearer t" } })).toEqual({
+      transport: "streamableHttp", url: "https://x.test/mcp", headers: { Authorization: "Bearer t" }, mode: "optional",
     });
-    expect(projectMuseMcpServer("docs", { type: "sse", url: "https://x.test/sse" })).toEqual({ transport: "streamableHttp", url: "https://x.test/sse" });
+    expect(projectMuseMcpServer({ type: "sse", url: "https://x.test/sse" })).toEqual({ transport: "streamableHttp", url: "https://x.test/sse", mode: "optional" });
   });
 
-  it("makes only the jinn server optional, in either transport", () => {
-    expect(projectMuseMcpServer("jinn", { command: "node" })).toMatchObject({ mode: "optional" });
-    expect(projectMuseMcpServer("jinn", { url: "https://x.test" })).toMatchObject({ mode: "optional" });
-    expect(projectMuseMcpServer("jinn-other", { command: "node" })).not.toHaveProperty("mode");
-    expect(projectMuseMcpServer("docs", { command: "node" })).not.toHaveProperty("mode");
+  it("makes every server optional, in either transport, so one that will not start cannot fail the turn", () => {
+    expect(projectMuseMcpServer({ command: "node" })).toMatchObject({ mode: "optional" });
+    expect(projectMuseMcpServer({ url: "https://x.test" })).toMatchObject({ mode: "optional" });
   });
 
   it("is null for a spec Muse cannot run", () => {
     for (const spec of [null, undefined, "node", 7, [], {}, { command: "" }, { url: "" }]) {
-      expect(projectMuseMcpServer("x", spec)).toBeNull();
+      expect(projectMuseMcpServer(spec)).toBeNull();
     }
   });
 
   it("copies the spec rather than sharing its objects", () => {
     const env = { K: "v" };
-    const projected = projectMuseMcpServer("x", { command: "node", env }) as { env: Record<string, string> };
+    const projected = projectMuseMcpServer({ command: "node", env }) as { env: Record<string, string> };
     projected.env.K = "changed";
     expect(env.K).toBe("v");
   });
 });
 
 describe("buildMuseSessionConfig", () => {
+  it("marks each of the session's servers optional, whatever its name", () => {
+    const resolved = { mcpServers: { jinn: { command: "node" }, "jinn-other": { command: "node" }, docs: { url: "https://x.test" } } } as unknown as ResolvedMcpConfig;
+    expect(Object.values(buildMuseSessionConfig(resolved)!.mcpServers).map((server) => server.mode)).toEqual(["optional", "optional", "optional"]);
+  });
+
   it("keeps the servers it can project and drops the rest", () => {
     const resolved = { mcpServers: { jinn: { command: "node" }, docs: { url: "https://x.test" }, broken: {} } } as unknown as ResolvedMcpConfig;
     expect(Object.keys(buildMuseSessionConfig(resolved)!.mcpServers)).toEqual(["jinn", "docs"]);
