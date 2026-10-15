@@ -29,7 +29,7 @@ describe("buildMuseViewMcp", () => {
     },
   } as unknown as ResolvedMcpConfig;
 
-  it("names each server in its own -c, jinn optional, with every env and header value a reference", () => {
+  it("names each server in its own -c, as optional as a turn's host has it, with every env and header value a reference", () => {
     const { flags, env, skipped } = buildMuseViewMcp(resolved);
     expect(flags.filter((f) => f === "-c")).toHaveLength(2);
     const jinn = JSON.parse(flags[1].replace("mcpServers.jinn=", ""));
@@ -45,6 +45,7 @@ describe("buildMuseViewMcp", () => {
       transport: "streamableHttp",
       url: "https://mcp.example.test/mcp",
       headers: { Authorization: "${MARID_MCP_3}" },
+      mode: "optional",
     });
     expect(env).toEqual({ MARID_MCP_1: "/home/x/.jinn", MARID_MCP_2: "s-1", MARID_MCP_3: "Bearer sekrit-token" });
     expect(skipped).toEqual(["bad.name"]);
