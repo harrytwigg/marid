@@ -626,8 +626,7 @@ function buildOpencodeEntry(
     if (pinned && !models.some((m) => m.id === pinned)) {
       models = [{ id: pinned, label: pinned, supportsEffort: false, effortLevels: [] }, ...models];
     }
-    models = withConfiguredWindows(models, opencodeBlock);
-    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: "none", models };
+    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: "none", models: withConfiguredWindows(models, opencodeBlock) };
   }
   if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);
   return { ...synthEntry, available };
