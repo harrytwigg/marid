@@ -13,9 +13,9 @@ import { listWorkItemAttemptRuns } from "./runs.js";
 import { latestOperatorResumeAt, listWorkItemEvents } from "./event-log.js";
 import { appendWorkItemEvent, listWorkItems, type WorkItem } from "./store.js";
 import { initDb } from "../shared/db.js";
+import type { Session } from "../shared/types.js";
 import { listSessionsByWorkItem } from "../sessions/registry.js";
-import { hasLiveBackgroundWork } from "../sessions/background-work.js";
-import { isSessionInFlight, todoHasOpenDelegations } from "./open-delegations.js";
+import { hasOpenDelegations, isSessionInFlight } from "./open-delegations.js";
 import type { AvailabilityRearmResult } from "./availability-resume.js";
 
 export type TodoRecoveryMode = "off" | "classify-only" | "auto";
@@ -46,16 +46,16 @@ export function todoRecoveryMode(raw: string | undefined): TodoRecoveryMode {
  *  flight too: its turn ended, its work did not. */
 export function sessionInFlight(sessionId: string): boolean {
   const row = initDb().prepare("SELECT status FROM sessions WHERE id = ?").get(sessionId) as { status: string } | undefined;
-  return row?.status === "running" || row?.status === "waiting" || (row?.status === "idle" && hasLiveBackgroundWork(sessionId));
+  return row !== undefined && isSessionInFlight({ id: sessionId, status: row.status as Session["status"] });
 }
 
 /** Newest-first, as the registry lists them; review links never count. A parent
  *  waiting on its own sub-tasks or on sessions it started is in flight too: its
  *  turn ended, its work did not. */
-export function attemptActivity(workItemId: string): AttemptActivity {
+export function attemptActivity(workItemId: string, now = Date.now()): AttemptActivity {
   const attempts = listSessionsByWorkItem(workItemId).filter(isExecutionAttempt);
   return {
-    inFlight: attempts.some(isSessionInFlight) || todoHasOpenDelegations(workItemId),
+    inFlight: attempts.some(isSessionInFlight) || hasOpenDelegations(workItemId, attempts, now),
     lastActivityAt: attempts[0]?.lastActivity ?? null,
     executingSince: listWorkItemEvents(workItemId)
       .filter((event) => event.kind === "status_change" && event.toStatus === "executing").at(-1)?.createdAt ?? null,
@@ -82,7 +82,7 @@ export function classifyWorkItem(item: WorkItem, now = new Date()): RecoveryClas
       ? { id: last.id, outcome: last.outcome ?? "crashed", error: last.error, endedAt: last.endedAt }
       : undefined,
     openRun: open ? { startedAt: open.startedAt, sessionInFlight: sessionInFlight(open.sessionId) } : undefined,
-    attempts: item.status === "executing" ? attemptActivity(item.id) : undefined,
+    attempts: item.status === "executing" ? attemptActivity(item.id, now.getTime()) : undefined,
     now,
   });
 }

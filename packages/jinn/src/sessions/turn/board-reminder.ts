@@ -13,25 +13,10 @@ import type { JinnConfig } from "../../shared/types.js";
 export const DEFAULT_BOARD_REMINDER =
   "Todo board: check status with get_work_item before changing it. "
   + "`executing` means you are working the Todo right now (feedback on in_review too). "
-  + "NEVER end a turn, or wait on a person or dependency, with the Todo in `executing`. "
-  + "Waiting, or ending your turn with a question or decision for the operator: first move it to `blocked`, "
+  + "While child Todos, delegations or QA you started are running, stay `executing` and end your turn; results wake you. "
+  + "Any other wait, or a question or decision for the operator: first move it to `blocked`, "
   + "keep the assignee, note who, what and your recommendation, and @mention the operator for a decision. "
   + "Unblocked: executing. "
-  + "Finished: in_review + note.";
-
-/**
- * The same paragraph for a session whose own child Todos, delegations or
- * reviewer sessions are still running. It stays `executing` and ends its turn:
- * each result wakes it, and a block would re-queue the Todo and, repeated, send
- * it to the operator over a wait nobody outside its delegation tree is part of.
- * Same token budget as the default.
- */
-export const PARENT_WAITING_BOARD_REMINDER =
-  "Todo board: check status with get_work_item before changing it. "
-  + "`executing` means you are working the Todo right now (feedback on in_review too). "
-  + "Your own child Todos, delegations or QA are still running: leave the Todo `executing` and end your turn; results wake you. "
-  + "Waiting on someone outside your delegation tree, or a decision for the operator: first move it to `blocked`, "
-  + "keep the assignee, note who, what and your recommendation, and @mention the operator for a decision. "
   + "Finished: in_review + note.";
 
 /** In an instance's `context.boardReminder`, replaced by the built-in text so an instance can extend it. */
@@ -44,21 +29,17 @@ export const BOARD_REMINDER_LABEL = "[Gateway reminder]";
  * The reminder this session's turns carry, or undefined when they carry none: a
  * session without the built-in jinn MCP server has no Todo tools to apply it
  * with, and an instance may turn it off with `context.boardReminder: false` (or "").
- * `waitingOnOwnWork` swaps the built-in text for the one that keeps the Todo
- * `executing`; an instance's own text is sent as written.
  */
 export function resolveBoardReminder(
   config: Pick<JinnConfig, "context">,
   jinnMcpAttached: boolean,
-  waitingOnOwnWork = false,
 ): string | undefined {
   if (!jinnMcpAttached) return undefined;
   const configured = config.context?.boardReminder;
-  const builtIn = waitingOnOwnWork ? PARENT_WAITING_BOARD_REMINDER : DEFAULT_BOARD_REMINDER;
   if (configured === false) return undefined;
   const text = typeof configured === "string"
-    ? configured.split(BOARD_REMINDER_DEFAULT_TOKEN).join(builtIn)
-    : builtIn;
+    ? configured.split(BOARD_REMINDER_DEFAULT_TOKEN).join(DEFAULT_BOARD_REMINDER)
+    : DEFAULT_BOARD_REMINDER;
   return text.trim() || undefined;
 }
 

@@ -12,7 +12,6 @@ let detect: typeof import("../anomaly-detect.js");
 let controller: typeof import("../recovery-controller.js");
 let rows: typeof import("../recovery-rows.js");
 let eventLog: typeof import("../event-log.js");
-let transitions: typeof import("../transitions.js");
 let db: import("better-sqlite3").Database;
 
 beforeAll(async () => {
@@ -22,7 +21,6 @@ beforeAll(async () => {
   controller = await import("../recovery-controller.js");
   rows = await import("../recovery-rows.js");
   eventLog = await import("../event-log.js");
-  transitions = await import("../transitions.js");
   db = (await import("../../shared/db.js")).initDb();
 });
 
@@ -52,47 +50,56 @@ function child(parentId: string, status: "executing" | "in_review" | "done" | "c
 const sweep = (now: Date) => controller.sweepTodoRecovery({ mode: "classify-only", now: () => now, rearm: () => ({ status: "assigned" }) });
 
 describe("open delegations", () => {
-  it.each(["executing", "backlog", "blocked"] as const)("a %s sub-task keeps its parent waiting", (status) => {
-    const { parent, sessionId } = parentWaiting(`sub-${status}`);
-    child(parent.id, status);
-    expect(delegations.hasOpenSubTasks(parent.id)).toBe(true);
-    expect(delegations.sessionHasOpenDelegations({ id: sessionId, workItemId: parent.id })).toBe(true);
-    expect(delegations.todoHasOpenDelegations(parent.id)).toBe(true);
+  const open = (parentId: string, sessionId: string, now = Date.now()) =>
+    delegations.hasOpenDelegations(parentId, [{ id: sessionId }], now);
+
+  it("an executing sub-task keeps its parent waiting", () => {
+    const { parent, sessionId } = parentWaiting("sub-executing");
+    child(parent.id, "executing");
+    expect(open(parent.id, sessionId)).toBe(true);
   });
 
-  it.each(["in_review", "done", "cancelled"] as const)("a %s sub-task no longer does", (status) => {
-    const { parent, sessionId } = parentWaiting(`closed-${status}`);
+  // None of these will wake the parent: nothing starts a backlog child, a
+  // blocked one waits on a person, a handed-in one on the operator.
+  it.each(["backlog", "blocked", "in_review", "done", "cancelled"] as const)("a %s sub-task does not", (status) => {
+    const { parent, sessionId } = parentWaiting(`not-waiting-${status}`);
     child(parent.id, status);
-    expect(delegations.sessionHasOpenDelegations({ id: sessionId, workItemId: parent.id })).toBe(false);
-    expect(delegations.todoHasOpenDelegations(parent.id)).toBe(false);
+    expect(open(parent.id, sessionId)).toBe(false);
   });
 
   it("a session it started that is running does, and stops once it is idle", () => {
     const { parent, sessionId } = parentWaiting("qa");
     session("qa-reviewer", "running", { parent: sessionId });
-    expect(delegations.sessionHasOpenDelegations({ id: sessionId, workItemId: parent.id })).toBe(true);
-    expect(delegations.todoHasOpenDelegations(parent.id)).toBe(true);
+    expect(open(parent.id, sessionId)).toBe(true);
     db.prepare("UPDATE sessions SET status = 'idle' WHERE id = ?").run("qa-reviewer");
-    expect(delegations.sessionHasOpenDelegations({ id: sessionId, workItemId: parent.id })).toBe(false);
-    expect(delegations.todoHasOpenDelegations(parent.id)).toBe(false);
+    expect(open(parent.id, sessionId)).toBe(false);
   });
 
-  it("a session with no Todo is only waiting on sessions it started", () => {
-    session("loose", "idle");
-    expect(delegations.sessionHasOpenDelegations({ id: "loose", workItemId: null })).toBe(false);
-    session("loose-child", "waiting", { parent: "loose" });
-    expect(delegations.sessionHasOpenDelegations({ id: "loose", workItemId: null })).toBe(true);
+  it("a child session still marked running long after it last spoke is stale, not working", () => {
+    const { parent, sessionId } = parentWaiting("stale");
+    session("stale-reviewer", "running", { parent: sessionId });
+    expect(open(parent.id, sessionId, later(1).getTime())).toBe(true);
+    expect(open(parent.id, sessionId, later(5).getTime())).toBe(false);
+  });
+
+  it("only sessions started by the Todo's own attempts count", () => {
+    const { parent } = parentWaiting("own");
+    const other = parentWaiting("someone-else");
+    session("someone-elses-reviewer", "running", { parent: other.sessionId });
+    expect(open(parent.id, "own-parent")).toBe(false);
   });
 });
 
 describe("a parent that stays executing while its children work", () => {
+  const flagged = (id: string, now: Date) => detect.detectTodoAnomalies({ now, persist: false }).find((row) => row.workItemId === id);
+
   it("raises no recovery or attention event across several sweeps, even past the 4h budget", () => {
     const { parent } = parentWaiting("quiet");
     child(parent.id, "executing");
     child(parent.id, "in_review");
     for (const hours of [1, 5, 24, 48]) {
       const now = later(hours);
-      expect(detect.detectTodoAnomalies({ now, persist: false }).find((row) => row.workItemId === parent.id)).toBeUndefined();
+      expect(flagged(parent.id, now)).toBeUndefined();
       sweep(now);
       expect(rows.getWorkItemRecovery(parent.id)?.lane).not.toBe("manager");
     }
@@ -103,12 +110,19 @@ describe("a parent that stays executing while its children work", () => {
     expect(events.map((event) => event.kind)).not.toContain("escalated");
   });
 
-  it("is flagged as before once the children are all handed in and it has gone quiet", () => {
-    const { parent } = parentWaiting("handed");
+  it("is not flagged while a reviewer session it started is running", () => {
+    const { parent, sessionId } = parentWaiting("reviewing");
+    session("reviewing-qa", "running", { parent: sessionId });
+    const now = later(3);
+    db.prepare("UPDATE sessions SET last_activity = ? WHERE id = 'reviewing-qa'").run(now.toISOString());
+    expect(flagged(parent.id, later(5))).toBeUndefined();
+  });
+
+  it.each(["in_review", "blocked", "backlog"] as const)("is flagged as before once its children are %s and it has gone quiet", (status) => {
+    const { parent } = parentWaiting(`settled-${status}`);
     const kid = child(parent.id, "executing");
-    expect(detect.detectTodoAnomalies({ now: later(48), persist: false }).find((row) => row.workItemId === parent.id)).toBeUndefined();
-    transitions.transition(kid.id, "in_review", "platform-worker");
-    expect(detect.detectTodoAnomalies({ now: later(48), persist: false }).find((row) => row.workItemId === parent.id))
-      .toMatchObject({ kind: "executing-unhanded", lane: "manager" });
+    expect(flagged(parent.id, later(48))).toBeUndefined();
+    db.prepare("UPDATE work_items SET status = ? WHERE id = ?").run(status, kid.id);
+    expect(flagged(parent.id, later(48))).toMatchObject({ kind: "executing-unhanded", lane: "manager" });
   });
 });
