@@ -6,6 +6,7 @@ vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: () => ({}
 import { isDeadSessionError } from "../../shared/rateLimit.js";
 import { isLostConversationError } from "../../shared/process-start.js";
 import { MusecodeEngine } from "../musecode.js";
+import { MspProcess } from "../musecode-process.js";
 import { MUSECODE_SESSION_IN_USE } from "../musecode-run.js";
 import { ctx, methods, opts, useFakeMuse } from "./helpers/fake-muse-harness.js";
 
@@ -43,6 +44,23 @@ describe("a session the terminal view holds", () => {
     const first = await ctx.engine.run(opts());
     await ctx.engine.run(opts({ resumeSessionId: first.sessionId }));
     expect(during).toBe(true);
+    expect(ctx.engine.hasLiveRun("s1")).toBe(false);
+  });
+
+  it("stays in flight until the host process is gone, not only until the turn has ended", async () => {
+    const shutdown = MspProcess.prototype.shutdown;
+    let afterShutdown: boolean | undefined;
+    const spy = vi.spyOn(MspProcess.prototype, "shutdown").mockImplementation(async function (this: MspProcess, ...args) {
+      const exit = await shutdown.apply(this, args);
+      afterShutdown = ctx.engine.hasLiveRun("s1");
+      return exit;
+    });
+    try {
+      await ctx.engine.run(opts());
+    } finally {
+      spy.mockRestore();
+    }
+    expect(afterShutdown).toBe(true);
     expect(ctx.engine.hasLiveRun("s1")).toBe(false);
   });
 

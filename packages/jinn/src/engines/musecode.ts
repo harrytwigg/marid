@@ -90,7 +90,7 @@ export class MusecodeEngine implements InterruptibleEngine {
     /* no-op */
   }
 
-  /** Whether a turn is in flight on the session: from the moment `run` is entered until the turn has ended (its host may still be exiting, which is harmless: the turn is over). */
+  /** Whether a turn is in flight on the session: from the moment `run` is entered until its host process is gone. */
   hasLiveRun(sessionId: string): boolean {
     return this.live.has(sessionId);
   }
@@ -111,8 +111,12 @@ export class MusecodeEngine implements InterruptibleEngine {
     } finally {
       clearTimeout(timeout);
       live.settled = true;
-      if (this.live.get(trackingId) === live) this.live.delete(trackingId);
-      await live.proc?.shutdown();
+      // Live until its host is gone: a terminal opened before then would meet a session the host still holds.
+      try {
+        await live.proc?.shutdown();
+      } finally {
+        if (this.live.get(trackingId) === live) this.live.delete(trackingId);
+      }
     }
   }
 
