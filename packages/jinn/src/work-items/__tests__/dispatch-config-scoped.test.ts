@@ -92,6 +92,30 @@ describe("a non-claude engine override on a scoped department's Todo", () => {
   });
 });
 
+describe("an open employee holding a scoped department's Todo", () => {
+  it("may have a non-claude override set and dispatched: its sessions are not claude-only", () => {
+    const id = todo("open employee in scoped dept", "lab", OPEN_MEMBER);
+    expect(dispatch.setTodoDispatchConfig(id, { engine: "codex" }, config()).ok).toBe(true);
+
+    const resolved = dispatch.resolveTodoDispatch(id, OPEN_MEMBER);
+    expect(resolved.ok && resolved.preamble.engine).toBe("codex");
+    // The same stored override is still refused for a scoped member picking the Todo up.
+    expect(dispatch.resolveTodoDispatch(id, SCOPED_MEMBER).ok).toBe(false);
+  });
+
+  it("is judged by the runner named, not the department: a dispatch by an open system employee goes ahead", () => {
+    const id = todo("open runner named", "lab");
+    scope.setDepartmentScopeResolver(() => "open");
+    try {
+      expect(dispatch.setTodoDispatchConfig(id, { engine: "codex" }, config()).ok).toBe(true);
+    } finally {
+      scope.setDepartmentScopeResolver((department) => (department === "lab" ? "scoped" : "open"));
+    }
+    const resolved = dispatch.resolveTodoDispatch(id, "todo-dispatcher");
+    expect(resolved.ok && resolved.preamble.engine).toBe("codex");
+  });
+});
+
 describe("the same override on an open department's Todo", () => {
   it("is accepted", () => {
     const id = todo("open dept", "platform", OPEN_MEMBER);
@@ -132,6 +156,12 @@ describe("an override stored before its Todo was scoped", () => {
     const id = todo("stale override, no employee", "lab");
     storeBadOverride(id);
     expect(dispatch.resolveTodoDispatch(id, null).ok).toBe(false);
+  });
+
+  it("refuses a model-only patch on top of a stored non-claude engine", () => {
+    const id = todo("stale override, model patch", "lab");
+    storeBadOverride(id);
+    expect(dispatch.setTodoDispatchConfig(id, { model: "gpt-5.6-sol" }, config()).ok).toBe(false);
   });
 
   it("does not trap a patch that leaves the override alone, and clearing it unblocks dispatch", () => {
