@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StreamDelta } from "../../shared/types.js";
-import { MuseTurn, describeModelRetry, describeMuseToolCall, formatRetryDelay, museTurnCost, toolOutputText } from "../musecode-turn.js";
+import { MuseTurn } from "../musecode-turn.js";
+import { describeModelRetry, describeMuseToolCall, formatRetryDelay, museTurnCost, toolOutputText } from "../musecode-turn-text.js";
 
 const SESSION = "01a13f8f-4840-7f30-92cd-aa7c6655b28c";
 const TURN = "01a13f8f-48cb-7e8f-ade4-adb3e742c322";

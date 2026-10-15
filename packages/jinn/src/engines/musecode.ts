@@ -1,14 +1,12 @@
-import os from "node:os";
 import type { EngineResult, EngineRunOpts, InterruptibleEngine } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
-import { getPackageVersion } from "../shared/version.js";
-import { lostConversationFailure, processStartFailure } from "../shared/process-start.js";
+import { lostConversationFailure } from "../shared/process-start.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
-import { MspClient, MspClosedError, MspError, MspProcess, uuidv7 } from "./musecode-msp.js";
+import { MspClient, MspClosedError, MspError, uuidv7 } from "./musecode-msp.js";
+import { MspProcess } from "./musecode-process.js";
 import {
-  MUSECODE_AUTH_HELP,
   buildMuseServeArgs,
   buildMusecodePrompt,
   describeMusecodeLaunch,
@@ -18,21 +16,20 @@ import { buildMuseSessionConfig } from "./musecode-mcp.js";
 import { loadMuseAttachments } from "./musecode-attachments.js";
 import { answerMuseServerRequest } from "./musecode-approvals.js";
 import { MuseTurn, type MuseModelCost, type MuseUsageSnapshot } from "./musecode-turn.js";
+import {
+  askTurnToStop,
+  describeMspFailure,
+  hostLost,
+  hostNeverStarted,
+  interruptedResult,
+  openedSession,
+  packageVersion,
+  waitForEnd,
+  type LiveTurn,
+  type OpenedSession,
+} from "./musecode-run.js";
 
-/** A turn gets this long to wind down after an interrupt before its host is signalled. */
-const INTERRUPT_WAIT_MS = 3000;
 const TURN_TIMEOUT_MS = 14 * 24 * 60 * 60 * 1000;
-
-/** What one turn has so far, for `kill` and `isAlive` to reach. */
-interface LiveTurn {
-  /** Why the turn was stopped from outside, once it has been. */
-  reason: string | null;
-  proc: MspProcess | null;
-  turn: MuseTurn | null;
-  sessionId: string | null;
-  turnId: string | null;
-  settled: boolean;
-}
 
 export interface MusecodeEngineOptions {
   /** Told of every subscription-usage snapshot a turn's host reports. */
@@ -254,80 +251,5 @@ export class MusecodeEngine implements InterruptibleEngine {
     if (!proc) return;
     if (turn && live.sessionId && !turn.isCompleted) await askTurnToStop(proc, turn, live);
     if (!live.settled && !proc.hasExited && !turn?.isCompleted) proc.signal("SIGTERM");
-  }
-}
-
-/** `turn/interrupt`, then up to three seconds for the turn to say it is over. */
-async function askTurnToStop(proc: MspProcess, turn: MuseTurn, live: LiveTurn): Promise<void> {
-  try {
-    await proc.client.request(
-      "turn/interrupt",
-      { commandId: uuidv7(), sessionId: live.sessionId, ...(live.turnId ? { turnId: live.turnId } : {}) },
-      { timeoutMs: INTERRUPT_WAIT_MS },
-    );
-  } catch (err) {
-    logger.debug(`Muse Code turn/interrupt failed: ${err instanceof Error ? err.message : err}`);
-  }
-  await Promise.race([turn.whenCompleted(), delay(INTERRUPT_WAIT_MS)]);
-}
-
-/** The host went away with the turn unfinished; whatever it had streamed is narration, not an answer. */
-async function hostLost(proc: MspProcess, live: LiveTurn, opts: EngineRunOpts): Promise<EngineResult> {
-  const exit = await proc.waitForExit();
-  const error = `Muse Code exited before the turn finished (code ${exit.code ?? "none"}${exit.signal ? `, signal ${exit.signal}` : ""})`
-    + (proc.stderrTail ? `: ${proc.stderrTail.slice(-500)}` : "");
-  logger.error(error);
-  return { sessionId: live.sessionId ?? opts.resumeSessionId ?? "", result: "", error, numTurns: 1 };
-}
-
-/**
- * The host exited before the session opened. Said as a process that did not
- * start, which the turn runner never takes for a stale resume id: the
- * conversation, if there was one, is as resumable as it was.
- */
-async function hostNeverStarted(proc: MspProcess, resume: string | undefined): Promise<EngineResult> {
-  const exit = await proc.waitForExit();
-  const signal = exit.signal ? os.constants.signals[exit.signal] : 0;
-  return { sessionId: resume ?? "", result: "", error: processStartFailure("musecode", { exitCode: exit.code, signal }, proc.stderrTail) };
-}
-
-interface OpenedSession {
-  sessionId: string;
-  modelId: string | undefined;
-}
-
-function openedSession(result: Record<string, unknown>, fallbackId?: string): OpenedSession {
-  const session = (result.session ?? {}) as Record<string, unknown>;
-  const sessionId = typeof session.sessionId === "string" ? session.sessionId : fallbackId;
-  if (!sessionId) throw new Error("Muse Code answered session/start without a session id");
-  return { sessionId, modelId: typeof session.modelId === "string" ? session.modelId : undefined };
-}
-
-function interruptedResult(opts: EngineRunOpts, reason: string, sessionId?: string): EngineResult {
-  return { sessionId: sessionId ?? opts.resumeSessionId ?? "", result: "", error: reason, ...(sessionId ? { numTurns: 1 } : {}) };
-}
-
-/** A failed request, in words for the operator. */
-function describeMspFailure(err: unknown): string {
-  if (err instanceof MspError) return err.kind === "authRequired" ? `${MUSECODE_AUTH_HELP} (${err.message})` : err.message;
-  return err instanceof Error ? err.message : String(err);
-}
-
-/** Resolves once the turn has ended, or the connection has gone. */
-function waitForEnd(turn: MuseTurn, client: MspClient): Promise<void> {
-  return Promise.race([turn.whenCompleted(), new Promise<void>((resolve) => client.onClose(() => resolve()))]);
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms).unref?.();
-  });
-}
-
-function packageVersion(): string {
-  try {
-    return getPackageVersion();
-  } catch {
-    return "0.0.0";
   }
 }

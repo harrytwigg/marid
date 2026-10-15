@@ -11,6 +11,7 @@ import type { AutoCompactConfig } from "./auto-compact-config.js";
 import type { ContextConfig } from "./context-config.js";
 import type { ClaudeAccountConfig } from "./claude-accounts-config.js";
 import type { EngineName } from "./models.js";
+import type { MusecodeEngineConfig } from "./musecode-config.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
 import type {
   ConnectorInstance,
@@ -155,10 +156,7 @@ export interface JinnConfig {
       usageLimits?: OpencodeUsageLimitsConfig;
       autoCompact?: AutoCompactConfig; // server mode only
     };
-    /** Muse Code (`muse` CLI) engine. `bin` optional — PATH-resolved. `model` is
-     *  a Muse catalog id (`muse-spark-1.2`); `effortLevel` rides on each turn as
-     *  `reasoningEffort`. */
-    musecode?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[]; fallbackModelMap?: Record<string, string> };
+    musecode?: MusecodeEngineConfig;
   };
   /** Optional model + capability registry. When absent, synthesized from engines.<name>.model. */
   models?: ModelsConfig;

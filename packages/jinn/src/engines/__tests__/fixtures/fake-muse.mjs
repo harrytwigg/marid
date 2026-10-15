@@ -39,72 +39,19 @@
 //               the NEXT resume of it is `sessionNotFound`
 //   NOANSWER    the turn completes with no agent message at all
 // Environment hooks:
-//   FAKE_MUSE_LOG        append one JSON line per request received (and one for
-//                        the process start: argv, cwd, environment names asked about)
-//   FAKE_MUSE_STATE_DIR  where sessions are kept
-//   FAKE_MUSE_RESET_MS   the reset time QUOTA reports
+//   FAKE_MUSE_LOG        one JSON line per request received, and one for the process start
+//   FAKE_MUSE_STATE_DIR  where sessions are kept; FAKE_MUSE_RESET_MS the reset QUOTA reports
 //   FAKE_MUSE_RESUME_FAIL  a message: every `session/resume` fails with it (invalid params)
 //   FAKE_MUSE_BOOT_EXIT  exit with this code before reading anything (a host that cannot start)
 //   FAKE_MUSE_NO_GRANT   grant no capability, whatever is asked for
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import crypto from "node:crypto";
 import readline from "node:readline";
-
-const STATE_DIR = process.env.FAKE_MUSE_STATE_DIR || path.join(os.tmpdir(), "fake-muse-state");
-const LOG = process.env.FAKE_MUSE_LOG;
-fs.mkdirSync(STATE_DIR, { recursive: true });
-
-function log(entry) {
-  if (LOG) fs.appendFileSync(LOG, `${JSON.stringify(entry)}\n`);
-}
-log({
-  start: true,
-  argv: process.argv.slice(2),
-  cwd: process.cwd(),
-  env: Object.fromEntries(
-    ["JINN_SESSION_ID", "JINN_EMPLOYEE", "CLAUDECODE", "CODEX_HOME", "META_API_KEY", "HOME"].filter((k) => k in process.env).map((k) => [k, process.env[k]]),
-  ),
-});
+import { fail, log, notify, out, readSession, reply, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
 
 if (process.env.FAKE_MUSE_BOOT_EXIT) {
   process.stderr.write("fake muse: cannot start (boot refused)\n");
   process.exit(Number(process.env.FAKE_MUSE_BOOT_EXIT));
 }
-
-function uuid7() {
-  const b = crypto.randomBytes(16);
-  let t = BigInt(Date.now());
-  for (let i = 5; i >= 0; i--) { b[i] = Number(t & 0xffn); t >>= 8n; }
-  b[6] = (b[6] & 0x0f) | 0x70;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = b.toString("hex");
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
-
-const out = (message) => process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
-const notify = (method, params) => out({ method, params });
-const reply = (id, result) => out({ id, result });
-const fail = (id, code, message, data) => out({ id, error: { code, message, ...(data ? { data } : {}) } });
-
-const sessionFile = (id) => path.join(STATE_DIR, `${id}.json`);
-const readSession = (id) => {
-  try { return JSON.parse(fs.readFileSync(sessionFile(id), "utf8")); } catch { return undefined; }
-};
-const writeSession = (session) => fs.writeFileSync(sessionFile(session.sessionId), JSON.stringify(session));
-
-const sessionView = (s) => ({
-  activeTurnId: null,
-  approvalMode: { mode: "allowAll", source: "startup" },
-  kind: "root",
-  modelId: s.modelId ?? null,
-  providerId: "meta",
-  sessionId: s.sessionId,
-  status: "idle",
-  turnCount: s.turns ?? 0,
-  workspaceRoot: s.workspaceRoot,
-});
 
 const rl = readline.createInterface({ input: process.stdin, terminal: false });
 let initialized = false;

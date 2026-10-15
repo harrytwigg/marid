@@ -104,9 +104,8 @@ export function engineSupportsRemote(name: string): name is RemoteEngineName {
  * Every engine here discovers its models from its CLI, but the others also ship
  * a known offline catalog, so an id outside it really is a typo. These have
  * nothing to fall back on: the catalog is whatever providers the operator
- * configured on this machine (or, for Muse Code, whatever its provider lists
- * today), and it is empty for the first moments after a restart and whenever
- * discovery fails. Refusing an unrecognised id there would
+ * configured on this machine, and it is empty for the first moments after a
+ * restart and whenever discovery fails. Refusing an unrecognised id there would
  * reject an employee's own configured model for reasons that have nothing to do
  * with the model — so the id is allowed through with a warning, and the engine
  * reports the real error if it turns out to be wrong.
@@ -140,7 +139,6 @@ const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
   // `--variant` exists, but nothing opencode reports says which models accept
   // which variants, so no model here claims effort support. See opencode-models.ts.
   opencode: "none",
-  // The level rides on each `turn/start` as `reasoningEffort`.
   musecode: "musecode-turn",
 };
 

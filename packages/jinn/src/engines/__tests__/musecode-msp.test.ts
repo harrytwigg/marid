@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../shared/logger.js", () => ({ logger: { warn: vi.fn(), debug: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
-import { MspClient, MspClosedError, MspError, MspProcess, MspTimeoutError, uuidv7 } from "../musecode-msp.js";
+import { MspClient, MspClosedError, MspError, MspTimeoutError, uuidv7 } from "../musecode-msp.js";
+import { MspProcess } from "../musecode-process.js";
 
 /** A client wired to in-memory pipes: `toServer` is what it wrote, `fromServer` is where the test speaks as the host. */
 function pair() {

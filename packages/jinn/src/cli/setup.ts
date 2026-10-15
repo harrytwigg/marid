@@ -24,6 +24,7 @@ import {
 } from "../shared/paths.js";
 import { initDb } from "../shared/db.js";
 import { getPackageVersion } from "../shared/version.js";
+import { MUSE_LOGIN_NUDGE, checkMuse, reportMuseVersion } from "./setup-musecode.js";
 import { deriveTodoIdPrefix } from "../work-items/id.js";
 import {
   deriveTemplateMaterializationInputs,
@@ -405,14 +406,7 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
   }
 
   // 4c. Check for Muse Code (`muse`)
-  const musePath = whichBin("muse");
-  if (musePath) {
-    ok(`muse found at ${musePath}`);
-  } else {
-    fail("muse not found");
-    info("Install Muse Code: curl -fsSL https://dev.meta.ai/install.sh | bash");
-  }
-
+  const musePath = checkMuse(whichBin, { ok, fail, info });
   // 5. Loudly warn if NO engine is installed — the gateway will start, but it
   //     cannot run any session until at least one engine CLI is on PATH.
   if (!claudePath && !codexPath && !grokPath && !hermesPath && !musePath) {
@@ -443,11 +437,7 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
     if (ver) ok(`hermes --version: ${ver}`);
     else warn("hermes --version failed");
   }
-  if (musePath) {
-    const ver = runVersion("muse");
-    if (ver) ok(`muse --version: ${ver}`);
-    else warn("muse --version failed");
-  }
+  if (musePath) reportMuseVersion(runVersion("muse"), { ok, warn });
   // A successful --version does NOT mean the engine is authenticated — the #1
   // silent fresh-install failure. Nudge the login step explicitly.
   if (claudePath || codexPath || grokPath || hermesPath || musePath) {
@@ -456,7 +446,7 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
     if (codexPath) info("First run? Launch `codex` once and sign in to authenticate.");
     if (grokPath) info("First run? Launch `grok` once to authenticate, or configure XAI_API_KEY.");
     if (hermesPath) info("First run? Launch `hermes` once to authenticate, or configure your API key.");
-    if (musePath) info("First run? Run `muse login` to authenticate, or set META_API_KEY.");
+    if (musePath) info(MUSE_LOGIN_NUDGE);
     info("Do this before `jinn start`, or sessions will fail silently.");
   }
 
