@@ -12,6 +12,8 @@ import { ChatHydrationOverlay, useHydrationSpinner } from '@/components/chat/cha
 import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-session-queue'
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
 import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
+import { FallbackModeChip } from './fallback-mode-chip'
+import type { SessionFallbackView } from './fallback-mode-model'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
 import { useLiveSession } from '@/hooks/use-live-session'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
@@ -555,6 +557,7 @@ export function ChatPane({
           ) : undefined
         }
         selectorSlot={
+          <>
           <ModelSelectorRow
             mode={sessionId ? 'existing' : 'new'}
             value={selector}
@@ -564,6 +567,14 @@ export function ChatPane({
             disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
           />
+          {sessionId ? (
+            <FallbackModeChip
+              sessionId={sessionId}
+              view={currentSession?.fallback as SessionFallbackView | undefined}
+              disabled={loading}
+            />
+          ) : null}
+          </>
         }
         terminalActionsSlot={
           viewMode === 'cli' && sessionId ? (
