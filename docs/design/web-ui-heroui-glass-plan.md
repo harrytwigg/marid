@@ -389,21 +389,31 @@ slice is verified in Chromium or WebKit some other way.
 
 ## 7. Renaming the product
 
-A product rename is decided and sequenced separately from these slices. The
-identity here takes the name from one place (`lib/brand.ts`), so no slice
-waits on it. When a name is chosen, the rename replaces every "Jinn" and
-"Marid" reference in the repository, the internal codename included, with
-three exceptions:
+A product rename would be decided and sequenced separately from these
+slices. The identity here takes the name from one place (`lib/brand.ts`), so
+no slice waits on it.
 
-- the fork attribution in `NOTICE`/`LICENSE`, which the MIT licence requires;
+If a name is chosen, the rename replaces every "Jinn" and "Marid" reference
+in the repository, the internal codename included. Some things are kept:
+
+- the fork attribution in `LICENSE`/`NOTICE`, which the MIT licence requires;
 - links to the upstream repository;
-- released changelog and migration entries.
+- released changelog entries, and the released instance-migration bundles
+  that upgrades merge against;
+- the desktop and mobile app identifiers and deep-link scheme, because a new
+  identifier is a new app;
+- Docker volume names and mount paths, because renaming them would look like
+  data loss.
 
 It lands as separate pull requests:
 
-1. **A compatibility layer first:** environment variables are read under
-   both names, existing homes and browser settings migrate in place, and the
-   MCP server answers to both names for one release.
+1. **A compatibility layer first:**
+   - environment variables and wire headers work under both names;
+   - existing homes, department stages and agent transcripts move in place;
+   - instance identity and the host registry carry over;
+   - browser settings and saved gateways are copied;
+   - plugins that import the old SDK name keep loading;
+   - each instance switches its tool-server name at its own upgrade.
 2. **The user-visible name.**
 3. **A rerunnable codemod** with a CI guard against the old names.
 4. **The docs.**
@@ -412,4 +422,3 @@ It lands as separate pull requests:
 
 The cost is that upstream changes can no longer be merged, only ported by
 hand.
-
