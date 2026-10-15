@@ -6,6 +6,8 @@ import { logger } from "../shared/logger.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { orgRegistry } from "../gateway/org-registry.js";
 import { runsOnlyOnClaude, scopedEngineRefusal } from "./scoped-engine.js";
+import { startsOnPreferredEngine } from "./session-fallback.js";
+import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
 
 /**
  * Validate a mid-chat model/effort change for an existing session.
@@ -45,7 +47,7 @@ export interface SessionPatchContext {
 export function validateNewSessionSelection(
   config: JinnConfig,
   body: { engine?: unknown; model?: unknown; effortLevel?: unknown },
-  defaults: { engine?: string; model?: string; effortLevel?: string; employee?: string } = {},
+  defaults: { engine?: string; model?: string; effortLevel?: string; employee?: string; fallbackMode?: SessionFallbackMode } = {},
 ): NewSessionSelectionResult {
   const registry = getModelRegistry(config);
   let engine: string = defaults.engine?.trim() || config.engines.default;
@@ -75,8 +77,10 @@ export function validateNewSessionSelection(
   // Nor is a department-scoped employee, which runs only on claude.
   const ownAccount = engine === "claude" && Boolean(defaults.employee)
     && resolveEmployeeClaudeProfile(orgRegistry().get(defaults.employee!)) !== null;
+  // Nor is a session whose fallback mode is `auto-resume` (`defaults.fallbackMode`, else the config's):
+  // it starts where it prefers and waits out a spent allowance.
   if (body.engine === undefined && body.model === undefined && isKnownEngine(engine) && !ownAccount
-    && !runsOnlyOnClaude(defaults.employee)) {
+    && !runsOnlyOnClaude(defaults.employee) && !startsOnPreferredEngine(config, defaults.fallbackMode)) {
     // NOT scoped by host, unlike the other two engine-choosing paths: `defaults`
     // carries the employee's NAME, not its record, so this cannot tell whether
     // the session runs here or on another machine. Until the Employee is

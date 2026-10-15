@@ -106,7 +106,7 @@ describe("a session with background sub-agents still working", () => {
       id: SID, engine: "claude", engineSessionId: null, source: "web", sourceRef: `web:${SID}`,
       connector: "web", sessionKey: `web:${SID}`, replyContext: null, messageId: null,
       transportMeta: null, employee: null, model: null, title: null, parentSessionId: null,
-      status: "idle", effortLevel: null, totalCost: 0, totalTurns: 0, lastContextTokens: null,
+      status: "idle", effortLevel: null, fallbackMode: null, totalCost: 0, totalTurns: 0, lastContextTokens: null,
       createdAt: at(T0), lastActivity: at(T0), lastError: null,
     };
     activity = new Map();

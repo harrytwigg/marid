@@ -22,7 +22,7 @@ function session(id: string, overrides: Partial<Session> = {}): Session {
     effortLevel: null,
     totalCost: 0,
     totalTurns: 0,
-    lastContextTokens: null,
+    lastContextTokens: null, fallbackMode: null,
     createdAt: "2026-07-20T10:00:00.000Z",
     lastActivity: "2026-07-20T10:00:00.000Z",
     lastError: null,

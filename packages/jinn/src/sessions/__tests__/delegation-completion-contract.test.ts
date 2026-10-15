@@ -46,7 +46,7 @@ function child(overrides: Partial<Session> = {}): Session {
     effortLevel: null,
     totalCost: 0,
     totalTurns: 1,
-    lastContextTokens: null,
+    lastContextTokens: null, fallbackMode: null,
     createdAt: "2026-07-10T08:00:00.000Z",
     lastActivity: "2026-07-10T08:01:00.000Z",
     lastError: null,

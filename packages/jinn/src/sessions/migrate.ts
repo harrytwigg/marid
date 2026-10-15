@@ -311,6 +311,8 @@ export function migrateSessionsSchema(database: Database.Database): void {
     ['total_turns', 'INTEGER', '0'],
     ['effort_level', 'TEXT'],
     ['last_context_tokens', 'INTEGER'],
+    // NULL follows `sessions.fallbackMode` (shared/session-fallback-config.ts).
+    ['fallback_mode', 'TEXT'],
     ['user_id', 'TEXT'],
     // No backfill: pre-existing sessions stay NULL (no excerpt); only new sessions populate it.
     ['prompt_excerpt', 'TEXT'],

@@ -9,6 +9,8 @@ import {
 import { logger } from "../shared/logger.js";
 import { reroutedSessionMeta } from "./engine-override-window.js";
 import { runsOnlyOnClaude } from "./scoped-engine.js";
+import { startsOnPreferredEngine } from "./session-fallback.js";
+import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
 
 /** What a routed turn brought with it about where the session should run. */
 export interface NewSessionEnginePreference {
@@ -16,6 +18,8 @@ export interface NewSessionEnginePreference {
   model?: string;
   effortLevel?: string;
   employee?: Employee;
+  /** The mode the new session will carry; absent, the config's. `auto-resume` starts it on its preferred engine. */
+  fallbackMode?: SessionFallbackMode;
 }
 
 /**
@@ -51,7 +55,9 @@ function healthyStart(
   // prefers, whatever the default account's health says; a rate limit then walks its own chain.
   const ownAccount = preferred === "claude" && resolveEmployeeClaudeProfile(preference.employee) !== null;
   // A department-scoped employee runs only on claude; a rate limit then moves it between claude accounts only.
-  if (named || ownAccount || runsOnlyOnClaude(preference.employee?.name)) return { engine: preferred, health: {} };
+  if (named || ownAccount || runsOnlyOnClaude(preference.employee?.name) || startsOnPreferredEngine(config, preference.fallbackMode)) {
+    return { engine: preferred, health: {} };
+  }
   // A remote employee's preference may only be reordered within the engines that
   // can actually run on its host. Rerouting it onto one that ignores
   // `remoteHost` would start the session on an engine whose every turn the

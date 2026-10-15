@@ -14,6 +14,7 @@ import { logger } from "../shared/logger.js";
 import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { isSpellableModelId } from "../shared/model-id.js";
 import { accountOverride } from "./session-account.js";
+import { isAutoResume } from "./session-fallback.js";
 import { extendSpentWindow } from "./engine-override-window.js";
 import { effortLevelsForModel, getModelRegistry } from "../shared/models.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
@@ -217,20 +218,32 @@ function restoredThread(session: Session, meta: Record<string, unknown>, parked:
   return parked.engineSessionId ?? getEngineSessionRef(unswapped, parked.engine).id ?? null;
 }
 
+/** The session while its stand-in still holds: the window is open, or the engine is known to be
+ *  spent still and the window moved out. Undefined when it is over, and always for `auto-resume`. */
+function heldOverride(opts: {
+  session: Session; meta: Record<string, unknown>; override: Record<string, unknown>; parked: ParkedOverride;
+  employee?: Employee; config?: Pick<JinnConfig, "sessions">;
+}): Session | undefined {
+  const { session, meta, override, parked, employee, config } = opts;
+  if (isAutoResume(config ?? {}, session)) return undefined;
+  if (parked.until.getTime() > Date.now()) return session;
+  return extendSpentWindow(session, meta, override, parked.engine, employee);
+}
+
 /** Restore the pre-rate-limit engine, and the model that belonged to it, once the
  *  override window has expired — or move the window out, when the engine is
- *  known to be spent still. */
-export function maybeRevertEngineOverride(session: Session, employee?: Employee): Session {
+ *  known to be spent still. A session whose fallback mode is `auto-resume` never
+ *  stands on a stand-in: its override counts as expired at once (`config` says
+ *  whether the default makes it so; without it only the session's own mode counts). */
+export function maybeRevertEngineOverride(session: Session, employee?: Employee, config?: Pick<JinnConfig, "sessions">): Session {
   const meta = (session.transportMeta || {}) as Record<string, unknown>;
   const override = meta["engineOverride"] as Record<string, unknown> | undefined;
   if (!override) return session;
 
   const parked = parkedOverride(override);
   if (!parked) return session;
-  if (parked.until.getTime() > Date.now()) return session;
-
-  const extended = extendSpentWindow(session, meta, override, parked.engine, employee);
-  if (extended) return extended;
+  const held = heldOverride({ session, meta, override, parked, employee, config });
+  if (held) return held;
 
   // Park the fallback engine's own thread id under its typed ref before handing
   // the mirror back to the engine being restored.
