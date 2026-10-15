@@ -10,8 +10,8 @@ dark.
 
 A working prototype of both halves (HeroUI wired in through a token bridge,
 the glass identity on the real shell, chat, board, Todo and settings screens)
-is in the companion prototype pull request, with before/after sheets attached
-in the format every slice will use.
+is in the prototype pull request (#165, not for merge), with before/after
+sheets attached in the format every slice will use.
 
 ---
 
@@ -108,8 +108,8 @@ references: Windows 7 Aero title bars, "Frutiger Aero" (sky, water, gloss),
 macOS sidebar vibrancy, visionOS glass materials (glass for chrome, solid
 ground for reading).
 
-Mockups: the identity board and the prototype's before/after sheets are
-attached to the prototype pull request.
+Mockups: the identity board is attached to this plan's pull request (#164);
+the prototype's before/after sheets are on #165.
 
 **Palette** (accent / info / success / highlight / danger / text):
 
