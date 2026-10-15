@@ -88,6 +88,7 @@ export const SESSION_CASES: Record<string, CaseBuilder> = {
   "GET /api/sessions/:id": onSession("GET", "", 200),
   "GET /api/sessions/:id/messages": onSession("GET", "/messages", 200),
   "GET /api/sessions/:id/transcript": onSession("GET", "/transcript", 200),
+  "GET /api/sessions/:id/waits": onSession("GET", "/waits", 200),
   "GET /api/sessions/:id/context": context,
   "POST /api/sessions/:id/stop": stop,
   "GET /api/sessions/:id/children": onSession("GET", "/children", 200, undefined, async (fx) => fx.self.id),

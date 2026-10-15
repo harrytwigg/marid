@@ -1,14 +1,14 @@
-/** Task ids of the finished background tasks announced by the
- *  `<task-notification>` blocks in `text`. A notification without a `<status>`
- *  (a Monitor's per-event notice) is not an ending. Its own module so the
- *  proxy and the engine's hook path share it, and a test that mocks the proxy
- *  does not take it away from the engine. */
 /** The notification body without its `<event>` blocks: an event is a Monitor's command output, which can
  *  say anything, `<status>` included, so only the CLI's own tags may be read as an ending. */
 function withoutEvents(body: string): string {
   return body.replace(/<event>[\s\S]*?<\/event>/g, "");
 }
 
+/** Task ids of the finished background tasks announced by the
+ *  `<task-notification>` blocks in `text`. A notification without a `<status>`
+ *  (a Monitor's per-event notice) is not an ending. Its own module so the
+ *  proxy and the engine's hook path share it, and a test that mocks the proxy
+ *  does not take it away from the engine. */
 export function finishedTaskNotificationIds(text: string): string[] {
   const ids: string[] = [];
   for (const [, body] of text.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)) {
