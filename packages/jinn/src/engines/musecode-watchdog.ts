@@ -13,13 +13,13 @@ import type { OpenedSession } from "./musecode-run.js";
  * Without a bound the turn sits running until it is interrupted or times out.
  */
 
-/** How long an accepted turn may go without the host sending anything about it. */
+/** How long an accepted (`disposition: started`) turn may go without the host announcing `turn/started`. */
 export const FIRST_EVENT_TIMEOUT_MS = 120_000;
 
 export const MUSECODE_NEVER_STARTED = "Muse Code accepted the turn but never started it.";
 
 export interface SilenceWatch {
-  /** Resolves when the host has been silent for the whole bound; never if it speaks first or the watch is cancelled. */
+  /** Resolves when `turn/started` has not come within the bound; never if it comes first, the turn completes, or the watch is cancelled. */
   silent: Promise<void>;
   cancel(): void;
 }
@@ -34,7 +34,7 @@ export function watchForSilence(turn: MuseTurn, timeoutMs: number): SilenceWatch
   const silent = new Promise<void>((resolve) => {
     const deadline = Date.now() + timeoutMs;
     poll = setInterval(() => {
-      if (turn.hasHeardFromHost || turn.isCompleted) return cancel();
+      if (turn.hasStarted || turn.isCompleted) return cancel();
       if (Date.now() < deadline) return;
       cancel();
       resolve();

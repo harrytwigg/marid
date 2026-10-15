@@ -45,6 +45,13 @@ describe("a turn the host accepts and never speaks of", () => {
     expect(isDeadSessionError(result)).toBe(false);
   }, 30_000);
 
+  it("is watched only once the host says the turn started, not when it queued it", async () => {
+    ctx.engine = new MusecodeEngine({ firstEventTimeoutMs: 400 });
+    vi.stubEnv("FAKE_MUSE_DISPOSITION", "queued");
+    const result = await ctx.engine.run(opts({ prompt: SILENT }));
+    expect(result.error).toBe("Muse Code did not start the turn (queued)");
+  }, 30_000);
+
   it("does not touch a turn whose host has spoken, even one that then hangs, however short the bound", async () => {
     ctx.engine = new MusecodeEngine({ firstEventTimeoutMs: 100 });
     let settled = false;

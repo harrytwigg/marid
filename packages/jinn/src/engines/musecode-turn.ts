@@ -66,8 +66,8 @@ export class MuseTurn {
   private contextUsed: number | undefined;
   private latestUsage: MuseUsageSnapshot | undefined;
   private unqueued = false;
-  /** Whether the host has sent anything at all about this session since the turn was asked for. */
-  hasHeardFromHost = false;
+  /** Whether the host has said the turn began (`turn/started`). Nothing later counts: a retrying provider starts the turn and then goes quiet. */
+  hasStarted = false;
   private completedWaiters: Array<() => void> = [];
 
   constructor(
@@ -100,7 +100,7 @@ export class MuseTurn {
     // The account's usage is not any one session's.
     if (method === "usage/changed") return this.readUsageChanged(params);
     if (str(params.sessionId) !== this.sessionId) return;
-    this.hasHeardFromHost = true;
+    if (method === "turn/started") this.hasStarted = true;
     this.sessionNotification(method, params);
   }
 

@@ -36,7 +36,7 @@
 //   NOANSWER    the turn completes with no agent message at all
 // Environment hooks (see also fake-muse-queries.mjs and fake-muse-store.mjs):
 //   FAKE_MUSE_LOG a JSON line per request; FAKE_MUSE_STATE_DIR where sessions live; FAKE_MUSE_RESET_MS the QUOTA reset
-//   FAKE_MUSE_RESUME_FAIL  a message every `session/resume` fails with; FAKE_MUSE_BOOT_EXIT  exit code before reading anything
+//   FAKE_MUSE_RESUME_FAIL  a message every `session/resume` fails with; FAKE_MUSE_BOOT_EXIT  exit code before reading anything; FAKE_MUSE_DISPOSITION  the `turn/start` disposition (default started)
 //   FAKE_MUSE_NO_GRANT   grant no capability. (A `required` MCP server under /nonexistent fails the turn, as on the real host.)
 import fs from "node:fs";
 import readline from "node:readline";
@@ -161,7 +161,7 @@ function startTurn(id, params) {
   if (!session) return fail(id, -32024, "session not loaded", { kind: "sessionNotLoaded" });
   const text = params.input.filter((p) => p.type === "text").map((p) => p.text).join("\n");
   const turnId = params.commandId;
-  reply(id, { commandId: params.commandId, disposition: "started", startedNewTurn: true, status: "accepted", turnId });
+  reply(id, { commandId: params.commandId, disposition: process.env.FAKE_MUSE_DISPOSITION || "started", startedNewTurn: true, status: "accepted", turnId });
   if (!directivesOf(text).has("SILENT")) void runTurn({ session, turnId, text, params }); // SILENT: accepted, then never a notification
 }
 

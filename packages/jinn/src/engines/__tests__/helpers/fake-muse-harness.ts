@@ -34,7 +34,7 @@ export function useFakeMuse(): void {
     ctx.logFile = path.join(ctx.tmp, "requests.jsonl");
     vi.stubEnv("FAKE_MUSE_STATE_DIR", path.join(ctx.tmp, "state"));
     vi.stubEnv("FAKE_MUSE_LOG", ctx.logFile);
-    for (const name of ["FAKE_MUSE_RESET_MS", "FAKE_MUSE_RESUME_FAIL", "FAKE_MUSE_IN_USE", "FAKE_MUSE_REFUSED", "FAKE_MUSE_PROJECTION_UNAVAILABLE", "FAKE_MUSE_BOOT_EXIT", "FAKE_MUSE_NO_GRANT"]) vi.stubEnv(name, "");
+    for (const name of ["FAKE_MUSE_RESET_MS", "FAKE_MUSE_RESUME_FAIL", "FAKE_MUSE_IN_USE", "FAKE_MUSE_REFUSED", "FAKE_MUSE_DISPOSITION", "FAKE_MUSE_PROJECTION_UNAVAILABLE", "FAKE_MUSE_BOOT_EXIT", "FAKE_MUSE_NO_GRANT"]) vi.stubEnv(name, "");
     vi.stubEnv("CLAUDECODE", "1");
     vi.stubEnv("CODEX_HOME", "/somewhere");
     ctx.streamed = [];
