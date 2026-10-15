@@ -82,7 +82,7 @@ describe("the walk's runner settings", () => {
   });
 
   it("refuses an engine this build does not know, and one the walk cannot be confined on", () => {
-    expect(resolveSettings({ engine: "nonsense" }).problems).toEqual(['engine "nonsense" is not one of claude, codex, antigravity, grok, pi, hermes, opencode']);
+    expect(resolveSettings({ engine: "nonsense" }).problems).toEqual(['engine "nonsense" is not one of claude, codex, antigravity, grok, pi, hermes, opencode, musecode']);
     expect(resolveSettings({ engine: "codex" }).problems).toEqual(['the board walk can only run on claude or opencode, so that its turn has only the walk\'s tools; "codex" cannot be confined to them']);
   });
 

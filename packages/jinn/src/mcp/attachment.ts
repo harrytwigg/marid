@@ -65,10 +65,12 @@ export const JINN_ATTACH_DEFAULT = true;
  *   - pi:     per-session generated `--extension` file; id/capability ride the
  *             Pi child env.
  *   - antigravity: guarded Gemini MCP config entry plus per-session child env.
+ *   - musecode: `config.mcpServers` of the session's `session/start` / `session/resume`,
+ *             over the host's stdin; nothing staged on disk.
  * (Lives here, not in resolver.ts, so the attachment decision can consult it
  * without an import cycle; resolver.ts re-exports it.)
  */
-export const MCP_CAPABLE_ENGINES: ReadonlySet<string> = new Set(["claude", "codex", "hermes", "grok", "pi", "antigravity", "opencode"]);
+export const MCP_CAPABLE_ENGINES: ReadonlySet<string> = new Set(["claude", "codex", "hermes", "grok", "pi", "antigravity", "opencode", "musecode"]);
 
 /** Whether an engine's adapter can consume a resolved MCP server set. */
 export function isMcpCapableEngine(engine: string | undefined): boolean {

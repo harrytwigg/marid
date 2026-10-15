@@ -155,6 +155,10 @@ export interface JinnConfig {
       usageLimits?: OpencodeUsageLimitsConfig;
       autoCompact?: AutoCompactConfig; // server mode only
     };
+    /** Muse Code (`muse` CLI) engine. `bin` optional — PATH-resolved. `model` is
+     *  a Muse catalog id (`muse-spark-1.2`); `effortLevel` rides on each turn as
+     *  `reasoningEffort`. */
+    musecode?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[]; fallbackModelMap?: Record<string, string> };
   };
   /** Optional model + capability registry. When absent, synthesized from engines.<name>.model. */
   models?: ModelsConfig;
