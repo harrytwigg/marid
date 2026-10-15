@@ -28,9 +28,10 @@ export interface MonitorEventNotice {
 }
 
 const EVENT_LINE_MAX = 300;
-/** The CLI's wording of a timeout notice (2.1.300). Nothing else announces it, so a reworded notice would
- *  leave the Monitor listed until its PTY is released. */
-const MONITOR_EXPIRED = /^\[Monitor expired after\b/;
+/** The CLI's two wordings of a timeout notice (2.1.300): "[Monitor expired after …]" when its timeouts
+ *  are bounded, "[Monitor timed out — re-arm if needed.]" otherwise. A reworded notice falls back on
+ *  the deadline the store keeps from the Monitor's own timeout. */
+const MONITOR_EXPIRED = /^\[Monitor (?:expired after|timed out)\b/;
 
 /** The Monitor events announced by the `<task-notification>` blocks in `text`: the blocks with no
  *  `<status>` (an ending is `finishedTaskNotificationIds`' business). */

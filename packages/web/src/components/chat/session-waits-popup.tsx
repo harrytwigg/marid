@@ -69,7 +69,7 @@ function Sections({ nodes, finished, others, now, onOpen }: {
         </Section>
       ) : null}
       {finished.length ? (
-        <Section title="Finished, not picked up yet">
+        <Section title="Finished since the last turn">
           <SessionTree nodes={finished} now={now} onOpen={onOpen} />
         </Section>
       ) : null}

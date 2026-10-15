@@ -1644,8 +1644,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   /** Background tasks per session, by task id: background Bash and Monitors (`activeMonitors`) and
    *  sub-agents launched by a top-level Agent/Task call that returned async (`backgroundAgents`).
    *  Each ends with the task notification announcing it, a TaskStop, a TaskOutput that found it
-   *  finished, or (a Monitor) its timeout notice. */
-  private taskStore = new BackgroundTaskStore();
+   *  finished, or (a Monitor) its timeout notice or, failing that, its deadline, which re-emits. */
+  private taskStore = new BackgroundTaskStore((jinnSessionId) => this.publishBackgroundState(jinnSessionId));
   private backgroundSilenceTimers = new Map<string, NodeJS.Timeout>();
   private backgroundActivityCb?: (jinnSessionId: string, info: UpstreamActivityInfo | null) => void;
   /** Test override for the post-settle clear quiet window (default 10s). */

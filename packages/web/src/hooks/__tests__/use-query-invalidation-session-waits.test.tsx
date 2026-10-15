@@ -56,6 +56,20 @@ describe('the "waiting on" popup follows the session events', () => {
     await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2), { timeout: 4_000 })
   })
 
+  it('asks for the waits once when a status change and its background change land in one flush', async () => {
+    const { queryFn, invalidated } = setup(true)
+    await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1))
+    invalidated.mockClear()
+
+    act(() => {
+      listener?.('session:completed', { sessionId: 'some-child' })
+      listener?.('session:background', { sessionId: 's-1', backgroundActivity: null })
+    })
+
+    await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2), { timeout: 4_000 })
+    expect(waitsInvalidations(invalidated)).toHaveLength(1)
+  })
+
   it('leaves a background change alone when no popup is open', async () => {
     const { invalidated } = setup(false)
 

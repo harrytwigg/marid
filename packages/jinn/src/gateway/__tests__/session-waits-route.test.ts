@@ -142,4 +142,19 @@ describe("a scoped caller", () => {
       sessionId: "hidden", reportsTo: self.id, employee: null, employeeDisplayName: null, title: null, todo: null, status: "running",
     });
   });
+
+  it("does not name another department's Todo that a child of its own works", async () => {
+    const self = await sessionOf("side-dev");
+    const peer = await sessionOf("side-qa", { parentSessionId: self.id });
+    // The store refuses this link for a bound session; only a link made around it, by an unscoped
+    // actor or before the department was bound, can leave one standing.
+    const { initDb } = await import("../../shared/db.js");
+    initDb().prepare("UPDATE sessions SET work_item_id = ?, work_item_role = 'execute' WHERE id = ?").run(todo.id, peer.id);
+    running(peer);
+
+    const [item] = (await waits(self.id, asCaller(self.id))).body.items;
+
+    expect(item).toMatchObject({ sessionId: peer.id, restricted: false, relation: "delegated", employee: "side-qa", todo: null });
+    expect(JSON.stringify(item)).not.toContain("waits-todo");
+  });
 });

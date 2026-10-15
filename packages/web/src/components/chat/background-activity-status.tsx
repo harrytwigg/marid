@@ -16,25 +16,28 @@ interface ActivityCopy {
   short: string
   title: string
   count?: number
+  /** The popup lists what this says: delegated sessions, or work the turn left running. Model
+   *  requests in flight alone are not listed, so they leave the label a plain status. */
+  listable: boolean
 }
 
 /** The runtime part of the line. Work the turn left running is counted as
  *  the answer caption counts it; model requests in flight with nothing else
  *  pending fall back to the in-flight agent count. */
-function runtimeCopy(activity: BackgroundActivity | null, nowMs: number): { long: string; short: string } {
+function runtimeCopy(activity: BackgroundActivity | null, nowMs: number): { long: string; short: string; listable: boolean } {
   const work = pendingWork(activity, null, nowMs)
   if (work) {
     const parts = [
       ...(work.subAgents ? [countLabel(work.subAgents, 'sub-agent')] : []),
       ...(work.monitors ? [countLabel(work.monitors, 'monitor')] : []),
     ]
-    if (!parts.length) return { long: 'Background re-run in progress', short: 'Re-running' }
+    if (!parts.length) return { long: 'Background re-run in progress', short: 'Re-running', listable: true }
     const short = [...parts, ...(work.rerun ? ['re-run'] : [])].join(' · ')
-    return { long: `${joinParts([...parts, ...(work.rerun ? ['a re-run'] : [])])} in background`, short }
+    return { long: `${joinParts([...parts, ...(work.rerun ? ['a re-run'] : [])])} in background`, short, listable: true }
   }
   const agents = activity?.activeAgents ?? activity?.activeStreams ?? 0
-  if (agents > 0) return { long: `${countLabel(agents, 'agent')} in background`, short: countLabel(agents, 'agent') }
-  return { long: 'Background work in progress', short: 'Working' }
+  if (agents > 0) return { long: `${countLabel(agents, 'agent')} in background`, short: countLabel(agents, 'agent'), listable: false }
+  return { long: 'Background work in progress', short: 'Working', listable: false }
 }
 
 function activityCopy(
@@ -53,6 +56,7 @@ function activityCopy(
         long: `${displayName} working`,
         short: `Working · ${displayName}`,
         title,
+        listable: true,
       }
     }
     if (employees.length > 1) {
@@ -62,6 +66,7 @@ function activityCopy(
         short: `${employees.length} working`,
         title,
         count: employees.length,
+        listable: true,
       }
     }
     return {
@@ -69,17 +74,19 @@ function activityCopy(
       long: 'Delegated work in progress',
       short: 'Work in progress',
       title,
+      listable: true,
     }
   }
 
   const nowMs = Date.now()
   if (!isBackgroundActivityVisible(activity, nowMs)) return null
-  const { long, short } = runtimeCopy(activity, nowMs)
+  const { long, short, listable } = runtimeCopy(activity, nowMs)
   return {
     kind: 'runtime',
     long,
     short,
     title: 'Background work running after the turn ended',
+    listable,
   }
 }
 
@@ -148,12 +155,14 @@ export function BackgroundActivityStatus({
     if (!rendered) return
     const timer = window.setTimeout(() => setRendered(false), reducedMotion ? 1 : EXIT_MS)
     return () => window.clearTimeout(timer)
-  }, [active, currentCopy?.kind, currentCopy?.long, currentCopy?.short, currentCopy?.title, reducedMotion, rendered])
+  }, [active, currentCopy?.kind, currentCopy?.long, currentCopy?.short, currentCopy?.title, currentCopy?.listable, reducedMotion, rendered])
 
-  // The popup goes with the status: it starts closing when the fade-out does.
+  // The popup goes with the status, and with anything it could list: it starts closing when the
+  // fade-out does, or when only model requests in flight are left.
+  const listable = currentCopy?.listable === true
   useEffect(() => {
-    if (!active) closePopup()
-  }, [active, closePopup])
+    if (!listable) closePopup()
+  }, [listable, closePopup])
 
   if (!rendered || !shownCopy) return null
 
@@ -185,7 +194,7 @@ export function BackgroundActivityStatus({
           : `opacity ${entered ? 160 : EXIT_MS}ms var(--ease-smooth), transform ${entered ? 160 : EXIT_MS}ms var(--ease-smooth)`,
       }}
     >
-      {sessionId ? (
+      {sessionId && shownCopy.listable ? (
         <Popover open={popupOpen} onOpenChange={setPopupOpen}>
           <PopoverTrigger asChild>
             <button

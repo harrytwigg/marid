@@ -120,14 +120,50 @@ describe("InteractiveClaudeEngine — background task details", () => {
       expect(tasks()).toEqual([]);
     });
 
-    it("drops a Monitor whose timeout elapsed, which the CLI announces as one more event", () => {
+    // The CLI (2.1.300) words the notice one way when its timeouts are bounded, the other way when not.
+    it.each([
+      "[Monitor expired after 600s with 3 events delivered. Re-arm it if you still need the watch.]",
+      "[Monitor timed out \u2014 re-arm if needed.]",
+    ])("drops a Monitor whose timeout elapsed, which the CLI announces as one more event: %s", (notice) => {
       launchMonitor("mon-1");
-      notify(eventNotice("mon-1", "[Monitor expired after 600s with 3 events delivered. Re-arm it if you still need the watch.]"));
+      notify(eventNotice("mon-1", notice));
       settleRerun();
 
       expect(tasks()).toEqual([]);
       vi.advanceTimersByTime(1_000);
       expect(events.at(-1)).toBeNull();
+    });
+
+    it("takes the timeout the CLI answered over the one asked for, and none for a persistent Monitor", () => {
+      launchMonitor("mon-capped", { tool_input: { description: "capped", timeout_ms: 3_600_000, command: "tail -f a.log" }, tool_response: { taskId: "mon-capped", timeoutMs: 1_800_000, persistent: false } });
+      launchMonitor("mon-kept", { tool_input: { description: "kept", timeout_ms: 300_000, command: "tail -f b.log" }, tool_response: { taskId: "mon-kept", timeoutMs: 0, persistent: true } });
+
+      expect(tasks().map((task) => [task.id, task.timeoutMs])).toEqual([["mon-capped", 1_800_000], ["mon-kept", null]]);
+    });
+
+    it("drops a timed Monitor at its deadline when no notice says so, and re-emits", () => {
+      launchMonitor("mon-1");
+      launchMonitor("mon-kept", { tool_response: { taskId: "mon-kept", timeoutMs: 0, persistent: true } });
+
+      vi.advanceTimersByTime(600_000 + 60_000 - 1);
+      expect(tasks().map((task) => task.id)).toEqual(["mon-1", "mon-kept"]);
+      vi.advanceTimersByTime(1);
+      expect(tasks().map((task) => task.id)).toEqual(["mon-kept"]);
+      expect(events.at(-1)).toMatchObject({ activeMonitors: 1 });
+
+      vi.advanceTimersByTime(24 * 60 * 60_000);
+      expect(tasks().map((task) => task.id)).toEqual(["mon-kept"]);
+    });
+
+    it("does not report a Monitor again at the deadline of one that already ended", () => {
+      launchMonitor("mon-1");
+      notify(endNotice("mon-1"));
+      settleRerun();
+      vi.advanceTimersByTime(1_000);
+      const reported = events.length;
+
+      vi.advanceTimersByTime(600_000 + 60_000);
+      expect(events).toHaveLength(reported);
     });
 
     it("drops a Monitor that TaskStop stopped, and a late event does not bring it back", () => {

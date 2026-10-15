@@ -69,7 +69,11 @@ export function handleSessionWaitsApi(res: ServerResponse, route: ParsedRoute, d
     statusOf: deps.statusOf,
     canRead: readable,
     employeeDisplayName: deps.employeeDisplayName,
-    todoTitle: (workItemId) => getWorkItem(workItemId)?.title ?? null,
+    // The redactor withholds another department's Todo id but not free text, so its title is withheld here.
+    todoTitle: (workItemId) => {
+      const item = getWorkItem(workItemId);
+      return item && (department === null || item.department === department) ? item.title : null;
+    },
     openRunStartedAt: (child) => findOpenWorkItemRunBySession(child.id)?.startedAt ?? null,
     engine: engineReport(session, deps),
     heartbeats: listHeartbeatsForSession(session.id),

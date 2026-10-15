@@ -173,11 +173,11 @@ describe('the waiting-on popup rows', () => {
     ['idle', 'Finished'],
     ['error', 'Failed'],
     ['interrupted', 'Stopped'],
-  ] as const)('moves a child that ends as %s to "Finished, not picked up yet" as %s', async (status, label) => {
+  ] as const)('moves a child that ends as %s to "Finished since the last turn" as %s', async (status, label) => {
     getSessionWaits().mockResolvedValueOnce(respond([builder, reviewer]))
     const { client } = mount()
     const { popup } = await openPopup()
-    expect(within(popup).queryByRole('heading', { name: /Finished, not picked up yet/ })).toBeNull()
+    expect(within(popup).queryByRole('heading', { name: /Finished since the last turn/ })).toBeNull()
 
     getSessionWaits().mockResolvedValue(respond([
       child({ ...builder, status, active: false, endedAt: iso(2 * MIN + 5_000) }),
@@ -185,7 +185,7 @@ describe('the waiting-on popup rows', () => {
     ]))
     await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.sessionWaits(PARENT) }) })
 
-    const finished = await within(popup).findByRole('region', { name: 'Finished, not picked up yet' })
+    const finished = await within(popup).findByRole('region', { name: 'Finished since the last turn' })
     expect(finished.textContent).toContain(label)
     expect(finished.textContent).toContain('finished 2m ago')
     expect(within(popup).getByRole('region', { name: 'Waiting on' }).textContent).toContain('Waiting')
@@ -212,7 +212,7 @@ describe('the waiting-on popup rows', () => {
     mount()
     const { popup } = await openPopup()
 
-    expect(within(popup).queryByRole('region', { name: 'Finished, not picked up yet' })).toBeNull()
+    expect(within(popup).queryByRole('region', { name: 'Finished since the last turn' })).toBeNull()
     const waiting = within(popup).getByRole('region', { name: 'Waiting on' })
     expect(within(waiting).getAllByTestId('session-wait-row')).toHaveLength(2)
   })

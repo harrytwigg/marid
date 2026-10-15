@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { EMPTY_CLOSE_MS } from '../session-waits-popup'
+import { BackgroundActivityStatus } from '../background-activity-status'
 import {
   Harness, PARENT, builder, getSessionWaits, monitor, mount, openPopup, respond, reviewer,
 } from './session-waits-fixtures'
@@ -126,5 +127,22 @@ describe('the waiting-on status as a button', () => {
 
     expect(await screen.findByText('Nothing pending')).toBeTruthy()
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: EMPTY_CLOSE_MS + 1500 })
+  })
+})
+
+describe('the status with nothing the popup lists', () => {
+  const now = () => new Date().toISOString()
+
+  it('stays plain text while only model requests are in flight, which the popup does not list', () => {
+    render(<BackgroundActivityStatus sessionId={PARENT} activity={{ activeStreams: 2, activeAgents: 2, lastActivityAt: now() }} />)
+
+    expect(screen.getByRole('status').textContent).toContain('2 agents in background')
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('is a button once the turn left work running that the popup lists', () => {
+    render(<BackgroundActivityStatus sessionId={PARENT} activity={{ activeStreams: 0, activeMonitors: 1, lastActivityAt: now() }} />)
+
+    expect(screen.getByRole('button', { name: /1 monitor/ })).toBeTruthy()
   })
 })

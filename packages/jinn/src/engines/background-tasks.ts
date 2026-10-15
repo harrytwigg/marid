@@ -41,10 +41,16 @@ function launchedProcess(input: Fields, response: Fields, base: Pick<LaunchedTas
   return { ...base, kind: "process", id: response.backgroundTaskId, command: clip(input.command, COMMAND_MAX), agentType: null, timeoutMs: null };
 }
 
+/** The timeout the Monitor runs under. The CLI's answer wins over what was asked: it caps the request
+ *  (10 or 30 minutes when bounded) and answers 0 for a persistent Monitor, which has none. */
+function monitorTimeout(input: Fields, response: Fields): number | null {
+  const timeout = typeof response?.timeoutMs === "number" ? response.timeoutMs : input?.timeout_ms;
+  return typeof timeout === "number" && timeout > 0 && response?.persistent !== true ? timeout : null;
+}
+
 function launchedMonitor(input: Fields, response: Fields, base: Pick<LaunchedTask, "description" | "startedAt">): LaunchedTask | null {
   if (typeof response?.taskId !== "string") return null;
-  const timeout = typeof input?.timeout_ms === "number" ? input.timeout_ms : response.timeoutMs;
-  return { ...base, kind: "monitor", id: response.taskId, command: monitorCommand(input), agentType: null, timeoutMs: typeof timeout === "number" ? timeout : null };
+  return { ...base, kind: "monitor", id: response.taskId, command: monitorCommand(input), agentType: null, timeoutMs: monitorTimeout(input, response) };
 }
 
 function launchedSubagent(input: Fields, response: Fields, base: Pick<LaunchedTask, "description" | "startedAt">): LaunchedTask | null {
@@ -71,9 +77,18 @@ export function launchedBackgroundTask(hook: HookPayload, now: number): Launched
   return null;
 }
 
+/** How long past its timeout a Monitor is still believed: the CLI's own notice normally ends it first. */
+export const MONITOR_DEADLINE_SLACK_MS = 60_000;
+
 /** The background tasks each session is waiting on, with what is known of each. In memory only. */
 export class BackgroundTaskStore {
   private readonly bySession = new Map<string, Map<string, TaskRecord>>();
+  /** A timed Monitor's backstop: the CLI kills it at its timeout, so it is over by then whether or
+   *  not the notice saying so was seen. */
+  private readonly deadlines = new Map<string, NodeJS.Timeout>();
+
+  /** `onOverdue` hears of a Monitor dropped at its deadline. */
+  constructor(private readonly onOverdue: (sessionId: string, taskId: string) => void = () => {}) {}
 
   /** False when the task was already known. */
   add(sessionId: string, task: LaunchedTask): boolean {
@@ -81,7 +96,22 @@ export class BackgroundTaskStore {
     if (tasks.has(task.id)) return false;
     tasks.set(task.id, { ...task, lastOutput: null });
     this.bySession.set(sessionId, tasks);
+    if (task.kind === "monitor" && task.timeoutMs !== null) this.armDeadline(sessionId, task.id, task.timeoutMs);
     return true;
+  }
+
+  private armDeadline(sessionId: string, taskId: string, timeoutMs: number): void {
+    const timer = setTimeout(() => {
+      if (this.drop(sessionId, [taskId])) this.onOverdue(sessionId, taskId);
+    }, timeoutMs + MONITOR_DEADLINE_SLACK_MS);
+    timer.unref?.();
+    this.deadlines.set(deadlineKey(sessionId, taskId), timer);
+  }
+
+  private disarm(sessionId: string, taskId: string): void {
+    const key = deadlineKey(sessionId, taskId);
+    clearTimeout(this.deadlines.get(key));
+    this.deadlines.delete(key);
   }
 
   /** Forget tasks; true when any was known. Unknown ids are ignored. */
@@ -89,7 +119,11 @@ export class BackgroundTaskStore {
     const tasks = this.bySession.get(sessionId);
     if (!tasks) return false;
     let dropped = false;
-    for (const id of taskIds) dropped = tasks.delete(id) || dropped;
+    for (const id of taskIds) {
+      if (!tasks.delete(id)) continue;
+      this.disarm(sessionId, id);
+      dropped = true;
+    }
     if (tasks.size === 0) this.bySession.delete(sessionId);
     return dropped;
   }
@@ -115,11 +149,10 @@ export class BackgroundTaskStore {
   }
 
   clear(sessionId: string, ...kinds: Array<TaskRecord["kind"]>): void {
-    if (kinds.length === 0) { this.bySession.delete(sessionId); return; }
     const tasks = this.bySession.get(sessionId);
     if (!tasks) return;
-    for (const [id, task] of tasks) if (kinds.includes(task.kind)) tasks.delete(id);
-    if (tasks.size === 0) this.bySession.delete(sessionId);
+    const ids = [...tasks.values()].filter((task) => kinds.length === 0 || kinds.includes(task.kind)).map((task) => task.id);
+    this.drop(sessionId, ids);
   }
 
   /** Oldest launch first, then id. */
@@ -132,4 +165,8 @@ export class BackgroundTaskStore {
         lastOutput: task.lastOutput ? { line: task.lastOutput.line, at: new Date(task.lastOutput.at).toISOString() } : null,
       }));
   }
+}
+
+function deadlineKey(sessionId: string, taskId: string): string {
+  return `${sessionId}\0${taskId}`;
 }

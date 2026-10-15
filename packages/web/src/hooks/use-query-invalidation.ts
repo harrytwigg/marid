@@ -112,7 +112,8 @@ export function useQueryInvalidation() {
             qc.invalidateQueries({ queryKey: queryKeys.sessionWaitsAll })
             break
           case 'session-waits':
-            qc.invalidateQueries({ queryKey: queryKeys.sessionWaitsAll })
+            // 'sessions' in the same flush has already asked for it.
+            if (!pendingRef.current.has('sessions')) qc.invalidateQueries({ queryKey: queryKeys.sessionWaitsAll })
             break
           case 'work-item-sessions':
             qc.invalidateQueries({ queryKey: ['work-item-sessions'] })
