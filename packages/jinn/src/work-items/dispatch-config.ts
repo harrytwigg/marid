@@ -7,6 +7,7 @@ import type { JinnConfig } from '../shared/types.js';
 import { parseTodoId } from './id.js';
 import { parseSkillsJson } from './dispatch-schema.js';
 import { readAutoStartRow, writeAutoStartRow, type AutoStartRow } from './auto-start.js';
+import { scopedOverrideRefusal } from './scoped-engine-override.js';
 
 /**
  * How a Todo is RUN (ICI-733): the skills its working session preloads and the
@@ -204,6 +205,13 @@ export function setTodoDispatchConfig(
   const patched = patchedOverride(current, input);
   const override = validateOverride(config, patched.engine, patched.model);
   if (!override.ok) return override;
+  // Only a call that changes the override is held to it: one that leaves a stored
+  // override alone (a skills or autoStart patch) must not be trapped by it, and
+  // `resolveTodoDispatch` surfaces a stored one that cannot run at the next attempt.
+  if (input.engine !== undefined || input.model !== undefined) {
+    const scoped = scopedOverrideRefusal(id, override.engine);
+    if (scoped) return { ok: false, error: scoped };
+  }
   const flag = patchedAutoStart(current, input);
   if (!flag.ok) return flag;
   const { autoStart } = flag;
@@ -264,6 +272,14 @@ export function resolveTodoDispatch(workItemId: string, employee?: string | null
   | { ok: false; error: string } {
   const stored = getTodoDispatchConfig(workItemId);
   if (!stored) return { ok: true, preamble: { prefix: '', engine: null, model: null } };
+
+  // An override stored before its Todo's department was scoped (or the Todo moved
+  // into one) can never run: say so here, with the way out, instead of letting the
+  // session start fail the engine gate with no mention of the override.
+  const scoped = scopedOverrideRefusal(workItemId, stored.engine, employee);
+  if (scoped) {
+    return { ok: false, error: `Todo ${workItemId} has an engine override that cannot run: ${scoped} Clear the override (engine: null) or set it to claude.` };
+  }
 
   const installed = offeredSkillNames(workItemId);
   const present = stored.skills.filter((name) => installed.has(name));
