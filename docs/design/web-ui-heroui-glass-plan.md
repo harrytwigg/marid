@@ -1,12 +1,14 @@
-# Web UI: HeroUI and the Marid Aero identity
+# Web UI: HeroUI and the Aero identity
 
 Status: proposal for approval. Nothing here changes the shipped UI until the
 slices below are approved and merged one by one.
 
 Goal: move the web UI onto [HeroUI v3](https://heroui.com) piece by piece,
-and give Marid a visual identity of its own: translucent glass, soft depth,
-light and glossy highlights ("Aero"), legible and accessible in light and
-dark.
+and give the product a visual identity of its own: translucent glass, soft
+depth, light and glossy highlights ("Aero"), legible and accessible in light
+and dark. The identity is deliberately independent of the product name: a
+rename, if one is decided, lands as its own pull requests and only touches
+the wordmark and icons here.
 
 A working prototype of both halves (HeroUI wired in through a token bridge,
 the glass identity on the real shell, chat, board, Todo and settings screens)
@@ -96,30 +98,33 @@ of slice 1):
 
 ---
 
-## 2. Visual identity: Marid Aero
+## 2. Visual identity: Aero
 
-**Direction.** Jinn's look is warm charcoal and amber over a flat tonal
-staircase, set in Hanken Grotesk. Marid today is that same structure
+**Direction.** The product is an organisation of agents doing real work, so
+the identity should feel like precise, fast, coordinated engineering, not
+folklore. Jinn's look is warm charcoal and amber over a flat tonal staircase,
+set in Hanken Grotesk; the current Marid palette is that same structure
 recoloured teal. Aero changes the structure, not just the hue: a luminous
-ambient backdrop (sky over shallow water by day, light through deep water at
-night) with the interface floating on it as glass: translucent chrome, a
+ambient backdrop (high-altitude daylight by day, the sky at altitude after
+dark) with the interface floating on it as glass: translucent chrome, a
 near-opaque reading sheet, lit edges and a soft specular highlight. Mood
-references: Windows 7 Aero title bars, "Frutiger Aero" (sky, water, gloss),
+references: Windows 7 Aero title bars, "Frutiger Aero" (sky, light, gloss),
 macOS sidebar vibrancy, visionOS glass materials (glass for chrome, solid
-ground for reading).
+ground for reading), the cockpit idea of calm instruments over a bright sky.
 
-Mockups: the identity board is attached to this plan's pull request (#164);
-the prototype's before/after sheets are on #165.
+Mockups: the identity board and the mark concepts are attached to this plan's
+pull request (#164); the prototype's before/after sheets are on #165.
 
 **Palette** (accent / info / success / highlight / danger / text):
 
-| | Aqua | Sky | Lagoon | Iris | Coral | Ink / Foam |
+| | Altitude | Azure | Signal | Ion | Flare | Ink / Contrail |
 |---|---|---|---|---|---|---|
 | Light | `#06659F` | `#1F6FD1` | `#13804F` | `#7A4FC4` | `#C4323E` | `#0C1A2B` |
 | Dark | `#62C6FF` | `#6AB0FF` | `#5FD69A` | `#C3A2FF` | `#FF7A82` | `#E8F1FB` |
 
-Ambient backdrop: four soft radial pools (aqua, iris, lagoon, sky) over a
-vertical gradient (`#EAF5FE → #D9E9F7` light, `#07111E → #0A1728` dark).
+Ambient backdrop: four soft radial pools of sky, ion violet and a cyan
+horizon glow over a vertical gradient (`#EAF5FE → #D9E9F7` light, `#07111E →
+#0A1728` dark).
 
 **Glass tokens** (new), weakest to strongest:
 
@@ -158,11 +163,26 @@ surfaces enter with opacity + 4px rise + 0.98→1 scale on `--ease-spring`;
 exits are quicker. Blur radius is never animated and the sheen never
 shimmers. HeroUI's transitions already honour `motion-reduce`.
 
-**Logo and wordmark.** A glass app mark (`docs/design/marid-aero/mark.svg`):
-a rounded tile in a sky-to-sea gradient with a lagoon caustic glow, a white
-"M" drawn as a wave, a top gloss and a lit rim. Wordmark "Marid" in Figtree
-700 at -0.02em. The mark becomes the default rail mark, favicon and PWA
-icons; an operator's own portal emoji or icon still wins.
+**Logo and wordmark.** Three original concepts in
+`docs/design/aero-identity/marks/`, each as a glass app tile and a
+monochrome glyph, drawn from abstract delta planforms (no aircraft
+silhouettes, no third-party marks):
+
+- **A · Delta**: one ogee delta: speed and direction. At small sizes it can
+  read as a paper-plane "send" icon, so it needs a narrower planform if
+  chosen alone.
+- **B · Formation**: a lead delta and two wingmen overlapping like glass:
+  many agents moving as one. Busy at 16px, so its favicon is the lead delta
+  alone (concept A), which keeps the family consistent.
+- **C · Swept C**: a C drawn as one swept wing whose upper tip dips forward.
+  Most legible at 16px, least distinctive.
+
+Recommendation: **B** for the app icon and large uses, A as its favicon
+form. Every tile sits in a sky gradient with a horizon glow, a top gloss and
+a lit rim. The wordmark is set in Figtree 700 at -0.02em and takes the
+product name from one place (`lib/brand.ts`). The mark becomes the default
+rail mark, favicon and PWA icons; an operator's own portal emoji or icon
+still wins.
 
 **Accessibility.**
 
@@ -314,7 +334,7 @@ attaches before/after sheets.
 | 2 | Identity: Aero tokens, ambient backdrop, sheet and panel shell, Figtree, reduced transparency (CSS), contrast unit test, axe pass | 1 | M | medium |
 | 3 | Transparency setting in Appearance, applied before first paint | 2 | S | low |
 | 4 | Floating glass: header pills, composer, mobile tab bar, top scrim, status bar; blur rules, footgun check, scroll measurements | 2 | M | medium |
-| 5 | Mark and wordmark: SVG mark, favicon, PWA icons, manifest and theme-color per theme, default rail mark | 2 | S | low |
+| 5 | Mark and wordmark: the chosen concept refined, favicon, PWA icons, manifest and theme-color per theme, default rail mark | 2 | S | low |
 | 6 | Primitives, controls: Button, Switch + ToggleSwitch, Input, Textarea, Badge (Chip), Skeleton, Tabs | 1 | M | medium |
 | 7a | Overlays: Tooltip, Popover, the HoverCard in Todo mentions | 6 | S | medium |
 | 7b | Overlays: DropdownMenu (18 importers), ContextMenu | 7a | M | high |
