@@ -133,9 +133,7 @@ export function isLostSession(err: unknown): boolean {
  */
 function isRefusedResume(err: MspError): boolean {
   const reason = err.data?.reason;
-  if (typeof reason === "string" && reason.startsWith("resume_refused")) return true;
-  const details = err.data?.details;
-  return !!details && typeof details === "object" && !!(details as Record<string, unknown>).unreplayableLog;
+  return typeof reason === "string" && reason.startsWith("resume_refused");
 }
 
 /**

@@ -22,16 +22,6 @@ describe("a resume the host refuses because it cannot read the session's log", (
   });
 });
 
-describe("a resume refused with an unreplayable log", () => {
-  it("is a lost conversation too, whatever the reason it carries", async () => {
-    const first = await ctx.engine.run(opts());
-    vi.stubEnv("FAKE_MUSE_REFUSED", "unreplayableLog");
-    const result = await ctx.engine.run(opts({ resumeSessionId: first.sessionId }));
-    expect(isDeadSessionError(result)).toBe(true);
-    expect(isLostConversationError(result.error!, first.sessionId)).toBe(true);
-  });
-});
-
 describe("a turn the host accepts and never speaks of", () => {
   const SILENT = "x\n---\nSILENT";
 
