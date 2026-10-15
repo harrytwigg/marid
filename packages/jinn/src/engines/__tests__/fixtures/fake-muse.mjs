@@ -16,7 +16,6 @@
 //     a blocking reminder child is still running, and only `turn/completed`
 //     ends the turn;
 //   - closing stdin ends the host (exit 0), as the real one does.
-//
 // Turn behaviour is steered by directive words after the prompt's LAST `---`
 // line (a fresh session's prompt is `<system prompt>\n\n---\n\n<message>`, so a
 // directive goes in a final `---` section):
@@ -38,14 +37,15 @@
 //   NOTFOUND    the turn answers, then the session is dropped from the store, so
 //               the NEXT resume of it is `sessionNotFound`
 //   NOANSWER    the turn completes with no agent message at all
-// Environment hooks:
+// Environment hooks (`model/list` and `usage/read`: see fake-muse-queries.mjs):
 //   FAKE_MUSE_LOG        one JSON line per request received, and one for the process start
 //   FAKE_MUSE_STATE_DIR  where sessions are kept; FAKE_MUSE_RESET_MS the reset QUOTA reports
-//   FAKE_MUSE_RESUME_FAIL  a message: every `session/resume` fails with it (invalid params)
+//   FAKE_MUSE_RESUME_FAIL  a message: every `session/resume` fails with it
 //   FAKE_MUSE_BOOT_EXIT  exit with this code before reading anything (a host that cannot start)
 //   FAKE_MUSE_NO_GRANT   grant no capability, whatever is asked for
 import fs from "node:fs";
 import readline from "node:readline";
+import { modelList, usageRead } from "./fake-muse-queries.mjs";
 import { fail, log, notify, out, readSession, reply, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
 
 if (process.env.FAKE_MUSE_BOOT_EXIT) {
@@ -99,6 +99,8 @@ function handle({ id, method, params }) {
     case "session/setModel": return setModel(id, params);
     case "turn/start": return startTurn(id, params);
     case "turn/interrupt": return interrupt(id, params);
+    case "model/list": return modelList(id);
+    case "usage/read": return usageRead(id);
     case "approval/decide":
     case "userInput/cancel":
       commands.get(method)?.(params);
