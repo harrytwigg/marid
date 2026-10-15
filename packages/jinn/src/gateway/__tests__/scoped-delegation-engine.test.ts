@@ -212,14 +212,28 @@ describe("delegating to a department-scoped employee", () => {
     expect(registry.getSession(retried.body.sessionId)?.engine).toBe("claude");
   });
 
-  it("refuses a Todo engine override the scoped delegate cannot run on, before linking anything", async () => {
+  it("refuses to set a Todo engine override its scoped delegate cannot run on", async () => {
+    const { id } = await dispatchedTodo("Todo pinned to another engine at set time");
+
+    const refused = dispatchConfig.setTodoDispatchConfig(id, { engine: "opencode" }, config);
+
+    expect(refused.ok).toBe(false);
+    expect(refused.ok === false && refused.error).toMatch(/run only on the claude engine/);
+    expect(dispatchConfig.getTodoDispatchConfig(id)?.engine ?? null).toBeNull();
+  });
+
+  it("refuses a stored Todo engine override the scoped delegate cannot run on, before linking anything", async () => {
     const { id, dispatcherId } = await dispatchedTodo("Todo pinned to another engine");
-    expect(dispatchConfig.setTodoDispatchConfig(id, { engine: "opencode" }, config).ok).toBe(true);
+    // As left behind by a release that validated the override against the registry only.
+    const db = (await import("../../shared/db.js")).initDb();
+    db.prepare("INSERT INTO work_item_dispatch (work_item_id, skills, engine, model, updated_at) VALUES (?, NULL, ?, NULL, ?)")
+      .run(id, "opencode", new Date().toISOString());
 
     const refused = await delegate(dispatcherId, id);
 
-    expect(refused.status).toBe(400);
+    expect(refused.status).toBe(409);
     expect(refused.body.error).toMatch(/claude/);
+    expect(refused.body.error).toContain(id);
     expect(executeSessions(id)).toHaveLength(0);
   });
 });
