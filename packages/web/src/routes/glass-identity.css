@@ -15,21 +15,54 @@
  *   - Reduced transparency swaps every glass token for its opaque twin.
  */
 
-/* Figtree — variable wght 300..900 — SIL OFL 1.1 (see src/fonts/OFL-figtree.txt) */
+/* Geist (UI) and Geist Mono (code), variable 100..900; Sora (headings),
+   variable 100..800 — all SIL OFL 1.1 (see src/fonts/OFL-*.txt) */
 @font-face {
-  font-family: 'Figtree';
+  font-family: 'Geist';
   font-style: normal;
-  font-weight: 300 900;
+  font-weight: 100 900;
   font-display: swap;
-  src: url('../fonts/figtree-latin-ext-var.woff2') format('woff2');
+  src: url('../fonts/geist-latin-ext-var.woff2') format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 @font-face {
-  font-family: 'Figtree';
+  font-family: 'Geist';
   font-style: normal;
-  font-weight: 300 900;
+  font-weight: 100 900;
   font-display: swap;
-  src: url('../fonts/figtree-latin-var.woff2') format('woff2');
+  src: url('../fonts/geist-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/geist-mono-latin-ext-var.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/geist-mono-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('../fonts/sora-latin-ext-var.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('../fonts/sora-latin-var.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -38,8 +71,9 @@
 @media (prefers-color-scheme: light) { [data-theme="system"] { color-scheme: light; } }
 
 :root, [data-theme] {
-  --font-ui: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-display: "Figtree", -apple-system, system-ui, sans-serif;
+  --font-ui: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Sora", "Geist", -apple-system, system-ui, sans-serif;
+  --font-code: "Geist Mono", "SF Mono", Menlo, monospace;
 
   /* Palette: sky blues and a little ion violet; deep navy at night. */
   --bg: light-dark(#F6FAFE, #0B1422);
@@ -180,13 +214,17 @@ body {
 
 /* The shell paints the ambient backdrop. Routed content floats on it as a
    glass sheet, and the chat list as its own glass panel, from lg up; below lg
-   the sheet is the whole screen. The sheet is near-opaque on purpose: text
-   reads on it, and anything that painted the page colour (scrims, sticky
-   bars) still covers what scrolls beneath. */
+   the sheet is the whole screen. The sheet is flat and opaque on purpose:
+   text reads on it, and anything that paints the page colour (scrims, sticky
+   large-title headers) covers what scrolls beneath and matches the sheet
+   exactly, so it never shows as a band. Its glass is the lit edge and shadow. */
 [data-shell="root"] { background: var(--app-backdrop); }
 [data-shell="sheet"] {
   --bg: var(--glass-sheet-opaque);
-  background: var(--glass-sheet);
+  /* The collapsing large-title bar paints this material; inside the sheet it
+     must be the sheet's own colour, or it shows as a band at rest. */
+  --material-thick: var(--glass-sheet-opaque);
+  background: var(--bg);
 }
 @media (min-width: 64rem) {
   [data-shell="sheet"], [data-shell="panel"] {
@@ -203,4 +241,43 @@ body {
        panel the panel is the colour, so they let it through. */
     --sidebar-bg: transparent;
   }
+}
+
+/* The board drops the sheet: its columns float on the sky as glass panels and
+   its cards are near-opaque glass, so text still reads on a solid ground. A
+   column header is not sticky here: a sticky header would need a blurred
+   surface per column, which is over the blur budget. */
+[data-shell="sheet"]:has([data-board-glass]:not([hidden])) {
+  --bg: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+[data-board-glass] [data-board-column] {
+  padding: 12px 10px 10px;
+  border-radius: var(--radius-2xl);
+  background: var(--glass-chrome);
+  background-image: var(--glass-sheen);
+  box-shadow: var(--shadow-card);
+}
+[data-board-glass] [data-board-column-head] {
+  position: static;
+  background: transparent;
+}
+[data-board-glass] [data-board-column] [role="button"][aria-label] {
+  background: var(--glass-sheet);
+  box-shadow: 0 0 0 1px var(--glass-edge), 0 4px 14px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+}
+[data-board-glass] [data-board-column] [role="button"][aria-label]:hover {
+  background: var(--glass-sheet-opaque);
+}
+
+/* The phone's tab bar is a float: it blurs the content that scrolls under it.
+   Coarse pointers keep the bar's opaque fallback (no blur), so a phone pays
+   nothing for it; the tint and lit edge still apply. */
+[data-glass-bar] {
+  border-top-color: var(--glass-edge);
+  box-shadow: 0 -8px 24px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+}
+@media (pointer: fine) {
+  [data-glass-bar] { background: var(--glass-float); }
 }

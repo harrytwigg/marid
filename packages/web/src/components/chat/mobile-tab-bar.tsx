@@ -45,6 +45,7 @@ export function MobileTabBar() {
   return (
     <nav
       aria-label="Primary"
+      data-glass-bar=""
       className={cn(
         "fixed inset-x-0 bottom-0 z-40 lg:hidden",
         "flex items-stretch",

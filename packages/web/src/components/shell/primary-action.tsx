@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react"
+import { Button } from "@heroui/react/button"
 import { cn } from "@/lib/utils"
 
 export const PRIMARY_ACTION_SLOT = "primary-action"
@@ -50,25 +51,19 @@ type ActionProps = {
 
 function TrailingAction({ "aria-label": ariaLabel, label, icon, onClick, disabled, testId }: ActionProps) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="primary"
       data-slot={PRIMARY_ACTION_SLOT}
       data-primary-action="trailing"
       data-testid={testId}
       aria-label={ariaLabel}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "hidden h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--fill-secondary)] px-3.5",
-        "text-[length:var(--text-subheadline)] font-[var(--weight-medium)] text-[var(--text-primary)]",
-        "lg:inline-flex",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
-        "disabled:text-[var(--text-quaternary)]",
-      )}
+      isDisabled={disabled}
+      onPress={onClick}
+      className="hidden shrink-0 lg:inline-flex"
     >
       {icon}
       {label}
-    </button>
+    </Button>
   )
 }
 

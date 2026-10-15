@@ -151,7 +151,6 @@ export const BoardCard = memo(function BoardCard({
         ghost
           ? "bg-[var(--bg-tertiary)] shadow-[var(--shadow-overlay)]"
           : "bg-[var(--bg-secondary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] hover:bg-[var(--bg-tertiary)]",
-        ghost ? "" : "max-[700px]:rounded-xl max-[700px]:bg-transparent max-[700px]:shadow-none max-[700px]:hover:bg-[var(--fill-quaternary)]",
         dragging ? "opacity-0" : "",
       ].join(" ")}
     >
@@ -193,7 +192,7 @@ export const BoardCard = memo(function BoardCard({
       {/* Row 2 — the state, then the only primary ink on the card. */}
       <div className="flex items-start gap-2">
         <StateCircle keyOf={stateKeyOf(item.status)} size={16} className="mt-[2px] flex-none" />
-        <div className="line-clamp-2 min-w-0 text-[calc(15px*var(--text-scale))] font-medium leading-[1.3] text-[var(--text-primary)] max-[700px]:line-clamp-1 max-[700px]:text-[calc(16px*var(--text-scale))]">
+        <div className="line-clamp-2 min-w-0 text-[calc(15px*var(--text-scale))] font-medium leading-[1.3] text-[var(--text-primary)] max-[700px]:text-[calc(16px*var(--text-scale))]">
           {item.title}
         </div>
       </div>

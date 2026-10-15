@@ -172,6 +172,11 @@ export function NavRibbon({
   // emoji (never a text-presentation glyph that would inherit the slot's text
   // color and look faded — see the brand-mark color note below).
   const emoji = settings.portalEmoji ?? `${PRODUCT_EMOJI}\u{FE0F}`
+  // Prototype: the glass mark stands in for the default emoji; an operator's
+  // own portal emoji still wins.
+  const mark = settings.portalEmoji
+    ? emoji
+    : <img src="/icons/aero-mark.svg" alt="" className="size-8 rounded-[9px] shadow-[0_4px_12px_rgba(10,80,140,0.35)]" />
   // The Chat icon is OPEN-ONLY. While already on the chat route ("/") with the
   // list collapsed, a plain click reveals the list instead of firing a dead
   // same-route navigation. Not on "/" → the Link navigates as before; list
@@ -221,7 +226,7 @@ export function NavRibbon({
                 aria-hidden
                 className="absolute inset-0 flex items-center justify-center text-[26px] leading-none text-[var(--text-primary)] [font-variant-emoji:emoji] transition-opacity duration-150 group-hover/sidebar:opacity-0 group-focus-within/logo:opacity-0"
               >
-                {emoji}
+                {mark}
               </span>
               <PanelLeft
                 size={22}
@@ -244,7 +249,7 @@ export function NavRibbon({
                 aria-hidden
                 className="flex items-center justify-center text-[26px] leading-none text-[var(--text-primary)] [font-variant-emoji:emoji]"
               >
-                {emoji}
+                {mark}
               </span>
             </Link>
           )}

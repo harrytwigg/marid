@@ -133,7 +133,7 @@ export function ToggleSwitch({
   // role="switch" and the checked state, the visible control is decorative.
   return (
     <Switch isSelected={checked} onChange={onChange} aria-label={ariaLabel} isDisabled={disabled} className="shrink-0">
-      <Switch.Content className="min-h-[40px] md:min-h-[34px] items-center">
+      <Switch.Content className="min-h-[40px] min-w-[44px] items-center justify-center md:min-h-[34px]">
         <Switch.Control>
           <Switch.Thumb />
         </Switch.Control>

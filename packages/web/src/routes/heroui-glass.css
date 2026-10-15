@@ -1,0 +1,34 @@
+/*
+ * HeroUI components in the Aero material: the theme-level component layer
+ * HeroUI expects a custom theme to provide (its default theme leaves this
+ * empty). Only material changes live here; behaviour and layout stay HeroUI's.
+ */
+@layer components {
+  .button--secondary {
+    --button-bg: var(--glass-float);
+    --button-bg-hover: var(--glass-overlay);
+    --button-bg-pressed: var(--glass-overlay);
+    --button-fg: var(--text-primary);
+    box-shadow: 0 0 0 1px var(--glass-edge), 0 2px 10px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+  }
+
+  .button--primary {
+    box-shadow: 0 4px 14px color-mix(in oklab, var(--accent) 35%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+
+  .tabs__list {
+    border-radius: 999px;
+    background: var(--glass-chrome);
+    box-shadow: inset 0 0 0 1px var(--glass-edge);
+  }
+
+  .tabs__indicator {
+    background: var(--glass-sheet);
+    box-shadow: 0 1px 6px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+  }
+
+  .switch__control[data-selected="true"],
+  [data-selected="true"] > .switch__control {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+}

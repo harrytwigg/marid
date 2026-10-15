@@ -14,7 +14,10 @@
 @import "../../node_modules/@heroui/styles/dist/themes/shared/theme.css";
 @import "@heroui/styles/utilities";
 @import "@heroui/styles/base/base.css" layer(base);
+@import "@heroui/styles/components/button.css" layer(components);
 @import "@heroui/styles/components/switch.css" layer(components);
+@import "@heroui/styles/components/tabs.css" layer(components);
 @import "./theme-overrides.css";
 @import "./glass-identity.css";
 @import "./heroui-bridge.css";
+@import "./heroui-glass.css";
