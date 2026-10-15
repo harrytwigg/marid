@@ -39,7 +39,7 @@ function Settings({ status }: { status: BoardWalkStatus }) {
       {job && (
         <p>
           Schedule: cron job{" "}
-          <Link to={`/cron/${encodeURIComponent(job.id)}`} className="focus-ring rounded font-[var(--weight-semibold)] text-[var(--accent)] outline-none">{job.name}</Link>
+          <Link to={`/cron/${encodeURIComponent(job.id)}`} className="focus-outline rounded font-[var(--weight-semibold)] text-[var(--accent)] outline-none">{job.name}</Link>
           {" "}— run it now, change it or switch it off there.
         </p>
       )}
@@ -62,7 +62,7 @@ function Tick({ tick, now }: { tick: TickRecord; now: number }) {
         <span title={new Date(tick.at).toLocaleString()}>{agoLabel(Date.parse(tick.at), now)}</span>
         <span>{tick.trigger}</span>
         <span style={{ color: OUTCOME_COLOR[tick.outcome] }}>{tick.outcome}</span>
-        {tick.sessionId && <Link to={`/chat/${tick.sessionId}`} className="focus-ring rounded text-[var(--accent)] outline-none">turn</Link>}
+        {tick.sessionId && <Link to={`/chat/${tick.sessionId}`} className="focus-outline rounded text-[var(--accent)] outline-none">turn</Link>}
       </div>
       <p className="mt-[2px] text-[length:var(--text-footnote)] text-[var(--text-primary)]">{tick.summary}</p>
       {tick.modelSummary && <p className="mt-[2px] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">Model: {tick.modelSummary}</p>}
@@ -70,7 +70,7 @@ function Tick({ tick, now }: { tick: TickRecord; now: number }) {
         <ul className="mt-[2px] grid gap-[2px]">
           {acted.map((entry, index) => (
             <li key={`${entry.workItemId}-${index}`} className="text-[length:var(--text-caption1)] text-[var(--text-secondary)]">
-              <Link to={`/todos/${entry.workItemId}`} className="focus-ring rounded font-[var(--weight-semibold)] text-[var(--accent)] outline-none">{entry.workItemId}</Link>
+              <Link to={`/todos/${entry.workItemId}`} className="focus-outline rounded font-[var(--weight-semibold)] text-[var(--accent)] outline-none">{entry.workItemId}</Link>
               {" "}{entry.kind}{entry.outcome ? ` — ${entry.outcome}` : ""}: {entry.reason}
             </li>
           ))}

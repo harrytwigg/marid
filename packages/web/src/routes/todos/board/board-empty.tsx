@@ -35,7 +35,7 @@ function EmptyCard(
             type="button"
             data-testid={action.testId}
             onClick={action.onClick}
-            className="focus-ring mt-3 rounded-full px-2.5 py-1 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
+            className="focus-outline mt-3 rounded-full px-2.5 py-1 text-[13px] font-semibold text-[var(--accent)] outline-none hover:bg-[var(--accent-fill)]"
           >
             {action.label}
           </button>

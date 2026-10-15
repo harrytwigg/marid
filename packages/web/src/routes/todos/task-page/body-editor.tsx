@@ -59,7 +59,7 @@ function ShowMoreToggle({ expanded, onToggle }: { expanded: boolean; onToggle: (
       aria-expanded={expanded}
       data-testid="task-body-toggle"
       onClick={onToggle}
-      className="focus-ring mt-1 flex min-h-[34px] items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+      className="focus-outline mt-1 flex min-h-[34px] items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
     >
       {expanded ? "Show less" : "Show more"}
       <ChevronRight

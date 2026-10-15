@@ -98,7 +98,7 @@ export function AttachmentTile({
         data-testid={testId ?? `attachment-tile-${attachment.id}`}
         aria-label={`${video ? "Play" : "Preview"} ${attachment.filename}`}
         onClick={(event) => preview.open(attachment, gallery, event.currentTarget)}
-        className={`focus-ring block w-full overflow-hidden rounded-[14px] bg-[var(--fill-tertiary)] text-left outline-none transition-colors hover:bg-[var(--fill-secondary)] ${
+        className={`focus-outline block w-full overflow-hidden rounded-[14px] bg-[var(--fill-tertiary)] text-left outline-none transition-colors hover:bg-[var(--fill-secondary)] ${
           dense ? "shadow-[var(--shadow-ambient)]" : ""
         }`}
       >
@@ -206,7 +206,7 @@ function AttachmentVideoDialog({
           type="button"
           aria-label="Close video"
           onClick={onClose}
-          className="focus-ring absolute -right-1 -top-11 grid size-10 place-items-center rounded-[var(--radius-md)] bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-xl transition-transform active:scale-[0.96]"
+          className="focus-outline absolute -right-1 -top-11 grid size-10 place-items-center rounded-[var(--radius-md)] bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-xl transition-transform active:scale-[0.96]"
         >
           <X size={18} strokeWidth={1.8} aria-hidden />
         </button>

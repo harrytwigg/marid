@@ -91,7 +91,7 @@ export function LogBrowser({ lines }: LogBrowserProps) {
             <button
               key={pill.key}
               onClick={() => setFilter(pill.key)}
-              className="focus-ring flex items-center flex-shrink-0 rounded-[20px] py-[6px] px-[14px] text-[length:var(--text-footnote)] font-[var(--weight-medium)] border-none cursor-pointer gap-[var(--space-2)] transition-all duration-200 ease-[var(--ease-smooth)]"
+              className="focus-outline flex items-center flex-shrink-0 rounded-[20px] py-[6px] px-[14px] text-[length:var(--text-footnote)] font-[var(--weight-medium)] border-none cursor-pointer gap-[var(--space-2)] transition-all duration-200 ease-[var(--ease-smooth)]"
               style={{
                 ...(isActive
                   ? {
@@ -124,7 +124,7 @@ export function LogBrowser({ lines }: LogBrowserProps) {
           placeholder="Search logs..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="focus-ring ml-auto py-[6px] px-3 text-[length:var(--text-footnote)] rounded-[var(--radius-sm)] border border-[var(--separator)] bg-[var(--fill-secondary)] text-[var(--text-primary)] outline-none min-w-40 max-w-60"
+          className="focus-outline ml-auto py-[6px] px-3 text-[length:var(--text-footnote)] rounded-[var(--radius-sm)] border border-[var(--separator)] bg-[var(--fill-secondary)] text-[var(--text-primary)] outline-none min-w-40 max-w-60"
         />
       </div>
 
@@ -173,7 +173,7 @@ export function LogBrowser({ lines }: LogBrowserProps) {
                       setExpandedId(isExpanded ? null : entry.id)
                     }
                   }}
-                  className="flex items-center hover-bg focus-ring min-h-11 px-[var(--space-4)]"
+                  className="flex items-center hover-bg focus-outline min-h-11 px-[var(--space-4)]"
                   style={{
                     cursor: isLong ? "pointer" : "default",
                     background:

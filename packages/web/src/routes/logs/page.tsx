@@ -129,7 +129,7 @@ export default function LogsPage() {
                   onClick={() =>
                     window.dispatchEvent(new CustomEvent("open-live-stream"))
                   }
-                  className="focus-ring flex items-center py-[6px] px-[14px] rounded-[var(--radius-sm)] border-none cursor-pointer text-[length:var(--text-footnote)] font-[var(--weight-semibold)] gap-1.5 bg-[var(--accent-fill)] text-[var(--accent)] transition-all duration-200 ease-[var(--ease-smooth)]"
+                  className="focus-outline flex items-center py-[6px] px-[14px] rounded-[var(--radius-sm)] border-none cursor-pointer text-[length:var(--text-footnote)] font-[var(--weight-semibold)] gap-1.5 bg-[var(--accent-fill)] text-[var(--accent)] transition-all duration-200 ease-[var(--ease-smooth)]"
                 >
                   <Radio size={14} />
                   Open Live Stream
@@ -140,7 +140,7 @@ export default function LogsPage() {
                 </span>
                 <button
                   onClick={refresh}
-                  className="focus-ring w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] border-none bg-transparent text-[var(--text-tertiary)] cursor-pointer transition-colors duration-150 ease-[var(--ease-smooth)]"
+                  className="focus-outline w-8 h-8 flex items-center justify-center rounded-[var(--radius-sm)] border-none bg-transparent text-[var(--text-tertiary)] cursor-pointer transition-colors duration-150 ease-[var(--ease-smooth)]"
                   aria-label="Refresh logs"
                 >
                   <RefreshCw

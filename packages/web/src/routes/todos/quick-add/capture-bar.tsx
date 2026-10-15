@@ -59,7 +59,7 @@ function CaptureField({
         aria-label={confirming ? "Send dictated capture" : "Send capture"}
         data-testid="quick-capture-send"
         data-confirming={confirming || undefined}
-        className="focus-ring inline-flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[var(--accent-fill)] text-[var(--accent)] shadow-[var(--inset-shine)] outline-none transition-transform hover:scale-[0.96] disabled:opacity-40 motion-reduce:transition-none"
+        className="focus-outline inline-flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[var(--accent-fill)] text-[var(--accent)] shadow-[var(--inset-shine)] outline-none transition-transform hover:scale-[0.96] disabled:opacity-40 motion-reduce:transition-none"
       >
         {confirming ? <Check className="size-4" aria-hidden /> : <ArrowUp className="size-4" aria-hidden />}
       </button>

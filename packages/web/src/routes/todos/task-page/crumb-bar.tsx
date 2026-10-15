@@ -79,7 +79,7 @@ export function CrumbBar({
           aria-label="Back"
           data-testid="task-crumb-back"
           onClick={onBack}
-          className="focus-ring grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
+          className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
         >
           <ChevronLeft size={17} strokeWidth={2.2} aria-hidden />
         </button>
@@ -90,7 +90,7 @@ export function CrumbBar({
             type="button"
             data-testid="task-crumb-board"
             onClick={onBack}
-            className="focus-ring -mx-2 -my-1 rounded-lg px-2 py-1 text-[13px] font-medium text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-primary)]"
+            className="focus-outline -mx-2 -my-1 rounded-lg px-2 py-1 text-[13px] font-medium text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-primary)]"
           >
             {boardLabel}
           </button>
@@ -102,7 +102,7 @@ export function CrumbBar({
                 data-testid={`task-crumb-${ancestor.id}`}
                 onClick={(event) => onOpenAncestor(ancestor.id, event)}
                 title={ancestor.title}
-                className="focus-ring -mx-1 rounded-md px-1 text-[11.5px] tracking-[.04em] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+                className="focus-outline -mx-1 rounded-md px-1 text-[11.5px] tracking-[.04em] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
                 style={{ fontFamily: "var(--font-code)" }}
               >
                 {ancestor.id}
@@ -115,7 +115,7 @@ export function CrumbBar({
             data-testid="task-copy-id"
             aria-label={`Copy ${id}`}
             onClick={onCopyId}
-            className="focus-ring -mx-1 flex min-h-[34px] flex-none items-center rounded-md px-1 text-[11.5px] tracking-[.04em] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+            className="focus-outline -mx-1 flex min-h-[34px] flex-none items-center rounded-md px-1 text-[11.5px] tracking-[.04em] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
             style={{ fontFamily: "var(--font-code)" }}
           >
             {id}
@@ -141,7 +141,7 @@ export function CrumbBar({
           aria-label={`Copy link to ${id}`}
           data-testid="task-copy-link"
           onClick={() => copyText(gatewayTransport().httpUrl(todoPath(id)))}
-          className="focus-ring grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
+          className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
         >
           <LinkIcon size={14} strokeWidth={2} aria-hidden />
         </button>
@@ -151,7 +151,7 @@ export function CrumbBar({
               type="button"
               aria-label="More"
               data-testid="task-crumb-more"
-              className="focus-ring grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
+              className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
             >
               <MoreHorizontal size={16} aria-hidden />
             </button>

@@ -1,0 +1,4 @@
+import { CaretDownIcon as Glyph } from "@phosphor-icons/react"
+import { shim } from "./shim"
+
+export const ChevronDownIcon = /* @__PURE__ */ shim(Glyph, "ChevronDownIcon")

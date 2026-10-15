@@ -209,7 +209,7 @@ export function FilterBar({
               type="button"
               aria-label="More filters"
               data-testid="filter-chip-more"
-              className="focus-ring grid h-[30px] w-[34px] flex-none place-items-center rounded-[15px] bg-[var(--fill-tertiary)] text-[var(--text-tertiary)] outline-none transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
+              className="focus-outline grid h-[30px] w-[34px] flex-none place-items-center rounded-[15px] bg-[var(--fill-tertiary)] text-[var(--text-tertiary)] outline-none transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
             >
               <MoreHorizontal size={14} aria-hidden />
             </button>

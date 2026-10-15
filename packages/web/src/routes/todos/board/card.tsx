@@ -147,11 +147,10 @@ export const BoardCard = memo(function BoardCard({
       onPointerDown={(e) => onLiftPointerDown?.(e, item)}
       className={[
         // A phone card never skips its render: an estimated height moved the container's scrollHeight 2721 → 3981 mid-commit and scroll anchoring chased it to an edge. Desktop keeps skipping, at a fixed intrinsic size rather than `auto`, which remembers each card's last rendered height and revises it mid-scroll (8129 → 6112).
-        "group focus-ring flex cursor-pointer select-none flex-col gap-2 rounded-[var(--radius-lg)] p-3 outline-none transition-colors duration-150 [content-visibility:auto] [contain-intrinsic-size:137px] max-[700px]:[content-visibility:visible] max-[700px]:[contain-intrinsic-size:auto]",
+        "group focus-outline flex cursor-pointer select-none flex-col gap-2 rounded-[var(--radius-lg)] p-3 outline-none transition-colors duration-150 [content-visibility:auto] [contain-intrinsic-size:137px] max-[700px]:[content-visibility:visible] max-[700px]:[contain-intrinsic-size:auto]",
         ghost
           ? "bg-[var(--bg-tertiary)] shadow-[var(--shadow-overlay)]"
           : "bg-[var(--bg-secondary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] hover:bg-[var(--bg-tertiary)]",
-        ghost ? "" : "max-[700px]:rounded-xl max-[700px]:bg-transparent max-[700px]:shadow-none max-[700px]:hover:bg-[var(--fill-quaternary)]",
         dragging ? "opacity-0" : "",
       ].join(" ")}
     >
@@ -193,7 +192,7 @@ export const BoardCard = memo(function BoardCard({
       {/* Row 2 — the state, then the only primary ink on the card. */}
       <div className="flex items-start gap-2">
         <StateCircle keyOf={stateKeyOf(item.status)} size={16} className="mt-[2px] flex-none" />
-        <div className="line-clamp-2 min-w-0 text-[calc(15px*var(--text-scale))] font-medium leading-[1.3] text-[var(--text-primary)] max-[700px]:line-clamp-1 max-[700px]:text-[calc(16px*var(--text-scale))]">
+        <div className="line-clamp-2 min-w-0 text-[calc(15px*var(--text-scale))] font-medium leading-[1.3] text-[var(--text-primary)] max-[700px]:text-[calc(16px*var(--text-scale))]">
           {item.title}
         </div>
       </div>
@@ -228,7 +227,7 @@ export const BoardCard = memo(function BoardCard({
               onToggleTree(item.id)
             }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="focus-ring flex h-5 flex-none items-center gap-1 rounded-[10px] bg-[var(--fill-tertiary)] py-0 pl-[5px] pr-2 text-[calc(11px*var(--text-scale))] font-medium tabular-nums text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)]"
+            className="focus-outline flex h-5 flex-none items-center gap-1 rounded-[10px] bg-[var(--fill-tertiary)] py-0 pl-[5px] pr-2 text-[calc(11px*var(--text-scale))] font-medium tabular-nums text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)]"
           >
             <ChevronRight
               size={10}

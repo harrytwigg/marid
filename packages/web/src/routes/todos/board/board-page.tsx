@@ -3,6 +3,8 @@ import { useNavigate, useNavigationType, useParams, useSearchParams } from "reac
 import { ListFilter, Plus } from "lucide-react"
 import { PageLayout } from "@/components/page-layout"
 import { PageScaffold } from "@/components/shell/page-scaffold"
+import { Button } from "@heroui/react/button"
+import { Tabs } from "@heroui/react/tabs"
 import { PrimaryAction } from "@/components/shell/primary-action"
 import { ApiError, type WorkItemCompactWire, type WorkItemStatusWire } from "@/lib/api"
 import {
@@ -109,6 +111,9 @@ export default function TodoBoardPage() {
   // The viewport picks the view — grouped list on the phone, columns on the
   // desktop — so there is nothing for the operator to toggle or to remember.
   const mobile = useIsBoardMobile()
+  // The phone shows the columns too, swiped one at a time; the grouped list is
+  // one tap away.
+  const [mobileView, setMobileView] = useState<"board" | "list">("board")
   const data = useBoardData(board, filters, now, !isAttention)
   const departments = useDepartments()
   const org = useOrg()
@@ -559,24 +564,35 @@ export default function TodoBoardPage() {
 
         {!isAttention && mobile && (
           <div className="flex-none px-[var(--space-3)] md:px-[var(--space-10)]">
-            <button
-              type="button"
-              data-testid="todo-mobile-filters"
-              onClick={() => setMobileFilterOpen(true)}
-              className="focus-ring flex h-[40px] flex-none items-center gap-[7px] rounded-[17px] bg-[var(--bg-secondary)] px-3.5 text-[14px] font-semibold text-[var(--text-primary)] outline-none"
-              style={{ boxShadow: "var(--shadow-ambient), var(--shadow-subtle), var(--inset-shine)" }}
-            >
-              <ListFilter
-                size={13}
-                strokeWidth={2.2}
-                aria-hidden
-                className={filterCount > 0 ? "text-[var(--accent)]" : undefined}
-              />
-              Filters
-              {filterCount > 0 && (
-                <span className="text-[12px] font-medium tabular-nums text-[var(--text-quaternary)]">{filterCount}</span>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                data-testid="todo-mobile-filters"
+                onPress={() => setMobileFilterOpen(true)}
+              >
+                <ListFilter
+                  size={15}
+                  aria-hidden
+                  className={filterCount > 0 ? "text-[var(--accent)]" : undefined}
+                />
+                Filters
+                {filterCount > 0 && (
+                  <span className="text-[12px] font-medium tabular-nums text-[var(--text-quaternary)]">{filterCount}</span>
+                )}
+              </Button>
+              <Tabs
+                className="ml-auto"
+                selectedKey={mobileView}
+                onSelectionChange={(key) => setMobileView(key === "list" ? "list" : "board")}
+              >
+                <Tabs.ListContainer>
+                  <Tabs.List aria-label="Board layout">
+                    <Tabs.Tab id="board">Board<Tabs.Indicator /></Tabs.Tab>
+                    <Tabs.Tab id="list">List<Tabs.Indicator /></Tabs.Tab>
+                  </Tabs.List>
+                </Tabs.ListContainer>
+              </Tabs>
+            </div>
             {sprintTools.strip}
           </div>
         )}
@@ -613,7 +629,7 @@ export default function TodoBoardPage() {
           <div
             ref={listScrollRef}
             onScroll={onListScroll}
-            hidden={!mobile}
+            hidden={!mobile || mobileView !== "list"}
             data-testid="todo-list-scroll"
             data-scrollable
             className="min-h-0 flex-1 overflow-y-auto pb-[var(--jinn-scaffold-bottom)] lg:pb-10"
@@ -649,10 +665,11 @@ export default function TodoBoardPage() {
             ref={boardScrollRef}
             onScroll={onBoardScroll}
             onContextMenu={sprintTools.onContextMenu}
-            hidden={mobile}
+            hidden={mobile && mobileView !== "board"}
             data-testid="todo-board-scroll"
+            data-board-glass=""
             data-scrollable
-            className="min-h-0 flex-1 overflow-auto pb-[var(--jinn-scaffold-bottom)] lg:pb-10"
+            className="min-h-0 flex-1 overflow-auto pb-[var(--jinn-scaffold-bottom)] lg:pb-10 max-[700px]:snap-x max-[700px]:snap-mandatory max-[700px]:scroll-px-4"
           >
             {data.isError ? (
               <BoardErrorCard error={data.error} />
@@ -661,7 +678,7 @@ export default function TodoBoardPage() {
             ) : filteredEmpty ? (
               <FilteredEmptyCard count={filterCount} onClear={clearAllFilters} />
             ) : (
-            <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5">
+            <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3">
               {visibleStatuses.map((status) => columnFor(status))}
               {CLOSED_STATUSES.some(listStatusInScope) && (closedOpen ? (
                 <section className="flex w-[262px] min-w-[238px] flex-none flex-col gap-3" data-testid="board-closed-column">

@@ -79,7 +79,7 @@ export function attentionIdLine(
 }
 
 const BTN =
-  "focus-ring flex h-[34px] items-center gap-[7px] whitespace-nowrap rounded-[17px] px-3.5 text-[13px] font-semibold outline-none transition-colors disabled:opacity-40"
+  "focus-outline flex h-[34px] items-center gap-[7px] whitespace-nowrap rounded-[17px] px-3.5 text-[13px] font-semibold outline-none transition-colors disabled:opacity-40"
 const BTN_QUIET = `${BTN} text-[var(--text-tertiary)] hover:bg-[var(--fill-tertiary)]`
 const BTN_FILLED = `${BTN} bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]`
 
@@ -169,7 +169,7 @@ function NeedsYouCard({
       className="mb-2.5 rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[16px_18px] shadow-[var(--shadow-card)]"
     >
       {/* Head: 34px disc · title over the mono ID line. */}
-      <button type="button" className="focus-ring flex w-full items-start gap-3 rounded-lg text-left outline-none" onClick={() => onOpen(item.id)}>
+      <button type="button" className="focus-outline flex w-full items-start gap-3 rounded-lg text-left outline-none" onClick={() => onOpen(item.id)}>
         <StatusCircle status={item.status} size={34} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-semibold leading-[1.35] text-[var(--text-primary)]">
