@@ -12,6 +12,8 @@ import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
 import { discoverOpencodeModels } from "./opencode-models.js";
 import { MUSECODE_EFFORT_LEVELS } from "./musecode-effort.js";
+import { buildMusecodeEntry } from "./musecode-registry.js";
+export { musecodeEngineOptions, musecodeModelCost, refreshMusecodeModels } from "./musecode-registry.js";
 import {
   CLAUDE_ALIAS_IDS,
   discoverClaudeEffortLevels,
@@ -452,6 +454,7 @@ export function buildRegistry(config: JinnConfig): ModelRegistry {
       registry[name] = buildOpencodeEntry(config, block?.opencode, synthesized[name], available);
       continue;
     }
+    if (name === "musecode") { registry[name] = buildMusecodeEntry(config, block?.musecode, synthesized[name], available, (b, p) => fromEngineModelsConfig(name, b, available, p)); continue }
     const engineBlock = block?.[name];
     registry[name] = engineBlock
       ? fromEngineModelsConfig(name, engineBlock, available)

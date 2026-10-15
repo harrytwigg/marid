@@ -13,7 +13,6 @@
 //     `turn/foregroundCompleted` arrives while a reminder child still runs, and
 //     only `turn/completed` ends the turn;
 //   - closing stdin ends the host (exit 0), as the real one does.
-//
 // Turn behaviour is steered by directive words after the prompt's LAST `---`
 // line (a fresh session's prompt is `<system prompt>\n\n---\n\n<message>`, so a
 // directive goes in a final `---` section):
@@ -35,15 +34,14 @@
 //   NOTFOUND    the turn answers, then the session is dropped from the store, so
 //               the NEXT resume of it is `sessionNotFound`
 //   NOANSWER    the turn completes with no agent message at all
-// Environment hooks:
-//   FAKE_MUSE_LOG        one JSON line per request received, and one for the process start
-//   FAKE_MUSE_STATE_DIR  where sessions are kept; FAKE_MUSE_RESET_MS the reset QUOTA reports
-//   FAKE_MUSE_RESUME_FAIL  a message: every `session/resume` fails with it (invalid params)
-//   FAKE_MUSE_IN_USE     every `session/resume` is refused as `sessionInUse`, as when a terminal holds the session
-//   FAKE_MUSE_BOOT_EXIT  exit with this code before reading anything (a host that cannot start)
+// Environment hooks (see also fake-muse-queries.mjs):
+//   FAKE_MUSE_LOG a JSON line per request; FAKE_MUSE_STATE_DIR where sessions live; FAKE_MUSE_RESET_MS the QUOTA reset
+//   FAKE_MUSE_RESUME_FAIL  a message every `session/resume` fails with; FAKE_MUSE_BOOT_EXIT  exit code before reading anything
+//   FAKE_MUSE_IN_USE   every `session/resume` is refused as `sessionInUse`, as when a terminal holds the session
 //   FAKE_MUSE_NO_GRANT   grant no capability. (A `required` MCP server under /nonexistent fails the turn, as on the real host.)
 import fs from "node:fs";
 import readline from "node:readline";
+import { modelList } from "./fake-muse-queries.mjs";
 import { fail, log, notify, out, readSession, reply, requiredServerThatCannotStart, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
 
 if (process.env.FAKE_MUSE_BOOT_EXIT) {
@@ -98,6 +96,7 @@ function handle({ id, method, params }) {
     case "session/setModel": return setModel(id, params);
     case "turn/start": return startTurn(id, params);
     case "turn/interrupt": return interrupt(id, params);
+    case "model/list": return modelList(id);
     case "approval/decide":
     case "userInput/cancel":
       commands.get(method)?.(params);

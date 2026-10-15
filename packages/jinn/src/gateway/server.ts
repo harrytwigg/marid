@@ -10,6 +10,7 @@ import type { JinnConfig, Connector, Engine, SlackConnectorConfig, TelegramConne
 import { loadConfig, normalizeClaudeEngineConfig } from "../shared/config.js";
 import {
   invalidateModelRegistry,
+  musecodeEngineOptions,
   type PtyViewEngineName,
 } from "../shared/models.js";
 import { configureLogger, logger } from "../shared/logger.js";
@@ -719,7 +720,7 @@ export async function startGateway(
   const codexEngine = new CodexEngine();
   const grokEngine = new GrokEngine();
   const hermesEngine = new HermesAcpEngine();
-  const musecodeEngine = new MusecodeEngine({ releaseView: (id) => musecodeInteractiveEngine.releaseUnviewed(id) });
+  const musecodeEngine = new MusecodeEngine({ ...musecodeEngineOptions, releaseView: (id) => musecodeInteractiveEngine.releaseUnviewed(id) });
   const engines = new Map<string, Engine>();
   // Claude WORK TURNS (chat, employees, cron, child sessions) run on the
   // interactive PTY engine → cc_entrypoint=cli, covered by the Max subscription

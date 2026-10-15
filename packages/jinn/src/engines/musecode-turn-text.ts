@@ -130,6 +130,46 @@ export function parseTokenUsage(usage: Record<string, unknown> | undefined): Tok
   };
 }
 
+export interface MuseUsageSnapshot {
+  observedAtMs: number;
+  tier: string;
+  window: { usedPercent: number; windowDurationMins: number; resetsAtMs: number };
+  weekly: { usedPercent: number; resetsAtMs: number };
+}
+
+/** `usage/changed`'s params as a snapshot, or undefined when they are not one. */
+export function parseUsageChanged(params: Record<string, unknown>): MuseUsageSnapshot | undefined {
+  const window = asRecord(params.window);
+  const weekly = asRecord(params.weekly);
+  const observedAtMs = num(params.observedAtMs);
+  if (!window || !weekly || observedAtMs === undefined) return undefined;
+  return {
+    observedAtMs,
+    tier: str(params.tier) ?? "",
+    window: {
+      usedPercent: numOr(window.usedPercent, 0),
+      windowDurationMins: numOr(window.windowDurationMins, 0),
+      resetsAtMs: numOr(window.resetsAtMs, 0),
+    },
+    weekly: { usedPercent: numOr(weekly.usedPercent, 0), resetsAtMs: numOr(weekly.resetsAtMs, 0) },
+  };
+}
+
+/** Two usage counters summed; either may be absent. */
+export function addTokenUsage(a: TokenUsage | undefined, b: TokenUsage | undefined): TokenUsage | undefined {
+  if (!a || !b) return a ?? b;
+  const sum = (x: number | undefined, y: number | undefined) => (x === undefined && y === undefined ? undefined : (x ?? 0) + (y ?? 0));
+  const cacheRead = sum(a.cacheReadTokens, b.cacheReadTokens);
+  const cacheWrite = sum(a.cacheWriteTokens, b.cacheWriteTokens);
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    cachedTokens: a.cachedTokens + b.cachedTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    ...(cacheRead === undefined ? {} : { cacheReadTokens: cacheRead }),
+    ...(cacheWrite === undefined ? {} : { cacheWriteTokens: cacheWrite }),
+  };
+}
+
 export function toolUseDelta(entry: ToolItem, toolId: string): StreamDelta {
   return {
     type: "tool_use",
