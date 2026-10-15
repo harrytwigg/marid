@@ -84,7 +84,7 @@ If Muse no longer has the session (`sessionNotFound`), the turn is reported as a
 
 ## The company toolset (MCP)
 
-Muse takes MCP servers per session, in `session/start` and `session/resume`, so nothing is written to disk. Marid projects the session's resolved servers into `config.mcpServers` (stdio and streamable HTTP). The `jinn` server is `optional`, so a session whose company tools fail to start still has its files and shell. The host grants per-session MCP only when asked for the `sessionMcp` capability, which Marid does exactly when the session has servers; if it is not granted the turn runs without the company tools and says so.
+Muse takes MCP servers per session, in `session/start` and `session/resume`, so nothing is written to disk. Marid projects the session's resolved servers into `config.mcpServers` (stdio and streamable HTTP). Every server is projected as `optional`, so a session whose company tools fail to start still has its files and shell. The host grants per-session MCP only when asked for the `sessionMcp` capability, which Marid does exactly when the session has servers; if it is not granted the turn runs without the company tools and says so.
 
 ---
 
@@ -146,6 +146,7 @@ A window at 100% or more counts as spent until its reset, as it does for Claude 
 - **Local only.** Muse Code does not run on remote (SSH) hosts.
 - **No department-scoped sessions.** Employees in a scoped or dedicated department run on Claude only.
 - **Muse's OS sandbox is off.** Marid passes `--disable-sandbox`, as the host's sandbox needs a capability many machines lack, and it runs its other unattended engines unsandboxed too.
+- **An MCP server that cannot start is skipped without a sign.** This covers every server, the company toolset included. Muse Code drops it and reports nothing: no notification, no item and no status, and the turn completes normally. A session can therefore run without its tools, and the model will not say so. To check, ask the session to list its MCP tools, or look at what the host sends the model: start the gateway with `MUSE_TRANSPORT_TRACE=1` in its environment and the log level at `debug`. Muse then writes each provider request to stderr, which Marid logs as `[muse stderr]`. The request's `tools` array has one `mcp__<server>` namespace per server that started (for the company toolset, `mcp__jinn`); a server that failed has no namespace. The trace includes the full prompt, so turn it off again when you are done.
 - **Reminder agents add provider calls.** With them on (Muse's default), every turn makes two or three extra calls, and `turn/foregroundCompleted` arrives before the blocking reminders finish. Marid waits for `turn/completed`. To turn them off, give the employee `cliFlags: ["-c", "run.reminder_roster=[]"]`.
 - **No terminal view.** Muse Code has a TUI (`muse resume <session>`), but Marid shows no CLI view for it.
 - **No usage until a turn has run.** The Limits card is empty until the first Muse Code turn reports usage.

@@ -223,8 +223,14 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
     }
   }, 60_000);
 
-  it("takes MCP servers in session/start, and an optional one that cannot start does not stop the turn", async () => {
-    const resolvedMcp = { mcpServers: { jinn: { command: "/nonexistent/jinn-mcp", args: ["--x"], env: { JINN_SESSION_ID: "e2e-1" } } } } as unknown as EngineRunOpts["resolvedMcp"];
+  it("takes MCP servers in session/start, and none that cannot start (stdio or http, jinn or not) stops the turn", async () => {
+    const resolvedMcp = {
+      mcpServers: {
+        jinn: { command: "/nonexistent/jinn-mcp", args: ["--x"], env: { JINN_SESSION_ID: "e2e-1" } },
+        other: { command: "/nonexistent/other-mcp" },
+        docs: { url: "http://127.0.0.1:9/mcp" },
+      },
+    } as unknown as EngineRunOpts["resolvedMcp"];
     const result = await engine.run(opts({ prompt: "with tools", resolvedMcp }));
     expect(result.error).toBeUndefined();
     expect(result.result).toBe("echo: with tools");
