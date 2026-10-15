@@ -260,9 +260,14 @@ still wins.
 6. **The board is the one screen without a sheet.** Its columns float on the
    backdrop as glass panels and its cards are near-opaque glass. On a phone
    the board keeps its columns: they scroll sideways and snap one at a time,
-   with a HeroUI Tabs switch to the grouped list (prototype in #165). Column
-   headers there are not sticky, because a sticky header over moving cards
-   would need one blurred surface per column, which is over the blur budget.
+   with a HeroUI Tabs switch to the grouped list (prototype in #165). On the
+   glass board, column headers are not sticky at any width, because a sticky
+   header over moving cards would need one blurred surface per column, which
+   is over the blur budget. Desktop has sticky column headers today, so this
+   is a trade for the operator: static headers, or sticky ones on desktop
+   with an opaque tint matching the column panel. On a phone, cards move
+   between columns through a tap "Move to…" action rather than drag, since
+   the target column is off-screen.
 
 **Order.** Foundation, then identity and shell, then primitives (controls
 before overlays), then screens, then cleanup. Each slice is one pull request,
@@ -375,7 +380,7 @@ attaches before/after sheets.
 | 9e | Screen pass: Talk orb palette, onboarding, sign-in, error pages | 2 | S | low |
 | 10 | Cleanup: fold `theme-overrides.css` into the identity, drop unused tokens, docs and README screenshots | all | S | low |
 
-1b, 1c and 1d can start at once; 3, 4, 5 and 6 can run in parallel once
-their dependency lands; the screen passes can run in parallel with each
+1b and 1c can start at once, and 1d follows 1c; 3, 4, 5 and 6 can run in
+parallel once their dependency lands; the screen passes can run in parallel with each
 other. "Chromium check" means the headless Chromium hang is fixed, or the
 slice is verified in Chromium or WebKit some other way.
