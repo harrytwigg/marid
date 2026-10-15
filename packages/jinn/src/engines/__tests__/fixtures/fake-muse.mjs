@@ -35,8 +35,7 @@
 //               the NEXT resume of it is `sessionNotFound`
 //   NOANSWER    the turn completes with no agent message at all
 // Environment hooks (see also fake-muse-queries.mjs):
-//   FAKE_MUSE_LOG        one JSON line per request, and one for the process start
-//   FAKE_MUSE_STATE_DIR  where sessions are kept; FAKE_MUSE_RESET_MS the reset QUOTA reports
+//   FAKE_MUSE_LOG a JSON line per request; FAKE_MUSE_STATE_DIR where sessions live; FAKE_MUSE_RESET_MS the QUOTA reset
 //   FAKE_MUSE_RESUME_FAIL  a message every `session/resume` fails with; FAKE_MUSE_BOOT_EXIT  exit code before reading anything
 //   FAKE_MUSE_NO_GRANT   grant no capability. (A `required` MCP server under /nonexistent fails the turn, as on the real host.)
 import fs from "node:fs";
