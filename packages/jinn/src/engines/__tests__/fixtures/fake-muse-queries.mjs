@@ -1,11 +1,8 @@
-// The two queries the fake `muse serve` answers outside a turn: `model/list`
-// and `usage/read`, shaped from Muse Code 1.4.8's own schema.
+// The query the fake `muse serve` answers outside a turn, `model/list`, shaped from Muse Code 1.4.8's own schema.
 //
 //   FAKE_MUSE_MODELS      a JSON `model/list` result to answer with (default: two rows, the
 //                         newer one `isDefault`, both priced); `error` fails the request,
 //                         `hang` never answers it
-//   FAKE_MUSE_USAGE       a JSON `usage` object `usage/read` answers with (default: nothing
-//                         observed, which is what a host that has seen no usage says)
 import { fail, reply } from "./fake-muse-store.mjs";
 
 const row = (modelId, displayLabel, isDefault, cost) => ({
@@ -29,8 +26,4 @@ export function modelList(id) {
   if (stated === "hang") return;
   if (stated === "error") return fail(id, -32603, "model catalog unavailable", { kind: "internal" });
   reply(id, stated ? JSON.parse(stated) : DEFAULT_MODELS);
-}
-
-export function usageRead(id) {
-  reply(id, process.env.FAKE_MUSE_USAGE ? { usage: JSON.parse(process.env.FAKE_MUSE_USAGE) } : {});
 }

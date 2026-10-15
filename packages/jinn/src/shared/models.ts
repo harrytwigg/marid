@@ -12,8 +12,8 @@ import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
 import { discoverOpencodeModels } from "./opencode-models.js";
 import { MUSECODE_EFFORT_LEVELS } from "./musecode-effort.js";
-import { discoverMusecodeModels, resolveMusecodeCatalog, type MusecodeModelDiscovery } from "./musecode-models.js";
-import type { MuseModelCost } from "../engines/musecode-turn-text.js";
+import { buildMusecodeEntry } from "./musecode-registry.js";
+export { musecodeEngineOptions, musecodeModelCost, refreshMusecodeModels } from "./musecode-registry.js";
 import {
   CLAUDE_ALIAS_IDS,
   discoverClaudeEffortLevels,
@@ -214,8 +214,6 @@ let discoveredGrokModels: GrokModelDiscovery | null = null;
 let discoveredHermesModels: HermesModelDiscovery | null = null;
 /** Snapshot of dynamically-discovered opencode models (null until first discovery). */
 let discoveredOpencodeModels: ModelInfo[] | null = null;
-/** Snapshot of the Muse Code catalog (`model/list`; null until first discovery). */
-let discoveredMusecodeModels: MusecodeModelDiscovery | null = null;
 
 /**
  * Discover Claude's catalog through Claude Code OAuth. This is best-effort and
@@ -343,25 +341,6 @@ export async function refreshOpencodeModels(config: JinnConfig): Promise<void> {
   }
 }
 
-/** Discover Muse Code's catalog (`model/list` on a short-lived `muse serve`) and refresh the registry. Never throws. */
-export async function refreshMusecodeModels(config: JinnConfig): Promise<void> {
-  if (!engineAvailable(config, "musecode")) {
-    discoveredMusecodeModels = null;
-    invalidateModelRegistry();
-    return;
-  }
-  const found = await discoverMusecodeModels(resolveBin("muse", engineBinOverride(config, "musecode")));
-  discoveredMusecodeModels = found.models.length > 0 ? found : null;
-  if (discoveredMusecodeModels) logger.info(`Muse Code model discovery: ${found.models.length} model(s)`);
-  invalidateModelRegistry();
-}
-
-/** What a model costs per million tokens, when the discovered catalog says. No model id means the catalog's default. */
-export function musecodeModelCost(modelId: string | undefined): MuseModelCost | undefined {
-  const catalog = discoveredMusecodeModels;
-  return catalog?.costs[modelId ?? catalog.defaultModel ?? ""];
-}
-
 /**
  * Discover Grok's authenticated model list (`grok models`) and refresh the registry.
  * Never throws; until discovery succeeds the registry uses Jinn's known Grok model
@@ -475,10 +454,7 @@ export function buildRegistry(config: JinnConfig): ModelRegistry {
       registry[name] = buildOpencodeEntry(config, block?.opencode, synthesized[name], available);
       continue;
     }
-    if (name === "musecode") {
-      registry[name] = buildMusecodeEntry(config, block?.musecode, synthesized[name], available);
-      continue;
-    }
+    if (name === "musecode") { registry[name] = buildMusecodeEntry(config, block?.musecode, synthesized[name], available, (b, p) => fromEngineModelsConfig(name, b, available, p)); continue }
     const engineBlock = block?.[name];
     registry[name] = engineBlock
       ? fromEngineModelsConfig(name, engineBlock, available)
@@ -662,19 +638,6 @@ function buildOpencodeEntry(
   }
   if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);
   return { ...synthEntry, available };
-}
-
-/** Muse Code registry entry: discovered catalog > config `models.musecode` block > the documented models. */
-function buildMusecodeEntry(
-  config: JinnConfig,
-  block: EngineModelsConfig | undefined,
-  synthEntry: EngineRegistryEntry,
-  available: boolean,
-): EngineRegistryEntry {
-  const pinned = config.engines.musecode?.model;
-  if (!discoveredMusecodeModels && block) return fromEngineModelsConfig("musecode", block, available, pinned);
-  const { defaultModel, models } = resolveMusecodeCatalog(discoveredMusecodeModels, pinned);
-  return { ...synthEntry, name: "musecode", available, defaultModel, effortMechanism: "musecode-turn", models };
 }
 
 /** Pi registry entry: discovered models > config `models.pi` block > synthesized. */

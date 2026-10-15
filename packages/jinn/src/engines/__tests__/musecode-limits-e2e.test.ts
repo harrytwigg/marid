@@ -106,8 +106,7 @@ describe.skipIf(!ENABLED)("Muse Code models and usage (real binary)", () => {
     expect(fs.statSync(MUSECODE_USAGE_FILE).mode & 0o777).toBe(0o600);
 
     const config = { engines: { default: "claude", musecode: { bin: BIN } } } as unknown as JinnConfig;
-    const snap = await collectMusecodeLimits(config);
-    // A fresh host has observed no usage, so `usage/read` is empty and the file is the source.
+    const snap = collectMusecodeLimits(config);
     expect(snap).toMatchObject({ status: "snapshot", source: "muse usage/changed", accountPlan: "everyday", stale: false });
     expect(snap.windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 42], ["weekly", 17]]);
   }, 90_000);
@@ -131,7 +130,7 @@ describe.skipIf(!ENABLED)("Muse Code models and usage (real binary)", () => {
 
   it("reports no usage, with the first-turn message, before any turn has run", async () => {
     const config = { engines: { default: "claude", musecode: { bin: BIN } } } as unknown as JinnConfig;
-    const snap = await collectMusecodeLimits(config);
+    const snap = collectMusecodeLimits(config);
     expect(snap.status).toBe("unavailable");
     expect(snap.unsupportedReason).toMatch(/after the first Muse Code turn/);
   }, 60_000);

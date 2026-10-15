@@ -40,7 +40,7 @@
 //   FAKE_MUSE_NO_GRANT   grant no capability. (A `required` MCP server under /nonexistent fails the turn, as on the real host.)
 import fs from "node:fs";
 import readline from "node:readline";
-import { modelList, usageRead } from "./fake-muse-queries.mjs";
+import { modelList } from "./fake-muse-queries.mjs";
 import { fail, log, notify, out, readSession, reply, requiredServerThatCannotStart, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
 
 if (process.env.FAKE_MUSE_BOOT_EXIT) {
@@ -96,7 +96,6 @@ function handle({ id, method, params }) {
     case "turn/start": return startTurn(id, params);
     case "turn/interrupt": return interrupt(id, params);
     case "model/list": return modelList(id);
-    case "usage/read": return usageRead(id);
     case "approval/decide":
     case "userInput/cancel":
       commands.get(method)?.(params);

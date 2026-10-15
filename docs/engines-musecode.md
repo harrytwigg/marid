@@ -135,7 +135,9 @@ The Limits page and `jinn limits` read it:
 | `5h` window | `window.usedPercent`, `windowDurationMins`, `resetsAtMs` |
 | `weekly` window | `weekly.usedPercent`, `resetsAtMs` |
 
-The collector first asks a short-lived `muse serve` (`usage/read`, 10 seconds). A host answers only for usage it has observed itself, so a fresh one has nothing, and the saved snapshot is what shows (status `snapshot`, `stale` when the window has since reset or the reading is more than six hours old). With no snapshot yet, the card says usage appears after the first Muse Code turn.
+The snapshot is the only source: its status is `snapshot`, and it is `stale` when the window has since reset or the reading is more than six hours old. With no snapshot yet, the card says usage appears after the first Muse Code turn.
+
+Muse Code also has a `usage/read` method, which answers only for usage the host process has itself observed. A host started just to be asked has observed none (checked on 1.4.8), so Marid does not ask. Whether it answers against real credentials is unverified, and a live read is a follow-up; until it is checked, Muse Code is not one of the engines the Limits page treats as live.
 
 A window at 100% or more counts as spent until its reset, as it does for Claude and Codex. Marid records Muse Code as exhausted, and a new session that would have started on it starts on its `fallback` engine instead, until the window reopens.
 

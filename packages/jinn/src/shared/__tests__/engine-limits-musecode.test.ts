@@ -39,7 +39,6 @@ beforeEach(() => {
   invalidateModelRegistry();
   fs.rmSync(TEST_HOME, { recursive: true, force: true });
   vi.stubEnv("FAKE_MUSE_STATE_DIR", path.join(TEST_HOME, "fake-state"));
-  vi.stubEnv("FAKE_MUSE_USAGE", "");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -47,22 +46,10 @@ afterEach(() => {
 });
 
 describe("collectMusecodeLimits", () => {
-  it("reports what the host answers to usage/read as live, without reading the snapshot file", async () => {
-    writeMusecodeUsage(usage({ used: 5 }));
-    const observedAtMs = NOW - 1000;
-    vi.stubEnv("FAKE_MUSE_USAGE", JSON.stringify(usage({ observedAtMs, used: 88 })));
-    const snap = await collectMusecodeLimits(config());
-    expect(snap.status).toBe("live");
-    expect(snap.source).toBe("muse usage/read");
-    expect(snap.accountPlan).toBe("everyday");
-    expect(snap.refreshedAt).toBe(new Date(observedAtMs).toISOString());
-    expect(snap.windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 88], ["weekly", 17]]);
-  });
-
-  it("falls back to the snapshot file a turn left, with windows in seconds and ISO", async () => {
+  it("reports the snapshot file a turn left, with windows in seconds and ISO", async () => {
     const kept = usage({ used: 42 });
     writeMusecodeUsage(kept);
-    const snap = await collectMusecodeLimits(config());
+    const snap = collectMusecodeLimits(config());
     expect(snap.status).toBe("snapshot");
     expect(snap.stale).toBe(false);
     expect(snap.accountPlan).toBe("everyday");
@@ -75,14 +62,14 @@ describe("collectMusecodeLimits", () => {
 
   it("marks a snapshot stale once its window has reset, and once it is older than six hours", async () => {
     writeMusecodeUsage(usage({ resetsInMs: -HOUR, observedAtMs: NOW - 2 * HOUR }));
-    expect((await collectMusecodeLimits(config())).stale).toBe(true);
+    expect((collectMusecodeLimits(config())).stale).toBe(true);
     fs.rmSync(MUSECODE_USAGE_FILE);
     writeMusecodeUsage(usage({ observedAtMs: NOW - 7 * HOUR, resetsInMs: 20 * HOUR }));
-    expect((await collectMusecodeLimits(config())).stale).toBe(true);
+    expect((collectMusecodeLimits(config())).stale).toBe(true);
   });
 
   it("says usage appears after the first Muse Code turn when there is no data at all", async () => {
-    const snap = await collectMusecodeLimits(config());
+    const snap = collectMusecodeLimits(config());
     expect(snap.status).toBe("unavailable");
     expect(snap.windows).toBeUndefined();
     expect(snap.unsupportedReason).toBe(MUSECODE_NO_USAGE_REASON);
@@ -91,17 +78,20 @@ describe("collectMusecodeLimits", () => {
 
   it("reports a missing binary the way the other engines do", async () => {
     invalidateModelRegistry();
-    const snap = await collectMusecodeLimits(config({ bin: path.join(TEST_HOME, "no-such-muse") }));
+    const snap = collectMusecodeLimits(config({ bin: path.join(TEST_HOME, "no-such-muse") }));
     expect(snap).toMatchObject({ status: "unavailable", available: false, unsupportedReason: "Muse Code CLI is not installed." });
   });
 });
 
 describe("collectEngineLimits for Muse Code", () => {
-  it("is in the collector chain, and a host's live read is shown as a snapshot (usage is as-of, not live)", async () => {
-    vi.stubEnv("FAKE_MUSE_USAGE", JSON.stringify(usage()));
+  it("is in the collector chain, and never starts the binary to ask for usage", async () => {
+    writeMusecodeUsage(usage());
+    const logFile = path.join(TEST_HOME, "requests.jsonl");
+    vi.stubEnv("FAKE_MUSE_LOG", logFile);
     const { engines } = await collectEngineLimits(config(), { engine: "musecode" });
     expect(engines.musecode!.status).toBe("snapshot");
     expect(engines.musecode!.windows).toHaveLength(2);
+    expect(fs.existsSync(logFile)).toBe(false);
   });
 
   it("records a window at 100% as exhausted until its reset, and new sessions move to the configured fallback", async () => {
