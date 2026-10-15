@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { FallbackModeChip } from '../fallback-mode-chip'
-import type { SessionFallbackView } from '../fallback-mode-model'
+import { parseFallbackView, type SessionFallbackView } from '../fallback-mode-model'
 
-const apiMocks = vi.hoisted(() => ({ updateSession: vi.fn() }))
+const apiMocks = vi.hoisted(() => ({ updateSession: vi.fn(), getSession: vi.fn() }))
 vi.mock('@/lib/api', () => ({ api: apiMocks }))
 
 const target = { engine: 'claude', account: 'backup', model: 'sonnet', label: 'Claude backup · Sonnet' }
@@ -18,6 +18,7 @@ function open() {
 
 beforeEach(() => {
   apiMocks.updateSession.mockReset()
+  apiMocks.getSession.mockReset()
   apiMocks.updateSession.mockResolvedValue({})
 })
 
@@ -71,5 +72,31 @@ describe('FallbackModeChip menu', () => {
     await act(async () => { fireEvent.click(screen.getByRole('menuitemradio', { name: /Auto-resume/ })) })
     await waitFor(() => expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('Fallback: Claude backup'))
     expect(apiMocks.updateSession).toHaveBeenCalledWith('s1', { fallbackMode: 'auto-resume' })
+    expect(screen.getByRole('alert').textContent).toBe('nope')
+  })
+  it('drops a result that arrives after the session changed', async () => {
+    let resolve!: (v: unknown) => void
+    apiMocks.updateSession.mockReturnValue(new Promise((r) => { resolve = r }))
+    const { rerender } = render(<FallbackModeChip sessionId="a" view={view()} />)
+    open()
+    await act(async () => { fireEvent.click(screen.getByRole('menuitemradio', { name: /children/ })) })
+    rerender(<FallbackModeChip sessionId="b" view={view({ mode: 'auto-resume' })} />)
+    await act(async () => { resolve({ fallback: view({ mode: 'fallback-children' }) }) })
+    expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('off (auto-resume)')
+  })
+  it('hides the chip on an unknown view shape', () => {
+    const bad = { mode: 'fallback', modeSource: 'session', target: { engine: 'claude' } } as unknown as SessionFallbackView
+    const { container } = render(<FallbackModeChip sessionId="s1" view={parseFallbackView(bad)} />)
+    expect(container.innerHTML).toBe('')
+  })
+  it('re-reads the view on session:updated for this session only', async () => {
+    let fire!: (f: unknown) => void
+    const subscribe = (fn: (f: never) => void) => { fire = fn as (f: unknown) => void; return () => {} }
+    apiMocks.getSession.mockResolvedValue({ fallback: view({ mode: 'auto-resume' }) })
+    render(<FallbackModeChip sessionId="s1" view={view()} subscribe={subscribe} />)
+    await act(async () => { fire({ event: 'session:updated', payload: { sessionId: 'other' } }) })
+    expect(apiMocks.getSession).not.toHaveBeenCalled()
+    await act(async () => { fire({ event: 'session:updated', payload: { sessionId: 's1' } }) })
+    await waitFor(() => expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('off (auto-resume)'))
   })
 })

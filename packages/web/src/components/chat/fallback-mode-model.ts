@@ -23,16 +23,33 @@ export const FALLBACK_MODE_OPTIONS: ReadonlyArray<{
   { mode: 'auto-resume', title: 'Auto-resume', description: 'Never switch model; wait and auto-resume' },
 ]
 
-/** Visible chip text: the full label, and a short form for narrow composers. */
-export function fallbackChipText(view: SessionFallbackView): { full: string; short: string } {
-  if (view.mode === 'auto-resume') return { full: 'Fallback: off (auto-resume)', short: 'off' }
-  if (!view.target) return { full: 'Fallback: disabled', short: 'disabled' }
-  return { full: `Fallback: ${view.target.label}`, short: view.target.label }
+/** Visible chip text. */
+export function fallbackChipText(view: SessionFallbackView): string {
+  if (view.mode === 'auto-resume') return 'Fallback: off (auto-resume)'
+  if (!view.target) return 'Fallback: disabled'
+  return `Fallback: ${view.target.label}`
+}
+
+const MODES: ReadonlyArray<string> = ['fallback', 'fallback-children', 'auto-resume']
+
+function isTarget(t: unknown): boolean {
+  if (t == null) return true
+  const o = t as Record<string, unknown>
+  return typeof t === 'object' && typeof o.label === 'string' && typeof o.engine === 'string'
+}
+
+/** Narrow an API value to a view, or null when the shape is not the contract's (older or newer gateway). */
+export function parseFallbackView(raw: unknown): SessionFallbackView | null {
+  if (!raw || typeof raw !== 'object') return null
+  const v = raw as Record<string, unknown>
+  const okMode = typeof v.mode === 'string' && MODES.includes(v.mode)
+  const okSource = v.modeSource === 'session' || v.modeSource === 'default'
+  return okMode && okSource && isTarget(v.target) ? (raw as SessionFallbackView) : null
 }
 
 /** Tooltip: the visible text plus the target's engine, account and model. */
 export function fallbackChipTitle(view: SessionFallbackView): string {
-  const parts: string[] = [fallbackChipText(view).full]
+  const parts: string[] = [fallbackChipText(view)]
   const t = view.mode === 'auto-resume' ? null : view.target
   if (t) {
     const detail = [`engine ${t.engine}`, t.account ? `account ${t.account}` : '', t.model ? `model ${t.model}` : '']

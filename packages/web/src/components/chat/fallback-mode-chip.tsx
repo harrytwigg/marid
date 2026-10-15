@@ -7,10 +7,12 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu'
+import type { GatewayEventListener } from '@jinn/gateway-events'
 import { api } from '@/lib/api'
 import {
   FALLBACK_MODE_OPTIONS,
   fallbackChipText,
+  parseFallbackView,
   fallbackChipTitle,
   withMode,
   type SessionFallbackMode,
@@ -22,33 +24,63 @@ interface FallbackModeChipProps {
   /** `session.fallback` from GET /api/sessions/:id; absent on an older gateway. */
   view: SessionFallbackView | null | undefined
   disabled?: boolean
+  /** Gateway event subscription; a `session:updated` for this session re-reads its fallback view. */
+  subscribe?: FallbackSubscribe
 }
 
-/** Optimistic mode change with rollback; any fresh server view replaces the local copy. */
-function useFallbackMode(sessionId: string, view: SessionFallbackView | null | undefined) {
+type FallbackSubscribe = (fn: GatewayEventListener) => () => void
+
+/**
+ * Optimistic mode change with rollback to the last server-confirmed view. A
+ * fresh server view replaces the local copy unless a PUT is in flight, and a
+ * session switch discards any result still on its way for the old session.
+ */
+function useFallbackMode(sessionId: string, view: SessionFallbackView | null | undefined, subscribe?: FallbackSubscribe) {
   const [local, setLocal] = useState<SessionFallbackView | null | undefined>(view)
   const [error, setError] = useState<string | null>(null)
   const seq = useRef(0)
-  useEffect(() => { setLocal(view); setError(null) }, [view, sessionId])
+  const inFlight = useRef(0)
+  const confirmed = useRef(view)
+  const viewKey = JSON.stringify(view ?? null)
+
+  const accept = (next: SessionFallbackView | null | undefined) => {
+    confirmed.current = next
+    if (inFlight.current === 0) setLocal(next)
+  }
+  useEffect(() => { seq.current++; inFlight.current = 0; confirmed.current = view; setLocal(view); setError(null) }, [sessionId])
+  useEffect(() => { accept(view); if (inFlight.current === 0) setError(null) }, [viewKey])
+  useEffect(() => {
+    if (!subscribe) return
+    return subscribe((frame) => {
+      if (frame.event !== 'session:updated' || frame.payload.sessionId !== sessionId) return
+      const mine = seq.current
+      api.getSession(sessionId, { messages: false })
+        .then((s) => { if (seq.current === mine) accept(parseFallbackView(s.fallback)) })
+        .catch(() => {})
+    })
+  }, [subscribe, sessionId])
 
   const pick = (value: string) => {
     const mode = value as SessionFallbackMode
     if (!local || mode === local.mode) return
-    const previous = local
+    const base = confirmed.current ?? local
     const mine = ++seq.current
+    inFlight.current++
     setLocal(withMode(local, mode))
     setError(null)
     api.updateSession(sessionId, { fallbackMode: mode })
       .then((res) => {
         if (seq.current !== mine) return
-        const next = (res as { fallback?: SessionFallbackView } | undefined)?.fallback
-        if (next) setLocal(next)
+        const next = parseFallbackView(res?.fallback) ?? withMode(base, mode)
+        confirmed.current = next
+        setLocal(next)
       })
       .catch((err) => {
         if (seq.current !== mine) return
-        setLocal(previous)
+        setLocal(base)
         setError(err instanceof Error ? err.message : 'Fallback mode update failed')
       })
+      .finally(() => { if (seq.current === mine) inFlight.current = 0 })
   }
   return { local, error, pick }
 }
@@ -64,6 +96,7 @@ function FallbackModeMenu({ local, error, onPick }: { local: SessionFallbackView
           <DropdownMenuRadioItem
             key={o.mode}
             value={o.mode}
+            onSelect={(e) => e.preventDefault()}
             className="items-start justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[state=checked]:text-[var(--text-primary)] [&>span:first-child]:hidden"
           >
             <span className="flex min-w-0 flex-1 flex-col">
@@ -98,8 +131,8 @@ function FallbackModeMenu({ local, error, onPick }: { local: SessionFallbackView
  * usage limit, with a three-option menu to change it. Renders nothing when the
  * gateway sends no `fallback` view.
  */
-export function FallbackModeChip({ sessionId, view, disabled }: FallbackModeChipProps) {
-  const { local, error, pick } = useFallbackMode(sessionId, view)
+export function FallbackModeChip({ sessionId, view, disabled, subscribe }: FallbackModeChipProps) {
+  const { local, error, pick } = useFallbackMode(sessionId, view, subscribe)
   if (!local) return null
   const text = fallbackChipText(local)
 
@@ -112,14 +145,11 @@ export function FallbackModeChip({ sessionId, view, disabled }: FallbackModeChip
           disabled={disabled}
           title={fallbackChipTitle(local)}
           aria-label={`${fallbackChipTitle(local)}. Change fallback mode`}
-          className="group inline-flex min-h-[40px] md:min-h-0 min-w-0 shrink items-center gap-1 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
+          className="group inline-flex min-h-[40px] md:min-h-0 min-w-[28px] shrink items-center gap-1 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
         >
           <ArrowRightLeftIcon aria-hidden className="size-3 shrink-0 text-[var(--text-tertiary)]" />
           <span className="truncate text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors @max-[340px]/composer:hidden">
-            {text.full}
-          </span>
-          <span className="hidden truncate text-[var(--text-tertiary)] @max-[340px]/composer:inline @max-[340px]/composer:max-w-[6ch]">
-            {text.short}
+            {text}
           </span>
           {local.mode === 'fallback-children' && (
             <span

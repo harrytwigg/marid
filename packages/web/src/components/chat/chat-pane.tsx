@@ -13,7 +13,7 @@ import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-sess
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
 import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
 import { FallbackModeChip } from './fallback-mode-chip'
-import type { SessionFallbackView } from './fallback-mode-model'
+import { parseFallbackView } from './fallback-mode-model'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
 import { useLiveSession } from '@/hooks/use-live-session'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
@@ -570,7 +570,8 @@ export function ChatPane({
           {sessionId ? (
             <FallbackModeChip
               sessionId={sessionId}
-              view={currentSession?.fallback as SessionFallbackView | undefined}
+              view={parseFallbackView(currentSession?.fallback)}
+              subscribe={subscribe}
               disabled={loading}
             />
           ) : null}
