@@ -164,18 +164,19 @@ export function FallbackModeChip({ sessionId, view, disabled, subscribe }: Fallb
           className="group inline-flex min-h-[40px] md:min-h-0 min-w-[28px] shrink-[8] items-center gap-1 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
         >
           <ArrowRightLeftIcon aria-hidden className="size-3 shrink-0 text-[var(--text-tertiary)]" />
-          <span className="truncate text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors @max-[480px]/composer:hidden">
+          {/* One truncating span, so the children marker clips with the text (never on its own) and hides with it. */}
+          <span className="min-w-0 truncate text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors @max-[480px]/composer:hidden">
             {text}
+            {local.mode === 'fallback-children' && (
+              <span
+                data-testid="fallback-children-marker"
+                title="Child sessions inherit this fallback"
+                className="ml-1 text-[length:var(--text-caption2)] text-[var(--text-quaternary)]"
+              >
+                + children
+              </span>
+            )}
           </span>
-          {local.mode === 'fallback-children' && (
-            <span
-              data-testid="fallback-children-marker"
-              title="Child sessions inherit this fallback"
-              className="shrink-0 text-[length:var(--text-caption2)] text-[var(--text-quaternary)] @max-[480px]/composer:hidden"
-            >
-              + children
-            </span>
-          )}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
