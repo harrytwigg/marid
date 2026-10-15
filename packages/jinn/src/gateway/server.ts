@@ -31,6 +31,7 @@ import { createAntigravityEnginePair } from "../engines/antigravity-runtime.js";
 import { PiEngine } from "../engines/pi.js";
 import { OpencodeEngine } from "../engines/opencode.js";
 import { OpencodeServerPool, opencodeMode } from "../engines/opencode-server.js";
+import { resolveCommandTimeoutMs } from "../engines/opencode-command-timeout.js";
 import { OpencodeInteractiveEngine } from "../engines/opencode-interactive.js";
 import { resolveSessionEngineMcp } from "../sessions/engine-run-mcp.js";
 import { GrokEngine } from "../engines/grok.js";
@@ -676,6 +677,7 @@ export async function startGateway(
     limits: () => currentConfig.engines.opencode?.server,
     bin: () => currentConfig.engines.opencode?.bin,
     disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
+    commandTimeoutMs: () => resolveCommandTimeoutMs(currentConfig.engines.opencode),
   });
   const opencodeEngine = new OpencodeEngine({
     // The same two live readers, for the same reason: opencode is the third
@@ -684,6 +686,7 @@ export async function startGateway(
     gatewayPort: () => port,
     mode: () => opencodeMode(currentConfig.engines.opencode),
     disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
+    commandTimeoutMs: () => resolveCommandTimeoutMs(currentConfig.engines.opencode),
     servers: opencodeServers,
   });
   const opencodeInteractiveEngine = new OpencodeInteractiveEngine(opencodeEngine, opencodeServers, {

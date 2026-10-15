@@ -50,6 +50,8 @@ const hoisted = vi.hoisted(() => ({
   ready: true,
   /** Flipped by one case to drop the staged opencode config. */
   withConfig: true,
+  /** What the host's `opencode --version` said, as its facts carry it. */
+  opencodeVersion: undefined as string | undefined,
   /** When set, the TURN's ssh client stays open until the test closes it —
    *  the shape of a run that is still going when an interrupt arrives. */
   hang: false,
@@ -146,6 +148,7 @@ vi.mock("../remote-stage.js", async (importOriginal) => {
           stageDir: "/home/builder/.jinn-remote-stage",
           nodeBin: "/home/builder/.nvm/versions/node/v22.22.3/bin/node",
           opencodeBin: REMOTE_BIN,
+          ...(hoisted.opencodeVersion ? { opencodeVersion: hoisted.opencodeVersion } : {}),
           jinnVersion: "0.32.0",
           entryDir: "/home/builder/.nvm/versions/node/v22.22.3/lib/node_modules/jinn-cli/dist/src/mcp",
         },
@@ -170,7 +173,6 @@ vi.mock("../../shared/logger.js", () => ({
 }));
 
 import { OpencodeEngine } from "../opencode.js";
-import type { OpencodeServerPool } from "../opencode-server.js";
 import { REMOTE_KILL_SCRIPT } from "../remote-stage.js";
 import { JINN_HOME } from "../../shared/paths.js";
 import type { EngineRunOpts } from "../../shared/types.js";
@@ -271,26 +273,30 @@ describe("OpencodeEngine — a remote employee's turn runs on the other machine"
     expect(command).toContain("'-s' 'ses_earlier'");
   });
 
-  it("adds --standalone when the host's server was refused as OpenCode 2, and not for another host", async () => {
-    const pool = (standaloneHost: string) => ({
-      acquire: async () => { throw new Error("server mode is off for this host: OpenCode 2 is not supported by server mode"); },
-      stop: async () => {},
-      size: () => 0,
-      runNeedsStandalone: (target: { remoteHost?: string }) => target.remoteHost === standaloneHost,
-    }) as unknown as OpencodeServerPool;
-    const viaPool = (host: string) => new OpencodeEngine({
-      mode: () => "server",
-      servers: pool(host),
-      remote: () => REMOTE_CONFIG,
-      gatewayPort: () => GATEWAY_PORT,
-    });
+  it("adds --standalone when the host's opencode is OpenCode 2, and not for 1.x", async () => {
+    hoisted.opencodeVersion = "2.0.29";
+    try {
+      await engine().run(runOpts());
+      expect(remoteCommand()).toContain("'--dangerously-skip-permissions' '--standalone'");
+      hoisted.spawns.length = 0;
+      hoisted.opencodeVersion = "1.19.0";
+      await engine().run(runOpts());
+      expect(remoteCommand()).not.toContain("--standalone");
+    } finally {
+      hoisted.opencodeVersion = undefined;
+    }
+  });
 
-    await viaPool("build-box").run(runOpts());
-    expect(remoteCommand()).toContain("'--dangerously-skip-permissions' '--standalone'");
+  it("passes the command ceiling to the remote opencode and has its plugin staged", async () => {
+    const withCeiling = new OpencodeEngine({ remote: () => REMOTE_CONFIG, gatewayPort: () => GATEWAY_PORT, commandTimeoutMs: () => 900_000 });
+    await withCeiling.run(runOpts());
+    expect(remoteCommand()).toContain("JINN_OPENCODE_COMMAND_TIMEOUT_MS='900000'");
+    expect(hoisted.prepareCalls.at(-1)).toMatchObject({ opencodeCommandTimeout: true });
 
     hoisted.spawns.length = 0;
-    await viaPool("another-box").run(runOpts());
-    expect(remoteCommand()).not.toContain("--standalone");
+    await engine().run(runOpts());
+    expect(remoteCommand()).not.toContain("JINN_OPENCODE_COMMAND_TIMEOUT_MS");
+    expect(hoisted.prepareCalls.at(-1)).toMatchObject({ opencodeCommandTimeout: false });
   });
 
   it("points opencode at the staged config and this session's home", async () => {

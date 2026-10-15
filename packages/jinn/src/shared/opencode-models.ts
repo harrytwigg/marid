@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import type { ModelInfo } from "./types.js";
 import { logger } from "./logger.js";
+import { localOpencodeVersion } from "./opencode-bin-version.js";
 
 /**
  * Dynamic model discovery for the opencode engine.
@@ -73,7 +74,7 @@ function killGracefully(proc: ChildProcess): NodeJS.Timeout {
 
 /** Everything `opencode models` printed, on either stream, or "" on any failure.
  *  The best-effort shape every other discovery in this directory uses. */
-function captureOpencodeModels(bin: string): Promise<string> {
+function captureOpencodeModels(bin: string, args: string[]): Promise<string> {
   return new Promise<string>((resolve) => {
     let out = "";
     let done = false;
@@ -90,7 +91,7 @@ function captureOpencodeModels(bin: string): Promise<string> {
     };
 
     try {
-      const proc = spawn(bin, ["models"], { stdio: ["ignore", "pipe", "pipe"] });
+      const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
       proc.stdout.on("data", (d: Buffer) => (out += d.toString()));
       proc.stderr.on("data", (d: Buffer) => (out += d.toString()));
       timer = setTimeout(() => {
@@ -116,5 +117,13 @@ function captureOpencodeModels(bin: string): Promise<string> {
 
 /** Run `opencode models` and return what the installed CLI exposes. */
 export async function discoverOpencodeModels(bin: string): Promise<ModelInfo[]> {
-  return parseOpencodeModels(await captureOpencodeModels(bin));
+  return parseOpencodeModels(await captureOpencodeModels(bin, await modelsArgs(bin)));
+}
+
+/** OpenCode 2's `models` otherwise starts (and leaves running) its background
+ *  service; `--standalone` lists from a private server. 1.x rejects the flag.
+ *  Same output either way. */
+async function modelsArgs(bin: string): Promise<string[]> {
+  const major = Number.parseInt((await localOpencodeVersion(bin))?.split(".")[0] ?? "", 10);
+  return major === 2 ? ["models", "--standalone"] : ["models"];
 }
