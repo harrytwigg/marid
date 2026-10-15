@@ -33,7 +33,7 @@ function Chip({
       data-testid={testId}
       aria-label={label}
       onClick={onOpen}
-      className={`focus-ring flex flex-none items-center gap-[7px] bg-[var(--fill-tertiary)] font-medium text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-secondary)] ${
+      className={`focus-outline flex flex-none items-center gap-[7px] bg-[var(--fill-tertiary)] font-medium text-[var(--text-secondary)] outline-none hover:bg-[var(--fill-secondary)] ${
         mobile
           ? `h-[34px] rounded-[17px] text-[13.5px] ${clearSlot ? "pl-3 pr-[34px]" : "px-3"}`
           : `h-7 rounded-[14px] text-[12.5px] ${clearSlot ? "pl-[11px] pr-7" : "px-[11px]"}`

@@ -13,7 +13,7 @@ import type { ArchiveStage } from "./department-archive-dialog"
 const ArchiveDialog = lazy(() => import("./department-archive-dialog").then((module) => ({ default: module.ArchiveDialog })))
 
 const TRIGGER_CLASS =
-  "focus-ring inline-flex size-10 items-center justify-center rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] outline-none transition-transform hover:scale-[0.96] motion-reduce:transition-none"
+  "focus-outline inline-flex size-10 items-center justify-center rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] outline-none transition-transform hover:scale-[0.96] motion-reduce:transition-none"
 
 export function DepartmentArchiveMenu({ slug, prefix, archived }: { slug: string; prefix: string | undefined; archived: boolean }) {
   const [stage, setStage] = useState<ArchiveStage | "closed">("closed")

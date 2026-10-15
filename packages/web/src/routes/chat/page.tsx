@@ -867,6 +867,7 @@ function ChatPage() {
         </div>}
 
         <div
+          data-shell="sheet"
           className="chat-pills-layout relative min-w-0 flex-1 flex-col overflow-hidden bg-background flex"
           // Set exactly where the pills + scrim are drawn, so a CLI or terminal
           // view clears them there and nowhere else (JIN-2; rule at the foot).

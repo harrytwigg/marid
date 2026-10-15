@@ -16,8 +16,7 @@ import { useFeatures } from './hooks/use-features'
 import { APP_ROUTES, type AppRouteId } from './lib/app-routes'
 import type { NativeGatewayProfiles, NativeGatewayProfilesSnapshot } from './lib/native-gateway-profiles'
 import { nativeBridge } from './platform/native-bridge'
-import './routes/globals.css'
-import './routes/theme-overrides.css'
+import './routes/app.css'
 
 let profiles: NativeGatewayProfiles | undefined
 let initialNativeOrigin: string | undefined

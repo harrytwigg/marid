@@ -114,7 +114,7 @@ function InlineRef({ sessionId, label, onOpen }: { sessionId: string; label: str
       data-testid={`session-ref-${sessionId}`}
       data-session-id={sessionId}
       onClick={onOpen}
-      className="focus-ring rounded-[5px] underline decoration-[var(--separator)] underline-offset-2 outline-none hover:decoration-[var(--text-tertiary)]"
+      className="focus-outline rounded-[5px] underline decoration-[var(--separator)] underline-offset-2 outline-none hover:decoration-[var(--text-tertiary)]"
     >
       {label}
     </button>
@@ -156,7 +156,7 @@ export function SessionRef({ sessionId, byName, inline, label: labelOverride }: 
       data-testid={`session-ref-${sessionId}`}
       data-session-id={sessionId}
       onClick={onOpen}
-      className="focus-ring group/ref flex min-w-0 items-center gap-[7px] rounded-[7px] text-left outline-none"
+      className="focus-outline group/ref flex min-w-0 items-center gap-[7px] rounded-[7px] text-left outline-none"
     >
       <RefGlyph employee={entry?.employee} />
       <span className="min-w-0 truncate">{label}</span>

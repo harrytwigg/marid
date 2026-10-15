@@ -1,0 +1,20 @@
+/*
+ * The one stylesheet main.tsx loads, so Tailwind compiles a single tree:
+ * HeroUI's component CSS @applies Marid's theme and HeroUI's utilities, which
+ * only resolve inside the same compile.
+ *
+ * Order matters. HeroUI's @theme comes after globals.css so its names
+ * (accent, muted, radius …) win; the few Marid call sites that meant something
+ * else by them were renamed. HeroUI's variants file is not imported: its dark
+ * variant falls back to prefers-color-scheme even when the app is set to light.
+ */
+@import "./globals.css";
+/* The package exports its theme files under a pattern with two wildcards,
+   which resolvers reject, so this one file is reached by path. */
+@import "../../node_modules/@heroui/styles/dist/themes/shared/theme.css";
+@import "@heroui/styles/utilities";
+@import "@heroui/styles/base/base.css" layer(base);
+@import "@heroui/styles/components/switch.css" layer(components);
+@import "./theme-overrides.css";
+@import "./glass-identity.css";
+@import "./heroui-bridge.css";

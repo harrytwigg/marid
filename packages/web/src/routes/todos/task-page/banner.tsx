@@ -33,7 +33,7 @@ const KIND_STYLE: Record<BannerKind, { color: string; rail: string }> = {
 }
 
 const QUIET_BTN =
-  "focus-ring min-h-11 rounded-full px-3 text-[12.5px] font-semibold text-[var(--text-tertiary)] outline-none transition-colors hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)] disabled:opacity-40 sm:min-h-8"
+  "focus-outline min-h-11 rounded-full px-3 text-[12.5px] font-semibold text-[var(--text-tertiary)] outline-none transition-colors hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)] disabled:opacity-40 sm:min-h-8"
 
 export function TaskBanner({
   detail,
