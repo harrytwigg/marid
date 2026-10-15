@@ -201,3 +201,26 @@ describe("a message sent while the terminal view is the active mode", () => {
     expect(methods().filter((m) => m === "session/start")).toHaveLength(1);
   }, 60_000);
 });
+
+describe("a conversation Muse refuses to resume", () => {
+  it("is started again in a fresh one, the same as one it no longer has, and the message is answered", async () => {
+    const manager = new ManagerClass(config(), new Map([["musecode", engine]]) as never, "musecode-boot");
+    const key = `stub:musecode-${Math.random().toString(16).slice(2)}`;
+    const first = await manager.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
+    const id = first!.sessionId;
+    const refused = registry.getEngineSessionRef(registry.getSession(id)!, "musecode").id;
+
+    // The host will not read the session's log any more (it is empty, or its permission frame is unreadable).
+    vi.stubEnv("FAKE_MUSE_REFUSED", "1");
+    await manager.route(connectorMessage(key, "two"), connectorStub(), { employee: employee as never });
+
+    const session = registry.getSession(id)!;
+    expect(session).toMatchObject({ status: "idle", lastError: null });
+    const fresh = registry.getEngineSessionRef(session, "musecode").id;
+    expect(fresh).toMatch(/^[0-9a-f]{8}-/);
+    expect(fresh).not.toBe(refused);
+    const answer = registry.getMessages(id).filter((m) => m.role === "assistant").map((m) => m.content).at(-1)!;
+    expect(answer).toContain("USER: one");
+    expect(answer).toMatch(/CURRENT MESSAGE:\ntwo$/);
+  }, 60_000);
+});

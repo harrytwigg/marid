@@ -13,6 +13,7 @@ import {
   museReasoningEffort,
 } from "./musecode-protocol.js";
 import { buildMuseSessionConfig } from "./musecode-mcp.js";
+import { FIRST_EVENT_TIMEOUT_MS, silentTurnResult, watchForSilence } from "./musecode-watchdog.js";
 import { loadMuseAttachments } from "./musecode-attachments.js";
 import { answerMuseServerRequest } from "./musecode-approvals.js";
 import { MuseTurn, type MuseModelCost, type MuseUsageSnapshot } from "./musecode-turn.js";
@@ -45,6 +46,8 @@ export interface MusecodeEngineOptions {
    * cannot resume a session its terminal has open.
    */
   releaseView?: (sessionId: string) => Promise<void>;
+  /** How long an accepted turn may go unheard before it is given up on. Defaults to {@link FIRST_EVENT_TIMEOUT_MS}. */
+  firstEventTimeoutMs?: number;
 }
 
 /**
@@ -113,12 +116,16 @@ export class MusecodeEngine implements InterruptibleEngine {
     }
   }
 
+  /** Let go of a terminal that holds the conversation about to be resumed. A failure to is logged; the turn goes on. */
+  private async closeView(opts: EngineRunOpts): Promise<void> {
+    if (!opts.resumeSessionId || !opts.sessionId) return;
+    await this.options.releaseView?.(opts.sessionId).catch((err) => {
+      logger.warn(`Muse Code could not close the terminal view of ${opts.sessionId}: ${err instanceof Error ? err.message : err}`);
+    });
+  }
+
   private async runTurn(opts: EngineRunOpts, trackingId: string, live: LiveTurn): Promise<EngineResult> {
-    if (opts.resumeSessionId && opts.sessionId) {
-      await this.options.releaseView?.(opts.sessionId).catch((err) => {
-        logger.warn(`Muse Code could not close the terminal view of ${opts.sessionId}: ${err instanceof Error ? err.message : err}`);
-      });
-    }
+    await this.closeView(opts);
     if (live.reason) return interruptedResult(opts, live.reason);
     const proc = this.spawnHost(opts, trackingId, live);
     const client = proc.client;
@@ -137,10 +144,23 @@ export class MusecodeEngine implements InterruptibleEngine {
       onUsage: (usage) => this.options.onUsage?.(usage),
     });
     live.turn = turn;
+    if (session.projectionUnavailable) opts.onStream?.({ type: "status", content: "Muse Code could not read this conversation's history (projectionUnavailable); the turn may not start" });
     await this.syncModel(client, session, opts);
     const started = await this.startTurn(client, turn, opts, live);
     if (started) return started;
-    await waitForEnd(turn, client);
+    return await this.awaitTurn(turn, session, live, opts);
+  }
+
+  /** Wait for an accepted turn to end, or for the host to say nothing about it for the whole bound. */
+  private async awaitTurn(turn: MuseTurn, session: OpenedSession, live: LiveTurn, opts: EngineRunOpts): Promise<EngineResult> {
+    const proc = live.proc!;
+    const watch = watchForSilence(turn, this.options.firstEventTimeoutMs ?? FIRST_EVENT_TIMEOUT_MS);
+    const silent = await Promise.race([waitForEnd(turn, proc.client).then(() => false), watch.silent.then(() => true)]);
+    watch.cancel();
+    if (silent && !turn.isCompleted && !live.reason) {
+      logger.error(`Muse Code accepted a turn on ${session.sessionId} and sent nothing about it; giving up on it`);
+      return silentTurnResult(session);
+    }
     return this.settle(turn, proc, live, opts);
   }
 

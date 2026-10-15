@@ -41,7 +41,7 @@
 import fs from "node:fs";
 import readline from "node:readline";
 import { modelList } from "./fake-muse-queries.mjs";
-import { fail, log, refuseInUse, notify, out, readSession, reply, requiredServerThatCannotStart, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
+import { fail, log, refuseResume, historyNoneReason, notify, out, readSession, reply, requiredServerThatCannotStart, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
 
 if (process.env.FAKE_MUSE_BOOT_EXIT) {
   process.stderr.write("fake muse: cannot start (boot refused)\n");
@@ -125,13 +125,13 @@ function resumeSession(id, params) {
   if (needsMcpCapability(id, params)) return;
   brokenServer = requiredServerThatCannotStart(params.config);
   if (process.env.FAKE_MUSE_RESUME_FAIL) return fail(id, -32602, process.env.FAKE_MUSE_RESUME_FAIL, { kind: "invalidParams" });
-  if (refuseInUse(id, params)) return;
+  if (refuseResume(id, params)) return;
   const session = readSession(params.sessionId);
   if (!session) {
     return fail(id, -32020, `session ${params.sessionId} not found`, { kind: "sessionNotFound", retryable: false, sessionId: params.sessionId });
   }
   reply(id, {
-    history: { items: null, mode: "none", noneReason: "excluded", snapshot: null },
+    history: { items: null, mode: "none", noneReason: historyNoneReason(), snapshot: null },
     pendingRequests: [],
     session: sessionView(session),
   });
@@ -162,7 +162,7 @@ function startTurn(id, params) {
   const text = params.input.filter((p) => p.type === "text").map((p) => p.text).join("\n");
   const turnId = params.commandId;
   reply(id, { commandId: params.commandId, disposition: "started", startedNewTurn: true, status: "accepted", turnId });
-  void runTurn({ session, turnId, text, params });
+  if (!directivesOf(text).has("SILENT")) void runTurn({ session, turnId, text, params }); // SILENT: accepted, then never a notification
 }
 
 const item = (turnId, fields) => ({ turnId, revision: 1, ...fields });

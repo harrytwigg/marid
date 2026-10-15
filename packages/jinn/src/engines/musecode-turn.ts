@@ -66,6 +66,7 @@ export class MuseTurn {
   private contextUsed: number | undefined;
   private latestUsage: MuseUsageSnapshot | undefined;
   private unqueued = false;
+  private heard = false;
   private completedWaiters: Array<() => void> = [];
 
   constructor(
@@ -76,6 +77,11 @@ export class MuseTurn {
   /** Named by `turn/start`'s answer; a `turn/completed` for any other turn of the session is not this one's. */
   setTurnId(turnId: string): void {
     this.turnId = turnId;
+  }
+
+  /** Whether the host has sent anything at all about this session since the turn was asked for. */
+  get hasHeardFromHost(): boolean {
+    return this.heard;
   }
 
   get isCompleted(): boolean {
@@ -98,6 +104,7 @@ export class MuseTurn {
     // The account's usage is not any one session's.
     if (method === "usage/changed") return this.readUsageChanged(params);
     if (str(params.sessionId) !== this.sessionId) return;
+    this.heard = true;
     this.sessionNotification(method, params);
   }
 

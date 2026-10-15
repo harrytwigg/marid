@@ -146,6 +146,28 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
     expect(responses.some((r) => r.body.includes("RULES-MARKER-7f3a"))).toBe(true);
   }, 60_000);
 
+  it("reads a session whose log was emptied as a lost conversation: the host refuses to resume it", async () => {
+    const first = await engine.run(opts({ prompt: "seed an empty log" }));
+    fs.writeFileSync(findSessionFile(path.join(scratch, "home"), first.sessionId)!, "");
+    const result = await engine.run(opts({ prompt: "after the log was emptied", resumeSessionId: first.sessionId }));
+    expect(result).toEqual({ sessionId: first.sessionId, result: "", error: `musecode has no conversation ${first.sessionId} to resume` });
+    expect(isDeadSessionError(result)).toBe(true);
+  }, 60_000);
+
+  it.each([
+    // The host refuses a garbled log outright (as with an empty one) on this build; a torn tail it resumes and then goes silent on.
+    ["a garbled log", (file: string) => fs.writeFileSync(file, "{garbage"), false],
+    ["a log torn off mid-line", (file: string) => fs.truncateSync(file, fs.statSync(file).size - 40), true],
+  ])("treats a damaged session log (%s) as a lost conversation, never a turn left hanging", async (_name, damage, silentTurn) => {
+    const first = await engine.run(opts({ prompt: "seed a log to damage" }));
+    damage(findSessionFile(path.join(scratch, "home"), first.sessionId)!);
+    engine = new MusecodeEngine({ firstEventTimeoutMs: 4000 });
+    const result = await engine.run(opts({ prompt: "after the damage", resumeSessionId: first.sessionId }));
+    expect(result).toEqual({ sessionId: first.sessionId, result: "", error: `musecode has no conversation ${first.sessionId} to resume` });
+    expect(isDeadSessionError(result)).toBe(true);
+    expect(streamed.some((d) => d.type === "status" && /projectionUnavailable/.test(d.content ?? ""))).toBe(silentTurn);
+  }, 90_000);
+
   it("maps a usage limit from the provider to a rejected rate limit with the provider's reset", async () => {
     const resetsAt = Math.floor(Date.now() / 1000) + 7200;
     const { port } = await startMock("quota", { MOCK_QUOTA_RESET: String(resetsAt) });

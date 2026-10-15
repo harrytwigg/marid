@@ -61,9 +61,24 @@ export function requiredServerThatCannotStart(config) {
   return bad?.[0];
 }
 
-/** FAKE_MUSE_IN_USE: every `session/resume` is refused as `sessionInUse`, as when a terminal holds the session. True when it was. */
-export function refuseInUse(id, params) {
-  if (!process.env.FAKE_MUSE_IN_USE) return false;
-  fail(id, -32021, `session ${params.sessionId} is already in use`, { kind: "sessionInUse", retryable: false, sessionId: params.sessionId });
+/**
+ * What a resume can be refused with, from the environment:
+ *   FAKE_MUSE_IN_USE   `sessionInUse`, as when a terminal holds the session
+ *   FAKE_MUSE_REFUSED  the real host's refusal of a session log it cannot read: -32603 `internal`, reason `resume_refused_class_c`
+ * True when the request was answered.
+ */
+export function refuseResume(id, params) {
+  if (process.env.FAKE_MUSE_IN_USE) {
+    fail(id, -32021, `session ${params.sessionId} is already in use`, { kind: "sessionInUse", retryable: false, sessionId: params.sessionId });
+    return true;
+  }
+  if (!process.env.FAKE_MUSE_REFUSED) return false;
+  fail(id, -32603, `retained session refused (class c): start a new session [${params.sessionId}]`, {
+    kind: "internal", reason: "resume_refused_class_c", retryable: false,
+    details: { refusalClass: "c", remedy: "retry with a compatible host that can read the retained permission frame, or start a new session" },
+  });
   return true;
 }
+
+/** FAKE_MUSE_PROJECTION_UNAVAILABLE: a resume that succeeds but could not read the log's history, as with a torn or garbled log. */
+export const historyNoneReason = () => (process.env.FAKE_MUSE_PROJECTION_UNAVAILABLE ? "projectionUnavailable" : "excluded");

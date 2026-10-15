@@ -65,13 +65,20 @@ export async function hostNeverStarted(proc: MspProcess, resume: string | undefi
 export interface OpenedSession {
   sessionId: string;
   modelId: string | undefined;
+  /** The host resumed the session but could not read its log's history (a torn or garbled log). */
+  projectionUnavailable: boolean;
 }
 
 export function openedSession(result: Record<string, unknown>, fallbackId?: string): OpenedSession {
   const session = (result.session ?? {}) as Record<string, unknown>;
   const sessionId = typeof session.sessionId === "string" ? session.sessionId : fallbackId;
   if (!sessionId) throw new Error("Muse Code answered session/start without a session id");
-  return { sessionId, modelId: typeof session.modelId === "string" ? session.modelId : undefined };
+  const history = (result.history ?? {}) as Record<string, unknown>;
+  return {
+    sessionId,
+    modelId: typeof session.modelId === "string" ? session.modelId : undefined,
+    projectionUnavailable: history.noneReason === "projectionUnavailable",
+  };
 }
 
 export function interruptedResult(opts: EngineRunOpts, reason: string, sessionId?: string): EngineResult {
@@ -114,7 +121,21 @@ export function packageVersion(): string {
  */
 export function isLostSession(err: unknown): boolean {
   if (!(err instanceof MspError)) return false;
-  return err.kind === "sessionNotFound" || (err.kind === "invalidParams" && /sessionId/.test(err.message));
+  if (err.kind === "sessionNotFound" || (err.kind === "invalidParams" && /sessionId/.test(err.message))) return true;
+  return isRefusedResume(err);
+}
+
+/**
+ * Muse read the session's log and refused to resume it (`resume_refused_class_c`: an empty
+ * log, or one whose permission frame it cannot read, whose remedy is to "start a new session").
+ * Whatever the cause, it will refuse every later resume the same way, so the conversation
+ * is as good as gone.
+ */
+function isRefusedResume(err: MspError): boolean {
+  const reason = err.data?.reason;
+  if (typeof reason === "string" && reason.startsWith("resume_refused")) return true;
+  const details = err.data?.details;
+  return !!details && typeof details === "object" && !!(details as Record<string, unknown>).unreplayableLog;
 }
 
 /**
