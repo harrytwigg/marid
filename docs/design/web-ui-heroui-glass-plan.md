@@ -54,7 +54,7 @@ viewer, more, the Talk orb harness, a dev-only redesign mockup, and plugin
 pages.
 
 **Primitive inventory** (`src/components/ui`, 26 files; importers in
-brackets): dropdown-menu (Radix, 18), employee-avatar (24), dialog (Radix,
+brackets): dropdown-menu (Radix, 17), employee-avatar (24), dialog (Radix,
 11), button (5), employee-chip (5), skeleton (4), dialog-actions (4),
 image-lightbox (3), context-menu (2), select (2), switch (1, plus the
 Settings `ToggleSwitch` used 22 times), textarea (2), option-pills (2),
@@ -72,19 +72,25 @@ helpers. Radix is used directly in two more files (a HoverCard in
   (`react-aria-components`, `react-aria`, `@react-aria/utils`,
   `@react-aria/ssr`, `@internationalized/date`). Radix and cmdk go once the
   last primitive moves.
-- Bundle, measured on the prototype against main: initial JS 187,673 →
-  187,683 B gzip (unchanged; HeroUI is only on the lazy Settings route); entry
-  CSS 30.3 → 33.5 KB gzip (HeroUI theme, utilities, Switch CSS and the glass
-  tokens); the first HeroUI component on a route brings React Aria's
-  foundation, about **28 KB gzip**, which later components share. Radix's menu
-  code is already in the initial chunk today, so moving the dropdown offsets
-  part of that when it lands.
+- Bundle, measured on the prototype against main (gzip):
+  - initial JS 187.7 → 215.9 KB. Almost all of the 28 KB is Phosphor's
+    six-weight icons that load with the shell; the icons slice's
+    single-weight components remove most of it;
+  - entry CSS 30.3 → 35.5 KB (HeroUI theme, utilities, Button, Switch and
+    Tabs CSS, the glass tokens, three font families' faces);
+  - board-page chunk 24.6 → 48.7 KB: the first HeroUI component on a route
+    brings React Aria's foundation, about **24–28 KB**, which later components
+    share. Here it came from the phone's Board/List Tabs and the Filters
+    Button. The board chunk's 25 KB budget means its HeroUI controls must be
+    lazy-loaded or the budget raised.
+  - Radix's menu code is already in the initial chunk today, so moving the
+    dropdown offsets part of React Aria's cost when it lands.
 - The initial-path budget (`perf-budgets.json`, 195,000 B) has about 7 KB of
-  headroom. Any HeroUI control in the always-loaded shell moves React Aria
-  into the initial path. See risks.
+  headroom on main. Any HeroUI control in the always-loaded shell moves React
+  Aria into the initial path. See risks.
 
 **Collisions found by the prototype** (each is fixed there and becomes part
-of slice 1):
+of slices 1a and 1c):
 
 | Collision | Effect | Resolution |
 |---|---|---|
@@ -133,7 +139,7 @@ horizon glow over a vertical gradient (`#EAF5FE → #D9E9F7` light, `#07111E →
 | `--glass-chrome` | white 52% | navy 50% | none | rail, chat list, side panels: they sit on the static backdrop |
 | `--glass-float` | white 64% | navy 62% | `--glass-blur` 22px, saturate 180% | header pills, composer, tab bar: they float over moving content |
 | `--glass-overlay` | white 80% | navy 82% | `--glass-blur-strong` 32px | menus, popovers, dialogs |
-| `--glass-sheet` | white 90% | navy 92% | none | where content is read |
+| `--glass-sheet` | opaque near-white | opaque navy | none | where content is read: flat and opaque, so sticky headers that paint the page colour match it exactly; its glass is the lit edge and shadow |
 
 Each has an `-opaque` twin (the tint composited at alpha 1). Every glass
 surface gets `--glass-edge` (a 1px lit border), `--glass-specular` (an inset
@@ -150,13 +156,23 @@ names (`--bg`, `--material-*`, `--fill-*`, `--text-*`, `--accent`,
 `--pill-bg`, `--sidebar-bg` …) are kept and re-pointed at the glass tokens,
 so untouched screens follow automatically.
 
-**Typography.** UI and display in **Figtree** (variable 300–900, SIL OFL,
-self-hosted, 20 KB latin), replacing Hanken Grotesk; code stays IBM Plex
-Mono. The fluid HIG scale and the Text size setting are unchanged; titles
-move to weight 700.
+**Typography.** A new family throughout, so the product no longer reads as
+Jinn's Hanken Grotesk / IBM Plex Mono pairing: **Geist** for the UI
+(variable 100–900, 29 KB latin), **Sora** for headings and the wordmark
+(variable 100–800, 34 KB latin; wide, geometric, a little aeronautical) and
+**Geist Mono** for code (23 KB latin). All SIL OFL, self-hosted. The fluid
+HIG scale and the Text size setting are unchanged; titles move to weight 700.
 
-**Iconography.** Keep `lucide-react` (HeroUI v3 is icon-agnostic) at a 1.75
-stroke; the active rail item sits on an accent-tinted glass chip.
+**Iconography.** Phosphor **duotone** replaces Lucide (Jinn's set): rounder
+glyphs with a soft 20% fill layer that picks up the glass. The prototype
+swaps all 140 icons at once by aliasing `lucide-react` to a module of
+Phosphor glyphs under Lucide's names (`src/lib/icon-shim.ts`, one module per
+icon), so no call site changes. Phosphor's React package ships all six
+weights inside every icon, which cost the prototype about 26 KB gzip on the
+initial path (about 49 icons load with the shell). The icons slice therefore
+generates single-weight duotone components from Phosphor's SVG sources behind
+the same names, then moves call sites to `@/components/ui/icon` and drops
+the alias.
 
 **Motion.** Keep the duration tokens and reduced-motion collapse. Glass
 surfaces enter with opacity + 4px rise + 0.98→1 scale on `--ease-spring`;
@@ -179,18 +195,19 @@ silhouettes, no third-party marks):
 
 Recommendation: **B** for the app icon and large uses, A as its favicon
 form. Every tile sits in a sky gradient with a horizon glow, a top gloss and
-a lit rim. The wordmark is set in Figtree 700 at -0.02em and takes the
+a lit rim. The wordmark is set in Sora 700 at -0.02em and takes the
 product name from one place (`lib/brand.ts`). The mark becomes the default
 rail mark, favicon and PWA icons; an operator's own portal emoji or icon
 still wins.
 
 **Accessibility.**
 
-- Text never sits on blur. Reading happens on the near-opaque sheet; chrome
+- Text never sits on blur. Reading happens on the opaque sheet; chrome
   carries only short labels.
 - Contrast is checked at the worst case: each text token over each glass tint
   composited on every backdrop stop. Prototype values (WCAG ratio, minimum
-  over all stops):
+  over all stops; the sheet was measured at 90% and is now opaque, so its
+  values are a floor):
 
   | | primary | secondary | tertiary | accent text |
   |---|---|---|---|---|
@@ -238,7 +255,14 @@ still wins.
    items navigate client-side.
 5. **Identity is tokens plus a few shell attributes** (`data-shell="root" |
    "sheet" | "panel"`), so it can ship and revert independently of the
-   component work.
+   component work: slice 2 depends only on the token-form refactor, not on
+   HeroUI.
+6. **The board is the one screen without a sheet.** Its columns float on the
+   backdrop as glass panels and its cards are near-opaque glass. On a phone
+   the board keeps its columns: they scroll sideways and snap one at a time,
+   with a HeroUI Tabs switch to the grouped list (prototype in #165). Column
+   headers there are not sticky, because a sticky header over moving cards
+   would need one blurred surface per column, which is over the blur budget.
 
 **Order.** Foundation, then identity and shell, then primitives (controls
 before overlays), then screens, then cleanup. Each slice is one pull request,
@@ -281,12 +305,12 @@ from the branch. A slice that touches a screen not yet listed adds it to
 |---|---|
 | Initial-path JS budget (about 7 KB headroom) cannot absorb React Aria's ~28 KB once a shell control (rail tooltip, header menu) is HeroUI | keep overlays lazy where possible; measure Radix removal as it lands; **decision needed**: accept raising the initial budget by up to ~25 KB when the overlay slices reach the shell |
 | Permanent divergence from upstream's web UI | **decision needed**: accept it |
-| Test churn: React Aria uses a native `checked` input (`role="switch"`), `data-selected` / `data-open` instead of Radix `data-state` (28 `data-[state=…]` selectors today) | each primitive slice updates its tests; the prototype's single swap broke 4 tests in 3 files, all `aria-checked` assertions |
+| Test churn: React Aria uses a native `checked` input (`role="switch"`), `data-selected` / `data-open` instead of Radix `data-state` (60 `data-[state=…]` occurrences today) | each primitive slice updates its tests; the prototype's single swap broke 4 tests in 3 files: 3 `aria-checked` assertions and 1 touch-target height (which must be kept, not deleted) |
 | Overlay behaviour (focus return, portals, z-index 100000, nested menus, typeahead) | overlays split into four slices; the dropdown slice gets the most scrutiny |
 | `light-dark()` needs Chrome 123, Safari 17.5, Firefox 120 | acceptable for a modern web app; if an older embedded WebView must be supported, slice 1 generates per-theme blocks instead |
 | New UI face changes metrics (truncation, wrapping) | every screen pass reviews its sheet at narrow width |
 | A user accent colour is not contrast-checked | unchanged from today; out of scope |
-| Headless Chromium has hung on the app on some hosts | captures default to Firefox; tracked separately |
+| Headless Chromium has hung on the app on some hosts, so **the glass has not been rendered in Chromium yet**, the browser most users run | captures default to Firefox; the identity and floating-glass slices depend on fixing the Chromium hang (or another Chromium/WebKit check) before they ship |
 
 **Performance: `backdrop-filter`.** A blurred surface makes the compositor
 re-sample everything behind it on every frame that content moves, at a cost
@@ -330,23 +354,28 @@ attaches before/after sheets.
 | # | Slice | Depends on | Size | Risk |
 |---|---|---|---|---|
 | 0 | Capture tooling (this pull request) | — | done | — |
-| 1 | Foundation: HeroUI + peers, `app.css` root, token bridge, `light-dark()` token form, collision renames, React Aria router; current look unchanged | — | M | high |
-| 2 | Identity: Aero tokens, ambient backdrop, sheet and panel shell, Figtree, reduced transparency (CSS), contrast unit test, axe pass | 1 | M | medium |
+| 1a | HeroUI foundation: HeroUI + peers, `app.css` root, token bridge, React Aria router; current look unchanged | 1c | M | high |
+| 1b | Token form: every colour token written once with `light-dark()`; pure refactor, current look unchanged | — | S | medium |
+| 1c | Collision renames: `focus-ring` → `focus-outline` (111 uses, 53 files), shadcn `accent`/`muted` hover fills → fill tokens; pure refactor | — | S | low |
+| 1d | Icons: Phosphor duotone as generated single-weight components behind one icon module; call sites move off `lucide-react` | 1c | M | medium |
+| 2 | Identity: Aero tokens, ambient backdrop, sheet and panel shell, Geist / Sora / Geist Mono, reduced transparency (CSS), contrast unit test, axe pass | 1b, Chromium check | M | medium |
 | 3 | Transparency setting in Appearance, applied before first paint | 2 | S | low |
-| 4 | Floating glass: header pills, composer, mobile tab bar, top scrim, status bar; blur rules, footgun check, scroll measurements | 2 | M | medium |
+| 4 | Floating glass: header pills, composer, mobile tab bar, top scrim, status bar; blur rules, footgun check, scroll measurements | 2, Chromium check | M | medium |
 | 5 | Mark and wordmark: the chosen concept refined, favicon, PWA icons, manifest and theme-color per theme, default rail mark | 2 | S | low |
-| 6 | Primitives, controls: Button, Switch + ToggleSwitch, Input, Textarea, Badge (Chip), Skeleton, Tabs | 1 | M | medium |
+| 6 | Primitives, controls: Button, Switch + ToggleSwitch, Input, Textarea, Badge (Chip), Skeleton, Tabs | 1a | M | medium |
 | 7a | Overlays: Tooltip, Popover, the HoverCard in Todo mentions | 6 | S | medium |
-| 7b | Overlays: DropdownMenu (18 importers), ContextMenu | 7a | M | high |
+| 7b | Overlays: DropdownMenu (17 importers), ContextMenu | 7a | M | high |
 | 7c | Overlays: Select | 7a | S | low |
 | 7d | Overlays: Dialog, image lightbox, the Todo dialog, sheets/drawers | 7a | M | high |
-| 8 | Remove Radix, cmdk and Hanken Grotesk; budgets rebased | 7a–7d | S | low |
+| 8 | Remove Radix, cmdk, Lucide and Hanken Grotesk; budgets rebased | 1d, 2, 7a–7d | S | low |
 | 9a | Screen pass: chat (bubbles, code blocks, delegation cards, composer) | 2, 4, 6 | M | medium |
-| 9b | Screen pass: Todos board and Todo page | 2, 6 | M | medium |
+| 9b | Screen pass: Todos board (glass columns, the phone's snapping columns and Board/List switch) and Todo page | 2, 6 | M | medium |
 | 9c | Screen pass: org map nodes and editor | 2, 7d | S | low |
 | 9d | Screen pass: settings, skills, cron, logs, limits, auto-dispatch, notes, more | 2, 6 | M | low |
 | 9e | Screen pass: Talk orb palette, onboarding, sign-in, error pages | 2 | S | low |
 | 10 | Cleanup: fold `theme-overrides.css` into the identity, drop unused tokens, docs and README screenshots | all | S | low |
 
-Slices 3, 4, 5 and 6 can run in parallel once their dependency lands; the
-screen passes can run in parallel with each other.
+1b, 1c and 1d can start at once; 3, 4, 5 and 6 can run in parallel once
+their dependency lands; the screen passes can run in parallel with each
+other. "Chromium check" means the headless Chromium hang is fixed, or the
+slice is verified in Chromium or WebKit some other way.

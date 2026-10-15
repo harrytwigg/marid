@@ -4,8 +4,10 @@
 //
 // Writes <out-dir>/<screen>-<theme>-<viewport>.png. Fails if a screen never
 // renders its fixture text, throws a page error, or shows something that looks
-// like an id or the sandbox token, since these images go on public PRs.
+// like an id, the sandbox token, a host name or an instance path (including
+// form values), since these images go on public PRs.
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { chromium, firefox } from '@playwright/test'
 import { SCREENS, THEMES, VIEWPORTS } from './screens.mjs'
@@ -19,13 +21,23 @@ const screens = only.length ? SCREENS.filter((s) => only.includes(s.name)) : SCR
 fs.mkdirSync(outDir, { recursive: true })
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i
+// Strings that would place the instance: the throwaway home's path (and the
+// root it sits in) and this machine's name. Short host names are skipped, as
+// they match ordinary words.
+const PLACES = [sandboxHome, path.dirname(path.dirname(sandboxHome)), os.hostname()]
+  .filter((value) => value && value.length >= 4)
 
 async function leaks(page) {
-  const text = await page.evaluate(() => document.body.innerText)
+  // innerText leaves out form values, so read inputs and textareas too.
+  const text = await page.evaluate(() => [
+    document.body.innerText,
+    ...[...document.querySelectorAll('input, textarea')].map((field) => field.value),
+  ].join('\n'))
   const found = []
   if (token && text.includes(token)) found.push('the sandbox token')
   const id = text.match(UUID)
   if (id) found.push(`an id-like string (${id[0].slice(0, 8)}…)`)
+  if (PLACES.some((place) => text.includes(place))) found.push('a host name or instance path')
   return found
 }
 
