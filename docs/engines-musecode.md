@@ -113,6 +113,8 @@ Two things about the real host are worth knowing:
 
 When the catalog declares a model's rates, a turn's cost is `(input - cached) x input + cached x cached + output x output`, per million tokens. Muse's `turn/completed` carries no `usage`, so Marid sums the turn's `session/tokenUsage` notifications (one per model call). A model with no declared rates, or a turn with no usage, reports **no cost** rather than 0.
 
+Two caveats. The formula reads `cachedTokens` as part of `inputTokens`; the protocol says the cache convention is provider-dependent, and the only captures checked so far show `cachedTokens: 0`, so it has not been verified against a real cached turn. And `session/tokenUsage` does not include reminder agents' or subagents' calls, so with reminder agents on, the cost is a floor.
+
 ---
 
 ## Usage limits

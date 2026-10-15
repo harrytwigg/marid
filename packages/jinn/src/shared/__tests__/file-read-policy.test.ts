@@ -39,7 +39,7 @@ describe("shared file-read policy", () => {
       fs.mkdirSync(path.join(home, "tmp", "codex-homes", "sess"), { recursive: true });
       const refused = [
         "gateway.json", "auth-devices.json", "pairing-codes.json",
-        "tmp/session-env.sh", "tmp/mcp.json", "tmp/settings.json", "tmp/opencode.json", "tmp/musecode-usage.json",
+        "tmp/session-env.sh", "tmp/mcp.json", "tmp/settings.json", "tmp/opencode.json", "tmp/musecode-usage.json", "tmp/musecode-usage.json.123.tmp",
         "tmp/mcp/sess/config.json", "tmp/codex-homes/sess/config.toml",
       ];
       for (const rel of refused) {
