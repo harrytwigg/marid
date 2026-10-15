@@ -84,6 +84,33 @@ describe('FallbackModeChip menu', () => {
     await act(async () => { resolve({ fallback: view({ mode: 'fallback-children' }) }) })
     expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('off (auto-resume)')
   })
+  it('rolls back to what the server last confirmed, not to the view before an earlier pick', async () => {
+    let resolveFirst!: (v: unknown) => void
+    let rejectSecond!: (e: unknown) => void
+    apiMocks.updateSession
+      .mockReturnValueOnce(new Promise((r) => { resolveFirst = r }))
+      .mockReturnValueOnce(new Promise((_, r) => { rejectSecond = r }))
+    render(<FallbackModeChip sessionId="s1" view={view()} />)
+    open()
+    await act(async () => { fireEvent.click(screen.getByRole('menuitemradio', { name: /children/ })) })
+    await act(async () => { fireEvent.click(screen.getByRole('menuitemradio', { name: /Auto-resume/ })) })
+    await act(async () => { resolveFirst({ fallback: view({ mode: 'fallback-children' }) }) })
+    expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('off (auto-resume)')
+    await act(async () => { rejectSecond(new Error('nope')) })
+    await waitFor(() => expect(screen.getByTestId('fallback-children-marker')).toBeTruthy())
+    expect(screen.getByRole('alert').textContent).toBe('nope')
+  })
+  it('holds a server view that arrives while a pick is in flight, and applies the pick result', async () => {
+    let resolve!: (v: unknown) => void
+    apiMocks.updateSession.mockReturnValue(new Promise((r) => { resolve = r }))
+    const { rerender } = render(<FallbackModeChip sessionId="s1" view={view()} />)
+    open()
+    await act(async () => { fireEvent.click(screen.getByRole('menuitemradio', { name: /Auto-resume/ })) })
+    rerender(<FallbackModeChip sessionId="s1" view={view({ target: null })} />)
+    expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('off (auto-resume)')
+    await act(async () => { resolve({ fallback: view({ mode: 'auto-resume' }) }) })
+    expect(screen.getByTestId('fallback-mode-chip').textContent).toContain('off (auto-resume)')
+  })
   it('hides the chip on an unknown view shape', () => {
     const bad = { mode: 'fallback', modeSource: 'session', target: { engine: 'claude' } } as unknown as SessionFallbackView
     const { container } = render(<FallbackModeChip sessionId="s1" view={parseFallbackView(bad)} />)

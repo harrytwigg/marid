@@ -30,6 +30,26 @@ interface FallbackModeChipProps {
 
 type FallbackSubscribe = (fn: GatewayEventListener) => () => void
 
+/** Re-read the view when the gateway says this session changed, dropping a read that lands after a session switch. */
+function useFallbackResync(
+  sessionId: string,
+  subscribe: FallbackSubscribe | undefined,
+  gen: { current: number },
+  accept: (next: SessionFallbackView | null) => void,
+) {
+  useEffect(() => {
+    if (!subscribe) return
+    return subscribe((frame) => {
+      if (frame.event !== 'session:updated' || frame.payload.sessionId !== sessionId) return
+      const mine = gen.current
+      api.getSession(sessionId, { messages: false })
+        .then((s) => { if (gen.current === mine) accept(parseFallbackView(s.fallback)) })
+        .catch(() => {})
+    })
+    // `accept` only touches refs and a state setter, so a stale copy behaves the same.
+  }, [subscribe, sessionId])
+}
+
 /**
  * Optimistic mode change with rollback to the last server-confirmed view. A
  * fresh server view replaces the local copy unless a PUT is in flight, and a
@@ -38,6 +58,9 @@ type FallbackSubscribe = (fn: GatewayEventListener) => () => void
 function useFallbackMode(sessionId: string, view: SessionFallbackView | null | undefined, subscribe?: FallbackSubscribe) {
   const [local, setLocal] = useState<SessionFallbackView | null | undefined>(view)
   const [error, setError] = useState<string | null>(null)
+  // `gen` changes with the session, so nothing still on its way for the old one lands;
+  // `seq` orders picks within a session, so only the newest pick moves the chip.
+  const gen = useRef(0)
   const seq = useRef(0)
   const inFlight = useRef(0)
   const confirmed = useRef(view)
@@ -47,40 +70,33 @@ function useFallbackMode(sessionId: string, view: SessionFallbackView | null | u
     confirmed.current = next
     if (inFlight.current === 0) setLocal(next)
   }
-  useEffect(() => { seq.current++; inFlight.current = 0; confirmed.current = view; setLocal(view); setError(null) }, [sessionId])
+  useEffect(() => { gen.current++; inFlight.current = 0; confirmed.current = view; setLocal(view); setError(null) }, [sessionId])
   useEffect(() => { accept(view); if (inFlight.current === 0) setError(null) }, [viewKey])
-  useEffect(() => {
-    if (!subscribe) return
-    return subscribe((frame) => {
-      if (frame.event !== 'session:updated' || frame.payload.sessionId !== sessionId) return
-      const mine = seq.current
-      api.getSession(sessionId, { messages: false })
-        .then((s) => { if (seq.current === mine) accept(parseFallbackView(s.fallback)) })
-        .catch(() => {})
-    })
-  }, [subscribe, sessionId])
+  useFallbackResync(sessionId, subscribe, gen, accept)
 
   const pick = (value: string) => {
     const mode = value as SessionFallbackMode
     if (!local || mode === local.mode) return
-    const base = confirmed.current ?? local
+    const session = gen.current
     const mine = ++seq.current
     inFlight.current++
     setLocal(withMode(local, mode))
     setError(null)
     api.updateSession(sessionId, { fallbackMode: mode })
       .then((res) => {
-        if (seq.current !== mine) return
-        const next = parseFallbackView(res?.fallback) ?? withMode(base, mode)
+        if (gen.current !== session) return
+        // What the server now holds, even when a newer pick has taken over the chip:
+        // a later failure rolls back to it, not to the view before this pick.
+        const next = parseFallbackView(res?.fallback) ?? withMode(confirmed.current ?? local, mode)
         confirmed.current = next
-        setLocal(next)
+        if (seq.current === mine) setLocal(next)
       })
       .catch((err) => {
-        if (seq.current !== mine) return
-        setLocal(base)
+        if (gen.current !== session || seq.current !== mine) return
+        setLocal(confirmed.current ?? local)
         setError(err instanceof Error ? err.message : 'Fallback mode update failed')
       })
-      .finally(() => { if (seq.current === mine) inFlight.current = 0 })
+      .finally(() => { if (gen.current === session && --inFlight.current < 0) inFlight.current = 0 })
   }
   return { local, error, pick }
 }
@@ -145,17 +161,17 @@ export function FallbackModeChip({ sessionId, view, disabled, subscribe }: Fallb
           disabled={disabled}
           title={fallbackChipTitle(local)}
           aria-label={`${fallbackChipTitle(local)}. Change fallback mode`}
-          className="group inline-flex min-h-[40px] md:min-h-0 min-w-[28px] shrink items-center gap-1 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
+          className="group inline-flex min-h-[40px] md:min-h-0 min-w-[28px] shrink-[8] items-center gap-1 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
         >
           <ArrowRightLeftIcon aria-hidden className="size-3 shrink-0 text-[var(--text-tertiary)]" />
-          <span className="truncate text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors @max-[340px]/composer:hidden">
+          <span className="truncate text-[var(--text-tertiary)] group-hover:text-[var(--text-secondary)] transition-colors @max-[480px]/composer:hidden">
             {text}
           </span>
           {local.mode === 'fallback-children' && (
             <span
               data-testid="fallback-children-marker"
               title="Child sessions inherit this fallback"
-              className="shrink-0 text-[length:var(--text-caption2)] text-[var(--text-quaternary)] @max-[340px]/composer:hidden"
+              className="shrink-0 text-[length:var(--text-caption2)] text-[var(--text-quaternary)] @max-[480px]/composer:hidden"
             >
               + children
             </span>
