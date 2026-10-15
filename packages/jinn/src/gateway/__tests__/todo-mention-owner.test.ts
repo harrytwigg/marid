@@ -62,6 +62,35 @@ describe("a mention of the employee who owns the Todo from outside it", () => {
     expect(h.registry.getSession(owner.id)?.workItemId).not.toBe(child.id);
   });
 
+  it("is delivered into the recorded delegator of a session the delegation landed in", async () => {
+    // Started by a mention, so it has no parent; the Todo has no creator session.
+    const item = h.store.createWorkItem({ title: "delegated into a live session" });
+    await h.comment(item.id, "@worker can you take a look?");
+    const [worker] = h.sessionsOf(item.id, "worker");
+    const owner = h.employeeSession("org-root");
+    expect((await h.delegate(item.id, "worker", sessionHeaders(owner.id))).body.reused).toBe(true);
+    h.runBriefTurn(worker.id);
+
+    await h.comment(item.id, "@org-root which way?", { as: worker.id });
+
+    expect(h.sessionsOf(item.id, "org-root")).toEqual([]);
+    expect(h.deliveriesTo(owner.id, "todo-mention")).toHaveLength(1);
+  });
+
+  it("is delivered into the parent of a session linked to the Todo, with no delegation on record", async () => {
+    const item = h.store.createWorkItem({ title: "linked before delegations were recorded" });
+    const owner = h.employeeSession("alpha");
+    const worker = h.registry.createSession({
+      engine: "codex", source: "web", sourceRef: `legacy:${crypto.randomUUID()}`, employee: "worker", connector: "web", parentSessionId: owner.id,
+    });
+    h.store.linkSession(item.id, worker.id);
+
+    await h.comment(item.id, "@alpha is this still the plan?", { as: worker.id });
+
+    expect(h.sessionsOf(item.id, "alpha")).toEqual([]);
+    expect(h.deliveriesTo(owner.id, "todo-mention")).toHaveLength(1);
+  });
+
   it("is delivered into the session that created the Todo before anyone took it", async () => {
     const { owner, child } = ownerWithChild("created, not yet delegated");
 
