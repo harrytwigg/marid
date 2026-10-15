@@ -224,13 +224,14 @@ describe("attachPtyWebSocket snapshot framing", () => {
     expect(engine.viewingCalls).toEqual([true, true]);
   });
 
-  it("answers a restart the engine refuses with a recoverable error, and closing the tab still stops the viewing", async () => {
+  it("answers a restart the engine refuses with one recoverable error (no \"did not resume\" after the next resize), and closing the tab still stops the viewing", async () => {
     const ws = new FakeWebSocket();
     const engine = Object.assign(new FakeEngine(), { restartPty: () => { throw new Error("A turn is running"); } });
-    attachPtyWebSocket(ws as any, "session-1", engine);
+    attachPtyWebSocket(ws as any, "session-1", engine, { resumeDeadlineMs: 50 });
     await settle();
-    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }, { type: "restart" }]) ws.receive(message);
-    expect(controls(ws).at(-1)).toMatchObject({ type: "error", recoverable: true });
+    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }, { type: "restart" }, { type: "resize", cols: 100, rows: 40 }]) ws.receive(message);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(controls(ws).filter((c) => c.type === "error")).toMatchObject([{ recoverable: true, message: expect.stringContaining("failed to restart") }]);
     ws.close();
     expect(engine.viewingCalls).toEqual([true, false]);
   });
