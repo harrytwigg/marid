@@ -3,21 +3,23 @@ import { MUSECODE_AUTH_HELP } from "./musecode-protocol.js";
 import {
   asRecord,
   describeModelRetry,
+  addTokenUsage,
   museTurnCost,
   num,
-  numOr,
   parseTokenUsage,
+  parseUsageChanged,
   parseTurnError,
   str,
   toolResultDelta,
   toolUseDelta,
   type MuseModelCost,
+  type MuseUsageSnapshot,
   type MuseTurnError,
   type TokenUsage,
   type ToolItem,
 } from "./musecode-turn-text.js";
 
-export type { MuseModelCost } from "./musecode-turn-text.js";
+export type { MuseModelCost, MuseUsageSnapshot } from "./musecode-turn-text.js";
 
 /**
  * One Muse Code turn, accumulated from its MSP notifications.
@@ -31,13 +33,6 @@ export type { MuseModelCost } from "./musecode-turn-text.js";
  * explicitly non-terminal: named background reminder checks may still be
  * running, and the turn is not over until they are.
  */
-
-export interface MuseUsageSnapshot {
-  observedAtMs: number;
-  tier: string;
-  window: { usedPercent: number; windowDurationMins: number; resetsAtMs: number };
-  weekly: { usedPercent: number; resetsAtMs: number };
-}
 
 export type MuseTerminal = "completed" | "failed" | "cancelled" | (string & {});
 
@@ -62,7 +57,10 @@ export class MuseTurn {
   private terminal: MuseTerminal | undefined;
   private error: MuseTurnError | undefined;
   private reason: string | undefined;
+  /** The turn's own aggregate, when `turn/completed` carries one. */
   private usage: TokenUsage | undefined;
+  /** The model calls' `session/tokenUsage` summed: what the real host reports when `turn/completed` has none. */
+  private legs: TokenUsage | undefined;
   private durationMs: number | undefined;
   private contextUsed: number | undefined;
   private latestUsage: MuseUsageSnapshot | undefined;
@@ -111,6 +109,7 @@ export class MuseTurn {
     "session/contextUsage": (p) => {
       this.contextUsed = num(p.usedTokens) ?? this.contextUsed;
     },
+    "session/tokenUsage": (p) => this.addLeg(p),
     "turn/completed": (p) => this.readCompleted(p),
     "turn/unqueued": () => {
       this.unqueued = true;
@@ -127,22 +126,20 @@ export class MuseTurn {
   }
 
   private readUsageChanged(params: Record<string, unknown>): void {
-    const window = asRecord(params.window);
-    const weekly = asRecord(params.weekly);
-    const observedAtMs = num(params.observedAtMs);
-    if (!window || !weekly || observedAtMs === undefined) return;
-    const snapshot: MuseUsageSnapshot = {
-      observedAtMs,
-      tier: str(params.tier) ?? "",
-      window: {
-        usedPercent: numOr(window.usedPercent, 0),
-        windowDurationMins: numOr(window.windowDurationMins, 0),
-        resetsAtMs: numOr(window.resetsAtMs, 0),
-      },
-      weekly: { usedPercent: numOr(weekly.usedPercent, 0), resetsAtMs: numOr(weekly.resetsAtMs, 0) },
-    };
+    const snapshot = parseUsageChanged(params);
+    if (!snapshot) return;
     this.latestUsage = snapshot;
     this.callbacks.onUsage?.(snapshot);
+  }
+
+  private addLeg(params: Record<string, unknown>): void {
+    const turnId = str(params.turnId);
+    if (this.turnId && turnId && turnId !== this.turnId) return;
+    this.legs = addTokenUsage(this.legs, parseTokenUsage(asRecord(params.usage)));
+  }
+
+  private get tokens(): TokenUsage | undefined {
+    return this.usage ?? this.legs;
   }
 
   private readCompleted(params: Record<string, unknown>): void {
@@ -239,7 +236,7 @@ export class MuseTurn {
   /** How full the context window is: the host's own reading, else the turn's input. */
   contextTokens(): number | undefined {
     if (this.contextUsed !== undefined && this.contextUsed > 0) return this.contextUsed;
-    const u = this.usage;
+    const u = this.tokens;
     if (!u) return undefined;
     const total = u.inputTokens + (u.cacheReadTokens ?? 0) + (u.cacheWriteTokens ?? 0);
     return total > 0 ? total : undefined;
@@ -255,7 +252,7 @@ export class MuseTurn {
    * stale resume id, and a failed turn is not that.
    */
   result(outcome: { terminationReason: string | null; costRates?: MuseModelCost }): EngineResult {
-    const cost = museTurnCost(this.usage, outcome.costRates);
+    const cost = museTurnCost(this.tokens, outcome.costRates);
     const base = {
       sessionId: this.sessionId,
       numTurns: 1,

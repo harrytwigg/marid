@@ -14,14 +14,16 @@ Jinn turns installed agent CLIs into a persistent AI company: named employees, a
 
 ## Engines
 
-Mix the six shipped engines. Jinn hides unavailable binaries and lets each employee or session choose one:
+Mix the eight shipped engines. Jinn hides unavailable binaries and lets each employee or session choose one:
 
 - **claude** - Anthropic Claude Code
 - **codex** - OpenAI Codex CLI
 - **grok** - xAI Grok CLI
 - **antigravity** - Antigravity CLI (`agy`)
 - **pi** - Pi coding agent
+- **opencode** - opencode, bring your own provider
 - **hermes** - NousResearch Hermes over ACP
+- **musecode** - Meta Muse Code over its session protocol
 
 ## Quickstart
 

@@ -112,6 +112,23 @@ describe.skipIf(!ENABLED)("Muse Code models and usage (real binary)", () => {
     expect(snap.windows?.map((w) => [w.name, w.usedPercent])).toEqual([["5h", 42], ["weekly", 17]]);
   }, 90_000);
 
+  it("prices a turn from the catalog's rates and the host's token usage (its turn/completed carries none, so session/tokenUsage is summed)", async () => {
+    const port = await startMock();
+    const found = await discoverMusecodeModels(BIN, { cliFlags: flags(port) });
+    const engine = new MusecodeEngine({ modelCost: (model) => found.costs[model ?? ""] });
+    const result = await engine.run({
+      prompt: "Explain what this repository does in one sentence.",
+      cwd: path.join(scratch, "ws"),
+      bin: BIN,
+      sessionId: "cost-e2e",
+      model: "muse-spark-1.2",
+      cliFlags: flags(port),
+    });
+    expect(result.error).toBeUndefined();
+    // The mock provider reports 100 input and 5 output tokens; the catalog prices muse-spark-1.2 at 1.00 / 0.10 / 5.00 per million.
+    expect(result.cost).toBeCloseTo((100 * 1 + 5 * 5) / 1e6, 10);
+  }, 90_000);
+
   it("reports no usage, with the first-turn message, before any turn has run", async () => {
     const config = { engines: { default: "claude", musecode: { bin: BIN } } } as unknown as JinnConfig;
     const snap = await collectMusecodeLimits(config);
