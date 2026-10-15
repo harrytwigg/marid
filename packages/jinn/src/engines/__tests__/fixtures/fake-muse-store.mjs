@@ -65,6 +65,7 @@ export function requiredServerThatCannotStart(config) {
  * What a resume can be refused with, from the environment:
  *   FAKE_MUSE_IN_USE   `sessionInUse`, as when a terminal holds the session
  *   FAKE_MUSE_REFUSED  the real host's refusal of a session log it cannot read: -32603 `internal`, reason `resume_refused_class_c`
+ *                      (`unreplayableLog`: the same without a reason, carrying `details.unreplayableLog` instead)
  * True when the request was answered.
  */
 export function refuseResume(id, params) {
@@ -73,9 +74,13 @@ export function refuseResume(id, params) {
     return true;
   }
   if (!process.env.FAKE_MUSE_REFUSED) return false;
+  const unreplayable = process.env.FAKE_MUSE_REFUSED === "unreplayableLog";
   fail(id, -32603, `retained session refused (class c): start a new session [${params.sessionId}]`, {
-    kind: "internal", reason: "resume_refused_class_c", retryable: false,
-    details: { refusalClass: "c", remedy: "retry with a compatible host that can read the retained permission frame, or start a new session" },
+    kind: "internal", retryable: false,
+    ...(unreplayable ? { details: { unreplayableLog: true } } : {
+      reason: "resume_refused_class_c",
+      details: { refusalClass: "c", remedy: "retry with a compatible host that can read the retained permission frame, or start a new session" },
+    }),
   });
   return true;
 }

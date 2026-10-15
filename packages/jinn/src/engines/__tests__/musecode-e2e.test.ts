@@ -155,8 +155,8 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
   }, 60_000);
 
   it.each([
-    // The host refuses a garbled log outright (as with an empty one) on this build; a torn tail it resumes and then goes silent on.
-    ["a garbled log", (file: string) => fs.writeFileSync(file, "{garbage"), false],
+    // A garbled log is answered differently from run to run on this build (the session is not found, or it resumes and goes silent), and both are a lost conversation; a torn tail always resumes and then goes silent.
+    ["a garbled log", (file: string) => fs.writeFileSync(file, "{garbage"), undefined],
     ["a log torn off mid-line", (file: string) => fs.truncateSync(file, fs.statSync(file).size - 40), true],
   ])("treats a damaged session log (%s) as a lost conversation, never a turn left hanging", async (_name, damage, silentTurn) => {
     const first = await engine.run(opts({ prompt: "seed a log to damage" }));
@@ -165,7 +165,7 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
     const result = await engine.run(opts({ prompt: "after the damage", resumeSessionId: first.sessionId }));
     expect(result).toEqual({ sessionId: first.sessionId, result: "", error: `musecode has no conversation ${first.sessionId} to resume` });
     expect(isDeadSessionError(result)).toBe(true);
-    expect(streamed.some((d) => d.type === "status" && /projectionUnavailable/.test(d.content ?? ""))).toBe(silentTurn);
+    if (silentTurn !== undefined) expect(streamed.some((d) => d.type === "status" && /projectionUnavailable/.test(d.content ?? ""))).toBe(silentTurn);
   }, 90_000);
 
   it("maps a usage limit from the provider to a rejected rate limit with the provider's reset", async () => {
