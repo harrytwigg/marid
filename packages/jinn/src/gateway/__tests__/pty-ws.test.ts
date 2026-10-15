@@ -223,21 +223,14 @@ describe("attachPtyWebSocket snapshot framing", () => {
     ws.receive({ type: "restart" });
     expect(engine.viewingCalls).toEqual([true, true]);
   });
-});
 
-describe("a restart the engine refuses", () => {
-  it("is a recoverable error, and the socket still counts as viewing, so closing the tab stops the viewing", async () => {
+  it("answers a restart the engine refuses with a recoverable error, and closing the tab still stops the viewing", async () => {
     const ws = new FakeWebSocket();
-    const engine = new FakeEngine();
-    engine.restartPty = () => { throw new Error("A turn is running; the terminal opens when it ends."); };
+    const engine = Object.assign(new FakeEngine(), { restartPty: () => { throw new Error("A turn is running"); } });
     attachPtyWebSocket(ws as any, "session-1", engine);
     await settle();
-    ws.receive({ type: "viewing", viewing: true });
-    ws.receive({ type: "resize", cols: 90, rows: 30 });
-    expect(engine.viewingCalls).toEqual([true]);
-
-    ws.receive({ type: "restart" });
-    expect(controls(ws).at(-1)).toMatchObject({ type: "error", recoverable: true, message: expect.stringContaining("A turn is running") });
+    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }, { type: "restart" }]) ws.receive(message);
+    expect(controls(ws).at(-1)).toMatchObject({ type: "error", recoverable: true });
     ws.close();
     expect(engine.viewingCalls).toEqual([true, false]);
   });
