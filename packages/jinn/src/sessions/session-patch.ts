@@ -10,9 +10,9 @@ import { runsOnlyOnClaude, scopedEngineRefusal } from "./scoped-engine.js";
 /**
  * Validate a mid-chat model/effort change for an existing session.
  *
- * Engine is NOT switchable mid-chat (new-chat only), so this only handles
- * `model` and `effortLevel`, validated against the registry for the session's
- * (fixed) engine. The change applies from the NEXT turn — the SessionManager
+ * An engine switch is validated by `validateNewSessionSelection`; this only
+ * handles `model` and `effortLevel`, validated against the registry for the
+ * session's current engine. The change applies from the NEXT turn — the SessionManager
  * reads session.model / session.effortLevel fresh on every turn and passes them
  * (with resumeSessionId) to the engine, which our spike confirmed honors a
  * changed --model in place (no fork needed). Antigravity supports --model; if

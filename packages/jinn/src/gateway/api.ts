@@ -23,6 +23,7 @@ import {
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
+import { scopedSwitchRefusal } from "../sessions/scoped-engine.js";
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
 import { effectiveSessionStatus, isBackgroundWorkLive, runtimeTransportRunning, serializeRuntimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
 import { readTodoSessionTree } from "../sessions/session-tree.js";
@@ -1849,6 +1850,8 @@ export async function handleApiRequest(
         if (blocksEngineSwitch(getSessionTransportState(session, context))) {
           return badRequest(res, "Cannot switch engine while a turn is running, waiting, or queued");
         }
+        const scopedRefusal = scopedSwitchRefusal(session, requestedEngine!);
+        if (scopedRefusal) return badRequest(res, scopedRefusal);
         const savedRef = getEngineSessionRef(session, requestedEngine);
         const selection = validateNewSessionSelection(configForPatch, {
           engine: requestedEngine,
