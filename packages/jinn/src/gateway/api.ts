@@ -1854,7 +1854,7 @@ export async function handleApiRequest(
           engine: requestedEngine,
           model: body.model ?? savedRef.model,
           effortLevel: body.effortLevel ?? savedRef.effortLevel,
-        });
+        }, { employee: session.employee ?? undefined });
         if (!selection.ok) return badRequest(res, selection.error || "invalid engine/model/effort");
         let switched = switchSessionEngine(params.id, selection.engine!, {
           model: selection.model ?? null,
