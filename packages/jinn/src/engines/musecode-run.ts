@@ -4,9 +4,10 @@ import { logger } from "../shared/logger.js";
 import { getPackageVersion } from "../shared/version.js";
 import { processStartFailure } from "../shared/process-start.js";
 import { MspClient, MspError, uuidv7 } from "./musecode-msp.js";
-import type { MspProcess } from "./musecode-process.js";
+import { MSP_EXIT_GRACE_MS, type MspProcess } from "./musecode-process.js";
 import { MUSECODE_AUTH_HELP } from "./musecode-protocol.js";
 import type { MuseTurn } from "./musecode-turn.js";
+import { CONVERSATION_KEPT } from "./musecode-turn-text.js";
 
 /**
  * What one Muse Code run needs around the engine's own flow: the state `kill`
@@ -47,7 +48,7 @@ export async function hostLost(proc: MspProcess, live: LiveTurn, opts: EngineRun
   const error = `Muse Code exited before the turn finished (code ${exit.code ?? "none"}${exit.signal ? `, signal ${exit.signal}` : ""})`
     + (proc.stderrTail ? `: ${proc.stderrTail.slice(-500)}` : "");
   logger.error(error);
-  return { sessionId: live.sessionId ?? opts.resumeSessionId ?? "", result: "", error, numTurns: 1 };
+  return { sessionId: live.sessionId ?? opts.resumeSessionId ?? "", result: "", error, ...CONVERSATION_KEPT };
 }
 
 /**
@@ -74,7 +75,7 @@ export function openedSession(result: Record<string, unknown>, fallbackId?: stri
 }
 
 export function interruptedResult(opts: EngineRunOpts, reason: string, sessionId?: string): EngineResult {
-  return { sessionId: sessionId ?? opts.resumeSessionId ?? "", result: "", error: reason, ...(sessionId ? { numTurns: 1 } : {}) };
+  return { sessionId: sessionId ?? opts.resumeSessionId ?? "", result: "", error: reason, ...(sessionId ? CONVERSATION_KEPT : {}) };
 }
 
 /** A failed request, in words for the operator. */
@@ -100,4 +101,26 @@ export function packageVersion(): string {
   } catch {
     return "0.0.0";
   }
+}
+
+/**
+ * Whether a failed `session/resume` means the conversation cannot be loaded, now or ever:
+ * the host has no such session, or the id is not one it could have minted. Either way
+ * the id is stale and the turn is run again in a fresh conversation.
+ */
+export function isLostSession(err: unknown): boolean {
+  if (!(err instanceof MspError)) return false;
+  return err.kind === "sessionNotFound" || (err.kind === "invalidParams" && /sessionId/.test(err.message));
+}
+
+/**
+ * SIGTERM to a host still running, then SIGKILL if it has not gone after the grace.
+ * A host stuck before its first answer, or one that ignores SIGTERM, is not left to
+ * hold the turn: the run only ends once its host has.
+ */
+export async function signalHost(proc: MspProcess, live: LiveTurn): Promise<void> {
+  if (live.settled || proc.hasExited) return;
+  proc.signal("SIGTERM");
+  await delay(MSP_EXIT_GRACE_MS);
+  if (!live.settled && !proc.hasExited) proc.signal("SIGKILL");
 }
