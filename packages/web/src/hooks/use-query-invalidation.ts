@@ -108,6 +108,11 @@ export function useQueryInvalidation() {
         switch (key) {
           case 'sessions':
             qc.invalidateQueries({ queryKey: queryKeys.sessions.all })
+            // What a status waits on follows the same changes; only an open popup is fetching.
+            qc.invalidateQueries({ queryKey: queryKeys.sessionWaitsAll })
+            break
+          case 'session-waits':
+            qc.invalidateQueries({ queryKey: queryKeys.sessionWaitsAll })
             break
           case 'work-item-sessions':
             qc.invalidateQueries({ queryKey: ['work-item-sessions'] })
@@ -215,8 +220,12 @@ export function useQueryInvalidation() {
             // on screen asks for it, which keeps the no-storm rule above.
             const treeOpen = qc.getQueryCache().findAll({ queryKey: ['work-item-sessions'], type: 'active' }).length > 0
             if (treeOpen) pendingRef.current.add('work-item-sessions')
+            // The "waiting on" popup lists this session's monitors and tasks, which the
+            // session patch above does not carry. Same rule: only a popup that is open asks.
+            const waitsOpen = qc.getQueryCache().findAll({ queryKey: queryKeys.sessionWaitsAll, type: 'active' }).length > 0
+            if (waitsOpen) pendingRef.current.add('session-waits')
             if (hasParent) pendingRef.current.add('sessions')
-            if (hasParent || treeOpen) break
+            if (hasParent || treeOpen || waitsOpen) break
           }
           return
         case 'session:completed':

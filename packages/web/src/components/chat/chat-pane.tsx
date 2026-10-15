@@ -551,6 +551,7 @@ export function ChatPane({
               activity={backgroundActivity}
               delegatedActivity={paneDelegatedActivity}
               employeeDisplayNames={employeeDisplayNames}
+              sessionId={sessionId}
             />
           ) : undefined
         }
