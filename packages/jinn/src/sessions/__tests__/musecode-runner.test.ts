@@ -30,6 +30,8 @@ createTestHome("jinn-musecode-runner-");
 const dbModule = await import("../../shared/db.js");
 const { formatResumeTime } = await import("../turn/text.js");
 const { MusecodeEngine } = await import("../../engines/musecode.js");
+const { MusecodeInteractiveEngine } = await import("../../engines/musecode-interactive.js");
+const { PtyLifecycleManager } = await import("../../engines/pty-lifecycle.js");
 
 const FAKE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "engines", "__tests__", "fixtures", "fake-muse.mjs");
 
@@ -173,5 +175,29 @@ describe("a Muse Code usage limit", () => {
     // Stopping the session ends the wait.
     registry.updateSession(row!.id, { status: "idle" });
     await routing;
+  }, 60_000);
+});
+
+describe("a message sent while the terminal view is the active mode", () => {
+  it("fails as view-only and keeps the session's conversation, so the next turn resumes it", async () => {
+    const headless = new ManagerClass(config(), new Map([["musecode", engine]]) as never, "musecode-boot");
+    const key = `stub:musecode-${Math.random().toString(16).slice(2)}`;
+    const first = await headless.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
+    const id = first!.sessionId;
+    const kept = registry.getEngineSessionRef(registry.getSession(id)!, "musecode").id;
+
+    // The same session, routed to the view engine, as a composer message in the CLI view is.
+    const view = new MusecodeInteractiveEngine(new PtyLifecycleManager({ maxLivePtys: 8 }));
+    const viewManager = new ManagerClass(config(), new Map([["musecode", view]]) as never, "musecode-boot");
+    await viewManager.route(connectorMessage(key, "two"), connectorStub(), { employee: employee as never });
+    const session = registry.getSession(id)!;
+    expect(session.status).toBe("error");
+    expect(session.lastError).toMatch(/view-only/);
+    expect(registry.getEngineSessionRef(session, "musecode").id).toBe(kept);
+
+    // Back on the work engine, the conversation is still there to resume.
+    await headless.route(connectorMessage(key, "three"), connectorStub(), { employee: employee as never });
+    expect(registry.getEngineSessionRef(registry.getSession(id)!, "musecode").id).toBe(kept);
+    expect(methods().filter((m) => m === "session/start")).toHaveLength(1);
   }, 60_000);
 });

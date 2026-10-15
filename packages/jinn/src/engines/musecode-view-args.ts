@@ -11,8 +11,10 @@ import { buildMuseSessionConfig, type MuseMcpServer } from "./musecode-mcp.js";
  * refuses a literal value for a secret leaf (a server's `env` and `headers`)
  * on the command line, and wants exactly one whole-value `${VAR}` naming a
  * variable that is set. So every such value rides in the view's own environment
- * under a generated name and the argv carries only the reference: nothing
- * secret is ever on a command line, where `ps` would show it.
+ * under a generated name and the argv carries only the reference: no env or
+ * header value is ever on a command line, where `ps` would show it. A server's
+ * `command`, `args` and `url` are not secret leaves to Muse and travel as given,
+ * so a credential placed there is visible in `ps`; keep credentials in `env` or `headers`.
  */
 
 /** Settings every Muse process the gateway starts carries; the same two a turn's host gets. */
@@ -47,7 +49,8 @@ function referenced(record: Record<string, string> | undefined, env: Record<stri
   for (const [key, value] of Object.entries(record ?? {})) {
     if (typeof value !== "string" || value === "") continue;
     const name = nextVar();
-    env[name] = value;
+    // Muse expands `${...}` in a value a second time, after resolving the reference, and `$$` is its escape.
+    env[name] = value.split("$").join("$$");
     out[key] = `\${${name}}`;
   }
   return Object.keys(out).length > 0 ? out : undefined;

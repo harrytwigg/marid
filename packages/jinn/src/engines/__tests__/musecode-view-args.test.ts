@@ -58,6 +58,11 @@ describe("buildMuseViewMcp", () => {
     expect(joined).not.toContain("sekrit-token");
   });
 
+  it("escapes `$` in a value, which Muse expands a second time after resolving the reference", () => {
+    const { env } = buildMuseViewMcp({ mcpServers: { s: { command: "/bin/x", env: { A: "pre${NOPE}post", B: "a$b" } } } } as unknown as ResolvedMcpConfig);
+    expect(env).toEqual({ MARID_MCP_1: "pre$${NOPE}post", MARID_MCP_2: "a$$b" });
+  });
+
   it("adds nothing for a session with no servers", () => {
     expect(buildMuseViewMcp(undefined)).toEqual({ flags: [], env: {}, skipped: [] });
     expect(buildMuseViewMcp({ mcpServers: {} })).toEqual({ flags: [], env: {}, skipped: [] });

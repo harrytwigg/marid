@@ -43,6 +43,7 @@ vi.mock("../../shared/logger.js", () => ({ logger: { warn: vi.fn(), debug: vi.fn
 vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: (id?: string) => (id === "s1" ? { JINN_EMPLOYEE: "worker" } : {}) }));
 
 import type { ResolvedMcpConfig } from "../../shared/types.js";
+import { isDeadSessionError } from "../../shared/rateLimit.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
 import { MUSECODE_VIEW_ONLY, MusecodeInteractiveEngine, type MusecodeInteractiveDeps } from "../musecode-interactive.js";
 
@@ -66,6 +67,13 @@ describe("MusecodeInteractiveEngine", () => {
     const { engine } = make();
     const result = await engine.run({ prompt: "hi", cwd: "/tmp", sessionId: "s1" });
     expect(result).toEqual({ sessionId: "", result: "", error: MUSECODE_VIEW_ONLY });
+  });
+
+  it("says so as a failure on an intact conversation, never as a dead session", async () => {
+    const { engine } = make();
+    const result = await engine.run({ prompt: "hi", cwd: "/tmp", sessionId: "s1", resumeSessionId: ID });
+    expect(result).toMatchObject({ sessionId: ID, error: MUSECODE_VIEW_ONLY, numTurns: 1, conversationIntact: true });
+    expect(isDeadSessionError(result)).toBe(false);
   });
 
   it("spawns `muse resume <id>` in the session's cwd, with the turn's scrubbed environment", () => {
@@ -147,13 +155,17 @@ describe("MusecodeInteractiveEngine", () => {
       expect(engine.hasWarmPty("s1")).toBe(true);
     });
 
-    it("keeps counting viewers across a restart", async () => {
+    it("counts a viewer once across a restart, since the socket enters again after it", async () => {
       const { engine } = make({ bin: () => "/opt/muse" });
       engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" });
       engine.setViewing("s1", true);
       engine.restartPty("s1", { engineSessionId: ID, cwd: "/w" });
+      engine.setViewing("s1", true);
       await engine.releaseUnviewed("s1");
       expect(spawnCalls[1].proc.killed).toBe(false);
+      engine.setViewing("s1", false);
+      await engine.releaseUnviewed("s1");
+      expect(spawnCalls[1].proc.killed).toBe(true);
     });
 
     it("does nothing when there is no terminal", async () => {

@@ -5,6 +5,7 @@ import { JINN_HOME } from "../shared/paths.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { CONVERSATION_KEPT } from "./musecode-turn-text.js";
 import { PtyLifecycleManager } from "./pty-lifecycle.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyIdleSpawnOpts, PtySnapshotSubscription, PtyViewEngine } from "./pty-view-engine.js";
@@ -49,12 +50,18 @@ export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
     lifecycle.onRelease((id) => {
       this.opened.delete(id);
       this.exits.delete(id);
+      // The lifecycle's own viewer count goes with the process, so this does too:
+      // a terminal that restarts is entered again by the socket that was on it.
+      this.viewers.delete(id);
     });
   }
 
   /** v1: the view is view-only. Work turns run through `MusecodeEngine`. */
-  async run(_opts: EngineRunOpts): Promise<EngineResult> {
-    return { sessionId: "", result: "", error: MUSECODE_VIEW_ONLY };
+  async run(opts: EngineRunOpts): Promise<EngineResult> {
+    // Said as a failed turn on a conversation that is intact, never as a dead
+    // session: the runner clears a resume id for a result with no work and no
+    // such mark, and a message sent in the CLI view must not cost the session its conversation.
+    return { sessionId: opts.resumeSessionId ?? "", result: "", error: MUSECODE_VIEW_ONLY, ...(opts.resumeSessionId ? CONVERSATION_KEPT : {}) };
   }
 
   // ── PtyViewEngine ─────────────────────────────────────────────────────────
@@ -91,7 +98,7 @@ export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
   }
 
   setViewing(sessionId: string, viewing: boolean): void {
-    // Counted here rather than read from the lifecycle, whose count goes with the process on a restart.
+    // Counted here because the lifecycle keeps its count private.
     const count = Math.max(0, (this.viewers.get(sessionId) ?? 0) + (viewing ? 1 : -1));
     if (count > 0) this.viewers.set(sessionId, count);
     else this.viewers.delete(sessionId);
