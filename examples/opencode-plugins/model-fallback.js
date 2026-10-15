@@ -23,7 +23,10 @@
  * `.opencode/`, `~/.opencode/`, the OpenCode config directory; then the
  * plugin entry's `options`):
  *   enabled          default true
- *   fallbackModels   [{ providerID, modelID }], tried in order
+ *   fallbackModels   [{ providerID, modelID }], tried in order, for every model;
+ *                    or one such list per model the session started on:
+ *                    { "<provider>/<model>": [...], "*": [...] }, where "*"
+ *                    is the list for a model not named (none: no fallback)
  *   fallbackMode     "stop" (default): when no fallback is usable, leave
  *                    OpenCode's own retry decision alone; "cycle": start again
  *                    from the first fallback that is not cooling down;
@@ -97,13 +100,41 @@ function loadConfig(directory, options) {
   const merged = { ...DEFAULTS, ...file, ...(options ?? {}) };
   merged.retryPolicy = { ...DEFAULTS.retryPolicy, ...(file.retryPolicy ?? {}), ...(options?.retryPolicy ?? {}) };
   merged.circuitBreaker = { ...DEFAULTS.circuitBreaker, ...(file.circuitBreaker ?? {}), ...(options?.circuitBreaker ?? {}) };
-  merged.fallbackModels = (Array.isArray(merged.fallbackModels) ? merged.fallbackModels : []).filter(
-    (m) => m && typeof m.providerID === "string" && typeof m.modelID === "string",
-  );
+  merged.chains = fallbackChains(merged.fallbackModels);
   return { config: merged, source };
 }
 
 const keyOf = (providerID, modelID) => `${providerID}/${modelID}`;
+const isModel = (m) => m && typeof m.providerID === "string" && typeof m.modelID === "string";
+
+/**
+ * `fallbackModels` as chains, by the model a session started on: a list is
+ * the chain for every model ("*"); an object names a chain per
+ * `provider/model`, with "*" for the rest. Entries that are not
+ * `{ providerID, modelID }`, and empty chains, are dropped.
+ */
+function fallbackChains(fallbackModels) {
+  const chains = new Map();
+  const add = (key, list) => {
+    const models = Array.isArray(list) ? list.filter(isModel) : [];
+    if (models.length) chains.set(key, models);
+  };
+  if (Array.isArray(fallbackModels)) add("*", fallbackModels);
+  else if (fallbackModels && typeof fallbackModels === "object") {
+    for (const [key, list] of Object.entries(fallbackModels)) add(key, list);
+  }
+  return chains;
+}
+
+/** The chain for a session that started on `origin`. */
+function chainFor(config, origin) {
+  return config.chains.get(origin) ?? config.chains.get("*") ?? [];
+}
+
+/** All the chains, for a log line: "origin → a, b; …". */
+function describeChains(chains) {
+  return [...chains].map(([origin, list]) => `${origin} → ${list.map((m) => keyOf(m.providerID, m.modelID)).join(", ")}`).join("; ");
+}
 
 /** True when a session error is a provider rate limit or quota error. */
 function isRateLimitError(error) {
@@ -127,7 +158,7 @@ function delayFor(policy, n) {
 function createState(config, now = () => Date.now()) {
   const cooldown = new Map(); // model key -> rate-limited at
   const circuit = new Map(); // model key -> { failures, openedAt }
-  const sessions = new Map(); // sessionID -> { attempted:Set, fallbacks, restore }
+  const sessions = new Map(); // sessionID -> { origin, attempted:Set, fallbacks, restore }
   let totalFallbacks = 0;
 
   const inCooldown = (key) => {
@@ -157,7 +188,7 @@ function createState(config, now = () => Date.now()) {
   return {
     session(id) {
       let s = sessions.get(id);
-      if (!s) sessions.set(id, (s = { attempted: new Set(), fallbacks: 0, restore: undefined }));
+      if (!s) sessions.set(id, (s = { origin: undefined, attempted: new Set(), fallbacks: 0, restore: undefined }));
       return s;
     },
     endSession(id) {
@@ -177,8 +208,8 @@ function createState(config, now = () => Date.now()) {
     succeeded(key) {
       circuit.delete(key);
     },
-    select(currentKey, attempted) {
-      const list = config.fallbackModels;
+    /** The next model in `list` (the session's chain) after `currentKey`. */
+    select(list, currentKey, attempted) {
       const at = list.findIndex((m) => keyOf(m.providerID, m.modelID) === currentKey);
       const ordered = [...list.slice(at + 1), ...list.slice(0, Math.max(0, at + 1))];
       const next = ordered.find((m) => usable(m, attempted));
@@ -197,7 +228,8 @@ function createState(config, now = () => Date.now()) {
     },
     report() {
       const lines = [`### ${PLUGIN_ID}`, "", `Fallbacks since start: ${totalFallbacks}`, "", "| model | cooling down | rate limits in a row | circuit |", "|---|---|---|---|"];
-      const keys = new Set([...cooldown.keys(), ...circuit.keys(), ...config.fallbackModels.map((m) => keyOf(m.providerID, m.modelID))]);
+      const chained = [...config.chains.values()].flat().map((m) => keyOf(m.providerID, m.modelID));
+      const keys = new Set([...cooldown.keys(), ...circuit.keys(), ...chained]);
       for (const k of keys) {
         const at = cooldown.get(k);
         const left = at === undefined || !inCooldown(k) ? "no" : `${Math.ceil((config.cooldownMs - (now() - at)) / 1000)} s left`;
@@ -253,7 +285,7 @@ export default {
   setup: async (ctx) => {
     const { config, source } = loadConfig(ctx.location?.directory, ctx.options);
     const log = makeLogger(Boolean(config.verbose));
-    if (!config.enabled || config.fallbackModels.length === 0) {
+    if (!config.enabled || config.chains.size === 0) {
       log.info(config.enabled ? "no fallbackModels configured; inactive" : "disabled by config");
       return;
     }
@@ -265,14 +297,17 @@ export default {
       const current = keyOf(input.model.providerID, input.model.id);
       const s = state.session(input.sessionID);
       const wasCooling = state.rateLimited(current);
+      // The chain follows the model the session was on when this execution
+      // first hit a limit, through every fallback after it.
+      s.origin ??= current;
       s.attempted.add(current);
       if (s.fallbacks >= config.retryPolicy.maxRetries) {
         log.info(`session ${input.sessionID}: ${s.fallbacks} fallbacks already this execution; leaving the retry to OpenCode`);
         return;
       }
-      const next = state.select(current, s.attempted);
+      const next = state.select(chainFor(config, s.origin), current, s.attempted);
       if (!next) {
-        log.info(`session ${input.sessionID}: no usable fallback for ${current} (mode ${config.fallbackMode}); leaving the retry to OpenCode`);
+        log.info(`session ${input.sessionID}: no usable fallback for ${current} (chain of ${s.origin}, mode ${config.fallbackMode}); leaving the retry to OpenCode`);
         return;
       }
       const model = { providerID: next.providerID, id: next.modelID };
@@ -307,7 +342,7 @@ export default {
     });
 
     log.info(
-      `armed: ${config.fallbackModels.map((m) => keyOf(m.providerID, m.modelID)).join(", ")} (mode ${config.fallbackMode}, cooldown ${config.cooldownMs}ms)${source ? ` (config ${source})` : ""}`,
+      `armed: ${describeChains(config.chains)} (mode ${config.fallbackMode}, cooldown ${config.cooldownMs}ms)${source ? ` (config ${source})` : ""}`,
     );
     return () => controller.abort();
   },

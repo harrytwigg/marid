@@ -93,7 +93,11 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
     writeJson(path.join(home, ".opencode", "rate-limit-fallback.json"), {
       fallbackMode: "stop",
       cooldownMs: 300_000,
-      fallbackModels: [{ providerID: "backup", modelID: "m1" }],
+      // A chain per model the session starts on: each primary model falls back to its own.
+      fallbackModels: {
+        "opencode-go/m1": [{ providerID: "backup", modelID: "m1" }],
+        "opencode-go/m2": [{ providerID: "backup", modelID: "m2" }],
+      },
       retryPolicy: { maxRetries: 2, strategy: "exponential", baseDelayMs: 200 },
       circuitBreaker: { enabled: true, failureThreshold: 3, recoveryTimeoutMs: 300_000 },
     });
@@ -218,9 +222,10 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
     const { result } = await turn("limited E429", { model: "opencode-go/m1" });
     expect(result.error).toBeUndefined();
     expect(result.result).toBe("hello from mock");
-    const urls = mainRequests().slice(-2).map((r) => r.url);
-    expect(urls[0]).toMatch(/^\/primary\//);
-    expect(urls[1]).toMatch(/^\/backup\//);
+    const [first, second] = mainRequests().slice(-2);
+    expect(first!.url).toMatch(/^\/primary\//);
+    expect(second!.url).toMatch(/^\/backup\//);
+    expect(second!.model).toBe("m1");
   }, 120_000);
 
   it("retries a pre-stream 400 in place (error-retry plugin), so the turn answers", async () => {
@@ -251,5 +256,16 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
       cappedEngine.killAll();
       await capped.stopAll();
     }
+  }, 120_000);
+
+  it("falls back along the chain of the model the turn started on (fallback plugin)", async () => {
+    const { result } = await turn("limited too E429", { model: "opencode-go/m2" });
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("hello from mock");
+    const [first, second] = mainRequests().slice(-2);
+    expect(first!).toMatchObject({ model: "m2" });
+    expect(first!.url).toMatch(/^\/primary\//);
+    expect(second!.url).toMatch(/^\/backup\//);
+    expect(second!.model).toBe("m2");
   }, 120_000);
 });
