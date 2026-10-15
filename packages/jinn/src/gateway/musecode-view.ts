@@ -40,7 +40,7 @@ export function createMusecodeEnginePair(gateway: {
   engineOptions: MusecodeEngineOptions;
 }): { work: MusecodeEngine; pty: MusecodeInteractiveEngine } {
   const lifecycle = gateway.createLifecycle({ onAdopt: gateway.refreshPids, onCleanup: gateway.refreshPids });
-  const pty = new MusecodeInteractiveEngine(lifecycle, viewDeps(gateway.getConfig));
-  const work = new MusecodeEngine({ ...gateway.engineOptions, releaseView: (id) => pty.releaseUnviewed(id) });
+  const pty: MusecodeInteractiveEngine = new MusecodeInteractiveEngine(lifecycle, { ...viewDeps(gateway.getConfig), turnRunning: (id) => work.hasLiveRun(id) });
+  const work: MusecodeEngine = new MusecodeEngine({ ...gateway.engineOptions, releaseView: (id) => pty.releaseUnviewed(id) });
   return { work, pty };
 }

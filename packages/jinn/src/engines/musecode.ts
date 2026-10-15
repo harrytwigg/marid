@@ -87,6 +87,11 @@ export class MusecodeEngine implements InterruptibleEngine {
     /* no-op */
   }
 
+  /** Whether a turn is in flight on the session, from the moment `run` is entered until it has finished and its host is gone. */
+  hasLiveRun(sessionId: string): boolean {
+    return this.live.has(sessionId);
+  }
+
   isAlive(sessionId: string): boolean {
     const live = this.live.get(sessionId);
     return !!live && !live.settled && !!live.proc && !live.proc.hasExited;

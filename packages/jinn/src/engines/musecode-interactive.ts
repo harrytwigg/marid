@@ -15,10 +15,15 @@ import { buildMuseViewArgs, type MuseViewArgs } from "./musecode-view-args.js";
 export const MUSECODE_VIEW_ONLY =
   "Muse Code's terminal view is view-only; work turns run on the Muse Code engine.";
 
+/** Why the terminal is not opened while a turn holds the session. */
+export const MUSECODE_TURN_RUNNING = "A turn is running; the terminal opens when it ends.";
+
 /** How long a headless turn waits for a view it has closed to let go of the session. */
 const VIEW_EXIT_WAIT_MS = 4000;
 
 export interface MusecodeInteractiveDeps {
+  /** Whether a turn is in flight on this session. Muse does not stop a terminal opening on a session a turn holds, so none is opened then. */
+  turnRunning?: (sessionId: string) => boolean;
   /** `engines.musecode.bin`. */
   bin?: () => string | undefined;
   /** What a turn of this session would be launched with: the employee's `cliFlags` and its MCP set. */
@@ -34,7 +39,8 @@ export interface MusecodeInteractiveDeps {
  * `sessionInUse`. The reverse is not guarded: a TUI opened while a turn's host
  * holds the session gets in and the two interleave. So work turns never run
  * here, the headless engine says plainly when the terminal holds its session,
- * and the dashboard keeps the terminal shut while a turn is running.
+ * and this engine opens no terminal while a turn is running (the dashboard also
+ * locks its view switch).
  */
 export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEngine {
   name = "musecode" as const;
@@ -67,6 +73,7 @@ export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
   // ── PtyViewEngine ─────────────────────────────────────────────────────────
 
   ensureIdleSpawn(jinnSessionId: string, opts: PtyIdleSpawnOpts): void {
+    if (this.wouldSpawn(jinnSessionId, opts) && this.deps.turnRunning?.(jinnSessionId)) throw new Error(MUSECODE_TURN_RUNNING);
     if (opts.cols && opts.rows) setCapped(this.lastGeom, jinnSessionId, { cols: opts.cols, rows: opts.rows });
     if (this.lifecycle.getWarm(jinnSessionId)) {
       // A TUI opened before the session had a conversation is a different one
@@ -78,6 +85,12 @@ export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
     }
     const handle = this.spawn(jinnSessionId, opts);
     this.lifecycle.adopt(jinnSessionId, handle);
+  }
+
+  /** Whether opening a terminal for this session starts a process: none is warm, or the warm one is on another conversation. */
+  private wouldSpawn(sessionId: string, opts: PtyIdleSpawnOpts): boolean {
+    if (!this.lifecycle.getWarm(sessionId)) return true;
+    return !!opts.engineSessionId && this.opened.get(sessionId) !== opts.engineSessionId;
   }
 
   hasWarmPty(sessionId: string): boolean {
@@ -93,6 +106,7 @@ export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
   }
 
   restartPty(sessionId: string, opts: PtyIdleSpawnOpts): void {
+    if (this.deps.turnRunning?.(sessionId)) throw new Error(MUSECODE_TURN_RUNNING);
     this.kill(sessionId, "Interrupted: terminal restart requested");
     this.ensureIdleSpawn(sessionId, opts);
   }

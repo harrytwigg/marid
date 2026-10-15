@@ -157,7 +157,7 @@ The chat pane's **CLI** toggle opens Muse's own TUI on the session's conversatio
 So work turns never run in the view (a message sent while the view is the active mode answers "view-only"), and Marid keeps the two apart from both sides:
 
 - A turn that meets `sessionInUse` fails with "The session is open in the terminal view; close it to continue." It is not a lost conversation: the resume id is kept and nothing is retried as a fresh session.
-- Before a turn resumes a conversation, Marid closes that session's terminal if no browser tab is attached to it, and waits for Muse to let go. A terminal someone has open is left alone, which is the case that produces the message above.
+- Before a turn resumes a conversation, Marid closes that session's terminal if no visible browser tab is viewing it (a tab in the background does not count), and waits for Muse to let go. A terminal someone has open is left alone, which is the case that produces the message above.
 - The CLI/Chat toggle is disabled while a Muse Code turn is running (as for Codex), so a terminal cannot be opened onto a live turn. A tab that was already on the CLI view when a turn starts is not stopped.
 
 Other behaviour:
@@ -166,7 +166,7 @@ Other behaviour:
 - **Approvals** are Muse's own (`on-request`): a person is at the terminal to answer them. Turns run with approvals allowed, as before.
 - **Company tools.** The TUI takes MCP servers from `-c mcpServers.<name>=<json>`, one flag per server, the same set a turn gets. Muse refuses a literal value for a server's `env` or `headers` on a command line, so each `env` and `headers` value is passed as a whole-value `${MARID_MCP_n}` reference and travels in the terminal's environment (with `$` doubled, because Muse expands a value a second time). A server's `command`, `args` and `url` are not secret leaves to Muse and are on the command line as given, so keep credentials in `env` or `headers`. Empty values are dropped. A server whose name cannot be addressed that way is left out with a warning in the gateway log.
 - **A fresh view is its own conversation.** A conversation started by typing in a view that had no resume id is not linked to the session: the next turn starts a new one. Open the CLI view after the first turn to continue the session's conversation. A view opened before the session had a conversation is reopened on the real one the next time it is opened.
-- **Races.** Nothing stops a terminal opening while a turn holds the session except the CLI toggle's lock, which a second tab or a reconnect does not see; the two then interleave on one conversation (Muse does not guard that order). A terminal resized in the instant a turn is closing it reopens, and the turn then gets the "close it to continue" message; send the message again.
+- **While a turn runs, no terminal opens.** Opening, restarting or resizing a terminal onto a session whose turn is in flight is refused with "A turn is running; the terminal opens when it ends.", and the terminal can be opened again once the turn is over. This is what keeps a terminal from opening on a session a turn holds, which Muse itself does not prevent. The CLI toggle's lock is only the visible half of it.
 - Stopping a session, or shutting the gateway down, kills its terminal too.
 
 ## Known limits

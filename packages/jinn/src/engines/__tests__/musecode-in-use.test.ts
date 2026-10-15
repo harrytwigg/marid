@@ -37,6 +37,15 @@ describe("a session the terminal view holds", () => {
     expect(releaseView).toHaveBeenCalledExactlyOnceWith("s1");
   });
 
+  it("is in flight from the moment run is entered, so a terminal is not opened while the view is being closed", async () => {
+    let during: boolean | undefined;
+    ctx.engine = new MusecodeEngine({ releaseView: async (id) => { during = ctx.engine.hasLiveRun(id); } });
+    const first = await ctx.engine.run(opts());
+    await ctx.engine.run(opts({ resumeSessionId: first.sessionId }));
+    expect(during).toBe(true);
+    expect(ctx.engine.hasLiveRun("s1")).toBe(false);
+  });
+
   it("still runs the turn when releasing the view fails", async () => {
     ctx.engine = new MusecodeEngine({ releaseView: async () => { throw new Error("boom"); } });
     const first = await ctx.engine.run(opts());

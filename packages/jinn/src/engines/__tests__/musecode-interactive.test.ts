@@ -45,7 +45,7 @@ vi.mock("../../sessions/employee-env.js", () => ({ employeeSessionEnv: (id?: str
 import type { ResolvedMcpConfig } from "../../shared/types.js";
 import { isDeadSessionError } from "../../shared/rateLimit.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
-import { MUSECODE_VIEW_ONLY, MusecodeInteractiveEngine, type MusecodeInteractiveDeps } from "../musecode-interactive.js";
+import { MUSECODE_TURN_RUNNING, MUSECODE_VIEW_ONLY, MusecodeInteractiveEngine, type MusecodeInteractiveDeps } from "../musecode-interactive.js";
 
 const ID = "01a13fb8-5801-7983-8ae6-77432f86606b";
 const OTHER = "01a13fb9-0000-7000-8000-000000000002";
@@ -133,6 +133,40 @@ describe("MusecodeInteractiveEngine", () => {
     engine.kill("s1");
     expect(engine.isAlive("s1")).toBe(false);
     expect(spawnCalls[0].proc.killed).toBe(true);
+  });
+
+  describe("while a turn is running", () => {
+    it("opens no terminal, however the socket asks, and opens one once the turn is over", () => {
+      let running = true;
+      const { engine } = make({ bin: () => "/opt/muse", turnRunning: () => running });
+      expect(() => engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" })).toThrow(MUSECODE_TURN_RUNNING);
+      expect(() => engine.restartPty("s1", { engineSessionId: ID, cwd: "/w" })).toThrow(MUSECODE_TURN_RUNNING);
+      expect(spawnCalls).toHaveLength(0);
+      running = false;
+      engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" });
+      expect(spawnCalls).toHaveLength(1);
+    });
+
+    it("does not reopen a terminal the turn closed, when a hidden tab comes back", async () => {
+      let running = false;
+      const { engine } = make({ bin: () => "/opt/muse", turnRunning: () => running });
+      engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" });
+      engine.setViewing("s1", true);
+      engine.setViewing("s1", false);
+      running = true;
+      await engine.releaseUnviewed("s1");
+      engine.setViewing("s1", true);
+      expect(() => engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" })).toThrow(MUSECODE_TURN_RUNNING);
+      expect(spawnCalls).toHaveLength(1);
+    });
+
+    it("leaves a warm terminal on the right conversation alone", () => {
+      let running = false;
+      const { engine } = make({ bin: () => "/opt/muse", turnRunning: () => running });
+      engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" });
+      running = true;
+      expect(() => engine.ensureIdleSpawn("s1", { engineSessionId: ID, cwd: "/w" })).not.toThrow();
+    });
   });
 
   describe("releaseUnviewed", () => {
