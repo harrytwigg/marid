@@ -7,6 +7,7 @@ import { addComment, getComment, setTodoCommentListener, type WorkItemComment } 
 import { canMessageSession } from "../work-items/employee-sessions.js";
 import { parseMentions } from "../work-items/mentions.js";
 import { getWorkItem, type WorkItem } from "../work-items/store.js";
+import { owningEmployeeSession } from "../work-items/todo-owner-session.js";
 import { orgRegistry } from "./org-registry.js";
 import { deliverIntoSession, wakeEmployeeOnTodo, wakeRootOnTodo, type WakeEmployeeResult } from "./todo-employee-session.js";
 import { virtualRootMention, type RootMention } from "./work-item-owner.js";
@@ -15,9 +16,10 @@ import type { ApiContext } from "./api.js";
 /**
  * Who a new comment on a Todo wakes.
  *
- * - Each `@employee` it mentions, on this Todo: into the session that employee
- *   already has on it, or a new one linked as a consultation. A mention never
- *   takes the Todo's claim, so the employee doing the work keeps it.
+ * - Each `@employee` it mentions, on this Todo: into the employee's session that
+ *   delegated or created the Todo, else the session that employee already has
+ *   on it, else a new one linked as a consultation. A mention never takes the
+ *   Todo's claim, so the employee doing the work keeps it.
  * - The virtual org root, when the operator mentions it by the portal's name
  *   (`@coo`): into the root session already on this Todo, or a new portal
  *   session linked as a consultation. Only the operator can: a root session
@@ -108,21 +110,31 @@ function reportFailedWake(comment: WorkItemComment, name: string, error: string)
   });
 }
 
-/** Wake one mentioned employee, or the root when `employee` is null. */
+/** Wake one mentioned employee, or the root when `employee` is null: into the
+ *  employee's session that delegated or created the Todo when it has one,
+ *  otherwise into their session on it or a new one. */
+function wakeTarget(context: ApiContext, item: WorkItem, comment: WorkItemComment, employee: Employee | null): WakeEmployeeResult {
+  const input = {
+    workItemId: item.id,
+    role: "consult" as const,
+    actor: comment.sessionId ? `session:${comment.sessionId}` : comment.author,
+    title: `Tagged on ${item.id}: ${item.title}`,
+    sourceAttempt: `mention:${comment.id}`,
+    deliveryKind: "todo-mention",
+    message: mentionPrompt(item, comment),
+    displayMessage: `🏷️ ${item.id} · ${comment.author}\n${comment.body}`,
+  };
+  if (!employee) return wakeRootOnTodo(context, input);
+  const owner = owningEmployeeSession(item, employee.name);
+  if (!owner || !scopedReplyAllowed(comment, owner)) return wakeEmployeeOnTodo(context, { ...input, employee });
+  deliverIntoSession(owner, input);
+  return { ok: true, session: owner, started: false };
+}
+
 function wakeOne(context: ApiContext, item: WorkItem, comment: WorkItemComment, employee: Employee | null, name: string): CommentWake | undefined {
   let woke: WakeEmployeeResult;
   try {
-    const input = {
-      workItemId: item.id,
-      role: "consult" as const,
-      actor: comment.sessionId ? `session:${comment.sessionId}` : comment.author,
-      title: `Tagged on ${item.id}: ${item.title}`,
-      sourceAttempt: `mention:${comment.id}`,
-      deliveryKind: "todo-mention",
-      message: mentionPrompt(item, comment),
-      displayMessage: `🏷️ ${item.id} · ${comment.author}\n${comment.body}`,
-    };
-    woke = employee ? wakeEmployeeOnTodo(context, { ...input, employee }) : wakeRootOnTodo(context, input);
+    woke = wakeTarget(context, item, comment, employee);
   } catch (error) {
     woke = { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
