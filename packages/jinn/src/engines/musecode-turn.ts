@@ -5,6 +5,7 @@ import {
   describeModelRetry,
   addTokenUsage,
   museTurnCost,
+  CONVERSATION_KEPT,
   num,
   parseTokenUsage,
   parseUsageChanged,
@@ -255,7 +256,7 @@ export class MuseTurn {
     const cost = museTurnCost(this.tokens, outcome.costRates);
     const base = {
       sessionId: this.sessionId,
-      numTurns: 1,
+      ...CONVERSATION_KEPT,
       ...(cost === undefined ? {} : { cost }),
       ...(this.durationMs === undefined ? {} : { durationMs: this.durationMs }),
       ...(this.contextTokens() === undefined ? {} : { contextTokens: this.contextTokens()! }),
@@ -271,7 +272,7 @@ export class MuseTurn {
     return this.failure(base);
   }
 
-  private failure(base: Pick<EngineResult, "sessionId" | "numTurns">): EngineResult {
+  private failure(base: Pick<EngineResult, "sessionId" | "numTurns" | "conversationIntact">): EngineResult {
     const error = this.error;
     if (!error) {
       return { ...base, result: "", error: this.reason ?? `Muse Code ended the turn as ${this.terminal ?? "failed"}` };

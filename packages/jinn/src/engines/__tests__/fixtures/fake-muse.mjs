@@ -188,7 +188,7 @@ async function runTurn({ session, turnId, text, params }) {
     const message = `invalid run configuration: Required MCP server \`${brokenServer}\` failed during startup: the configured command is unavailable.`;
     return finish(base, turnId, { terminal: "failed", error: { kind: "configError", message, retryable: false } });
   }
-  if (directives.has("AUTH")) return finish(base, turnId, { terminal: "failed", error: { kind: "authRequired", message: "Not signed in to Meta", retryable: false } });
+  if (directives.has("AUTH")) return finish(base, turnId, { terminal: "failed", error: { kind: "authRequired", message: "Your session has expired, please log in again", retryable: false } });
   if (directives.has("QUOTA")) {
     const resetsAtMs = Number(process.env.FAKE_MUSE_RESET_MS || Date.now() + 2 * 3600 * 1000);
     return finish(base, turnId, {
@@ -197,7 +197,7 @@ async function runTurn({ session, turnId, text, params }) {
       error: { kind: "modelError", message: "API error 429: Usage limit reached (tier_limit_error)", quota: { limitKind: "tierLimit", resetsAtMs }, retryable: false },
     });
   }
-  if (directives.has("FAIL")) return finish(base, turnId, { terminal: "failed", error: { kind: "modelError", message: "The model stopped: simulated failure", retryable: false } });
+  if (directives.has("FAIL")) return finish(base, turnId, { terminal: "failed", error: { kind: "modelError", message: "API error 401: your session has expired", retryable: false } });
   if (directives.has("HANG") || directives.has("STUCK")) return hang(base, turnId, directives.has("STUCK"));
   if (directives.has("TOOL")) await toolCall(base, turnId);
   if (directives.has("APPROVAL")) {

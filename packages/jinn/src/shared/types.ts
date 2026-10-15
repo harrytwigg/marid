@@ -227,6 +227,8 @@ export interface EngineResult {
   cost?: number;
   durationMs?: number;
   numTurns?: number;
+  /** The engine states the conversation is intact whatever `error` says, so a failure is never read as a stale resume id (`isDeadSessionError`). */
+  conversationIntact?: boolean;
   /** Most recent turn's INPUT context size (input + cache-read + cache-creation
    *  tokens) — i.e. how full the context window currently is. Undefined when the
    *  engine doesn't surface usage. */

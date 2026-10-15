@@ -6,6 +6,14 @@ import { extractActivityReceiptId } from "../shared/activity-receipts.js";
  * params, and the words the live view shows for what happened.
  */
 
+/**
+ * What every result carries once the conversation exists: one turn, and an
+ * explicit statement that it is intact. Muse reports no cost until a catalog
+ * supplies rates, and its errors are provider text that can contain anything,
+ * so neither may decide that a resumable conversation is dead.
+ */
+export const CONVERSATION_KEPT = { numTurns: 1, conversationIntact: true } as const;
+
 /** What a model costs per million tokens, as the catalog (`model/list`) states it. */
 export interface MuseModelCost {
   input: number;
