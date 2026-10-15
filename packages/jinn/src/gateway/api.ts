@@ -323,6 +323,8 @@ import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } fr
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
 import { handleSprintsApi } from "./sprints-api.js";
 import { handleSessionsListApi } from "./sessions-list-api.js";
+import { handleSessionWaitsApi } from "./session-waits-api.js";
+import { resolveScopedCaller } from "./department-scope/caller.js";
 import { handleDepartmentsApi } from "./departments-api.js";
 import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
 import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
@@ -1770,6 +1772,15 @@ export async function handleApiRequest(
 
     // GET /api/sessions: the list, in its own module (api.ts is over its size budget).
     if (await handleSessionsListApi(res, { method, pathname, url }, { serialize: (sessions) => serializeSessionList(sessions, context), portalSlug: () => context.getConfig().portal?.portalName })) return;
+
+    // GET /api/sessions/:id/waits: what the session waits on, in its own module (api.ts is over its size budget).
+    if (handleSessionWaitsApi(res, { method, pathname, url }, {
+      holdingCapacity: (all) => sessionsHoldingEngineCapacity(all, context),
+      statusOf: (waiting) => effectiveSessionStatus(waiting, currentRuntimeActivity(waiting, context)),
+      engines: (waiting) => [context.sessionManager.getEngine(waiting.engine), context.ptyViewEngines?.[waiting.engine]],
+      employeeDisplayName: (employee) => orgRegistry(context.getConfig()).get(employee)?.displayName ?? null,
+      callerDepartment: () => resolveScopedCaller(resolveScopedWriteCallerIdentity(req, context))?.department ?? null,
+    })) return;
 
     // GET /api/sessions/:id/messages?before=<messageId>&limit=N
     // Bounded older-history page for seamless transcript prepending in the web UI.
