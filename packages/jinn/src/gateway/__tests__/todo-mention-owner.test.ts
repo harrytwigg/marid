@@ -82,6 +82,27 @@ describe("a mention of the employee who owns the Todo from outside it", () => {
     expect(h.deliveriesTo(consult.id)).toEqual([]);
   });
 
+  it("leaves it to the employee's own session working the Todo, over the session that created it", async () => {
+    const { owner, child } = ownerWithChild("created, then taken on by its author");
+    const working = h.executing(child.id, "alpha");
+
+    await h.comment(child.id, "@alpha how far along is it?");
+
+    expect(h.deliveriesTo(working.id, "todo-mention")).toHaveLength(1);
+    expect(h.deliveriesTo(owner.id)).toEqual([]);
+    expect(h.sessionsOf(child.id, "alpha").map((session) => session.id)).toEqual([working.id]);
+  });
+
+  it("leaves it to the employee's own session working the Todo, over the session that delegated it", async () => {
+    const { owner, child, worker } = await delegatedToWorker("handed back to its delegator's employee");
+    const working = h.executing(child.id, "alpha");
+
+    await h.comment(child.id, "@alpha over to you?", { as: worker.id });
+
+    expect(h.deliveriesTo(working.id, "todo-mention")).toHaveLength(1);
+    expect(h.deliveriesTo(owner.id, "todo-mention")).toEqual([]);
+  });
+
   it("starts a consultation when the delegating session can no longer be messaged", async () => {
     const { owner, child, worker } = await delegatedToWorker("owner gone");
     h.registry.updateSession(owner.id, { status: "error" });

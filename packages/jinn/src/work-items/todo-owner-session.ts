@@ -1,7 +1,8 @@
 import type { Session } from '../shared/types.js';
 import { getSession, listSessionsByWorkItem } from '../sessions/registry.js';
 import { isLegacyWorkflowPhaseSession } from '../sessions/legacy-workflow-phase.js';
-import { canMessageSession, employeeSessionsTable } from './employee-sessions.js';
+import { canMessageSession, employeeSessionsTable, isLiveEmployeeSession } from './employee-sessions.js';
+import { toWorkItemLinkRole } from './link-role.js';
 import type { WorkItem } from './store.js';
 
 /**
@@ -13,8 +14,11 @@ import type { WorkItem } from './store.js';
  * and a mention of that employee would otherwise start a consultation with
  * none of that context, one that can contradict the owner within a minute.
  *
- * Looked for in this order, and only that employee's sessions that can still be
- * messaged count:
+ * An employee with a live session working the Todo from inside (linked to
+ * execute or review it) owns it there instead: that session holds the latest
+ * state of the work, whoever created or delegated it, and the ordinary
+ * look-up finds it. Otherwise, looked for in this order, and only that
+ * employee's sessions that can still be messaged count:
  * - the delegator each employee's session on the Todo reports to, the most
  *   recent delegation first;
  * - the parent of each session linked to the Todo, newest first, which is who
@@ -41,8 +45,16 @@ function candidateIds(item: WorkItem): string[] {
   return [...recordedDelegators(item.id), ...parents, creatorSessionId(item)].filter((id): id is string => !!id);
 }
 
-/** `employee`'s live delegating or creating session for `item`, if any. */
+/** Whether `employee` has a live session linked to work the Todo, not just consulted on it. */
+function worksItFromInside(item: WorkItem, employee: string): boolean {
+  return listSessionsByWorkItem(item.id).some((session) =>
+    isLiveEmployeeSession(session, item.id, employee) && toWorkItemLinkRole(session.workItemRole) !== 'consult');
+}
+
+/** `employee`'s live delegating or creating session for `item`, if any, unless
+ *  one of theirs works it from inside. */
 export function owningEmployeeSession(item: WorkItem, employee: string): Session | undefined {
+  if (worksItFromInside(item, employee)) return undefined;
   for (const id of new Set(candidateIds(item))) {
     const session = getSession(id);
     if (session?.employee === employee && canMessageSession(session) && !isLegacyWorkflowPhaseSession(session)) return session;
