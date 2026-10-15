@@ -1,3 +1,5 @@
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   childFallbackMode, effectiveFallbackMode, isAutoResume, resolveSessionFallbackTarget, sessionFallbackView, startsOnPreferredEngine,
@@ -7,7 +9,7 @@ import { makeSession } from "./helpers/session-fixture.js";
 import type { Employee, JinnConfig, ModelRegistry } from "../../shared/types.js";
 import type { SessionFallbackMode } from "../../shared/session-fallback-config.js";
 
-const FRIEND = "/Users/operator/.claude-friend";
+const FRIEND = path.join(os.tmpdir(), "claude-profile-friend");
 const friendKey = claudeProfileFromDir(FRIEND)!.key;
 
 const registry = {

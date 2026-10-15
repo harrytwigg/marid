@@ -12,7 +12,7 @@ function stub(response: unknown) {
     calls.push({ url: String(input), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
     return { status: 201, text: async () => JSON.stringify(response) } as unknown as Response;
   }) as unknown as typeof fetch;
-  const ctx: JinnMcpContext = { gatewayUrl: "http://127.0.0.1:7777", fetchFn, callerSessionId: "caller-1", sessionCapability: "cap-test" };
+  const ctx: JinnMcpContext = { gatewayUrl: "http://127.0.0.1:7799", fetchFn, callerSessionId: "caller-1", sessionCapability: "cap-test" };
   return { calls, ctx };
 }
 
@@ -36,7 +36,7 @@ describe.each([
   it.each(["fallback", "fallback-children", "auto-resume"])("forwards %s to the gateway", async (mode) => {
     const { calls, ctx } = stub(response);
     await tool(name).handler({ ...base, fallbackMode: mode }, ctx);
-    expect(calls[0].url).toBe(`http://127.0.0.1:7777${route}`);
+    expect(calls[0].url).toBe(`http://127.0.0.1:7799${route}`);
     expect(calls[0].body).toMatchObject({ fallbackMode: mode });
   });
 
