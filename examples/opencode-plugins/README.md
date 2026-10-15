@@ -18,7 +18,7 @@ function`. The server still starts, but without them.
 `fallbackModels` in `rate-limit-fallback.json` takes either of two forms:
 
 - **A list**, as `opencode-rate-limit` takes it. It is the fallback chain for every model.
-- **An object**, giving each model the session starts on its own chain, keyed by `provider/model`. `"*"` is the chain for any model not named. With no `"*"`, an unnamed model gets opencode's own retries only.
+- **An object**, giving each model the session starts on its own chain, keyed by `provider/model`. `"*"` is the chain for any model not named. With no `"*"`, an unnamed model gets opencode's own retries only. `[]` turns fallback off for that model, even when there is a `"*"`.
 
 ```json
 {

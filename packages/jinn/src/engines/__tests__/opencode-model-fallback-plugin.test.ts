@@ -121,9 +121,19 @@ describe("fallback chains per model", () => {
     expect(decision).toBeUndefined();
   });
 
-  it("drops entries that are not models, and is inactive with no chain left", async () => {
+  it("keeps a model named with an empty chain off fallback, instead of sending it down \"*\"", async () => {
+    const p = await plugin({ fallbackModels: { "opencode-go/local-only": [], "*": chains["*"] } });
+    const { to, decision } = await p.rateLimited("ses_a", "opencode-go/local-only");
+    expect(to).toBeUndefined();
+    expect(decision).toBeUndefined();
+    expect((await p.rateLimited("ses_b", "opencode-go/other")).to).toBe("openrouter/any-backup");
+  });
+
+  it("drops entries that are not models, and is inactive with nowhere to fall back to", async () => {
     const p = await plugin({ fallbackModels: { "opencode-go/fast": [{ providerID: "openrouter" }], "*": "nope" } });
     expect(p.hooked()).toBe(false);
+    expect((await plugin({ fallbackModels: { "opencode-go/fast": [] } })).hooked()).toBe(false);
+    expect((await plugin({ fallbackModels: [] })).hooked()).toBe(false);
   });
 });
 

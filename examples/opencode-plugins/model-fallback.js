@@ -26,7 +26,8 @@
  *   fallbackModels   [{ providerID, modelID }], tried in order, for every model;
  *                    or one such list per model the session started on:
  *                    { "<provider>/<model>": [...], "*": [...] }, where "*"
- *                    is the list for a model not named (none: no fallback)
+ *                    is the list for a model not named (none: no fallback),
+ *                    and [] turns fallback off for that model
  *   fallbackMode     "stop" (default): when no fallback is usable, leave
  *                    OpenCode's own retry decision alone; "cycle": start again
  *                    from the first fallback that is not cooling down;
@@ -111,29 +112,34 @@ const isModel = (m) => m && typeof m.providerID === "string" && typeof m.modelID
  * `fallbackModels` as chains, by the model a session started on: a list is
  * the chain for every model ("*"); an object names a chain per
  * `provider/model`, with "*" for the rest. Entries that are not
- * `{ providerID, modelID }`, and empty chains, are dropped.
+ * `{ providerID, modelID }` are dropped. A model named with an empty chain
+ * (or one with nothing valid in it) keeps it: no fallback for that model,
+ * rather than the "*" chain.
  */
 function fallbackChains(fallbackModels) {
   const chains = new Map();
-  const add = (key, list) => {
-    const models = Array.isArray(list) ? list.filter(isModel) : [];
-    if (models.length) chains.set(key, models);
-  };
-  if (Array.isArray(fallbackModels)) add("*", fallbackModels);
-  else if (fallbackModels && typeof fallbackModels === "object") {
-    for (const [key, list] of Object.entries(fallbackModels)) add(key, list);
+  const models = (list) => (Array.isArray(list) ? list.filter(isModel) : []);
+  if (Array.isArray(fallbackModels)) {
+    if (models(fallbackModels).length) chains.set("*", models(fallbackModels));
+  } else if (fallbackModels && typeof fallbackModels === "object") {
+    for (const [key, list] of Object.entries(fallbackModels)) chains.set(key, models(list));
   }
   return chains;
 }
 
-/** The chain for a session that started on `origin`. */
+/** Whether any model has somewhere to fall back to. */
+function hasFallbacks(chains) {
+  return [...chains.values()].some((list) => list.length > 0);
+}
+
+/** The chain for a session that started on `origin`: its own (empty: none), else "*". */
 function chainFor(config, origin) {
   return config.chains.get(origin) ?? config.chains.get("*") ?? [];
 }
 
 /** All the chains, for a log line: "origin → a, b; …". */
 function describeChains(chains) {
-  return [...chains].map(([origin, list]) => `${origin} → ${list.map((m) => keyOf(m.providerID, m.modelID)).join(", ")}`).join("; ");
+  return [...chains].map(([origin, list]) => `${origin} → ${list.map((m) => keyOf(m.providerID, m.modelID)).join(", ") || "(none)"}`).join("; ");
 }
 
 /** True when a session error is a provider rate limit or quota error. */
@@ -285,7 +291,7 @@ export default {
   setup: async (ctx) => {
     const { config, source } = loadConfig(ctx.location?.directory, ctx.options);
     const log = makeLogger(Boolean(config.verbose));
-    if (!config.enabled || config.chains.size === 0) {
+    if (!config.enabled || !hasFallbacks(config.chains)) {
       log.info(config.enabled ? "no fallbackModels configured; inactive" : "disabled by config");
       return;
     }
