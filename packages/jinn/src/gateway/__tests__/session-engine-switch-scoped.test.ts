@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { api, makeReq, makeRes, operatorHeaders, reg } from "./helpers/work-items-route-harness.js";
 import type { JinnConfig } from "../../shared/types.js";
 
@@ -34,11 +34,16 @@ const ctx = {
 } as unknown as import("../api.js").ApiContext;
 
 let scope: typeof import("../../work-items/department-scope.js");
+let labScope: "scoped" | "open" = "scoped";
 
 beforeAll(async () => {
   scope = await import("../../work-items/department-scope.js");
   scope.setEmployeeDepartmentResolver((employee) => (employee === "lab-dev" ? "lab" : "platform"));
-  scope.setDepartmentScopeResolver((department) => (department === "lab" ? "scoped" : "open"));
+  scope.setDepartmentScopeResolver((department) => (department === "lab" ? labScope : "open"));
+});
+
+beforeEach(() => {
+  labScope = "scoped";
 });
 
 afterAll(() => {
@@ -60,17 +65,38 @@ describe("switching a session's engine mid-chat", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('department "lab"');
-    expect(res.body.error).toContain("claude engine");
+    expect(res.body.error).toContain("run only on the claude engine");
+    expect(res.body.error).not.toContain("Name \"claude\" or no engine");
     expect(reg.getSession(session.id)?.engine).toBe("claude");
   });
 
-  it("lets a scoped employee's session switch to claude (no change)", async () => {
-    const session = reg.createSession({ engine: "claude", source: "web", sourceRef: "scoped-same", title: "scoped", employee: "lab-dev" });
+  it("still refuses a session bound to its department once its employee is no longer scoped", async () => {
+    const session = reg.createSession({ engine: "claude", source: "web", sourceRef: "scoped-bound", title: "bound", employee: "lab-dev" });
+    expect(session.scopeDepartment).toBe("lab");
+    labScope = "open";
 
-    const res = await patch(session.id, { engine: "claude", title: "renamed" });
+    const res = await patch(session.id, { engine: "codex" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('department "lab"');
+    expect(reg.getSession(session.id)?.engine).toBe("claude");
+  });
+
+  it("lets a scoped session stranded on another engine switch back to claude", async () => {
+    const session = reg.createSession({ engine: "codex", source: "web", sourceRef: "scoped-stranded", title: "stranded", employee: "lab-dev" });
+
+    const res = await patch(session.id, { engine: "claude" });
 
     expect(res.status).toBe(200);
     expect(reg.getSession(session.id)?.engine).toBe("claude");
+  });
+
+  it("still takes a model change on a scoped session", async () => {
+    const session = reg.createSession({ engine: "claude", source: "web", sourceRef: "scoped-model", title: "model", employee: "lab-dev" });
+
+    const res = await patch(session.id, { model: "sonnet" });
+
+    expect(res.status).toBe(200);
   });
 
   it("leaves an open employee's switch alone", async () => {
