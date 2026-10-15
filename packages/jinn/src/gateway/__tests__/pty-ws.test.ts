@@ -225,6 +225,24 @@ describe("attachPtyWebSocket snapshot framing", () => {
   });
 });
 
+describe("a restart the engine refuses", () => {
+  it("is a recoverable error, and the socket still counts as viewing, so closing the tab stops the viewing", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    engine.restartPty = () => { throw new Error("A turn is running; the terminal opens when it ends."); };
+    attachPtyWebSocket(ws as any, "session-1", engine);
+    await settle();
+    ws.receive({ type: "viewing", viewing: true });
+    ws.receive({ type: "resize", cols: 90, rows: 30 });
+    expect(engine.viewingCalls).toEqual([true]);
+
+    ws.receive({ type: "restart" });
+    expect(controls(ws).at(-1)).toMatchObject({ type: "error", recoverable: true, message: expect.stringContaining("A turn is running") });
+    ws.close();
+    expect(engine.viewingCalls).toEqual([true, false]);
+  });
+});
+
 describe("attachPtyWebSocket input frames", () => {
   it("writes an input frame to the PTY byte-for-byte: keys, mouse reports, pastes", () => {
     const ws = new FakeWebSocket();

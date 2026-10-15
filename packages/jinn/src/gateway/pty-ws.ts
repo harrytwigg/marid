@@ -248,6 +248,7 @@ export function attachPtyWebSocket(
       terminalReady = false;
       sendControl({ type: "restoring" });
       const restoreViewing = didEnter || pendingViewing === true;
+      const entered = { didEnter, entryReady, pendingViewing };
       didEnter = false;
       entryReady = false;
       pendingViewing = null;
@@ -256,6 +257,8 @@ export function attachPtyWebSocket(
         armResumeDeadline();
         if (restoreViewing) applyViewingWhenReady(true);
       } catch (error) {
+        // A restart that is refused (an engine may refuse one mid-turn) leaves the terminal as it was, this socket still counted as viewing it.
+        ({ didEnter, entryReady, pendingViewing } = entered);
         sendControl({
           type: "error",
           message: `failed to restart terminal: ${error instanceof Error ? error.message : String(error)}`,
