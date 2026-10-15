@@ -57,7 +57,7 @@ import {
 /** Engines registered in this build (mirrors server.ts engine map). */
 export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "hermes", "opencode", "musecode"] as const;
 export type EngineName = (typeof ENGINE_NAMES)[number];
-export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode"] as const; // engines with a /ws/pty view
+export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode", "musecode"] as const; // engines with a /ws/pty view
 export type PtyViewEngineName = (typeof PTY_VIEW_ENGINE_NAMES)[number];
 
 /**

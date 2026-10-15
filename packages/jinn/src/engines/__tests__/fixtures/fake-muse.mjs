@@ -42,6 +42,7 @@
 //   FAKE_MUSE_LOG        one JSON line per request received, and one for the process start
 //   FAKE_MUSE_STATE_DIR  where sessions are kept; FAKE_MUSE_RESET_MS the reset QUOTA reports
 //   FAKE_MUSE_RESUME_FAIL  a message: every `session/resume` fails with it (invalid params)
+//   FAKE_MUSE_IN_USE     every `session/resume` is refused as `sessionInUse`, as when a terminal holds the session
 //   FAKE_MUSE_BOOT_EXIT  exit with this code before reading anything (a host that cannot start)
 //   FAKE_MUSE_NO_GRANT   grant no capability, whatever is asked for
 import fs from "node:fs";
@@ -126,6 +127,9 @@ function startSession(id, params) {
 function resumeSession(id, params) {
   if (needsMcpCapability(id, params)) return;
   if (process.env.FAKE_MUSE_RESUME_FAIL) return fail(id, -32602, process.env.FAKE_MUSE_RESUME_FAIL, { kind: "invalidParams" });
+  if (process.env.FAKE_MUSE_IN_USE) {
+    return fail(id, -32021, `session ${params.sessionId} is already in use`, { kind: "sessionInUse", retryable: false, sessionId: params.sessionId });
+  }
   const session = readSession(params.sessionId);
   if (!session) {
     return fail(id, -32020, `session ${params.sessionId} not found`, { kind: "sessionNotFound", retryable: false, sessionId: params.sessionId });

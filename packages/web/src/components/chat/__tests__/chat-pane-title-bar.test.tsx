@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TURN_STALL_VISIBLE_MS } from '@/components/chat/session-signals'
 import { emojiForName } from '@/lib/emoji-pool'
-import { ChatPaneTitleBar } from '../chat-pane-title-bar'
+import type { Session } from '@/components/chat/session-signals'
+import { ChatPaneTitleBar, paneViewControls } from '../chat-pane-title-bar'
 
 describe('ChatPaneTitleBar', () => {
   it('renders pane identity with a quiet id and a stable trailing cluster', () => {
@@ -201,5 +202,21 @@ describe('ChatPaneTitleBar', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }))
 
     await waitFor(() => expect(document.querySelector('[data-chat-pane-title]')?.getAttribute('title')).toBe('Durable title'))
+  })
+})
+
+describe('paneViewControls', () => {
+  const registry = { engines: { codex: { supportsPty: true }, musecode: { supportsPty: true }, claude: { supportsPty: true } } } as never
+  const session = (engine: string, status: string) => ({ id: 's1', engine, status }) as unknown as Session
+
+  it.each([['codex', 'Codex'], ['musecode', 'Muse Code']])('locks the %s view switch while a turn is running', (engine, name) => {
+    const controls = paneViewControls(session(engine, 'running'), registry)
+    expect(controls.viewSwitchLocked).toBe(true)
+    expect(controls.cliTitle).toBe(`${name} view switching is locked while a turn is running`)
+  })
+
+  it('lets the view switch once the turn is over, and never locks an engine whose terminal and turns coexist', () => {
+    expect(paneViewControls(session('musecode', 'idle'), registry).viewSwitchLocked).toBe(false)
+    expect(paneViewControls(session('claude', 'running'), registry).viewSwitchLocked).toBe(false)
   })
 })

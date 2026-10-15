@@ -38,6 +38,8 @@ import { GrokEngine } from "../engines/grok.js";
 import { GrokInteractiveEngine } from "../engines/grok-interactive.js";
 import { HermesAcpEngine } from "../engines/hermes-acp.js";
 import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
+import { MusecodeInteractiveEngine } from "../engines/musecode-interactive.js";
+import { musecodeViewDeps } from "./musecode-view.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
 import { startBoardWalk } from "../board-walk/walk.js";
@@ -570,6 +572,7 @@ export async function startGateway(
   let antigravityLifecycle: PtyLifecycleManager | undefined;
   let grokLifecycle: PtyLifecycleManager | undefined;
   let hermesLifecycle: PtyLifecycleManager | undefined;
+  let musecodeLifecycle: PtyLifecycleManager | undefined;
   let opencodeServerLifecycle: PtyLifecycleManager | undefined;
   let opencodeViewPids: () => number[] = () => [];
   const ptyLifecycles: PtyLifecycleManager[] = [];
@@ -582,6 +585,7 @@ export async function startGateway(
         ...(antigravityLifecycle ? antigravityLifecycle.livePids() : []),
         ...(grokLifecycle ? grokLifecycle.livePids() : []),
         ...(hermesLifecycle ? hermesLifecycle.livePids() : []),
+        ...(musecodeLifecycle ? musecodeLifecycle.livePids() : []),
         ...(opencodeServerLifecycle ? opencodeServerLifecycle.livePids() : []),
         ...opencodeViewPids(),
       ];
@@ -654,6 +658,15 @@ export async function startGateway(
     onCleanup: () => refreshPtyPids(),
   });
   const hermesInteractiveEngine = new HermesInteractiveEngine(hermesLifecycle);
+  musecodeLifecycle = createPtyLifecycle({
+    onAdopt: () => refreshPtyPids(),
+    onCleanup: () => refreshPtyPids(),
+  });
+  const musecodeInteractiveEngine = new MusecodeInteractiveEngine(musecodeLifecycle, musecodeViewDeps({
+    getConfig: () => currentConfig,
+    getSession,
+    employeeOf: (session) => (session.employee ? orgRegistry(currentConfig).get(session.employee) : undefined),
+  }));
   const piEngine = new PiEngine({
     // Same two live readers the interactive engine takes, and for the same
     // reason: pi is the second engine that can relocate a turn over SSH, so a
@@ -701,12 +714,12 @@ export async function startGateway(
     },
   });
   opencodeViewPids = () => opencodeInteractiveEngine.livePids();
-  logger.info(`Engines initialized: claude (interactive PTY), codex (headless + interactive PTY), antigravity (headless + interactive PTY), grok (headless + interactive PTY), hermes (headless + interactive PTY), pi, opencode (${opencodeMode(config.engines.opencode)} mode), musecode (headless MSP)`);
+  logger.info(`Engines initialized: claude (interactive PTY), codex (headless + interactive PTY), antigravity (headless + interactive PTY), grok (headless + interactive PTY), hermes (headless + interactive PTY), pi, opencode (${opencodeMode(config.engines.opencode)} mode), musecode (headless MSP + interactive PTY)`);
 
   const codexEngine = new CodexEngine();
   const grokEngine = new GrokEngine();
   const hermesEngine = new HermesAcpEngine();
-  const musecodeEngine = new MusecodeEngine();
+  const musecodeEngine = new MusecodeEngine({ releaseView: (id) => musecodeInteractiveEngine.releaseUnviewed(id) });
   const engines = new Map<string, Engine>();
   // Claude WORK TURNS (chat, employees, cron, child sessions) run on the
   // interactive PTY engine → cc_entrypoint=cli, covered by the Max subscription
@@ -732,6 +745,7 @@ export async function startGateway(
     grok: grokInteractiveEngine,
     hermes: hermesInteractiveEngine,
     opencode: opencodeInteractiveEngine,
+    musecode: musecodeInteractiveEngine,
   };
 
   const terminalEngine = createShellTerminalEngine({ getConfig: () => currentConfig, getSession, employees: (c) => orgRegistry(c).values() });
@@ -1274,6 +1288,7 @@ export async function startGateway(
     opencodeEngine.killAll();
     opencodeInteractiveEngine.killAll();
     musecodeEngine.killAll();
+    musecodeInteractiveEngine.killAll();
     void opencodeServers.stopAll();
 
     // A pi or opencode turn on a remote host is killed over a control

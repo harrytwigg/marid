@@ -77,8 +77,12 @@ export function interruptedResult(opts: EngineRunOpts, reason: string, sessionId
   return { sessionId: sessionId ?? opts.resumeSessionId ?? "", result: "", error: reason, ...(sessionId ? { numTurns: 1 } : {}) };
 }
 
+/** Said when Muse refuses a session its terminal view holds. Not a lost conversation: it is intact, and closing the terminal frees it. */
+export const MUSECODE_SESSION_IN_USE = "The session is open in the terminal view; close it to continue.";
+
 /** A failed request, in words for the operator. */
 export function describeMspFailure(err: unknown): string {
+  if (err instanceof MspError && err.kind === "sessionInUse") return MUSECODE_SESSION_IN_USE;
   if (err instanceof MspError) return err.kind === "authRequired" ? `${MUSECODE_AUTH_HELP} (${err.message})` : err.message;
   return err instanceof Error ? err.message : String(err);
 }

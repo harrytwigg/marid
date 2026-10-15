@@ -36,6 +36,12 @@ export interface MusecodeEngineOptions {
   onUsage?: (usage: MuseUsageSnapshot) => void;
   /** The per-million-token rates of a model, once a catalog knows them. Without one a turn carries no cost. */
   modelCost?: (modelId: string | undefined) => MuseModelCost | undefined;
+  /**
+   * Called before a turn on a session that already has a conversation, to let go
+   * of a terminal view that holds it: Muse refuses a second owner, so a turn
+   * cannot resume a session its terminal has open.
+   */
+  releaseView?: (sessionId: string) => Promise<void>;
 }
 
 /**
@@ -100,6 +106,12 @@ export class MusecodeEngine implements InterruptibleEngine {
   }
 
   private async runTurn(opts: EngineRunOpts, trackingId: string, live: LiveTurn): Promise<EngineResult> {
+    if (opts.resumeSessionId && opts.sessionId) {
+      await this.options.releaseView?.(opts.sessionId).catch((err) => {
+        logger.warn(`Muse Code could not close the terminal view of ${opts.sessionId}: ${err instanceof Error ? err.message : err}`);
+      });
+    }
+    if (live.reason) return interruptedResult(opts, live.reason);
     const proc = this.spawnHost(opts, trackingId, live);
     const client = proc.client;
     let session: OpenedSession;
