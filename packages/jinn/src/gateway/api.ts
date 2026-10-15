@@ -315,6 +315,7 @@ import {
 } from "./lifecycle.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
+import { handleSessionContextApi } from "./session-context-api.js";
 import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
 import { isAutoCompacting } from "../sessions/auto-compaction.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
@@ -1225,6 +1226,10 @@ export async function handleApiRequest(
     if (await handleSelfCompactionApi(req, res, { method, pathname, url }, {
       resolveCaller: () => resolveScopedWriteCallerIdentity(req, context),
       opencodeMode: () => context.getConfig().engines.opencode?.mode,
+    })) return;
+    if (await handleSessionContextApi(req, res, { method, pathname, url }, {
+      getConfig: context.getConfig,
+      resolveCaller: () => resolveScopedWriteCallerIdentity(req, context),
     })) return;
     if (pathname.startsWith("/api/terminals") && await handleTerminalApi(req, res, { method, pathname, url }, terminalApiOptions(req, context))) return;
 

@@ -54,7 +54,7 @@ export interface SelfCompactionApiOptions {
 
 const send = (res: ServerResponse, status: number, body: unknown): void => json(res, body, status);
 
-async function enqueueViaMessageRoute(sessionId: string, message: string, displayMessage: string): Promise<void> {
+export async function enqueueViaMessageRoute(sessionId: string, message: string, displayMessage: string): Promise<void> {
   const gateway = internalGatewayConnection();
   const response = await fetch(`${gateway.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/message`, {
     method: "POST",

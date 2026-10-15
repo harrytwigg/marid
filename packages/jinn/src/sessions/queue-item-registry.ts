@@ -205,6 +205,13 @@ export function listPendingQueueItemIdsForSession(sessionId: string): string[] {
   return rows.map((row) => row.id);
 }
 
+/** The prompts of the turns a session is running right now. */
+export function runningQueuePromptsForSession(sessionId: string): string[] {
+  const db = initDb();
+  const rows = db.prepare("SELECT prompt FROM queue_items WHERE session_id = ? AND status = 'running'").all(sessionId) as Array<{ prompt: string }>;
+  return rows.map((row) => row.prompt);
+}
+
 /**
  * What a session's queued and running turns are carrying: their prompts, and
  * the ids of the logged messages they will answer, from their own rows and

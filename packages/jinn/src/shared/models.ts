@@ -10,7 +10,7 @@ import { logger } from "./logger.js";
 import { keepClaudeCatalogAfter, logClaudeCatalogShortfall, readClaudeCredentialStatus } from "./claude-auth.js";
 import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
-import { discoverOpencodeModels } from "./opencode-models.js";
+import { discoverOpencodeModels, withConfiguredWindows } from "./opencode-models.js";
 import {
   CLAUDE_ALIAS_IDS,
   discoverClaudeEffortLevels,
@@ -626,6 +626,7 @@ function buildOpencodeEntry(
     if (pinned && !models.some((m) => m.id === pinned)) {
       models = [{ id: pinned, label: pinned, supportsEffort: false, effortLevels: [] }, ...models];
     }
+    models = withConfiguredWindows(models, opencodeBlock);
     return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: "none", models };
   }
   if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);

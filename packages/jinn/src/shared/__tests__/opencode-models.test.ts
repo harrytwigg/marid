@@ -1,5 +1,11 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { parseOpencodeModels } from "../opencode-models.js";
+import { discoverOpencodeModels, parseOpencodeModels } from "../opencode-models.js";
+
+/** `opencode models --verbose` on 1.19.0, cut to three models. */
+const VERBOSE = fs.readFileSync(path.join(__dirname, "fixtures", "opencode-models-verbose.txt"), "utf8");
 
 /**
  * What `opencode models` actually prints, and what must not reach the picker.
@@ -72,5 +78,108 @@ describe("parseOpencodeModels", () => {
     // replacing it with nonsense.
     expect(parseOpencodeModels("no providers configured\n")).toEqual([]);
     expect(parseOpencodeModels("")).toEqual([]);
+  });
+});
+
+/**
+ * `--verbose` follows each model line with its record as pretty-printed JSON;
+ * `limit.context` is the model's context window. Real output from 1.19.0
+ * (`fixtures/opencode-models-verbose.txt`, three models).
+ */
+describe("parseOpencodeModels --verbose", () => {
+  it("reads each model's context window from limit.context", () => {
+    expect(parseOpencodeModels(VERBOSE)).toEqual([
+      { id: "opencode/big-pickle", label: "big-pickle", supportsEffort: false, effortLevels: [], contextWindow: 200000 },
+      { id: "opencode/exo-free", label: "exo-free", supportsEffort: false, effortLevels: [], contextWindow: 1048576 },
+      { id: "opencode/step-5-preview-free", label: "step-5-preview-free", supportsEffort: false, effortLevels: [], contextWindow: 1000000 },
+    ]);
+  });
+
+  it("still lists a model whose record is missing or has no usable limit", () => {
+    const models = parseOpencodeModels([
+      "opencode/bare",
+      "opencode/no-limit",
+      "{",
+      '  "id": "no-limit"',
+      "}",
+      "opencode/zero",
+      "{",
+      '  "limit": { "context": 0 }',
+      "}",
+      "opencode/text",
+      "{",
+      '  "limit": { "context": "200000" }',
+      "}",
+    ].join("\n"));
+    expect(models.map((m) => m.id)).toEqual(["opencode/bare", "opencode/no-limit", "opencode/zero", "opencode/text"]);
+    expect(models.some((m) => m.contextWindow !== undefined)).toBe(false);
+  });
+
+  it("gives a model with bad JSON no window and does not lose its neighbours", () => {
+    const models = parseOpencodeModels([
+      "opencode/broken",
+      "{",
+      '  "limit": { "context": 5',
+      "}",
+      "opencode/after",
+      "{",
+      '  "limit": { "context": 8000 }',
+      "}",
+    ].join("\n"));
+    expect(models.map((m) => [m.id, m.contextWindow])).toEqual([["opencode/broken", undefined], ["opencode/after", 8000]]);
+  });
+
+  it("treats a model line at column 0 as the end of a cut-off record", () => {
+    const models = parseOpencodeModels([
+      "opencode/cut",
+      "{",
+      '  "limit": {',
+      "opencode/next",
+      "{",
+      '  "limit": { "context": 4096 }',
+      "}",
+    ].join("\n"));
+    expect(models.map((m) => [m.id, m.contextWindow])).toEqual([["opencode/cut", undefined], ["opencode/next", 4096]]);
+  });
+
+  it("keeps the first record of a repeated id and ignores the second", () => {
+    const record = (n: number) => `{\n  "limit": { "context": ${n} }\n}`;
+    const models = parseOpencodeModels(`opencode/dup\n${record(1000)}\nopencode/dup\n${record(2000)}\n`);
+    expect(models).toHaveLength(1);
+    expect(models[0].contextWindow).toBe(1000);
+  });
+
+  it("is not thrown by stray lines, colour codes or CRLF around the records", () => {
+    const models = parseOpencodeModels([
+      "Update available: 9.9.9",
+      "\u001b[32mopencode/colour\u001b[0m\r",
+      "{\r",
+      '  "limit": { "context": 32000 }\r',
+      "}\r",
+      "warning: something",
+    ].join("\n"));
+    expect(models).toEqual([
+      { id: "opencode/colour", label: "colour", supportsEffort: false, effortLevels: [], contextWindow: 32000 },
+    ]);
+  });
+
+  it("still parses plain `opencode models` output, with no windows", () => {
+    expect(parseOpencodeModels("opencode/a\nopencode/b\n").every((m) => m.contextWindow === undefined)).toBe(true);
+  });
+});
+
+describe("discoverOpencodeModels", () => {
+  it("asks the CLI for `models --verbose` and returns the windows", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oc-models-"));
+    try {
+      const bin = path.join(dir, "opencode");
+      // Prints the fixture only for the exact arguments; anything else is the
+      // plain list a build without --verbose would print.
+      fs.writeFileSync(bin, `#!/bin/sh\nif [ "$1 $2" = "models --verbose" ]; then cat "${path.join(__dirname, "fixtures", "opencode-models-verbose.txt")}"; else echo opencode/plain; fi\n`, { mode: 0o755 });
+      const models = await discoverOpencodeModels(bin);
+      expect(models.map((m) => m.contextWindow)).toEqual([200000, 1048576, 1000000]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

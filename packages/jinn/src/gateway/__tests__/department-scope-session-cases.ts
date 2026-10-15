@@ -29,6 +29,14 @@ const stop: CaseBuilder = async (fx) => {
   return { allow: at(child.id), allowStatus: 200, refuse: { kind: "unknown", req: at(fx.coo.id), like: at(unknown), ids: [fx.coo.id, unknown] } };
 };
 
+const compact: CaseBuilder = async (fx) => {
+  const child = await sessionOf("side-qa", { parentSessionId: fx.self.id });
+  const unknown = randomUUID();
+  const at = (id: string): Req => ["POST", `/api/sessions/${id}/compact`];
+  // The child has no engine conversation yet, so the route answers its own 409 once the gate lets the call in.
+  return { allow: at(child.id), allowStatus: 409, refuse: { kind: "unknown", req: at(fx.coo.id), like: at(unknown), ids: [fx.coo.id, unknown] } };
+};
+
 const searchMessages: CaseBuilder = (fx) => {
   const own = `zebrafish-${randomUUID().slice(0, 8)}`;
   const theirs = `zebrafish-${randomUUID().slice(0, 8)}`;
@@ -89,7 +97,9 @@ export const SESSION_CASES: Record<string, CaseBuilder> = {
   "GET /api/sessions/:id/messages": onSession("GET", "/messages", 200),
   "GET /api/sessions/:id/transcript": onSession("GET", "/transcript", 200),
   "GET /api/sessions/:id/context": context,
+  "GET /api/sessions/:id/context-usage": onSession("GET", "/context-usage", 200),
   "POST /api/sessions/:id/stop": stop,
+  "POST /api/sessions/:id/compact": compact,
   "GET /api/sessions/:id/children": onSession("GET", "/children", 200, undefined, async (fx) => fx.self.id),
   "POST /api/sessions/:id/message": onSession("POST", "/message", 200, { message: "hello" }),
   "POST /api/sessions/:id/attachments": (fx) => ({
