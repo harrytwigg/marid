@@ -103,6 +103,34 @@ describe("a conversation Muse no longer has", () => {
   }, 60_000);
 });
 
+describe("a failed turn on a resumed conversation", () => {
+  it("keeps the conversation when the failure reads like a dead session, and does not re-run it in a fresh one", async () => {
+    const manager = new ManagerClass(config(), new Map([["musecode", engine]]) as never, "musecode-boot");
+    const key = `stub:musecode-${Math.random().toString(16).slice(2)}`;
+    const first = await manager.route(connectorMessage(key, "one"), connectorStub(), { employee: employee as never });
+    const id = first!.sessionId;
+    const kept = registry.getEngineSessionRef(registry.getSession(id)!, "musecode").id;
+
+    // The fake's AUTH failure says "Your session has expired, please log in again".
+    await manager.route(connectorMessage(key, "two\n---\nAUTH"), connectorStub(), { employee: employee as never });
+
+    const session = registry.getSession(id)!;
+    expect(session.status).toBe("error");
+    expect(session.lastError).toMatch(/muse login/);
+    expect(registry.getEngineSessionRef(session, "musecode").id).toBe(kept);
+    // One session was started, and the second turn resumed it once: nothing was started afresh.
+    const order = methods();
+    expect(order.filter((m) => m === "session/start")).toHaveLength(1);
+    expect(order.filter((m) => m === "session/resume")).toHaveLength(1);
+
+    // The next message resumes the same conversation.
+    await manager.route(connectorMessage(key, "three"), connectorStub(), { employee: employee as never });
+    expect(registry.getSession(id)!.status).toBe("idle");
+    expect(registry.getEngineSessionRef(registry.getSession(id)!, "musecode").id).toBe(kept);
+    expect(methods().filter((m) => m === "session/resume")).toHaveLength(2);
+  }, 60_000);
+});
+
 describe("a Muse Code usage limit", () => {
   it("moves the session to the fallback engine, announcing Muse's own reset time", async () => {
     const resetsAtMs = Math.floor((Date.now() + 5 * 3600_000) / 1000) * 1000;

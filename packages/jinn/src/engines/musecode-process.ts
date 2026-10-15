@@ -3,6 +3,8 @@ import { logger } from "../shared/logger.js";
 import { MspClient } from "./musecode-msp.js";
 
 const STDERR_MAX = 10 * 1024;
+/** How long after a child exits its pipes get to close on their own. */
+const STDIO_SETTLE_MS = 500;
 
 export interface MspProcessSpec {
   bin: string;
@@ -54,10 +56,23 @@ export class MspProcess {
         this.client.close(`failed to spawn ${spec.bin}: ${err.message}`);
         resolve(this.exit);
       });
-      this.proc.once("close", (code, signal) => {
+      // `exit` is the child going, `close` is its pipes closing too. Something it left running (a
+      // daemonised tool, say) can hold them open indefinitely, so the exit does not wait on them past
+      // a short settle for the child's last words.
+      this.proc.once("exit", (code, signal) => {
         this.exit = { code, signal };
-        this.client.close(`${spec.bin} exited (code ${code ?? "none"}${signal ? `, signal ${signal}` : ""})`);
-        resolve(this.exit);
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(settle);
+          for (const stream of [this.proc.stdin, this.proc.stdout, this.proc.stderr]) stream?.destroy();
+          this.client.close(`${spec.bin} exited (code ${code ?? "none"}${signal ? `, signal ${signal}` : ""})`);
+          resolve(this.exit!);
+        };
+        const settle = setTimeout(finish, STDIO_SETTLE_MS);
+        settle.unref?.();
+        this.proc.once("close", finish);
       });
     });
   }

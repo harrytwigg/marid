@@ -4,7 +4,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { lostConversationFailure } from "../shared/process-start.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
-import { MspClient, MspClosedError, MspError, uuidv7 } from "./musecode-msp.js";
+import { MspClient, MspClosedError, uuidv7 } from "./musecode-msp.js";
 import { MspProcess } from "./musecode-process.js";
 import {
   buildMuseServeArgs,
@@ -16,14 +16,17 @@ import { buildMuseSessionConfig } from "./musecode-mcp.js";
 import { loadMuseAttachments } from "./musecode-attachments.js";
 import { answerMuseServerRequest } from "./musecode-approvals.js";
 import { MuseTurn, type MuseModelCost, type MuseUsageSnapshot } from "./musecode-turn.js";
+import { CONVERSATION_KEPT } from "./musecode-turn-text.js";
 import {
   askTurnToStop,
   describeMspFailure,
   hostLost,
   hostNeverStarted,
   interruptedResult,
+  isLostSession,
   openedSession,
   packageVersion,
+  signalHost,
   waitForEnd,
   type LiveTurn,
   type OpenedSession,
@@ -230,14 +233,14 @@ export class MusecodeEngine implements InterruptibleEngine {
         live.turnId = turnId;
       }
       if (ack.disposition !== "started") {
-        return { sessionId, result: "", error: `Muse Code did not start the turn (${String(ack.disposition ?? "no disposition")})`, numTurns: 1 };
+        return { sessionId, result: "", error: `Muse Code did not start the turn (${String(ack.disposition ?? "no disposition")})`, ...CONVERSATION_KEPT };
       }
       return undefined;
     } catch (err) {
       if (live.reason) return interruptedResult(opts, live.reason, sessionId);
       const error = describeMspFailure(err);
       logger.error(`Muse Code turn/start failed: ${error}`);
-      return { sessionId, result: "", error, numTurns: 1 };
+      return { sessionId, result: "", error, ...CONVERSATION_KEPT };
     }
   }
 
@@ -247,14 +250,14 @@ export class MusecodeEngine implements InterruptibleEngine {
     if (live.reason) return interruptedResult(opts, live.reason);
     if (proc.failedToSpawn) throw new Error(`Failed to spawn Muse Code CLI: ${proc.failedToSpawn.message}`);
     // The conversation is gone: no work, no cost, so the runner clears the id and starts a fresh one.
-    if (err instanceof MspError && err.kind === "sessionNotFound" && resume) {
+    if (resume && isLostSession(err)) {
       return { sessionId: resume, result: "", error: lostConversationFailure("musecode", resume) };
     }
     if (err instanceof MspClosedError) return await hostNeverStarted(proc, resume);
     const error = describeMspFailure(err);
     logger.error(`Muse Code could not open its session: ${error}`);
     // A session that was to be resumed is known to exist; only a failure to resume it is not "no work".
-    return { sessionId: resume ?? "", result: "", error, ...(resume ? { numTurns: 1 } : {}) };
+    return { sessionId: resume ?? "", result: "", error, ...(resume ? CONVERSATION_KEPT : {}) };
   }
 
   /** Ask the turn to stop; if it has not within a few seconds, signal its host. */
@@ -262,6 +265,6 @@ export class MusecodeEngine implements InterruptibleEngine {
     const { proc, turn } = live;
     if (!proc) return;
     if (turn && live.sessionId && !turn.isCompleted) await askTurnToStop(proc, turn, live);
-    if (!live.settled && !proc.hasExited && !turn?.isCompleted) proc.signal("SIGTERM");
+    if (!turn?.isCompleted) await signalHost(proc, live);
   }
 }

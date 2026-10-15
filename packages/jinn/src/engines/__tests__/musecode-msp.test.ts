@@ -229,3 +229,17 @@ describe("MspProcess", () => {
     await expect(proc.client.request("x")).rejects.toBeInstanceOf(MspClosedError);
   });
 });
+
+describe("MspProcess: a child that leaves something holding its pipes", () => {
+  it("is gone when it has exited, even if a process it left behind keeps its stdout open", async () => {
+    // The grandchild inherits the pipes and outlives the host, as a daemonised tool does.
+    const script = `require("child_process").spawn("sleep", ["4"], { detached: true, stdio: ["ignore", "inherit", "inherit"] }).unref();`;
+    const proc = new MspProcess(spec(script));
+    const t0 = Date.now();
+    const exit = await proc.shutdown(300);
+    expect(exit.code).toBe(0);
+    expect(proc.hasExited).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(2500);
+    await expect(proc.client.request("late")).rejects.toBeInstanceOf(MspClosedError);
+  }, 15_000);
+});

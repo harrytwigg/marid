@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { EngineRunOpts } from "../../shared/types.js";
 
@@ -7,6 +9,7 @@ vi.mock("../../sessions/employee-env.js", () => ({
 }));
 
 import { isDeadSessionError, detectRateLimit } from "../../shared/rateLimit.js";
+import { MuseTurn } from "../musecode-turn.js";
 import { isLostConversationError } from "../../shared/process-start.js";
 import { ctx, methods, opts, sent, starts, useFakeMuse } from "./helpers/fake-muse-harness.js";
 
@@ -35,13 +38,17 @@ describe("failures", () => {
     expect(result.error).toMatch(/muse login/);
     expect(result.error).toMatch(/META_API_KEY/);
     expect(result.sessionId).toBe(first.sessionId);
+    // The server's own words say the session expired; the conversation is not lost for that.
+    expect(result.error).toContain("session has expired");
     expect(isDeadSessionError(result)).toBe(false);
   });
 
   it("reports a plain model failure", async () => {
     const result = await ctx.engine.run(opts({ prompt: "x\n---\nFAIL" }));
-    expect(result.error).toBe("The model stopped: simulated failure");
-    expect(result.numTurns).toBe(1);
+    expect(result.error).toBe("API error 401: your session has expired");
+    expect(result).toMatchObject({ numTurns: 1, conversationIntact: true });
+    // Provider text that reads like a dead session must not read as one: the conversation is intact.
+    expect(isDeadSessionError(result)).toBe(false);
   });
 
   it("fails the turn, with what the host said, when the host dies in the middle of it", async () => {
@@ -122,6 +129,20 @@ describe("interrupts", () => {
     expect(methods()).toContain("turn/interrupt");
   }, 15_000);
 
+  it("kills a host that is stuck before its first answer and ignores SIGTERM", async () => {
+    const stuck = path.join(ctx.tmp, "stuck-muse.mjs");
+    fs.writeFileSync(stuck, "#!/usr/bin/env node\nprocess.on('SIGTERM', () => {});\nprocess.stdin.resume();\nsetInterval(() => {}, 1000);\n", { mode: 0o755 });
+    const run = ctx.engine.run(opts({ bin: stuck }));
+    await new Promise((r) => setTimeout(r, 400));
+    expect(ctx.engine.isAlive("s1")).toBe(true);
+    const t0 = Date.now();
+    ctx.engine.kill("s1");
+    const result = await run;
+    expect(result.error).toBe("Interrupted");
+    expect(Date.now() - t0).toBeLessThan(6000);
+    expect(ctx.engine.isAlive("s1")).toBe(false);
+  }, 15_000);
+
   it("killAll stops every turn in flight", async () => {
     const run = startHanging("HANG");
     await new Promise((r) => setTimeout(r, 200));
@@ -149,7 +170,7 @@ describe("MCP", () => {
     expect(sent("session/start")[0]!.config).toEqual({
       mcpServers: {
         jinn: { transport: "stdio", command: "node", args: ["/x/mcp.js"], env: { JINN_SESSION_ID: "s1", JINN_MCP_CAPABILITY: "secret-capability" }, mode: "optional" },
-        docs: { transport: "streamableHttp", url: "https://docs.example.test/mcp", headers: { Authorization: "Bearer docs-token" } },
+        docs: { transport: "streamableHttp", url: "https://docs.example.test/mcp", headers: { Authorization: "Bearer docs-token" }, mode: "optional" },
       },
     });
     expect(JSON.stringify(starts()[0]!.argv)).not.toMatch(/secret-capability|docs-token/);
@@ -159,6 +180,13 @@ describe("MCP", () => {
     const first = await ctx.engine.run(opts());
     await ctx.engine.run(opts({ resolvedMcp, resumeSessionId: first.sessionId }));
     expect(Object.keys(sent("session/resume")[0]!.config.mcpServers)).toEqual(["jinn", "docs"]);
+  });
+
+  it("marks every server optional, so one that cannot start does not fail the turn", async () => {
+    const broken = { mcpServers: { jinn: { command: "node" }, other: { command: "/nonexistent/other-mcp" } } } as unknown as EngineRunOpts["resolvedMcp"];
+    const result = await ctx.engine.run(opts({ resolvedMcp: broken }));
+    expect(result.error).toBeUndefined();
+    expect(Object.values(sent("session/start")[0]!.config.mcpServers).map((s) => (s as { mode: string }).mode)).toEqual(["optional", "optional"]);
   });
 
   it("sends no config when the session has no servers", async () => {
@@ -189,5 +217,20 @@ describe("notfound after a turn", () => {
     expect(first.error).toBeUndefined();
     const second = await ctx.engine.run(opts({ resumeSessionId: first.sessionId }));
     expect(second.error).toBe(`musecode has no conversation ${first.sessionId} to resume`);
+  });
+});
+
+describe("a failure's words", () => {
+  it("never read as a stale resume id, whatever the provider says", () => {
+    for (const message of ["Your session has expired, please log in again", "API error 401: session expired", "error during execution", "invalid session"]) {
+      for (const kind of ["authRequired", "modelError"]) {
+        const turn = new MuseTurn("s1");
+        turn.setTurnId("t1");
+        turn.read("turn/completed", { sessionId: "s1", turnId: "t1", terminal: "failed", error: { kind, message, retryable: false } });
+        const result = turn.result({ terminationReason: null });
+        expect(result).toMatchObject({ numTurns: 1, conversationIntact: true });
+        expect(isDeadSessionError(result)).toBe(false);
+      }
+    }
   });
 });

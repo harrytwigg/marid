@@ -126,10 +126,10 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
     expect(isDeadSessionError(result)).toBe(true);
   }, 60_000);
 
-  it("reports a malformed resume id in Muse's own words, not as a lost conversation", async () => {
+  it("reads a resume id Muse cannot parse as a lost conversation, since it can never resume", async () => {
     const result = await engine.run(opts({ resumeSessionId: "not-a-uuid" }));
-    expect(result.error).toMatch(/invalid sessionId/);
-    expect(result.error).not.toMatch(/has no conversation/);
+    expect(result).toEqual({ sessionId: "not-a-uuid", result: "", error: "musecode has no conversation not-a-uuid to resume" });
+    expect(isDeadSessionError(result)).toBe(true);
   }, 60_000);
 
   it("maps a usage limit from the provider to a rejected rate limit with the provider's reset", async () => {
@@ -223,8 +223,14 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
     }
   }, 60_000);
 
-  it("takes MCP servers in session/start, and an optional one that cannot start does not stop the turn", async () => {
-    const resolvedMcp = { mcpServers: { jinn: { command: "/nonexistent/jinn-mcp", args: ["--x"], env: { JINN_SESSION_ID: "e2e-1" } } } } as unknown as EngineRunOpts["resolvedMcp"];
+  it("takes MCP servers in session/start, and none that cannot start (stdio or http, jinn or not) stops the turn", async () => {
+    const resolvedMcp = {
+      mcpServers: {
+        jinn: { command: "/nonexistent/jinn-mcp", args: ["--x"], env: { JINN_SESSION_ID: "e2e-1" } },
+        other: { command: "/nonexistent/other-mcp" },
+        docs: { url: "http://127.0.0.1:9/mcp" },
+      },
+    } as unknown as EngineRunOpts["resolvedMcp"];
     const result = await engine.run(opts({ prompt: "with tools", resolvedMcp }));
     expect(result.error).toBeUndefined();
     expect(result.result).toBe("echo: with tools");

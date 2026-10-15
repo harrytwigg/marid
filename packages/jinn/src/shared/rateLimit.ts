@@ -52,6 +52,7 @@ const DEAD_SESSION_PATTERNS = [
  */
 export function isDeadSessionError(result: EngineResult): boolean {
   if (!result.error) return false;
+  if (result.conversationIntact) return false;
 
   // A process that never started its session did no work for a reason of its
   // own (an exec refusal, a dropped ssh connection, a crash on boot), and its

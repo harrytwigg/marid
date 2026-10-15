@@ -54,3 +54,9 @@ export const sessionView = (s) => ({
   workspaceRoot: s.workspaceRoot,
 });
 
+
+/** The first `required` MCP server in a session config whose command does not exist (the real host fails the turn on it), if any. */
+export function requiredServerThatCannotStart(config) {
+  const bad = Object.entries(config?.mcpServers ?? {}).find(([, s]) => s.mode !== "optional" && String(s.command ?? "").startsWith("/nonexistent"));
+  return bad?.[0];
+}

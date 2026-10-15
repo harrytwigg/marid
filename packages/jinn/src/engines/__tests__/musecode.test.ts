@@ -161,12 +161,20 @@ describe("a resumed turn", () => {
     expect(isLostConversationError(result.error!, gone)).toBe(true);
   });
 
+  it("reads a resume id the host cannot parse as a lost conversation: it can never resume", async () => {
+    vi.stubEnv("FAKE_MUSE_RESUME_FAIL", "invalid sessionId: invalid character: found `n` at 0");
+    const result = await ctx.engine.run(opts({ resumeSessionId: "not-a-uuid" }));
+    expect(result).toEqual({ sessionId: "not-a-uuid", result: "", error: "musecode has no conversation not-a-uuid to resume" });
+    expect(isLostConversationError(result.error!, "not-a-uuid")).toBe(true);
+    expect(isDeadSessionError(result)).toBe(true);
+  });
+
   it("does not mistake any other resume failure for a lost conversation", async () => {
     const first = await ctx.engine.run(opts());
     vi.stubEnv("FAKE_MUSE_RESUME_FAIL", "the session store is locked");
     const result = await ctx.engine.run(opts({ resumeSessionId: first.sessionId }));
     expect(result.error).toBe("the session store is locked");
-    expect(result.numTurns).toBe(1);
+    expect(result).toMatchObject({ numTurns: 1, conversationIntact: true });
     expect(isDeadSessionError(result)).toBe(false);
     expect(isLostConversationError(result.error!, first.sessionId)).toBe(false);
   });
