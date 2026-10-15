@@ -227,6 +227,8 @@ export interface EngineResult {
   cost?: number;
   durationMs?: number;
   numTurns?: number;
+  /** The engine states the conversation is intact whatever `error` says, so a failure is never read as a stale resume id (`isDeadSessionError`). */
+  conversationIntact?: boolean;
   /** Most recent turn's INPUT context size (input + cache-read + cache-creation
    *  tokens) — i.e. how full the context window currently is. Undefined when the
    *  engine doesn't surface usage. */
@@ -740,7 +742,7 @@ export interface ConnectorInstance {
  */
 
 /** How an engine conveys reasoning-effort to its CLI. */
-export type EffortMechanism = "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "none";
+export type EffortMechanism = "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "musecode-turn" | "none";
 
 /** A single model and its capabilities, as exposed to the UI / validation. */
 export interface ModelInfo {

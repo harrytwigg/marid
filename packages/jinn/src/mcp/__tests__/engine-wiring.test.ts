@@ -66,8 +66,8 @@ afterEach(() => {
 describe("per-engine jinn-server wiring (GRS-018 seam for GRS-017 default-on)", () => {
   it("covers every MCP-capable engine (fails when the set grows without a wiring test here)", () => {
     // If a new engine joins MCP_CAPABLE_ENGINES, add its attach-artifact case and
-    // extend this list. opencode's is in engines/__tests__/opencode-mcp.test.ts.
-    expect([...MCP_CAPABLE_ENGINES].sort()).toEqual(["antigravity", "claude", "codex", "grok", "hermes", "opencode", "pi"]);
+    // extend this list. opencode's is in engines/__tests__/opencode-mcp.test.ts, musecode's in musecode-mcp.test.ts.
+    expect([...MCP_CAPABLE_ENGINES].sort()).toEqual(["antigravity", "claude", "codex", "grok", "hermes", "musecode", "opencode", "pi"]);
   });
 
   it("claude: temp-file JSON carries the jinn spec verbatim, non-secret env only, and cleans up", () => {

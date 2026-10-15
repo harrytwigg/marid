@@ -20,6 +20,7 @@ import {
   refreshHermesModels,
   refreshPiModels,
   refreshOpencodeModels,
+  refreshMusecodeModels,
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
@@ -4159,6 +4160,7 @@ export async function handleApiRequest(
         refreshPiModels(config),
         refreshOpencodeModels(config),
         refreshGrokModels(config),
+        refreshMusecodeModels(config),
         refreshHermesModels(config),
       ]);
       context.emit("engines:updated", {});

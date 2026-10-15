@@ -70,6 +70,7 @@ const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   codex:       "Codex",
   grok:        "Grok",
   antigravity: "Antigravity",
+  musecode:    "Muse Code",
 }
 
 function engineDisplayName(key: string): string {

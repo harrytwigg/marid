@@ -21,6 +21,7 @@ import {
   refreshHermesModels,
   refreshPiModels,
   refreshOpencodeModels,
+  refreshMusecodeModels,
 } from "../shared/models.js";
 
 /**
@@ -59,6 +60,7 @@ export function startBackgroundRefreshes(getConfig: () => JinnConfig, emit: Gate
       refreshPiModels(config),
       refreshOpencodeModels(config),
       refreshGrokModels(config),
+      refreshMusecodeModels(config),
       refreshHermesModels(config),
     ])
       .finally(() => emit("engines:updated", {}));

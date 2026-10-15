@@ -10,6 +10,7 @@ import type { JinnConfig, Connector, Engine, SlackConnectorConfig, TelegramConne
 import { loadConfig, normalizeClaudeEngineConfig } from "../shared/config.js";
 import {
   invalidateModelRegistry,
+  musecodeEngineOptions,
   type PtyViewEngineName,
 } from "../shared/models.js";
 import { configureLogger, logger } from "../shared/logger.js";
@@ -30,6 +31,7 @@ import { CodexInteractiveEngine } from "../engines/codex-interactive.js";
 import { createAntigravityEnginePair } from "../engines/antigravity-runtime.js";
 import { PiEngine } from "../engines/pi.js";
 import { OpencodeEngine } from "../engines/opencode.js";
+import { createMusecodeEnginePair } from "./musecode-view.js";
 import { OpencodeServerPool, opencodeMode } from "../engines/opencode-server.js";
 import { OpencodeInteractiveEngine } from "../engines/opencode-interactive.js";
 import { resolveSessionEngineMcp } from "../sessions/engine-run-mcp.js";
@@ -575,15 +577,8 @@ export async function startGateway(
   let enforcingGlobalIdleCap = false;
   function refreshPtyPids(): void {
     try {
-      const pids = [
-        ...claudeLifecycle.livePids(),
-        ...(codexLifecycle ? codexLifecycle.livePids() : []),
-        ...(antigravityLifecycle ? antigravityLifecycle.livePids() : []),
-        ...(grokLifecycle ? grokLifecycle.livePids() : []),
-        ...(hermesLifecycle ? hermesLifecycle.livePids() : []),
-        ...(opencodeServerLifecycle ? opencodeServerLifecycle.livePids() : []),
-        ...opencodeViewPids(),
-      ];
+      // Every lifecycle the gateway made, so an engine's terminal is tracked by being made through createPtyLifecycle.
+      const pids = [...ptyLifecycles.flatMap((lifecycle) => lifecycle.livePids()), ...opencodeViewPids()];
       updateGatewayPtyPids(GATEWAY_INFO_FILE, pids);
     } catch { /* best effort */ }
   }
@@ -700,11 +695,12 @@ export async function startGateway(
     },
   });
   opencodeViewPids = () => opencodeInteractiveEngine.livePids();
-  logger.info(`Engines initialized: claude (interactive PTY), codex (headless + interactive PTY), antigravity (headless + interactive PTY), grok (headless + interactive PTY), hermes (headless + interactive PTY), pi, opencode (${opencodeMode(config.engines.opencode)} mode)`);
+  logger.info(`Engines initialized: claude (interactive PTY), codex (headless + interactive PTY), antigravity (headless + interactive PTY), grok (headless + interactive PTY), hermes (headless + interactive PTY), pi, opencode (${opencodeMode(config.engines.opencode)} mode), musecode (headless MSP + interactive PTY)`);
 
   const codexEngine = new CodexEngine();
   const grokEngine = new GrokEngine();
   const hermesEngine = new HermesAcpEngine();
+  const { work: musecodeEngine, pty: musecodeInteractiveEngine } = createMusecodeEnginePair({ getConfig: () => currentConfig, createLifecycle: createPtyLifecycle, refreshPids: refreshPtyPids, engineOptions: musecodeEngineOptions });
   const engines = new Map<string, Engine>();
   // Claude WORK TURNS (chat, employees, cron, child sessions) run on the
   // interactive PTY engine → cc_entrypoint=cli, covered by the Max subscription
@@ -719,6 +715,7 @@ export async function startGateway(
   engines.set("hermes", hermesEngine);
   engines.set("pi", piEngine);
   engines.set("opencode", opencodeEngine);
+  engines.set("musecode", musecodeEngine);
 
   // PTY-capable engines, keyed by engine name — the /ws/pty handler routes by
   // session.engine so the xterm view attaches to the right engine.
@@ -729,6 +726,7 @@ export async function startGateway(
     grok: grokInteractiveEngine,
     hermes: hermesInteractiveEngine,
     opencode: opencodeInteractiveEngine,
+    musecode: musecodeInteractiveEngine,
   };
 
   const terminalEngine = createShellTerminalEngine({ getConfig: () => currentConfig, getSession, employees: (c) => orgRegistry(c).values() });
@@ -1270,6 +1268,8 @@ export async function startGateway(
     piEngine.killAll();
     opencodeEngine.killAll();
     opencodeInteractiveEngine.killAll();
+    musecodeEngine.killAll();
+    musecodeInteractiveEngine.killAll();
     void opencodeServers.stopAll();
 
     // A pi or opencode turn on a remote host is killed over a control

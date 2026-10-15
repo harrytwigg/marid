@@ -48,6 +48,8 @@ This page lists the headline features Marid has that upstream does not, and is j
 |---|---|---|---|
 | Employees on a remote host over SSH (Claude) | ✅ | ❌ | An employee with `remoteHost` runs its turns on another machine; repositories, builds and tests stay there. Needs a `remote` block in `config.yaml` and fails closed without one. Manage with `jinn remote status\|wake`. See [`remote-execution.md`](remote-execution.md). |
 | Remote Pi employees | ✅ | ❌ | Pi runs headless over `ssh -T` and streams normally. Claude loses token-by-token streaming remotely. |
+| Muse Code engine | ✅ | ❌ | `engines/musecode*.ts`: one `muse serve` per turn over the Muse Session Protocol, sessions that resume, the company toolset per session, a quota window that waits or falls back. See [`engines-musecode.md`](engines-musecode.md). |
+| Muse Code models and usage limits | ✅ | ❌ | The model catalog is discovered from the host (`shared/musecode-models.ts`), turns are priced at its rates, and the subscription window and weekly block show on the Limits page (`shared/engine-limits-musecode.ts`) and feed engine health like Claude and Codex. |
 | Remote opencode employees | ✅ | ❌ | Both run and server mode. |
 | Interrupt stops the remote process | ✅ | ❌ | The remote command records the agent's pid, and an interrupt, timeout or shutdown kills it and its children before the turn settles (`engines/remote-stage.ts`). |
 | Other engines on a remote host | ❌ | ❌ | Codex, Grok, Hermes and Antigravity ignore `remoteHost`; Marid refuses those turns rather than run them locally. |
