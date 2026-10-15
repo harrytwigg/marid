@@ -74,7 +74,7 @@ describe("MusecodeInteractiveEngine", () => {
     expect(spawnCalls).toHaveLength(1);
     const call = spawnCalls[0];
     expect(call.bin).toBe("/opt/muse");
-    expect(call.args.slice(0, 3)).toEqual(["resume", ID, "--disable-sandbox"]);
+    expect(call.args.slice(0, 4)).toEqual(["resume", ID, "--disable-sandbox", "--trust-workspace"]);
     expect(call.args).toContain("muse-spark-1.2");
     expect(call.opts).toMatchObject({ cwd: "/work/a", cols: 100, rows: 30 });
     expect(call.opts.env).toMatchObject({ JINN_SESSION_ID: "s1", JINN_EMPLOYEE: "worker", META_API_KEY: "key-from-gateway", TERM: "xterm-256color" });

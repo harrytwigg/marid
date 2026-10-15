@@ -53,7 +53,7 @@ An employee can carry `cliFlags` in its YAML. They are appended to `muse serve` 
 Every turn starts its own host:
 
 ```
-muse serve --disable-sandbox \
+muse serve --disable-sandbox --trust-workspace \
   -c context.foreign_personal_rules=false -c context.foreign_personal_skills=false \
   [--model <id>] [...cliFlags]
 ```
@@ -147,11 +147,11 @@ A window at 100% or more counts as spent until its reset, as it does for Claude 
 
 ## Terminal view
 
-The chat pane's **CLI** toggle opens Muse's own TUI on the session's conversation: `muse resume <session id> --disable-sandbox`, in the session's working directory. A session with no conversation yet gets a fresh `muse`. The view carries the same credentials as a turn (the gateway's scrubbed environment and the session's identity variables), the same `context.foreign_personal_*` settings, the configured `--model`, and the employee's `cliFlags`, last.
+The chat pane's **CLI** toggle opens Muse's own TUI on the session's conversation: `muse resume <session id> --disable-sandbox --trust-workspace`, in the session's working directory. A session with no conversation yet gets a fresh `muse`. The view carries the same credentials as a turn (the gateway's scrubbed environment and the session's identity variables), the same `context.foreign_personal_*` settings, the configured `--model`, and the employee's `cliFlags`, last.
 
 **The view is view-only.** Muse allows one owner per session. Checked on `muse` 1.4.8:
 
-- While a TUI has a session open (even sitting at its workspace-trust prompt), a `muse serve` host that tries to `session/resume` it is refused with `-32021 sessionInUse`, and so is a `turn/start` on it. Closing the TUI (SIGTERM or SIGKILL) frees it at once.
+- While a TUI has a session open (however idle), a `muse serve` host that tries to `session/resume` it is refused with `-32021 sessionInUse`, and so is a `turn/start` on it. Closing the TUI (SIGTERM or SIGKILL) frees it at once.
 - The reverse is **not** guarded: a TUI opened on a session that a `serve` host already holds gets in, and a turn started afterwards on that host runs. Two writers then share one conversation.
 
 So work turns never run in the view (a message sent while the view is the active mode answers "view-only"), and Marid keeps the two apart from both sides:
@@ -162,7 +162,7 @@ So work turns never run in the view (a message sent while the view is the active
 
 Other behaviour:
 
-- **Workspace trust.** The first time Muse opens a working directory it asks "Do you trust this workspace?" in the terminal; answer it there. The answer is stored by Muse, per directory.
+- **Workspace trust.** Marid trusts the session's workspace, for turns and for the view alike (`--trust-workspace`: for that run only, nothing is saved), so the workspace's own rules (`AGENTS.md`, else `CLAUDE.md`), skills and hooks load, as Claude's project settings do. Without it a headless host loads none of them, which silently drops an employee's project instructions, and the terminal stops at Muse's "Do you trust this workspace?" prompt. The session's working directory is treated as trusted by the operator, so keep untrusted repositories out of employees' working directories.
 - **Approvals** are Muse's own (`on-request`): a person is at the terminal to answer them. Turns run with approvals allowed, as before.
 - **Company tools.** The TUI takes MCP servers from `-c mcpServers.<name>=<json>`, one flag per server, the same set a turn gets. Muse refuses a literal value for a server's `env` or `headers` on a command line, so each value is passed as a whole-value `${MARID_MCP_n}` reference and travels in the terminal's environment; no secret is ever in argv. A server whose name cannot be addressed that way is left out with a warning in the gateway log.
 - **A fresh view is its own conversation.** A conversation started by typing in a view that had no resume id is not linked to the session: the next turn starts a new one. Open the CLI view after the first turn to continue the session's conversation. A view opened before the session had a conversation is reopened on the real one the next time it is opened.
@@ -172,6 +172,7 @@ Other behaviour:
 
 - **Local only.** Muse Code does not run on remote (SSH) hosts.
 - **No department-scoped sessions.** Employees in a scoped or dedicated department run on Claude only.
+- **Workspace trust is on.** Marid passes `--trust-workspace` (this run only, nothing saved), so the working directory's rules, skills and hooks load and its `CLAUDE.md` or `AGENTS.md` reaches the model.
 - **Muse's OS sandbox is off.** Marid passes `--disable-sandbox`, as the host's sandbox needs a capability many machines lack, and it runs its other unattended engines unsandboxed too.
 - **An MCP server that cannot start is skipped without a sign.** This covers every server, the company toolset included. Muse Code drops it and reports nothing: no notification, no item and no status, and the turn completes normally. A session can therefore run without its tools, and the model will not say so. To check, ask the session to list its MCP tools, or look at what the host sends the model: start the gateway with `MUSE_TRANSPORT_TRACE=1` in its environment and the log level at `debug`. Muse then writes each provider request to stderr, which Marid logs as `[muse stderr]`. The request's `tools` array has one `mcp__<server>` namespace per server that started (for the company toolset, `mcp__jinn`); a server that failed has no namespace. The trace includes the full prompt, so turn it off again when you are done.
 - **Reminder agents add provider calls.** With them on (Muse's default), every turn makes two or three extra calls, and `turn/foregroundCompleted` arrives before the blocking reminders finish. Marid waits for `turn/completed`. To turn them off, give the employee `cliFlags: ["-c", "run.reminder_roster=[]"]`.

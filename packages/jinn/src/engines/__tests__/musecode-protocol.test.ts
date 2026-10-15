@@ -10,7 +10,7 @@ import { MAX_IMAGE_BYTES, loadMuseAttachments } from "../musecode-attachments.js
 describe("buildMuseServeArgs", () => {
   it("carries the base flags, then the model, then the operator's own flags", () => {
     expect(buildMuseServeArgs({})).toEqual([
-      "serve", "--disable-sandbox",
+      "serve", "--disable-sandbox", "--trust-workspace",
       "-c", "context.foreign_personal_rules=false",
       "-c", "context.foreign_personal_skills=false",
     ]);

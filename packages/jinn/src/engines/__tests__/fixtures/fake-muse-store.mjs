@@ -60,3 +60,10 @@ export function requiredServerThatCannotStart(config) {
   const bad = Object.entries(config?.mcpServers ?? {}).find(([, s]) => s.mode !== "optional" && String(s.command ?? "").startsWith("/nonexistent"));
   return bad?.[0];
 }
+
+/** FAKE_MUSE_IN_USE: every `session/resume` is refused as `sessionInUse`, as when a terminal holds the session. True when it was. */
+export function refuseInUse(id, params) {
+  if (!process.env.FAKE_MUSE_IN_USE) return false;
+  fail(id, -32021, `session ${params.sessionId} is already in use`, { kind: "sessionInUse", retryable: false, sessionId: params.sessionId });
+  return true;
+}

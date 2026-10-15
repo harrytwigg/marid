@@ -24,6 +24,11 @@ const BASE_SERVE_ARGS = [
   // The OS sandbox needs a capability this kind of host often lacks, and
   // jinn runs its other unattended engines unsandboxed too.
   "--disable-sandbox",
+  // Without it a headless host does not load the workspace's own CLAUDE.md or
+  // AGENTS.md (nor its skills and hooks), so an employee would lose its project
+  // instructions with no sign. Claude loads them unasked. Trust is for this run
+  // only; Muse saves nothing.
+  "--trust-workspace",
   "-c", "context.foreign_personal_rules=false",
   "-c", "context.foreign_personal_skills=false",
 ];

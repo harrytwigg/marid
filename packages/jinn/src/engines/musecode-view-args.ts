@@ -85,15 +85,17 @@ export function buildMuseViewMcp(resolvedMcp: ResolvedMcpConfig | undefined): { 
 /**
  * `muse resume <id> …`, or plain `muse …` with no conversation to resume yet.
  *
- * `--disable-sandbox` for the reason a turn's host has it: the OS sandbox needs a
- * capability this kind of machine often lacks. Approvals stay Muse's own, since
- * there is a person at this terminal to answer them.
+ * `--disable-sandbox` and `--trust-workspace` for the reasons a turn's host has
+ * them (see `musecode-protocol.ts`); trust is for this run and saves nothing, so
+ * the terminal never stops at Muse's trust prompt. Approvals stay Muse's own,
+ * since there is a person at this terminal to answer them.
  */
 export function buildMuseViewArgs(launch: MuseViewLaunch): MuseViewArgs {
   const mcp = buildMuseViewMcp(launch.resolvedMcp);
   const args = [
     ...(launch.engineSessionId ? ["resume", launch.engineSessionId] : []),
     "--disable-sandbox",
+    "--trust-workspace",
     ...FOREIGN_RULES_OFF,
     ...(launch.model ? ["--model", launch.model] : []),
     ...mcp.flags,

@@ -7,16 +7,16 @@ const RULES_OFF = ["-c", "context.foreign_personal_rules=false", "-c", "context.
 
 describe("buildMuseViewArgs", () => {
   it("resumes the session's conversation", () => {
-    expect(buildMuseViewArgs({ engineSessionId: ID }).args).toEqual(["resume", ID, "--disable-sandbox", ...RULES_OFF]);
+    expect(buildMuseViewArgs({ engineSessionId: ID }).args).toEqual(["resume", ID, "--disable-sandbox", "--trust-workspace", ...RULES_OFF]);
   });
 
   it("opens a fresh TUI when there is no conversation yet", () => {
-    expect(buildMuseViewArgs({}).args).toEqual(["--disable-sandbox", ...RULES_OFF]);
+    expect(buildMuseViewArgs({}).args).toEqual(["--disable-sandbox", "--trust-workspace", ...RULES_OFF]);
   });
 
   it("puts the model before, and the employee's own flags after, everything the gateway adds", () => {
     const { args } = buildMuseViewArgs({ engineSessionId: ID, model: "muse-spark-1.2", cliFlags: ["--provider", "echo"] });
-    expect(args).toEqual(["resume", ID, "--disable-sandbox", ...RULES_OFF, "--model", "muse-spark-1.2", "--provider", "echo"]);
+    expect(args).toEqual(["resume", ID, "--disable-sandbox", "--trust-workspace", ...RULES_OFF, "--model", "muse-spark-1.2", "--provider", "echo"]);
   });
 });
 

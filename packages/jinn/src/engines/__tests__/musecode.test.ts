@@ -38,7 +38,7 @@ describe("a fresh turn", () => {
   it("spawns `muse serve` with the sandbox off, foreign rules and skills off, and the operator's flags last", async () => {
     await ctx.engine.run(opts({ model: "muse-spark-1.2", cliFlags: ["--provider", "echo"] }));
     expect(starts()[0]!.argv).toEqual([
-      "serve", "--disable-sandbox",
+      "serve", "--disable-sandbox", "--trust-workspace",
       "-c", "context.foreign_personal_rules=false",
       "-c", "context.foreign_personal_skills=false",
       "--model", "muse-spark-1.2",

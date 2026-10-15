@@ -148,11 +148,6 @@ export class MusecodeInteractiveEngine implements InterruptibleEngine, PtyViewEn
     try { await Promise.race([exited, bound]); } finally { if (timer) clearTimeout(timer); }
   }
 
-  /** Pids of the live terminals, for the gateway's orphan tracking. */
-  livePids(): number[] {
-    return this.lifecycle.livePids();
-  }
-
   // ── Private ───────────────────────────────────────────────────────────────
 
   private proc(sessionId: string): pty.IPty | undefined {

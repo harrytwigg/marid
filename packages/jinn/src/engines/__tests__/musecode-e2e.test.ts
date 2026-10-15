@@ -132,6 +132,20 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
     expect(isDeadSessionError(result)).toBe(true);
   }, 60_000);
 
+  it("trusts the session's workspace, so its CLAUDE.md reaches the model", async () => {
+    const rules = path.join(scratch, "ws-rules");
+    fs.mkdirSync(rules, { recursive: true });
+    fs.writeFileSync(path.join(rules, "CLAUDE.md"), "Project rule: always say RULES-MARKER-7f3a.\n");
+    const { port, log } = await startMock("ok", { MOCK_FULL_BODIES: "1" });
+    vi.stubEnv("META_API_KEY", "test");
+    const result = await engine.run(opts({ cwd: rules, prompt: "Explain what this repository does in one sentence.", cliFlags: mockFlags(port) }));
+    expect(result.error).toBeUndefined();
+    const requests = fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { method: string; url: string; body: string });
+    const responses = requests.filter((r) => r.method === "POST" && r.url.startsWith("/responses"));
+    expect(responses.length).toBeGreaterThan(0);
+    expect(responses.some((r) => r.body.includes("RULES-MARKER-7f3a"))).toBe(true);
+  }, 60_000);
+
   it("maps a usage limit from the provider to a rejected rate limit with the provider's reset", async () => {
     const resetsAt = Math.floor(Date.now() / 1000) + 7200;
     const { port } = await startMock("quota", { MOCK_QUOTA_RESET: String(resetsAt) });

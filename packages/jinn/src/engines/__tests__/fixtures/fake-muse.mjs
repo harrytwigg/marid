@@ -34,15 +34,14 @@
 //   NOTFOUND    the turn answers, then the session is dropped from the store, so
 //               the NEXT resume of it is `sessionNotFound`
 //   NOANSWER    the turn completes with no agent message at all
-// Environment hooks (see also fake-muse-queries.mjs):
+// Environment hooks (see also fake-muse-queries.mjs and fake-muse-store.mjs):
 //   FAKE_MUSE_LOG a JSON line per request; FAKE_MUSE_STATE_DIR where sessions live; FAKE_MUSE_RESET_MS the QUOTA reset
 //   FAKE_MUSE_RESUME_FAIL  a message every `session/resume` fails with; FAKE_MUSE_BOOT_EXIT  exit code before reading anything
-//   FAKE_MUSE_IN_USE   every `session/resume` is refused as `sessionInUse`, as when a terminal holds the session
 //   FAKE_MUSE_NO_GRANT   grant no capability. (A `required` MCP server under /nonexistent fails the turn, as on the real host.)
 import fs from "node:fs";
 import readline from "node:readline";
 import { modelList } from "./fake-muse-queries.mjs";
-import { fail, log, notify, out, readSession, reply, requiredServerThatCannotStart, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
+import { fail, log, refuseInUse, notify, out, readSession, reply, requiredServerThatCannotStart, sessionFile, sessionView, uuid7, writeSession } from "./fake-muse-store.mjs";
 
 if (process.env.FAKE_MUSE_BOOT_EXIT) {
   process.stderr.write("fake muse: cannot start (boot refused)\n");
@@ -126,9 +125,7 @@ function resumeSession(id, params) {
   if (needsMcpCapability(id, params)) return;
   brokenServer = requiredServerThatCannotStart(params.config);
   if (process.env.FAKE_MUSE_RESUME_FAIL) return fail(id, -32602, process.env.FAKE_MUSE_RESUME_FAIL, { kind: "invalidParams" });
-  if (process.env.FAKE_MUSE_IN_USE) {
-    return fail(id, -32021, `session ${params.sessionId} is already in use`, { kind: "sessionInUse", retryable: false, sessionId: params.sessionId });
-  }
+  if (refuseInUse(id, params)) return;
   const session = readSession(params.sessionId);
   if (!session) {
     return fail(id, -32020, `session ${params.sessionId} not found`, { kind: "sessionNotFound", retryable: false, sessionId: params.sessionId });

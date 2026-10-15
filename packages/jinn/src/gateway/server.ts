@@ -31,7 +31,7 @@ import { CodexInteractiveEngine } from "../engines/codex-interactive.js";
 import { createAntigravityEnginePair } from "../engines/antigravity-runtime.js";
 import { PiEngine } from "../engines/pi.js";
 import { OpencodeEngine } from "../engines/opencode.js";
-import { MusecodeEngine } from "../engines/musecode.js";
+import { createMusecodeEnginePair } from "./musecode-view.js";
 import { OpencodeServerPool, opencodeMode } from "../engines/opencode-server.js";
 import { OpencodeInteractiveEngine } from "../engines/opencode-interactive.js";
 import { resolveSessionEngineMcp } from "../sessions/engine-run-mcp.js";
@@ -39,8 +39,6 @@ import { GrokEngine } from "../engines/grok.js";
 import { GrokInteractiveEngine } from "../engines/grok-interactive.js";
 import { HermesAcpEngine } from "../engines/hermes-acp.js";
 import { HermesInteractiveEngine } from "../engines/hermes-interactive.js";
-import { MusecodeInteractiveEngine } from "../engines/musecode-interactive.js";
-import { musecodeViewDeps } from "./musecode-view.js";
 import type { PtyViewEngine } from "../engines/pty-view-engine.js";
 import { startBackgroundRefreshes } from "./background-refresh.js";
 import { startBoardWalk } from "../board-walk/walk.js";
@@ -573,23 +571,14 @@ export async function startGateway(
   let antigravityLifecycle: PtyLifecycleManager | undefined;
   let grokLifecycle: PtyLifecycleManager | undefined;
   let hermesLifecycle: PtyLifecycleManager | undefined;
-  let musecodeLifecycle: PtyLifecycleManager | undefined;
   let opencodeServerLifecycle: PtyLifecycleManager | undefined;
   let opencodeViewPids: () => number[] = () => [];
   const ptyLifecycles: PtyLifecycleManager[] = [];
   let enforcingGlobalIdleCap = false;
   function refreshPtyPids(): void {
     try {
-      const pids = [
-        ...claudeLifecycle.livePids(),
-        ...(codexLifecycle ? codexLifecycle.livePids() : []),
-        ...(antigravityLifecycle ? antigravityLifecycle.livePids() : []),
-        ...(grokLifecycle ? grokLifecycle.livePids() : []),
-        ...(hermesLifecycle ? hermesLifecycle.livePids() : []),
-        ...(musecodeLifecycle ? musecodeLifecycle.livePids() : []),
-        ...(opencodeServerLifecycle ? opencodeServerLifecycle.livePids() : []),
-        ...opencodeViewPids(),
-      ];
+      // Every lifecycle the gateway made, so an engine's terminal is tracked by being made through createPtyLifecycle.
+      const pids = [...ptyLifecycles.flatMap((lifecycle) => lifecycle.livePids()), ...opencodeViewPids()];
       updateGatewayPtyPids(GATEWAY_INFO_FILE, pids);
     } catch { /* best effort */ }
   }
@@ -659,15 +648,6 @@ export async function startGateway(
     onCleanup: () => refreshPtyPids(),
   });
   const hermesInteractiveEngine = new HermesInteractiveEngine(hermesLifecycle);
-  musecodeLifecycle = createPtyLifecycle({
-    onAdopt: () => refreshPtyPids(),
-    onCleanup: () => refreshPtyPids(),
-  });
-  const musecodeInteractiveEngine = new MusecodeInteractiveEngine(musecodeLifecycle, musecodeViewDeps({
-    getConfig: () => currentConfig,
-    getSession,
-    employeeOf: (session) => (session.employee ? orgRegistry(currentConfig).get(session.employee) : undefined),
-  }));
   const piEngine = new PiEngine({
     // Same two live readers the interactive engine takes, and for the same
     // reason: pi is the second engine that can relocate a turn over SSH, so a
@@ -720,7 +700,7 @@ export async function startGateway(
   const codexEngine = new CodexEngine();
   const grokEngine = new GrokEngine();
   const hermesEngine = new HermesAcpEngine();
-  const musecodeEngine = new MusecodeEngine({ ...musecodeEngineOptions, releaseView: (id) => musecodeInteractiveEngine.releaseUnviewed(id) });
+  const { work: musecodeEngine, pty: musecodeInteractiveEngine } = createMusecodeEnginePair({ getConfig: () => currentConfig, createLifecycle: createPtyLifecycle, refreshPids: refreshPtyPids, engineOptions: musecodeEngineOptions });
   const engines = new Map<string, Engine>();
   // Claude WORK TURNS (chat, employees, cron, child sessions) run on the
   // interactive PTY engine → cc_entrypoint=cli, covered by the Max subscription

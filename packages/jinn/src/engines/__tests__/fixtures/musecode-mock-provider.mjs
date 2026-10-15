@@ -24,7 +24,7 @@ const server = http.createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
-    fs.appendFileSync(log, `${JSON.stringify({ method: req.method, url: req.url, body: body.slice(0, 3000) })}\n`);
+    fs.appendFileSync(log, `${JSON.stringify({ method: req.method, url: req.url, body: process.env.MOCK_FULL_BODIES ? body : body.slice(0, 3000) })}\n`);
     if (req.url.startsWith("/muse-code/models")) {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(fs.readFileSync(catalogFile, "utf8"));
