@@ -1,128 +1,27 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
-import type { ServerResponse } from "node:http";
-import {
-  CALLER_SESSION_CAPABILITY_HEADER, CALLER_SESSION_HEADER, TOOL_CALL_HEADER, TOOL_CALL_HEADER_VALUE, ensureSessionCapability,
-} from "../../mcp/identity.js";
-import type { JinnConfig, Session } from "../../shared/types.js";
+import type { JinnConfig } from "../../shared/types.js";
 import type { SessionFallbackMode } from "../../shared/session-fallback-config.js";
+import {
+  HEALTH_PATH, baseConfig, call, dbModule, emitted, loadApi, makeParent, registry, resetFallbackFixture, setConfig,
+  spawn, stored, toolHeaders, unloadApi,
+} from "./session-fallback-api-harness.js";
 
 /**
  * A session's fallback mode through the HTTP surface: the view GET reports, PUT's validation and
- * persistence, and what POST /api/sessions and POST /api/delegations accept, refuse and inherit.
+ * persistence, and what POST /api/sessions accepts, refuses and inherits. Delegations are in
+ * session-fallback-delegations.test.ts.
  */
-
-const home = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-session-fallback-api-"));
-process.env.JINN_HOME = home;
-fs.mkdirSync(path.join(home, "org"), { recursive: true });
-fs.writeFileSync(
-  path.join(home, "org", "a-worker.yaml"),
-  ["name: a-worker", "displayName: A Worker", "department: platform", "rank: employee", "engine: claude", "model: opus", "persona: Fallback mode fixture", ""].join("\n"),
-);
-const HEALTH_PATH = path.join(home, "tmp", "engine-health.json");
 
 vi.mock("../../shared/models.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../shared/models.js")>()),
   engineAvailable: () => true,
 }));
 
-const dbModule = await import("../../shared/db.js");
-let api: typeof import("../api.js");
-let registry: typeof import("../../sessions/registry.js");
-
-const engineStub = { name: "stub", run: () => new Promise(() => {}), isAlive: () => false, kill: () => {}, killAll: () => {} };
-const queueStub = {
-  enqueue: async () => {}, clearCancelled: () => {}, clearQueue: () => {}, holdForCallbackDrain: () => {},
-  releaseCallbackDrain: () => {}, hasInFlightItem: () => false, getPendingCount: () => 0,
-  getTransportState: (_key: string, status: string) => status,
-};
-
-const baseConfig = {
-  gateway: { port: 7798, host: "127.0.0.1" },
-  engines: {
-    default: "claude",
-    claude: { bin: "claude", model: "opus", fallback: ["codex"], fallbackModelMap: { opus: "gpt-mapped" } },
-    codex: { bin: "codex", model: "gpt-5.6-sol" },
-  },
-  models: {
-    claude: { default: "opus", models: [{ id: "opus" }] },
-    codex: { default: "gpt-5.6-sol", models: [{ id: "gpt-5.6-sol" }, { id: "gpt-mapped" }] },
-  },
-  connectors: {},
-  logging: { file: false, stdout: false, level: "error" },
-  mcp: { gateway: { enabled: true } },
-} as unknown as JinnConfig;
-let config: JinnConfig = baseConfig;
-const emitted: Array<[string, unknown]> = [];
-
-const context = {
-  getConfig: () => config,
-  connectors: new Map(),
-  startTime: Date.now(),
-  gatewayAuthToken: "test-token",
-  emit: (event: string, payload: unknown) => { emitted.push([event, payload]); },
-  reloadOrg: () => {},
-  sessionManager: {
-    getEngine: () => engineStub,
-    getEngines: () => new Map([["claude", engineStub], ["codex", engineStub]]),
-    getQueue: () => queueStub,
-  },
-} as unknown as import("../api.js").ApiContext;
-
-async function call(method: string, url: string, body?: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: any }> {
-  let status = 200;
-  let raw = "";
-  const req = Object.assign(Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]), {
-    method, url,
-    headers: { host: "localhost", authorization: "Bearer test-token", "content-type": "application/json", ...headers },
-  });
-  const res = {
-    writeHead(next: number) { status = next; return this; },
-    setHeader() { return this; },
-    end(chunk?: Buffer | string) { if (chunk) raw += chunk.toString(); },
-  } as unknown as ServerResponse;
-  await api.handleApiRequest(req as never, res, context);
-  return { status, body: raw ? JSON.parse(raw) : undefined };
-}
-
-const toolHeaders = (sessionId: string) => ({
-  [TOOL_CALL_HEADER]: TOOL_CALL_HEADER_VALUE,
-  [CALLER_SESSION_HEADER]: sessionId,
-  [CALLER_SESSION_CAPABILITY_HEADER]: ensureSessionCapability(sessionId),
-});
-
-function makeParent(fallbackMode: SessionFallbackMode | null): Session {
-  return registry.createSession({
-    engine: "claude", source: "web", sourceRef: `web:parent-${Math.random()}`, model: "opus", ...(fallbackMode ? { fallbackMode } : {}),
-  });
-}
-
-const spawn = (body: Record<string, unknown>, headers?: Record<string, string>) => call("POST", "/api/sessions", { prompt: "brief", ...body }, headers);
-const delegate = (body: Record<string, unknown>, headers?: Record<string, string>) =>
-  call("POST", "/api/delegations", { employee: "a-worker", task: "A brief with acceptance.", ...body }, headers);
-const stored = (id: string) => registry.getSession(id)!.fallbackMode;
-
-beforeAll(async () => {
-  api = await import("../api.js");
-  registry = await import("../../sessions/registry.js");
-  dbModule.initDb();
-  const { setJinnAttachGate } = await import("../../mcp/attachment.js");
-  setJinnAttachGate({ ok: true });
-});
-
-afterAll(async () => {
-  const { setJinnAttachGate } = await import("../../mcp/attachment.js");
-  setJinnAttachGate(null);
-});
-
-beforeEach(() => {
-  config = baseConfig;
-  emitted.length = 0;
-  fs.rmSync(HEALTH_PATH, { force: true });
-});
+beforeAll(loadApi);
+afterAll(unloadApi);
+beforeEach(resetFallbackFixture);
 
 describe("GET /api/sessions/:id", () => {
   it("carries the fallback view: the default mode, where it came from and the resolved target", async () => {
@@ -135,13 +34,13 @@ describe("GET /api/sessions/:id", () => {
   });
 
   it("reports a stored mode with source session, and a null target when the chain is empty", async () => {
-    config = { ...baseConfig, engines: { ...baseConfig.engines, claude: { bin: "claude", model: "opus", fallback: [] } } } as JinnConfig;
+    setConfig({ ...baseConfig, engines: { ...baseConfig.engines, claude: { bin: "claude", model: "opus", fallback: [] } } } as JinnConfig);
     const session = makeParent("auto-resume");
     expect((await call("GET", `/api/sessions/${session.id}`)).body.fallback).toEqual({ mode: "auto-resume", modeSource: "session", target: null });
   });
 
   it("follows sessions.fallbackMode for a session with none of its own", async () => {
-    config = { ...baseConfig, sessions: { fallbackMode: "fallback-children" } } as JinnConfig;
+    setConfig({ ...baseConfig, sessions: { fallbackMode: "fallback-children" } } as JinnConfig);
     const got = await call("GET", `/api/sessions/${makeParent(null).id}`);
     expect(got.body.fallback).toMatchObject({ mode: "fallback-children", modeSource: "default" });
   });
@@ -233,7 +132,7 @@ describe("POST /api/sessions", () => {
   it("an explicit mode wins over the parent's, and a legacy NULL parent follows a fallback-children default", async () => {
     const explicit = await spawn({ parentSessionId: makeParent("auto-resume").id, fallbackMode: "fallback" });
     expect(stored(explicit.body.id)).toBe("fallback");
-    config = { ...baseConfig, sessions: { fallbackMode: "fallback-children" } } as JinnConfig;
+    setConfig({ ...baseConfig, sessions: { fallbackMode: "fallback-children" } } as JinnConfig);
     const inherited = await spawn({ parentSessionId: makeParent(null).id });
     expect(stored(inherited.body.id)).toBe("fallback-children");
   });
@@ -262,47 +161,3 @@ describe("POST /api/sessions", () => {
   });
 });
 
-describe("POST /api/delegations", () => {
-  it("stores and echoes an explicit mode", async () => {
-    const created = await delegate({ fallbackMode: "auto-resume" });
-    expect(created.status).toBe(201);
-    expect(created.body.fallbackMode).toBe("auto-resume");
-    expect(stored(created.body.sessionId)).toBe("auto-resume");
-  });
-
-  it("a root delegation stores NULL and echoes null", async () => {
-    const created = await delegate({});
-    expect(created.status).toBe(201);
-    expect(created.body.fallbackMode).toBeNull();
-    expect(stored(created.body.sessionId)).toBeNull();
-  });
-
-  it("refuses a bad value with a 400 before minting anything", async () => {
-    const bad = await delegate({ fallbackMode: "never" });
-    expect(bad.status).toBe(400);
-    expect(bad.body.error).toMatch(/fallback, fallback-children, auto-resume/);
-    expect(bad.body.workItemId).toBeUndefined();
-  });
-
-  it.each<[SessionFallbackMode | null, SessionFallbackMode]>([
-    ["fallback-children", "fallback-children"], ["fallback", "auto-resume"], ["auto-resume", "auto-resume"], [null, "auto-resume"],
-  ])("a delegation from a %s session stores %s", async (parentMode, expected) => {
-    const created = await delegate({}, toolHeaders(makeParent(parentMode).id));
-    expect(created.status).toBe(201);
-    expect(created.body.fallbackMode).toBe(expected);
-    expect(stored(created.body.sessionId)).toBe(expected);
-  });
-
-  it("an explicit mode beats the caller's", async () => {
-    const created = await delegate({ fallbackMode: "fallback" }, toolHeaders(makeParent("auto-resume").id));
-    expect(stored(created.body.sessionId)).toBe("fallback");
-  });
-
-  it("echoes the stored mode on an idempotent replay, whatever the retry says", async () => {
-    const caller = toolHeaders(makeParent("fallback-children").id);
-    const first = await delegate({ idempotencyKey: "fallback-mode-replay" }, caller);
-    expect(first.status).toBe(201);
-    const replay = await delegate({ idempotencyKey: "fallback-mode-replay", fallbackMode: "auto-resume" }, caller);
-    expect(replay.body).toMatchObject({ replayed: true, sessionId: first.body.sessionId, fallbackMode: "fallback-children" });
-  });
-});
