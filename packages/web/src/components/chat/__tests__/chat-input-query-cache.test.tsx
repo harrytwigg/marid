@@ -36,7 +36,7 @@ vi.mock("@/components/stt/whisper-download-modal", () => ({
 
 import { ChatInput } from "../chat-input"
 
-function renderWithCachedQueries(inputProps: { isActive?: boolean; focusTrigger?: number; selectorSlot?: React.ReactNode } = {}) {
+function renderWithCachedQueries(inputProps: { isActive?: boolean; focusTrigger?: number; selectorSlot?: React.ReactNode; statusSlot?: React.ReactNode; terminalActionsSlot?: React.ReactNode } = {}) {
   const client = new QueryClient({
     defaultOptions: {
       queries: {
@@ -98,7 +98,17 @@ describe("ChatInput query-backed menus", () => {
     expect(classes).toEqual(expect.arrayContaining(["min-w-0", "shrink", "overflow-hidden"]))
     expect(classes).not.toContain("shrink-0")
     // Its icon floor is sized from the composer, not the viewport, and stops at a narrow composer.
-    expect(classes).toContain("@min-[220px]/composer:min-w-12")
+    expect(classes).toContain("@min-[240px]/composer:min-w-12")
+  })
+
+  it("drops the toolbar floors when the row also holds the CLI keys", () => {
+    renderWithCachedQueries({
+      selectorSlot: <span data-testid="model-chip">GPT-5.6 Sol</span>,
+      statusSlot: <span data-testid="status">2 working</span>,
+      terminalActionsSlot: <span>keys</span>,
+    })
+    expect(screen.getByTestId("model-chip").parentElement!.className).not.toMatch(/min-w-12/)
+    expect(screen.getByTestId("status").parentElement!.className).not.toMatch(/has-\[>\*\]:min-w/)
   })
 
   it("populates @mentions and slash commands from the shared query cache", async () => {

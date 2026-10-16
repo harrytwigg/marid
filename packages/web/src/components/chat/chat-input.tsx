@@ -107,6 +107,22 @@ interface ChatInputProps {
 
 /* ── File to MediaAttachment ─────────────────────────────── */
 
+/**
+ * Minimum widths that keep the model chip's icons (48px) and the waiting-on status (24px for the
+ * dot and count, 40px, then 72px for the short label) visible in a narrow composer. A floor only
+ * applies once the composer row has room for it. The parts of the row that never shrink (attach,
+ * context ring, mic, Send and the gaps) take 190px with phone-sized buttons and 180px on desktop,
+ * so each threshold is 190px + the floors that would apply + 2px of slack: a busy row of any width
+ * never overflows and never pushes Send out. Sized from the composer container, never the
+ * viewport, because a chat-grid pane is phone-narrow on a wide screen. A row that also shows the
+ * STT language picker or the CLI keys has less to spare, so it gets no floors (TOOLBAR_FLOORS is
+ * only applied when `toolbarFloors` holds).
+ */
+const TOOLBAR_FLOORS = {
+  selector: '@min-[240px]/composer:min-w-12',
+  status: '@min-[264px]/composer:has-[>*]:min-w-6 @min-[280px]/composer:has-[>*]:min-w-10 @min-[312px]/composer:has-[>*]:min-w-[4.5rem]',
+} as const
+
 function resizeImage(file: File, maxPx: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -253,6 +269,8 @@ export function ChatInput({
     // armed auto-send still fires on this path.
     applyTranscriptRef.current(text ?? '')
   })
+  // Floors assume the toolbar's fixed parts; extra fixed controls leave no room to spare.
+  const toolbarFloors = stt.languages.length <= 1 && !terminalActionsSlot
 
   // Consume files dropped onto the chat area by the parent
   const consumedRef = useRef<File[] | undefined>(undefined)
@@ -832,11 +850,12 @@ export function ChatInput({
           {/* Model chip — wrapped so clicks on the trigger (and its inline popover)
               don't re-trigger card focus. The cap bounds a long model label, and
               the wrapper still shrinks when the cap is more than the row has left,
-              so nothing in the slot can push Send outside a narrow pane. From a
-              220px composer it keeps at least its icons (model, fallback). */}
+              so nothing in the slot can push Send outside a narrow pane. Where
+              the row has room for it, it keeps at least its icons (model,
+              fallback): see TOOLBAR_FLOORS. */}
           {selectorSlot && (
             <div
-              className="flex min-w-0 @min-[220px]/composer:min-w-12 max-w-[55%] shrink items-center overflow-hidden"
+              className={`flex min-w-0 max-w-[55%] shrink items-center overflow-hidden ${toolbarFloors ? TOOLBAR_FLOORS.selector : ''}`}
               onPointerDown={(e) => e.stopPropagation()}
             >
               {selectorSlot}
@@ -856,13 +875,9 @@ export function ChatInput({
               reading as a continuation of the model chip's cluster rather than a
               floating center element. flex-1 (basis-0) claims only LEFTOVER
               space, and an overlong status clips inside this container. While it
-              shows something it keeps a floor sized from the composer's own
-              width (a grid pane is narrow on a wide screen): the dot and count,
-              then the short label. The model chip's floor above keeps its icon
-              and the fallback icon, so the two share the row instead of one
-              squeezing the other out. Below 220px neither floor applies and the
-              row degrades as before, so Send is never pushed off. */}
-          <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden pl-1 @min-[220px]/composer:has-[>*]:min-w-6 @min-[260px]/composer:has-[>*]:min-w-10 @min-[300px]/composer:has-[>*]:min-w-[4.5rem]">
+              shows something it keeps a floor where the row has room for one:
+              see TOOLBAR_FLOORS. */}
+          <div className={`flex min-w-0 flex-1 items-center justify-start overflow-hidden pl-1 ${toolbarFloors ? TOOLBAR_FLOORS.status : ''}`}>
             {statusSlot}
           </div>
 
