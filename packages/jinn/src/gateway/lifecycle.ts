@@ -4,7 +4,8 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG_PATH, PID_FILE, GATEWAY_INFO_FILE, JINN_HOME, JINN_HOME_IDENTITY } from "../shared/paths.js";
-import { JINN_BINDING_HOME_ENV, JINN_INSTANCE_IDENTITY_ENV_KEYS } from "../shared/sandbox-env.js";
+import { envAliases, setEnv } from "../shared/codename-env.js";
+import { JINN_INSTANCE_IDENTITY_ENV_KEYS } from "../shared/sandbox-env.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
 import { startGateway } from "./server.js";
@@ -135,22 +136,20 @@ export function buildGatewayChildEnv(
     if (shouldScrubGatewayChildEnv(key)) continue;
     if (value !== undefined) env[key] = value;
   }
-  return {
-    ...env,
-    JINN_HOME,
-    JINN_HOME_IDENTITY,
-    [JINN_BINDING_HOME_ENV]: JINN_HOME_IDENTITY,
-    JINN_HOST: host,
-    JINN_PORT: String(port),
-    JINN_GATEWAY_URL: gatewayBaseUrl({ port, host }),
-    JINN_GATEWAY_TOKEN: ensureGatewayAuthToken(JINN_HOME),
-  };
+  setEnv(env, "HOME", JINN_HOME);
+  setEnv(env, "HOME_IDENTITY", JINN_HOME_IDENTITY);
+  setEnv(env, "BINDING_HOME", JINN_HOME_IDENTITY);
+  setEnv(env, "HOST", host);
+  setEnv(env, "PORT", String(port));
+  setEnv(env, "GATEWAY_URL", gatewayBaseUrl({ port, host }));
+  setEnv(env, "GATEWAY_TOKEN", ensureGatewayAuthToken(JINN_HOME));
+  return env;
 }
 
 const GATEWAY_CHILD_ENV_SCRUB_EXACT: ReadonlySet<string> = new Set([
   // A restart re-launches the SAME instance, so its name stays; every other identity
   // variable is re-derived below from this gateway's own home and config.
-  ...JINN_INSTANCE_IDENTITY_ENV_KEYS.filter((key) => key !== "JINN_INSTANCE"),
+  ...JINN_INSTANCE_IDENTITY_ENV_KEYS.filter((key) => !envAliases("INSTANCE").includes(key)),
   "CODEX",
   "CLAUDECODE",
   "ANTHROPIC_BASE_URL",

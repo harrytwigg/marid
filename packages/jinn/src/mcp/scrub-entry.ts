@@ -18,6 +18,7 @@
  */
 import { spawn } from "node:child_process";
 import { createMcpTempSandbox } from "./temp-sandbox.js";
+import { envAliases } from "../shared/codename-env.js";
 
 const [realCommand, ...realArgs] = process.argv.slice(2);
 
@@ -27,7 +28,8 @@ if (!realCommand) {
 }
 
 // First security boundary: strip the gateway bearer before the untrusted child runs.
-delete process.env.JINN_GATEWAY_TOKEN;
+// Under every spelling: a token inherited from an older gateway sits under the older name.
+for (const name of envAliases("GATEWAY_TOKEN")) delete process.env[name];
 
 // External MCPs also get a launcher-owned temp root. Browser drivers can leak
 // launch artifacts when setup fails before their cleanup hook is registered;

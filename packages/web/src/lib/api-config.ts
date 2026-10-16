@@ -1,13 +1,15 @@
 import { authFetch } from "@/lib/auth"
+import { readResponseHeader, requestHeaderName } from "@/lib/codename"
 
 /**
  * The name the gateway stamps config.yaml's revision under, on both the GET that
  * serves the document and the PUT that rewrites it. Spelled here rather than
  * imported: the gateway's own module reaches node:fs to compute the value, and
  * nothing runtime crosses from that package into the bundle. `X-Jinn-Origin` is
- * duplicated the same way, for the same reason.
+ * duplicated the same way, for the same reason. The gateway answers under both codenames'
+ * spellings while a rename is in effect, so a page reads either and sends the current one.
  */
-export const CONFIG_REVISION_HEADER = "X-Jinn-Config-Revision"
+export const CONFIG_REVISION_HEADER = requestHeaderName("config-revision")
 
 /** config.yaml, and which config.yaml it was. */
 export interface ConfigDocument {
@@ -37,7 +39,7 @@ export function createConfigApi({ responseError }: ConfigHttp) {
     getConfig: async (): Promise<ConfigDocument> => {
       const res = await authFetch("/api/config")
       if (!res.ok) throw await responseError(res)
-      return { config: await res.json(), revision: res.headers.get(CONFIG_REVISION_HEADER) ?? "" }
+      return { config: await res.json(), revision: readResponseHeader(res.headers, "config-revision") ?? "" }
     },
     /** `revision` is the one `getConfig()` handed over. Sending it is what lets the
      *  gateway refuse a save that would overwrite an edit made since; omitting it is
@@ -52,7 +54,7 @@ export function createConfigApi({ responseError }: ConfigHttp) {
         body: JSON.stringify(data),
       })
       if (!res.ok) throw await responseError(res)
-      return { revision: res.headers.get(CONFIG_REVISION_HEADER) ?? "" }
+      return { revision: readResponseHeader(res.headers, "config-revision") ?? "" }
     },
   }
 }

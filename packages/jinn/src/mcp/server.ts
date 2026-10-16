@@ -19,7 +19,7 @@ import { buildHeartbeatTools } from "./heartbeat-tools.js";
 import { JINN_SESSION_CAPABILITY_ENV, JINN_SESSION_ID_ENV } from "./identity.js"; import { departmentBelt } from "./department-profile.js";
 import { toolsFor } from "./toolsets.js";
 import { loadConfig } from "../shared/config.js";
-import { resolveJinnHome } from "../shared/home.js";
+import { resolveJinnHome } from "../shared/home.js"; import { readEnv } from "../shared/codename-env.js";
 
 /**
  * GRS-018 (§3b) — bearer resolution with a gateway.json fallback.
@@ -37,8 +37,8 @@ import { resolveJinnHome } from "../shared/home.js";
  * env (no JINN_HOME grant), and a same-uid process could already read the file.
  */
 export function resolveServerToken(explicit?: string): string | undefined {
-  if (explicit) return explicit;
-  if (process.env.JINN_GATEWAY_TOKEN) return process.env.JINN_GATEWAY_TOKEN;
+  const given = explicit || readEnv(process.env, "GATEWAY_TOKEN"); // footgun: ok the server's own inherited credential, as before
+  if (given) return given;
   try {
     const home = resolveJinnHome();
     const raw = JSON.parse(fs.readFileSync(path.join(home, "gateway.json"), "utf-8")) as { token?: unknown };

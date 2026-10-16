@@ -142,6 +142,9 @@ export default defineConfig(() => {
         // editor has to judge a model id by the rule the config loader judges it
         // by, and a second copy of that rule is a second answer waiting to drift.
         '@jinn/model-id': path.resolve(__dirname, '../jinn/src/shared/model-id.ts'),
+        // The codename is one literal for the whole repo: the gateway's names and the
+        // browser's are built from the same line, so they cannot disagree.
+        '@jinn/codename': path.resolve(__dirname, '../jinn/src/shared/codename-constant.ts'),
       },
     },
     build: {

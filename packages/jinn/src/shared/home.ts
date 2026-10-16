@@ -1,17 +1,20 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { NAMES } from "./codename.js";
+import { readEnv } from "./codename-env.js";
 
 /** Resolve the current instance home at call time, before eager path constants. */
 export function resolveJinnHome(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.JINN_HOME) return path.resolve(env.JINN_HOME);
-  const instance = env.JINN_INSTANCE || "jinn";
+  const home = readEnv(env, "HOME");
+  if (home) return path.resolve(home);
+  const instance = readEnv(env, "INSTANCE") || NAMES.codename;
   return path.resolve(path.join(os.homedir(), `.${instance}`));
 }
 
 /** Resolve the canonical default home without applying instance overrides. */
 export function resolveDefaultJinnHome(): string {
-  return path.resolve(path.join(os.homedir(), ".jinn"));
+  return path.resolve(path.join(os.homedir(), `.${NAMES.codename}`));
 }
 
 /** The comparable identity of a home: two paths naming one directory resolve equal. */
@@ -51,19 +54,20 @@ export function claudeJsonPath(): string {
  * (`~/.jinn-yorio` -> `jinn-yorio`), falling back to the default `jinn`.
  */
 export function resolveJinnInstance(jinnHome?: string): string {
-  if (process.env.JINN_INSTANCE) return process.env.JINN_INSTANCE;
-  const home = jinnHome ?? process.env.JINN_HOME;
+  const instance = readEnv(process.env, "INSTANCE");
+  if (instance) return instance;
+  const home = jinnHome ?? readEnv(process.env, "HOME");
   if (home) {
     const base = path.basename(path.resolve(home));
     const name = base.startsWith(".") ? base.slice(1) : base;
     if (name) return name;
   }
-  return "jinn";
+  return NAMES.codename;
 }
 
 /** The exact CLI command that pairs a browser to this instance. */
 export function pairCommandFor(instance: string): string {
-  return instance && instance !== "jinn" ? `jinn -i ${instance} pair` : "jinn pair";
+  return instance && instance !== NAMES.codename ? `${NAMES.codename} -i ${instance} pair` : `${NAMES.codename} pair`;
 }
 
 /** Resolve the durable per-instance key without freezing JINN_HOME at import. */

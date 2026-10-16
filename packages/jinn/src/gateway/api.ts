@@ -96,7 +96,7 @@ import { configDocumentForApi, deepMerge } from "./config-payload.js";
 export { isSensitiveConfigKey, sanitizeConfigForApi } from "./config-payload.js";
 import {
   CONFIG_CONFLICT_BODY,
-  CONFIG_REVISION_HEADER,
+  setConfigRevisionHeaders,
   currentConfigRevision,
   isStaleConfigRevision,
 } from "./config-revision.js";
@@ -161,7 +161,6 @@ import {
   ACTIVITY_TOOL_HEADER,
   CALLER_SESSION_HEADER,
   TOOL_CALL_HEADER,
-  TOOL_CALL_HEADER_VALUE,
   UNIDENTIFIED_TOOL_CALL_ERROR,
   verifySessionCapability,
 } from "../mcp/identity.js";
@@ -229,6 +228,7 @@ import {
   WorkItemAttachmentError,
   type AttachmentActor,
 } from "../work-items/attachments.js";
+import { isToolCallMarker, readHookSessionId, wireHeader } from "../shared/wire-names.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
 import { authorizeWorkItemDelegation, authorizeWorkItemOwnerManagerOrRoot } from "./work-item-authority.js";
@@ -301,6 +301,7 @@ import {
   revokeAuthSession,
   shouldRequireGatewayAuth,
   touchAuthSession,
+  legacyAuthCookieMigration,
   verifyGatewayAuth,
 } from "./auth.js";
 import {
@@ -691,7 +692,7 @@ function verifiedActivityTarget(
   const toolName = singleHeader(headers, ACTIVITY_TOOL_HEADER);
   const toolMarker = singleHeader(headers, TOOL_CALL_HEADER);
   const allowedTools = typeof expectedTools === "string" ? [expectedTools] : expectedTools;
-  const operation = toolMarker === TOOL_CALL_HEADER_VALUE
+  const operation = isToolCallMarker(toolMarker)
     && operationId !== undefined
     && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(operationId)
     && toolName !== undefined
@@ -945,7 +946,7 @@ function resolveSpawnParentSessionId(caller: CallerIdentity, requested: unknown,
   if (caller.kind !== "session") return requestedId;
   if (requestedId && getSession(requestedId)) return requestedId;
   if (getSession(caller.callerId)) return caller.callerId;
-  logger.warn(`Ignoring unknown x-jinn-caller-session "${caller.callerId}" on ${action}`);
+  logger.warn(`Ignoring unknown ${CALLER_SESSION_HEADER} "${caller.callerId}" on ${action}`);
   return undefined;
 }
 
@@ -1279,7 +1280,12 @@ export async function handleApiRequest(
     // GET /api/auth/state — safe browser boot metadata. Never includes the token.
     if (method === "GET" && pathname === "/api/auth/state") {
       const state = createAuthState(context.getConfig(), req, context.gatewayAuthToken, jinnHome);
-      if (state.authenticated) touchAuthSession(jinnHome, req);
+      if (state.authenticated) {
+        touchAuthSession(jinnHome, req);
+        // A browser paired before a codename change holds the old cookie names: re-issue the same session under the new.
+        const migrated = legacyAuthCookieMigration(req.headers, jinnHome, () => requestArrivedOverHttps(req));
+        if (migrated.length > 0) res.setHeader("Set-Cookie", migrated);
+      }
       return json(res, state);
     }
 
@@ -1455,7 +1461,7 @@ export async function handleApiRequest(
           error: CONTAINER_RESTART_UNSUPPORTED_MESSAGE,
         }, 409);
       }
-      const requestingSessionId = headerValue(req, "x-jinn-session-id")?.trim();
+      const requestingSessionId = headerValue(req, wireHeader("session-id"))?.trim();
       if (requestingSessionId) {
         const requestingSession = getSession(requestingSessionId);
         const completed = markRunningQueueItemsCompletedForSession(requestingSessionId);
@@ -4211,7 +4217,7 @@ export async function handleApiRequest(
     if (method === "GET" && pathname === "/api/config") {
       // The revision comes off the FILE, not off this in-memory config: the file is
       // what a PUT deep-merges into, so the file is what a conflict is about.
-      res.setHeader(CONFIG_REVISION_HEADER, currentConfigRevision());
+      setConfigRevisionHeaders(res, currentConfigRevision());
       return json(res, configDocumentForApi(context.getConfig(), CONFIG_TOP_LEVEL_KEYS));
     }
 
@@ -4271,7 +4277,7 @@ export async function handleApiRequest(
       context.reloadConfig?.(); // refresh in-memory config now (don't wait on the watcher)
       invalidateModelRegistry(); // models/engines may have changed — rebuild on next read
       logger.info("Config updated via API");
-      res.setHeader(CONFIG_REVISION_HEADER, currentConfigRevision());
+      setConfigRevisionHeaders(res, currentConfigRevision());
       return json(res, { status: "ok" });
     }
 
@@ -4576,7 +4582,8 @@ export async function handleApiRequest(
       }
       const _parsed = await readJsonBody(req, res, { maxBytes: HOOK_BODY_MAX_BYTES });
       if (!_parsed.ok) return;
-      const hookBody = _parsed.body as { jinnSessionId?: string; hook?: import("./hook-registry.js").HookPayload };
+      const hookBody = _parsed.body as import("./hook-endpoint.js").HookPostBody;
+      const hookSessionId = readHookSessionId(_parsed.body);
       // Remote containment: a session running over SSH reaches the org's real
       // knowledge/docs/org through one sshfs mount. If that mount drops, writes
       // to a JINN_HOME-shaped path succeed into an empty local directory on the
@@ -4586,8 +4593,8 @@ export async function handleApiRequest(
       // and resolved only for PreToolUse — the sole event the policy inspects —
       // so the Stop/SessionStart path costs no session or org lookup.
       const hookConfig = context.getConfig();
-      const hookSession = hookBody.hook?.hook_event_name === "PreToolUse" && hookBody.jinnSessionId
-        ? getSession(hookBody.jinnSessionId)
+      const hookSession = hookBody.hook?.hook_event_name === "PreToolUse" && hookSessionId
+        ? getSession(hookSessionId)
         : undefined;
       const hookEmployee = hookSession?.employee
         ? orgRegistry(hookConfig).get(hookSession.employee)
@@ -4609,11 +4616,11 @@ export async function handleApiRequest(
             ? { remoteMountRoot, gatewayHome: context.jinnHome ?? JINN_HOME, ...(remoteHome ? { remoteHome } : {}) }
             : {}),
         },
-        req.headers["x-jinn-hook-secret"] as string | undefined,
+        req.headers[wireHeader("hook-secret")] as string | undefined,
         hookBody,
       );
       if (rejected) return json(res, { message: rejected.body }, rejected.status);
-      const jinnSessionId = hookBody.jinnSessionId!;
+      const jinnSessionId = hookSessionId!;
       const hook = hookBody.hook!;
       context.hookRegistry.deliver(jinnSessionId, hook);
       // Central engineSessionId capture: persist claude's OWN session id the moment

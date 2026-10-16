@@ -52,8 +52,10 @@ import { reconcileWorkItemsOnStartup, startWorkItemReconciler } from "../work-it
 import { setTodoLiveEmitter, setTodoStatusChangeListener } from "../work-items/live-events.js";
 import { cleanupSessionSettings } from "../shared/claude-settings.js";
 import { bootClaudeProfiles } from "./claude-profile-boot.js";
+import { adoptLegacyHeaders } from "../shared/wire-names.js";
+import { readHostAsset } from "../shared/host-assets.js";
+import { setEnv } from "../shared/codename-env.js";
 import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
-import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
 import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
 import { emitTodoProjectionEvent, interruptSessionTurn, isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
@@ -508,11 +510,11 @@ export async function startGateway(
   // token. Same trust boundary as the 0600 gateway.json it already came from.
   // gatewayBaseUrl maps a wildcard bind (0.0.0.0) to 127.0.0.1 and keeps a specific
   // host as-is, so the URL is always reachable from the child.
-  process.env.JINN_GATEWAY_TOKEN = gatewayAuthToken;
-  process.env.JINN_GATEWAY_URL = gatewayBaseUrl({ port, host });
+  setEnv(process.env, "GATEWAY_TOKEN", gatewayAuthToken); // footgun: ok exported to spawned sessions, see above
+  setEnv(process.env, "GATEWAY_URL", gatewayBaseUrl({ port, host })); // footgun: ok exported to spawned sessions, see above
   // Name the home that binding belongs to, so a command a session points at another
   // home (JINN_HOME=<sandbox> jinn start) can tell the binding it inherited is not its own.
-  process.env[JINN_BINDING_HOME_ENV] = JINN_HOME_IDENTITY; // footgun: ok exported to spawned sessions beside JINN_GATEWAY_URL above, which every engine reads from process.env
+  setEnv(process.env, "BINDING_HOME", JINN_HOME_IDENTITY); // footgun: ok exported to spawned sessions beside JINN_GATEWAY_URL above, which every engine reads from process.env
 
   // Normalize claude engine config (idempotent — loadConfig already normalized it)
   const claudeCfg = normalizeClaudeEngineConfig(config.engines.claude);
@@ -553,7 +555,7 @@ export async function startGateway(
   try {
     const relaySrc = relayCandidates.find((p) => fs.existsSync(p));
     if (relaySrc) {
-      fs.copyFileSync(relaySrc, HOOK_RELAY_SCRIPT);
+      fs.writeFileSync(HOOK_RELAY_SCRIPT, readHostAsset(relaySrc));
     } else {
       logger.warn(`hook-relay.mjs asset not found in any candidate location; interactive Claude hooks may not work`);
     }
@@ -1039,6 +1041,7 @@ export async function startGateway(
   });
 
   server.on("upgrade", (req, socket, head) => {
+    adoptLegacyHeaders(req.headers);
     const reqUrl = req.url || "";
     const pathname = reqUrl.split("?")[0];
     if (rejectUnverifiedIdentifiedUpgradeCaller(req, socket)) return;

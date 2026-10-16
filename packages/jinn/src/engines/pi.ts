@@ -26,6 +26,7 @@ import {
   type RemoteRun,
 } from "./remote-stage.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { envNamesFor } from "../shared/codename-env.js";
 
 interface LiveProcess extends RemoteRun {
   proc: ChildProcess;
@@ -206,7 +207,7 @@ export class PiEngine implements InterruptibleEngine {
    * `buildCleanEnv` strips locally: the markers that tell a nested CLI it is
    * running inside another agent.
    */
-  private static readonly REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "JINN_HOME_IDENTITY", "JINN_TAKE_PORT"];
+  private static readonly REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", ...envNamesFor(["HOME_IDENTITY", "TAKE_PORT"])];
 
   async run(opts: EngineRunOpts): Promise<EngineResult> {
     const trackingId = opts.sessionId || `pi-${Date.now()}`;

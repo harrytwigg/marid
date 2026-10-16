@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { nameAliases } from "../shared/codename.js";
 
 /**
  * A plugin id is a namespace: it names a directory in the instance home, the
@@ -9,7 +10,8 @@ import path from "node:path";
  * by a user-supplied one.
  */
 export const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,38}$/;
-const RESERVED_ID = "jinn";
+/** Both codenames: a plugin installed before a rename may not take the new one either. */
+const RESERVED_IDS = nameAliases((n) => n.codename);
 
 /** The client half is optional to declare, not optional to have. */
 const DEFAULT_CLIENT = "client.js";
@@ -98,7 +100,7 @@ function validateId(value: unknown, folder: string): StringResult {
       error: `id "${id}" must be 2-39 characters of lowercase letters, digits and hyphens, starting with a letter or digit`,
     };
   }
-  if (id === RESERVED_ID) return { ok: false, error: `id "${RESERVED_ID}" is reserved for the gateway` };
+  if (RESERVED_IDS.includes(id)) return { ok: false, error: `id "${id}" is reserved for the gateway` };
   if (id !== folder) return { ok: false, error: `id "${id}" does not match its folder name "${folder}"` };
   return { ok: true, value: id };
 }

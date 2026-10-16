@@ -8,6 +8,8 @@ import { resolveEnvVar } from "../shared/env-ref.js";
 import { wrapServersWithScrub } from "./env-scrub.js";
 import { decideJinnAttachment } from "./attachment.js";
 import { MCP_TOOLSET_ARG } from "./identity.js";
+import { isBuiltinMcpName } from "./builtin-name.js";
+import { LEGACY_CODENAME } from "../shared/codename.js";
 
 export type { ResolvedMcpConfig } from "../shared/types.js";
 
@@ -32,6 +34,8 @@ export function resolveMcpServers(
   globalMcp: McpGlobalConfig | undefined,
   employee?: Employee,
   engine?: string,
+  /** The name the instance registers the built-in server under (mcp/builtin-name.ts). */
+  builtin: string = LEGACY_CODENAME,
 ): ResolvedMcpConfig {
   const servers: Record<string, McpServerConfig> = {};
   const jinnDecision = decideJinnAttachment({ globalMcp, employee, engine });
@@ -40,12 +44,12 @@ export function resolveMcpServers(
     // No `mcp:` section at all. A per-employee force-on (jinnMcp: true) still
     // attaches the builtin — the pilot needs no other MCP config — otherwise
     // today's empty set, byte-identical.
-    if (jinnDecision.attach) servers.jinn = buildJinnServerSpec();
+    if (jinnDecision.attach) servers[builtin] = buildJinnServerSpec();
     return { mcpServers: servers };
   }
 
   // Build the full set of available MCP servers from global config
-  const available = buildAvailableServers(globalMcp, jinnDecision.attach);
+  const available = buildAvailableServers(globalMcp, jinnDecision.attach ? builtin : undefined);
 
   // Determine which servers this employee gets
   const employeeMcp = employee?.mcp;
@@ -53,17 +57,18 @@ export function resolveMcpServers(
   if (employeeMcp === false) {
     // Employee explicitly opted out of all MCP servers. jinnMcp: true is more
     // specific and wins for the builtin only (decided above).
-    return { mcpServers: jinnDecision.attach ? { jinn: available.jinn ?? buildJinnServerSpec() } : {} };
+    return { mcpServers: jinnDecision.attach ? { [builtin]: available[builtin] ?? buildJinnServerSpec() } : {} };
   }
 
   if (Array.isArray(employeeMcp)) {
     // Employee wants only specific servers
     for (const name of employeeMcp) {
-      if (name === "jinn") {
+      if (isBuiltinMcpName(name)) {
         // The builtin is governed by the attachment decision, not availability;
         // copying here (list order) keeps the pre-017e set shape when attached.
-        if (jinnDecision.attach) servers.jinn = available.jinn ?? buildJinnServerSpec();
-        else logger.warn(`Employee ${employee?.name} requests MCP server "jinn" but it is not attached: ${jinnDecision.reason}`);
+        // Either reserved name asks for it: the list may predate the instance's switch-over.
+        if (jinnDecision.attach) servers[builtin] = available[builtin] ?? buildJinnServerSpec();
+        else logger.warn(`Employee ${employee?.name} requests MCP server "${name}" but it is not attached: ${jinnDecision.reason}`);
         continue;
       }
       if (available[name]) {
@@ -73,7 +78,7 @@ export function resolveMcpServers(
       }
     }
     // Force-on (jinnMcp: true) attaches even when the allowlist omits "jinn".
-    if (jinnDecision.attach && !servers.jinn) servers.jinn = available.jinn ?? buildJinnServerSpec();
+    if (jinnDecision.attach && !servers[builtin]) servers[builtin] = available[builtin] ?? buildJinnServerSpec();
   } else {
     // Employee gets all enabled servers (default behavior, or mcp: true)
     Object.assign(servers, available);
@@ -89,7 +94,7 @@ export function resolveMcpServers(
  */
 export function configuredMcpServerNames(globalMcp: McpGlobalConfig | undefined): string[] {
   if (!globalMcp) return [];
-  return Object.keys(buildAvailableServers(globalMcp, false));
+  return Object.keys(buildAvailableServers(globalMcp, undefined));
 }
 
 /**
@@ -121,7 +126,7 @@ export function buildJinnServerSpec(toolset?: JinnToolset): McpServerStdioConfig
  * jinn membership is decided there, never here; this function only places the
  * spec at its pre-017e position so attached sets keep their exact shape.
  */
-function buildAvailableServers(config: McpGlobalConfig, attachJinn: boolean): Record<string, McpServerConfig> {
+function buildAvailableServers(config: McpGlobalConfig, attachJinn: string | undefined): Record<string, McpServerConfig> {
   const servers: Record<string, McpServerConfig> = {};
 
   // Browser automation via Playwright
@@ -179,20 +184,20 @@ function buildAvailableServers(config: McpGlobalConfig, attachJinn: boolean): Re
   // upgraded instances with no new MCP block. `mcp.gateway.enabled: false`
   // remains the explicit kill switch.
   if (attachJinn) {
-    servers.jinn = buildJinnServerSpec();
+    servers[attachJinn] = buildJinnServerSpec();
   }
 
   // Custom user-defined MCP servers
   if (config.custom) {
     for (const [name, serverConfig] of Object.entries(config.custom)) {
       if (serverConfig.enabled === false) continue;
-      // `jinn` is a RESERVED name for the built-in gateway server. A custom server
-      // must never override it — otherwise engine adapters that treat `jinn` as the
+      // Both codenames are RESERVED names for the built-in gateway server, whichever one the
+      // instance registers it under. A custom server must never override it — otherwise engine adapters that treat `jinn` as the
       // trusted built-in (e.g. the grok/codex MCP wiring, which assume it carries no
       // secret in command/args) could serialize a user-controlled spec's secret args
       // to disk/argv. Skip a custom `jinn` with a warning (GRS-012c, Codex review).
-      if (name === "jinn") {
-        logger.warn(`Ignoring custom MCP server "jinn": that name is reserved for the built-in gateway server.`);
+      if (isBuiltinMcpName(name)) {
+        logger.warn(`Ignoring custom MCP server "${name}": that name is reserved for the built-in gateway server.`);
         continue;
       }
       const { enabled, ...rest } = serverConfig;

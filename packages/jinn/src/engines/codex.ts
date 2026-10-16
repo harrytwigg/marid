@@ -18,6 +18,7 @@ import {
   codexRateLimitFor,
 } from "./codex-transcript.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { builtinMcpNames, findBuiltinMcp, isBuiltinMcpName } from "../mcp/builtin-name.js";
 
 
 // Hard backstop so a genuinely stuck turn (no terminal event ever) can't hang
@@ -97,7 +98,7 @@ export function codexMcpConfigArgs(
     const stdio = spec as McpServerStdioConfig;
     // When a per-session CODEX_HOME is active, the builtin jinn server rides its
     // config.toml (token off argv) — don't also re-emit it on argv.
-    if (opts.skipJinn && name === "jinn" && stdio.env?.JINN_SESSION_CAPABILITY) continue;
+    if (opts.skipJinn && isBuiltinMcpName(name) && stdio.env?.JINN_SESSION_CAPABILITY) continue;
     args.push("-c", `mcp_servers.${name}.command=${JSON.stringify(command)}`);
     const cmdArgs = stdio.args ?? [];
     args.push("-c", `mcp_servers.${name}.args=[${cmdArgs.map((a) => JSON.stringify(a)).join(",")}]`);
@@ -105,7 +106,7 @@ export function codexMcpConfigArgs(
       // Only emit allowlisted non-secret env keys into argv; drop everything else
       // (potential secrets) so nothing sensitive is exposed via the process table.
       // The builtin jinn server gets its (wider, still non-secret) required set.
-      const allowlist = name === "jinn" ? CODEX_ARGV_JINN_SAFE_ENV_KEYS : CODEX_ARGV_SAFE_ENV_KEYS;
+      const allowlist = isBuiltinMcpName(name) ? CODEX_ARGV_JINN_SAFE_ENV_KEYS : CODEX_ARGV_SAFE_ENV_KEYS;
       const safe = Object.entries(stdio.env).filter(([k]) => allowlist.has(k));
       if (safe.length > 0) {
         const inline = safe.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(",");
@@ -230,7 +231,7 @@ function tomlTableName(line: string): string | undefined {
 }
 
 function isJinnMcpTable(name: string): boolean {
-  return name === "mcp_servers.jinn" || name.startsWith("mcp_servers.jinn.");
+  return builtinMcpNames().some((builtin) => name === `mcp_servers.${builtin}` || name.startsWith(`mcp_servers.${builtin}.`));
 }
 
 function stripJinnMcpStanzas(configText: string): string {
@@ -272,8 +273,9 @@ export function prepareCodexSessionHome(
   sessionId: string,
   opts: { baseDir?: string } = {},
 ): CodexSessionHome | undefined {
-  const spec = resolvedMcp?.mcpServers?.jinn as (McpServerStdioConfig & { url?: unknown }) | undefined;
-  if (!spec || typeof spec.command !== "string" || spec.url !== undefined || !spec.env?.JINN_SESSION_CAPABILITY) {
+  const builtin = findBuiltinMcp(resolvedMcp?.mcpServers);
+  const spec = builtin?.spec as (McpServerStdioConfig & { url?: unknown }) | undefined;
+  if (!builtin || !spec || typeof spec.command !== "string" || spec.url !== undefined || !spec.env?.JINN_SESSION_CAPABILITY) {
     return undefined;
   }
 
@@ -313,7 +315,7 @@ export function prepareCodexSessionHome(
     if (fs.existsSync(realConfig)) baseConfig = fs.readFileSync(realConfig, "utf8");
   } catch { /* no base config — fine, start empty */ }
   const cleanBaseConfig = stripJinnMcpStanzas(baseConfig);
-  const merged = (cleanBaseConfig.trimEnd() + "\n\n" + buildJinnMcpStanza("jinn", spec)).replace(/^\n+/, "");
+  const merged = (cleanBaseConfig.trimEnd() + "\n\n" + buildJinnMcpStanza(builtin.name, spec)).replace(/^\n+/, "");
   const cfgPath = path.join(home, "config.toml");
   fs.writeFileSync(cfgPath, merged, { mode: 0o600 });
   try { fs.chmodSync(cfgPath, 0o600); } catch { /* best effort */ }

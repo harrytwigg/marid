@@ -25,6 +25,7 @@ import {
   type RemoteOpencodeStaging,
 } from "./remote-stage.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { envNamesFor } from "../shared/codename-env.js";
 
 /**
  * Where one opencode turn runs, and what it is spawned with.
@@ -69,7 +70,7 @@ export interface OpencodeLaunchPlan {
  * `ANTHROPIC_API_KEY` would silently move the session onto metered billing.
  * opencode has no subscription to fall off.
  */
-export const REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "JINN_HOME_IDENTITY", "JINN_TAKE_PORT"];
+export const REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", ...envNamesFor(["HOME_IDENTITY", "TAKE_PORT"])];
 
 /**
  * What Marid itself sets on every opencode process, local or remote.

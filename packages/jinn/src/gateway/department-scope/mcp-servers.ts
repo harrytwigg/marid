@@ -1,5 +1,6 @@
 import type { ResolvedMcpConfig } from "../../shared/types.js";
 import { departmentRecord } from "../department-registry.js";
+import { builtinMcpNames } from "../../mcp/builtin-name.js";
 
 /**
  * The MCP set a department-scoped session may carry: the built-in `jinn` server, which
@@ -16,7 +17,7 @@ export function confineMcpToDepartment(config: ResolvedMcpConfig, department: st
 export function confineMcpToDepartment(config: ResolvedMcpConfig | undefined, department: string | null | undefined): ResolvedMcpConfig | undefined;
 export function confineMcpToDepartment(config: ResolvedMcpConfig | undefined, department: string | null | undefined): ResolvedMcpConfig | undefined {
   if (!config || !department) return config;
-  const allowed = new Set(["jinn", ...(departmentRecord(department).definition?.mcp ?? [])]);
+  const allowed = new Set([...builtinMcpNames(), ...(departmentRecord(department).definition?.mcp ?? [])]);
   const mcpServers = Object.fromEntries(Object.entries(config.mcpServers).filter(([name]) => allowed.has(name)));
   return { ...config, mcpServers };
 }
