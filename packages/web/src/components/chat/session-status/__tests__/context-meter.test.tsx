@@ -254,6 +254,53 @@ describe('ContextMeter compact flow', () => {
     }
   })
 
+  it('keeps waiting while the gateway reports the compaction as queued, and when that clears before the turn starts', async () => {
+    serve(usageFixture({ contextTokens: 182_000 }))
+    api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
+    const { update } = renderMeter()
+    await openPopover()
+    fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
+    await screen.findByRole('button', { name: /Compacting…/ })
+
+    // Queued: the gateway's own pending /compact, which is not a finished compaction.
+    serve(usageFixture({
+      contextTokens: 182_000,
+      compact: { available: false, reason: { code: 'queued', message: 'A message is already queued.' } },
+    }))
+    update({ status: 'idle', lastContextTokens: 1 })
+    await waitFor(() => expect(api.getContextUsage.mock.calls.length).toBeGreaterThan(1))
+    // The queued reason clears a beat before the session reports running.
+    serve(usageFixture({ contextTokens: 182_000 }))
+    update({ status: 'idle', lastContextTokens: 2 })
+    await waitFor(() => expect(api.getContextUsage.mock.calls.length).toBeGreaterThan(2))
+    expect(screen.queryByTestId('compact-outcome')).toBeNull()
+    expect(screen.getByRole('button', { name: /Compacting…/ }).hasAttribute('disabled')).toBe(true)
+
+    update({ loading: true, status: 'running' })
+    serve(usageFixture({ contextTokens: 31_000 }))
+    update({ loading: false, status: 'idle', lastContextTokens: 31_000 })
+    expect((await screen.findByTestId('compact-outcome')).textContent).toContain('Compacted: 182k → 31k')
+  })
+
+  it('reports a compaction that ended with the session in error as failed, not compacted', async () => {
+    serve(usageFixture({ contextTokens: 182_000 }))
+    api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
+    const { update } = renderMeter()
+    await openPopover()
+    fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
+    await screen.findByRole('button', { name: /Compacting…/ })
+    update({ loading: true, status: 'running' })
+    // A failed compaction still holds the cooldown.
+    serve(usageFixture({
+      contextTokens: 182_000,
+      compact: { available: false, reason: { code: 'cooldown', message: 'Compacted a moment ago.' }, retryAt: '2026-10-15T14:32:00.000Z' },
+    }))
+    update({ loading: false, status: 'error' })
+    const error = await screen.findByTestId('compact-error')
+    expect(error.textContent).toContain('did not complete')
+    expect(screen.queryByTestId('compact-outcome')).toBeNull()
+  })
+
   it('shows the server message when the POST is refused', async () => {
     serve(usageFixture())
     api.compactSession.mockRejectedValue(new Error('The session is busy; compact when the turn has finished.'))
