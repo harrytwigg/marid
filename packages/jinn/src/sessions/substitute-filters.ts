@@ -2,7 +2,9 @@ import type { AccountFallbackOptions } from "../shared/account-fallback.js";
 import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { engineSupportsRemote, type EngineName } from "../shared/models.js";
-import type { JinnConfig, Session } from "../shared/types.js";
+import { isRemoteTarget } from "../shared/remote-target.js";
+import type { Employee, JinnConfig, Session } from "../shared/types.js";
+import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { accountOverride } from "./session-account.js";
 import { sessionScopeDepartment } from "./session-scope.js";
 
@@ -35,4 +37,12 @@ export function accountWalkOptions(session: Session, options?: AccountFallbackOp
 /** An account's `fallbackModelMap`: the default account's lives under `engines.claude`. */
 export function fallbackModelMapOf(config: JinnConfig, account: string): Record<string, string> | undefined {
   return account === DEFAULT_CLAUDE_ACCOUNT ? config.engines.claude?.fallbackModelMap : declaredAccountByKey(config, account)?.fallbackModelMap;
+}
+
+/** The scope a session's substitutes are filtered by: department-scoped, and/or running on a remote host. */
+export function sessionSubstituteScope(
+  session: Session, employee: Employee | undefined, config: JinnConfig,
+): { scoped: boolean; remote: boolean } {
+  const remoteTarget = rateLimitRemoteTarget({ session, employee, config });
+  return { scoped: substituteScoped(session, remoteTarget), remote: isRemoteTarget(remoteTarget) };
 }

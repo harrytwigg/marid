@@ -1,6 +1,6 @@
 import type { EngineName } from "../shared/models.js";
 import { engineAvailable, getModelRegistry, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
-import { isRemoteTarget, sshDestination } from "../shared/remote-target.js";
+import { sshDestination } from "../shared/remote-target.js";
 import { isEngineExhausted, type EngineHealthReading } from "../shared/engine-health.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import {
@@ -11,9 +11,8 @@ import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import type { RemoteEngineName } from "../shared/models.js";
 import { effectiveFallbackMode } from "./session-fallback.js";
 import { rateLimitAccount, substituteHealth } from "./rate-limit-account.js";
-import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { accountOverride } from "./session-account.js";
-import { engineAllowedAsSubstitute, substituteScoped } from "./substitute-filters.js";
+import { engineAllowedAsSubstitute, sessionSubstituteScope, substituteScoped } from "./substitute-filters.js";
 import type { ChooseSubstituteInput, SubstituteChoice } from "./rate-limit-substitute.js";
 
 /**
@@ -56,7 +55,7 @@ export function fallbackTargetRefusal(
   const registry = getModelRegistry(config);
   const entry = registry[target.engine];
   if (!entry) return `unknown engine "${target.engine}"`;
-  const scope = scopeOf(config, session, employee);
+  const scope = sessionSubstituteScope(session, employee, config);
   if (!engineAllowedAsSubstitute(scope, target.engine as EngineName)) {
     return scope.scoped && target.engine !== "claude"
       ? `this session is confined to a department, so its fallback must stay on claude (not "${target.engine}")`
@@ -67,11 +66,6 @@ export function fallbackTargetRefusal(
     return `unknown model "${target.model}" for engine "${target.engine}"`;
   }
   return null;
-}
-
-function scopeOf(config: JinnConfig, session: Session, employee: Employee | undefined): { scoped: boolean; remote: boolean } {
-  const remoteTarget = rateLimitRemoteTarget({ session, employee, config });
-  return { scoped: substituteScoped(session, remoteTarget), remote: isRemoteTarget(remoteTarget) };
 }
 
 /** The account swap that keeps a claude model change on the account the session stands on. */

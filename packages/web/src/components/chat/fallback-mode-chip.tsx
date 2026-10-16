@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRightLeftIcon, CheckIcon } from 'lucide-react'
+import { ArrowRightLeftIcon, CheckIcon, ChevronRightIcon } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import type { GatewayEventListener } from '@jinn/gateway-events'
+import { FallbackTargetPicker } from './fallback-target-picker'
 import { api } from '@/lib/api'
 import {
   FALLBACK_MODE_OPTIONS,
@@ -15,6 +18,9 @@ import {
   parseFallbackView,
   fallbackChipTitle,
   withMode,
+  withTarget,
+  hasOwnTarget,
+  type FallbackTargetChoice,
   type SessionFallbackMode,
   type SessionFallbackView,
 } from './fallback-mode-model'
@@ -74,34 +80,49 @@ function useFallbackMode(sessionId: string, view: SessionFallbackView | null | u
   useEffect(() => { accept(view); if (inFlight.current === 0) setError(null) }, [viewKey])
   useFallbackResync(sessionId, subscribe, gen, accept)
 
-  const pick = (value: string) => {
-    const mode = value as SessionFallbackMode
-    if (!local || mode === local.mode) return
+  /** Send one change and show it at once; `optimistic` is the view if the server accepts it.
+   *  Resolves true when the server took it, false when it refused (the error is on the chip). */
+  const change = (body: { fallbackMode?: SessionFallbackMode; fallbackTarget?: FallbackTargetChoice | null }, optimistic: (view: SessionFallbackView) => SessionFallbackView): Promise<boolean> => {
+    if (!local) return Promise.resolve(false)
     const session = gen.current
     const mine = ++seq.current
     inFlight.current++
-    setLocal(withMode(local, mode))
+    setLocal(optimistic(local))
     setError(null)
-    api.updateSession(sessionId, { fallbackMode: mode })
+    return api.updateSession(sessionId, body)
       .then((res) => {
-        if (gen.current !== session) return
+        if (gen.current !== session) return true
         // What the server now holds, even when a newer pick has taken over the chip:
         // a later failure rolls back to it, not to the view before this pick.
-        const next = parseFallbackView(res?.fallback) ?? withMode(confirmed.current ?? local, mode)
+        const next = parseFallbackView(res?.fallback) ?? optimistic(confirmed.current ?? local)
         confirmed.current = next
         if (seq.current === mine) setLocal(next)
+        return true
       })
       .catch((err) => {
-        if (gen.current !== session || seq.current !== mine) return
+        if (gen.current !== session || seq.current !== mine) return false
         setLocal(confirmed.current ?? local)
-        setError(err instanceof Error ? err.message : 'Fallback mode update failed')
+        setError(err instanceof Error ? err.message : 'Fallback update failed')
+        return false
       })
       .finally(() => { if (gen.current === session && --inFlight.current < 0) inFlight.current = 0 })
   }
-  return { local, error, pick }
+  const pick = (value: string) => {
+    const mode = value as SessionFallbackMode
+    if (!local || mode === local.mode) return
+    void change({ fallbackMode: mode }, (view) => withMode(view, mode))
+  }
+  const pickTarget = (choice: FallbackTargetChoice | null) => change({ fallbackTarget: choice }, (view) => withTarget(view, choice))
+  return { local, error, pick, pickTarget }
 }
 
-function FallbackModeMenu({ local, error, onPick }: { local: SessionFallbackView; error: string | null; onPick: (mode: string) => void }) {
+function FallbackModeMenu({ local, error, onPick, onChooseModel, onUseConfig }: {
+  local: SessionFallbackView
+  error: string | null
+  onPick: (mode: string) => void
+  onChooseModel: () => void
+  onUseConfig: () => void
+}) {
   return (
     <>
       <div className="px-2 pt-1 pb-1.5 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
@@ -128,6 +149,22 @@ function FallbackModeMenu({ local, error, onPick }: { local: SessionFallbackView
           </DropdownMenuRadioItem>
         ))}
       </DropdownMenuRadioGroup>
+      <DropdownMenuSeparator className="bg-[var(--separator)]" />
+      <DropdownMenuItem
+        onSelect={(e) => { e.preventDefault(); onChooseModel() }}
+        className="gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)]"
+      >
+        <span className="flex-1">Choose fallback model…</span>
+        <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-[var(--text-quaternary)]" />
+      </DropdownMenuItem>
+      {hasOwnTarget(local) && (
+        <DropdownMenuItem
+          onSelect={(e) => { e.preventDefault(); onUseConfig() }}
+          className="rounded-[9px] py-1.5 px-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)]"
+        >
+          Use config fallback
+        </DropdownMenuItem>
+      )}
       {!local.target && (
         <div className="px-2 pt-1 pb-0.5 text-[length:var(--text-caption2)] text-[var(--text-quaternary)]">
           No fallback configured for this model
@@ -148,12 +185,19 @@ function FallbackModeMenu({ local, error, onPick }: { local: SessionFallbackView
  * gateway sends no `fallback` view.
  */
 export function FallbackModeChip({ sessionId, view, disabled, subscribe }: FallbackModeChipProps) {
-  const { local, error, pick } = useFallbackMode(sessionId, view, subscribe)
+  const { local, error, pick, pickTarget } = useFallbackMode(sessionId, view, subscribe)
+  // The menu is the mode list, or the model picker the "Choose fallback model…" row opens in its place.
+  const [open, setOpen] = useState(false)
+  const [panel, setPanel] = useState<'mode' | 'pick'>('mode')
+  // A target change closes the menu once the server has taken it; a refusal goes back to the list, which shows why.
+  const applyTarget = (choice: FallbackTargetChoice | null) => {
+    void pickTarget(choice).then((ok) => { if (ok) setOpen(false); else setPanel('mode') })
+  }
   if (!local) return null
   const text = fallbackChipText(local)
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={(next) => { setOpen(next); if (next) setPanel('mode') }}>
       <DropdownMenuTrigger asChild disabled={disabled}>
         {/* shrink-[100] against the model button's 1: the chip gives up its text first, and
             once it is down to its icon the model label takes the rest. Keep both factors >= 1:
@@ -190,7 +234,21 @@ export function FallbackModeChip({ sessionId, view, disabled, subscribe }: Fallb
         collisionPadding={16}
         className="w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[var(--radius-lg)] border-0 bg-[var(--bg-tertiary)] p-1.5 shadow-[var(--shadow-overlay)]"
       >
-        <FallbackModeMenu local={local} error={error} onPick={pick} />
+        {panel === 'pick' ? (
+          <FallbackTargetPicker
+            view={local}
+            onBack={() => setPanel('mode')}
+            onChoose={applyTarget}
+          />
+        ) : (
+          <FallbackModeMenu
+            local={local}
+            error={error}
+            onPick={pick}
+            onChooseModel={() => setPanel('pick')}
+            onUseConfig={() => applyTarget(null)}
+          />
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

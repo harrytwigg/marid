@@ -177,6 +177,16 @@ describe("the fallback view", () => {
     expect(view).toMatchObject({ targetSource: "config", target: { engine: "opencode" } });
   });
 
+  it("lists the installed engines the session may choose from", () => {
+    const entry = (available: boolean) => ({ available, models: [], defaultModel: "", supportsEffort: false });
+    const reg = { claude: entry(true), codex: entry(true), opencode: entry(true), pi: entry(false) } as never;
+    expect(sessionFallbackView(config, reg, makeSession()).allowedEngines).toEqual(["claude", "codex", "opencode"]);
+    // A department-scoped session stays on claude; a remote one takes the engines that run on a host.
+    expect(sessionFallbackView(config, reg, makeSession({ scopeDepartment: "ops" })).allowedEngines).toEqual(["claude"]);
+    const remoteEmployee = { name: "w", remoteHost: "build-host", remoteUser: "ci", remoteCwd: "/work" } as never;
+    expect(sessionFallbackView(config, reg, makeSession(), remoteEmployee).allowedEngines).toEqual(["claude", "opencode"]);
+  });
+
   it("keeps showing the chosen target in auto-resume", () => {
     const view = sessionFallbackView(config, registry(), makeSession({ fallbackMode: "auto-resume", fallbackTarget: { engine: "codex", model: "gpt-mini" } }));
     expect(view).toMatchObject({ mode: "auto-resume", targetSource: "session" });

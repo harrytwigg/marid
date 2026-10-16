@@ -37,6 +37,8 @@ export interface SessionFallbackView {
   modeSource: "session" | "default";
   target: SessionFallbackTarget | null;
   targetSource: "session" | "config";
+  /** The installed engines this session may choose as its own fallback target (a scoped session: claude; a remote one: the engines that run on a host). */
+  allowedEngines: string[];
 }
 
 export function isSessionFallbackMode(value: unknown): value is SessionFallbackMode {

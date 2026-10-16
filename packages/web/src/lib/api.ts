@@ -618,7 +618,7 @@ export const api = {
     )
   },
   getSessionChildren: (id: string) => get<Record<string, unknown>[]>(`/api/sessions/${id}/children`),
-  updateSession: (id: string, data: { title?: string; engine?: string; model?: string; effortLevel?: string; fallbackMode?: 'fallback' | 'fallback-children' | 'auto-resume' }) =>
+  updateSession: (id: string, data: { title?: string; engine?: string; model?: string; effortLevel?: string; fallbackMode?: 'fallback' | 'fallback-children' | 'auto-resume'; fallbackTarget?: { engine: string; model: string } | null }) =>
     put<Record<string, unknown>>(`/api/sessions/${id}`, data),
   archiveSession: (id: string) => post<Record<string, unknown>>(`/api/sessions/${id}/archive`, {}),
   unarchiveSession: (id: string) => post<Record<string, unknown>>(`/api/sessions/${id}/unarchive`, {}),

@@ -18,6 +18,8 @@ export interface ModelPickerProps {
   onPickModel: (model: string) => void
   /** Offer only some installed engines (a session's fallback may not use every one). */
   isEngineAllowed?: (engine: string) => boolean
+  /** A model pick leaves the menu open, for a parent that closes it once the pick has been accepted. */
+  keepOpenOnPick?: boolean
   /** Adds a Back row to the model panel, for a picker opened from another menu panel. */
   onBack?: () => void
   /** Rows the parent adds below the model list (effort, context), above the engine switch. */
@@ -31,7 +33,7 @@ export interface ModelPickerProps {
  * render it, so they search and list models the same way. It owns navigation and
  * search; what a pick means (apply at once, or just browse) is the parent's.
  */
-export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickModel, isEngineAllowed, onBack, children }: ModelPickerProps) {
+export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickModel, isEngineAllowed, keepOpenOnPick, onBack, children }: ModelPickerProps) {
   const queryClient = useQueryClient()
   const reduceMotion = usePrefersReducedMotion()
   const list = useModelList(registry, engine, modelId)
@@ -108,7 +110,7 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
   const mainPanel = (
     <>
       {onBack && <BackRow onBack={onBack} />}
-      <ModelListPanel engine={engine} modelId={modelId} list={list} onPickModel={onPickModel} />
+      <ModelListPanel engine={engine} modelId={modelId} list={list} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} />
       {children}
       {/* Engine switch — navigates the SAME surface to the engine panel (no nested menu). */}
       <DropdownMenuSeparator className="bg-[var(--separator)]" />

@@ -76,11 +76,13 @@ export function BackRow({ onBack }: { onBack: () => void }) {
  * badge + accent check on the selected. The list scrolls rather than growing the
  * menu, so even the expanded opencode catalog stays inside the composer.
  */
-export function ModelListPanel({ engine, modelId, list, onPickModel }: {
+export function ModelListPanel({ engine, modelId, list, onPickModel, keepOpenOnPick }: {
   engine: string
   modelId: string
   list: ModelList
   onPickModel: (model: string) => void
+  /** A model pick leaves the menu open (the parent closes it when the pick has been taken). */
+  keepOpenOnPick?: boolean
 }) {
   // The model-list scroller, so ArrowDown/Up from the search field can hand focus
   // to the first/last result. Radix's own arrow handling ignores a nested input
@@ -139,6 +141,7 @@ export function ModelListPanel({ engine, modelId, list, onPickModel }: {
                     <DropdownMenuRadioItem
                       key={m.id}
                       value={m.id}
+                      onSelect={keepOpenOnPick ? (e) => e.preventDefault() : undefined}
                       className="justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[state=checked]:font-[var(--weight-semibold)] data-[state=checked]:text-[var(--text-primary)] [&>span:first-child]:hidden"
                     >
                       <span className="flex min-w-0 flex-1 items-center gap-1.5">

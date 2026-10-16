@@ -9,10 +9,10 @@ import {
   type SessionFallbackMode, type SessionFallbackTarget, type SessionFallbackView, type StoredFallbackTarget,
 } from "../shared/session-fallback-config.js";
 import type { Employee, JinnConfig, ModelRegistry, Session } from "../shared/types.js";
-import type { EngineName } from "../shared/models.js";
+import { isKnownEngine, type EngineName } from "../shared/models.js";
 import { rateLimitAccount } from "./rate-limit-account.js";
 import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
-import { accountWalkOptions, engineAllowedAsSubstitute, fallbackModelMapOf, substituteScoped } from "./substitute-filters.js";
+import { accountWalkOptions, engineAllowedAsSubstitute, fallbackModelMapOf, sessionSubstituteScope, substituteScoped } from "./substitute-filters.js";
 
 /**
  * Per-session usage-limit behaviour (`fallbackMode`): which mode a session
@@ -128,6 +128,14 @@ function ownTarget(registry: ModelRegistry, own: StoredFallbackTarget): SessionF
   return { engine: own.engine, model: own.model, label };
 }
 
+/** The installed engines this session may name as its own fallback: the substitute walk's filters. */
+function allowedFallbackEngines(config: JinnConfig, registry: ModelRegistry, session: Session, employee?: Employee): string[] {
+  const scope = sessionSubstituteScope(session, employee, config);
+  return Object.entries(registry)
+    .filter(([name, entry]) => entry.available && isKnownEngine(name) && engineAllowedAsSubstitute(scope, name))
+    .map(([name]) => name);
+}
+
 /** What `GET /api/sessions/:id` reports for fallback. */
 export function sessionFallbackView(
   config: JinnConfig,
@@ -136,6 +144,7 @@ export function sessionFallbackView(
   employee?: Employee,
 ): SessionFallbackView {
   const { mode, source } = effectiveFallbackMode(config, session);
-  if (session.fallbackTarget) return { mode, modeSource: source, target: ownTarget(registry, session.fallbackTarget), targetSource: "session" };
-  return { mode, modeSource: source, target: resolveSessionFallbackTarget(config, registry, session, employee), targetSource: "config" };
+  const allowedEngines = allowedFallbackEngines(config, registry, session, employee);
+  if (session.fallbackTarget) return { mode, modeSource: source, target: ownTarget(registry, session.fallbackTarget), targetSource: "session", allowedEngines };
+  return { mode, modeSource: source, target: resolveSessionFallbackTarget(config, registry, session, employee), targetSource: "config", allowedEngines };
 }
