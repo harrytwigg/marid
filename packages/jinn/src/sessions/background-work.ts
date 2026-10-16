@@ -38,6 +38,17 @@ export function isBackgroundWorkLive(info: RuntimeActivityInfo | undefined): boo
   return info.backgroundRerun === true || (info.backgroundAgents ?? 0) > 0;
 }
 
+/**
+ * Whether the engine still counts a background task the session launched: a
+ * shell task or a sub-agent. The question is only whether a turn that just
+ * ended was a wait for that task, so it is wider than isBackgroundWorkLive
+ * (which leaves out shell tasks that may never end, to keep status honest) and
+ * leaves out a re-run in progress: a re-run's own reply is the answer, not a wait.
+ */
+export function isAwaitingOwnBackgroundTask(info: RuntimeActivityInfo | undefined): boolean {
+  return !!info && ((info.activeMonitors ?? 0) > 0 || (info.backgroundAgents ?? 0) > 0);
+}
+
 /** Whether the transport is busy: any model request in flight, auxiliary ones
  *  included, or live background work between requests. Wider than
  *  isBackgroundWorkLive, which decides the status every reader acts on. */

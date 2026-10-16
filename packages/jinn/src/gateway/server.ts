@@ -23,6 +23,7 @@ import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunnin
 import { initDb } from "../shared/db.js";
 import { SessionManager, type RouteOptions } from "../sessions/manager.js";
 import { recoverSessionDeliveryStateOnStartup } from "../sessions/callbacks.js";
+import { reviewHeldInterimRepliesOnTodoStatusChange, reviewHeldInterimReply } from "../sessions/held-replies.js";
 import { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { enforcePtyIdleCap, ptyIdleCapForHost, PtyLifecycleManager, type PtyLifecycleOpts } from "../engines/pty-lifecycle.js";
 import { CodexEngine, startCodexSessionHomeSweeps } from "../engines/codex.js";
@@ -48,7 +49,7 @@ import { HookRegistry } from "./hook-registry.js";
 import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
 import { reconcileWorkItemsOnStartup, startWorkItemReconciler } from "../work-items/reconcile.js";
-import { setTodoLiveEmitter } from "../work-items/live-events.js";
+import { setTodoLiveEmitter, setTodoStatusChangeListener } from "../work-items/live-events.js";
 import { cleanupSessionSettings } from "../shared/claude-settings.js";
 import { bootClaudeProfiles } from "./claude-profile-boot.js";
 import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
@@ -804,6 +805,10 @@ export async function startGateway(
   // ICI-570: in-process Todo writes (cron mints, session-lifecycle reconciles)
   // reach the dashboard through the same company:changed lane the routes use.
   setTodoLiveEmitter((event) => emit("company:changed", event));
+  // A child's reply held while it waited on its own background work goes out
+  // once its Todo leaves execution, even if a task it launched never ends.
+  // The listener is a single slot: a second user must fan out from here.
+  setTodoStatusChangeListener(reviewHeldInterimRepliesOnTodoStatusChange);
 
   const backgroundRefreshes = startBackgroundRefreshes(() => currentConfig, emit);
 
@@ -837,7 +842,12 @@ export async function startGateway(
     emit,
   });
   for (const engine of new Set(Object.values(ptyViewEngines))) {
-    (engine as RuntimeActivitySource).onRuntimeActivity?.(handleRuntimeActivity);
+    // After the map is current: a held child reply goes out once the tasks it
+    // waited on are over and no newer reply supersedes it.
+    (engine as RuntimeActivitySource).onRuntimeActivity?.((sessionId, info) => {
+      handleRuntimeActivity(sessionId, info);
+      reviewHeldInterimReply(sessionId);
+    });
   }
 
   // Unsolicited-Stop consumer: a Stop hook nobody claims within the registry's

@@ -91,7 +91,22 @@ vi.mock("../registry.js", () => ({
   listPendingSessionDeliveries: callbackDeliveryMockState.listPending,
   ensureCallbackAttemptToken: vi.fn(() => "legacy-attempt-token"),
   consumeChildReportedToParent: vi.fn(() => true),
+  holdInterimReply: vi.fn((id: string, held: { text: string; workItemId: string; at: number }, cap: number) => {
+    const current = interimHeld.get(id);
+    const count = current && current.workItemId === held.workItemId ? current.count : 0;
+    if (count >= cap) return false;
+    interimHeld.set(id, { ...held, count: count + 1 });
+    return true;
+  }),
+  takeHeldInterimReply: vi.fn((id: string) => {
+    const held = interimHeld.get(id);
+    interimHeld.delete(id);
+    return held;
+  }),
+  listHeldInterimReplySessionIds: vi.fn(() => [...interimHeld.keys()]),
 }));
+
+const interimHeld = vi.hoisted(() => new Map<string, { count: number; text: string; at: number; workItemId: string }>());
 
 vi.mock("../../work-items/store.js", () => ({
   getWorkItem: vi.fn(),
@@ -110,9 +125,11 @@ vi.mock("../../shared/logger.js", () => ({
   },
 }));
 
-import { __resetCallbackRetrySweepForTest, notifyManagerVisibility, notifyParentOfExternalTurn, notifyParentSession, notifyRateLimitResumed, recoverOrphanedDelegationCompletionClaims, recoverPendingSessionDeliveries } from "../callbacks.js";
+import { HELD_REPLY_MAX_AGE_MS, HELD_REPLY_SETTLE_MS, INTERIM_RELAY_HOLD_CAP, reviewHeldInterimReply, reviewHeldInterimRepliesForWorkItem, flushHeldInterimReply } from "../held-replies.js";
+import { __resetCallbackRetrySweepForTest, recoverSessionDeliveryStateOnStartup, notifyManagerVisibility, notifyParentOfExternalTurn, notifyParentSession, notifyParentSessionAndWait, notifyRateLimitResumed, recoverOrphanedDelegationCompletionClaims, recoverPendingSessionDeliveries } from "../callbacks.js";
 import { claimSessionDelivery, consumeChildReportedToParent, getSession, listDelegationCompletionNudgedSessions, markDelegationCompletionSurfaced } from "../registry.js";
 import { getWorkItem } from "../../work-items/store.js";
+import { runtimeActivity } from "../background-work.js";
 import type { Session } from "../../shared/types.js";
 
 function makeSession(overrides: Partial<Session> = {}): Session {
@@ -151,6 +168,8 @@ beforeEach(() => {
   callbackDeliveryMockState.deliveries.clear();
   callbackDeliveryMockState.nextId = 1;
   vi.mocked(claimSessionDelivery).mockClear();
+  interimHeld.clear();
+  runtimeActivity.clear();
 });
 
 afterEach(() => {
@@ -959,5 +978,239 @@ describe("notifyParentOfExternalTurn", () => {
     expect(body.message).toContain("Still waiting on two reviewers.");
     expect(body.message).not.toContain("Delegation completion contract");
     expect(body.block).toMatchObject({ op: "patch", block: { id: "dg-TST-64", type: "delegation", status: "done" } });
+  });
+});
+
+describe("interim replies of a child waiting on its own background work", () => {
+  let fetchSpy: ReturnType<typeof vi.fn>;
+  const waiting = (info: Record<string, unknown> = { activeMonitors: 1 }) =>
+    runtimeActivity.set("child-001", { activeStreams: 0, lastActivityAt: Date.now(), ...info });
+  const child = (overrides: Partial<Session> = {}) => makeSession({
+    workItemId: "wi-open",
+    transportMeta: { delegationCompletionTracked: true },
+    ...overrides,
+  });
+  const parentWakes = () => fetchSpy.mock.calls.filter(([url]) => String(url).endsWith("/api/sessions/parent-001/message"));
+  const woken = () => parentWakes().map(([, init]) => JSON.parse(init.body).message as string);
+
+  beforeEach(() => {
+    fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    vi.mocked(getSession).mockImplementation((id: string) =>
+      id === "child-001" ? child() : makeSession({ id: "parent-001", parentSessionId: null, status: "idle" }),
+    );
+    vi.mocked(getWorkItem).mockReset().mockReturnValue({ id: "wi-open", status: "executing", source: "delegation" } as never);
+    vi.mocked(listDelegationCompletionNudgedSessions).mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    globalThis.fetch = originalFetch as typeof fetch;
+  });
+
+  it("wakes the parent once for three interim turn ends and one final report", async () => {
+    waiting();
+    await notifyParentSessionAndWait(child(), { result: "Build is still running in the background. I'll report once it's done." });
+    await notifyParentOfExternalTurn(child(), "Build passed. Tests started; still running.", "turn-2");
+    waiting({ activeMonitors: 2 });
+    await notifyParentOfExternalTurn(child(), "Waiting for the reviewer's verdict.", "turn-3");
+    expect(parentWakes()).toHaveLength(0);
+    // Holding is silent: no completion-contract nudge goes back to the child either.
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    runtimeActivity.clear();
+    await notifyParentOfExternalTurn(child(), "All checks pass. PR is up.", "turn-4");
+
+    expect(woken()).toHaveLength(1);
+    expect(woken()[0]).toContain("All checks pass. PR is up.");
+    expect(interimHeld.size).toBe(0);
+  });
+
+  it("relays a question or a blocker even while a task is still open and the Todo is executing", async () => {
+    waiting();
+    await notifyParentOfExternalTurn(child(), "Waiting on the build. Should I also rerun the lint?", "question");
+    await notifyParentOfExternalTurn(child(), "Blocked on missing credentials; waiting for you.", "blocked");
+    expect(woken()).toHaveLength(2);
+    expect(interimHeld.size).toBe(0);
+  });
+
+  describe("a held reply goes out when what it waited on is over", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    });
+    const report = "Pass. Suite 812/0, tsc clean. Dev server still running in the background on 4100.";
+
+    it("relays a final report written while a task ran, once the task count reaches zero", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), report, "turn-1");
+      expect(parentWakes()).toHaveLength(0);
+
+      runtimeActivity.clear();
+      reviewHeldInterimReply("child-001");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS - 1);
+      expect(parentWakes()).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(woken()).toEqual([expect.stringContaining(report)]);
+      expect(interimHeld.size).toBe(0);
+    });
+
+    it("lets a newer reply in the settle window supersede the held one", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), "Build started; waiting on it.", "turn-1");
+      runtimeActivity.clear();
+      reviewHeldInterimReply("child-001");
+      await notifyParentOfExternalTurn(child(), "All checks pass. PR is up.", "turn-2");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(woken()).toEqual([expect.stringContaining("All checks pass. PR is up.")]);
+    });
+
+    it("waits out a re-run, and stands down when a task is counted again", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), "Build started; waiting on it.", "turn-1");
+      waiting({ activeMonitors: 0, backgroundRerun: true });
+      reviewHeldInterimReply("child-001");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+
+      waiting({ activeMonitors: 0 });
+      reviewHeldInterimReply("child-001");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS / 2);
+      waiting();
+      reviewHeldInterimReply("child-001");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+      expect(interimHeld.size).toBe(1);
+    });
+
+    it("relays when the child's Todo leaves execution, though a task it launched still runs", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), report, "turn-1");
+      reviewHeldInterimRepliesForWorkItem("wi-open");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+
+      vi.mocked(getWorkItem).mockReturnValue({ id: "wi-open", status: "in_review", source: "delegation" } as never);
+      reviewHeldInterimRepliesForWorkItem("wi-other");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+      reviewHeldInterimRepliesForWorkItem("wi-open");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS);
+      expect(woken()).toEqual([expect.stringContaining(report)]);
+    });
+
+    it("leaves a held reply to the turn the child is running when its Todo closes", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), "Build started; waiting on it.", "turn-1");
+      vi.mocked(getSession).mockImplementation((id: string) =>
+        id === "child-001" ? child({ status: "running" }) : makeSession({ id: "parent-001", parentSessionId: null, status: "idle" }),
+      );
+      vi.mocked(getWorkItem).mockReturnValue({ id: "wi-open", status: "in_review", source: "delegation" } as never);
+      reviewHeldInterimRepliesForWorkItem("wi-open");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+
+      // That turn's reply is the one the parent hears.
+      await notifyParentSessionAndWait(child({ attemptToken: "attempt-002" }), { result: "Done: PR is up for review." });
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(woken()).toEqual([expect.stringContaining("Done: PR is up for review.")]);
+    });
+  });
+
+  it("holds a background sub-agent wait, but a re-run's own reply is not a wait", async () => {
+    waiting({ activeMonitors: 0, backgroundAgents: 1 });
+    await notifyParentSessionAndWait(child(), { result: "Reviewers launched; waiting for them." });
+    expect(parentWakes()).toHaveLength(0);
+
+    waiting({ activeMonitors: 0, backgroundAgents: 0, backgroundRerun: true });
+    await notifyParentOfExternalTurn(child(), "Reviewer reported; waiting on the second.", "rerun");
+    expect(parentWakes()).toHaveLength(1);
+  });
+
+  it("never holds an error, and relays once the child's Todo is no longer open", async () => {
+    waiting();
+    await notifyParentSessionAndWait(child(), { error: "engine crashed" });
+    expect(parentWakes()).toHaveLength(1);
+
+    vi.mocked(getWorkItem).mockReturnValue({ id: "wi-open", status: "in_review", source: "delegation" } as never);
+    await notifyParentOfExternalTurn(child(), "Waiting on the build.", "turn-2");
+    expect(parentWakes()).toHaveLength(2);
+  });
+
+  it("relays as before for a child with no Todo, or with nothing running", async () => {
+    waiting();
+    await notifyParentSessionAndWait(makeSession(), { result: "No Todo, still waiting." });
+    runtimeActivity.clear();
+    await notifyParentSessionAndWait(child({ attemptToken: "attempt-002" }), { result: "Nothing running, waiting." });
+    expect(parentWakes()).toHaveLength(2);
+  });
+
+  it("relays when holding itself fails, instead of throwing out of the turn", async () => {
+    waiting();
+    vi.mocked(getWorkItem).mockImplementationOnce(() => { throw new Error("db locked"); });
+    await expect(notifyParentSessionAndWait(child(), { result: "Waiting on the build." })).resolves.toBeUndefined();
+    expect(parentWakes()).toHaveLength(1);
+  });
+
+  it("lets the next reply through once the hold cap is spent, then starts counting again", async () => {
+    waiting();
+    for (let i = 0; i < INTERIM_RELAY_HOLD_CAP; i++) {
+      await notifyParentOfExternalTurn(child(), `Still waiting on the run ${i}.`, `held-${i}`);
+    }
+    expect(parentWakes()).toHaveLength(0);
+    await notifyParentOfExternalTurn(child(), "Still waiting on the run, over the cap.", "over-cap");
+    expect(parentWakes()).toHaveLength(1);
+    expect(interimHeld.size).toBe(0);
+  });
+
+  it("starts the count over for a new Todo", async () => {
+    waiting();
+    for (let i = 0; i < INTERIM_RELAY_HOLD_CAP; i++) {
+      await notifyParentOfExternalTurn(child(), `Still waiting on the run ${i}.`, `held-${i}`);
+    }
+    vi.mocked(getWorkItem).mockReturnValue({ id: "wi-next", status: "executing", source: "delegation" } as never);
+    await notifyParentOfExternalTurn(child({ workItemId: "wi-next" }), "Waiting on the next build.", "next-todo");
+    expect(parentWakes()).toHaveLength(0);
+    expect(interimHeld.get("child-001")).toMatchObject({ workItemId: "wi-next", count: 1 });
+  });
+
+  it("relays the newest held reply once its time is up with nothing newer", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    waiting();
+    await notifyParentSessionAndWait(child(), { result: "Build started; waiting on it." });
+    await notifyParentOfExternalTurn(child(), "Tests running; still waiting.", "turn-2");
+    expect(parentWakes()).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(HELD_REPLY_MAX_AGE_MS + 1_000);
+    expect(woken()).toHaveLength(1);
+    expect(woken()[0]).toContain("Tests running; still waiting.");
+    expect(interimHeld.size).toBe(0);
+    await expect(flushHeldInterimReply("child-001")).resolves.toBe(false);
+  });
+
+  it("relays a reply held before a restart when the gateway starts", async () => {
+    waiting();
+    await notifyParentSessionAndWait(child(), { result: "Build started; waiting on it." });
+    runtimeActivity.clear();
+    expect(parentWakes()).toHaveLength(0);
+
+    // The mocked outbox never accepts a row, so empty it: only the held reply is under test.
+    callbackDeliveryMockState.deliveries.clear();
+    await recoverSessionDeliveryStateOnStartup();
+    expect(woken()).toHaveLength(1);
+    expect(woken()[0]).toContain("Build started; waiting on it.");
+  });
+
+  it("does not leave a stale held reply behind when a later reply relays", async () => {
+    waiting();
+    await notifyParentOfExternalTurn(child(), "Build started; waiting on it.", "turn-1");
+    expect(interimHeld.size).toBe(1);
+    runtimeActivity.clear();
+    await notifyParentOfExternalTurn(child(), "All checks pass; PR is up.", "turn-2");
+    expect(interimHeld.size).toBe(0);
+    fetchSpy.mockClear();
+    callbackDeliveryMockState.deliveries.clear();
+    await recoverSessionDeliveryStateOnStartup();
+    expect(woken()).toHaveLength(0);
   });
 });
