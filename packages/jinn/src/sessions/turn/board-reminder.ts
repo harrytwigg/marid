@@ -13,8 +13,8 @@ import type { JinnConfig } from "../../shared/types.js";
 export const DEFAULT_BOARD_REMINDER =
   "Todo board: check status with get_work_item before changing it. "
   + "`executing` means you are working the Todo right now (feedback on in_review too). "
-  + "NEVER end a turn, or wait on a person or dependency, with the Todo in `executing`. "
-  + "Waiting, or ending your turn with a question or decision for the operator: first move it to `blocked`, "
+  + "While child Todos, delegations or QA you started are running, stay `executing` and end your turn; results wake you. "
+  + "Any other wait, or a question or decision for the operator: first move it to `blocked`, "
   + "keep the assignee, note who, what and your recommendation, and @mention the operator for a decision. "
   + "Unblocked: executing. "
   + "Finished: in_review + note.";
