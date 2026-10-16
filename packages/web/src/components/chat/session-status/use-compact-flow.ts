@@ -5,6 +5,7 @@ import { contextUsageApi, type ContextUsageWire } from '@/lib/api-context-usage'
 import { useSessionContextUsage } from '@/hooks/use-session-context-usage'
 import { fmtK } from '@/lib/context-usage'
 import { shownTokens } from './context-meter-model'
+import { useSettlingLiveTokens } from './use-settling-live-tokens'
 
 export type CompactPhase =
   | { kind: 'idle' }
@@ -116,7 +117,8 @@ export function useCompactFlow({ sessionId, loading, status, lastContextTokens, 
   })
   const data = query.data
   const run = useRef<CompactRun>({ pre: null, sawActive: false, settling: false })
-  const shown = shownTokens(data, liveContextTokens)
+  const live = useSettlingLiveTokens(loading, liveContextTokens, query.dataUpdatedAt)
+  const shown = shownTokens(data, live)
 
   const start = useCallback(async () => {
     run.current = { pre: shown, sawActive: false, settling: false }
@@ -144,5 +146,5 @@ export function useCompactFlow({ sessionId, loading, status, lastContextTokens, 
     setPhase((p) => (p.kind === 'done' || p.kind === 'error' ? { kind: 'idle' } : p))
   }, [])
 
-  return { data, phase, start, dismiss, shown }
+  return { data, phase, start, dismiss, shown, live }
 }

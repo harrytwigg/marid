@@ -129,6 +129,20 @@ describe('ContextMeter ring', () => {
     expect((await screen.findByTestId('context-meter-text')).textContent).toContain('5%')
   })
 
+  it('keeps the streamed figure when a turn ends until the post-turn refetch lands', async () => {
+    serve(usageFixture({ contextTokens: 10_000 }))
+    const { update } = renderMeter({ loading: true, status: 'running', liveContextTokens: 160_000 })
+    expect((await screen.findByTestId('context-meter-text')).textContent).toContain('80%')
+    let land: (data: ContextUsageWire) => void = () => {}
+    api.getContextUsage.mockImplementation(() => new Promise<ContextUsageWire>((resolve) => { land = resolve }))
+    update({ loading: false, status: 'idle', lastContextTokens: 162_000 })
+    // The fetched answer is still the pre-turn 10k: the ring must not fall back to 5% in between.
+    expect(screen.getByTestId('context-meter-text').textContent).toContain('80%')
+    await waitFor(() => expect(api.getContextUsage).toHaveBeenCalled())
+    await act(async () => { land(usageFixture({ contextTokens: 162_000 })) })
+    await waitFor(() => expect(screen.getByTestId('context-meter-text').textContent).toContain('81%'))
+  })
+
   it('refetches when the session status or last size changes', async () => {
     serve(usageFixture())
     const { update } = renderMeter({ status: 'running', lastContextTokens: 1 })
