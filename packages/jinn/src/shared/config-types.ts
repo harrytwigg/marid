@@ -9,6 +9,7 @@ import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { AutoCompactConfig } from "./auto-compact-config.js";
 import type { ContextConfig } from "./context-config.js";
+import type { SessionFallbackMode } from "./session-fallback-config.js";
 import type { ClaudeAccountConfig } from "./claude-accounts-config.js";
 import type { EngineName } from "./models.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
@@ -191,6 +192,10 @@ export interface JinnConfig {
     rateLimitStrategy?: "wait" | "fallback";
     /** Engine to use when rateLimitStrategy="fallback". Default: "codex" */
     fallbackEngine?: "codex";
+    /** What a session without its own setting does at a usage limit (session-fallback-config.ts).
+     *  Default "fallback". Children of a `fallback` session get `auto-resume`;
+     *  "fallback-children" restores tree-wide fallback. */
+    fallbackMode?: SessionFallbackMode;
   };
   cron?: {
     defaultDelivery?: CronDelivery;

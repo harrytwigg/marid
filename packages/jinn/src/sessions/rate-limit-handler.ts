@@ -112,7 +112,11 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   // repository deliberately never cloned there. A chain with nothing left in it
   // falls through to Branch B, which waits the limit out where the work lives.
   const remote = isRemoteTarget(remoteTarget) ? remoteTarget : undefined;
-  const choice = chooseSubstitute({ config, engines, session, employee, account, remote, remoteTarget });
+  // The mode is read from the stored row, not the turn-start snapshot: it may have been changed while this turn ran.
+  const live = getSession(session.id);
+  const choice = chooseSubstitute({
+    config, engines, session: live ? { ...session, fallbackMode: live.fallbackMode } : session, employee, account, remote, remoteTarget,
+  });
   const substituteName = choice?.engine;
   const substituteEngine = substituteName ? engines.get(substituteName) : undefined;
   if (!substituteName && remote) {

@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import { initDb } from "../shared/db.js";
 import { logger } from "../shared/logger.js";
-import type { ChatBlockEnvelope, Employee, JsonObject, Session, WorkItemLinkRole } from "../shared/types.js";
+import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
+import type { ChatBlockEnvelope, Employee, JinnConfig, JsonObject, Session, WorkItemLinkRole } from "../shared/types.js";
+import { effectiveFallbackMode } from "../sessions/session-fallback.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
 import { deliverClaimedSessionDelivery } from "../sessions/callbacks.js";
 import { applyBlockEnvelope, claimSessionDelivery, getSession, getSessionDeliveryByQueueItemId, updateSession } from "../sessions/registry.js";
@@ -219,6 +221,11 @@ export function delegationLoopError(workItemId: string, reused: Session, delegat
       + `this delegation there would make the two report to each other. Ask that session, or the operator, instead.`;
 }
 
+/** What a session was started with, as a delegation answer reports it. */
+function storedChoices(session: Session): JsonObject {
+  return { model: session.model ?? null, effortLevel: session.effortLevel ?? null, fallbackMode: session.fallbackMode ?? null };
+}
+
 /** The route's answer for a retry whose key a first call already used. */
 export function delegationReplayBody(replay: Session, reused: boolean): JsonObject {
   const replayItem = replay.workItemId ? getWorkItem(replay.workItemId) : undefined;
@@ -227,8 +234,7 @@ export function delegationReplayBody(replay: Session, reused: boolean): JsonObje
     sessionId: replay.id,
     employee: replay.employee ?? null,
     engine: replay.engine,
-    model: replay.model ?? null,
-    effortLevel: replay.effortLevel ?? null,
+    ...storedChoices(replay),
     status: replay.status,
     title: replayItem?.title ?? replay.title ?? null,
     replayed: true,
@@ -236,7 +242,8 @@ export function delegationReplayBody(replay: Session, reused: boolean): JsonObje
   };
 }
 
-export interface DelegationSelection { engine: string; model?: string; effortLevel?: string }
+/** What a delegation resolved to. `fallbackMode` is only the one the request named: an inherited default is not a request. */
+export interface DelegationSelection { engine: string; model?: string; effortLevel?: string; fallbackMode?: SessionFallbackMode }
 
 /**
  * The route's answer for a delegation that landed in a live session. The
@@ -248,14 +255,21 @@ function selectionOf(selection: { engine: string; model?: string | null; effortL
   return { engine: selection.engine, model: selection.model ?? null, effortLevel: selection.effortLevel ?? null };
 }
 
-export function reusedDelegationBody(workItemId: string, reused: Session, title: string, requested: DelegationSelection): JsonObject {
+/** The live session's effective mode, named only when the delegation asked for one to compare it with. */
+function keptMode(requested: DelegationSelection, current: Session, config: Pick<JinnConfig, "sessions">): { fallbackMode?: SessionFallbackMode } {
+  return requested.fallbackMode ? { fallbackMode: effectiveFallbackMode(config, current).mode } : {};
+}
+
+export function reusedDelegationBody(
+  workItemId: string, reused: Session, title: string, requested: DelegationSelection, config: Pick<JinnConfig, "sessions">,
+): JsonObject {
   const current = getSession(reused.id) ?? reused;
-  const kept = selectionOf(current);
-  const asked = selectionOf(requested);
+  const kept = { ...selectionOf(current), ...keptMode(requested, current, config) };
+  const asked = { ...selectionOf(requested), ...(requested.fallbackMode ? { fallbackMode: requested.fallbackMode } : {}) };
   const differs = JSON.stringify(kept) !== JSON.stringify(asked);
   if (differs) logger.info(`Delegation ${workItemId}: session ${reused.id} keeps ${JSON.stringify(kept)}; the delegation resolved to ${JSON.stringify(asked)}`);
   return {
-    workItemId, sessionId: reused.id, employee: current.employee ?? null, ...kept, status: current.status, title, reused: true,
+    workItemId, sessionId: reused.id, employee: current.employee ?? null, ...kept, fallbackMode: current.fallbackMode ?? null, status: current.status, title, reused: true,
     ...(differs ? { selectionIgnored: asked } : {}),
   };
 }

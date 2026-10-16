@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4180;
+const MAX_MANIFEST_TOKENS = 4313;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -249,9 +249,18 @@ const ATTESTED = {
   // `dueAt`. 18 tokens on every wrapper, and there is still no dead prose on
   // this surface to buy them back with, so the ceiling moves by exactly that
   // and Pi stays one under it.
-  rpc: { tokens: 3844, sha256: "2533e9a6be4b34613067269421d0712b1ce2fe6692ff116ca1ba339aef4e8062" },
-  pi: { tokens: 4179, sha256: "ef9fd1eea4a86708df55572d7eb8f0a8d4e8840b17d12b1d6fa78da882ff0cbc" },
-  openai: { tokens: 3983, sha256: "e7c0c042aa090140ca44262c8a32a999d030d8da647493239f2e195c78fd8b63" },
+  // Rebased for `fallbackMode` on delegate_task and spawn_session: what a new
+  // session does at a usage limit (fallback, fallback-children, auto-resume),
+  // with one sentence of description naming the three values and the default a
+  // child gets. The default is not obvious (it depends on the caller's own mode),
+  // so the sentence cannot be dropped without a model guessing, and the enum is
+  // what lets the gateway's refusal be the only validation. 133 tokens on every
+  // wrapper, two properties of about 66 each; the description is the same text
+  // on both tools because a model reads one and expects the other to match. The
+  // ceiling moves by exactly the 133 and Pi stays one under it.
+  rpc: { tokens: 3977, sha256: "b503214626e25f935ffcc5ebb9f1a993ffb8fa510fb8d71cd26bc0d98a7f0b3e" },
+  pi: { tokens: 4312, sha256: "0b37f9c77dedca7c53d87909e59c25aaf315486515dbd0229b6bb963a523c25f" },
+  openai: { tokens: 4116, sha256: "1388408de5f967eda66e4939fd9e6d979ddb448fff88d56c44d276605f851047" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;
