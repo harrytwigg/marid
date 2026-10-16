@@ -12,6 +12,7 @@ import { ChatEmployeePicker } from '@/components/chat/chat-employee-picker'
 import { ChatHydrationOverlay, useHydrationSpinner } from '@/components/chat/chat-hydration'
 import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-session-queue'
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
+import { useSubagentView } from '@/components/chat/use-subagent-view'
 import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
 import { FallbackModeChip } from './fallback-mode-chip'
 import { parseFallbackView } from './fallback-mode-model'
@@ -435,6 +436,7 @@ export function ChatPane({
     backgroundActivity, delegatedActivity, paneTitle, paneEmployee, portalName })
   const titleBarViewControls = paneViewControls(titleBarState.session, engineRegistry)
   const paneDelegatedActivity = (titleBarState.session.delegatedActivity as DelegatedActivity | null | undefined) ?? null
+  const subagentView = useSubagentView(sessionId)
   // A terminal session is its shell and nothing else: no transcript, no composer.
   const terminalPane = sessionId && (terminal || isTerminalSession(currentSession)) ? sessionId : null
   // A document tab of this pane's group is showing (a file, a Todo): it covers the chat, which stays
@@ -555,6 +557,7 @@ export function ChatPane({
               delegatedActivity={paneDelegatedActivity}
               employeeDisplayNames={employeeDisplayNames}
               sessionId={sessionId}
+              onOpenSubagent={subagentView.open}
             />
           ) : undefined
         }
@@ -603,6 +606,7 @@ export function ChatPane({
         </div>
       ) : null}
       </div>
+      {subagentView.node}
     </div>
   )
 }
