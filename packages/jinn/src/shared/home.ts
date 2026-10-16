@@ -1,20 +1,32 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { NAMES } from "./codename.js";
+import { NAMES, currentInstanceName, legacyHomePath } from "./codename.js";
 import { readEnv } from "./codename-env.js";
 
 /** Resolve the current instance home at call time, before eager path constants. */
 export function resolveJinnHome(env: NodeJS.ProcessEnv = process.env): string {
   const home = readEnv(env, "HOME");
   if (home) return path.resolve(home);
-  const instance = readEnv(env, "INSTANCE") || NAMES.codename;
+  // An instance an older build named (`jinn-x`) lives, under this build's naming, at the home of the current name.
+  const instance = currentInstanceName(readEnv(env, "INSTANCE") || NAMES.codename);
   return path.resolve(path.join(os.homedir(), `.${instance}`));
 }
 
 /** Resolve the canonical default home without applying instance overrides. */
 export function resolveDefaultJinnHome(): string {
   return path.resolve(path.join(os.homedir(), `.${NAMES.codename}`));
+}
+
+/**
+ * Whether `home` is the default instance's home: at the current name, or still at the legacy one an
+ * older build used (a container's volume mount keeps its path, and a home not yet moved is there too).
+ * A symlink left at the old path after a move names the same directory, so the comparison is by identity.
+ */
+export function isDefaultHome(home: string): boolean {
+  const identity = resolveHomeIdentity(home);
+  const current = resolveDefaultJinnHome();
+  return [current, legacyHomePath(current)].some((candidate) => resolveHomeIdentity(candidate) === identity);
 }
 
 /** The comparable identity of a home: two paths naming one directory resolve equal. */
@@ -55,12 +67,12 @@ export function claudeJsonPath(): string {
  */
 export function resolveJinnInstance(jinnHome?: string): string {
   const instance = readEnv(process.env, "INSTANCE");
-  if (instance) return instance;
+  if (instance) return currentInstanceName(instance);
   const home = jinnHome ?? readEnv(process.env, "HOME");
   if (home) {
     const base = path.basename(path.resolve(home));
     const name = base.startsWith(".") ? base.slice(1) : base;
-    if (name) return name;
+    if (name) return currentInstanceName(name);
   }
   return NAMES.codename;
 }

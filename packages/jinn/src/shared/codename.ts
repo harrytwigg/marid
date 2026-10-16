@@ -15,6 +15,7 @@
  * `codename-constant.js`, which holds the one literal.
  */
 
+import path from "node:path";
 import { CODENAME } from "./codename-constant.js";
 
 export { CODENAME };
@@ -74,4 +75,35 @@ export function legacyInstanceName(name: string, names: Names = NAMES): string {
   if (name === names.codename) return LEGACY_CODENAME;
   if (name.startsWith(`${names.codename}-`)) return `${LEGACY_CODENAME}-${name.slice(names.codename.length + 1)}`;
   return name;
+}
+
+/** Whether two instance names, in either spelling, name the same instance. */
+export function sameInstanceName(a: string, b: string, names: Names = NAMES): boolean {
+  return currentInstanceName(a, names) === currentInstanceName(b, names);
+}
+
+/** Whether `name` is the default instance's name, in either spelling. */
+export function isDefaultInstanceName(name: string, names: Names = NAMES): boolean {
+  return currentInstanceName(name, names) === names.codename;
+}
+
+/**
+ * The directory a home an older build named would have under this build's naming: the dotted
+ * directory name `.jinn-<slug>` becomes `.<codename>-<slug>` in the same parent. A path whose last
+ * segment never carried the codename (a home the operator put wherever they liked) is returned as it is.
+ */
+export function currentHomePath(home: string, names: Names = NAMES): string {
+  return mapHomeBase(home, (name) => currentInstanceName(name, names));
+}
+
+/** Inverse of {@link currentHomePath}: the path an older build would have kept this home at. */
+export function legacyHomePath(home: string, names: Names = NAMES): string {
+  return mapHomeBase(home, (name) => legacyInstanceName(name, names));
+}
+
+function mapHomeBase(home: string, map: (instance: string) => string): string {
+  const base = path.basename(home);
+  if (!base.startsWith(".")) return home;
+  const mapped = map(base.slice(1));
+  return mapped === base.slice(1) ? home : path.join(path.dirname(home), `.${mapped}`);
 }

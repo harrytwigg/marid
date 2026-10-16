@@ -65,10 +65,12 @@ describe("adoptLegacyEnv", () => {
     expect(sink.lines).toHaveLength(2);
   });
 
-  it("never overwrites a variable set under the current name", () => {
+  it("never overwrites a variable set under the current name, and says nothing about one the gateway exported under both", () => {
     const env: NodeJS.ProcessEnv = { JINN_HOME: "/old", ACME_HOME: "/new" };
-    expect(adoptLegacyEnv(env, { names: acme, ...collect() })).toEqual([]);
+    const sink = collect();
+    expect(adoptLegacyEnv(env, { names: acme, ...sink })).toEqual([]);
     expect(env.ACME_HOME).toBe("/new");
+    expect(sink.lines).toEqual([]);
   });
 
   it("adopts the container entry's underscore-led variable under its own form", () => {

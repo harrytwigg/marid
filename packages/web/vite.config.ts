@@ -1,7 +1,25 @@
 import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'node:fs'
 import path from 'node:path'
+import { CODENAME } from '../jinn/src/shared/codename-constant'
+
+/**
+ * The service worker's warm-up script, written with the codename in its cache name. It cannot live in
+ * `public/` as a static file: that copies it verbatim, and the cache it fills has to be named like the one
+ * the navigation rule in `runtimeCaching` reads.
+ */
+function shellWarmScript(): Plugin {
+  return {
+    name: 'jinn-shell-warm-script',
+    apply: 'build',
+    generateBundle() {
+      const template = fs.readFileSync(path.resolve(__dirname, 'sw-shell-warm.template.js'), 'utf8')
+      this.emitFile({ type: 'asset', fileName: 'sw-shell-warm.js', source: template.replaceAll('__CODENAME__', CODENAME) })
+    },
+  }
+}
 
 /**
  * The UI face is only discoverable once the stylesheet has downloaded and
@@ -62,6 +80,7 @@ export default defineConfig(() => {
     plugins: [
       react(),
       preloadUiFont(),
+      shellWarmScript(),
       VitePWA({
         // Registered from main.tsx instead, so the one call site is greppable.
         injectRegister: null,
@@ -116,7 +135,7 @@ export default defineConfig(() => {
                 request.mode === 'navigate' && !url.pathname.startsWith('/api/'),
               handler: 'NetworkFirst',
               options: {
-                cacheName: 'jinn-app-shell',
+                cacheName: `${CODENAME}-app-shell`,
                 networkTimeoutSeconds: 3,
                 plugins: [{ cacheKeyWillBeUsed: async () => '/index.html' }],
               },

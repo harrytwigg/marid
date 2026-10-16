@@ -22,6 +22,7 @@ import { CORS_ALLOWED_REQUEST_HEADERS, CORS_EXPOSED_RESPONSE_HEADERS, createGate
 import { handleHookPost } from "../hook-endpoint.js";
 import { HookRegistry } from "../hook-registry.js";
 import { resolveCallerIdentity } from "../session-comm-guards.js";
+import { rejectNonOperatorPtyUpgradeCaller, rejectUnverifiedIdentifiedUpgradeCaller } from "../upgrade-guards.js";
 import { WRITE_ORIGIN_HEADER, readWriteOrigin } from "../../work-items/origin.js";
 import { CALLER_SESSION_HEADER, TOOL_CALL_HEADER, TOOL_CALL_HEADER_VALUE } from "../../mcp/identity.js";
 import { isToolCallMarker } from "../../shared/wire-names.js";
@@ -140,5 +141,19 @@ describe("a browser paired before the rename", () => {
     expect(cleared).toContain(authCookieName(home));
     expect(cleared).toContain(`jinn_auth_${legacyNs}`);
     expect(cleared).toContain(`jinn_device_${legacyNs}`);
+  });
+});
+
+describe("a WebSocket upgrade from an MCP server that has not upgraded", () => {
+  const socket = () => { const writes: string[] = []; return { writes, write: (chunk: string) => { writes.push(chunk); return true; }, destroy: () => true }; };
+  const upgrade = (headers: Headers) => ({ headers, rawHeaders: [], socket: { remoteAddress: "127.0.0.1", localAddress: "127.0.0.1", localPort: 7801 } }) as unknown as import("node:http").IncomingMessage;
+
+  it("is refused as an unidentified tool call, not served as an operator's", () => {
+    for (const guard of [rejectUnverifiedIdentifiedUpgradeCaller, rejectNonOperatorPtyUpgradeCaller]) {
+      const sink = socket();
+      expect(guard(upgrade({ "x-jinn-tool-call": "jinn-mcp" }), sink, { sessionExists: () => true })).toBe(true);
+      expect(sink.writes.join("")).toContain("403 Forbidden");
+    }
+    expect(rejectUnverifiedIdentifiedUpgradeCaller(upgrade({}), socket(), { sessionExists: () => true })).toBe(false);
   });
 });

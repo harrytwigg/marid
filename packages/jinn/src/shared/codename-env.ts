@@ -66,7 +66,7 @@ export interface AdoptLegacyEnvOptions {
 const warnedInProcess = new Set<string>();
 
 /**
- * Give every legacy-named variable in `env` a current-named twin, in place, and warn once per
+ * Give every legacy-named variable in `env` that has no current-named twin one, in place, and warn once per
  * name. Returns the legacy names it adopted; empty, and a no-op, while the codename is unchanged.
  */
 export function adoptLegacyEnv(env: NodeJS.ProcessEnv, options: AdoptLegacyEnvOptions = {}): string[] {
@@ -78,10 +78,11 @@ export function adoptLegacyEnv(env: NodeJS.ProcessEnv, options: AdoptLegacyEnvOp
   for (const key of Object.keys(env)) {
     const current = currentTwinOf(key, env, names);
     if (current === undefined) continue;
-    if (env[current] === undefined) {
-      env[current] = env[key];
-      adopted.push(key);
-    }
+    // Only a variable somebody set under the old name alone is news. One set under both names (the gateway exports
+    // both to what it spawns) is already in step with this build, and warning about it would say nothing true.
+    if (env[current] !== undefined) continue;
+    env[current] = env[key];
+    adopted.push(key);
     if (!warned.has(key)) {
       warned.add(key);
       warn(`Environment variable ${key} is deprecated: set ${current} instead.`);

@@ -1,4 +1,6 @@
-/* Imported by the generated service worker.
+/* Imported by the generated service worker. A template: the build writes it as sw-shell-warm.js with the
+ * codename in place (vite.config.ts, `shellWarmScript`), so the cache it fills is named like the one the
+ * navigation rule below reads, and an earlier codename's cache can be told from this one's.
  *
  * Navigations are network-first so a deploy lands on the next reload rather
  * than the one after it, which means the offline fallback lives in a runtime
@@ -7,7 +9,7 @@
  * without this an app that has been opened exactly once has no shell to fall
  * back to. Fetching the document here also pins it to the same install that
  * precaches the chunks it references, so the two can never disagree offline. */
-const SHELL_CACHE = 'jinn-app-shell'
+const SHELL_CACHE = '__CODENAME__-app-shell'
 const SHELL_KEY = '/index.html'
 
 self.addEventListener('install', (event) => {

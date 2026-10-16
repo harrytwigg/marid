@@ -52,7 +52,6 @@ import { reconcileWorkItemsOnStartup, startWorkItemReconciler } from "../work-it
 import { setTodoLiveEmitter, setTodoStatusChangeListener } from "../work-items/live-events.js";
 import { cleanupSessionSettings } from "../shared/claude-settings.js";
 import { bootClaudeProfiles } from "./claude-profile-boot.js";
-import { adoptLegacyHeaders } from "../shared/wire-names.js";
 import { readHostAsset } from "../shared/host-assets.js";
 import { setEnv } from "../shared/codename-env.js";
 import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
@@ -1041,7 +1040,6 @@ export async function startGateway(
   });
 
   server.on("upgrade", (req, socket, head) => {
-    adoptLegacyHeaders(req.headers);
     const reqUrl = req.url || "";
     const pathname = reqUrl.split("?")[0];
     if (rejectUnverifiedIdentifiedUpgradeCaller(req, socket)) return;

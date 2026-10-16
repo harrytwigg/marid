@@ -1,6 +1,6 @@
 import path from "node:path";
-import { resolveDefaultJinnHome } from "../shared/home.js";
-import { LEGACY_CODENAME, NAMES, legacyInstanceName } from "../shared/codename.js";
+import { isDefaultHome } from "../shared/home.js";
+import { LEGACY_CODENAME, NAMES, currentInstanceName, legacyInstanceName } from "../shared/codename.js";
 import { readEnv } from "../shared/codename-env.js";
 
 export const AUTH_COOKIE = `${NAMES.codename}_auth`;
@@ -39,8 +39,9 @@ function cookieNamespace(jinnHome?: string): string {
   const home = jinnHome ?? readEnv(process.env, "HOME"); // footgun: ok the same fallback the cookie name always took
   if (!home) return "";
   const resolved = path.resolve(home);
-  if (resolved === resolveDefaultJinnHome()) return "";
-  const base = path.basename(resolved).replace(/^\./, "");
+  if (isDefaultHome(resolved)) return "";
+  // Named after the instance, which a home an older build created carries under the old spelling.
+  const base = currentInstanceName(path.basename(resolved).replace(/^\./, ""));
   return base.replace(/[^A-Za-z0-9_-]/g, "") || "instance";
 }
 
