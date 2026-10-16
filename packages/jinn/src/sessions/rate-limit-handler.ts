@@ -37,7 +37,7 @@ import {
 } from "../shared/rateLimit.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
 import { chooseSubstituteOrReason } from "./rate-limit-substitute.js";
-import { beginEngineSubstitution, standingOverrideUntil } from "./engine-override.js";
+import { abandonEngineSubstitution, beginEngineSubstitution, standingOverrideUntil } from "./engine-override.js";
 import { earlier, handBack, handBackAt as accountHandBackAt } from "./rate-limit-handback.js";
 import { resolveEngineRunMcp } from "./engine-run-mcp.js";
 import { getSession, getMessages, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
@@ -114,10 +114,11 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const remote = isRemoteTarget(remoteTarget) ? remoteTarget : undefined;
   // The mode and target are read from the stored row, not the turn-start snapshot: they may have been changed while this turn ran.
   const live = getSession(session.id);
-  const { choice, reason: targetReason } = chooseSubstituteOrReason({
+  const { choice, reason: chosenReason } = chooseSubstituteOrReason({
     config, engines, session: live ? { ...session, fallbackMode: live.fallbackMode, fallbackTarget: live.fallbackTarget } : session,
     employee, account, remote, remoteTarget,
   });
+  let targetReason = chosenReason;
   const substituteName = choice?.engine;
   const substituteEngine = substituteName ? engines.get(substituteName) : undefined;
   if (!substituteName && remote) {
@@ -131,7 +132,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     const { resumeAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
     const until = resumeAt ?? new Date(Date.now() + UNSTATED_RESET_WINDOW_MS);
     const syncSince = new Date().toISOString();
-    const substituteLabel = choice.accounts ? `the ${choice.accounts.substitute} Claude account` : rateLimitEngineLabel(substituteName);
+    const substituteLabel = (choice.accounts ? `the ${choice.accounts.substitute} Claude account` : rateLimitEngineLabel(substituteName))
+      + (choice.model ? ` (${choice.model})` : "");
+    const metaBefore = (getSession(session.id) ?? session).transportMeta;
 
     await hooks.onFallbackStart?.({ resumeAt: resumeAt ?? null, until, substitute: substituteName, ...(choice.model ? { model: choice.model } : {}) });
 
@@ -180,20 +183,32 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
       ...(hooks.onFallbackStream ? { onStream: hooks.onFallbackStream } : {}),
     });
 
-    // Persist the substitute's thread id so future fallbacks can resume it —
-    // and so the mirror stops lying about which engine the id belongs to.
-    const live = getSession(session.id);
-    if (live && fallbackResult.sessionId) {
-      // The live row carries the override, so an account substitute's id lands in its own account's slot.
-      updateSessionForAttempt(session.id, attemptToken, nextEngineSessionFields(live, substituteName, fallbackResult.sessionId));
+    // The operator's own target limited too: the turn is not lost. Put the session back where it was
+    // and wait out the limit it hit, saying why nothing switched.
+    const limitedAgain = Boolean(choice.model) && !fallbackResult.error?.startsWith("Interrupted") && detectRateLimit(fallbackResult).limited;
+    if (limitedAgain) {
+      targetReason = `the chosen fallback ${substituteName} (${choice.model}) is limited too`;
+      recordAccountRateLimit(rateLimitAccount(substituteName, employee, session).account, substituteName, rateLimitEngineLabel(substituteName), detectRateLimit(fallbackResult).resetsAt);
+      if (!abandonEngineSubstitution(session, attemptToken, metaBefore)) {
+        await hooks.onCancelled?.();
+        return { kind: "cancelled" };
+      }
+    } else {
+      // Persist the substitute's thread id so future fallbacks can resume it —
+      // and so the mirror stops lying about which engine the id belongs to.
+      const live = getSession(session.id);
+      if (live && fallbackResult.sessionId) {
+        // The live row carries the override, so an account substitute's id lands in its own account's slot.
+        updateSessionForAttempt(session.id, attemptToken, nextEngineSessionFields(live, substituteName, fallbackResult.sessionId));
+      }
+
+      await hooks.onFallbackComplete?.(fallbackResult, {
+        engine: substituteName,
+        model: substitution.model ?? substitution.engineConfig.model,
+      });
+
+      return { kind: "fallback", result: fallbackResult };
     }
-
-    await hooks.onFallbackComplete?.(fallbackResult, {
-      engine: substituteName,
-      model: substitution.model ?? substitution.engineConfig.model,
-    });
-
-    return { kind: "fallback", result: fallbackResult };
   }
   // Nothing usable in the chain — fall through to wait-and-retry.
 

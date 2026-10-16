@@ -81,7 +81,7 @@ function delegateSession(input: TalkDelegationInput, key: string, existing: Sess
     effortLevel: input.employee.effortLevel,
     parentSessionId: input.sourceSessionId,
     fallbackMode,
-    fallbackTarget: childFallbackTarget(config, parent, fallbackMode),
+    fallbackTarget: childFallbackTarget(config, parent, fallbackMode, { employee: input.employee.name }),
     prompt: input.prompt,
     title: `Delegate ${input.todoId}`,
   });

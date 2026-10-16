@@ -45,6 +45,7 @@ vi.mock("../../shared/rateLimit.js", () => ({
   rateLimitEngineLabel: (engine: string) => engine,
 }));
 
+import { detectRateLimit } from "../../shared/rateLimit.js";
 import { makeSession } from "./helpers/session-fixture.js";
 import { handleRateLimit, type RateLimitHandlerOpts } from "../rate-limit-handler.js";
 import type { Session, EngineResult } from "../../shared/types.js";
@@ -84,6 +85,7 @@ describe("handleRateLimit — a session's own fallback target", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     engineAvailableMock.mockReturnValue(true);
+    vi.mocked(detectRateLimit).mockReturnValue({ limited: false });
   });
 
   it("switches to the chosen engine and model, not the chain's engine, and says which model", async () => {
@@ -139,5 +141,47 @@ describe("handleRateLimit — a session's own fallback target", () => {
     await handleRateLimit(cleared.opts);
     expect(cleared.codexRun).not.toHaveBeenCalled();
     expect(cleared.grokRun).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a target that is limited too", () => {
+    const limitedRun = () => vi.fn(async () => ({ result: "", sessionId: "", error: "You've hit your usage limit." }) as EngineResult);
+
+    it("an engine that comes back limited parks the turn with the reason, and the session goes back where it was", async () => {
+      const { opts, codexRun, hooks } = makeOpts(makeSession({ fallbackTarget: target }));
+      codexRun.mockImplementation(limitedRun());
+      vi.mocked(detectRateLimit).mockImplementation((r) => ({ limited: Boolean(r.error?.includes("usage limit")) }));
+
+      const outcome = await handleRateLimit(opts);
+
+      expect(codexRun).toHaveBeenCalledTimes(1);
+      expect(outcome.kind).not.toBe("fallback");
+      expect(hooks.onFallbackComplete).not.toHaveBeenCalled();
+      expect(hooks.onWaitingStart).toHaveBeenCalledWith(expect.objectContaining({ reason: "the chosen fallback codex (gpt-mini) is limited too" }));
+      const writes = updateSessionForAttemptMock.mock.calls.map((c) => c[2]);
+      const flip = writes.findIndex((w) => w.engine === "codex");
+      const back = writes.findIndex((w, i) => i > flip && w.engine === "claude");
+      expect(flip).toBeGreaterThanOrEqual(0);
+      expect(writes[back]).toMatchObject({ engine: "claude", model: "opus", transportMeta: null });
+      expect(writes.findIndex((w, i) => i > back && w.status === "waiting")).toBeGreaterThan(back);
+    });
+
+    it("a same-engine model change that comes back limited parks the same way", async () => {
+      const { opts, claudeRun, hooks } = makeOpts(makeSession({ fallbackTarget: { engine: "claude", model: "sonnet" } }));
+      claudeRun.mockImplementation(limitedRun());
+      vi.mocked(detectRateLimit).mockImplementation((r) => ({ limited: Boolean(r.error?.includes("usage limit")) }));
+
+      const outcome = await handleRateLimit(opts);
+
+      expect(outcome.kind).not.toBe("fallback");
+      expect(hooks.onWaitingStart).toHaveBeenCalledWith(expect.objectContaining({ reason: "the chosen fallback claude (sonnet) is limited too" }));
+      expect(updateSessionForAttemptMock).toHaveBeenCalledWith("sess-1", "attempt-1", expect.objectContaining({ engine: "claude", model: "opus", transportMeta: null }));
+    });
+
+    it("an interrupted substitute is not read as a limit", async () => {
+      const { opts, codexRun } = makeOpts(makeSession({ fallbackTarget: target }));
+      codexRun.mockImplementation(vi.fn(async () => ({ result: "", sessionId: "", error: "Interrupted: stopped" }) as EngineResult));
+      vi.mocked(detectRateLimit).mockReturnValue({ limited: true });
+      expect((await handleRateLimit(opts)).kind).toBe("fallback");
+    });
   });
 });

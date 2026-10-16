@@ -91,9 +91,10 @@ function resolveFallbackMode(
 
 /** What a spawn stores for fallback: its mode, and the parent's target when the parent passes its fallback on. */
 function storedFallback(
-  config: JinnConfig, parentSessionId: string | undefined, mode: SessionFallbackMode | undefined,
+  config: JinnConfig, input: SpawnSessionInput, employee: string | null, mode: SessionFallbackMode | undefined,
 ): { fallbackMode: SessionFallbackMode | undefined; fallbackTarget: StoredFallbackTarget | undefined } {
-  return { fallbackMode: mode, fallbackTarget: childFallbackTarget(config, parentSessionId ? getSession(parentSessionId) : undefined, mode) };
+  const parent = input.parentSessionId ? getSession(input.parentSessionId) : undefined;
+  return { fallbackMode: mode, fallbackTarget: childFallbackTarget(config, parent, mode, { employee }) };
 }
 
 async function resolveSelection(
@@ -218,7 +219,7 @@ export async function spawnSession(
     employee: employeeName,
     parentSessionId: input.parentSessionId,
     effortLevel: selection.effortLevel,
-    ...storedFallback(config, input.parentSessionId, selection.fallbackMode),
+    ...storedFallback(config, input, employeeName, selection.fallbackMode),
     // Honor the requested model so API clients can pin per-employee models
     // (e.g. MCP servers that look up org/<employee>.yaml and pass the
     // employee's configured model). Without this, the turn falls back to

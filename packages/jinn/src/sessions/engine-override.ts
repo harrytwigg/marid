@@ -149,6 +149,24 @@ export function beginEngineSubstitution(opts: {
   };
 }
 
+/**
+ * Undo `beginEngineSubstitution` for a substitute that could not take the turn either: the session
+ * goes back to the engine, thread and model the turn began on, with the transport meta from before
+ * the swap (so no override record is left, and one that already stood is kept). False when the
+ * attempt fence was lost.
+ */
+export function abandonEngineSubstitution(session: Session, attemptToken: string, metaBefore: Session["transportMeta"]): boolean {
+  return Boolean(updateSessionForAttempt(session.id, attemptToken, {
+    engine: session.engine,
+    engineSessionId: session.engineSessionId,
+    model: session.model,
+    transportMeta: metaBefore ?? null,
+    status: "running",
+    lastActivity: new Date().toISOString(),
+    lastError: null,
+  }));
+}
+
 /** What the swap parked, or null when the record names no engine to go back to. */
 interface ParkedOverride {
   engine: string;

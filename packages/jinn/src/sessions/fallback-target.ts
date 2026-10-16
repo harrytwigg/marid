@@ -7,6 +7,8 @@ import {
   sessionFallbackTargetShapeError, parseStoredFallbackTarget, type StoredFallbackTarget,
 } from "../shared/session-fallback-config.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
+import { orgRegistry } from "../gateway/org-registry.js";
+import { scopedDepartmentOf } from "../work-items/department-scope.js";
 import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import type { RemoteEngineName } from "../shared/models.js";
 import { effectiveFallbackMode } from "./session-fallback.js";
@@ -30,15 +32,26 @@ export function parseFallbackTargetPatch(value: unknown): { ok: true; target?: S
   return target ? { ok: true, target } : { ok: false, error: sessionFallbackTargetShapeError(value) };
 }
 
-/** The target a child of `parent` is created with: the parent's, when the parent passes its fallback on
- *  (`fallback-children`) and the child is not explicitly told to wait out limits. */
+/**
+ * The target a child of `parent` is created with: the parent's, when the parent passes its fallback on
+ * (`fallback-children`) and the child is not explicitly told to wait out limits. The operator chose it for the
+ * parent, so a child that may not use it (a department-scoped employee off claude, a remote one on an engine that
+ * cannot run there) gets none and follows the chain under its mode. `child` names the employee it is created for;
+ * without it the filters are not applied.
+ */
 export function childFallbackTarget(
-  config: Pick<JinnConfig, "sessions">,
+  config: JinnConfig,
   parent: Pick<Session, "fallbackMode" | "fallbackTarget"> | undefined,
   explicitMode?: string,
+  child?: { employee: string | null | undefined },
 ): StoredFallbackTarget | undefined {
   if (!parent?.fallbackTarget || explicitMode === "auto-resume") return undefined;
-  return effectiveFallbackMode(config, parent).mode === "fallback-children" ? parent.fallbackTarget : undefined;
+  if (effectiveFallbackMode(config, parent).mode !== "fallback-children") return undefined;
+  const target = parent.fallbackTarget;
+  if (!child) return target;
+  const employee = child.employee ? orgRegistry(config).get(child.employee) : undefined;
+  const forChild = { id: "", employee: child.employee ?? null, scopeDepartment: scopedDepartmentOf(child.employee) ?? null } as Session;
+  return fallbackTargetRefusal(config, forChild, employee, target) ? undefined : target;
 }
 
 function targetName(target: StoredFallbackTarget): string {

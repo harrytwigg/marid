@@ -3409,7 +3409,7 @@ export async function handleApiRequest(
       if (!todoDispatch.ok) return json(res, { error: todoDispatch.error }, 409);
       const todoOverride = todoDispatch.preamble;
       const fallbackMode = childFallbackMode(config, delegatorSession, fallbackParam.mode);
-      const fallbackTarget = childFallbackTarget(config, delegatorSession, fallbackMode);
+      const fallbackTarget = childFallbackTarget(config, delegatorSession, fallbackMode, { employee: employeeName });
       const selection = validateNewSessionSelection(config, {
         engine: todoOverride.engine ?? body.engine,
         model: todoOverride.engine ? todoOverride.model ?? undefined : body.model,

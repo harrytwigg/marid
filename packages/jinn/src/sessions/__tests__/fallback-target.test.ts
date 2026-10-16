@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * A session's own fallback target (`sessions.fallback_target`): how it is stored, which engine and model a
@@ -34,6 +34,7 @@ const { sessionFallbackView } = await import("../session-fallback.js");
 const { getModelRegistry, invalidateModelRegistry } = await import("../../shared/models.js");
 const { recordEngineUnavailable } = await import("../../shared/engine-health.js");
 const { makeSession } = await import("./helpers/session-fixture.js");
+const { setDepartmentScopeResolver, setEmployeeDepartmentResolver } = await import("../../work-items/department-scope.js");
 import type { JinnConfig, Session } from "../../shared/types.js";
 
 const STATE_PATH = path.join(tmp, "tmp", "engine-health.json");
@@ -229,7 +230,7 @@ describe("fallbackTargetRefusal and parseFallbackTargetPatch", () => {
 
 describe("childFallbackTarget", () => {
   const target = { engine: "codex", model: "gpt-mini" };
-  const cfg = {} as Pick<JinnConfig, "sessions">;
+  const cfg = {} as JinnConfig;
 
   it("a fallback-children parent passes its target on", () => {
     expect(childFallbackTarget(cfg, { fallbackMode: "fallback-children", fallbackTarget: target })).toEqual(target);
@@ -240,10 +241,35 @@ describe("childFallbackTarget", () => {
   });
 
   it("follows the config default for a parent with no mode, and gives nothing without a target, parent or when told to wait", () => {
-    expect(childFallbackTarget({ sessions: { fallbackMode: "fallback-children" } }, { fallbackMode: null, fallbackTarget: target })).toEqual(target);
+    expect(childFallbackTarget({ sessions: { fallbackMode: "fallback-children" } } as JinnConfig, { fallbackMode: null, fallbackTarget: target })).toEqual(target);
     expect(childFallbackTarget(cfg, { fallbackMode: null, fallbackTarget: target })).toBeUndefined();
     expect(childFallbackTarget(cfg, { fallbackMode: "fallback-children", fallbackTarget: null })).toBeUndefined();
     expect(childFallbackTarget(cfg, undefined)).toBeUndefined();
     expect(childFallbackTarget(cfg, { fallbackMode: "fallback-children", fallbackTarget: target }, "auto-resume")).toBeUndefined();
+  });
+
+  describe("for a child that has filters of its own", () => {
+    const parent = { fallbackMode: "fallback-children", fallbackTarget: target } as const;
+    afterEach(() => {
+      setDepartmentScopeResolver(null);
+      setEmployeeDepartmentResolver(null);
+    });
+
+    it("keeps the parent's target for an employee who may use it", () => {
+      expect(childFallbackTarget(config, parent, undefined, { employee: "free-worker" })).toEqual(target);
+      expect(childFallbackTarget(config, parent, undefined, { employee: null })).toEqual(target);
+    });
+
+    it("drops it for a department-scoped employee, whose target must stay on claude, and keeps a claude one", () => {
+      setDepartmentScopeResolver((d) => (d === "ops" ? "scoped" : "open"));
+      setEmployeeDepartmentResolver((name) => (name === "scoped-worker" ? "ops" : undefined));
+      expect(childFallbackTarget(config, parent, undefined, { employee: "scoped-worker" })).toBeUndefined();
+      const claudeTarget = { engine: "claude", model: "sonnet" };
+      expect(childFallbackTarget(config, { ...parent, fallbackTarget: claudeTarget }, undefined, { employee: "scoped-worker" })).toEqual(claudeTarget);
+    });
+
+    it("drops one the child's engine registry refuses, such as a model the engine no longer offers", () => {
+      expect(childFallbackTarget(config, { ...parent, fallbackTarget: { engine: "codex", model: "gone" } }, undefined, { employee: "free-worker" })).toBeUndefined();
+    });
   });
 });
