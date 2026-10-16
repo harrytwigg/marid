@@ -19,6 +19,11 @@ export function parseFallbackModeParam(value: unknown): { ok: true; mode?: Sessi
   return isSessionFallbackMode(value) ? { ok: true, mode: value } : { ok: false, error: sessionFallbackModeError(value) };
 }
 
+/** A PUT/PATCH's `fallbackMode`: as above, and null clears the session's own mode so it follows the config default again. */
+export function parseFallbackModePatch(value: unknown): { ok: true; mode?: SessionFallbackMode | null } | { ok: false; error: string } {
+  return value === null ? { ok: true, mode: null } : parseFallbackModeParam(value);
+}
+
 /** The view for one session, from the live config and the roster. */
 export function fallbackViewFor(session: Session, context: ApiContext): SessionFallbackView {
   const config = context.getConfig();

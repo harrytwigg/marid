@@ -66,7 +66,11 @@ import type { SessionFallbackMode } from "../../shared/session-fallback-config.j
  * (Branch B) and never starts the substitute.
  */
 
-function makeOpts(fallbackRun: ReturnType<typeof vi.fn>, session: Session, sessions?: Record<string, unknown>): RateLimitHandlerOpts & { waiting: ReturnType<typeof vi.fn> } {
+/** `stored` is the row the registry holds, which is what a choice reads; it differs from the turn-start `session` snapshot when the mode changed mid-turn. */
+function makeOpts(
+  fallbackRun: ReturnType<typeof vi.fn>, session: Session, sessions?: Record<string, unknown>, stored: Session = session,
+): RateLimitHandlerOpts & { waiting: ReturnType<typeof vi.fn> } {
+  getSessionMock.mockImplementation(() => stored);
   const waiting = vi.fn();
   return {
     session,
@@ -126,5 +130,35 @@ describe("handleRateLimit — per-session fallback mode", () => {
     const fallbackRun = vi.fn(async () => ({ result: "from-codex", sessionId: "codex-1" }) as EngineResult);
     await handleRateLimit(makeOpts(fallbackRun, makeSession({ fallbackMode: own }), { fallbackMode: configured }));
     expect(fallbackRun).toHaveBeenCalledTimes(substitutes ? 1 : 0);
+  });
+
+  describe("a mode changed while the turn ran", () => {
+    it("is read from the stored row: auto-resume stored, fallback in the turn-start snapshot, no substitute and Branch B", async () => {
+      const fallbackRun = vi.fn(async () => ({ result: "from-codex", sessionId: "codex-1" }) as EngineResult);
+      const opts = makeOpts(fallbackRun, makeSession({ fallbackMode: "fallback" }), undefined, makeSession({ fallbackMode: "auto-resume" }));
+
+      const outcome = await handleRateLimit(opts);
+
+      expect(fallbackRun).not.toHaveBeenCalled();
+      expect(outcome.kind).not.toBe("fallback");
+      expect(opts.waiting).toHaveBeenCalledTimes(1);
+    });
+
+    it("works the other way: fallback stored, auto-resume in the snapshot, the substitute runs", async () => {
+      const fallbackRun = vi.fn(async () => ({ result: "from-codex", sessionId: "codex-1" }) as EngineResult);
+
+      const outcome = await handleRateLimit(makeOpts(fallbackRun, makeSession({ fallbackMode: "auto-resume" }), undefined, makeSession({ fallbackMode: "fallback" })));
+
+      expect(fallbackRun).toHaveBeenCalledTimes(1);
+      expect(outcome.kind).toBe("fallback");
+    });
+
+    it("a cleared mode (NULL stored) follows the config default, not the snapshot", async () => {
+      const fallbackRun = vi.fn(async () => ({ result: "from-codex", sessionId: "codex-1" }) as EngineResult);
+
+      await handleRateLimit(makeOpts(fallbackRun, makeSession({ fallbackMode: "fallback" }), { fallbackMode: "auto-resume" }, makeSession({ fallbackMode: null })));
+
+      expect(fallbackRun).not.toHaveBeenCalled();
+    });
   });
 });

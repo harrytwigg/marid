@@ -11,8 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { JinnConfig, Session } from "../shared/types.js";
 import type { RealtimeUsage } from "../shared/voice.js";
-import { createSession, getSession, insertMessage } from "../sessions/registry.js";
-import { childFallbackMode } from "../sessions/session-fallback.js";
+import { createSession, insertMessage } from "../sessions/registry.js";
 import { priceTurn } from "../talk/session/pricing.js";
 import type { TalkSessionRegistry } from "../talk/session/registry.js";
 import type { TalkActionRecord, TalkSession, VisualCaptureReceipt } from "../talk/session/types.js";
@@ -211,7 +210,9 @@ export async function recordAction(
 }
 
 /** Spawn a normal text session with the talk session's row as its parent, so the
- *  existing callback machinery reaches it without anyone polling. */
+ *  existing callback machinery reaches it without anyone polling. It stores no
+ *  fallback mode: like a new typed chat, it is the root of its own work and follows
+ *  the config default. */
 export async function handOff(
   req: IncomingMessage,
   res: ServerResponse,
@@ -233,7 +234,6 @@ export async function handOff(
     connector: "web",
     replyContext: { source: "web" },
     parentSessionId: session.sessionId,
-    fallbackMode: childFallbackMode(config, getSession(session.sessionId)),
     prompt,
   });
   insertMessage(spawned.id, "user", prompt);

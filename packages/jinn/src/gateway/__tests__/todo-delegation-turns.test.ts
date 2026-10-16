@@ -116,6 +116,26 @@ describe("a delegation that lands in a live session", () => {
     expect(res.body).toMatchObject({ reused: true, model: "older-model", selectionIgnored: { engine: "codex", model: "gpt-5.5" } });
   });
 
+  it("reports an explicit fallbackMode the live session did not take, and says nothing when none was asked for", async () => {
+    const item = h.store.createWorkItem({ title: "mode on reuse" });
+    await h.comment(item.id, "@alpha look");
+    const [consult] = h.sessionsOf(item.id, "alpha");
+    h.registry.updateSession(consult.id, { status: "idle", fallbackMode: "fallback" });
+    const task = { workItemId: item.id, employee: "alpha", task: "Take it over." };
+
+    const asked = await h.call("POST", "/api/delegations", { ...task, fallbackMode: "auto-resume" });
+    expect(asked.body).toMatchObject({ reused: true, fallbackMode: "fallback", selectionIgnored: { fallbackMode: "auto-resume" } });
+
+    h.registry.updateSession(consult.id, { status: "idle" });
+    const same = await h.call("POST", "/api/delegations", { ...task, fallbackMode: "fallback" });
+    expect(same.body).toMatchObject({ reused: true, fallbackMode: "fallback" });
+    expect(same.body).not.toHaveProperty("selectionIgnored");
+
+    h.registry.updateSession(consult.id, { status: "idle" });
+    const unasked = await h.call("POST", "/api/delegations", task);
+    expect(unasked.body.selectionIgnored?.fallbackMode).toBeUndefined();
+  });
+
   it("answers a retry with the same idempotency key as a replay of the reuse", async () => {
     const item = h.store.createWorkItem({ title: "retried" });
     await h.comment(item.id, "@alpha look");

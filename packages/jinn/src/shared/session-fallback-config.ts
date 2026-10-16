@@ -42,7 +42,7 @@ export function storedFallbackMode(value: unknown): SessionFallbackMode | null {
 
 /** The message a refused `fallbackMode` carries, naming what is allowed. */
 export function sessionFallbackModeError(value: unknown): string {
-  return `fallbackMode must be one of ${SESSION_FALLBACK_MODES.join(", ")} (got ${typeof value === "string" ? `"${value}"` : typeof value})`;
+  return `fallbackMode must be one of ${SESSION_FALLBACK_MODES.join(", ")} (got ${typeof value === "string" ? `"${value}"` : value === null ? "null" : typeof value})`;
 }
 
 /** Problems with `sessions.fallbackMode`, for the config loader. */

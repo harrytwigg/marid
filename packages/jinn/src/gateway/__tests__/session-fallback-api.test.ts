@@ -84,12 +84,23 @@ describe("PUT /api/sessions/:id", () => {
     expect(registry.getSession(session.id)).toMatchObject({ engine: "claude", fallbackMode: "auto-resume" });
   });
 
-  it.each([["wait"], [null], [2], [""], ["Fallback"]])("refuses %j with a 400 naming the allowed values, changing nothing", async (bad) => {
+  it.each([["wait"], [2], [""], ["Fallback"], [[]]])("refuses %j with a 400 naming the allowed values, changing nothing", async (bad) => {
     const session = makeParent("fallback");
     const put = await call("PUT", `/api/sessions/${session.id}`, { fallbackMode: bad });
     expect(put.status).toBe(400);
     expect(put.body.error).toMatch(/fallbackMode must be one of fallback, fallback-children, auto-resume/);
     expect(stored(session.id)).toBe("fallback");
+  });
+
+  it("null clears the session's own mode, which then follows the config default again", async () => {
+    setConfig({ ...baseConfig, sessions: { fallbackMode: "fallback-children" } } as JinnConfig);
+    const session = makeParent("auto-resume");
+    const put = await call("PUT", `/api/sessions/${session.id}`, { fallbackMode: null });
+    expect(put.status).toBe(200);
+    expect(put.body.fallbackMode).toBeNull();
+    expect(put.body.fallback).toMatchObject({ mode: "fallback-children", modeSource: "default" });
+    expect(stored(session.id)).toBeNull();
+    expect((await call("PATCH", `/api/sessions/${session.id}`, { fallbackMode: null })).status).toBe(200);
   });
 
   it("still refuses a body with nothing to update", async () => {
@@ -109,11 +120,14 @@ describe("POST /api/sessions", () => {
     expect(stored(root.body.id)).toBeNull();
   });
 
-  it("refuses a bad value with a 400 naming the three, and creates nothing", async () => {
+  it("refuses a bad value, null included, with a 400 naming the three, and creates nothing", async () => {
     const before = registry.listSessions().length;
     const bad = await spawn({ fallbackMode: "off" });
     expect(bad.status).toBe(400);
     expect(bad.body.error).toMatch(/fallback, fallback-children, auto-resume/);
+    const nulled = await spawn({ fallbackMode: null });
+    expect(nulled.status).toBe(400);
+    expect(nulled.body.error).toMatch(/\(got null\)$/);
     expect(registry.listSessions()).toHaveLength(before);
   });
 

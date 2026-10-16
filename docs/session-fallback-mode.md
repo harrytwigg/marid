@@ -25,9 +25,9 @@ In-engine fallback plugins that Marid does not control (for example an opencode 
 The mode is stored on the session row when the session is created, and can be changed afterwards.
 
 1. **Explicit.** `fallbackMode` on `POST /api/sessions`, on `POST /api/delegations`, or on the `spawn_session` / `delegate_task` MCP tools.
-2. **Inherited.** A session created with a parent session (a spawn or a delegation by another session, a Talk hand-off or delegation) gets `fallback-children` if its parent's mode is `fallback-children`, and `auto-resume` otherwise. The parent's mode is its own, or the config default when it has none.
-3. **Root.** A session with no parent stores no mode and follows the config default.
-4. **Changed later.** `PUT` or `PATCH /api/sessions/:id` with `{ "fallbackMode": "<mode>" }`. It can be sent alone, and takes effect from the next usage limit.
+2. **Inherited.** A session created with a parent session (a spawn or a delegation by another session, or a Talk delegation) gets `fallback-children` if its parent's mode is `fallback-children`, and `auto-resume` otherwise. The parent's mode is its own, or the config default when it has none.
+3. **Root.** A session with no parent stores no mode and follows the config default. So does a Talk hand-off: it is the root of its own work, like a new typed chat, even though the Talk session is recorded as its parent.
+4. **Changed later.** `PUT` or `PATCH /api/sessions/:id` with `{ "fallbackMode": "<mode>" }`. It can be sent alone, and takes effect from the next usage limit, including one that arrives in a turn already running. `{ "fallbackMode": null }` clears the session's own mode, so it follows the config default again (`modeSource: "default"`). Create requests refuse `null`: leaving the field out already means the default.
 
 **By default, the children of a `fallback` session stop falling back.** They get `auto-resume`, so only the root of a tree switches model. To restore tree-wide fallback for sessions that do not choose otherwise, set the default to `fallback-children`:
 
@@ -58,4 +58,4 @@ The target follows the same rules as the switch itself. A local Claude session w
 
 `delegate_task` and `spawn_session` take an optional `fallbackMode` (`fallback`, `fallback-children` or `auto-resume`). Left out, the new session follows the inheritance rule above. A bad value is refused with a 400 that names the three.
 
-When a delegation lands in a session the employee already has on the Todo, that session keeps its own mode, as it keeps its engine and model.
+When a delegation lands in a session the employee already has on the Todo, that session keeps its own mode, as it keeps its engine and model. If the delegation named a `fallbackMode` the session does not have, the response reports it under `selectionIgnored`.

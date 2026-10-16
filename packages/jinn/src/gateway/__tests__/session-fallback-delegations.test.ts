@@ -35,6 +35,9 @@ describe("POST /api/delegations", () => {
     expect(bad.status).toBe(400);
     expect(bad.body.error).toMatch(/fallback, fallback-children, auto-resume/);
     expect(bad.body.workItemId).toBeUndefined();
+    const nulled = await delegate({ fallbackMode: null });
+    expect(nulled.status).toBe(400);
+    expect(nulled.body.error).toMatch(/\(got null\)$/);
   });
 
   it.each<[SessionFallbackMode | null, SessionFallbackMode]>([

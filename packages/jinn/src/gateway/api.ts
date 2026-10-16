@@ -23,7 +23,7 @@ import {
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
-import { parseFallbackModeParam, withFallbackView } from "./session-fallback-api.js";
+import { parseFallbackModeParam, parseFallbackModePatch, withFallbackView } from "./session-fallback-api.js";
 import { childFallbackMode } from "../sessions/session-fallback.js";
 import { scopedSwitchRefusal } from "../sessions/scoped-engine.js";
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
@@ -1838,9 +1838,9 @@ export async function handleApiRequest(
         if (!trimmed) return badRequest(res, "title must not be empty");
         updates.title = trimmed.slice(0, 200);
       }
-      const fallbackPatch = parseFallbackModeParam(body.fallbackMode);
+      const fallbackPatch = parseFallbackModePatch(body.fallbackMode);
       if (!fallbackPatch.ok) return badRequest(res, fallbackPatch.error);
-      if (fallbackPatch.mode) updates.fallbackMode = fallbackPatch.mode;
+      if (fallbackPatch.mode !== undefined) updates.fallbackMode = fallbackPatch.mode;
       const configForPatch = context.getConfig();
       let requestedEngine: string | undefined;
       if (body.engine !== undefined) {
@@ -3531,7 +3531,7 @@ export async function handleApiRequest(
           return json(res, { error: `delegation into session ${reused.id} failed: ${linkErr instanceof Error ? linkErr.message : linkErr}`, workItemId: workItem.id }, 500);
         }
         announceDelegation({ ...announcement, session: reused, dispatchedAt: Date.now() });
-        return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel }));
+        return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel, fallbackMode: fallbackParam.mode }, config));
       }
       // The key is the session's turn lane: SessionQueue serializes turns per
       // key, so it must be unique per session. Keyed on the Todo alone, every
