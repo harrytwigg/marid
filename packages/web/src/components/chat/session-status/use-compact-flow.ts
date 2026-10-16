@@ -19,10 +19,19 @@ const NEVER_SEEN_MS = 20_000
 /** The session is running something (the compaction turn included). */
 const RUNNING_CODES = new Set(['busy', 'compacting'])
 
-/** "Compacted: 182k → 31k", or the honest fallback when no new size is known yet. */
+export const UNCONFIRMED_MESSAGE =
+  "Compaction finished without a confirmed size change; see the chat for the engine's message"
+
+/**
+ * What a settled compaction says, judged from the refetched size and never from
+ * the session merely going idle: a lower figure, or none where there was one,
+ * means it compacted; anything else is reported neutrally (the chat carries the
+ * engine's own confirmation or failure notice).
+ */
 export function compactOutcome(pre: number | null, post: number | null | undefined): string {
-  if (post == null || post === pre) return 'Compacted; the size updates after the next turn'
-  return pre == null ? `Compacted: now ${fmtK(post)}` : `Compacted: ${fmtK(pre)} → ${fmtK(post)}`
+  if (pre == null) return post == null ? UNCONFIRMED_MESSAGE : `Compaction finished; the context is now ${fmtK(post)}`
+  if (post == null) return 'Compacted; the size updates after the next turn'
+  return post < pre ? `Compacted: ${fmtK(pre)} → ${fmtK(post)}` : UNCONFIRMED_MESSAGE
 }
 
 function errorMessage(err: unknown): string {
@@ -52,8 +61,6 @@ interface SettleInput {
   active: boolean
   /** The compaction is queued behind nothing yet started: the gateway reports it as "queued". */
   queued: boolean
-  /** Reads the session's latest reported status when the compaction ends. */
-  readStatus: () => string | null | undefined
   run: MutableRefObject<CompactRun>
   refetch: () => Promise<{ data?: ContextUsageWire }>
   setPhase: (phase: CompactPhase) => void
@@ -65,19 +72,13 @@ interface SettleInput {
  * seen (a missed status event, a very fast compaction) settles after a grace
  * period, so the spinner cannot stay up.
  */
-function useSettleWhenIdle({ compacting, active, queued, readStatus, run, refetch, setPhase }: SettleInput) {
+function useSettleWhenIdle({ compacting, active, queued, run, refetch, setPhase }: SettleInput) {
   const settle = useCallback(async () => {
     if (run.current.settling) return
     run.current.settling = true
     const fresh = (await refetch()).data
-    // A failed compaction ends the same way a good one does (idle, the cooldown held), so the
-    // session's own status is what tells them apart.
-    if (readStatus() === 'error') {
-      setPhase({ kind: 'error', message: 'The compaction did not complete. Try again once the cooldown ends.' })
-      return
-    }
     setPhase({ kind: 'done', message: compactOutcome(run.current.pre, fresh?.contextTokens) })
-  }, [run, refetch, setPhase, readStatus])
+  }, [run, refetch, setPhase])
 
   useEffect(() => {
     if (!compacting) return
@@ -130,14 +131,10 @@ export function useCompactFlow({ sessionId, loading, status, lastContextTokens, 
   }, [sessionId, shown, queryClient])
 
   const code = data?.compact.reason?.code
-  const statusRef = useRef(status)
-  statusRef.current = status
-  const readStatus = useCallback(() => statusRef.current, [])
   useSettleWhenIdle({
     compacting,
     active: loading || (code != null && RUNNING_CODES.has(code)),
     queued: code === 'queued',
-    readStatus,
     run,
     refetch: query.refetch,
     setPhase,

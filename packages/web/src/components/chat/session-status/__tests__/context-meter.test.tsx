@@ -12,6 +12,7 @@ vi.mock('@/lib/api-context-usage', () => ({ contextUsageApi: api }))
 
 import type { ContextMeterProps } from '../context-meter'
 import { SessionStatusCluster } from '../session-status-cluster'
+import { UNCONFIRMED_MESSAGE } from '../use-compact-flow'
 
 beforeAll(() => {
   const g = globalThis as unknown as { ResizeObserver?: unknown }
@@ -116,10 +117,16 @@ describe('ContextMeter ring', () => {
     expect(screen.queryByTestId('context-meter')).toBeNull()
   })
 
-  it('overlays the live token figure on the fetched one', async () => {
+  it('overlays the live token figure on the fetched one while a turn runs', async () => {
     serve(usageFixture({ contextTokens: 10_000 }))
-    renderMeter({ liveContextTokens: 160_000 })
+    renderMeter({ loading: true, liveContextTokens: 160_000 })
     expect((await screen.findByTestId('context-meter-text')).textContent).toContain('80%')
+  })
+
+  it('shows the fetched figure, not a stale live one, once the turn has settled', async () => {
+    serve(usageFixture({ contextTokens: 10_000 }))
+    renderMeter({ loading: false, liveContextTokens: 160_000 })
+    expect((await screen.findByTestId('context-meter-text')).textContent).toContain('5%')
   })
 
   it('refetches when the session status or last size changes', async () => {
@@ -225,7 +232,7 @@ describe('ContextMeter compact flow', () => {
     )
   })
 
-  it('treats an unchanged size as not yet known', async () => {
+  it('does not claim a compaction when the size did not change', async () => {
     serve(usageFixture({ contextTokens: 182_000 }))
     api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
     const { update } = renderMeter()
@@ -234,7 +241,53 @@ describe('ContextMeter compact flow', () => {
     await screen.findByRole('button', { name: /Compacting…/ })
     update({ loading: true })
     update({ loading: false })
-    expect((await screen.findByTestId('compact-outcome')).textContent).toContain('the size updates after the next turn')
+    const outcome = await screen.findByTestId('compact-outcome')
+    expect(outcome.textContent).toBe(UNCONFIRMED_MESSAGE)
+    expect(outcome.textContent).not.toContain('Compacted')
+    expect(screen.queryByTestId('compact-error')).toBeNull()
+  })
+
+  it('does not claim a compaction when the size grew', async () => {
+    serve(usageFixture({ contextTokens: 100_000 }))
+    api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
+    const { update } = renderMeter()
+    await openPopover()
+    fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
+    await screen.findByRole('button', { name: /Compacting…/ })
+    update({ loading: true })
+    serve(usageFixture({ contextTokens: 120_000 }))
+    update({ loading: false })
+    expect((await screen.findByTestId('compact-outcome')).textContent).toBe(UNCONFIRMED_MESSAGE)
+  })
+
+  it('drops the ring to n/a after a compaction with no new size, even with a stale live figure', async () => {
+    serve(usageFixture({ contextTokens: 182_000 }))
+    api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
+    // The pane still holds the last streamed figure from the turn before the compaction.
+    const { update } = renderMeter({ liveContextTokens: 182_000 })
+    await openPopover()
+    fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
+    await screen.findByRole('button', { name: /Compacting…/ })
+    update({ loading: true })
+    serve(usageFixture({ contextTokens: null }))
+    update({ loading: false })
+    expect((await screen.findByTestId('compact-outcome')).textContent).toBe('Compacted; the size updates after the next turn')
+    expect(screen.getByTestId('context-meter-text').textContent).toBe('n/a')
+    expect(screen.getByTestId('context-meter-ring').getAttribute('data-unknown')).toBe('true')
+  })
+
+  it('shows the new size on the ring after a compaction, with a stale live figure present', async () => {
+    serve(usageFixture({ contextTokens: 182_000 }))
+    api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
+    const { update } = renderMeter({ liveContextTokens: 182_000 })
+    await openPopover()
+    fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
+    await screen.findByRole('button', { name: /Compacting…/ })
+    update({ loading: true })
+    serve(usageFixture({ contextTokens: 31_000 }))
+    update({ loading: false })
+    expect((await screen.findByTestId('compact-outcome')).textContent).toBe('Compacted: 182k → 31k')
+    expect(screen.getByTestId('context-meter-text').textContent).toBe('16%')
   })
 
   it('settles from polling when no running turn is ever seen', async () => {
@@ -282,7 +335,7 @@ describe('ContextMeter compact flow', () => {
     expect((await screen.findByTestId('compact-outcome')).textContent).toContain('Compacted: 182k → 31k')
   })
 
-  it('reports a compaction that ended with the session in error as failed, not compacted', async () => {
+  it('stays neutral about a compaction that ended with the session in error and the cooldown held', async () => {
     serve(usageFixture({ contextTokens: 182_000 }))
     api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
     const { update } = renderMeter()
@@ -290,15 +343,13 @@ describe('ContextMeter compact flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
     await screen.findByRole('button', { name: /Compacting…/ })
     update({ loading: true, status: 'running' })
-    // A failed compaction still holds the cooldown.
     serve(usageFixture({
       contextTokens: 182_000,
       compact: { available: false, reason: { code: 'cooldown', message: 'Compacted a moment ago.' }, retryAt: '2026-10-15T14:32:00.000Z' },
     }))
     update({ loading: false, status: 'error' })
-    const error = await screen.findByTestId('compact-error')
-    expect(error.textContent).toContain('did not complete')
-    expect(screen.queryByTestId('compact-outcome')).toBeNull()
+    expect((await screen.findByTestId('compact-outcome')).textContent).toBe(UNCONFIRMED_MESSAGE)
+    expect(screen.queryByTestId('compact-error')).toBeNull()
   })
 
   it('shows the server message when the POST is refused', async () => {

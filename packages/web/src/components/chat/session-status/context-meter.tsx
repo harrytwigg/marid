@@ -20,8 +20,11 @@ export interface ContextMeterProps {
  */
 export function ContextMeter({ sessionId, loading, status, lastContextTokens, liveContextTokens }: ContextMeterProps) {
   const [open, setOpen] = useState(false)
-  const { data, phase, start, dismiss, shown } = useCompactFlow({ sessionId, loading, status, lastContextTokens, liveContextTokens })
-  const model = contextMeterModel(data, liveContextTokens)
+  // The streamed figure belongs to a running turn. Once the session settles (a compaction
+  // included) the fetched size must win, or a stale live value outlives the compaction.
+  const live = loading ? liveContextTokens : null
+  const { data, phase, start, dismiss, shown } = useCompactFlow({ sessionId, loading, status, lastContextTokens, liveContextTokens: live })
+  const model = contextMeterModel(data, live)
   if (model.kind === 'hidden' || !data) return null
 
   const known = model.kind === 'known'
