@@ -23,8 +23,8 @@ export function plainOutputTail(output: string, max = 300): string {
  * throws at spawn: the child prints the reason into the PTY and exits 1, which
  * is why the process's own last output is carried here.
  */
-export function processStartFailure(engine: string, exit?: { exitCode?: number | null; signal?: number | null }, output?: string): string {
-  const said = output ? plainOutputTail(output) : "";
+export function processStartFailure(engine: string, exit?: { exitCode?: number | null; signal?: number | null }, output?: string, tailChars?: number): string {
+  const said = output ? plainOutputTail(output, tailChars) : "";
   return `${engine} did not start: its process exited (code ${exit?.exitCode ?? "unknown"}, signal ${exit?.signal ?? "unknown"}) `
     + `before its session began${said ? `. Its last output: ${said}` : ", with no output"}`;
 }
@@ -38,15 +38,35 @@ export function isProcessStartFailure(error: string): boolean {
  * The session Claude Code refused to resume because its daemon still holds it
  * as a background session, or undefined when `error` says anything else.
  *
- * Claude Code prints "That session is running in the background (<short id>).
- * Run `claude attach <id>` to open it, or `claude stop <id>` first to resume it
- * here." and exits 1 before the session starts, so it arrives as a
- * {@link processStartFailure} carrying that line. The id is the short prefix of
- * the one that was resumed, which is what `claude stop` takes.
+ * Claude Code prints "<title, or "That session"> is running in the background
+ * (<short id>). [<what became of the prompt>] Run `claude attach <id>` to open
+ * it, or `claude stop <id>` first to resume it here. Add --fork-session to
+ * branch off a copy instead." and exits 1 before the session starts, so it
+ * arrives as a {@link processStartFailure} carrying that text. The id is the
+ * short prefix of the one that was resumed, which is what `claude stop` takes.
+ *
+ * Keyed on the two stable phrases, not on the subject (a session's own title,
+ * up to 60 characters) or on the text between them. A host that cannot name the
+ * job prints "Run `claude agents` to find it" with no id: undefined, since
+ * there is nothing to stop by.
  */
 export function backgroundHeldSessionId(error: string | undefined): string | undefined {
   if (!error || !isProcessStartFailure(error)) return undefined;
-  return /that session is running in the background \(([0-9a-f][0-9a-f-]{5,35})\)/i.exec(error)?.[1];
+  const found = /is running in the background \(([0-9a-f][0-9a-f-]{5,35})\)|claude stop ([0-9a-f][0-9a-f-]{5,35})`? first to resume it here/i.exec(error);
+  return found?.[1] ?? found?.[2];
+}
+
+/**
+ * Whether Claude Code says the prompt it was started with reached the background
+ * session it refused to resume: "Your prompt was saved and will be sent to it
+ * when you next restart it", "Your prompt was sent to it, but it could not be
+ * opened here", "Your prompt may not have reached it". Starting the session
+ * again with the same prompt could then deliver it twice, so neither the engine
+ * nor the turn runner runs such a turn again. The other outcomes ("Your prompt
+ * was not sent to it", "It could not be opened here") mean it did not arrive.
+ */
+export function backgroundSessionMayHoldPrompt(error: string | undefined): boolean {
+  return !!error && /your prompt (?:was saved and will be sent|may not have reached|was sent to it)/i.test(error);
 }
 
 /** What each CLI prints when the conversation `id` it was asked to resume is gone. */

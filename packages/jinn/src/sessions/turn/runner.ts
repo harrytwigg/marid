@@ -16,7 +16,7 @@ import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./en
 import { compactColdSessionFirst, settlePreemptedBeforeEngine } from "./auto-compact.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
 import { preflightTurn, resolveTurnPrompt, warnIfNearUsageLimit } from "./preflight.js";
-import { isMissingConversationOutput, isProcessStartFailure } from "../../shared/process-start.js";
+import { backgroundSessionMayHoldPrompt, isMissingConversationOutput, isProcessStartFailure } from "../../shared/process-start.js";
 import { isRawEngineCommand } from "../../shared/skill-commands.js";
 import { ensureRemoteHostReady } from "./remote-ready.js";
 import { runRateLimitTurn } from "./rate-limit-turn.js";
@@ -135,7 +135,11 @@ async function compactFirstIfCold(run: TurnRun): Promise<boolean> {
  */
 async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAttempt; model: string | undefined }> {
   const first = await runEngineWithModelFallback(run);
-  if (!lostResumedConversation(run, first.attempt.result)) return await rerunAfterStartFailure(run, first);
+  if (!lostResumedConversation(run, first.attempt.result)) {
+    const again = await rerunAfterStartFailure(run, first);
+    // The second start may be the one that finds the conversation gone.
+    if (again === first || !lostResumedConversation(run, again.attempt.result)) return again;
+  }
 
   const sessionId = run.input.session.id;
   const lostId = run.plan.resumeSessionId;
@@ -168,7 +172,8 @@ async function rerunAfterStartFailure(
 ): Promise<{ attempt: EngineAttempt; model: string | undefined }> {
   const { plan, input } = run;
   const error = first.attempt.result.error;
-  if (!error || !isProcessStartFailure(error) || plan.compaction || isRawEngineCommand(plan.engineName, input.prompt)) return first;
+  // A prompt Claude Code says it handed to a background session is not undelivered.
+  if (!error || !isProcessStartFailure(error) || backgroundSessionMayHoldPrompt(error) || plan.compaction || isRawEngineCommand(plan.engineName, input.prompt)) return first;
   const live = getSession(input.session.id);
   if (live?.attemptToken !== input.attemptToken || live.status !== "running" || live.engine !== plan.engineName) return first;
 

@@ -81,6 +81,28 @@ describe("a resumed turn whose process never started its session", () => {
     expect(registry.getEngineSessionRef(session, "claude").id).toBe("native-1");
   });
 
+  it("does not run the turn again when Claude Code says it handed the prompt to a background session", async () => {
+    const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, "That session is running in the background (5a1c9d02). Your prompt was saved and will be sent to it when you next restart it. Run `claude stop 5a1c9d02` first to resume it here.");
+    const { session, resumedWith } = await twoTurns(engineResult({ error }));
+
+    expect(resumedWith).toEqual([undefined, "native-1"]);
+    expect(session).toMatchObject({ status: "error", lastError: error });
+  });
+
+  it("answers in a fresh conversation when the second start is the one that finds the conversation gone", async () => {
+    const down = processStartFailure("claude", { exitCode: 255, signal: 0 }, "ssh: connect to host build-box port 22: Connection timed out");
+    const lost = processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: native-1");
+    const { session, resumedWith } = await twoTurns(
+      engineResult({ error: down }),
+      engineResult({ sessionId: "native-1", error: lost }),
+      engineResult({ sessionId: "native-2", result: "answered afresh", cost: 0.01, numTurns: 1 }),
+    );
+
+    expect(resumedWith).toEqual([undefined, "native-1", "native-1", undefined]);
+    expect(session).toMatchObject({ status: "idle", lastError: null });
+    expect(registry.getEngineSessionRef(session, "claude").id).toBe("native-2");
+  });
+
   it("does not run an engine command twice when it fails to start", async () => {
     const error = processStartFailure("claude", { exitCode: 255, signal: 0 }, "ssh: connect to host build-box port 22: Connection timed out");
     const claude = scriptedEngine("claude", [

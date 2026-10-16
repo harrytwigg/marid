@@ -10,8 +10,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
  */
 
 const SID = "held-sess";
-const RESUME = "7eaeb488-1111-4222-8333-444455556666";
-const HELD_LINE = "That session is running in the background (7eaeb488). Run `claude attach 7eaeb488` to open it, or `claude stop 7eaeb488` first to resume it here.";
+const RESUME = "5a1c9d02-1111-4222-8333-444455556666";
+const REFUSAL_TAIL = "Run `claude attach 5a1c9d02` to open it, or `claude stop 5a1c9d02` first to resume it here. Add --fork-session to branch off a copy instead.";
+const HELD_LINE = `That session is running in the background (5a1c9d02). ${REFUSAL_TAIL}`;
 
 const hoisted = vi.hoisted(() => ({
   spawns: [] as { bin: string; args: string[] }[],
@@ -19,6 +20,9 @@ const hoisted = vi.hoisted(() => ({
   deaths: [] as Array<string | undefined>,
   stops: [] as { bin: string; args: string[]; opts: any }[],
   stopFails: false,
+  /** When set, `claude stop` waits for this to be called instead of finishing at once. */
+  holdStop: false,
+  finishStop: undefined as (() => void) | undefined,
 }));
 
 vi.mock("node-pty", () => ({
@@ -55,8 +59,12 @@ vi.mock("node:child_process", async (importOriginal) => {
     ...actual,
     execFile: vi.fn((bin: string, args: string[], opts: any, cb: (err: Error | null, stdout: string, stderr: string) => void) => {
       hoisted.stops.push({ bin, args, opts });
-      if (hoisted.stopFails) cb(new Error("exit code 1"), "", "no such background session");
-      else cb(null, "stopped\n", "");
+      const finish = () => {
+        if (hoisted.stopFails) cb(new Error("exit code 1"), "", "no such background session");
+        else cb(null, "stopped\n", "");
+      };
+      if (hoisted.holdStop) hoisted.finishStop = finish;
+      else finish();
     }),
   };
 });
@@ -100,22 +108,61 @@ import os from "node:os";
 import path from "node:path";
 import { InteractiveClaudeEngine } from "../claude-interactive.js";
 import { PtyLifecycleManager } from "../pty-lifecycle.js";
-import { backgroundHeldSessionId, processStartFailure } from "../../shared/process-start.js";
+import { backgroundHeldSessionId, backgroundSessionMayHoldPrompt, processStartFailure } from "../../shared/process-start.js";
 import { claudeProfileFromDir } from "../../shared/claude-profile.js";
 import { CLAUDE_SETTINGS_DIR } from "../../shared/paths.js";
 import { cleanupSessionSettings } from "../../shared/claude-settings.js";
 
+const failure = (output: string) => processStartFailure("claude", { exitCode: 1, signal: 0 }, output, 1_000);
+const LONG_TITLE = "Review the retry handling of the delegated build and report what the second attempt changed";
+
 describe("backgroundHeldSessionId", () => {
   it("reads the short id out of Claude Code's refusal", () => {
-    const error = processStartFailure("claude", { exitCode: 1, signal: 0 }, `\x1b[2m${HELD_LINE}\x1b[0m\r\n`);
-    expect(backgroundHeldSessionId(error)).toBe("7eaeb488");
+    expect(backgroundHeldSessionId(failure(`\x1b[2m${HELD_LINE}\x1b[0m\r\n`))).toBe("5a1c9d02");
+  });
+
+  it("reads it when the session has a title, which replaces \"That session\"", () => {
+    expect(backgroundHeldSessionId(failure(`"Fix the retry loop" is running in the background (5a1c9d02). ${REFUSAL_TAIL}`))).toBe("5a1c9d02");
+  });
+
+  it("reads it past a long title and a sentence on what became of the prompt", () => {
+    const line = `"${LONG_TITLE.slice(0, 60)}" is running in the background (5a1c9d02). Your prompt was not sent to it: the job did not answer in time. ${REFUSAL_TAIL}`;
+    expect(backgroundHeldSessionId(failure(line))).toBe("5a1c9d02");
+  });
+
+  it("reads it from the `claude stop` instruction alone when a long output has cut the front off", () => {
+    const cut = processStartFailure("claude", { exitCode: 1, signal: 0 }, `${"x".repeat(400)} reason ${REFUSAL_TAIL}`, 150);
+    expect(cut).not.toContain("is running in the background");
+    expect(backgroundHeldSessionId(cut)).toBe("5a1c9d02");
+  });
+
+  it("says nothing when Claude Code cannot name the job", () => {
+    expect(backgroundHeldSessionId(failure("That session is running in the background. Run `claude agents` to find it and open it, or stop it there first to resume it here."))).toBeUndefined();
   });
 
   it("says nothing for any other failure, or for the same words printed by a session that did start", () => {
     expect(backgroundHeldSessionId(processStartFailure("claude", { exitCode: 255, signal: 0 }, "ssh: connect to host build-box port 22: Connection refused"))).toBeUndefined();
-    expect(backgroundHeldSessionId(processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: 7eaeb488"))).toBeUndefined();
+    expect(backgroundHeldSessionId(processStartFailure("claude", { exitCode: 1, signal: 0 }, "No conversation found with session ID: 5a1c9d02"))).toBeUndefined();
     expect(backgroundHeldSessionId(`Interrupted: claude process exited. ${HELD_LINE}`)).toBeUndefined();
     expect(backgroundHeldSessionId(undefined)).toBeUndefined();
+  });
+});
+
+describe("backgroundSessionMayHoldPrompt", () => {
+  it.each([
+    "Your prompt was saved and will be sent to it when you next restart it.",
+    "Your prompt was sent to it, but it could not be opened here: the terminal is busy.",
+    "Your prompt may not have reached it: the job did not answer.",
+  ])("is true when Claude Code says: %s", (sentence) => {
+    expect(backgroundSessionMayHoldPrompt(failure(`That session is running in the background (5a1c9d02). ${sentence} ${REFUSAL_TAIL}`))).toBe(true);
+  });
+
+  it.each([
+    "",
+    "Your prompt was not sent to it: the job did not answer.",
+    "It could not be opened here: the terminal is busy.",
+  ])("is false when the prompt did not arrive: %s", (sentence) => {
+    expect(backgroundSessionMayHoldPrompt(failure(`That session is running in the background (5a1c9d02). ${sentence} ${REFUSAL_TAIL}`))).toBe(false);
   });
 });
 
@@ -128,6 +175,8 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
     hoisted.deaths.length = 0;
     hoisted.stops.length = 0;
     hoisted.stopFails = false;
+    hoisted.holdStop = false;
+    hoisted.finishStop = undefined;
     lifecycle = new PtyLifecycleManager({ maxLivePtys: 10 });
     engine = new InteractiveClaudeEngine(lifecycle, { register: () => {}, unregister: () => {} } as any, {
       remote: () => ({ root: "/srv/jinn-work", mount: "/mnt/jinn-home" }),
@@ -150,7 +199,7 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
 
     expect(hoisted.stops).toHaveLength(1);
     expect(path.basename(hoisted.stops[0].bin)).toBe("claude");
-    expect(hoisted.stops[0].args).toEqual(["stop", "7eaeb488"]);
+    expect(hoisted.stops[0].args).toEqual(["stop", "5a1c9d02"]);
     const resumed = hoisted.spawns[1].args;
     expect(resumed[resumed.indexOf("--resume") + 1]).toBe(RESUME);
     expect(resumed[resumed.length - 1]).toContain("the reply");
@@ -178,7 +227,7 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
     expect(hoisted.spawns).toHaveLength(2);
     expect(hoisted.stops).toHaveLength(1);
     expect(result.error).toContain("claude did not start");
-    expect(result.error).toContain("running in the background (7eaeb488)");
+    expect(result.error).toContain("running in the background (5a1c9d02)");
   });
 
   it("still runs the turn again when the stop itself fails, since the session may have ended meanwhile", async () => {
@@ -190,7 +239,7 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
   });
 
   it("does not stop a session other than the one it was asked to resume", async () => {
-    hoisted.deaths.push(HELD_LINE.replaceAll("7eaeb488", "0badf00d"));
+    hoisted.deaths.push(HELD_LINE.replaceAll("5a1c9d02", "0badf00d"));
     const result = await turn();
 
     expect(hoisted.stops).toHaveLength(0);
@@ -205,6 +254,42 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
     expect(hoisted.stops).toHaveLength(0);
     expect(hoisted.spawns).toHaveLength(1);
     expect(result.error).toContain("unknown option");
+  });
+
+  it.each([
+    "Your prompt was saved and will be sent to it when you next restart it.",
+    "Your prompt was sent to it, but it could not be opened here: the terminal is busy.",
+    "Your prompt may not have reached it: the job did not answer.",
+  ])("does not run the turn again when Claude Code says the prompt reached the session (%s)", async (sentence) => {
+    hoisted.deaths.push(`"Fix the retry loop" is running in the background (5a1c9d02). ${sentence} ${REFUSAL_TAIL}`);
+    const result = await turn();
+
+    expect(hoisted.stops).toHaveLength(0);
+    expect(hoisted.spawns).toHaveLength(1);
+    expect(result.error).toContain(sentence);
+  });
+
+  it("runs the turn again when Claude Code says the prompt was not sent", async () => {
+    hoisted.deaths.push(`"Fix the retry loop" is running in the background (5a1c9d02). Your prompt was not sent to it: the job did not answer. ${REFUSAL_TAIL}`);
+    void turn().catch(() => {});
+    await vi.waitFor(() => expect(hoisted.spawns).toHaveLength(2));
+    expect(hoisted.stops).toHaveLength(1);
+  });
+
+  it("answers a stop that arrives while the background session is being stopped, and does not run the turn", async () => {
+    hoisted.holdStop = true;
+    hoisted.deaths.push(HELD_LINE);
+    const pending = turn();
+    await vi.waitFor(() => expect(hoisted.finishStop).toBeDefined());
+
+    expect(engine.isTurnRunning(SID)).toBe(true);
+    engine.kill(SID, "Interrupted: stopped by the operator");
+    hoisted.finishStop!();
+    const result = await pending;
+
+    expect(result.error).toBe("Interrupted: stopped by the operator");
+    expect(hoisted.spawns).toHaveLength(1);
+    expect(engine.isTurnRunning(SID)).toBe(false);
   });
 
   it("stops it on the remote host, over ssh, under the session's remote Claude profile", async () => {
@@ -225,7 +310,7 @@ describe("InteractiveClaudeEngine — a session held in the daemon's background"
     expect(command).toContain("cd '/srv/jinn-work/proj' && exec env");
     expect(command).toContain("CLAUDE_CONFIG_DIR='/home/builder/.claude-work'");
     expect(command).toContain(`PATH='/usr/bin':"$PATH"`);
-    expect(command).toMatch(/'\/usr\/local\/bin\/claude' 'stop' '7eaeb488'$/);
+    expect(command).toMatch(/'\/usr\/local\/bin\/claude' 'stop' '5a1c9d02'$/);
     expect(args).toContain("builder@build-box");
   });
 });

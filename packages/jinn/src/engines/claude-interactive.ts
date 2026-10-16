@@ -11,7 +11,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { departmentSessionEnv, isScopedSession } from "../gateway/department-scope/session-env.js";
 import { PtyLifecycleManager, ptyHostKey, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
-import { backgroundHeldSessionId, processStartFailure } from "../shared/process-start.js";
+import { backgroundHeldSessionId, backgroundSessionMayHoldPrompt, processStartFailure } from "../shared/process-start.js";
 import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
@@ -190,10 +190,15 @@ export function compactionStatsFromTranscript(transcriptPath: string, afterMs: n
 }
 
 /** How long to wait for the `compact_boundary` after PostCompact has fired. */
-/** How long `claude stop` gets to release a background session. */
-const BACKGROUND_STOP_TIMEOUT_MS = 30_000;
 const COMPACT_BOUNDARY_WAIT_MS = 2_000;
 const COMPACT_BOUNDARY_POLL_MS = 100;
+
+/** How long `claude stop` gets to release a background session. */
+const BACKGROUND_STOP_TIMEOUT_MS = 30_000;
+/** How much of a dying process's output a start failure keeps. Claude Code's
+ *  refusal to resume a background session can run past the default: a title, a
+ *  sentence on what became of the prompt, then the instructions. */
+const START_FAILURE_TAIL_CHARS = 1_000;
 
 /**
  * The sizes of a compaction PostCompact has just confirmed. Claude Code fires
@@ -986,7 +991,7 @@ export class TurnResolver {
   processExited(exit: PtyExit | undefined, output?: string): void {
     if (this.settled) return;
     if (!this.processStarted) {
-      this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", error: processStartFailure("claude", exit, output) });
+      this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", error: processStartFailure("claude", exit, output, START_FAILURE_TAIL_CHARS) });
       return;
     }
     this.interrupt(processExitInterruption("claude", exit));
@@ -1619,6 +1624,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private terminalTurns = new Map<string, number>();
   /** Gateway turns waiting for a terminal turn to finish; calling it aborts. */
   private terminalWaits = new Map<string, (reason: string) => void>();
+  /** Sessions whose daemon-held background session is being stopped before the
+   *  turn runs again. No turn is active then, so kill() records the interrupt here. */
+  private backgroundStops = new Map<string, { reason?: string }>();
   private terminalWaitStartedAt = new Map<string, number>();
   private terminalWaitCb?: (sessionId: string, waiting: boolean) => void;
   /** Model/effort the live PTY was spawned with, per session. `--model`/`--effort`
@@ -2294,18 +2302,31 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *
    * A turn that starts work Claude Code backgrounds (a long Monitor, a forked
    * sub-agent) can leave `claude daemon` hosting the session after the
-   * foreground process has gone. `--resume` then exits at once with "That
-   * session is running in the background", and without this the message it
-   * carried is never seen. The gateway keeps no live process for the session
-   * at this point, so nothing it can reach is lost by stopping the daemon's.
+   * foreground process has gone. `--resume` then exits at once with "… is
+   * running in the background", and without this the message it carried is
+   * never seen. The gateway keeps no live process for the session at this
+   * point, so nothing it can reach is lost by stopping the daemon's.
+   *
+   * Not when Claude Code says the prompt reached that session (saved for it,
+   * sent to it, possibly delivered): running the turn again would deliver it
+   * twice. That failure stands, with Claude Code's account of the prompt.
    */
   async run(opts: EngineRunOpts): Promise<EngineResult> {
     const result = await this.runTurn(opts);
     const resumed = opts.resumeSessionId?.toLowerCase();
     const heldId = resumed ? backgroundHeldSessionId(result.error) : undefined;
-    if (!heldId || !resumed?.startsWith(heldId.toLowerCase())) return result;
+    if (!heldId || !resumed?.startsWith(heldId.toLowerCase()) || backgroundSessionMayHoldPrompt(result.error)) return result;
     logger.warn(`InteractiveClaudeEngine: Claude Code session ${heldId} is held in the background by its daemon; stopping it and running ${opts.sessionId}'s turn again`);
-    await this.stopBackgroundSession(opts, heldId);
+    const sessionId = opts.sessionId!;
+    const stop: { reason?: string } = {};
+    this.backgroundStops.set(sessionId, stop);
+    try {
+      await this.stopBackgroundSession(opts, heldId);
+    } finally {
+      this.backgroundStops.delete(sessionId);
+    }
+    // A stop or shutdown that arrived while `claude stop` ran found no turn to interrupt.
+    if (stop.reason) return { sessionId: opts.resumeSessionId ?? "", result: "", error: stop.reason };
     return await this.runTurn(opts);
   }
 
@@ -3424,6 +3445,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       abortWait(reason);
       if (WAIT_ONLY_INTERRUPTS.has(reason)) return;
     }
+    const stopping = this.backgroundStops.get(sessionId);
+    if (stopping) stopping.reason = reason.startsWith("Interrupted") ? reason : `Interrupted: ${reason}`;
     this.cancelLateRecovery(sessionId);
     const e = this.active.get(sessionId);
     e?.resolver.interrupt(reason.startsWith("Interrupted") ? reason : `Interrupted: ${reason}`);
@@ -3432,7 +3455,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
   killAll(): void {
     for (const abort of [...this.terminalWaits.values()]) abort("Interrupted: gateway shutting down");
-    for (const id of [...this.active.keys()]) this.kill(id, "Interrupted: gateway shutting down");
+    for (const id of new Set([...this.active.keys(), ...this.backgroundStops.keys()])) this.kill(id, "Interrupted: gateway shutting down");
     this.lifecycle.killAll();
   }
 
@@ -3450,7 +3473,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   isTurnRunning(sessionId: string): boolean {
     // A turn waiting behind one typed in the terminal is still a turn: "send
     // now" and /stop must be able to interrupt it.
-    return this.active.has(sessionId) || this.terminalWaits.has(sessionId);
+    return this.active.has(sessionId) || this.terminalWaits.has(sessionId) || this.backgroundStops.has(sessionId);
   }
 
   /** Observable progress for the in-flight turn, or undefined if none is running.
