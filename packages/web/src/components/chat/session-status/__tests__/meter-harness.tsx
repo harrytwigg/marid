@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, type RenderResult } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { contextUsageApi, type ContextUsageWire } from '@/lib/api-context-usage'
 import type { ContextMeterProps } from '../context-meter'
@@ -31,7 +31,12 @@ export function useMeterTestEnvironment() {
 
 const BASE: ContextMeterProps = { sessionId: 'sess-1', loading: false }
 
-export function renderMeter(props: Partial<ContextMeterProps> = {}) {
+export interface RenderedMeter extends RenderResult {
+  update: (props: Partial<ContextMeterProps>) => void
+  client: QueryClient
+}
+
+export function renderMeter(props: Partial<ContextMeterProps> = {}): RenderedMeter {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const tree = (p: Partial<ContextMeterProps>) => (
     <QueryClientProvider client={client}>
