@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import type { BackgroundActivity, DelegatedActivity } from '@/lib/api'
+import type { SubagentRef } from '@/lib/subagent-transcript'
 import { SessionWaitsBoundary, WaitsNote } from '@/components/chat/session-waits-boundary'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { titleCaseSlug } from '@/lib/session-waits'
@@ -125,11 +126,14 @@ export function BackgroundActivityStatus({
   delegatedActivity = null,
   employeeDisplayNames = {},
   sessionId = null,
+  onOpenSubagent,
 }: {
   activity: BackgroundActivity | null
   delegatedActivity?: DelegatedActivity | null
   employeeDisplayNames?: Record<string, string>
   sessionId?: string | null
+  /** Shows a sub-agent's conversation, held by whoever outlives this status: without it a sub-agent row is plain text. */
+  onOpenSubagent?: (agent: SubagentRef) => void
 }) {
   const currentCopy = activityCopy(activity, delegatedActivity, employeeDisplayNames)
   const active = currentCopy !== null
@@ -220,7 +224,7 @@ export function BackgroundActivityStatus({
           >
             <SessionWaitsBoundary>
               <Suspense fallback={<WaitsNote>Loading…</WaitsNote>}>
-                <SessionWaitsPopup key={sessionId} sessionId={sessionId} onClose={closePopup} />
+                <SessionWaitsPopup key={sessionId} sessionId={sessionId} onClose={closePopup} onOpenSubagent={onOpenSubagent} />
               </Suspense>
             </SessionWaitsBoundary>
           </PopoverContent>

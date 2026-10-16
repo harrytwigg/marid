@@ -77,13 +77,18 @@ function addBlock(fold: Fold, role: "user" | "assistant", block: Raw, at: string
   }
 }
 
-function addLine(fold: Fold, line: unknown): void {
+/** The role and timestamp of a user or assistant line, and the blocks of its message; null for any other line. */
+function conversationLine(line: unknown): { role: "user" | "assistant"; at: string | null; content: unknown } | null {
   const obj = record(line);
   const role = obj?.type;
-  if (role !== "user" && role !== "assistant") return;
-  const message = record(obj?.message);
-  const at = instant(obj?.timestamp);
-  const content = message?.content;
+  if (role !== "user" && role !== "assistant") return null;
+  return { role, at: instant(obj?.timestamp), content: record(obj?.message)?.content };
+}
+
+function addLine(fold: Fold, line: unknown): void {
+  const parsed = conversationLine(line);
+  if (!parsed) return;
+  const { role, at, content } = parsed;
   if (typeof content === "string") return addText(fold, role, content, at);
   if (!Array.isArray(content)) return;
   for (const block of content) {
