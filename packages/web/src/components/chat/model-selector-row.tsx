@@ -14,51 +14,12 @@ import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { useModelRegistry, engineList, effortLevelsFor, findModel, defaultEffort, clampEffort, contextWindowFor, providerOf, providerLabel, modelMatchesQuery } from '@/hooks/use-model-registry'
 import { loadExpandedByEngine, setEngineExpanded } from '@/lib/model-picker-prefs'
+import { fmtK, formatContextUsage } from '@/lib/context-usage'
 
 /** Rows the model list shows before the operator asks for more. opencode's
  *  catalog can be hundreds of models, so the picker is a short list plus a
  *  search box, never the whole registry in one scroll of the composer. */
 const MAX_VISIBLE_MODELS = 5
-
-/** Round a token count to a compact `k` string (e.g. 23148 → "23k", 980 → "980"). */
-export function fmtK(n: number): string {
-  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)
-}
-
-export interface ContextUsage {
-  /** Tokens used on the most recent turn (0 for a fresh chat). */
-  tokens: number
-  /** The model's context window in tokens. */
-  window: number
-  /** Fraction full, clamped to [0,1] for the bar. */
-  pct: number
-  /** Raw (un-clamped) fraction, for the tooltip percentage. */
-  rawPct: number
-  /** True when the turn exceeded the window. */
-  over: boolean
-  /** Threshold colour (orange ≥75%, red ≥90%/over), else undefined. */
-  color?: string
-  /** Compact "23k / 200k" label (">200k / 200k" when over). */
-  label: string
-}
-
-/**
- * Pure formatting for the in-dropdown context meter. Returns null only when the
- * window is unknown; a null/0 token count is a valid fresh-chat state (tokens 0).
- */
-export function formatContextUsage(
-  contextTokens: number | null | undefined,
-  window: number | undefined,
-): ContextUsage | null {
-  if (!window || window <= 0) return null
-  const tokens = contextTokens && contextTokens > 0 ? contextTokens : 0
-  const rawPct = tokens / window
-  const pct = Math.min(rawPct, 1)
-  const over = tokens > window
-  const color = pct >= 0.9 ? 'var(--system-red)' : pct >= 0.75 ? 'var(--system-orange)' : undefined
-  const label = over ? `>${fmtK(window)} / ${fmtK(window)}` : `${fmtK(tokens)} / ${fmtK(window)}`
-  return { tokens, window, pct, rawPct, over, color, label }
-}
 
 export interface SelectorValue {
   engine?: string

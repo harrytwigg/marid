@@ -54,7 +54,7 @@ export interface SelfCompactionApiOptions {
 
 const send = (res: ServerResponse, status: number, body: unknown): void => json(res, body, status);
 
-async function enqueueViaMessageRoute(sessionId: string, message: string, displayMessage: string): Promise<void> {
+export async function enqueueViaMessageRoute(sessionId: string, message: string, displayMessage: string): Promise<void> {
   const gateway = internalGatewayConnection();
   const response = await fetch(`${gateway.baseUrl}/api/sessions/${encodeURIComponent(sessionId)}/message`, {
     method: "POST",
@@ -113,8 +113,10 @@ function queuedRefusal(count: number): string {
 function cooldownRefusal(previousAt: number): { error: string; retryAt: number } {
   const retryAt = previousAt + SELF_COMPACTION_COOLDOWN_MS;
   return {
-    error: `this session already requested a compaction at ${new Date(previousAt).toISOString()}; `
-      + `the next is allowed from ${new Date(retryAt).toISOString()}. If one is already scheduled, end your turn.`,
+    // The claim is shared with the operator's meter compaction, so the earlier
+    // one may not have been this session's own request.
+    error: `this session was compacted, or a compaction was requested, at ${new Date(previousAt).toISOString()}; `
+      + `the next is allowed from ${new Date(retryAt).toISOString()}.`,
     retryAt,
   };
 }

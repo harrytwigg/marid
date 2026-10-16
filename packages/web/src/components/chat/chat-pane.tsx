@@ -4,6 +4,7 @@ import { useOrg } from '@/hooks/use-employees'
 import { ChatMessages } from '@/components/chat/chat-messages'
 import type { CommsPeekData } from '@/components/chat/thread-peek'
 import { ChatInput } from '@/components/chat/chat-input'
+import { SessionStatusCluster } from '@/components/chat/session-status/session-status-cluster'
 import { CliKeybar } from '@/components/chat/cli-keybar'
 import { TerminalPaneBody } from '@/components/chat/terminal-pane-body'
 import { isTerminalSession } from '@/lib/terminal-session'
@@ -577,6 +578,16 @@ export function ChatPane({
           ) : null}
           </>
         }
+        sessionStatusSlot={sessionId ? (
+          <SessionStatusCluster
+            key={sessionId}
+            sessionId={sessionId}
+            loading={loading}
+            status={currentSession?.status as string | undefined}
+            lastContextTokens={currentSession?.lastContextTokens as number | null | undefined}
+            liveContextTokens={liveContextTokens}
+          />
+        ) : undefined}
         terminalActionsSlot={
           viewMode === 'cli' && sessionId ? (
             <CliKeybar onKey={(data) => cliTerminalRef.current?.sendKey(data)} />

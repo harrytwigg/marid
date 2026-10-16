@@ -13,6 +13,7 @@ export const queryKeys = {
     children: (id: string) => ['sessions', id, 'children'] as const,
     transcript: (id: string) => ['sessions', id, 'transcript'] as const,
     queue: (id: string) => ['sessions', id, 'queue'] as const,
+    contextUsage: (id: string) => ['sessions', id, 'context-usage'] as const,
   },
   org: {
     all: ['org'] as const,

@@ -151,7 +151,8 @@ import { resolveMessageAudiences, speechContextApplies } from "./speech-context.
 import { isJsonMediaType } from "./media-type.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
-import { clipSessionMessage, sessionCommGuards, prepareLateralSend, isDescendantOf, resolveCallerIdentity, describeUnidentifiedTool, headerString, type CallerIdentity } from "./session-comm-guards.js";
+import { callerMayActOnSession } from "./session-reach-guard.js";
+import { clipSessionMessage, sessionCommGuards, prepareLateralSend, resolveCallerIdentity, describeUnidentifiedTool, headerString, type CallerIdentity } from "./session-comm-guards.js";
 import { originMatchesAuthority, parseRequestAuthority, requestHeaderValues, singleRequestHeader, type RequestAuthority } from "./request-authority.js";
 import {
   ACTIVITY_OPERATION_HEADER,
@@ -317,6 +318,7 @@ import {
 } from "./lifecycle.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
+import { handleSessionContextApi } from "./session-context-api.js";
 import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
 import { isAutoCompacting } from "../sessions/auto-compaction.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
@@ -1228,6 +1230,7 @@ export async function handleApiRequest(
       resolveCaller: () => resolveScopedWriteCallerIdentity(req, context),
       opencodeMode: () => context.getConfig().engines.opencode?.mode,
     })) return;
+    if (await handleSessionContextApi(req, res, { method, pathname, url }, { getConfig: context.getConfig, resolveCaller: () => resolveScopedWriteCallerIdentity(req, context) })) return;
     if (pathname.startsWith("/api/terminals") && await handleTerminalApi(req, res, { method, pathname, url }, terminalApiOptions(req, context))) return;
 
     if (method === "GET" && pathname === "/api/features") {
@@ -1975,18 +1978,10 @@ export async function handleApiRequest(
       // bearer token the scoping is best-effort — it refuses to TEACH the
       // pattern, it cannot police curl.
       const stopCaller = resolveScopedWriteCallerIdentity(req, context);
-      if (stopCaller.kind === "unidentified-tool") {
-        res.writeHead(403, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: UNIDENTIFIED_TOOL_CALL_ERROR }));
-        return;
-      }
-      if (stopCaller.kind === "session" && !isDescendantOf(params.id, stopCaller.callerId, getSession) && reportingParentSessionId(session) !== stopCaller.callerId) {
-        res.writeHead(403, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          error: `session ${params.id} is not a descendant of your session — agents may only stop sessions they spawned (directly or transitively) or delegated to. Ask the operator or the session's parent instead.`,
-        }));
-        return;
-      }
+      if (!callerMayActOnSession(res, session, stopCaller, {
+        verb: "stop",
+        instead: "Ask the operator or the session's parent instead.",
+      })) return;
       interruptSessionTurn(context, session, USER_STOP_INTERRUPTION_REASON, "Interrupted by user");
       return json(res, { status: "stopped", sessionId: params.id });
     }

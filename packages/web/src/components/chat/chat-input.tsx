@@ -101,6 +101,8 @@ interface ChatInputProps {
   statusSlot?: React.ReactNode
   /** Optional terminal-key control, rendered in the toolbar beside the mic. */
   terminalActionsSlot?: React.ReactNode
+  /** Optional per-session status items (context meter), right after the model chip. */
+  sessionStatusSlot?: React.ReactNode
 }
 
 /* ── File to MediaAttachment ─────────────────────────────── */
@@ -178,6 +180,7 @@ export function ChatInput({
   selectorSlot,
   statusSlot,
   terminalActionsSlot,
+  sessionStatusSlot,
 }: ChatInputProps) {
   const { value, setValue, pendingSend } = useChatDraft(sessionId)
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -836,6 +839,15 @@ export function ChatInput({
               onPointerDown={(e) => e.stopPropagation()}
             >
               {selectorSlot}
+            </div>
+          )}
+
+          {/* display: contents, so the wrapper has no box of its own (the slot's
+              own root collapses when it has nothing to show, and no gap is left);
+              React's pointer events still bubble through it. */}
+          {sessionStatusSlot && (
+            <div className="contents" onPointerDown={(e) => e.stopPropagation()}>
+              {sessionStatusSlot}
             </div>
           )}
 
