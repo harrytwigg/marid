@@ -5,6 +5,8 @@ import {
   claimSessionDelivery,
   claimSessionDeliveryAttempt,
   consumeChildReportedToParent,
+  holdInterimRelay,
+  clearHeldInterimRelays,
   recordSessionDeliveryFailure,
   ensureCallbackAttemptToken,
   listDelegationCompletionNudgedSessions,
@@ -16,6 +18,8 @@ import { STRUCTURED_MESSAGE_BODY_MAX_CHARS, type Session } from "../shared/types
 import type { ChatBlockEnvelope, JsonObject } from "../shared/types.js";
 import { enforceDelegationCompletionContract } from "./delegation-completion-contract.js";
 import { isRemoteMcpSession } from "./remote-mcp-session.js";
+import { hasPendingBackgroundWork } from "./background-work.js";
+import { getWorkItem } from "../work-items/store.js";
 import { withReportingParent } from "../work-items/employee-session-delegation.js";
 import type { SessionDeliveryPayload } from "../shared/types.js";
 
@@ -25,6 +29,10 @@ export const CALLBACK_DELIVERY_MAX_ATTEMPTS = CALLBACK_DELIVERY_RETRY_DELAYS_MS.
 // This is a transport ceiling with headroom under macOS ARG_MAX, not a preview budget.
 export const CALLBACK_REPLY_MAX_CHARS = 128_000;
 const CALLBACK_DELIVERY_ATTEMPT_LEASE_MS = 60_000;
+// A shell task that never ends (a dev server) would hold every reply of a child
+// that is otherwise done. After this many held in a row the next one goes out.
+export const INTERIM_RELAY_HOLD_CAP = 25;
+const OPEN_TODO_STATUSES = new Set(["backlog", "executing"]);
 
 let callbackRetryTimer: ReturnType<typeof setTimeout> | undefined;
 let callbackRetrySweepRunning: Promise<number> | undefined;
@@ -112,6 +120,7 @@ export async function notifyParentSessionAndWait(
   // external reply — that would re-create the loss on a side path.
   const relayed = consumeExplicitRelay(childSession);
   if (!result.error && (!hasMeaningfulReply(result.result) || relayed)) return;
+  if (!result.error && holdsInterimRelay(childSession)) return;
 
   await _sendNotification(childSession, result, options).catch((err) => {
     logger.warn(`[callbacks] Failed to notify parent session ${childSession.parentSessionId}: ${err instanceof Error ? err.message : String(err)}`);
@@ -144,6 +153,7 @@ export async function notifyParentOfExternalTurn(
   if (!childSession.parentSessionId) return;
   const relayed = consumeExplicitRelay(childSession);
   if (!hasMeaningfulReply(text) || relayed) return;
+  if (holdsInterimRelay(childSession)) return;
 
   await _sendNotification(childSession, { result: text }, {
     alwaysNotify: options?.alwaysNotify,
@@ -172,6 +182,32 @@ function consumeExplicitRelay(childSession: Session): boolean {
   if (!fresh.attemptToken || fresh.transportMeta?.reportedToParentAttempt !== fresh.attemptToken) return false;
   consumeChildReportedToParent(fresh.id, fresh.attemptToken);
   return true;
+}
+
+/**
+ * Whether this reply is a wait rather than a report, so the parent is not woken
+ * for it. The child's own background work (a build under a monitor, a
+ * sub-agent) is still open and its Todo is still open: the turn ended to wait,
+ * and the work wakes the child again when it finishes. The parent hears the
+ * result that follows (a reply with nothing left running, or the Todo moving
+ * on), an error, or an explicit send_to_session, which is a separate path.
+ *
+ * Fail-safe: a child with no open Todo, nothing running, or a spent hold cap
+ * relays as before, and the cap keeps a never-ending shell task from holding a
+ * finished child's report back for good.
+ */
+function holdsInterimRelay(childSession: Session): boolean {
+  if (childSession.workItemId && hasPendingBackgroundWork(childSession.id)) {
+    const item = getWorkItem(childSession.workItemId);
+    if (item && OPEN_TODO_STATUSES.has(item.status) && holdInterimRelay(childSession.id, INTERIM_RELAY_HOLD_CAP)) {
+      logger.debug(`[callbacks] Held an interim reply of child ${childSession.id}: its background work is still open`);
+      return true;
+    }
+  }
+  if ((getSession(childSession.id) ?? childSession).transportMeta?.interimRelaysHeld !== undefined) {
+    clearHeldInterimRelays(childSession.id);
+  }
+  return false;
 }
 
 /**

@@ -91,7 +91,16 @@ vi.mock("../registry.js", () => ({
   listPendingSessionDeliveries: callbackDeliveryMockState.listPending,
   ensureCallbackAttemptToken: vi.fn(() => "legacy-attempt-token"),
   consumeChildReportedToParent: vi.fn(() => true),
+  holdInterimRelay: vi.fn((id: string, cap: number) => {
+    const held = interimHeld.get(id) ?? 0;
+    if (held >= cap) return false;
+    interimHeld.set(id, held + 1);
+    return true;
+  }),
+  clearHeldInterimRelays: vi.fn((id: string) => { interimHeld.delete(id); }),
 }));
+
+const interimHeld = vi.hoisted(() => new Map<string, number>());
 
 vi.mock("../../work-items/store.js", () => ({
   getWorkItem: vi.fn(),
@@ -110,9 +119,10 @@ vi.mock("../../shared/logger.js", () => ({
   },
 }));
 
-import { __resetCallbackRetrySweepForTest, notifyManagerVisibility, notifyParentOfExternalTurn, notifyParentSession, notifyRateLimitResumed, recoverOrphanedDelegationCompletionClaims, recoverPendingSessionDeliveries } from "../callbacks.js";
+import { INTERIM_RELAY_HOLD_CAP, __resetCallbackRetrySweepForTest, notifyManagerVisibility, notifyParentOfExternalTurn, notifyParentSession, notifyParentSessionAndWait, notifyRateLimitResumed, recoverOrphanedDelegationCompletionClaims, recoverPendingSessionDeliveries } from "../callbacks.js";
 import { claimSessionDelivery, consumeChildReportedToParent, getSession, listDelegationCompletionNudgedSessions, markDelegationCompletionSurfaced } from "../registry.js";
 import { getWorkItem } from "../../work-items/store.js";
+import { runtimeActivity } from "../background-work.js";
 import type { Session } from "../../shared/types.js";
 
 function makeSession(overrides: Partial<Session> = {}): Session {
@@ -151,6 +161,8 @@ beforeEach(() => {
   callbackDeliveryMockState.deliveries.clear();
   callbackDeliveryMockState.nextId = 1;
   vi.mocked(claimSessionDelivery).mockClear();
+  interimHeld.clear();
+  runtimeActivity.clear();
 });
 
 afterEach(() => {
@@ -959,5 +971,84 @@ describe("notifyParentOfExternalTurn", () => {
     expect(body.message).toContain("Still waiting on two reviewers.");
     expect(body.message).not.toContain("Delegation completion contract");
     expect(body.block).toMatchObject({ op: "patch", block: { id: "dg-TST-64", type: "delegation", status: "done" } });
+  });
+});
+
+describe("interim replies of a child waiting on its own background work", () => {
+  let fetchSpy: ReturnType<typeof vi.fn>;
+  const waiting = (n = 1) => runtimeActivity.set("child-001", { activeStreams: 0, activeMonitors: n, lastActivityAt: Date.now() });
+  const child = () => makeSession({
+    workItemId: "wi-open",
+    transportMeta: {
+      delegationCompletionTracked: true,
+      ...(interimHeld.has("child-001") ? { interimRelaysHeld: interimHeld.get("child-001")! } : {}),
+    },
+  });
+  const parentWakes = () => fetchSpy.mock.calls.filter(([url]) => String(url).endsWith("/api/sessions/parent-001/message"));
+
+  beforeEach(() => {
+    fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    vi.mocked(getSession).mockImplementation((id: string) =>
+      id === "child-001" ? child() : makeSession({ id: "parent-001", parentSessionId: null, status: "idle" }),
+    );
+    vi.mocked(getWorkItem).mockReset().mockReturnValue({ id: "wi-open", status: "executing", source: "delegation" } as never);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalThis.fetch = originalFetch as typeof fetch;
+  });
+
+  it("wakes the parent once for three interim turn ends and one final report", async () => {
+    waiting();
+    await notifyParentSessionAndWait(child(), { result: "Build started; waiting on it." });
+    await notifyParentOfExternalTurn(child(), "Build passed. Tests started; still running.", "turn-2");
+    waiting(2);
+    await notifyParentOfExternalTurn(child(), "Two test shards running.", "turn-3");
+    expect(parentWakes()).toHaveLength(0);
+
+    runtimeActivity.clear();
+    await notifyParentOfExternalTurn(child(), "All checks pass. PR is up.", "turn-4");
+
+    expect(parentWakes()).toHaveLength(1);
+    expect(JSON.parse(parentWakes()[0][1].body).message).toContain("All checks pass. PR is up.");
+  });
+
+  it("holds a background sub-agent wait and a re-run the same way", async () => {
+    runtimeActivity.set("child-001", { activeStreams: 0, backgroundAgents: 1, lastActivityAt: Date.now() });
+    await notifyParentSessionAndWait(child(), { result: "Reviewers launched." });
+    runtimeActivity.set("child-001", { activeStreams: 0, backgroundRerun: true, lastActivityAt: Date.now() });
+    await notifyParentOfExternalTurn(child(), "One reviewer reported.", "turn-2");
+    expect(parentWakes()).toHaveLength(0);
+  });
+
+  it("never holds an error, and relays once the child's Todo is no longer open", async () => {
+    waiting();
+    await notifyParentSessionAndWait(child(), { error: "engine crashed" });
+    expect(parentWakes()).toHaveLength(1);
+
+    vi.mocked(getWorkItem).mockReturnValue({ id: "wi-open", status: "in_review", source: "delegation" } as never);
+    await notifyParentOfExternalTurn(child(), "Done; PR ready.", "turn-2");
+    expect(parentWakes()).toHaveLength(2);
+  });
+
+  it("relays as before for a child with no Todo, or with nothing running", async () => {
+    waiting();
+    await notifyParentSessionAndWait(makeSession(), { result: "No Todo, still reports." });
+    runtimeActivity.clear();
+    await notifyParentSessionAndWait({ ...child(), attemptToken: "attempt-002" }, { result: "Nothing running, reports." });
+    expect(parentWakes()).toHaveLength(2);
+  });
+
+  it("lets the next reply through once the hold cap is spent, then starts counting again", async () => {
+    waiting();
+    for (let i = 0; i < INTERIM_RELAY_HOLD_CAP; i++) {
+      await notifyParentOfExternalTurn(child(), `still running ${i}`, `held-${i}`);
+    }
+    expect(parentWakes()).toHaveLength(0);
+    await notifyParentOfExternalTurn(child(), "a monitor that never ends, work is done", "over-cap");
+    expect(parentWakes()).toHaveLength(1);
+    expect(interimHeld.has("child-001")).toBe(false);
   });
 });

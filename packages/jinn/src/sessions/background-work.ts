@@ -38,6 +38,19 @@ export function isBackgroundWorkLive(info: RuntimeActivityInfo | undefined): boo
   return info.backgroundRerun === true || (info.backgroundAgents ?? 0) > 0;
 }
 
+/**
+ * Whether a session has background work of its own still open that will wake
+ * it again: a background shell task, a background sub-agent, or a re-run in
+ * progress. Wider than isBackgroundWorkLive on purpose. That one decides the
+ * status every reader acts on, so it leaves out shell tasks that may never end;
+ * this one asks only whether a turn that just ended was a wait, not a report.
+ */
+export function hasPendingBackgroundWork(sessionId: string): boolean {
+  const info = runtimeActivity.get(sessionId);
+  if (!info) return false;
+  return isBackgroundWorkLive(info) || (info.activeMonitors ?? 0) > 0;
+}
+
 /** Whether the transport is busy: any model request in flight, auxiliary ones
  *  included, or live background work between requests. Wider than
  *  isBackgroundWorkLive, which decides the status every reader acts on. */

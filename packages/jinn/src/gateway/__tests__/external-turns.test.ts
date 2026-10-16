@@ -766,6 +766,30 @@ describe("syncExternalTurn — waking the parent", () => {
     expect(reg.getMessages(quiet)).toHaveLength(1);
   });
 
+  it("wakes the parent once across three background-wait replies and the final report", async () => {
+    const store = await import("../../work-items/store.js");
+    const { runtimeActivity } = await import("../../sessions/background-work.js");
+    const parentId = makeSession();
+    const childId = makeSettledChild(parentId);
+    const todo = store.createWorkItem({ title: "long build", status: "executing" });
+    (await import("../../shared/db.js")).initDb().prepare("UPDATE sessions SET work_item_id = ? WHERE id = ?").run(todo.id, childId);
+    const stop = (text: string) => ({ hook_event_name: "Stop", transcript_path: path.join(tmp, "missing.jsonl"), last_assistant_message: text });
+
+    runtimeActivity.set(childId, { activeStreams: 0, activeMonitors: 1, lastActivityAt: Date.now() });
+    for (const text of ["Build started; waiting on it.", "Build passed; test run started, waiting.", "Tests half done; still waiting."]) {
+      expect(ext.syncExternalTurn(childId, emit, stop(text))).toBe(1);
+    }
+    await flush();
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    runtimeActivity.delete(childId);
+    expect(ext.syncExternalTurn(childId, emit, stop("All checks pass; PR is ready."))).toBe(1);
+    await flush();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchSpy.mock.calls[0][1].body).message).toContain("All checks pass; PR is ready.");
+    expect((reg.getSession(childId)!.transportMeta as any)?.interimRelaysHeld).toBeUndefined();
+  });
+
   it("an explicit send_to_session relay suppresses exactly one later wake", async () => {
     const parentId = makeSession();
     const childId = makeSettledChild(parentId);

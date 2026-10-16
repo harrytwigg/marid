@@ -804,6 +804,37 @@ export function recordChildReportedToParent(id: string, attemptToken: string): v
 }
 
 /**
+ * Count one parent relay held back because the child ended its turn waiting on
+ * its own background work. One statement, so the cap is exact: returns false
+ * once `cap` relays are already held, and the caller then relays instead.
+ */
+export function holdInterimRelay(id: string, cap: number): boolean {
+  const db = initDb();
+  const result = db.prepare(`
+    UPDATE sessions
+    SET transport_meta = json_set(
+      COALESCE(transport_meta, '{}'),
+      '$.interimRelaysHeld',
+      COALESCE(json_extract(transport_meta, '$.interimRelaysHeld'), 0) + 1
+    )
+    WHERE id = ?
+      AND COALESCE(json_extract(transport_meta, '$.interimRelaysHeld'), 0) < ?
+  `).run(id, cap);
+  return result.changes === 1;
+}
+
+/** A relay went out: the held-relay count starts over. */
+export function clearHeldInterimRelays(id: string): void {
+  const db = initDb();
+  db.prepare(`
+    UPDATE sessions
+    SET transport_meta = json_remove(transport_meta, '$.interimRelaysHeld')
+    WHERE id = ?
+      AND json_extract(transport_meta, '$.interimRelaysHeld') IS NOT NULL
+  `).run(id);
+}
+
+/**
  * Claim a session's self-compaction slot: at most one per `cooldownMs`. The
  * check and the write are one statement, so two concurrent requests from the
  * same session cannot both win. Returns the claim instant on success, or the
