@@ -6,7 +6,7 @@ import { isSpellableModelId } from "../shared/model-id.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import {
   DEFAULT_SESSION_FALLBACK_MODE, isSessionFallbackMode,
-  type SessionFallbackMode, type SessionFallbackTarget, type SessionFallbackView,
+  type SessionFallbackMode, type SessionFallbackTarget, type SessionFallbackView, type StoredFallbackTarget,
 } from "../shared/session-fallback-config.js";
 import type { Employee, JinnConfig, ModelRegistry, Session } from "../shared/types.js";
 import type { EngineName } from "../shared/models.js";
@@ -122,6 +122,12 @@ export function resolveSessionFallbackTarget(
   return to ? engineTarget(config, registry, session, to) : null;
 }
 
+/** The session's own chosen target as the view shows it: the model's label when the registry has one. */
+function ownTarget(registry: ModelRegistry, own: StoredFallbackTarget): SessionFallbackTarget {
+  const label = registry[own.engine]?.models.find((m) => m.id === own.model)?.label ?? own.model;
+  return { engine: own.engine, model: own.model, label };
+}
+
 /** What `GET /api/sessions/:id` reports for fallback. */
 export function sessionFallbackView(
   config: JinnConfig,
@@ -130,5 +136,6 @@ export function sessionFallbackView(
   employee?: Employee,
 ): SessionFallbackView {
   const { mode, source } = effectiveFallbackMode(config, session);
-  return { mode, modeSource: source, target: resolveSessionFallbackTarget(config, registry, session, employee) };
+  if (session.fallbackTarget) return { mode, modeSource: source, target: ownTarget(registry, session.fallbackTarget), targetSource: "session" };
+  return { mode, modeSource: source, target: resolveSessionFallbackTarget(config, registry, session, employee), targetSource: "config" };
 }

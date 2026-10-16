@@ -101,6 +101,8 @@ export function beginEngineSubstitution(opts: {
   config: JinnConfig;
   employee: Employee | undefined;
   substitute: string;
+  /** The model the substitute runs, when the operator chose one; else it is derived from the session's pin. */
+  model?: string;
   /** Set when the substitute is another Claude account rather than an engine
    *  (FR-079): the session keeps its engine and runs on that account's profile. */
   accounts?: AccountSwap;
@@ -111,9 +113,9 @@ export function beginEngineSubstitution(opts: {
   const { session, attemptToken, config, employee, substitute, accounts, until, syncSince, lastError } = opts;
 
   const engineConfig: EngineConfig = config.engines[substitute as keyof JinnConfig["engines"]] as EngineConfig ?? {};
-  const model = accounts
+  const model = opts.model ?? (accounts
     ? accountSwapModel(accounts, session.model)
-    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model });
+    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model }));
   const engineOverride = overrideRecord(session, accounts, until, syncSince);
 
   const started = updateSessionForAttempt(session.id, attemptToken, {

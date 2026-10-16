@@ -36,7 +36,7 @@ import {
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
 } from "../shared/rateLimit.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
-import { chooseSubstitute } from "./rate-limit-substitute.js";
+import { chooseSubstituteOrReason } from "./rate-limit-substitute.js";
 import { beginEngineSubstitution, standingOverrideUntil } from "./engine-override.js";
 import { earlier, handBack, handBackAt as accountHandBackAt } from "./rate-limit-handback.js";
 import { resolveEngineRunMcp } from "./engine-run-mcp.js";
@@ -112,10 +112,11 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   // repository deliberately never cloned there. A chain with nothing left in it
   // falls through to Branch B, which waits the limit out where the work lives.
   const remote = isRemoteTarget(remoteTarget) ? remoteTarget : undefined;
-  // The mode is read from the stored row, not the turn-start snapshot: it may have been changed while this turn ran.
+  // The mode and target are read from the stored row, not the turn-start snapshot: they may have been changed while this turn ran.
   const live = getSession(session.id);
-  const choice = chooseSubstitute({
-    config, engines, session: live ? { ...session, fallbackMode: live.fallbackMode } : session, employee, account, remote, remoteTarget,
+  const { choice, reason: targetReason } = chooseSubstituteOrReason({
+    config, engines, session: live ? { ...session, fallbackMode: live.fallbackMode, fallbackTarget: live.fallbackTarget } : session,
+    employee, account, remote, remoteTarget,
   });
   const substituteName = choice?.engine;
   const substituteEngine = substituteName ? engines.get(substituteName) : undefined;
@@ -132,12 +133,12 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     const syncSince = new Date().toISOString();
     const substituteLabel = choice.accounts ? `the ${choice.accounts.substitute} Claude account` : rateLimitEngineLabel(substituteName);
 
-    await hooks.onFallbackStart?.({ resumeAt: resumeAt ?? null, until, substitute: substituteName });
+    await hooks.onFallbackStart?.({ resumeAt: resumeAt ?? null, until, substitute: substituteName, ...(choice.model ? { model: choice.model } : {}) });
 
     // A swap made while another stands keeps that swap's window, so the session stays on the substitute until then.
     const backAt = standingOverrideUntil(session) ?? resumeAt;
     const substitution = beginEngineSubstitution({
-      session, attemptToken, config, employee, substitute: substituteName, accounts: choice.accounts, until, syncSince,
+      session, attemptToken, config, employee, substitute: substituteName, model: choice.model, accounts: choice.accounts, until, syncSince,
       lastError: backAt
         ? `${engineLabel} usage limit — using ${substituteLabel} until ${backAt.toISOString()}`
         : `${engineLabel} usage limit — using ${substituteLabel} temporarily`,
@@ -222,16 +223,16 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     ...threadFields,
     status: "waiting",
     lastActivity: new Date().toISOString(),
-    lastError: resumeAt
+    lastError: (resumeAt
       ? `${engineLabel} usage limit — resumes ${resumeAt.toISOString()}`
-      : `${engineLabel} usage limit — waiting for reset`,
+      : `${engineLabel} usage limit — waiting for reset`) + (targetReason ? `; ${targetReason}` : ""),
   });
   if (!enteredWaiting) {
     await hooks.onCancelled?.();
     return { kind: "cancelled" };
   }
 
-  await hooks.onWaitingStart?.({ resumeAt: resumeAt ?? null, rateLimit });
+  await hooks.onWaitingStart?.({ resumeAt: resumeAt ?? null, rateLimit, ...(targetReason ? { reason: targetReason } : {}) });
 
   // Keep lastActivity fresh while waiting (UI / status endpoints).
   const heartbeat = setInterval(() => {

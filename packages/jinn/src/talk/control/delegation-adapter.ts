@@ -9,6 +9,7 @@ import {
   updateSession,
 } from "../../sessions/registry.js";
 import { childFallbackMode } from "../../sessions/session-fallback.js";
+import { childFallbackTarget } from "../../sessions/fallback-target.js";
 import { initDb } from "../../shared/db.js";
 import type { Session } from "../../shared/types.js";
 import { assignWorkItem } from "../../work-items/assignment.js";
@@ -65,6 +66,9 @@ function validateReplay(session: Session, input: TalkDelegationInput): void {
  */
 function delegateSession(input: TalkDelegationInput, key: string, existing: Session | undefined, todoStatus: string): Session {
   const reused = existing ? undefined : liveEmployeeSession(input.todoId, input.employee.name);
+  const config = input.context.getConfig();
+  const parent = getSession(input.sourceSessionId);
+  const fallbackMode = childFallbackMode(config, parent);
   const session = existing ?? reused ?? createSession({
     engine: input.employee.engine,
     source: "web",
@@ -76,7 +80,8 @@ function delegateSession(input: TalkDelegationInput, key: string, existing: Sess
     model: input.employee.model,
     effortLevel: input.employee.effortLevel,
     parentSessionId: input.sourceSessionId,
-    fallbackMode: childFallbackMode(input.context.getConfig(), getSession(input.sourceSessionId)),
+    fallbackMode,
+    fallbackTarget: childFallbackTarget(config, parent, fallbackMode),
     prompt: input.prompt,
     title: `Delegate ${input.todoId}`,
   });

@@ -24,11 +24,19 @@ export interface SessionFallbackTarget {
   label: string;
 }
 
-/** A session's fallback setting as the API reports it. */
+/** The engine and model an operator chose as one session's usage-limit fallback (`sessions.fallback_target`). */
+export interface StoredFallbackTarget {
+  engine: string;
+  model: string;
+}
+
+/** A session's fallback setting as the API reports it. `targetSource` says whether `target` is the
+ *  session's own choice or what the config's chains would give. */
 export interface SessionFallbackView {
   mode: SessionFallbackMode;
   modeSource: "session" | "default";
   target: SessionFallbackTarget | null;
+  targetSource: "session" | "config";
 }
 
 export function isSessionFallbackMode(value: unknown): value is SessionFallbackMode {
@@ -51,4 +59,27 @@ export function sessionFallbackConfigProblems(sessions: unknown): string[] {
   const { fallbackMode } = sessions as Record<string, unknown>;
   if (fallbackMode === undefined || isSessionFallbackMode(fallbackMode)) return [];
   return [`sessions.${sessionFallbackModeError(fallbackMode)}`];
+}
+
+/** A stored or requested target: an object with a non-empty engine and model, else null. */
+export function parseStoredFallbackTarget(value: unknown): StoredFallbackTarget | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const { engine, model } = value as Record<string, unknown>;
+  if (typeof engine !== "string" || typeof model !== "string") return null;
+  return engine.trim() && model.trim() ? { engine: engine.trim(), model: model.trim() } : null;
+}
+
+/** A stored column value (JSON text) as a target, else NULL (follow the chain). */
+export function storedFallbackTarget(value: unknown): StoredFallbackTarget | null {
+  if (typeof value !== "string") return null;
+  try {
+    return parseStoredFallbackTarget(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+/** The message a malformed `fallbackTarget` carries. */
+export function sessionFallbackTargetShapeError(value: unknown): string {
+  return `fallbackTarget must be null or an object with a non-empty "engine" and "model" (got ${Array.isArray(value) ? "array" : typeof value})`;
 }
