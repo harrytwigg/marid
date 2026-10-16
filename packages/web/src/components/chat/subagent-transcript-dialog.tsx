@@ -69,7 +69,7 @@ export default function SubagentTranscriptDialog({ sessionId, agent, onClose }: 
         data-pane-focus-preserving
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
-        className="flex h-[min(80vh,720px)] w-[min(720px,calc(100vw-16px))] max-w-none flex-col gap-0 rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-0 shadow-[var(--shadow-overlay)] sm:max-w-none"
+        className="flex h-[min(80vh,720px)] w-[min(720px,calc(100vw-16px))] max-w-none flex-col gap-0 rounded-[var(--radius-xl)] border-0 bg-[var(--bg-secondary)] p-0 shadow-[var(--shadow-overlay)] sm:max-w-none"
       >
         <header className="flex shrink-0 items-start gap-3 px-4 pb-2 pt-3 pr-11">
           <div className="min-w-0 flex-1">
