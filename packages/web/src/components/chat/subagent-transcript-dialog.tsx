@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { SubagentTranscriptView } from '@/components/chat/subagent-transcript-view'
 import { formatElapsed } from '@/lib/session-waits'
 import {
   SUBAGENT_LIVE_MS,
+  getSubagentTranscript,
   subagentRefetchMs,
   subagentUnavailableText,
   type SubagentRef,
@@ -57,7 +57,7 @@ export default function SubagentTranscriptDialog({ sessionId, agent, onClose }: 
   const now = useNow()
   const { data, isError } = useQuery({
     queryKey: queryKeys.subagentTranscript(sessionId, agent.id),
-    queryFn: ({ signal }) => api.getSubagentTranscript(sessionId, agent.id, signal),
+    queryFn: ({ signal }) => getSubagentTranscript(sessionId, agent.id, signal),
     refetchInterval: (query) => subagentRefetchMs(query.state.data, Date.now()),
     staleTime: 0,
     gcTime: 0,

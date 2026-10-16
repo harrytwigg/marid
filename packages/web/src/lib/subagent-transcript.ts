@@ -1,3 +1,5 @@
+import { get } from '@/lib/api'
+
 /** `GET /api/sessions/:id/subagents/:agentId/transcript`: a background sub-agent's conversation.
  *  Mirrors the gateway's response; the two sides change together. */
 
@@ -41,4 +43,12 @@ export function subagentUnavailableText(reason: SubagentTranscriptUnavailable): 
 export function subagentRefetchMs(data: SubagentTranscriptResponse | undefined, now: number): number {
   if (data?.available && now - Date.parse(data.updatedAt) > 5 * SUBAGENT_LIVE_MS) return 10_000
   return 2_000
+}
+
+/** A background sub-agent's conversation, read from beside the session's own transcript. */
+export function getSubagentTranscript(sessionId: string, agentId: string, signal?: AbortSignal): Promise<SubagentTranscriptResponse> {
+  return get<SubagentTranscriptResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/subagents/${encodeURIComponent(agentId)}/transcript`,
+    signal ? { signal } : undefined,
+  )
 }

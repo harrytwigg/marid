@@ -5,17 +5,20 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { BackgroundActivityStatus } from '../background-activity-status'
 import { useSubagentView } from '../use-subagent-view'
-import { api } from '@/lib/api'
 import type { BackgroundTaskWait } from '@/lib/session-waits'
-import type { SubagentEntry, SubagentTranscriptResponse } from '@/lib/subagent-transcript'
+import { getSubagentTranscript, type SubagentEntry, type SubagentTranscriptResponse } from '@/lib/subagent-transcript'
 import { PARENT, getSessionWaits, iso, monitor, respond } from './session-waits-fixtures'
 
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
-  return { ...actual, api: { ...actual.api, getSessionWaits: vi.fn(), getSubagentTranscript: vi.fn() } }
+  return { ...actual, api: { ...actual.api, getSessionWaits: vi.fn() } }
+})
+vi.mock('@/lib/subagent-transcript', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/subagent-transcript')>()
+  return { ...actual, getSubagentTranscript: vi.fn() }
 })
 
-const getTranscript = () => vi.mocked(api.getSubagentTranscript)
+const getTranscript = () => vi.mocked(getSubagentTranscript)
 
 const subagent: BackgroundTaskWait = {
   kind: 'subagent',
