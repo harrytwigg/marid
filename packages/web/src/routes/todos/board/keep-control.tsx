@@ -38,7 +38,7 @@ export function KeepToggle(
         onToggle({ id, kept: !kept })
       }}
       className={[
-        "focus-ring grid size-[22px] flex-none place-items-center rounded-md outline-none transition-colors duration-150",
+        "focus-outline grid size-[22px] flex-none place-items-center rounded-md outline-none transition-colors duration-150",
         kept
           ? "text-[var(--accent)] hover:bg-[var(--accent-fill)]"
           : "text-[var(--text-tertiary)] hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]",

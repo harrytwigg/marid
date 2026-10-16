@@ -1281,7 +1281,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Focus ring — keyboard only */
-.focus-ring:focus-visible {
+.focus-outline:focus-visible {
   outline: 2px solid var(--system-blue);
   outline-offset: 2px;
 }

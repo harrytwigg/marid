@@ -54,7 +54,7 @@ export function ValueChip({
           type="button"
           aria-label={label}
           data-testid={testId}
-          className={`focus-ring flex h-[30px] flex-none items-center gap-1.5 rounded-[15px] px-3 text-[13px] font-medium outline-none transition-colors ${
+          className={`focus-outline flex h-[30px] flex-none items-center gap-1.5 rounded-[15px] px-3 text-[13px] font-medium outline-none transition-colors ${
             set
               ? "bg-[var(--accent-fill)] text-[var(--accent)]"
               : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
@@ -82,7 +82,7 @@ export function BoardActiveChip({ label, onRemove }: { label: string; onRemove: 
       type="button"
       aria-label={`Remove ${label}`}
       onClick={onRemove}
-      className="focus-ring flex h-[30px] flex-none items-center gap-1.5 rounded-[15px] bg-[var(--accent-fill)] px-3 text-[13px] font-medium text-[var(--accent)] outline-none transition-colors hover:bg-[var(--fill-secondary)]"
+      className="focus-outline flex h-[30px] flex-none items-center gap-1.5 rounded-[15px] bg-[var(--accent-fill)] px-3 text-[13px] font-medium text-[var(--accent)] outline-none transition-colors hover:bg-[var(--fill-secondary)]"
     >
       {label}
       <X size={11} strokeWidth={2.4} aria-hidden />

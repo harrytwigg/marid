@@ -44,7 +44,7 @@ function QuickCaptureButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       aria-label="Quick capture"
       title="Quick capture — type or dictate a rough idea"
-      className="focus-ring inline-flex size-10 items-center justify-center rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] outline-none transition-transform hover:scale-[0.96] motion-reduce:transition-none"
+      className="focus-outline inline-flex size-10 items-center justify-center rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] outline-none transition-transform hover:scale-[0.96] motion-reduce:transition-none"
     >
       <Zap className="size-4" aria-hidden />
     </button>
