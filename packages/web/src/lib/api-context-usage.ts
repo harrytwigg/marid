@@ -35,7 +35,6 @@ export interface ContextUsageWire {
     /** ISO time; only for the `cooldown` code. */
     retryAt?: string
   }
-  lastCompaction?: { at: string; preTokens: number | null; postTokens: number | null }
 }
 
 export interface CompactQueuedWire {

@@ -62,7 +62,8 @@ describe("ChatInput session status slot", () => {
     const chipWrapper = screen.getByRole("button", { name: "model chip" }).parentElement
     const slotWrapper = screen.getByTestId("status-item").parentElement
     expect(chipWrapper?.nextElementSibling).toBe(slotWrapper)
-    expect(slotWrapper?.className).toContain("shrink-0")
+    // No box of its own: the slot's root decides whether anything takes room in the toolbar.
+    expect(slotWrapper?.className).toBe("contents")
   })
 
   it("keeps a click on the slot from reaching the composer card's pointer handler", () => {

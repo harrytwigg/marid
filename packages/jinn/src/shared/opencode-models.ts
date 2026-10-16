@@ -110,7 +110,10 @@ function readLine(reader: Reader, text: string): void {
 export function withConfiguredWindows(models: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
   const configured = new Map<string, number>();
   for (const entry of block?.models ?? []) {
-    if (typeof entry.contextWindow === "number") configured.set(entry.id, entry.contextWindow);
+    // A zero, negative or NaN window states nothing: keep the discovered one.
+    if (typeof entry.contextWindow === "number" && Number.isFinite(entry.contextWindow) && entry.contextWindow > 0) {
+      configured.set(entry.id, entry.contextWindow);
+    }
   }
   if (configured.size === 0) return models;
   return models.map((model) => {
@@ -140,18 +143,29 @@ function killGracefully(proc: ChildProcess): NodeJS.Timeout {
   }, 1000);
 }
 
-/** Everything `opencode models --verbose` printed, on either stream, or "" on any failure.
- *  The best-effort shape every other discovery in this directory uses. */
-function captureOpencodeModels(bin: string): Promise<string> {
-  return new Promise<string>((resolve) => {
-    let out = "";
+/** What one `opencode models` run printed on stdout and how it exited. stderr
+ *  is for the log only: it is not model output, and a stderr line landing
+ *  inside a multi-line JSON record would cost that model its window. */
+interface ModelsRun {
+  stdout: string;
+  /** Exit code, or null when the process was killed or never started. */
+  code: number | null;
+}
+
+/** Run `opencode <args>` once. Best-effort, the shape every other discovery in
+ *  this directory uses: any failure resolves to an empty run, never a throw. */
+function runOpencodeModels(bin: string, args: string[]): Promise<ModelsRun> {
+  return new Promise<ModelsRun>((resolve) => {
+    let stdout = "";
+    let stderr = "";
     let done = false;
     let timer: NodeJS.Timeout | undefined;
     let killTimer: NodeJS.Timeout | undefined;
-    const finish = (s: string) => {
+    const finish = (code: number | null) => {
       if (done) return;
       done = true;
-      resolve(s);
+      if (stderr.trim()) logger.debug(`opencode ${args.join(" ")} stderr: ${stderr.trim().slice(0, 500)}`);
+      resolve({ stdout, code });
     };
     const stopTimers = () => {
       if (timer) clearTimeout(timer);
@@ -159,31 +173,42 @@ function captureOpencodeModels(bin: string): Promise<string> {
     };
 
     try {
-      const proc = spawn(bin, ["models", "--verbose"], { stdio: ["ignore", "pipe", "pipe"] });
-      proc.stdout.on("data", (d: Buffer) => (out += d.toString()));
-      proc.stderr.on("data", (d: Buffer) => (out += d.toString()));
+      const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+      proc.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
+      proc.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
       timer = setTimeout(() => {
         killTimer = killGracefully(proc);
-        finish(out);
+        finish(null);
       }, DISCOVERY_TIMEOUT_MS);
-      proc.on("close", () => {
+      proc.on("close", (code) => {
         stopTimers();
-        finish(out);
+        finish(code);
       });
       proc.on("error", (e) => {
         stopTimers();
         logger.warn(`opencode models failed: ${e.message}`);
-        finish("");
+        stdout = "";
+        finish(null);
       });
     } catch (e) {
       stopTimers();
       logger.warn(`opencode models spawn failed: ${e instanceof Error ? e.message : e}`);
-      finish("");
+      stdout = "";
+      finish(null);
     }
   });
 }
 
-/** Run `opencode models --verbose` and return what the installed CLI exposes. */
+/** Run `opencode models --verbose` and return what the installed CLI exposes.
+ *
+ *  `--verbose` is what carries the context windows, but not every build has it:
+ *  OpenCode 2.x exits 1 with "Unrecognized flag: --verbose". When that run
+ *  exits non-zero or lists no models, the plain `models` list is used instead,
+ *  without windows, so such a build keeps its catalogue. */
 export async function discoverOpencodeModels(bin: string): Promise<ModelInfo[]> {
-  return parseOpencodeModels(await captureOpencodeModels(bin));
+  const verbose = await runOpencodeModels(bin, ["models", "--verbose"]);
+  const withWindows = parseOpencodeModels(verbose.stdout);
+  if (verbose.code === 0 && withWindows.length > 0) return withWindows;
+  const plain = parseOpencodeModels((await runOpencodeModels(bin, ["models"])).stdout);
+  return plain.length > 0 ? plain : withWindows;
 }

@@ -1,7 +1,10 @@
 /**
  * The one rule for turning "tokens used / window" into a label, a fill and a
- * threshold colour. The model picker's context bar and the composer's context
- * meter both read it, so the two never disagree about what "nearly full" means.
+ * threshold colour. The model picker's context footer and the composer's context
+ * meter both read it, so they agree on the thresholds for "nearly full". They
+ * can still show different figures: the meter's window and auto-compact budget
+ * come from the gateway (which resolves `[1m]` models), while the footer reads
+ * the registry's window and has no budget.
  */
 
 /** Round a token count to a compact string (23148 → "23k", 980 → "980", 1_048_576 → "1M"). */

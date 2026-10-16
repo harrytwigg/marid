@@ -841,8 +841,11 @@ export function ChatInput({
             </div>
           )}
 
+          {/* display: contents, so the wrapper has no box of its own (the slot's
+              own root collapses when it has nothing to show, and no gap is left);
+              React's pointer events still bubble through it. */}
           {sessionStatusSlot && (
-            <div className="shrink-0 empty:hidden" onPointerDown={(e) => e.stopPropagation()}>
+            <div className="contents" onPointerDown={(e) => e.stopPropagation()}>
               {sessionStatusSlot}
             </div>
           )}

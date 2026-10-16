@@ -1,6 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { UNIDENTIFIED_TOOL_CALL_ERROR } from "../mcp/identity.js";
-import { reportingParentSessionId } from "../work-items/employee-session-delegation.js";
 import { resolveAutoCompactPolicy } from "../shared/auto-compact-config.js";
 import { resolveContextWindow } from "../shared/context-window.js";
 import { logger } from "../shared/logger.js";
@@ -20,7 +18,8 @@ import {
 import { isTerminalSession } from "../terminals/session.js";
 import { enqueueViaMessageRoute } from "./self-compaction-api.js";
 import { json, matchRoute, notFound, type ParsedRoute } from "./route-helpers.js";
-import { isDescendantOf, type CallerIdentity } from "./session-comm-guards.js";
+import type { CallerIdentity } from "./session-comm-guards.js";
+import { callerMayActOnSession } from "./session-reach-guard.js";
 
 /**
  * The context meter's two routes.
@@ -154,24 +153,12 @@ function refusalResponse(res: ServerResponse, availability: CompactRefused): voi
 }
 
 /** Who may compact a session: the operator, or an agent that spawned it or
- *  delegated to it — the reach of `POST /api/sessions/:id/stop`, because both
- *  act on a session's turns on its behalf. A tool call that lost its identity
- *  fails closed. Answers the refusal itself. */
-function callerMayCompact(res: ServerResponse, session: Session, caller: CallerIdentity): boolean {
-  if (caller.kind === "unidentified-tool") {
-    json(res, { error: UNIDENTIFIED_TOOL_CALL_ERROR }, 403);
-    return false;
-  }
-  if (caller.kind === "session"
-    && !isDescendantOf(session.id, caller.callerId, getSession)
-    && reportingParentSessionId(session) !== caller.callerId) {
-    json(res, {
-      error: `session ${session.id} is not a descendant of your session — agents may only compact sessions they spawned (directly or transitively) or delegated to. Compact your own context with compact_session.`,
-    }, 403);
-    return false;
-  }
-  return true;
-}
+ *  delegated to it, as for `POST /api/sessions/:id/stop`. */
+const callerMayCompact = (res: ServerResponse, session: Session, caller: CallerIdentity): boolean =>
+  callerMayActOnSession(res, session, caller, {
+    verb: "compact",
+    instead: "Compact your own context with compact_session.",
+  });
 
 async function requestCompact(res: ServerResponse, session: Session, options: SessionContextApiOptions): Promise<void> {
   const availability = compactAvailability(session, availabilityDeps(options));

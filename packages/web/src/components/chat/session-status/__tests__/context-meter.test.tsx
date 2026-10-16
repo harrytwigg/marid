@@ -65,7 +65,11 @@ describe('ContextMeter ring', () => {
     renderMeter()
     await waitFor(() => expect(api.getContextUsage).toHaveBeenCalled())
     expect(screen.queryByTestId('context-meter')).toBeNull()
-    expect((screen.getByTestId('session-status-cluster')).childElementCount).toBe(0)
+    const cluster = screen.getByTestId('session-status-cluster')
+    expect(cluster.childElementCount).toBe(0)
+    // Nothing inside, so the cluster's `empty:hidden` takes it out of the toolbar's flow.
+    expect(cluster.matches(':empty')).toBe(true)
+    expect(cluster.className).toContain('empty:hidden')
   })
 
   it('renders nothing while the first answer is pending or when it fails', async () => {

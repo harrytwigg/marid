@@ -75,6 +75,9 @@ export function ContextMeterPopover({ trigger, open, onOpenChange, data, tokens,
           side="top"
           align="start"
           sideOffset={8}
+          // Keep a margin from the viewport edge: at 375px the left-aligned popover
+          // would otherwise be shifted flush against the right edge.
+          collisionPadding={8}
           aria-label="Context usage"
           className="z-50 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] border-0 bg-[var(--bg-tertiary)] p-3 text-[length:var(--text-caption1)] shadow-[var(--shadow-overlay)] motion-safe:data-[state=closed]:animate-pop-out motion-safe:data-[state=open]:animate-pop-in"
         >
