@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fmtK, formatContextUsage } from '../model-selector-row'
+import { fmtK, formatContextUsage } from '../context-usage'
 
 describe('fmtK', () => {
   it('rounds thousands to a compact k string', () => {
@@ -10,6 +10,12 @@ describe('fmtK', () => {
   it('leaves sub-1000 counts as plain numbers', () => {
     expect(fmtK(980)).toBe('980')
     expect(fmtK(0)).toBe('0')
+  })
+  it('writes a million-token window as M', () => {
+    expect(fmtK(1_000_000)).toBe('1M')
+    expect(fmtK(1_048_576)).toBe('1M')
+    expect(fmtK(1_500_000)).toBe('1.5M')
+    expect(fmtK(999_400)).toBe('999k')
   })
 })
 
@@ -53,5 +59,19 @@ describe('formatContextUsage', () => {
     expect(u.pct).toBe(1)
     expect(u.label).toBe('>258k / 258k')
     expect(u.color).toBe('var(--system-red)')
+  })
+
+  it('warns amber at 90% of an enabled auto-compact budget while the window has room', () => {
+    expect(formatContextUsage(135_000, 1_000_000, 150_000)!.color).toBe('var(--system-orange)')
+    expect(formatContextUsage(134_000, 1_000_000, 150_000)!.color).toBeUndefined()
+  })
+
+  it('ignores a missing or zero budget', () => {
+    expect(formatContextUsage(135_000, 1_000_000, null)!.color).toBeUndefined()
+    expect(formatContextUsage(135_000, 1_000_000, 0)!.color).toBeUndefined()
+  })
+
+  it('stays red past 90% of the window even with a budget', () => {
+    expect(formatContextUsage(950_000, 1_000_000, 150_000)!.color).toBe('var(--system-red)')
   })
 })
