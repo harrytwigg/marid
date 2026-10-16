@@ -66,15 +66,21 @@ const INTERIM_WAIT_MAX_CHARS = 600;
 const INTERIM_WAIT_SIGNAL = /\b(?:waiting|still\s+(?:running|in\s+progress|working)|in\s+the\s+background|monitor(?:ing)?|will\s+(?:report|continue|check|resume)\s+(?:when|once|after))\b/i;
 const ASKS_OR_BLOCKED_SIGNAL = /\?|\b(?:please\s+(?:confirm|advise|clarify|review)|which\s+(?:option|approach)|should\s+i|would\s+you|let\s+me\s+know|blocked|need(?:s)?\s+(?:your|the\s+parent['’]s|approval|a\s+decision|input|access|credentials?)|awaiting\s+(?:approval|confirmation|input|your))\b/i;
 
+const REPORTS_RESULT_SIGNAL = /\b(?:verdict|findings?|defects?|lgtm|approved?|rejected?|(?:pr|pull\s+request)\s+(?:is\s+)?(?:opened|up|created|ready)|(?:opened|created)\s+(?:a\s+|the\s+)?(?:pr|pull\s+request))\b/i;
+
 /**
  * Whether a child's reply is nothing more than a wait on its own background
  * work, which is the only kind of reply the parent is spared. The check is
  * positive and short: it must say it is waiting, stay brief, and make no
- * terminal claim, ask nothing and report no blocker. Anything else is a report
+ * terminal claim, report no result (verdict, findings, a PR), ask nothing and
+ * report no blocker. Anything else is a report
  * or a question the parent has to hear, so doubt means not a wait.
  */
 export function readsAsInterimWait(text: string): boolean {
   const t = text.trim();
   if (t.length === 0 || t.length > INTERIM_WAIT_MAX_CHARS) return false;
-  return INTERIM_WAIT_SIGNAL.test(t) && !hasTerminalSignal(t) && !ASKS_OR_BLOCKED_SIGNAL.test(t);
+  return INTERIM_WAIT_SIGNAL.test(t)
+    && !hasTerminalSignal(t)
+    && !REPORTS_RESULT_SIGNAL.test(t)
+    && !ASKS_OR_BLOCKED_SIGNAL.test(t);
 }

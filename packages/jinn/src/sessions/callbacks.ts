@@ -34,9 +34,11 @@ const CALLBACK_DELIVERY_ATTEMPT_LEASE_MS = 60_000;
 // A shell task that never ends (a dev server) would hold every reply of a child
 // that is otherwise done. After this many held in a row the next one goes out.
 export const INTERIM_RELAY_HOLD_CAP = 25;
-// A held reply is never lost: when nothing newer has relayed it by now (the
-// child went idle for good, the engine never reported the task's end), the
-// parent gets it. A restart relays it at startup instead.
+// A held reply is never lost: once this long has passed since the first of a
+// run of held replies, with nothing relayed meanwhile (the child went idle for
+// good, the engine never reported the task's end), the parent gets the newest
+// one. It also bounds the wake rate of a long wait to one per this period. A
+// restart relays a held reply at startup instead.
 export const HELD_REPLY_MAX_AGE_MS = 45 * 60_000;
 const heldReplyTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
