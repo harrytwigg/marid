@@ -39,16 +39,18 @@ export function isBackgroundWorkLive(info: RuntimeActivityInfo | undefined): boo
 }
 
 /**
- * Whether a session has background work of its own still open that will wake
- * it again: a background shell task, a background sub-agent, or a re-run in
- * progress. Wider than isBackgroundWorkLive on purpose. That one decides the
- * status every reader acts on, so it leaves out shell tasks that may never end;
- * this one asks only whether a turn that just ended was a wait, not a report.
+ * Whether the engine still counts a background task the session launched: a
+ * shell task or a sub-agent. The question is only whether a turn that just
+ * ended was a wait for that task, so it is wider than isBackgroundWorkLive
+ * (which leaves out shell tasks that may never end, to keep status honest) and
+ * leaves out a re-run in progress: a re-run's own reply is the answer, not a wait.
  */
-export function hasPendingBackgroundWork(sessionId: string): boolean {
-  const info = runtimeActivity.get(sessionId);
-  if (!info) return false;
-  return isBackgroundWorkLive(info) || (info.activeMonitors ?? 0) > 0;
+export function isAwaitingOwnBackgroundTask(info: RuntimeActivityInfo | undefined): boolean {
+  return !!info && ((info.activeMonitors ?? 0) > 0 || (info.backgroundAgents ?? 0) > 0);
+}
+
+export function hasOwnBackgroundTask(sessionId: string): boolean {
+  return isAwaitingOwnBackgroundTask(runtimeActivity.get(sessionId));
 }
 
 /** Whether the transport is busy: any model request in flight, auxiliary ones

@@ -5,8 +5,9 @@ import {
   claimSessionDelivery,
   claimSessionDeliveryAttempt,
   consumeChildReportedToParent,
-  holdInterimRelay,
-  clearHeldInterimRelays,
+  holdInterimReply,
+  takeHeldInterimReply,
+  listHeldInterimReplySessionIds,
   recordSessionDeliveryFailure,
   ensureCallbackAttemptToken,
   listDelegationCompletionNudgedSessions,
@@ -16,9 +17,10 @@ import {
 import { logger } from "../shared/logger.js";
 import { STRUCTURED_MESSAGE_BODY_MAX_CHARS, type Session } from "../shared/types.js";
 import type { ChatBlockEnvelope, JsonObject } from "../shared/types.js";
-import { enforceDelegationCompletionContract } from "./delegation-completion-contract.js";
+import { enforceDelegationCompletionContract, OPEN_EXECUTION_STATUSES } from "./delegation-completion-contract.js";
+import { readsAsInterimWait } from "./stop-nudge.js";
 import { isRemoteMcpSession } from "./remote-mcp-session.js";
-import { hasPendingBackgroundWork } from "./background-work.js";
+import { hasOwnBackgroundTask } from "./background-work.js";
 import { getWorkItem } from "../work-items/store.js";
 import { withReportingParent } from "../work-items/employee-session-delegation.js";
 import type { SessionDeliveryPayload } from "../shared/types.js";
@@ -32,7 +34,11 @@ const CALLBACK_DELIVERY_ATTEMPT_LEASE_MS = 60_000;
 // A shell task that never ends (a dev server) would hold every reply of a child
 // that is otherwise done. After this many held in a row the next one goes out.
 export const INTERIM_RELAY_HOLD_CAP = 25;
-const OPEN_TODO_STATUSES = new Set(["backlog", "executing"]);
+// A held reply is never lost: when nothing newer has relayed it by now (the
+// child went idle for good, the engine never reported the task's end), the
+// parent gets it. A restart relays it at startup instead.
+export const HELD_REPLY_MAX_AGE_MS = 45 * 60_000;
+const heldReplyTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 let callbackRetryTimer: ReturnType<typeof setTimeout> | undefined;
 let callbackRetrySweepRunning: Promise<number> | undefined;
@@ -119,8 +125,9 @@ export async function notifyParentSessionAndWait(
   // error, settleThrownTurn) must not leave it standing to swallow the next
   // external reply — that would re-create the loss on a side path.
   const relayed = consumeExplicitRelay(childSession);
+  if (result.error || relayed) releaseHeldReply(childSession.id);
   if (!result.error && (!hasMeaningfulReply(result.result) || relayed)) return;
-  if (!result.error && holdsInterimRelay(childSession)) return;
+  if (!result.error && holdsInterimRelay(childSession, result.result ?? "", options)) return;
 
   await _sendNotification(childSession, result, options).catch((err) => {
     logger.warn(`[callbacks] Failed to notify parent session ${childSession.parentSessionId}: ${err instanceof Error ? err.message : String(err)}`);
@@ -152,8 +159,9 @@ export async function notifyParentOfExternalTurn(
   childSession = withReportingParent(childSession);
   if (!childSession.parentSessionId) return;
   const relayed = consumeExplicitRelay(childSession);
+  if (relayed) releaseHeldReply(childSession.id);
   if (!hasMeaningfulReply(text) || relayed) return;
-  if (holdsInterimRelay(childSession)) return;
+  if (holdsInterimRelay(childSession, text, options)) return;
 
   await _sendNotification(childSession, { result: text }, {
     alwaysNotify: options?.alwaysNotify,
@@ -186,28 +194,107 @@ function consumeExplicitRelay(childSession: Session): boolean {
 
 /**
  * Whether this reply is a wait rather than a report, so the parent is not woken
- * for it. The child's own background work (a build under a monitor, a
- * sub-agent) is still open and its Todo is still open: the turn ended to wait,
- * and the work wakes the child again when it finishes. The parent hears the
- * result that follows (a reply with nothing left running, or the Todo moving
- * on), an error, or an explicit send_to_session, which is a separate path.
+ * for it. Three things must hold: the reply reads as nothing but a wait (short,
+ * says it is waiting, claims nothing is done, asks nothing, reports no
+ * blocker), the child's Todo is still open, and the engine still counts a
+ * background task of the child's, which wakes the child again when it finishes.
+ * The parent then hears what follows: the next reply that is not a wait, an
+ * error, or an explicit send_to_session, which is a separate path.
  *
- * Fail-safe: a child with no open Todo, nothing running, or a spent hold cap
- * relays as before, and the cap keeps a never-ending shell task from holding a
- * finished child's report back for good.
+ * A held reply is parked with the session, the newest replacing the older, and
+ * relayed by flushHeldReply if nothing newer relays first. Neither the
+ * completion contract nor the delegation block is touched for it: a wait is not
+ * a completion to judge, and the delegation is not done.
+ *
+ * Fail-safe: anything doubtful, any failure here, and a spent hold cap all
+ * relay as before.
  */
-function holdsInterimRelay(childSession: Session): boolean {
-  if (childSession.workItemId && hasPendingBackgroundWork(childSession.id)) {
-    const item = getWorkItem(childSession.workItemId);
-    if (item && OPEN_TODO_STATUSES.has(item.status) && holdInterimRelay(childSession.id, INTERIM_RELAY_HOLD_CAP)) {
-      logger.debug(`[callbacks] Held an interim reply of child ${childSession.id}: its background work is still open`);
-      return true;
+function holdsInterimRelay(
+  childSession: Session,
+  text: string,
+  options?: { alwaysNotify?: boolean },
+): boolean {
+  try {
+    if (
+      options?.alwaysNotify !== false
+      && childSession.workItemId
+      && hasOwnBackgroundTask(childSession.id)
+      && readsAsInterimWait(text)
+    ) {
+      const item = getWorkItem(childSession.workItemId);
+      if (
+        item
+        && OPEN_EXECUTION_STATUSES.has(item.status)
+        && holdInterimReply(
+          childSession.id,
+          { text: text.trim().slice(0, CALLBACK_REPLY_MAX_CHARS), workItemId: childSession.workItemId, at: Date.now() },
+          INTERIM_RELAY_HOLD_CAP,
+        )
+      ) {
+        armHeldReplyFlush(childSession.id);
+        logger.debug(`[callbacks] Held an interim reply of child ${childSession.id}: its background work is still open`);
+        return true;
+      }
     }
+  } catch (error) {
+    logger.warn(`[callbacks] Could not hold an interim reply of child ${childSession.id}; relaying it: ${error instanceof Error ? error.message : String(error)}`);
   }
-  if ((getSession(childSession.id) ?? childSession).transportMeta?.interimRelaysHeld !== undefined) {
-    clearHeldInterimRelays(childSession.id);
-  }
+  releaseHeldReply(childSession.id);
   return false;
+}
+
+/** A reply is going to the parent, or the child reported on its own: the held
+ *  one is superseded and its count starts over. Never throws. */
+function releaseHeldReply(sessionId: string): void {
+  const timer = heldReplyTimers.get(sessionId);
+  if (timer) clearTimeout(timer);
+  heldReplyTimers.delete(sessionId);
+  try {
+    takeHeldInterimReply(sessionId);
+  } catch (error) {
+    logger.warn(`[callbacks] Could not clear the held reply of child ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function armHeldReplyFlush(sessionId: string): void {
+  if (heldReplyTimers.has(sessionId)) return;
+  const timer = setTimeout(() => {
+    heldReplyTimers.delete(sessionId);
+    void flushHeldInterimReply(sessionId);
+  }, HELD_REPLY_MAX_AGE_MS);
+  timer.unref?.();
+  heldReplyTimers.set(sessionId, timer);
+}
+
+/** Hand the parent the newest held reply of a child, once. Returns whether there was one. */
+export async function flushHeldInterimReply(sessionId: string): Promise<boolean> {
+  const timer = heldReplyTimers.get(sessionId);
+  if (timer) clearTimeout(timer);
+  heldReplyTimers.delete(sessionId);
+  const held = takeHeldInterimReply(sessionId);
+  if (!held) return false;
+  const stored = getSession(sessionId);
+  if (!stored) return false;
+  const child = withReportingParent(stored);
+  if (!child.parentSessionId) return false;
+  await _sendNotification(child, { result: held.text }, {
+    skipCompletionContract: true,
+    callbackKind: "parent-external-turn",
+    attemptQualifier: `held:${held.at}`,
+  }).catch((err) => {
+    logger.warn(`[callbacks] Failed to relay a held reply of child ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+  });
+  return true;
+}
+
+/** At startup nothing is running any more, so no reply held before the restart
+ *  can still be a wait: relay each one. */
+async function recoverHeldInterimReplies(): Promise<void> {
+  for (const sessionId of listHeldInterimReplySessionIds()) {
+    await flushHeldInterimReply(sessionId).catch((err) => {
+      logger.warn(`[callbacks] Held-reply recovery failed for child ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  }
 }
 
 /**
@@ -279,6 +366,11 @@ export async function recoverSessionDeliveryStateOnStartup(): Promise<{
     orphanedRecovered = await recoverOrphanedDelegationCompletionClaims();
   } catch (error) {
     logger.error(`[callbacks] Startup orphan recovery failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    await recoverHeldInterimReplies();
+  } catch (error) {
+    logger.error(`[callbacks] Startup held-reply recovery failed: ${error instanceof Error ? error.message : String(error)}`);
   }
   return { pendingRecovered, orphanedRecovered };
 }
@@ -605,6 +697,8 @@ function armCallbackRetrySweep(): void {
 }
 
 export function __resetCallbackRetrySweepForTest(): void {
+  for (const timer of heldReplyTimers.values()) clearTimeout(timer);
+  heldReplyTimers.clear();
   if (callbackRetryTimer) clearTimeout(callbackRetryTimer);
   callbackRetryTimer = undefined;
   callbackRetrySweepRunning = undefined;

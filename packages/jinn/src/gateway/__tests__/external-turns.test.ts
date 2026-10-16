@@ -776,18 +776,22 @@ describe("syncExternalTurn — waking the parent", () => {
     const stop = (text: string) => ({ hook_event_name: "Stop", transcript_path: path.join(tmp, "missing.jsonl"), last_assistant_message: text });
 
     runtimeActivity.set(childId, { activeStreams: 0, activeMonitors: 1, lastActivityAt: Date.now() });
-    for (const text of ["Build started; waiting on it.", "Build passed; test run started, waiting.", "Tests half done; still waiting."]) {
+    for (const text of ["Build started; waiting on it.", "Build passed; test run started, waiting.", "Tests running; still waiting."]) {
       expect(ext.syncExternalTurn(childId, emit, stop(text))).toBe(1);
     }
     await flush();
     expect(fetchSpy).not.toHaveBeenCalled();
+    // The newest held reply is parked with the session, count and all.
+    expect((reg.getSession(childId)!.transportMeta as any).interimRelayHold).toMatchObject({ count: 3, text: "Tests running; still waiting." });
+    expect(reg.listHeldInterimReplySessionIds()).toContain(childId);
 
     runtimeActivity.delete(childId);
     expect(ext.syncExternalTurn(childId, emit, stop("All checks pass; PR is ready."))).toBe(1);
     await flush();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(JSON.parse(fetchSpy.mock.calls[0][1].body).message).toContain("All checks pass; PR is ready.");
-    expect((reg.getSession(childId)!.transportMeta as any)?.interimRelaysHeld).toBeUndefined();
+    expect((reg.getSession(childId)!.transportMeta as any)?.interimRelayHold).toBeUndefined();
+    expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
   });
 
   it("an explicit send_to_session relay suppresses exactly one later wake", async () => {

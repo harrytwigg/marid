@@ -804,34 +804,81 @@ export function recordChildReportedToParent(id: string, attemptToken: string): v
 }
 
 /**
- * Count one parent relay held back because the child ended its turn waiting on
- * its own background work. One statement, so the cap is exact: returns false
- * once `cap` relays are already held, and the caller then relays instead.
+ * A child's reply that was held back from its parent because the turn only
+ * waited on the child's own background work. Persisted with the session so a
+ * restart, which forgets the in-memory background state, can still hand the
+ * latest one to the parent instead of losing it.
  */
-export function holdInterimRelay(id: string, cap: number): boolean {
-  const db = initDb();
-  const result = db.prepare(`
-    UPDATE sessions
-    SET transport_meta = json_set(
-      COALESCE(transport_meta, '{}'),
-      '$.interimRelaysHeld',
-      COALESCE(json_extract(transport_meta, '$.interimRelaysHeld'), 0) + 1
-    )
-    WHERE id = ?
-      AND COALESCE(json_extract(transport_meta, '$.interimRelaysHeld'), 0) < ?
-  `).run(id, cap);
-  return result.changes === 1;
+export interface HeldInterimReply {
+  /** Replies held in a row for this Todo, this one included. */
+  count: number;
+  /** The newest held reply. Older ones are superseded, not queued. */
+  text: string;
+  at: number;
+  workItemId: string;
 }
 
-/** A relay went out: the held-relay count starts over. */
-export function clearHeldInterimRelays(id: string): void {
+const HELD_INTERIM_REPLY_KEY = "interimRelayHold";
+
+function readHeldInterimReply(db: Database.Database, id: string): HeldInterimReply | undefined {
+  const row = db.prepare(`SELECT json_extract(transport_meta, '$.${HELD_INTERIM_REPLY_KEY}') AS held FROM sessions WHERE id = ?`)
+    .get(id) as { held?: string | null } | undefined;
+  if (!row?.held) return undefined;
+  try {
+    const held = JSON.parse(row.held) as Partial<HeldInterimReply>;
+    return typeof held.text === "string" && typeof held.workItemId === "string"
+      ? { count: Number(held.count) || 1, text: held.text, at: Number(held.at) || 0, workItemId: held.workItemId }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Hold one reply, replacing any earlier held one. Returns false once `cap`
+ * replies are already held in a row for this Todo, and the caller relays
+ * instead. A new Todo starts the count over.
+ */
+export function holdInterimReply(
+  id: string,
+  held: Pick<HeldInterimReply, "text" | "workItemId" | "at">,
+  cap: number,
+): boolean {
   const db = initDb();
-  db.prepare(`
-    UPDATE sessions
-    SET transport_meta = json_remove(transport_meta, '$.interimRelaysHeld')
-    WHERE id = ?
-      AND json_extract(transport_meta, '$.interimRelaysHeld') IS NOT NULL
-  `).run(id);
+  return db.transaction(() => {
+    const current = readHeldInterimReply(db, id);
+    const count = current && current.workItemId === held.workItemId ? current.count : 0;
+    if (count >= cap) return false;
+    const record: HeldInterimReply = { ...held, count: count + 1 };
+    const result = db.prepare(`
+      UPDATE sessions
+      SET transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.${HELD_INTERIM_REPLY_KEY}', json(?))
+      WHERE id = ?
+    `).run(JSON.stringify(record), id);
+    return result.changes === 1;
+  })();
+}
+
+/** Remove and return the held reply, if any: it was relayed, or superseded by a relay. */
+export function takeHeldInterimReply(id: string): HeldInterimReply | undefined {
+  const db = initDb();
+  return db.transaction(() => {
+    const held = readHeldInterimReply(db, id);
+    if (!held) return undefined;
+    db.prepare(`
+      UPDATE sessions SET transport_meta = json_remove(transport_meta, '$.${HELD_INTERIM_REPLY_KEY}') WHERE id = ?
+    `).run(id);
+    return held;
+  })();
+}
+
+/** Sessions that hold a reply nobody has relayed yet. */
+export function listHeldInterimReplySessionIds(): string[] {
+  const db = initDb();
+  const rows = db.prepare(`
+    SELECT id FROM sessions WHERE json_extract(transport_meta, '$.${HELD_INTERIM_REPLY_KEY}') IS NOT NULL
+  `).all() as Array<{ id: string }>;
+  return rows.map((row) => row.id);
 }
 
 /**
