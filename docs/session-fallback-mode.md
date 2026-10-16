@@ -44,15 +44,28 @@ sessions:
 {
   "mode": "fallback",
   "modeSource": "default",
-  "target": { "engine": "codex", "model": "gpt-5.6-sol", "label": "gpt-5.6-sol" }
+  "target": { "engine": "codex", "model": "gpt-5.6-sol", "label": "gpt-5.6-sol" },
+  "targetSource": "config",
+  "allowedEngines": ["claude", "codex"]
 }
 ```
 
 - `modeSource` is `session` when the session has its own mode and `default` when it follows `sessions.fallbackMode`.
+- `targetSource` is `session` when `target` is the session's own chosen fallback (see below) and `config` when it comes from the chains. `allowedEngines` lists the installed engines the session may choose as its own fallback: the same filters the substitute walk applies.
 - `target` is where the session would fall back to, worked out from config alone: no engine health, and no check that a binary is installed. It is `null` when the chain is empty or has nothing the session may use. It is reported whatever the mode, so a client can decide what to show for `auto-resume`.
 - `label` is the model id when there is one, else the engine name. For another Claude account it is `claude:<account>`, followed by ` · <model>` when a model is resolved.
 
 The target follows the same rules as the switch itself. A local Claude session walks its own account's chain. A department-scoped session takes only Claude-account entries (and a scoped session on another engine may only move to Claude). A remote session takes only engines that can also run on its host. The model is the session's model mapped through `fallbackModelMap` when the substitute serves it, else the substitute's configured or default model. A Claude account keeps the engine, and the session's model passes through that account's map.
+
+## Choosing a fallback model for one session
+
+By default a session falls back along the config's chain. The operator can instead name the engine and model one session switches to, so the choice does not depend on how the chain is configured.
+
+- **Set it.** `PUT` or `PATCH /api/sessions/:id` with `{ "fallbackTarget": { "engine": "codex", "model": "gpt-5.6-sol" } }`; `{ "fallbackTarget": null }` clears it and the session follows the chain again. It is stored per session (`sessions.fallback_target`) and survives a restart. The request is refused with a reason when the engine is unknown or not installed, the model is not one the engine offers, the session is department-scoped and the engine is not claude, or the session runs on a remote host and the engine cannot run there. The web composer's fallback chip menu has "Choose fallback model…" (the same engine, model and search picker as the new-chat selector, offering only the allowed engines) and "Use config fallback".
+- **What a limit does.** In `fallback` and `fallback-children`, a usage limit switches the session to exactly that engine and model. It never uses the chain instead. When the chosen target cannot serve at that moment (the engine is not installed or not available to this session, has hit its own limit, no longer offers the model, or is the model that just hit its limit), the session parks and resumes when its own limit resets, as `auto-resume` does, and the notice and the session's last error say why. In `auto-resume` the target is kept but unused.
+- **Same engine.** A target on the session's own engine (for example another Claude model) is a model change on the account the session is on. Engine health is not consulted for it, because a limit is recorded per engine and may have been the old model's alone.
+- **Children.** A `fallback-children` session passes its target on with the mode, to children created by spawns, delegations and Talk delegations. Any other child gets no target. A child is checked against its own filters when the limit comes, so a target it may not use parks it.
+- **MCP.** Not exposed through the MCP tools.
 
 ## MCP
 
