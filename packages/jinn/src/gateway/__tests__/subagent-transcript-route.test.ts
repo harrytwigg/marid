@@ -88,11 +88,20 @@ describe("GET /api/sessions/:id/subagents/:agentId/transcript", () => {
 
   it("never follows an agent id out of the subagents folder", async () => {
     const { session, project, conversation } = await sessionWithSubagent("eng-dev", [ask]);
+    // Where an unchecked id would land: a file the agent id's own `..` segments would reach.
     fs.writeFileSync(path.join(project, conversation, "agent-x.jsonl"), `${said}\n`);
-    for (const id of ["..%2Fagent-x", "..", "a%2Fb"]) {
+    for (const id of ["..%2Fagent-x", "..", "a%2Fb", "x%2F..%2F..%2Fagent-x"]) {
       const { status, body } = await read(session.id, id);
       expect(status === 404 || (status === 200 && !body.available)).toBe(true);
     }
+  });
+
+  it("reads only a file name made of letters, digits, - and _", async () => {
+    // `a.b` is one path segment the router lets through, and `agent-a.b.jsonl` a file it would find.
+    const { session, project, conversation } = await sessionWithSubagent("eng-dev", [ask]);
+    fs.writeFileSync(path.join(project, conversation, "subagents", "agent-a.b.jsonl"), `${said}\n`);
+    const { status, body } = await read(session.id, "a.b");
+    expect({ status, available: body.available }).toEqual({ status: 200, available: false });
   });
 });
 

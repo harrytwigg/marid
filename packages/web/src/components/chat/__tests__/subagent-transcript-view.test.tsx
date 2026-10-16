@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { BackgroundActivityStatus } from '../background-activity-status'
@@ -41,26 +41,32 @@ const unavailable = (reason: 'not-found' | 'unreadable' | 'no-conversation'): Su
   ({ sessionId: PARENT, agentId: subagent.id, available: false, reason })
 
 /** What the chat pane does: the status line, and the view its popup opens, held beside it. */
-function Pane({ active }: { active: boolean }) {
-  const view = useSubagentView(PARENT)
+function Pane({ active, session = PARENT, onPaneEvent }: { active: boolean; session?: string; onPaneEvent?: (type: string) => void }) {
+  const view = useSubagentView(session)
+  const seen = (type: string) => () => onPaneEvent?.(type)
   return (
-    <>
+    <div
+      onKeyDown={seen('keydown')} onMouseDown={seen('mousedown')} onDragEnter={seen('dragenter')}
+      onDragOver={seen('dragover')} onDrop={seen('drop')} onClick={seen('click')}
+    >
       <BackgroundActivityStatus
         activity={active ? { activeAgents: 1, subAgents: 1 } as never : null}
         delegatedActivity={active ? { activeSessions: 1, employees: ['alpha-builder'] } : null}
-        sessionId={PARENT}
+        sessionId={session}
         onOpenSubagent={view.open}
       />
       {view.node}
-    </>
+    </div>
   )
 }
 
-function mount(active = true) {
+function mount(active = true, onPaneEvent?: (type: string) => void) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  const tree = (on: boolean) => <QueryClientProvider client={client}><MemoryRouter><Pane active={on} /></MemoryRouter></QueryClientProvider>
+  const tree = (on: boolean, session = PARENT) => (
+    <QueryClientProvider client={client}><MemoryRouter><Pane active={on} session={session} onPaneEvent={onPaneEvent} /></MemoryRouter></QueryClientProvider>
+  )
   const view = render(tree(active))
-  return { rerender: (on: boolean) => view.rerender(tree(on)) }
+  return { rerender: (on: boolean, session = PARENT) => view.rerender(tree(on, session)) }
 }
 
 async function openSubagentRow() {
@@ -164,5 +170,52 @@ describe('a background sub-agent row in the waiting-on popup', () => {
     const activity = await screen.findByTestId('subagent-activity')
     expect(activity.getAttribute('data-live')).toBe('false')
     expect(activity.textContent).toMatch(/Quiet for/)
+  })
+
+  it('does not come back when the chat shows another session and then this one again', async () => {
+    getTranscript().mockResolvedValue(transcript([prompt, said]))
+    const { rerender } = mount()
+    await openSubagentRow()
+    await screen.findByTestId('subagent-transcript')
+
+    rerender(true, 'other-session')
+    await waitFor(() => expect(screen.queryByTestId('subagent-transcript-dialog')).toBeNull())
+    rerender(true, PARENT)
+
+    await waitFor(() => expect(screen.getByTestId('background-activity-status')).toBeTruthy())
+    expect(screen.queryByTestId('subagent-transcript-dialog')).toBeNull()
+  })
+
+  it('keeps its clicks, keys and dropped files from the chat pane behind it', async () => {
+    getTranscript().mockResolvedValue(transcript([prompt, said]))
+    const events: string[] = []
+    mount(true, (type) => events.push(type))
+    await openSubagentRow()
+    const dialog = await screen.findByTestId('subagent-transcript-dialog')
+    events.length = 0
+
+    fireEvent.click(dialog)
+    fireEvent.mouseDown(dialog)
+    fireEvent.keyDown(dialog, { key: 'a' })
+    fireEvent.dragEnter(dialog)
+    fireEvent.dragOver(dialog)
+    const drop = createEvent.drop(dialog)
+    fireEvent(dialog, drop)
+
+    expect(events).toEqual([])
+    // The browser must not open the file in place of the page.
+    expect(drop.defaultPrevented).toBe(true)
+  })
+
+  it('returns focus to the status line it was opened from, which the popup row it came from no longer is', async () => {
+    getTranscript().mockResolvedValue(transcript([prompt, said]))
+    mount()
+    const user = await openSubagentRow()
+    await screen.findByTestId('subagent-transcript')
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByTestId('subagent-transcript-dialog')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('background-activity-trigger')))
   })
 })

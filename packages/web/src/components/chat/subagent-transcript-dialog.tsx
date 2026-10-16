@@ -15,6 +15,21 @@ import {
 
 const NOTE = 'm-0 px-4 py-8 text-center text-[length:var(--text-caption1)] text-[var(--text-secondary)]'
 
+const stop = (event: { stopPropagation: () => void }) => event.stopPropagation()
+/** A dialog's events travel through React's tree to the chat pane it was opened from, whose click, key,
+ *  focus-tracking and file-drop handlers have no business with a read-only view. A drop is also
+ *  cancelled here, or the browser would open the file in place of the page. */
+const ISOLATED = {
+  onClick: stop,
+  onPointerDown: stop,
+  onMouseDown: stop,
+  onKeyDown: stop,
+  onDragEnter: stop,
+  onDragLeave: stop,
+  onDragOver: (event: React.DragEvent) => { event.preventDefault(); event.stopPropagation() },
+  onDrop: (event: React.DragEvent) => { event.preventDefault(); event.stopPropagation() },
+}
+
 function useNow(): number {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -49,9 +64,11 @@ function Body({ data, isError }: { data: SubagentTranscriptResponse | undefined;
  * A background sub-agent's conversation in a dialog over the chat: read-only, and live while the
  * sub-agent writes. It is a dialog, not a route, so closing it leaves the chat exactly as it was.
  */
-export default function SubagentTranscriptDialog({ sessionId, agent, onClose }: {
+export default function SubagentTranscriptDialog({ sessionId, agent, returnFocusTo = null, onClose }: {
   sessionId: string
   agent: SubagentRef
+  /** Takes focus when the view closes, if it is still on the page. */
+  returnFocusTo?: HTMLElement | null
   onClose: () => void
 }) {
   const now = useNow()
@@ -67,8 +84,13 @@ export default function SubagentTranscriptDialog({ sessionId, agent, onClose }: 
       <DialogContent
         data-testid="subagent-transcript-dialog"
         data-pane-focus-preserving
-        onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
+        {...ISOLATED}
+        onCloseAutoFocus={(event) => {
+          // Radix would return focus to the popup row that opened this, which is gone.
+          if (!returnFocusTo?.isConnected) return
+          event.preventDefault()
+          returnFocusTo.focus()
+        }}
         className="flex h-[min(80vh,720px)] w-[min(720px,calc(100vw-16px))] max-w-none flex-col gap-0 rounded-[var(--radius-xl)] border-0 bg-[var(--bg-secondary)] p-0 shadow-[var(--shadow-overlay)] sm:max-w-none"
       >
         <header className="flex shrink-0 items-start gap-3 px-4 pb-2 pt-3 pr-11">
