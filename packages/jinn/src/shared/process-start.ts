@@ -34,6 +34,21 @@ export function isProcessStartFailure(error: string): boolean {
   return /^\S+ did not start: its process exited\b/.test(error);
 }
 
+/**
+ * The session Claude Code refused to resume because its daemon still holds it
+ * as a background session, or undefined when `error` says anything else.
+ *
+ * Claude Code prints "That session is running in the background (<short id>).
+ * Run `claude attach <id>` to open it, or `claude stop <id>` first to resume it
+ * here." and exits 1 before the session starts, so it arrives as a
+ * {@link processStartFailure} carrying that line. The id is the short prefix of
+ * the one that was resumed, which is what `claude stop` takes.
+ */
+export function backgroundHeldSessionId(error: string | undefined): string | undefined {
+  if (!error || !isProcessStartFailure(error)) return undefined;
+  return /that session is running in the background \(([0-9a-f][0-9a-f-]{5,35})\)/i.exec(error)?.[1];
+}
+
 /** What each CLI prints when the conversation `id` it was asked to resume is gone. */
 function missingConversation(id: string): RegExp[] {
   const quoted = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

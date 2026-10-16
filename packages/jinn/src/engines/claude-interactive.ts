@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import * as pty from "node-pty";
 import type { CompactionStats, InterruptibleEngine, EngineRunOpts, EngineResult, EngineRateLimitInfo, StreamDelta, TurnProgress } from "../shared/types.js";
@@ -10,7 +11,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { departmentSessionEnv, isScopedSession } from "../gateway/department-scope/session-env.js";
 import { PtyLifecycleManager, ptyHostKey, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
-import { processStartFailure } from "../shared/process-start.js";
+import { backgroundHeldSessionId, processStartFailure } from "../shared/process-start.js";
 import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
@@ -189,6 +190,8 @@ export function compactionStatsFromTranscript(transcriptPath: string, afterMs: n
 }
 
 /** How long to wait for the `compact_boundary` after PostCompact has fired. */
+/** How long `claude stop` gets to release a background session. */
+const BACKGROUND_STOP_TIMEOUT_MS = 30_000;
 const COMPACT_BOUNDARY_WAIT_MS = 2_000;
 const COMPACT_BOUNDARY_POLL_MS = 100;
 
@@ -2284,7 +2287,75 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     });
   }
 
+  /**
+   * Run a turn; if Claude Code refuses to resume the session because its daemon
+   * still holds it as a background session, stop that background session and
+   * run the turn once more.
+   *
+   * A turn that starts work Claude Code backgrounds (a long Monitor, a forked
+   * sub-agent) can leave `claude daemon` hosting the session after the
+   * foreground process has gone. `--resume` then exits at once with "That
+   * session is running in the background", and without this the message it
+   * carried is never seen. The gateway keeps no live process for the session
+   * at this point, so nothing it can reach is lost by stopping the daemon's.
+   */
   async run(opts: EngineRunOpts): Promise<EngineResult> {
+    const result = await this.runTurn(opts);
+    const resumed = opts.resumeSessionId?.toLowerCase();
+    const heldId = resumed ? backgroundHeldSessionId(result.error) : undefined;
+    if (!heldId || !resumed?.startsWith(heldId.toLowerCase())) return result;
+    logger.warn(`InteractiveClaudeEngine: Claude Code session ${heldId} is held in the background by its daemon; stopping it and running ${opts.sessionId}'s turn again`);
+    await this.stopBackgroundSession(opts, heldId);
+    return await this.runTurn(opts);
+  }
+
+  /** `claude stop <id>`, as the session's own Claude profile, on the host the
+   *  session runs on. Never throws: a stop that did not work shows as the
+   *  second attempt failing the same way, with Claude Code's own words. */
+  private async stopBackgroundSession(opts: EngineRunOpts, id: string): Promise<void> {
+    try {
+      let bin: string;
+      let args: string[];
+      let options: { env?: NodeJS.ProcessEnv; cwd?: string };
+      if (isRemoteTarget(opts)) {
+        const remote = this.readRemoteConfig();
+        const destination = sshDestination(opts);
+        const facts = cachedRemoteFacts(destination);
+        if (!facts) throw new Error(`host ${destination} has not been staged this gateway boot`);
+        const claudeConfigDir = resolveRemoteClaudeConfigDir(opts, remote);
+        bin = resolveBin("ssh");
+        args = buildSshSpawnArgs({
+          destination,
+          tunnelPort: 0,
+          gatewayPort: 0,
+          reverseTunnel: false,
+          allocateTty: false,
+          remoteCwd: opts.remoteCwd!,
+          remoteEnv: claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeConfigDir } : {},
+          unsetRemoteEnv: InteractiveClaudeEngine.remoteEnvDeny(claudeConfigDir),
+          pathPrepend: [remoteNodeDir(facts)],
+          bin: requireRemoteEngineBin(destination, facts, "claude"),
+          args: ["stop", id],
+        });
+        options = { env: this.buildPtyEnv(opts.sessionId, { sshClient: true }) };
+      } else {
+        bin = resolveBin("claude", opts.bin);
+        args = ["stop", id];
+        options = { env: this.buildPtyEnv(opts.sessionId, { claudeProfile: opts.claudeProfile }), cwd: opts.cwd || JINN_HOME };
+      }
+      await new Promise<void>((resolve, reject) => {
+        execFile(bin, args, { ...options, timeout: BACKGROUND_STOP_TIMEOUT_MS }, (err, stdout, stderr) => {
+          if (err) reject(Object.assign(err, { output: `${stdout}${stderr}`.trim() }));
+          else resolve();
+        });
+      });
+    } catch (err) {
+      const output = (err as { output?: string }).output;
+      logger.warn(`InteractiveClaudeEngine: could not stop background Claude Code session ${id}: ${err instanceof Error ? err.message : String(err)}${output ? ` (${output.slice(-300)})` : ""}`);
+    }
+  }
+
+  private async runTurn(opts: EngineRunOpts): Promise<EngineResult> {
     const jinnSessionId = opts.sessionId;
     if (!jinnSessionId) throw new Error("InteractiveClaudeEngine.run requires opts.sessionId");
 
