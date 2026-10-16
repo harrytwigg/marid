@@ -199,16 +199,25 @@ function runOpencodeModels(bin: string, args: string[]): Promise<ModelsRun> {
   });
 }
 
+/** The plain list, tried in this order when `--verbose` gave nothing. OpenCode
+ *  2.x lists from a private server only with `--standalone` (without it `models`
+ *  starts and depends on its background service, which can fail outright);
+ *  1.x rejects that flag, so a build that does is asked again without it. */
+const PLAIN_MODELS_ARGS: string[][] = [["models", "--standalone"], ["models"]];
+
 /** Run `opencode models --verbose` and return what the installed CLI exposes.
  *
  *  `--verbose` is what carries the context windows, but not every build has it:
  *  OpenCode 2.x exits 1 with "Unrecognized flag: --verbose". When that run
- *  exits non-zero or lists no models, the plain `models` list is used instead,
- *  without windows, so such a build keeps its catalogue. */
+ *  exits non-zero or lists no models, the plain list is used instead, without
+ *  windows, so such a build keeps its catalogue. */
 export async function discoverOpencodeModels(bin: string): Promise<ModelInfo[]> {
   const verbose = await runOpencodeModels(bin, ["models", "--verbose"]);
   const withWindows = parseOpencodeModels(verbose.stdout);
   if (verbose.code === 0 && withWindows.length > 0) return withWindows;
-  const plain = parseOpencodeModels((await runOpencodeModels(bin, ["models"])).stdout);
-  return plain.length > 0 ? plain : withWindows;
+  for (const args of PLAIN_MODELS_ARGS) {
+    const plain = parseOpencodeModels((await runOpencodeModels(bin, args)).stdout);
+    if (plain.length > 0) return plain;
+  }
+  return withWindows;
 }

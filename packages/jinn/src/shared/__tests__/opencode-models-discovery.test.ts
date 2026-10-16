@@ -31,23 +31,34 @@ function fakeBin(body: string): string {
 const calls = (): string[] => fs.readFileSync(log, "utf8").trim().split("\n");
 
 describe("discoverOpencodeModels without --verbose support", () => {
-  // What 2.0.29 does: `models --verbose` exits 1 with no model on stdout.
+  // What 2.0.29 does: `models --verbose` exits 1 with no model on stdout, and
+  // plain `models` needs `--standalone` (it otherwise wants its background service).
   const REJECTS_VERBOSE = [
     'if [ "$2" = "--verbose" ]; then echo "Unrecognized flag: --verbose in command opencode models" >&2; exit 1; fi',
+    'if [ "$2" != "--standalone" ]; then echo "Error: Server process exited with code 1" >&2; exit 1; fi',
     "printf 'opencode/alpha\\nopencode/beta\\nopencode/gamma\\n'",
   ].join("\n");
 
-  it("falls back to plain `models`, whose list carries no windows", async () => {
+  it("falls back to the plain list, whose entries carry no windows", async () => {
     const models = await discoverOpencodeModels(fakeBin(REJECTS_VERBOSE));
     expect(models.map((m) => m.id)).toEqual(["opencode/alpha", "opencode/beta", "opencode/gamma"]);
     expect(models.every((m) => m.contextWindow === undefined)).toBe(true);
-    expect(calls()).toEqual(["models --verbose", "models"]);
+    expect(calls()).toEqual(["models --verbose", "models --standalone"]);
+  });
+
+  it("asks again without --standalone when the build rejects that flag too", async () => {
+    const bin = fakeBin([
+      'if [ "$2" = "--verbose" ] || [ "$2" = "--standalone" ]; then echo "unknown flag" >&2; exit 1; fi',
+      "echo opencode/legacy",
+    ].join("\n"));
+    expect((await discoverOpencodeModels(bin)).map((m) => m.id)).toEqual(["opencode/legacy"]);
+    expect(calls()).toEqual(["models --verbose", "models --standalone", "models"]);
   });
 
   it("falls back when --verbose exits 0 but prints no model", async () => {
     const bin = fakeBin('if [ "$2" = "--verbose" ]; then echo "nothing to show"; exit 0; fi\necho opencode/plain');
     expect((await discoverOpencodeModels(bin)).map((m) => m.id)).toEqual(["opencode/plain"]);
-    expect(calls()).toEqual(["models --verbose", "models"]);
+    expect(calls()).toEqual(["models --verbose", "models --standalone"]);
   });
 
   it("falls back when --verbose lists models but exits non-zero", async () => {
