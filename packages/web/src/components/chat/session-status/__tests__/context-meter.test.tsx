@@ -300,11 +300,26 @@ describe('ContextMeter compact flow', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
       await screen.findByRole('button', { name: /Compacting…/ })
       serve(usageFixture({ contextTokens: 31_000 }))
-      await act(async () => { await vi.advanceTimersByTimeAsync(21_000) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+      expect(screen.queryByTestId('compact-outcome')).toBeNull()
+      await act(async () => { await vi.advanceTimersByTimeAsync(31_000) })
       expect((await screen.findByTestId('compact-outcome')).textContent).toContain('Compacted: 182k → 31k')
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('counts a running status as having seen the session busy', async () => {
+    serve(usageFixture({ contextTokens: 182_000 }))
+    api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
+    const { update } = renderMeter({ status: 'idle' })
+    await openPopover()
+    fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
+    await screen.findByRole('button', { name: /Compacting…/ })
+    update({ status: 'running' })
+    serve(usageFixture({ contextTokens: 31_000 }))
+    update({ status: 'idle' })
+    expect((await screen.findByTestId('compact-outcome')).textContent).toBe('Compacted: 182k → 31k')
   })
 
   it('keeps waiting while the gateway reports the compaction as queued, and when that clears before the turn starts', async () => {

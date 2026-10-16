@@ -14,9 +14,9 @@ export type CompactPhase =
 
 const POLL_MS = 2500
 /** If the compaction turn is never seen running, settle anyway after this long. */
-const NEVER_SEEN_MS = 20_000
+const NEVER_SEEN_MS = 60_000
 
-/** The session is running something (the compaction turn included). */
+/** Refusal codes that mean the session is running something (the compaction turn included). */
 const RUNNING_CODES = new Set(['busy', 'compacting'])
 
 export const UNCONFIRMED_MESSAGE =
@@ -133,7 +133,7 @@ export function useCompactFlow({ sessionId, loading, status, lastContextTokens, 
   const code = data?.compact.reason?.code
   useSettleWhenIdle({
     compacting,
-    active: loading || (code != null && RUNNING_CODES.has(code)),
+    active: loading || status === 'running' || status === 'waiting' || (code != null && RUNNING_CODES.has(code)),
     queued: code === 'queued',
     run,
     refetch: query.refetch,
