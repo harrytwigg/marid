@@ -996,10 +996,8 @@
       ]
     },
     "packages/web/src/components/chat/model-selector-row.tsx": {
-      "lines": 525,
       "exempt": [
-        "complexity",
-        "max-lines-per-function"
+        "complexity"
       ]
     },
     "packages/web/src/components/chat/session-row-menu.tsx": {
