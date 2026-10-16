@@ -854,10 +854,12 @@ export function ChatInput({
           {/* Ambient status sits left-anchored in the toolbar's flexible middle,
               reading as a continuation of the model chip's cluster rather than a
               floating center element. flex-1 (basis-0) claims only LEFTOVER
-              space, so the slot can never push or truncate its siblings —
-              appearing/disappearing moves nothing, and an overlong status clips
-              inside this container. */}
-          <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden pl-1">
+              space, and an overlong status clips inside this container. While it
+              shows something it keeps a small floor (dot and count, or the short
+              label from 360px), so on a phone the shrinkable model chip gives up
+              that width and the status stays a tap target; when empty the floor
+              goes and nothing moves. */}
+          <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden pl-1 has-[>*]:min-w-10 min-[360px]:has-[>*]:min-w-[4.5rem]">
             {statusSlot}
           </div>
 
