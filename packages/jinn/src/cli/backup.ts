@@ -5,13 +5,14 @@ import { readManifest, verifyManifest } from "../backup/manifest.js";
 import { restoreSnapshot } from "../backup/restore.js";
 import { runBackupRun, DEFAULT_MAX_TOTAL_BYTES, DEFAULT_RETENTION_DAYS } from "../backup/run.js";
 import { SNAPSHOT_DIR_PATTERN } from "../backup/snapshot.js";
+import { backupRootFor, legacyBackupRootFor } from "../instances/backup-rename.js";
 
 type JsonOptions = { json?: boolean };
 
 /** Outside every instance home by design: a backup inside the thing it backs up
  *  is lost with it. */
 export function defaultBackupRoot(homeDir: string = os.homedir()): string {
-  return path.join(homeDir, "Backups", "jinn-homes");
+  return backupRootFor(homeDir);
 }
 
 const GIB = 1024 * 1024 * 1024;
@@ -92,7 +93,9 @@ function listSnapshots(root: string): SnapshotListing[] {
 }
 
 export function runBackupList(options: { root?: string } & JsonOptions = {}): void {
-  const snapshots = listSnapshots(options.root ?? defaultBackupRoot());
+  // Without an explicit root, the snapshots an earlier codename wrote (an instance not yet moved still has them there) are listed too.
+  const roots = options.root ? [options.root] : [...new Set([defaultBackupRoot(), legacyBackupRootFor(os.homedir())])];
+  const snapshots = roots.flatMap(listSnapshots);
   if (options.json) return printJson(snapshots);
   if (snapshots.length === 0) return console.log("No snapshots yet.");
   for (const snapshot of snapshots) {

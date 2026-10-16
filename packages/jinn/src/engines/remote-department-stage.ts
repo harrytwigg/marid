@@ -3,6 +3,7 @@ import { departmentRecord } from "../gateway/department-registry.js";
 import { generateStageFileSet } from "../gateway/department-stage/file-set.js";
 import { logger } from "../shared/logger.js";
 import { relayStampShellCheck } from "../shared/host-assets.js";
+import { renameRemoteStages } from "./remote-stage-rename.js";
 import { resolveJinnHome } from "../shared/paths.js";
 import { FARM_FILTERED_DIRS, REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
 import { assertScopedRemoteSpawn, remoteDepartmentsRoot, remoteDepartmentStageDir } from "../shared/remote-department.js";
@@ -235,7 +236,14 @@ function incomingName(slug: string): string {
  * before the trust seed, whose `mkdir -p` would otherwise create an empty stage directory.
  * Returns the stage directory's real path on the host.
  */
-export async function syncRemoteDepartmentStage(destination: string, facts: RemoteFacts, remote: RemoteExecutionConfig, slug: string): Promise<string> {
+export async function syncRemoteDepartmentStage(
+  destination: string,
+  facts: RemoteFacts,
+  remote: RemoteExecutionConfig,
+  slug: string,
+  claudeConfigDir?: string,
+): Promise<string> {
+  await renameRemoteStages(destination, facts, remote, claudeConfigDir);
   const { files } = generateStageFileSet({ home: resolveJinnHome(), slug, definition: departmentRecord(slug).definition });
   const res = await sshRun(destination, [buildStageSyncCommand(remote, facts, slug, incomingName(slug))], { stdin: buildStageTar(files) });
   if (res.code !== 0) {

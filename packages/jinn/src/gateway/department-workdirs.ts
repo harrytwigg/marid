@@ -5,6 +5,7 @@ import path from "node:path";
 import { resolveClaudeConfigDir } from "../shared/home.js";
 import { resolveJinnHome } from "../shared/paths.js";
 import { employeeClaudeConfigDirs } from "./org-yaml-files.js";
+import { LEGACY_CODENAME, NAMES } from "../shared/codename.js";
 
 /**
  * Working-directory validation for a department (FR-033). A department's working
@@ -20,7 +21,12 @@ import { employeeClaudeConfigDirs } from "./org-yaml-files.js";
  * name do not overwrite each other's stage directory.
  */
 export function departmentStagesContainer(): string {
-  return path.join(path.dirname(resolveJinnHome()), ".jinn-departments");
+  return path.join(path.dirname(resolveJinnHome()), `.${NAMES.codename}-departments`);
+}
+
+/** The container an earlier codename named, beside the same home: where stage directories are before they move. */
+export function legacyDepartmentStagesContainer(home: string = resolveJinnHome()): string {
+  return path.join(path.dirname(home), `.${LEGACY_CODENAME}-departments`);
 }
 
 /**
@@ -87,7 +93,7 @@ function gitTopLevel(dir: string): string | null {
 
 /** Neither the directory nor anything above it may be one of these roots. */
 function exactOrAncestorRoots(options: WorkdirOptions): string[] {
-  return [os.homedir(), resolveJinnHome(), departmentStagesContainer(), path.join(os.homedir(), ".claude"), resolveClaudeConfigDir(), ...(options.claudeConfigDirs ?? [])].map(real);
+  return [os.homedir(), resolveJinnHome(), departmentStagesContainer(), legacyDepartmentStagesContainer(), path.join(os.homedir(), ".claude"), resolveClaudeConfigDir(), ...(options.claudeConfigDirs ?? [])].map(real);
 }
 
 /** Nothing inside any of these may be a department's working directory. */
@@ -96,6 +102,7 @@ function protectedTrees(options: WorkdirOptions): string[] {
   return [
     resolveJinnHome(),
     departmentStagesContainer(),
+    legacyDepartmentStagesContainer(),
     ...[".claude", ".ssh", ".config", ".aws", ".gnupg", "Library"].map((name) => path.join(home, name)),
     // The gateway's own profile, which `CLAUDE_CONFIG_DIR` may put somewhere other than ~/.claude.
     resolveClaudeConfigDir(),

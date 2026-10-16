@@ -1309,7 +1309,7 @@ async function stageHostState(opts: PrepareRemoteSessionOpts, destination: strin
       ? await rebuildScopedHome(destination, facts, sessionHome, SESSION_STAGE_TTL_DAYS, target.remoteWorkArea)
       : await rebuildHomeFarm(destination, facts, remote.mount, sessionHome, target.remoteCwd);
     await ensureAssets(destination, facts, present);
-    const realStageDir = department ? await syncRemoteDepartmentStage(destination, facts, remote, department) : undefined;
+    const realStageDir = department ? await syncRemoteDepartmentStage(destination, facts, remote, department, resolveRemoteClaudeConfigDir(target, remote)) : undefined;
     // Claude Code's folder-trust dialog is the thing being pre-empted here, and
     // it is Claude Code's alone: `pi -p` reads its prompt from stdin and prints
     // JSON, with no first-run dialog to hang on and no `.claude.json` to write.

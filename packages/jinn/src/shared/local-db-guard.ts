@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { REMOTE_STAGE_MARKER } from "./remote-farm.js";
+import { LEGACY_REMOTE_STAGE_MARKER, REMOTE_STAGE_MARKER } from "./remote-farm.js";
 
 /**
  * Refuse to open a Marid SQLite database that is not on a local filesystem.
@@ -105,11 +105,13 @@ export function networkFilesystemOf(dbPath: string, deps: LocalDbGuardDeps = {})
 /** Whether `home` is a remote session's staged home (FARM_SCRIPT writes the
  *  marker as a real file, never a link). */
 export function isRemoteStagedHome(home: string): boolean {
-  try {
-    return fs.lstatSync(path.join(home, REMOTE_STAGE_MARKER)).isFile();
-  } catch {
-    return false;
-  }
+  return [REMOTE_STAGE_MARKER, LEGACY_REMOTE_STAGE_MARKER].some((marker) => {
+    try {
+      return fs.lstatSync(path.join(home, marker)).isFile();
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** Throws when `home` is a remote session's staged home: its linked entries are
