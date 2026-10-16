@@ -155,13 +155,17 @@ export function FallbackModeChip({ sessionId, view, disabled, subscribe }: Fallb
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={disabled}>
+        {/* shrink-[100] against the model button's 1: the chip gives up its text first, and
+            once it is down to its icon the model label takes the rest. Keep both factors >= 1:
+            when the unfrozen items' factors sum below 1, flex absorbs only that fraction of the
+            overflow and the wrapper clips the chip instead. */}
         <button
           type="button"
           data-testid="fallback-mode-chip"
           disabled={disabled}
           title={fallbackChipTitle(local)}
           aria-label={`${fallbackChipTitle(local)}. Change fallback mode`}
-          className="group inline-flex min-h-[40px] md:min-h-0 min-w-[28px] shrink-[8] items-center gap-1 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
+          className="group inline-flex min-h-[40px] md:min-h-0 min-w-[28px] shrink-[100] items-center gap-1 rounded-lg border-none bg-transparent px-1.5 py-1 text-[length:var(--text-footnote)] transition-colors hover:bg-[var(--fill-secondary)] disabled:cursor-default disabled:opacity-60 cursor-pointer"
         >
           <ArrowRightLeftIcon aria-hidden className="size-3 shrink-0 text-[var(--text-tertiary)]" />
           {/* One truncating span, so the children marker clips with the text (never on its own) and hides with it. */}
@@ -183,6 +187,7 @@ export function FallbackModeChip({ sessionId, view, disabled, subscribe }: Fallb
         side="top"
         align="start"
         sideOffset={8}
+        collisionPadding={16}
         className="w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[var(--radius-lg)] border-0 bg-[var(--bg-tertiary)] p-1.5 shadow-[var(--shadow-overlay)]"
       >
         <FallbackModeMenu local={local} error={error} onPick={pick} />
