@@ -62,7 +62,7 @@ export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
           {/* D4: Search lives at the very top — the only visible ⌘K entry point on desktop. */}
           <button
             onClick={props.openGlobalSearch}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)]"
           >
             <Search className="size-3.5" />
             <span className="flex-1">Search…</span>
@@ -71,7 +71,7 @@ export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
           <ViewModeToggle {...props} />
           <button
             onClick={() => { props.onOpenChatBeside(); onOpenChange(false) }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)]"
           >
             <PanelRightOpen className="size-3.5" />
             <span className="flex-1">Open beside</span>
@@ -96,7 +96,7 @@ function ViewModeToggle(props: ChatHeaderMenuProps) {
         title={viewSwitchLocked ? cliTitle : undefined}
         className={cn(
           "flex-1 rounded-md px-2 py-1 text-caption1 font-medium transition-colors",
-          effectiveViewMode === 'chat' ? "bg-[var(--accent-fill)] text-[var(--accent)]" : "text-muted-foreground hover:bg-accent",
+          effectiveViewMode === 'chat' ? "bg-[var(--accent-fill)] text-[var(--accent)]" : "text-muted-foreground hover:bg-[var(--fill-secondary)]",
           viewSwitchLocked && "opacity-60 cursor-not-allowed"
         )}
       >
@@ -108,7 +108,7 @@ function ViewModeToggle(props: ChatHeaderMenuProps) {
         title={cliTitle}
         className={cn(
           "flex-1 rounded-md px-2 py-1 font-mono text-caption1 font-medium transition-colors",
-          effectiveViewMode === 'cli' ? "bg-[var(--accent-fill)] text-[var(--accent)]" : "text-muted-foreground hover:bg-accent",
+          effectiveViewMode === 'cli' ? "bg-[var(--accent-fill)] text-[var(--accent)]" : "text-muted-foreground hover:bg-[var(--fill-secondary)]",
           (!cliModeAvailable || viewSwitchLocked) && "opacity-45 cursor-not-allowed"
         )}
       >
@@ -125,7 +125,7 @@ function SelectedChatItems(props: SelectedChatProps) {
     <>
       <button
         onClick={() => { void openExternal(sessionUrl(selectedId)); onOpenChange(false) }}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)]"
       >
         <ExternalLink className="size-3.5" />
         <span className="flex-1">Open in new tab</span>
@@ -134,7 +134,7 @@ function SelectedChatItems(props: SelectedChatProps) {
       <button
         onClick={() => props.onDuplicate(selectedId)}
         disabled={props.duplicatePending}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent disabled:opacity-50"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)] disabled:opacity-50"
       >
         <Copy className="size-3.5" />
         <span className="flex-1">{props.duplicatePending ? 'Duplicating...' : 'Duplicate...'}</span>
@@ -143,7 +143,7 @@ function SelectedChatItems(props: SelectedChatProps) {
       <div className="my-0.5 border-t border-border" />
       <button
         onClick={() => { if (sessionMeta?.archivedAt) props.onUnarchive(selectedId); else props.onArchive(selectedId) }}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)]"
       >
         {sessionMeta?.archivedAt ? <ArchiveRestore className="size-3.5" /> : <Archive className="size-3.5" />}
         <span className="flex-1">{sessionMeta?.archivedAt ? 'Unarchive chat' : 'Archive chat'}</span>
@@ -155,7 +155,7 @@ function SelectedChatItems(props: SelectedChatProps) {
       <div className="my-0.5 border-t border-border" />
       <button
         onClick={() => { onOpenChange(false); if (window.confirm('Delete this session?')) props.onDeleteSession(selectedId) }}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-[var(--system-red)] transition-colors hover:bg-accent"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-[var(--system-red)] transition-colors hover:bg-[var(--fill-secondary)]"
       >
         <Trash2 className="size-3.5" />
         <span className="flex-1">Delete Session</span>
@@ -175,7 +175,7 @@ function PinItem({ selectedId, onOpenChange }: Pick<SelectedChatProps, 'selected
   return (
     <button
       onClick={() => { togglePin({ key: selectedId, pinned: !isPinned }); onOpenChange(false) }}
-      className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent"
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)]"
     >
       {isPinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
       <span className="flex-1">{isPinned ? 'Unpin' : 'Pin'}</span>
@@ -194,7 +194,7 @@ function DeveloperItems(props: SelectedChatProps) {
       </div>
       <button
         onClick={() => onCopyToClipboard(selectedId, 'id')}
-        className="block w-full px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent"
+        className="block w-full px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)]"
       >
         Copy Session ID
       </button>
@@ -204,21 +204,21 @@ function DeveloperItems(props: SelectedChatProps) {
             const cli = sessionMeta.engine === 'codex' ? 'codex' : 'claude'
             onCopyToClipboard(`${cli} --resume ${sessionMeta.engineSessionId}`, 'cli')
           }}
-          className="block w-full px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent"
+          className="block w-full px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)]"
         >
           Copy CLI Resume Command
         </button>
       )}
       <button
         onClick={() => { onOpenChange(false); props.onShareDebugLog() }}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-accent"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-subheadline text-foreground transition-colors hover:bg-[var(--fill-secondary)]"
       >
         <Share2 className="size-3.5" />
         <span className="flex-1">Share debug log</span>
       </button>
       <button
         onClick={() => { onOpenChange(false); props.onClearDebugLog() }}
-        className="block w-full px-3 py-2 text-left text-caption1 text-muted-foreground transition-colors hover:bg-accent"
+        className="block w-full px-3 py-2 text-left text-caption1 text-muted-foreground transition-colors hover:bg-[var(--fill-secondary)]"
       >
         Clear debug log
       </button>

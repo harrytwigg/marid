@@ -60,7 +60,7 @@ export function BoardSwitcher({ board, title, departments, attentionCount }: Boa
           type="button"
           data-testid="board-switcher"
           aria-label={`Board: ${title} — switch board`}
-          className="focus-ring -ml-0.5 flex items-center gap-2 rounded-xl py-0.5 pl-0.5 pr-2.5 transition-colors duration-150 hover:bg-[var(--fill-quaternary)]"
+          className="focus-outline -ml-0.5 flex items-center gap-2 rounded-xl py-0.5 pl-0.5 pr-2.5 transition-colors duration-150 hover:bg-[var(--fill-quaternary)]"
         >
           <h1>
             {title}

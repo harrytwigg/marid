@@ -88,7 +88,7 @@ export function SubTasksSection({
             if (expanded) closeField()
             setExpanded(!expanded)
           }}
-          className="focus-ring -ml-1.5 flex min-h-[34px] min-w-0 items-center gap-2 rounded-[var(--radius-sm)] px-1.5 text-left text-[11px] font-semibold uppercase tracking-[.15em] text-[var(--text-secondary)] outline-none"
+          className="focus-outline -ml-1.5 flex min-h-[34px] min-w-0 items-center gap-2 rounded-[var(--radius-sm)] px-1.5 text-left text-[11px] font-semibold uppercase tracking-[.15em] text-[var(--text-secondary)] outline-none"
           style={{ fontFamily: "var(--font-code)" }}
         >
           <ChevronDown
@@ -121,7 +121,7 @@ export function SubTasksSection({
               setExpanded(true)
               setAdding(true)
             }}
-            className="focus-ring grid size-9 flex-none place-items-center rounded-full text-[var(--text-quaternary)] outline-none transition-[background-color,color,scale] duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)] active:scale-[0.96]"
+            className="focus-outline grid size-9 flex-none place-items-center rounded-full text-[var(--text-quaternary)] outline-none transition-[background-color,color,scale] duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)] active:scale-[0.96]"
           >
             <Plus size={15} strokeWidth={2.2} aria-hidden />
           </button>

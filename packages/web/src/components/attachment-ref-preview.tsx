@@ -25,7 +25,7 @@ function AttachmentRefRow({ attachment }: { attachment: AttachmentRef }) {
     <a
       href={api.workItemAttachmentUrl(attachment.workItemId, attachment.attachmentId)}
       data-testid={`attachment-ref-file-${attachment.attachmentId}`}
-      className="focus-ring inline-flex min-h-[34px] max-w-full items-center gap-2 rounded-[10px] bg-[var(--fill-tertiary)] px-2.5 text-[13px] text-[var(--text-secondary)] no-underline outline-none transition-colors hover:bg-[var(--fill-secondary)]"
+      className="focus-outline inline-flex min-h-[34px] max-w-full items-center gap-2 rounded-[10px] bg-[var(--fill-tertiary)] px-2.5 text-[13px] text-[var(--text-secondary)] no-underline outline-none transition-colors hover:bg-[var(--fill-secondary)]"
     >
       <FileText size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-[var(--text-tertiary)]" />
       <span className="truncate font-medium">{kindLabel(attachment.mime)}</span>
@@ -52,7 +52,7 @@ function AttachmentRefThumbnail({
       data-testid={`attachment-ref-thumb-${attachment.attachmentId}`}
       aria-label={`Preview ${kindLabel(attachment.mime)} attachment`}
       onClick={(event) => onOpen(event.currentTarget)}
-      className="focus-ring grid min-h-[34px] min-w-[34px] place-items-center overflow-hidden rounded-[12px] bg-[var(--fill-tertiary)] outline-none transition-colors hover:bg-[var(--fill-secondary)]"
+      className="focus-outline grid min-h-[34px] min-w-[34px] place-items-center overflow-hidden rounded-[12px] bg-[var(--fill-tertiary)] outline-none transition-colors hover:bg-[var(--fill-secondary)]"
     >
       <img
         src={`${url}?thumb=1`}
