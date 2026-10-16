@@ -3,6 +3,7 @@ import { act, render } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { vi } from 'vitest'
 import type { OrgData } from '@/lib/api'
+import type { SessionWaitsResponse } from '@/lib/session-waits'
 import ChatPageWrapper from '../page'
 import { CHAT_SESSION_DND_MIME } from '../chat-session-dnd'
 
@@ -40,6 +41,7 @@ const apiMocks = vi.hoisted(() => ({
   getFeatures: vi.fn(async () => ({ notesEnabled: false, staleChat: { enabled: false, tokenThreshold: 300000, staleAfterMinutes: 60 } })),
   getSkills: vi.fn(async () => []),
   getSessionQueue: vi.fn(async () => []),
+  getSessionWaits: vi.fn(async (id: string): Promise<SessionWaitsResponse> => ({ sessionId: id, generatedAt: new Date().toISOString(), items: [] })),
   createSession: vi.fn(async () => ({ id: 'e' })),
   sendMessage: vi.fn(async () => ({})),
   updateSession: vi.fn(async () => ({})),

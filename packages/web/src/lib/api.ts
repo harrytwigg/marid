@@ -10,6 +10,7 @@ import { createConfigApi } from "@/lib/api-config"
 import { createSttApi } from "@/lib/api-stt"
 import { createTodoCaptureApi } from "@/lib/api-todo-capture"
 import type { EngineLimitsResponse } from "@/lib/api-engine-limits"
+import type { SessionWaitsResponse } from "@/lib/session-waits"
 export type { EngineLimitAccountSnapshot, EngineLimitsResponse } from "@/lib/api-engine-limits"
 export type { TodoCaptureWire, TodoCaptureStageWire, TodoCaptureRouteWire } from "@/lib/api-todo-capture"
 import type { StaleChatPolicy } from "@/lib/stale-chat"
@@ -617,6 +618,9 @@ export const api = {
       `/api/sessions/${id}/messages${query ? `?${query}` : ""}`,
     )
   },
+  /** What the session's "waiting on" status names: sessions, background tasks, heartbeats. */
+  getSessionWaits: (id: string, signal?: AbortSignal) =>
+    get<SessionWaitsResponse>(`/api/sessions/${encodeURIComponent(id)}/waits`, signal ? { signal } : undefined),
   getSessionChildren: (id: string) => get<Record<string, unknown>[]>(`/api/sessions/${id}/children`),
   updateSession: (id: string, data: { title?: string; engine?: string; model?: string; effortLevel?: string; fallbackMode?: 'fallback' | 'fallback-children' | 'auto-resume'; fallbackTarget?: { engine: string; model: string } | null }) =>
     put<Record<string, unknown>>(`/api/sessions/${id}`, data),

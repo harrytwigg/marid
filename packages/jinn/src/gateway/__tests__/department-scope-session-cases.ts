@@ -96,6 +96,7 @@ export const SESSION_CASES: Record<string, CaseBuilder> = {
   "GET /api/sessions/:id": onSession("GET", "", 200),
   "GET /api/sessions/:id/messages": onSession("GET", "/messages", 200),
   "GET /api/sessions/:id/transcript": onSession("GET", "/transcript", 200),
+  "GET /api/sessions/:id/waits": onSession("GET", "/waits", 200),
   "GET /api/sessions/:id/context": context,
   "GET /api/sessions/:id/context-usage": onSession("GET", "/context-usage", 200),
   "POST /api/sessions/:id/stop": stop,

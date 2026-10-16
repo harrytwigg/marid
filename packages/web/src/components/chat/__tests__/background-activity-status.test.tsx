@@ -56,6 +56,16 @@ describe('isBackgroundActivityVisible', () => {
 })
 
 describe('BackgroundActivityStatus', () => {
+  it('picks the long or short label from the composer width, not the viewport', () => {
+    // A grid pane is phone-narrow on a wide screen, so a viewport breakpoint picks the wrong one.
+    render(<BackgroundActivityStatus activity={activity({ activeStreams: 2 })} />)
+    const long = screen.getByText('2 agents in background')
+    const short = screen.getByText('2 agents')
+    expect(long.className).toContain('@min-[480px]/composer:inline')
+    expect(short.className).toContain('@min-[480px]/composer:hidden')
+    expect(`${long.className} ${short.className}`).not.toMatch(/(^|\s)(sm|md|lg):/)
+  })
+
   it('falls back to the active-stream count when new fields are absent', () => {
     render(<BackgroundActivityStatus activity={activity({ activeStreams: 2 })} />)
     const status = screen.getByRole('status')
