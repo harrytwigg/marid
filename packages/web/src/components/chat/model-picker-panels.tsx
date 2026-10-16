@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { CheckIcon, ChevronLeftIcon } from 'lucide-react'
 import {
   DropdownMenuRadioGroup,
@@ -7,7 +7,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { providerOf, providerLabel } from '@/hooks/use-model-registry'
-import type { EngineRegistryEntry } from '@/lib/api'
+import type { EngineRegistryEntry, ModelInfo } from '@/lib/api'
 import type { ModelList } from './use-model-list'
 
 export const engineLabelOf = (e: string) => (e ? e.charAt(0).toUpperCase() + e.slice(1) : '')
@@ -71,11 +71,86 @@ export function BackRow({ onBack }: { onBack: () => void }) {
   )
 }
 
-/**
- * The model search and short radio list of one engine: query left, provider
- * badge + accent check on the selected. The list scrolls rather than growing the
- * menu, so even the expanded opencode catalog stays inside the composer.
- */
+/** The search field. Radix reads printable keys as menu typeahead and ignores arrows from a nested
+ *  input, so printable keys stay in the field, Escape and Tab pass through, and ArrowDown/Up hand focus
+ *  to the first/last result (`listRef`), or the field is a keyboard dead end. */
+function ModelSearchBox({ list, listRef }: { list: ModelList; listRef: RefObject<HTMLDivElement | null> }) {
+  return (
+    <div className="px-1 pb-1">
+      <input
+        type="search"
+        value={list.query}
+        onChange={(e) => list.setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            e.stopPropagation()
+            const items = listRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+            if (items && items.length) {
+              items[e.key === 'ArrowDown' ? 0 : items.length - 1].focus()
+            }
+            return
+          }
+          if (e.key === 'Escape' || e.key === 'Tab') return
+          e.stopPropagation()
+        }}
+        placeholder="Search models…"
+        aria-label="Search models"
+        className="w-full rounded-[8px] bg-[var(--fill-tertiary)] px-2 py-1.5 text-[length:var(--text-footnote)] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] outline-none focus:bg-[var(--fill-secondary)]"
+      />
+    </div>
+  )
+}
+
+/** One model row: label, provider badge, accent check on the selected. */
+function ModelRow({ model, selected, keepOpenOnPick }: { model: ModelInfo; selected: boolean; keepOpenOnPick?: boolean }) {
+  const provider = providerOf(model.id)
+  return (
+    <DropdownMenuRadioItem
+      value={model.id}
+      onSelect={keepOpenOnPick ? (e) => e.preventDefault() : undefined}
+      className="justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[state=checked]:font-[var(--weight-semibold)] data-[state=checked]:text-[var(--text-primary)] [&>span:first-child]:hidden"
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="truncate">{model.label}</span>
+        {provider && (
+          <span className="shrink-0 rounded-[5px] bg-[var(--fill-tertiary)] px-1 py-px text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
+            {providerLabel(provider)}
+          </span>
+        )}
+      </span>
+      {selected && <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />}
+    </DropdownMenuRadioItem>
+  )
+}
+
+/** The results: a fixed-height scroller, so even the expanded opencode catalog stays inside the composer. */
+function ModelRows({ list, modelId, onPickModel, keepOpenOnPick, listRef }: {
+  list: ModelList
+  modelId: string
+  onPickModel: (model: string) => void
+  keepOpenOnPick?: boolean
+  listRef: RefObject<HTMLDivElement | null>
+}) {
+  if (list.visibleModels.length === 0) {
+    return (
+      <div className="px-2 py-1.5 text-[length:var(--text-caption1)] text-[var(--text-secondary)]">
+        No models match “{list.trimmedQuery}”.
+      </div>
+    )
+  }
+  return (
+    <div ref={listRef} className="max-h-[min(50vh,270px)] overflow-y-auto">
+      <DropdownMenuRadioGroup value={modelId} onValueChange={onPickModel}>
+        {list.visibleModels.map((m) => (
+          <ModelRow key={m.id} model={m} selected={m.id === modelId} keepOpenOnPick={keepOpenOnPick} />
+        ))}
+      </DropdownMenuRadioGroup>
+    </div>
+  )
+}
+
+/** The model search and short radio list of one engine, under an engine header. */
 export function ModelListPanel({ engine, modelId, list, onPickModel, keepOpenOnPick }: {
   engine: string
   modelId: string
@@ -84,81 +159,21 @@ export function ModelListPanel({ engine, modelId, list, onPickModel, keepOpenOnP
   /** A model pick leaves the menu open (the parent closes it when the pick has been taken). */
   keepOpenOnPick?: boolean
 }) {
-  // The model-list scroller, so ArrowDown/Up from the search field can hand focus
-  // to the first/last result. Radix's own arrow handling ignores a nested input
-  // (the event target is not the menu content), so without this the field is a
-  // keyboard dead end and the results are only reachable by Tab.
+  // The results scroller, so the search field can hand focus to it.
   const listRef = useRef<HTMLDivElement>(null)
   return (
     <>
-      {/* Engine header — current engine. */}
       <div className="px-2 pt-1 pb-1.5 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
         Engine · {engineLabelOf(engine)}
       </div>
-
       {list.models.length === 0 ? (
         <div className="px-2 py-1.5 text-[length:var(--text-caption1)] leading-snug text-[var(--text-secondary)]">
           No models discovered yet.
         </div>
       ) : (
         <>
-          <div className="px-1 pb-1">
-            <input
-              type="search"
-              value={list.query}
-              onChange={(e) => list.setQuery(e.target.value)}
-              // Radix reads printable keys as menu typeahead and ignores arrows
-              // from a nested input. Keep printable keys in the field, let Escape
-              // and Tab through, and hand ArrowDown/Up to the results ourselves.
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  const items = listRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
-                  if (items && items.length) {
-                    items[e.key === 'ArrowDown' ? 0 : items.length - 1].focus()
-                  }
-                  return
-                }
-                if (e.key === 'Escape' || e.key === 'Tab') return
-                e.stopPropagation()
-              }}
-              placeholder="Search models…"
-              aria-label="Search models"
-              className="w-full rounded-[8px] bg-[var(--fill-tertiary)] px-2 py-1.5 text-[length:var(--text-footnote)] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] outline-none focus:bg-[var(--fill-secondary)]"
-            />
-          </div>
-          {list.visibleModels.length === 0 ? (
-            <div className="px-2 py-1.5 text-[length:var(--text-caption1)] text-[var(--text-secondary)]">
-              No models match “{list.trimmedQuery}”.
-            </div>
-          ) : (
-            <div ref={listRef} className="max-h-[min(50vh,270px)] overflow-y-auto">
-              <DropdownMenuRadioGroup value={modelId} onValueChange={onPickModel}>
-                {list.visibleModels.map((m) => {
-                  const provider = providerOf(m.id)
-                  return (
-                    <DropdownMenuRadioItem
-                      key={m.id}
-                      value={m.id}
-                      onSelect={keepOpenOnPick ? (e) => e.preventDefault() : undefined}
-                      className="justify-between gap-2 rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)] data-[state=checked]:font-[var(--weight-semibold)] data-[state=checked]:text-[var(--text-primary)] [&>span:first-child]:hidden"
-                    >
-                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                        <span className="truncate">{m.label}</span>
-                        {provider && (
-                          <span className="shrink-0 rounded-[5px] bg-[var(--fill-tertiary)] px-1 py-px text-[length:var(--text-caption2)] text-[var(--text-tertiary)]">
-                            {providerLabel(provider)}
-                          </span>
-                        )}
-                      </span>
-                      {m.id === modelId && <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />}
-                    </DropdownMenuRadioItem>
-                  )
-                })}
-              </DropdownMenuRadioGroup>
-            </div>
-          )}
+          <ModelSearchBox list={list} listRef={listRef} />
+          <ModelRows list={list} modelId={modelId} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} listRef={listRef} />
           {list.showExpandToggle && (
             <DropdownMenuItem
               onSelect={(e) => { e.preventDefault(); list.toggleExpanded() }}

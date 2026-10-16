@@ -76,18 +76,24 @@ function defaultProvenance(): SpawnProvenance {
  *  gateway-default session. */
 type SpawnSelection =
   | { ok: false; error: string }
-  | { ok: true; engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute; fallbackMode?: SessionFallbackMode; fallbackTarget?: StoredFallbackTarget };
+  | { ok: true; engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute; fallbackMode?: SessionFallbackMode };
 
 /** The mode a spawn stores: its explicit one, else the parent's rule (undefined for a root). */
 function resolveFallbackMode(
   config: JinnConfig,
   input: SpawnSessionInput,
-): { ok: true; mode: SessionFallbackMode | undefined; target: StoredFallbackTarget | undefined } | { ok: false; error: string } {
+): { ok: true; mode: SessionFallbackMode | undefined } | { ok: false; error: string } {
   const param = parseFallbackModeParam(input.fallbackMode);
   if (!param.ok) return param;
   const parent = input.parentSessionId ? getSession(input.parentSessionId) : undefined;
-  const mode = childFallbackMode(config, parent, param.mode);
-  return { ok: true, mode, target: childFallbackTarget(config, parent, mode) };
+  return { ok: true, mode: childFallbackMode(config, parent, param.mode) };
+}
+
+/** What a spawn stores for fallback: its mode, and the parent's target when the parent passes its fallback on. */
+function storedFallback(
+  config: JinnConfig, parentSessionId: string | undefined, mode: SessionFallbackMode | undefined,
+): { fallbackMode: SessionFallbackMode | undefined; fallbackTarget: StoredFallbackTarget | undefined } {
+  return { fallbackMode: mode, fallbackTarget: childFallbackTarget(config, parentSessionId ? getSession(parentSessionId) : undefined, mode) };
 }
 
 async function resolveSelection(
@@ -125,7 +131,6 @@ async function resolveSelection(
     effortLevel: selection.effortLevel,
     reroute: selection.reroute,
     ...(fallbackMode ? { fallbackMode } : {}),
-    ...(fallback.target ? { fallbackTarget: fallback.target } : {}),
   };
 }
 
@@ -213,8 +218,7 @@ export async function spawnSession(
     employee: employeeName,
     parentSessionId: input.parentSessionId,
     effortLevel: selection.effortLevel,
-    fallbackMode: selection.fallbackMode,
-    fallbackTarget: selection.fallbackTarget,
+    ...storedFallback(config, input.parentSessionId, selection.fallbackMode),
     // Honor the requested model so API clients can pin per-employee models
     // (e.g. MCP servers that look up org/<employee>.yaml and pass the
     // employee's configured model). Without this, the turn falls back to

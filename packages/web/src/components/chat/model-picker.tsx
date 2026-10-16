@@ -26,18 +26,8 @@ export interface ModelPickerProps {
   children?: ReactNode
 }
 
-/**
- * The engine and model picker as one surface inside a dropdown menu: a model
- * panel (engine header, search, short list) and an engine panel the "Switch
- * engine" row slides to. The new-chat selector and the fallback chip both
- * render it, so they search and list models the same way. It owns navigation and
- * search; what a pick means (apply at once, or just browse) is the parent's.
- */
-export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickModel, isEngineAllowed, keepOpenOnPick, onBack, children }: ModelPickerProps) {
-  const queryClient = useQueryClient()
-  const reduceMotion = usePrefersReducedMotion()
-  const list = useModelList(registry, engine, modelId)
-
+/** The picker's navigation between its panels, with the focus-parking and height animation the single surface needs. */
+function usePickerNav() {
   // Which panel is showing inside the one surface ('main' = models, 'engine' = engine list).
   // `dir` drives the slide direction (forward / back).
   const [panel, setPanel] = useState<'main' | 'engine'>('main')
@@ -50,9 +40,6 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
   const [surfaceH, setSurfaceH] = useState<number>()
   // Skip the focus-confirm on mount (Radix focuses the content itself).
   const firstPanel = useRef(true)
-
-  const engines = engineList(registry).filter((e) => !isEngineAllowed || isEngineAllowed(e.name))
-  const canSwitchEngine = engines.some((e) => e.name !== engine)
 
   // Track the surface height across panel swaps / content changes so the height
   // animates instead of snapping. ResizeObserver covers panel swaps AND any
@@ -76,16 +63,6 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
     panelWrapRef.current?.focus()
   }, [panel])
 
-  // Re-discover dynamic (pi) models without a restart, then update the cache.
-  const refreshModels = async () => {
-    try {
-      const fresh = await api.refreshEngines()
-      queryClient.setQueryData(queryKeys.engines.all, fresh)
-    } catch {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.engines.all })
-    }
-  }
-
   // Park focus inside the layer, then move to the requested panel. Parking is
   // synchronous so the unmounting active item never drops focus to <body>.
   const goToPanel = (next: 'main' | 'engine') => {
@@ -93,30 +70,27 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
     panelWrapRef.current?.focus()
     setPanel(next)
   }
+  return { panel, dir, panelWrapRef, surfaceH, goToPanel }
+}
 
-  // Choose an engine from the engine panel, then auto-return to the model panel
-  // (now reflecting that engine's models). Re-picking the current engine is a
-  // no-op selection: just slide back.
-  const chooseEngine = (next: string) => {
-    panelWrapRef.current?.focus()
-    // The old engine's filter means nothing for the new one — drop it, or the
-    // new engine's models render as an empty "no match" list.
-    list.clearSearch()
-    if (next !== engine) onPickEngine(next)
-    setDir(-1)
-    setPanel('main')
+/** Re-discover dynamic (pi) models without a restart, then update the cache. */
+function useRefreshModels(): () => void {
+  const queryClient = useQueryClient()
+  return () => {
+    void api.refreshEngines()
+      .then((fresh) => queryClient.setQueryData(queryKeys.engines.all, fresh))
+      .catch(() => queryClient.invalidateQueries({ queryKey: queryKeys.engines.all }))
   }
+}
 
-  const mainPanel = (
+/** The model panel's footer: the engine switch, or a refresh when there is no other engine to switch to. */
+function EngineSwitchRow({ canSwitch, onSwitch, onRefresh }: { canSwitch: boolean; onSwitch: () => void; onRefresh: () => void }) {
+  return (
     <>
-      {onBack && <BackRow onBack={onBack} />}
-      <ModelListPanel engine={engine} modelId={modelId} list={list} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} />
-      {children}
-      {/* Engine switch — navigates the SAME surface to the engine panel (no nested menu). */}
       <DropdownMenuSeparator className="bg-[var(--separator)]" />
-      {canSwitchEngine ? (
+      {canSwitch ? (
         <DropdownMenuItem
-          onSelect={(e) => { e.preventDefault(); goToPanel('engine') }}
+          onSelect={(e) => { e.preventDefault(); onSwitch() }}
           className="rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)]"
         >
           <span className="flex-1">Switch engine…</span>
@@ -124,7 +98,7 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
         </DropdownMenuItem>
       ) : (
         <DropdownMenuItem
-          onSelect={(e) => { e.preventDefault(); void refreshModels() }}
+          onSelect={(e) => { e.preventDefault(); onRefresh() }}
           className="rounded-[9px] py-1.5 px-2 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]"
         >
           ↻ Refresh models
@@ -132,20 +106,57 @@ export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickMod
       )}
     </>
   )
+}
+
+/**
+ * The engine and model picker as one surface inside a dropdown menu: a model
+ * panel (engine header, search, short list) and an engine panel the "Switch
+ * engine" row slides to. The new-chat selector and the fallback chip both
+ * render it, so they search and list models the same way. It owns navigation and
+ * search; what a pick means (apply at once, or just browse) is the parent's.
+ */
+export function ModelPicker({ registry, engine, modelId, onPickEngine, onPickModel, isEngineAllowed, keepOpenOnPick, onBack, children }: ModelPickerProps) {
+  const reduceMotion = usePrefersReducedMotion()
+  const list = useModelList(registry, engine, modelId)
+  const nav = usePickerNav()
+  const refreshModels = useRefreshModels()
+  const engines = engineList(registry).filter((e) => !isEngineAllowed || isEngineAllowed(e.name))
+
+  // Choose an engine from the engine panel, then auto-return to the model panel
+  // (now reflecting that engine's models). Re-picking the current engine is a
+  // no-op selection: just slide back.
+  const chooseEngine = (next: string) => {
+    // The old engine's filter means nothing for the new one — drop it, or the
+    // new engine's models render as an empty "no match" list.
+    list.clearSearch()
+    if (next !== engine) onPickEngine(next)
+    nav.goToPanel('main')
+  }
 
   return (
     // Single surface; height animates as the two panels swap in place.
     <div
       style={{
-        height: surfaceH != null ? `${surfaceH}px` : undefined,
+        height: nav.surfaceH != null ? `${nav.surfaceH}px` : undefined,
         overflow: 'hidden',
         transition: reduceMotion ? 'none' : 'height 200ms var(--ease-smooth)',
       }}
     >
-      <div ref={panelWrapRef} tabIndex={-1} className="outline-none">
-        <SlidePanel key={panel} dir={dir} reduceMotion={reduceMotion}>
-          {panel === 'main' ? mainPanel : (
-            <EnginePanel engines={engines} engine={engine} onBack={() => goToPanel('main')} onChoose={chooseEngine} onRefresh={() => void refreshModels()} />
+      <div ref={nav.panelWrapRef} tabIndex={-1} className="outline-none">
+        <SlidePanel key={nav.panel} dir={nav.dir} reduceMotion={reduceMotion}>
+          {nav.panel === 'main' ? (
+            <>
+              {onBack && <BackRow onBack={onBack} />}
+              <ModelListPanel engine={engine} modelId={modelId} list={list} onPickModel={onPickModel} keepOpenOnPick={keepOpenOnPick} />
+              {children}
+              <EngineSwitchRow
+                canSwitch={engines.some((e) => e.name !== engine)}
+                onSwitch={() => nav.goToPanel('engine')}
+                onRefresh={refreshModels}
+              />
+            </>
+          ) : (
+            <EnginePanel engines={engines} engine={engine} onBack={() => nav.goToPanel('main')} onChoose={chooseEngine} onRefresh={refreshModels} />
           )}
         </SlidePanel>
       </div>

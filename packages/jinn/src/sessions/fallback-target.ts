@@ -78,6 +78,30 @@ function standingAccountSwap(session: Session): SubstituteChoice["accounts"] {
 
 export type TargetDecision = { choice: SubstituteChoice } | { reason: string };
 
+/** Why the chosen engine cannot serve this session at all (not an engine we know, not allowed, not installed), or undefined. */
+function engineRefusal(input: ChooseSubstituteInput, target: StoredFallbackTarget): string | undefined {
+  const { config, engines, session, remote, remoteTarget } = input;
+  if (!isKnownEngine(target.engine)) return "is not an engine this gateway knows";
+  const scoped = substituteScoped(session, remoteTarget);
+  if (!engineAllowedAsSubstitute({ scoped, remote: Boolean(remote) }, target.engine)) {
+    return scoped && target.engine !== "claude" ? "is not allowed for a department-scoped session" : "cannot run on this session's remote host";
+  }
+  const installed = remote
+    ? remoteEngineAvailable(sshDestination(remote), target.engine as RemoteEngineName) !== false
+    : engines.has(target.engine) && engineAvailable(config, target.engine);
+  if (!installed) return remote ? "is not installed on this session's host" : "is not installed";
+  return undefined;
+}
+
+/** Why the chosen model cannot be switched to now (no longer offered, the one that just hit its limit, or its engine is spent), or undefined. */
+function modelRefusal(input: ChooseSubstituteInput, health: EngineHealthReading, target: StoredFallbackTarget): string | undefined {
+  const { config, session, employee } = input;
+  const offered = getModelRegistry(config)[target.engine]?.models ?? [];
+  if (!offered.some((m) => m.id === target.model) && !hasDynamicModelCatalog(target.engine)) return "names a model that is no longer offered";
+  if (session.engine === target.engine) return session.model === target.model ? "is the model that just hit its limit" : undefined;
+  return isEngineExhausted(substituteHealth(health, employee), target.engine) ? "has hit its own usage limit" : undefined;
+}
+
 /**
  * The substitute a session with its own target takes at a usage limit: exactly that
  * engine and model, or the reason it cannot, never the config's chain instead. A
@@ -86,27 +110,13 @@ export type TargetDecision = { choice: SubstituteChoice } | { reason: string };
  * been the old model's alone.
  */
 export function chooseTargetSubstitute(input: ChooseSubstituteInput, health: EngineHealthReading): TargetDecision {
-  const { config, engines, session, employee, remote, remoteTarget } = input;
+  const { session, employee, remote } = input;
   const target = session.fallbackTarget!;
-  const name = targetName(target);
-  const refuse = (why: string): TargetDecision => ({ reason: `the chosen fallback ${name} ${why}` });
-  if (!isKnownEngine(target.engine)) return refuse("is not an engine this gateway knows");
-  const scoped = substituteScoped(session, remoteTarget);
-  if (!engineAllowedAsSubstitute({ scoped, remote: Boolean(remote) }, target.engine)) {
-    return refuse(scoped && target.engine !== "claude" ? "is not allowed for a department-scoped session" : "cannot run on this session's remote host");
-  }
-  const installed = remote
-    ? remoteEngineAvailable(sshDestination(remote), target.engine as RemoteEngineName) !== false
-    : engines.has(target.engine) && engineAvailable(config, target.engine);
-  if (!installed) return refuse(remote ? "is not installed on this session's host" : "is not installed");
-  const offered = getModelRegistry(config)[target.engine]?.models ?? [];
-  if (!offered.some((m) => m.id === target.model) && !hasDynamicModelCatalog(target.engine)) return refuse("names a model that is no longer offered");
+  const why = engineRefusal(input, target) ?? modelRefusal(input, health, target);
+  if (why) return { reason: `the chosen fallback ${targetName(target)} ${why}` };
   const sameEngine = session.engine === target.engine;
-  if (sameEngine && session.model === target.model) return refuse("is the model that just hit its limit");
-  if (!sameEngine && isEngineExhausted(substituteHealth(health, employee), target.engine)) return refuse("has hit its own usage limit");
   const accounts = target.engine === "claude" && sameEngine && !remote ? standingAccountSwap(session) : undefined;
   const claudeProfile = target.engine !== "claude" || remote ? null
     : sameEngine ? rateLimitAccount("claude", employee, session).claudeProfile : resolveEmployeeClaudeProfile(employee);
-  return { choice: { engine: target.engine, model: target.model, claudeProfile, ...(accounts ? { accounts } : {}) } };
+  return { choice: { engine: target.engine as EngineName, model: target.model, claudeProfile, ...(accounts ? { accounts } : {}) } };
 }
-

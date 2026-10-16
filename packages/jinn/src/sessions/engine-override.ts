@@ -80,6 +80,13 @@ function accountSwapModel(accounts: AccountSwap, model: string | null | undefine
 
 type EngineConfig = { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string };
 
+/** The model a stand-in nobody chose a model for runs: through the account's map for an account swap, else the engine's. */
+function derivedSubstituteModel(config: JinnConfig, session: Session, substitute: string, accounts: AccountSwap | undefined): string | undefined {
+  return accounts
+    ? accountSwapModel(accounts, session.model)
+    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model });
+}
+
 /** What the stand-in runs as, once the session row has been flipped onto it. */
 export interface EngineSubstitution {
   engineConfig: EngineConfig;
@@ -113,9 +120,7 @@ export function beginEngineSubstitution(opts: {
   const { session, attemptToken, config, employee, substitute, accounts, until, syncSince, lastError } = opts;
 
   const engineConfig: EngineConfig = config.engines[substitute as keyof JinnConfig["engines"]] as EngineConfig ?? {};
-  const model = opts.model ?? (accounts
-    ? accountSwapModel(accounts, session.model)
-    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model }));
+  const model = opts.model ?? derivedSubstituteModel(config, session, substitute, accounts);
   const engineOverride = overrideRecord(session, accounts, until, syncSince);
 
   const started = updateSessionForAttempt(session.id, attemptToken, {
