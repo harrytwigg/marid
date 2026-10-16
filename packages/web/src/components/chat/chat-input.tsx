@@ -827,11 +827,12 @@ export function ChatInput({
           </button>
 
           {/* Model chip — wrapped so clicks on the trigger (and its inline popover)
-              don't re-trigger card focus. The cap bounds a long model label instead
-              of letting an unshrinkable chip push Send outside a narrow pane. */}
+              don't re-trigger card focus. The cap bounds a long model label, and
+              the wrapper still shrinks when the cap is more than the row has left,
+              so nothing in the slot can push Send outside a narrow pane. */}
           {selectorSlot && (
             <div
-              className="flex max-w-[55%] shrink-0 items-center overflow-hidden"
+              className="flex min-w-0 max-w-[55%] shrink items-center overflow-hidden"
               onPointerDown={(e) => e.stopPropagation()}
             >
               {selectorSlot}
