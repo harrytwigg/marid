@@ -125,7 +125,8 @@ vi.mock("../../shared/logger.js", () => ({
   },
 }));
 
-import { HELD_REPLY_MAX_AGE_MS, HELD_REPLY_SETTLE_MS, INTERIM_RELAY_HOLD_CAP, __resetCallbackRetrySweepForTest, reviewHeldInterimReply, reviewHeldInterimRepliesForWorkItem, flushHeldInterimReply, recoverSessionDeliveryStateOnStartup, notifyManagerVisibility, notifyParentOfExternalTurn, notifyParentSession, notifyParentSessionAndWait, notifyRateLimitResumed, recoverOrphanedDelegationCompletionClaims, recoverPendingSessionDeliveries } from "../callbacks.js";
+import { HELD_REPLY_MAX_AGE_MS, HELD_REPLY_SETTLE_MS, INTERIM_RELAY_HOLD_CAP, reviewHeldInterimReply, reviewHeldInterimRepliesForWorkItem, flushHeldInterimReply } from "../held-replies.js";
+import { __resetCallbackRetrySweepForTest, recoverSessionDeliveryStateOnStartup, notifyManagerVisibility, notifyParentOfExternalTurn, notifyParentSession, notifyParentSessionAndWait, notifyRateLimitResumed, recoverOrphanedDelegationCompletionClaims, recoverPendingSessionDeliveries } from "../callbacks.js";
 import { claimSessionDelivery, consumeChildReportedToParent, getSession, listDelegationCompletionNudgedSessions, markDelegationCompletionSurfaced } from "../registry.js";
 import { getWorkItem } from "../../work-items/store.js";
 import { runtimeActivity } from "../background-work.js";

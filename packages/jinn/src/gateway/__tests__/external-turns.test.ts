@@ -798,7 +798,7 @@ describe("syncExternalTurn — waking the parent", () => {
     const store = await import("../../work-items/store.js");
     const { transition, setTodoStatusChangeListener } = await import("../../work-items/transitions.js");
     const { runtimeActivity } = await import("../../sessions/background-work.js");
-    const { HELD_REPLY_SETTLE_MS, reviewHeldInterimRepliesOnTodoStatusChange } = await import("../../sessions/callbacks.js");
+    const { HELD_REPLY_SETTLE_MS, reviewHeldInterimRepliesOnTodoStatusChange } = await import("../../sessions/held-replies.js");
     const parentId = makeSession();
     const childId = makeSettledChild(parentId);
     const todo = store.createWorkItem({ title: "serve the preview", status: "executing" });
@@ -820,6 +820,46 @@ describe("syncExternalTurn — waking the parent", () => {
     } finally {
       vi.useRealTimers();
       setTodoStatusChangeListener(null);
+      runtimeActivity.delete(childId);
+    }
+  });
+
+  it("relays a turn that answers the parent's own message at once, and drops the held wait", async () => {
+    const store = await import("../../work-items/store.js");
+    const { runtimeActivity } = await import("../../sessions/background-work.js");
+    const { notifyParentSessionAndWait } = await import("../../sessions/callbacks.js");
+    const parentId = makeSession();
+    const childId = makeSettledChild(parentId);
+    const todo = store.createWorkItem({ title: "long build", status: "executing" });
+    (await import("../../shared/db.js")).initDb().prepare("UPDATE sessions SET work_item_id = ? WHERE id = ?").run(todo.id, childId);
+    const stop = (text: string) => ({ hook_event_name: "Stop", transcript_path: path.join(tmp, "missing.jsonl"), last_assistant_message: text });
+    const relayFrom = (fromSessionId: string) => ({ kind: "agent-relay", fromSessionId, fromLabel: "Lead", hops: 1, maxHops: 12, fullMessage: "status?" });
+    const answer = async (text: string) => {
+      reg.insertMessage(childId, "assistant", text);
+      await notifyParentSessionAndWait(reg.getSession(childId)!, { result: text });
+    };
+    runtimeActivity.set(childId, { activeStreams: 0, activeMonitors: 1, lastActivityAt: Date.now() });
+    try {
+      expect(ext.syncExternalTurn(childId, emit, stop("Build started; waiting on it."))).toBe(1);
+      await flush();
+      expect(reg.listHeldInterimReplySessionIds()).toContain(childId);
+
+      // A message from someone else is not the parent asking: that turn's reply waits too.
+      reg.insertMessage(childId, "notification", "status?", undefined, undefined, undefined, relayFrom("someone-else"));
+      await answer("Build is at step 2 of 5.");
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      reg.insertMessage(childId, "notification", "status?", undefined, undefined, undefined, relayFrom(parentId));
+      await answer("Build is at step 3 of 5, about 10 min left.");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchSpy.mock.calls[0][1].body).message).toContain("Build is at step 3 of 5, about 10 min left.");
+      expect(reg.listHeldInterimReplySessionIds()).not.toContain(childId);
+
+      // The parent's message is answered; the next wait is held again.
+      expect(ext.syncExternalTurn(childId, emit, stop("Tests running; still waiting."))).toBe(1);
+      await flush();
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
       runtimeActivity.delete(childId);
     }
   });

@@ -22,7 +22,8 @@ import { PRODUCT_NAME, productBanner } from "../shared/brand.js";
 import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunningSessionsForShutdown, recordSessionsRunningAtBoot, resumeRestartInterruptedSessions } from "../sessions/restart-resume.js";
 import { initDb } from "../shared/db.js";
 import { SessionManager, type RouteOptions } from "../sessions/manager.js";
-import { recoverSessionDeliveryStateOnStartup, reviewHeldInterimRepliesOnTodoStatusChange, reviewHeldInterimReply } from "../sessions/callbacks.js";
+import { recoverSessionDeliveryStateOnStartup } from "../sessions/callbacks.js";
+import { reviewHeldInterimRepliesOnTodoStatusChange, reviewHeldInterimReply } from "../sessions/held-replies.js";
 import { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { enforcePtyIdleCap, ptyIdleCapForHost, PtyLifecycleManager, type PtyLifecycleOpts } from "../engines/pty-lifecycle.js";
 import { CodexEngine, startCodexSessionHomeSweeps } from "../engines/codex.js";
@@ -806,6 +807,7 @@ export async function startGateway(
   setTodoLiveEmitter((event) => emit("company:changed", event));
   // A child's reply held while it waited on its own background work goes out
   // once its Todo leaves execution, even if a task it launched never ends.
+  // The listener is a single slot: a second user must fan out from here.
   setTodoStatusChangeListener(reviewHeldInterimRepliesOnTodoStatusChange);
 
   const backgroundRefreshes = startBackgroundRefreshes(() => currentConfig, emit);
