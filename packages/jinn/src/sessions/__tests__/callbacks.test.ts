@@ -125,7 +125,7 @@ vi.mock("../../shared/logger.js", () => ({
   },
 }));
 
-import { HELD_REPLY_MAX_AGE_MS, INTERIM_RELAY_HOLD_CAP, __resetCallbackRetrySweepForTest, flushHeldInterimReply, recoverSessionDeliveryStateOnStartup, notifyManagerVisibility, notifyParentOfExternalTurn, notifyParentSession, notifyParentSessionAndWait, notifyRateLimitResumed, recoverOrphanedDelegationCompletionClaims, recoverPendingSessionDeliveries } from "../callbacks.js";
+import { HELD_REPLY_MAX_AGE_MS, HELD_REPLY_SETTLE_MS, INTERIM_RELAY_HOLD_CAP, __resetCallbackRetrySweepForTest, reviewHeldInterimReply, reviewHeldInterimRepliesForWorkItem, flushHeldInterimReply, recoverSessionDeliveryStateOnStartup, notifyManagerVisibility, notifyParentOfExternalTurn, notifyParentSession, notifyParentSessionAndWait, notifyRateLimitResumed, recoverOrphanedDelegationCompletionClaims, recoverPendingSessionDeliveries } from "../callbacks.js";
 import { claimSessionDelivery, consumeChildReportedToParent, getSession, listDelegationCompletionNudgedSessions, markDelegationCompletionSurfaced } from "../registry.js";
 import { getWorkItem } from "../../work-items/store.js";
 import { runtimeActivity } from "../background-work.js";
@@ -1010,10 +1010,10 @@ describe("interim replies of a child waiting on its own background work", () => 
 
   it("wakes the parent once for three interim turn ends and one final report", async () => {
     waiting();
-    await notifyParentSessionAndWait(child(), { result: "Build started; waiting on it." });
+    await notifyParentSessionAndWait(child(), { result: "Build is still running in the background. I'll report once it's done." });
     await notifyParentOfExternalTurn(child(), "Build passed. Tests started; still running.", "turn-2");
     waiting({ activeMonitors: 2 });
-    await notifyParentOfExternalTurn(child(), "Two test shards running; still waiting.", "turn-3");
+    await notifyParentOfExternalTurn(child(), "Waiting for the reviewer's verdict.", "turn-3");
     expect(parentWakes()).toHaveLength(0);
     // Holding is silent: no completion-contract nudge goes back to the child either.
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -1026,14 +1026,94 @@ describe("interim replies of a child waiting on its own background work", () => 
     expect(interimHeld.size).toBe(0);
   });
 
-  it("relays a final report, a question or a blocker even while a task is still open and the Todo is executing", async () => {
+  it("relays a question or a blocker even while a task is still open and the Todo is executing", async () => {
     waiting();
-    await notifyParentOfExternalTurn(child(), "All checks pass; PR ready. The dev server is still running.", "final");
     await notifyParentOfExternalTurn(child(), "Waiting on the build. Should I also rerun the lint?", "question");
     await notifyParentOfExternalTurn(child(), "Blocked on missing credentials; waiting for you.", "blocked");
-    await notifyParentOfExternalTurn(child(), `Waiting on the build. ${"Findings: x. ".repeat(80)}`, "long-report");
-    expect(woken()).toHaveLength(4);
+    expect(woken()).toHaveLength(2);
     expect(interimHeld.size).toBe(0);
+  });
+
+  describe("a held reply goes out when what it waited on is over", () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    });
+    const report = "Pass. Suite 812/0, tsc clean. Dev server still running in the background on 4100.";
+
+    it("relays a final report written while a task ran, once the task count reaches zero", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), report, "turn-1");
+      expect(parentWakes()).toHaveLength(0);
+
+      runtimeActivity.clear();
+      reviewHeldInterimReply("child-001");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS - 1);
+      expect(parentWakes()).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(woken()).toEqual([expect.stringContaining(report)]);
+      expect(interimHeld.size).toBe(0);
+    });
+
+    it("lets a newer reply in the settle window supersede the held one", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), "Build started; waiting on it.", "turn-1");
+      runtimeActivity.clear();
+      reviewHeldInterimReply("child-001");
+      await notifyParentOfExternalTurn(child(), "All checks pass. PR is up.", "turn-2");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(woken()).toEqual([expect.stringContaining("All checks pass. PR is up.")]);
+    });
+
+    it("waits out a re-run, and stands down when a task is counted again", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), "Build started; waiting on it.", "turn-1");
+      waiting({ activeMonitors: 0, backgroundRerun: true });
+      reviewHeldInterimReply("child-001");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+
+      waiting({ activeMonitors: 0 });
+      reviewHeldInterimReply("child-001");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS / 2);
+      waiting();
+      reviewHeldInterimReply("child-001");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+      expect(interimHeld.size).toBe(1);
+    });
+
+    it("relays when the child's Todo leaves execution, though a task it launched still runs", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), report, "turn-1");
+      reviewHeldInterimRepliesForWorkItem("wi-open");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+
+      vi.mocked(getWorkItem).mockReturnValue({ id: "wi-open", status: "in_review", source: "delegation" } as never);
+      reviewHeldInterimRepliesForWorkItem("wi-other");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+      reviewHeldInterimRepliesForWorkItem("wi-open");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS);
+      expect(woken()).toEqual([expect.stringContaining(report)]);
+    });
+
+    it("leaves a held reply to the turn the child is running when its Todo closes", async () => {
+      waiting();
+      await notifyParentOfExternalTurn(child(), "Build started; waiting on it.", "turn-1");
+      vi.mocked(getSession).mockImplementation((id: string) =>
+        id === "child-001" ? child({ status: "running" }) : makeSession({ id: "parent-001", parentSessionId: null, status: "idle" }),
+      );
+      vi.mocked(getWorkItem).mockReturnValue({ id: "wi-open", status: "in_review", source: "delegation" } as never);
+      reviewHeldInterimRepliesForWorkItem("wi-open");
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(parentWakes()).toHaveLength(0);
+
+      // That turn's reply is the one the parent hears.
+      await notifyParentSessionAndWait(child({ attemptToken: "attempt-002" }), { result: "Done: PR is up for review." });
+      await vi.advanceTimersByTimeAsync(HELD_REPLY_SETTLE_MS * 2);
+      expect(woken()).toEqual([expect.stringContaining("Done: PR is up for review.")]);
+    });
   });
 
   it("holds a background sub-agent wait, but a re-run's own reply is not a wait", async () => {
@@ -1124,6 +1204,7 @@ describe("interim replies of a child waiting on its own background work", () => 
     waiting();
     await notifyParentOfExternalTurn(child(), "Build started; waiting on it.", "turn-1");
     expect(interimHeld.size).toBe(1);
+    runtimeActivity.clear();
     await notifyParentOfExternalTurn(child(), "All checks pass; PR is up.", "turn-2");
     expect(interimHeld.size).toBe(0);
     fetchSpy.mockClear();

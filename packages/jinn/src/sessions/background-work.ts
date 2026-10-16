@@ -49,10 +49,6 @@ export function isAwaitingOwnBackgroundTask(info: RuntimeActivityInfo | undefine
   return !!info && ((info.activeMonitors ?? 0) > 0 || (info.backgroundAgents ?? 0) > 0);
 }
 
-export function hasOwnBackgroundTask(sessionId: string): boolean {
-  return isAwaitingOwnBackgroundTask(runtimeActivity.get(sessionId));
-}
-
 /** Whether the transport is busy: any model request in flight, auxiliary ones
  *  included, or live background work between requests. Wider than
  *  isBackgroundWorkLive, which decides the status every reader acts on. */
