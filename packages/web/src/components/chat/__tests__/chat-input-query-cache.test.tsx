@@ -97,6 +97,8 @@ describe("ChatInput query-backed menus", () => {
     // ...but allowed below that, so a cap wider than the row's free space cannot push Send off.
     expect(classes).toEqual(expect.arrayContaining(["min-w-0", "shrink", "overflow-hidden"]))
     expect(classes).not.toContain("shrink-0")
+    // Its icon floor is sized from the composer, not the viewport, and stops at a narrow composer.
+    expect(classes).toContain("@min-[220px]/composer:min-w-12")
   })
 
   it("populates @mentions and slash commands from the shared query cache", async () => {

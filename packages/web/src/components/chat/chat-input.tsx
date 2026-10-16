@@ -832,10 +832,11 @@ export function ChatInput({
           {/* Model chip — wrapped so clicks on the trigger (and its inline popover)
               don't re-trigger card focus. The cap bounds a long model label, and
               the wrapper still shrinks when the cap is more than the row has left,
-              so nothing in the slot can push Send outside a narrow pane. */}
+              so nothing in the slot can push Send outside a narrow pane. From a
+              220px composer it keeps at least its icons (model, fallback). */}
           {selectorSlot && (
             <div
-              className="flex min-w-0 max-w-[55%] shrink items-center overflow-hidden"
+              className="flex min-w-0 @min-[220px]/composer:min-w-12 max-w-[55%] shrink items-center overflow-hidden"
               onPointerDown={(e) => e.stopPropagation()}
             >
               {selectorSlot}
@@ -855,11 +856,13 @@ export function ChatInput({
               reading as a continuation of the model chip's cluster rather than a
               floating center element. flex-1 (basis-0) claims only LEFTOVER
               space, and an overlong status clips inside this container. While it
-              shows something it keeps a small floor (dot and count, or the short
-              label from 360px), so on a phone the shrinkable model chip gives up
-              that width and the status stays a tap target; when empty the floor
-              goes and nothing moves. */}
-          <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden pl-1 has-[>*]:min-w-10 min-[360px]:has-[>*]:min-w-[4.5rem]">
+              shows something it keeps a floor sized from the composer's own
+              width (a grid pane is narrow on a wide screen): the dot and count,
+              then the short label. The model chip's floor above keeps its icon
+              and the fallback icon, so the two share the row instead of one
+              squeezing the other out. Below 220px neither floor applies and the
+              row degrades as before, so Send is never pushed off. */}
+          <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden pl-1 @min-[220px]/composer:has-[>*]:min-w-6 @min-[260px]/composer:has-[>*]:min-w-10 @min-[300px]/composer:has-[>*]:min-w-[4.5rem]">
             {statusSlot}
           </div>
 
