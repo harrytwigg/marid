@@ -43,7 +43,7 @@ function resumePendingQueueItem(item: QueueItem, context: ApiContext): boolean {
   }
   // Hot-reload calls this too: a row waiting its turn here is owned, not orphaned.
   if (context.sessionManager.getQueue().hasInFlightItem(item.id)) return false;
-  session = maybeRevertEngineOverride(session);
+  session = maybeRevertEngineOverride(session, undefined, context.getConfig());
 
   const engine = context.sessionManager.getEngine(session.engine);
   if (!engine) {

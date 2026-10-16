@@ -27,6 +27,14 @@
  *  compacts, resumes and immediately compacts again to one cycle per window. */
 export const SELF_COMPACTION_COOLDOWN_MS = 10 * 60_000;
 
+/** When the session last claimed its self-compaction slot (ms since the epoch),
+ *  read without claiming. The claim is `claimSelfCompaction`'s; this is for a
+ *  caller that only needs to know whether one would be refused. */
+export function selfCompactionClaimedAt(session: { transportMeta?: Record<string, unknown> | null }): number | undefined {
+  const at = session.transportMeta?.selfCompactionAt;
+  return typeof at === "number" && Number.isFinite(at) ? at : undefined;
+}
+
 /** Engines whose native compaction Jinn can drive. */
 export const SELF_COMPACTION_ENGINES = ["claude", "opencode"] as const;
 

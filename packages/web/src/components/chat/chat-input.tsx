@@ -101,6 +101,8 @@ interface ChatInputProps {
   statusSlot?: React.ReactNode
   /** Optional terminal-key control, rendered in the toolbar beside the mic. */
   terminalActionsSlot?: React.ReactNode
+  /** Optional per-session status items (context meter), right after the model chip. */
+  sessionStatusSlot?: React.ReactNode
 }
 
 /* ── File to MediaAttachment ─────────────────────────────── */
@@ -178,6 +180,7 @@ export function ChatInput({
   selectorSlot,
   statusSlot,
   terminalActionsSlot,
+  sessionStatusSlot,
 }: ChatInputProps) {
   const { value, setValue, pendingSend } = useChatDraft(sessionId)
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -827,14 +830,24 @@ export function ChatInput({
           </button>
 
           {/* Model chip — wrapped so clicks on the trigger (and its inline popover)
-              don't re-trigger card focus. The cap bounds a long model label instead
-              of letting an unshrinkable chip push Send outside a narrow pane. */}
+              don't re-trigger card focus. The cap bounds a long model label, and
+              the wrapper still shrinks when the cap is more than the row has left,
+              so nothing in the slot can push Send outside a narrow pane. */}
           {selectorSlot && (
             <div
-              className="flex max-w-[55%] shrink-0 items-center overflow-hidden"
+              className="flex min-w-0 max-w-[55%] shrink items-center overflow-hidden"
               onPointerDown={(e) => e.stopPropagation()}
             >
               {selectorSlot}
+            </div>
+          )}
+
+          {/* display: contents, so the wrapper has no box of its own (the slot's
+              own root collapses when it has nothing to show, and no gap is left);
+              React's pointer events still bubble through it. */}
+          {sessionStatusSlot && (
+            <div className="contents" onPointerDown={(e) => e.stopPropagation()}>
+              {sessionStatusSlot}
             </div>
           )}
 

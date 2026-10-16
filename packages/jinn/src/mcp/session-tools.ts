@@ -1,4 +1,5 @@
 import { assertBoundCaller, gatewayRequest, JinnMcpToolError, type JinnMcpContext, type JinnMcpTool } from "./toolkit.js";
+import { SESSION_FALLBACK_MODES } from "../shared/session-fallback-config.js";
 
 /**
  * GRS-017a — the SESSIONS tool group of the `jinn` MCP server: agents spawn,
@@ -171,6 +172,12 @@ export function buildSessionTools(): JinnMcpTool[] {
         engine: { type: "string" },
         model: { type: "string" },
         effortLevel: { type: "string" },
+        fallbackMode: {
+          type: "string",
+          enum: [...SESSION_FALLBACK_MODES],
+          description:
+            "Usage-limit behaviour for the new session: fallback, fallback-children (its children inherit), or auto-resume (never switch model). Default: fallback-children if this session has it, else auto-resume.",
+        },
       },
       required: ["prompt"],
     },
@@ -178,7 +185,7 @@ export function buildSessionTools(): JinnMcpTool[] {
       requireCallerIdentity(ctx);
       const prompt = requireString(args, "prompt");
       const body: Record<string, unknown> = { prompt };
-      for (const key of ["employee", "engine", "model", "effortLevel"] as const) {
+      for (const key of ["employee", "engine", "model", "effortLevel", "fallbackMode"] as const) {
         const v = optionalString(args, key);
         if (v !== undefined) body[key] = v;
       }

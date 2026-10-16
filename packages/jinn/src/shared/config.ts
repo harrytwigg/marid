@@ -6,6 +6,7 @@ import { claudeChainAccountProblems, validateClaudeAccounts } from "./claude-acc
 import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
 import { autoCompactProblems } from "./auto-compact-config.js";
 import { contextConfigProblems } from "./context-config.js";
+import { sessionFallbackConfigProblems } from "./session-fallback-config.js";
 import type { JinnConfig } from "./types.js";
 import { todoRecoveryProblems } from "./todo-recovery-config.js";
 import { todoDepartmentsProblems } from "./todo-departments-config.js";
@@ -41,7 +42,7 @@ export function validateConfigShape(config: unknown): string[] {
   const problems: string[] = [];
   const c = config as Record<string, any>;
 
-  problems.push(...contextConfigProblems(c.context), ...validateKnowledgeShape(c.knowledge));
+  problems.push(...contextConfigProblems(c.context), ...sessionFallbackConfigProblems(c.sessions), ...validateKnowledgeShape(c.knowledge));
 
   if (c.gateway !== undefined) {
     if (typeof c.gateway !== "object" || c.gateway === null || Array.isArray(c.gateway)) {

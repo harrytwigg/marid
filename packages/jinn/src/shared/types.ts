@@ -4,6 +4,8 @@ export type { CompanyChangedEvent } from "./gateway-events.js";
 
 export type { NoteDocument, NoteFolder, NoteStoreResult, NoteSummary } from "./note-types.js";
 
+import type { SessionFallbackMode, StoredFallbackTarget } from "./session-fallback-config.js";
+
 /** Generous but bounded body size for durable communication-card metadata. */
 export const STRUCTURED_MESSAGE_BODY_MAX_CHARS = 16_000;
 
@@ -392,6 +394,10 @@ export interface Session {
   attemptInterruptionCause?: SessionAttemptInterruptionCause | null;
   attemptInterruptionTurn?: number | null;
   effortLevel: string | null;
+  /** Usage-limit behaviour chosen for this session; null follows `sessions.fallbackMode`. */
+  fallbackMode: SessionFallbackMode | null;
+  /** The engine and model the operator chose to switch to at a usage limit; null follows the config's fallback chain. */
+  fallbackTarget: StoredFallbackTarget | null;
   totalCost: number;
   totalTurns: number;
   /** Most recent turn's input-context token count (for the UI context meter). */
