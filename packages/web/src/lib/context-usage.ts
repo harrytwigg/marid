@@ -6,7 +6,8 @@
 
 /** Round a token count to a compact string (23148 → "23k", 980 → "980", 1_048_576 → "1M"). */
 export function fmtK(n: number): string {
-  if (n >= 1_000_000) return `${String(Math.round(n / 100_000) / 10)}M`
+  // Pick the unit from the rounded figure, so 999_999 reads "1M", never "1000k".
+  if (Math.round(n / 1000) >= 1000) return `${String(Math.round(n / 100_000) / 10)}M`
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)
 }
 

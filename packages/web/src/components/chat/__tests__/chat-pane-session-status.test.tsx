@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { useEffect } from 'react'
 import type React from 'react'
 import { ChatPane } from '../chat-pane'
 
@@ -14,6 +15,7 @@ const featuresResult = { data: { notesEnabled: false, staleChat: { enabled: fals
 vi.mock('@/hooks/use-employees', () => ({ useOrg: () => orgResult }))
 vi.mock('@/hooks/use-features', () => ({ useFeatures: () => featuresResult }))
 
+const mounts = vi.hoisted(() => [] as string[])
 const live = vi.hoisted(() => ({ state: {} as Record<string, unknown> }))
 vi.mock('@/hooks/use-live-session', () => ({ useLiveSession: () => live.state }))
 
@@ -28,9 +30,10 @@ vi.mock('@/components/chat/chat-employee-picker', () => ({ ChatEmployeePicker: (
 vi.mock('@/components/chat/background-activity-status', () => ({ BackgroundActivityStatus: () => null }))
 vi.mock('@/components/chat/cli-keybar', () => ({ CliKeybar: () => null }))
 vi.mock('@/components/chat/session-status/session-status-cluster', () => ({
-  SessionStatusCluster: (props: Record<string, unknown>) => (
-    <div data-testid="cluster" data-props={JSON.stringify(props)} />
-  ),
+  SessionStatusCluster: (props: Record<string, unknown>) => {
+    useEffect(() => { mounts.push(String(props.sessionId)) }, [])
+    return <div data-testid="cluster" data-props={JSON.stringify(props)} />
+  },
 }))
 
 function renderPane(sessionId: string | null) {
@@ -76,6 +79,16 @@ describe('ChatPane session status cluster', () => {
     renderPane('s1')
     const props = JSON.parse(screen.getByTestId('cluster').getAttribute('data-props') ?? '{}')
     expect(props.loading).toBe(true)
+  })
+
+  it('starts a fresh meter when the pane switches to another session', () => {
+    mounts.length = 0
+    const pane = (id: string) => (
+      <ChatPane sessionId={id} isActive onFocus={() => {}} subscribe={() => () => {}} events={[]} />
+    )
+    const { rerender } = render(pane('s1'))
+    rerender(pane('s2'))
+    expect(mounts).toEqual(['s1', 's2'])
   })
 
   it('renders no cluster in the new-chat composer', () => {

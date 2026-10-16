@@ -16,6 +16,9 @@ describe('fmtK', () => {
     expect(fmtK(1_048_576)).toBe('1M')
     expect(fmtK(1_500_000)).toBe('1.5M')
     expect(fmtK(999_400)).toBe('999k')
+    expect(fmtK(999_499)).toBe('999k')
+    expect(fmtK(999_500)).toBe('1M')
+    expect(fmtK(999_999)).toBe('1M')
   })
 })
 

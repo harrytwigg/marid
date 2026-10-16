@@ -568,6 +568,7 @@ export function ChatPane({
         }
         sessionStatusSlot={sessionId ? (
           <SessionStatusCluster
+            key={sessionId}
             sessionId={sessionId}
             loading={loading}
             status={currentSession?.status as string | undefined}
