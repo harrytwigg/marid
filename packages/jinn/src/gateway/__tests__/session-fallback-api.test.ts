@@ -29,14 +29,14 @@ describe("GET /api/sessions/:id", () => {
     const got = await call("GET", `/api/sessions/${session.id}`);
     expect(got.status).toBe(200);
     expect(got.body.fallback).toEqual({
-      mode: "fallback", modeSource: "default", target: { engine: "codex", model: "gpt-mapped", label: "gpt-mapped" },
+      mode: "fallback", modeSource: "default", target: { engine: "codex", model: "gpt-mapped", label: "gpt-mapped" }, targetSource: "config", allowedEngines: expect.any(Array),
     });
   });
 
   it("reports a stored mode with source session, and a null target when the chain is empty", async () => {
     setConfig({ ...baseConfig, engines: { ...baseConfig.engines, claude: { bin: "claude", model: "opus", fallback: [] } } } as JinnConfig);
     const session = makeParent("auto-resume");
-    expect((await call("GET", `/api/sessions/${session.id}`)).body.fallback).toEqual({ mode: "auto-resume", modeSource: "session", target: null });
+    expect((await call("GET", `/api/sessions/${session.id}`)).body.fallback).toEqual({ mode: "auto-resume", modeSource: "session", target: null, targetSource: "config", allowedEngines: expect.any(Array) });
   });
 
   it("follows sessions.fallbackMode for a session with none of its own", async () => {

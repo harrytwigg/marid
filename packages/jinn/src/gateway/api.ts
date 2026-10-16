@@ -25,6 +25,8 @@ import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
 import { parseFallbackModeParam, parseFallbackModePatch, withFallbackView } from "./session-fallback-api.js";
 import { childFallbackMode } from "../sessions/session-fallback.js";
+import { childFallbackTarget } from "../sessions/fallback-target.js";
+import { applyFallbackTargetPatch } from "./session-fallback-api.js";
 import { scopedSwitchRefusal } from "../sessions/scoped-engine.js";
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
 import { effectiveSessionStatus, isBackgroundWorkLive, runtimeTransportRunning, serializeRuntimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
@@ -1844,6 +1846,8 @@ export async function handleApiRequest(
       const fallbackPatch = parseFallbackModePatch(body.fallbackMode);
       if (!fallbackPatch.ok) return badRequest(res, fallbackPatch.error);
       if (fallbackPatch.mode !== undefined) updates.fallbackMode = fallbackPatch.mode;
+      const targetPatch = applyFallbackTargetPatch(body.fallbackTarget, session, context, updates);
+      if (!targetPatch.ok) return badRequest(res, targetPatch.error);
       const configForPatch = context.getConfig();
       let requestedEngine: string | undefined;
       if (body.engine !== undefined) {
@@ -3405,6 +3409,7 @@ export async function handleApiRequest(
       if (!todoDispatch.ok) return json(res, { error: todoDispatch.error }, 409);
       const todoOverride = todoDispatch.preamble;
       const fallbackMode = childFallbackMode(config, delegatorSession, fallbackParam.mode);
+      const fallbackTarget = childFallbackTarget(config, delegatorSession, fallbackMode, { employee: employeeName });
       const selection = validateNewSessionSelection(config, {
         engine: todoOverride.engine ?? body.engine,
         model: todoOverride.engine ? todoOverride.model ?? undefined : body.model,
@@ -3549,6 +3554,7 @@ export async function handleApiRequest(
           model: selection.model,
           effortLevel: selection.effortLevel,
           fallbackMode,
+          fallbackTarget,
           prompt: brief,
           title,
           portalName: config.portal?.portalName,

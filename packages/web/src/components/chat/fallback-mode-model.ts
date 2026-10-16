@@ -11,6 +11,16 @@ export interface SessionFallbackView {
   mode: SessionFallbackMode
   modeSource: 'session' | 'default'
   target: SessionFallbackTarget | null
+  /** Whose target it is: the session's own choice or the config's chain. Absent on an older gateway. */
+  targetSource?: 'session' | 'config'
+  /** Installed engines the session may pick as its fallback. Absent on an older gateway: no limit. */
+  allowedEngines?: string[]
+}
+
+/** A fallback target the operator picks: what PUT /api/sessions/:id takes. */
+export interface FallbackTargetChoice {
+  engine: string
+  model: string
 }
 
 export const FALLBACK_MODE_OPTIONS: ReadonlyArray<{
@@ -64,4 +74,15 @@ export function fallbackChipTitle(view: SessionFallbackView): string {
 /** The view after picking `mode`: the mode is now the session's own; the target is unchanged. */
 export function withMode(view: SessionFallbackView, mode: SessionFallbackMode): SessionFallbackView {
   return { ...view, mode, modeSource: 'session' }
+}
+
+/** The view after choosing `choice` (null clears it back to the config's chain), before the server answers. */
+export function withTarget(view: SessionFallbackView, choice: FallbackTargetChoice | null): SessionFallbackView {
+  if (!choice) return { ...view, targetSource: 'config' }
+  return { ...view, targetSource: 'session', target: { engine: choice.engine, model: choice.model, label: choice.model } }
+}
+
+/** Whether the target is the session's own pick, which the menu offers to clear. */
+export function hasOwnTarget(view: SessionFallbackView): boolean {
+  return view.targetSource === 'session' && view.target !== null
 }

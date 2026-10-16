@@ -10,12 +10,15 @@ import type { Employee, JinnConfig, RemoteTarget, Session, SessionRemoteTarget }
 import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import { resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
 import { isAutoResume } from "./session-fallback.js";
+import { chooseTargetSubstitute } from "./fallback-target.js";
 import { accountWalkOptions, engineAllowedAsSubstitute, fallbackModelMapOf, substituteScoped } from "./substitute-filters.js";
 
 /** What a rate-limited turn moves onto: an engine, the Claude profile it runs
  *  as there, and, for another Claude account, the swap the override records. */
 export interface SubstituteChoice {
   engine: EngineName;
+  /** Set when the session's own fallback target names the model to run; otherwise the substitute's own default. */
+  model?: string;
   claudeProfile: ClaudeProfile;
   accounts?: { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };
 }
@@ -38,6 +41,7 @@ export interface ChooseSubstituteInput {
  *
  * - A board walk turn never changes engine or account (FR-076).
  * - Neither does a session whose fallback mode is `auto-resume`: it parks and resumes.
+ * - A session with its own fallback target (`session.fallbackTarget`) takes exactly that, or waits.
  * - A remote employee keeps today's rule: an engine that can also run on its
  *   host. Account entries apply to local sessions only in v1.
  * - A local Claude session walks its account's own chain (FR-079): the default
@@ -46,12 +50,19 @@ export interface ChooseSubstituteInput {
  * - Any other local session walks its engine's chain, as before accounts.
  */
 export function chooseSubstitute(input: ChooseSubstituteInput): SubstituteChoice | undefined {
-  if (isBoardWalkTurn(input.session)) return undefined;
-  if (isAutoResume(input.config, input.session)) return undefined;
+  return chooseSubstituteOrReason(input).choice;
+}
+
+/** As `chooseSubstitute`, and when a session with its own fallback target cannot use it, why:
+ *  it never falls back to the config's chain, so the turn waits and says so. */
+export function chooseSubstituteOrReason(input: ChooseSubstituteInput): { choice?: SubstituteChoice; reason?: string } {
+  if (isBoardWalkTurn(input.session)) return {};
+  if (isAutoResume(input.config, input.session)) return {};
   // Health recorded about the gateway's own login says nothing about the host
   // this turn is going back to.
   const health = engineHealthForTarget(readEngineHealth(), input.remoteTarget);
-  return !input.remote && input.session.engine === "claude" ? accountSubstitute(input, health) : engineSubstitute(input, health);
+  if (input.session.fallbackTarget) return chooseTargetSubstitute(input, health);
+  return { choice: !input.remote && input.session.engine === "claude" ? accountSubstitute(input, health) : engineSubstitute(input, health) };
 }
 
 /** A local Claude session: its account's own chain (FR-079). */

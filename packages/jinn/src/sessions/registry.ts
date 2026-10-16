@@ -17,7 +17,7 @@ import { getMeta, setMeta, canonicalCallbackIdentityText, canonicalSessionDelive
 import { parseTodoId } from '../work-items/id.js';
 import { toWorkItemLinkRole } from '../work-items/link-role.js';
 import { scopedDepartmentOf } from '../work-items/department-scope.js';
-import { storedFallbackMode, type SessionFallbackMode } from '../shared/session-fallback-config.js';
+import { storedFallbackMode, storedFallbackTarget, type SessionFallbackMode, type StoredFallbackTarget } from '../shared/session-fallback-config.js';
 import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs, JsonObject, ReplyContext, Session, SessionAttemptOutcome, SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload, SessionAttemptInterruptionCause } from '../shared/types.js';
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
@@ -127,6 +127,7 @@ function rowToSession(row: Record<string, unknown>): Session {
     userId: (row.user_id as string) ?? null,
     effortLevel: (row.effort_level as string) ?? null,
     fallbackMode: storedFallbackMode(row.fallback_mode),
+    fallbackTarget: storedFallbackTarget(row.fallback_target),
     status: row.status as Session['status'],
     attemptOutcome: (row.attempt_outcome as SessionAttemptOutcome) ?? null,
     attemptToken: (row.attempt_token as string) ?? null,
@@ -413,6 +414,8 @@ export interface CreateSessionOpts {
   effortLevel?: string;
   /** The resolved usage-limit mode (sessions/session-fallback.ts); undefined stores NULL, the config default. */
   fallbackMode?: SessionFallbackMode;
+  /** The usage-limit fallback a parent passes on (sessions/fallback-target.ts); undefined stores NULL. */
+  fallbackTarget?: StoredFallbackTarget;
   /**
    * Optional human-facing excerpt override. When the prompt is scaffolded
    * (e.g. talk delegation wraps the operator's ask in a brief + verbatim
@@ -463,12 +466,12 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     INSERT INTO sessions (
       id, engine, source, source_ref, connector, session_key, reply_context, message_id, transport_meta,
       employee, model, title, prompt_excerpt, parent_session_id,
-      user_id, effort_level, fallback_mode, status, created_at, last_activity, scope_department
+      user_id, effort_level, fallback_mode, fallback_target, status, created_at, last_activity, scope_department
     )
     VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, ?, 'idle', ?, ?, ?
+      ?, ?, ?, ?, 'idle', ?, ?, ?
     )
   `);
   stmt.run(
@@ -489,6 +492,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     opts.userId ?? null,
     opts.effortLevel ?? null,
     opts.fallbackMode ?? null,
+    opts.fallbackTarget ? JSON.stringify(opts.fallbackTarget) : null,
     now,
     now,
     scopeDepartment,
@@ -517,6 +521,7 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     userId: opts.userId ?? null,
     effortLevel: opts.effortLevel ?? null,
     fallbackMode: opts.fallbackMode ?? null,
+    fallbackTarget: opts.fallbackTarget ?? null,
     status: 'idle',
     attemptOutcome: null,
     attemptToken: null,
@@ -564,6 +569,7 @@ export interface UpdateSessionFields {
   model?: string | null;
   effortLevel?: string | null;
   fallbackMode?: SessionFallbackMode | null;
+  fallbackTarget?: StoredFallbackTarget | null;
   lastContextTokens?: number | null;
   replyContext?: ReplyContext | null;
   messageId?: string | null;
@@ -653,6 +659,10 @@ export function updateSession(id: string, updates: UpdateSessionFields): Session
   if (updates.fallbackMode !== undefined) {
     sets.push('fallback_mode = ?');
     values.push(updates.fallbackMode);
+  }
+  if (updates.fallbackTarget !== undefined) {
+    sets.push('fallback_target = ?');
+    values.push(updates.fallbackTarget ? JSON.stringify(updates.fallbackTarget) : null);
   }
   if (updates.lastContextTokens !== undefined) {
     sets.push('last_context_tokens = ?');
@@ -1833,10 +1843,10 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       INSERT INTO sessions (
         id, engine, engine_session_id, source, source_ref, connector, session_key,
         reply_context, message_id, transport_meta,
-        employee, model, title, parent_session_id, effort_level, fallback_mode, status,
+        employee, model, title, parent_session_id, effort_level, fallback_mode, fallback_target, status,
         total_cost, total_turns, created_at, last_activity, scope_department
       )
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'idle', 0, 0, ?, ?, ?)
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'idle', 0, 0, ?, ?, ?)
     `).run(
       newId,
       source.engine,
@@ -1852,6 +1862,7 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       title,
       source.effortLevel,
       source.fallbackMode,
+      source.fallbackTarget ? JSON.stringify(source.fallbackTarget) : null,
       now,
       now,
       scopedDepartmentOf(source.employee),

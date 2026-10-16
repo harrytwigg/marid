@@ -80,6 +80,13 @@ function accountSwapModel(accounts: AccountSwap, model: string | null | undefine
 
 type EngineConfig = { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string };
 
+/** The model a stand-in nobody chose a model for runs: through the account's map for an account swap, else the engine's. */
+function derivedSubstituteModel(config: JinnConfig, session: Session, substitute: string, accounts: AccountSwap | undefined): string | undefined {
+  return accounts
+    ? accountSwapModel(accounts, session.model)
+    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model });
+}
+
 /** What the stand-in runs as, once the session row has been flipped onto it. */
 export interface EngineSubstitution {
   engineConfig: EngineConfig;
@@ -101,6 +108,8 @@ export function beginEngineSubstitution(opts: {
   config: JinnConfig;
   employee: Employee | undefined;
   substitute: string;
+  /** The model the substitute runs, when the operator chose one; else it is derived from the session's pin. */
+  model?: string;
   /** Set when the substitute is another Claude account rather than an engine
    *  (FR-079): the session keeps its engine and runs on that account's profile. */
   accounts?: AccountSwap;
@@ -111,9 +120,7 @@ export function beginEngineSubstitution(opts: {
   const { session, attemptToken, config, employee, substitute, accounts, until, syncSince, lastError } = opts;
 
   const engineConfig: EngineConfig = config.engines[substitute as keyof JinnConfig["engines"]] as EngineConfig ?? {};
-  const model = accounts
-    ? accountSwapModel(accounts, session.model)
-    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model });
+  const model = opts.model ?? derivedSubstituteModel(config, session, substitute, accounts);
   const engineOverride = overrideRecord(session, accounts, until, syncSince);
 
   const started = updateSessionForAttempt(session.id, attemptToken, {
@@ -140,6 +147,24 @@ export function beginEngineSubstitution(opts: {
     // account's slot, which only the override record makes current.
     resumeSessionId: getEngineSessionRef(accounts ? started : session, substitute).id,
   };
+}
+
+/**
+ * Undo `beginEngineSubstitution` for a substitute that could not take the turn either: the session
+ * goes back to the engine, thread and model the turn began on, with the transport meta from before
+ * the swap (so no override record is left, and one that already stood is kept). False when the
+ * attempt fence was lost.
+ */
+export function abandonEngineSubstitution(session: Session, attemptToken: string, metaBefore: Session["transportMeta"]): boolean {
+  return Boolean(updateSessionForAttempt(session.id, attemptToken, {
+    engine: session.engine,
+    engineSessionId: session.engineSessionId,
+    model: session.model,
+    transportMeta: metaBefore ?? null,
+    status: "running",
+    lastActivity: new Date().toISOString(),
+    lastError: null,
+  }));
 }
 
 /** What the swap parked, or null when the record names no engine to go back to. */
