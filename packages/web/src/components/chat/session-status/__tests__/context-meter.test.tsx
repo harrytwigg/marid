@@ -94,7 +94,8 @@ describe('ContextMeter ring', () => {
     expect((await screen.findByTestId('context-meter-text')).textContent).toContain('80%')
     let land: (data: ContextUsageWire) => void = () => {}
     api.getContextUsage.mockImplementation(() => new Promise<ContextUsageWire>((resolve) => { land = resolve }))
-    update({ loading: false, status: 'idle', lastContextTokens: 162_000 })
+    // The pane clears its streamed figure in the same render that ends the turn.
+    update({ loading: false, status: 'idle', lastContextTokens: 162_000, liveContextTokens: null })
     // The fetched answer is still the pre-turn 10k: the ring must not fall back to 5% in between.
     expect(screen.getByTestId('context-meter-text').textContent).toContain('80%')
     await waitFor(() => expect(api.getContextUsage).toHaveBeenCalled())

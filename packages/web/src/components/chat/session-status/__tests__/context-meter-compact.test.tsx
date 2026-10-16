@@ -94,6 +94,20 @@ describe('ContextMeter compact flow', () => {
     expect(screen.getByTestId('context-meter-ring').getAttribute('data-unknown')).toBe('true')
   })
 
+  it('drops the ring to n/a after a compaction when the pane clears its live figure as the turn ends', async () => {
+    serve(usageFixture({ contextTokens: 182_000 }))
+    api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
+    const { update } = renderMeter()
+    await openPopover()
+    fireEvent.click(screen.getByRole('button', { name: 'Compact now' }))
+    await screen.findByRole('button', { name: /Compacting…/ })
+    update({ loading: true, liveContextTokens: 182_000 })
+    serve(usageFixture({ contextTokens: null }))
+    update({ loading: false, liveContextTokens: null })
+    expect((await screen.findByTestId('compact-outcome')).textContent).toBe('Compacted; the size updates after the next turn')
+    await waitFor(() => expect(screen.getByTestId('context-meter-text').textContent).toBe('n/a'))
+  })
+
   it('shows the new size on the ring after a compaction, with a stale live figure present', async () => {
     serve(usageFixture({ contextTokens: 182_000 }))
     api.compactSession.mockResolvedValue({ status: 'queued', sessionId: 'sess-1', engine: 'claude' })
