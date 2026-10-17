@@ -1,6 +1,8 @@
-/** The accent swatches the picker offers, beside the picker that renders them. */
-export const ACCENT_PRESETS = [
-  { label: "Marid teal", value: "#3DBFB2" },
+/** The accent swatches the picker offers, beside the picker that renders them.
+ *  The first has no value: it clears the override, so the theme's own accent
+ *  (a light-dark() pair, readable on both sheets) applies. */
+export const ACCENT_PRESETS: { label: string; value: string | null }[] = [
+  { label: "Default", value: null },
   { label: "Red", value: "#EF4444" },
   { label: "Orange", value: "#F97316" },
   { label: "Amber", value: "#F59E0B" },

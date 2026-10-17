@@ -18,6 +18,7 @@ import type { NativeGatewayProfiles, NativeGatewayProfilesSnapshot } from './lib
 import { nativeBridge } from './platform/native-bridge'
 import './routes/globals.css'
 import './routes/theme-overrides.css'
+import './routes/glass-identity.css'
 
 let profiles: NativeGatewayProfiles | undefined
 let initialNativeOrigin: string | undefined
