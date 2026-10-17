@@ -396,3 +396,10 @@ body {
     box-shadow: var(--shadow-overlay), 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent);
   }
 }
+
+/* The product name where it is shown large (onboarding, connect). */
+.brand-wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}

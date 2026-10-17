@@ -100,15 +100,22 @@ async function captureOne({ screen, theme, viewport }) {
     reducedMotion: 'reduce',
     extraHTTPHeaders: { authorization: `Bearer ${token}` },
   })
-  await context.addInitScript(([t, isReduced]) => {
+  await context.addInitScript(([t, isReduced, onboarded]) => {
     localStorage.setItem('jinn-theme', t)
-    localStorage.setItem('jinn-onboarded', 'true')
+    if (onboarded) localStorage.setItem('jinn-onboarded', 'true')
     if (isReduced) localStorage.setItem('jinn-settings', JSON.stringify({ transparency: 'reduced' }))
     document.addEventListener('DOMContentLoaded', () => {
       window.__rootAtParse = document.documentElement.getAttribute('data-transparency')
     })
-  }, [theme, reduced])
+  }, [theme, reduced, !screen.onboarding])
   const page = await context.newPage()
+  if (screen.onboarding) {
+    // The sandbox is onboarded; report it as fresh so the wizard opens.
+    await page.route('**/api/onboarding', async (route) => {
+      const response = await route.fetch()
+      await route.fulfill({ response, json: { ...(await response.json()), onboarded: false, needed: true } })
+    })
+  }
   const errors = []
   page.on('pageerror', (err) => errors.push(String(err)))
   try {

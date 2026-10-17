@@ -183,7 +183,7 @@ function ScreenHeader({ unreachableName }: { unreachableName?: string }) {
         <ShieldCheck size={22} aria-hidden />
       </div>
       <div className="min-w-0">
-        <h1 className="text-balance text-[length:var(--text-title3)] font-[var(--weight-semibold)] tracking-[var(--tracking-normal)]">
+        <h1 className="brand-wordmark text-balance text-[length:var(--text-title3)]">
           {unreachableName ? `Cannot reach ${unreachableName}` : `Connect ${PRODUCT_NAME}`}
         </h1>
         <p className="mt-1 text-pretty text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">

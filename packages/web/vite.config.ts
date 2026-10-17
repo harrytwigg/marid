@@ -77,6 +77,7 @@ export default defineConfig(() => {
             'manifest.webmanifest',
             'apple-touch-icon.png',
             'icons/*.png',
+            'icons/*.svg',
             'assets/index-*.js',
             'assets/vendor-*.js',
             'assets/index-*.css',

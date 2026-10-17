@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
-import { PRODUCT_EMOJI } from "@/lib/brand"
+import { BrandMark } from "@/components/brand-mark"
+import { customBrandGlyph } from "@/lib/brand"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { EmojiPicker } from "@/components/ui/emoji-picker"
@@ -14,7 +15,6 @@ const LABEL_CLASS = "block text-[length:var(--text-caption1)] text-[var(--text-t
 const SWATCH_CLASS =
   "flex size-[44px] cursor-pointer items-center justify-center rounded-[13px] border-none bg-[var(--fill-quaternary)] text-[26px] leading-none transition-colors hover:bg-[var(--fill-tertiary)]"
 
-const PORTAL_DEFAULT_EMOJI = PRODUCT_EMOJI
 const ERROR_CLASS =
   "mt-[var(--space-2)] rounded-[var(--radius-lg)] p-[8px_10px] text-[length:var(--text-caption1)] text-[var(--system-red)]"
 const ERROR_WASH = { background: "color-mix(in srgb, var(--system-red) 8%, transparent)" }
@@ -79,7 +79,7 @@ export function PortalEmojiRow() {
   const { settings, setPortalEmoji } = useSettings()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [draft, setDraft] = useState(settings.portalEmoji ?? "")
-  const current = settings.portalEmoji ?? PORTAL_DEFAULT_EMOJI
+  const current = customBrandGlyph(settings) ?? ""
 
   useEffect(() => {
     setDraft(settings.portalEmoji ?? "")
@@ -96,15 +96,15 @@ export function PortalEmojiRow() {
           aria-expanded={pickerOpen}
           className={SWATCH_CLASS}
         >
-          {current}
+          {current || <BrandMark size={30} />}
         </button>
         <input
           type="text"
           className={cn(CONTROL_CLASS, "w-[96px] text-center")}
-          placeholder={`${PRODUCT_EMOJI}\u{FE0F}`}
+          placeholder="Default"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => setPortalEmoji(draft || null)}
+          onBlur={() => setPortalEmoji(draft.trim() || null)}
         />
         {pickerOpen && (
           <EmojiPicker
