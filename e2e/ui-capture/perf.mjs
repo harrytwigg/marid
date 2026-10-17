@@ -6,7 +6,7 @@
 // scroll, then scrolls the transcript up and down with real compositor-driven wheel gestures while
 // a requestAnimationFrame loop records the gap between frames. The warm-up scroll is discarded.
 // Writes <out-dir>/perf.json (every frame gap per
-// run, so runs from separate launches can be pooled) and prints one summary line per run.
+// run (`gaps`), so runs from separate launches can be pooled) and prints one summary line per run.
 //
 // Environment: JINN_PERF_RUNS (measured runs per variant, default 3), JINN_PERF_THROTTLE (CPU
 // slowdown, default 4), JINN_PERF_VARIANTS (comma list of theme-width, default all four).
@@ -44,7 +44,8 @@ function summarise(frames) {
     p95: percentile(sorted, 95),
     p99: percentile(sorted, 99),
     max: sorted[sorted.length - 1],
-    over33: frames.filter((f) => f > 33.4).length,
+    // Two vsyncs or more: a frame the page missed (a 60Hz frame is 16.7ms).
+    missed: frames.filter((f) => f > 25).length,
   }
 }
 
@@ -106,7 +107,7 @@ async function runVariant(browser, { theme, viewport }) {
     })
     await page.waitForTimeout(500)
     const frames = await scrollRun(client, page, viewport)
-    runs.push({ frames, ...summarise(frames) })
+    runs.push({ gaps: frames, ...summarise(frames) })
   }
   await context.close()
   return runs
@@ -114,7 +115,7 @@ async function runVariant(browser, { theme, viewport }) {
 
 function report(label, runs) {
   for (const [i, run] of runs.entries()) {
-    console.log(`PERF ${label} run${i + 1}: ${run.frames} frames, median ${run.median.toFixed(1)}ms, p95 ${run.p95.toFixed(1)}ms, p99 ${run.p99.toFixed(1)}ms, max ${run.max.toFixed(1)}ms, ${run.over33} over 33ms`)
+    console.log(`PERF ${label} run${i + 1}: ${run.frames} frames, median ${run.median.toFixed(1)}ms, p95 ${run.p95.toFixed(1)}ms, p99 ${run.p99.toFixed(1)}ms, max ${run.max.toFixed(1)}ms, ${run.missed} missed`)
   }
 }
 
