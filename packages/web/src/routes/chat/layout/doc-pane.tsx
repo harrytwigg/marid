@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { X } from '@/components/ui/icon'
 import { FileLinkSessionContext } from '@/components/chat/file-link-session-context'
 import type { PaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { DocView } from '@/components/chat/doc-view'

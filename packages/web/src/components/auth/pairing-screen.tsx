@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react"
-import { ChevronDown, KeyRound, Settings, ShieldCheck, Terminal, Wifi } from "lucide-react"
+import { ChevronDown, KeyRound, Settings, ShieldCheck, Terminal, Wifi } from "@/components/ui/icon"
 import type { AuthState } from "@/lib/auth"
 import { AuthStateIcon, AuthStateLabel } from "./auth-motion"
 import { PRODUCT_NAME } from "@/lib/brand"

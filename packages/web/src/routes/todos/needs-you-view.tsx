@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Check, MessageSquareText } from "lucide-react"
+import { Check, MessageSquareText } from "@/components/ui/icon"
 import { AttachmentRefText } from "@/components/attachment-ref-preview"
 import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire } from "@/lib/api"
 import {
@@ -49,7 +49,7 @@ function WorkRef({ item }: { item: WorkItemCompactWire }) {
     const sessionRef = publicWorkItemReference(item.sessionRef.ref) ?? publicWorkItemReference(item.sessionRef.sessionId)
     return (
       <span className="inline-flex min-w-0 items-center gap-1.5 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
-        <MessageSquareText size={12.5} strokeWidth={1.75} aria-hidden />
+        <MessageSquareText size={12.5} aria-hidden />
         <span className="truncate">{sessionRef ? `Session · ${shortRef(sessionRef)}` : "Session"}</span>
       </span>
     )
@@ -240,7 +240,7 @@ export function NeedsYouEmpty() {
           }}
           aria-hidden
         >
-          <Check size={26} strokeWidth={2.4} />
+          <Check size={26} />
         </div>
         <h2 className="mt-4 text-[20px] font-bold tracking-[-0.41px] text-[var(--text-primary)]">All quiet.</h2>
         <p className="mt-1.5 text-[14px] leading-[1.5] text-[var(--text-tertiary)]">

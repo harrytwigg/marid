@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react"
-import { Play, Plus } from "lucide-react"
+import { Play, Plus } from "@/components/ui/icon"
 import { STATUS_LABEL } from "@/lib/todos"
 import { StatusCircle } from "@/routes/todos/state-glyph"
 import { useTriggerCronJob } from "@/hooks/use-cron"
@@ -73,7 +73,7 @@ function RunForm({ row }: { row: CommandObject }) {
         onClick={() => trigger.mutate()}
         className={PRIMARY}
       >
-        <Play size={12} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+        <Play size={12} fill="currentColor" aria-hidden="true" />
         {triggered ? "Triggered" : trigger.isPending ? "Starting…" : "Run now"}
       </button>
       {triggered && (

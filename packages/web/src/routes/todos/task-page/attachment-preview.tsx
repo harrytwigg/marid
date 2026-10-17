@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react"
-import { Play, X } from "lucide-react"
+import { Play, X } from "@/components/ui/icon"
 import { ImageLightbox, type ImageLightboxItem } from "@/components/ui/image-lightbox"
 import { VideoPlayer } from "@/components/ui/video-player"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -108,7 +108,7 @@ export function AttachmentTile({
             aria-label={`${attachment.filename} preview unavailable`}
             className={`grid w-full place-items-center bg-[var(--bg-tertiary)] text-[var(--text-secondary)] ${dense ? "h-[70px]" : "aspect-[3/2]"}`}
           >
-            <Play size={dense ? 20 : 26} fill="currentColor" strokeWidth={1.4} aria-hidden className="ml-0.5" />
+            <Play size={dense ? 20 : 26} fill="currentColor" aria-hidden className="ml-0.5" />
           </span>
         ) : (
           <img
@@ -122,7 +122,7 @@ export function AttachmentTile({
         )}
         {video && !posterFailed && (
           <span className="pointer-events-none absolute left-1/2 top-1/2 grid size-10 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] backdrop-blur-xl">
-            <Play size={16} fill="currentColor" strokeWidth={1.4} aria-hidden className="ml-0.5" />
+            <Play size={16} fill="currentColor" aria-hidden className="ml-0.5" />
           </span>
         )}
         <span
@@ -208,7 +208,7 @@ function AttachmentVideoDialog({
           onClick={onClose}
           className="focus-outline absolute -right-1 -top-11 grid size-10 place-items-center rounded-[var(--radius-md)] bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-xl transition-transform active:scale-[0.96]"
         >
-          <X size={18} strokeWidth={1.8} aria-hidden />
+          <X size={18} aria-hidden />
         </button>
       </DialogContent>
     </Dialog>

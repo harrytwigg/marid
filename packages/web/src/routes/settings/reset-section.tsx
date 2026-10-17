@@ -1,4 +1,4 @@
-import { RotateCcw, Trash2 } from "lucide-react"
+import { RotateCcw, Trash2 } from "@/components/ui/icon"
 import { Section } from "./shared"
 
 export function ResetSection({ resetAll }: { resetAll: () => void }) {

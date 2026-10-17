@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Flag } from "lucide-react"
+import { Flag } from "@/components/ui/icon"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,7 +70,7 @@ function movable(status: string, current: WorkItemSprintRefWire | null, followsR
 function SprintValue({ current, followsRoot }: { current: WorkItemSprintRefWire | null; followsRoot: string | null }) {
   return (
     <>
-      <Flag size={14} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
+      <Flag size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
       {current ? (
         <span className="min-w-0 truncate">
           {current.name}

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight } from "@/components/ui/icon"
 import { MarkdownView } from "@/components/markdown-view"
 import { BODY_CLAMP_PX, BODY_PLACEHOLDER } from "./body-editor-constants"
 
@@ -64,7 +64,6 @@ function ShowMoreToggle({ expanded, onToggle }: { expanded: boolean; onToggle: (
       {expanded ? "Show less" : "Show more"}
       <ChevronRight
         size={11}
-        strokeWidth={2.2}
         aria-hidden
         className={`transition-transform duration-150 ${expanded ? "-rotate-90" : "rotate-90"}`}
       />

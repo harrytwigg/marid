@@ -1,6 +1,6 @@
 
 import { useCallback, useEffect, useState } from "react"
-import { RefreshCw, Radio } from "lucide-react"
+import { RefreshCw, Radio } from "@/components/ui/icon"
 import { api } from "@/lib/api"
 import { PageLayout, ToolbarActions } from "@/components/page-layout"
 import { LogBrowser, parseLogLine } from "@/components/activity/log-browser"

@@ -1,4 +1,4 @@
-import { Pin } from "lucide-react"
+import { Pin } from "@/components/ui/icon"
 import type { WorkItemCompactWire } from "@/lib/api"
 import { departmentTitle } from "./board-switcher"
 
@@ -45,7 +45,7 @@ export function KeepToggle(
         className,
       ].join(" ")}
     >
-      <Pin size={13} strokeWidth={2} aria-hidden className={kept ? "fill-current" : ""} />
+      <Pin size={13} aria-hidden className={kept ? "fill-current" : ""} />
     </button>
   )
 }
@@ -67,7 +67,7 @@ export function KeptCaption({ item, className = "" }: { item: WorkItemCompactWir
       data-testid={`kept-caption-${item.id}`}
       className={`flex items-center gap-1.5 text-[12px] text-[var(--text-quaternary)] ${className}`}
     >
-      <Pin size={10} strokeWidth={2} aria-hidden className="flex-none" />
+      <Pin size={10} aria-hidden className="flex-none" />
       {caption}
     </div>
   )

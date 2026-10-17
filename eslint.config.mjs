@@ -32,6 +32,11 @@ const ROOT_TREES = [
 
 export const LINTED = [...PACKAGE_TREES, ...ROOT_TREES]
 
+// The web app draws its icons from `@/components/ui/icon`, whose modules are
+// generated from Phosphor's duotone sources. Lucide is on its way out of the
+// dependency tree, so nothing new may import it.
+const WEB_SOURCES = ["packages/web/**/*.{ts,tsx}"]
+
 // Every tree in `LINTED` names its tests, because a test left out of this list
 // is a test judged by the size caps the ones beside it are excused from. Each
 // entry stays inside a `LINTED` tree on purpose: a file that matches here but
@@ -126,6 +131,23 @@ export const enforcement = tseslint.config(
         project: ["./tsconfig.e2e.json", "./tsconfig.scripts.json"],
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    files: WEB_SOURCES,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "lucide-react",
+              message: "Import icons from \"@/components/ui/icon\"; its modules are generated from Phosphor's duotone sources (pnpm --filter @jinn/web icons).",
+            },
+          ],
+          patterns: [{ group: ["lucide-react/*"], message: "Import icons from \"@/components/ui/icon\"." }],
+        },
+      ],
     },
   },
   {

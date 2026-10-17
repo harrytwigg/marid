@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react"
+import { RefreshCw } from "@/components/ui/icon"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"

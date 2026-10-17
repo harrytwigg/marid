@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Play, Trash2 } from "lucide-react"
+import { Play, Trash2 } from "@/components/ui/icon"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import type { SprintWire } from "@/lib/sprint-api"
 import { CompletePanel } from "./sprint-complete-panel"

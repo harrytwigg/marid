@@ -1,6 +1,6 @@
 
 import { useLayoutEffect, useState, type ReactNode } from 'react'
-import { ChevronLeft, SquarePen } from 'lucide-react'
+import { ChevronLeft, SquarePen } from '@/components/ui/icon'
 import { type ChatTab } from '@/hooks/use-chat-tabs'
 // Frosted pill primitives now live in the shared cross-page pill system.
 import { PILL_CLASS, PillButton } from '@/components/pill-nav'
@@ -71,7 +71,7 @@ function DesktopThreadChrome({ title, backTo, onNew, moreMenu }: Pick<ChatHeader
           aria-label={`Back to ${backTo.label}`}
           className="pointer-events-auto inline-flex max-w-[160px] shrink-0 items-center gap-1 text-[length:var(--text-footnote)] font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
         >
-          <ChevronLeft size={13} strokeWidth={2.4} aria-hidden className="shrink-0" />
+          <ChevronLeft size={13} aria-hidden className="shrink-0" />
           <span className="truncate">{backTo.label}</span>
         </button>
       )}

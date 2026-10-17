@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react"
-import { ChevronRight, LoaderCircle, Plus, X } from "lucide-react"
+import { ChevronRight, LoaderCircle, Plus, X } from "@/components/ui/icon"
 import { NativePairingDialog } from "@/components/auth/native-pairing-screen"
 import { CreateWorkspaceDialog } from "@/components/workspaces/create-workspace-dialog"
 import { useStartWorkspace, useWorkspaces } from "@/hooks/use-workspaces"

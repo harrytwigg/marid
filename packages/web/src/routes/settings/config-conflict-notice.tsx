@@ -1,4 +1,4 @@
-import { RotateCcw } from "lucide-react"
+import { RotateCcw } from "@/components/ui/icon"
 
 /**
  * config.yaml moved under an open page.

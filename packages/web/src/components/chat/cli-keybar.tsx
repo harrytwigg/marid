@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CornerDownLeft, Keyboard, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CornerDownLeft, Keyboard, X, type IconComponent } from '@/components/ui/icon'
 import { Button } from '@/components/ui/button'
-import type { LucideIcon } from 'lucide-react'
 
 type CliKey = {
   label: string
   aria: string
   data: string
-  icon?: LucideIcon
+  icon?: IconComponent
 }
 
 export const CLI_KEYS: readonly CliKey[] = [

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { Moon, Palette, Sun } from "lucide-react"
+import { Moon, Palette, Sun } from "@/components/ui/icon"
 import { useTheme } from "@/routes/providers"
 import { THEMES, type ThemeId } from "@/lib/themes"
 import { WorkspaceSwitcher } from "@/components/workspaces/workspace-menu"

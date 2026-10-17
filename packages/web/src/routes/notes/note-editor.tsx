@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, ChevronLeft, PenLine, RotateCcw, ShieldAlert } from "lucide-react"
+import { Check, ChevronLeft, PenLine, RotateCcw, ShieldAlert } from "@/components/ui/icon"
 import { ApiError, api } from "@/lib/api"
 import { MarkdownView } from "@/components/markdown-view"
 import { cn } from "@/lib/utils"

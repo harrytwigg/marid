@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "icons": "node scripts/generate-icons.mjs",
     "perf:budget": "node scripts/perf-budget.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -43,6 +44,7 @@
     "tiptap-markdown": "^0.8"
   },
   "devDependencies": {
+    "@phosphor-icons/core": "2.1.1",
     "@tailwindcss/postcss": "^4.1.0",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "14.6.1",
