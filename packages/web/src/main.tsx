@@ -151,7 +151,8 @@ const appRoutes: RouteObject[] = APP_ROUTES.flatMap((route) => {
 const router = createBrowserRouter([
   {
     element: <AppShell />,
-    errorElement: <RouteFailure />,
+    // Outside AppShell, so it needs its own router provider for a link in it.
+    errorElement: <AriaRouter><RouteFailure /></AriaRouter>,
     children: [
       ...appRoutes,
       // A plugin's page, last and on the splat so the app's own routes are

@@ -3,7 +3,7 @@
  * --radius-xl from Marid's own tokens are not proportional to it (6, 10, 14,
  * 18px). Left to win, it would move every rounded corner in the app, so the
  * names the app resolved before are put back: sm to xl read Marid's tokens,
- * xs and 2xl keep Tailwind's defaults that Marid's tokens are layered over.
+ * xs and 2xl to 4xl keep Tailwind's defaults.
  * (Its --ease-smooth needs no such care: it lands in the theme layer, below
  * the unlayered one Marid declares on :root.)
  */
@@ -17,4 +17,6 @@
 @theme {
   --radius-xs: 0.125rem;
   --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
 }
