@@ -11,16 +11,12 @@ import { PRODUCT_EMOJI, PRODUCT_NAME } from "@/lib/brand"
 // ---------------------------------------------------------------------------
 // Frosted pill primitives (mockup _shared.css `.pill` recipe)
 // ---------------------------------------------------------------------------
-// A theme-aware material, 0.5px theme-aware border (the shadow's built-in ring,
-// NOT a hairline at rest), overlay shadow, full radius — flipping with the theme
-// via --pill-bg / --pill-border (globals.css). blur(20px) saturate(1.3) rides on
-// top for pointer:fine only: these float over a scrolling region, where a
-// backdrop filter re-rasterises every frame. Coarse pointers get the same
-// material composited to alpha 1 (--pill-bg-opaque), not a dropped effect.
-const PILL_MATERIAL =
-  "border-[0.5px] border-[var(--pill-border)] bg-[var(--pill-bg-opaque)] shadow-[var(--shadow-overlay)] " +
-  "[@media(pointer:fine)]:bg-[var(--pill-bg)] [@media(pointer:fine)]:[backdrop-filter:blur(20px)_saturate(1.3)] " +
-  "[@media(pointer:fine)]:[-webkit-backdrop-filter:blur(20px)_saturate(1.3)]"
+// Glass material (.glass-tint, glass-identity.css): the float tint, lit edge and
+// specular highlight, full radius, flipping with the theme. These pills sit on
+// the chat's top scrim, which is the surface that blurs the scrolling thread
+// behind them, so they are tint only: blur does not nest. Coarse pointers and
+// reduced transparency get the same material composited to alpha 1.
+const PILL_MATERIAL = "glass-tint border-[0.5px] border-[var(--pill-border)]"
 
 // The cross-page pill system and the chat header pills share this primitive; the
 // nav popover reuses the EXACT same material, only the radius differs.

@@ -23,6 +23,15 @@ describe('MobileTabBar', () => {
     }
   })
 
+  // The bar blurs the page that scrolls beneath it through the shared glass class; a raw filter here would
+  // dodge the pointer fallback and the reduced-transparency switch the class carries.
+  it('is one floating glass bar and sets no backdrop filter of its own', () => {
+    renderAt('/')
+    const bar = screen.getByRole('navigation', { name: 'Primary' })
+    expect(bar.classList.contains('glass-float-bar')).toBe(true)
+    expect(bar.className).not.toMatch(/backdrop/)
+  })
+
   it('marks the Chat tab current on "/" and no other', () => {
     renderAt('/')
     expect(

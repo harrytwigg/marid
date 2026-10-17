@@ -409,8 +409,6 @@
   --system-orange: light-dark(#B5701A, #E89B45);
   --system-yellow: light-dark(#9C7A10, #E3C34C);
   --system-purple: light-dark(#7A5A9E, #B98AD6);
-  --pill-bg: light-dark(rgba(251,249,242,0.72), rgba(34,31,24,0.64));
-  --pill-bg-opaque: light-dark(#F9F7EF, #1D1B15);
   --pill-border: light-dark(rgba(33,30,22,0.10), rgba(255,255,255,0.14));
   --code-bg: light-dark(rgba(33,30,22,0.05), rgba(255,255,255,0.05));
   --code-border: light-dark(rgba(33,30,22,0.10), rgba(255,255,255,0.09));
@@ -1162,8 +1160,6 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   border: 1px solid var(--separator);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
 
 /* ============================================

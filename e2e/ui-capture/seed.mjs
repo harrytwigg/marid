@@ -38,6 +38,24 @@ const CONVERSATION = [
   ['assistant', 'Added: **4. Update the changelog** with the user-facing changes, grouped by area.'],
 ]
 
+// JINN_CAPTURE_MESSAGES=<n> pads the chat with generic filler up to n messages, for the scroll
+// measurement. The extra turns vary in length and shape (prose, lists, code) like a real thread.
+const FILLER = [
+  ['user', 'Can you walk me through the next step?'],
+  ['assistant', ['Sure. There are three things to settle first:', '', '- the order the checks run in', '- which checks may run in parallel', '- what blocks the release if one fails', '', 'I would start with the first and confirm it before moving on.'].join('\n')],
+  ['user', 'Show me how the check could be written.'],
+  ['assistant', ['Something like this:', '', '```ts', 'export async function runChecks(checks: Array<() => Promise<boolean>>): Promise<boolean> {', '  for (const check of checks) {', '    if (!(await check())) return false', '  }', '  return true', '}', '```', '', 'It stops at the first failure, which keeps the output short.'].join('\n')],
+  ['user', 'What if two of them are independent?'],
+  ['assistant', 'Then they can share a batch and run together. The batch passes only when every check in it passes, and the next batch starts after that. I would keep the batches small so a failure is easy to place.'],
+]
+
+function conversation() {
+  const wanted = Number(process.env.JINN_CAPTURE_MESSAGES ?? 0)
+  const rows = [...CONVERSATION]
+  for (let i = 0; rows.length < wanted; i += 1) rows.push(FILLER[i % FILLER.length])
+  return rows
+}
+
 function seedDb(repo) {
   const requireFromJinn = createRequire(path.join(repo, 'packages/jinn/package.json'))
   const Database = requireFromJinn('better-sqlite3')
@@ -46,10 +64,10 @@ function seedDb(repo) {
   if (!session) throw new Error('the sandbox --seed session sandbox:1 is missing')
   const insert = db.prepare('INSERT INTO messages (id, session_id, role, content, timestamp, seq) VALUES (?, ?, ?, ?, ?, ?)')
   const start = Date.now() - 10 * 60_000
-  CONVERSATION.forEach(([role, content], i) => {
+  conversation().forEach(([role, content], i) => {
     insert.run(crypto.randomUUID(), session.id, role, content, start + i * 60_000, i + 1)
   })
-  db.prepare('UPDATE sessions SET total_turns = 2, last_activity = ? WHERE id = ?').run(new Date().toISOString(), session.id)
+  db.prepare('UPDATE sessions SET total_turns = ?, last_activity = ? WHERE id = ?').run(conversation().length === CONVERSATION.length ? 2 : Math.ceil(conversation().length / 2), new Date().toISOString(), session.id)
   db.close()
 }
 

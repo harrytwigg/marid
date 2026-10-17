@@ -10,6 +10,22 @@ export const SCREENS = [
     ready: 'Add a step for the changelog',
   },
   {
+    // The chat over a long thread, scrolled to the middle so text passes under the glass chrome.
+    // Run with JINN_CAPTURE_MESSAGES=120 (seed.mjs pads the thread).
+    name: 'chat-long',
+    longThread: true,
+    title: 'Chat, long thread scrolled',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: 'Can you walk me through the next step?',
+    prepare: async (page) => {
+      await page.evaluate(() => {
+        const scroller = document.querySelector('.chat-messages-scroll')
+        if (scroller) scroller.scrollTop = scroller.scrollHeight / 2
+      })
+      await page.waitForTimeout(600)
+    },
+  },
+  {
     name: 'board',
     title: 'Todos board',
     url: () => '/todos',

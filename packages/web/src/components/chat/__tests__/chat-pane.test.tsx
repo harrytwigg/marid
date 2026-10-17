@@ -156,6 +156,27 @@ describe('ChatPane', () => {
     expect(onFocus).toHaveBeenCalledOnce()
   })
 
+  // glass-identity.css floats the composer over the transcript only where this attribute is set.
+  it('lets the composer float over a single plain transcript', () => {
+    const { container } = renderPane()
+
+    expect(container.querySelector('[data-chat-pane-body]')?.hasAttribute('data-composer-float')).toBe(true)
+    expect(container.querySelector('[data-chat-multi-pane]')).toBeNull()
+  })
+
+  it('keeps the composer flat beside other panes, and marks the pane so no glass control in it blurs', () => {
+    const { container } = renderPane({ multiPane: true })
+
+    expect(container.querySelector('[data-chat-pane-body]')?.hasAttribute('data-composer-float')).toBe(false)
+    expect(container.querySelector('[data-chat-multi-pane]')).toBeTruthy()
+  })
+
+  it('keeps the composer flat under a terminal view, whose last rows it would cover', () => {
+    const { container } = renderPane({ viewMode: 'cli' })
+
+    expect(container.querySelector('[data-chat-pane-body]')?.hasAttribute('data-composer-float')).toBe(false)
+  })
+
   it('renders pane-owned chrome only in a multi-pane layout', () => {
     const onFocus = vi.fn()
     const onClose = vi.fn()

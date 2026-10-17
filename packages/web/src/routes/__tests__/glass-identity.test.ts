@@ -228,8 +228,102 @@ describe("the shell", () => {
     expect(order[2]).toBeGreaterThan(order[1])
   })
 
-  it("adds no backdrop-filter surface: blur lives in tokens the floating slices consume", () => {
-    expect(IDENTITY.match(/backdrop-filter/g) ?? []).toHaveLength(0)
+})
+
+/** Top-level @media blocks of a stylesheet, with the stylesheet minus them. */
+function splitMedia(css: string): { rest: string; blocks: Array<{ query: string; body: string }> } {
+  const blocks: Array<{ query: string; body: string }> = []
+  let rest = ""
+  let i = 0
+  while (i < css.length) {
+    const at = css.indexOf("@media", i)
+    if (at < 0) break
+    rest += css.slice(i, at)
+    const open = css.indexOf("{", at)
+    let depth = 0
+    let end = open
+    for (; end < css.length; end++) {
+      if (css[end] === "{") depth++
+      else if (css[end] === "}" && --depth === 0) break
+    }
+    blocks.push({ query: css.slice(at + 6, open).trim(), body: css.slice(open + 1, end) })
+    i = end + 1
+  }
+  return { rest: rest + css.slice(i), blocks }
+}
+
+describe("floating glass", () => {
+  const { rest, blocks } = splitMedia(IDENTITY)
+  const MAX_RADIUS = 32
+
+  it("keeps every blur radius within 32px, in the tokens and anywhere else", () => {
+    const radii = [...IDENTITY.matchAll(/blur\((\d+(?:\.\d+)?)px\)/g)].map((m) => Number(m[1]))
+    expect(radii.length).toBeGreaterThan(0)
+    for (const radius of radii) expect(radius).toBeLessThanOrEqual(MAX_RADIUS)
+  })
+
+  it("applies a backdrop filter only for a fine pointer, so a coarse pointer gets the opaque tint", () => {
+    // Outside a media query a filter may only be switched off (the several-panes rule).
+    for (const m of rest.matchAll(/backdrop-filter:\s*([^;]+);/g)) expect(m[1].trim()).toBe("none")
+    for (const block of blocks.filter((b) => /backdrop-filter/.test(b.body))) {
+      expect(block.query).toContain("pointer: fine")
+    }
+    expect(ruleBody(rest, ".glass-float, .glass-float-bar, .glass-tint, .glass-tint-bar")).toMatch(/background:\s*var\(--glass-float-opaque\)/)
+  })
+
+  it("filters through the blur token, which reduced transparency sets to none", () => {
+    const fine = blocks.filter((b) => b.query.includes("pointer: fine"))
+    const filters = fine.flatMap((b) => [...b.body.matchAll(/(?<!-webkit-)backdrop-filter:\s*([^;]+);/g)].map((m) => m[1].trim()))
+    expect(filters.length).toBeGreaterThan(0)
+    // Anything but `none` goes through the token; `none` only switches a surface off.
+    for (const value of filters.filter((v) => v !== "none")) expect(value).toBe("var(--glass-blur)")
+  })
+
+  it("scales geometry and gradients with --glass-live: 1 normally, 0 under reduced transparency", () => {
+    expect(SHARED.get("--glass-live")).toBe("1")
+    const media = IDENTITY.slice(IDENTITY.indexOf("@media (prefers-reduced-transparency: reduce)"))
+    const fromOs = declarations(ruleBody(media, ":root, [data-theme]"))
+    const fromAttribute = declarations(ruleBody(IDENTITY, '[data-transparency="reduced"], [data-transparency="reduced"] [data-theme]'))
+    expect(fromOs.get("--glass-live")).toBe("0")
+    expect(fromAttribute.get("--glass-live")).toBe("0")
+  })
+
+  it("lets the composer overlap the transcript only with the glass live and a fine pointer", () => {
+    const floats = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("--composer-overlap"))
+    expect(floats, "the composer's pointer: fine block").toBeTruthy()
+    expect(declarations(ruleBody(rest, "[data-composer-float]")).get("--composer-overlap")).toBe("0px")
+    expect(declarations(ruleBody(floats!.body, "[data-composer-float]")).get("--composer-overlap")).toBe("calc(var(--glass-live) * 56px)")
+  })
+
+  it("lets the empty parts of the composer band pass the wheel and clicks to the text under it", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("--composer-overlap"))!
+    const bandRule = ruleBody(fine.body, "[data-composer-float] [data-chat-composer],\n  [data-composer-float] [data-chat-composer-measure]")
+    expect(bandRule).toMatch(/pointer-events:\s*none/)
+    expect(ruleBody(fine.body, "[data-composer-float] [data-chat-composer-measure] > *")).toMatch(/pointer-events:\s*auto/)
+  })
+
+  it("keeps the several-panes tint behind a fine pointer, so a coarse pointer stays opaque", () => {
+    expect(rest).toMatch(/\[data-chat-multi-pane\] \.glass-float \{[^}]*backdrop-filter:\s*none/)
+    expect(rest).not.toMatch(/\[data-chat-multi-pane\] \.glass-float \{[^}]*background/)
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("[data-chat-multi-pane]"))
+    expect(fine, "the multi-pane tint's pointer: fine block").toBeTruthy()
+  })
+
+  it("keeps the plain fade on the top scrim in a CLI view", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("[data-chat-top-scrim]"))!
+    expect(fine.body).toContain("[data-chat-top-scrim]:not([data-chat-scrim-flat])")
+    expect(fine.body).not.toMatch(/\[data-chat-top-scrim\] \{/)
+  })
+
+  it("lets the loading ring win over the float shadow", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("composer-card-loading"))
+    expect(fine, "the loading ring rule").toBeTruthy()
+  })
+
+  it("is tint only on the top scrim below lg, where the header bar is the blurred surface", () => {
+    const narrow = blocks.find((b) => b.query.includes("max-width") && b.body.includes("[data-chat-top-scrim]"))
+    expect(narrow, "the narrow scrim block").toBeTruthy()
+    expect(declarations(ruleBody(narrow!.body, "[data-chat-top-scrim]:not([data-chat-scrim-flat])").replace(/opacity:\s*([^;]+);/, "--opacity: $1;")).get("--opacity")).toBe("calc(1 - var(--glass-live))")
   })
 })
 
