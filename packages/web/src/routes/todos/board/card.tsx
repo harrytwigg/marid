@@ -147,7 +147,7 @@ export const BoardCard = memo(function BoardCard({
       onPointerDown={(e) => onLiftPointerDown?.(e, item)}
       className={[
         // A phone card never skips its render: an estimated height moved the container's scrollHeight 2721 → 3981 mid-commit and scroll anchoring chased it to an edge. Desktop keeps skipping, at a fixed intrinsic size rather than `auto`, which remembers each card's last rendered height and revises it mid-scroll (8129 → 6112).
-        "group focus-ring flex cursor-pointer select-none flex-col gap-2 rounded-[var(--radius-lg)] p-3 outline-none transition-colors duration-150 [content-visibility:auto] [contain-intrinsic-size:137px] max-[700px]:[content-visibility:visible] max-[700px]:[contain-intrinsic-size:auto]",
+        "group focus-outline flex cursor-pointer select-none flex-col gap-2 rounded-[var(--radius-lg)] p-3 outline-none transition-colors duration-150 [content-visibility:auto] [contain-intrinsic-size:137px] max-[700px]:[content-visibility:visible] max-[700px]:[contain-intrinsic-size:auto]",
         ghost
           ? "bg-[var(--bg-tertiary)] shadow-[var(--shadow-overlay)]"
           : "bg-[var(--bg-secondary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] hover:bg-[var(--bg-tertiary)]",
@@ -228,7 +228,7 @@ export const BoardCard = memo(function BoardCard({
               onToggleTree(item.id)
             }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="focus-ring flex h-5 flex-none items-center gap-1 rounded-[10px] bg-[var(--fill-tertiary)] py-0 pl-[5px] pr-2 text-[calc(11px*var(--text-scale))] font-medium tabular-nums text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)]"
+            className="focus-outline flex h-5 flex-none items-center gap-1 rounded-[10px] bg-[var(--fill-tertiary)] py-0 pl-[5px] pr-2 text-[calc(11px*var(--text-scale))] font-medium tabular-nums text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)]"
           >
             <ChevronRight
               size={10}

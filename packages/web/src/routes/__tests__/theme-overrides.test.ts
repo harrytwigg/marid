@@ -6,14 +6,14 @@ import { describe, expect, it } from "vitest"
 const ROUTES = path.resolve(__dirname, "..")
 const OVERRIDES = readFileSync(path.join(ROUTES, "theme-overrides.css"), "utf8")
 const GLOBALS = readFileSync(path.join(ROUTES, "globals.css"), "utf8")
-const MAIN = readFileSync(path.resolve(ROUTES, "../main.tsx"), "utf8")
+const APP_CSS = readFileSync(path.join(ROUTES, "app.css"), "utf8")
 
 const ORB = ["--orb-core", "--orb-base", "--orb-bloom", "--orb-lobe-a", "--orb-lobe-b", "--orb-lobe-c", "--orb-shadow", "--orb-specular", "--orb-rim"]
 
 describe("theme-overrides.css", () => {
   it("is imported after globals.css so it wins on source order", () => {
-    const g = MAIN.indexOf("./routes/globals.css")
-    const o = MAIN.indexOf("./routes/theme-overrides.css")
+    const g = APP_CSS.indexOf("./globals.css")
+    const o = APP_CSS.indexOf("./theme-overrides.css")
     expect(g).toBeGreaterThanOrEqual(0)
     expect(o).toBeGreaterThan(g)
   })

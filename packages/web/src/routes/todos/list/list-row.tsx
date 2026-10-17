@@ -53,7 +53,7 @@ export const TodoListRow = memo(function TodoListRow({
       data-testid={`todo-list-row-${item.id}`}
       data-anchor-id={item.id}
       onClick={() => onOpen(item.id, item)}
-      className="focus-ring flex min-h-[44px] min-w-0 flex-1 flex-col items-stretch justify-center gap-1 rounded-[var(--radius-md)] px-2.5 py-1 text-left outline-none transition-colors duration-150 hover:bg-[var(--fill-quaternary)] max-[700px]:min-h-[52px]"
+      className="focus-outline flex min-h-[44px] min-w-0 flex-1 flex-col items-stretch justify-center gap-1 rounded-[var(--radius-md)] px-2.5 py-1 text-left outline-none transition-colors duration-150 hover:bg-[var(--fill-quaternary)] max-[700px]:min-h-[52px]"
     >
       {/* The phone renders rows, not cards, so a stopped Todo says why here too. */}
       {hasStopLead(item) && <StopCauseLead item={item} className="pl-[calc(0.75rem+12px)] max-[700px]:pl-0" />}
