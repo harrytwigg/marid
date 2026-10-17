@@ -20,7 +20,7 @@ beforeAll(async () => {
 /* React Aria's selection indicator (the sliding tab pill) asks the element for
  * its running animations, and its tab list builds selectors with CSS.escape.
  * jsdom has neither. */
-if (typeof Element.prototype.getAnimations !== "function") {
+if (typeof Element !== "undefined" && typeof Element.prototype.getAnimations !== "function") {
   Element.prototype.getAnimations = () => [];
 }
 if (typeof globalThis.CSS === "undefined") {

@@ -221,11 +221,16 @@ describe("reduced transparency", () => {
 
 describe("the shell", () => {
   it("is loaded after globals.css and theme-overrides.css so it wins on source order", () => {
+    // main.tsx loads the one stylesheet root, which pulls globals.css and then
+    // theme-overrides.css in; the identity comes after the whole root.
     const main = readFileSync(path.resolve(ROUTES, "../main.tsx"), "utf8")
-    const order = ["globals.css", "theme-overrides.css", "glass-identity.css"].map((f) => main.indexOf(`./routes/${f}`))
-    expect(order[0]).toBeGreaterThanOrEqual(0)
-    expect(order[1]).toBeGreaterThan(order[0])
-    expect(order[2]).toBeGreaterThan(order[1])
+    const root = readFileSync(path.resolve(ROUTES, "app.css"), "utf8")
+    const imports = ["app.css", "glass-identity.css"].map((f) => main.indexOf(`./routes/${f}`))
+    expect(imports[0]).toBeGreaterThanOrEqual(0)
+    expect(imports[1]).toBeGreaterThan(imports[0])
+    const inRoot = ["globals.css", "theme-overrides.css"].map((f) => root.indexOf(`@import "./${f}"`))
+    expect(inRoot[0]).toBeGreaterThanOrEqual(0)
+    expect(inRoot[1]).toBeGreaterThan(inRoot[0])
   })
 
 })
