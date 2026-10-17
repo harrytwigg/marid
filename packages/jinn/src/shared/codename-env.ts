@@ -66,6 +66,12 @@ export interface AdoptLegacyEnvOptions {
 const warnedInProcess = new Set<string>();
 
 /**
+ * Variables the gateway sets on a session's own processes, under the old name only until the writers move
+ * to {@link setEnv}. They are adopted like any other, but they are never an operator's to fix, so they do not warn.
+ */
+const GATEWAY_OWNED_SUFFIXES = new Set(["SESSION_ID", "SESSION_CAPABILITY", "EMPLOYEE", "DEPARTMENT", "DEPARTMENT_FILE_ROOTS"]);
+
+/**
  * Give every legacy-named variable in `env` that has no current-named twin one, in place, and warn once per
  * name. Returns the legacy names it adopted; empty, and a no-op, while the codename is unchanged.
  */
@@ -83,12 +89,16 @@ export function adoptLegacyEnv(env: NodeJS.ProcessEnv, options: AdoptLegacyEnvOp
     if (env[current] !== undefined) continue;
     env[current] = env[key];
     adopted.push(key);
-    if (!warned.has(key)) {
-      warned.add(key);
-      warn(`Environment variable ${key} is deprecated: set ${current} instead.`);
-    }
+    warnOnce(key, current, warned, warn);
   }
   return adopted;
+}
+
+/** One deprecation line per name, and none for a variable an operator could not have set. */
+function warnOnce(key: string, current: string, warned: Set<string>, warn: (message: string) => void): void {
+  if (warned.has(key) || GATEWAY_OWNED_SUFFIXES.has(legacySuffixOf(key)?.suffix ?? "")) return;
+  warned.add(key);
+  warn(`Environment variable ${key} is deprecated: set ${current} instead.`);
 }
 
 /** The current name of a legacy-named variable that is set, or undefined for any other variable. */

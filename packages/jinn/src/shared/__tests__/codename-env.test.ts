@@ -73,6 +73,14 @@ describe("adoptLegacyEnv", () => {
     expect(sink.lines).toEqual([]);
   });
 
+  it("adopts the per-session variables the gateway sets under the old name alone, without a warning", () => {
+    const env: NodeJS.ProcessEnv = { JINN_SESSION_ID: "s1", JINN_SESSION_CAPABILITY: "c", JINN_EMPLOYEE: "e", JINN_DEPARTMENT: "d", JINN_PORT: "7" };
+    const sink = collect();
+    adoptLegacyEnv(env, { names: acme, ...sink });
+    expect([env.ACME_SESSION_ID, env.ACME_SESSION_CAPABILITY, env.ACME_EMPLOYEE, env.ACME_DEPARTMENT]).toEqual(["s1", "c", "e", "d"]);
+    expect(sink.lines).toEqual(["Environment variable JINN_PORT is deprecated: set ACME_PORT instead."]);
+  });
+
   it("adopts the container entry's underscore-led variable under its own form", () => {
     const env: NodeJS.ProcessEnv = { _JINN_CONTAINER_SERVICE_START: "1" };
     adoptLegacyEnv(env, { names: acme, ...collect() });
