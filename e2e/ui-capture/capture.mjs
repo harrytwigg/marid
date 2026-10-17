@@ -41,7 +41,7 @@ async function leaks(page) {
   return found
 }
 
-// Firefox by default: headless Chromium has hung on this app on some hosts.
+// Firefox by default. Headless Chromium hangs where /dev/dri blocks (see README); capture-ui.sh hides it.
 // JINN_CAPTURE_BROWSER=chromium switches; keep one browser for a before/after pair.
 const browserType = process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox
 const browser = await browserType.launch()
