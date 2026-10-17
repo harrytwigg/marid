@@ -711,7 +711,7 @@ export function ChatInput({
       {/* Soft top scrim — fades scrolling content into the composer instead of a
           hard 1px divider. Borderless, readable over the thread in both themes.
           Stays full-bleed (spans the whole thread width). */}
-      <div aria-hidden className="pointer-events-none absolute -top-5 left-0 right-0 h-5 bg-gradient-to-b from-transparent to-[var(--bg)]" />
+      <div aria-hidden data-chat-composer-fade className="pointer-events-none absolute -top-5 left-0 right-0 h-5 bg-gradient-to-b from-transparent to-[var(--bg)]" />
       {/* Centered measure — caps the composer to the same column as the message
           text (--chat-measure + the message rows' space-3/space-8 side insets), so
           the card lines up edge-for-edge with the thread content instead of

@@ -80,7 +80,9 @@ contributions.registerMany([
  */
 export function StatusBar() {
   return (
-    <div className="mb-[calc(var(--tab-bar-height)+max(var(--safe-bottom),6px))] flex shrink-0 items-center justify-end gap-1 px-2 py-1 lg:mb-0">
+    // Tint only (.glass-tint-bar): this strip is a flow sibling under the content column, so
+    // nothing scrolls beneath it for a blur to act on.
+    <div className="glass-tint-bar mb-[calc(var(--tab-bar-height)+max(var(--safe-bottom),6px))] flex shrink-0 items-center justify-end gap-1 px-2 py-1 lg:mb-0">
       <Slot area={AREAS.statusbarRight} variant="chip" />
     </div>
   )

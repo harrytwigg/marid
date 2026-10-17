@@ -67,6 +67,27 @@ function sideTracks(row: HTMLElement): [string, string] {
   return [tracks[1], tracks[2]]
 }
 
+// One blurred surface carries the nav bar and the session tabs under it, so the thread blurs once behind
+// the two rows, not twice; the rows themselves paint nothing.
+describe('mobile chat header glass', () => {
+  it('puts a single glass bar behind both rows', () => {
+    renderNavBar({ backWidth: BARE_BACK_WIDTH, title: 'Standup', mobileWorkingSet: true })
+    const header = document.querySelector<HTMLElement>('[data-chat-mobile-header]')!
+    expect(header.classList.contains('glass-float-bar')).toBe(true)
+    expect(header.getAttribute('data-edge')).toBe('top')
+    const surfaces = header.querySelectorAll('.glass-float-bar, .glass-float, [class*="backdrop"]')
+    expect(surfaces).toHaveLength(0)
+    expect(header.querySelector('[data-mobile-session-tabs-row]')?.className).not.toMatch(/bg-|glass/)
+  })
+
+  it('leaves the desktop pill tint only, because the scrim under it is the surface that blurs', () => {
+    render(<ChatHeaderPills title="Standup" onBack={vi.fn()} onNew={vi.fn()} />)
+    const pill = document.querySelector<HTMLElement>('[data-chat-desktop-actions] > div')!
+    expect(pill.classList.contains('glass-tint')).toBe(true)
+    expect(pill.className).not.toMatch(/glass-float|backdrop/)
+  })
+})
+
 describe('mobile chat header title centring', () => {
   it('reserves the actions cluster width on both sides of a bare chevron back', () => {
     const row = renderNavBar({ backWidth: BARE_BACK_WIDTH, title: 'Standup' })

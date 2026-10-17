@@ -4,7 +4,6 @@ import { ChevronLeft, SquarePen } from 'lucide-react'
 import { type ChatTab } from '@/hooks/use-chat-tabs'
 // Frosted pill primitives now live in the shared cross-page pill system.
 import { PILL_CLASS, PillButton } from '@/components/pill-nav'
-import { cn } from '@/lib/utils'
 import { useTitleArrival } from './title-arrival'
 import { useEndTabSwitchWhile } from './tab-switch-mark'
 
@@ -99,12 +98,6 @@ function DesktopThreadChrome({ title, backTo, onNew, moreMenu }: Pick<ChatHeader
   )
 }
 
-// The mobile nav bar's frosted material, shared by its two rows. Frosted on
-// pointer:fine; coarse pointers get the same material composited to alpha 1
-// (--material-thick-opaque) instead, so the backdrop filter stops re-rasterising
-// over the scrolling thread.
-const MOBILE_BAR_MATERIAL = 'bg-[var(--material-thick-opaque)] [@media(pointer:fine)]:bg-[var(--material-thick)] [@media(pointer:fine)]:[backdrop-filter:blur(20px)_saturate(1.3)] [@media(pointer:fine)]:[-webkit-backdrop-filter:blur(20px)_saturate(1.3)]'
-
 // The chat thread chrome. The old left toggle pill is gone — the sidebar toggle
 // now lives at the top of the nav ribbon, and the conversation title relocates to
 // a slim inline title (desktop) / a centered nav-bar title (mobile thread). The
@@ -154,14 +147,14 @@ export function ChatHeaderPills({
 
       {/* MOBILE — thread nav bar: back · centered title · compose · more. Hidden
           over the list (the tab bar + list header own that screen). No hairline
-          at rest; content scrolls under it via the thread's top scrim. Frosted
-          on pointer:fine; coarse pointers get the same material composited to
-          alpha 1 (--material-thick-opaque) instead, so the backdrop filter stops
-          re-rasterising over the scrolling thread. */}
+          at rest. One glass surface carries both rows (the nav bar and the
+          session tabs), so the thread blurs once behind them, not twice; coarse
+          pointers get the same material opaque (.glass-float-bar). */}
       {!hideOnMobile && (
         <div
           data-chat-mobile-header
-          className="absolute inset-x-0 top-0 z-10 lg:hidden"
+          data-edge="top"
+          className="glass-float-bar absolute inset-x-0 top-0 z-10 lg:hidden"
           style={{ paddingTop: 'max(var(--safe-top), 0px)' }}
         >
           {/* Both side tracks lock to the WIDER cluster, so the title sits on
@@ -169,7 +162,7 @@ export function ChatHeaderPills({
               controls. A labelled back control mirrors its width onto the right,
               and the title truncates into what is left rather than overlap. */}
           <div
-            className={cn('relative grid h-12 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-1.5', MOBILE_BAR_MATERIAL)}
+            className="relative grid h-12 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 px-1.5"
             style={{ gridTemplateColumns: `${sideTrack}px minmax(0,1fr) ${sideTrack}px` }}
           >
             {/* Back control. A drill-in reads `‹ Parent` and returns to the
@@ -212,7 +205,7 @@ export function ChatHeaderPills({
             </div>
           </div>
           {mobileWorkingSet ? (
-            <div data-mobile-session-tabs-row className={cn('flex h-[var(--mobile-session-tabs-height)] items-stretch px-1.5', MOBILE_BAR_MATERIAL)}>
+            <div data-mobile-session-tabs-row className="flex h-[var(--mobile-session-tabs-height)] items-stretch px-1.5">
               {mobileWorkingSet}
             </div>
           ) : null}

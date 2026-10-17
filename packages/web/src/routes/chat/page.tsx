@@ -873,14 +873,14 @@ function ChatPage() {
           // view clears them there and nowhere else (JIN-2; rule at the foot).
           data-floating-header={desktopMultiPane ? undefined : ''}
         >
-          {/* Single-pane content scrolls beneath the theme-aware header cloud. */}
+          {/* Single-pane content scrolls beneath the header scrim: a glass band from
+              lg up on a fine pointer, today's solid fade otherwise (glass-identity.css). */}
           {!desktopMultiPane && <div
             aria-hidden data-chat-top-scrim
             className={cn(
               "pointer-events-none absolute inset-x-0 top-0 z-[5] h-[var(--chat-top-scrim)]",
               onMobileList && "hidden lg:block",
             )}
-            style={{ background: 'linear-gradient(to bottom, var(--bg) 0, var(--bg) 52px, color-mix(in srgb, var(--bg) 68%, transparent) 68px, transparent 100%)' }}
           />}
 
           {/* Mobile keeps its nav chrome; multi-pane desktop moves identity into panes. */}

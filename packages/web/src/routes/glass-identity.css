@@ -16,7 +16,12 @@
  * Glass rules:
  *   - Chrome (rail, lists) sits on the ambient backdrop, which never scrolls,
  *     so it is tint only: no backdrop-filter, nothing to repaint.
- *   - Only surfaces that float over moving content blur (--glass-blur).
+ *   - Only surfaces that float over moving content blur (--glass-blur), and
+ *     only through the floating-glass classes at the foot of this file: at most
+ *     3 blurred surfaces on screen, radius 32px at most, never on rows or cards
+ *     inside a scroller, never animated. A bar over a surface that already blurs
+ *     is tint only (blur does not nest). scripts/check-footguns.mjs rejects a raw
+ *     backdrop-filter anywhere else.
  *   - Content reads on --glass-sheet, which is near-opaque by design.
  *   - Reduced transparency swaps every glass token for its opaque twin.
  */
@@ -131,8 +136,15 @@
   --glass-edge: light-dark(rgba(255,255,255,0.78), rgba(200,228,255,0.12));
   --glass-specular: light-dark(rgba(255,255,255,0.95), rgba(255,255,255,0.10));
   --glass-shadow: light-dark(rgba(20,60,110,0.10), rgba(0,0,0,0.45));
-  --glass-blur: blur(22px) saturate(180%);
+  /* 12px, not the 32px the budget allows: a blurred surface costs by area times
+     radius, and the scroll trace showed the top band and the composer together
+     dropping frames at 22px under software raster (each alone was fine). */
+  --glass-blur: blur(12px) saturate(180%);
   --glass-blur-strong: blur(32px) saturate(190%);
+  /* 1 while the glass is live, 0 under reduced transparency. Geometry and
+     gradients cannot swap for an opaque twin the way a colour can, so they
+     scale with this instead (the composer's overlap, the scrim's fade). */
+  --glass-live: 1;
 
   /* Existing material tokens now speak glass. */
   --material-regular: var(--glass-float);
@@ -202,6 +214,7 @@
     --glass-sheet: var(--glass-sheet-opaque);
     --glass-blur: none;
     --glass-blur-strong: none;
+    --glass-live: 0;
   }
 }
 [data-transparency="reduced"], [data-transparency="reduced"] [data-theme] {
@@ -211,6 +224,7 @@
   --glass-sheet: var(--glass-sheet-opaque);
   --glass-blur: none;
   --glass-blur-strong: none;
+  --glass-live: 0;
 }
 
 body {
@@ -251,5 +265,121 @@ body {
     /* The list paints its own rows and header in this colour; inside the
        panel the panel is the colour, so they let it through. */
     --sidebar-bg: transparent;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Floating glass: the one place a surface blurs what is behind it.
+
+   .glass-float      a pill, button or card over content that moves beneath it
+   .glass-float-bar  an edge-to-edge bar over scrolling content (data-edge="top"
+                     for a bar at the top; a bottom bar is the default)
+   .glass-tint       the same material with no blur, for a surface that sits on
+                     something that blurs already (blur does not nest) or on the
+                     static backdrop (nothing moves behind it)
+   .glass-tint-bar   .glass-tint as an edge-to-edge bar: the status bar
+
+   All three are opaque (--glass-float-opaque) by default, which is what a
+   coarse pointer gets: a phone re-rasterising a backdrop filter on every
+   scrolled frame costs more than it earns. A fine pointer gets the tint, and
+   the first two also get --glass-blur. Reduced transparency makes --glass-float
+   its opaque twin and --glass-blur none, so they need no case of their own.
+   --------------------------------------------------------------------------- */
+.glass-float, .glass-float-bar, .glass-tint, .glass-tint-bar {
+  background: var(--glass-float-opaque);
+}
+.glass-float, .glass-tint {
+  box-shadow: var(--shadow-overlay);
+}
+.glass-float-bar {
+  border-color: var(--glass-edge);
+  box-shadow: 0 -8px 24px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+}
+.glass-tint-bar {
+  box-shadow: inset 0 1px 0 var(--glass-specular);
+}
+.glass-float-bar[data-edge="top"] {
+  box-shadow: 0 8px 24px var(--glass-shadow), inset 0 -1px 0 var(--glass-edge);
+}
+@media (pointer: fine) {
+  .glass-float, .glass-float-bar, .glass-tint, .glass-tint-bar { background: var(--glass-float); }
+  .glass-float, .glass-float-bar {
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+}
+/* A glass control keeps its hover wash: the fill rides on top of the tint. */
+.glass-float:is(button, a):hover {
+  background-image: linear-gradient(var(--fill-secondary), var(--fill-secondary));
+}
+/* Several chat panes on screen: nothing may blur, so the budget holds however
+   many panes there are. */
+[data-chat-multi-pane] .glass-float {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--glass-overlay);
+}
+
+/* ---------------------------------------------------------------------------
+   Chat chrome. Below lg the mobile header bar is the blurred surface over the
+   thread; from lg up the top scrim is, and the pills sit on it as tint.
+   --------------------------------------------------------------------------- */
+
+/* The fade under the header pills. Its base is today's solid-to-clear fade in
+   the sheet colour; a fine pointer turns it into a glass band whose blur fades
+   out with the tint (a mask on an element with a backdrop-filter masks the
+   blur). --glass-live scales both back to the solid fade when transparency is
+   reduced. */
+[data-chat-top-scrim] {
+  background: linear-gradient(to bottom, var(--bg) 0, var(--bg) 52px, color-mix(in srgb, var(--bg) 68%, transparent) 68px, transparent 100%);
+}
+@media (pointer: fine) {
+  [data-chat-top-scrim] {
+    --scrim-fill: color-mix(in srgb, var(--glass-float) calc(var(--glass-live) * 100%), var(--bg));
+    background: linear-gradient(to bottom, var(--scrim-fill) 0, var(--scrim-fill) 52px, color-mix(in srgb, var(--scrim-fill) 68%, transparent) 68px, transparent 100%);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 52px, rgb(0 0 0 / calc(1 - var(--glass-live))) 100%);
+    mask-image: linear-gradient(to bottom, #000 0, #000 52px, rgb(0 0 0 / calc(1 - var(--glass-live))) 100%);
+  }
+}
+@media (pointer: fine) and (max-width: 63.999rem) {
+  /* The mobile header bar blurs there; a second blurred band under it would
+     break the budget and hide the content the bar is meant to blur. */
+  [data-chat-top-scrim] {
+    opacity: calc(1 - var(--glass-live));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* The composer floats over the bottom edge of the transcript: its box overlaps
+   the transcript by --composer-overlap, the transcript pads itself by the same,
+   and the card is glass. The pane marks itself (data-composer-float) only while
+   the plain transcript shows and it is the only pane; a terminal view, several
+   panes, a coarse pointer and reduced transparency all keep the flat composer
+   (overlap 0, solid wrapper, the old soft fade above it). */
+[data-composer-float] { --composer-overlap: 0px; }
+@media (pointer: fine) {
+  [data-composer-float] {
+    --composer-overlap: calc(var(--glass-live) * 56px);
+  }
+  [data-composer-float] [data-chat-composer] {
+    margin-top: calc(-1 * var(--composer-overlap));
+    z-index: 11;
+    /* Nothing paints behind the card (it would blur a flat colour): the pane's
+       colour comes back only under it, where the bottom padding is. */
+    --composer-top-fill: color-mix(in srgb, var(--bg) calc((1 - var(--glass-live)) * 100%), transparent);
+    background: linear-gradient(to bottom, var(--composer-top-fill) 0, var(--composer-top-fill) calc(100% - 28px), var(--bg) calc(100% - 12px));
+  }
+  [data-composer-float] [data-chat-composer-fade] { opacity: calc(1 - var(--glass-live)); }
+  [data-composer-float] .composer-card {
+    background: var(--glass-float);
+    box-shadow: var(--shadow-overlay);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  [data-composer-float] .composer-card-active:focus-within {
+    box-shadow: var(--shadow-overlay), 0 0 0 4px var(--accent-fill);
   }
 }
