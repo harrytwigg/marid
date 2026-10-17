@@ -61,8 +61,11 @@ the kernel, and anything that needs the GPU process hangs the page: the app's
 emoji favicon draws on a canvas, so every route freezes, as does WebGL or a
 screenshot. With `JINN_CAPTURE_BROWSER=chromium` the script therefore runs the
 capture under `bwrap --dev-bind / / --tmpfs /dev/dri`, which makes Chromium
-fall back to software rendering. It needs `bwrap`; without it a warning is
-printed and the device stays visible.
+fall back to software rendering. It needs `bwrap` with unprivileged user
+namespaces; without `bwrap` a warning is printed and the device stays visible,
+and where `bwrap` cannot create the sandbox the run fails with its error. On a
+host with a working GPU the sandbox masks it (captures are software-rendered
+either way); set `JINN_CAPTURE_KEEP_DRI=1` to skip it.
 
 Captures run with reduced motion, so a sheet compares states rather than
 frames of a transition.
