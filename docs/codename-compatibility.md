@@ -34,10 +34,11 @@ Things to know about the move itself:
 - A move that is killed after the rename leaves a note, `state/home-move-pending.json`, in the moved home. The next
   command or start finishes the remaining steps (the link, the conversations, the stage root, the registry, the
   receipt) and removes it.
-- On a remote host the stage directories are moved at the next department spawn, but only while no process there has
-  its working directory inside the old container (a live session, or another gateway, would otherwise have its
-  conversations filed under a key that no longer matches). Until then they stay under the old name and the check is
-  repeated at each spawn. Where `/proc` cannot be read on the host the check is skipped.
+- On a remote host the stage directories are moved at the next department spawn, one by one: each stage directory
+  the new container does not have yet moves across with its conversations, one that exists in both is left as it
+  is, and one that a process on the host has as its working directory (a live session would otherwise have its
+  conversations filed under a key that no longer matches) stays where it is and is tried again at the next
+  spawn. Where `/proc` cannot be read on the host that check is skipped. The old container goes once it is empty.
 
 ## Rolling back
 
