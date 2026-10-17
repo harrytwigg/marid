@@ -254,26 +254,27 @@ export default function SettingsPage() {
               className="flex flex-wrap gap-[var(--space-2)] mb-[var(--space-3)]"
             >
               {ACCENT_PRESETS.map((preset) => {
-                const isActive = settings.accentColor === preset.value
+                const isActive = (settings.accentColor ?? null) === preset.value
+                const swatch = preset.value ?? "var(--accent)"
                 return (
                   <button
-                    key={preset.value}
+                    key={preset.value ?? "default"}
                     onClick={() => setAccentColor(preset.value)}
                     aria-label={preset.label}
                     aria-pressed={isActive}
                     title={preset.label}
                     className="flex h-[40px] w-[40px] md:h-[30px] md:w-[30px] cursor-pointer items-center justify-center rounded-full border-none transition-transform duration-100 ease-[var(--ease-smooth)] hover:scale-105"
                     style={{
-                      background: preset.value,
+                      background: swatch,
                       // Selection ring floats off the swatch on a bg-colored gap —
                       // a control affordance, not a resting hairline.
                       boxShadow: isActive
-                        ? `0 0 0 2px var(--bg-secondary), 0 0 0 4px ${preset.value}`
+                        ? `0 0 0 2px var(--bg-secondary), 0 0 0 4px ${swatch}`
                         : "none",
                     }}
                   >
                     {isActive && (
-                      <Check size={14} color="#fff" strokeWidth={3} />
+                      <Check size={14} color={preset.value ? "#fff" : "var(--accent-contrast)"} strokeWidth={3} />
                     )}
                   </button>
                 )

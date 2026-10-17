@@ -16,7 +16,11 @@ import { SCREENS, THEMES, VIEWPORTS } from './screens.mjs'
 const [beforeDir, afterDir, outDir] = process.argv.slice(2)
 if (!beforeDir || !afterDir || !outDir) throw new Error('usage: sheet.mjs <before-dir> <after-dir> <out-dir>')
 fs.mkdirSync(outDir, { recursive: true })
-const [leftLabel, rightLabel] = (process.env.JINN_SHEET_LABELS ?? 'Before,After').split(',')
+const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+const [leftLabel, rightLabel] = (process.env.JINN_SHEET_LABELS ?? 'Before,After')
+  .split(',')
+  .map((label) => escapeHtml(label.trim()))
+if (!leftLabel || !rightLabel) throw new Error('JINN_SHEET_LABELS needs two comma-separated labels, e.g. "Firefox,Chromium"')
 
 const img = (dir, file) => {
   const p = path.join(dir, file)

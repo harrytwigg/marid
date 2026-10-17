@@ -237,6 +237,10 @@ body {
     overflow: hidden;
   }
   [data-shell="panel"] {
+    /* The list's column clips what overflows it (it animates its width), so
+       the panel's shadow must fit inside its 10px margin: a 2px offset and an
+       8px blur reach exactly 10px. */
+    box-shadow: 0 0 0 1px var(--glass-edge), 0 2px 8px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
     height: calc(100% - 20px);
     background: var(--glass-chrome);
     background-image: var(--glass-sheen);

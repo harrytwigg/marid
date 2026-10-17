@@ -246,7 +246,22 @@ describe("things that mirror the identity", () => {
     }
   })
 
-  it("offers the default accent first in the accent picker", () => {
-    expect(ACCENT_PRESETS[0]).toEqual({ label: "Altitude", value: token("--accent", "dark").toUpperCase() })
+  it("offers the theme's own accent first, as a swatch that clears the override", () => {
+    // A picked swatch is written inline on <html> and replaces the light-dark()
+    // pair, so a single colour must read on both sheets; the default is the
+    // pair itself.
+    expect(ACCENT_PRESETS[0]).toEqual({ label: "Default", value: null })
+  })
+})
+
+describe("system colours", () => {
+  it.each(SCHEMES)("read as text on the sheet at AA in %s", (scheme) => {
+    // They also sit on the chat list's glass, where the lighter ones fall just
+    // short of AA in light (4.2 to 4.5); they are status glyphs and labels
+    // there, and the screen passes decide whether to deepen them.
+    const sheet = colour("--glass-sheet-opaque", scheme)
+    for (const name of ["--system-blue", "--system-indigo", "--system-green", "--system-red", "--system-orange", "--system-yellow", "--system-purple"]) {
+      expect(ratio(colour(name, scheme), sheet), `${name} on the sheet`).toBeGreaterThanOrEqual(AA)
+    }
   })
 })
