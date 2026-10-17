@@ -8,7 +8,7 @@ import { ACCENT_PRESETS } from "../settings/appearance-pickers"
 const ROUTES = path.resolve(__dirname, "..")
 const OVERRIDES = readFileSync(path.join(ROUTES, "theme-overrides.css"), "utf8")
 const GLOBALS = readFileSync(path.join(ROUTES, "globals.css"), "utf8")
-const MAIN = readFileSync(path.resolve(ROUTES, "../main.tsx"), "utf8")
+const APP_CSS = readFileSync(path.join(ROUTES, "app.css"), "utf8")
 
 /** The four selectors globals.css declares its theme tokens under, in the order
  *  it declares them. The override file must restate the accent for each. */
@@ -62,8 +62,8 @@ function over(fg: string, alpha: number, bg: string): string {
 
 describe("theme-overrides.css", () => {
   it("is imported after globals.css so it wins on source order", () => {
-    const g = MAIN.indexOf("./routes/globals.css")
-    const o = MAIN.indexOf("./routes/theme-overrides.css")
+    const g = APP_CSS.indexOf("./globals.css")
+    const o = APP_CSS.indexOf("./theme-overrides.css")
     expect(g).toBeGreaterThanOrEqual(0)
     expect(o).toBeGreaterThan(g)
   })
