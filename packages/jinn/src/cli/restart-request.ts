@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { gatewayBaseUrl } from "../gateway/gateway-info.js";
 import { portOwnedByThisInstance, resolveLocalGatewayConnection } from "../gateway/lifecycle.js";
 import { JINN_HOME } from "../shared/paths.js";
+import { wireHeader } from "../shared/wire-names.js";
 
 interface GatewayConnection {
   port: number;
@@ -46,7 +47,7 @@ export async function requestRestartFromGateway(
       headers: {
         authorization: `Bearer ${connection.token}`,
         "content-type": "application/json",
-        ...(currentSessionId ? { "x-jinn-session-id": currentSessionId } : {}),
+        ...(currentSessionId ? { [wireHeader("session-id")]: currentSessionId } : {}),
       },
       body: "{}",
       signal: AbortSignal.timeout(2_000),

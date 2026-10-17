@@ -3,6 +3,8 @@ import path from "node:path";
 import type { ResolvedMcpConfig, McpServerStdioConfig } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
 import { stripMcpBootstrapArgs } from "../mcp/identity.js";
+import { findBuiltinMcp } from "../mcp/builtin-name.js";
+import { NAMES, nameAliases } from "../shared/codename.js";
 
 /**
  * GRS-012c — attach the built-in `jinn` MCP server to a spawned Grok
@@ -19,7 +21,7 @@ import { stripMcpBootstrapArgs } from "../mcp/identity.js";
  * with `cwd = JINN_HOME` (sessions/manager.ts + gateway/api.ts), so ALL concurrent
  * grok sessions read/write the SAME `<JINN_HOME>/.grok/config.toml`. Two design
  * consequences, both handled here:
- *   1. We emit ONLY the built-in `jinn` server (see {@link JINN_BUILTIN_SERVER}).
+ *   1. We emit ONLY the built-in `jinn` server (under the name the instance registers it by).
  *      Its spec is process-global (same node bin + entry + the non-secret
  *      `JINN_GATEWAY_URL`), so every concurrent session writes BYTE-IDENTICAL
  *      content — no last-writer-wins corruption. Restricting to `jinn` also means
@@ -43,16 +45,16 @@ import { stripMcpBootstrapArgs } from "../mcp/identity.js";
  * written into the config `env`; the bearer token reaches the server via grok's
  * INHERITED env, never a file (same contract as Codex).
  */
-export const JINN_GROK_MCP_MARKER =
-  "# jinn-managed: auto-generated MCP attach config (GRS-012c). Safe to delete.";
+const grokMarker = (codename: string): string => `# ${codename}-managed: auto-generated MCP attach config (GRS-012c). Safe to delete.`;
+export const JINN_GROK_MCP_MARKER = grokMarker(NAMES.codename);
 
-/** The one server this slice attaches to grok — matches the resolver's built-in
- *  server key (mcp/resolver.ts). */
-export const JINN_BUILTIN_SERVER = "jinn";
+/** A file an earlier build wrote carries that build's marker: it is as managed as ours, and a stale one is overwritten. */
+const GROK_MCP_MARKERS = nameAliases((n) => grokMarker(n.codename));
+const isManagedGrokConfig = (content: string): boolean => GROK_MCP_MARKERS.some((marker) => content.startsWith(marker));
 
 /**
  * Env keys allowed into the on-disk `.grok/config.toml` (non-secret only).
- * This file only ever writes the BUILTIN `jinn` server ({@link JINN_BUILTIN_SERVER}).
+ * This file only ever writes the BUILTIN `jinn` server.
  *
  * GRS-018 unified builtin-env model, grok's split:
  *   - JINN_GATEWAY_URL + JINN_HOME ride THIS file — both are process-global and
@@ -82,7 +84,7 @@ const GROK_SAFE_ENV_KEYS: ReadonlySet<string> = new Set([
  * Empty when no jinn server is attached or the spec carries no id/capability.
  */
 export function grokJinnSessionEnv(resolvedMcp: ResolvedMcpConfig | undefined): Record<string, string> {
-  const spec = jinnServer(resolvedMcp);
+  const spec = jinnServer(resolvedMcp)?.spec;
   const sessionId = spec?.env?.JINN_SESSION_ID;
   const capability = spec?.env?.JINN_SESSION_CAPABILITY;
   return sessionId && capability ? {
@@ -112,9 +114,10 @@ export type GrokMcpAttachHandle =
  *  Requires a string `command` and NO `url` field, so a URL-transport server can
  *  never be mistaken for the built-in (defense-in-depth; the resolver already
  *  reserves the `jinn` name so a custom server cannot occupy this key). */
-function jinnServer(resolvedMcp: ResolvedMcpConfig | undefined): McpServerStdioConfig | null {
-  const spec = resolvedMcp?.mcpServers?.[JINN_BUILTIN_SERVER] as (McpServerStdioConfig & { url?: unknown }) | undefined;
-  if (spec && typeof spec.command === "string" && spec.command && spec.url === undefined) return spec;
+function jinnServer(resolvedMcp: ResolvedMcpConfig | undefined): { name: string; spec: McpServerStdioConfig } | null {
+  const found = findBuiltinMcp(resolvedMcp?.mcpServers);
+  const spec = found?.spec as (McpServerStdioConfig & { url?: unknown }) | undefined;
+  if (found && spec && typeof spec.command === "string" && spec.command && spec.url === undefined) return { name: found.name, spec };
   return null;
 }
 
@@ -149,21 +152,21 @@ export function prepareGrokProjectMcpConfig(
   cwd: string | undefined,
   resolvedMcp: ResolvedMcpConfig | undefined,
 ): GrokMcpAttachHandle {
-  const spec = jinnServer(resolvedMcp);
-  if (!spec) return { attached: false };
+  const builtin = jinnServer(resolvedMcp);
+  if (!builtin) return { attached: false };
 
   // Resolve to an absolute path so the refcount map key is stable regardless of a
   // relative cwd (two references to the same dir must share one entry).
   const grokDir = path.resolve(cwd || process.cwd(), ".grok");
   const configPath = path.join(grokDir, "config.toml");
-  const toml = `${JINN_GROK_MCP_MARKER}\n${buildGrokMcpToml(JINN_BUILTIN_SERVER, spec)}\n`;
+  const toml = `${JINN_GROK_MCP_MARKER}\n${buildGrokMcpToml(builtin.name, builtin.spec)}\n`;
 
   // Skip when a NON-jinn-managed file occupies the path (a user's own config) —
   // never clobber it. Checked for BOTH the first and concurrent attach so a user
   // who replaces our file mid-run isn't falsely reported attached.
   const userFileBlocks = (): boolean => {
     if (!fs.existsSync(configPath)) return false;
-    if (fs.readFileSync(configPath, "utf-8").startsWith(JINN_GROK_MCP_MARKER)) return false;
+    if (isManagedGrokConfig(fs.readFileSync(configPath, "utf-8"))) return false;
     logger.warn(
       `Grok MCP attach skipped: ${configPath} exists and is not jinn-managed; leaving it untouched (jinn tools unavailable this session).`,
     );
@@ -217,7 +220,7 @@ export function cleanupGrokProjectMcpConfig(handle: GrokMcpAttachHandle | undefi
   try {
     if (fs.existsSync(handle.configPath)) {
       const current = fs.readFileSync(handle.configPath, "utf-8");
-      if (current.startsWith(JINN_GROK_MCP_MARKER)) fs.unlinkSync(handle.configPath);
+      if (isManagedGrokConfig(current)) fs.unlinkSync(handle.configPath);
     }
     if (entry.createdDir && fs.existsSync(handle.grokDir) && fs.readdirSync(handle.grokDir).length === 0) {
       fs.rmdirSync(handle.grokDir);

@@ -24,6 +24,7 @@ import {
 import type { WorkItemCommentPageWire, WorkItemCommentWire } from "@/lib/work-item-comment-wire"
 import type { WorkItemRunWire } from "@/lib/work-item-runs-wire"
 import type { WorkItemSprintRefWire } from "./sprint-api"
+import { requestHeaderName } from "./codename";
 
 export interface TranscriptContentBlock {
   type: 'text' | 'tool_use' | 'tool_result' | 'thinking'
@@ -191,7 +192,7 @@ export type WriteOriginWire = "talk"
 
 function writeHeaders(origin?: WriteOriginWire): Record<string, string> {
   return origin
-    ? { "Content-Type": "application/json", "X-Jinn-Origin": origin }
+    ? { "Content-Type": "application/json", [requestHeaderName("origin")]: origin }
     : { "Content-Type": "application/json" };
 }
 
@@ -208,7 +209,7 @@ export async function post<T>(path: string, body?: unknown, origin?: WriteOrigin
 export async function del<T>(path: string, origin?: WriteOriginWire): Promise<T> {
   const res = await authFetch(path, {
     method: "DELETE",
-    ...(origin ? { headers: { "X-Jinn-Origin": origin } } : {}),
+    ...(origin ? { headers: { [requestHeaderName("origin")]: origin } } : {}),
   });
   if (!res.ok) throw await responseError(res);
   return res.json();

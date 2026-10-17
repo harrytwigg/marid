@@ -7,6 +7,7 @@
  *   stop the running gateway → wait for the port to free → start a fresh daemon.
  * The returning gateway resumes any sessions it marked "interrupted" on shutdown.
  */
+import "../shared/adopt-legacy-env-entry.js";
 import { loadConfig } from "../shared/config.js";
 import { stopAndWait, startDaemon, waitForDashboardReady, waitForPortFree, waitForPortListening } from "./lifecycle.js";
 import { closeLogger, configureLogger, logger } from "../shared/logger.js";

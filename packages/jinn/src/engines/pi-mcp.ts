@@ -3,8 +3,8 @@ import path from "node:path";
 import type { McpServerStdioConfig, ResolvedMcpConfig } from "../shared/types.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { logger } from "../shared/logger.js";
+import { findBuiltinMcp } from "../mcp/builtin-name.js";
 
-const JINN_BUILTIN_SERVER = "jinn";
 const JINN_MCP_SERVER_MODULE_URL = new URL("../mcp/server.js", import.meta.url).href;
 const JINN_PI_MCP_MODULE_URL = new URL("./pi-mcp.js", import.meta.url).href;
 
@@ -21,7 +21,7 @@ export function projectPiToolManifest(tools: Array<{ name: string; description: 
 }
 
 function jinnServer(resolvedMcp: ResolvedMcpConfig | undefined): McpServerStdioConfig | null {
-  const spec = resolvedMcp?.mcpServers?.[JINN_BUILTIN_SERVER] as (McpServerStdioConfig & { url?: unknown }) | undefined;
+  const spec = findBuiltinMcp(resolvedMcp?.mcpServers)?.spec as (McpServerStdioConfig & { url?: unknown }) | undefined;
   if (spec && typeof spec.command === "string" && spec.command && spec.url === undefined) return spec;
   return null;
 }
@@ -33,10 +33,11 @@ function jinnServer(resolvedMcp: ResolvedMcpConfig | undefined): McpServerStdioC
  * `jinn` entry in any other shape is one pi has no way to run.
  */
 function unattachableJinnReason(resolvedMcp: ResolvedMcpConfig | undefined): string | null {
-  const spec = resolvedMcp?.mcpServers?.[JINN_BUILTIN_SERVER] as (McpServerStdioConfig & { url?: unknown }) | undefined;
-  if (!spec || jinnServer(resolvedMcp)) return null;
+  const builtin = findBuiltinMcp(resolvedMcp?.mcpServers);
+  const spec = builtin?.spec as (McpServerStdioConfig & { url?: unknown }) | undefined;
+  if (!builtin || !spec || jinnServer(resolvedMcp)) return null;
   const shape = spec.url !== undefined ? "is URL-based" : "carries no command";
-  return `the resolved "jinn" server ${shape}, and pi can only wire the built-in stdio server as a generated extension`;
+  return `the resolved "${builtin.name}" server ${shape}, and pi can only wire the built-in stdio server as a generated extension`;
 }
 
 function safeSessionId(sessionId: string): string {

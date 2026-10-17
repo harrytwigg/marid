@@ -1,4 +1,5 @@
 import { gatewayTransport } from "./gateway-transport"
+import { hashKeyNames, requestHeaderName } from "./codename"
 
 export interface AuthState {
   authRequired: boolean
@@ -26,14 +27,17 @@ export interface PairedDevice {
   current?: boolean
 }
 
-const LOCAL_BOOTSTRAP_HASH_KEY = "jinn-bootstrap"
-const WORKSPACE_PAIRING_HASH_KEY = "jinn-pair"
+// The CLI that opens the browser may be a build from before a codename change, so a launch URL's
+// fragment key is read under either spelling.
+const LOCAL_BOOTSTRAP_HASH_KEYS = hashKeyNames("bootstrap")
+const WORKSPACE_PAIRING_HASH_KEYS = hashKeyNames("pair")
 
-function takeHashValue(key: string): string | undefined {
+function takeHashValue(keys: readonly string[]): string | undefined {
   if (typeof window === "undefined") return undefined
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""))
-  const value = params.get(key)?.trim()
-  if (!value) return undefined
+  const key = keys.find((candidate) => params.get(candidate)?.trim())
+  const value = key === undefined ? undefined : params.get(key)?.trim()
+  if (key === undefined || !value) return undefined
   params.delete(key)
   const nextHash = params.toString()
   window.history.replaceState(
@@ -45,14 +49,14 @@ function takeHashValue(key: string): string | undefined {
 }
 
 function takeLocalBootstrapGrant(): string | undefined {
-  return takeHashValue(LOCAL_BOOTSTRAP_HASH_KEY)
+  return takeHashValue(LOCAL_BOOTSTRAP_HASH_KEYS)
 }
 
 /** Consume the short-lived pairing code returned by authenticated workspace
  * creation. URL fragments never reach the server or referrer, and are removed
  * before the code is exchanged for the new instance's HttpOnly cookie. */
 export function takeWorkspacePairingCode(): string | undefined {
-  return takeHashValue(WORKSPACE_PAIRING_HASH_KEY)
+  return takeHashValue(WORKSPACE_PAIRING_HASH_KEYS)
 }
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -95,7 +99,7 @@ export async function bootstrapLocalAuth(): Promise<boolean> {
   if (!grant) return false
   const res = await gatewayTransport().request("/api/auth/bootstrap", {
     method: "POST",
-    headers: { "X-Jinn-Bootstrap-Grant": grant },
+    headers: { [requestHeaderName("bootstrap-grant")]: grant },
   })
   await jsonOrThrow(res)
   return true

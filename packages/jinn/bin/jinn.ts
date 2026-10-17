@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "../src/shared/adopt-legacy-env-entry.js";
 import { Command } from "commander";
 import { realpathSync } from "node:fs";
 import os from "node:os";

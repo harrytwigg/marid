@@ -24,6 +24,9 @@
       ],
       "@jinn/model-id": [
         "../jinn/src/shared/model-id.ts"
+      ],
+      "@jinn/codename": [
+        "../jinn/src/shared/codename-constant.ts"
       ]
     }
   },

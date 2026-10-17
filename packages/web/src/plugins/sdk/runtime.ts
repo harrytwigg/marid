@@ -13,16 +13,21 @@
  */
 import * as React from 'react'
 import * as jsxRuntime from 'react/jsx-runtime'
+import { pluginSdkSpecifiers } from '@/lib/codename'
 
-/** The three specifiers a plugin may import, each with the global its shim
+/** The SDK's own specifiers: the current package name and the legacy one that plugins
+ *  installed before a rename still write, both resolving to the one SDK. */
+const SDK_SPECIFIERS = pluginSdkSpecifiers()
+
+/** The specifiers a plugin may import, each with the global its shim
  *  reads. Membership is the allowlist the loader rejects against. */
-const SDK_GLOBALS = {
-  '@jinn/plugin-sdk': '__JINN_PLUGIN_SDK__',
+const SDK_GLOBALS: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(SDK_SPECIFIERS.map((specifier) => [specifier, '__JINN_PLUGIN_SDK__'])),
   react: '__JINN_REACT__',
   'react/jsx-runtime': '__JINN_REACT_JSX__',
-} as const
+}
 
-type SdkSpecifier = keyof typeof SDK_GLOBALS
+type SdkSpecifier = string
 
 /**
  * The namespaces behind those specifiers, resolved by the first install.
@@ -41,18 +46,19 @@ const BINDING_NAME = /^[A-Za-z_$][\w$]*$/
 
 /** Install the app's own instances where the shims read them. Idempotent. */
 export async function installPluginSdk(): Promise<void> {
+  // The alias, not the relative path: a broken `@jinn/plugin-sdk` mapping
+  // must fail this app build rather than a stranger's first plugin load.
+  // Dynamic so the barrel (Select, Menu, the floating layer) stays off
+  // the first paint of a dashboard whose plugins directory is empty.
+  const sdk = namespaces ? null : await import('@jinn/plugin-sdk')
   namespaces ??= {
-    // The alias, not the relative path: a broken `@jinn/plugin-sdk` mapping
-    // must fail this app build rather than a stranger's first plugin load.
-    // Dynamic so the barrel (Select, Menu, the floating layer) stays off
-    // the first paint of a dashboard whose plugins directory is empty.
-    '@jinn/plugin-sdk': await import('@jinn/plugin-sdk'),
+    ...Object.fromEntries(SDK_SPECIFIERS.map((specifier) => [specifier, sdk as object])),
     react: React,
     'react/jsx-runtime': jsxRuntime,
   }
 
   for (const [specifier, key] of Object.entries(SDK_GLOBALS)) {
-    Object.assign(globalThis, { [key]: namespaces[specifier as SdkSpecifier] })
+    Object.assign(globalThis, { [key]: namespaces[specifier] })
   }
 }
 
@@ -91,15 +97,18 @@ export function sdkImportMap(): Record<string, string> {
     )
   }
 
+  // One shim per global: both spellings of the SDK specifier land on the same module.
+  const byGlobal = new Map<string, string>()
   cached ??= Object.fromEntries(
-    Object.entries(SDK_GLOBALS).map(([specifier, key]) => [
-      specifier,
-      URL.createObjectURL(
-        new Blob([shimSource(key, resolved[specifier as SdkSpecifier])], {
-          type: 'text/javascript',
-        }),
-      ),
-    ]),
+    Object.entries(SDK_GLOBALS).map(([specifier, key]) => {
+      if (!byGlobal.has(key)) {
+        byGlobal.set(
+          key,
+          URL.createObjectURL(new Blob([shimSource(key, resolved[specifier])], { type: 'text/javascript' })),
+        )
+      }
+      return [specifier, byGlobal.get(key) as string]
+    }),
   )
 
   return cached

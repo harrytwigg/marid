@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { CONFIG_PATH } from "../shared/paths.js";
+import { wireHeader, wireHeaderDisplay, wireHeaderDisplayAliases } from "../shared/wire-names.js";
 
 /**
  * Which config.yaml a page was looking at when it loaded, so a save that would
@@ -14,10 +15,18 @@ import { CONFIG_PATH } from "../shared/paths.js";
  * the file, not from the in-memory config, because the file is what the merge
  * reads and therefore what a conflict is actually about.
  */
-export const CONFIG_REVISION_HEADER = "X-Jinn-Config-Revision";
+export const CONFIG_REVISION_HEADER = wireHeaderDisplay("config-revision");
+
+/** Both spellings, for a response: a page from either build reads the one it knows. */
+export const CONFIG_REVISION_RESPONSE_HEADERS = wireHeaderDisplayAliases("config-revision");
 
 /** The lowercase key Node hands request headers over under. */
-const REQUEST_HEADER_KEY = CONFIG_REVISION_HEADER.toLowerCase();
+const REQUEST_HEADER_KEY = wireHeader("config-revision");
+
+/** Put the revision on a response under every spelling of the header. */
+export function setConfigRevisionHeaders(res: { setHeader(name: string, value: string): unknown }, revision: string): void {
+  for (const name of CONFIG_REVISION_RESPONSE_HEADERS) res.setHeader(name, revision);
+}
 
 /**
  * A revision for config.yaml as it is on disk right now. Hashing the bytes rather

@@ -1,3 +1,4 @@
+import './lib/legacy-storage-entry'
 import { Component, Suspense, useSyncExternalStore, type ComponentType, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Navigate, Outlet, RouterProvider, createBrowserRouter, type RouteObject } from 'react-router-dom'

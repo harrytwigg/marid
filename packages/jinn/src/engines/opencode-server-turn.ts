@@ -5,6 +5,7 @@ import { buildOpencodePrompt } from "./opencode-protocol.js";
 import { basicAuthHeader, type OpencodeServer } from "./opencode-server.js";
 import { USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { abandonedRetryError, providerFailureReason, providerRetryOf, repeatsPrompt, SettleWait, type ProviderRetry, type SettleKind } from "./opencode-server-settle.js";
+import { metadataTag, readMetadataTag } from "./opencode-metadata-tag.js";
 
 /**
  * One Jinn turn, sent straight to the session's opencode server over HTTP.
@@ -123,9 +124,9 @@ const QUOTE_LIMIT = 500;
 /** Metadata on every text part Jinn posts, which is how a later turn tells
  *  Jinn's prompts in the history from the operator's. opencode stores a text
  *  part's metadata and returns it with the message (verified on 1.18.32). */
-export const JINN_PROMPT_METADATA = { jinn: "prompt" } as const;
-const JINN_NOTICE_METADATA = { jinn: "cancelled-requests" } as const;
-const JINN_STOPPED_NOTICE_METADATA = { jinn: "stopped-requests" } as const;
+export const JINN_PROMPT_METADATA = metadataTag("prompt");
+const JINN_NOTICE_METADATA = metadataTag("cancelled-requests");
+const JINN_STOPPED_NOTICE_METADATA = metadataTag("stopped-requests");
 /** How long marking a stopped prompt may hold up the stop. */
 const MARK_TIMEOUT_MS = 5_000;
 
@@ -303,7 +304,7 @@ function textParts(message: StoredMessage): Array<Record<string, unknown>> {
 
 /** A prompt Jinn posted (it marks every text part it sends). */
 function isJinnPrompt(message: StoredMessage): boolean {
-  return textParts(message).some((p) => record(p.metadata)?.jinn !== undefined);
+  return textParts(message).some((p) => readMetadataTag(record(p.metadata)) !== undefined);
 }
 
 /** What the user typed: the message's text, less anything opencode added. */
@@ -313,7 +314,7 @@ function requestText(message: StoredMessage): string {
 
 /** The metadata of a Jinn prompt's own text part (the one {@link JINN_PROMPT_METADATA} marks). */
 function jinnPromptMetadata(message: StoredMessage): Record<string, unknown> | undefined {
-  return textParts(message).map((p) => record(p.metadata)).find((m) => m?.jinn === JINN_PROMPT_METADATA.jinn);
+  return textParts(message).map((p) => record(p.metadata)).find((m) => readMetadataTag(m) === "prompt");
 }
 
 /** A Jinn prompt the user stopped: marked so by the turn the stop ended. */
@@ -333,7 +334,7 @@ function stoppedRequestText(message: StoredMessage): string {
 /** A Jinn prompt that carried a notice: everything older was named there, and
  *  the model still has that notice in the history it reads. */
 function carriedNotice(message: StoredMessage): boolean {
-  return textParts(message).some((p) => p.synthetic && record(p.metadata)?.jinn !== undefined);
+  return textParts(message).some((p) => p.synthetic && readMetadataTag(record(p.metadata)) !== undefined);
 }
 
 /** What the history says was cancelled, oldest first in each list: the
@@ -724,7 +725,7 @@ export class OpencodeServerTurn {
     const signal = AbortSignal.timeout(MARK_TIMEOUT_MS); // the read and the write together
     try {
       const message = record(await this.request("GET", route, undefined, signal)) as StoredMessage | undefined;
-      const part = textParts(message ?? {}).find((p) => record(p.metadata)?.jinn === JINN_PROMPT_METADATA.jinn);
+      const part = textParts(message ?? {}).find((p) => readMetadataTag(record(p.metadata)) === "prompt");
       const partId = str(part?.id);
       if (!part || !partId) throw new Error("the stored prompt has no Jinn text part");
       const metadata = { ...record(part.metadata), stopped: "user", request: this.opts.prompt.slice(0, QUOTE_LIMIT + 1) };

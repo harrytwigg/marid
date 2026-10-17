@@ -24,6 +24,8 @@ import { confineMcpToDepartment } from "../gateway/department-scope/mcp-servers.
 import { piJinnMcpAttachable, piJinnSessionEnv, remotePiExtensionSource } from "./pi-mcp.js";
 import { buildOpencodeSessionConfig, serializeOpencodeSessionConfig } from "./opencode-mcp.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { readHostAsset, relayStampShellCheck } from "../shared/host-assets.js";
+import { NAMES, nameAliases } from "../shared/codename.js";
 
 /**
  * Everything the gateway does to a remote host that is NOT the interactive
@@ -252,9 +254,9 @@ printf 'node=%s\\n' "$(command -v node 2>/dev/null || true)"
 printf 'claude=%s\\n' "$(command -v claude 2>/dev/null || true)"
 printf 'pi=%s\\n' "$(command -v pi 2>/dev/null || true)"
 printf 'opencode=%s\\n' "$(command -v opencode 2>/dev/null || true)"
-jinnbin=$(command -v jinn 2>/dev/null || true)
+jinnbin=$(${nameAliases((n) => n.codename).map((cli) => `command -v ${cli} 2>/dev/null`).join(" || ")} || true)
 if [ -n "$jinnbin" ]; then
-  printf 'jinnversion=%s\\n' "$(jinn --version 2>/dev/null | tr -d '\\r' | head -n 1)"
+  printf 'jinnversion=%s\\n' "$(${NAMES.renamed ? '"$jinnbin"' : "jinn"} --version 2>/dev/null | tr -d '\\r' | head -n 1)"
   printf 'entrydir=%s\\n' "$(node -e 'const fs=require("fs"),path=require("path");try{const b=fs.realpathSync(process.argv[1]);process.stdout.write(path.resolve(path.dirname(b),"..","src","mcp"))}catch(e){}' "$jinnbin" 2>/dev/null || true)"
 fi
 `;
@@ -885,7 +887,7 @@ function safeSessionSegment(segment: string): string {
 async function ensureAssets(destination: string, facts: RemoteFacts, present: Set<string>): Promise<void> {
   for (const name of HOST_ASSETS) {
     if (present.has(name)) continue;
-    const content = fs.readFileSync(assetPath(name), "utf-8");
+    const content = readHostAsset(assetPath(name));
     await stageRemoteFile(destination, path.posix.join(facts.stageDir, name), content);
   }
 }
@@ -1085,7 +1087,7 @@ fi
 # already happening — and it is what lets a wiped stage restage itself instead
 # of relying on a cache that outlives the directory it describes.
 for a in hook-relay.mjs remote-trust-seed.mjs; do
-  if [ -f "$root/$a" ] && [ ! -L "$root/$a" ]; then printf 'asset=%s\\n' "$a"; fi
+  if [ -f "$root/$a" ] && [ ! -L "$root/$a" ]${relayStampShellCheck(shq)}; then printf 'asset=%s\\n' "$a"; fi
 done
 `;
 
