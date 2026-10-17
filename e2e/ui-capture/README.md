@@ -52,6 +52,8 @@ captured. Keep the shots out of the repository.
 | `JINN_CAPTURE_NODE` | node beside pnpm | Node binary for the sandbox and scripts. |
 | `JINN_CAPTURE_BROWSER` | `firefox` | `firefox` or `chromium`. Use the same one for both sides. |
 | `JINN_CAPTURE_KEEP_DRI` | unset | Set to leave `/dev/dri` visible to Chromium. |
+| `JINN_CAPTURE_TRANSPARENCY` | unset | `reduced` sets `data-transparency="reduced"` on `<html>` after load. Use a separate out-dir. |
+| `JINN_SHEET_LABELS` | `Before,After` | Column names for `sheet.mjs`, e.g. `Firefox,Chromium` to compare two browsers. |
 
 Firefox is the default. Both render `backdrop-filter` and `light-dark()`.
 
@@ -66,6 +68,14 @@ namespaces; without `bwrap` a warning is printed and the device stays visible,
 and where `bwrap` cannot create the sandbox the run fails with its error. On a
 host with a working GPU the sandbox masks it (captures are software-rendered
 either way); set `JINN_CAPTURE_KEEP_DRI=1` to skip it.
+
+Every capture also gets an axe pass (`@axe-core/playwright`, WCAG 2 A and AA).
+It only reports: a line per capture on the console and `axe.json` in the
+out-dir (rule, impact, node count and the first selectors). Violations never
+fail the run. "To review" counts are axe's incomplete results, which includes
+text on gradients and translucent surfaces that it cannot resolve; the contrast
+unit test in `packages/web/src/routes/__tests__/glass-identity.test.ts` covers
+those.
 
 Captures run with reduced motion, so a sheet compares states rather than
 frames of a transition.

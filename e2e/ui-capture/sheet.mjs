@@ -3,6 +3,9 @@
 //
 //   node sheet.mjs <before-dir> <after-dir> <out-dir>
 //
+// JINN_SHEET_LABELS="Firefox,Chromium" renames the two columns (default
+// "Before,After"), for comparing two browsers or two settings instead.
+//
 // Each sheet has a row per theme and viewport with before on the left and
 // after on the right. A capture missing on one side is shown as missing.
 import fs from 'node:fs'
@@ -13,6 +16,7 @@ import { SCREENS, THEMES, VIEWPORTS } from './screens.mjs'
 const [beforeDir, afterDir, outDir] = process.argv.slice(2)
 if (!beforeDir || !afterDir || !outDir) throw new Error('usage: sheet.mjs <before-dir> <after-dir> <out-dir>')
 fs.mkdirSync(outDir, { recursive: true })
+const [leftLabel, rightLabel] = (process.env.JINN_SHEET_LABELS ?? 'Before,After').split(',')
 
 const img = (dir, file) => {
   const p = path.join(dir, file)
@@ -27,8 +31,8 @@ function rowsFor(screen) {
     .map(({ viewport, theme }) => ({ viewport, theme, file: `${screen.name}-${theme}-${viewport.name}.png` }))
     .filter(({ file }) => fs.existsSync(path.join(beforeDir, file)) || fs.existsSync(path.join(afterDir, file)))
     .map(({ viewport, theme, file }) => `<section class="${viewport.name}"><h2>${theme} · ${viewport.name}</h2>
-          <div class="pair"><figure><figcaption>Before</figcaption>${img(beforeDir, file)}</figure>
-          <figure><figcaption>After</figcaption>${img(afterDir, file)}</figure></div></section>`)
+          <div class="pair"><figure><figcaption>${leftLabel}</figcaption>${img(beforeDir, file)}</figure>
+          <figure><figcaption>${rightLabel}</figcaption>${img(afterDir, file)}</figure></div></section>`)
 }
 
 const STYLE = `<style>
@@ -47,7 +51,7 @@ try {
     const rows = rowsFor(screen)
     if (!rows.length) continue
     const page = await browser.newPage({ viewport: { width: 1928, height: 800 } })
-    await page.setContent(`<!doctype html><meta charset="utf-8">${STYLE}<h1>${screen.title}: before / after</h1>${rows.join('')}`, { waitUntil: 'load' })
+    await page.setContent(`<!doctype html><meta charset="utf-8">${STYLE}<h1>${screen.title}: ${leftLabel} / ${rightLabel}</h1>${rows.join('')}`, { waitUntil: 'load' })
     await page.screenshot({ path: path.join(outDir, `${screen.name}.png`), fullPage: true })
     await page.close()
     console.log(`sheet ${screen.name}`)
