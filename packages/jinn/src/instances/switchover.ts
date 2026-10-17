@@ -279,21 +279,30 @@ function restore(applied: readonly Edit[], originals: ReadonlyMap<string, string
   }
 }
 
-/** Snapshot, keep copies, write every edit (the flip last) and leave a receipt; put the files back if a write fails. */
-async function applyEdits(edits: readonly Edit[], options: SwitchoverOptions, report: SwitchoverReport): Promise<void> {
-  const now = options.now ?? new Date();
+/** The snapshot's path (undefined when none was configured), or why nothing may be changed: it failed, or a gateway started while it ran. */
+async function snapshotFirst(options: SwitchoverOptions): Promise<string | undefined | { blocker: string }> {
   let snapshot: string | undefined;
   try {
     snapshot = await options.backup?.(options.home);
   } catch (error) {
-    report.blockers.push(`it was not changed because the snapshot failed: ${error instanceof Error ? error.message : String(error)}`);
-    return;
+    return { blocker: `it was not changed because the snapshot failed: ${error instanceof Error ? error.message : String(error)}` };
   }
   // The snapshot can take minutes; a gateway started meanwhile must not have its files rewritten under it.
   if ((options.gatewayRunning ?? defaultGatewayRunning)(options.home)) {
-    report.blockers.push("a gateway started at this home while it was being backed up, so nothing was changed: stop it and run again");
+    return { blocker: "a gateway started at this home while it was being backed up, so nothing was changed: stop it and run again" };
+  }
+  return snapshot;
+}
+
+/** Snapshot, keep copies, write every edit (the flip last) and leave a receipt; put the files back if a write fails. */
+async function applyEdits(edits: readonly Edit[], options: SwitchoverOptions, report: SwitchoverReport): Promise<void> {
+  const now = options.now ?? new Date();
+  const taken = await snapshotFirst(options);
+  if (typeof taken === "object") {
+    report.blockers.push(taken.blocker);
     return;
   }
+  const snapshot = taken;
   const originals = new Map(edits.map((edit) => [edit.file, fs.readFileSync(edit.file, "utf-8")]));
   const copies = keepCopies(edits, options.home, now.toISOString().replace(/[:.]/g, "-"));
   const written: Edit[] = [];
