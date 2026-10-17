@@ -38,6 +38,14 @@ export const SCREENS = [
     ready: 'Neutral fixture used for interface captures.',
   },
   {
+    // The first-run welcome step. `onboarding` leaves the browser un-onboarded and answers /api/onboarding as fresh, so the wizard opens over the chat.
+    name: 'onboarding',
+    onboarding: true,
+    title: 'Onboarding welcome',
+    url: () => '/',
+    ready: 'Your AI team management portal',
+  },
+  {
     name: 'settings',
     title: 'Settings',
     url: () => '/settings',
