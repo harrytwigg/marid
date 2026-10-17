@@ -38,3 +38,15 @@
     border-color: currentColor;
   }
 }
+
+/* base.css also turns off the page-level view transition (and its pointer
+   events), which is the cross-fade globals.css gives every route change. */
+@layer base {
+  :root {
+    view-transition-name: root;
+  }
+
+  ::view-transition {
+    pointer-events: auto;
+  }
+}
