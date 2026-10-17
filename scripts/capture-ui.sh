@@ -12,6 +12,9 @@
 #   JINN_CAPTURE_NODE   node binary (default: the one beside pnpm).
 #   JINN_CAPTURE_BROWSER firefox (default) or chromium; use the same one for before and after.
 #   JINN_CAPTURE_KEEP_DRI set to leave /dev/dri visible to Chromium (see below).
+#   JINN_CAPTURE_TOOL    the script in e2e/ui-capture to run against the sandbox: capture.mjs
+#                        (default), perf.mjs (scroll frame times) or blur-count.mjs.
+#   JINN_CAPTURE_MESSAGES pad the chat to this many messages (perf.mjs wants a long transcript).
 set -euo pipefail
 
 unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID
@@ -85,4 +88,4 @@ if [[ "${JINN_CAPTURE_BROWSER:-firefox}" == "chromium" && -z "${JINN_CAPTURE_KEE
 fi
 
 cd "$SCRIPT_REPO"
-${RUN[@]+"${RUN[@]}"} "$NODE_BIN" "$CAPTURE_DIR/capture.mjs" "$SANDBOX_HOME" "$BASE_URL" "$OUT" "$@"
+${RUN[@]+"${RUN[@]}"} "$NODE_BIN" "$CAPTURE_DIR/${JINN_CAPTURE_TOOL:-capture.mjs}" "$SANDBOX_HOME" "$BASE_URL" "$OUT" "$@"

@@ -53,6 +53,8 @@ captured. Keep the shots out of the repository.
 | `JINN_CAPTURE_BROWSER` | `firefox` | `firefox` or `chromium`. Use the same one for both sides. |
 | `JINN_CAPTURE_KEEP_DRI` | unset | Set to leave `/dev/dri` visible to Chromium. |
 | `JINN_CAPTURE_TRANSPARENCY` | unset | `reduced` photographs with Reduced selected in the persisted settings, checks the root was marked at DOMContentLoaded, and keeps first-paint frames in `firstpaint/`. Use a separate out-dir. |
+| `JINN_CAPTURE_MESSAGES` | unset | Pads the seeded chat with generic filler to this many messages. The `chat-long` screen (the thread scrolled to the middle, so text passes under the glass chrome) is only captured when it is set, and the `chat` screen needs it unset. |
+| `JINN_CAPTURE_TOOL` | `capture.mjs` | The script to run against the sandbox: `capture.mjs`, `blur-count.mjs` or `perf.mjs` (below). |
 | `JINN_SHEET_LABELS` | `Before,After` | Column names for `sheet.mjs`, e.g. `Firefox,Chromium` to compare two browsers. |
 
 Firefox is the default. Both render `backdrop-filter` and `light-dark()`.
@@ -79,3 +81,26 @@ those.
 
 Captures run with reduced motion, so a sheet compares states rather than
 frames of a transition.
+
+## Blur budget and scroll frame times
+
+Two more tools run in the same sandbox, through `JINN_CAPTURE_TOOL`:
+
+- `blur-count.mjs` opens the chat in each theme and width, with the thread at
+  rest and scrolled up, and lists every element whose computed
+  `backdrop-filter` is not `none`: all of them in the DOM and the ones visible
+  at once. It exits non-zero over 3 visible blurred surfaces, over a 32px
+  radius, or any blur at all under Reduced or a coarse pointer (Chromium).
+- `perf.mjs` (Chromium only) scrolls a long transcript up and down with real
+  wheel gestures at 4× CPU throttle and records the gap between animation
+  frames, printing the median and 95th percentile per run. Set
+  `JINN_CAPTURE_MESSAGES=400`. It writes `perf.json` with every frame gap, so
+  runs from several launches can be pooled; run the two builds alternately
+  (before, after, before, after) so host load drifts across both. With
+  `/dev/dri` hidden this is software raster, where a blur costs more than on a
+  GPU: compare the builds with each other, not with a target. `JINN_PERF_RUNS`,
+  `JINN_PERF_THROTTLE` and `JINN_PERF_VARIANTS` (for example
+  `dark-desktop,dark-narrow`) tune it.
+
+Headless Firefox does not render `backdrop-filter` at all, so a Firefox sheet
+shows the glass tint without its blur; judge the blur in a Chromium sheet.

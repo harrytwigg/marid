@@ -26,7 +26,10 @@ if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: capture.mjs <sa
 
 const { token } = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'gateway.json'), 'utf8'))
 const fixtures = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), 'utf8'))
-const screens = only.length ? SCREENS.filter((s) => only.includes(s.name)) : SCREENS
+// A screen that needs the padded thread is only part of the default set when it was asked for.
+const screens = only.length
+  ? SCREENS.filter((s) => only.includes(s.name))
+  : SCREENS.filter((s) => !s.longThread || process.env.JINN_CAPTURE_MESSAGES)
 fs.mkdirSync(outDir, { recursive: true })
 
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i
@@ -115,6 +118,7 @@ async function captureOne({ screen, theme, viewport }) {
     await page.evaluate(() => document.fonts.ready)
     if (reduced) await assertRootReduced(page)
     await page.waitForTimeout(400)
+    if (screen.prepare) await screen.prepare(page)
     const leaked = await leaks(page)
     if (leaked.length) throw new Error(`shows ${leaked.join(' and ')}`)
     if (errors.length) throw new Error(`page error: ${errors[0]}`)
