@@ -37,6 +37,7 @@ function percentile(sorted, p) {
 }
 
 function summarise(frames) {
+  if (frames.length === 0) throw new Error('no animation frames were recorded; the page did not paint during the scroll')
   const sorted = [...frames].sort((a, b) => a - b)
   return {
     frames: frames.length,
@@ -44,7 +45,7 @@ function summarise(frames) {
     p95: percentile(sorted, 95),
     p99: percentile(sorted, 99),
     max: sorted[sorted.length - 1],
-    // Two vsyncs or more: a frame the page missed (a 60Hz frame is 16.7ms).
+    // Longer than a frame and a half: a missed vsync (a 60Hz frame is 16.7ms, a missed one 33.3ms).
     missed: frames.filter((f) => f > 25).length,
   }
 }

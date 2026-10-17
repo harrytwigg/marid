@@ -152,8 +152,6 @@
   --material-thick-opaque: var(--glass-overlay-opaque);
   --material-thin: light-dark(rgba(255,255,255,0.40), rgba(200,228,255,0.05));
   --material-ultra-thin: light-dark(rgba(255,255,255,0.24), rgba(200,228,255,0.03));
-  --pill-bg: var(--glass-float);
-  --pill-bg-opaque: var(--glass-float-opaque);
   --pill-border: var(--glass-edge);
   --ribbon-bg: transparent;
   --sidebar-bg: var(--glass-chrome);
@@ -317,7 +315,10 @@ body {
 [data-chat-multi-pane] .glass-float {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: var(--glass-overlay);
+}
+@media (pointer: fine) {
+  /* Without the blur a tint this thin lets text through, so it takes the overlay tint. */
+  [data-chat-multi-pane] .glass-float { background: var(--glass-overlay); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -329,12 +330,13 @@ body {
    the sheet colour; a fine pointer turns it into a glass band whose blur fades
    out with the tint (a mask on an element with a backdrop-filter masks the
    blur). --glass-live scales both back to the solid fade when transparency is
-   reduced. */
+   reduced. A CLI view keeps the plain fade (data-chat-scrim-flat): a terminal
+   that repaints must not sit under a backdrop filter. */
 [data-chat-top-scrim] {
   background: linear-gradient(to bottom, var(--bg) 0, var(--bg) 52px, color-mix(in srgb, var(--bg) 68%, transparent) 68px, transparent 100%);
 }
 @media (pointer: fine) {
-  [data-chat-top-scrim] {
+  [data-chat-top-scrim]:not([data-chat-scrim-flat]) {
     --scrim-fill: color-mix(in srgb, var(--glass-float) calc(var(--glass-live) * 100%), var(--bg));
     background: linear-gradient(to bottom, var(--scrim-fill) 0, var(--scrim-fill) 52px, color-mix(in srgb, var(--scrim-fill) 68%, transparent) 68px, transparent 100%);
     -webkit-backdrop-filter: var(--glass-blur);
@@ -346,7 +348,7 @@ body {
 @media (pointer: fine) and (max-width: 63.999rem) {
   /* The mobile header bar blurs there; a second blurred band under it would
      break the budget and hide the content the bar is meant to blur. */
-  [data-chat-top-scrim] {
+  [data-chat-top-scrim]:not([data-chat-scrim-flat]) {
     opacity: calc(1 - var(--glass-live));
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -364,6 +366,13 @@ body {
   [data-composer-float] {
     --composer-overlap: calc(var(--glass-live) * 56px);
   }
+  [data-composer-float] [data-chat-composer],
+  [data-composer-float] [data-chat-composer-measure] {
+    /* The band overlaps the transcript, so the empty parts of it must let the wheel,
+       selection and clicks through to the text showing there; what is in it takes them back. */
+    pointer-events: none;
+  }
+  [data-composer-float] [data-chat-composer-measure] > * { pointer-events: auto; }
   [data-composer-float] [data-chat-composer] {
     margin-top: calc(-1 * var(--composer-overlap));
     z-index: 11;
@@ -381,5 +390,9 @@ body {
   }
   [data-composer-float] .composer-card-active:focus-within {
     box-shadow: var(--shadow-overlay), 0 0 0 4px var(--accent-fill);
+  }
+  [data-composer-float] .composer-card-active.composer-card-loading,
+  [data-composer-float] .composer-card-active.composer-card-loading:focus-within {
+    box-shadow: var(--shadow-overlay), 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent);
   }
 }

@@ -6,9 +6,9 @@
 // backdrop-filter is not `none`, twice: every one in the DOM, and the ones visible at once
 // (inside the viewport, painted, not faded out). It measures with the thread at rest and
 // scrolled up, where the jump-to-latest control shows, and with the Reduced setting on,
-// where nothing may blur. With Chromium it also measures a coarse pointer, which keeps the
-// opaque fallback. Exits non-zero when a state is over 3 visible surfaces or a radius is
-// over 32px. Writes <out-dir>/blur-count.json.
+// where nothing may blur. With Chromium it also measures Reduced from the OS preference, a
+// coarse pointer, a CLI view and two panes side by side, where nothing may blur either.
+// Exits non-zero when a state is over 3 visible surfaces or a radius is over 32px. Writes <out-dir>/blur-count.json.
 import fs from 'node:fs'
 import path from 'node:path'
 import { chromium, firefox } from '@playwright/test'
@@ -55,10 +55,61 @@ function survey() {
     .map(([el, filter]) => row(el, filter))
 }
 
-async function open(browserContext) {
-  const page = await browserContext.newPage()
-  await page.goto(baseUrl + `/?session=${fixtures.chatSession}`, { waitUntil: 'networkidle' })
-  await page.locator('.chat-messages-scroll').first().waitFor({ timeout: 15_000 })
+const results = []
+const failures = []
+
+// A second session to put beside the first, found through the API like the capture's own seed does.
+async function otherSession() {
+  const res = await fetch(`${baseUrl}/api/sessions`, { headers: { authorization: `Bearer ${token}` } })
+  const body = await res.json()
+  const list = Array.isArray(body) ? body : body.sessions ?? []
+  const other = list.find((s) => s.id && s.id !== fixtures.chatSession)
+  if (!other) throw new Error('the sandbox has no second session to open beside the first')
+  return other.id
+}
+
+// What the page finds in storage before it starts: the theme, Reduced when the setting is on, and
+// for the other layouts a two-pane split or a CLI view of the chat.
+function storageFor({ theme, reduced, layout }, ids) {
+  const entries = { 'jinn-theme': theme, 'jinn-onboarded': 'true' }
+  if (reduced === 'setting') entries['jinn-settings'] = JSON.stringify({ transparency: 'reduced' })
+  if (layout === 'cli') entries[`jinn-view-mode-${ids.first}`] = 'cli'
+  if (layout === 'panes') {
+    const group = (id, tab) => ({ type: 'group', id, tabs: [tab], activeTab: tab })
+    entries['jinn-chat-split-layout'] = JSON.stringify({
+      version: 1,
+      root: { type: 'split', id: 's1', direction: 'row', children: [group('g1', ids.first), group('g2', ids.second)], sizes: [0.5, 0.5] },
+      auto: false,
+      focusedGroupId: 'g1',
+      focusHistory: [ids.first, ids.second],
+      nextId: 3,
+    })
+  }
+  return entries
+}
+
+function newContext({ theme, viewport, pointer }) {
+  return browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+    colorScheme: theme,
+    reducedMotion: 'reduce',
+    ...(pointer === 'coarse' ? { hasTouch: true, isMobile: true } : {}),
+    extraHTTPHeaders: { authorization: `Bearer ${token}` },
+  })
+}
+
+async function open(context, options, ids) {
+  await context.addInitScript((entries) => {
+    for (const [key, value] of Object.entries(entries)) localStorage.setItem(key, value)
+  }, storageFor(options, ids))
+  const page = await context.newPage()
+  if (options.reduced === 'os') {
+    // The OS preference cannot be set through Playwright, but the DevTools protocol can emulate it.
+    const client = await context.newCDPSession(page)
+    await client.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] })
+  }
+  await page.goto(`${baseUrl}/?session=${ids.first}`, { waitUntil: 'networkidle' })
+  // A CLI view has no transcript scroller; every layout has a composer.
   await page.locator('[data-chat-composer]').first().waitFor({ timeout: 15_000 })
   await page.evaluate(() => document.fonts.ready)
   await page.waitForTimeout(400)
@@ -73,25 +124,20 @@ async function scrollUp(page) {
   await page.waitForTimeout(500)
 }
 
-const results = []
-const failures = []
-
-function newContext({ theme, viewport, pointer }) {
-  return browser.newContext({
-    viewport: { width: viewport.width, height: viewport.height },
-    colorScheme: theme,
-    reducedMotion: 'reduce',
-    ...(pointer === 'coarse' ? { hasTouch: true, isMobile: true } : {}),
-    extraHTTPHeaders: { authorization: `Bearer ${token}` },
-  })
+// Nothing may blur under Reduced, with a coarse pointer, in a CLI view or beside other panes;
+// otherwise the budget applies.
+function noneAllowed({ pointer, reduced, layout }) {
+  return Boolean(reduced) || pointer === 'coarse' || layout !== 'chat'
 }
 
-// What a state is allowed: nothing under Reduced or a coarse pointer, otherwise the budget.
-function judge(name, rows, { pointer, reduced }) {
+function judge(name, rows, options) {
   const visible = rows.filter((row) => row.visible)
   const found = []
-  if (reduced || pointer === 'coarse') {
-    if (rows.length) found.push(`${name}: ${rows.length} blurred surface(s) where none is allowed`)
+  if (noneAllowed(options)) {
+    // Reduced and a coarse pointer drop the filter everywhere; a layout only has to show none (the
+    // mobile header, display: none from lg, keeps its filter and costs nothing).
+    const offenders = options.layout === 'chat' ? rows : visible
+    if (offenders.length) found.push(`${name}: ${offenders.length} blurred surface(s) where none is allowed`)
   } else if (visible.length > MAX_VISIBLE) {
     found.push(`${name}: ${visible.length} visible blurred surfaces (budget ${MAX_VISIBLE})`)
   }
@@ -106,33 +152,68 @@ function record(name, rows) {
   for (const row of rows) console.log(`    ${row.visible ? 'visible' : 'hidden '} ${row.filter}  ${row.el}`)
 }
 
-async function measure(options) {
-  const { theme, viewport, pointer, reduced } = options
+// A layout that did not render proves nothing about the budget: the two panes are both there, the
+// CLI view has no transcript scroller.
+async function layoutRendered(page, layout) {
+  return page.evaluate((wanted) => {
+    if (wanted === 'panes') return document.querySelectorAll('[data-chat-pane-session]').length >= 2
+    if (wanted === 'cli') return !document.querySelector('.chat-messages-scroll')
+    return true
+  }, layout)
+}
+
+// The composer's band overlaps the transcript; its empty parts must hand the pointer to the text
+// beneath, or the wheel and a text selection stop working there.
+async function bandPassesPointer(page) {
+  return page.evaluate(() => {
+    const band = document.querySelector('[data-composer-float] [data-chat-composer]')
+    if (!band) return true
+    const rect = band.getBoundingClientRect()
+    const hit = document.elementFromPoint(rect.left + 60, rect.top + 10)
+    return hit !== band && !band.contains(hit)
+  })
+}
+
+async function measure(options, ids) {
+  const { theme, viewport, pointer, reduced, layout } = options
   const context = await newContext(options)
-  await context.addInitScript(([t, isReduced]) => {
-    localStorage.setItem('jinn-theme', t)
-    localStorage.setItem('jinn-onboarded', 'true')
-    if (isReduced) localStorage.setItem('jinn-settings', JSON.stringify({ transparency: 'reduced' }))
-  }, [theme, reduced])
-  const page = await open(context)
-  const name = `${theme}-${viewport.name}-${pointer}${reduced ? '-reduced' : ''}`
+  const page = await open(context, options, ids)
+  const name = [theme, viewport.name, pointer, layout === 'chat' ? '' : layout, reduced ? `${reduced}-reduced` : ''].filter(Boolean).join('-')
   for (const state of ['rest', 'scrolled-up']) {
     if (state === 'scrolled-up') await scrollUp(page)
     const rows = await page.evaluate(survey)
     record(`${name}/${state}`, rows)
     failures.push(...judge(`${name}/${state}`, rows, options))
   }
+  if (!(await layoutRendered(page, layout))) failures.push(`${name}: the ${layout} layout did not render`)
+  if (!noneAllowed(options) && !(await bandPassesPointer(page))) failures.push(`${name}: the composer band takes the pointer from the transcript under it`)
   await context.close()
 }
 
+const DESKTOP = VIEWPORTS.find((v) => v.name === 'desktop')
+const NARROW = VIEWPORTS.find((v) => v.name === 'narrow')
+const base = { pointer: 'fine', reduced: false, layout: 'chat' }
+
+function variants() {
+  const list = THEMES.flatMap((theme) => VIEWPORTS.flatMap((viewport) => [
+    { ...base, theme, viewport },
+    { ...base, theme, viewport, reduced: 'setting' },
+  ]))
+  if (!isChromium) return list
+  // Chromium only: the OS preference, a coarse pointer, and the layouts that must not blur at all.
+  return [
+    ...list,
+    { ...base, theme: 'dark', viewport: DESKTOP, reduced: 'os' },
+    { ...base, theme: 'dark', viewport: NARROW, reduced: 'os' },
+    { ...base, theme: 'dark', viewport: NARROW, pointer: 'coarse' },
+    { ...base, theme: 'dark', viewport: DESKTOP, layout: 'panes' },
+    { ...base, theme: 'dark', viewport: DESKTOP, layout: 'cli' },
+  ]
+}
+
 try {
-  for (const theme of THEMES) {
-    for (const viewport of VIEWPORTS) {
-      await measure({ theme, viewport, pointer: 'fine', reduced: false })
-      await measure({ theme, viewport, pointer: 'fine', reduced: true })
-    }
-  }
-  if (isChromium) for (const viewport of VIEWPORTS.filter((v) => v.name === 'narrow')) await measure({ theme: 'dark', viewport, pointer: 'coarse', reduced: false })
+  const ids = { first: fixtures.chatSession, second: await otherSession() }
+  for (const options of variants()) await measure(options, ids)
 } finally {
   await browser.close()
 }

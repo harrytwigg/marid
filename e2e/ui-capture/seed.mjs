@@ -67,7 +67,7 @@ function seedDb(repo) {
   conversation().forEach(([role, content], i) => {
     insert.run(crypto.randomUUID(), session.id, role, content, start + i * 60_000, i + 1)
   })
-  db.prepare('UPDATE sessions SET total_turns = ?, last_activity = ? WHERE id = ?').run(Math.ceil(conversation().length / 2), new Date().toISOString(), session.id)
+  db.prepare('UPDATE sessions SET total_turns = ?, last_activity = ? WHERE id = ?').run(conversation().length === CONVERSATION.length ? 2 : Math.ceil(conversation().length / 2), new Date().toISOString(), session.id)
   db.close()
 }
 

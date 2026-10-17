@@ -716,7 +716,7 @@ export function ChatInput({
           text (--chat-measure + the message rows' space-3/space-8 side insets), so
           the card lines up edge-for-edge with the thread content instead of
           spanning the full pane. Mobile stays effectively full-width. */}
-      <div className="relative mx-auto w-full max-w-[var(--chat-measure)] px-3 lg:px-8">
+      <div data-chat-composer-measure className="relative mx-auto w-full max-w-[var(--chat-measure)] px-3 lg:px-8">
       {/* Slash command autocomplete */}
       {showCommands && filteredCommands.length > 0 && (
         <div className="absolute bottom-full left-3 right-3 lg:left-8 lg:right-8 mb-1 border-0 bg-[var(--bg-tertiary)] rounded-[var(--radius-lg)] shadow-[var(--shadow-overlay)] max-h-60 overflow-y-auto z-10">
@@ -1069,6 +1069,8 @@ export function ChatInput({
            streaming so the brighter loading ring takes precedence. */
         .composer-card-active { box-shadow: var(--shadow-card); }
         .composer-card-active:focus-within { box-shadow: var(--shadow-card), 0 0 0 4px var(--accent-fill); }
+        .composer-card-active.composer-card-loading,
+        .composer-card-active.composer-card-loading:focus-within { box-shadow: var(--shadow-card), 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent); }
       `}</style>
     </div>
   )

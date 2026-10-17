@@ -275,7 +275,8 @@ describe("floating glass", () => {
     const fine = blocks.filter((b) => b.query.includes("pointer: fine"))
     const filters = fine.flatMap((b) => [...b.body.matchAll(/(?<!-webkit-)backdrop-filter:\s*([^;]+);/g)].map((m) => m[1].trim()))
     expect(filters.length).toBeGreaterThan(0)
-    for (const value of filters) expect(value).toBe("var(--glass-blur)")
+    // Anything but `none` goes through the token; `none` only switches a surface off.
+    for (const value of filters.filter((v) => v !== "none")) expect(value).toBe("var(--glass-blur)")
   })
 
   it("scales geometry and gradients with --glass-live: 1 normally, 0 under reduced transparency", () => {
@@ -294,10 +295,35 @@ describe("floating glass", () => {
     expect(declarations(ruleBody(floats!.body, "[data-composer-float]")).get("--composer-overlap")).toBe("calc(var(--glass-live) * 56px)")
   })
 
+  it("lets the empty parts of the composer band pass the wheel and clicks to the text under it", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("--composer-overlap"))!
+    const bandRule = ruleBody(fine.body, "[data-composer-float] [data-chat-composer],\n  [data-composer-float] [data-chat-composer-measure]")
+    expect(bandRule).toMatch(/pointer-events:\s*none/)
+    expect(ruleBody(fine.body, "[data-composer-float] [data-chat-composer-measure] > *")).toMatch(/pointer-events:\s*auto/)
+  })
+
+  it("keeps the several-panes tint behind a fine pointer, so a coarse pointer stays opaque", () => {
+    expect(rest).toMatch(/\[data-chat-multi-pane\] \.glass-float \{[^}]*backdrop-filter:\s*none/)
+    expect(rest).not.toMatch(/\[data-chat-multi-pane\] \.glass-float \{[^}]*background/)
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("[data-chat-multi-pane]"))
+    expect(fine, "the multi-pane tint's pointer: fine block").toBeTruthy()
+  })
+
+  it("keeps the plain fade on the top scrim in a CLI view", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("[data-chat-top-scrim]"))!
+    expect(fine.body).toContain("[data-chat-top-scrim]:not([data-chat-scrim-flat])")
+    expect(fine.body).not.toMatch(/\[data-chat-top-scrim\] \{/)
+  })
+
+  it("lets the loading ring win over the float shadow", () => {
+    const fine = blocks.find((b) => b.query === "(pointer: fine)" && b.body.includes("composer-card-loading"))
+    expect(fine, "the loading ring rule").toBeTruthy()
+  })
+
   it("is tint only on the top scrim below lg, where the header bar is the blurred surface", () => {
     const narrow = blocks.find((b) => b.query.includes("max-width") && b.body.includes("[data-chat-top-scrim]"))
     expect(narrow, "the narrow scrim block").toBeTruthy()
-    expect(declarations(ruleBody(narrow!.body, "[data-chat-top-scrim]").replace(/opacity:\s*([^;]+);/, "--opacity: $1;")).get("--opacity")).toBe("calc(1 - var(--glass-live))")
+    expect(declarations(ruleBody(narrow!.body, "[data-chat-top-scrim]:not([data-chat-scrim-flat])").replace(/opacity:\s*([^;]+);/, "--opacity: $1;")).get("--opacity")).toBe("calc(1 - var(--glass-live))")
   })
 })
 

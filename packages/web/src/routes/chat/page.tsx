@@ -876,7 +876,7 @@ function ChatPage() {
           {/* Single-pane content scrolls beneath the header scrim: a glass band from
               lg up on a fine pointer, today's solid fade otherwise (glass-identity.css). */}
           {!desktopMultiPane && <div
-            aria-hidden data-chat-top-scrim
+            aria-hidden data-chat-top-scrim data-chat-scrim-flat={effectiveViewMode === 'cli' ? '' : undefined}
             className={cn(
               "pointer-events-none absolute inset-x-0 top-0 z-[5] h-[var(--chat-top-scrim)]",
               onMobileList && "hidden lg:block",
