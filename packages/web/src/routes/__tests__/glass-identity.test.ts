@@ -254,14 +254,12 @@ describe("things that mirror the identity", () => {
   })
 })
 
-describe("system colours", () => {
-  it.each(SCHEMES)("read as text on the sheet at AA in %s", (scheme) => {
-    // They also sit on the chat list's glass, where the lighter ones fall just
-    // short of AA in light (4.2 to 4.5); they are status glyphs and labels
-    // there, and the screen passes decide whether to deepen them.
-    const sheet = colour("--glass-sheet-opaque", scheme)
-    for (const name of ["--system-blue", "--system-indigo", "--system-green", "--system-red", "--system-orange", "--system-yellow", "--system-purple"]) {
-      expect(ratio(colour(name, scheme), sheet), `${name} on the sheet`).toBeGreaterThanOrEqual(AA)
+describe.each(SCHEMES)("system colours in %s", (scheme) => {
+  const SYSTEM = ["--system-blue", "--system-indigo", "--system-green", "--system-red", "--system-orange", "--system-yellow", "--system-purple"]
+
+  it.each(SYSTEM)("%s reads as text on every glass tint, the backdrop stops and the sheet at AA", (name) => {
+    for (const { label, colour: ground } of surfaces(scheme)) {
+      expect(ratio(colour(name, scheme), ground), `${name} on ${label}`).toBeGreaterThanOrEqual(AA)
     }
   })
 })

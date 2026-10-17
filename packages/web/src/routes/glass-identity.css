@@ -93,13 +93,17 @@
   --talk-focus-ring: light-dark(rgba(6,101,159,0.55), rgba(98,198,255,0.55));
   --danger-fill: light-dark(rgba(196,50,62,0.12), rgba(255,122,130,0.16));
 
-  --system-blue: light-dark(#1F6FD1, #6AB0FF);
+  /* Status colours are text and glyphs on every surface, glass included. The
+     light side is each hue deepened (oklch lightness, hue kept) by the least
+     that clears 4.5:1 on the worst glass and backdrop stop; the dark side
+     already does. The contrast test fails a value that slips. */
+  --system-blue: light-dark(#0E63C4, #6AB0FF);
   --system-indigo: light-dark(#5150C8, #9C9BFF);
-  --system-green: light-dark(#13804F, #5FD69A);
-  --system-red: light-dark(#C4323E, #FF7A82);
-  --system-orange: light-dark(#B45A0C, #FFAA5C);
-  --system-yellow: light-dark(#8A6A00, #F2CD4C);
-  --system-purple: light-dark(#7A4FC4, #C3A2FF);
+  --system-green: light-dark(#007444, #5FD69A);
+  --system-red: light-dark(#BE2C39, #FF7A82);
+  --system-orange: light-dark(#A44C00, #FFAA5C);
+  --system-yellow: light-dark(#806000, #F2CD4C);
+  --system-purple: light-dark(#784CC1, #C3A2FF);
 
   --fill-primary: light-dark(rgba(16,52,92,0.08), rgba(200,228,255,0.11));
   --fill-secondary: light-dark(rgba(16,52,92,0.06), rgba(200,228,255,0.08));
