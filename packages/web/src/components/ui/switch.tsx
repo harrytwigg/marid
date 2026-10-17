@@ -77,7 +77,7 @@ function LoadedSwitch({
       {...data}
     >
       <Hero.Content className={targetClassName}>
-        <Hero.Control className="w-11">
+        <Hero.Control>
           <Hero.Thumb />
         </Hero.Control>
       </Hero.Content>
@@ -122,7 +122,7 @@ function PlainSwitch({
           value={value}
           onChange={(event) => change(event.target.checked)}
         />
-        <span data-slot="switch-control" className="switch__control w-11">
+        <span data-slot="switch-control" className="switch__control">
           <span data-slot="switch-thumb" className="switch__thumb" />
         </span>
       </label>
