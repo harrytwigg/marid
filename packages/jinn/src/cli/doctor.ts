@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { NAMES, currentInstanceName, type Names } from "../shared/codename.js";
+import { LEGACY_CODENAME, NAMES, currentInstanceName, type Names } from "../shared/codename.js";
 import { isCodenameEnvKey } from "../shared/codename-env.js";
 import { resolveJinnHome } from "../shared/home.js";
 import { builtinMcpServerName } from "../mcp/builtin-name.js";
@@ -7,6 +7,7 @@ import { readHomeMoveReceipt } from "../instances/home-rename.js";
 import { inspectHome, type HomeState } from "../instances/home-state.js";
 import { readPendingMove } from "../instances/home-pending.js";
 import { stageRootFor } from "../instances/stage-rename.js";
+import { readSwitchoverReceipt } from "../instances/switchover.js";
 import { loadInstances, type Instance } from "../instances/directory.js";
 import yaml from "js-yaml";
 import path from "node:path";
@@ -67,7 +68,9 @@ function homeFindings(home: string, names: Names): DoctorFinding[] {
   if (receipt) findings.push({ level: "info", message: `Moved ${receipt.at}: ${receipt.transcripts} conversation director${receipt.transcripts === 1 ? "y" : "ies"} followed it${receipt.backup ? `; snapshot at ${receipt.backup}` : ""}.` });
   const legacyStage = stageRootFor(legacy, names, true);
   if (fs.existsSync(legacyStage)) findings.push({ level: "problem", message: `Department stage directories are still under ${legacyStage}; they move with the home.` });
-  findings.push({ level: "info", message: `The built-in MCP server is registered as "${configuredMcpName(current, names)}".` });
+  const registered = configuredMcpName(current, names);
+  const switched = readSwitchoverReceipt(current);
+  findings.push({ level: "info", message: `The built-in MCP server is registered as "${registered}"${switched ? `; switched over ${switched.at}` : registered === LEGACY_CODENAME ? `; \`${names.codename} doctor --rename\` moves this instance to the new name` : ""}.` });
   return findings;
 }
 
@@ -99,7 +102,15 @@ function safeInstances(): Instance[] {
 
 const MARK = { ok: "ok     ", info: "note   ", problem: "ACTION " } as const;
 
-export function runDoctor(options: { json?: boolean } = {}): void {
+export async function runDoctor(options: { json?: boolean; rename?: boolean; apply?: boolean } = {}): Promise<void> {
+  if (options.rename) {
+    const { printRenameReport, renameReport } = await import("./doctor-rename.js");
+    const report = await renameReport({ apply: options.apply });
+    if (options.json) console.log(JSON.stringify(report, null, 2));
+    else printRenameReport(report, options.apply === true);
+    if (report.blockers.length > 0) process.exitCode = 1;
+    return;
+  }
   const findings = doctorFindings();
   if (options.json) console.log(JSON.stringify(findings, null, 2));
   else for (const finding of findings) console.log(`${MARK[finding.level]}${finding.message}`);
