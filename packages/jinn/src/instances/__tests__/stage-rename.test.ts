@@ -12,6 +12,7 @@ import { renameStageRoot, stageRootFor } from "../stage-rename.js";
 import { backupRootFor, legacyBackupRootFor, renameBackupDirs } from "../backup-rename.js";
 import { doctorFindings } from "../../cli/doctor.js";
 import { tryAcquireHomeLock } from "../home-lock.js";
+import { writePendingMove } from "../home-pending.js";
 
 let root: string;
 beforeEach(() => { root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "stage-rename-"))); });
@@ -114,6 +115,16 @@ describe("doctor", () => {
     const done = doctorFindings({ home: path.join(root, ".jinn-john"), env: {}, instances: [] });
     expect(done.some((finding) => finding.level === "problem")).toBe(false);
     expect(done[0].message).toContain("link to it");
+  });
+
+  it("flags a move whose steps did not all finish", () => {
+    vi.spyOn(os, "homedir").mockReturnValue(root);
+    const current = path.join(root, ".acme-john");
+    fs.mkdirSync(current);
+    fs.symlinkSync(current, path.join(root, ".jinn-john"), "dir");
+    writePendingMove(current, { legacy: path.join(root, ".jinn-john"), current, instance: "jinn-john", physicalLegacy: path.join(root, ".jinn-john"), configDirs: [], at: "x" });
+    const findings = doctorFindings({ home: path.join(root, ".jinn-john"), env: {}, instances: [] });
+    expect(findings.find((finding) => finding.level === "problem")?.message).toContain("did not finish");
   });
 
   it("reports one instance registered under two names", () => {

@@ -96,6 +96,17 @@ describe("moving a host's stage directories", () => {
     expect(fs.existsSync(path.join(config(), "projects", claudeProjectSlug(path.join(newRoot, "ops")), "a.jsonl"))).toBe(true);
   });
 
+  it("finishes a stage directory whose conversations moved before the connection dropped", () => {
+    const [oldRoot, newRoot] = [path.join(root, ".jinn-departments"), path.join(root, ".acme-departments")];
+    touch(path.join(oldRoot, "ops", "CLAUDE.md"));
+    // The state after a drop between the two moves: the conversations under the new key, the directory still in the old container.
+    touch(path.join(config(), "projects", claudeProjectSlug(path.join(newRoot, "ops")), "a.jsonl"));
+    fs.mkdirSync(newRoot);
+    expect(run(oldRoot, newRoot, config())).toContain("renamed=");
+    expect(fs.existsSync(path.join(newRoot, "ops", "CLAUDE.md"))).toBe(true);
+    expect(fs.existsSync(path.join(config(), "projects", claudeProjectSlug(path.join(newRoot, "ops")), "a.jsonl"))).toBe(true);
+  });
+
   it("leaves a stage directory that exists in both containers as it is, and still moves the rest", () => {
     touch(path.join(root, ".jinn-departments", "ops", "old"));
     touch(path.join(root, ".jinn-departments", "dev", "old"));

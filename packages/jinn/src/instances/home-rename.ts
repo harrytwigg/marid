@@ -54,7 +54,7 @@ export interface HomeMoveReceipt {
 export type HomeRenameOutcome =
   | { kind: "nothing"; home: string }
   | { kind: "moved"; home: string; receipt: HomeMoveReceipt }
-  | { kind: "kept"; home: string; reason: string }
+  | { kind: "kept"; home: string; reason: string; /** Another live process is mid-move: starting a gateway here now would be moved from under. */ blocking?: boolean }
   | { kind: "conflict"; home: string; legacyHome: string; currentHome: string };
 
 /** Where the receipt of a move is kept, inside the moved home. */
@@ -140,11 +140,11 @@ async function moveHome(
   const now = (deps.now ?? (() => new Date()))();
   const kept = (reason: string): HomeRenameOutcome => ({ kind: "kept", home: legacy, reason });
   if ((deps.isMountPoint ?? defaultIsMountPoint)(legacy)) return kept(`${legacy} is a mount point, so its path stays`);
-  if ((deps.gatewayRunning ?? ((dir) => defaultGatewayRunning(dir, names)))(legacy)) {
+  if (gatewayRunningAt(legacy, deps, names)) {
     return kept(`a gateway is running at ${legacy}: stop it, then start it again to move the home to ${current}`);
   }
   const lock = await acquireHomeLock(path.join(path.dirname(legacy), `.${names.codename}-home-move.lock`), deps.lockTimeoutMs);
-  if (!lock) return kept(`another process is moving ${legacy}`);
+  if (!lock) return { kind: "kept", home: legacy, reason: `another process is moving ${legacy}`, blocking: true };
   try {
     // Someone else may have finished the move while this one waited.
     if (decide(legacy, current) !== "move") return renameHomeIfNeeded(legacy, { ...deps, lockTimeoutMs: 0 });
@@ -152,6 +152,10 @@ async function moveHome(
   } finally {
     lock.release();
   }
+}
+
+function gatewayRunningAt(home: string, deps: HomeRenameDeps, names: Names): boolean {
+  return (deps.gatewayRunning ?? ((dir) => defaultGatewayRunning(dir, names)))(home);
 }
 
 interface MoveContext {
@@ -172,6 +176,8 @@ async function moveLocked(legacy: string, current: string, context: MoveContext)
   } catch (error) {
     return kept(`it was not moved because the backup failed: ${error instanceof Error ? error.message : String(error)}`);
   }
+  // The snapshot can take minutes: a gateway that started meanwhile (the lock keeps other movers out, not a plain start) is not moved from under.
+  if (gatewayRunningAt(legacy, deps, context.names)) return kept(`a gateway started at ${legacy} while it was being backed up, so it was not moved`);
   const physicalLegacy = fs.realpathSync.native(legacy);
   const configDirs = (deps.claudeConfigDirs ?? claudeConfigDirsOf)(legacy);
   const facts: MoveFacts = { legacy, current, instance, physicalLegacy, configDirs, backup };
@@ -182,10 +188,16 @@ async function moveLocked(legacy: string, current: string, context: MoveContext)
     clearPendingMove(legacy);
     return kept(`it could not be renamed (${(error as NodeJS.ErrnoException).code ?? "error"}): ${(error as Error).message}`);
   }
-  const receipt = followTheMove(facts, context);
-  clearPendingMove(current);
+  const { receipt, complete } = followTheMove(facts, context);
+  settlePending(current, complete, context.log);
   context.log(`Moved ${legacy} to ${current}; a link remains at the old path.`);
   return { kind: "moved", home: current, receipt };
+}
+
+/** The note stays while any follow-up step failed, so the next command tries those steps again. */
+function settlePending(home: string, complete: boolean, log: (message: string) => void): void {
+  if (complete) clearPendingMove(home);
+  else log(`Some steps of the move to ${home} did not finish; they are tried again at the next command.`);
 }
 
 /** Finish a move whose process died after the rename: the same follow-up steps, from the note it left. */
@@ -196,9 +208,9 @@ async function resumeMove(current: string, deps: HomeRenameDeps, names: Names, l
     const pending = readPendingMove(current);
     if (!pending) return { kind: "nothing", home: current };
     const context: MoveContext = { deps, names, log, homeDir: deps.homeDir ?? os.homedir(), now: (deps.now ?? (() => new Date()))() };
-    const receipt = followTheMove({ ...pending, backup: pending.backup }, context);
-    clearPendingMove(current);
-    log(`Finished the move of ${pending.legacy} to ${current} that an earlier run left half done.`);
+    const { receipt, complete } = followTheMove({ ...pending, backup: pending.backup }, context);
+    settlePending(current, complete, log);
+    log(`${complete ? "Finished" : "Went on with"} the move of ${pending.legacy} to ${current} that an earlier run left half done.`);
     return { kind: "moved", home: current, receipt };
   } finally {
     lock.release();
@@ -215,15 +227,16 @@ interface MoveFacts {
 }
 
 /** Everything that has to follow a home that has just been renamed: the link, the record, the conversations, the stage root, the snapshots, the registry. */
-function followTheMove(facts: MoveFacts, context: MoveContext): HomeMoveReceipt {
+function followTheMove(facts: MoveFacts, context: MoveContext): { receipt: HomeMoveReceipt; complete: boolean } {
   const { legacy, current, instance, physicalLegacy, configDirs, backup } = facts;
   const { deps, names, log, homeDir, now } = context;
-  const warn = (message: string): void => log(message);
+  let complete = true;
+  const warn = (message: string): void => { complete = false; log(message); };
   linkOldPath(legacy, current, log);
   const physicalCurrent = fs.realpathSync.native(current);
   rewriteGatewayRecord(current, physicalCurrent);
   const transcripts = moveTranscripts(physicalLegacy, physicalCurrent, configDirs, warn).length;
-  const stage = safely(() => renameStageRoot(legacy, current, configDirs, { names, onError: warn }), warn);
+  const stage = safely(() => renameStageRoot(legacy, current, configDirs, { names, onError: warn, physicalLegacyHome: physicalLegacy }), warn);
   const currentName = currentInstanceName(instance, names);
   safely(() => renameBackupDirs({ homeDir, legacyName: instance, currentName, names }), warn);
   safely(() => recordInstanceRenamed({ fromHome: legacy, toHome: current, name: instance }, deps.registry), warn);
@@ -236,7 +249,7 @@ function followTheMove(facts: MoveFacts, context: MoveContext): HomeMoveReceipt 
     ...(backup ? { backup: path.join(backupRootFor(homeDir, names), currentName, path.basename(backup)) } : {}),
   };
   safely(() => writeReceipt(current, receipt), warn);
-  return receipt;
+  return { receipt, complete };
 }
 
 function safely<T>(action: () => T, warn: (message: string) => void): T | undefined {

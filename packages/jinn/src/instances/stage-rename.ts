@@ -52,21 +52,21 @@ export function stageRootFor(home: string, names: Names, legacy: boolean): strin
 /**
  * Move the stage root the legacy codename made for `legacyHome` to the one this build uses for
  * `currentHome`, with the transcripts. Nothing happens unless the old root is a real directory and the
- * new one does not exist. The old container is removed when that leaves it empty.
+ * new one does not exist, except that a root already moved by a run that died has its transcripts moved
+ * now (`physicalLegacyHome` says where it was). The old container is removed when that leaves it empty.
  */
 export function renameStageRoot(
   legacyHome: string,
   currentHome: string,
   configDirs: Iterable<string>,
-  options: { names?: Names; onError?: (message: string) => void } = {},
+  options: { names?: Names; onError?: (message: string) => void; physicalLegacyHome?: string } = {},
 ): StageRenameResult | undefined {
   const names = options.names ?? NAMES;
   const from = stageRootFor(legacyHome, names, true);
   const to = stageRootFor(currentHome, names, false);
-  if (from === to || !isRealDirectory(from) || exists(to)) return undefined;
-  const physicalFrom = fs.realpathSync(from);
-  fs.mkdirSync(path.dirname(to), { recursive: true });
-  fs.renameSync(from, to);
+  if (from === to) return undefined;
+  const physicalFrom = relocateRoot(from, to, options.physicalLegacyHome ? stageRootFor(options.physicalLegacyHome, names, true) : undefined);
+  if (physicalFrom === undefined) return undefined;
   const physicalTo = fs.realpathSync(to);
   const dirs = [...configDirs];
   const departments: string[] = [];
@@ -79,6 +79,20 @@ export function renameStageRoot(
   removeIfEmpty(path.dirname(from));
   removeIfEmpty(path.dirname(path.dirname(from)));
   return { from, to, transcripts, departments };
+}
+
+/**
+ * Rename the root, and say where it physically was. A root that an earlier run already renamed (`to` exists,
+ * `from` does not) is not moved again, but its old physical place is returned so its transcripts still follow.
+ */
+function relocateRoot(from: string, to: string, physicalWhenMoved: string | undefined): string | undefined {
+  if (isRealDirectory(from) && !exists(to)) {
+    const physical = fs.realpathSync(from);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.renameSync(from, to);
+    return physical;
+  }
+  return isRealDirectory(to) && !exists(from) ? physicalWhenMoved : undefined;
 }
 
 function removeIfEmpty(directory: string): void {

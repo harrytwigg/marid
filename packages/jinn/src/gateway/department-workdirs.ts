@@ -5,7 +5,7 @@ import path from "node:path";
 import { resolveClaudeConfigDir } from "../shared/home.js";
 import { resolveJinnHome } from "../shared/paths.js";
 import { employeeClaudeConfigDirs } from "./org-yaml-files.js";
-import { LEGACY_CODENAME, NAMES } from "../shared/codename.js";
+import { LEGACY_CODENAME, NAMES, currentHomePath } from "../shared/codename.js";
 
 /**
  * Working-directory validation for a department (FR-033). A department's working
@@ -38,7 +38,11 @@ export const STAGE_INSTANCES_DIR = ".instances";
 
 /** The generated per-department directories live beside the home, never inside it, in a root of this instance's own: `<parent>/.jinn-departments/.instances/<basename of the home>/`. */
 export function departmentStageRoot(): string {
-  return path.join(departmentStagesContainer(), STAGE_INSTANCES_DIR, path.basename(resolveJinnHome()) || "instance");
+  const home = resolveJinnHome();
+  // A home that had to stay at its old path keeps its stage root in the old container as well, which is
+  // where the move that finally renames the home looks for it; one root, never one in each.
+  const container = currentHomePath(home) !== home ? legacyDepartmentStagesContainer(home) : departmentStagesContainer();
+  return path.join(container, STAGE_INSTANCES_DIR, path.basename(home) || "instance");
 }
 
 /** Profile directories employees run their Claude sessions as (`claudeConfigDir`). */

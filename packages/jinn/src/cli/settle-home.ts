@@ -14,5 +14,9 @@ export async function settleHomeForCommand(command: string, env: NodeJS.ProcessE
     console.error(`Both ${settled.legacyHome} and ${settled.currentHome} exist. Neither was touched; \`${NAMES.codename} doctor\` says what to do.`);
     process.exit(1);
   }
+  if (settled.kind === "kept" && settled.blocking) {
+    console.error(`${settled.reason}. Nothing was started; run the command again once that has finished.`);
+    process.exit(1);
+  }
   if (settled.kind === "kept") console.error(`Using ${settled.home} under its old name: ${settled.reason}.`);
 }

@@ -5,6 +5,7 @@ import { resolveJinnHome } from "../shared/home.js";
 import { builtinMcpServerName } from "../mcp/builtin-name.js";
 import { readHomeMoveReceipt } from "../instances/home-rename.js";
 import { inspectHome, type HomeState } from "../instances/home-state.js";
+import { readPendingMove } from "../instances/home-pending.js";
 import { stageRootFor } from "../instances/stage-rename.js";
 import { loadInstances, type Instance } from "../instances/directory.js";
 import yaml from "js-yaml";
@@ -61,6 +62,7 @@ function configuredMcpName(home: string, names: Names): string {
 function homeFindings(home: string, names: Names): DoctorFinding[] {
   const { state, current, legacy } = inspectHome(home, names);
   const findings = [HOME_STATE_FINDINGS[state](home, current, legacy)];
+  if (readPendingMove(current)) findings.push({ level: "problem", message: `The move to ${current} did not finish all its steps (conversations, stage directories, registry). The next command that settles the home tries them again.` });
   const receipt = readHomeMoveReceipt(current);
   if (receipt) findings.push({ level: "info", message: `Moved ${receipt.at}: ${receipt.transcripts} conversation director${receipt.transcripts === 1 ? "y" : "ies"} followed it${receipt.backup ? `; snapshot at ${receipt.backup}` : ""}.` });
   const legacyStage = stageRootFor(legacy, names, true);

@@ -12,7 +12,8 @@ import { shq, sshRun, type RemoteFacts } from "./remote-stage.js";
  * not have yet moves across, and one that exists in both is left alone. A stage directory is also left
  * where it is while any process on the host has its working directory inside it (a live session there would
  * have its conversations filed under a key that no longer matches); the next spawn tries again, whether or
- * not the new container exists by then. Where /proc cannot be read that check is skipped. The old container
+ * not the new container exists by then. A stage directory's conversations move before the directory does, so a
+ * dropped connection between the two leaves a state the next run completes. Where /proc cannot be read that check is skipped. The old container
  * goes once it is empty.
  *
  * Arguments: the old container, the new container, then each Claude config dir to look in.
@@ -41,8 +42,7 @@ for stage in "$real_old"/*/; do
   name=$(basename "$stage")
   [ ! -e "$real_new/$name" ] || continue
   if busy_in "$real_old/$name"; then busy=$((busy + 1)); continue; fi
-  mv "$real_old/$name" "$real_new/$name"
-  moved=$((moved + 1))
+  # The conversations first: if the connection drops between the two moves, the next run still finds the directory in the old container and finishes.
   from=$(slug_of "$real_old/$name")
   to=$(slug_of "$real_new/$name")
   for config in "$@"; do
@@ -51,6 +51,8 @@ for stage in "$real_old"/*/; do
       transcripts=$((transcripts + 1))
     fi
   done
+  mv "$real_old/$name" "$real_new/$name"
+  moved=$((moved + 1))
 done
 rmdir "$real_old" 2>/dev/null || true
 [ "$busy" -eq 0 ] || printf 'busy=%s\\n' "$busy"
