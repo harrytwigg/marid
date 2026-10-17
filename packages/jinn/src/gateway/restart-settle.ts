@@ -14,7 +14,15 @@ export async function settleBeforeRestart(
   loadedHome: string,
   deps: HomeRenameDeps = {},
 ): Promise<{ respawn: boolean }> {
-  const outcome = await settleInstanceEnv(env, deps);
+  const attempt = { ...env };
+  const outcome = await settleInstanceEnv(attempt, deps);
+  // Two homes, or another process mid-move: the gateway was running at the loaded home a moment ago, so it
+  // comes back there. Pointing it at the old directory instead would show it old data and split the writes.
+  if (outcome.kind === "conflict" || (outcome.kind === "kept" && outcome.blocking)) {
+    deps.log?.(`The home was not moved at restart (${outcome.kind === "conflict" ? "both an old and a new directory exist" : outcome.reason}); carrying on at ${loadedHome}. \`doctor\` says more.`);
+    return { respawn: false };
+  }
+  Object.assign(env, attempt);
   const respawn = path.resolve(outcome.home) !== path.resolve(loadedHome);
   // What the old location derived is wrong for the new one; the new process works its own out.
   if (respawn) for (const key of envNamesFor(["HOME_IDENTITY", "BINDING_HOME"])) delete env[key];

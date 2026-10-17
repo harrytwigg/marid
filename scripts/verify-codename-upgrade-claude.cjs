@@ -20,6 +20,8 @@ const at = (flag) => { const index = args.indexOf(flag); return index >= 0 ? arg
 const log = (message) => { if (process.env.CLAUDE_CONFIG_DIR) fs.appendFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, "stand-in.log"), `${message}\n`); };
 
 if (args.includes("--version")) { console.log("2.1.300 (Claude Code)"); process.exit(0); }
+// The gateway probes the CLI with these; the real one answers and exits, so the stand-in must too.
+if (args.includes("--help") || args[0] === "auth") { console.log(args[0] === "auth" ? "Logged in (stand-in)" : "Claude Code (stand-in)"); process.exit(0); }
 
 const cwd = process.cwd();
 const slug = (value) => value.replace(/[^a-zA-Z0-9]/g, "-");

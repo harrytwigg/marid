@@ -169,6 +169,25 @@ describe("a restart over a gateway that was running at an older build's home", (
     expect((await settleBeforeRestart(env, currentHome(), deps)).respawn).toBe(false);
   });
 
+  it("carries on at the loaded home, and starts nothing elsewhere, when both homes exist", async () => {
+    seedHome(currentHome());
+    seedHome(legacyHome());
+    const env: NodeJS.ProcessEnv = { ACME_HOME: currentHome(), JINN_HOME: currentHome() };
+    const logged: string[] = [];
+    expect((await settleBeforeRestart(env, currentHome(), { ...deps, log: (message) => logged.push(message) })).respawn).toBe(false);
+    expect(env).toEqual({ ACME_HOME: currentHome(), JINN_HOME: currentHome() });
+    expect(logged.join(" ")).toContain("carrying on at");
+  });
+
+  it("carries on at the loaded home when another process is mid-move", async () => {
+    seedHome(legacyHome());
+    fs.writeFileSync(path.join(root, ".acme-home-move.lock"), String(process.pid));
+    const env: NodeJS.ProcessEnv = { JINN_HOME: legacyHome() };
+    expect((await settleBeforeRestart(env, legacyHome(), { ...deps, lockTimeoutMs: 100 })).respawn).toBe(false);
+    expect(env).toEqual({ JINN_HOME: legacyHome() });
+    expect(fs.lstatSync(legacyHome()).isDirectory()).toBe(true);
+  });
+
   it("carries on in place when the home had to stay", async () => {
     seedHome(legacyHome());
     const env: NodeJS.ProcessEnv = { JINN_HOME: legacyHome() };
