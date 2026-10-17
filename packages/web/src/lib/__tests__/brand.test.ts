@@ -3,19 +3,15 @@ import { customBrandGlyph } from "../brand"
 
 describe("customBrandGlyph", () => {
   it("is null when the operator set nothing, so the default mark shows", () => {
-    expect(customBrandGlyph({ portalEmoji: null, portalIcon: null })).toBeNull()
-    expect(customBrandGlyph({ portalEmoji: "  ", portalIcon: "" })).toBeNull()
+    expect(customBrandGlyph({ portalEmoji: null })).toBeNull()
+    expect(customBrandGlyph({ portalEmoji: "  " })).toBeNull()
   })
 
-  it("returns the portal emoji", () => {
-    expect(customBrandGlyph({ portalEmoji: "🦊", portalIcon: null })).toBe("🦊")
+  it("returns the portal emoji, trimmed", () => {
+    expect(customBrandGlyph({ portalEmoji: " 🦊 " })).toBe("🦊")
   })
 
-  it("uses the portal icon when there is no emoji", () => {
-    expect(customBrandGlyph({ portalEmoji: null, portalIcon: "★" })).toBe("★")
-  })
-
-  it("lets the emoji win over the icon", () => {
-    expect(customBrandGlyph({ portalEmoji: "🦊", portalIcon: "★" })).toBe("🦊")
+  it("ignores the legacy portalIcon, which nothing writes or reads", () => {
+    expect(customBrandGlyph({ portalEmoji: null, portalIcon: "★" } as never)).toBeNull()
   })
 })

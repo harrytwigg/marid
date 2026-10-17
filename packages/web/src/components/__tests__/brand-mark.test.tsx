@@ -1,10 +1,16 @@
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { render } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
-import { BRAND_FAVICON_PNG, BRAND_FAVICON_SVG, BRAND_MARK_SRC } from "@/lib/brand"
+import { BRAND_MARK_SRC } from "@/lib/brand"
 import { BrandMark, PortalMark } from "../brand-mark"
 import { BrandFavicon } from "../brand-favicon"
 import { NavRibbon } from "../pill-nav"
+
+// The icon links the page really declares, so the test cannot drift from index.html.
+const DECLARED_ICON_LINKS = readFileSync(join(__dirname, "..", "..", "..", "index.html"), "utf8").match(/<link rel="icon"[^>]*>/g) ?? []
+const DECLARED_HREFS = DECLARED_ICON_LINKS.map((tag) => /href="([^"]+)"/.exec(tag)?.[1])
 
 const settings = { portalEmoji: null as string | null, portalIcon: null as string | null, portalName: null as string | null }
 
@@ -32,15 +38,11 @@ describe("PortalMark", () => {
     expect(markImages(container)).toHaveLength(0)
   })
 
-  it("draws the operator's icon when no emoji is set, and the emoji when both are", () => {
+  it("ignores a stale portalIcon: the glass mark stays", () => {
     settings.portalIcon = "★"
-    const first = render(<PortalMark size={32} glyphClassName="glyph" />)
-    expect(first.container.querySelector(".glyph")?.textContent).toBe("★")
-    first.unmount()
-
-    settings.portalEmoji = "🦊"
-    const second = render(<PortalMark size={32} glyphClassName="glyph" />)
-    expect(second.container.querySelector(".glyph")?.textContent).toBe("🦊")
+    const { container } = render(<PortalMark size={32} glyphClassName="glyph" />)
+    expect(markImages(container)).toHaveLength(1)
+    expect(container.querySelector(".glyph")).toBeNull()
   })
 
   it("keeps the decorative mark out of the accessibility tree", () => {
@@ -82,7 +84,7 @@ describe("BrandFavicon", () => {
   const drawn: string[] = []
 
   beforeEach(() => {
-    document.head.innerHTML = `<link rel="icon" type="image/svg+xml" href="${BRAND_FAVICON_SVG}"><link rel="icon" type="image/png" sizes="32x32" href="${BRAND_FAVICON_PNG}">`
+    document.head.innerHTML = DECLARED_ICON_LINKS.join("")
     drawn.length = 0
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((() => ({
       font: "",
@@ -102,7 +104,7 @@ describe("BrandFavicon", () => {
 
   it("leaves the declared mark alone and draws nothing by default", () => {
     render(<BrandFavicon />)
-    expect(hrefs()).toEqual([BRAND_FAVICON_SVG, BRAND_FAVICON_PNG])
+    expect(hrefs()).toEqual(DECLARED_HREFS)
     expect(drawn).toEqual([])
   })
 
@@ -110,7 +112,7 @@ describe("BrandFavicon", () => {
     settings.portalEmoji = "🦊"
     render(<BrandFavicon />)
     expect(drawn).toEqual(["🦊"])
-    expect(hrefs()).toEqual(["data:image/png;base64,GLYPH", "data:image/png;base64,GLYPH"])
+    expect(hrefs()).toEqual(DECLARED_HREFS.map(() => "data:image/png;base64,GLYPH"))
     expect(document.querySelector("link[rel='icon']")?.getAttribute("type")).toBe("image/png")
   })
 
@@ -119,8 +121,18 @@ describe("BrandFavicon", () => {
     const { rerender } = render(<BrandFavicon />)
     settings.portalEmoji = null
     rerender(<BrandFavicon />)
-    expect(hrefs()).toEqual([BRAND_FAVICON_SVG, BRAND_FAVICON_PNG])
+    expect(hrefs()).toEqual(DECLARED_HREFS)
     expect(document.querySelector("link[rel='icon']")?.getAttribute("type")).toBe("image/svg+xml")
+  })
+
+  it("removes an icon link it had to create when the glyph is cleared", () => {
+    document.head.innerHTML = ""
+    settings.portalEmoji = "🦊"
+    const { rerender } = render(<BrandFavicon />)
+    expect(hrefs()).toEqual(["data:image/png;base64,GLYPH"])
+    settings.portalEmoji = null
+    rerender(<BrandFavicon />)
+    expect(hrefs()).toEqual([])
   })
 })
 

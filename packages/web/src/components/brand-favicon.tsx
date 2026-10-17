@@ -5,6 +5,10 @@ import { customBrandGlyph } from "@/lib/brand"
 const ICON_LINKS = "link[rel='icon']"
 
 function restoreDeclared(link: HTMLLinkElement) {
+  if (link.dataset.created) {
+    link.remove()
+    return
+  }
   if (link.dataset.defaultType) link.type = link.dataset.defaultType
   else link.removeAttribute("type")
   if (link.dataset.defaultHref) link.setAttribute("href", link.dataset.defaultHref)
@@ -16,6 +20,7 @@ function setFavicon(href: string | null) {
   if (href && links.length === 0) {
     const link = document.createElement("link")
     link.rel = "icon"
+    link.dataset.created = "1"
     document.head.appendChild(link)
     links = [link]
   }

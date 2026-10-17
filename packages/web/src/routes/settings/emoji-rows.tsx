@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { BrandMark } from "@/components/brand-mark"
+import { customBrandGlyph } from "@/lib/brand"
 import { api } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { EmojiPicker } from "@/components/ui/emoji-picker"
@@ -78,7 +79,7 @@ export function PortalEmojiRow() {
   const { settings, setPortalEmoji } = useSettings()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [draft, setDraft] = useState(settings.portalEmoji ?? "")
-  const current = settings.portalEmoji ?? ""
+  const current = customBrandGlyph(settings) ?? ""
 
   useEffect(() => {
     setDraft(settings.portalEmoji ?? "")
@@ -103,7 +104,7 @@ export function PortalEmojiRow() {
           placeholder="Default"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => setPortalEmoji(draft || null)}
+          onBlur={() => setPortalEmoji(draft.trim() || null)}
         />
         {pickerOpen && (
           <EmojiPicker

@@ -10,14 +10,13 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue>({ theme: 'dark', setTheme: () => {} })
 
 /**
- * An installed PWA paints its titlebar from these metas, so they have to follow
- * the theme the app actually resolved — the per-scheme pair in index.html would
- * give an explicitly light install a dark titlebar on a dark OS. Read back off --bg so
+ * An installed PWA paints its titlebar from these metas. index.html declares one
+ * per colour scheme, which is only the state before this script runs: an
+ * explicitly light install on a dark OS must not keep the dark one, so every
+ * meta takes the theme the app actually resolved. Read back off --bg so
  * the titlebar and the page can never disagree about what the background is.
  */
 function syncThemeColor() {
-  // index.html declares one per scheme so the chrome is right before any script
-  // runs; the resolved theme overrides both.
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
   if (!bg) return
   for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute('content', bg)
