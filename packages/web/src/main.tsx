@@ -10,6 +10,7 @@ import { registerRoutePrefetch } from './lib/route-prefetch'
 import { startKeyboardInset } from './platform'
 import { RouteLoading } from './components/route-loading'
 import { RouteFailure } from './components/route-failure'
+import { AriaRouter } from './components/ui/aria-router'
 import { TodosIndexRedirect, todosIndexLoader } from './routes/todos/board/todos-index-redirect'
 import { LegacyChatRedirect } from './routes/chat/legacy-chat-redirect'
 import { useFeatures } from './hooks/use-features'
@@ -84,11 +85,13 @@ function AppShell() {
     () => 0,
   )
   return (
-    <ClientProviders key={`gateway:${generation}`}>
-      <Suspense fallback={<RouteLoading />}>
-        <Outlet />
-      </Suspense>
-    </ClientProviders>
+    <AriaRouter>
+      <ClientProviders key={`gateway:${generation}`}>
+        <Suspense fallback={<RouteLoading />}>
+          <Outlet />
+        </Suspense>
+      </ClientProviders>
+    </AriaRouter>
   )
 }
 
