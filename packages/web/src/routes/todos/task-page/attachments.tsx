@@ -66,7 +66,7 @@ export function AttachmentsSection({
       aria-label={`Remove ${attachment.filename}`}
       data-testid={`attachment-remove-${attachment.id}`}
       onClick={() => onRemove(attachment)}
-      className={`focus-ring grid place-items-center opacity-0 outline-none transition-opacity focus-visible:opacity-100 ${className}`}
+      className={`focus-outline grid place-items-center opacity-0 outline-none transition-opacity focus-visible:opacity-100 ${className}`}
     >
       <X size={12} strokeWidth={2.2} aria-hidden />
     </button>
@@ -79,7 +79,7 @@ export function AttachmentsSection({
         aria-label="Attach a file"
         data-testid="attachment-add"
         onClick={() => inputRef.current?.click()}
-        className="focus-ring -ml-2 grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-quaternary)] outline-none transition-colors hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+        className="focus-outline -ml-2 grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-quaternary)] outline-none transition-colors hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
       >
         <Paperclip size={15} strokeWidth={1.8} aria-hidden />
       </button>
@@ -108,7 +108,7 @@ export function AttachmentsSection({
                   download={attachment.filename}
                   data-testid={`attachment-chip-${attachment.id}`}
                   aria-label={`Download ${attachment.filename}`}
-                  className="focus-ring flex min-w-0 items-center gap-2 rounded-lg outline-none"
+                  className="focus-outline flex min-w-0 items-center gap-2 rounded-lg outline-none"
                 >
                   <span className="grid size-6 flex-none place-items-center rounded-[7px] bg-[var(--fill-secondary)] text-[var(--text-tertiary)]">
                     {isImageMime(attachment.mime) ? <ImageIcon size={12} strokeWidth={1.8} aria-hidden /> : <FileText size={12} strokeWidth={1.8} aria-hidden />}

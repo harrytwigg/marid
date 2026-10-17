@@ -4,31 +4,63 @@ import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
-const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+/**
+ * The button's look is HeroUI's: the `button` classes (variant and size) come
+ * from its stylesheet, and the Aero material is layered on in heroui-glass.css.
+ * It is a native element. HeroUI's stylesheet answers `:hover`, `:active`,
+ * `:focus-visible` and `:disabled` beside its `data-*` forms, so the control
+ * needs none of React Aria's press handling, and every prop a button takes
+ * (title, role, tabIndex, pointer and mouse handlers, ref) reaches the element
+ * untouched. What is left here is the mapping from this app's variant and size
+ * names, and the few sizes HeroUI has no name for.
+ */
+const HERO_VARIANT = {
+  default: "primary",
+  destructive: "danger",
+  outline: "outline",
+  secondary: "secondary",
+  ghost: "ghost",
+  link: "ghost",
+} as const
+
+const HERO_SIZE = {
+  default: "md",
+  xs: "sm",
+  sm: "sm",
+  lg: "lg",
+  icon: "md",
+  "icon-xs": "sm",
+  "icon-sm": "sm",
+  "icon-lg": "lg",
+} as const
+
+type Variant = keyof typeof HERO_VARIANT
+type Size = keyof typeof HERO_SIZE
+
+const isIconSize = (size: Size) => size.startsWith("icon")
+
+/** What HeroUI's own variant classes do not already say. */
+const buttonExtras = cva(
+  "shrink-0 gap-2 text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
-        outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "text-primary underline-offset-4 hover:underline",
+        default: "",
+        destructive: "",
+        outline: "",
+        secondary: "",
+        ghost: "",
+        link: "text-[var(--accent)] underline-offset-4 hover:bg-transparent hover:underline data-[hovered=true]:bg-transparent data-[pressed=true]:bg-transparent",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
-        "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-8",
-        "icon-lg": "size-10",
+        default: "",
+        xs: "h-6 gap-1 px-2 text-xs md:h-6 [&_svg:not([class*='size-'])]:size-3",
+        sm: "",
+        lg: "",
+        icon: "",
+        "icon-xs": "size-6 md:size-6 [&_svg:not([class*='size-'])]:size-3",
+        "icon-sm": "",
+        "icon-lg": "",
       },
     },
     defaultVariants: {
@@ -38,27 +70,37 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
-  className,
+/** The class list a plain element needs to look like this button. */
+function nativeClassName(variant: Variant, size: Size, className?: string) {
+  return cn(
+    "button",
+    `button--${HERO_SIZE[size]}`,
+    `button--${HERO_VARIANT[variant]}`,
+    isIconSize(size) && "button--icon-only",
+    buttonExtras({ variant, size }),
+    className,
+  )
+}
+
+/** The class list for anything that should look like a button (a link, a slotted child). */
+function buttonVariants({
   variant = "default",
   size = "default",
-  asChild = false,
-  ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-  }) {
-  const Comp = asChild ? Slot.Root : "button"
+  className,
+}: VariantProps<typeof buttonExtras> & { className?: string } = {}) {
+  return nativeClassName(variant ?? "default", size ?? "default", className)
+}
 
-  return (
-    <Comp
-      data-slot="button"
-      data-variant={variant}
-      data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  )
+type ButtonProps = React.ComponentProps<"button"> &
+  VariantProps<typeof buttonExtras> & {
+    asChild?: boolean
+  }
+
+function Button({ className, variant = "default", size = "default", asChild = false, ...props }: ButtonProps) {
+  const v: Variant = variant ?? "default"
+  const s: Size = size ?? "default"
+  const Comp = asChild ? Slot.Root : "button"
+  return <Comp data-slot="button" data-variant={v} data-size={s} className={nativeClassName(v, s, className)} {...props} />
 }
 
 export { Button, buttonVariants }

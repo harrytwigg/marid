@@ -10,14 +10,14 @@ import { registerRoutePrefetch } from './lib/route-prefetch'
 import { startKeyboardInset } from './platform'
 import { RouteLoading } from './components/route-loading'
 import { RouteFailure } from './components/route-failure'
+import { AriaRouter } from './components/ui/aria-router'
 import { TodosIndexRedirect, todosIndexLoader } from './routes/todos/board/todos-index-redirect'
 import { LegacyChatRedirect } from './routes/chat/legacy-chat-redirect'
 import { useFeatures } from './hooks/use-features'
 import { APP_ROUTES, type AppRouteId } from './lib/app-routes'
 import type { NativeGatewayProfiles, NativeGatewayProfilesSnapshot } from './lib/native-gateway-profiles'
 import { nativeBridge } from './platform/native-bridge'
-import './routes/globals.css'
-import './routes/theme-overrides.css'
+import './routes/app.css'
 import './routes/glass-identity.css'
 
 let profiles: NativeGatewayProfiles | undefined
@@ -86,11 +86,13 @@ function AppShell() {
     () => 0,
   )
   return (
-    <ClientProviders key={`gateway:${generation}`}>
-      <Suspense fallback={<RouteLoading />}>
-        <Outlet />
-      </Suspense>
-    </ClientProviders>
+    <AriaRouter>
+      <ClientProviders key={`gateway:${generation}`}>
+        <Suspense fallback={<RouteLoading />}>
+          <Outlet />
+        </Suspense>
+      </ClientProviders>
+    </AriaRouter>
   )
 }
 
@@ -150,7 +152,8 @@ const appRoutes: RouteObject[] = APP_ROUTES.flatMap((route) => {
 const router = createBrowserRouter([
   {
     element: <AppShell />,
-    errorElement: <RouteFailure />,
+    // Outside AppShell, so it needs its own router provider for a link in it.
+    errorElement: <AriaRouter><RouteFailure /></AriaRouter>,
     children: [
       ...appRoutes,
       // A plugin's page, last and on the splat so the app's own routes are

@@ -1,89 +1,128 @@
-
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Tabs as TabsPrimitive } from "radix-ui"
+import { Tabs as HeroTabs } from "@heroui/react/tabs"
 
 import { cn } from "@/lib/utils"
 
-function Tabs({
-  className,
-  orientation = "horizontal",
-  ...props
-}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+/**
+ * Same parts and props as ever (`value`, `onValueChange`, a trigger and its
+ * content paired by `value`), drawn by HeroUI's Tabs: the value is a React Aria
+ * key, a trigger is a Tab, content is a Panel, and the arrow keys, Home and End
+ * move between triggers. `default` is HeroUI's pill list, `line` its underline.
+ * Tabs keep React Aria (a native element has no roving arrow-key behaviour), so
+ * a route that renders them carries it.
+ */
+type Orientation = "horizontal" | "vertical"
+type ListVariant = "default" | "line"
+
+const tabsListVariants = cva("tabs__list", {
+  variants: {
+    variant: {
+      default: "",
+      line: "",
+    },
+  },
+  defaultVariants: {
+    variant: "default",
+  },
+})
+
+interface TabsState {
+  orientation: Orientation
+  variant: ListVariant
+  setVariant: (variant: ListVariant) => void
+}
+
+/**
+ * HeroUI's Tabs reads the variant off its root, while this API gives it to the
+ * list, so the list says which one it is and the root restyles itself.
+ */
+const TabsContext = React.createContext<TabsState | null>(null)
+
+type TabsProps = Omit<React.ComponentProps<"div">, "defaultValue" | "onChange"> & {
+  value?: string
+  defaultValue?: string
+  onValueChange?: (value: string) => void
+  orientation?: Orientation
+}
+
+function Tabs({ value, defaultValue, onValueChange, orientation = "horizontal", children, ...props }: TabsProps) {
+  const [variant, setVariant] = React.useState<ListVariant>("default")
+  const state = React.useMemo<TabsState>(() => ({ orientation, variant, setVariant }), [orientation, variant])
+  const Root = HeroTabs as unknown as React.ComponentType<Record<string, unknown>>
   return (
-    <TabsPrimitive.Root
-      data-slot="tabs"
-      data-orientation={orientation}
-      orientation={orientation}
-      className={cn(
-        "group/tabs flex gap-2 data-[orientation=horizontal]:flex-col",
-        className
-      )}
-      {...props}
-    />
+    <TabsContext.Provider value={state}>
+      <Root
+        data-slot="tabs"
+        orientation={orientation}
+        variant={variant === "line" ? "secondary" : "primary"}
+        {...(value === undefined ? { defaultSelectedKey: defaultValue } : { selectedKey: value })}
+        onSelectionChange={(key: React.Key) => onValueChange?.(String(key))}
+        {...props}
+      >
+        {children}
+      </Root>
+    </TabsContext.Provider>
   )
 }
 
-const tabsListVariants = cva(
-  "rounded-lg p-[3px] group-data-[orientation=horizontal]/tabs:h-9 data-[variant=line]:rounded-none group/tabs-list text-muted-foreground inline-flex w-fit items-center justify-center group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
-  {
-    variants: {
-      variant: {
-        default: "bg-muted",
-        line: "gap-1 bg-transparent",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-)
+function useTabsState() {
+  const state = React.useContext(TabsContext)
+  if (!state) throw new Error("Tabs parts must be rendered inside <Tabs>")
+  return state
+}
 
 function TabsList({
   className,
   variant = "default",
+  children,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.List> &
-  VariantProps<typeof tabsListVariants>) {
+}: React.ComponentProps<"div"> & VariantProps<typeof tabsListVariants>) {
+  const { setVariant } = useTabsState()
+  const v: ListVariant = variant ?? "default"
+  React.useLayoutEffect(() => setVariant(v), [setVariant, v])
   return (
-    <TabsPrimitive.List
-      data-slot="tabs-list"
-      data-variant={variant}
-      className={cn(tabsListVariants({ variant }), className)}
-      {...props}
-    />
+    <HeroTabs.ListContainer>
+      <HeroTabs.List data-slot="tabs-list" data-variant={v} className={className} {...(props as Record<string, unknown>)}>
+        {children as React.ReactNode}
+      </HeroTabs.List>
+    </HeroTabs.ListContainer>
   )
 }
 
 function TabsTrigger({
   className,
+  value,
+  disabled,
+  children,
+  onClick,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+}: Omit<React.ComponentProps<"button">, "value"> & { value: string }) {
   return (
-    <TabsPrimitive.Trigger
+    <HeroTabs.Tab
       data-slot="tabs-trigger"
-      className={cn(
-        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-foreground/60 hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-all group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 group-data-[variant=default]/tabs-list:data-[state=active]:shadow-sm group-data-[variant=line]/tabs-list:data-[state=active]:shadow-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        "group-data-[variant=line]/tabs-list:bg-transparent group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent dark:group-data-[variant=line]/tabs-list:data-[state=active]:border-transparent dark:group-data-[variant=line]/tabs-list:data-[state=active]:bg-transparent",
-        "data-[state=active]:bg-background dark:data-[state=active]:text-foreground dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 data-[state=active]:text-foreground",
-        "after:bg-foreground after:absolute after:opacity-0 after:transition-opacity group-data-[orientation=horizontal]/tabs:after:inset-x-0 group-data-[orientation=horizontal]/tabs:after:bottom-[-5px] group-data-[orientation=horizontal]/tabs:after:h-0.5 group-data-[orientation=vertical]/tabs:after:inset-y-0 group-data-[orientation=vertical]/tabs:after:-right-1 group-data-[orientation=vertical]/tabs:after:w-0.5 group-data-[variant=line]/tabs-list:data-[state=active]:after:opacity-100",
-        className
-      )}
-      {...props}
-    />
+      id={value}
+      isDisabled={disabled}
+      className={className}
+      onClick={onClick as never}
+      {...(props as Record<string, unknown>)}
+    >
+      {children}
+      <HeroTabs.Indicator />
+    </HeroTabs.Tab>
   )
 }
 
 function TabsContent({
   className,
+  value,
+  children,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Content>) {
+}: Omit<React.ComponentProps<"div">, "children"> & { value: string; children?: React.ReactNode }) {
   return (
-    <TabsPrimitive.Content
-      data-slot="tabs-content"
-      className={cn("flex-1 outline-none", className)}
-      {...props}
-    />
+    <HeroTabs.Panel data-slot="tabs-content" id={value} className={cn("flex-1 outline-none", className)} {...(props as Record<string, unknown>)}>
+      {children}
+    </HeroTabs.Panel>
   )
 }
 

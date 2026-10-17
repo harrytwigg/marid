@@ -1,5 +1,6 @@
 import { Check, Minus, X } from "lucide-react"
 import type { Employee } from "@/lib/api"
+import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
 
 /* design-cron §2 — shared grammar for the Cron list + detail: the wire types
  * the gateway's read tier actually returns (compact by design — prompt/env are
@@ -84,24 +85,15 @@ export function ToggleSwitch({
   onChange: (v: boolean) => void
   label: string
 }) {
+  // The row it sits in is 24px of switch tall and has never given it more.
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={(e) => {
-        e.stopPropagation()
-        onChange(!checked)
-      }}
-      className="relative h-[24px] w-[44px] flex-none cursor-pointer rounded-[12px] border-none transition-[background] duration-200 ease-[var(--ease-smooth)]"
-      style={{ background: checked ? "var(--system-green)" : "var(--fill-primary)" }}
-    >
-      <span
-        className="absolute top-[2px] size-[20px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-[left] duration-200 ease-[var(--ease-spring)]"
-        style={{ left: checked ? 22 : 2 }}
-      />
-    </button>
+    <UiToggleSwitch
+      checked={checked}
+      onChange={onChange}
+      label={label}
+      onClick={(e) => e.stopPropagation()}
+      targetClassName="min-h-[24px] min-w-[44px] justify-center"
+    />
   )
 }
 

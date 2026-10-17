@@ -1,3 +1,5 @@
+import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
+
 // ---------------------------------------------------------------------------
 // Section wrapper using CSS variable styling
 // ---------------------------------------------------------------------------
@@ -127,29 +129,5 @@ export function ToggleSwitch({
   /** A switch mid-write: not clickable and not keyboard-toggleable either. */
   disabled?: boolean
 }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className="relative h-[40px] md:h-[34px] w-[44px] shrink-0 cursor-pointer rounded-[17px] border-none bg-transparent"
-    >
-      <span
-        aria-hidden="true"
-        className="absolute inset-x-0 top-1/2 h-[24px] -translate-y-1/2 rounded-[12px] transition-[background] duration-200 ease-[var(--ease-smooth)]"
-        style={{
-          background: checked ? "var(--system-green)" : "var(--fill-primary)",
-        }}
-      />
-      <span
-        aria-hidden="true"
-        className="absolute top-1/2 h-[20px] w-[20px] -translate-y-1/2 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-[left] duration-200 ease-[var(--ease-spring)]"
-        style={{
-          left: checked ? 22 : 2,
-        }}
-      />
-    </button>
-  )
+  return <UiToggleSwitch checked={checked} onChange={onChange} label={ariaLabel} disabled={disabled} />
 }

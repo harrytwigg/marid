@@ -16,7 +16,7 @@ export const SCOPE_TEXT: Record<DepartmentScopeWire, { name: string; body: strin
 
 const OPTIONS = (["open", "scoped", "dedicated"] as const).map((value) => ({ value, label: SCOPE_TEXT[value].name }))
 const MUTED = "m-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]"
-const BUTTON = "focus-ring min-h-9 cursor-pointer rounded-full border-none px-4 py-1.5 text-[length:var(--text-footnote)] font-[var(--weight-medium)] outline-none disabled:cursor-default disabled:opacity-50"
+const BUTTON = "focus-outline min-h-9 cursor-pointer rounded-full border-none px-4 py-1.5 text-[length:var(--text-footnote)] font-[var(--weight-medium)] outline-none disabled:cursor-default disabled:opacity-50"
 /** `system` and `org` hold the company's own employees and cannot be scoped. */
 const UNSCOPABLE = new Set(["system", "org"])
 

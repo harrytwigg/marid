@@ -753,7 +753,7 @@ export const CliTerminal = forwardRef<CliTerminalHandle, CliTerminalProps>(funct
               className="min-h-10 shrink-0 rounded-lg px-3 transition-transform active:scale-[0.96]"
               style={{
                 background: "var(--accent)",
-                color: "var(--accent-foreground)",
+                color: "var(--accent-contrast)",
                 fontFamily: "var(--font-code)",
                 fontSize: 12,
                 cursor: "pointer",

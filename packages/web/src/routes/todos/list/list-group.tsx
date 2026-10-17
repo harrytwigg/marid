@@ -33,7 +33,7 @@ export function TodoListGroupHeader({
           type="button"
           aria-expanded={open}
           onClick={onToggle}
-          className="focus-ring -ml-1 flex min-h-[34px] min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-sm)] px-1 text-left outline-none"
+          className="focus-outline -ml-1 flex min-h-[34px] min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-sm)] px-1 text-left outline-none"
         >
           <ChevronDown
             size={13}
@@ -54,7 +54,7 @@ export function TodoListGroupHeader({
         data-testid={`todo-list-add-${group.key}`}
         aria-label={`Add Todo from ${group.label}`}
         onClick={onQuickAdd}
-        className="focus-ring -mr-1 grid size-9 flex-none place-items-center rounded-full text-[var(--text-quaternary)] outline-none transition-[background-color,color,scale] duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)] active:scale-[0.96]"
+        className="focus-outline -mr-1 grid size-9 flex-none place-items-center rounded-full text-[var(--text-quaternary)] outline-none transition-[background-color,color,scale] duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)] active:scale-[0.96]"
       >
         <Plus size={15} strokeWidth={2.2} aria-hidden />
       </button>
@@ -81,7 +81,7 @@ export function TodoListShowMore({
       data-testid={`todo-list-show-more-${group.key}`}
       disabled={loadingMore}
       onClick={onLoadMore}
-      className="focus-ring mt-1 min-h-10 rounded-[var(--radius-md)] px-2.5 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] disabled:opacity-50"
+      className="focus-outline mt-1 min-h-10 rounded-[var(--radius-md)] px-2.5 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-quaternary)] disabled:opacity-50"
     >
       {loadingMore ? "Loading…" : "Show more"}
     </button>
