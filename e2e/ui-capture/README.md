@@ -52,7 +52,7 @@ captured. Keep the shots out of the repository.
 | `JINN_CAPTURE_NODE` | node beside pnpm | Node binary for the sandbox and scripts. |
 | `JINN_CAPTURE_BROWSER` | `firefox` | `firefox` or `chromium`. Use the same one for both sides. |
 | `JINN_CAPTURE_KEEP_DRI` | unset | Set to leave `/dev/dri` visible to Chromium. |
-| `JINN_CAPTURE_TRANSPARENCY` | unset | `reduced` sets `data-transparency="reduced"` on `<html>` after load. Use a separate out-dir. |
+| `JINN_CAPTURE_TRANSPARENCY` | unset | `reduced` photographs with Reduced selected in the persisted settings, checks the root was marked at DOMContentLoaded, and keeps first-paint frames in `firstpaint/`. Use a separate out-dir. |
 | `JINN_SHEET_LABELS` | `Before,After` | Column names for `sheet.mjs`, e.g. `Firefox,Chromium` to compare two browsers. |
 
 Firefox is the default. Both render `backdrop-filter` and `light-dark()`.
