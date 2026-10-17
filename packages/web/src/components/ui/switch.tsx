@@ -1,11 +1,6 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
-import { createLazyHeroUI } from "./heroui-lazy"
-
-import type { HeroSwitch as HeroSwitchType } from "./switch-heroui"
-
-const heroSwitch = createLazyHeroUI(() => import("./switch-heroui"))
 
 type SwitchProps = Omit<React.ComponentProps<"button">, "onChange" | "value" | "type"> & {
   checked?: boolean
@@ -23,81 +18,28 @@ type SwitchProps = Omit<React.ComponentProps<"button">, "onChange" | "value" | "
 }
 
 /**
- * Same shape as ever (`checked`, `onCheckedChange`), drawn by HeroUI's Switch.
- * The input underneath is a native checkbox with role=switch, so the checked
+ * Same shape as ever (`checked`, `onCheckedChange`), in HeroUI's switch markup
+ * and classes. The input is a native checkbox with role=switch, so the checked
  * state is `checked`, not `aria-checked`, and a form can submit it by `name`.
+ * HeroUI's stylesheet keys the track on `data-selected` and `data-disabled` at
+ * the root and answers `:hover` and `:active` itself; the focus ring is drawn
+ * from the input's `:focus-visible` in heroui-glass.css.
  */
-function Switch({ checked, defaultChecked, onCheckedChange, ...props }: SwitchProps) {
-  const hero = heroSwitch.use()
+function Switch({
+  className,
+  targetClassName,
+  checked,
+  defaultChecked,
+  onCheckedChange,
+  disabled,
+  required,
+  name,
+  value,
+  id,
+  ...rest
+}: SwitchProps) {
   const [uncontrolled, setUncontrolled] = React.useState(defaultChecked ?? false)
   const selected = checked ?? uncontrolled
-  const change = (next: boolean) => {
-    setUncontrolled(next)
-    onCheckedChange?.(next)
-  }
-  const shared = { ...props, selected, change }
-  return hero ? <LoadedSwitch hero={hero.HeroSwitch} {...shared} /> : <PlainSwitch {...shared} />
-}
-
-type ViewProps = Omit<SwitchProps, "onCheckedChange" | "checked" | "defaultChecked"> & {
-  selected: boolean
-  change: (next: boolean) => void
-}
-
-function LoadedSwitch({
-  hero: Hero,
-  selected,
-  change,
-  disabled,
-  required,
-  name,
-  value,
-  id,
-  className,
-  targetClassName,
-  ...rest
-}: ViewProps & { hero: typeof HeroSwitchType }) {
-  const { aria, data, onClick } = splitProps(rest)
-  return (
-    <Hero
-      data-slot="switch"
-      // `isSelected` is held here for both kinds of switch, so one that was
-      // given a defaultChecked still keeps its state across the swap.
-      isSelected={selected}
-      onChange={change}
-      isDisabled={disabled}
-      isRequired={required}
-      name={name}
-      value={value}
-      size="lg"
-      id={id}
-      className={cn("shrink-0", className)}
-      onClick={onClick as never}
-      {...aria}
-      {...data}
-    >
-      <Hero.Content className={targetClassName}>
-        <Hero.Control>
-          <Hero.Thumb />
-        </Hero.Control>
-      </Hero.Content>
-    </Hero>
-  )
-}
-
-/** Not loaded yet: the same markup, from plain elements, in HeroUI's classes. */
-function PlainSwitch({
-  selected,
-  change,
-  disabled,
-  required,
-  name,
-  value,
-  id,
-  className,
-  targetClassName,
-  ...rest
-}: ViewProps) {
   const { aria, data, onClick } = splitProps(rest)
   return (
     <div
@@ -120,7 +62,10 @@ function PlainSwitch({
           required={required}
           name={name}
           value={value}
-          onChange={(event) => change(event.target.checked)}
+          onChange={(event) => {
+            setUncontrolled(event.target.checked)
+            onCheckedChange?.(event.target.checked)
+          }}
         />
         <span data-slot="switch-control" className="switch__control">
           <span data-slot="switch-thumb" className="switch__thumb" />

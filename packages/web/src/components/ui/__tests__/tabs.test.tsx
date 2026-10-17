@@ -1,13 +1,8 @@
-import { act, render, screen } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { useState } from "react"
-import { afterEach, describe, expect, it, vi } from "vitest"
-import { preloadHeroUI, resetHeroUIForTests } from "../heroui-lazy"
+import { describe, expect, it, vi } from "vitest"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../tabs"
-
-afterEach(async () => {
-  await preloadHeroUI()
-})
 
 function Demo({ onValueChange, variant }: { onValueChange?: (value: string) => void; variant?: "default" | "line" }) {
   return (
@@ -115,25 +110,5 @@ describe("Tabs", () => {
     expect(document.querySelector('[data-slot="tabs"]')!.className).toContain("mine")
     expect(screen.getByRole("tab").className).toContain("trigger")
     expect(screen.getByRole("tabpanel").className).toContain("content")
-  })
-})
-
-describe("Tabs before React Aria has loaded", () => {
-  it("draws plain tabs that switch on a click, then hands over without losing the selection", async () => {
-    resetHeroUIForTests()
-    const onValueChange = vi.fn()
-    const { container } = render(<Demo onValueChange={onValueChange} />)
-
-    expect(container.querySelector("[data-rac]")).toBeNull()
-    await userEvent.click(screen.getByRole("tab", { name: "Beta" }))
-    expect(onValueChange).toHaveBeenLastCalledWith("b")
-    expect(screen.getByRole("tabpanel").textContent).toBe("Beta panel")
-
-    await act(async () => {
-      await preloadHeroUI()
-    })
-    expect(container.querySelector("[data-rac]")).not.toBeNull()
-    expect(screen.getByRole("tab", { name: "Beta" }).getAttribute("aria-selected")).toBe("true")
-    expect(screen.getByRole("tabpanel").textContent).toBe("Beta panel")
   })
 })

@@ -3,13 +3,16 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
-import { createLazyHeroUI } from "./heroui-lazy"
 
 /**
  * The button's look is HeroUI's: the `button` classes (variant and size) come
  * from its stylesheet, and the Aero material is layered on in heroui-glass.css.
- * What is left here is the mapping from this app's variant and size names, and
- * the few sizes HeroUI has no name for.
+ * It is a native element. HeroUI's stylesheet answers `:hover`, `:active`,
+ * `:focus-visible` and `:disabled` beside its `data-*` forms, so the control
+ * needs none of React Aria's press handling, and every prop a button takes
+ * (title, role, tabIndex, pointer and mouse handlers, ref) reaches the element
+ * untouched. What is left here is the mapping from this app's variant and size
+ * names, and the few sizes HeroUI has no name for.
  */
 const HERO_VARIANT = {
   default: "primary",
@@ -88,76 +91,16 @@ function buttonVariants({
   return nativeClassName(variant ?? "default", size ?? "default", className)
 }
 
-const heroButton = createLazyHeroUI(() => import("./button-heroui"))
-
 type ButtonProps = React.ComponentProps<"button"> &
   VariantProps<typeof buttonExtras> & {
     asChild?: boolean
   }
 
-/**
- * React Aria's Button forwards only the DOM props it knows, and these are three
- * a button here has always carried. They are written onto the element instead.
- */
-function useKeptAttributes(
-  ref: React.Ref<HTMLButtonElement> | undefined,
-  { title, role, tabIndex }: Pick<React.ComponentProps<"button">, "title" | "role" | "tabIndex">,
-) {
-  const node = React.useRef<HTMLButtonElement | null>(null)
-  const setRef = React.useCallback(
-    (element: HTMLButtonElement | null) => {
-      node.current = element
-      if (typeof ref === "function") ref(element)
-      else if (ref) ref.current = element
-    },
-    [ref],
-  )
-  React.useLayoutEffect(() => {
-    const element = node.current
-    if (!element) return
-    if (title !== undefined) element.title = title
-    if (role !== undefined) element.setAttribute("role", role)
-    if (tabIndex !== undefined) element.tabIndex = tabIndex
-  })
-  return setRef
-}
-
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  asChild = false,
-  disabled,
-  type = "submit",
-  ref,
-  ...props
-}: ButtonProps) {
-  const hero = heroButton.use()
-  const kept = useKeptAttributes(ref, props)
+function Button({ className, variant = "default", size = "default", asChild = false, ...props }: ButtonProps) {
   const v: Variant = variant ?? "default"
   const s: Size = size ?? "default"
-  const marks = { "data-slot": "button", "data-variant": v, "data-size": s }
-
-  if (asChild) {
-    return <Slot.Root {...marks} ref={ref} className={nativeClassName(v, s, className)} {...props} />
-  }
-  if (hero) {
-    const Hero = hero.HeroButton as React.ComponentType<Record<string, unknown>>
-    return (
-      <Hero
-        {...marks}
-        variant={HERO_VARIANT[v]}
-        size={HERO_SIZE[s]}
-        isIconOnly={isIconSize(s)}
-        isDisabled={disabled}
-        type={type}
-        ref={kept}
-        className={cn(buttonExtras({ variant: v, size: s }), className)}
-        {...props}
-      />
-    )
-  }
-  return <button {...marks} ref={ref} type={type} disabled={disabled} className={nativeClassName(v, s, className)} {...props} />
+  const Comp = asChild ? Slot.Root : "button"
+  return <Comp data-slot="button" data-variant={v} data-size={s} className={nativeClassName(v, s, className)} {...props} />
 }
 
 export { Button, buttonVariants }

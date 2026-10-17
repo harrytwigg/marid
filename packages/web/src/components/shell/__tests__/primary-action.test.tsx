@@ -132,10 +132,9 @@ describe("PrimaryAction", () => {
       return screen.getByTestId("new") as HTMLButtonElement
     }
 
-    it("is a HeroUI button that keeps its slot, test id and desktop-only display", () => {
+    it("is a HeroUI-classed button that keeps its slot, test id and desktop-only display", () => {
       const trailing = renderTrailing()
 
-      expect(trailing.hasAttribute("data-rac")).toBe(true)
       expect(trailing.className).toContain("button--secondary")
       expect(trailing.dataset.slot).toBe(PRIMARY_ACTION_SLOT)
       expect(trailing.dataset.primaryAction).toBe("trailing")

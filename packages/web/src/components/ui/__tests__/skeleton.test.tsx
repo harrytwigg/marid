@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest"
 import { Skeleton } from "../skeleton"
 
 describe("Skeleton", () => {
-  it("is HeroUI's skeleton, sized by width and height", () => {
+  it("is HeroUI's skeleton classes on a div, sized by width and height", () => {
     const { container } = render(<Skeleton width={120} height="1.5rem" className="mine" data-testid="s" />)
     const skeleton = container.firstElementChild as HTMLElement
 
-    expect(skeleton.className).toContain("skeleton")
+    expect(skeleton.className).toContain("skeleton skeleton--shimmer")
+    expect(skeleton.tagName).toBe("DIV")
     expect(skeleton.className).toContain("mine")
     expect(skeleton.style.width).toBe("120px")
     expect(skeleton.style.height).toBe("1.5rem")

@@ -1,13 +1,8 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { useState } from "react"
-import { afterEach, describe, expect, it, vi } from "vitest"
-import { preloadHeroUI, resetHeroUIForTests } from "../heroui-lazy"
+import { describe, expect, it, vi } from "vitest"
 import { Switch } from "../switch"
-
-afterEach(async () => {
-  await preloadHeroUI()
-})
 
 const input = (name: string) => screen.getByRole("switch", { name }) as HTMLInputElement
 
@@ -47,17 +42,23 @@ describe("Switch", () => {
     expect(input("Notify").checked).toBe(false)
   })
 
-  it("marks the root selected, which is what turns the track on", () => {
-    const { container } = render(<Switch aria-label="Notify" checked />)
-    expect(container.querySelector('[data-slot="switch"]')!.getAttribute("data-selected")).toBe("true")
+  it("marks the root selected or disabled, which is what HeroUI's stylesheet keys the track on", () => {
+    const { container, rerender } = render(<Switch aria-label="Notify" checked />)
+    const root = () => container.querySelector('[data-slot="switch"]')!
+    expect(root().getAttribute("data-selected")).toBe("true")
+    expect(root().hasAttribute("data-disabled")).toBe(false)
+
+    rerender(<Switch aria-label="Notify" checked={false} disabled />)
+    expect(root().hasAttribute("data-selected")).toBe(false)
+    expect(root().getAttribute("data-disabled")).toBe("true")
   })
 
-  it("marks keyboard focus as focus-visible on the label that carries the ring", async () => {
+  it("is reached by Tab on the input inside the label, where :focus-visible draws the ring", async () => {
     render(<Switch aria-label="Notify" checked={false} />)
 
     await userEvent.tab()
     expect(document.activeElement).toBe(input("Notify"))
-    expect(input("Notify").closest('[data-slot="switch-content"]')!.getAttribute("data-focus-visible")).toBe("true")
+    expect(input("Notify").closest('[data-slot="switch-content"]')).not.toBeNull()
   })
 
   it("can neither be clicked nor toggled from the keyboard when disabled", async () => {
@@ -86,29 +87,5 @@ describe("Switch", () => {
   it("accepts a bigger press target around the track", () => {
     render(<Switch aria-label="Notify" targetClassName="min-h-[40px]" />)
     expect(input("Notify").closest('[data-slot="switch-content"]')!.className).toContain("min-h-[40px]")
-  })
-})
-
-describe("Switch before React Aria has loaded", () => {
-  it("draws the same markup from plain elements, and a toggle in that window still counts", async () => {
-    resetHeroUIForTests()
-    const onCheckedChange = vi.fn()
-    function Controlled() {
-      const [on, setOn] = useState(false)
-      return <Switch aria-label="Notify" checked={on} onCheckedChange={(next) => { onCheckedChange(next); setOn(next) }} />
-    }
-    const { container } = render(<Controlled />)
-
-    expect(container.querySelector("[data-rac]")).toBeNull()
-    expect(container.querySelector(".switch__control .switch__thumb")).not.toBeNull()
-    fireEvent.click(input("Notify"))
-    expect(onCheckedChange).toHaveBeenLastCalledWith(true)
-    expect(container.querySelector('[data-slot="switch"]')!.getAttribute("data-selected")).toBe("true")
-
-    await act(async () => {
-      await preloadHeroUI()
-    })
-    expect(container.querySelector("[data-rac]")).not.toBeNull()
-    expect(input("Notify").checked).toBe(true)
   })
 })

@@ -1,20 +1,15 @@
-import { act, fireEvent, render, screen } from "@testing-library/react"
-import { createRef } from "react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { createRef } from "react"
+import { describe, expect, it, vi } from "vitest"
 import { Button, buttonVariants } from "../button"
-import { preloadHeroUI, resetHeroUIForTests } from "../heroui-lazy"
-
-afterEach(async () => {
-  await preloadHeroUI()
-})
 
 describe("Button", () => {
-  it("is a React Aria button drawn in HeroUI's variant and size classes", () => {
+  it("is a native button drawn in HeroUI's variant and size classes", () => {
     render(<Button variant="destructive" size="lg">Delete</Button>)
     const button = screen.getByRole("button", { name: "Delete" })
 
-    expect(button.hasAttribute("data-rac")).toBe(true)
+    expect(button.tagName).toBe("BUTTON")
     expect(button.className).toContain("button--danger")
     expect(button.className).toContain("button--lg")
     expect(button.dataset.variant).toBe("destructive")
@@ -46,7 +41,7 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "icon-xs" }).className).toContain("size-6")
   })
 
-  it("passes onClick the DOM event once per click, and a keyboard press clicks too", async () => {
+  it("runs onClick from a click and from Enter and Space, with the DOM event", async () => {
     let target: EventTarget | null = null
     const onClick = vi.fn((event: React.MouseEvent) => {
       target = event.currentTarget
@@ -64,29 +59,11 @@ describe("Button", () => {
     expect(onClick).toHaveBeenCalledTimes(3)
   })
 
-  it("marks keyboard focus as focus-visible, which is what draws the ring, and pointer focus as not", async () => {
+  it("is reached by Tab, which is what :focus-visible (HeroUI's ring) answers", async () => {
     render(<Button>Save</Button>)
-    const button = screen.getByRole("button", { name: "Save" })
 
     await userEvent.tab()
-    expect(document.activeElement).toBe(button)
-    expect(button.getAttribute("data-focus-visible")).toBe("true")
-
-    await userEvent.tab()
-    await userEvent.click(button)
-    expect(button.getAttribute("data-focus-visible")).toBeNull()
-  })
-
-  it("marks a press with data-pressed while it is held, and clears it on release", async () => {
-    render(<Button>Save</Button>)
-    const button = screen.getByRole("button", { name: "Save" })
-
-    await userEvent.pointer({ keys: "[MouseLeft>]", target: button })
-    expect(button.getAttribute("data-pressed")).toBe("true")
-    fireEvent.mouseUp(document.body)
-    fireEvent.pointerUp(document.body, { pointerType: "mouse", button: 0 })
-    await userEvent.click(button)
-    expect(button.getAttribute("data-pressed")).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Save" }))
   })
 
   it("does nothing when disabled, from the pointer or the keyboard", async () => {
@@ -101,7 +78,7 @@ describe("Button", () => {
     expect(onClick).not.toHaveBeenCalled()
   })
 
-  it("keeps the native defaults: a button submits its form unless told otherwise", () => {
+  it("keeps the native default: a button submits its form unless told otherwise", () => {
     const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault())
     render(
       <form onSubmit={onSubmit}>
@@ -116,10 +93,23 @@ describe("Button", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
-  it("forwards the props a button carries, including the ones React Aria drops", () => {
+  it("passes every prop a button takes straight to the element, pointer handlers included", () => {
     const ref = createRef<HTMLButtonElement>()
+    const onMouseDown = vi.fn((event: React.MouseEvent) => event.preventDefault())
+    const onPointerDown = vi.fn()
     render(
-      <Button ref={ref} title="Saves" role="menuitem" tabIndex={-1} data-testid="save" aria-label="Save it" className="extra">
+      <Button
+        ref={ref}
+        title="Saves"
+        role="menuitem"
+        tabIndex={-1}
+        draggable
+        data-testid="save"
+        aria-label="Save it"
+        className="extra"
+        onMouseDown={onMouseDown}
+        onPointerDown={onPointerDown}
+      >
         x
       </Button>,
     )
@@ -129,8 +119,15 @@ describe("Button", () => {
     expect(button.getAttribute("title")).toBe("Saves")
     expect(button.getAttribute("role")).toBe("menuitem")
     expect(button.tabIndex).toBe(-1)
+    expect(button.draggable).toBe(true)
     expect(button.getAttribute("aria-label")).toBe("Save it")
     expect(button.className).toContain("extra")
+
+    // A button that keeps focus in a field by cancelling mousedown still can.
+    const prevented = !fireEvent.mouseDown(button)
+    fireEvent.pointerDown(button)
+    expect(prevented).toBe(true)
+    expect(onPointerDown).toHaveBeenCalledTimes(1)
   })
 
   it("lets asChild put the button's look on another element", () => {
@@ -147,28 +144,5 @@ describe("Button", () => {
 
   it("exposes the class list for non-React callers", () => {
     expect(buttonVariants({ variant: "secondary", size: "sm", className: "mine" })).toMatch(/button--secondary.*mine/)
-  })
-})
-
-describe("Button before React Aria has loaded", () => {
-  it("draws a plain button that looks and works the same, then swaps in place", async () => {
-    resetHeroUIForTests()
-    const onClick = vi.fn()
-    render(<Button variant="secondary" onClick={onClick}>Save</Button>)
-    const plain = screen.getByRole("button", { name: "Save" })
-
-    expect(plain.hasAttribute("data-rac")).toBe(false)
-    expect(plain.className).toContain("button--secondary")
-    fireEvent.click(plain)
-    expect(onClick).toHaveBeenCalledTimes(1)
-
-    await act(async () => {
-      await preloadHeroUI()
-    })
-    const loaded = screen.getByRole("button", { name: "Save" })
-    expect(loaded.hasAttribute("data-rac")).toBe(true)
-    expect(loaded.className).toContain("button--secondary")
-    fireEvent.click(loaded)
-    expect(onClick).toHaveBeenCalledTimes(2)
   })
 })

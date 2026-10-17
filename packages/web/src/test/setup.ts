@@ -1,6 +1,5 @@
 import { configure } from "@testing-library/react";
-import { beforeAll, beforeEach } from "vitest";
-import { preloadHeroUI } from "@/components/ui/heroui-lazy";
+import { beforeEach } from "vitest";
 
 /* `findBy*` and `waitFor` give up after 1s by default, which measures the
  * machine more than the app: under a full monorepo run — several vitest pools,
@@ -8,14 +7,6 @@ import { preloadHeroUI } from "@/components/ui/heroui-lazy";
  * miss that window, and the suite reports "unable to find" for an element that
  * arrived moments later. */
 configure({ asyncUtilTimeout: 5000 });
-
-/* HeroUI's controls load on demand and draw a plain stand-in until they do. A
- * suite should exercise the real controls from its first render, so whatever
- * adapters the file imported are loaded before its tests start. The adapters'
- * own tests reset this to look at the stand-ins. */
-beforeAll(async () => {
-  await preloadHeroUI();
-});
 
 /* React Aria's selection indicator (the sliding tab pill) asks the element for
  * its running animations, and its tab list builds selectors with CSS.escape.

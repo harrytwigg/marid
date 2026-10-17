@@ -5,9 +5,9 @@
  * HeroUI's, and a call site never restyles a control to get the look.
  */
 @layer components {
-  /* A control drawn before React Aria arrives is a plain element in HeroUI's
-     classes. These are the states React Aria would have marked with data
-     attributes, so the two look the same. */
+  /* Button, Switch, Input and Textarea are native elements in HeroUI's classes,
+     so what React Aria would mark with a data attribute is drawn from the
+     element's own state here. */
   .switch:has(input:focus-visible) .switch__control {
     @apply status-focused;
   }
