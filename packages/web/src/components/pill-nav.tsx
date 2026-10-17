@@ -6,7 +6,8 @@ import { useNavigation } from "@/lib/use-navigation"
 import { cn } from "@/lib/utils"
 import { useFeatures } from "@/hooks/use-features"
 import { prefetchRoute } from "@/lib/route-prefetch"
-import { PRODUCT_EMOJI, PRODUCT_NAME } from "@/lib/brand"
+import { PRODUCT_NAME } from "@/lib/brand"
+import { PortalMark } from "@/components/brand-mark"
 
 // ---------------------------------------------------------------------------
 // Frosted pill primitives (mockup _shared.css `.pill` recipe)
@@ -164,10 +165,6 @@ export function NavRibbon({
   const pathname = useLocation().pathname
   const { settings } = useSettings()
   const portalName = settings.portalName ?? PRODUCT_NAME
-  // Default brand mark carries U+FE0F so the genie always renders as a COLOR
-  // emoji (never a text-presentation glyph that would inherit the slot's text
-  // color and look faded — see the brand-mark color note below).
-  const emoji = settings.portalEmoji ?? `${PRODUCT_EMOJI}\u{FE0F}`
   // The Chat icon is OPEN-ONLY. While already on the chat route ("/") with the
   // list collapsed, a plain click reveals the list instead of firing a dead
   // same-route navigation. Not on "/" → the Link navigates as before; list
@@ -209,15 +206,15 @@ export function NavRibbon({
               aria-expanded={listOpen}
               className="relative flex size-11 items-center justify-center rounded-[12px] text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
             >
-              {/* Full-strength brand color (NOT the button's --text-secondary) +
-                  forced color-emoji presentation, so the genie — or a custom
-                  monochrome/letter portalEmoji — reads crisp at rest in BOTH
-                  themes instead of inheriting the muted secondary text token. */}
+              {/* The glass mark, or the operator's own glyph. A glyph gets
+                  full-strength brand color (NOT the button's --text-secondary)
+                  and forced color-emoji presentation, so a custom monochrome or
+                  letter mark reads crisp at rest in BOTH themes. */}
               <span
                 aria-hidden
                 className="absolute inset-0 flex items-center justify-center text-[26px] leading-none text-[var(--text-primary)] [font-variant-emoji:emoji] transition-opacity duration-150 group-hover/sidebar:opacity-0 group-focus-within/logo:opacity-0"
               >
-                {emoji}
+                <PortalMark size={32} />
               </span>
               <PanelLeft
                 size={22}
@@ -226,8 +223,8 @@ export function NavRibbon({
             </button>
           ) : (
             // Global (non-chat) rail: no list to fold, so the top slot is a plain
-            // brand mark that links home. Same full-strength color + forced
-            // color-emoji presentation as the chat variant — no toggle/morph.
+            // brand mark that links home. Same mark as the chat variant — no
+            // toggle/morph.
             <Link
               to="/" viewTransition
               onPointerEnter={() => prefetchRoute("/")}
@@ -240,7 +237,7 @@ export function NavRibbon({
                 aria-hidden
                 className="flex items-center justify-center text-[26px] leading-none text-[var(--text-primary)] [font-variant-emoji:emoji]"
               >
-                {emoji}
+                <PortalMark size={32} />
               </span>
             </Link>
           )}

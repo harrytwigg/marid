@@ -19,7 +19,8 @@ import { api, type ModelInfo } from "@/lib/api"
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { buildNewSessionParams } from "@/components/chat/new-chat-helpers"
 import { resolveTodoIdPrefix } from "@/lib/todo-id"
-import { PRODUCT_EMOJI, PRODUCT_NAME } from "@/lib/brand"
+import { PRODUCT_NAME } from "@/lib/brand"
+import { BrandMark } from "@/components/brand-mark"
 
 // ---------------------------------------------------------------------------
 // Accent color presets
@@ -309,10 +310,8 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
           WebkitBackdropFilter: "blur(40px) saturate(160%)",
         }}
       >
-        <div className="w-[72px] h-[72px] rounded-full bg-[var(--accent-fill)] flex items-center justify-center animate-pulse">
-          <span className="text-[44px] leading-none">{PRODUCT_EMOJI}</span>
-        </div>
-        <p className="text-[length:var(--text-title3)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
+        <BrandMark size={72} className="animate-pulse" />
+        <p className="brand-wordmark text-[length:var(--text-title3)] text-[var(--text-primary)]">
           Summoning {localName || PRODUCT_NAME}…
         </p>
       </div>
@@ -362,10 +361,8 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
               key="step-0"
               className="animate-fade-in text-center"
             >
-              <div className="mx-auto mb-[var(--space-4)] w-[72px] h-[72px] rounded-full bg-[var(--accent-fill)] flex items-center justify-center">
-                <span className="text-[44px] leading-none">{PRODUCT_EMOJI}</span>
-              </div>
-              <h2 className="text-[length:var(--text-title1)] font-[var(--weight-bold)] tracking-[var(--tracking-tight)] text-[var(--text-primary)] mb-[var(--space-2)]">
+              <BrandMark size={72} className="mx-auto mb-[var(--space-4)]" />
+              <h2 className="brand-wordmark text-[length:var(--text-title1)] text-[var(--text-primary)] mb-[var(--space-2)]">
                 Welcome to {localName || PRODUCT_NAME}
               </h2>
               <p className="text-[length:var(--text-subheadline)] text-[var(--text-secondary)] leading-[var(--leading-relaxed)] max-w-[380px] mx-auto mb-[var(--space-5)]">
