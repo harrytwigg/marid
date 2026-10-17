@@ -12,7 +12,9 @@
 //      directory, a host registry entry, and Claude conversations filed under both working directories;
 //   2. starts and stops it with the OLD build, as the operator's service would have;
 //   3. starts the NEW build against the OLD home path and instance name, exactly as that service's unit
-//      would (`JINN_HOME=<old path>`), so the home has to move on its own;
+//      would (`JINN_HOME=<old path>`), so the home has to move on its own. With `--restart` the old gateway is
+//      left running instead and the NEW build's restart helper is run over it, as `restart` after an upgrade
+//      would: the home has to move between the old gateway stopping and the new one starting;
 //   4. checks one identity (home, stage root, registry entry), that the conversations followed, and that
 //      sessions resume, fork and auto-compact through the real gateway against a stand-in `claude` that
 //      refuses a conversation not filed under the physical directory it runs in;
@@ -38,6 +40,7 @@ import {
   exists,
   host,
   instance,
+  until,
   live,
   log,
   newEnv,
@@ -158,15 +161,29 @@ async function checkTheSwitchover(state) {
   await useTheSwitchedOverInstance(state, doctor);
 }
 
+/** The new build's restart helper, run over the old build's live gateway: it stops it, settles the home, and starts the new one. */
+async function restartOverTheRunningGateway() {
+  const helper = path.join(newRepo, "packages/jinn/dist/src/gateway/restart-entry.js");
+  const started = run(NODE, [helper, "--port", String(port)], { env: { ...baseEnv(), ...newEnv } });
+  console.log(started.out.trim());
+  check("the restart helper ran", started.status === 0, started.out.trim().split("\n").pop());
+  live.started = { repo: newRepo, home: newHome };
+  await until(async () => exists(newHome, "sessions", "registry.db") && (await api("GET", "/api/status")).status === 200, "the gateway to come back from the moved home");
+}
+
 async function main() {
   console.log(`host ${host}`);
   seedOld();
-  const state = await seedOldState({ JINN_HOME: oldHome, JINN_INSTANCE: `jinn-${instance}` });
+  const state = await seedOldState({ JINN_HOME: oldHome, JINN_INSTANCE: `jinn-${instance}` }, { leaveRunning: Boolean(args.restart) });
   console.log(`old home ${oldHome}\nscoped department stage ${state.stageDir}`);
-  const upgraded = startGateway(newRepo, newEnv, newHome);
-  console.log(upgraded.out.trim());
-  check("the new build starts", upgraded.status === 0);
-  live.started.home = newHome;
+  if (args.restart) {
+    await restartOverTheRunningGateway();
+  } else {
+    const upgraded = startGateway(newRepo, newEnv, newHome);
+    console.log(upgraded.out.trim());
+    check("the new build starts", upgraded.status === 0);
+    live.started.home = newHome;
+  }
   await awaitStatus("the new gateway");
   const newStage = path.join(host, `.${codename}-departments`, ".instances", `.${codename}-${instance}`, "side-project");
   await checkTheMove(state, newStage);

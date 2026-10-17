@@ -115,7 +115,7 @@ export function seedOld() {
 }
 
 /** What the old build writes that a move has to carry, written by the old build running turns against the stand-in. */
-export async function seedOldState(oldEnv) {
+export async function seedOldState(oldEnv, options = {}) {
   const record = run(NODE, ["--input-type=module", "-e", `
     import path from "node:path";
     import { pathToFileURL } from "node:url";
@@ -146,7 +146,7 @@ export async function seedOldState(oldEnv) {
   const stageDir = fs.realpathSync(path.join(host, ".jinn-departments", ".instances", `.jinn-${instance}`, "side-project"));
   const file = (cwd, id) => path.join(claudeProfile, "projects", slug(fs.realpathSync(cwd)), `${id}.jsonl`);
   check("the old build filed both conversations under their physical directories", fs.existsSync(file(oldHome, conversations.plain)) && fs.existsSync(file(stageDir, conversations.scoped)));
-  await stopGateway(oldRepo, oldEnv);
+  if (!options.leaveRunning) await stopGateway(oldRepo, oldEnv);
   return { plain: created.plain, scoped: created.scoped, stageDir, conversations, file };
 }
 
