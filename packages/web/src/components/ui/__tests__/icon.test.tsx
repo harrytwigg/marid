@@ -5,7 +5,7 @@ import { createElement } from "react"
 import { describe, expect, it } from "vitest"
 
 import * as icons from "@/components/ui/icon"
-import { Check, Loader2, ICONS, Icon } from "@/components/ui/icon"
+import { Bell, Check, Loader2, ICONS, Icon } from "@/components/ui/icon"
 
 const packageRoot = path.resolve(__dirname, "../../../..")
 
@@ -21,15 +21,15 @@ describe("icons", () => {
   })
 
   it("is duotone: a 20% layer under the outline", () => {
-    const { container } = render(<Check />)
+    const { container } = render(<Bell />)
     const paths = container.querySelectorAll("svg > path")
     expect(paths).toHaveLength(2)
     expect(paths[0]?.getAttribute("opacity")).toBe("0.2")
     expect(paths[1]?.hasAttribute("opacity")).toBe(false)
   })
 
-  it("draws the carets in regular weight: one outline path, no fill layer", () => {
-    for (const name of ["ChevronDown", "ChevronLeft", "ChevronRight", "ChevronUp", "ChevronRightIcon"] as const) {
+  it("draws the carets and glyphs with a plain background layer in regular weight: one outline path", () => {
+    for (const name of ["ChevronDown", "ChevronLeft", "ChevronRight", "ChevronUp", "ChevronRightIcon", "Check", "X", "Plus"] as const) {
       const Glyph = icons[name]
       const { container, unmount } = render(<Glyph />)
       expect(container.querySelector(`[data-icon="${name}"]`)).not.toBeNull()
@@ -39,7 +39,7 @@ describe("icons", () => {
   })
 
   it("raises the layer to full strength when filled", () => {
-    const { container } = render(<Check filled />)
+    const { container } = render(<Bell filled />)
     const paths = container.querySelectorAll("svg > path")
     expect(paths[0]?.getAttribute("opacity")).toBe("1")
     expect(container.querySelector("svg")?.hasAttribute("filled")).toBe(false)

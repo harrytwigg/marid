@@ -156,10 +156,16 @@ export const ICON_MAP = {
 }
 
 /**
- * Names drawn in another Phosphor weight. The duotone caret is a small outlined
- * triangle; the regular caret keeps the chevron shape and still matches the set.
+ * Names drawn in another Phosphor weight: regular where the duotone layer is a
+ * plain background shape (a square, rectangle or disc behind a stroke glyph).
+ * The duotone caret is a small outlined triangle; the regular caret keeps the
+ * chevron shape and still matches the set. A glyph whose layer is its own
+ * silhouette (a clock face, a bell, a folder) stays duotone.
  */
 export const WEIGHT_OVERRIDES = {
+  ArrowRightLeftIcon: "regular",
+  Check: "regular",
+  CheckIcon: "regular",
   ChevronDown: "regular",
   ChevronDownIcon: "regular",
   ChevronLeft: "regular",
@@ -168,4 +174,22 @@ export const WEIGHT_OVERRIDES = {
   ChevronRightIcon: "regular",
   ChevronUp: "regular",
   ChevronUpIcon: "regular",
+  Download: "regular",
+  Ellipsis: "regular",
+  EllipsisVertical: "regular",
+  GripVertical: "regular",
+  ListChecks: "regular",
+  ListFilter: "regular",
+  ListTodo: "regular",
+  LogOut: "regular",
+  Minimize2: "regular",
+  Minus: "regular",
+  MoreHorizontal: "regular",
+  Plus: "regular",
+  RefreshCw: "regular",
+  RotateCcw: "regular",
+  RotateCw: "regular",
+  Terminal: "regular",
+  X: "regular",
+  XIcon: "regular",
 }
