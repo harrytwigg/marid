@@ -27,6 +27,18 @@ A home that cannot be moved (a gateway is running there, the snapshot failed, th
 used under its old name, and `doctor` says why. If both the old and the new directory exist, nothing is touched until
 you decide which holds your data.
 
+Things to know about the move itself:
+
+- The first command on a large home takes a full snapshot before it moves anything, and prints nothing while it does.
+  A second process that meets the lock waits up to a minute, then uses the home under its old name for that command.
+- A move that is killed after the rename leaves a note, `state/home-move-pending.json`, in the moved home. The next
+  command or start finishes the remaining steps (the link, the conversations, the stage root, the registry, the
+  receipt) and removes it.
+- On a remote host the stage directories are moved at the next department spawn, but only while no process there has
+  its working directory inside the old container (a live session, or another gateway, would otherwise have its
+  conversations filed under a key that no longer matches). Until then they stay under the old name and the check is
+  repeated at each spawn. Where `/proc` cannot be read on the host the check is skipped.
+
 ## Rolling back
 
 The old build keeps working against a moved home: it finds it through the link, reads the old names it wrote, and
