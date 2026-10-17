@@ -125,8 +125,10 @@ pull request (#164); the prototype's before/after sheets are on #165.
 
 | | Altitude | Azure | Signal | Ion | Flare | Ink / Contrail |
 |---|---|---|---|---|---|---|
-| Light | `#06659F` | `#1F6FD1` | `#13804F` | `#7A4FC4` | `#C4323E` | `#0C1A2B` |
+| Light | `#06659F` | `#0E63C4` | `#007444` | `#784CC1` | `#BE2C39` | `#0C1A2B` |
 | Dark | `#62C6FF` | `#6AB0FF` | `#5FD69A` | `#C3A2FF` | `#FF7A82` | `#E8F1FB` |
+
+The light status colours are the values the identity slice settled on: each is darkened in lightness by the least that reads at 4.5:1 as text on the weakest glass.
 
 Ambient backdrop: four soft radial pools of sky, ion violet and a cyan
 horizon glow over a vertical gradient (`#EAF5FE → #D9E9F7` light, `#07111E →
