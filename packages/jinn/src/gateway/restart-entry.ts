@@ -27,11 +27,11 @@ process.on("unhandledRejection", (reason) => {
 });
 
 /** Settles the home; when it moved, hands over to a fresh helper that reads the new location. */
-async function continuesFromMovedHome(): Promise<boolean> {
-  const settled = await settleBeforeRestart(process.env, JINN_HOME, { log: (message) => logger.info(message) });
+async function continuesFromMovedHome(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  const settled = await settleBeforeRestart(env, JINN_HOME, { log: (message) => logger.info(message) });
   if (!settled.respawn) return false;
   logger.info("restart-entry: the home moved; continuing from its new location…");
-  spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: "ignore", env: process.env }).unref();
+  spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: "ignore", env }).unref();
   return true;
 }
 
