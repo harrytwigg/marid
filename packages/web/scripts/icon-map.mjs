@@ -8,6 +8,8 @@
  * module so a route carries only the names it imports.
  *
  * Adding an icon: add a line here and run `pnpm --filter @jinn/web icons`.
+ *
+ * Every icon is duotone unless it is named in `WEIGHT_OVERRIDES`.
  */
 export const ICON_MAP = {
   Activity: "pulse",
@@ -151,4 +153,19 @@ export const ICON_MAP = {
   XIcon: "x",
   Zap: "lightning",
   ZoomIn: "magnifying-glass-plus",
+}
+
+/**
+ * Names drawn in another Phosphor weight. The duotone caret is a small outlined
+ * triangle; the regular caret keeps the chevron shape and still matches the set.
+ */
+export const WEIGHT_OVERRIDES = {
+  ChevronDown: "regular",
+  ChevronDownIcon: "regular",
+  ChevronLeft: "regular",
+  ChevronLeftIcon: "regular",
+  ChevronRight: "regular",
+  ChevronRightIcon: "regular",
+  ChevronUp: "regular",
+  ChevronUpIcon: "regular",
 }

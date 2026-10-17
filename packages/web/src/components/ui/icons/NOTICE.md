@@ -1,6 +1,6 @@
 # Phosphor Icons
 
-The icon paths in this directory are generated from the duotone SVGs of
+The icon paths in this directory are generated from the SVGs of
 [Phosphor Icons](https://github.com/phosphor-icons/core) (`@phosphor-icons/core`),
 released under the MIT License.
 

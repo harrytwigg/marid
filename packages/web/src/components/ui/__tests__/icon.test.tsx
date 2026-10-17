@@ -28,6 +28,16 @@ describe("icons", () => {
     expect(paths[1]?.hasAttribute("opacity")).toBe(false)
   })
 
+  it("draws the carets in regular weight: one outline path, no fill layer", () => {
+    for (const name of ["ChevronDown", "ChevronLeft", "ChevronRight", "ChevronUp", "ChevronRightIcon"] as const) {
+      const Glyph = icons[name]
+      const { container, unmount } = render(<Glyph />)
+      expect(container.querySelector(`[data-icon="${name}"]`)).not.toBeNull()
+      expect(container.querySelectorAll("svg > path")).toHaveLength(1)
+      unmount()
+    }
+  })
+
   it("raises the layer to full strength when filled", () => {
     const { container } = render(<Check filled />)
     const paths = container.querySelectorAll("svg > path")

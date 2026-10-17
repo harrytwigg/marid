@@ -19,8 +19,8 @@ export type IconComponent = (props: IconProps) => React.ReactElement
 interface IconSvgProps extends IconProps {
   /** The name the app imports the icon by; written to `data-icon`. */
   name: string
-  /** Path data of the 20% fill layer. */
-  layer: string
+  /** Path data of the 20% fill layer; absent for an icon drawn in regular weight. */
+  layer?: string
   /** Path data of the outline. */
   line: string
 }
@@ -40,7 +40,7 @@ export function IconSvg({ name, layer, line, size = 24, color, filled = false, .
       data-icon={name}
       {...props}
     >
-      <path d={layer} opacity={filled ? 1 : 0.2} />
+      {layer !== undefined && <path d={layer} opacity={filled ? 1 : 0.2} />}
       <path d={line} />
     </svg>
   )
