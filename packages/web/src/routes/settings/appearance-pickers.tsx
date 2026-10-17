@@ -17,7 +17,7 @@ export const ACCENT_PRESETS: { label: string; value: string | null }[] = [
   { label: "Pink", value: "#EC4899" },
 ]
 
-import { TEXT_SCALES } from "@/lib/settings"
+import { TEXT_SCALES, TRANSPARENCIES } from "@/lib/settings"
 import { THEMES } from "@/lib/themes"
 import { useTheme } from "@/routes/providers"
 import { useSettings } from "@/routes/settings-provider"
@@ -119,6 +119,39 @@ export function TextSizePicker() {
             label={step.label}
             isActive={settings.textScale === step.value}
             onClick={() => setTextScale(step.value)}
+          />
+        ))}
+      </div>
+    </>
+  )
+}
+
+export function TransparencyPicker() {
+  const { settings, setTransparency } = useSettings()
+
+  return (
+    <>
+      <PickerLabel>Transparency</PickerLabel>
+      <div className="grid grid-cols-2 gap-[var(--space-2)] mb-[var(--space-4)]">
+        {TRANSPARENCIES.map((option) => (
+          <StepButton
+            key={option.value}
+            // The same panel drawn both ways, so the choice reads before it is made.
+            glyph={
+              <span
+                aria-hidden="true"
+                className="h-[30px] w-[44px] rounded-[8px] border border-[var(--separator)]"
+                style={{
+                  background:
+                    option.value === "full"
+                      ? "linear-gradient(135deg, var(--accent-fill), var(--fill-quaternary))"
+                      : "var(--bg-secondary)",
+                }}
+              />
+            }
+            label={option.label}
+            isActive={settings.transparency === option.value}
+            onClick={() => setTransparency(option.value)}
           />
         ))}
       </div>

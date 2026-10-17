@@ -25,7 +25,7 @@
          app once at the default and reflow. The step list mirrors TEXT_SCALES in
          src/lib/settings.ts, which an inline script cannot import; anything else
          stored falls through to the unscaled default in globals.css. -->
-    <script>(function(){try{var t=localStorage.getItem('jinn-theme')||'dark';if(t==='system'){t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t);var s=JSON.parse(localStorage.getItem('jinn-settings')||'{}').textScale;if([0.9,1,1.1,1.25].indexOf(s)>=0){document.documentElement.style.setProperty('--text-scale',s)}}catch(e){}})()</script>
+    <script>(function(){try{var t=localStorage.getItem('jinn-theme')||'dark';if(t==='system'){t=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'}document.documentElement.setAttribute('data-theme',t);var s=JSON.parse(localStorage.getItem('jinn-settings')||'{}').textScale;if([0.9,1,1.1,1.25].indexOf(s)>=0){document.documentElement.style.setProperty('--text-scale',s)}if(JSON.parse(localStorage.getItem('jinn-settings')||'{}').transparency==='reduced'){document.documentElement.setAttribute('data-transparency','reduced')}}catch(e){}})()</script>
   </head>
   <body>
     <div id="root"></div>
