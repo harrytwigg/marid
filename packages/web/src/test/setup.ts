@@ -1,5 +1,6 @@
 import { configure } from "@testing-library/react";
-import { beforeEach } from "vitest";
+import { beforeAll, beforeEach } from "vitest";
+import { preloadHeroUI } from "@/components/ui/heroui-lazy";
 
 /* `findBy*` and `waitFor` give up after 1s by default, which measures the
  * machine more than the app: under a full monorepo run — several vitest pools,
@@ -7,6 +8,27 @@ import { beforeEach } from "vitest";
  * miss that window, and the suite reports "unable to find" for an element that
  * arrived moments later. */
 configure({ asyncUtilTimeout: 5000 });
+
+/* HeroUI's controls load on demand and draw a plain stand-in until they do. A
+ * suite should exercise the real controls from its first render, so whatever
+ * adapters the file imported are loaded before its tests start. The adapters'
+ * own tests reset this to look at the stand-ins. */
+beforeAll(async () => {
+  await preloadHeroUI();
+});
+
+/* React Aria's selection indicator (the sliding tab pill) asks the element for
+ * its running animations, and its tab list builds selectors with CSS.escape.
+ * jsdom has neither. */
+if (typeof Element.prototype.getAnimations !== "function") {
+  Element.prototype.getAnimations = () => [];
+}
+if (typeof globalThis.CSS === "undefined") {
+  Object.defineProperty(globalThis, "CSS", { value: {}, configurable: true });
+}
+if (typeof globalThis.CSS.escape !== "function") {
+  globalThis.CSS.escape = (value: string) => value.replace(/[^a-zA-Z0-9_\u00A0-\uFFFF-]/g, (char) => `\\${char}`);
+}
 
 function createMemoryStorage(): Storage {
   const data = new Map<string, string>();

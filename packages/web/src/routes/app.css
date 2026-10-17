@@ -23,6 +23,17 @@
 @import "@heroui/styles/base/base.css" layer(base);
 @import "./theme-overrides.css";
 @import "./heroui-bridge.css";
+/* One import per HeroUI component an adapter in components/ui draws. A control
+   whose adapter is added later adds its line here. */
+@import "@heroui/styles/components/button.css" layer(components);
+@import "@heroui/styles/components/switch.css" layer(components);
+@import "@heroui/styles/components/tabs.css" layer(components);
+@import "@heroui/styles/components/scroll-shadow.css" layer(components);
+@import "@heroui/styles/components/chip.css" layer(components);
+@import "@heroui/styles/components/skeleton.css" layer(components);
+@import "@heroui/styles/components/input.css" layer(components);
+@import "@heroui/styles/components/textarea.css" layer(components);
+@import "./heroui-glass.css";
 
 /* base.css gives every element's border the --border colour. Marid's borders
    that name no colour have always drawn in the text colour (a red error box

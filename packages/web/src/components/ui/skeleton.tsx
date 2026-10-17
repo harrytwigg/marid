@@ -1,3 +1,4 @@
+import { Skeleton as HeroSkeleton } from "@heroui/react/skeleton"
 
 import { cn } from "@/lib/utils"
 
@@ -8,18 +9,10 @@ interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
 
 function Skeleton({ className, width, height, style, ...props }: SkeletonProps) {
   return (
-    <div
-      className={cn(
-        "animate-shimmer rounded-md",
-        className
-      )}
-      style={{
-        background: `linear-gradient(90deg, var(--fill-secondary) 25%, var(--fill-tertiary) 50%, var(--fill-secondary) 75%)`,
-        backgroundSize: '200% 100%',
-        width,
-        height,
-        ...style,
-      }}
+    <HeroSkeleton
+      data-slot="skeleton"
+      className={cn("rounded-md", className)}
+      style={{ width, height, ...style }}
       {...props}
     />
   )

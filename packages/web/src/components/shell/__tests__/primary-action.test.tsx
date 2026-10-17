@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { Plus } from "lucide-react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { LargeTitleHeader } from "../large-title-header"
 import { PageScaffold } from "../page-scaffold"
 import { FAB_BOTTOM_WITH_TAB, FAB_BOTTOM_WITHOUT_TAB, PRIMARY_ACTION_SLOT, PrimaryAction } from "../primary-action"
@@ -116,5 +117,50 @@ describe("PrimaryAction", () => {
     const fab = screen.getByRole("button", { name: "New" })
     expect((fab as HTMLButtonElement).disabled).toBe(true)
     expect(fab.className).toContain("--fill-tertiary")
+  })
+
+  describe("the trailing control", () => {
+    const renderTrailing = (props: { disabled?: boolean; onClick?: () => void } = {}) => {
+      render(
+        <PageScaffold
+          header={<LargeTitleHeader title="Todos" />}
+          primaryAction={<PrimaryAction aria-label="New todo" label="New todo" icon={<Plus />} onClick={props.onClick ?? (() => {})} disabled={props.disabled} testId="new" />}
+        >
+          <p>list</p>
+        </PageScaffold>,
+      )
+      return screen.getByTestId("new") as HTMLButtonElement
+    }
+
+    it("is a HeroUI button that keeps its slot, test id and desktop-only display", () => {
+      const trailing = renderTrailing()
+
+      expect(trailing.hasAttribute("data-rac")).toBe(true)
+      expect(trailing.className).toContain("button--secondary")
+      expect(trailing.dataset.slot).toBe(PRIMARY_ACTION_SLOT)
+      expect(trailing.dataset.primaryAction).toBe("trailing")
+      expect(trailing.type).toBe("button")
+      expect(trailing.className).toContain("hidden")
+      expect(trailing.className).toContain("lg:inline-flex")
+    })
+
+    it("runs the action from a click and from the keyboard, and not when disabled", async () => {
+      const onClick = vi.fn()
+      const trailing = renderTrailing({ onClick })
+
+      await userEvent.click(trailing)
+      trailing.focus()
+      await userEvent.keyboard("{Enter}")
+      expect(onClick).toHaveBeenCalledTimes(2)
+    })
+
+    it("does nothing while disabled", async () => {
+      const onClick = vi.fn()
+      const trailing = renderTrailing({ onClick, disabled: true })
+
+      expect(trailing.disabled).toBe(true)
+      await userEvent.click(trailing)
+      expect(onClick).not.toHaveBeenCalled()
+    })
   })
 })
