@@ -94,8 +94,15 @@ describe("the blocking bootstrap in index.html", () => {
 
   it("leaves the root unmarked for full, junk or nothing stored", () => {
     expect(script).not.toBe("")
-    for (const stored of [{ transparency: "full" }, { transparency: "clear" }, {}]) {
-      localStorage.setItem("jinn-settings", JSON.stringify(stored))
+    for (const stored of [
+      JSON.stringify({ transparency: "full" }),
+      JSON.stringify({ transparency: "clear" }),
+      JSON.stringify({}),
+      "{oops",
+      null,
+    ]) {
+      localStorage.clear()
+      if (stored !== null) localStorage.setItem("jinn-settings", stored)
       new Function(script)()
       expect(root.hasAttribute("data-transparency")).toBe(false)
     }

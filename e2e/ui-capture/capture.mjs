@@ -72,6 +72,21 @@ async function audit(page, label) {
   }
 }
 
+// First paint: stop at DOMContentLoaded and shoot before the app has hydrated.
+async function shootFirstPaint(page, screen, label) {
+  await page.goto(baseUrl + screen.url(fixtures), { waitUntil: 'domcontentloaded' })
+  fs.mkdirSync(path.join(outDir, 'firstpaint'), { recursive: true })
+  await page.screenshot({ path: path.join(outDir, 'firstpaint', `${label}.png`) })
+}
+
+// The bootstrap marked <html> before React mounted, and hydration kept it.
+async function assertRootReduced(page) {
+  const atParse = await page.evaluate(() => window.__rootAtParse)
+  if (atParse !== 'reduced') throw new Error(`root was not reduced at DOMContentLoaded (${atParse})`)
+  const now = await page.evaluate(() => document.documentElement.getAttribute('data-transparency'))
+  if (now !== 'reduced') throw new Error(`root lost data-transparency after hydration (${now})`)
+}
+
 async function captureOne({ screen, theme, viewport }) {
   const label = `${screen.name}-${theme}-${viewport.name}`
   const context = await browser.newContext({
@@ -94,21 +109,11 @@ async function captureOne({ screen, theme, viewport }) {
   const errors = []
   page.on('pageerror', (err) => errors.push(String(err)))
   try {
-    if (reduced && screen.name === 'settings' && viewport.name === 'desktop') {
-      // First paint: stop at DOMContentLoaded and shoot before the app has hydrated.
-      await page.goto(baseUrl + screen.url(fixtures), { waitUntil: 'domcontentloaded' })
-      fs.mkdirSync(path.join(outDir, 'firstpaint'), { recursive: true })
-      await page.screenshot({ path: path.join(outDir, 'firstpaint', `${label}.png`) })
-    }
+    if (reduced && screen.name === 'settings' && viewport.name === 'desktop') await shootFirstPaint(page, screen, label)
     await page.goto(baseUrl + screen.url(fixtures), { waitUntil: 'networkidle' })
     await page.getByText(screen.ready, { exact: false }).locator('visible=true').first().waitFor({ timeout: 15_000 })
     await page.evaluate(() => document.fonts.ready)
-    if (reduced) {
-      const atParse = await page.evaluate(() => window.__rootAtParse)
-      if (atParse !== 'reduced') throw new Error(`root was not reduced at DOMContentLoaded (${atParse})`)
-      const now = await page.evaluate(() => document.documentElement.getAttribute('data-transparency'))
-      if (now !== 'reduced') throw new Error(`root lost data-transparency after hydration (${now})`)
-    }
+    if (reduced) await assertRootReduced(page)
     await page.waitForTimeout(400)
     const leaked = await leaks(page)
     if (leaked.length) throw new Error(`shows ${leaked.join(' and ')}`)
