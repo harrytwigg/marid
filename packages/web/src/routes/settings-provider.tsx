@@ -33,6 +33,7 @@ interface SettingsContextValue {
   setTalkOrbVariant: (variant: JinnSettings["talkOrbVariant"]) => void
   setTalkOrbIntensity: (intensity: JinnSettings["talkOrbIntensity"]) => void
   setTextScale: (textScale: JinnSettings["textScale"]) => void
+  setTransparency: (transparency: JinnSettings["transparency"]) => void
   setEmployeeOverride: (employeeId: string, override: EmployeeOverride) => void
   clearEmployeeOverride: (employeeId: string) => void
   getEmployeeDisplay: (employee: { name: string; emoji: string; id: string }) => EmployeeDisplay
@@ -56,6 +57,7 @@ const SettingsContext = createContext<SettingsContextValue>({
   setTalkOrbVariant: () => {},
   setTalkOrbIntensity: () => {},
   setTextScale: () => {},
+  setTransparency: () => {},
   setEmployeeOverride: () => {},
   clearEmployeeOverride: () => {},
   getEmployeeDisplay: (employee) => ({ emoji: employee.emoji }),
@@ -198,6 +200,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const setTalkOrb = useField(update, "talkOrb")
   const setTalkOrbVariant = useField(update, "talkOrbVariant")
   const setTalkOrbIntensity = useField(update, "talkOrbIntensity")
+  const setTransparency = useField(update, "transparency")
 
   const setTextScale = useCallback(
     (textScale: JinnSettings["textScale"]) => {
@@ -267,6 +270,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setTalkOrbVariant,
         setTalkOrbIntensity,
         setTextScale,
+        setTransparency,
         setEmployeeOverride,
         clearEmployeeOverride,
         getEmployeeDisplay,

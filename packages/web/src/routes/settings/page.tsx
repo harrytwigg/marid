@@ -17,7 +17,7 @@ import {
   resetEngineModelOverrides,
   showModelOverride,
 } from "@/lib/model-config"
-import { ACCENT_PRESETS, ThemePicker, TextSizePicker } from "./appearance-pickers"
+import { ACCENT_PRESETS, ThemePicker, TextSizePicker, TransparencyPicker } from "./appearance-pickers"
 import { OperatorEmojiRow, PortalEmojiRow } from "./emoji-rows"
 import { ConfigConflictNotice } from "./config-conflict-notice"
 import { ConfigSaveStatus } from "./config-save-status"
@@ -243,6 +243,7 @@ export default function SettingsPage() {
           <Section title="Appearance">
             <ThemePicker />
             <TextSizePicker />
+            <TransparencyPicker />
 
             {/* Accent color */}
             <div
