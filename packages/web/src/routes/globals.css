@@ -362,7 +362,10 @@
 /* Custom properties that script reads back with getComputedStyle (the talk
    orb paints them onto a canvas, the PWA titlebar copies --bg). A registered
    <color> resolves light-dark() into a plain colour at computed-value time;
-   an unregistered one would hand script the literal "light-dark(...)" text. */
+   an unregistered one would hand script the literal "light-dark(...)" text.
+   Firefox resolves a registered token against the PARENT's color-scheme, so a
+   nested opposite-theme subtree (a light panel inside a dark page) must not
+   read these; Chromium resolves them against the element itself. */
 @property --bg { syntax: "<color>"; inherits: true; initial-value: transparent; }
 @property --system-red { syntax: "<color>"; inherits: true; initial-value: transparent; }
 @property --orb-core { syntax: "<color>"; inherits: true; initial-value: transparent; }
