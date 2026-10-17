@@ -72,26 +72,37 @@ describe("moving a host's stage directories", () => {
     expect(run(path.join(root, ".jinn-departments"), path.join(root, ".acme-departments"), config())).toBe("");
   });
 
-  it.runIf(fs.existsSync("/proc/self"))("leaves the container where it is while a process works inside it, and moves it once that has ended", async () => {
-    touch(path.join(root, ".jinn-departments", "ops", "CLAUDE.md"));
-    touch(path.join(config(), "projects", claudeProjectSlug(path.join(root, ".jinn-departments", "ops")), "a.jsonl"));
-    const session = spawn("sleep", ["30"], { cwd: path.join(root, ".jinn-departments", "ops"), stdio: "ignore" });
+  it.runIf(fs.existsSync("/proc/self"))("moves what is idle, leaves a stage directory a process works in, and finishes once that process has ended", async () => {
+    const [oldRoot, newRoot] = [path.join(root, ".jinn-departments"), path.join(root, ".acme-departments")];
+    touch(path.join(oldRoot, "ops", "CLAUDE.md"));
+    touch(path.join(oldRoot, "dev", "CLAUDE.md"));
+    touch(path.join(config(), "projects", claudeProjectSlug(path.join(oldRoot, "ops")), "a.jsonl"));
+    const session = spawn("sleep", ["30"], { cwd: path.join(oldRoot, "ops"), stdio: "ignore" });
     try {
       await new Promise((resolve) => session.once("spawn", resolve));
-      expect(run(path.join(root, ".jinn-departments"), path.join(root, ".acme-departments"), config())).toContain("busy=");
-      expect(fs.existsSync(path.join(root, ".jinn-departments", "ops", "CLAUDE.md"))).toBe(true);
-      expect(fs.existsSync(path.join(root, ".acme-departments"))).toBe(false);
+      const first = run(oldRoot, newRoot, config());
+      expect(first).toContain("busy=1");
+      expect(fs.existsSync(path.join(oldRoot, "ops", "CLAUDE.md"))).toBe(true);
+      expect(fs.existsSync(path.join(newRoot, "dev", "CLAUDE.md"))).toBe(true);
+      // What a spawn does next: it stages another department into the new container, which must not stop the retry.
+      touch(path.join(newRoot, "docs", "CLAUDE.md"));
     } finally {
       session.kill();
       await new Promise((resolve) => session.once("exit", resolve));
     }
-    expect(run(path.join(root, ".jinn-departments"), path.join(root, ".acme-departments"), config())).toContain("transcripts=1");
+    expect(run(oldRoot, newRoot, config())).toContain("transcripts=1");
+    expect(fs.existsSync(oldRoot)).toBe(false);
+    expect(fs.existsSync(path.join(newRoot, "ops", "CLAUDE.md"))).toBe(true);
+    expect(fs.existsSync(path.join(config(), "projects", claudeProjectSlug(path.join(newRoot, "ops")), "a.jsonl"))).toBe(true);
   });
 
-  it("leaves both alone when the new container exists already", () => {
+  it("leaves a stage directory that exists in both containers as it is, and still moves the rest", () => {
     touch(path.join(root, ".jinn-departments", "ops", "old"));
+    touch(path.join(root, ".jinn-departments", "dev", "old"));
     touch(path.join(root, ".acme-departments", "ops", "new"));
-    expect(run(path.join(root, ".jinn-departments"), path.join(root, ".acme-departments"), config())).toBe("");
+    expect(run(path.join(root, ".jinn-departments"), path.join(root, ".acme-departments"), config())).toContain("renamed=");
     expect(fs.existsSync(path.join(root, ".jinn-departments", "ops", "old"))).toBe(true);
+    expect(fs.existsSync(path.join(root, ".acme-departments", "ops", "new"))).toBe(true);
+    expect(fs.existsSync(path.join(root, ".acme-departments", "dev", "old"))).toBe(true);
   });
 });
