@@ -1,5 +1,5 @@
 import path from "node:path";
-import { isUnderRoot, REMOTE_STAGE_DIR_NAME } from "./remote-target.js";
+import { isUnderRoot, LEGACY_REMOTE_STAGE_DIR_NAME, REMOTE_STAGE_DIR_NAME } from "./remote-target.js";
 import { nameAliases } from "./codename.js";
 
 export type CommandPolicyAction = "allow" | "block";
@@ -59,7 +59,7 @@ const SHARED_TREE = new RegExp(`(?:^|/)\\.(?:${CODENAME_ALTERNATION})(?:-[A-Za-z
 /** The remote session's staged `$JINN_HOME` — a symlink farm over the mount.
  *  Escaped from the shared constant so the two can never drift apart. */
 const STAGE_FARM_SEGMENT = new RegExp(
-  `(?:^|/)${REMOTE_STAGE_DIR_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:/|$)`,
+  `(?:^|/)(?:${[REMOTE_STAGE_DIR_NAME, LEGACY_REMOTE_STAGE_DIR_NAME].map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?:/|$)`,
 );
 
 /** Commands that create or overwrite a file named in their arguments. */

@@ -7,6 +7,7 @@ import { JINN_HOME } from "../shared/paths.js";
 import { resolveJinnInstance, pairCommandFor } from "../shared/home.js";
 import { loadInstances } from "./instances.js";
 import { PRODUCT_NAME } from "../shared/brand.js";
+import { NAMES, isDefaultInstanceName } from "../shared/codename.js";
 
 export interface PairingCodeResponse {
   code: string;
@@ -164,7 +165,7 @@ export async function requestUnpairDevice(opts: {
 export function formatPairingInstructions(
   pairing: PairingCodeResponse,
   port: number,
-  instance = "jinn",
+  instance: string = NAMES.codename,
 ): string {
   const minutes = pairing.ttlSeconds ? Math.max(1, Math.ceil(pairing.ttlSeconds / 60)) : 5;
   return [
@@ -186,7 +187,7 @@ export function formatPairingInstructions(
   ].join("\n");
 }
 
-export function formatPairedDevices(devices: PairedDeviceResponse[], instance = "jinn"): string {
+export function formatPairedDevices(devices: PairedDeviceResponse[], instance: string = NAMES.codename): string {
   if (devices.length === 0) {
     return [
       "Paired browsers",
@@ -245,8 +246,8 @@ export async function runPair(opts: { json?: boolean } = {}): Promise<void> {
       console.log(formatPairingInstructions(pairing, info.port, instance));
       // On the default instance, nudge multi-instance operators toward the -i
       // form so they don't mint a code for `.jinn` when they meant another one.
-      if (instance === "jinn") {
-        const others = loadInstances().filter((i) => i.name !== "jinn");
+      if (isDefaultInstanceName(instance)) {
+        const others = loadInstances().filter((i) => !isDefaultInstanceName(i.name));
         if (others.length > 0) console.log(formatPairInstanceNudge(others.map((i) => i.name)));
       }
     }

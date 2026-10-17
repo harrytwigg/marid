@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isDefaultInstanceName } from "../shared/codename.js";
 
 function canonicalHome(home: string): string {
   const resolved = path.resolve(home);
@@ -40,7 +41,7 @@ export function assertContainerPrimaryCommand(
     && selectedHome
     && canonicalHome(primaryHome) === canonicalHome(selectedHome)
     && !selectedInstance
-    && (!instance || instance === "jinn");
+    && (!instance || isDefaultInstanceName(instance));
   if (targetsPrimary) return;
 
   throw new Error(

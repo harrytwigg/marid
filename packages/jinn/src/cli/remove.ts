@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { loadInstances, saveInstances } from "./instances.js";
+import { NAMES, isDefaultInstanceName, sameInstanceName } from "../shared/codename.js";
 
 const GREEN = "\x1b[32m";
 const RED = "\x1b[31m";
@@ -8,13 +9,13 @@ const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
 
 export async function runRemove(name: string, opts: { force?: boolean }): Promise<void> {
-  if (name === "jinn") {
-    console.error(`${RED}Error:${RESET} Cannot remove the default "jinn" instance.`);
+  if (isDefaultInstanceName(name)) {
+    console.error(`${RED}Error:${RESET} Cannot remove the default "${NAMES.codename}" instance.`);
     process.exit(1);
   }
 
   const instances = loadInstances();
-  const index = instances.findIndex((i) => i.name === name);
+  const index = instances.findIndex((i) => sameInstanceName(i.name, name));
 
   if (index === -1) {
     console.error(`${RED}Error:${RESET} Instance "${name}" not found.`);

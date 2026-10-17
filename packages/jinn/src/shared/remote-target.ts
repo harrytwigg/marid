@@ -1,7 +1,8 @@
 import path from "node:path";
 import type { Employee, RemoteTarget } from "./types.js";
 import type { RemoteExecutionConfig } from "./config-types.js";
-import { remoteDepartmentsRoot, remoteDepartmentStageDir, type RemoteScope, type SessionRemoteTarget } from "./remote-department.js";
+import { remoteDepartmentsRoots, remoteDepartmentStageDir, type RemoteScope, type SessionRemoteTarget } from "./remote-department.js";
+import { LEGACY_CODENAME, NAMES } from "./codename.js";
 
 /**
  * Remote-execution containment.
@@ -26,7 +27,10 @@ import { remoteDepartmentsRoot, remoteDepartmentStageDir, type RemoteScope, type
  * machine, staging into its home would overwrite its gateway.json and point its
  * hook relay at our tunnel.
  */
-export const REMOTE_STAGE_DIR_NAME = ".jinn-remote-stage";
+export const REMOTE_STAGE_DIR_NAME = `.${NAMES.codename}-remote-stage`;
+
+/** The directory an earlier codename named. A session an older gateway started is still staged there, so the file policy keeps recognising it. */
+export const LEGACY_REMOTE_STAGE_DIR_NAME = `.${LEGACY_CODENAME}-remote-stage`;
 
 /** Name of the file whose content proves the mount is live, on both ends. Every
  *  remote session stage links it, so it also marks a directory as a Jinn home
@@ -111,8 +115,8 @@ export function validateRemoteTarget(
  * company CLAUDE.md into a scoped session's cwd or one above it (FR-062).
  */
 function validateOutsideDepartments(cwd: string, department: string | undefined, remote: RemoteExecutionConfig): RemoteTargetProblem | undefined {
-  const departments = remoteDepartmentsRoot(remote.root);
-  if (!isUnderRoot(cwd, departments)) return undefined;
+  const departments = remoteDepartmentsRoots(remote.root).find((root) => isUnderRoot(cwd, root));
+  if (!departments) return undefined;
   if (department && path.posix.normalize(cwd).replace(/\/+$/, "") === remoteDepartmentStageDir(remote.root, department)) return undefined;
   return { error: `remoteCwd "${cwd}" lies in "${departments}", where department-scoped employees' stage directories are synced` };
 }

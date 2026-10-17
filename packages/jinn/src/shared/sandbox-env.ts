@@ -2,6 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import { resolveHomeIdentity, resolveJinnHome } from "./home.js";
 import { envAliases, envNamesFor, readEnv, setEnv } from "./codename-env.js";
+import { nameAliases } from "./codename.js";
 
 /**
  * The variables that name WHICH Jinn instance a process belongs to: its home, its
@@ -137,7 +138,7 @@ export function assertNotProductionGateway(target: { home?: string; port?: numbe
   }
   if (target.home === undefined) return;
   const home = path.resolve(target.home);
-  if (resolveHomeIdentity(home) === resolveHomeIdentity(defaultInstanceHome())) {
+  if (defaultInstanceHomes().some((candidate) => resolveHomeIdentity(home) === resolveHomeIdentity(candidate))) {
     throw new Error(
       `Refusing to use ${home}: it is the default instance home. ` +
       `Point JINN_HOME at a throwaway directory for sandbox work.`,
@@ -145,8 +146,9 @@ export function assertNotProductionGateway(target: { home?: string; port?: numbe
   }
 }
 
-function defaultInstanceHome(): string {
+/** The default home under this build's name and under the legacy one: the operator's real home is at one or the other. */
+function defaultInstanceHomes(): string[] {
   // Deliberately not resolveJinnHome(): a sandbox sets JINN_HOME, so honouring it would
   // make the sandbox "production" and wave the real home through.
-  return path.join(os.homedir(), ".jinn"); // footgun: ok the canary must know the default home even when JINN_HOME names another
+  return nameAliases((n) => path.join(os.homedir(), `.${n.codename}`)); // footgun: ok the canary must know the default home even when JINN_HOME names another
 }
