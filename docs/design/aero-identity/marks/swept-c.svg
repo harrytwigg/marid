@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Swept C mark">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8AD8FF"/>
+      <stop offset="0.5" stop-color="#2A93DA"/>
+      <stop offset="1" stop-color="#0B4F8E"/>
+    </linearGradient>
+    <radialGradient id="horizon" cx="0.5" cy="1.15" r="0.75">
+      <stop offset="0" stop-color="#B9F3FF" stop-opacity="0.65"/>
+      <stop offset="1" stop-color="#B9F3FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#sky)"/>
+  <rect width="512" height="512" rx="120" fill="url(#horizon)"/>
+  <path d="M372 168C336 124 290 108 244 112C164 120 112 188 116 262C120 344 188 404 268 400C312 398 350 380 380 350L344 316C324 336 298 348 268 350C214 352 170 312 168 260C166 206 204 166 252 162C284 160 312 172 336 198L392 196Z" fill="#FFFFFF"/>
+  <path d="M40 150C40 80 90 40 160 40h192c70 0 120 40 120 110-70 28-150 40-216 40S110 178 40 150z" fill="url(#gloss)"/>
+  <rect x="6" y="6" width="500" height="500" rx="114" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="4"/>
+</svg>
