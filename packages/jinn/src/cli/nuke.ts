@@ -37,7 +37,7 @@ export async function runNuke(name?: string): Promise<void> {
   const instances = loadInstances().filter((i) => !isDefaultInstanceName(i.name));
 
   if (instances.length === 0) {
-    console.log("No removable instances found. The default \"${NAMES.codename}\" instance cannot be nuked.");
+    console.log(`No removable instances found. The default "${NAMES.codename}" instance cannot be nuked.`);
     return;
   }
 

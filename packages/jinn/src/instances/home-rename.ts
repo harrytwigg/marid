@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { LEGACY_CODENAME, NAMES, currentInstanceName, type Names } from "../shared/codename.js";
 import { acquireHomeLock } from "./home-lock.js";
-import { decide, linkToCurrent, pairFor } from "./home-state.js";
+import { decide, kindOf, linkToCurrent, pairFor } from "./home-state.js";
+import { clearPendingMove, readPendingMove, writePendingMove } from "./home-pending.js";
 import { claudeConfigDirsOf } from "./claude-profile-dirs.js";
 import { moveTranscripts } from "../shared/claude-transcript-move.js";
 import { renameStageRoot } from "./stage-rename.js";
@@ -117,6 +118,8 @@ export async function renameHomeIfNeeded(home: string, deps: HomeRenameDeps = {}
   const log = deps.log ?? (() => undefined);
   const { current, legacy } = pairFor(home, names);
   if (current === legacy) return { kind: "nothing", home: path.resolve(home) };
+  // A move that was started and not finished (the process died): finish it before anything else looks at the home.
+  if (readPendingMove(current)) return resumeMove(current, deps, names, log);
   // The old path, now a link to the moved home: use the real one, so one directory has one identity and one stage root.
   if (linkToCurrent(legacy, current)) return { kind: "nothing", home: current };
   const verdict = decide(legacy, current);
@@ -171,14 +174,35 @@ async function moveLocked(legacy: string, current: string, context: MoveContext)
   }
   const physicalLegacy = fs.realpathSync.native(legacy);
   const configDirs = (deps.claudeConfigDirs ?? claudeConfigDirsOf)(legacy);
+  const facts: MoveFacts = { legacy, current, instance, physicalLegacy, configDirs, backup };
   try {
+    writePendingMove(legacy, { ...facts, at: now.toISOString() });
     fs.renameSync(legacy, current);
   } catch (error) {
+    clearPendingMove(legacy);
     return kept(`it could not be renamed (${(error as NodeJS.ErrnoException).code ?? "error"}): ${(error as Error).message}`);
   }
-  const receipt = followTheMove({ legacy, current, instance, physicalLegacy, configDirs, backup }, context);
+  const receipt = followTheMove(facts, context);
+  clearPendingMove(current);
   context.log(`Moved ${legacy} to ${current}; a link remains at the old path.`);
   return { kind: "moved", home: current, receipt };
+}
+
+/** Finish a move whose process died after the rename: the same follow-up steps, from the note it left. */
+async function resumeMove(current: string, deps: HomeRenameDeps, names: Names, log: (message: string) => void): Promise<HomeRenameOutcome> {
+  const lock = await acquireHomeLock(path.join(path.dirname(current), `.${names.codename}-home-move.lock`), deps.lockTimeoutMs);
+  if (!lock) return { kind: "nothing", home: current };
+  try {
+    const pending = readPendingMove(current);
+    if (!pending) return { kind: "nothing", home: current };
+    const context: MoveContext = { deps, names, log, homeDir: deps.homeDir ?? os.homedir(), now: (deps.now ?? (() => new Date()))() };
+    const receipt = followTheMove({ ...pending, backup: pending.backup }, context);
+    clearPendingMove(current);
+    log(`Finished the move of ${pending.legacy} to ${current} that an earlier run left half done.`);
+    return { kind: "moved", home: current, receipt };
+  } finally {
+    lock.release();
+  }
 }
 
 interface MoveFacts {
@@ -225,6 +249,7 @@ function safely<T>(action: () => T, warn: (message: string) => void): T | undefi
 }
 
 function linkOldPath(legacy: string, current: string, log: (message: string) => void): void {
+  if (kindOf(legacy) !== "absent") return;
   try {
     fs.symlinkSync(current, legacy, process.platform === "win32" ? "junction" : "dir");
   } catch (error) {

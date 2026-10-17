@@ -12,6 +12,7 @@ import { findTranscriptForSession } from "../../engines/claude-transcript-path.j
 import { loadInstances, saveInstances } from "../directory.js";
 import { HOME_MOVE_RECEIPT, readHomeMoveReceipt, renameHomeIfNeeded, type HomeRenameDeps } from "../home-rename.js";
 import { inspectHome } from "../home-state.js";
+import { HOME_MOVE_PENDING, writePendingMove } from "../home-pending.js";
 import { settleInstanceEnv } from "../canonical-env.js";
 
 /** A real-shaped host: an older build's home with a sessions database, an attachment, a department stage
@@ -125,6 +126,34 @@ describe("moving an older build's home", () => {
     expect(fs.readdirSync(path.join(claudeDir, "projects"))).toHaveLength(1);
     expect(loadInstances(deps.registry)).toHaveLength(1);
     expect(inspectHome(legacyHome()).state).toBe("moved");
+  });
+
+  it("finishes a move whose process died right after the rename", async () => {
+    seedHome(legacyHome());
+    const { stageDir } = seedStage(".jinn-john");
+    const homeConversation = seedConversation(legacyHome(), "home-session");
+    const stageConversation = seedConversation(stageDir, "stage-session");
+    // What a kill between the rename and the follow-up steps leaves: the note, the moved home, no link, nothing else.
+    writePendingMove(legacyHome(), { legacy: legacyHome(), current: currentHome(), instance: "jinn-john", physicalLegacy: legacyHome(), configDirs: [claudeDir], at: "2026-10-01T00:00:00.000Z" });
+    fs.renameSync(legacyHome(), currentHome());
+    expect(fs.existsSync(legacyHome())).toBe(false);
+
+    expect(await renameHomeIfNeeded(legacyHome(), deps)).toMatchObject({ kind: "moved", home: currentHome() });
+
+    expect(fs.lstatSync(legacyHome()).isSymbolicLink()).toBe(true);
+    expect(fs.existsSync(path.join(currentHome(), HOME_MOVE_PENDING))).toBe(false);
+    expect(fs.existsSync(homeConversation)).toBe(false);
+    expect(fs.existsSync(path.join(projectDir(currentHome()), "home-session.jsonl"))).toBe(true);
+    expect(fs.existsSync(stageConversation)).toBe(false);
+    expect(loadInstances(deps.registry)).toEqual([expect.objectContaining({ name: "acme-john", home: currentHome() })]);
+    expect(readHomeMoveReceipt(currentHome())).toMatchObject({ from: legacyHome(), to: currentHome() });
+    expect(await renameHomeIfNeeded(legacyHome(), deps)).toEqual({ kind: "nothing", home: currentHome() });
+  });
+
+  it("leaves no note behind after a complete move", async () => {
+    seedHome(legacyHome());
+    await renameHomeIfNeeded(legacyHome(), deps);
+    expect(fs.existsSync(path.join(currentHome(), HOME_MOVE_PENDING))).toBe(false);
   });
 
   it("merges a home moved from two processes at once into one move", async () => {
