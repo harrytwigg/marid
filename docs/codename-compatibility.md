@@ -38,7 +38,10 @@ Things to know about the move itself:
   the new container does not have yet moves across with its conversations, one that exists in both is left as it
   is, and one that a process on the host has as its working directory (a live session would otherwise have its
   conversations filed under a key that no longer matches) stays where it is and is tried again at the next
-  spawn. Where `/proc` cannot be read on the host that check is skipped. The old container goes once it is empty.
+  spawn. The one case this does not repair: a department's stage directory that is in use at that department's first spawn after the
+  upgrade is staged afresh in the new container, so the two then both exist and the older conversations stay under the
+  old one (a resume of those sessions starts fresh). Where `/proc` cannot be read on the host that check is skipped. The
+  old container goes once it is empty.
 
 ## Rolling back
 
