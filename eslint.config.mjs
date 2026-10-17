@@ -129,6 +129,48 @@ export const enforcement = tseslint.config(
     },
   },
   {
+    // HeroUI reaches the app through `src/components/ui` only, so a control can
+    // be swapped without touching its call sites, and always by deep path
+    // (`@heroui/react/switch`): the barrel entry would put every component
+    // into whichever chunk imports it.
+    files: ["packages/web/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@heroui/react",
+              message: "Import the component by deep path, for example `@heroui/react/switch`: the barrel pulls in every component.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["@heroui/react/*"],
+              message: "Only `src/components/ui` imports HeroUI. Wrap the control there and import that wrapper.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["packages/web/src/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@heroui/react",
+              message: "Import the component by deep path, for example `@heroui/react/switch`: the barrel pulls in every component.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: TESTS,
     rules: {
       ...Object.fromEntries(CAPS_OFF_IN_TESTS.map((rule) => [rule, "off"])),
