@@ -45,7 +45,7 @@ export function KeepToggle(
         className,
       ].join(" ")}
     >
-      <Pin size={13} aria-hidden className={kept ? "fill-current" : ""} />
+      <Pin size={13} aria-hidden filled={kept} />
     </button>
   )
 }

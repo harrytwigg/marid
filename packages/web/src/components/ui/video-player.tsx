@@ -100,7 +100,7 @@ export function VideoPlayer({ src, name, className }: { src: string; name: strin
             onClick={() => setPlaying(true)}
             className="focus-outline absolute left-1/2 top-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[var(--material-thick)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] outline-none backdrop-blur-xl transition-transform active:scale-[0.96]"
           >
-            <Play size={20} fill="currentColor" aria-hidden className="ml-0.5" />
+            <Play size={20} filled aria-hidden className="ml-0.5" />
           </button>
         </>
       )}

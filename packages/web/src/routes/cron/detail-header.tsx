@@ -71,7 +71,7 @@ function CronJobTrailing({
           </>
         ) : (
           <>
-            <Play className="size-[13px]" fill="currentColor" aria-hidden />
+            <Play className="size-[13px]" filled aria-hidden />
             {triggerPending ? "Starting…" : "Run now"}
           </>
         )}

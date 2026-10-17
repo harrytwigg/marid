@@ -17,7 +17,7 @@ export const ICON_MAP = {
   ArrowDown: "arrow-down",
   ArrowLeft: "arrow-left",
   ArrowRight: "arrow-right",
-  ArrowRightLeftIcon: "swap",
+  ArrowRightLeftIcon: "arrows-left-right",
   ArrowUp: "arrow-up",
   ArrowUpRight: "arrow-up-right",
   Bell: "bell",

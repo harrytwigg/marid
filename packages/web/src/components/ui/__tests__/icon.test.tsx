@@ -28,6 +28,13 @@ describe("icons", () => {
     expect(paths[1]?.hasAttribute("opacity")).toBe(false)
   })
 
+  it("raises the layer to full strength when filled", () => {
+    const { container } = render(<Check filled />)
+    const paths = container.querySelectorAll("svg > path")
+    expect(paths[0]?.getAttribute("opacity")).toBe("1")
+    expect(container.querySelector("svg")?.hasAttribute("filled")).toBe(false)
+  })
+
   it("takes size, color, className and SVG props", () => {
     const { container } = render(<Check size={12} color="red" className="x" data-testid="t" />)
     const svg = container.querySelector("svg")

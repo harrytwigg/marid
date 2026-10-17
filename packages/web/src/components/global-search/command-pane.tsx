@@ -73,7 +73,7 @@ function RunForm({ row }: { row: CommandObject }) {
         onClick={() => trigger.mutate()}
         className={PRIMARY}
       >
-        <Play size={12} fill="currentColor" aria-hidden="true" />
+        <Play size={12} filled aria-hidden="true" />
         {triggered ? "Triggered" : trigger.isPending ? "Starting…" : "Run now"}
       </button>
       {triggered && (
