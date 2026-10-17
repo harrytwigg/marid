@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { ChevronRightIcon } from 'lucide-react'
+import { ChevronRightIcon } from '@/components/ui/icon'
 import { useQueryClient } from '@tanstack/react-query'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { api, type EnginesResponse } from '@/lib/api'

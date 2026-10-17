@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { ChevronRight, Sun, Moon, Palette, type LucideIcon } from "lucide-react"
+import { ChevronRight, Sun, Moon, Palette, type IconComponent } from "@/components/ui/icon"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -29,7 +29,7 @@ const TINT: Record<string, { bg: string; fg: string }> = {
   "/settings": { bg: "var(--text-tertiary)", fg: "var(--bg-secondary)" },
 }
 
-function RowIcon({ Icon, href }: { Icon: LucideIcon; href: string }) {
+function RowIcon({ Icon, href }: { Icon: IconComponent; href: string }) {
   const tint = TINT[href] ?? { bg: "var(--text-tertiary)", fg: "#fff" }
   return (
     <span

@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, FolderOpen } from "lucide-react"
+import { ChevronRight, Folder, FolderOpen } from "@/components/ui/icon"
 import type { NoteFolder } from "./types"
 import { cn } from "@/lib/utils"
 

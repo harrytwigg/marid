@@ -1,5 +1,5 @@
 import type React from "react"
-import { ChevronDown, ChevronUp, GripVertical, X } from "lucide-react"
+import { ChevronDown, ChevronUp, GripVertical, X } from "@/components/ui/icon"
 import { CONTROL_CLASS } from "../shared"
 import { engineLabel, moveInChain, removeFromChain } from "./chain-model"
 import { rowShift, useChainDrag } from "./use-chain-drag"
@@ -43,7 +43,7 @@ function ChainRow({ engine, name, index, count, style, onPointerDown, onMove, on
       style={style}
       className="flex items-center gap-[var(--space-1)] rounded-[10px] bg-[var(--fill-tertiary)] py-[3px] pl-[var(--space-2)] pr-[3px]"
     >
-      <GripVertical size={14} strokeWidth={2} aria-hidden className="shrink-0 cursor-grab text-[var(--text-quaternary)]" />
+      <GripVertical size={14} aria-hidden className="shrink-0 cursor-grab text-[var(--text-quaternary)]" />
       <span className="w-[14px] shrink-0 text-[length:var(--text-caption2)] text-[var(--text-quaternary)] [font-variant-numeric:tabular-nums]">
         {index + 1}
       </span>
@@ -51,13 +51,13 @@ function ChainRow({ engine, name, index, count, style, onPointerDown, onMove, on
         {label}
       </span>
       <RowButton label={`Move ${label} earlier in the ${chain}`} disabled={index === 0} onClick={() => onMove(index - 1)}>
-        <ChevronUp size={15} strokeWidth={2.2} aria-hidden />
+        <ChevronUp size={15} aria-hidden />
       </RowButton>
       <RowButton label={`Move ${label} later in the ${chain}`} disabled={index === count - 1} onClick={() => onMove(index + 1)}>
-        <ChevronDown size={15} strokeWidth={2.2} aria-hidden />
+        <ChevronDown size={15} aria-hidden />
       </RowButton>
       <RowButton label={`Remove ${label} from the ${chain}`} onClick={onRemove}>
-        <X size={15} strokeWidth={2.2} aria-hidden />
+        <X size={15} aria-hidden />
       </RowButton>
     </div>
   )

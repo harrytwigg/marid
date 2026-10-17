@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { Check } from "lucide-react"
+import { Check } from "@/components/ui/icon"
 
 /* Todos v2 slice 6 — the picker shells (design-doc §7.3, polish laws 1–4, 22).
  *
@@ -265,7 +265,7 @@ export function PickerRow({
           <span className="text-[11px] font-normal text-[var(--text-quaternary)]">{sub ?? reason}</span>
         )}
       </span>
-      {checked && <Check size={13} strokeWidth={2.6} aria-hidden className="ml-auto flex-none text-[var(--accent)]" />}
+      {checked && <Check size={13} aria-hidden className="ml-auto flex-none text-[var(--accent)]" />}
       {!checked && trailing && <span className="ml-auto flex-none">{trailing}</span>}
     </button>
   )

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Copy, KeyRound, Laptop, LogOut, ShieldCheck, Smartphone, Unlink } from "lucide-react"
+import { Copy, KeyRound, Laptop, LogOut, ShieldCheck, Smartphone, Unlink } from "@/components/ui/icon"
 import type { AuthState, PairedDevice, PairingCode } from "@/lib/auth"
 import { gatewayTransport } from "@/lib/gateway-transport"
 import { copyText } from "@/platform"

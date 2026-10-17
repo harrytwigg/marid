@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle } from "@/components/ui/icon"
 import type { EngineLimitAccountSnapshot, EngineLimitEngineSnapshot, EngineLimitWindow } from "@/lib/api"
 import { accountStatus } from "./account-status"
 import { agoLabel, barColor, clampPercent, resetLabel, windowLabel } from "./format"

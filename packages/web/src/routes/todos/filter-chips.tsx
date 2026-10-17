@@ -1,4 +1,4 @@
-import { Check, ChevronDown, X } from "lucide-react"
+import { Check, ChevronDown, X } from "@/components/ui/icon"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 /* The filter row's chips, split out of filter-bar.tsx: the list view's removable
@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/compon
 
 /** The accent tick a menu row wears when it is the current choice. */
 export function MenuCheck({ on }: { on: boolean }) {
-  return <Check size={14} strokeWidth={2.6} className={`ml-auto ${on ? "text-[var(--accent)]" : "opacity-0"}`} aria-hidden />
+  return <Check size={14} className={`ml-auto ${on ? "text-[var(--accent)]" : "opacity-0"}`} aria-hidden />
 }
 
 export const SUBMENU_CLASS =
@@ -22,7 +22,7 @@ export function ActiveChip({ label, onRemove }: { label: string; onRemove: () =>
       className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[var(--accent-fill)] px-3 text-[length:var(--text-footnote)] font-medium text-[var(--accent)] transition-colors hover:bg-[var(--fill-secondary)]"
     >
       {label}
-      <X size={12} strokeWidth={2.4} aria-hidden />
+      <X size={12} aria-hidden />
     </button>
   )
 }
@@ -63,7 +63,6 @@ export function ValueChip({
           {set && display != null ? display : label}
           <ChevronDown
             size={10}
-            strokeWidth={2.4}
             className={set ? "opacity-70" : "text-[var(--text-quaternary)]"}
             aria-hidden
           />
@@ -85,7 +84,7 @@ export function BoardActiveChip({ label, onRemove }: { label: string; onRemove: 
       className="focus-outline flex h-[30px] flex-none items-center gap-1.5 rounded-[15px] bg-[var(--accent-fill)] px-3 text-[13px] font-medium text-[var(--accent)] outline-none transition-colors hover:bg-[var(--fill-secondary)]"
     >
       {label}
-      <X size={11} strokeWidth={2.4} aria-hidden />
+      <X size={11} aria-hidden />
     </button>
   )
 }

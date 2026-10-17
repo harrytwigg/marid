@@ -98,7 +98,7 @@ describe('ChatBlockInline', () => {
     const { container } = render(<ChatBlockInline block={block} onPeek={vi.fn()} />)
     expect(screen.queryByRole('button')).toBeNull()
     expect(container.querySelector('[data-handoff-interactive="false"]')).toBeTruthy()
-    expect(container.querySelector('svg.lucide-chevron-right')).toBeNull()
+    expect(container.querySelector('[data-icon="ChevronRight"]')).toBeNull()
   })
 
   it('applies the one-time delegation arrival wrapper with the supplied capped delay', () => {

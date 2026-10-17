@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight } from "@/components/ui/icon"
 import { api } from "@/lib/api"
 import { agoLabel, describeCron, formatNextRun, nextCronDate } from "@/lib/cron-utils"
 import { PageLayout } from "@/components/page-layout"
@@ -115,7 +115,7 @@ export function CronRow({
         label={job.enabled ? `Disable ${job.name}` : `Enable ${job.name}`}
       />
       <CronDeleteMenu job={job} variant="row" />
-      <ChevronRight size={14} strokeWidth={2.4} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
+      <ChevronRight size={14} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
     </div>
   )
 }

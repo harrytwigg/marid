@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Copy, Link as LinkIcon, MoreHorizontal } from "lucide-react"
+import { ChevronLeft, ChevronRight, Copy, Link as LinkIcon, MoreHorizontal } from "@/components/ui/icon"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +28,6 @@ function Csep() {
   return (
     <ChevronRight
       size={11}
-      strokeWidth={2.2}
       aria-hidden
       className="flex-none text-[var(--text-quaternary)]"
     />
@@ -81,7 +80,7 @@ export function CrumbBar({
           onClick={onBack}
           className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
         >
-          <ChevronLeft size={17} strokeWidth={2.2} aria-hidden />
+          <ChevronLeft size={17} aria-hidden />
         </button>
       ) : (
         <div className="-ml-2 flex min-w-0 flex-1 items-center gap-2 overflow-hidden whitespace-nowrap pl-2">
@@ -143,7 +142,7 @@ export function CrumbBar({
           onClick={() => copyText(gatewayTransport().httpUrl(todoPath(id)))}
           className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
         >
-          <LinkIcon size={14} strokeWidth={2} aria-hidden />
+          <LinkIcon size={14} aria-hidden />
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

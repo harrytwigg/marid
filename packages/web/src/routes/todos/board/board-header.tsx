@@ -1,4 +1,4 @@
-import { Zap } from "lucide-react"
+import { Zap } from "@/components/ui/icon"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import type { DepartmentSummaryWire } from "@/lib/api"
 import type { BoardId } from "./board-route"

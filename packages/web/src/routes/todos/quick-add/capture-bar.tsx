@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ArrowUp, Check } from "lucide-react"
+import { ArrowUp, Check } from "@/components/ui/icon"
 import { TodoDialog } from "../todo-dialog"
 import { CaptureMic } from "./capture-mic"
 import { PipelineStrip } from "./pipeline-strip"

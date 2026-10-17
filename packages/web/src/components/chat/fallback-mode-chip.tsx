@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRightLeftIcon } from 'lucide-react'
+import { ArrowRightLeftIcon } from '@/components/ui/icon'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from '@/components/ui/dropdown-menu'
 import { FallbackTargetPicker } from './fallback-target-picker'
 import { FallbackModeMenu } from './fallback-mode-menu'

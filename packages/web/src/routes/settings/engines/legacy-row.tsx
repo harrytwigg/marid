@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react"
+import { ArrowRight } from "@/components/ui/icon"
 import { engineLabel } from "./chain-model"
 
 /** The deprecated `sessions.rateLimitStrategy` / `sessions.fallbackEngine` pair,
@@ -12,7 +12,7 @@ export function LegacyFallbackRow({ engine, onMigrate }: { engine: string; onMig
         <div className="min-w-0">
           <div className="flex items-center gap-[6px] text-[length:var(--text-footnote)] text-[var(--text-primary)]">
             Claude
-            <ArrowRight size={13} strokeWidth={2.2} aria-hidden className="shrink-0 text-[var(--text-quaternary)]" />
+            <ArrowRight size={13} aria-hidden className="shrink-0 text-[var(--text-quaternary)]" />
             {engineLabel(engine)}
           </div>
           <div className="mt-[2px] text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">

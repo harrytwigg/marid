@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ChevronLeft, PencilLine } from "lucide-react"
+import { ChevronLeft, PencilLine } from "@/components/ui/icon"
 import { api } from "@/lib/api"
 import { extraFrontmatter, parseSkillMd } from "@/lib/skills"
 import { MarkdownView } from "@/components/markdown-view"
@@ -149,7 +149,7 @@ export default function SkillDetailPage() {
                 to="/skills"
                 className="mb-3.5 inline-flex items-center gap-1 text-[length:var(--text-footnote)] font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
               >
-                <ChevronLeft size={13} strokeWidth={2.4} aria-hidden />
+                <ChevronLeft size={13} aria-hidden />
                 Skills
               </Link>
             }

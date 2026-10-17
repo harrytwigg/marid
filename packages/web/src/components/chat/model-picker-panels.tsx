@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { CheckIcon, ChevronLeftIcon } from 'lucide-react'
+import { CheckIcon, ChevronLeftIcon } from '@/components/ui/icon'
 import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,

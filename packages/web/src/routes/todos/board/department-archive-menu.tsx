@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react"
-import { MoreHorizontal } from "lucide-react"
+import { MoreHorizontal } from "@/components/ui/icon"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS } from "@/components/chat/session-row-menu"
 import type { ArchiveStage } from "./department-archive-dialog"

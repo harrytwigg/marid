@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react"
-import { Plus } from "lucide-react"
+import { Plus } from "@/components/ui/icon"
 import type { WorkItemStatusWire } from "@/lib/api"
 import { StateCircle } from "../state-glyph"
 import { stateKeyOf, STATUS_LABEL } from "@/lib/todos"
@@ -103,7 +103,7 @@ export function BoardColumn({
             onClick={onQuickAdd}
             className="focus-outline ml-auto grid size-6 place-items-center rounded-lg text-[var(--text-quaternary)] opacity-0 transition-opacity hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)] focus-visible:opacity-100 group-hover/colhead:opacity-100 max-[700px]:size-11 max-[700px]:opacity-100"
           >
-            <Plus size={13} strokeWidth={2.2} aria-hidden />
+            <Plus size={13} aria-hidden />
           </button>
         )}
       </div>

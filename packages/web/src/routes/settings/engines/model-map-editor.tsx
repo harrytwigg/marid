@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Plus, X } from "lucide-react"
+import { Plus, X } from "@/components/ui/icon"
 import { cn } from "@/lib/utils"
 import { CONTROL_CLASS } from "../shared"
 import { engineLabel } from "./chain-model"
@@ -76,7 +76,7 @@ function MapRow({ engine, from, to, targets, problem, onRetarget, onRemove }: {
           onClick={onRemove}
           className={ROW_BUTTON_CLASS}
         >
-          <X size={15} strokeWidth={2.2} aria-hidden />
+          <X size={15} aria-hidden />
         </button>
       </div>
       {problem && (
@@ -232,7 +232,7 @@ export function ModelMapEditor({ engine, chain, pairs, served, defaultModels, on
           onClick={() => setAdding(true)}
           className={cn(CONTROL_CLASS, "mt-[var(--space-2)] flex h-[34px] w-auto cursor-pointer items-center gap-[6px] px-[var(--space-3)] text-[var(--text-secondary)]")}
         >
-          <Plus size={14} strokeWidth={2.2} aria-hidden />
+          <Plus size={14} aria-hidden />
           Add a model mapping
         </button>
       )}

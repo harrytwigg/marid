@@ -1,4 +1,4 @@
-import { Lock, ShieldHalf } from "lucide-react"
+import { Lock, ShieldHalf } from "@/components/ui/icon"
 import { isConfined, type DepartmentScopeWire } from "@/lib/department-api"
 
 /* A department's scope, as a small pill. Open departments show nothing, so an
@@ -22,7 +22,7 @@ export function DepartmentScopeBadge({ scope, className = "" }: { scope: Departm
       className={`inline-flex flex-none items-center gap-1 rounded-full px-2 py-px text-[length:var(--text-caption2)] font-[var(--weight-semibold)] uppercase tracking-[0.04em] ${className}`}
       style={{ color: tone, background: `color-mix(in srgb, ${tone} 14%, transparent)` }}
     >
-      <Icon size={10} strokeWidth={2.4} aria-hidden />
+      <Icon size={10} aria-hidden />
       {text}
     </span>
   )

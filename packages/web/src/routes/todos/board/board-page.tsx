@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useNavigationType, useParams, useSearchParams } from "react-router-dom"
-import { ListFilter, Plus } from "lucide-react"
+import { ListFilter, Plus } from "@/components/ui/icon"
 import { PageLayout } from "@/components/page-layout"
 import { PageScaffold } from "@/components/shell/page-scaffold"
 import { PrimaryAction } from "@/components/shell/primary-action"
@@ -568,7 +568,6 @@ export default function TodoBoardPage() {
             >
               <ListFilter
                 size={13}
-                strokeWidth={2.2}
                 aria-hidden
                 className={filterCount > 0 ? "text-[var(--accent)]" : undefined}
               />

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { PanelRightOpen, Plus, SquareTerminal } from "lucide-react"
+import { PanelRightOpen, Plus, SquareTerminal } from "@/components/ui/icon"
 import { useState } from "react"
 import {
   DropdownMenu,

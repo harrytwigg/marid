@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react"
-import { Plus } from "lucide-react"
+import { Plus } from "@/components/ui/icon"
 import { describe, expect, it } from "vitest"
 import { LargeTitleHeader } from "../large-title-header"
 import { PageScaffold } from "../page-scaffold"

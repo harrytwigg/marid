@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom"
-import { ArrowUpRight, CornerDownRight, Eye, MessageCircle } from "lucide-react"
+import { ArrowUpRight, CornerDownRight, Eye, MessageCircle } from "@/components/ui/icon"
 import type { Employee } from "@/lib/api"
 import type { SessionTreeNodeWire, SessionTreeWire } from "@/lib/session-tree-api"
 import { pendingCaption, usePendingWork, type PendingWork } from "@/components/chat/pending-work"

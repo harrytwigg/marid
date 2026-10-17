@@ -1,5 +1,5 @@
 import { Popover } from 'radix-ui'
-import { LoaderCircleIcon } from 'lucide-react'
+import { LoaderCircleIcon } from '@/components/ui/icon'
 import type { ReactNode } from 'react'
 import type { ContextUsageWire } from '@/lib/api-context-usage'
 import { fmtK, formatContextUsage, type ContextUsage } from '@/lib/context-usage'

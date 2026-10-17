@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { Check, ChevronLeft, Play } from "lucide-react"
+import { Check, ChevronLeft, Play } from "@/components/ui/icon"
 import { describeCron } from "@/lib/cron-utils"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { ToggleSwitch, type CronJobWire } from "./shared"
@@ -11,7 +11,7 @@ function CronBackLink() {
       to="/cron"
       className="mb-3.5 inline-flex items-center gap-1 text-[length:var(--text-footnote)] font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
     >
-      <ChevronLeft size={13} strokeWidth={2.4} aria-hidden />
+      <ChevronLeft size={13} aria-hidden />
       Cron
     </Link>
   )
@@ -71,7 +71,7 @@ function CronJobTrailing({
           </>
         ) : (
           <>
-            <Play className="size-[13px]" fill="currentColor" strokeWidth={0} aria-hidden />
+            <Play className="size-[13px]" filled aria-hidden />
             {triggerPending ? "Starting…" : "Run now"}
           </>
         )}
