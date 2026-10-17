@@ -1856,7 +1856,7 @@ export function ChatSidebar({
   }
 
   return (
-    <div className="relative z-10 flex h-full flex-col bg-[var(--sidebar-bg)] shadow-[var(--shadow-card)]">
+    <div data-shell="panel" className="relative z-10 flex h-full flex-col bg-[var(--sidebar-bg)] shadow-[var(--shadow-card)]">
       {/* One slim control row — part of the List surface (--sidebar-bg), not
           the Thread. At rest it shows the Focused/All segmented control (left)
           + a borderless search icon (right); tapping search morphs the whole

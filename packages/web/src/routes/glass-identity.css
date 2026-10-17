@@ -1,0 +1,247 @@
+/*
+ * AERO — the glass identity.
+ *
+ * Loaded after globals.css and theme-overrides.css, so it re-declares the
+ * shared tokens every screen already reads (--bg, --material-*, --fill-*,
+ * --text-*, --accent …) and adds the glass vocabulary below. Colours are
+ * written once with light-dark(); color-scheme on the root (globals.css)
+ * picks the side. Gradients cannot use light-dark(), so the backdrop and the
+ * sheen keep a block per theme; shadows are built from --glass-shadow and so
+ * need none.
+ *
+ * Registered tokens (--bg, see globals.css) resolve against the parent's
+ * color-scheme in Firefox, so nothing here re-declares one inside a nested
+ * opposite-theme subtree.
+ *
+ * Glass rules:
+ *   - Chrome (rail, lists) sits on the ambient backdrop, which never scrolls,
+ *     so it is tint only: no backdrop-filter, nothing to repaint.
+ *   - Only surfaces that float over moving content blur (--glass-blur).
+ *   - Content reads on --glass-sheet, which is near-opaque by design.
+ *   - Reduced transparency swaps every glass token for its opaque twin.
+ */
+
+/* Geist (UI) and Geist Mono (code), variable 100..900; Sora (headings),
+   variable 100..800 — all SIL OFL 1.1 (see src/fonts/OFL-*.txt) */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/geist-latin-ext-var.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/geist-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/geist-mono-latin-ext-var.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/geist-mono-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('../fonts/sora-latin-ext-var.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('../fonts/sora-latin-var.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root, [data-theme] {
+  --font-ui: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Sora", "Geist", -apple-system, system-ui, sans-serif;
+  --font-code: "Geist Mono", "SF Mono", Menlo, monospace;
+
+  /* Palette: sky blues and a little ion violet; deep navy at night. */
+  --bg: light-dark(#F6FAFE, #0B1422);
+  --bg-secondary: light-dark(#FFFFFF, #111C2D);
+  --bg-tertiary: light-dark(#EAF2FA, #172437);
+
+  --text-primary: light-dark(#0C1A2B, #E8F1FB);
+  --text-secondary: light-dark(rgba(12,26,43,0.70), rgba(232,241,251,0.74));
+  --text-tertiary: light-dark(rgba(12,26,43,0.64), rgba(232,241,251,0.58));
+  --text-quaternary: light-dark(rgba(12,26,43,0.34), rgba(232,241,251,0.32));
+
+  --accent: light-dark(#06659F, #62C6FF);
+  --accent-fill: light-dark(rgba(6,101,159,0.12), rgba(98,198,255,0.16));
+  --accent-contrast: light-dark(#FFFFFF, #06223A);
+  --talk-focus-ring: light-dark(rgba(6,101,159,0.55), rgba(98,198,255,0.55));
+  --danger-fill: light-dark(rgba(196,50,62,0.12), rgba(255,122,130,0.16));
+
+  --system-blue: light-dark(#1F6FD1, #6AB0FF);
+  --system-indigo: light-dark(#5150C8, #9C9BFF);
+  --system-green: light-dark(#13804F, #5FD69A);
+  --system-red: light-dark(#C4323E, #FF7A82);
+  --system-orange: light-dark(#B45A0C, #FFAA5C);
+  --system-yellow: light-dark(#8A6A00, #F2CD4C);
+  --system-purple: light-dark(#7A4FC4, #C3A2FF);
+
+  --fill-primary: light-dark(rgba(16,52,92,0.08), rgba(200,228,255,0.11));
+  --fill-secondary: light-dark(rgba(16,52,92,0.06), rgba(200,228,255,0.08));
+  --fill-tertiary: light-dark(rgba(16,52,92,0.045), rgba(200,228,255,0.06));
+  --fill-quaternary: light-dark(rgba(16,52,92,0.03), rgba(200,228,255,0.04));
+  --separator: light-dark(rgba(16,52,92,0.12), rgba(200,228,255,0.10));
+  --separator-opaque: light-dark(#D3E2F0, #22324A);
+  --scrim: light-dark(rgba(10,30,60,0.22), rgba(0,4,12,0.48));
+
+  --code-bg: light-dark(rgba(16,52,92,0.05), rgba(200,228,255,0.06));
+  --code-border: light-dark(rgba(16,52,92,0.10), rgba(200,228,255,0.10));
+  --code-text: light-dark(#16304D, #E8F1FB);
+
+  /* Glass tints, weakest to strongest. */
+  --glass-chrome: light-dark(rgba(255,255,255,0.52), rgba(14,26,44,0.50));
+  --glass-float: light-dark(rgba(255,255,255,0.64), rgba(20,34,54,0.62));
+  --glass-overlay: light-dark(rgba(255,255,255,0.80), rgba(16,28,46,0.82));
+  --glass-sheet: light-dark(rgba(248,251,255,0.90), rgba(10,18,31,0.92));
+  /* The same tints composited at alpha 1, for reduced transparency. */
+  --glass-chrome-opaque: light-dark(#E9F2FA, #0E1A2C);
+  --glass-float-opaque: light-dark(#F4F9FD, #142236);
+  --glass-overlay-opaque: light-dark(#FBFDFF, #101C2E);
+  --glass-sheet-opaque: light-dark(#F8FBFF, #0A121F);
+  /* The lit edge and the highlight along the top of every glass surface. */
+  --glass-edge: light-dark(rgba(255,255,255,0.78), rgba(200,228,255,0.12));
+  --glass-specular: light-dark(rgba(255,255,255,0.95), rgba(255,255,255,0.10));
+  --glass-shadow: light-dark(rgba(20,60,110,0.10), rgba(0,0,0,0.45));
+  --glass-blur: blur(22px) saturate(180%);
+  --glass-blur-strong: blur(32px) saturate(190%);
+
+  /* Existing material tokens now speak glass. */
+  --material-regular: var(--glass-float);
+  --material-thick: var(--glass-overlay);
+  --material-thick-opaque: var(--glass-overlay-opaque);
+  --material-thin: light-dark(rgba(255,255,255,0.40), rgba(200,228,255,0.05));
+  --material-ultra-thin: light-dark(rgba(255,255,255,0.24), rgba(200,228,255,0.03));
+  --pill-bg: var(--glass-float);
+  --pill-bg-opaque: var(--glass-float-opaque);
+  --pill-border: var(--glass-edge);
+  --ribbon-bg: transparent;
+  --sidebar-bg: var(--glass-chrome);
+  --sidebar-backdrop: none;
+
+  --inset-shine: inset 0 1px 0 var(--glass-specular);
+  --shadow-subtle: 0 1px 2px var(--glass-shadow);
+  --shadow-ambient: 0 0 0 0.5px var(--glass-shadow);
+  --shadow-key: 0 2px 8px var(--glass-shadow), 0 12px 32px var(--glass-shadow);
+  --shadow-card: 0 0 0 1px var(--glass-edge), 0 1px 2px var(--glass-shadow), 0 8px 24px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+  --shadow-overlay: 0 0 0 1px var(--glass-edge), 0 8px 24px var(--glass-shadow), 0 24px 64px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+
+  --radius-sm: 7px;
+  --radius-md: 11px;
+  --radius-lg: 15px;
+  --radius-xl: 20px;
+  --radius-2xl: 26px;
+
+  /* Night: the sky at altitude after dark, with a horizon glow. */
+  --app-backdrop:
+    radial-gradient(55% 45% at 6% 0%, rgba(38,128,214,0.42) 0%, transparent 72%),
+    radial-gradient(45% 40% at 100% 6%, rgba(112,84,214,0.30) 0%, transparent 70%),
+    radial-gradient(65% 55% at 82% 104%, rgba(16,168,160,0.28) 0%, transparent 72%),
+    linear-gradient(180deg, #07111E 0%, #0A1728 100%);
+  --glass-sheen: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 38%);
+}
+
+/* Day: high-altitude daylight. */
+[data-theme="light"] {
+  --app-backdrop:
+    radial-gradient(60% 55% at 4% 0%, #8FD0FF 0%, transparent 72%),
+    radial-gradient(50% 45% at 100% 4%, #C8BCFF 0%, transparent 70%),
+    radial-gradient(70% 60% at 85% 106%, #8CE6D6 0%, transparent 72%),
+    radial-gradient(45% 40% at 20% 100%, #B5D8FF 0%, transparent 70%),
+    linear-gradient(180deg, #EAF5FE 0%, #D9E9F7 100%);
+  --glass-sheen: linear-gradient(180deg, rgba(255,255,255,0.70) 0%, rgba(255,255,255,0) 40%);
+}
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    --app-backdrop:
+      radial-gradient(60% 55% at 4% 0%, #8FD0FF 0%, transparent 72%),
+      radial-gradient(50% 45% at 100% 4%, #C8BCFF 0%, transparent 70%),
+      radial-gradient(70% 60% at 85% 106%, #8CE6D6 0%, transparent 72%),
+      radial-gradient(45% 40% at 20% 100%, #B5D8FF 0%, transparent 70%),
+      linear-gradient(180deg, #EAF5FE 0%, #D9E9F7 100%);
+    --glass-sheen: linear-gradient(180deg, rgba(255,255,255,0.70) 0%, rgba(255,255,255,0) 40%);
+  }
+}
+
+/* Reduced transparency: every glass token becomes its opaque twin and nothing
+   blurs. Honoured from the OS and from data-transparency="reduced", which a
+   setting can write on <html>. */
+@media (prefers-reduced-transparency: reduce) {
+  :root, [data-theme] {
+    --glass-chrome: var(--glass-chrome-opaque);
+    --glass-float: var(--glass-float-opaque);
+    --glass-overlay: var(--glass-overlay-opaque);
+    --glass-sheet: var(--glass-sheet-opaque);
+    --glass-blur: none;
+    --glass-blur-strong: none;
+  }
+}
+[data-transparency="reduced"], [data-transparency="reduced"] [data-theme] {
+  --glass-chrome: var(--glass-chrome-opaque);
+  --glass-float: var(--glass-float-opaque);
+  --glass-overlay: var(--glass-overlay-opaque);
+  --glass-sheet: var(--glass-sheet-opaque);
+  --glass-blur: none;
+  --glass-blur-strong: none;
+}
+
+body {
+  background: var(--app-backdrop);
+  background-attachment: fixed;
+}
+
+/* The shell paints the ambient backdrop. Routed content floats on it as a
+   glass sheet, and the chat list as its own glass panel, from lg up; below lg
+   the sheet is the whole screen. The sheet is flat and opaque on purpose:
+   text reads on it, and anything that paints the page colour (scrims, sticky
+   large-title headers) covers what scrolls beneath and matches the sheet
+   exactly, so it never shows as a band. Its glass is the lit edge and shadow. */
+[data-shell="root"] { background: var(--app-backdrop); }
+[data-shell="sheet"] {
+  --bg: var(--glass-sheet-opaque);
+  /* The collapsing large-title bar paints this material; inside the sheet it
+     must be the sheet's own colour, or it shows as a band at rest. */
+  --material-thick: var(--glass-sheet-opaque);
+  --material-thick-opaque: var(--glass-sheet-opaque);
+  background: var(--bg);
+}
+@media (min-width: 64rem) {
+  [data-shell="sheet"], [data-shell="panel"] {
+    margin: 10px 10px 10px 0;
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  [data-shell="panel"] {
+    height: calc(100% - 20px);
+    background: var(--glass-chrome);
+    background-image: var(--glass-sheen);
+    /* The list paints its own rows and header in this colour; inside the
+       panel the panel is the colour, so they let it through. */
+    --sidebar-bg: transparent;
+  }
+}

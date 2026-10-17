@@ -27,56 +27,57 @@ import {
 /**
  * Theme-aware xterm color palettes. The app exposes exactly two visual themes
  * via `data-theme` on <html> ("dark" / "light"; "system" resolves through the
- * prefers-color-scheme media query). These ITheme palettes mirror the Ledger
- * design tokens (warm charcoal / warm paper) with a tasteful warm ANSI 16-color
- * set so the interactive `claude` TUI reads correctly in both themes.
+ * prefers-color-scheme media query). These ITheme palettes mirror the Aero
+ * identity (glass-identity.css): the terminal sits on the reading sheet, so its
+ * background is the opaque sheet colour, and its ANSI colours are the identity's
+ * system colours, so the interactive `claude` TUI reads correctly in both themes.
  */
 const XTERM_THEME_DARK: ITheme = {
-  background: "#0F1719",
-  foreground: "#E2ECEB",
-  cursor: "#3DBFB2",
-  cursorAccent: "#0F1719",
-  selectionBackground: "rgba(61,191,178,0.30)",
-  black: "#0F1719",
-  red: "#E0675A",
-  green: "#7DBE6A",
-  yellow: "#E0A33C",
-  blue: "#5B9BD5",
-  magenta: "#B98AD6",
-  cyan: "#6FBFB0",
-  white: "#E2ECEB",
-  brightBlack: "#5C564A",
-  brightRed: "#EC8479",
-  brightGreen: "#95D183",
-  brightYellow: "#EDB85E",
-  brightBlue: "#7BB1E2",
-  brightMagenta: "#CBA3E4",
-  brightCyan: "#8AD2C4",
-  brightWhite: "#F4F1E8",
+  background: "#0A121F",
+  foreground: "#E8F1FB",
+  cursor: "#62C6FF",
+  cursorAccent: "#0A121F",
+  selectionBackground: "rgba(98,198,255,0.30)",
+  black: "#0A121F",
+  red: "#FF7A82",
+  green: "#5FD69A",
+  yellow: "#F2CD4C",
+  blue: "#6AB0FF",
+  magenta: "#C3A2FF",
+  cyan: "#62C6FF",
+  white: "#E8F1FB",
+  brightBlack: "#5B6B80",
+  brightRed: "#FF9298",
+  brightGreen: "#7DE3AF",
+  brightYellow: "#F7DB78",
+  brightBlue: "#8CC1FF",
+  brightMagenta: "#D3B9FF",
+  brightCyan: "#8AD6FF",
+  brightWhite: "#F6FAFE",
 };
 
 const XTERM_THEME_LIGHT: ITheme = {
-  background: "#EEF3F3",
-  foreground: "#14211F",
-  cursor: "#0A6763",
-  cursorAccent: "#EEF3F3",
-  selectionBackground: "rgba(10,103,99,0.25)",
-  black: "#14211F",
-  red: "#B23B33",
-  green: "#5C7A4A",
-  yellow: "#B07A1A",
-  blue: "#2D6CB5",
-  magenta: "#7A5A9E",
-  cyan: "#2E7D74",
-  white: "#14211F",
-  brightBlack: "#6B6457",
-  brightRed: "#C45248",
-  brightGreen: "#6E8E5A",
-  brightYellow: "#C68F2A",
-  brightBlue: "#3F7DC4",
-  brightMagenta: "#8E6CB0",
-  brightCyan: "#3C8E84",
-  brightWhite: "#0F1719",
+  background: "#F8FBFF",
+  foreground: "#0C1A2B",
+  cursor: "#06659F",
+  cursorAccent: "#F8FBFF",
+  selectionBackground: "rgba(6,101,159,0.25)",
+  black: "#0C1A2B",
+  red: "#C4323E",
+  green: "#13804F",
+  yellow: "#8A6A00",
+  blue: "#1F6FD1",
+  magenta: "#7A4FC4",
+  cyan: "#0B7285",
+  white: "#0C1A2B",
+  brightBlack: "#5B6B80",
+  brightRed: "#D9505B",
+  brightGreen: "#2A9A66",
+  brightYellow: "#A98300",
+  brightBlue: "#3A86E0",
+  brightMagenta: "#9168D8",
+  brightCyan: "#1A8FA5",
+  brightWhite: "#0B1422",
 };
 
 /** Resolve the active app theme to its xterm palette. "system" → media query. */
@@ -98,11 +99,11 @@ function resolveXtermTheme(): ITheme {
 
 /** Read the app mono font from CSS so the terminal matches the rest of the UI. */
 function resolveXtermFont(): string {
-  if (typeof document === "undefined") return '"IBM Plex Mono", monospace';
+  if (typeof document === "undefined") return '"Geist Mono", monospace';
   const v = getComputedStyle(document.documentElement)
     .getPropertyValue("--font-code")
     .trim();
-  return v || '"IBM Plex Mono", monospace';
+  return v || '"Geist Mono", monospace';
 }
 
 /** One wheel notch (~100px in Chromium) moves ~2.8 lines at xterm's default
