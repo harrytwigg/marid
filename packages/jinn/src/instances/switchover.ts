@@ -186,8 +186,46 @@ export function planSwitchover(home: string, profileDirs: readonly string[] = []
 
 function profileEdit(file: string, names: Names): Edit[] {
   const text = readText(file);
-  const edit = text === undefined ? undefined : toolTokenEdit(file, text, names);
+  const edit = text === undefined ? undefined : twinEntriesEdit(file, text, names);
   return edit ? [edit] : [];
+}
+
+/**
+ * A Claude profile's settings are shared by every instance on the host, and one that has not been switched
+ * over still registers the server under the old name. So an entry naming the old tools gets the new name
+ * added beside it, never in its place: both builds are right, a second run adds nothing, and there is
+ * nothing to put back on a rollback. Only the lists are touched; a file that is not JSON is left alone.
+ */
+function twinEntriesEdit(file: string, text: string, names: Names): Edit | undefined {
+  let document: unknown;
+  try {
+    document = JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+  const pattern = new RegExp(`\\bmcp__${LEGACY_CODENAME}(?=__|\\b)`);
+  let added = 0;
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      const out: unknown[] = [];
+      for (const item of value) {
+        out.push(walk(item));
+        const twin = typeof item === "string" && pattern.test(item) ? item.replace(pattern, `mcp__${names.codename}`) : undefined;
+        if (twin !== undefined && !value.includes(twin) && !out.includes(twin)) { out.push(twin); added += 1; }
+      }
+      return out;
+    }
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, walk(item)]));
+    return value;
+  };
+  const next = walk(document);
+  if (added === 0) return undefined;
+  return {
+    file,
+    what: `lists the built-in server's tools as \`mcp__${LEGACY_CODENAME}__*\`; \`mcp__${names.codename}__*\` is added beside them (shared by every instance, so the old ones stay)`,
+    count: added,
+    text: `${JSON.stringify(next, null, 2)}${text.endsWith("\n") ? "\n" : ""}`,
+  };
 }
 
 function defaultGatewayRunning(home: string): boolean {
@@ -249,6 +287,11 @@ async function applyEdits(edits: readonly Edit[], options: SwitchoverOptions, re
     snapshot = await options.backup?.(options.home);
   } catch (error) {
     report.blockers.push(`it was not changed because the snapshot failed: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  // The snapshot can take minutes; a gateway started meanwhile must not have its files rewritten under it.
+  if ((options.gatewayRunning ?? defaultGatewayRunning)(options.home)) {
+    report.blockers.push("a gateway started at this home while it was being backed up, so nothing was changed: stop it and run again");
     return;
   }
   const originals = new Map(edits.map((edit) => [edit.file, fs.readFileSync(edit.file, "utf-8")]));

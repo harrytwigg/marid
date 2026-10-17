@@ -68,6 +68,25 @@ describe("reporting a switch-over", () => {
     expect(edit.text).toContain('"Bash(ls)"');
   });
 
+  it("adds the new tool names beside the old in a shared profile's allow and deny lists, once, and keeps the rest", async () => {
+    write(path.join(profile, "settings.json"), '{ "model": "x", "permissions": { "allow": ["Bash(ls)", "mcp__jinn__*"], "deny": ["mcp__jinn__stop_session"] } }');
+    await switchOver({ ...options, apply: true });
+    const settings = JSON.parse(fs.readFileSync(path.join(profile, "settings.json"), "utf-8"));
+    expect(settings.model).toBe("x");
+    expect(settings.permissions.allow).toEqual(["Bash(ls)", "mcp__jinn__*", "mcp__acme__*"]);
+    expect(settings.permissions.deny).toEqual(["mcp__jinn__stop_session", "mcp__acme__stop_session"]);
+    expect(planSwitchover(home, [profile], { codename: "acme", upper: "ACME", title: "Acme", renamed: true }).some((edit) => edit.file.startsWith(profile))).toBe(false);
+  });
+
+  it("changes nothing when a gateway started while the snapshot ran", async () => {
+    let running = false;
+    const before = read("config.yaml");
+    const report = await switchOver({ ...options, apply: true, gatewayRunning: () => running, backup: async () => { running = true; return undefined; } });
+    expect(report.blockers.join(" ")).toContain("started");
+    expect(report.applied).toBeUndefined();
+    expect(read("config.yaml")).toBe(before);
+  });
+
   it("leaves notes, sessions and everything it does not read out", async () => {
     const report = await switchOver(options);
     expect(report.findings.some((finding) => /knowledge|sessions/.test(finding.file))).toBe(false);
@@ -94,7 +113,8 @@ describe("switching an instance over", () => {
     expect(read("skills", "triage", "SKILL.md")).toBe("Call mcp__acme__list_employees, then mcp__acme__get_work_item.\n");
     expect(JSON.parse(read("cron", "jobs.json"))[0].prompt).toBe("use mcp__acme__create_work_item");
     expect(JSON.parse(read(".claude", "settings.json")).permissions.allow).toEqual(["mcp__acme__*", "mcp__acme", "Bash(ls)"]);
-    expect(fs.readFileSync(path.join(profile, "settings.json"), "utf-8")).toContain("mcp__acme__send_to_session");
+    // A profile is shared by every instance on the host: the new name is added beside the old, not put in its place.
+    expect(JSON.parse(fs.readFileSync(path.join(profile, "settings.json"), "utf-8")).permissions.allow).toEqual(["mcp__jinn__send_to_session", "mcp__acme__send_to_session"]);
     // What it does not own is exactly as it was.
     expect(read("knowledge", "history.md")).toContain("mcp__jinn__");
 

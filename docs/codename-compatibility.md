@@ -16,7 +16,7 @@ While the literal is unchanged every alias collapses to a single name and none o
 | Names | It reads the old spelling wherever an old peer or file can still carry it (environment, headers, flags, cookies, config key, roster key, plugin SDK specifier, browser storage) and writes the new one. A variable set only under the old name is adopted once, with one warning per name. | Automatic, every start |
 | Home | The home is renamed (`~/.jinn-x` to `~/.<new>-x`), not copied, and a link is left at the old path. Claude Code files conversations by the physical working directory, so the project directories for the home and for each department stage directory move with it, in every profile. The host registry entry, the stage root, the snapshots and `gateway.json` follow. | The first command or start that finds the old home with nothing running at it, after a snapshot, under a lock |
 | MCP name | The built-in server keeps its old registered name on an upgraded instance, so no prompt, skill or permission list changes underfoot. | Per instance, at the switch-over |
-| Switch-over | Skills, cron prompts, permission lists and rosters that say `mcp__<old>__*` or `<old>Mcp` are rewritten, the instance block in `config.yaml` is keyed by the new name, and the registered name flips, last. | You: `doctor --rename --apply`, gateway stopped |
+| Switch-over | Skills, cron prompts, the instance's own permission lists and rosters that say `mcp__<old>__*` or `<old>Mcp` are rewritten, the instance block in `config.yaml` is keyed by the new name, and the registered name flips, last. A Claude profile's settings, which every instance on the host shares, get the new tool names added beside the old ones. | You: `doctor --rename --apply`, gateway stopped |
 
 `doctor` reports where an instance stands in all four and never changes anything. `doctor --rename` reports what
 the switch-over would change, and `--apply` makes the change after a snapshot, keeping a copy of every file it edits
@@ -48,7 +48,11 @@ Things to know about the move itself:
 The old build keeps working against a moved home: it finds it through the link, reads the old names it wrote, and
 ignores the new ones. What it cannot do is find conversations, which now sit under the new keys.
 
-- **Before the home moved**: nothing to undo. Stay on, or return to, the old build.
+- **Before the home moved**: nothing to undo for the home. An instance with remote departments is the exception: the
+  stage directories on a remote host move at the next department spawn whether or not the home has, so the old build
+  would find `.jinn-departments` gone there. Move `<remote root>/.<new>-departments/<department>` back to
+  `<remote root>/.jinn-departments/<department>` on that host, and each `projects/<slug of the new path>` under the
+  Claude profile there back to `projects/<slug of the old path>`, then stay on, or return to, the old build.
 - **After the home moved, before the switch-over**:
   1. Stop the gateway.
   2. Remove the link at the old path and rename the directory back (`~/.<new>-x` to `~/.jinn-x`).
@@ -56,13 +60,16 @@ ignores the new ones. What it cannot do is find conversations, which now sit und
      every profile. The move's receipt, `state/home-move.json`, names the home and the stage directories it moved.
   4. Move the stage root back (`.<new>-departments/.instances/.<new>-x` to `.jinn-departments/.instances/.jinn-x`) and
      rename the snapshot directories likewise.
-  5. Set the registry entry's name and home back (`~/.config/<new>/instances.json`; the old registry file is left in place
-     and is still current for every other field).
+  5. Set the registry entry's name and home back (`~/.config/<new>/instances.json`). The old registry file is left in
+     place, but it is not updated after the move: copy back only the entry's name and home, and keep anything the
+     new build changed in the new file.
+  6. If the instance has remote departments, move their stage directories and conversations back as described above.
   Skipping step 3 loses nothing, but a resumed session starts a fresh conversation, as one does when Claude Code cannot
   find the old one; the files are still there.
-- **After the switch-over**: also restore the files it edited from `.migration-backups/rename-<time>/` (the receipt,
-  `state/rename-switchover.json`, lists them), which puts the instance block, the rosters, the skills and the permission
-  lists back and the built-in server back under its old name.
+- **After the switch-over**: also restore the instance's own files it edited from `.migration-backups/rename-<time>/`
+  (the receipt, `state/rename-switchover.json`, lists them), which puts the instance block, the rosters, the skills and
+  the permission lists back and the built-in server back under its old name. A Claude profile's settings need no
+  restoring: they only gained entries, and the old ones were never removed.
 
 Each of those is a manual rollback because each is a deliberate, rare event. Take the snapshot (`backup run`) before
 the first start of a new build: the move takes one of its own, and so does the switch-over.
