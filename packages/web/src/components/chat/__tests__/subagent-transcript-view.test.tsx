@@ -169,8 +169,17 @@ describe('a background sub-agent row in the waiting-on popup', () => {
     await waitFor(() => expect(screen.queryByTestId('subagent-transcript-dialog')).toBeNull())
   })
 
-  it('marks a sub-agent that has gone quiet', async () => {
+  it('marks a sub-agent that has given its answer as finished, however long ago', async () => {
     getTranscript().mockResolvedValue(transcript([prompt, said], iso(5 * 60_000)))
+    mount()
+    await openSubagentRow()
+    const activity = await screen.findByTestId('subagent-activity')
+    expect(activity.getAttribute('data-live')).toBe('false')
+    expect(activity.textContent).toBe('Finished')
+  })
+
+  it('marks a sub-agent that stopped mid-task as quiet', async () => {
+    getTranscript().mockResolvedValue(transcript([prompt, { ...tool, result: null }], iso(5 * 60_000)))
     mount()
     await openSubagentRow()
     const activity = await screen.findByTestId('subagent-activity')

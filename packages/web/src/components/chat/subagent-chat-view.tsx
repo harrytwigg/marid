@@ -5,7 +5,6 @@ import { queryKeys } from '@/lib/query-keys'
 import { formatElapsed } from '@/lib/session-waits'
 import { subagentMessages } from '@/lib/subagent-messages'
 import {
-  SUBAGENT_LIVE_MS,
   getSubagentTranscript,
   subagentIsLive,
   subagentRefetchMs,
@@ -36,7 +35,7 @@ function Activity({ data, now }: { data: SubagentTranscriptResponse | undefined;
         aria-hidden="true"
         className={live ? 'h-1.5 w-1.5 rounded-full bg-[var(--system-orange)] animate-[jinn-pulse_1.4s_infinite] motion-reduce:animate-none' : 'h-1.5 w-1.5 rounded-full bg-[var(--text-tertiary)]'}
       />
-      {live ? 'Working' : quiet < SUBAGENT_LIVE_MS ? 'Finished' : `Quiet for ${formatElapsed(quiet)}`}
+      {live ? 'Working' : data.entries.at(-1)?.kind === 'text' ? 'Finished' : `Quiet for ${formatElapsed(quiet)}`}
     </span>
   )
 }
