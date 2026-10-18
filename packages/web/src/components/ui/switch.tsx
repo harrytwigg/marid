@@ -31,7 +31,8 @@ type SwitchProps = Omit<React.ComponentProps<"div">, "onChange" | "defaultValue"
  * Space only (Enter does nothing, and inside a form it submits the form); and
  * `onClick` runs once per press, from the input's click. A press on the label or
  * track makes the browser click the input too, and only that second click is
- * reported.
+ * reported. Calling `preventDefault()` there does not stop the toggle (Radix's
+ * did): `onCheckedChange` still fires, and a controlled value decides what shows.
  */
 function Switch({
   className,
