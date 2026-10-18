@@ -3,7 +3,7 @@ import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import type { DialogPopupProps } from "./dialog-popup"
-import { loadedPopup } from "./dialog-load"
+import { loadedPopup, retryFailedLoad } from "./dialog-load"
 import { DialogClose, useDialogRoot, type DialogRoot } from "./dialog-root"
 
 /* The dialog's box, drawn by the popup once it has loaded. See `dialog.tsx`. */
@@ -63,7 +63,10 @@ function useLoadFailure(open: boolean) {
   const [wasOpen, setWasOpen] = React.useState(open)
   if (open !== wasOpen) {
     setWasOpen(open)
-    if (open) setFailed(false)
+    if (open) {
+      retryFailedLoad()
+      setFailed(false)
+    }
   }
   return [failed, setFailed] as const
 }
