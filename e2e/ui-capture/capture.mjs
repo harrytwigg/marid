@@ -96,7 +96,7 @@ async function assertRootReduced(page) {
 async function captureOne({ screen, theme, viewport }) {
   const label = `${screen.name}-${theme}-${viewport.name}`
   const context = await browser.newContext({
-    viewport: { width: viewport.width, height: viewport.height },
+    viewport: { width: viewport.width, height: screen.heights?.[viewport.name] ?? viewport.height },
     deviceScaleFactor: 2,
     colorScheme: theme,
     // Captures compare states, not transitions.
@@ -119,12 +119,14 @@ async function captureOne({ screen, theme, viewport }) {
       await route.fulfill({ response, json: { ...(await response.json()), onboarded: false, needed: true } })
     })
   }
+  if (screen.setup) await screen.setup(page)
   const errors = []
   page.on('pageerror', (err) => errors.push(String(err)))
   try {
     if (reduced && screen.name === 'settings' && viewport.name === 'desktop') await shootFirstPaint(page, screen, label)
-    await page.goto(baseUrl + screen.url(fixtures), { waitUntil: 'networkidle' })
-    await page.getByText(screen.ready, { exact: false }).locator('visible=true').first().waitFor({ timeout: 15_000 })
+    await page.goto(baseUrl + screen.url(fixtures), { waitUntil: screen.waitUntil ?? 'networkidle' })
+    const ready = screen.readyLocator ? screen.readyLocator(page) : page.getByText(screen.ready, { exact: false }).locator('visible=true').first()
+    await ready.waitFor({ timeout: 15_000 })
     await page.evaluate(() => document.fonts.ready)
     if (reduced) await assertRootReduced(page)
     await page.waitForTimeout(400)

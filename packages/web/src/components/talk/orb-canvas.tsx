@@ -11,23 +11,34 @@ import { usePrefersReducedMotion } from "./use-reduced-motion"
  */
 
 /**
- * The palette hangs off `data-theme` on the root, and that attribute is the one
- * thing every theme path touches. Picking a theme writes it; so does an OS
- * scheme flip while the setting sits on "system" — and that second path changes
- * no React state at all, so a repaint keyed on the theme *setting* never fires
- * and the sphere keeps the palette it was born with.
+ * The palette hangs off `data-theme` and `data-transparency` on the root, and
+ * those attributes are the things every path touches. Picking a theme or
+ * Reduced writes them; so does an OS scheme flip while the setting sits on
+ * "system" — and that second path changes no React state at all, so a repaint
+ * keyed on the setting never fires and the sphere keeps the palette it was
+ * born with. The OS's own Reduced preference reaches the palette through a
+ * media query, so it is watched too.
  */
-function useThemeAttribute(): string {
-  const [attribute, setAttribute] = useState(() => document.documentElement.dataset.theme ?? "")
-  useEffect(() => {
+function usePaletteKey(): string {
+  const read = () => {
     const root = document.documentElement
-    const read = () => setAttribute(root.dataset.theme ?? "")
-    const observer = new MutationObserver(read)
-    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] })
-    read()
-    return () => observer.disconnect()
+    const reduced = root.dataset.transparency === "reduced" || window.matchMedia("(prefers-reduced-transparency: reduce)").matches
+    return `${root.dataset.theme ?? ""}${reduced ? "|reduced" : ""}`
+  }
+  const [key, setKey] = useState(read)
+  useEffect(() => {
+    const update = () => setKey(read())
+    const observer = new MutationObserver(update)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-transparency"] })
+    const media = window.matchMedia("(prefers-reduced-transparency: reduce)")
+    media.addEventListener("change", update)
+    update()
+    return () => {
+      observer.disconnect()
+      media.removeEventListener("change", update)
+    }
   }, [])
-  return attribute
+  return key
 }
 
 interface OrbCanvasProps {
@@ -47,7 +58,7 @@ interface OrbCanvasProps {
 export function OrbCanvas({ state, variant = "mist", energyRef, size, motion = "live", intensity = "standard" }: OrbCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const reduce = usePrefersReducedMotion()
-  const themeAttribute = useThemeAttribute()
+  const paletteKey = usePaletteKey()
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -72,8 +83,8 @@ export function OrbCanvas({ state, variant = "mist", energyRef, size, motion = "
     }
     frame = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(frame)
-    // `themeAttribute` is not read here — it re-reads the palette when the theme flips.
-  }, [state, variant, size, reduce, motion, themeAttribute, energyRef, intensity])
+    // `paletteKey` is not read here — it re-reads the palette when the theme or Reduced flips.
+  }, [state, variant, size, reduce, motion, paletteKey, energyRef, intensity])
 
   return (
     <canvas

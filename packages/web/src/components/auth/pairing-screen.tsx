@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react"
-import { ChevronDown, KeyRound, Settings, ShieldCheck, Terminal, Wifi } from "@/components/ui/icon"
+import { ChevronDown, KeyRound, Settings, Terminal, Wifi } from "@/components/ui/icon"
 import type { AuthState } from "@/lib/auth"
 import { AuthStateIcon, AuthStateLabel } from "./auth-motion"
+import { BrandMark } from "@/components/brand-mark"
 import { PRODUCT_NAME } from "@/lib/brand"
 
 type PairingMode = "code" | "token"
@@ -53,12 +54,11 @@ export function PairingScreen({ authState, pairing, error, onPair }: PairingScre
 
   return (
     <main className="h-dvh overflow-y-auto bg-[var(--bg)] text-[var(--text-primary)] flex items-start sm:items-center justify-center px-[var(--space-4)] py-[max(var(--safe-top),var(--space-8))]">
-      <section className="w-full max-w-[560px] rounded-[var(--radius-xl)] bg-[var(--material-regular)] shadow-[var(--shadow-card)] p-[var(--space-6)]">
+      <section className="w-full max-w-[560px] glass-card rounded-[var(--radius-xl)] p-[var(--space-6)]">
         <div className="mb-[var(--space-5)] flex items-center gap-[var(--space-3)] px-[var(--space-4)]">
-          <div className="size-11 rounded-full bg-[var(--accent-fill)] text-[var(--accent)] flex items-center justify-center">
-            <ShieldCheck size={22} />
-          </div>
+          <BrandMark size={44} className="shrink-0" />
           <div>
+            <p className="brand-wordmark text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">{PRODUCT_NAME}</p>
             <h1 className="text-balance text-[length:var(--text-title3)] font-[var(--weight-semibold)] tracking-[var(--tracking-normal)]">
               Pair This Browser
             </h1>
@@ -69,7 +69,7 @@ export function PairingScreen({ authState, pairing, error, onPair }: PairingScre
           </div>
         </div>
 
-        <div className="mb-[var(--space-5)] rounded-[var(--radius-lg)] bg-[var(--bg-secondary)] p-[var(--space-4)]">
+        <div className="mb-[var(--space-5)] rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-4)]">
           <p className="text-pretty text-[length:var(--text-subheadline)] leading-[var(--leading-relaxed)] text-[var(--text-secondary)]">
             This browser is not paired yet. Choose one way to get a one-time code.
           </p>
@@ -115,7 +115,7 @@ export function PairingScreen({ authState, pairing, error, onPair }: PairingScre
           </p>
         </div>
 
-        <form onSubmit={submit} className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] bg-[var(--bg-secondary)] p-[var(--space-4)]">
+        <form onSubmit={submit} className="flex flex-col gap-[var(--space-3)] rounded-[var(--radius-lg)] bg-[var(--fill-quaternary)] p-[var(--space-4)]">
           <label className="text-[length:var(--text-caption1)] font-[var(--weight-semibold)] text-[var(--text-tertiary)]" htmlFor="jinn-pairing-code">
             {mode === "code" ? "Remote access code" : "Setup token"}
           </label>

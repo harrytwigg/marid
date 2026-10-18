@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from 'react'
+import { BrandMark } from '@/components/brand-mark'
 import { reloadRoute } from '@/lib/gateway-transport'
 
 function subscribe(listener: () => void) {
@@ -15,7 +16,8 @@ export function RouteFailure() {
   const [refreshing, setRefreshing] = useState(false)
   const online = useSyncExternalStore(subscribe, () => navigator.onLine, () => true)
   return (
-    <main className="flex h-dvh flex-col items-center justify-center gap-3 bg-background p-6 text-center">
+    <main className="flex h-dvh flex-col items-center justify-center gap-3 bg-[var(--bg)] p-6 text-center">
+      <BrandMark size={56} className="mb-1" />
       <h1 className="text-subheadline font-medium text-foreground">
         {online ? 'This page could not load' : "You're offline"}
       </h1>
