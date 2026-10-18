@@ -11,6 +11,7 @@
 #   JINN_CAPTURE_TMP    where the throwaway host home goes (default /tmp).
 #   JINN_CAPTURE_NODE   node binary (default: the one beside pnpm).
 #   JINN_CAPTURE_BROWSER firefox (default) or chromium; use the same one for before and after.
+#   JINN_CAPTURE_KEEP_DRI set to leave /dev/dri visible to Chromium (see below).
 set -euo pipefail
 
 unset JINN_HOME JINN_PORT JINN_HOST JINN_INSTANCE JINN_GATEWAY_URL JINN_GATEWAY_TOKEN JINN_SESSION_ID
@@ -70,5 +71,18 @@ STARTED=1
 env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" start "$INSTANCE"
 "$NODE_BIN" "$CAPTURE_DIR/seed.mjs" api "$SANDBOX_HOME" "$BASE_URL"
 
+# Headless Chromium renders in software, but its GPU process still opens /dev/dri. On a host whose
+# GPU driver is wedged that open blocks in the kernel, and the page's main thread then waits on the
+# GPU process forever (any canvas drawing, WebGL or screenshot hangs). Hiding the device node makes
+# Chromium fall back to software cleanly, so run it with an empty /dev/dri when bwrap is available.
+RUN=()
+if [[ "${JINN_CAPTURE_BROWSER:-firefox}" == "chromium" && -z "${JINN_CAPTURE_KEEP_DRI:-}" && -e /dev/dri ]]; then
+  if command -v bwrap >/dev/null 2>&1; then
+    RUN=(bwrap --dev-bind / / --tmpfs /dev/dri)
+  else
+    echo "capture-ui: bwrap not found; Chromium keeps /dev/dri and may hang on a host with a wedged GPU driver" >&2
+  fi
+fi
+
 cd "$SCRIPT_REPO"
-"$NODE_BIN" "$CAPTURE_DIR/capture.mjs" "$SANDBOX_HOME" "$BASE_URL" "$OUT" "$@"
+${RUN[@]+"${RUN[@]}"} "$NODE_BIN" "$CAPTURE_DIR/capture.mjs" "$SANDBOX_HOME" "$BASE_URL" "$OUT" "$@"
