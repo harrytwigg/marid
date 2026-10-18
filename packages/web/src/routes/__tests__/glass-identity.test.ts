@@ -219,18 +219,43 @@ describe("reduced transparency", () => {
   })
 })
 
+describe("the Talk orb palette", () => {
+  const ORB = ["--orb-core", "--orb-base", "--orb-bloom", "--orb-lobe-a", "--orb-lobe-b", "--orb-lobe-c", "--orb-shadow", "--orb-specular", "--orb-rim"]
+  const GLOBALS = readFileSync(path.join(ROUTES, "globals.css"), "utf8")
+
+  it("is one light-dark() pair per token in the shared block", () => {
+    for (const token of ORB) expect(SHARED.get(token), token).toMatch(/^light-dark\(.+\)$/)
+  })
+
+  it("is registered as a colour, so script reads back a plain colour", () => {
+    for (const token of ORB) expect(GLOBALS, token).toContain(`@property ${token} {`)
+  })
+
+  it("gives Reduced transparency solid twins, from the OS preference and from the setting", () => {
+    const solid = /^light-dark\(#[0-9A-F]{6}, #[0-9A-F]{6}\)$/
+    const media = IDENTITY.slice(IDENTITY.indexOf("@media (prefers-reduced-transparency: reduce)"))
+    const fromOs = declarations(ruleBody(media, ":root, [data-theme]"))
+    const fromAttribute = declarations(ruleBody(IDENTITY, '[data-transparency="reduced"], [data-transparency="reduced"] [data-theme]'))
+    // the shadow and the specular are gradient stops that fade to nothing, so they stay translucent
+    const SOLID = ORB.filter((t) => t !== "--orb-shadow" && t !== "--orb-specular")
+    for (const decls of [fromOs, fromAttribute]) for (const token of SOLID) expect(decls.get(token), token).toMatch(solid)
+  })
+
+  it("leaves no upstream warm orb colour behind", () => {
+    expect(IDENTITY + GLOBALS).not.toMatch(/255,206,132|255,182,88/)
+  })
+})
+
 describe("the shell", () => {
-  it("is loaded after globals.css and theme-overrides.css so it wins on source order", () => {
-    // main.tsx loads the one stylesheet root, which pulls globals.css and then
-    // theme-overrides.css in; the identity comes after the whole root.
+  it("is loaded after globals.css so it wins on source order", () => {
+    // main.tsx loads the one stylesheet root, which pulls globals.css in; the
+    // identity comes after the whole root.
     const main = readFileSync(path.resolve(ROUTES, "../main.tsx"), "utf8")
     const root = readFileSync(path.resolve(ROUTES, "app.css"), "utf8")
     const imports = ["app.css", "glass-identity.css"].map((f) => main.indexOf(`./routes/${f}`))
     expect(imports[0]).toBeGreaterThanOrEqual(0)
     expect(imports[1]).toBeGreaterThan(imports[0])
-    const inRoot = ["globals.css", "theme-overrides.css"].map((f) => root.indexOf(`@import "./${f}"`))
-    expect(inRoot[0]).toBeGreaterThanOrEqual(0)
-    expect(inRoot[1]).toBeGreaterThan(inRoot[0])
+    expect(root.indexOf('@import "./globals.css"')).toBeGreaterThanOrEqual(0)
   })
 
 })

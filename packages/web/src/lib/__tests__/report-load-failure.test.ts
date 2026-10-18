@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { clearHostBridge, registerHostNotificationSink } from "@/plugins/sdk/host-bridge"
+import { clearNoticeSink, registerNoticeSink } from "@/lib/notices"
 import { loadFailureMessage, reportLoadFailure } from "../report-load-failure"
 
 afterEach(() => {
-  clearHostBridge()
+  clearNoticeSink()
   vi.restoreAllMocks()
 })
 
 describe("reportLoadFailure", () => {
   it("raises one error notice naming what could not load, on the app's notice surface", () => {
     const sink = vi.fn()
-    registerHostNotificationSink(sink)
+    registerNoticeSink(sink)
 
     reportLoadFailure("Quick capture")
 
@@ -27,6 +27,6 @@ describe("reportLoadFailure", () => {
 
     reportLoadFailure("The menu")
 
-    expect(warn).toHaveBeenCalledWith("[load] The menu couldn't load. Reload the page and try again.")
+    expect(warn).toHaveBeenCalledWith("[notice] error: The menu couldn't load. Reload the page and try again.")
   })
 })

@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCompactWire, WorkItemListWire, WorkItemStatusWire } from "@/lib/api"
-import { clearHostBridge, registerHostNotificationSink } from "@/plugins/sdk/host-bridge"
+import { clearNoticeSink, registerNoticeSink } from "@/lib/notices"
 import TodoBoardPage from "../board/board-page"
 import { clearBoardScrollCache } from "../board/board-route"
 
@@ -84,7 +84,7 @@ function renderBoard() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  clearHostBridge()
+  clearNoticeSink()
   clearBoardScrollCache()
   sessionStorage.clear()
   rows = { executing: [compact("PLA-3", "executing")] }
@@ -95,7 +95,7 @@ describe("the quick-capture bar's chunk failing to load", () => {
   it("takes the scrim down and says so on the notice surface, so the page is not left dimmed", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const notice = vi.fn()
-    registerHostNotificationSink(notice)
+    registerNoticeSink(notice)
     renderBoard()
     await screen.findByTestId("board-card-PLA-3")
 

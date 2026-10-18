@@ -25,7 +25,6 @@
 | file | `/file` | semantic | published file metadata and preview; controls: open, attach |
 | more | `/more` | semantic | available destinations; controls: navigate |
 | talk-orb | `/talk-orb` | semantic | development orb bench state; controls: none |
-| redesign | `/redesign` | semantic | development-only design bench; controls: none |
 | plugin-contributed | `/*` | explicit gap | plugin-context-unavailable; plugin host SDK publishes route, selected object, controls, and freshness |
 
 A normal question uses semantic context. One bounded image is permitted only when the current surface declares a named visual gap; the Talk orb, hidden content, secrets, and password inputs are excluded.

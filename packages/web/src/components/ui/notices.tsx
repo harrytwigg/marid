@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
+import { registerNoticeSink, type NoticeLevel } from '@/lib/notices'
 import { cn } from '@/lib/utils'
-import { registerHostNotificationSink, type HostNotifyLevel } from './host-bridge'
+import { registerHostNotificationSink } from '@/plugins/sdk/host-bridge'
 
 /**
- * The surface every plugin notice lands on, whichever half raised it: the
+ * The one surface every notice lands on: the app's own (`raiseNotice`, which
+ * `reportLoadFailure` uses) and a plugin's, whichever half raised it. The
  * browser `host.notify` and a backend one arriving as a frame both reach it
- * through the one registered sink.
+ * through the host-bridge sink.
  *
- * It registers rather than being passed down because neither caller is a
- * render — one is a plugin's event handler, the other is the gateway socket.
- * Until something registers, `host-bridge`'s sink is null and every notice a
- * plugin raises is dropped, which is the whole reason this is mounted.
+ * It registers rather than being passed down because no caller is a render:
+ * they are event handlers, promise rejections and the gateway socket. Until
+ * something registers, both sinks are null and every notice is dropped, which
+ * is the whole reason this is mounted.
  */
 
 /** Long enough to finish a sentence, short enough that an unattended dashboard
@@ -18,13 +20,17 @@ import { registerHostNotificationSink, type HostNotifyLevel } from './host-bridg
 const DISMISS_AFTER_MS = 6_000
 
 /** A plugin in a loop must not be able to paper over the app, so the stack has
- *  a ceiling and the oldest falls off it. */
-const MAX_VISIBLE = 3
+ *  a ceiling and the oldest falls off it. The ceiling is per source: a flood of
+ *  plugin notices pushes out older plugin notices and never an app one, so the
+ *  app's own errors are not throttled by anything a plugin does. */
+const MAX_VISIBLE_PER_SOURCE = 3
+
+type Source = 'app' | 'plugin'
 
 /** Status colour as a dot, never a painted panel — the same restraint the task
  *  page's banner uses. Info stays on the neutral text ramp: most notices are not
  *  events, and tinting them all would leave nothing for the two that are. */
-const LEVEL_DOT: Record<HostNotifyLevel, string> = {
+const LEVEL_DOT: Record<NoticeLevel, string> = {
   info: 'var(--text-tertiary)',
   warning: 'var(--system-orange)',
   error: 'var(--system-red)',
@@ -34,19 +40,28 @@ interface Notice {
   id: number
   title: string
   description?: string
-  level: HostNotifyLevel
+  level: NoticeLevel
+  source: Source
 }
 
-export function PluginNotices() {
+/** The oldest of a source falls off once it has more than its share on screen. */
+function capSource(notices: readonly Notice[], source: Source): readonly Notice[] {
+  const mine = notices.filter((notice) => notice.source === source)
+  if (mine.length <= MAX_VISIBLE_PER_SOURCE) return notices
+  const dropped = new Set(mine.slice(0, mine.length - MAX_VISIBLE_PER_SOURCE))
+  return notices.filter((notice) => !dropped.has(notice))
+}
+
+export function Notices() {
   const [notices, setNotices] = useState<readonly Notice[]>([])
   const nextId = useRef(0)
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
 
   useEffect(() => {
     const pending = timers.current
-    registerHostNotificationSink((notice) => {
+    const show = (notice: Omit<Notice, 'id'>) => {
       const id = (nextId.current += 1)
-      setNotices((current) => [...current, { ...notice, id }].slice(-MAX_VISIBLE))
+      setNotices((current) => capSource([...current, { ...notice, id }], notice.source))
       // Per notice rather than one clock for the stack: a notice that arrives
       // while an older one is on screen has its own full reading time.
       const timer = setTimeout(() => {
@@ -54,7 +69,9 @@ export function PluginNotices() {
         setNotices((current) => current.filter((notice) => notice.id !== id))
       }, DISMISS_AFTER_MS)
       pending.add(timer)
-    })
+    }
+    registerNoticeSink((notice) => show({ ...notice, source: 'app' }))
+    registerHostNotificationSink((notice) => show({ ...notice, source: 'plugin' }))
     return () => {
       for (const timer of pending) clearTimeout(timer)
       pending.clear()
@@ -65,7 +82,7 @@ export function PluginNotices() {
 
   return (
     <div
-      data-plugin-notices
+      data-notices
       className={cn(
         'pointer-events-none fixed inset-x-[var(--space-3)] z-[70] flex flex-col gap-[var(--space-2)]',
         'top-[max(var(--safe-top),var(--space-3))]',
@@ -92,11 +109,11 @@ function NoticeCard({ notice, onDismiss }: { notice: Notice; onDismiss: () => vo
       role="status"
       className={cn(
         'pointer-events-auto flex items-start gap-[var(--space-3)] rounded-[var(--radius-xl)]',
-        // `--material-regular` for the same reason the Talk undo strip uses it:
-        // nothing sits behind this to read as a surface, so it has to lift off
-        // the page rather than tint it.
-        'bg-[var(--material-regular)] py-[var(--space-3)] pl-[var(--space-4)] pr-[var(--space-2)]',
-        'shadow-[var(--shadow-overlay)] backdrop-blur-2xl motion-safe:animate-pop-in',
+        // The overlay material, for the same reason the Talk undo strip uses
+        // it: nothing sits behind this to read as a surface, so it has to lift
+        // off the page rather than tint it.
+        'glass-overlay py-[var(--space-3)] pl-[var(--space-4)] pr-[var(--space-2)]',
+        'motion-safe:animate-pop-in',
       )}
     >
       {/* Nudged down to sit on the first line's centre rather than its box:

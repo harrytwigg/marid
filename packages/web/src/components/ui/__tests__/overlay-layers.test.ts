@@ -5,12 +5,10 @@ import { REACT_ARIA_OVERLAY_Z_INDEX } from "../overlay-layers"
 
 const SRC = path.resolve(__dirname, "../../..")
 const TABLE = readFileSync(path.resolve(__dirname, "../overlay-layers.ts"), "utf8")
-// The redesign preview route draws with its own inline stylesheet.
-const SKIP = new Set(["redesign"])
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    if (entry.name === "__tests__" || SKIP.has(entry.name)) return []
+    if (entry.name === "__tests__") return []
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) return sourceFiles(full)
     return /\.(tsx?|css)$/.test(entry.name) && !/\.test\./.test(entry.name) ? [full] : []

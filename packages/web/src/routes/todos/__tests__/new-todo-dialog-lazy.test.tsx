@@ -38,8 +38,8 @@ describe("LazyNewTodoDialog", () => {
     const onFailed = vi.fn()
     const notice = vi.fn()
     // Each case has its own copy of the modules, so the surface is registered on the copy the dialog reads.
-    const { registerHostNotificationSink } = await import("@/plugins/sdk/host-bridge")
-    registerHostNotificationSink(notice)
+    const { registerNoticeSink } = await import("@/lib/notices")
+    registerNoticeSink(notice)
     render(<LazyNewTodoDialog {...props} onFailed={onFailed} />)
 
     await waitFor(() => expect(onFailed).toHaveBeenCalledTimes(1))

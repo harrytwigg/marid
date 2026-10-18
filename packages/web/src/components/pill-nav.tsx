@@ -212,7 +212,7 @@ export function NavRibbon({
     <div className="relative hidden h-full w-14 shrink-0 lg:block">
       {/* Named so a route change snapshots the rail apart from the page — globals.css. */}
       <nav aria-label="Primary"
-        className="absolute inset-y-0 left-0 z-30 flex w-14 flex-col items-center gap-0.5 bg-[var(--ribbon-bg)] px-1.5 pb-2.5 pt-3.5 [view-transition-name:jinn-nav-rail]"
+        className="absolute inset-y-0 left-0 z-30 flex w-14 flex-col items-center gap-0.5 px-1.5 pb-2.5 pt-3.5 [view-transition-name:jinn-nav-rail]"
       >
         {/* Top slot — a plain, button-sized Jinn brand mark that fills the rail
             top (no frosted-pill chrome). It morphs to the sidebar.left toggle

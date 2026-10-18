@@ -12,7 +12,7 @@ import { NavRibbon } from "../pill-nav"
 const DECLARED_ICON_LINKS = readFileSync(join(__dirname, "..", "..", "..", "index.html"), "utf8").match(/<link rel="icon"[^>]*>/g) ?? []
 const DECLARED_HREFS = DECLARED_ICON_LINKS.map((tag) => /href="([^"]+)"/.exec(tag)?.[1])
 
-const settings = { portalEmoji: null as string | null, portalIcon: null as string | null, portalName: null as string | null }
+const settings = { portalEmoji: null as string | null, portalName: null as string | null }
 
 vi.mock("@/routes/settings-provider", () => ({ useSettings: () => ({ settings }) }))
 vi.mock("@/lib/route-prefetch", () => ({ prefetchRoute: vi.fn() }))
@@ -21,7 +21,6 @@ const markImages = (root: ParentNode) => root.querySelectorAll(`img[src="${BRAND
 
 beforeEach(() => {
   settings.portalEmoji = null
-  settings.portalIcon = null
 })
 
 describe("PortalMark", () => {
@@ -36,13 +35,6 @@ describe("PortalMark", () => {
     const { container } = render(<PortalMark size={32} glyphClassName="glyph" />)
     expect(container.querySelector(".glyph")?.textContent).toBe("🦊")
     expect(markImages(container)).toHaveLength(0)
-  })
-
-  it("ignores a stale portalIcon: the glass mark stays", () => {
-    settings.portalIcon = "★"
-    const { container } = render(<PortalMark size={32} glyphClassName="glyph" />)
-    expect(markImages(container)).toHaveLength(1)
-    expect(container.querySelector(".glyph")).toBeNull()
   })
 
   it("keeps the decorative mark out of the accessibility tree", () => {

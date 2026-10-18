@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { clearHostBridge, registerHostNotificationSink } from "@/plugins/sdk/host-bridge"
+import { clearNoticeSink, registerNoticeSink } from "@/lib/notices"
 import { LazyTodoFilterSheet } from "../todo-filter-sheet-lazy"
 
 /* The mobile filter sheet loads on its first open; when its chunk cannot be fetched it closes and says so. */
@@ -9,13 +9,13 @@ vi.mock("../todo-filter-sheet", () => {
   throw new Error("Failed to fetch dynamically imported module")
 })
 
-afterEach(() => clearHostBridge())
+afterEach(() => clearNoticeSink())
 
 describe("LazyTodoFilterSheet", () => {
   it("closes the sheet and says so on the notice surface when the chunk cannot be fetched", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const notice = vi.fn()
-    registerHostNotificationSink(notice)
+    registerNoticeSink(notice)
     const onClose = vi.fn()
 
     render(
