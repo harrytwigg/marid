@@ -169,7 +169,7 @@ function Members({ members, onSelect }: { members: string[]; onSelect: (name: st
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {members.map((name) => (
-            <Button key={name} variant="outline" size="xs" onClick={() => onSelect(name)} className={`${MONO} rounded-full`}>
+            <Button key={name} type="button" variant="outline" size="xs" onClick={() => onSelect(name)} className={`${MONO} max-w-full rounded-full`}>
               {name}
             </Button>
           ))}

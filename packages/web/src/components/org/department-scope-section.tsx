@@ -69,10 +69,10 @@ function readOnlyReason(department: DepartmentDefinitionWire): string | null {
 function StagedActions({ pending, onSave, onCancel }: { pending: boolean; onSave: () => void; onCancel: () => void }) {
   return (
     <div data-testid="department-scope-staged" className="mt-[var(--space-3)] flex flex-wrap items-center gap-2">
-      <Button disabled={pending} onClick={onSave}>
+      <Button type="button" disabled={pending} onClick={onSave}>
         {pending ? "Saving..." : "Save scope"}
       </Button>
-      <Button variant="secondary" disabled={pending} onClick={onCancel}>
+      <Button type="button" variant="secondary" disabled={pending} onClick={onCancel}>
         Cancel
       </Button>
       <span className={MUTED}>Not saved yet.</span>

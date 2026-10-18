@@ -69,6 +69,12 @@ choice sticks, and a phone tap. It runs against any build, so the same command
 gives the before and the after, exits non-zero when a check fails, and
 photographs the closed and open states and the settings page's native selects.
 
+## Org screens
+
+`org-map`, `org-employee`, `org-employee-editor` and `org-department` show a seeded org (`seed-org.mjs`:
+four departments, one scoped, managers with reports). `capture-ui.sh` writes it only when one of those
+screens is named, or no screen is, so the other screens' fixtures and baselines do not move.
+
 ## Settings
 
 | Variable | Default | Meaning |

@@ -173,7 +173,7 @@ export function EmployeeDetail({
             <RankBadge rank={rank} />
             {/* The COO node is injected client-side (no YAML) — not editable. */}
             {rank !== "executive" && (
-              <Button variant="outline" size="xs" onClick={() => setEditing(true)} aria-label="Edit employee">
+              <Button type="button" variant="outline" size="xs" onClick={() => setEditing(true)} aria-label="Edit employee">
                 Edit
               </Button>
             )}
@@ -212,7 +212,7 @@ export function EmployeeDetail({
               {truncatedPersona}
             </p>
             {persona.length > 200 && (
-              <Button variant="link" size="xs" className="mt-[var(--space-1)] px-0" onClick={() => setPersonaExpanded(!personaExpanded)}>
+              <Button type="button" variant="link" size="xs" className="mt-[var(--space-1)] px-0" onClick={() => setPersonaExpanded(!personaExpanded)}>
                 {personaExpanded ? "Show less" : "Show more"}
               </Button>
             )}

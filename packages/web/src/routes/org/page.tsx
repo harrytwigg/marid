@@ -137,7 +137,7 @@ export default function OrgPage() {
           <div className="rounded-[var(--radius-md,12px)] px-[var(--space-4)] py-[var(--space-3)] text-[length:var(--text-body)] text-[var(--system-red)]" style={{ background: "color-mix(in srgb, var(--system-red) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--system-red) 30%, transparent)" }}>
             Failed to load organization: {error}
           </div>
-          <Button onClick={loadData}>Retry</Button>
+          <Button type="button" onClick={loadData}>Retry</Button>
         </div>
       </PageLayout>
     );
@@ -182,6 +182,7 @@ export default function OrgPage() {
               <div className="sticky top-0 z-10 flex items-center justify-end px-[var(--space-4)] py-[var(--space-3)] bg-[var(--bg)]">
                 <Button
                   ref={closeRef}
+                  type="button"
                   variant="secondary"
                   size="icon-sm"
                   className="rounded-full"

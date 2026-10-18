@@ -33,7 +33,7 @@ export const ORG_SCREENS = [
     ready: 'Platform Developer',
     prepare: async (page) => {
       await page.getByRole('button', { name: 'Edit employee' }).click()
-      await page.getByText('Edit employee', { exact: true }).waitFor({ timeout: 10_000 })
+      await page.getByText('Display name', { exact: true }).waitFor({ timeout: 10_000 })
       await page.waitForTimeout(900)
     },
   },
@@ -42,7 +42,7 @@ export const ORG_SCREENS = [
     name: 'org-department',
     title: 'Org department panel',
     url: () => '/org?department=engineering',
-    ready: 'Members',
+    ready: 'Engineering Lead',
     prepare: async (page) => {
       await page.getByRole('radiogroup', { name: 'Scope' }).waitFor({ timeout: 10_000 })
       await page.waitForTimeout(900)

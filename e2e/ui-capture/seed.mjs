@@ -65,7 +65,7 @@ function openDb(repo) {
 }
 
 function seedDb(repo) {
-  writeOrg(sandboxHome)
+  if (process.env.JINN_CAPTURE_SEED_ORG) writeOrg(sandboxHome)
   const db = openDb(repo)
   const session = db.prepare("SELECT id FROM sessions WHERE source_ref = 'sandbox:1'").get()
   if (!session) throw new Error('the sandbox --seed session sandbox:1 is missing')

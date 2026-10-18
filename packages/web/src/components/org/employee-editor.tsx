@@ -154,7 +154,7 @@ export function EmployeeEditor({
 
   return (
     <div
-      className="rounded-[var(--radius-lg,16px)] border border-[var(--separator)] bg-[var(--material-regular)] p-[var(--space-5)] flex flex-col gap-[var(--space-4)]"
+      className="rounded-[var(--radius-lg,16px)] border border-[var(--separator)] bg-[var(--glass-float-opaque)] p-[var(--space-5)] flex flex-col gap-[var(--space-4)]"
       onKeyDown={onKeyDown}
     >
       <div className="flex items-center justify-between">
