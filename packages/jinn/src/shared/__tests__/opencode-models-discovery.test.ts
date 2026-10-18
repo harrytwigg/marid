@@ -108,17 +108,22 @@ describe("discoverOpencodeModels with a slow --verbose", () => {
     expect(await discovery.details).toBeUndefined();
   });
 
-  it("has no details to wait for when the API answered with records meanwhile", async () => {
+  it("has no details to wait for when the API answered with records meanwhile, and stops the slow run", async () => {
     const api = path.join(__dirname, "fixtures", "opencode-api-model-list.json");
+    const pidFile = path.join(dir, "verbose.pid");
     const bin = fakeBin([
-      'if [ "$2" = "--verbose" ]; then sleep 5; exit 1; fi',
+      `if [ "$2" = "--verbose" ]; then echo $$ > "${pidFile}"; exec sleep 30; fi`,
       `if [ "$1 $2 $3" = "api model.list --standalone" ]; then cat "${api}"; exit 0; fi`,
       "echo opencode/plain",
     ].join("\n"));
-    const discovery = await discoverOpencodeModels(bin, { timeoutMs: 100, detailsTimeoutMs: 400 });
+    const discovery = await discoverOpencodeModels(bin, { timeoutMs: 100, detailsTimeoutMs: 60_000 });
     expect(discovery.detailed).toBe(true);
     expect(discovery.details).toBeUndefined();
     expect(discovery.models.some((m) => m.contextWindow !== undefined)).toBe(true);
+    const pid = Number(fs.readFileSync(pidFile, "utf8").trim());
+    const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    for (let i = 0; i < 40 && alive(); i++) await new Promise((r) => setTimeout(r, 50));
+    expect(alive()).toBe(false);
   });
 
   it("has no details to wait for when --verbose finished in time", async () => {

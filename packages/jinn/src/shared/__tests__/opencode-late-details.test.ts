@@ -127,38 +127,74 @@ describe("a --verbose run that outlives the discovery timeout", () => {
   });
 });
 
-describe("the second look at a first detailed answer", () => {
-  it("serves the first answer at once, stays pending until the second run, and takes that run's catalogue", async () => {
+describe("an overtaken refresh", () => {
+  it("still lands details the snapshot lacks, so a newer refresh that fails cannot bring the refusal back", async () => {
+    // A boot refresh and a config reload during its first minute are both slow.
+    const boot = slowDetails();
+    const reload = slowDetails();
+    discoveries.push(boot.discovery, reload.discovery);
+    await refreshOpencodeModels(config);
+    await refreshOpencodeModels(config);
+    await boot.land(detailed());
+    expect(entry()).toMatchObject({ effortLevels: ["low", "high"] });
+    expect(effortLevelsPending("opencode")).toBe(false);
+    await reload.land(undefined);
+    expect(entry()).toMatchObject({ effortLevels: ["low", "high"] });
+    expect(validateNewSessionSelection(config, { engine: "opencode", model: "opencode/a", effortLevel: "high" })).toMatchObject({ ok: true, effortLevel: "high" });
+  });
+});
+
+describe("the gateway's second look at a first detailed answer", () => {
+  const gateway = { secondLook: true };
+
+  it("serves the first answer at once, then takes the second run's catalogue", async () => {
     // A fresh home's first run lists the catalogue bundled in the binary; the next one the current catalogue.
     const second = deferred<OpencodeDiscovery>();
     discoveries.push(answer(detailed(["high"])), () => second.promise);
-    await refreshOpencodeModels(config);
+    await refreshOpencodeModels(config, gateway);
     expect(entry()).toMatchObject({ effortLevels: ["high"] });
-    expect(effortLevelsPending("opencode")).toBe(true);
-    await second.release({ models: detailed(["low", "medium", "high"]), detailed: true });
+    await second.release({ models: [...detailed(["low", "medium", "high"]), { ...detailed()[0], id: "opencode/new" }], detailed: true });
     expect(entry()).toMatchObject({ effortLevels: ["low", "medium", "high"] });
-    expect(effortLevelsPending("opencode")).toBe(false);
+    expect(effortLevelsPending("opencode", "opencode/new")).toBe(false);
+  });
+
+  it("leaves a model the first answer lists alone while it runs, and holds one it does not", async () => {
+    const second = deferred<OpencodeDiscovery>();
+    discoveries.push(answer(detailed()), () => second.promise);
+    await refreshOpencodeModels(config, gateway);
+    expect(effortLevelsPending("opencode", "opencode/a")).toBe(false);
+    expect(effortLevelsPending("opencode", "opencode/new")).toBe(true);
+    expect(effortLevelsPending("opencode")).toBe(true);
+    await second.release({ models: detailed(), detailed: true });
+    expect(effortLevelsPending("opencode", "opencode/new")).toBe(false);
   });
 
   it("keeps the first answer when the second run finds nothing", async () => {
     discoveries.push(answer(detailed(["high"])));
-    await refreshOpencodeModels(config);
+    await refreshOpencodeModels(config, gateway);
     await flush();
-    expect(effortLevelsPending("opencode")).toBe(false);
+    expect(effortLevelsPending("opencode", "opencode/new")).toBe(false);
     expect(entry()).toMatchObject({ effortLevels: ["high"] });
   });
 
   it("is taken once: a later refresh over the detailed catalogue runs discovery once", async () => {
     discoveries.push(answer(detailed()), answer(detailed()));
-    await refreshOpencodeModels(config);
+    await refreshOpencodeModels(config, gateway);
     await flush();
     expect(discoverOpencodeModels).toHaveBeenCalledTimes(2);
     discoveries.push(answer(detailed(["max"])));
-    await refreshOpencodeModels(config);
+    await refreshOpencodeModels(config, gateway);
     await flush();
     expect(discoverOpencodeModels).toHaveBeenCalledTimes(3);
-    expect(effortLevelsPending("opencode")).toBe(false);
     expect(entry()).toMatchObject({ effortLevels: ["max"] });
+  });
+
+  it("is not taken outside the gateway: a CLI command runs discovery once and is not left waiting", async () => {
+    discoveries.push(answer(detailed()));
+    await refreshOpencodeModels(config);
+    await flush();
+    expect(discoverOpencodeModels).toHaveBeenCalledTimes(1);
+    expect(effortLevelsPending("opencode")).toBe(false);
   });
 });
 

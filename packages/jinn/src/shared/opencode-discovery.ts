@@ -65,6 +65,8 @@ interface RunningModels {
    *  exits instead of waiting out a slow `--verbose`. The gateway is kept alive
    *  by its server, so there the run still finishes and lands. */
   detach: () => void;
+  /** End the run now; `done` resolves when the process closes. */
+  stop: () => void;
 }
 
 /** Run `opencode <args>` once. Best-effort, the shape every other discovery in
@@ -114,7 +116,7 @@ function startOpencodeModels(bin: string, args: string[], timeoutMs: number): Ru
       finish(null);
     }
   });
-  return { done, detach: () => detachRun(proc, timer) };
+  return { done, detach: () => detachRun(proc, timer), stop: () => proc && killGracefully(proc).unref() };
 }
 
 function detachRun(proc: ChildProcess | undefined, timer: NodeJS.Timeout | undefined): void {
@@ -181,7 +183,10 @@ export async function discoverOpencodeModels(bin: string, timeouts: DiscoveryTim
   if (!finished) {
     verbose.detach();
     const fallback = await fallbackModels(bin, timeoutMs);
-    if (fallback.detailed) return fallback;
+    if (fallback.detailed) {
+      verbose.stop(); // the API's records answered for it
+      return fallback;
+    }
     logger.info(`opencode models --verbose is still running after ${timeoutMs} ms; serving the plain list until it finishes`);
     return { ...fallback, details: verbose.done.then(verboseModels) };
   }

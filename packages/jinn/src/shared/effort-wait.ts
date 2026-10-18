@@ -21,11 +21,12 @@ function hasEffortChoice(engineConfig: EffortSources[0], session: EffortSources[
 export async function awaitEffortLevels(
   config: JinnConfig,
   engine: string,
-  session: EffortSources[1],
+  session: EffortSources[1] & { model?: string | null },
   employee: EffortSources[2],
 ): Promise<void> {
-  const engineConfig = (config.engines as unknown as Record<string, EffortSources[0] | undefined>)[engine] ?? {};
-  if (!effortLevelsPending(engine) || !hasEffortChoice(engineConfig, session, employee)) return;
+  const engineConfig = (config.engines as unknown as Record<string, (EffortSources[0] & { model?: string }) | undefined>)[engine] ?? {};
+  const model = session.model ?? engineConfig.model;
+  if (!effortLevelsPending(engine, model) || !hasEffortChoice(engineConfig, session, employee)) return;
   logger.info(`Waiting for ${engine} model discovery before resolving an effort level`);
-  await effortLevelsSettled(engine, DETAILS_TIMEOUT_MS);
+  await effortLevelsSettled(engine, DETAILS_TIMEOUT_MS, model);
 }

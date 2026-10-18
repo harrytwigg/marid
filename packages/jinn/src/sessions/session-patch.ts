@@ -163,7 +163,7 @@ export function validateNewSessionSelection(
     const valid = effortLevelsForModel(config, engine, effectiveModel);
     // Levels not discovered yet are unknown, not absent: the level is kept, and
     // the turn checks it once they are known.
-    const unknown = effortLevelsPending(engine);
+    const unknown = effortLevelsPending(engine, effectiveModel);
     if (valid.length === 0 && !unknown) {
       if (!effortFromBody) {
         logger.warn(
@@ -238,7 +238,7 @@ export function validateSessionPatch(
     const level = body.effortLevel.trim();
     const effectiveModel = updates.model ?? currentModel ?? undefined;
     const valid = effortLevelsForModel(config, engine, effectiveModel);
-    const unknown = effortLevelsPending(engine); // not discovered yet: kept, and checked at the turn
+    const unknown = effortLevelsPending(engine, effectiveModel); // not discovered yet: kept, and checked at the turn
     if (valid.length === 0 && !unknown) {
       return { ok: false, error: `engine "${engine}"${effectiveModel ? ` model "${effectiveModel}"` : ""} does not support effort levels` };
     }

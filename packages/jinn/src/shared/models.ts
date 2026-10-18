@@ -315,9 +315,9 @@ export async function refreshPiModels(config: JinnConfig): Promise<void> {
  * after this returns). Never throws; degrades to the config/synthesized
  * fallback when opencode is absent or discovery fails.
  */
-export async function refreshOpencodeModels(config: JinnConfig): Promise<void> {
+export async function refreshOpencodeModels(config: JinnConfig, opts: { secondLook?: boolean } = {}): Promise<void> {
   const bin = engineAvailable(config, "opencode") ? resolveBin("opencode", engineBinOverride(config, "opencode")) : null;
-  await refreshOpencodeCatalogue(bin, invalidateModelRegistry);
+  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook);
 }
 
 /**

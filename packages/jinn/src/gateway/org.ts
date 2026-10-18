@@ -240,7 +240,7 @@ export function validateEmployeeUpdate(
     const valid = effortLevelsForModel(config, resultingEngine, effectiveModel);
     // Levels not discovered yet are unknown, not absent: the level is kept, and
     // a turn checks it once they are known.
-    const unknown = effortLevelsPending(resultingEngine);
+    const unknown = effortLevelsPending(resultingEngine, effectiveModel);
     if (valid.length === 0 && !unknown) {
       return { ok: false, error: `engine "${resultingEngine}"${effectiveModel ? ` model "${effectiveModel}"` : ""} does not support effort levels` };
     }
@@ -251,7 +251,7 @@ export function validateEmployeeUpdate(
   } else if (current.effortLevel) {
     const level = current.effortLevel.trim();
     const valid = effortLevelsForModel(config, resultingEngine, effectiveModel);
-    if (level && !effortLevelsPending(resultingEngine) && (valid.length === 0 || !valid.includes(level))) {
+    if (level && !effortLevelsPending(resultingEngine, effectiveModel) && (valid.length === 0 || !valid.includes(level))) {
       updates.effortLevel = null;
     }
   }
