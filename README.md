@@ -359,10 +359,12 @@ pnpm lint        # lint every package
 pnpm test:e2e    # Playwright end-to-end tests
 ```
 
-`pnpm test` uses every core locally and runs at idle scheduling priority (`nice 19`, and the
-`ionice` idle class where the platform has it), so it takes the machine when nothing else wants
-it and yields to an editor, a gateway or you. In CI neither applies and the run stays capped as
-it always has — turbo one task at a time, vitest two workers.
+`pnpm test` runs at the lowest scheduling priority available (`nice 19`, and the `ionice` idle
+class where the platform has it), so it yields to an editor, a gateway or you. Each vitest suite
+is capped at four forks locally — full parallelism was measured on a shared build machine and
+timed a different set of jsdom and gateway tests out on every run, so the cap is deliberate.
+In CI neither applies and the run stays capped as it always has — turbo one task at a time,
+vitest two workers.
 
 > **Prerequisites:** Node.js **22 or newer**; contributors should use **24.13.0**, pinned by `.nvmrc` + `engine-strict` because native modules like `better-sqlite3` are ABI-locked. You also need pnpm **10.6+** and at least one engine CLI. See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the full setup.
 

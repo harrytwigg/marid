@@ -49,10 +49,11 @@ reach for, what makes a test worth keeping, and what a plan has to show.
   ```
   `pnpm test` also runs on Windows in CI; if you touch filesystem paths or process spawning,
   expect that leg to have an opinion.
-  Locally `pnpm test` uses every core, at idle scheduling priority (`nice 19` and, on Linux, the
-  `ionice` idle class), so it yields to whatever else you are doing; set `JINN_TEST_NICE=0` for a
-  normal-priority run. CI is unaffected — turbo is serial and vitest is capped at two workers
-  there.
+  Locally `pnpm test` runs at the lowest scheduling priority available (`nice 19` and, on Linux,
+  the `ionice` idle class), so it yields to whatever else you are doing; set `JINN_TEST_NICE=0`
+  for a normal-priority run. Each vitest suite is capped at four forks locally — full parallelism
+  times a different set of jsdom and gateway tests out on each run of a shared machine, so the cap
+  is deliberate. CI is unaffected — turbo is serial and vitest is capped at two workers there.
 - Branch protection on `main` requires exactly one status check: `all-checks-pass`. It needs
   every other job in `.github/workflows/ci.yml` and passes only when all of them report
   `success` — a skipped or cancelled job counts as a failure, because it proved nothing.

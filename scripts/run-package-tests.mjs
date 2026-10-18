@@ -10,16 +10,15 @@ import { exitCodeFor, spawnLowPriority } from "./low-priority.mjs";
  * runs through cmd.exe on Windows as well as sh, and there is no conditional that
  * reads the same in both, so the flag is chosen in JavaScript.
  *
- *   - turbo runs serial in CI (`--concurrency=1`) and at its own default here. A
- *     two-vCPU runner gains nothing from four package suites fighting over it; a
- *     64-core workstation gains a lot, and scripts/low-priority.mjs is what keeps
- *     the workstation responsive rather than a worker cap.
+ *   - turbo runs serial in CI (`--concurrency=1`) and at its own default here, so
+ *     the four package suites can be in flight together. They bound themselves:
+ *     each vitest suite caps its own forks in its own vitest.config.ts, and
+ *     scripts/test-slot-gate.mjs caps how many suites run at once machine-wide.
  *   - CI runs unwrapped: there is nothing on a dedicated runner to yield to, and
  *     low-priority.mjs no-ops there anyway.
  *
- * vitest's worker count is deliberately not set here. packages/jinn/vitest.config.ts
- * already scales itself down in CI and leaves itself unbounded locally; a second
- * copy of that decision is a second place to get it wrong.
+ * vitest's worker count is deliberately not set here — a second copy of that
+ * decision is a second place to get it wrong.
  */
 
 /** The turbo subcommand for this environment: serial in CI, default locally. */
