@@ -5,7 +5,7 @@ import type { NewTodoDialog as NewTodoDialogComponent } from "./new-todo-dialog"
 /* The board opens the new-Todo dialog on a press, so the dialog (its pickers, the modal it is drawn in and their
  * code) is not in the board's chunk: it loads when the page is idle, and when a button that opens it is hovered,
  * focused or touched. A press before that still works: an inert scrim in the dialog's own overlay stands in
- * until the chunk lands, and if the chunk cannot be fetched the scrim is taken down and the caller is told. */
+ * until the chunk lands, and if the chunk cannot be fetched the scrim is taken down, the notice surface says so and the caller is told. */
 
 const load = () => import("./new-todo-dialog")
 const NewTodoDialog = lazy(() => load().then((module) => ({ default: module.NewTodoDialog })))
@@ -29,7 +29,7 @@ export function usePreloadNewTodoDialog(): void {
 
 export function LazyNewTodoDialog({ onFailed, ...props }: ComponentProps<typeof NewTodoDialogComponent> & { onFailed: () => void }) {
   return (
-    <LoadBoundary onFailed={onFailed}>
+    <LoadBoundary what="The new Todo dialog" onFailed={onFailed}>
       <Suspense fallback={<LoadingScrim testId="todo-new-loading" />}>
         <NewTodoDialog {...props} />
       </Suspense>

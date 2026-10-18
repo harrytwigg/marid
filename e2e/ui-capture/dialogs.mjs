@@ -141,14 +141,36 @@ async function sprintAndLightboxChecks() {
   })
 }
 
+const abortChunk = (pattern) => (context) => context.route(pattern, (route) => route.abort())
+
 async function failureChecks() {
-  await check('a dialog chunk that cannot be fetched: the board says so and stays usable', async () => {
-    const { page, errors } = await open(DESKTOP, '/todos', { before: (context) => context.route(/new-todo-dialog-.*\.js/, (route) => route.abort()) })
+  await check('a dialog chunk that cannot be fetched: the new-Todo dialog closes, says so, and the board stays usable', async () => {
+    const { page, errors } = await open(DESKTOP, '/todos', { before: abortChunk(/new-todo-dialog-.*\.js/) })
     await newTodo(page).click()
-    await page.getByText(/couldn't load/i).first().waitFor({ timeout: 5000 })
+    await page.getByText("The new Todo dialog couldn't load. Reload the page and try again.").first().waitFor({ timeout: 5000 })
     assert((await page.locator('[data-testid="todo-new-loading"]').count()) === 0, 'scrim left behind')
     assert(await newTodo(page).isEnabled(), 'the board is not usable')
     assert(errors.length === 0, `page errors: ${errors}`)
+  })
+  await check('the sprint planner chunk cannot be fetched: it closes and says so, each time it is asked for', async () => {
+    const { page } = await open(DESKTOP, '/todos', { before: abortChunk(/sprints-dialog-.*\.js/) })
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await tid(page, 'filter-chip-sprint').click()
+      await tid(page, 'filter-sprint-manage').click()
+      await page.getByText("The sprint planner couldn't load. Reload the page and try again.").first().waitFor({ timeout: 5000 })
+      assert((await tid(page, 'sprints-dialog').count()) === 0, 'a planner appeared')
+      await page.keyboard.press('Escape')
+    }
+    assert(await newTodo(page).isEnabled(), 'the board is not usable')
+  })
+  await check('the shared dialog popup cannot be fetched: a dialog closes and says so', async () => {
+    const { page } = await open(DESKTOP, '/todos', { before: abortChunk(/dialog-popup-.*\.js/) })
+    await tid(page, 'filter-chip-sprint').click()
+    await tid(page, 'filter-sprint-manage').click()
+    await page.getByText("The dialog couldn't load. Reload the page and try again.").first().waitFor({ timeout: 8000 })
+    assert((await page.locator('[data-slot="dialog-loading"]').count()) === 0, 'scrim stuck')
+    assert((await tid(page, 'sprints-dialog').count()) === 0, 'a planner appeared')
+    assert(await newTodo(page).isEnabled(), 'the board is not usable')
   })
 }
 

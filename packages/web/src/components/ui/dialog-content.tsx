@@ -2,6 +2,7 @@ import * as React from "react"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { reportLoadFailure } from "@/lib/report-load-failure"
 import type { DialogPopupProps } from "./dialog-popup"
 import { loadedPopup, retryFailedLoad } from "./dialog-load"
 import { DialogClose, useDialogRoot, type DialogRoot } from "./dialog-root"
@@ -90,6 +91,7 @@ export function DialogContent({
   return (
     <LoadBoundary
       onFail={() => {
+        reportLoadFailure("The dialog")
         setFailed(true)
         root.change(false)
       }}

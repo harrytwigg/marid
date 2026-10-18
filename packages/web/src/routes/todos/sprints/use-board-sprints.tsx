@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from "react"
+import { LoadBoundary } from "@/components/ui/lazy-overlay"
 import type { WorkItemStatusWire } from "@/lib/api"
 import type { TodoFilters } from "@/lib/todos"
 import type { BoardColumnData } from "../board/use-board"
@@ -11,6 +12,27 @@ import { sprintErrorMessage, useSprints } from "./use-sprints"
  * board chunk and loads on first open. It then stays mounted, closed, so the
  * dialog plays its exit animation. */
 const SprintsDialog = lazy(() => import("./sprints-dialog").then((module) => ({ default: module.SprintsDialog })))
+
+/** The lazily loaded planner. One that cannot load is dropped, not just closed, so the next open tries (and says so) again. */
+function PlannerHost({ planner, close, drop, onShowOnBoard }: {
+  planner: { open: boolean; completing?: string }
+  close: () => void
+  drop: () => void
+  onShowOnBoard: (sprintId: string) => void
+}) {
+  return (
+    <LoadBoundary what="The sprint planner" onFailed={drop}>
+      <Suspense fallback={null}>
+        <SprintsDialog
+          open={planner.open}
+          onOpenChange={(open) => { if (!open) close() }}
+          completing={planner.completing ?? null}
+          onShowOnBoard={onShowOnBoard}
+        />
+      </Suspense>
+    </LoadBoundary>
+  )
+}
 
 /* Everything the board needs for sprints, in one place: the strip under the
  * filter row while a sprint filter is set, the planner dialog, and the card
@@ -50,17 +72,15 @@ export function useBoardSprints({ filters, setFilters, columns, mobile, announce
     <>
       {cardMenu.menu}
       {planner !== null && (
-        <Suspense fallback={null}>
-          <SprintsDialog
-            open={planner.open}
-            onOpenChange={(open) => { if (!open) closePlanner() }}
-            completing={planner.completing ?? null}
-            onShowOnBoard={(sprintId) => {
-              closePlanner()
-              setFilters({ ...filters, sprint: sprintId })
-            }}
-          />
-        </Suspense>
+        <PlannerHost
+          planner={planner}
+          close={closePlanner}
+          drop={() => setPlanner(null)}
+          onShowOnBoard={(sprintId) => {
+            closePlanner()
+            setFilters({ ...filters, sprint: sprintId })
+          }}
+        />
       )}
     </>
   )

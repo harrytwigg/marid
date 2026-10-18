@@ -753,10 +753,7 @@ export default function TodoBoardPage() {
       {capturing && (
         <LazyQuickCaptureBar
           onClose={() => setCapturing(false)}
-          onFailed={() => {
-            setCapturing(false)
-            announce("Quick capture couldn't load. Reload the page and try again.")
-          }}
+          onFailed={() => setCapturing(false)}
         />
       )}
 
@@ -764,7 +761,7 @@ export default function TodoBoardPage() {
         <LazyNewTodoDialog
           onClose={() => setCreating(null)}
           onCreated={() => setCreating(null)}
-          onFailed={() => { setCreating(null); announce("The new Todo dialog couldn't load. Reload the page and try again.") }}
+          onFailed={() => setCreating(null)}
           defaults={{
             department: creating.department,
             employees: org.data?.employees ?? [],

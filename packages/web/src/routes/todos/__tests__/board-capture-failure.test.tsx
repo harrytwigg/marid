@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkItemCompactWire, WorkItemListWire, WorkItemStatusWire } from "@/lib/api"
+import { clearHostBridge, registerHostNotificationSink } from "@/plugins/sdk/host-bridge"
 import TodoBoardPage from "../board/board-page"
 import { clearBoardScrollCache } from "../board/board-route"
 
@@ -83,6 +84,7 @@ function renderBoard() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearHostBridge()
   clearBoardScrollCache()
   sessionStorage.clear()
   rows = { executing: [compact("PLA-3", "executing")] }
@@ -90,14 +92,16 @@ beforeEach(() => {
 })
 
 describe("the quick-capture bar's chunk failing to load", () => {
-  it("takes the scrim down and shows a message, so the page is not left dimmed", async () => {
+  it("takes the scrim down and says so on the notice surface, so the page is not left dimmed", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
+    const notice = vi.fn()
+    registerHostNotificationSink(notice)
     renderBoard()
     await screen.findByTestId("board-card-PLA-3")
 
     fireEvent.click(screen.getByTestId("todo-quick-capture"))
 
-    await waitFor(() => expect(screen.getByTestId("board-callout").textContent).toContain("Quick capture couldn't load"))
+    await waitFor(() => expect(notice).toHaveBeenCalledWith({ title: "Quick capture couldn't load. Reload the page and try again.", level: "error" }))
     expect(screen.queryByTestId("quick-capture-loading")).toBeNull()
     expect(screen.queryByTestId("quick-capture")).toBeNull()
   })

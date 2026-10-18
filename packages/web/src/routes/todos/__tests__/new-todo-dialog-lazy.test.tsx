@@ -36,9 +36,14 @@ describe("LazyNewTodoDialog", () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const { LazyNewTodoDialog } = await import("../new-todo-dialog-lazy")
     const onFailed = vi.fn()
+    const notice = vi.fn()
+    // Each case has its own copy of the modules, so the surface is registered on the copy the dialog reads.
+    const { registerHostNotificationSink } = await import("@/plugins/sdk/host-bridge")
+    registerHostNotificationSink(notice)
     render(<LazyNewTodoDialog {...props} onFailed={onFailed} />)
 
     await waitFor(() => expect(onFailed).toHaveBeenCalledTimes(1))
+    expect(notice).toHaveBeenCalledWith({ title: "The new Todo dialog couldn't load. Reload the page and try again.", level: "error" })
     expect(screen.queryByTestId("todo-new-loading")).toBeNull()
   })
 

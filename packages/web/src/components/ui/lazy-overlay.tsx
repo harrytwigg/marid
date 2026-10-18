@@ -1,7 +1,8 @@
 import { Component, useEffect, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
+import { reportLoadFailure } from "@/lib/report-load-failure"
 
-/* The parts a lazily loaded modal (the quick-capture bar, the new-Todo dialog) shares. Each is a separate chunk that
+/* The parts a lazily loaded modal (the quick-capture bar, the new-Todo dialog, the filter sheet, the sprint planner) shares. Each is a separate chunk that
  * loads when the page is idle and when the button that opens it is hovered, focused or touched, so a press normally
  * finds it loaded. A press before that still works: an inert scrim in the dialog's own overlay stands in until the
  * chunk lands, and if the chunk cannot be fetched the scrim is taken down and the caller is told. */
@@ -29,13 +30,15 @@ export function LoadingScrim({ testId, className }: { testId: string; className?
   )
 }
 
-/** Tells the caller, once, that the chunk it was waiting for threw (a stale chunk after a deploy, or offline). */
-export class LoadBoundary extends Component<{ onFailed: () => void; children: ReactNode }, { failed: boolean }> {
+/** When the chunk it waits for throws (a stale chunk after a deploy, or offline): says so on the app's notice surface,
+ *  under `what` ("Quick capture", "The filter sheet"), and tells the caller, once, so it can close the overlay. */
+export class LoadBoundary extends Component<{ what: string; onFailed: () => void; children: ReactNode }, { failed: boolean }> {
   override state = { failed: false }
   static getDerivedStateFromError() {
     return { failed: true }
   }
   override componentDidCatch() {
+    reportLoadFailure(this.props.what)
     this.props.onFailed()
   }
   override render() {

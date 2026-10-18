@@ -25,7 +25,7 @@ export function usePreloadQuickCapture(): void {
 
 export function LazyQuickCaptureBar({ onFailed, ...props }: ComponentProps<typeof QuickCaptureBarComponent> & { onFailed: () => void }) {
   return (
-    <LoadBoundary onFailed={onFailed}>
+    <LoadBoundary what="Quick capture" onFailed={onFailed}>
       <Suspense fallback={<LoadingScrim testId="quick-capture-loading" />}>
         <QuickCaptureBar {...props} />
       </Suspense>
