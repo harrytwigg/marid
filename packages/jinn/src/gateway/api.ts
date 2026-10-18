@@ -89,7 +89,7 @@ export {
 import { forkEngineSession } from "../sessions/fork.js";
 import { spawnCwd } from "../sessions/session-cwd.js";
 import { sessionScopeDepartment } from "../sessions/session-scope.js";
-import { claudeProfileForSession } from "./session-claude-profile.js";
+import { claudeProfileForSession, findTranscriptOfSession } from "./session-claude-profile.js";
 import { cleanUpDeletedSession } from "./session-cleanup.js";
 import { ptySnapshotStore } from "../engines/pty-snapshot.js";
 import { configDocumentForApi, deepMerge } from "./config-payload.js";
@@ -330,6 +330,7 @@ import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
 import { handleSprintsApi } from "./sprints-api.js";
 import { handleSessionsListApi } from "./sessions-list-api.js";
 import { handleSessionWaitsApi } from "./session-waits-api.js";
+import { handleSubagentTranscriptApi } from "./subagent-transcript-api.js";
 import { resolveScopedCaller } from "./department-scope/caller.js";
 import { handleDepartmentsApi } from "./departments-api.js";
 import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
@@ -1786,6 +1787,13 @@ export async function handleApiRequest(
       statusOf: (waiting) => effectiveSessionStatus(waiting, currentRuntimeActivity(waiting, context)),
       engines: (waiting) => [context.sessionManager.getEngine(waiting.engine), context.ptyViewEngines?.[waiting.engine]],
       employeeDisplayName: (employee) => orgRegistry(context.getConfig()).get(employee)?.displayName ?? null,
+      callerDepartment: () => resolveScopedCaller(resolveScopedWriteCallerIdentity(req, context))?.department ?? null,
+    })) return;
+
+    // GET /api/sessions/:id/subagents/:agentId/transcript: a background sub-agent's conversation, in its own module.
+    if (handleSubagentTranscriptApi(res, { method, pathname, url }, {
+      claudeSessionId: (parent) => getEngineSessionRef(parent, "claude").id,
+      transcriptOf: findTranscriptOfSession,
       callerDepartment: () => resolveScopedCaller(resolveScopedWriteCallerIdentity(req, context))?.department ?? null,
     })) return;
 
