@@ -9,6 +9,7 @@
  *   SLOW      streams forty words, 250 ms apart (time to stop the turn)
  *   E400ONCE  answers the first request 400 `{"model":…}` (a pre-stream 400)
  *   E429      answers 429 under the URL prefix MOCK_LIMITED (default: everywhere)
+ *   E500      answers 500 under the URL prefix MOCK_LIMITED (default: everywhere)
  * Anything else answers "hello from mock". A compaction request answers with
  * a summary in the template opencode asks for; a request without tools (the
  * title) answers "Mock title".
@@ -82,6 +83,9 @@ function answer(req, res, body) {
   }
   if (lastUser.includes("E429") && (!LIMITED || req.url.startsWith(`/${LIMITED}/`))) {
     return fail(res, 429, { error: { message: "mock rate limit", type: "rate_limit" } });
+  }
+  if (lastUser.includes("E500") && (!LIMITED || req.url.startsWith(`/${LIMITED}/`))) {
+    return fail(res, 500, { error: { message: "mock internal error", type: "server_error" } });
   }
   if (lastUser.includes("TOOLCALL") && last?.role !== "tool") return toolCall(res, "shell", { command: "echo hi-from-tool", description: "echo" });
   if (lastUser.includes("MCPCALL") && last?.role !== "tool" && tools.includes("jinn_echo")) return toolCall(res, "jinn_echo", {});
