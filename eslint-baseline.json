@@ -525,10 +525,6 @@
     "packages/web/src/components/chat/mobile-tab-bar.tsx": [
       "max-lines-per-function"
     ],
-    "packages/web/src/components/chat/model-selector-row.tsx": [
-      "complexity",
-      "max-lines-per-function"
-    ],
     "packages/web/src/components/chat/session-row-menu.tsx": [
       "max-lines-per-function"
     ],

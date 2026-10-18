@@ -5,13 +5,16 @@ import type { SessionReroute } from "./engine-override-window.js";
 import { logger } from "../shared/logger.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
 import { orgRegistry } from "../gateway/org-registry.js";
+import { runsOnlyOnClaude, scopedEngineRefusal } from "./scoped-engine.js";
+import { startsOnPreferredEngine } from "./session-fallback.js";
+import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
 
 /**
  * Validate a mid-chat model/effort change for an existing session.
  *
- * Engine is NOT switchable mid-chat (new-chat only), so this only handles
- * `model` and `effortLevel`, validated against the registry for the session's
- * (fixed) engine. The change applies from the NEXT turn — the SessionManager
+ * An engine switch is validated by `validateNewSessionSelection`; this only
+ * handles `model` and `effortLevel`, validated against the registry for the
+ * session's current engine. The change applies from the NEXT turn — the SessionManager
  * reads session.model / session.effortLevel fresh on every turn and passes them
  * (with resumeSessionId) to the engine, which our spike confirmed honors a
  * changed --model in place (no fork needed). Antigravity supports --model; if
@@ -44,7 +47,7 @@ export interface SessionPatchContext {
 export function validateNewSessionSelection(
   config: JinnConfig,
   body: { engine?: unknown; model?: unknown; effortLevel?: unknown },
-  defaults: { engine?: string; model?: string; effortLevel?: string; employee?: string } = {},
+  defaults: { engine?: string; model?: string; effortLevel?: string; employee?: string; fallbackMode?: SessionFallbackMode } = {},
 ): NewSessionSelectionResult {
   const registry = getModelRegistry(config);
   let engine: string = defaults.engine?.trim() || config.engines.default;
@@ -57,6 +60,10 @@ export function validateNewSessionSelection(
   }
 
   if (!registry[engine]) return { ok: false, error: `unknown engine "${engine}"` };
+  // Refused here, before anything is created: a scoped session's first turn on
+  // another engine would fail, and the failed attempt would strand its Todo.
+  const scopedRefusal = scopedEngineRefusal(defaults.employee, engine);
+  if (scopedRefusal) return { ok: false, error: scopedRefusal };
 
   // Nothing named this engine outright — it came from the config default or an
   // employee's YAML — so an engine whose allowance is spent may be reordered out
@@ -67,9 +74,13 @@ export function validateNewSessionSelection(
   let defaultEffortLevel = defaults.effortLevel;
   let reroute: SessionReroute | undefined;
   // A local named Claude profile is its own account (FR-056): never reordered off the default account's health.
+  // Nor is a department-scoped employee, which runs only on claude.
   const ownAccount = engine === "claude" && Boolean(defaults.employee)
     && resolveEmployeeClaudeProfile(orgRegistry().get(defaults.employee!)) !== null;
-  if (body.engine === undefined && body.model === undefined && isKnownEngine(engine) && !ownAccount) {
+  // Nor is a session whose fallback mode is `auto-resume` (`defaults.fallbackMode`, else the config's):
+  // it starts where it prefers and waits out a spent allowance.
+  if (body.engine === undefined && body.model === undefined && isKnownEngine(engine) && !ownAccount
+    && !runsOnlyOnClaude(defaults.employee) && !startsOnPreferredEngine(config, defaults.fallbackMode)) {
     // NOT scoped by host, unlike the other two engine-choosing paths: `defaults`
     // carries the employee's NAME, not its record, so this cannot tell whether
     // the session runs here or on another machine. Until the Employee is

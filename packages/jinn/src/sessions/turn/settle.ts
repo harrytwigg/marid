@@ -24,6 +24,7 @@ import { COMPACTION_UNCONFIRMED, compactionConfirmation, compactionRateLimited, 
 import { rateLimitEngineLabel } from "../../shared/rateLimit.js";
 import { rateLimitAccount, recordAccountRateLimit } from "../rate-limit-account.js";
 import type { EngineResult } from "../../shared/types.js";
+import { recordRefusedBeforeEngine } from "../engine-reach.js";
 import type { TurnInput, TurnRun, TurnSurface } from "./types.js";
 
 /**
@@ -59,6 +60,7 @@ export async function settleRefusedTurn(
 ): Promise<void> {
   if (isRemoteMcpSession(input.session)) return settleAnchorTurn(input, surface, terminalFields);
   logger.error(`Session ${input.session.id} blocked: ${error}`);
+  recordRefusedBeforeEngine(input.session.id); // before the settle, which re-reads the meta and wakes the parent
   insertMessage(input.session.id, "assistant", `⛔ ${error}`);
   await settleTurn({
     sessionId: input.session.id,

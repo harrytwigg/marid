@@ -98,13 +98,23 @@ describe("board reminder text", () => {
     expect(new Tiktoken(o200k).encode(LINE).length).toBeLessThanOrEqual(120);
   });
 
-  it("forbids leaving a Todo in executing while waiting, and never assigns a blocked Todo to the operator", () => {
+  it("blocks a Todo that waits outside its own delegation tree, and never assigns a blocked Todo to the operator", () => {
     expect(DEFAULT_BOARD_REMINDER).toContain("`executing` means you are working the Todo right now");
-    expect(DEFAULT_BOARD_REMINDER).toContain("NEVER end a turn, or wait on a person or dependency, with the Todo in `executing`");
-    expect(DEFAULT_BOARD_REMINDER).toContain("ending your turn with a question or decision for the operator: first move it to `blocked`");
+    expect(DEFAULT_BOARD_REMINDER).toContain("Any other wait, or a question or decision for the operator: first move it to `blocked`");
     expect(DEFAULT_BOARD_REMINDER).toContain("keep the assignee");
     expect(DEFAULT_BOARD_REMINDER).toContain("@mention the operator");
+    expect(DEFAULT_BOARD_REMINDER).toContain("Unblocked: executing.");
     expect(DEFAULT_BOARD_REMINDER).not.toMatch(/assign @operator/i);
+  });
+
+  it("keeps a parent executing while its own children run, in the text every turn carries", () => {
+    const stay = DEFAULT_BOARD_REMINDER.indexOf("While child Todos, delegations or QA you started are running, stay `executing` and end your turn");
+    const block = DEFAULT_BOARD_REMINDER.indexOf("first move it to `blocked`");
+    expect(stay).toBeGreaterThan(-1);
+    // The exception comes before the instruction to block, and the block is for "any other" wait.
+    expect(stay).toBeLessThan(block);
+    expect(DEFAULT_BOARD_REMINDER).not.toContain("NEVER end a turn");
+    expect(DEFAULT_BOARD_REMINDER).not.toMatch(/wait on a person or dependency/);
   });
 
   it("uses the built-in text when the instance sets none", () => {

@@ -23,6 +23,11 @@ import {
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
+import { parseFallbackModeParam, parseFallbackModePatch, withFallbackView } from "./session-fallback-api.js";
+import { childFallbackMode } from "../sessions/session-fallback.js";
+import { childFallbackTarget } from "../sessions/fallback-target.js";
+import { applyFallbackTargetPatch } from "./session-fallback-api.js";
+import { scopedSwitchRefusal } from "../sessions/scoped-engine.js";
 import { buildDelegatedActivityIndex } from "../sessions/delegated-activity.js";
 import { effectiveSessionStatus, isBackgroundWorkLive, runtimeTransportRunning, serializeRuntimeActivity, type RuntimeActivityInfo } from "../sessions/background-work.js";
 import { readTodoSessionTree } from "../sessions/session-tree.js";
@@ -148,7 +153,8 @@ import { resolveMessageAudiences, speechContextApplies } from "./speech-context.
 import { isJsonMediaType } from "./media-type.js";
 import { recoverPendingSessionDeliveries } from "../sessions/callbacks.js";
 import { clearDelegationCompletionContract, DELEGATION_COMPLETION_TRACKED_META_KEY } from "../sessions/delegation-completion-contract.js";
-import { clipSessionMessage, sessionCommGuards, prepareLateralSend, isDescendantOf, resolveCallerIdentity, describeUnidentifiedTool, headerString, type CallerIdentity } from "./session-comm-guards.js";
+import { callerMayActOnSession } from "./session-reach-guard.js";
+import { clipSessionMessage, sessionCommGuards, prepareLateralSend, resolveCallerIdentity, describeUnidentifiedTool, headerString, type CallerIdentity } from "./session-comm-guards.js";
 import { originMatchesAuthority, parseRequestAuthority, requestHeaderValues, singleRequestHeader, type RequestAuthority } from "./request-authority.js";
 import {
   ACTIVITY_OPERATION_HEADER,
@@ -314,6 +320,7 @@ import {
 } from "./lifecycle.js";
 import { handleHeartbeatApi } from "./heartbeat-api.js";
 import { handleSelfCompactionApi } from "./self-compaction-api.js";
+import { handleSessionContextApi } from "./session-context-api.js";
 import { shouldInterruptRunningTurn as interruptsRunningTurn } from "./message-interrupt.js";
 import { isAutoCompacting } from "../sessions/auto-compaction.js";
 import { isRawEngineCommand } from "../shared/skill-commands.js";
@@ -322,6 +329,8 @@ import { isTerminalSession, TERMINAL_HAS_NO_TURN, TERMINAL_REFUSES_MESSAGES } fr
 import { handleWorkItemKeptApi } from "./work-item-kept-api.js";
 import { handleSprintsApi } from "./sprints-api.js";
 import { handleSessionsListApi } from "./sessions-list-api.js";
+import { handleSessionWaitsApi } from "./session-waits-api.js";
+import { resolveScopedCaller } from "./department-scope/caller.js";
 import { handleDepartmentsApi } from "./departments-api.js";
 import { setWorkItemSprint, type Sprint } from "../work-items/sprints.js";
 import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
@@ -1225,6 +1234,7 @@ export async function handleApiRequest(
       resolveCaller: () => resolveScopedWriteCallerIdentity(req, context),
       opencodeMode: () => context.getConfig().engines.opencode?.mode,
     })) return;
+    if (await handleSessionContextApi(req, res, { method, pathname, url }, { getConfig: context.getConfig, resolveCaller: () => resolveScopedWriteCallerIdentity(req, context) })) return;
     if (pathname.startsWith("/api/terminals") && await handleTerminalApi(req, res, { method, pathname, url }, terminalApiOptions(req, context))) return;
 
     if (method === "GET" && pathname === "/api/features") {
@@ -1770,6 +1780,15 @@ export async function handleApiRequest(
     // GET /api/sessions: the list, in its own module (api.ts is over its size budget).
     if (await handleSessionsListApi(res, { method, pathname, url }, { serialize: (sessions) => serializeSessionList(sessions, context), portalSlug: () => context.getConfig().portal?.portalName })) return;
 
+    // GET /api/sessions/:id/waits: what the session waits on, in its own module (api.ts is over its size budget).
+    if (handleSessionWaitsApi(res, { method, pathname, url }, {
+      holdingCapacity: (all) => sessionsHoldingEngineCapacity(all, context),
+      statusOf: (waiting) => effectiveSessionStatus(waiting, currentRuntimeActivity(waiting, context)),
+      engines: (waiting) => [context.sessionManager.getEngine(waiting.engine), context.ptyViewEngines?.[waiting.engine]],
+      employeeDisplayName: (employee) => orgRegistry(context.getConfig()).get(employee)?.displayName ?? null,
+      callerDepartment: () => resolveScopedCaller(resolveScopedWriteCallerIdentity(req, context))?.department ?? null,
+    })) return;
+
     // GET /api/sessions/:id/messages?before=<messageId>&limit=N
     // Bounded older-history page for seamless transcript prepending in the web UI.
     let params = matchRoute("/api/sessions/:id/messages", pathname);
@@ -1813,11 +1832,11 @@ export async function handleApiRequest(
         });
       }
 
-      return json(res, {
+      return json(res, withFallbackView({
         ...serializeSessionResponse(session, context),
         ...(includeMessages ? { messages } : {}),
         ...(page ? { messagesPage: { hasOlder: page.hasOlder } } : {}),
-      });
+      }, session, context));
     }
 
     // PUT|PATCH /api/sessions/:id — update title and/or mid-chat model/effort
@@ -1835,6 +1854,11 @@ export async function handleApiRequest(
         if (!trimmed) return badRequest(res, "title must not be empty");
         updates.title = trimmed.slice(0, 200);
       }
+      const fallbackPatch = parseFallbackModePatch(body.fallbackMode);
+      if (!fallbackPatch.ok) return badRequest(res, fallbackPatch.error);
+      if (fallbackPatch.mode !== undefined) updates.fallbackMode = fallbackPatch.mode;
+      const targetPatch = applyFallbackTargetPatch(body.fallbackTarget, session, context, updates);
+      if (!targetPatch.ok) return badRequest(res, targetPatch.error);
       const configForPatch = context.getConfig();
       let requestedEngine: string | undefined;
       if (body.engine !== undefined) {
@@ -1849,6 +1873,8 @@ export async function handleApiRequest(
         if (blocksEngineSwitch(getSessionTransportState(session, context))) {
           return badRequest(res, "Cannot switch engine while a turn is running, waiting, or queued");
         }
+        const scopedRefusal = scopedSwitchRefusal(session, requestedEngine!);
+        if (scopedRefusal) return badRequest(res, scopedRefusal);
         const savedRef = getEngineSessionRef(session, requestedEngine);
         const selection = validateNewSessionSelection(configForPatch, {
           engine: requestedEngine,
@@ -1861,11 +1887,11 @@ export async function handleApiRequest(
           effortLevel: selection.effortLevel ?? null,
         });
         if (!switched) return notFound(res);
-        if (updates.title !== undefined) {
-          switched = updateSession(params.id, { title: updates.title }) ?? switched;
+        if (Object.keys(updates).length > 0) {
+          switched = updateSession(params.id, updates) ?? switched;
         }
         context.emit("session:updated", { sessionId: params.id });
-        return json(res, serializeSessionResponse(switched, context));
+        return json(res, withFallbackView(serializeSessionResponse(switched, context), switched, context));
       }
 
       // Mid-chat model / effort switch (applies from the next turn). Validated
@@ -1886,7 +1912,7 @@ export async function handleApiRequest(
       const updated = updateSession(params.id, updates);
       if (!updated) return notFound(res);
       context.emit("session:updated", { sessionId: params.id });
-      return json(res, serializeSessionResponse(updated, context));
+      return json(res, withFallbackView(serializeSessionResponse(updated, context), updated, context));
     }
 
     // DELETE /api/sessions/:id
@@ -1967,18 +1993,10 @@ export async function handleApiRequest(
       // bearer token the scoping is best-effort — it refuses to TEACH the
       // pattern, it cannot police curl.
       const stopCaller = resolveScopedWriteCallerIdentity(req, context);
-      if (stopCaller.kind === "unidentified-tool") {
-        res.writeHead(403, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: UNIDENTIFIED_TOOL_CALL_ERROR }));
-        return;
-      }
-      if (stopCaller.kind === "session" && !isDescendantOf(params.id, stopCaller.callerId, getSession) && reportingParentSessionId(session) !== stopCaller.callerId) {
-        res.writeHead(403, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          error: `session ${params.id} is not a descendant of your session — agents may only stop sessions they spawned (directly or transitively) or delegated to. Ask the operator or the session's parent instead.`,
-        }));
-        return;
-      }
+      if (!callerMayActOnSession(res, session, stopCaller, {
+        verb: "stop",
+        instead: "Ask the operator or the session's parent instead.",
+      })) return;
       interruptSessionTurn(context, session, USER_STOP_INTERRUPTION_REASON, "Interrupted by user");
       return json(res, { status: "stopped", sessionId: params.id });
     }
@@ -3350,6 +3368,8 @@ export async function handleApiRequest(
       }
       const delegateAsRoot = spawnAsRootRefusal(delegationCaller, employeeName);
       if (delegateAsRoot) return json(res, { error: delegateAsRoot }, 403);
+      const fallbackParam = parseFallbackModeParam(body.fallbackMode);
+      if (!fallbackParam.ok) return badRequest(res, fallbackParam.error);
       let attachments: string[] | undefined;
       if (body.attachments !== undefined) {
         if (!Array.isArray(body.attachments) || body.attachments.length > 20) {
@@ -3399,11 +3419,13 @@ export async function handleApiRequest(
         : { ok: true as const, preamble: { prefix: "", engine: null, model: null } };
       if (!todoDispatch.ok) return json(res, { error: todoDispatch.error }, 409);
       const todoOverride = todoDispatch.preamble;
+      const fallbackMode = childFallbackMode(config, delegatorSession, fallbackParam.mode);
+      const fallbackTarget = childFallbackTarget(config, delegatorSession, fallbackMode, { employee: employeeName });
       const selection = validateNewSessionSelection(config, {
         engine: todoOverride.engine ?? body.engine,
         model: todoOverride.engine ? todoOverride.model ?? undefined : body.model,
         effortLevel: body.effortLevel,
-      }, todoOverride.engine ? { employee: employeeName } : employeeDefaults);
+      }, { ...(todoOverride.engine ? { employee: employeeName } : employeeDefaults), ...(fallbackMode ? { fallbackMode } : {}) });
       if (!selection.ok) return badRequest(res, selection.error || "invalid engine/model/effort");
       // The Todo's skills are preloaded by prefixing the brief the delegate reads.
       const brief = todoOverride.prefix + task;
@@ -3520,7 +3542,7 @@ export async function handleApiRequest(
           return json(res, { error: `delegation into session ${reused.id} failed: ${linkErr instanceof Error ? linkErr.message : linkErr}`, workItemId: workItem.id }, 500);
         }
         announceDelegation({ ...announcement, session: reused, dispatchedAt: Date.now() });
-        return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel }));
+        return json(res, reusedDelegationBody(workItem.id, reused, title, { engine: engineName, model: selection.model, effortLevel: selection.effortLevel, fallbackMode: fallbackParam.mode }, config));
       }
       // The key is the session's turn lane: SessionQueue serializes turns per
       // key, so it must be unique per session. Keyed on the Todo alone, every
@@ -3542,6 +3564,8 @@ export async function handleApiRequest(
           parentSessionId,
           model: selection.model,
           effortLevel: selection.effortLevel,
+          fallbackMode,
+          fallbackTarget,
           prompt: brief,
           title,
           portalName: config.portal?.portalName,
@@ -3561,6 +3585,7 @@ export async function handleApiRequest(
             engine: replay.engine,
             model: replay.model ?? null,
             effortLevel: replay.effortLevel ?? null,
+            fallbackMode: replay.fallbackMode ?? null,
             status: replay.status,
             title: getWorkItem(replay.workItemId)?.title ?? replay.title ?? null,
             replayed: true,
@@ -3634,6 +3659,7 @@ export async function handleApiRequest(
         engine: engineName,
         model: selection.model ?? null,
         effortLevel: selection.effortLevel ?? null,
+        fallbackMode: session.fallbackMode ?? null,
         status: session.status,
         title,
       }, 201);
@@ -3682,6 +3708,7 @@ export async function handleApiRequest(
         engine: body.engine,
         model: body.model,
         effortLevel: body.effortLevel,
+        fallbackMode: body.fallbackMode,
         parentSessionId: body.parentSessionId,
         promptExcerpt: typeof body.promptExcerpt === "string" ? body.promptExcerpt : undefined,
         userId,
@@ -3700,7 +3727,7 @@ export async function handleApiRequest(
       let session = getSession(params.id);
       if (!session) return notFound(res);
       if (isTerminalSession(session)) return json(res, { error: TERMINAL_REFUSES_MESSAGES }, 409);
-      session = maybeRevertEngineOverride(session);
+      session = maybeRevertEngineOverride(session, undefined, context.getConfig());
       const _parsed = await readJsonBody(req, res);
       if (!_parsed.ok) return;
       const body = _parsed.body as any;

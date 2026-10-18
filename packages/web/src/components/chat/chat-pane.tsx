@@ -4,6 +4,7 @@ import { useOrg } from '@/hooks/use-employees'
 import { ChatMessages } from '@/components/chat/chat-messages'
 import type { CommsPeekData } from '@/components/chat/thread-peek'
 import { ChatInput } from '@/components/chat/chat-input'
+import { SessionStatusCluster } from '@/components/chat/session-status/session-status-cluster'
 import { CliKeybar } from '@/components/chat/cli-keybar'
 import { TerminalPaneBody } from '@/components/chat/terminal-pane-body'
 import { isTerminalSession } from '@/lib/terminal-session'
@@ -12,6 +13,8 @@ import { ChatHydrationOverlay, useHydrationSpinner } from '@/components/chat/cha
 import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-session-queue'
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
 import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
+import { FallbackModeChip } from './fallback-mode-chip'
+import { parseFallbackView } from './fallback-mode-model'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
 import { useLiveSession } from '@/hooks/use-live-session'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
@@ -551,10 +554,12 @@ export function ChatPane({
               activity={backgroundActivity}
               delegatedActivity={paneDelegatedActivity}
               employeeDisplayNames={employeeDisplayNames}
+              sessionId={sessionId}
             />
           ) : undefined
         }
         selectorSlot={
+          <>
           <ModelSelectorRow
             mode={sessionId ? 'existing' : 'new'}
             value={selector}
@@ -564,7 +569,26 @@ export function ChatPane({
             disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
           />
+          {sessionId ? (
+            <FallbackModeChip
+              sessionId={sessionId}
+              view={parseFallbackView(currentSession?.fallback)}
+              subscribe={subscribe}
+              disabled={loading}
+            />
+          ) : null}
+          </>
         }
+        sessionStatusSlot={sessionId ? (
+          <SessionStatusCluster
+            key={sessionId}
+            sessionId={sessionId}
+            loading={loading}
+            status={currentSession?.status as string | undefined}
+            lastContextTokens={currentSession?.lastContextTokens as number | null | undefined}
+            liveContextTokens={liveContextTokens}
+          />
+        ) : undefined}
         terminalActionsSlot={
           viewMode === 'cli' && sessionId ? (
             <CliKeybar onKey={(data) => cliTerminalRef.current?.sendKey(data)} />

@@ -1,7 +1,12 @@
 import { logger } from "../shared/logger.js";
 import type { JinnConfig, Session } from "../shared/types.js";
-import { createSession, insertMessage, updateSession, enqueueQueueItem } from "../sessions/registry.js";
+import { createSession, getSession, insertMessage, updateSession, enqueueQueueItem } from "../sessions/registry.js";
 import { validateNewSessionSelection } from "../sessions/session-patch.js";
+import { childFallbackMode } from "../sessions/session-fallback.js";
+import { childFallbackTarget } from "../sessions/fallback-target.js";
+import type { StoredFallbackTarget } from "../shared/session-fallback-config.js";
+import type { SessionFallbackMode } from "../shared/session-fallback-config.js";
+import { parseFallbackModeParam } from "./session-fallback-api.js";
 import { reroutedSessionMeta, type SessionReroute } from "../sessions/engine-override-window.js";
 import { fileIdsToMedia, rehomeAttachmentsToSession } from "./files.js";
 import { resolveMessageAudiences, speechContextApplies } from "./speech-context.js";
@@ -35,6 +40,8 @@ export interface SpawnSessionInput {
   engine?: unknown;
   model?: unknown;
   effortLevel?: unknown;
+  /** Usage-limit mode for the new session (shared/session-fallback-config.ts); default: inherited from the parent. */
+  fallbackMode?: unknown;
   parentSessionId?: string;
   promptExcerpt?: string;
   userId?: string;
@@ -69,13 +76,35 @@ function defaultProvenance(): SpawnProvenance {
  *  gateway-default session. */
 type SpawnSelection =
   | { ok: false; error: string }
-  | { ok: true; engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute };
+  | { ok: true; engineName: string; model?: string; effortLevel?: string; reroute?: SessionReroute; fallbackMode?: SessionFallbackMode };
+
+/** The mode a spawn stores: its explicit one, else the parent's rule (undefined for a root). */
+function resolveFallbackMode(
+  config: JinnConfig,
+  input: SpawnSessionInput,
+): { ok: true; mode: SessionFallbackMode | undefined } | { ok: false; error: string } {
+  const param = parseFallbackModeParam(input.fallbackMode);
+  if (!param.ok) return param;
+  const parent = input.parentSessionId ? getSession(input.parentSessionId) : undefined;
+  return { ok: true, mode: childFallbackMode(config, parent, param.mode) };
+}
+
+/** What a spawn stores for fallback: its mode, and the parent's target when the parent passes its fallback on. */
+function storedFallback(
+  config: JinnConfig, input: SpawnSessionInput, employee: string | null, mode: SessionFallbackMode | undefined,
+): { fallbackMode: SessionFallbackMode | undefined; fallbackTarget: StoredFallbackTarget | undefined } {
+  const parent = input.parentSessionId ? getSession(input.parentSessionId) : undefined;
+  return { fallbackMode: mode, fallbackTarget: childFallbackTarget(config, parent, mode, { employee }) };
+}
 
 async function resolveSelection(
   config: JinnConfig,
   input: SpawnSessionInput,
   employeeName: string | null,
 ): Promise<SpawnSelection> {
+  const fallback = resolveFallbackMode(config, input);
+  if (!fallback.ok) return fallback;
+  const fallbackMode = fallback.mode;
   let employeeDefaults: { engine: string; model: string; effortLevel?: string; employee?: string } | undefined;
   if (employeeName) {
     const { orgRegistry } = await import("./org-registry.js");
@@ -94,7 +123,7 @@ async function resolveSelection(
     engine: input.engine,
     model: input.model,
     effortLevel: input.effortLevel,
-  }, employeeDefaults);
+  }, { ...employeeDefaults, ...(fallbackMode ? { fallbackMode } : {}) });
   if (!selection.ok) return { ok: false, error: selection.error || "invalid engine/model/effort" };
   return {
     ok: true,
@@ -102,6 +131,7 @@ async function resolveSelection(
     model: selection.model,
     effortLevel: selection.effortLevel,
     reroute: selection.reroute,
+    ...(fallbackMode ? { fallbackMode } : {}),
   };
 }
 
@@ -189,6 +219,7 @@ export async function spawnSession(
     employee: employeeName,
     parentSessionId: input.parentSessionId,
     effortLevel: selection.effortLevel,
+    ...storedFallback(config, input, employeeName, selection.fallbackMode),
     // Honor the requested model so API clients can pin per-employee models
     // (e.g. MCP servers that look up org/<employee>.yaml and pass the
     // employee's configured model). Without this, the turn falls back to

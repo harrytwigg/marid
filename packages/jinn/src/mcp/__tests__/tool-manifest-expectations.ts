@@ -113,7 +113,10 @@ export const EXPECTED_REQUIRED = {
 export const EXPECTED_ENUMS = {
   cost_report: [["properties.groupBy", ["employee", "day"]]],
   create_work_item: [["properties.priority", [0, 1, 2, 3]]],
-  delegate_task: [["properties.intent", ["execute", "review"]]],
+  delegate_task: [
+    ["properties.fallbackMode", ["fallback", "fallback-children", "auto-resume"]],
+    ["properties.intent", ["execute", "review"]],
+  ],
   edit_work_item: [["properties.priority", [0, 1, 2, 3]]],
   link_work_items: [["properties.kind", ["blocks", "relates", "duplicates"]]],
   list_sessions: [["properties.scope", ["children", "employee", "recent", "pinned"]]],
@@ -123,6 +126,7 @@ export const EXPECTED_ENUMS = {
     ["properties.source", ["human", "delegation", "cron", "workflow", "session", "connector", "goal"]],
   ],
   search_messages: [["properties.role", ["user", "assistant"]]],
+  spawn_session: [["properties.fallbackMode", ["fallback", "fallback-children", "auto-resume"]]],
   search_sessions: [["properties.status", ["idle", "running", "error", "waiting", "interrupted"]]],
   search_work_items: [
     ["properties.status", ["backlog", "executing", "in_review", "done", "blocked", "cancelled"]],

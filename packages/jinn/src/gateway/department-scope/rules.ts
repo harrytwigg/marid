@@ -24,7 +24,7 @@ import { matchRoute } from "../route-helpers.js";
  *   spawn           the employee must be a member of D; a named parent must be bound to D
  *   sessions-list, session-search, message-search
  *                   only sessions bound to D
- *   session         one session: bound to D, else unknown
+ *   session         one session (or its waits): bound to D, else unknown
  *   session-children the session bound to D; children outside D hidden
  *   session-message bound to D, or the caller's own requester (FR-013)
  *   own-session     only the caller's own session
@@ -77,8 +77,8 @@ export const SCOPED_ROUTES: readonly ScopedRoute[] = [
   ...rows("sessions-list", ["GET"], "/api/sessions"),
   ...rows("session-search", ["GET"], "/api/search/sessions"),
   ...rows("message-search", ["GET"], "/api/search/messages"),
-  ...rows("session", ["GET"], "/api/sessions/:id", "/api/sessions/:id/messages", "/api/sessions/:id/transcript", "/api/sessions/:id/context"),
-  ...rows("session", ["POST"], "/api/sessions/:id/stop"),
+  ...rows("session", ["GET"], "/api/sessions/:id", "/api/sessions/:id/messages", "/api/sessions/:id/transcript", "/api/sessions/:id/context", "/api/sessions/:id/context-usage", "/api/sessions/:id/waits"),
+  ...rows("session", ["POST"], "/api/sessions/:id/stop", "/api/sessions/:id/compact"),
   ...rows("session-children", ["GET"], "/api/sessions/:id/children"),
   ...rows("session-message", ["POST"], "/api/sessions/:id/message"),
   ...rows("own-session", ["POST"], "/api/sessions/:id/attachments"),

@@ -14,6 +14,7 @@ import { logger } from "../shared/logger.js";
 import { resolveSubstituteModel } from "../shared/engine-fallback.js";
 import { isSpellableModelId } from "../shared/model-id.js";
 import { accountOverride } from "./session-account.js";
+import { isAutoResume } from "./session-fallback.js";
 import { extendSpentWindow } from "./engine-override-window.js";
 import { effortLevelsForModel, getModelRegistry } from "../shared/models.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
@@ -79,6 +80,13 @@ function accountSwapModel(accounts: AccountSwap, model: string | null | undefine
 
 type EngineConfig = { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string };
 
+/** The model a stand-in nobody chose a model for runs: through the account's map for an account swap, else the engine's. */
+function derivedSubstituteModel(config: JinnConfig, session: Session, substitute: string, accounts: AccountSwap | undefined): string | undefined {
+  return accounts
+    ? accountSwapModel(accounts, session.model)
+    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model });
+}
+
 /** What the stand-in runs as, once the session row has been flipped onto it. */
 export interface EngineSubstitution {
   engineConfig: EngineConfig;
@@ -100,6 +108,8 @@ export function beginEngineSubstitution(opts: {
   config: JinnConfig;
   employee: Employee | undefined;
   substitute: string;
+  /** The model the substitute runs, when the operator chose one; else it is derived from the session's pin. */
+  model?: string;
   /** Set when the substitute is another Claude account rather than an engine
    *  (FR-079): the session keeps its engine and runs on that account's profile. */
   accounts?: AccountSwap;
@@ -110,9 +120,7 @@ export function beginEngineSubstitution(opts: {
   const { session, attemptToken, config, employee, substitute, accounts, until, syncSince, lastError } = opts;
 
   const engineConfig: EngineConfig = config.engines[substitute as keyof JinnConfig["engines"]] as EngineConfig ?? {};
-  const model = accounts
-    ? accountSwapModel(accounts, session.model)
-    : resolveSubstituteModel(config, getModelRegistry(config), { from: session.engine, to: substitute, model: session.model });
+  const model = opts.model ?? derivedSubstituteModel(config, session, substitute, accounts);
   const engineOverride = overrideRecord(session, accounts, until, syncSince);
 
   const started = updateSessionForAttempt(session.id, attemptToken, {
@@ -139,6 +147,24 @@ export function beginEngineSubstitution(opts: {
     // account's slot, which only the override record makes current.
     resumeSessionId: getEngineSessionRef(accounts ? started : session, substitute).id,
   };
+}
+
+/**
+ * Undo `beginEngineSubstitution` for a substitute that could not take the turn either: the session
+ * goes back to the engine, thread and model the turn began on, with the transport meta from before
+ * the swap (so no override record is left, and one that already stood is kept). False when the
+ * attempt fence was lost.
+ */
+export function abandonEngineSubstitution(session: Session, attemptToken: string, metaBefore: Session["transportMeta"]): boolean {
+  return Boolean(updateSessionForAttempt(session.id, attemptToken, {
+    engine: session.engine,
+    engineSessionId: session.engineSessionId,
+    model: session.model,
+    transportMeta: metaBefore ?? null,
+    status: "running",
+    lastActivity: new Date().toISOString(),
+    lastError: null,
+  }));
 }
 
 /** What the swap parked, or null when the record names no engine to go back to. */
@@ -217,20 +243,32 @@ function restoredThread(session: Session, meta: Record<string, unknown>, parked:
   return parked.engineSessionId ?? getEngineSessionRef(unswapped, parked.engine).id ?? null;
 }
 
+/** The session while its stand-in still holds: the window is open, or the engine is known to be
+ *  spent still and the window moved out. Undefined when it is over, and always for `auto-resume`. */
+function heldOverride(opts: {
+  session: Session; meta: Record<string, unknown>; override: Record<string, unknown>; parked: ParkedOverride;
+  employee?: Employee; config?: Pick<JinnConfig, "sessions">;
+}): Session | undefined {
+  const { session, meta, override, parked, employee, config } = opts;
+  if (isAutoResume(config ?? {}, session)) return undefined;
+  if (parked.until.getTime() > Date.now()) return session;
+  return extendSpentWindow(session, meta, override, parked.engine, employee);
+}
+
 /** Restore the pre-rate-limit engine, and the model that belonged to it, once the
  *  override window has expired — or move the window out, when the engine is
- *  known to be spent still. */
-export function maybeRevertEngineOverride(session: Session, employee?: Employee): Session {
+ *  known to be spent still. A session whose fallback mode is `auto-resume` never
+ *  stands on a stand-in: its override counts as expired at once (`config` says
+ *  whether the default makes it so; without it only the session's own mode counts). */
+export function maybeRevertEngineOverride(session: Session, employee?: Employee, config?: Pick<JinnConfig, "sessions">): Session {
   const meta = (session.transportMeta || {}) as Record<string, unknown>;
   const override = meta["engineOverride"] as Record<string, unknown> | undefined;
   if (!override) return session;
 
   const parked = parkedOverride(override);
   if (!parked) return session;
-  if (parked.until.getTime() > Date.now()) return session;
-
-  const extended = extendSpentWindow(session, meta, override, parked.engine, employee);
-  if (extended) return extended;
+  const held = heldOverride({ session, meta, override, parked, employee, config });
+  if (held) return held;
 
   // Park the fallback engine's own thread id under its typed ref before handing
   // the mirror back to the engine being restored.

@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import * as pty from "node-pty";
 import type { CompactionStats, InterruptibleEngine, EngineRunOpts, EngineResult, EngineRateLimitInfo, StreamDelta, TurnProgress } from "../shared/types.js";
@@ -10,13 +11,15 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { departmentSessionEnv, isScopedSession } from "../gateway/department-scope/session-env.js";
 import { PtyLifecycleManager, ptyHostKey, isProcessExitInterruption, processExitInterruption, type PtyExit, type PtyHandle } from "./pty-lifecycle.js";
-import { processStartFailure } from "../shared/process-start.js";
+import { backgroundHeldSessionId, backgroundSessionMayHoldPrompt, processStartFailure } from "../shared/process-start.js";
 import { argumentLimitApplies, assertArgumentsFit } from "./argv-limit.js";
 import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
 import type { HookRegistry, HookPayload } from "../gateway/hook-registry.js";
 import { SsePtyProxy, MAIN_AGENT_SENTINEL, type SseDataEvent, type UpstreamActivityInfo } from "./sse-pty-proxy.js";
+import { BackgroundTaskStore, launchedBackgroundTask } from "./background-tasks.js";
 import { finishedTaskNotificationIds } from "./task-notifications.js";
+import type { BackgroundTasksReport, BackgroundTasksSource } from "../shared/session-waits.js";
 import { isCompactCommand, isNativeClaudeCommand, neutralizeForPaste } from "../shared/skill-commands.js";
 import { buildPromptWithPlatformContext } from "./platform-context.js";
 import { findSessionTranscript } from "./claude-transcript-path.js";
@@ -191,6 +194,13 @@ export function compactionStatsFromTranscript(transcriptPath: string, afterMs: n
 /** How long to wait for the `compact_boundary` after PostCompact has fired. */
 const COMPACT_BOUNDARY_WAIT_MS = 2_000;
 const COMPACT_BOUNDARY_POLL_MS = 100;
+
+/** How long `claude stop` gets to release a background session. */
+const BACKGROUND_STOP_TIMEOUT_MS = 30_000;
+/** How much of a dying process's output a start failure keeps. Claude Code's
+ *  refusal to resume a background session can run past the default: a title, a
+ *  sentence on what became of the prompt, then the instructions. */
+const START_FAILURE_TAIL_CHARS = 1_000;
 
 /**
  * The sizes of a compaction PostCompact has just confirmed. Claude Code fires
@@ -983,7 +993,7 @@ export class TurnResolver {
   processExited(exit: PtyExit | undefined, output?: string): void {
     if (this.settled) return;
     if (!this.processStarted) {
-      this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", error: processStartFailure("claude", exit, output) });
+      this.settle({ sessionId: this.claudeSessionId ?? this.opts.fallbackSessionId ?? "", result: "", error: processStartFailure("claude", exit, output, START_FAILURE_TAIL_CHARS) });
       return;
     }
     this.interrupt(processExitInterruption("claude", exit));
@@ -1581,7 +1591,7 @@ export function pasteAndSubmit(
   };
 }
 
-export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngine {
+export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngine, BackgroundTasksSource {
   name = "claude" as const;
   /** Active turn resolvers keyed by Jinn session id. `boundProc` is the specific
    *  PTY serving this turn (captured at spawn / warm-reuse). A PTY's onExit only
@@ -1616,6 +1626,9 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private terminalTurns = new Map<string, number>();
   /** Gateway turns waiting for a terminal turn to finish; calling it aborts. */
   private terminalWaits = new Map<string, (reason: string) => void>();
+  /** Sessions whose daemon-held background session is being stopped before the
+   *  turn runs again. No turn is active then, so kill() records the interrupt here. */
+  private backgroundStops = new Map<string, { reason?: string }>();
   private terminalWaitStartedAt = new Map<string, number>();
   private terminalWaitCb?: (sessionId: string, waiting: boolean) => void;
   /** Model/effort the live PTY was spawned with, per session. `--model`/`--effort`
@@ -1639,11 +1652,11 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     /** The last emission reported background sub-agents or a re-run. */
     emittedDiscreteWork?: boolean;
   }>();
-  private backgroundMonitors = new Map<string, Set<string>>();
-  /** Background sub-agents per session, by agent id: launched by a top-level
-   *  Agent/Task call that returned async, ended by the task notification
-   *  announcing them, a TaskStop, or a TaskOutput that found them finished. */
-  private backgroundAgents = new Map<string, Set<string>>();
+  /** Background tasks per session, by task id: background Bash and Monitors (`activeMonitors`) and
+   *  sub-agents launched by a top-level Agent/Task call that returned async (`backgroundAgents`).
+   *  Each ends with the task notification announcing it, a TaskStop, a TaskOutput that found it
+   *  finished, or (a Monitor) its timeout notice or, failing that, its deadline, which re-emits. */
+  private taskStore = new BackgroundTaskStore((jinnSessionId) => this.publishBackgroundState(jinnSessionId));
   private backgroundSilenceTimers = new Map<string, NodeJS.Timeout>();
   private backgroundActivityCb?: (jinnSessionId: string, info: UpstreamActivityInfo | null) => void;
   /** Test override for the post-settle clear quiet window (default 10s). */
@@ -1805,22 +1818,10 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     const response = hook.tool_response && typeof hook.tool_response === "object" && !Array.isArray(hook.tool_response)
       ? hook.tool_response as Record<string, unknown>
       : undefined;
-    const topLevel = typeof hook.agent_id !== "string";
+    const launched = launchedBackgroundTask(hook, Date.now());
 
-    if (
-      hook.tool_name === "Bash"
-      && topLevel
-      && input?.run_in_background === true
-      && typeof response?.backgroundTaskId === "string"
-    ) {
-      this.addBackgroundTask(this.backgroundMonitors, jinnSessionId, response.backgroundTaskId);
-    } else if (
-      (hook.tool_name === "Agent" || hook.tool_name === "Task")
-      && topLevel
-      && response?.status === "async_launched"
-      && typeof response.agentId === "string"
-    ) {
-      this.addBackgroundTask(this.backgroundAgents, jinnSessionId, response.agentId);
+    if (launched) {
+      if (this.taskStore.add(jinnSessionId, launched)) this.publishBackgroundState(jinnSessionId);
     } else if (hook.tool_name === "TaskStop" && typeof input?.task_id === "string") {
       this.dropBackgroundMonitors(jinnSessionId, [input.task_id]);
     } else if (hook.tool_name === "TaskOutput") {
@@ -1832,27 +1833,20 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     }
   }
 
-  private addBackgroundTask(tasks: Map<string, Set<string>>, jinnSessionId: string, taskId: string): void {
-    const ids = tasks.get(jinnSessionId) ?? new Set<string>();
-    if (ids.has(taskId)) return;
-    ids.add(taskId);
-    tasks.set(jinnSessionId, ids);
-    this.publishBackgroundState(jinnSessionId);
-  }
-
   /** Forget background tasks that ended — stopped with TaskStop, or finished on
    *  their own and announced by a task-notification. Covers background Bash
-   *  tasks and background sub-agents alike; unknown ids (Monitors, tasks a
+   *  tasks, Monitors and background sub-agents alike; unknown ids (tasks a
    *  subagent launched) are ignored. */
   private dropBackgroundMonitors(jinnSessionId: string, taskIds: string[]): void {
-    let dropped = false;
-    for (const tasks of [this.backgroundMonitors, this.backgroundAgents]) {
-      const ids = tasks.get(jinnSessionId);
-      if (!ids) continue;
-      for (const taskId of taskIds) dropped = ids.delete(taskId) || dropped;
-      if (ids.size === 0) tasks.delete(jinnSessionId);
-    }
-    if (dropped) this.publishBackgroundState(jinnSessionId);
+    if (this.taskStore.drop(jinnSessionId, taskIds)) this.publishBackgroundState(jinnSessionId);
+  }
+
+  /** What the session is waiting on in the background, for the "waiting on" view. */
+  backgroundTasks(jinnSessionId: string): BackgroundTasksReport {
+    return {
+      tasks: this.taskStore.list(jinnSessionId),
+      ...(this.backgroundReruns.has(jinnSessionId) ? { rerun: { startedAt: null } } : {}),
+    };
   }
 
   /** A background-work fact changed (a task started or ended, a re-run opened
@@ -1872,8 +1866,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private backgroundSnapshot(jinnSessionId: string, info: UpstreamActivityInfo): UpstreamActivityInfo {
     return {
       ...info,
-      activeMonitors: this.backgroundMonitors.get(jinnSessionId)?.size ?? 0,
-      backgroundAgents: this.backgroundAgents.get(jinnSessionId)?.size ?? 0,
+      activeMonitors: this.taskStore.count(jinnSessionId, "process", "monitor"),
+      backgroundAgents: this.taskStore.count(jinnSessionId, "subagent"),
       backgroundRerun: this.backgroundReruns.has(jinnSessionId),
     };
   }
@@ -1940,11 +1934,11 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
         return;
       }
       logger.warn(
-        `InteractiveClaudeEngine: ${jinnSessionId} background work (${this.backgroundAgents.get(jinnSessionId)?.size ?? 0} sub-agent(s)`
+        `InteractiveClaudeEngine: ${jinnSessionId} background work (${this.taskStore.count(jinnSessionId, "subagent")} sub-agent(s)`
         + `${this.backgroundReruns.has(jinnSessionId) ? ", a re-run" : ""}) silent for ${Math.round(this.backgroundSilenceMs / 60_000)}m `
         + `with no end reported — no longer counting it as running`,
       );
-      this.backgroundAgents.delete(jinnSessionId);
+      this.taskStore.clear(jinnSessionId, "subagent");
       this.backgroundReruns.delete(jinnSessionId);
       this.publishBackgroundState(jinnSessionId);
     }, this.backgroundSilenceMs);
@@ -1969,8 +1963,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
    *  the cleared notification if activity had been reported. */
   private clearBackground(jinnSessionId: string): void {
     this.lifecycle.setRuntimeActive(jinnSessionId, false);
-    this.backgroundMonitors.delete(jinnSessionId);
-    this.backgroundAgents.delete(jinnSessionId);
+    this.taskStore.clear(jinnSessionId);
     const silence = this.backgroundSilenceTimers.get(jinnSessionId);
     if (silence) clearTimeout(silence);
     this.backgroundSilenceTimers.delete(jinnSessionId);
@@ -1993,7 +1986,11 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   private observeBackgroundWork(jinnSessionId: string, h: HookPayload): void {
     this.handleBackgroundMonitorHook(jinnSessionId, h);
     // The re-run a notification opens is the announcement that its tasks ended.
-    if (isBackgroundReinvocation(h)) this.dropBackgroundMonitors(jinnSessionId, finishedTaskNotificationIds(String(h.prompt)));
+    if (isBackgroundReinvocation(h)) {
+      const prompt = String(h.prompt);
+      // A Monitor's timeout notice ends it, like a status does.
+      this.dropBackgroundMonitors(jinnSessionId, [...finishedTaskNotificationIds(prompt), ...this.taskStore.noteMonitorEvents(jinnSessionId, prompt, Date.now())]);
+    }
     if (this.active.has(jinnSessionId)) return;
     const rerunWasOpen = this.backgroundReruns.has(jinnSessionId);
     // A notification folded into a typed turn is taken for a re-run too: a
@@ -2284,7 +2281,88 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
     });
   }
 
+  /**
+   * Run a turn; if Claude Code refuses to resume the session because its daemon
+   * still holds it as a background session, stop that background session and
+   * run the turn once more.
+   *
+   * A turn that starts work Claude Code backgrounds (a long Monitor, a forked
+   * sub-agent) can leave `claude daemon` hosting the session after the
+   * foreground process has gone. `--resume` then exits at once with "… is
+   * running in the background", and without this the message it carried is
+   * never seen. The gateway keeps no live process for the session at this
+   * point, so nothing it can reach is lost by stopping the daemon's.
+   *
+   * Not when Claude Code says the prompt reached that session (saved for it,
+   * sent to it, possibly delivered): running the turn again would deliver it
+   * twice. That failure stands, with Claude Code's account of the prompt.
+   */
   async run(opts: EngineRunOpts): Promise<EngineResult> {
+    const result = await this.runTurn(opts);
+    const resumed = opts.resumeSessionId?.toLowerCase();
+    const heldId = resumed ? backgroundHeldSessionId(result.error) : undefined;
+    if (!heldId || !resumed?.startsWith(heldId.toLowerCase()) || backgroundSessionMayHoldPrompt(result.error)) return result;
+    logger.warn(`InteractiveClaudeEngine: Claude Code session ${heldId} is held in the background by its daemon; stopping it and running ${opts.sessionId}'s turn again`);
+    const sessionId = opts.sessionId!;
+    const stop: { reason?: string } = {};
+    this.backgroundStops.set(sessionId, stop);
+    try {
+      await this.stopBackgroundSession(opts, heldId);
+    } finally {
+      this.backgroundStops.delete(sessionId);
+    }
+    // A stop or shutdown that arrived while `claude stop` ran found no turn to interrupt.
+    if (stop.reason) return { sessionId: opts.resumeSessionId ?? "", result: "", error: stop.reason };
+    return await this.runTurn(opts);
+  }
+
+  /** `claude stop <id>`, as the session's own Claude profile, on the host the
+   *  session runs on. Never throws: a stop that did not work shows as the
+   *  second attempt failing the same way, with Claude Code's own words. */
+  private async stopBackgroundSession(opts: EngineRunOpts, id: string): Promise<void> {
+    try {
+      let bin: string;
+      let args: string[];
+      let options: { env?: NodeJS.ProcessEnv; cwd?: string };
+      if (isRemoteTarget(opts)) {
+        const remote = this.readRemoteConfig();
+        const destination = sshDestination(opts);
+        const facts = cachedRemoteFacts(destination);
+        if (!facts) throw new Error(`host ${destination} has not been staged this gateway boot`);
+        const claudeConfigDir = resolveRemoteClaudeConfigDir(opts, remote);
+        bin = resolveBin("ssh");
+        args = buildSshSpawnArgs({
+          destination,
+          tunnelPort: 0,
+          gatewayPort: 0,
+          reverseTunnel: false,
+          allocateTty: false,
+          remoteCwd: opts.remoteCwd!,
+          remoteEnv: claudeConfigDir ? { CLAUDE_CONFIG_DIR: claudeConfigDir } : {},
+          unsetRemoteEnv: InteractiveClaudeEngine.remoteEnvDeny(claudeConfigDir),
+          pathPrepend: [remoteNodeDir(facts)],
+          bin: requireRemoteEngineBin(destination, facts, "claude"),
+          args: ["stop", id],
+        });
+        options = { env: this.buildPtyEnv(opts.sessionId, { sshClient: true }) };
+      } else {
+        bin = resolveBin("claude", opts.bin);
+        args = ["stop", id];
+        options = { env: this.buildPtyEnv(opts.sessionId, { claudeProfile: opts.claudeProfile }), cwd: opts.cwd || JINN_HOME };
+      }
+      await new Promise<void>((resolve, reject) => {
+        execFile(bin, args, { ...options, timeout: BACKGROUND_STOP_TIMEOUT_MS }, (err, stdout, stderr) => {
+          if (err) reject(Object.assign(err, { output: `${stdout}${stderr}`.trim() }));
+          else resolve();
+        });
+      });
+    } catch (err) {
+      const output = (err as { output?: string }).output;
+      logger.warn(`InteractiveClaudeEngine: could not stop background Claude Code session ${id}: ${err instanceof Error ? err.message : String(err)}${output ? ` (${output.slice(-300)})` : ""}`);
+    }
+  }
+
+  private async runTurn(opts: EngineRunOpts): Promise<EngineResult> {
     const jinnSessionId = opts.sessionId;
     if (!jinnSessionId) throw new Error("InteractiveClaudeEngine.run requires opts.sessionId");
 
@@ -3353,6 +3431,8 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
       abortWait(reason);
       if (WAIT_ONLY_INTERRUPTS.has(reason)) return;
     }
+    const stopping = this.backgroundStops.get(sessionId);
+    if (stopping) stopping.reason = reason.startsWith("Interrupted") ? reason : `Interrupted: ${reason}`;
     this.cancelLateRecovery(sessionId);
     const e = this.active.get(sessionId);
     e?.resolver.interrupt(reason.startsWith("Interrupted") ? reason : `Interrupted: ${reason}`);
@@ -3361,7 +3441,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
 
   killAll(): void {
     for (const abort of [...this.terminalWaits.values()]) abort("Interrupted: gateway shutting down");
-    for (const id of [...this.active.keys()]) this.kill(id, "Interrupted: gateway shutting down");
+    for (const id of new Set([...this.active.keys(), ...this.backgroundStops.keys()])) this.kill(id, "Interrupted: gateway shutting down");
     this.lifecycle.killAll();
   }
 
@@ -3379,7 +3459,7 @@ export class InteractiveClaudeEngine implements InterruptibleEngine, PtyViewEngi
   isTurnRunning(sessionId: string): boolean {
     // A turn waiting behind one typed in the terminal is still a turn: "send
     // now" and /stop must be able to interrupt it.
-    return this.active.has(sessionId) || this.terminalWaits.has(sessionId);
+    return this.active.has(sessionId) || this.terminalWaits.has(sessionId) || this.backgroundStops.has(sessionId);
   }
 
   /** Observable progress for the in-flight turn, or undefined if none is running.

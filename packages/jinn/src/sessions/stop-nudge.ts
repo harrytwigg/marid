@@ -61,3 +61,15 @@ export function planStopNudge(input: { finalText: string; stopNudgesSent: number
   if (input.stopNudgesSent >= MAX_STOP_NUDGES || text.length === 0) return false;
   return !hasTerminalSignal(text) && !PARENT_WAIT_SIGNAL.test(text);
 }
+
+const ASKS_OR_BLOCKED_SIGNAL = /\?|\b(?:please\s+(?:confirm|advise|clarify|review)|which\s+(?:option|approach)|should\s+i|would\s+you|let\s+me\s+know|blocked|need(?:s)?\s+(?:your|the\s+parent['’]s|approval|a\s+decision|input|access|credentials?)|awaiting\s+(?:approval|confirmation|input|your))\b/i;
+
+/**
+ * Whether a child's reply asks its parent something or reports a blocker. Such
+ * a reply always reaches the parent, even while the child waits on its own
+ * background work. It is a filter, not a classifier: a false match only costs
+ * the parent a wake, so it errs wide.
+ */
+export function asksOrReportsBlocker(text: string): boolean {
+  return ASKS_OR_BLOCKED_SIGNAL.test(text);
+}

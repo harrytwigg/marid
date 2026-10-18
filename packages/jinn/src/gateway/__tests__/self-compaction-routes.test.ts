@@ -268,8 +268,19 @@ describe("POST /api/compactions — integration against the real routes and outb
     expect((await request("POST", "/api/compactions", { headers: asSession(me), body: HANDOFF })).status).toBe(202);
     const again = await request("POST", "/api/compactions", { headers: asSession(me), body: HANDOFF });
     expect(again.status).toBe(429);
-    expect((again.body as { error: string }).error).toMatch(/already requested a compaction.*end your turn/i);
+    expect((again.body as { error: string }).error).toMatch(/was compacted, or a compaction was requested, at \S+; the next is allowed from \S+\.$/);
     expect(queuedPrompts(me)).toHaveLength(2);
+  });
+
+  it("does not claim the session asked for the earlier compaction, which an operator's meter may have made", async () => {
+    const me = newSession("claude");
+    registry.claimSelfCompaction(me, Date.now(), 600_000);
+    const res = await request("POST", "/api/compactions", { headers: asSession(me), body: HANDOFF });
+    expect(res.status).toBe(429);
+    const { error } = res.body as { error: string };
+    expect(error).toMatch(/was compacted, or a compaction was requested, at/);
+    expect(error).not.toMatch(/already requested|already scheduled|end your turn/i);
+    expect(queuedPrompts(me)).toEqual([]);
   });
 
   it("suppresses the parent callback for the turn that asked, when the caller is a child", async () => {

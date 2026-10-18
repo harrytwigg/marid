@@ -13,7 +13,11 @@ export const queryKeys = {
     children: (id: string) => ['sessions', id, 'children'] as const,
     transcript: (id: string) => ['sessions', id, 'transcript'] as const,
     queue: (id: string) => ['sessions', id, 'queue'] as const,
+    contextUsage: (id: string) => ['sessions', id, 'context-usage'] as const,
   },
+  /** What a session's status is waiting on; only fetched while its popup is open. */
+  sessionWaitsAll: ['session-waits'] as const,
+  sessionWaits: (id: string) => ['session-waits', id] as const,
   org: {
     all: ['org'] as const,
     employee: (name: string) => ['org', 'employees', name] as const,

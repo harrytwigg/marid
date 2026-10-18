@@ -37,7 +37,7 @@ export interface RateLimitHandlerHooks {
    * than re-derived because the chain walk that chose it already happened here,
    * and a transport re-walking it could disagree with the engine that then runs.
    */
-  onFallbackStart?: (info: { resumeAt: Date | null; until: Date; substitute: EngineName }) => void | Promise<void>;
+  onFallbackStart?: (info: { resumeAt: Date | null; until: Date; substitute: EngineName; model?: string }) => void | Promise<void>;
 
   /**
    * Optional stream callback for the fallback engine's run (web emits deltas here).
@@ -54,8 +54,11 @@ export interface RateLimitHandlerHooks {
   /**
    * Called once when entering the wait-and-retry loop. Use this to: switch UI
    * to "waiting", post a "I'll continue automatically" message, notify Discord, etc.
+   *
+   * `reason` is set when the session has a fallback target of its own that could not
+   * take the turn, so the notice can say why it waited instead of switching.
    */
-  onWaitingStart?: (info: { resumeAt: Date | null; rateLimit: RateLimitInfo }) => void | Promise<void>;
+  onWaitingStart?: (info: { resumeAt: Date | null; rateLimit: RateLimitInfo; reason?: string }) => void | Promise<void>;
 
   /**
    * Called each retry iteration BEFORE the retry engine.run — switch UI back

@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import type { BackgroundActivity, DelegatedActivity } from '@/lib/api'
+import { SessionWaitsBoundary, WaitsNote } from '@/components/chat/session-waits-boundary'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { titleCaseSlug } from '@/lib/session-waits'
 import { countLabel, isBackgroundActivityVisible, joinParts, pendingWork } from './pending-work'
 
 const EXIT_MS = 140
+
+/** The popup's code (rows, query, tick) only loads when the status is first opened. */
+const SessionWaitsPopup = lazy(() => import('@/components/chat/session-waits-popup'))
 
 interface ActivityCopy {
   kind: 'runtime' | 'delegated-one' | 'delegated-many' | 'delegated-generic'
@@ -10,33 +16,28 @@ interface ActivityCopy {
   short: string
   title: string
   count?: number
-}
-
-function titleCaseSlug(slug: string): string {
-  return slug
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
+  /** The popup lists what this says: delegated sessions, or work the turn left running. Model
+   *  requests in flight alone are not listed, so they leave the label a plain status. */
+  listable: boolean
 }
 
 /** The runtime part of the line. Work the turn left running is counted as
  *  the answer caption counts it; model requests in flight with nothing else
  *  pending fall back to the in-flight agent count. */
-function runtimeCopy(activity: BackgroundActivity | null, nowMs: number): { long: string; short: string } {
+function runtimeCopy(activity: BackgroundActivity | null, nowMs: number): { long: string; short: string; listable: boolean } {
   const work = pendingWork(activity, null, nowMs)
   if (work) {
     const parts = [
       ...(work.subAgents ? [countLabel(work.subAgents, 'sub-agent')] : []),
       ...(work.monitors ? [countLabel(work.monitors, 'monitor')] : []),
     ]
-    if (!parts.length) return { long: 'Background re-run in progress', short: 'Re-running' }
+    if (!parts.length) return { long: 'Background re-run in progress', short: 'Re-running', listable: true }
     const short = [...parts, ...(work.rerun ? ['re-run'] : [])].join(' · ')
-    return { long: `${joinParts([...parts, ...(work.rerun ? ['a re-run'] : [])])} in background`, short }
+    return { long: `${joinParts([...parts, ...(work.rerun ? ['a re-run'] : [])])} in background`, short, listable: true }
   }
   const agents = activity?.activeAgents ?? activity?.activeStreams ?? 0
-  if (agents > 0) return { long: `${countLabel(agents, 'agent')} in background`, short: countLabel(agents, 'agent') }
-  return { long: 'Background work in progress', short: 'Working' }
+  if (agents > 0) return { long: `${countLabel(agents, 'agent')} in background`, short: countLabel(agents, 'agent'), listable: false }
+  return { long: 'Background work in progress', short: 'Working', listable: false }
 }
 
 function activityCopy(
@@ -55,6 +56,7 @@ function activityCopy(
         long: `${displayName} working`,
         short: `Working · ${displayName}`,
         title,
+        listable: true,
       }
     }
     if (employees.length > 1) {
@@ -64,6 +66,7 @@ function activityCopy(
         short: `${employees.length} working`,
         title,
         count: employees.length,
+        listable: true,
       }
     }
     return {
@@ -71,17 +74,19 @@ function activityCopy(
       long: 'Delegated work in progress',
       short: 'Work in progress',
       title,
+      listable: true,
     }
   }
 
   const nowMs = Date.now()
   if (!isBackgroundActivityVisible(activity, nowMs)) return null
-  const { long, short } = runtimeCopy(activity, nowMs)
+  const { long, short, listable } = runtimeCopy(activity, nowMs)
   return {
     kind: 'runtime',
     long,
     short,
     title: 'Background work running after the turn ended',
+    listable,
   }
 }
 
@@ -107,6 +112,9 @@ function usePrefersReducedMotion(): boolean {
  * informational (input stays live); the parent hides it while a foreground
  * turn streams (the "Thinking" indicator owns that) and in the CLI view.
  *
+ * With a session to ask about, the label is a button that opens a popup of what the session
+ * is waiting on; the popup closes with the status.
+ *
  * Orange is the system's background-work semantic (sidebar dot: blue =
  * foreground running, orange = background) — kept for cross-surface
  * consistency. Exit keeps the node mounted until the fade completes so
@@ -116,16 +124,21 @@ export function BackgroundActivityStatus({
   activity,
   delegatedActivity = null,
   employeeDisplayNames = {},
+  sessionId = null,
 }: {
   activity: BackgroundActivity | null
   delegatedActivity?: DelegatedActivity | null
   employeeDisplayNames?: Record<string, string>
+  sessionId?: string | null
 }) {
   const currentCopy = activityCopy(activity, delegatedActivity, employeeDisplayNames)
   const active = currentCopy !== null
   const [rendered, setRendered] = useState(active)
   const [entered, setEntered] = useState(false)
   const reducedMotion = usePrefersReducedMotion()
+  const [popupOpen, setPopupOpen] = useState(false)
+  // Stable: the popup's timers depend on it, and this component re-renders often.
+  const closePopup = useCallback(() => setPopupOpen(false), [])
   // Copy shown while exiting is frozen so the label does not flash to an idle
   // value during the fade-out.
   const [shownCopy, setShownCopy] = useState<ActivityCopy | null>(currentCopy)
@@ -142,7 +155,14 @@ export function BackgroundActivityStatus({
     if (!rendered) return
     const timer = window.setTimeout(() => setRendered(false), reducedMotion ? 1 : EXIT_MS)
     return () => window.clearTimeout(timer)
-  }, [active, currentCopy?.kind, currentCopy?.long, currentCopy?.short, currentCopy?.title, reducedMotion, rendered])
+  }, [active, currentCopy?.kind, currentCopy?.long, currentCopy?.short, currentCopy?.title, currentCopy?.listable, reducedMotion, rendered])
+
+  // The popup goes with the status, and with anything it could list: it starts closing when the
+  // fade-out does, or when only model requests in flight are left.
+  const listable = currentCopy?.listable === true
+  useEffect(() => {
+    if (!listable) closePopup()
+  }, [listable, closePopup])
 
   if (!rendered || !shownCopy) return null
 
@@ -151,6 +171,14 @@ export function BackgroundActivityStatus({
     const remainder = label.slice(String(shownCopy.count).length)
     return <><span data-activity-count className="tabular-nums">{shownCopy.count}</span>{remainder}</>
   }
+
+  const label = (
+    <>
+      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--system-orange)] animate-[jinn-pulse_1.4s_infinite] motion-reduce:animate-none" />
+      <span className="hidden min-w-0 truncate @min-[480px]/composer:inline">{renderLabel(shownCopy.long)}</span>
+      <span className="min-w-0 truncate @min-[480px]/composer:hidden">{renderLabel(shownCopy.short)}</span>
+    </>
+  )
 
   return (
     <span
@@ -166,9 +194,38 @@ export function BackgroundActivityStatus({
           : `opacity ${entered ? 160 : EXIT_MS}ms var(--ease-smooth), transform ${entered ? 160 : EXIT_MS}ms var(--ease-smooth)`,
       }}
     >
-      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--system-orange)] animate-[jinn-pulse_1.4s_infinite] motion-reduce:animate-none" />
-      <span className="hidden min-w-0 truncate sm:inline">{renderLabel(shownCopy.long)}</span>
-      <span className="min-w-0 truncate sm:hidden">{renderLabel(shownCopy.short)}</span>
+      {sessionId && shownCopy.listable ? (
+        <Popover open={popupOpen} onOpenChange={setPopupOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              data-pane-focus-preserving
+              data-testid="background-activity-trigger"
+              onPointerDown={(event) => event.stopPropagation()}
+              className="-mx-1 inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-[6px] border-none bg-transparent px-1 py-0.5 font-[inherit] text-[length:inherit] text-inherit transition-colors duration-150 hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)] focus-visible:bg-[var(--fill-tertiary)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent)]"
+            >
+              {label}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            collisionPadding={8}
+            aria-label="What this session is waiting on"
+            data-pane-focus-preserving
+            data-testid="session-waits-popup"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            className="max-h-[min(60vh,420px)] w-[min(380px,calc(100vw-16px))] overflow-y-auto p-1.5"
+            style={{ background: 'var(--material-thick)', boxShadow: 'var(--shadow-overlay)' }}
+          >
+            <SessionWaitsBoundary>
+              <Suspense fallback={<WaitsNote>Loading…</WaitsNote>}>
+                <SessionWaitsPopup key={sessionId} sessionId={sessionId} onClose={closePopup} />
+              </Suspense>
+            </SessionWaitsBoundary>
+          </PopoverContent>
+        </Popover>
+      ) : label}
     </span>
   )
 }
