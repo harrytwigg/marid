@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import type * as React from "react"
 import { describe, expect, it, vi } from "vitest"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip"
 
@@ -129,6 +130,68 @@ describe("Tooltip", () => {
     await userEvent.unhover(trigger)
 
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull(), { timeout: 200 })
+  })
+
+  describe("content props, which the SDK types as every div prop", () => {
+    function WithProps({ content }: { content: Partial<React.ComponentProps<typeof TooltipContent>> }) {
+      return (
+        <Tooltip defaultOpen>
+          <TooltipTrigger asChild>
+            <button type="button">Archive</button>
+          </TooltipTrigger>
+          <TooltipContent {...content}>Move to the archive</TooltipContent>
+        </Tooltip>
+      )
+    }
+
+    it("forwards style (under React Aria's own positioning), title, aria-* and data-* onto the tooltip", async () => {
+      render(
+        <WithProps
+          content={{
+            style: { color: "red", maxWidth: 120 },
+            title: "More",
+            "aria-label": "Archive hint",
+            "aria-live": "polite",
+            "data-hint": "archive",
+            id: "archive-hint",
+          } as never}
+        />,
+      )
+
+      const tip = await screen.findByRole("tooltip")
+      expect(tip.style.color).toBe("red")
+      expect(tip.style.maxWidth).toBe("120px")
+      expect(tip.style.position).toBe("absolute")
+      expect(tip.getAttribute("title")).toBe("More")
+      expect(tip.getAttribute("aria-label")).toBe("Archive hint")
+      expect(tip.getAttribute("aria-live")).toBe("polite")
+      expect(tip.getAttribute("data-hint")).toBe("archive")
+      expect(tip.id).toBe("archive-hint")
+    })
+
+    it("takes a hand-set attribute off again when the prop goes", async () => {
+      const { rerender } = render(<WithProps content={{ title: "More" }} />)
+      const tip = await screen.findByRole("tooltip")
+      expect(tip.getAttribute("title")).toBe("More")
+
+      rerender(<WithProps content={{}} />)
+
+      expect(tip.hasAttribute("title")).toBe(false)
+    })
+
+    it("keeps its own role, and leaves the key and focus handlers to React Aria", async () => {
+      const onKeyDown = vi.fn()
+      const onFocus = vi.fn()
+      render(<WithProps content={{ role: "note", onKeyDown, onFocus } as never} />)
+
+      const tip = await screen.findByRole("tooltip")
+      fireEvent.keyDown(tip, { key: "a" })
+      fireEvent.focus(tip)
+
+      expect(tip.getAttribute("role")).toBe("tooltip")
+      expect(onKeyDown).not.toHaveBeenCalled()
+      expect(onFocus).not.toHaveBeenCalled()
+    })
   })
 
   it("draws on the overlay glass and HeroUI's tooltip classes", async () => {

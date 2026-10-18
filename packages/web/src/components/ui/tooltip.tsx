@@ -83,6 +83,34 @@ function TooltipTrigger({
   )
 }
 
+/** What React Aria's tooltip would fight us over, so it is not passed on: its own `role`, and the key and
+ *  focus handlers its trigger and Escape handling own. */
+const DROPPED = new Set(["role", "onKeyDown", "onKeyUp", "onKeyPress", "onFocus", "onBlur"])
+
+/** The attributes React Aria does not forward but the element can carry: `title`, and every `aria-*` it does
+ *  not take itself (it takes `aria-label`, `aria-labelledby`, `aria-describedby` and `aria-details`). */
+const SET_BY_HAND = /^(title|aria-(?!label$|labelledby$|describedby$|details$).+)$/
+
+/** Puts those attributes on the surface by hand, and takes them off again when they change or it goes. */
+function useAttributes(ref: React.RefObject<HTMLElement | null>, attributes: Record<string, string>) {
+  const key = JSON.stringify(attributes)
+  React.useLayoutEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const entries = Object.entries(JSON.parse(key) as Record<string, string>)
+    for (const [name, value] of entries) element.setAttribute(name, value)
+    return () => {
+      for (const [name] of entries) element.removeAttribute(name)
+    }
+  }, [ref, key])
+}
+
+/**
+ * Takes the props the Radix content took (the SDK declares every div prop), and forwards what can be
+ * forwarded: `className`, `style` (merged under React Aria's own positioning), `data-*`, `aria-*`, `title`,
+ * `id` and the mouse, pointer and touch handlers. `role` and the key and focus handlers are ignored: the
+ * role is `tooltip`, and Escape, focus and blur are React Aria's.
+ */
 function TooltipContent({
   className,
   side = "top",
@@ -90,19 +118,32 @@ function TooltipContent({
   sideOffset = 6,
   children,
   ...props
-}: OverlayDomProps & {
+}: Omit<React.ComponentProps<"div">, "children"> & {
   children?: React.ReactNode
   side?: Side
   align?: Align
   sideOffset?: number
 }) {
+  const surface = React.useRef<HTMLDivElement | null>(null)
+  const byHand: Record<string, string> = {}
+  const forwarded: Record<string, unknown> = {}
+  for (const [name, value] of Object.entries(props)) {
+    if (DROPPED.has(name)) continue
+    if (SET_BY_HAND.test(name)) {
+      if (value !== undefined && value !== null && value !== false) byHand[name] = String(value)
+    } else {
+      forwarded[name] = value
+    }
+  }
+  useAttributes(surface, byHand)
   return (
     <AriaTooltip
+      ref={surface}
       data-slot="tooltip-content"
       placement={placementOf(side, align)}
       offset={sideOffset}
       className={cn("tooltip glass-overlay max-w-[260px] break-words px-[var(--space-2)] py-[var(--space-1)] text-[length:var(--text-caption1)] text-[var(--text-secondary)]", className)}
-      {...props}
+      {...(forwarded as OverlayDomProps)}
     >
       {children}
     </AriaTooltip>

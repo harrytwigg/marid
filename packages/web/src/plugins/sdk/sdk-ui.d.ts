@@ -204,17 +204,12 @@ export declare const Tooltip: ComponentType<{
 export declare const TooltipTrigger: ComponentType<
   ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }
 >
-/** Only these props reach the tooltip: React Aria drops the rest (a key handler,
- *  `style`, `title`, `role`), so the type does not offer them. `data-*`
- *  attributes pass. */
-export declare const TooltipContent: ComponentType<{
-  className?: string
-  children?: ReactNode
-  id?: string
-  side?: Side
-  sideOffset?: number
-  align?: Align
-}>
+/** `className`, `style`, `data-*`, `aria-*`, `title`, `id` and the mouse, pointer and touch handlers are
+ *  forwarded to the tooltip. `role` (always `tooltip`) and the key and focus handlers are ignored: Escape,
+ *  focus and blur belong to the trigger's tooltip behaviour. */
+export declare const TooltipContent: ComponentType<
+  DivProps & { side?: Side; sideOffset?: number; align?: Align }
+>
 export declare const TooltipProvider: ComponentType<{
   delayDuration?: number
   children?: ReactNode
