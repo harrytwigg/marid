@@ -93,8 +93,8 @@ async function assertRootReduced(page) {
   if (now !== 'reduced') throw new Error(`root lost data-transparency after hydration (${now})`)
 }
 
-async function captureOne({ screen, theme, viewport }) {
-  const label = `${screen.name}-${theme}-${viewport.name}`
+// A fresh browser context per capture: theme, size, persisted settings and the screen's own network setup.
+async function openPage({ screen, theme, viewport }) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: screen.heights?.[viewport.name] ?? viewport.height },
     deviceScaleFactor: 2,
@@ -120,17 +120,28 @@ async function captureOne({ screen, theme, viewport }) {
     })
   }
   if (screen.setup) await screen.setup(page)
+  return { context, page }
+}
+
+async function showScreen(page, screen) {
+  await page.goto(baseUrl + screen.url(fixtures), { waitUntil: screen.waitUntil ?? 'networkidle' })
+  const ready = screen.readyLocator ? screen.readyLocator(page) : page.getByText(screen.ready, { exact: false }).locator('visible=true').first()
+  await ready.waitFor({ timeout: 15_000 })
+  await page.evaluate(() => document.fonts.ready)
+  if (reduced) await assertRootReduced(page)
+  await page.waitForTimeout(400)
+  if (screen.prepare) await screen.prepare(page)
+}
+
+async function captureOne(job) {
+  const { screen, theme, viewport } = job
+  const label = `${screen.name}-${theme}-${viewport.name}`
+  const { context, page } = await openPage(job)
   const errors = []
   page.on('pageerror', (err) => errors.push(String(err)))
   try {
     if (reduced && screen.name === 'settings' && viewport.name === 'desktop') await shootFirstPaint(page, screen, label)
-    await page.goto(baseUrl + screen.url(fixtures), { waitUntil: screen.waitUntil ?? 'networkidle' })
-    const ready = screen.readyLocator ? screen.readyLocator(page) : page.getByText(screen.ready, { exact: false }).locator('visible=true').first()
-    await ready.waitFor({ timeout: 15_000 })
-    await page.evaluate(() => document.fonts.ready)
-    if (reduced) await assertRootReduced(page)
-    await page.waitForTimeout(400)
-    if (screen.prepare) await screen.prepare(page)
+    await showScreen(page, screen)
     const leaked = await leaks(page)
     if (leaked.length) throw new Error(`shows ${leaked.join(' and ')}`)
     if (errors.length) throw new Error(`page error: ${errors[0]}`)
