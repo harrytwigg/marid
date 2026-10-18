@@ -500,6 +500,7 @@ export function ChatPane({
             olderMessagesError={olderMessagesError}
             onLoadOlderMessages={loadOlderMessages}
             onPeek={onPeek}
+            onOpenSubagent={subagentView.open}
             blockArrivals={blockArrivals}
             liveTerminalDelegationIds={liveTerminalDelegationIds}
             blockAnnouncement={blockAnnouncement}
