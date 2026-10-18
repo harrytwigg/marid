@@ -2,6 +2,7 @@ import type { EngineResult, EngineRunOpts, StreamDelta } from "../shared/types.j
 import { logger } from "../shared/logger.js";
 import { OpencodeTurn } from "./opencode-turn.js";
 import { buildOpencodePrompt } from "./opencode-protocol.js";
+import { unsupportedServerFlags, variantOf } from "./opencode-variant.js";
 import { basicAuthHeader, type OpencodeServer } from "./opencode-server.js";
 import { USER_STOP_INTERRUPTION_REASON } from "../sessions/interruption-reasons.js";
 import { abandonedRetryError, providerFailureReason, providerRetryOf, repeatsPrompt, SettleWait, type ProviderRetry, type SettleKind } from "./opencode-server-settle.js";
@@ -950,9 +951,10 @@ export class OpencodeServerTurn {
   private promptBody(found: CancelledRequests = { cancelled: [], stopped: [] }): Record<string, unknown> {
     const model = promptModel(this.opts.model);
     const agent = agentFromCliFlags(this.opts.cliFlags);
-    const flags = this.opts.cliFlags ?? [];
-    if (flags.length > (agent ? 2 : 0)) {
-      logger.warn(`opencode server mode ignores cliFlags other than --agent: ${flags.join(" ")}`);
+    const variant = variantOf(this.opts);
+    const ignored = unsupportedServerFlags(this.opts.cliFlags);
+    if (ignored.length) {
+      logger.warn(`opencode server mode ignores cliFlags other than --agent and --variant: ${ignored.join(" ")}`);
     }
     return {
       messageID: this.userMessageId,
@@ -967,6 +969,8 @@ export class OpencodeServerTurn {
         { type: "text", text: (this.promptText = buildOpencodePrompt(this.opts)), metadata: JINN_PROMPT_METADATA },
       ],
       ...(model ? { model } : {}),
+      // The model's effort level; the body's own field in the 1.x API.
+      ...(model && variant ? { variant } : {}),
       ...(agent ? { agent } : {}),
       // As under `opencode run`, which has no question tool (see the file header).
       tools: { question: false },
