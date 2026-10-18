@@ -141,11 +141,11 @@ describe("moving a card on a phone", () => {
     tap(screen.getByRole("menuitemradio", { name: "In review" }))
 
     await waitFor(() => expect(setWorkItemStatus).toHaveBeenCalledWith("PLA-3", "in_review"))
-    // Optimistic: the card is in In review at once, on top, and the callout names the move.
+    // Optimistic: the card is in In review at once, on top; the callout names the move once the gateway agrees.
     const review = screen.getByTestId("board-column-in_review")
     await waitFor(() => expect(review.contains(screen.getByTestId("board-card-PLA-3"))).toBe(true))
     expect(screen.getByTestId("board-column-in_review").querySelectorAll("[data-board-card]")[0]?.getAttribute("data-board-card")).toBe("PLA-3")
-    expect(screen.getByTestId("board-callout").textContent).toBe("PLA-3 moved to In review")
+    await waitFor(() => expect(screen.getByTestId("board-callout").textContent).toBe("PLA-3 moved to In review"))
     // The tap was the menu's, not the card's: the task page did not open.
     expect(screen.queryByTestId("task-probe")).toBeNull()
   })
@@ -177,6 +177,8 @@ describe("moving a card on a phone", () => {
     tap(screen.getByRole("menuitemradio", { name: "In review" }))
 
     await waitFor(() => expect(screen.getByTestId("board-callout").textContent).toContain("refused"))
+    // The refusal is the only thing said: the move was never announced.
+    expect(screen.getByTestId("board-callout").textContent).not.toContain("moved")
     await waitFor(() => expect(screen.getByTestId("board-column-executing").contains(screen.getByTestId("board-card-PLA-3"))).toBe(true))
   })
 

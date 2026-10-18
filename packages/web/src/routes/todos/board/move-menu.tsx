@@ -37,8 +37,13 @@ function moveRows(item: WorkItemCompactWire, openChildren: number) {
     if (status === item.status) return [{ status, disabled: false, reason: undefined }]
     const target = targets.find((t) => t.status === status)
     if (!target) return []
-    const blocked = target.gated || !!target.cascade
-    return [{ status, disabled: blocked, reason: blocked ? target.reason : undefined }]
+    // A close that would also close open sub-tasks is decided on the task page, so the row says that
+    // rather than what the move would have done.
+    if (target.cascade && !target.gated) {
+      const noun = openChildren === 1 ? "sub-task" : "sub-tasks"
+      return [{ status, disabled: true, reason: `Has ${openChildren} open ${noun}. Close from the task page` }]
+    }
+    return [{ status, disabled: target.gated, reason: target.gated ? target.reason : undefined }]
   })
 }
 

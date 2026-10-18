@@ -72,7 +72,7 @@ describe("the card's Move to… menu", () => {
 
     const done = screen.getByRole("menuitemradio", { name: /Done/ })
     expect(done.getAttribute("aria-disabled")).toBe("true")
-    expect(done.textContent).toContain("also closes 2 open sub-tasks")
+    expect(done.textContent).toContain("Has 2 open sub-tasks. Close from the task page")
     tap(done)
     expect(onMove).not.toHaveBeenCalled()
     // Cancelled is gated outright over open sub-tasks.

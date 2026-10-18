@@ -1,5 +1,6 @@
 import { Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { preloadQuickCapture } from "../quick-add/capture-bar-lazy"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import type { DepartmentSummaryWire } from "@/lib/api"
 import type { BoardId } from "./board-route"
@@ -44,6 +45,9 @@ function QuickCaptureButton({ onClick }: { onClick: () => void }) {
       size="icon"
       data-testid="todo-quick-capture"
       onClick={onClick}
+      onPointerEnter={preloadQuickCapture}
+      onFocus={preloadQuickCapture}
+      onTouchStart={preloadQuickCapture}
       aria-label="Quick capture"
       title="Quick capture — type or dictate a rough idea"
       className="size-10 rounded-full"

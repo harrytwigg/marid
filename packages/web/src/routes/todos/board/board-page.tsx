@@ -28,7 +28,7 @@ import { FilterBar } from "../filter-bar"
 import { LazyTodoFilterSheet } from "../todo-filter-sheet-lazy"
 import { NeedsYouView } from "../needs-you-view"
 import { NewTodoDialog } from "../new-todo-dialog"
-import { LazyQuickCaptureBar } from "../quick-add/capture-bar-lazy"
+import { LazyQuickCaptureBar, usePreloadQuickCapture } from "../quick-add/capture-bar-lazy"
 import { BoardHeader } from "./board-header"
 import { TodoList } from "../list/todo-list"
 import { BoardCard, cardLayoutKey, rollupOf, type CardEnrichment } from "./card"
@@ -249,7 +249,7 @@ export default function TodoBoardPage() {
   )
 
   const commitTransition = useCallback(
-    (item: WorkItemCompactWire, to: WorkItemStatusWire, index: number) => {
+    (item: WorkItemCompactWire, to: WorkItemStatusWire, index: number, { announceMove = false } = {}) => {
       // The drop position is a promise: once the status PUT lands, write the
       // rank at the landing slot too (Stage-A review F3) so the next refetch
       // never reorders a drop the gateway accepted.
@@ -269,6 +269,8 @@ export default function TodoBoardPage() {
         { id: item.id, status: to },
         {
           onSuccess: (result) => {
+            // A tick later: setting the callout inside this callback took the card off the board for a frame.
+            if (announceMove) window.setTimeout(() => announce(`${item.id} moved to ${STATUS_LABEL[to]}`), 0)
             // A drop into Blocked commits immediately, then opens the
             // task page with the banner's reason field focused (design-doc §5 —
             // the reason is asked for, never demanded by a modal). Review F6:
@@ -349,10 +351,10 @@ export default function TodoBoardPage() {
   commitTransitionRef.current = commitTransition
   const moveCard = useCallback(
     (item: WorkItemCompactWire, to: WorkItemStatusWire) => {
-      commitTransitionRef.current(item, to, 0)
-      announce(`${item.id} moved to ${STATUS_LABEL[to]}`)
+      // Said once the gateway has agreed: a refused move says only why.
+      commitTransitionRef.current(item, to, 0, { announceMove: true })
     },
-    [announce],
+    [],
   )
 
   // ── Keyboard rank (⌘/Ctrl + arrows) with SR announcements ──────────────────
@@ -384,6 +386,7 @@ export default function TodoBoardPage() {
   // ── Page chrome state ───────────────────────────────────────────────────────
   const [creating, setCreating] = useState<null | { department?: string }>(null)
   const [capturing, setCapturing] = useState(false)
+  usePreloadQuickCapture()
   // A URL naming a closed status asked for closed work — never one tap short.
   const closedFilter = CLOSED_STATUSES.some((status) => status === filters.status)
   const [closedOpen, setClosedOpen] = useState(closedFilter)
@@ -745,7 +748,15 @@ export default function TodoBoardPage() {
       )}
       <span ref={liveRef} aria-live="polite" className="sr-only" />
 
-      {capturing && <LazyQuickCaptureBar onClose={() => setCapturing(false)} />}
+      {capturing && (
+        <LazyQuickCaptureBar
+          onClose={() => setCapturing(false)}
+          onFailed={() => {
+            setCapturing(false)
+            announce("Quick capture couldn't load. Reload the page and try again.")
+          }}
+        />
+      )}
 
       {creating && (
         <NewTodoDialog

@@ -5,7 +5,7 @@
 // Runs in the browser JINN_CAPTURE_BROWSER names (Firefox by default) and exits non-zero when a check
 // fails. Checks: the board is the default view, one column fills the screen with the next peeking in,
 // a swipe settles on a column and the dots follow it, "Move to..." changes a card's status by taps and
-// the gateway agrees, a long press does not lift a card (Chromium only: it needs raw touch input),
+// the gateway agrees, a long press does not lift a card (Chromium only: it needs raw touch input), back from a card returns to the column the strip was on,
 // and Board | List is switchable by tap and remembered across a reload. Then it records a short video
 // of the same walk-through to <out-dir>/phone-board.webm.
 import fs from 'node:fs'
@@ -143,7 +143,10 @@ console.log(`phone board checks (${isChromium ? 'Chromium' : 'Firefox'}, ${VIEWP
     await settled(page)
     const id = await cardId(page, 'executing')
     await moveCard(page, id, 'In review')
-    assert(await page.getByTestId('board-column-in_review').locator(`[data-board-card="${id}"]`).count() === 1, 'the card is not in In review')
+    // The shared status lane lets a card out of every column for a frame as the gateway's answer lands (Firefox), so let it settle.
+    const inReview = page.getByTestId('board-column-in_review').locator(`[data-board-card="${id}"]`)
+    await page.waitForTimeout(800)
+    assert((await inReview.count()) === 1, 'the card is not in In review')
     assert(await page.getByTestId('board-column-executing').locator(`[data-board-card="${id}"]`).count() === 0, 'the card is still in In progress')
     await page.waitForTimeout(600)
     assert((await status(id)) === 'in_review', `the gateway says ${await status(id)}`)
@@ -183,6 +186,20 @@ console.log(`phone board checks (${isChromium ? 'Chromium' : 'Firefox'}, ${VIEWP
       }
     })
   }
+
+  await check('back from a card returns to the column the strip was on, not the first', async () => {
+    await page.getByTestId('board-column-in_review').scrollIntoViewIfNeeded()
+    await settled(page)
+    const marker = await position(page)
+    assert(!marker.startsWith('Column 1 of'), `could not get off the first column (${marker})`)
+    await page.getByTestId('board-column-in_review').locator('[data-board-card]').first().tap({ position: { x: 40, y: 60 } })
+    await page.waitForURL(/\/todos\/[A-Z]+-\d+/, { timeout: 10_000 })
+    await page.goBack()
+    await strip(page).waitFor({ state: 'visible' })
+    await page.waitForTimeout(800)
+    await settled(page)
+    assert((await position(page)) === marker, `came back to ${await position(page)}, not ${marker}`)
+  })
 
   await check('List is one tap away, and the choice is remembered across a reload', async () => {
     await page.getByRole('radio', { name: 'List' }).locator('..').tap()

@@ -136,3 +136,11 @@ phone or a desktop. It exits non-zero when a check fails and records the same
 walk-through to `phone-board.webm` in the out-dir. The screens `board-phone`,
 `board-phone-swiped`, `board-phone-list`, `board-phone-move`, `board-closed` and
 `board-sticky-header` photograph the board's states for before and after.
+
+`JINN_CAPTURE_TOOL=capture-bar-load.mjs` presses the board's Quick capture button
+while the bar's chunk is held on its way (a route that releases it later), at
+desktop and phone width: an inert, `aria-hidden` scrim must stand in, the board's
+columns and cards must not move by a pixel while it is pending or when the bar
+arrives, and a chunk that cannot be fetched must take the scrim down and show a
+message. It photographs `<viewport>-pending.png` and `<viewport>-arrived.png`.
+

@@ -203,6 +203,22 @@ describe("the Todos board on a phone", () => {
     expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).hidden).toBe(true)
   })
 
+  it("returns from a card to the column the strip was on, not the first", async () => {
+    setViewport(true)
+    rows.executing = [compact("PLA-1", "executing")]
+    renderTodos("/todos/b/platform")
+    const card = await screen.findByTestId("board-card-PLA-1")
+    const strip = screen.getByTestId("todo-board-scroll") as HTMLDivElement
+
+    strip.scrollLeft = 679
+    fireEvent.scroll(strip)
+    fireEvent.click(card)
+    await screen.findByTestId("detail-back")
+    fireEvent.click(screen.getByTestId("detail-back"))
+
+    await waitFor(() => expect((screen.getByTestId("todo-board-scroll") as HTMLDivElement).scrollLeft).toBe(679))
+  })
+
   it("moves between Board and List with the arrow keys, as a native radio group does", async () => {
     setViewport(true)
     rows.executing = [compact("PLA-1", "executing")]
