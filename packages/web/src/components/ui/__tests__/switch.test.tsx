@@ -84,6 +84,21 @@ describe("Switch", () => {
     expect(new FormData(screen.getByTestId("form") as HTMLFormElement).get("notify")).toBe("yes")
   })
 
+  it("keeps the other props a caller passes: title, style, data attributes and a click handler land on the root", () => {
+    const onClick = vi.fn()
+    const { container } = render(
+      <Switch aria-label="Notify" title="tip" style={{ opacity: 0.5 }} data-testid="sw" className="mine" onClick={onClick} />,
+    )
+    const root = container.querySelector('[data-slot="switch"]') as HTMLElement
+
+    expect(root.getAttribute("title")).toBe("tip")
+    expect(root.style.opacity).toBe("0.5")
+    expect(root.dataset.testid).toBe("sw")
+    expect(root.className).toContain("mine")
+    root.querySelector("input")!.click()
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
   it("accepts a bigger press target around the track", () => {
     render(<Switch aria-label="Notify" targetClassName="min-h-[40px]" />)
     expect(input("Notify").closest('[data-slot="switch-content"]')!.className).toContain("min-h-[40px]")

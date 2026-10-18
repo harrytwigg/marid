@@ -2,10 +2,11 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-type SwitchProps = Omit<React.ComponentProps<"button">, "onChange" | "value" | "type"> & {
+type SwitchProps = Omit<React.ComponentProps<"div">, "onChange" | "defaultValue"> & {
   checked?: boolean
   defaultChecked?: boolean
   onCheckedChange?: (checked: boolean) => void
+  disabled?: boolean
   required?: boolean
   name?: string
   value?: string
@@ -40,15 +41,14 @@ function Switch({
 }: SwitchProps) {
   const [uncontrolled, setUncontrolled] = React.useState(defaultChecked ?? false)
   const selected = checked ?? uncontrolled
-  const { aria, data, onClick } = splitProps(rest)
+  const { aria, root } = splitProps(rest)
   return (
     <div
       data-slot="switch"
       className={cn("switch switch--lg shrink-0", className)}
       data-selected={selected || undefined}
       data-disabled={disabled || undefined}
-      onClick={onClick}
-      {...data}
+      {...root}
     >
       <label data-slot="switch-content" className={cn("switch__content", targetClassName)}>
         <input
@@ -76,18 +76,19 @@ function Switch({
 }
 
 /**
- * The accessible name and description belong on the input; the data attributes
- * and a click handler on the root, which is where a click inside the control
- * (the label, the track, the input itself) ends up after it bubbles.
+ * The accessible name and description (aria-*) belong on the input. Everything
+ * else a caller passes (data attributes, title, style, a click handler) goes on
+ * the root, which is where a click inside the control (the label, the track,
+ * the input itself) ends up after it bubbles.
  */
 function splitProps(props: Record<string, unknown>) {
   const aria: Record<string, unknown> = {}
-  const data: Record<string, unknown> = {}
+  const root: Record<string, unknown> = {}
   for (const key of Object.keys(props)) {
     if (key.startsWith("aria-")) aria[key] = props[key]
-    else if (key.startsWith("data-")) data[key] = props[key]
+    else root[key] = props[key]
   }
-  return { aria, data, onClick: props.onClick as React.MouseEventHandler<HTMLElement> | undefined }
+  return { aria, root }
 }
 
 export { Switch }
