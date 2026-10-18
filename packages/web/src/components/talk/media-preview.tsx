@@ -167,7 +167,8 @@ function PreviewOverlay({ preview, onPick }: { preview: PreviewSet; onPick: Answ
         {...scrim}
         className={cn(
           "absolute inset-0 flex items-center justify-center outline-none",
-          "bg-[var(--material-thick)] backdrop-blur-2xl",
+          // A full-screen sheet: tint only, a full-viewport blur is the costliest surface there is.
+          "bg-[var(--glass-overlay)]",
         )}
       >
         <div

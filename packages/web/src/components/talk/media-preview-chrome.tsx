@@ -19,7 +19,8 @@ const ROUND_BUTTON = cn(
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
 )
 
-const FLOATING = "bg-[var(--material-thick)] shadow-[var(--shadow-overlay)] backdrop-blur-[20px]"
+// Tint only: these sit on a full-screen sheet that is itself a glass surface, and blur does not nest.
+const FLOATING = "bg-[var(--glass-overlay)] shadow-[var(--shadow-overlay)]"
 
 export function PreviewSteppers({ onStep }: { onStep: (direction: -1 | 1) => void }) {
   return (

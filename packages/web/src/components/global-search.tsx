@@ -30,13 +30,12 @@ const PALETTE = [
   // `sm:max-w-lg` is in the dialog's own base class, so the wide cap needs the
   // same breakpoint to win — a bare max-width loses to it above 640px.
   "top-[88px] translate-y-0 w-[880px] max-w-[calc(100%-2rem)] sm:max-w-[880px] h-[560px]",
-  "rounded-[var(--radius-2xl)] bg-[var(--material-thick)] shadow-[var(--shadow-overlay)]",
-  "backdrop-blur-[40px] backdrop-saturate-[1.8]",
+  "glass-overlay rounded-[var(--radius-2xl)]",
   "max-[480px]:top-0 max-[480px]:left-0 max-[480px]:translate-x-0",
   "max-[480px]:h-[100dvh] max-[480px]:w-full max-[480px]:max-w-full max-[480px]:rounded-none",
 ].join(" ")
 
-const SCRIM = "bg-[var(--scrim)] backdrop-blur-[14px] backdrop-saturate-[1.2]"
+const SCRIM = "bg-[var(--scrim)]"
 const PILL = "inline-flex flex-none items-center gap-1.5 rounded-lg bg-[var(--accent-fill)] px-[9px] py-1 text-[13px] font-medium text-[var(--accent)]"
 const FOOTER = "flex items-center gap-[15px] bg-[var(--material-thin)] px-5 py-[9px] text-[11.5px] text-[var(--text-quaternary)] max-[480px]:hidden"
 const FOOTER_KEY = "font-medium text-[var(--text-tertiary)]"

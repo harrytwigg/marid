@@ -334,7 +334,7 @@ export function NeedsYouView({
         <div
           role="status"
           data-testid="needs-callout"
-          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[var(--radius-lg)] bg-[var(--material-thick)] px-4 py-2.5 text-[length:var(--text-footnote)] text-[var(--text-primary)] shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+          className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-[var(--radius-lg)] glass-overlay px-4 py-2.5 text-[length:var(--text-footnote)] text-[var(--text-primary)]"
         >
           {callout}
         </div>
