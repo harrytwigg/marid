@@ -168,12 +168,35 @@ export function describeToolCall(toolName: string | undefined, input: Record<str
   return detail ? `${toolName ?? "tool"}: ${detail}` : `Running ${toolName ?? "tool"}`;
 }
 
-/** The message an `error` event carries, as a single line for EngineResult.error. */
-export function opencodeErrorText(event: Record<string, unknown>): string | undefined {
+/** How much of an unreadable error event is kept in EngineResult.error. */
+const RAW_ERROR_LIMIT = 500;
+
+/**
+ * The message an `error` event carries, as a single line for EngineResult.error.
+ *
+ * 1.x prints `{name, data: {message}}`. OpenCode 2's `opencode run` prints
+ * `{type, message, status?}` unconverted, and is read the way `v2ErrorLine`
+ * reads it for a server turn, so one failure says the same thing on either
+ * path. An event that has neither shape is quoted rather than dropped: an
+ * opaque "no message" is something nobody can act on.
+ */
+export function opencodeErrorText(event: Record<string, unknown>): string {
+  const bare = trimmedString(event.error);
+  if (bare) return bare;
   const error = asRecord(event.error);
-  if (!error) return undefined;
-  const message = trimmedString(asRecord(error.data)?.message);
-  const name = trimmedString(error.name);
-  if (message && name) return `${name}: ${message}`;
-  return message ?? name;
+  const readable = error && readableErrorText(error);
+  if (readable) return readable;
+  const raw = JSON.stringify(error ?? event);
+  const quoted = raw.length > RAW_ERROR_LIMIT ? `${raw.slice(0, RAW_ERROR_LIMIT)}…` : raw;
+  return `opencode reported an error with no message: ${quoted}`;
+}
+
+/** `name: message (HTTP status)` from either version's error object, or
+ *  undefined when it has neither a name nor a message. */
+function readableErrorText(error: Record<string, unknown>): string | undefined {
+  const message = trimmedString(asRecord(error.data)?.message) ?? trimmedString(error.message);
+  const name = trimmedString(error.name) ?? trimmedString(error.type);
+  if (!message && !name) return undefined;
+  const status = typeof error.status === "number" ? ` (HTTP ${error.status})` : "";
+  return `${[name, message].filter(Boolean).join(": ")}${status}`;
 }
