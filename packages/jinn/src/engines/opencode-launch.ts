@@ -5,7 +5,7 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { assertRemoteTarget } from "../shared/remote-target.js";
-import type { RemoteExecutionConfig } from "../shared/config-types.js";
+import type { JinnConfig, RemoteExecutionConfig } from "../shared/config-types.js";
 import { buildOpencodeArgs, buildOpencodePrompt, describeOpencodeLaunch, type OpencodeRunFlags } from "./opencode-protocol.js";
 import { opencodeApiOf, type OpencodeApi } from "./opencode-version.js";
 import { COMMAND_TIMEOUT_ENV, localCommandTimeoutPlugins } from "./opencode-command-timeout.js";
@@ -101,15 +101,28 @@ export interface OpencodeProcessOptions {
   commandTimeoutMs?: number;
 }
 
+/** The gateway's environment with the other engines' variables scrubbed out. */
+const gatewayChildEnv = (): Record<string, string> =>
+  buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true });
+
 /** The environment every gateway-spawned opencode process starts from. Exported
  *  for the server mode, whose server, client and view must start from exactly
  *  the environment a `run` turn does. */
 export function cleanEnv(sessionId: string, opts: OpencodeProcessOptions): Record<string, string> {
-  const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true });
+  const env = gatewayChildEnv();
   env.JINN_SESSION_ID = sessionId;
   Object.assign(env, employeeSessionEnv(sessionId));
   Object.assign(env, opencodeProcessEnv(opts));
   return env;
+}
+
+/** The environment for opencode runs that belong to no session: model discovery.
+ *  `models` starts a private opencode server (always on 2.x with `--standalone`),
+ *  so it needs the same scrubbing and Marid-set variables as a turn, minus the
+ *  session identity. `disableFff` is read from the config as the engine does. */
+export function opencodeDiscoveryEnv(config: JinnConfig): Record<string, string> {
+  const env = gatewayChildEnv();
+  return Object.assign(env, opencodeProcessEnv({ disableFff: config.engines.opencode?.disableFff !== false }));
 }
 
 /** What a binary of this API needs on its `run` argv: OpenCode 2's CLI starts

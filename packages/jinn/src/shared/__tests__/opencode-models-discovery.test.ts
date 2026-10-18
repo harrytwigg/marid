@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { discoverOpencodeModels, withConfiguredWindows } from "../opencode-models.js";
 import type { EngineModelsConfig, ModelInfo } from "../types.js";
 
@@ -104,6 +104,35 @@ describe("discoverOpencodeModels reads stdout only", () => {
   it("does not take a model from stderr", async () => {
     const bin = fakeBin('echo "opencode/from-stderr" >&2\nexit 0');
     expect(await discoverOpencodeModels(bin)).toEqual([]);
+  });
+});
+
+describe("discoverOpencodeModels environment", () => {
+  // Records the variable on every run, then behaves like 2.x: `--verbose` is
+  // rejected and the plain list needs `--standalone`, so three spawns are made.
+  const RECORDS_ENV = [
+    'echo "DISABLE_FFF=${OPENCODE_DISABLE_FFF-unset} GATEWAY_ONLY=${GATEWAY_ONLY-unset}" >> "$ENV_LOG"',
+    'if [ "$2" = "--verbose" ]; then exit 1; fi',
+    'if [ "$2" != "--standalone" ]; then exit 1; fi',
+    "echo opencode/alpha",
+  ].join("\n");
+
+  it("starts every run with the env it is given, not the gateway's", async () => {
+    vi.stubEnv("GATEWAY_ONLY", "leaked");
+    const envLog = path.join(dir, "env.log");
+    const bin = fakeBin(RECORDS_ENV);
+    const models = await discoverOpencodeModels(bin, { PATH: process.env.PATH ?? "", ENV_LOG: envLog, OPENCODE_DISABLE_FFF: "1" });
+    expect(models.map((m) => m.id)).toEqual(["opencode/alpha"]);
+    expect(fs.readFileSync(envLog, "utf8").trim().split("\n")).toEqual(Array(2).fill("DISABLE_FFF=1 GATEWAY_ONLY=unset"));
+    vi.unstubAllEnvs();
+  });
+
+  it("inherits the gateway's env when none is given", async () => {
+    vi.stubEnv("ENV_LOG", path.join(dir, "env.log"));
+    vi.stubEnv("GATEWAY_ONLY", "inherited");
+    await discoverOpencodeModels(fakeBin(RECORDS_ENV));
+    expect(fs.readFileSync(path.join(dir, "env.log"), "utf8").trim().split("\n")[0]).toBe("DISABLE_FFF=unset GATEWAY_ONLY=inherited");
+    vi.unstubAllEnvs();
   });
 });
 

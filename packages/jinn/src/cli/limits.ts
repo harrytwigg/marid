@@ -4,6 +4,7 @@ import { JINN_HOME } from "../shared/paths.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
 import { refreshGrokModels, refreshPiModels, refreshHermesModels, refreshOpencodeModels } from "../shared/models.js";
 import type { EngineLimitEngineSnapshot, EngineLimitWindow } from "../shared/types.js";
+import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
 
 export interface LimitsOptions {
   json?: boolean;
@@ -84,7 +85,7 @@ export async function runLimits(opts: LimitsOptions = {}): Promise<void> {
 
   const config = loadConfig();
   await refreshPiModels(config);
-  await refreshOpencodeModels(config);
+  await refreshOpencodeModels(config, opencodeDiscoveryEnv(config));
   await refreshGrokModels(config);
   await refreshHermesModels(config);
   const snapshot = await collectEngineLimits(config, { engine: opts.engine });

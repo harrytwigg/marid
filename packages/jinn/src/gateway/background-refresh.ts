@@ -22,6 +22,7 @@ import {
   refreshPiModels,
   refreshOpencodeModels,
 } from "../shared/models.js";
+import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
 
 /**
  * How often to re-run dynamic engine model discovery while the gateway is up.
@@ -57,7 +58,7 @@ export function startBackgroundRefreshes(getConfig: () => JinnConfig, emit: Gate
       refreshCodexModels(config),
       refreshAntigravityModels(config),
       refreshPiModels(config),
-      refreshOpencodeModels(config),
+      refreshOpencodeModels(config, opencodeDiscoveryEnv(config)),
       refreshGrokModels(config),
       refreshHermesModels(config),
     ])

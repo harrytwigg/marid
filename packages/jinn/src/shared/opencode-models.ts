@@ -153,8 +153,9 @@ interface ModelsRun {
 }
 
 /** Run `opencode <args>` once. Best-effort, the shape every other discovery in
- *  this directory uses: any failure resolves to an empty run, never a throw. */
-function runOpencodeModels(bin: string, args: string[]): Promise<ModelsRun> {
+ *  this directory uses: any failure resolves to an empty run, never a throw.
+ *  `env` is the whole environment of the child; absent, it inherits the gateway's. */
+function runOpencodeModels(bin: string, args: string[], env: Record<string, string> | undefined): Promise<ModelsRun> {
   return new Promise<ModelsRun>((resolve) => {
     let stdout = "";
     let stderr = "";
@@ -173,7 +174,7 @@ function runOpencodeModels(bin: string, args: string[]): Promise<ModelsRun> {
     };
 
     try {
-      const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+      const proc = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"], ...(env ? { env } : {}) });
       proc.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
       proc.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
       timer = setTimeout(() => {
@@ -210,13 +211,18 @@ const PLAIN_MODELS_ARGS: string[][] = [["models", "--standalone"], ["models"]];
  *  `--verbose` is what carries the context windows, but not every build has it:
  *  OpenCode 2.x exits 1 with "Unrecognized flag: --verbose". When that run
  *  exits non-zero or lists no models, the plain list is used instead, without
- *  windows, so such a build keeps its catalogue. */
-export async function discoverOpencodeModels(bin: string): Promise<ModelInfo[]> {
-  const verbose = await runOpencodeModels(bin, ["models", "--verbose"]);
+ *  windows, so such a build keeps its catalogue.
+ *
+ *  `env` is the environment of every opencode this starts. `shared/` may not
+ *  import `engines/`, where Marid's own opencode variables (`OPENCODE_DISABLE_FFF`)
+ *  are defined, so the caller builds it and hands it in; omitted, the gateway's
+ *  own environment is inherited. */
+export async function discoverOpencodeModels(bin: string, env?: Record<string, string>): Promise<ModelInfo[]> {
+  const verbose = await runOpencodeModels(bin, ["models", "--verbose"], env);
   const withWindows = parseOpencodeModels(verbose.stdout);
   if (verbose.code === 0 && withWindows.length > 0) return withWindows;
   for (const args of PLAIN_MODELS_ARGS) {
-    const plain = parseOpencodeModels((await runOpencodeModels(bin, args)).stdout);
+    const plain = parseOpencodeModels((await runOpencodeModels(bin, args, env)).stdout);
     if (plain.length > 0) return plain;
   }
   return withWindows;

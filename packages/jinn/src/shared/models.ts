@@ -314,9 +314,11 @@ export async function refreshPiModels(config: JinnConfig): Promise<void> {
  * Discover the models the installed opencode CLI can reach (`opencode models`)
  * and refresh the registry. Async — populates a snapshot the synchronous
  * registry reads. Never throws; degrades to the config/synthesized fallback
- * when opencode is absent or discovery fails.
+ * when opencode is absent or discovery fails. `env` is what the discovery runs
+ * start with (`opencodeDiscoveryEnv`), supplied by callers because `shared/`
+ * cannot import the engine that defines it.
  */
-export async function refreshOpencodeModels(config: JinnConfig): Promise<void> {
+export async function refreshOpencodeModels(config: JinnConfig, env?: Record<string, string>): Promise<void> {
   if (!engineAvailable(config, "opencode")) {
     discoveredOpencodeModels = null;
     invalidateModelRegistry();
@@ -324,7 +326,7 @@ export async function refreshOpencodeModels(config: JinnConfig): Promise<void> {
   }
   try {
     const bin = resolveBin("opencode", engineBinOverride(config, "opencode"));
-    discoveredOpencodeModels = await discoverOpencodeModels(bin);
+    discoveredOpencodeModels = await discoverOpencodeModels(bin, env);
     logger.info(`opencode model discovery: ${discoveredOpencodeModels.length} model(s)`);
   } catch (err) {
     logger.warn(`opencode model discovery failed: ${err instanceof Error ? err.message : err}`);
