@@ -10,7 +10,7 @@ import { logger } from "./logger.js";
 import { keepClaudeCatalogAfter, logClaudeCatalogShortfall, readClaudeCredentialStatus } from "./claude-auth.js";
 import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
-import { discoverOpencodeModels, withConfiguredWindows } from "./opencode-models.js";
+import { discoverOpencodeModels, withConfiguredOverrides } from "./opencode-models.js";
 import {
   CLAUDE_ALIAS_IDS,
   discoverClaudeEffortLevels,
@@ -134,9 +134,8 @@ const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
   grok: "grok-flag",
   pi: "pi-flag",
   hermes: "none",
-  // `--variant` exists, but nothing opencode reports says which models accept
-  // which variants, so no model here claims effort support. See opencode-models.ts.
-  opencode: "none",
+  // A model's variants are its effort levels; opencode lists them per model.
+  opencode: "opencode-variant",
 };
 
 export const CODEX_DEFAULT_MODEL = "gpt-5.5";
@@ -411,6 +410,17 @@ export function effortLevelsForModel(config: JinnConfig, engine: string, modelId
   return model?.supportsEffort ? model.effortLevels : [];
 }
 
+/**
+ * The effort levels the registry lists for exactly this model: none for a model
+ * it does not list, and none without a model, where {@link effortLevelsForModel}
+ * would answer for the engine's default. For an engine that sends the level to
+ * the model itself (opencode's variants) and must never send one the model lacks.
+ */
+export function exactEffortLevelsForModel(config: JinnConfig, engine: string, modelId: string | undefined): string[] {
+  const model = modelId ? getModelRegistry(config)[engine]?.models.find((m) => m.id === modelId) : undefined;
+  return model?.supportsEffort ? model.effortLevels : [];
+}
+
 /** Build the registry without touching the cache (used by getModelRegistry + tests). */
 export function buildRegistry(config: JinnConfig): ModelRegistry {
   const synthesized = synthesizeFromEngineConfig(config);
@@ -628,7 +638,7 @@ function buildOpencodeEntry(
     if (pinned && !models.some((m) => m.id === pinned)) {
       models = [{ id: pinned, label: pinned, supportsEffort: false, effortLevels: [] }, ...models];
     }
-    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: "none", models: withConfiguredWindows(models, opencodeBlock) };
+    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: EFFORT_MECHANISM.opencode, models: withConfiguredOverrides(models, opencodeBlock) };
   }
   if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);
   return { ...synthEntry, available };

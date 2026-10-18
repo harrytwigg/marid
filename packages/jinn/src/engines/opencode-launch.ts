@@ -129,9 +129,10 @@ export function opencodeDiscoveryEnv(config: JinnConfig): Record<string, string>
 
 /** What a binary of this API needs on its `run` argv: OpenCode 2's CLI starts
  *  (and leaves) a background service unless told `--standalone`, which a 1.x
- *  CLI rejects. */
+ *  CLI rejects, and takes a variant on the model (`-m provider/model#variant`)
+ *  where a 1.x CLI has `--variant`. */
 export function runFlagsFor(api: OpencodeApi): OpencodeRunFlags {
-  return { standalone: api === 2 };
+  return { standalone: api === 2, variantOnModel: api === 2 };
 }
 
 /** A turn on the gateway's own machine. `api` is the binary's, from its version. */

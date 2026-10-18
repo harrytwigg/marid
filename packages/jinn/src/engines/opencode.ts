@@ -23,6 +23,7 @@ import { OpencodeV2ServerCompaction } from "./opencode-v2-compaction.js";
 import { isCompactCommand } from "../shared/skill-commands.js";
 import { describeOpencodeLaunch } from "./opencode-protocol.js";
 import { opencodeApiOf } from "./opencode-version.js";
+import { withKnownEffort, type ModelEffortLevels } from "./opencode-variant.js";
 import { localOpencodeVersion } from "../shared/opencode-bin-version.js";
 import { resolveBin } from "../shared/resolve-bin.js";
 
@@ -88,6 +89,9 @@ export class OpencodeEngine implements InterruptibleEngine {
    *  process. Absent means on. */
   private readDisableFff: () => boolean;
   private readCommandTimeoutMs: () => number;
+  /** The effort levels (opencode variants) the registry knows for a model, read
+   *  live because discovery refreshes. Absent: none, so no turn sends a variant. */
+  private readEffortLevels: () => ModelEffortLevels;
   private servers?: OpencodeServerPool;
 
   constructor(opts: {
@@ -97,6 +101,8 @@ export class OpencodeEngine implements InterruptibleEngine {
     disableFff?: () => boolean;
     /** `engines.opencode.commandTimeoutMs`, resolved, read per turn; absent or 0: no ceiling. */
     commandTimeoutMs?: () => number;
+    /** The effort levels (variants) the model registry lists for a model. */
+    effortLevels?: () => ModelEffortLevels;
     servers?: OpencodeServerPool;
   } = {}) {
     this.readRemoteConfig = opts.remote ?? (() => undefined);
@@ -104,6 +110,7 @@ export class OpencodeEngine implements InterruptibleEngine {
     this.readMode = opts.mode ?? (() => "run");
     this.readDisableFff = opts.disableFff ?? (() => true);
     this.readCommandTimeoutMs = opts.commandTimeoutMs ?? (() => 0);
+    this.readEffortLevels = opts.effortLevels ?? (() => () => []);
     this.servers = opts.servers;
   }
 
@@ -166,7 +173,9 @@ export class OpencodeEngine implements InterruptibleEngine {
     return !!live && !live.proc.killed && live.proc.exitCode === null;
   }
 
-  async run(opts: EngineRunOpts): Promise<EngineResult> {
+  async run(requested: EngineRunOpts): Promise<EngineResult> {
+    // From here on `effortLevel` is the variant to send, or nothing.
+    const opts = withKnownEffort(requested, this.readEffortLevels());
     const trackingId = opts.sessionId || `opencode-${Date.now()}`;
     const onStream = opts.onStream || null;
 
