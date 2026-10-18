@@ -59,13 +59,17 @@ function PopoverTrigger({
   )
 }
 
+/** The popover's trigger, from the context React Aria's trigger provides. */
+function useTriggerRef(): React.RefObject<Element | null> | undefined {
+  const context = React.useContext(PopoverContext) as { triggerRef?: React.RefObject<Element | null> } | null
+  return context?.triggerRef
+}
+
 /** Closes the popover on a press that lands outside both it and its trigger (a
  *  press on the trigger is the trigger's own toggle). Listens in the capture
  *  phase, so a handler that stops propagation cannot hide the press from it. */
-function useClosesOnOutsidePress(surface: React.RefObject<HTMLElement | null>) {
+function useClosesOnOutsidePress(surface: React.RefObject<HTMLElement | null>, triggerRef: React.RefObject<Element | null> | undefined) {
   const state = React.useContext(OverlayTriggerStateContext)
-  const context = React.useContext(PopoverContext) as { triggerRef?: React.RefObject<Element | null> } | null
-  const triggerRef = context?.triggerRef
   const isOpen = state?.isOpen ?? false
   const close = state?.close
   React.useEffect(() => {
@@ -100,12 +104,16 @@ function PopoverContent({
   ...props
 }: PopoverContentProps) {
   const surface = React.useRef<HTMLElement | null>(null)
-  useClosesOnOutsidePress(surface)
+  const triggerRef = useTriggerRef()
+  useClosesOnOutsidePress(surface, triggerRef)
   return (
     <AriaPopover
       ref={surface}
       data-slot="popover-content"
       isNonModal
+      // Focus moving from the dialog to the trigger is the start of the trigger's own press, which
+      // toggles the popover shut; closing on that blur would let the press open it again.
+      shouldCloseOnInteractOutside={(element) => !triggerRef?.current?.contains(element)}
       placement={placementOf(side, align)}
       offset={sideOffset}
       containerPadding={collisionPadding}

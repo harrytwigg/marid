@@ -83,6 +83,20 @@ describe("Popover", () => {
     expect(onElsewhere).toHaveBeenCalledTimes(1)
   })
 
+  it("is closed by a second press on its trigger, not reopened by it", async () => {
+    // Focus leaving the dialog for the trigger must not count as an outside press: it would close the
+    // popover on pointer-down and the press itself would then open it again.
+    render(<Example />)
+    await userEvent.click(trigger())
+    await screen.findByRole("dialog")
+
+    await userEvent.click(trigger())
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
   it("is not modal: no underlay over the page, nothing hidden or locked behind it", async () => {
     render(<Example />)
     await userEvent.click(trigger())
