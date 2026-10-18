@@ -31,15 +31,35 @@ export function withKnownEffort(opts: EngineRunOpts, levelsOf: ModelEffortLevels
   return { ...opts, effortLevel: undefined };
 }
 
+/** The value `flags[i]` (a `--variant`) takes: the next token, unless that is
+ *  missing or another flag. */
+function valueAfter(flags: readonly string[], i: number): string | undefined {
+  const value = flags[i + 1]?.trim();
+  return value && !value.startsWith("-") ? value : undefined;
+}
+
 /** The value of a `--variant` in the operator's cliFlags (`--variant x` or
  *  `--variant=x`); the last one wins, as it does on opencode's command line. */
 export function variantFromCliFlags(flags: readonly string[] | undefined): string | undefined {
   let found: string | undefined;
   flags?.forEach((flag, i) => {
-    const value = flag === "--variant" ? flags[i + 1] : flag.startsWith("--variant=") ? flag.slice("--variant=".length) : undefined;
-    if (value?.trim()) found = value.trim();
+    const value = flag === "--variant" ? valueAfter(flags, i) : flag.startsWith("--variant=") ? flag.slice("--variant=".length).trim() : undefined;
+    if (value && !value.startsWith("-")) found = value;
   });
   return found;
+}
+
+/** cliFlags without any `--variant`, for a binary that takes the variant on the
+ *  model instead (a flag it does not know would fail the turn). */
+export function withoutVariantFlags(flags: readonly string[] | undefined): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < (flags?.length ?? 0); i++) {
+    const flag = flags![i]!;
+    if (flag === "--variant") {
+      if (valueAfter(flags!, i)) i++;
+    } else if (!flag.startsWith("--variant=")) out.push(flag);
+  }
+  return out;
 }
 
 /** The variant a turn sends: the operator's explicit `--variant`, else the
@@ -52,10 +72,10 @@ export function variantOf(opts: Pick<EngineRunOpts, "effortLevel" | "cliFlags">)
  *  and `--variant`, which the prompt API takes. */
 export function unsupportedServerFlags(flags: readonly string[] | undefined): string[] {
   const out: string[] = [];
-  for (let i = 0; i < (flags?.length ?? 0); i++) {
-    const flag = flags![i]!;
-    if (flag === "--agent" || flag === "--variant") i++;
-    else if (!flag.startsWith("--variant=")) out.push(flag);
+  const rest = withoutVariantFlags(flags);
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === "--agent") i++;
+    else out.push(rest[i]!);
   }
   return out;
 }

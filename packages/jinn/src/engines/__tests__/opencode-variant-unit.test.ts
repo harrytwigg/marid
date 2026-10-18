@@ -14,6 +14,7 @@ import {
   variantFromCliFlags,
   variantOf,
   withKnownEffort,
+  withoutVariantFlags,
 } from "../opencode-variant.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 import { logger } from "../../shared/logger.js";
@@ -64,6 +65,9 @@ describe("variantFromCliFlags / variantOf", () => {
     expect(variantFromCliFlags(["--variant", "low", "--variant=high"])).toBe("high");
     expect(variantFromCliFlags(["--agent", "x"])).toBeUndefined();
     expect(variantFromCliFlags(["--variant"])).toBeUndefined();
+    // A flag is not a value.
+    expect(variantFromCliFlags(["--variant", "--agent", "x"])).toBeUndefined();
+    expect(variantFromCliFlags(["--variant=-x", "--variant="])).toBeUndefined();
     expect(variantFromCliFlags(undefined)).toBeUndefined();
   });
 
@@ -79,6 +83,8 @@ describe("variantFromCliFlags / variantOf", () => {
     expect(unsupportedServerFlags(["--agent", "plan", "--variant", "high", "--variant=low"])).toEqual([]);
     expect(unsupportedServerFlags(["--agent", "plan", "--thinking", "--variant", "high"])).toEqual(["--thinking"]);
     expect(unsupportedServerFlags(undefined)).toEqual([]);
+    expect(unsupportedServerFlags(["--variant", "--agent", "plan"])).toEqual([]);
+    expect(withoutVariantFlags(["--a", "--variant", "x", "--variant=y", "--b", "--variant", "--c"])).toEqual(["--a", "--b", "--c"]);
   });
 });
 
@@ -115,12 +121,16 @@ describe("the run argv", () => {
     expect(argv(opts({ model: undefined, effortLevel: "high" }))).toEqual(["run", "--format", "json", "--dangerously-skip-permissions"]);
   });
 
-  it("lets an explicit --variant in cliFlags win, on either API", () => {
-    const flags = { effortLevel: "high", cliFlags: ["--variant", "max"] };
-    expect(argv(opts(flags)).filter((a) => a === "--variant")).toHaveLength(1);
-    expect(argv(opts(flags)).join(" ")).toContain("-m mock/five --variant max");
-    expect(argv(opts(flags), 2).join(" ")).toContain("-m mock/five --variant max");
-    expect(argv(opts(flags), 2)).not.toContain("mock/five#high");
+  it("lets an explicit --variant in cliFlags win: the flag on 1.x, the model's variant on 2.x, which has no such flag", () => {
+    const flags = { effortLevel: "high", cliFlags: ["--variant", "max", "--agent", "plan"] };
+    const one = argv(opts(flags));
+    expect(one.filter((a) => a === "--variant")).toHaveLength(1);
+    expect(one.slice(one.indexOf("-m"))).toEqual(["-m", "mock/five", "--variant", "max", "--agent", "plan"]);
+    const two = argv(opts(flags), 2);
+    expect(two).not.toContain("--variant");
+    expect(two.slice(two.indexOf("-m"))).toEqual(["-m", "mock/five#max", "--agent", "plan"]);
+    // Even where the model lists no effort at all.
+    expect(argv(opts({ cliFlags: ["--variant=low"] }), 2)).toContain("mock/five#low");
   });
 
   it("is named in the launch log line", () => {

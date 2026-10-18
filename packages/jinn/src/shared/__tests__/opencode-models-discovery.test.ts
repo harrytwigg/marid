@@ -135,15 +135,20 @@ describe("withConfiguredOverrides effort levels", () => {
   ];
   const entries = (...models: Array<Record<string, unknown>>): EngineModelsConfig => ({ models }) as unknown as EngineModelsConfig;
 
-  it("lets a configured list win over the discovered one, and give a model without any its own", () => {
+  it("lets a configured list win over the discovered one, and with supportsEffort: true give a model without any its own", () => {
     const out = withConfiguredOverrides(discovered(), entries(
       { id: "opencode/a", effortLevels: ["low", "high"] },
-      { id: "opencode/b", effortLevels: ["medium"], contextWindow: 9000 },
+      { id: "opencode/b", supportsEffort: true, effortLevels: ["medium"], contextWindow: 9000 },
     ));
     expect(out).toEqual([
       { id: "opencode/a", label: "a", supportsEffort: true, effortLevels: ["low", "high"] },
       { id: "opencode/b", label: "b", supportsEffort: true, effortLevels: ["medium"], contextWindow: 9000 },
     ]);
+  });
+
+  it("does not turn effort on for a model without it from a list alone, as a block with no discovery does not", () => {
+    const out = withConfiguredOverrides(discovered(), entries({ id: "opencode/b", effortLevels: ["medium"], contextWindow: 9000 }));
+    expect(out[1]).toEqual({ id: "opencode/b", label: "b", supportsEffort: false, effortLevels: [], contextWindow: 9000 });
   });
 
   it("keeps the discovered levels when the configured list names none", () => {

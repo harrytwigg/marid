@@ -132,21 +132,41 @@ function readLine(reader: Reader, text: string): void {
 }
 
 /** What an entry of the `models.opencode` block overrides on a discovered model. */
-type ModelOverride = Pick<ModelInfo, "contextWindow" | "supportsEffort" | "effortLevels">;
+interface ModelOverride {
+  contextWindow?: number;
+  /** `false`: switch the model's effort off. */
+  supportsEffort?: false;
+  /** The levels the entry lists, and whether it turned effort on itself. */
+  levels?: { list: string[]; explicit: boolean };
+}
 
 /** The part of a configured entry that states something. A zero, negative or
  *  NaN window states nothing, nor does an effort list that names no level:
  *  the discovered value stays. `supportsEffort: false` is the one way to switch
  *  a discovered model's effort off. */
-function overrideOf(entry: NonNullable<EngineModelsConfig["models"]>[number]): Partial<ModelOverride> {
-  const override: Partial<ModelOverride> = {};
+function overrideOf(entry: NonNullable<EngineModelsConfig["models"]>[number]): ModelOverride {
+  const override: ModelOverride = {};
   if (typeof entry.contextWindow === "number" && Number.isFinite(entry.contextWindow) && entry.contextWindow > 0) {
     override.contextWindow = entry.contextWindow;
   }
-  const levels = (Array.isArray(entry.effortLevels) ? entry.effortLevels : []).filter((l) => typeof l === "string" && l.trim() !== "");
-  if (entry.supportsEffort === false) Object.assign(override, { supportsEffort: false, effortLevels: [] });
-  else if (levels.length > 0) Object.assign(override, { supportsEffort: true, effortLevels: levels });
+  const list = (Array.isArray(entry.effortLevels) ? entry.effortLevels : []).filter((l) => typeof l === "string" && l.trim() !== "");
+  if (entry.supportsEffort === false) override.supportsEffort = false;
+  else if (list.length > 0) override.levels = { list, explicit: entry.supportsEffort === true };
   return override;
+}
+
+/** One model with its entry applied. Levels follow the block's own convention
+ *  (a model has effort when the entry says `supportsEffort: true`, as in a block
+ *  with no discovery), except that a list for a model discovery already gave
+ *  effort replaces its levels without that flag. */
+function applyOverride(model: ModelInfo, override: ModelOverride): ModelInfo {
+  const out: ModelInfo = { ...model };
+  if (override.contextWindow !== undefined) out.contextWindow = override.contextWindow;
+  if (override.supportsEffort === false) return { ...out, supportsEffort: false, effortLevels: [] };
+  if (override.levels && (override.levels.explicit || model.supportsEffort)) {
+    return { ...out, supportsEffort: true, effortLevels: override.levels.list };
+  }
+  return out;
 }
 
 /** The operator's configured `contextWindow` and `effortLevels` for a model win
@@ -155,7 +175,7 @@ function overrideOf(entry: NonNullable<EngineModelsConfig["models"]>[number]): P
  *  variants of a build whose discovery lists none). Nothing else of the
  *  `models.opencode` block is applied to a discovered catalog. */
 export function withConfiguredOverrides(models: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
-  const configured = new Map<string, Partial<ModelOverride>>();
+  const configured = new Map<string, ModelOverride>();
   for (const entry of block?.models ?? []) {
     const override = overrideOf(entry);
     if (Object.keys(override).length > 0) configured.set(entry.id, override);
@@ -163,7 +183,7 @@ export function withConfiguredOverrides(models: ModelInfo[], block: EngineModels
   if (configured.size === 0) return models;
   return models.map((model) => {
     const override = configured.get(model.id);
-    return override ? { ...model, ...override } : model;
+    return override ? applyOverride(model, override) : model;
   });
 }
 

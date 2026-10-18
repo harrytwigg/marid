@@ -1,6 +1,6 @@
 import type { EngineRunOpts } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
-import { modelWithVariant, runVariantOf } from "./opencode-variant.js";
+import { modelWithVariant, runVariantOf, variantOf, withoutVariantFlags } from "./opencode-variant.js";
 
 /**
  * opencode's wire contract, as pure functions.
@@ -47,13 +47,14 @@ function isStandaloneFlag(flag: string): boolean {
 }
 
 /** `-m`, with the turn's variant (its effort level) where the binary takes one.
- *  Only an effort the model lists reaches here (see opencode-variant.ts); an
- *  operator's own `--variant` in cliFlags wins and is passed on as it is. */
+ *  Only an effort the model lists reaches here (see opencode-variant.ts). An
+ *  operator's own `--variant` in cliFlags wins: a 1.x CLI gets it as the flag
+ *  it is, and a 2.x CLI, which has no such flag, gets it on the model. */
 function modelArgs(opts: EngineRunOpts, run: OpencodeRunFlags): string[] {
   if (!opts.model) return [];
+  if (run.variantOnModel) return ["-m", modelWithVariant(opts.model, variantOf(opts))];
   const variant = runVariantOf(opts);
-  if (!variant) return ["-m", opts.model];
-  return run.variantOnModel ? ["-m", modelWithVariant(opts.model, variant)] : ["-m", opts.model, "--variant", variant];
+  return variant ? ["-m", opts.model, "--variant", variant] : ["-m", opts.model];
 }
 
 /**
@@ -78,7 +79,9 @@ export function buildOpencodeArgs(opts: EngineRunOpts, run: OpencodeRunFlags = {
   // opencode assigns its own session ids, so a resume names one it gave us on a
   // previous turn — unlike pi, where the id is ours and the same on every turn.
   if (opts.resumeSessionId) args.push("-s", opts.resumeSessionId);
-  if (opts.cliFlags?.length) args.push(...opts.cliFlags);
+  // A 2.x `run` rejects `--variant`; its value went on the model above.
+  const flags = run.variantOnModel ? withoutVariantFlags(opts.cliFlags) : opts.cliFlags ?? [];
+  args.push(...flags);
   // The prompt goes over stdin, never argv: `run` takes the message as trailing
   // positionals, so a prompt beginning with a dash would be read as a flag, and
   // a long one would run into ARG_MAX.
@@ -103,7 +106,7 @@ export function buildOpencodeViewArgs(serverUrl: string, engineSessionId?: strin
 
 /** The model and variant, for a log line. */
 export function describeOpencodeLaunch(opts: EngineRunOpts): string {
-  const variant = runVariantOf(opts);
+  const variant = variantOf(opts);
   return `-m ${opts.model || "(opencode default)"}${variant && opts.model ? ` (variant ${variant})` : ""}`;
 }
 
