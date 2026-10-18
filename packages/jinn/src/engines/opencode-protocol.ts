@@ -1,5 +1,6 @@
 import type { EngineRunOpts } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
+import { modelWithVariant, runVariantOf } from "./opencode-variant.js";
 
 /**
  * opencode's wire contract, as pure functions.
@@ -35,11 +36,24 @@ export function buildOpencodePrompt(opts: EngineRunOpts): string {
 /** Per-host facts that change a `run` turn's argv. */
 export interface OpencodeRunFlags {
   standalone?: boolean;
+  /** The binary's `run` has no `--variant`: the variant rides on the model
+   *  (`-m provider/model#variant`). OpenCode 2's CLI. */
+  variantOnModel?: boolean;
 }
 
 /** `--standalone` in any spelling: bare, with a value, or negated. */
 function isStandaloneFlag(flag: string): boolean {
   return flag === "--standalone" || flag === "--no-standalone" || flag.startsWith("--standalone=");
+}
+
+/** `-m`, with the turn's variant (its effort level) where the binary takes one.
+ *  Only an effort the model lists reaches here (see opencode-variant.ts); an
+ *  operator's own `--variant` in cliFlags wins and is passed on as it is. */
+function modelArgs(opts: EngineRunOpts, run: OpencodeRunFlags): string[] {
+  if (!opts.model) return [];
+  const variant = runVariantOf(opts);
+  if (!variant) return ["-m", opts.model];
+  return run.variantOnModel ? ["-m", modelWithVariant(opts.model, variant)] : ["-m", opts.model, "--variant", variant];
 }
 
 /**
@@ -60,7 +74,7 @@ export function buildOpencodeArgs(opts: EngineRunOpts, run: OpencodeRunFlags = {
   // unless told not to. Older CLIs reject the flag, so only a host known to run
   // 2.x gets it. Whatever the operator's `cliFlags` say about it wins.
   if (run.standalone && !opts.cliFlags?.some(isStandaloneFlag)) args.push("--standalone");
-  if (opts.model) args.push("-m", opts.model);
+  args.push(...modelArgs(opts, run));
   // opencode assigns its own session ids, so a resume names one it gave us on a
   // previous turn — unlike pi, where the id is ours and the same on every turn.
   if (opts.resumeSessionId) args.push("-s", opts.resumeSessionId);
@@ -87,9 +101,10 @@ export function buildOpencodeViewArgs(serverUrl: string, engineSessionId?: strin
   return api === 2 ? ["--server", serverUrl, ...session] : ["attach", serverUrl, ...session];
 }
 
-/** The model, for a log line. */
+/** The model and variant, for a log line. */
 export function describeOpencodeLaunch(opts: EngineRunOpts): string {
-  return `-m ${opts.model || "(opencode default)"}`;
+  const variant = runVariantOf(opts);
+  return `-m ${opts.model || "(opencode default)"}${variant && opts.model ? ` (variant ${variant})` : ""}`;
 }
 
 /** The `tokens` block of a `step_finish` part, as far as we rely on it. */

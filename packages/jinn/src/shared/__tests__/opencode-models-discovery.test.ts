@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discoverOpencodeModels, withConfiguredWindows } from "../opencode-models.js";
+import { discoverOpencodeModels, withConfiguredOverrides } from "../opencode-models.js";
 import type { EngineModelsConfig, ModelInfo } from "../types.js";
 
 /**
@@ -107,7 +107,7 @@ describe("discoverOpencodeModels reads stdout only", () => {
   });
 });
 
-describe("withConfiguredWindows", () => {
+describe("withConfiguredOverrides", () => {
   const discovered = (): ModelInfo[] => [
     { id: "opencode/a", label: "a", supportsEffort: false, effortLevels: [], contextWindow: 200_000 },
     { id: "opencode/b", label: "b", supportsEffort: false, effortLevels: [] },
@@ -116,14 +116,48 @@ describe("withConfiguredWindows", () => {
     ({ models: windows.map(([id, contextWindow]) => ({ id, label: id, contextWindow })) }) as unknown as EngineModelsConfig;
 
   it("applies a positive configured window", () => {
-    const out = withConfiguredWindows(discovered(), block(["opencode/a", 128_000], ["opencode/b", 32_000]));
+    const out = withConfiguredOverrides(discovered(), block(["opencode/a", 128_000], ["opencode/b", 32_000]));
     expect(out.map((m) => m.contextWindow)).toEqual([128_000, 32_000]);
   });
 
   it("ignores a window of 0, a negative one, NaN or Infinity, keeping the discovered one", () => {
     for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const out = withConfiguredWindows(discovered(), block(["opencode/a", bad], ["opencode/b", bad]));
+      const out = withConfiguredOverrides(discovered(), block(["opencode/a", bad], ["opencode/b", bad]));
       expect(out.map((m) => m.contextWindow)).toEqual([200_000, undefined]);
     }
+  });
+});
+
+describe("withConfiguredOverrides effort levels", () => {
+  const discovered = (): ModelInfo[] => [
+    { id: "opencode/a", label: "a", supportsEffort: true, effortLevels: ["high"] },
+    { id: "opencode/b", label: "b", supportsEffort: false, effortLevels: [] },
+  ];
+  const entries = (...models: Array<Record<string, unknown>>): EngineModelsConfig => ({ models }) as unknown as EngineModelsConfig;
+
+  it("lets a configured list win over the discovered one, and give a model without any its own", () => {
+    const out = withConfiguredOverrides(discovered(), entries(
+      { id: "opencode/a", effortLevels: ["low", "high"] },
+      { id: "opencode/b", effortLevels: ["medium"], contextWindow: 9000 },
+    ));
+    expect(out).toEqual([
+      { id: "opencode/a", label: "a", supportsEffort: true, effortLevels: ["low", "high"] },
+      { id: "opencode/b", label: "b", supportsEffort: true, effortLevels: ["medium"], contextWindow: 9000 },
+    ]);
+  });
+
+  it("keeps the discovered levels when the configured list names none", () => {
+    for (const effortLevels of [[], [""], undefined, "high"]) {
+      expect(withConfiguredOverrides(discovered(), entries({ id: "opencode/a", effortLevels }))).toEqual(discovered());
+    }
+  });
+
+  it("switches effort off for a model configured with supportsEffort: false", () => {
+    const out = withConfiguredOverrides(discovered(), entries({ id: "opencode/a", supportsEffort: false, effortLevels: ["low"] }));
+    expect(out[0]).toEqual({ id: "opencode/a", label: "a", supportsEffort: false, effortLevels: [] });
+  });
+
+  it("does not add a model the discovery did not list", () => {
+    expect(withConfiguredOverrides(discovered(), entries({ id: "opencode/c", effortLevels: ["high"] }))).toEqual(discovered());
   });
 });

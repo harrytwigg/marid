@@ -41,10 +41,9 @@ describe("parseOpencodeModels", () => {
     ]);
   });
 
-  it("claims no effort support for any model", () => {
-    // opencode reports no capability columns, and `--variant` is provider-
-    // specific. An effort picker that silently changes nothing is worse than
-    // none at all.
+  it("claims no effort support for a model the plain list names", () => {
+    // Plain `opencode models` has no records, so no variants: an effort picker
+    // that silently changes nothing is worse than none at all.
     const models = parseOpencodeModels("anthropic/claude-opus-5\n");
     expect(models[0]).toMatchObject({ supportsEffort: false, effortLevels: [] });
   });
@@ -87,11 +86,11 @@ describe("parseOpencodeModels", () => {
  * (`fixtures/opencode-models-verbose.txt`, three models).
  */
 describe("parseOpencodeModels --verbose", () => {
-  it("reads each model's context window from limit.context", () => {
+  it("reads each model's context window from limit.context and its effort levels from variants", () => {
     expect(parseOpencodeModels(VERBOSE)).toEqual([
       { id: "opencode/big-pickle", label: "big-pickle", supportsEffort: false, effortLevels: [], contextWindow: 200000 },
-      { id: "opencode/exo-free", label: "exo-free", supportsEffort: false, effortLevels: [], contextWindow: 1048576 },
-      { id: "opencode/step-5-preview-free", label: "step-5-preview-free", supportsEffort: false, effortLevels: [], contextWindow: 1000000 },
+      { id: "opencode/exo-free", label: "exo-free", supportsEffort: true, effortLevels: ["high"], contextWindow: 1048576 },
+      { id: "opencode/step-5-preview-free", label: "step-5-preview-free", supportsEffort: true, effortLevels: ["low", "medium", "high"], contextWindow: 1000000 },
     ]);
   });
 
@@ -161,6 +160,31 @@ describe("parseOpencodeModels --verbose", () => {
     expect(models).toEqual([
       { id: "opencode/colour", label: "colour", supportsEffort: false, effortLevels: [], contextWindow: 32000 },
     ]);
+  });
+
+  describe("variants", () => {
+    const withVariants = (variants: string) => parseOpencodeModels(`opencode/m\n{\n  "variants": ${variants}\n}\n`)[0];
+
+    it("takes an object's keys as the levels, in opencode's order", () => {
+      expect(withVariants('{ "minimal": {}, "high": {}, "low": {} }')).toMatchObject({ supportsEffort: true, effortLevels: ["minimal", "high", "low"] });
+    });
+
+    it("takes an array of {id} (the 2.x shape) the same way", () => {
+      expect(withVariants('[{ "id": "low" }, { "id": "high" }, { "id": "low" }, { "id": "" }, { "name": "x" }, null]'))
+        .toMatchObject({ supportsEffort: true, effortLevels: ["low", "high"] });
+    });
+
+    it("means no effort when variants is empty, null, missing or of another shape", () => {
+      for (const variants of ["{}", "[]", "null", '"high"', "7"]) {
+        expect(withVariants(variants)).toMatchObject({ supportsEffort: false, effortLevels: [] });
+      }
+      expect(parseOpencodeModels('opencode/m\n{\n  "id": "m"\n}\n')[0]).toMatchObject({ supportsEffort: false, effortLevels: [] });
+    });
+
+    it("keeps a model's variants when its window is unusable", () => {
+      const model = parseOpencodeModels('opencode/m\n{\n  "limit": { "context": 0 },\n  "variants": { "high": {} }\n}\n')[0];
+      expect(model).toEqual({ id: "opencode/m", label: "m", supportsEffort: true, effortLevels: ["high"] });
+    });
   });
 
   it("still parses plain `opencode models` output, with no windows", () => {

@@ -12,13 +12,15 @@ import { logger } from "./logger.js";
  * rather than any provider directly is what keeps the catalog honest: a model
  * never appears here for credentials this host does not hold.
  *
- * Only the context window is taken from the record (`limit.context`), for the
- * context meter; plain `opencode models` has none. Nothing else is claimed
- * about capability, and `--variant` (the reasoning-effort flag) is
- * provider-specific with no list to validate against. So no model here
- * declares effort support: an effort picker that silently changes nothing is
- * worse than no picker, and a bad variant is an error the turn discovers at
- * the provider.
+ * Two things are taken from the record: the context window (`limit.context`),
+ * for the context meter, and the model's variants. A variant is opencode's
+ * reasoning-effort control (`run --variant`, the prompt body's `variant`), and
+ * the record lists exactly which ones THIS model has — `{high}` for one model,
+ * `{low, medium, high, xhigh, max}` for another, `{}` for one with none. Those
+ * keys, in opencode's order, are the model's effort levels, so the picker offers
+ * what the model accepts and nothing it would reject. A model with no variants
+ * (or a record without the field, as plain `opencode models` has none) declares
+ * no effort support. Plain `opencode models` carries neither window nor variants.
  */
 
 /** One `provider/model` line. The model half may itself contain slashes
@@ -29,17 +31,34 @@ const MODEL_LINE = /^([A-Za-z0-9_.-]+)\/(\S+)$/;
 /** Strip terminal colour/cursor escapes. */
 const stripAnsi = (line: string): string => line.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "");
 
-/** `limit.context` of one model's `--verbose` JSON, or undefined when it is
- *  missing, not a positive number, or the text is not JSON at all. */
-function contextWindowOf(json: string): number | undefined {
+/** One model's `--verbose` JSON as an object, or undefined when the text is
+ *  not JSON or not an object. */
+function parseRecord(json: string): Record<string, unknown> | undefined {
   try {
     const parsed: unknown = JSON.parse(json);
-    const limit = (parsed as { limit?: { context?: unknown } } | null)?.limit;
-    const context = limit?.context;
-    return typeof context === "number" && Number.isFinite(context) && context > 0 ? context : undefined;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** `limit.context` of a record, or undefined when it is missing or not a
+ *  positive number. */
+function contextWindowOf(record: Record<string, unknown>): number | undefined {
+  const limit = record.limit as { context?: unknown } | null | undefined;
+  const context = limit?.context;
+  return typeof context === "number" && Number.isFinite(context) && context > 0 ? context : undefined;
+}
+
+/** The effort levels a record's `variants` name, in the order opencode lists
+ *  them. 1.x gives an object keyed by level; 2.x's API gives an array of
+ *  `{id}`. Missing, null, empty or any other shape names none. */
+function effortLevelsOf(record: Record<string, unknown>): string[] {
+  const variants = record.variants;
+  let names: unknown[] = [];
+  if (Array.isArray(variants)) names = variants.map((v) => (v as { id?: unknown } | null)?.id);
+  else if (variants && typeof variants === "object") names = Object.keys(variants);
+  return [...new Set(names.filter((n): n is string => typeof n === "string" && n.trim() !== ""))];
 }
 
 /**
@@ -53,9 +72,9 @@ function contextWindowOf(json: string): number | undefined {
  *
  * `--verbose` follows each model line with that model's record as a
  * pretty-printed JSON object: `{` alone on a line, every inner line indented,
- * `}` alone on a line. Its `limit.context` becomes the model's `contextWindow`.
- * A model with no object, a cut-off one or one that is not JSON simply has no
- * window — never a guessed one.
+ * `}` alone on a line. Its `limit.context` becomes the model's `contextWindow`
+ * and its `variants` the model's `effortLevels`. A model with no object, a
+ * cut-off one or one that is not JSON simply has neither — never a guessed one.
  */
 export function parseOpencodeModels(output: string): ModelInfo[] {
   const reader: Reader = { models: [], seen: new Set() };
@@ -73,10 +92,19 @@ interface Reader {
   json?: string[];
 }
 
-/** The object is complete (or cut off): give its model the window it states. */
+/** The object is complete (or cut off): give its model the window and the
+ *  effort levels it states. */
 function closeObject(reader: Reader): void {
-  const window = reader.current && reader.json ? contextWindowOf(reader.json.join("\n")) : undefined;
-  if (reader.current && window !== undefined) reader.current.contextWindow = window;
+  const record = reader.current && reader.json ? parseRecord(reader.json.join("\n")) : undefined;
+  if (reader.current && record) {
+    const window = contextWindowOf(record);
+    if (window !== undefined) reader.current.contextWindow = window;
+    const levels = effortLevelsOf(record);
+    if (levels.length > 0) {
+      reader.current.supportsEffort = true;
+      reader.current.effortLevels = levels;
+    }
+  }
   reader.json = undefined;
 }
 
@@ -103,22 +131,39 @@ function readLine(reader: Reader, text: string): void {
   }
 }
 
-/** The operator's configured `contextWindow` for a model wins over the one
- *  opencode reports: it is the operator's own statement about a model (a
- *  provider limit opencode does not know, a self-imposed cap). Nothing else of
- *  the `models.opencode` block is applied to a discovered catalog. */
-export function withConfiguredWindows(models: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
-  const configured = new Map<string, number>();
+/** What an entry of the `models.opencode` block overrides on a discovered model. */
+type ModelOverride = Pick<ModelInfo, "contextWindow" | "supportsEffort" | "effortLevels">;
+
+/** The part of a configured entry that states something. A zero, negative or
+ *  NaN window states nothing, nor does an effort list that names no level:
+ *  the discovered value stays. `supportsEffort: false` is the one way to switch
+ *  a discovered model's effort off. */
+function overrideOf(entry: NonNullable<EngineModelsConfig["models"]>[number]): Partial<ModelOverride> {
+  const override: Partial<ModelOverride> = {};
+  if (typeof entry.contextWindow === "number" && Number.isFinite(entry.contextWindow) && entry.contextWindow > 0) {
+    override.contextWindow = entry.contextWindow;
+  }
+  const levels = (Array.isArray(entry.effortLevels) ? entry.effortLevels : []).filter((l) => typeof l === "string" && l.trim() !== "");
+  if (entry.supportsEffort === false) Object.assign(override, { supportsEffort: false, effortLevels: [] });
+  else if (levels.length > 0) Object.assign(override, { supportsEffort: true, effortLevels: levels });
+  return override;
+}
+
+/** The operator's configured `contextWindow` and `effortLevels` for a model win
+ *  over what opencode reports: they are the operator's own statement about a
+ *  model (a provider limit opencode does not know, a self-imposed cap, the
+ *  variants of a build whose discovery lists none). Nothing else of the
+ *  `models.opencode` block is applied to a discovered catalog. */
+export function withConfiguredOverrides(models: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
+  const configured = new Map<string, Partial<ModelOverride>>();
   for (const entry of block?.models ?? []) {
-    // A zero, negative or NaN window states nothing: keep the discovered one.
-    if (typeof entry.contextWindow === "number" && Number.isFinite(entry.contextWindow) && entry.contextWindow > 0) {
-      configured.set(entry.id, entry.contextWindow);
-    }
+    const override = overrideOf(entry);
+    if (Object.keys(override).length > 0) configured.set(entry.id, override);
   }
   if (configured.size === 0) return models;
   return models.map((model) => {
-    const window = configured.get(model.id);
-    return window === undefined ? model : { ...model, contextWindow: window };
+    const override = configured.get(model.id);
+    return override ? { ...model, ...override } : model;
   });
 }
 

@@ -85,7 +85,18 @@ engines:
 
 Model ids are opencode's own `provider/model` form, exactly as `opencode models` prints them. The model half may contain further slashes (`openrouter/meta-llama/llama-4`); only the first one is structural.
 
-**No effort levels.** opencode has a `--variant` flag for provider-specific reasoning effort, but reports no list of which models accept which variants — so jinn offers no effort picker for opencode rather than offering one that silently does nothing.
+**Effort levels are the model's variants.** opencode's reasoning-effort control is the model *variant*, and `opencode models --verbose` lists the variants each model has (`high` for one model, `low` … `max` for another, none for a third). Discovery turns those into the model's effort levels, so the effort picker offers exactly what the model accepts, and a model with no variants has no picker. The level reaches opencode as `run --variant <level>` (1.x), `-m provider/model#<level>` (2.x `run`), the prompt body's `variant` (1.x server) or the `variant` of the session's model ref (2.x server; the model is posted again when only the variant changed). A level the model does not list is never sent, and neither is `default`. A `--variant` in `cliFlags` wins over the picker's level.
+
+OpenCode 2.x lists no variants through the CLI, so its models have no picker until discovery reads them from the server. List them by hand meanwhile; a configured list wins over a discovered one, and `supportsEffort: false` switches a model's picker off:
+
+```yaml
+models:
+  opencode:
+    models:
+      - { id: opencode/some-model, label: some-model, supportsEffort: true, effortLevels: [low, medium, high] }
+```
+
+The terminal view is a client of the session's server and sends no turns of its own, so it has no variant to pass.
 
 ### The file indexer (`disableFff`)
 
@@ -371,7 +382,7 @@ The catalog exists **only** once discovery has run: opencode ships no offline li
 - The terminal view exists only in server mode. In the default `run` mode there is no `/ws/pty` terminal for an opencode session.
 - **Prompts that bypass Jinn are not copied into the Jinn chat.** Since the desktop terminal is interactive, so a prompt typed into opencode's own input box in the CLI view is one of these, alongside a programmatic `/ws/pty` `stdin` client and direct calls to the password-protected server API. It runs in the opencode session and shows in opencode's history and in the TUI, and the next Jinn turn's context includes it (it is the same opencode session), but the Jinn chat does not show it. Anything sent through the composer is in the transcript. Accepted as D5 and again.
 - If a turn has to replace the server (see above) while an operator's own prompt is running in the terminal, that prompt is cut off.
-- No effort/`--variant` support (see Configuration above).
+- OpenCode 2.x models have no effort picker until their variants are configured by hand (see Configuration above).
 - No quota reading from the provider. Unless `usageLimits` is configured (see Usage limits above), `jinn limits` lists opencode as unsupported. When it is configured, the reading is jinn's own estimate from its turn ledger, not the provider's account.
 - **Run mode on OpenCode 2 cannot tell a lost conversation.** 2.x's `run -s <id>` creates a session under an id it does not know, rather than failing, so a `run` turn that resumes such an id starts with no history. Server mode is not affected (the session is looked up first, and an unknown one starts afresh with the transcript). It matters after an OpenCode 2 rollback and re-upgrade (see [opencode-2-upgrade.md](opencode-2-upgrade.md)).
 - Attachments are named in the prompt text on a local turn and refused outright on a remote one. opencode's own `-f` flag is not wired up yet — Pi behaves the same way.
