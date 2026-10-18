@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Plus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { CONTROL_CLASS } from "../shared"
-import { engineLabel } from "./chain-model"
+import { engineDisplayName } from "@/lib/engine-names"
 import {
   addMapPair,
   firstSubstitute,
@@ -65,14 +65,14 @@ function MapRow({ engine, from, to, targets, problem, onRetarget, onRemove }: {
         </span>
         <span aria-hidden className="shrink-0 text-[length:var(--text-footnote)] text-[var(--text-quaternary)]">→</span>
         <TargetSelect
-          label={`Model ${from} runs as on the ${engineLabel(engine)} stand-in`}
+          label={`Model ${from} runs as on the ${engineDisplayName(engine)} stand-in`}
           value={to}
           options={targets}
           onChange={onRetarget}
         />
         <button
           type="button"
-          aria-label={`Remove the mapping for ${from} from ${engineLabel(engine)}`}
+          aria-label={`Remove the mapping for ${from} from ${engineDisplayName(engine)}`}
           onClick={onRemove}
           className={ROW_BUTTON_CLASS}
         >
@@ -126,7 +126,7 @@ function AddMapping({ engine, sources, targets, onAdd, onCancel }: {
   const [from, setFrom] = useState("")
   const [to, setTo] = useState(targets[0] ?? "")
   const listId = `model-map-sources-${engine}`
-  const label = engineLabel(engine)
+  const label = engineDisplayName(engine)
 
   return (
     <form
@@ -215,8 +215,8 @@ export function ModelMapEditor({ engine, chain, pairs, served, defaultModels, on
       <MapRows engine={engine} pairs={pairs} targets={targets} context={context} onChange={onChange} />
       <p className={`mt-[var(--space-1)] ${LABEL_CLASS}`} data-model-map-floor={engine}>
         {substitute
-          ? `Any model not listed runs on ${engineLabel(substitute)}'s own default${floorModel ? ` (${floorModel})` : ""}.`
-          : `${engineLabel(engine)} has no fallback chain, so these mappings have no effect until it does.`}
+          ? `Any model not listed runs on ${engineDisplayName(substitute)}'s own default${floorModel ? ` (${floorModel})` : ""}.`
+          : `${engineDisplayName(engine)} has no fallback chain, so these mappings have no effect until it does.`}
       </p>
       {adding ? (
         <AddMapping
