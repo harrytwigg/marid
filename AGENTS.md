@@ -322,8 +322,13 @@ change to how it looks is faulted against these rules.
   blur. The `raw-backdrop-blur` footgun rejects `backdrop-filter` and `backdrop-blur-*` anywhere
   else, and `scripts/footguns/backdrop-blur-allowlist.mjs` is empty: keep it empty.
 - Budget: at most three blurred surfaces on screen, radius at most 32px, never on a row or a card
-  inside a scroller, never animated. Blur does not nest, so nothing inside an overlay asks for
-  another; a full-screen sheet is tint only; a terminal that repaints is never under a filter.
+  inside a scroller, and the blur radius is never animated (a surface may enter with opacity and
+  transform). Blur does not nest, so nothing inside an overlay asks for another; a full-screen sheet
+  is opaque; a terminal that repaints is never under a filter.
+- A surface that must not blur takes `--material-thick-opaque` (the opaque overlay material, and
+  the sheet's own colour inside the reading sheet), never a bare `--glass-overlay` or `--glass-float`
+  background: those stay translucent on a touch screen and inside the sheet, so text or video behind
+  them shows through. The notice stack is such a surface (up to six cards would spend the budget).
 - Text reads on the opaque sheet, not on blur. Coarse pointers get the opaque material, and
   reduced transparency swaps every glass token for its opaque twin and drops the blur.
 

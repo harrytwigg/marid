@@ -26,13 +26,12 @@ export type NoticeSink = (notice: AppNotice & { level: NoticeLevel }) => void
 
 let sink: NoticeSink | null = null
 
-export function registerNoticeSink(fn: NoticeSink): void {
+/** Returns the way to unregister, which does nothing if another surface has registered since. */
+export function registerNoticeSink(fn: NoticeSink): () => void {
   sink = fn
-}
-
-/** Null until the surface has mounted. */
-export function noticeSink(): NoticeSink | null {
-  return sink
+  return () => {
+    if (sink === fn) sink = null
+  }
 }
 
 /** Raise a notice on the app's surface. With none mounted (a test, the first frame) the words go to the console instead of nowhere. */

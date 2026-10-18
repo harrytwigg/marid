@@ -125,7 +125,7 @@ export function PickerPopover({
       style={{
         top: -7 - currentIndex * ROW_H + shift,
         left: -6,
-        background: "var(--glass-overlay)",
+        background: "var(--material-thick-opaque)",
         boxShadow: "var(--shadow-overlay)",
       }}
     >

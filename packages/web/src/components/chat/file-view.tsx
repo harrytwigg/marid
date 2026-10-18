@@ -218,7 +218,7 @@ export function FileView({
               onClick={onBack}
               title="Back to chat"
               aria-label="Back to chat"
-              className="pointer-events-auto inline-flex size-8 items-center justify-center rounded-full border border-[var(--separator)] bg-[var(--glass-overlay)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
+              className="pointer-events-auto inline-flex size-8 items-center justify-center rounded-full border border-[var(--separator)] bg-[var(--material-thick-opaque)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
             >
               <ArrowLeft size={16} />
             </button>
@@ -231,7 +231,7 @@ export function FileView({
               target="_blank"
               rel="noopener noreferrer"
               title="Open in new browser tab"
-              className="pointer-events-auto inline-flex size-8 items-center justify-center rounded-full border border-[var(--separator)] bg-[var(--glass-overlay)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
+              className="pointer-events-auto inline-flex size-8 items-center justify-center rounded-full border border-[var(--separator)] bg-[var(--material-thick-opaque)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
             >
               <ExternalLink size={16} />
             </a>
@@ -264,7 +264,7 @@ export function FileView({
       <header
         className="px-[var(--space-6)] py-[var(--space-4)]"
         style={{
-          background: "var(--glass-overlay)",
+          background: "var(--material-thick-opaque)",
           borderBottom: "1px solid var(--separator)",
         }}
       >

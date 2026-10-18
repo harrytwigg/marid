@@ -409,3 +409,32 @@ describe.each(SCHEMES)("system colours in %s", (scheme) => {
     }
   })
 })
+
+describe("controls that do not blur", () => {
+  // A bare --glass-overlay background is translucent on a touch screen and inside the reading sheet, where
+  // --material-thick-opaque is the sheet's own colour. These sit over text, video or a terminal.
+  const SRC = path.resolve(ROUTES, "..")
+  const FILES = [
+    "components/chat/cli-keybar.tsx",
+    "components/chat/file-view.tsx",
+    "components/talk/media-preview-chrome.tsx",
+    "components/talk/media-preview.tsx",
+    "components/ui/image-lightbox.tsx",
+    "components/ui/notices.tsx",
+    "components/ui/video-player.tsx",
+    "routes/todos/pickers/picker-shell.tsx",
+    "routes/todos/task-page/attachment-preview.tsx",
+    "routes/todos/task-page/attachments.tsx",
+  ]
+
+  it.each(FILES)("%s draws on the opaque overlay material, not a bare translucent token", (file) => {
+    const source = readFileSync(path.join(SRC, file), "utf8")
+    expect(source).toContain("var(--material-thick-opaque)")
+    expect(source).not.toMatch(/var\(--glass-(overlay|float)\)/)
+  })
+
+  it("resolves --material-thick-opaque to the sheet's own colour inside the sheet", () => {
+    const sheet = declarations(ruleBody(IDENTITY, '[data-shell="sheet"]'))
+    expect(sheet.get("--material-thick-opaque")).toBe("var(--glass-sheet-opaque)")
+  })
+})

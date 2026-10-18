@@ -70,9 +70,11 @@ export function Notices() {
       }, DISMISS_AFTER_MS)
       pending.add(timer)
     }
-    registerNoticeSink((notice) => show({ ...notice, source: 'app' }))
-    registerHostNotificationSink((notice) => show({ ...notice, source: 'plugin' }))
+    const unregisterApp = registerNoticeSink((notice) => show({ ...notice, source: 'app' }))
+    const unregisterPlugin = registerHostNotificationSink((notice) => show({ ...notice, source: 'plugin' }))
     return () => {
+      unregisterApp()
+      unregisterPlugin()
       for (const timer of pending) clearTimeout(timer)
       pending.clear()
     }
@@ -109,11 +111,11 @@ function NoticeCard({ notice, onDismiss }: { notice: Notice; onDismiss: () => vo
       role="status"
       className={cn(
         'pointer-events-auto flex items-start gap-[var(--space-3)] rounded-[var(--radius-xl)]',
-        // The overlay material, for the same reason the Talk undo strip uses
-        // it: nothing sits behind this to read as a surface, so it has to lift
-        // off the page rather than tint it.
-        'glass-overlay py-[var(--space-3)] pl-[var(--space-4)] pr-[var(--space-2)]',
-        'motion-safe:animate-pop-in',
+        // The opaque overlay material, no blur: nothing sits behind this to read
+        // as a surface, so it has to lift off the page rather than tint it, and
+        // a stack of up to six cards would spend the blur budget on its own.
+        'bg-[var(--material-thick-opaque)] py-[var(--space-3)] pl-[var(--space-4)] pr-[var(--space-2)]',
+        'shadow-[var(--shadow-overlay)] motion-safe:animate-pop-in',
       )}
     >
       {/* Nudged down to sit on the first line's centre rather than its box:

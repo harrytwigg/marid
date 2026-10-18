@@ -1340,11 +1340,6 @@
         "max-lines-per-function"
       ]
     },
-    "packages/web/src/routes/redesign/page.tsx": {
-      "exempt": [
-        "max-lines-per-function"
-      ]
-    },
     "packages/web/src/routes/settings-provider.tsx": {
       "exempt": [
         "max-lines-per-function"

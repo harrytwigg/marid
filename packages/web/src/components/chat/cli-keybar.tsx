@@ -76,7 +76,7 @@ export function CliKeybar({
         <div
           role="toolbar"
           aria-label="Terminal keys"
-          className="absolute bottom-full right-0 z-30 mb-2 flex w-max max-w-[min(92vw,280px)] flex-wrap items-center justify-end gap-1 rounded-[var(--radius-md)] border border-[var(--separator)] bg-[var(--glass-overlay)] p-1.5 shadow-[var(--shadow-overlay)]"
+          className="absolute bottom-full right-0 z-30 mb-2 flex w-max max-w-[min(92vw,280px)] flex-wrap items-center justify-end gap-1 rounded-[var(--radius-md)] border border-[var(--separator)] bg-[var(--material-thick-opaque)] p-1.5 shadow-[var(--shadow-overlay)]"
         >
           {CLI_KEYS.map((key) => {
             const Icon = key.icon

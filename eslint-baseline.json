@@ -732,9 +732,6 @@
     "packages/web/src/routes/org/page.tsx": [
       "max-lines-per-function"
     ],
-    "packages/web/src/routes/redesign/page.tsx": [
-      "max-lines-per-function"
-    ],
     "packages/web/src/routes/settings-provider.tsx": [
       "max-lines-per-function"
     ],
