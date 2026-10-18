@@ -43,7 +43,7 @@ async function leaks(page) {
   // innerText leaves out form values, so read inputs and textareas too.
   const text = await page.evaluate(() => [
     document.body.innerText,
-    ...[...document.querySelectorAll('input, textarea')].map((field) => field.value),
+    ...[...document.querySelectorAll('input, textarea')].map((field) => /** @type {HTMLInputElement} */ (field).value),
   ].join('\n'))
   const found = []
   if (token && text.includes(token)) found.push('the sandbox token')
@@ -85,9 +85,11 @@ async function shootFirstPaint(page, screen, label) {
   await page.screenshot({ path: path.join(outDir, 'firstpaint', `${label}.png`) })
 }
 
+/** @typedef {Window & { __rootAtParse?: string | null }} RootMarkedWindow */
+
 // The bootstrap marked <html> before React mounted, and hydration kept it.
 async function assertRootReduced(page) {
-  const atParse = await page.evaluate(() => window.__rootAtParse)
+  const atParse = await page.evaluate(() => /** @type {RootMarkedWindow} */ (window).__rootAtParse)
   if (atParse !== 'reduced') throw new Error(`root was not reduced at DOMContentLoaded (${atParse})`)
   const now = await page.evaluate(() => document.documentElement.getAttribute('data-transparency'))
   if (now !== 'reduced') throw new Error(`root lost data-transparency after hydration (${now})`)
@@ -108,7 +110,7 @@ async function openPage({ screen, theme, viewport }) {
     if (onboarded) localStorage.setItem('jinn-onboarded', 'true')
     if (isReduced) localStorage.setItem('jinn-settings', JSON.stringify({ transparency: 'reduced' }))
     document.addEventListener('DOMContentLoaded', () => {
-      window.__rootAtParse = document.documentElement.getAttribute('data-transparency')
+      /** @type {RootMarkedWindow} */ (window).__rootAtParse = document.documentElement.getAttribute('data-transparency')
     })
   }, [theme, reduced, !screen.onboarding])
   const page = await context.newPage()

@@ -15,6 +15,11 @@ export function createKit({ browser, headers, baseUrl }) {
     if (!condition) throw new Error(message)
   }
 
+  /**
+   * @param {{ width: number, height: number }} viewport
+   * @param {string} url
+   * @param {{ touch?: boolean, before?: (context: import('@playwright/test').BrowserContext) => unknown }} [options]
+   */
   async function open(viewport, url, { touch = viewport.width < 600, before } = {}) {
     const context = await browser.newContext({ viewport, hasTouch: touch, extraHTTPHeaders: headers })
     await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })

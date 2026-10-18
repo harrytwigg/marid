@@ -218,7 +218,9 @@ console.log(`phone board checks (${isChromium ? 'Chromium' : 'Firefox'}, ${VIEWP
 
 // The board's surfaces are tints: not a card, a column, a header or the rail blurs what is behind it,
 // on a phone or on a desktop (Chromium computes backdrop-filter; Firefox reports none for everything).
-for (const [label, viewport, touch] of [['phone', VIEWPORT, true], ['desktop', { width: 1440, height: 900 }, false]]) {
+/** @type {Array<[string, { width: number, height: number }, boolean]>} */
+const BOARDS = [['phone', VIEWPORT, true], ['desktop', { width: 1440, height: 900 }, false]]
+for (const [label, viewport, touch] of BOARDS) {
   const context = await browser.newContext({ viewport, hasTouch: touch, extraHTTPHeaders: headers })
   await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
   const page = await context.newPage()
