@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react"
-import { KeyRound, LoaderCircle, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "lucide-react"
+import { KeyRound, LoaderCircle, PlugZap, RefreshCw, ShieldCheck, Trash2 } from "@/components/ui/icon"
 import type { NativeGatewayProfile, NativeGatewayProfilesSnapshot } from "@/lib/native-gateway-profiles"
 import {
   nativeGatewayProfiles,

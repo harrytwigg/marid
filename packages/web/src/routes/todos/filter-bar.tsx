@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Filter, MoreHorizontal } from "lucide-react"
+import { Filter, MoreHorizontal } from "@/components/ui/icon"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -307,7 +307,7 @@ export function FilterBar({
                 : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
             }`}
           >
-            <Filter size={16} strokeWidth={1.9} aria-hidden />
+            <Filter size={16} aria-hidden />
             <span className="max-[420px]:sr-only">Filter</span>
             {active > 0 && <span className="tabular-nums">{active}</span>}
           </button>
@@ -325,7 +325,7 @@ export function FilterBar({
                     : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
                 }`}
               >
-                <Filter size={16} strokeWidth={1.9} aria-hidden />
+                <Filter size={16} aria-hidden />
                 <span className="max-[420px]:sr-only">Filter</span>
                 {active > 0 && <span className="tabular-nums">{active}</span>}
               </button>

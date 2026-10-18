@@ -12,20 +12,20 @@ import {
   CornerDownRight,
   Target,
   Plug,
-  type LucideIcon,
-} from "lucide-react"
+  type IconComponent,
+} from "@/components/ui/icon"
 import type { WorkItemSourceWire, WorkItemStatusWire } from "@/lib/api"
 import { stateKeyOf, type StateKey } from "@/lib/todos"
 
 /* GRS-021d — the state-circle primitive. A tinted disc + a glyph from the same
- * lucide family the rest of the app uses. The disc
+ * icon family the rest of the app uses. The disc
  * treatment (soft tinted fill, no border) is the new primitive; the glyph inside
  * is the shared family. */
 
 export type StateGlyphKey = StateKey
 
 interface GlyphSpec {
-  Icon: LucideIcon
+  Icon: IconComponent
   /** color-mix tint for the disc background (theme-aware via token). */
   bg: string
   /** glyph + text colour. */
@@ -81,7 +81,7 @@ export function StateCircle({
         color: spec.fg,
       }}
     >
-      <spec.Icon size={glyph} className={spec.spin ? "animate-spin" : undefined} strokeWidth={2} />
+      <spec.Icon size={glyph} className={spec.spin ? "animate-spin" : undefined} />
     </span>
   )
 }
@@ -91,8 +91,8 @@ export function StatusCircle({ status, size, className }: { status: WorkItemStat
   return <StateCircle keyOf={stateKeyOf(status)} size={size} className={className} />
 }
 
-// ── Provenance glyphs (the whisper icon). Same lucide family. ────────────────
-const PROVENANCE_ICON: Record<WorkItemSourceWire, LucideIcon> = {
+// ── Provenance glyphs (the whisper icon). Same icon family. ────────────────
+const PROVENANCE_ICON: Record<WorkItemSourceWire, IconComponent> = {
   human: UserRound,
   delegation: CornerDownRight,
   cron: Clock,
@@ -104,5 +104,5 @@ const PROVENANCE_ICON: Record<WorkItemSourceWire, LucideIcon> = {
 
 export function ProvenanceIcon({ source, size = 12, className }: { source: WorkItemSourceWire; size?: number; className?: string }) {
   const Icon = PROVENANCE_ICON[source]
-  return <Icon size={size} className={className} strokeWidth={1.75} aria-hidden />
+  return <Icon size={size} className={className} aria-hidden />
 }

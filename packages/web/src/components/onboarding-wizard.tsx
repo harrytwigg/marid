@@ -11,7 +11,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Rocket,
-} from "lucide-react"
+} from "@/components/ui/icon"
 import { useSettings } from "@/routes/settings-provider"
 import { useTheme } from "@/routes/providers"
 import { THEMES } from "@/lib/themes"
@@ -542,7 +542,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                         }}
                       >
                         {isActive && (
-                          <Check size={18} color="var(--accent-contrast)" strokeWidth={3} />
+                          <Check size={18} color="var(--accent-contrast)" />
                         )}
                       </button>
                     )
@@ -613,7 +613,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                               </div>
                               {isActive && (
                                 <div className="w-5 h-5 rounded-full bg-[var(--accent)] flex items-center justify-center shrink-0">
-                                  <Check size={11} color="var(--accent-contrast)" strokeWidth={3} />
+                                  <Check size={11} color="var(--accent-contrast)" />
                                 </div>
                               )}
                             </button>
@@ -678,7 +678,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                                 </div>
                                 {isActive && (
                                   <div className="w-5 h-5 rounded-full bg-[var(--accent)] flex items-center justify-center shrink-0">
-                                    <Check size={11} color="var(--accent-contrast)" strokeWidth={3} />
+                                    <Check size={11} color="var(--accent-contrast)" />
                                   </div>
                                 )}
                               </button>

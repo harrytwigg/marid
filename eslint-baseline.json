@@ -702,9 +702,6 @@
       "complexity",
       "max-lines-per-function"
     ],
-    "packages/web/src/routes/limits/page.tsx": [
-      "max-lines-per-function"
-    ],
     "packages/web/src/routes/limits/use-engine-limits.ts": [
       "complexity",
       "max-lines-per-function"

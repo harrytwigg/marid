@@ -1,4 +1,4 @@
-import { Zap } from "lucide-react"
+import { Zap } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import { preloadQuickCapture } from "../quick-add/capture-bar-lazy"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"

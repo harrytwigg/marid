@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, Copy, ExternalLink, MoreHorizontal, PanelRightOpen, Pin, PinOff, Search, Share2, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Copy, ExternalLink, MoreHorizontal, PanelRightOpen, Pin, PinOff, Search, Share2, Trash2 } from '@/components/ui/icon'
 import { sessionUrl } from '@/components/chat/chat-route-helpers'
 import { usePins, useTogglePin } from '@/hooks/use-pins'
 import { openExternal } from '@/platform'

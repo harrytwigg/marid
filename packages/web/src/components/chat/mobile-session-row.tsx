@@ -1,5 +1,5 @@
 import React from "react"
-import { Pin } from "lucide-react"
+import { Pin } from "@/components/ui/icon"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { SessionDepartmentBadge } from "@/components/session-department-badge"
 import { cleanPreview } from "@/lib/clean-preview"

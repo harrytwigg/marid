@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react"
+import { RefreshCw } from "@/components/ui/icon"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -38,7 +38,7 @@ function Header({ installed, enabled, busy, onRescan }: {
           onClick={onRescan}
           className="grid size-[34px] place-items-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
         >
-          <RefreshCw size={14} strokeWidth={2.2} className={busy ? "animate-spin" : undefined} aria-hidden />
+          <RefreshCw size={14} className={busy ? "animate-spin" : undefined} aria-hidden />
         </button>
       }
     />

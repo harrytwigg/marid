@@ -1,4 +1,4 @@
-import { CheckIcon, ChevronLeftIcon } from 'lucide-react'
+import { CheckIcon, ChevronLeftIcon } from "@/components/ui/icon"
 import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,

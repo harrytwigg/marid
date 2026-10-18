@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { LoaderCircle } from "lucide-react"
+import { LoaderCircle } from "@/components/ui/icon"
 import { api, type CreateWorkspaceResult } from "@/lib/api"
 import { gatewayTransport } from "@/lib/gateway-transport"
 import {

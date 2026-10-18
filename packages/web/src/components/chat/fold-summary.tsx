@@ -1,5 +1,5 @@
 import { Fragment } from 'react'
-import { ChevronDown, Settings } from 'lucide-react'
+import { ChevronDown, Settings } from '@/components/ui/icon'
 import { FOLD_MS } from './fold-motion'
 
 /**
@@ -75,7 +75,7 @@ export function FoldSummaryLine({ summary, closed, arriving, onToggle }: FoldSum
           onClick={onToggle}
           className="-ml-1.5 flex min-h-8 w-full cursor-pointer items-center gap-[var(--space-2)] rounded-[8px] border-none bg-transparent py-[3px] pl-1.5 pr-2 text-left font-[inherit] text-[length:var(--text-caption1)] font-[var(--weight-medium)] text-[var(--text-tertiary)] transition-colors duration-150 ease-[var(--ease-smooth)] hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
         >
-          <Settings size={13} strokeWidth={2} aria-hidden="true" className="shrink-0 text-[var(--text-quaternary)]" />
+          <Settings size={13} aria-hidden="true" className="shrink-0 text-[var(--text-quaternary)]" />
           <span className="flex min-w-0 flex-wrap items-center gap-[7px]">
             {words.map((word, index) => (
               <Fragment key={index}>
@@ -91,7 +91,6 @@ export function FoldSummaryLine({ summary, closed, arriving, onToggle }: FoldSum
               the work rather than before or after it. */}
           <ChevronDown
             size={12}
-            strokeWidth={2.5}
             aria-hidden="true"
             style={{ transitionDuration: `${FOLD_MS}ms` }}
             className={`ml-0.5 shrink-0 text-[var(--text-quaternary)] transition-transform ease-[var(--ease-smooth)] ${closed ? 'rotate-0' : 'rotate-180'}`}

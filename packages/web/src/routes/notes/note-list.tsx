@@ -1,4 +1,4 @@
-import { ChevronLeft, PenSquare, Search } from "lucide-react"
+import { ChevronLeft, PenSquare, Search } from "@/components/ui/icon"
 import type { NoteSummary } from "./types"
 import { cn } from "@/lib/utils"
 

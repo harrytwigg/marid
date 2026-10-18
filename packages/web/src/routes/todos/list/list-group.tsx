@@ -1,4 +1,4 @@
-import { ChevronDown, Plus } from "lucide-react"
+import { ChevronDown, Plus } from "@/components/ui/icon"
 import type { Employee, WorkItemCompactWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
 import { NEW_TODO_PRELOAD } from "../new-todo-dialog-lazy"
 import { StatusCircle } from "../state-glyph"
@@ -58,7 +58,7 @@ export function TodoListGroupHeader({
         {...NEW_TODO_PRELOAD}
         className="focus-outline -mr-1 grid size-9 flex-none place-items-center rounded-full text-[var(--text-quaternary)] outline-none transition-[background-color,color,scale] duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)] active:scale-[0.96]"
       >
-        <Plus size={15} strokeWidth={2.2} aria-hidden />
+        <Plus size={15} aria-hidden />
       </button>
     </div>
   )

@@ -1,6 +1,6 @@
 
 import { useEffect, useRef, useState } from "react"
-import { RotateCcw, Trash2, Check, Loader2, Plus, EyeOff } from "lucide-react"
+import { RotateCcw, Trash2, Check, Loader2, Plus, EyeOff } from "@/components/ui/icon"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
@@ -275,7 +275,7 @@ export default function SettingsPage() {
                     }}
                   >
                     {isActive && (
-                      <Check size={14} color={preset.value ? "#fff" : "var(--accent-contrast)"} strokeWidth={3} />
+                      <Check size={14} color={preset.value ? "#fff" : "var(--accent-contrast)"} />
                     )}
                   </button>
                 )

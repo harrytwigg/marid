@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronRight, Search } from "lucide-react"
+import { ChevronRight, Search } from "@/components/ui/icon"
 import { api } from "@/lib/api"
 import { filterSkills, type SkillSummary } from "@/lib/skills"
 import { PageLayout } from "@/components/page-layout"
@@ -30,7 +30,7 @@ function SkillRow({ skill, onOpen }: { skill: SkillSummary; onOpen: (name: strin
           {skill.description || "No description"}
         </span>
       </span>
-      <ChevronRight size={14} strokeWidth={2.4} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
+      <ChevronRight size={14} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
     </button>
   )
 }
@@ -90,7 +90,7 @@ export default function SkillsPage() {
             }
             trailing={
               <label className="inline-flex h-[30px] w-[220px] items-center gap-[7px] rounded-full bg-[var(--fill-tertiary)] px-3 text-[length:var(--text-footnote)] text-[var(--text-quaternary)] transition-colors focus-within:text-[var(--text-tertiary)] max-[500px]:w-full">
-                <Search size={12} strokeWidth={2.4} className="flex-none" aria-hidden />
+                <Search size={12} className="flex-none" aria-hidden />
                 <input
                   data-testid="skills-search"
                   value={query}

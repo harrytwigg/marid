@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo, startTransiti
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
-import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, ListTree, Pin, Plus, Search, SquarePen, Trash2, X } from "lucide-react"
+import { Archive, CalendarClock, ChevronDown, ChevronRight, Clock3, EllipsisVertical, Focus, Layers, ListChecks, ListTree, Pin, Plus, Search, SquarePen, Trash2, X } from "@/components/ui/icon"
 import { api, type Employee, type SessionsResponse } from "@/lib/api"
 import { useOrg } from "@/hooks/use-employees"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
@@ -1946,7 +1946,7 @@ export function ChatSidebar({
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  <Icon className="size-[15px]" strokeWidth={2} />
+                  <Icon className="size-[15px]" />
                 </button>
               ))}
             </div>

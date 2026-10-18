@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight } from '@/components/ui/icon'
 import type { ChatBlock, JsonValue } from '@/lib/blocks'
 import { EmployeeChip } from '@/components/ui/employee-chip'
 import { QuietCard } from '@/components/ui/quiet-card'

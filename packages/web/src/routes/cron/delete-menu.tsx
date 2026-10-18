@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { EllipsisVertical, MoreHorizontal, Trash2 } from "lucide-react"
+import { EllipsisVertical, MoreHorizontal, Trash2 } from "@/components/ui/icon"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import {
   DropdownMenu,

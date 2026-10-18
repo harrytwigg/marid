@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react"
+import { RefreshCw } from "@/components/ui/icon"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 
 export function CronListHeader({
@@ -25,7 +25,7 @@ export function CronListHeader({
             onClick={onRefresh}
             className="grid size-[30px] place-items-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)]"
           >
-            <RefreshCw size={13} strokeWidth={2.2} className={fetching ? "animate-spin" : undefined} aria-hidden />
+            <RefreshCw size={13} className={fetching ? "animate-spin" : undefined} aria-hidden />
           </button>
         </div>
       }

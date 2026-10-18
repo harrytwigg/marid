@@ -1,4 +1,4 @@
-import { Ellipsis, ExternalLink, PanelRightOpen, Share2 } from 'lucide-react'
+import { Ellipsis, ExternalLink, PanelRightOpen, Share2 } from '@/components/ui/icon'
 import { useState } from 'react'
 import { sessionUrl } from '@/components/chat/chat-route-helpers'
 import { SessionRowMenu, SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS, SESSION_MENU_SEPARATOR_CLASS } from '@/components/chat/session-row-menu'

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronDown, Plus } from "lucide-react"
+import { ChevronDown, Plus } from "@/components/ui/icon"
 import { Button } from "@/components/ui/button"
 import type { Employee, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/api"
 import { PendingSubTaskRow, SubTaskRow } from "./subtask-row"
@@ -125,7 +125,7 @@ export function SubTasksSection({
             }}
             className="size-9 flex-none rounded-full text-[var(--text-quaternary)]"
           >
-            <Plus size={15} strokeWidth={2.2} aria-hidden />
+            <Plus size={15} aria-hidden />
           </Button>
         )}
       </div>
@@ -166,7 +166,7 @@ export function SubTasksSection({
                 data-testid="subtask-add-row"
                 className="-mx-2.5 flex min-h-9 items-center px-2.5 py-[5px] motion-safe:animate-capture-step-in"
               >
-                <Plus size={12} strokeWidth={2.2} aria-hidden className="mr-4 flex-none text-[var(--text-quaternary)]" />
+                <Plus size={12} aria-hidden className="mr-4 flex-none text-[var(--text-quaternary)]" />
                 <input
                   autoFocus
                   value={title}
