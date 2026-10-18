@@ -3,6 +3,7 @@ import {
   assignedTodo,
   delegate,
   dispatch,
+  dispatchAs,
   employeeSession,
   registry,
   sessionsOf,
@@ -127,8 +128,80 @@ describe("delegate_task ownership guard", () => {
     const again = await delegate(dispatcherId, item.id, "second-worker");
 
     expect(again.status).toBe(403);
-    expect(again.body.error).toMatch(/employee "todo-dispatcher" does not own Todo/);
+    expect(again.body.error).toMatch(/this Dispatcher's hand-off is spent/);
     expect(workItems.getWorkItem(item.id)).toMatchObject({ assignee: "first-worker" });
     expect(sessionsOf(item.id, "second-worker")).toHaveLength(0);
+  });
+});
+
+/**
+ * A delegate that stopped before finishing: the Dispatcher's one hand-off is
+ * spent, so it is refused, as it must be (a fresh start on top of partial work
+ * is the operator's call). The refusal used to stop there, which left the
+ * Dispatcher reaching for a second session that had no standing either. It now
+ * names the recovery that keeps the work, resuming the delegate's own session,
+ * and the operator action that starts afresh.
+ */
+describe("a Dispatcher whose delegate stopped", () => {
+  async function crashedHandoff(title: string) {
+    const item = assignedTodo(title);
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+    const delegated = await delegate(dispatcherId, item.id, "first-worker");
+    expect(delegated.status).toBe(201);
+    const delegateId = delegated.body.sessionId as string;
+    registry.updateSession(delegateId, { status: "error", lastError: "lost the engine's event stream" });
+    registry.updateSession(dispatcherId, { status: "idle" });
+    return { item, dispatcherId, delegateId };
+  }
+
+  it("is refused a second delegation, with the delegate session to resume and the operator's fresh start", async () => {
+    const { item, dispatcherId, delegateId } = await crashedHandoff("Delegate crashed mid-work");
+
+    const again = await delegate(dispatcherId, item.id, "first-worker");
+
+    expect(again.status).toBe(403);
+    expect(again.body.error).toContain("hand-off is spent");
+    expect(again.body.error).toContain(`send_to_session { sessionId: "${delegateId}" }`);
+    expect(again.body.error).toMatch(/first-worker, error/);
+    expect(again.body.error).toContain(`press Dispatch on Todo ${item.id}`);
+    expect(sessionsOf(item.id, "first-worker")).toHaveLength(1);
+  });
+
+  it("gets the same guidance from dispatch_work_item, and starts no second Dispatcher", async () => {
+    const { item, dispatcherId, delegateId } = await crashedHandoff("Delegate crashed, Dispatcher tries dispatch");
+
+    const again = await dispatchAs(dispatcherId, item.id);
+
+    expect(again.status).toBe(403);
+    expect(again.body.error).toContain(`send_to_session { sessionId: "${delegateId}" }`);
+    expect(sessionsOf(item.id, "todo-dispatcher")).toHaveLength(1);
+  });
+
+  it("still lets the operator's Dispatch start afresh, and that Dispatcher hand the Todo on", async () => {
+    const { item, dispatcherId } = await crashedHandoff("Delegate crashed, operator presses Dispatch");
+
+    const pressed = await dispatch(item.id);
+
+    expect(pressed.status).toBe(201);
+    const fresh = pressed.body.sessionId as string;
+    expect(fresh).not.toBe(dispatcherId);
+    const delegated = await delegate(fresh, item.id, "first-worker");
+    expect(delegated.status).toBe(201);
+    expect(registry.getSession(delegated.body.sessionId)).toMatchObject({ employee: "first-worker", parentSessionId: fresh });
+  });
+
+  // The other half of the incident: a child spawned with no employee (or, before
+  // the spawn route refused it, as the operator's coordinator) has no standing.
+  it("refuses an employee-less child, saying who can act on the Todo", async () => {
+    const { item, dispatcherId } = await crashedHandoff("Delegate crashed, a plain child tries");
+    const child = registry.createSession({
+      engine: "codex", source: "web", sourceRef: "plain-child:1", connector: "web", prompt: "delegate it", parentSessionId: dispatcherId,
+    });
+
+    const attempted = await delegate(child.id, item.id, "first-worker");
+
+    expect(attempted.status).toBe(403);
+    expect(attempted.body.error).toMatch(/has no employee identity and cannot delegate Todo/);
+    expect(attempted.body.error).toMatch(/owner, their manager or the operator/);
   });
 });

@@ -76,6 +76,7 @@ const ctx = {
     engines: { default: "codex", codex: { bin: "codex", model: "gpt-5.5" } },
     sessions: {},
     mcp: { browser: { enabled: false }, gateway: { enabled: false } },
+    portal: { portalName: "COO" },
   }),
   connectors: new Map(),
   startTime: Date.now(),
@@ -149,5 +150,48 @@ describe("POST /api/sessions — a session caller is always the parent", () => {
     const cap = await spawn({ prompt: "operator spawn" }, { authorization: "Bearer test-token" });
     expect(cap.status).toBe(201);
     expect(reg.isPortalAgentSession(reg.getSession(cap.body.id as string)!)).toBe(true);
+  });
+});
+
+/**
+ * The portal's name is not an employee a session can spawn.
+ *
+ * The operator's coordinator chat has no employee of its own, so the route
+ * coerces a spawn naming it to no employee at all. From the operator's surface
+ * that is the coordinator chat itself. From a session it used to produce a
+ * child that believed it was the coordinator but, having a parent, had none of
+ * its standing: every Todo action it then tried was refused. Its standing is
+ * the operator's, so the fix is to refuse the spawn and say so, never to let
+ * a child carry it.
+ */
+describe("POST /api/sessions — a session cannot spawn the operator's coordinator", () => {
+  it.each(["COO", "coo", " COO "])("refuses a session caller naming the portal as %j, and creates nothing", async (employee) => {
+    const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: `spawn-portal-${employee.trim()}`, employee: "some-worker" });
+    const before = reg.countSessions();
+
+    const cap = await spawn({ prompt: "delegate the Todo for me", employee }, toolHeaders(caller.id));
+
+    expect(cap.status).toBe(403);
+    expect(cap.body.error).toMatch(/"COO" is the operator's coordinator, not an employee/);
+    expect(cap.body.error).toMatch(/omit employee/);
+    expect(reg.countSessions()).toBe(before);
+  });
+
+  it("still opens the coordinator chat when the operator's surface names the portal", async () => {
+    const cap = await spawn({ prompt: "operator opens a COO chat", employee: "COO" }, { authorization: "Bearer test-token" });
+
+    expect(cap.status).toBe(201);
+    const session = reg.getSession(cap.body.id as string)!;
+    expect(session.employee ?? null).toBeNull();
+    expect(reg.isPortalAgentSession(session)).toBe(true);
+  });
+
+  it("still lets a session spawn a plain child with no employee", async () => {
+    const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "spawn-plain-caller", employee: "some-worker" });
+
+    const cap = await spawn({ prompt: "a quick question" }, toolHeaders(caller.id));
+
+    expect(cap.status).toBe(201);
+    expect(reg.getSession(cap.body.id as string)!.parentSessionId).toBe(caller.id);
   });
 });

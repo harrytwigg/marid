@@ -1007,6 +1007,24 @@ function workItemCommentFailure(res: ServerResponse, err: unknown): void {
  * no employee — the spawn route already collapses that name to a plain session —
  * so there is nothing to claim and nothing is refused.
  */
+/**
+ * A session naming the portal as the employee to spawn.
+ *
+ * The portal is the operator's coordinator, not an employee: the operator's own
+ * surface spawning it opens a coordinator chat, which is why the route coerces
+ * the name away. A session's child has a parent, though, so it would be a plain
+ * session that believes it is the coordinator, with none of the standing that
+ * belongs to the operator's chat, and every Todo action it tried would fail.
+ * Refused, so the caller learns that here rather than three refusals later.
+ */
+function spawnAsPortalRefusal(caller: CallerIdentity, requested: unknown, portalName: string | undefined): string | undefined {
+  if (caller.kind !== "session" || typeof requested !== "string" || !requested.trim()) return undefined;
+  if (!portalName || coercePortalEmployee(requested, portalName) !== null) return undefined;
+  return `"${portalName.trim()}" is the operator's coordinator, not an employee, and a session cannot spawn it: its standing over Todos `
+    + "belongs to the operator's own chat, so a child under its name would have none. Spawn an employee by name, "
+    + "omit employee for a plain session (which has no standing over Todos either), or block the Todo for the operator";
+}
+
 function spawnAsRootRefusal(caller: CallerIdentity, employeeName: string | null | undefined): string | undefined {
   if (!employeeName || caller.kind !== "session") return undefined;
   const root = resolveOrgRoot();
@@ -3695,6 +3713,8 @@ export async function handleApiRequest(
         return badRequest(res, `unknown parentSessionId "${body.parentSessionId}"`);
       }
       const config = context.getConfig();
+      const spawnAsPortal = spawnAsPortalRefusal(spawnCaller, body.employee, config.portal?.portalName);
+      if (spawnAsPortal) return json(res, { error: spawnAsPortal }, 403);
       const employeeName = coercePortalEmployee(body.employee, config.portal?.portalName);
       const spawnAsRoot = spawnAsRootRefusal(spawnCaller, employeeName);
       if (spawnAsRoot) return json(res, { error: spawnAsRoot }, 403);

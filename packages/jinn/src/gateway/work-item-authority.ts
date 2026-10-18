@@ -48,7 +48,12 @@ export function authorizeWorkItemOwnerManagerOrRoot(
   if (remoteMcpHasOperatorStanding(caller)) return { ok: true };
   const employeeName = caller.session.employee;
   if (!employeeName) {
-    return { ok: false, status: 403, error: `session ${caller.callerId} has no employee identity and cannot ${action} Todo ${item.id}` };
+    return {
+      ok: false,
+      status: 403,
+      error: `session ${caller.callerId} has no employee identity and cannot ${action} Todo ${item.id}: `
+        + `a session spawned without an employee has no standing over Todos, so the Todo's owner, their manager or the operator has to ${action} it`,
+    };
   }
   const roster = orgRegistry();
   const employee = roster.get(employeeName);
@@ -56,6 +61,7 @@ export function authorizeWorkItemOwnerManagerOrRoot(
     return { ok: false, status: 403, error: `employee "${employeeName}" is not in the org roster and cannot ${action} Todo ${item.id}` };
   }
   if (hasStandingOverWorkItem(roster, employee, employeeName, item)) return { ok: true };
+  if (isDispatcherStartedFor(caller.session, item)) return spentDispatcherRefusal(caller.callerId, item, action);
   return {
     ok: false,
     status: 403,
@@ -91,10 +97,41 @@ function todoDispatcherSessionKeyPrefix(workItemId: string): string {
  * attempt beside the first.
  */
 function isDispatcherRoutingTodo(session: Session, item: WorkItem): boolean {
+  return isDispatcherStartedFor(session, item) && getWorkItemClaim(item.id)?.sessionId === session.id;
+}
+
+/** A Dispatcher the gateway started on THIS Todo, whether or not it has handed it on since. */
+function isDispatcherStartedFor(session: Session, item: WorkItem): boolean {
   return session.employee === TODO_DISPATCHER_NAME
     && session.workItemId === item.id
-    && !!session.sessionKey?.startsWith(todoDispatcherSessionKeyPrefix(item.id))
-    && getWorkItemClaim(item.id)?.sessionId === session.id;
+    && !!session.sessionKey?.startsWith(todoDispatcherSessionKeyPrefix(item.id));
+}
+
+/**
+ * The refusal for a Dispatcher whose one hand-off is spent, with the way on.
+ *
+ * Its delegate is its child, so a delegate that stopped before finishing
+ * reports to it, and the Dispatcher is woken holding a Todo it may no longer
+ * route. Starting afresh on top of whatever that delegate did is the
+ * operator's call. Resuming the delegate's own session is not: that keeps the
+ * work, and the delegate is the Dispatcher's child to message. A bare "not its
+ * owner" sent Dispatchers hunting for another session to do it for them,
+ * which has no standing either.
+ */
+function spentDispatcherRefusal(callerId: string, item: WorkItem, action: string): { ok: false; status: 403; error: string } {
+  const delegate = listSessionsByWorkItem(item.id)
+    .filter((session) => isExecutionAttempt(session) && session.parentSessionId === callerId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
+  const resume = delegate
+    ? ` Its delegate is session ${delegate.id} (${delegate.employee ?? "no employee"}, ${delegate.status}): `
+      + `to carry on after it stopped, resume it with send_to_session { sessionId: "${delegate.id}" }, which keeps the work it did.`
+    : "";
+  return {
+    ok: false,
+    status: 403,
+    error: `this Dispatcher's hand-off is spent: it already handed Todo ${item.id} on, and cannot ${action} it again.${resume} `
+      + `A fresh start is the operator's call: they press Dispatch on Todo ${item.id}.`,
+  };
 }
 
 /**
