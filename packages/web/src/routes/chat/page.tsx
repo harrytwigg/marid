@@ -169,7 +169,7 @@ function ChatPage() {
   // A pane still showing a removed session can take focus after the removal (the composer's
   // focus after a switch lands a frame late), and focus selects the pane's chat: that reopened
   // the closed tab and pulled the route back. So the ids removed here are remembered until an
-  // explicit selection opens one again, and a pane's focus does not select them.
+  // explicit selection opens one again, and a pane's own focus does not select them.
   const removedSessionIdsRef = useRef(new Set<string>())
   const handleSessionsRemoved = useCallback((ids: string[]) => {
     for (const id of ids) { removedSessionIdsRef.current.add(id); removeWorkingSetPane(id); closeSessionTab(id) }
@@ -295,13 +295,18 @@ function ChatPage() {
   )
 
   const handleFocusPane = useCallback((sessionId: string) => {
-    if (removedSessionIdsRef.current.has(sessionId)) return
     workingSet.focus(sessionId)
     if (sessionId !== selectedIdRef.current) {
       preservePaneFocusRef.current = sessionId
       handleSelect(sessionId, { navigateMobile: false })
     }
   }, [handleSelect, workingSet])
+
+  // Focus that reaches a pane itself, as opposed to a deliberate move to a chat (the next/previous
+  // shortcut, closing a pane): a pane for a chat removed in bulk is not a selection.
+  const handlePaneFocus = useCallback((sessionId: string) => {
+    if (!removedSessionIdsRef.current.has(sessionId)) handleFocusPane(sessionId)
+  }, [handleFocusPane])
 
   const handleMobileWorkingSetSelect = useCallback((sessionId: string) => {
     handleSelect(sessionId, { navigateMobile: false })
@@ -946,7 +951,7 @@ function ChatPage() {
                   delegatedActivity: focusedDelegatedActivity,
                 }}
                 viewport={viewport}
-                onFocus={handleFocusPane}
+                onFocus={handlePaneFocus}
                 onRemove={handleRemovePane}
                 metaById={paneState.metaById} sessionTitleFor={(id) => sessionsQuery.data?.find((session) => String(session.id ?? '') === id)?.title}
                 runtime={{ portalName, subscribe, engineRegistry, connectionSeq, skillsVersion, events }}
