@@ -288,7 +288,9 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
   if (!visible && !launching) return null
 
   // Loading bridge: shown after "Get Started" while the /chat route mounts.
-  // The same backdrop as the wizard keeps the screen branded and non-blank.
+  // It is a solid sheet with the mark, not the wizard's scrim, so the change on
+  // "Get Started" from scrim to solid is deliberate: the screen stays branded
+  // and non-blank, and the chat does not show through while the route mounts.
   if (launching) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-[var(--space-4)] bg-[var(--bg)]">

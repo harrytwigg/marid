@@ -13,9 +13,11 @@
  * near-white sheet; dark lets the aqua glow against navy.
  *
  * These are <color> registered tokens (globals.css), which script reads back
- * for the canvas. Firefox resolves a registered token against the PARENT's
- * color-scheme, so nothing here re-declares one inside a nested opposite-theme
- * subtree.
+ * for the canvas. They are declared on :root and on every [data-theme], like
+ * the upstream tokens, so a nested [data-theme] subtree gets its own pair.
+ * Firefox resolves a registered token against the PARENT's color-scheme, so a
+ * read inside a nested opposite-theme subtree would see the page's side; the
+ * orb is never drawn in one (the only such subtree is the dev mockup route).
  */
 :root, [data-theme] {
   --orb-core: light-dark(rgba(232,252,255,0.94), rgba(150,240,236,0.78));
