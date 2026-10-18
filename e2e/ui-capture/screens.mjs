@@ -64,6 +64,18 @@ export const SCREENS = [
     },
   },
   {
+    // The context meter's popover, opened by a click on the ring in the composer.
+    name: 'context-popover',
+    title: 'Context meter popover',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: 'Add a step for the changelog',
+    prepare: async (page) => {
+      await page.locator('[data-testid="context-meter"]').first().click()
+      await page.getByRole('dialog', { name: 'Context usage' }).waitFor({ timeout: 5_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
     // The same label, revealed by focus after a real Tab, which is what a keyboard does.
     name: 'rail-tooltip-keyboard',
     viewports: ['desktop'],
