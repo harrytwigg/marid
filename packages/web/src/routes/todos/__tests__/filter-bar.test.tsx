@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render as rtlRender, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { FilterBar } from "../filter-bar"
-
+import "@/test/preload-menus"
 const listLabels = vi.fn()
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>()
