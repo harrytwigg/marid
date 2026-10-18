@@ -74,11 +74,23 @@ describe("classifyEngineFailureText", () => {
     'unreadable error {"requestID":"req_01J429ABC"}',
     "session ses_ab429cd failed",
     "failed at 1792322429001",
+    "TypeError at engine.ts:429:5",
+    "request req-429-abc failed",
+    "12:34:56.429 engine error",
+    "elapsed 0.429s before the crash",
   ])("does not read the digits 429 inside an id or number as a rate limit: %j", (text) => {
     expect([...classifyEngineFailureText(text).classes]).toEqual(["terminal"]);
   });
 
-  it.each(["(HTTP 429)", "HTTP 429", "status 429", "status: 429 Too Many Requests"])(
+  it.each([
+    "(HTTP 429)",
+    "HTTP 429",
+    "status 429",
+    "status: 429 Too Many Requests",
+    "HTTP/1.1 429",
+    '{"status":429}',
+    "the provider answered with 429.",
+  ])(
     "reads a standalone 429 status as a rate limit: %j",
     (text) => {
       expect(classifyEngineFailureText(text).classes.has("rate-limit")).toBe(true);
