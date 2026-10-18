@@ -31,7 +31,7 @@ async function leaks(page) {
   // innerText leaves out form values, so read inputs and textareas too.
   const text = await page.evaluate(() => [
     document.body.innerText,
-    ...[...document.querySelectorAll('input, textarea')].map((field) => field.value),
+    ...[...document.querySelectorAll('input, textarea')].map((field) => /** @type {HTMLInputElement} */ (field).value),
   ].join('\n'))
   const found = []
   if (token && text.includes(token)) found.push('the sandbox token')
