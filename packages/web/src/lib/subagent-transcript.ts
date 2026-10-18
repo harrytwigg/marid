@@ -32,6 +32,16 @@ export interface SubagentRef {
 
 /** How recent the file's last write must be for the sub-agent to read as working. */
 export const SUBAGENT_LIVE_MS = 20_000
+/** A sub-agent whose last line is its own words, and that has written nothing since, has given its answer. */
+const SUBAGENT_ANSWERED_MS = 4_000
+
+/** Whether the sub-agent is still working: it wrote recently, and has not just given its final answer. */
+export function subagentIsLive(data: SubagentTranscriptResponse | undefined, now: number): boolean {
+  if (!data?.available) return false
+  const quiet = now - Date.parse(data.updatedAt)
+  if (quiet >= SUBAGENT_LIVE_MS) return false
+  return !(data.entries.at(-1)?.kind === 'text' && quiet >= SUBAGENT_ANSWERED_MS)
+}
 
 export function subagentUnavailableText(reason: SubagentTranscriptUnavailable): string {
   if (reason === 'no-conversation') return 'This session has no Claude conversation to read a sub-agent from.'

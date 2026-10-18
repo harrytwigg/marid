@@ -4,6 +4,7 @@ import { createEvent, fireEvent, render, screen, waitFor, within } from '@testin
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { BackgroundActivityStatus } from '../background-activity-status'
+import { SubagentOpenContext, type OpenSubagent } from '../file-open-context'
 import { useSubagentView } from '../use-subagent-view'
 import type { BackgroundTaskWait } from '@/lib/session-waits'
 import { getSubagentTranscript, type SubagentEntry, type SubagentTranscriptResponse } from '@/lib/subagent-transcript'
@@ -60,10 +61,14 @@ function Pane({ active, session = PARENT, onPaneEvent }: { active: boolean; sess
   )
 }
 
-function mount(active = true, onPaneEvent?: (type: string) => void) {
+function mount(active = true, onPaneEvent?: (type: string) => void, openTab: OpenSubagent | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const tree = (on: boolean, session = PARENT) => (
-    <QueryClientProvider client={client}><MemoryRouter><Pane active={on} session={session} onPaneEvent={onPaneEvent} /></MemoryRouter></QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <SubagentOpenContext.Provider value={openTab}><Pane active={on} session={session} onPaneEvent={onPaneEvent} /></SubagentOpenContext.Provider>
+      </MemoryRouter>
+    </QueryClientProvider>
   )
   const view = render(tree(active))
   return { rerender: (on: boolean, session = PARENT) => view.rerender(tree(on, session)) }
@@ -101,13 +106,14 @@ describe('a background sub-agent row in the waiting-on popup', () => {
     await openSubagentRow()
 
     const dialog = await screen.findByTestId('subagent-transcript-dialog')
-    await waitFor(() => expect(within(dialog).getAllByTestId('subagent-entry')).toHaveLength(3))
+    await waitFor(() => expect(within(dialog).getByText(/Read notes.txt and count its lines/)).toBeTruthy())
     expect(getTranscript().mock.calls[0].slice(0, 2)).toEqual([PARENT, subagent.id])
-    expect(within(dialog).getByText('Count the lines')).toBeTruthy()
-    expect(within(dialog).getByText(/Read notes.txt and count its lines/)).toBeTruthy()
-    expect(within(dialog).getByText('wc -l notes.txt', { selector: 'span' })).toBeTruthy()
-    expect(within(dialog).getByTestId('subagent-tool-result').textContent).toBe('1 notes.txt')
+    expect(within(dialog).getByTestId('subagent-title').textContent).toBe('Count the lines')
+    // The chat's own transcript view draws it: the prompt as the user's message, the call as a tool row, the answer as the reply.
+    // The finished turn folds its calls into a summary, as a chat's does.
+    expect(within(dialog).getByText('1 tool')).toBeTruthy()
     expect(within(dialog).getByText('one')).toBeTruthy()
+    expect(within(dialog).getByTestId('subagent-readonly')).toBeTruthy()
     // The popup went; only the view is a dialog now.
     expect(screen.getAllByRole('dialog')).toHaveLength(1)
   })
@@ -119,10 +125,10 @@ describe('a background sub-agent row in the waiting-on popup', () => {
     await openSubagentRow()
 
     const dialog = await screen.findByTestId('subagent-transcript-dialog')
-    await waitFor(() => expect(within(dialog).getAllByTestId('subagent-entry')).toHaveLength(2))
-    expect(within(dialog).getByText('running…')).toBeTruthy()
-    await waitFor(() => expect(within(dialog).getAllByTestId('subagent-entry')).toHaveLength(3), { timeout: 5000 })
-    expect(within(dialog).queryByText('running…')).toBeNull()
+    await waitFor(() => expect(within(dialog).getByText(/Read notes.txt and count its lines/)).toBeTruthy())
+    expect(within(dialog).getByText(/running…/)).toBeTruthy()
+    expect(within(dialog).queryByText('one')).toBeNull()
+    await waitFor(() => expect(within(dialog).getByText('one')).toBeTruthy(), { timeout: 5000 })
     expect(within(dialog).getByTestId('subagent-activity').getAttribute('data-live')).toBe('true')
   })
 
@@ -217,5 +223,28 @@ describe('a background sub-agent row in the waiting-on popup', () => {
 
     await waitFor(() => expect(screen.queryByTestId('subagent-transcript-dialog')).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('background-activity-trigger')))
+  })
+
+  it('opens as a tab beside the chat where the layout has one, with no sheet over it', async () => {
+    const openTab = vi.fn<OpenSubagent>(() => true)
+    mount(true, undefined, openTab)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /working/i }))
+    await user.click(await within(await screen.findByRole('dialog')).findByRole('button', { name: /Count the lines/ }))
+
+    expect(openTab).toHaveBeenCalledWith({ sessionId: PARENT, agentId: subagent.id, description: 'Count the lines', agentType: 'general-purpose' })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByTestId('subagent-transcript-dialog')).toBeNull()
+    expect(getTranscript()).not.toHaveBeenCalled()
+  })
+
+  it('opens in a sheet over the chat when the layout cannot hold the tab', async () => {
+    getTranscript().mockResolvedValue(transcript([prompt, said]))
+    const openTab = vi.fn<OpenSubagent>(() => false)
+    mount(true, undefined, openTab)
+    await openSubagentRow()
+
+    expect(openTab).toHaveBeenCalledTimes(1)
+    expect(await screen.findByTestId('subagent-transcript-dialog')).toBeTruthy()
   })
 })

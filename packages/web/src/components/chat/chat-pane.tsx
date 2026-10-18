@@ -24,6 +24,7 @@ import { FileDropOverlay } from '@/components/ui/file-drop-overlay'
 import { ChatPaneTitleBar, paneTitleBarState, paneViewControls } from '@/components/chat/chat-pane-title-bar'
 import { usePaneClosable, usePaneShownDoc, usePaneTabId, usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
 import { DocView } from '@/components/chat/doc-view'
+import { docViewTestId } from '@/components/chat/doc-view-test-id'
 import { ChatCopyToast } from '@/components/chat/chat-copy-toast'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
@@ -601,7 +602,7 @@ export function ChatPane({
       </>)}
       </div>
       {shownFile ? (
-        <div data-testid={shownFile.kind === 'file' ? 'pane-file-view' : 'pane-todo-view'} className="absolute inset-0 z-[6] flex flex-col bg-[var(--bg)]">
+        <div data-testid={docViewTestId(shownFile)} className="absolute inset-0 z-[6] flex flex-col bg-[var(--bg)]">
           <DocView doc={shownFile} />
         </div>
       ) : null}
