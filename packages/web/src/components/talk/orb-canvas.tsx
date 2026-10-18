@@ -20,9 +20,10 @@ import { usePrefersReducedMotion } from "./use-reduced-motion"
  * media query, so it is watched too.
  */
 function usePaletteKey(): string {
+  const [media] = useState(() => (typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-transparency: reduce)") : null))
   const read = () => {
     const root = document.documentElement
-    const reduced = root.dataset.transparency === "reduced" || window.matchMedia("(prefers-reduced-transparency: reduce)").matches
+    const reduced = root.dataset.transparency === "reduced" || media?.matches === true
     return `${root.dataset.theme ?? ""}${reduced ? "|reduced" : ""}`
   }
   const [key, setKey] = useState(read)
@@ -30,12 +31,11 @@ function usePaletteKey(): string {
     const update = () => setKey(read())
     const observer = new MutationObserver(update)
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-transparency"] })
-    const media = window.matchMedia("(prefers-reduced-transparency: reduce)")
-    media.addEventListener("change", update)
+    media?.addEventListener("change", update)
     update()
     return () => {
       observer.disconnect()
-      media.removeEventListener("change", update)
+      media?.removeEventListener("change", update)
     }
   }, [])
   return key
