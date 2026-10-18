@@ -881,6 +881,7 @@ export default function SettingsPage() {
                 <FieldRow label="Share Session in Channel">
                   <ToggleSwitch
                     checked={config.connectors?.slack?.shareSessionInChannel ?? false}
+                    ariaLabel="Share session in channel"
                     onChange={(v) =>
                       updateConfig(["connectors", "slack", "shareSessionInChannel"], v)
                     }
@@ -903,6 +904,7 @@ export default function SettingsPage() {
                 <FieldRow label="Ignore Old Messages on Boot">
                   <ToggleSwitch
                     checked={config.connectors?.slack?.ignoreOldMessagesOnBoot ?? true}
+                    ariaLabel="Ignore old messages on boot (Slack)"
                     onChange={(v) =>
                       updateConfig(["connectors", "slack", "ignoreOldMessagesOnBoot"], v)
                     }
@@ -997,6 +999,7 @@ export default function SettingsPage() {
                 <FieldRow label="Ignore Old Messages on Boot">
                   <ToggleSwitch
                     checked={config.connectors?.telegram?.ignoreOldMessagesOnBoot ?? true}
+                    ariaLabel="Ignore old messages on boot (Telegram)"
                     onChange={(v) =>
                       updateConfig(["connectors", "telegram", "ignoreOldMessagesOnBoot"], v)
                     }
@@ -1346,12 +1349,14 @@ export default function SettingsPage() {
                 <FieldRow label="Stdout">
                   <ToggleSwitch
                     checked={config.logging?.stdout ?? true}
+                    ariaLabel="Stdout"
                     onChange={(v) => updateConfig(["logging", "stdout"], v)}
                   />
                 </FieldRow>
                 <FieldRow label="File Logging">
                   <ToggleSwitch
                     checked={config.logging?.file ?? false}
+                    ariaLabel="File logging"
                     onChange={(v) => updateConfig(["logging", "file"], v)}
                   />
                 </FieldRow>

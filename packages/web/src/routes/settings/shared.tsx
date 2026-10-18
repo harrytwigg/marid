@@ -125,7 +125,10 @@ export function ToggleSwitch({
 }: {
   checked: boolean
   onChange: (v: boolean) => void
-  ariaLabel?: string
+  /** Required: a `role="switch"` control carries no text of its own, so an
+   *  omitted name leaves a screen reader announcing it as bare "switch".
+   *  Optional let five settings-page call sites ship unnamed. */
+  ariaLabel: string
   /** A switch mid-write: not clickable and not keyboard-toggleable either. */
   disabled?: boolean
 }) {
