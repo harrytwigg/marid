@@ -51,9 +51,11 @@ reach for, what makes a test worth keeping, and what a plan has to show.
   expect that leg to have an opinion.
   Locally `pnpm test` runs at the lowest scheduling priority available (`nice 19` and, on Linux,
   the `ionice` idle class), so it yields to whatever else you are doing; set `JINN_TEST_NICE=0`
-  for a normal-priority run. Each vitest suite is capped at four forks locally — full parallelism
-  times a different set of jsdom and gateway tests out on each run of a shared machine, so the cap
-  is deliberate. CI is unaffected — turbo is serial and vitest is capped at two workers there.
+  for a normal-priority run. Each vitest suite leases up to eight workers from a core pool shared
+  by every run on the machine (cores minus 12, never fewer than 8; `JINN_TEST_GLOBAL_CORES`,
+  `JINN_TEST_RUN_CORES` and `JINN_TEST_RESERVED_CORES` tune it, `JINN_TEST_GLOBAL_CORES=0`
+  turns it off) and waits when the pool is empty. CI is unaffected — turbo is serial and vitest
+  is capped at two workers there.
 - Branch protection on `main` requires exactly one status check: `all-checks-pass`. It needs
   every other job in `.github/workflows/ci.yml` and passes only when all of them report
   `success` — a skipped or cancelled job counts as a failure, because it proved nothing.

@@ -11,27 +11,18 @@ import { defineConfig } from 'vitest/config'
 // So we scale vitest down in CI: fewer concurrent forks (less peak CPU/mem
 // contention) and generous timeouts (slow-but-correct boots don't get killed).
 //
-// Locally the forks are capped too, at four. Full parallelism was measured on this
-// repo's shared build machine and did not survive it: with ~60 forks on 64 cores
-// alongside other worktrees' suites (load average 52-132), jsdom files blew their
-// 20s budget in four of five runs and one run lost 122 files to 30s hook timeouts
-// on `await import("../api.js")`. The upstream `--maxWorkers=2` cap was there for
-// stability and it was right about the shape of the problem; four rather than two
-// is the throughput the machine was asked for. scripts/low-priority.mjs is what
-// makes the cap affordable at all — the workers yield to whatever else is running
-// instead of having to be throttled to nothing.
+// Locally the worker count is not set here. scripts/vitest-flaky-retry.mjs leases
+// cores from a machine-wide budget shared by every session (scripts/test-core-budget.mjs)
+// and passes the grant as --maxWorkers, so a run takes up to eight cores when the
+// pool has them and fewer when other sessions hold them. Running vitest by hand
+// keeps vitest's own default.
 //
 // A niced run also widens the timeouts. nice 19 in the idle I/O class means 5s is
 // no longer generous on a core something else is using, and a false red at nice 19
-// is worse than a slow green. That wrapper sets JINN_TEST_LOW_PRIORITY, so the
-// widening follows the priority rather than the environment.
+// is worse than a slow green. scripts/low-priority.mjs sets JINN_TEST_LOW_PRIORITY,
+// so the widening follows the priority rather than the environment.
 const isCI = !!process.env.CI
 const isLowPriority = process.env.JINN_TEST_LOW_PRIORITY === '1'
-
-// Local forks. Kept in step with `packages/web/vitest.config.ts`'s LOCAL_MAX_WORKERS:
-// the two suites can run at the same time under the machine-wide slot gate, so a
-// run's peak is roughly two of these plus the light packages.
-const LOCAL_MAX_WORKERS = 4
 
 // Windows needs the same headroom, for a different reason: it has no fork(), so
 // every pool worker is a full process spawn that re-resolves the module graph
@@ -55,11 +46,11 @@ export default defineConfig({
     // Forks (the vitest v4 default) give each test file a clean process, which
     // matters for the gateway/PTY tests that mutate process-global state.
     pool: 'forks',
-    // Cap concurrency so heavy integration tests don't contend for the runner's
-    // handful of cores and its limited memory — on CI, and locally at four. In
-    // vitest v4 the pool concurrency is set via top-level maxWorkers/minWorkers
-    // (the old poolOptions.forks.maxForks was removed).
-    ...(isCI ? { minWorkers: 1, maxWorkers: 2 } : { maxWorkers: LOCAL_MAX_WORKERS }),
+    // Cap concurrency on CI so heavy integration tests don't contend for the
+    // runner's handful of cores and its limited memory. In vitest v4 the pool
+    // concurrency is set via top-level maxWorkers/minWorkers (the old
+    // poolOptions.forks.maxForks was removed). Locally the core budget decides.
+    ...(isCI ? { minWorkers: 1, maxWorkers: 2 } : {}),
     // Give slow, resource-starved CI runners — and a niced run sharing this
     // machine with an editor — enough headroom to boot real servers/workers/PTYs
     // without tripping spurious timeouts.

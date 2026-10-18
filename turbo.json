@@ -36,7 +36,9 @@
       // strict env mode would strip both, and a suite that cannot see the second
       // one keeps the 5s timeouts it was told to widen.
       "passThroughEnv": [
-        "JINN_TEST_MAX_CONCURRENT",
+        "JINN_TEST_GLOBAL_CORES",
+        "JINN_TEST_RUN_CORES",
+        "JINN_TEST_RESERVED_CORES",
         "JINN_TEST_NICE",
         "JINN_TEST_LOW_PRIORITY",
         "CLAUDE_CONFIG_DIR"

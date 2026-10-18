@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnLowPriority } from "./low-priority.mjs";
 import { report } from "./vitest-flaky-report.mjs";
-import { acquireTestSlot } from "./test-slot-gate.mjs";
+import { acquireTestCores } from "./test-core-budget.mjs";
 
 /* Re-exported so the reporting split stays an internal detail of this script. */
 export { formatFlakySummary } from "./vitest-flaky-report.mjs";
@@ -128,6 +128,19 @@ export function diffRuns(firstReport, retryReport, packageDir) {
   return { flaky, stillFailing };
 }
 
+/**
+ * `passthrough` plus the leased worker count. An explicit `--maxWorkers` from the
+ * caller wins — someone who asked for a number meant it — and a null lease (CI,
+ * or the budget disabled) leaves the arguments alone.
+ */
+export function withLeasedWorkers(passthrough, cores) {
+  if (cores === null) return passthrough;
+  if (passthrough.some((arg) => arg === "--maxWorkers" || arg.startsWith("--maxWorkers="))) {
+    return passthrough;
+  }
+  return [...passthrough, `--maxWorkers=${cores}`];
+}
+
 function resolveVitestBin(packageDir) {
   const require = createRequire(path.join(packageDir, "package.json"));
   const manifestPath = require.resolve("vitest/package.json");
@@ -201,24 +214,25 @@ function main() {
   const packageDir = process.cwd();
   const vitestBin = resolveVitestBin(packageDir);
 
-  // Machine-wide cap on concurrent suites (build worktrees, agents, humans):
-  // held across the retry too, so one run counts as one slot. See
-  // test-slot-gate.mjs; CI containers are one-suite-per-runner so it never
-  // blocks there.
-  const releaseSlot = acquireTestSlot({ log: (message) => console.log(`${LABEL}: ${message}`) });
+  // Machine-wide core budget (build worktrees, agents, humans): this run leases
+  // the cores it will use before vitest starts and holds them across the retry.
+  // The grant becomes vitest's worker count. See test-core-budget.mjs; in CI the
+  // budget is empty, nothing is leased, and vitest's own config decides.
+  const lease = acquireTestCores({ log: (message) => console.log(`${LABEL}: ${message}`) });
+  const args = withLeasedWorkers(passthrough, lease.cores);
   try {
     if (!process.env.CI) {
-      return runVitest(vitestBin, buildVitestArgs({ passthrough }), packageDir);
+      return runVitest(vitestBin, buildVitestArgs({ passthrough: args }), packageDir);
     }
 
     const reportDir = fs.mkdtempSync(path.join(os.tmpdir(), "vitest-flaky-"));
     try {
-      return runWithRetry(vitestBin, passthrough, packageDir, reportDir);
+      return runWithRetry(vitestBin, args, packageDir, reportDir);
     } finally {
       fs.rmSync(reportDir, { recursive: true, force: true });
     }
   } finally {
-    releaseSlot();
+    lease.release();
   }
 }
 
