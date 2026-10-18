@@ -1,4 +1,5 @@
 import { RotateCcw } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 
 /**
  * config.yaml moved under an open page.
@@ -24,15 +25,10 @@ export function ConfigConflictNotice({ message, remedy, onReload }: {
     >
       <span>{message}</span>
       {remedy && <span className="text-[var(--text-secondary)]">{remedy}</span>}
-      <button
-        type="button"
-        aria-label="Reload config"
-        onClick={onReload}
-        className="inline-flex h-[34px] cursor-pointer items-center gap-1.5 rounded-full border-none bg-[var(--fill-tertiary)] px-4 text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-      >
+      <Button variant="secondary" size="sm" aria-label="Reload config" onClick={onReload}>
         <RotateCcw size={15} aria-hidden />
         Reload
-      </button>
+      </Button>
     </div>
   )
 }

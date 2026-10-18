@@ -10,6 +10,7 @@ import crypto from 'node:crypto'
 import zlib from 'node:zlib'
 import { createRequire } from 'node:module'
 import { writeOrg } from './seed-org.mjs'
+import { writePages } from './seed-pages.mjs'
 
 const [mode, sandboxHome, third, fourth] = process.argv.slice(2)
 if (!mode || !sandboxHome || !third) {
@@ -66,6 +67,7 @@ function openDb(repo) {
 
 function seedDb(repo) {
   if (process.env.JINN_CAPTURE_SEED_ORG) writeOrg(sandboxHome)
+  if (process.env.JINN_CAPTURE_SEED_PAGES) writePages(sandboxHome)
   const db = openDb(repo)
   const session = db.prepare("SELECT id FROM sessions WHERE source_ref = 'sandbox:1'").get()
   if (!session) throw new Error('the sandbox --seed session sandbox:1 is missing')

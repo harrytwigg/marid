@@ -1,14 +1,13 @@
 import type React from "react"
 import { ChevronDown, ChevronUp, GripVertical, X } from "@/components/ui/icon"
-import { CONTROL_CLASS } from "../shared"
+import { Button } from "@/components/ui/button"
+import { SettingsSelect } from "../shared"
 import { moveInChain, removeFromChain } from "./chain-model"
 import { engineDisplayName } from "@/lib/engine-names"
 import { rowShift, useChainDrag } from "./use-chain-drag"
 
-const ROW_BUTTON_CLASS =
-  "grid size-[34px] shrink-0 place-items-center rounded-[8px] border-none bg-transparent " +
-  "text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] " +
-  "hover:text-[var(--text-primary)] disabled:pointer-events-none disabled:opacity-30"
+/** A row's icon button: ghost, at the 34px the rows are laid out for. */
+export const ROW_BUTTON_CLASS = "size-[34px] min-h-0 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
 
 function RowButton({ label, disabled, onClick, children }: {
   label: string
@@ -17,9 +16,9 @@ function RowButton({ label, disabled, onClick, children }: {
   children: React.ReactNode
 }) {
   return (
-    <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className={ROW_BUTTON_CLASS}>
+    <Button variant="ghost" size="icon-sm" aria-label={label} disabled={disabled} onClick={onClick} className={ROW_BUTTON_CLASS}>
       {children}
-    </button>
+    </Button>
   )
 }
 
@@ -72,17 +71,14 @@ function AddEngineControl({ engine, options, onAdd }: {
   onAdd: (name: string) => void
 }) {
   return (
-    <select
-      value=""
-      aria-label={`Add an engine to the ${engineDisplayName(engine)} chain`}
-      onChange={(event) => { if (event.target.value) onAdd(event.target.value) }}
-      className={`${CONTROL_CLASS} mt-[var(--space-2)] cursor-pointer text-[var(--text-tertiary)] sm:w-[220px]`}
-    >
-      <option value="">Add an engine</option>
-      {options.map((name) => (
-        <option key={name} value={name}>{engineDisplayName(name)}</option>
-      ))}
-    </select>
+    <div className="mt-[var(--space-2)] sm:w-[220px]">
+      <SettingsSelect
+        value=""
+        ariaLabel={`Add an engine to the ${engineDisplayName(engine)} chain`}
+        onChange={(name) => { if (name) onAdd(name) }}
+        options={[{ value: "", label: "Add an engine" }, ...options.map((name) => ({ value: name, label: engineDisplayName(name) }))]}
+      />
+    </div>
   )
 }
 

@@ -63,7 +63,7 @@ export function UsageCard({ samples, starts, now, error, switcher }: {
   const weekly = weeklyVerdicts(all, now)
   const label = switcher?.accounts.find((option) => option.account === switcher.account)?.label
   return (
-    <section data-testid="usage" className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-5)] shadow-[var(--shadow-card)]">
+    <section data-testid="usage" className="glass-card rounded-[var(--radius-xl)] p-[var(--space-5)]">
       <div className="flex flex-wrap items-baseline justify-between gap-x-[var(--space-3)] gap-y-[var(--space-2)]">
         <h2 className="text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
           Where the Claude allowance is heading{label ? ` — ${label}` : ""}

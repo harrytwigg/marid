@@ -1,4 +1,5 @@
 import { ChevronDownIcon } from "@/components/ui/icon"
+import { Input } from "@/components/ui/input"
 import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
 
 // ---------------------------------------------------------------------------
@@ -19,25 +20,16 @@ export function Section({
       >
         {title}
       </div>
-      {/* Grouped-inset card (shared visual language): --bg-secondary carrying
-          the card shadow — no hairline ring at rest. */}
-      <div
-        className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-4)] shadow-[var(--shadow-card)]"
-      >
+      {/* Glass card on the reading sheet (glass-identity.css): tint, lit edge, no blur. */}
+      <div className="glass-card rounded-[var(--radius-xl)] p-[var(--space-4)]">
         {children}
       </div>
     </section>
   )
 }
 
-// One control recipe for every text input and select on the page: soft
-// --fill-tertiary well, no border at rest, accent focus ring (mirrors
-// .apple-input, sized for dense form rows).
-export const CONTROL_CLASS =
-  "min-h-[40px] md:min-h-0 w-full rounded-[10px] border-none bg-[var(--fill-tertiary)] px-[12px] py-[7px] " +
-  "text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none " +
-  "placeholder:text-[var(--text-tertiary)] transition-[box-shadow] duration-150 " +
-  "focus:shadow-[0_0_0_3px_var(--accent-fill)]"
+/** The field's phone floor: a thumb needs 40px, and from md up the field's own 34px does. */
+export const FIELD_CLASS = "min-h-[40px] md:min-h-0"
 
 export function FieldRow({
   label,
@@ -78,7 +70,7 @@ export function SettingsInput({
   ariaLabel?: string
 }) {
   return (
-    <input
+    <Input
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -86,7 +78,7 @@ export function SettingsInput({
       disabled={disabled}
       min={min}
       aria-label={ariaLabel}
-      className={`${CONTROL_CLASS} disabled:cursor-not-allowed disabled:opacity-50`}
+      className={FIELD_CLASS}
     />
   )
 }
@@ -96,17 +88,20 @@ export function SettingsSelect({
   onChange,
   options,
   ariaLabel,
+  onBlur,
 }: {
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string; disabled?: boolean }[]
   ariaLabel?: string
+  onBlur?: () => void
 }) {
   return (
     <span className="relative block w-full">
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         aria-label={ariaLabel}
         className="select__trigger min-h-[40px] w-full cursor-pointer appearance-none pe-8 text-[length:var(--text-footnote)] md:min-h-0"
       >

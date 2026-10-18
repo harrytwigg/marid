@@ -1,7 +1,9 @@
 import { useState } from "react"
 import { Plus, X } from "@/components/ui/icon"
-import { cn } from "@/lib/utils"
-import { CONTROL_CLASS } from "../shared"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { SettingsSelect } from "../shared"
+import { ROW_BUTTON_CLASS } from "./chain-editor"
 import { engineDisplayName } from "@/lib/engine-names"
 import {
   addMapPair,
@@ -16,11 +18,6 @@ import {
   type ServedModels,
 } from "./model-map-model"
 
-const ROW_BUTTON_CLASS =
-  "grid size-[34px] shrink-0 place-items-center rounded-[8px] border-none bg-transparent " +
-  "text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)] " +
-  "hover:text-[var(--text-primary)]"
-
 const LABEL_CLASS = "text-[length:var(--text-caption1)] text-[var(--text-tertiary)]"
 
 /** A target picker that can always show what is already configured. An entry
@@ -34,15 +31,14 @@ function TargetSelect({ label, value, options, onChange }: {
 }) {
   const offered = value && !options.includes(value) ? [value, ...options] : options
   return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className={cn(CONTROL_CLASS, "h-[34px] min-w-0 flex-1 cursor-pointer")}
-    >
-      {offered.length === 0 && <option value="">No models to map onto</option>}
-      {offered.map((id) => <option key={id} value={id}>{id}</option>)}
-    </select>
+    <div className="min-w-0 flex-1">
+      <SettingsSelect
+        ariaLabel={label}
+        value={value}
+        onChange={onChange}
+        options={offered.length === 0 ? [{ value: "", label: "No models to map onto" }] : offered.map((id) => ({ value: id, label: id }))}
+      />
+    </div>
   )
 }
 
@@ -70,14 +66,15 @@ function MapRow({ engine, from, to, targets, problem, onRetarget, onRemove }: {
           options={targets}
           onChange={onRetarget}
         />
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           aria-label={`Remove the mapping for ${from} from ${engineDisplayName(engine)}`}
           onClick={onRemove}
           className={ROW_BUTTON_CLASS}
         >
           <X size={15} aria-hidden />
-        </button>
+        </Button>
       </div>
       {problem && (
         <p data-model-map-problem={from} className="px-[var(--space-2)] text-[length:var(--text-caption2)]" style={{ color: "var(--system-red)" }}>
@@ -93,20 +90,12 @@ function MapRow({ engine, from, to, targets, problem, onRetarget, onRemove }: {
 function AddActions({ ready, onCancel }: { ready: boolean; onCancel: () => void }) {
   return (
     <div className="flex items-center gap-[var(--space-2)]">
-      <button
-        type="submit"
-        disabled={!ready}
-        className={cn(CONTROL_CLASS, "h-[34px] w-auto cursor-pointer px-[var(--space-3)] disabled:cursor-not-allowed disabled:opacity-40")}
-      >
+      <Button type="submit" variant="secondary" size="sm" disabled={!ready}>
         Add mapping
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="h-[34px] cursor-pointer border-none bg-transparent px-[var(--space-1)] text-[length:var(--text-caption1)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-      >
+      </Button>
+      <Button variant="ghost" size="sm" onClick={onCancel}>
         Cancel
-      </button>
+      </Button>
     </div>
   )
 }
@@ -138,13 +127,13 @@ function AddMapping({ engine, sources, targets, onAdd, onCancel }: {
       }}
     >
       <div className="flex items-center gap-[var(--space-1)]">
-        <input
+        <Input
           aria-label={`Model to carry off ${label}`}
           list={listId}
           value={from}
           placeholder="Model id"
           onChange={(event) => setFrom(event.target.value)}
-          className={cn(CONTROL_CLASS, "h-[34px] min-w-0 flex-1")}
+          className="min-w-0 flex-1"
         />
         <datalist id={listId}>
           {sources.map((id) => <option key={id} value={id} />)}
@@ -227,14 +216,10 @@ export function ModelMapEditor({ engine, chain, pairs, served, defaultModels, on
           onCancel={() => setAdding(false)}
         />
       ) : (
-        <button
-          type="button"
-          onClick={() => setAdding(true)}
-          className={cn(CONTROL_CLASS, "mt-[var(--space-2)] flex h-[34px] w-auto cursor-pointer items-center gap-[6px] px-[var(--space-3)] text-[var(--text-secondary)]")}
-        >
+        <Button variant="secondary" size="sm" className="mt-[var(--space-2)]" onClick={() => setAdding(true)}>
           <Plus size={14} aria-hidden />
           Add a model mapping
-        </button>
+        </Button>
       )}
     </div>
   )

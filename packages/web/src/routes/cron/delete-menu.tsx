@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS } from "@/components/chat/session-row-menu"
 import { api } from "@/lib/api"
-import { DIALOG_CANCEL_CLASS } from "@/components/ui/dialog-actions"
+import { Button } from "@/components/ui/button"
 
 /* design-cron §2 — deleting a job is the one cron action with no undo, so it
  * sits behind the same `⋯` grammar the chat sidebar already uses: always
@@ -20,16 +20,9 @@ import { DIALOG_CANCEL_CLASS } from "@/components/ui/dialog-actions"
  * option one item away in the same menu's neighbourhood. */
 
 const TRIGGER_CLASS = {
-  row: "flex size-11 flex-none items-center justify-center rounded-full text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)] focus-visible:outline-none focus-visible:text-[var(--text-secondary)]",
-  header: "grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none transition-colors hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]",
+  row: "size-11 min-h-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]",
+  header: "size-[34px] min-h-0 rounded-[10px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]",
 } as const
-
-/** The destructive twin of `DIALOG_ACTION_CLASS`: the shared dialog geometry so
- *  the pair keeps one height, wearing the tinted-fill-and-saturated-text
- *  grammar the cron header's own Run-now already uses — in red, because this
- *  button ends the job rather than starting it. */
-const DELETE_ACTION_CLASS =
-  "h-[34px] rounded-full bg-[color-mix(in_srgb,var(--system-red)_16%,transparent)] px-3.5 text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--system-red)] disabled:opacity-50"
 
 /** The cron error style: red on an 8% tint of itself, as the detail page already
  *  reports a failed trigger. */
@@ -68,19 +61,12 @@ function DeleteConfirmDialog({ name, open, onCancel, onConfirm, pending, error }
           </div>
         )}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className={DIALOG_CANCEL_CLASS}>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
             Cancel
-          </button>
-          <button
-            type="button"
-            autoFocus
-            disabled={pending}
-            onClick={onConfirm}
-            data-testid="cron-delete-confirm"
-            className={DELETE_ACTION_CLASS}
-          >
+          </Button>
+          <Button variant="destructive" size="sm" autoFocus disabled={pending} onClick={onConfirm} data-testid="cron-delete-confirm">
             {pending ? "Deleting…" : "Delete"}
-          </button>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -127,14 +113,15 @@ export function CronDeleteMenu({ job, variant, onDeleted }: {
     >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon"
             aria-label={`Actions for ${job.name}`}
             data-testid={`cron-actions-${job.id}`}
             className={TRIGGER_CLASS[variant]}
           >
             <Glyph className="size-[18px]" aria-hidden />
-          </button>
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className={SESSION_MENU_CONTENT_CLASS}>
           <DropdownMenuItem

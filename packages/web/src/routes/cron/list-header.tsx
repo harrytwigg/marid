@@ -1,4 +1,5 @@
 import { RefreshCw } from "@/components/ui/icon"
+import { Button } from "@/components/ui/button"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 
 export function CronListHeader({
@@ -19,14 +20,9 @@ export function CronListHeader({
       trailing={
         <div className="flex items-center gap-2 text-[length:var(--text-caption1)] text-[var(--text-quaternary)]">
           {updatedAgo && <span>Updated {updatedAgo}</span>}
-          <button
-            type="button"
-            aria-label="Refresh cron jobs"
-            onClick={onRefresh}
-            className="grid size-[30px] place-items-center rounded-full text-[var(--text-tertiary)] transition-colors hover:bg-[var(--fill-secondary)]"
-          >
+          <Button variant="ghost" size="icon-sm" aria-label="Refresh cron jobs" onClick={onRefresh} className="size-[30px] min-h-0 text-[var(--text-tertiary)]">
             <RefreshCw size={13} className={fetching ? "animate-spin" : undefined} aria-hidden />
-          </button>
+          </Button>
         </div>
       }
     />

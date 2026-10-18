@@ -4,6 +4,7 @@
 // is the text that proves the screen has rendered its data.
 import { DIALOG_SCREENS } from './screens-dialogs.mjs'
 import { ORG_SCREENS } from './screens-org.mjs'
+import { PAGE_SCREENS } from './screens-pages.mjs'
 
 export const SCREENS = [
   {
@@ -278,6 +279,7 @@ export const SCREENS = [
   },
   ...DIALOG_SCREENS,
   ...ORG_SCREENS,
+  ...PAGE_SCREENS,
 ]
 
 export const THEMES = ['light', 'dark']
