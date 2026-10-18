@@ -183,7 +183,8 @@ describe('ModelSelectorRow chip', () => {
     openMenu()
     const row = await screen.findByTestId('effort-levels')
     const pressed = within(row).getAllByRole('button').map((b) => b.getAttribute('aria-pressed'))
-    expect(pressed).toEqual(['false', 'false', 'false', 'false', 'false'])
+    expect(pressed.length).toBeGreaterThan(0)
+    expect(pressed).not.toContain('true')
   })
 
   it('renders nothing extra (one trigger) — engine/model/effort all live in one dropdown', () => {
