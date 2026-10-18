@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react"
 import type { EngineLimitAccountSnapshot, EngineLimitEngineSnapshot, EngineLimitWindow } from "@/lib/api"
+import { engineDisplayName } from "@/lib/engine-names"
 import { accountStatus } from "./account-status"
 import { agoLabel, barColor, clampPercent, resetLabel, windowLabel } from "./format"
 import { deriveFreshness, type FreshnessKind } from "./use-engine-limits"
@@ -104,12 +105,16 @@ function CardHeader({ engine, account, title, tone, Title }: {
 }) {
   const where = account?.location
   const remoteHost = where?.kind === "remote" ? where.host : null
+  // An account's own label (".claude-friend", "harry@studio") is shown as written;
+  // an engine's name goes through the shared display-name helper ("Muse Code",
+  // "opencode") rather than a CSS `capitalize`, which mangles both.
+  const label = title ?? engine.name
+  const isEngineName = !title || title === engine.name
   return (
     <div className="flex items-center justify-between gap-[var(--space-3)]">
       <div className="flex items-baseline gap-[var(--space-3)] min-w-0">
-        {/* An account's own label (".claude-friend", "harry@studio") is shown as written; only an engine's name is capitalised. */}
-        <Title className={`text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)] truncate${title && title !== engine.name ? "" : " capitalize"}`}>
-          {title ?? engine.name}
+        <Title className="text-[length:var(--text-body)] font-[var(--weight-semibold)] text-[var(--text-primary)] truncate">
+          {isEngineName ? engineDisplayName(label) : label}
         </Title>
         {engine.accountPlan && (
           <span className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] truncate">
