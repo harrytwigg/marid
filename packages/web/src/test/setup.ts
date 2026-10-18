@@ -1,5 +1,5 @@
-import { configure } from "@testing-library/react";
-import { beforeEach } from "vitest";
+import { cleanup, configure } from "@testing-library/react";
+import { afterEach, beforeEach, vi } from "vitest";
 
 /* `findBy*` and `waitFor` give up after 1s by default, which measures the
  * machine more than the app: under a full monorepo run — several vitest pools,
@@ -79,3 +79,32 @@ if (typeof (globalThis as Record<string, unknown>).DOMMatrixReadOnly === "undefi
   }
   (globalThis as Record<string, unknown>).DOMMatrixReadOnly = DOMMatrixReadOnlyMock;
 }
+
+/* @radix-ui/react-focus-scope (Dialog, Popover, AlertDialog, Select, Dropdown)
+ * defers its unmount work to a `setTimeout(…, 0)`: the AUTOFOCUS_ON_UNMOUNT
+ * dispatch and the refocus of whatever was focused before the scope opened.
+ * That is a real Node timer, so it outlives the jsdom environment the test ran
+ * in. Vitest recreates the jsdom global for the next file in the same worker
+ * process, so if the timer is still pending at the file boundary its callback
+ * runs against the *next* file's realm: `new CustomEvent(...)` resolves to the
+ * new window's constructor while `container` is an element from the old
+ * document, and jsdom's dispatchEvent rejects the cross-realm Event. The throw
+ * is reported against whichever file happened to be running and fails a run
+ * whose every test passed.
+ *
+ * Unmounting here and giving the timer one turn of the event loop lets it fire
+ * while this file's realm is still installed. Cleanup is called explicitly
+ * rather than left to Testing Library's own afterEach, because the order
+ * between the two hooks is not guaranteed — whichever runs first, the unmount
+ * happens before the flush below.
+ */
+afterEach(async () => {
+  cleanup();
+  if (vi.isFakeTimers()) {
+    /* A test left fake timers installed. The Radix unmount timer is then a
+     * fake timer that would never fire, so drop it with the fake clock instead
+     * of leaking it — and restore real timers so the await below cannot hang. */
+    vi.useRealTimers();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
