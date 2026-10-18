@@ -19,6 +19,7 @@ import { isAbortError, record, runLinesFromStoredReply, str, V2RunLines, v2Reply
 import { cancelledV2Requests, JINN_V2_PROMPT_METADATA, jinnSessionNotes, type JinnSessionNotes } from "./opencode-v2-history.js";
 import { sessionRoute, v2Headers, v2InInbox, v2Messages, v2Request, v2RunningSessions, v2UpdateSessionNotes } from "./opencode-v2-api.js";
 import { RESEED_PREAMBLE } from "./opencode-server-compaction.js";
+import { sameModelRef, unsupportedServerFlags, variantOf, type V2ModelRef } from "./opencode-variant.js";
 
 /**
  * One Jinn turn on an OpenCode 2 server (`/api/*`), the counterpart of
@@ -289,11 +290,20 @@ export class OpencodeV2ServerTurn {
     this.armStatusPoll();
   }
 
-  private async createSession(): Promise<string> {
+  /** The turn's model as the 2.x API takes it, with the effort level as the
+   *  ref's `variant`: the session keeps the variant with the model. */
+  private modelRef(): V2ModelRef | undefined {
     const model = promptModel(this.opts.model);
+    if (!model) return undefined;
+    const variant = variantOf(this.opts);
+    return { providerID: model.providerID, id: model.modelID, ...(variant ? { variant } : {}) };
+  }
+
+  private async createSession(): Promise<string> {
+    const model = this.modelRef();
     const agent = agentFromCliFlags(this.opts.cliFlags);
     const created = record(await v2Request(this.server, "POST", "/api/session", {
-      ...(model ? { model: { providerID: model.providerID, id: model.modelID } } : {}),
+      ...(model ? { model } : {}),
       ...(agent ? { agent } : {}),
       permissions: NO_QUESTIONS,
     }));
@@ -302,15 +312,16 @@ export class OpencodeV2ServerTurn {
     return id;
   }
 
-  /** The session to resume, on the turn's model and agent. A session the
+  /** The session to resume, on the turn's model, variant and agent. A session the
    *  server does not know fails here, as a 1.x post to one does. */
   private async resumeSession(id: string): Promise<string> {
     const session = record(await v2Request(this.server, "GET", sessionRoute(id))) ?? {};
     this.notes = jinnSessionNotes(record(session.metadata));
-    const model = promptModel(this.opts.model);
-    const current = record(session.model);
-    if (model && (current?.providerID !== model.providerID || current?.id !== model.modelID)) {
-      await v2Request(this.server, "POST", sessionRoute(id, "/model"), { model: { providerID: model.providerID, id: model.modelID } });
+    const model = this.modelRef();
+    // The model is selected again when the variant alone changed too, going
+    // from a variant to none included.
+    if (model && !sameModelRef(record(session.model), model)) {
+      await v2Request(this.server, "POST", sessionRoute(id, "/model"), { model });
     }
     const agent = agentFromCliFlags(this.opts.cliFlags);
     if (agent && session.agent !== agent) await v2Request(this.server, "POST", sessionRoute(id, "/agent"), { agent });
@@ -336,9 +347,9 @@ export class OpencodeV2ServerTurn {
   }
 
   private async postPrompt(cancelled: string[]): Promise<void> {
-    const flags = this.opts.cliFlags ?? [];
-    if (flags.length > (agentFromCliFlags(flags) ? 2 : 0)) {
-      logger.warn(`opencode server mode ignores cliFlags other than --agent: ${flags.join(" ")}`);
+    const ignored = unsupportedServerFlags(this.opts.cliFlags);
+    if (ignored.length) {
+      logger.warn(`opencode server mode ignores cliFlags other than --agent and --variant: ${ignored.join(" ")}`);
     }
     const notices = this.notices(cancelled);
     this.promptText = [...notices, buildOpencodePrompt(this.opts)].join("\n\n---\n\n");
