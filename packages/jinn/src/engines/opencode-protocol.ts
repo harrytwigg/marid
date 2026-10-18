@@ -79,9 +79,12 @@ export function buildOpencodeServeArgs(port: number): string[] {
 }
 
 /** The terminal view: opencode's own TUI as a client of the session's server,
- *  opened on the session when there is one yet. */
-export function buildOpencodeViewArgs(serverUrl: string, engineSessionId?: string): string[] {
-  return ["attach", serverUrl, ...(engineSessionId ? ["-s", engineSessionId] : [])];
+ *  opened on the session when there is one yet. OpenCode 2 has no `attach`:
+ *  its TUI takes `--server` (and reads the password from
+ *  `OPENCODE_SERVER_PASSWORD`, as 1.x's attach does). */
+export function buildOpencodeViewArgs(serverUrl: string, engineSessionId?: string, api: 1 | 2 = 1): string[] {
+  const session = engineSessionId ? ["-s", engineSessionId] : [];
+  return api === 2 ? ["--server", serverUrl, ...session] : ["attach", serverUrl, ...session];
 }
 
 /** The model, for a log line. */
