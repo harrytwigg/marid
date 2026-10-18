@@ -48,8 +48,9 @@ export function effortLevelsOf(record: Record<string, unknown>): string[] {
  * same `limit.context` and `variants` (an array of `{id}`) as a 1.x record.
  *
  * The ids are the `provider/model` lines plain `opencode models` prints, and
- * the list is put in that command's order (by id) so a host's picker reads the
- * same whichever way it was discovered; the API's own order is by release date.
+ * the list is sorted by id, close to that command's order (which differs only
+ * for ids with unusual characters, such as `~`), rather than the API's own
+ * order by release date, so the picker does not reshuffle with each release.
  * A record opencode marks `enabled: false` is left out, as its own clients do.
  * Output that is not that shape gives no models.
  */
