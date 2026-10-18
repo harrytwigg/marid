@@ -1,3 +1,4 @@
+import { createContext, useContext, useId } from "react"
 import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,17 @@ export const CONTROL_CLASS =
   "placeholder:text-[var(--text-tertiary)] transition-[box-shadow] duration-150 " +
   "focus:shadow-[0_0_0_3px_var(--accent-fill)]"
 
+/** The id a `FieldRow` puts on its label, so the control the row labels can
+ *  carry the same id and the two are associated. `SettingsSelect` and
+ *  `SettingsInput` take it; the settings `ToggleSwitch` does not, because the
+ *  HeroUI switch already wraps its input in a label element and a second one
+ *  would be two labels for the same control. */
+const FieldRowControlId = createContext<string | null>(null)
+
+function useFieldRowControlId(): string | undefined {
+  return useContext(FieldRowControlId) ?? undefined
+}
+
 export function FieldRow({
   label,
   children,
@@ -45,16 +57,24 @@ export function FieldRow({
   label: string
   children: React.ReactNode
 }) {
+  const controlId = `field-${useId()}`
   return (
     <div
       className="flex flex-col items-stretch gap-[var(--space-2)] py-[var(--space-2)] sm:flex-row sm:items-center sm:justify-between sm:gap-[var(--space-4)]"
     >
+      {/* A real label for the row's control: the control takes this id through
+          the context below, so the name comes from the row and clicking the
+          words focuses the field. It used to be an orphan <label> with no
+          htmlFor. On a switch row the id goes unclaimed — see the context. */}
       <label
+        htmlFor={controlId}
         className="shrink-0 text-[length:var(--text-subheadline)] text-[var(--text-secondary)]"
       >
         {label}
       </label>
-      <div className="min-w-0 w-full sm:w-[240px] sm:shrink-0">{children}</div>
+      <FieldRowControlId.Provider value={controlId}>
+        <div className="min-w-0 w-full sm:w-[240px] sm:shrink-0">{children}</div>
+      </FieldRowControlId.Provider>
     </div>
   )
 }
@@ -76,8 +96,10 @@ export function SettingsInput({
   min?: number
   ariaLabel?: string
 }) {
+  const fieldId = useFieldRowControlId()
   return (
     <input
+      id={fieldId}
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -99,10 +121,15 @@ export function SettingsSelect({
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string; disabled?: boolean }[]
-  ariaLabel?: string
+  /** Required: a `<select>` shows only its chosen option, not what it is for, so
+   *  an omitted name leaves a screen reader reading bare menu options. Optional
+   *  let eight settings-page call sites ship unnamed. */
+  ariaLabel: string
 }) {
+  const fieldId = useFieldRowControlId()
   return (
     <select
+      id={fieldId}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}

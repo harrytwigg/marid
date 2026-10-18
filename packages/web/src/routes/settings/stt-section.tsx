@@ -144,6 +144,7 @@ function AddLanguageRow({
   return (
     <div className="flex gap-[var(--space-2)]">
       <select
+        aria-label="Language to add"
         value={addLang}
         onChange={(e) => setAddLang(e.target.value)}
         className={cn(CONTROL_CLASS, "flex-1 cursor-pointer")}
