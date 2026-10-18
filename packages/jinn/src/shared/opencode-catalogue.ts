@@ -24,6 +24,8 @@ let generation = 0;
 let pending: { promise: Promise<void>; resolve: () => void } | undefined;
 /** Whether a first detailed answer's second look is still running. */
 let confirming = false;
+/** The refresh whose detailed answer the snapshot holds. */
+let detailedBy = 0;
 const listeners = new Set<() => void>();
 
 /** One refresh's landing: its generation, its binary, and what to tell when
@@ -97,6 +99,7 @@ function land(at: Landing, models: ModelInfo[] | null, isDetailed: boolean): voi
   const firstDetails = isDetailed && !detailed;
   snapshot = models;
   detailed = isDetailed;
+  if (isDetailed) detailedBy = at.refresh;
   at.changed();
   if (firstDetails && at.secondLook) {
     confirming = true;
@@ -110,9 +113,12 @@ async function confirm(at: Landing): Promise<void> {
   const again = await discoverOpencodeModels(at.bin);
   const models = again.detailed ? again.models : await again.details;
   confirming = false;
-  // A newer refresh has answered for itself; this look only settles the wait.
-  if (models && at.refresh === generation) {
+  // A newer refresh's detailed answer outranks this look; one that brought
+  // none (a reload whose --verbose failed) does not.
+  if (models && detailedBy <= at.refresh) {
     snapshot = models;
+    detailed = true;
+    detailedBy = at.refresh;
     at.changed();
   }
   logger.info(`opencode model discovery: ${models ? `second look found ${models.length} model(s)` : "the second look found nothing; keeping the first answer"}`);
@@ -121,9 +127,16 @@ async function confirm(at: Landing): Promise<void> {
 }
 
 function landLate(at: Landing, models: ModelInfo[] | undefined): void {
-  if (at.refresh !== generation && !(models && !detailed)) return;
-  logger.info(models ? `opencode model discovery: details for ${models.length} model(s) arrived` : "opencode model discovery: --verbose gave nothing; keeping the plain list");
-  land(at, models ?? snapshot, models ? true : detailed);
+  if (!models) {
+    if (at.refresh !== generation) return;
+    logger.info("opencode model discovery: --verbose gave nothing; keeping what is there");
+    // A second look still running settles the wait itself, with what it finds.
+    if (!confirming) settle();
+    return;
+  }
+  if (at.refresh !== generation && detailed) return;
+  logger.info(`opencode model discovery: details for ${models.length} model(s) arrived`);
+  land(at, models, true);
   announce();
 }
 

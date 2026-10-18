@@ -169,6 +169,28 @@ describe("the gateway's second look at a first detailed answer", () => {
     expect(effortLevelsPending("opencode", "opencode/new")).toBe(false);
   });
 
+  it("still applies its catalogue when a reload that found no details overlapped it", async () => {
+    const second = deferred<OpencodeDiscovery>();
+    discoveries.push(answer(detailed()), () => second.promise);
+    await refreshOpencodeModels(config, gateway);
+    const reload = slowDetails();
+    discoveries.push(reload.discovery);
+    await refreshOpencodeModels(config, gateway);
+    await reload.land(undefined);
+    await second.release({ models: [...detailed(), { ...detailed()[0], id: "opencode/new" }], detailed: true });
+    expect(buildRegistry(config).opencode.models.map((m) => m.id)).toContain("opencode/new");
+    expect(effortLevelsPending("opencode", "opencode/new")).toBe(false);
+  });
+
+  it("does not put its catalogue over a newer refresh's detailed answer", async () => {
+    const second = deferred<OpencodeDiscovery>();
+    discoveries.push(answer(detailed()), () => second.promise, answer(detailed(["max"])));
+    await refreshOpencodeModels(config, gateway);
+    await refreshOpencodeModels(config, gateway);
+    await second.release({ models: detailed(["low"]), detailed: true });
+    expect(entry()).toMatchObject({ effortLevels: ["max"] });
+  });
+
   it("keeps the first answer when the second run finds nothing", async () => {
     discoveries.push(answer(detailed(["high"])));
     await refreshOpencodeModels(config, gateway);

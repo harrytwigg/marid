@@ -36,13 +36,17 @@ vi.mock("../../shared/opencode-discovery.js", async (importOriginal) => ({
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "jinn-opencode-effort-wait-"));
 process.env.JINN_HOME = tmp;
+// Discovery checks the binary itself (the mocked export does not reach calls
+// inside models.ts), so it must exist whatever this machine has on PATH.
+const opencodeBin = path.join(tmp, "opencode");
+fs.writeFileSync(opencodeBin, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
 const reg = await import("../registry.js");
 const { runTurn } = await import("../turn/runner.js");
 const { refreshOpencodeModels } = await import("../../shared/models.js");
 
 const config = {
   gateway: {},
-  engines: { default: "opencode", claude: { model: "opus", fallback: ["opencode"] }, opencode: { bin: "opencode" } },
+  engines: { default: "opencode", claude: { model: "opus", fallback: ["opencode"] }, opencode: { bin: opencodeBin } },
   sessions: {},
 } as unknown as JinnConfig;
 
