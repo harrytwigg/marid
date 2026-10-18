@@ -17,7 +17,7 @@ import { PtyStreamManager, createPtyHandle, setCapped } from "./pty-stream.js";
 import type { PtyControlEvent, PtyViewEngine, PtyIdleSpawnOpts, PtySnapshotSubscription } from "./pty-view-engine.js";
 import type { HookRegistry, HookPayload } from "../gateway/hook-registry.js";
 import { SsePtyProxy, MAIN_AGENT_SENTINEL, type SseDataEvent, type UpstreamActivityInfo } from "./sse-pty-proxy.js";
-import { BackgroundTaskStore, launchedBackgroundTask } from "./background-tasks.js";
+import { BackgroundTaskStore, launchedBackgroundTask, launchedSubagentId } from "./background-tasks.js";
 import { finishedTaskNotificationIds } from "./task-notifications.js";
 import type { BackgroundTasksReport, BackgroundTasksSource } from "../shared/session-waits.js";
 import { isCompactCommand, isNativeClaudeCommand, neutralizeForPaste } from "../shared/skill-commands.js";
@@ -513,12 +513,16 @@ export function claudeHookToDeltas(h: Record<string, unknown>): StreamDelta[] {
   const isError = h.is_error === true || responseRecord?.isError === true || responseRecord?.is_error === true;
   const activityReceiptId = extractActivityReceiptId(receiptSource, { isError });
   const toolId = typeof h.tool_use_id === "string" && h.tool_use_id ? h.tool_use_id : undefined;
+  // A background Agent/Task launch answers with its sub-agent's id; persisting it on the
+  // tool row is what lets the chat's Agent card open that sub-agent's transcript later.
+  const agentId = toolName === "Agent" || toolName === "Task" ? launchedSubagentId(responseRecord) : undefined;
   return [{
     type: "tool_result",
     content: String(h.tool_name ?? ""),
     toolName,
     ...(toolId ? { toolId } : {}),
     ...(activityReceiptId ? { activityReceiptId } : {}),
+    ...(agentId ? { agentId } : {}),
   }];
 }
 
