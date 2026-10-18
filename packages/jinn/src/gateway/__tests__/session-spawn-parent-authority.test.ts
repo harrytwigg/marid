@@ -186,6 +186,25 @@ describe("POST /api/sessions — a session cannot spawn the operator's coordinat
     expect(reg.isPortalAgentSession(session)).toBe(true);
   });
 
+  // An employee sharing the portal's name is a supported, warned-about
+  // collision: "not an employee" would be untrue, so the spawn is not refused.
+  it("does not refuse when an employee shares the portal's name", async () => {
+    const orgFile = path.join(tmpHome, "org", "coo.yaml");
+    fs.writeFileSync(orgFile, "name: coo\ndisplayName: Coo\ndepartment: ops\nrank: employee\nengine: codex\nmodel: gpt-5.5\npersona: Ops\n");
+    const { refreshOrg } = await import("../org-registry.js");
+    refreshOrg();
+    try {
+      const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "spawn-collision-caller", employee: "some-worker" });
+
+      const cap = await spawn({ prompt: "ask the ops employee", employee: "COO" }, toolHeaders(caller.id));
+
+      expect(cap.status).toBe(201);
+    } finally {
+      fs.rmSync(orgFile);
+      refreshOrg();
+    }
+  });
+
   it("still lets a session spawn a plain child with no employee", async () => {
     const caller = reg.createSession({ engine: "codex", source: "web", sourceRef: "spawn-plain-caller", employee: "some-worker" });
 

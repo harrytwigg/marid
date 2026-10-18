@@ -131,7 +131,9 @@ describe("Todo Dispatcher persona — a delegate that stopped", () => {
 
 /** The paragraph that sends a dead end to the operator. */
 function deadEndParagraph(text: string): string {
-  return text.split("\n\n").find((paragraph) => /dead end/.test(paragraph)) ?? "";
+  const paragraph = text.split("\n\n").find((candidate) => /dead end/.test(candidate));
+  expect(paragraph).toBeDefined();
+  return paragraph!;
 }
 
 /**

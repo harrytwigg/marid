@@ -993,22 +993,6 @@ function workItemCommentFailure(res: ServerResponse, err: unknown): void {
 }
 
 /**
- * The refusal for a session trying to mint a child that IS the employee-
- * hierarchy root, or undefined when the spawn is fine.
- *
- * Root identity carries standing the rest of the org lacks: it may assign,
- * delegate and archive any Todo anywhere beneath it. A session that can obtain
- * a root-identity child holds that authority in two hops, so every route that mints a session
- * refuses it. Which route it takes does not matter, hence one helper for both.
- * The operator surface is unrestricted: it already holds the authority the
- * impersonation would be reaching for.
- *
- * Only an `employee` root can be impersonated. With no executive at the top,
- * `resolveOrgRoot()` answers with a virtual root whose name belongs to
- * no employee — the spawn route already collapses that name to a plain session —
- * so there is nothing to claim and nothing is refused.
- */
-/**
  * A session naming the portal as the employee to spawn.
  *
  * The portal is the operator's coordinator, not an employee: the operator's own
@@ -1021,11 +1005,31 @@ function workItemCommentFailure(res: ServerResponse, err: unknown): void {
 function spawnAsPortalRefusal(caller: CallerIdentity, requested: unknown, portalName: string | undefined): string | undefined {
   if (caller.kind !== "session" || typeof requested !== "string" || !requested.trim()) return undefined;
   if (!portalName || coercePortalEmployee(requested, portalName) !== null) return undefined;
+  // An employee sharing the portal's name is a supported, warned-about collision;
+  // the message below would be untrue for it.
+  const name = requested.trim().toLowerCase();
+  if ([...orgRegistry().keys()].some((employee) => employee.toLowerCase() === name)) return undefined;
   return `"${portalName.trim()}" is the operator's coordinator, not an employee, and a session cannot spawn it: its standing over Todos `
     + "belongs to the operator's own chat, so a child under its name would have none. Spawn an employee by name, "
     + "omit employee for a plain session (which has no standing over Todos either), or block the Todo for the operator";
 }
 
+/**
+ * The refusal for a session trying to mint a child that IS the employee-
+ * hierarchy root, or undefined when the spawn is fine.
+ *
+ * Root identity carries standing the rest of the org lacks: it may assign,
+ * delegate and archive any Todo anywhere beneath it. A session that can obtain
+ * a root-identity child holds that authority in two hops, so every route that mints a session
+ * refuses it. Which route it takes does not matter, hence one helper for both.
+ * The operator surface is unrestricted: it already holds the authority the
+ * impersonation would be reaching for.
+ *
+ * Only an `employee` root can be impersonated. With no executive at the top,
+ * `resolveOrgRoot()` answers with a virtual root whose name belongs to no
+ * employee: the portal's. A session naming it is refused by
+ * {@link spawnAsPortalRefusal} instead, so there is nothing to claim here.
+ */
 function spawnAsRootRefusal(caller: CallerIdentity, employeeName: string | null | undefined): string | undefined {
   if (!employeeName || caller.kind !== "session") return undefined;
   const root = resolveOrgRoot();

@@ -297,6 +297,8 @@ describe("a delegate refused before its engine ever ran", () => {
 
     expect(again.status).toBe(403);
     expect(workItems.getWorkItem(id)?.assignee).toBe("lab-lead");
+    // Resuming the old delegate would restart work the operator moved elsewhere.
+    expect(again.body.error).not.toContain("send_to_session");
   });
 
   it("keeps the one-shot rule for a delegate whose engine ran, even when its first turn threw", async () => {

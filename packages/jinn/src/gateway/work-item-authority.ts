@@ -61,7 +61,7 @@ export function authorizeWorkItemOwnerManagerOrRoot(
     return { ok: false, status: 403, error: `employee "${employeeName}" is not in the org roster and cannot ${action} Todo ${item.id}` };
   }
   if (hasStandingOverWorkItem(roster, employee, employeeName, item)) return { ok: true };
-  if (isDispatcherStartedFor(caller.session, item)) return spentDispatcherRefusal(caller.callerId, item, action);
+  if (isDispatcherStartedFor(caller.session, item)) return dispatcherRefusal(caller.callerId, caller.session, item, action);
   return {
     ok: false,
     status: 403,
@@ -108,22 +108,36 @@ function isDispatcherStartedFor(session: Session, item: WorkItem): boolean {
 }
 
 /**
- * The refusal for a Dispatcher whose one hand-off is spent, with the way on.
+ * The refusal for a Dispatcher on its own Todo, with the way on.
  *
- * Its delegate is its child, so a delegate that stopped before finishing
- * reports to it, and the Dispatcher is woken holding a Todo it may no longer
- * route. Starting afresh on top of whatever that delegate did is the
- * operator's call. Resuming the delegate's own session is not: that keeps the
- * work, and the delegate is the Dispatcher's child to message. A bare "not its
- * owner" sent Dispatchers hunting for another session to do it for them,
- * which has no standing either.
+ * A Dispatcher that still holds the hand-off is refused only the action it
+ * asked for: delegate_task is still open to it, and a refusal that read as
+ * spent would send it to block a Todo it could route.
+ *
+ * Once the hand-off is spent, its delegate is its child, so a delegate that
+ * stopped before finishing reports to it, and the Dispatcher is woken holding
+ * a Todo it may no longer route. Starting afresh on top of whatever that
+ * delegate did is the operator's call. Resuming the delegate's own session is
+ * not: that keeps the work, and the delegate is the Dispatcher's child to
+ * message. A bare "not its owner" sent Dispatchers hunting for another session
+ * to do it for them, which has no standing either. The delegate is named only
+ * while the Todo still sits with it: after a reassignment, resuming it would
+ * restart work the operator moved elsewhere.
  */
-function spentDispatcherRefusal(callerId: string, item: WorkItem, action: string): { ok: false; status: 403; error: string } {
+function dispatcherRefusal(callerId: string, session: Session, item: WorkItem, action: string): { ok: false; status: 403; error: string } {
+  if (isDispatcherRoutingTodo(session, item) || handedOffStillborn(callerId, item)) {
+    return {
+      ok: false,
+      status: 403,
+      error: `this Dispatcher cannot ${action} Todo ${item.id}, but it still holds the Todo's hand-off: `
+        + `hand it on with delegate_task { workItemId: "${item.id}" }`,
+    };
+  }
   const delegate = listSessionsByWorkItem(item.id)
-    .filter((session) => isExecutionAttempt(session) && session.parentSessionId === callerId)
+    .filter((attempt) => isExecutionAttempt(attempt) && attempt.parentSessionId === callerId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
-  const resume = delegate
-    ? ` Its delegate is session ${delegate.id} (${delegate.employee ?? "no employee"}, ${delegate.status}): `
+  const resume = delegate && delegate.employee === item.assignee
+    ? ` Its delegate is session ${delegate.id} (${delegate.employee}, ${delegate.status}): `
       + `to carry on after it stopped, resume it with send_to_session { sessionId: "${delegate.id}" }, which keeps the work it did.`
     : "";
   return {

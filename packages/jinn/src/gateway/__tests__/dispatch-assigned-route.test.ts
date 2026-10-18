@@ -167,6 +167,21 @@ describe("a Dispatcher whose delegate stopped", () => {
     expect(sessionsOf(item.id, "first-worker")).toHaveLength(1);
   });
 
+  // Before the hand-off the Dispatcher may still delegate, so a refusal of some
+  // other action must not read as spent: that would send it to block a Todo it
+  // could route.
+  it("tells a Dispatcher that has not handed off yet to delegate, not that it is spent", async () => {
+    const item = assignedTodo("Dispatcher calls dispatch before delegating");
+    const dispatcherId = (await dispatch(item.id)).body.sessionId as string;
+
+    const refused = await dispatchAs(dispatcherId, item.id);
+
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).not.toMatch(/spent/);
+    expect(refused.body.error).toContain(`delegate_task { workItemId: "${item.id}" }`);
+    expect((await delegate(dispatcherId, item.id, "first-worker")).status).toBe(201);
+  });
+
   it("gets the same guidance from dispatch_work_item, and starts no second Dispatcher", async () => {
     const { item, dispatcherId, delegateId } = await crashedHandoff("Delegate crashed, Dispatcher tries dispatch");
 
