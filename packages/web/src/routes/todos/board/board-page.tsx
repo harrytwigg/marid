@@ -764,10 +764,7 @@ export default function TodoBoardPage() {
         <LazyNewTodoDialog
           onClose={() => setCreating(null)}
           onCreated={() => setCreating(null)}
-          onFailed={() => {
-            setCreating(null)
-            announce("The new Todo dialog couldn't load. Reload the page and try again.")
-          }}
+          onFailed={() => { setCreating(null); announce("The new Todo dialog couldn't load. Reload the page and try again.") }}
           defaults={{
             department: creating.department,
             employees: org.data?.employees ?? [],

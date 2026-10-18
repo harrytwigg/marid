@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Check } from "lucide-react"
 import DialogPopup from "@/components/ui/dialog-popup"
+import { returnFocusTo } from "@/components/ui/menu-focus"
 
 /* Todos v2 slice 6 — the picker shells (design-doc §7.3, polish laws 1–4, 22).
  *
@@ -147,6 +148,10 @@ export function PickerSheet({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   usePickerKeyboard(ref, onClose)
+  // What had focus when the sheet opened, read before the sheet moves it. The sheet is unmounted by whoever
+  // opened it, with no exit to run, and focus that was inside it is then on the body.
+  const [opener] = useState(() => (typeof document === "undefined" ? null : document.activeElement))
+  useEffect(() => () => returnFocusTo(opener instanceof HTMLElement ? opener : null), [opener])
   // A modal of its own, so one opened from inside a dialog or another sheet nests in it: the sheet below goes
   // inert behind this one and keeps its place when this closes. Above the app's other phone sheets (z-100): a
   // picker opened from inside one is the sheet you are answering, so it has to be the one on top.

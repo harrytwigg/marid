@@ -7,6 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import zlib from 'node:zlib'
 import { createRequire } from 'node:module'
 
 const [mode, sandboxHome, third, fourth] = process.argv.slice(2)
@@ -98,6 +99,61 @@ const TODOS = [
   { title: 'Retire the old export option', priority: 3, status: 'cancelled' },
 ]
 
+// A plain gradient picture, written as a PNG so the lightbox has something to show without a binary in the
+// repository. `hue` tells two apart.
+function gradientPng(width, height, hue) {
+  const rows = []
+  for (let y = 0; y < height; y += 1) {
+    const row = Buffer.alloc(1 + width * 3)
+    for (let x = 0; x < width; x += 1) {
+      const t = (x / width + y / height) / 2
+      row[1 + x * 3] = Math.round(40 + 160 * t * (hue === 0 ? 1 : 0.4))
+      row[2 + x * 3] = Math.round(90 + 110 * (1 - t))
+      row[3 + x * 3] = Math.round(200 - 120 * t * (hue === 0 ? 0.5 : 1.2))
+    }
+    rows.push(row)
+  }
+  const chunk = (type, data) => {
+    const head = Buffer.alloc(8)
+    head.writeUInt32BE(data.length, 0)
+    head.write(type, 4, 'ascii')
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(zlib.crc32(Buffer.concat([head.subarray(4), data])), 0)
+    return Buffer.concat([head, data, crc])
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header.set([8, 2, 0, 0, 0], 8)
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', zlib.deflateSync(Buffer.concat(rows))),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+async function seedAttachments(baseUrl, token, todoId) {
+  for (const [index, name] of ['overview.png', 'detail.png'].entries()) {
+    const form = new FormData()
+    form.append('file', new File([gradientPng(960, 600, index)], name, { type: 'image/png' }))
+    const res = await fetch(`${baseUrl}/api/work-items/${todoId}/attachments`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: form,
+    })
+    if (!res.ok) console.warn(`attachment ${name} skipped: ${res.status}`)
+  }
+}
+
+// Two sprints, one running with a Todo in it, so the planner has a list to show.
+async function seedSprints(call, todoIds) {
+  const active = await call('POST', '/api/sprints', { name: 'Sprint 1', goal: 'Ship the release candidate' })
+  await call('POST', '/api/sprints', { name: 'Sprint 2', goal: 'Polish the board' })
+  await call('PUT', `/api/work-items/${todoIds[0]}/sprint`, { sprint: active.sprint.id }).catch(() => {})
+  await call('POST', `/api/sprints/${active.sprint.id}/start`).catch((err) => console.warn(`sprint start skipped: ${err.message}`))
+}
+
 async function seedApi(baseUrl, repo) {
   const { token } = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'gateway.json'), 'utf8'))
   const call = async (method, url, body) => {
@@ -124,6 +180,8 @@ async function seedApi(baseUrl, repo) {
       })
     }
   }
+  await seedAttachments(baseUrl, token, created[0])
+  await seedSprints(call, created).catch((err) => console.warn(`sprints skipped: ${err.message}`))
   const sessions = await call('GET', '/api/sessions')
   const list = Array.isArray(sessions) ? sessions : sessions.sessions ?? []
   const chat = list.find((s) => s.sourceRef === 'sandbox:1' || s.title === '#1 - Chat layout QA')
