@@ -731,6 +731,14 @@ export const CliTerminal = forwardRef<CliTerminalHandle, CliTerminalProps>(funct
             transform: "translateX(-50%)",
             display: "flex",
             alignItems: "center",
+            // A shrink-to-fit box centred with left:50% only gets half the pane
+            // as available width, so on a narrow screen the card collapsed to
+            // ~195px and squeezed the message while the button overhung it.
+            // max-content (capped by maxWidth) lets the card use the full
+            // window, and wrap stacks the button under the message if even that
+            // is too tight. Desktop is unchanged — both items still fit one row.
+            width: "max-content",
+            flexWrap: "wrap",
             gap: "0.65rem",
             maxWidth: "calc(100% - 1.5rem)",
             padding: "0.5rem 0.6rem 0.5rem 0.8rem",
