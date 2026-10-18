@@ -9,7 +9,7 @@ import { Separator } from "react-aria-components/Separator"
 
 import { cn } from "@/lib/utils"
 import { OverlayContainerContext } from "./overlay-container"
-import { textOf } from "./menu-parts"
+import { MENU_SURFACE_ATTR, textOf } from "./menu-parts"
 import { returnFocusTo } from "./menu-focus"
 
 /**
@@ -121,6 +121,8 @@ function SelectContent({ className, children }: { className?: string; children?:
   return (
     <Popover
       data-slot="select-content"
+      // Marks the list as a surface that is leaving, so focus is returned once it has gone (see `returnFocusTo`).
+      {...{ [MENU_SURFACE_ATTR]: "" }}
       UNSTABLE_portalContainer={container ?? undefined}
       offset={4}
       containerPadding={8}
