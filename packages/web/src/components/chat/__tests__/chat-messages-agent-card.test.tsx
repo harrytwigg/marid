@@ -5,10 +5,10 @@ import { ChatMessages } from '../chat-messages'
 import type { OpenSubagentCard } from '../tool-group'
 import type { Message } from '@/lib/conversations'
 
-/** The chat's Agent-card entry point to the sub-agent transcript view (#170):
- *  clicking a finished background sub-agent's card opens the same read-only view
- *  the waiting-on popup used to, which is gone once the sub-agent ends. Its own
- *  file so `chat-messages-tool-group.test.tsx` stays under its size budget. */
+/** The chat's Agent-card entry point to the sub-agent transcript view (#170): clicking a
+ *  finished background sub-agent's card opens the same read-only view the waiting-on popup
+ *  used to, which is gone once the sub-agent ends. Its own file so the Agent-card concern
+ *  does not sit inside the tool-group file, which is already at its recorded size budget. */
 
 function renderChat(messages: Message[], onOpenSubagent?: OpenSubagentCard) {
   return render(

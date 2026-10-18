@@ -514,7 +514,10 @@ export function claudeHookToDeltas(h: Record<string, unknown>): StreamDelta[] {
   const activityReceiptId = extractActivityReceiptId(receiptSource, { isError });
   const toolId = typeof h.tool_use_id === "string" && h.tool_use_id ? h.tool_use_id : undefined;
   // A background Agent/Task launch answers with its sub-agent's id; persisting it on the
-  // tool row is what lets the chat's Agent card open that sub-agent's transcript later.
+  // tool row is what lets the chat's Agent card open that sub-agent's transcript later —
+  // the rows the waiting-on popup showed before the sub-agent ended. That popup is fed by
+  // `launchedBackgroundTask`, which drops a launch carrying `agent_id`: a sub-agent's own
+  // background work is its own, not the session's, and was never a row to restore.
   const agentId = (toolName === "Agent" || toolName === "Task") && typeof h.agent_id !== "string"
     ? launchedSubagentId(responseRecord)
     : undefined;
