@@ -15,6 +15,7 @@ import {
 import { useSettings } from "@/routes/settings-provider"
 import { useTheme } from "@/routes/providers"
 import { THEMES } from "@/lib/themes"
+import { engineDisplayName } from "@/lib/engine-names"
 import { api, type ModelInfo } from "@/lib/api"
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { buildNewSessionParams } from "@/components/chat/new-chat-helpers"
@@ -63,18 +64,6 @@ const CLAUDE_EYEBROW: Record<string, string> = {
   opus:                "Smartest",
   "claude-sonnet-4-6": "Balanced",
   "claude-haiku-4-5":  "Fastest",
-}
-
-/** Friendly display names for known engine keys. Falls back to capitalising. */
-const ENGINE_DISPLAY_NAMES: Record<string, string> = {
-  claude:      "Claude",
-  codex:       "Codex",
-  grok:        "Grok",
-  antigravity: "Antigravity",
-}
-
-function engineDisplayName(key: string): string {
-  return ENGINE_DISPLAY_NAMES[key] ?? (key.charAt(0).toUpperCase() + key.slice(1))
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { STARTED_BY_LABEL, type StartedSession } from "@/lib/api-auto-dispatch"
+import { engineDisplayName } from "@/lib/engine-names"
 import { agoLabel } from "./format"
 
 /**
@@ -29,7 +30,7 @@ function EngineTabs({ engines, engine, onPick }: { engines: string[]; engine: st
           onClick={() => onPick(name)}
           className={`focus-outline rounded-full px-[10px] py-[2px] text-[length:var(--text-caption1)] outline-none ${name === engine ? "bg-[var(--accent)] text-white" : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)]"}`}
         >
-          {name}
+          {engineDisplayName(name)}
         </button>
       ))}
     </div>
