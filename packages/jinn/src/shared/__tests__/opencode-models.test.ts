@@ -2,10 +2,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { discoverOpencodeModels, parseOpencodeModels } from "../opencode-models.js";
+import { discoverOpencodeModels, parseOpencodeApiModels, parseOpencodeModels } from "../opencode-models.js";
 
 /** `opencode models --verbose` on 1.19.0, cut to three models. */
 const VERBOSE = fs.readFileSync(path.join(__dirname, "fixtures", "opencode-models-verbose.txt"), "utf8");
+
+/** `opencode api model.list --standalone` on 2.0.29, cut to three models. */
+const API_LIST = fs.readFileSync(path.join(__dirname, "fixtures", "opencode-api-model-list.json"), "utf8");
 
 /**
  * What `opencode models` actually prints, and what must not reach the picker.
@@ -189,6 +192,43 @@ describe("parseOpencodeModels --verbose", () => {
 
   it("still parses plain `opencode models` output, with no windows", () => {
     expect(parseOpencodeModels("opencode/a\nopencode/b\n").every((m) => m.contextWindow === undefined)).toBe(true);
+  });
+});
+
+describe("parseOpencodeApiModels", () => {
+  const list = (...data: unknown[]) => JSON.stringify({ location: { directory: "/w" }, data });
+
+  it("reads each model's window and variants from a real 2.x answer, in id order", () => {
+    expect(parseOpencodeApiModels(API_LIST)).toEqual([
+      { id: "opencode/big-pickle", label: "big-pickle", supportsEffort: false, effortLevels: [], contextWindow: 200000 },
+      { id: "opencode/deepseek-v4.1-flash-free", label: "deepseek-v4.1-flash-free", supportsEffort: true, effortLevels: ["low", "high", "max"], contextWindow: 200000 },
+      { id: "opencode/space-bunny-free", label: "space-bunny-free", supportsEffort: true, effortLevels: ["low", "medium", "high", "xhigh", "max"], contextWindow: 1048576 },
+    ]);
+  });
+
+  it("keeps the whole id when the model half has its own slashes", () => {
+    expect(parseOpencodeApiModels(list({ providerID: "openrouter", id: "meta-llama/llama-4", variants: [] }))[0])
+      .toEqual({ id: "openrouter/meta-llama/llama-4", label: "meta-llama/llama-4", supportsEffort: false, effortLevels: [] });
+  });
+
+  it("leaves out a disabled model, a record without ids, an id with whitespace and a repeat", () => {
+    const models = parseOpencodeApiModels(list(
+      { providerID: "p", id: "off", enabled: false, variants: [{ id: "high" }] },
+      { providerID: "p", id: "on", enabled: true, variants: [{ id: "high" }] },
+      { providerID: "p" },
+      { id: "orphan" },
+      { providerID: "p", id: "has space" },
+      { providerID: "p", id: "on", variants: [{ id: "low" }] },
+      null,
+      "p/string",
+    ));
+    expect(models).toEqual([{ id: "p/on", label: "on", supportsEffort: true, effortLevels: ["high"] }]);
+  });
+
+  it("gives no models for output that is not the API's answer", () => {
+    for (const output of ["", "not json", "[]", "null", JSON.stringify({ data: "x" }), JSON.stringify([{ providerID: "p", id: "m" }]), "opencode/plain\n"]) {
+      expect(parseOpencodeApiModels(output)).toEqual([]);
+    }
   });
 });
 

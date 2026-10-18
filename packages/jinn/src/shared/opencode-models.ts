@@ -21,6 +21,13 @@ import { logger } from "./logger.js";
  * what the model accepts and nothing it would reject. A model with no variants
  * (or a record without the field, as plain `opencode models` has none) declares
  * no effort support. Plain `opencode models` carries neither window nor variants.
+ *
+ * OpenCode 2.x has no `--verbose`. Its records come from the server's
+ * `GET /api/model` instead, asked through `opencode api model.list
+ * --standalone`: the CLI starts a private server, prints the answer as JSON and
+ * stops it. That keeps discovery a one-shot command like every other step here,
+ * independent of whether Marid runs a server of its own (run mode has none, and
+ * server mode's servers are per session and come and go).
  */
 
 /** One `provider/model` line. The model half may itself contain slashes
@@ -129,6 +136,41 @@ function readLine(reader: Reader, text: string): void {
   } else if (text === "{" && reader.current) {
     reader.json = [text];
   }
+}
+
+/**
+ * Parse `opencode api model.list` output (OpenCode 2.x): `{data: [record…]}`,
+ * where each record names its model as `providerID` plus `id` and carries the
+ * same `limit.context` and `variants` (an array of `{id}`) as a 1.x record.
+ *
+ * The ids are the `provider/model` lines plain `opencode models` prints, and
+ * the list is put in that command's order (by id) so a host's picker reads the
+ * same whichever way it was discovered; the API's own order is by release date.
+ * A record opencode marks `enabled: false` is left out, as its own clients do.
+ * Output that is not that shape gives no models.
+ */
+export function parseOpencodeApiModels(output: string): ModelInfo[] {
+  const data = parseRecord(output.trim())?.data;
+  if (!Array.isArray(data)) return [];
+  const models = new Map<string, ModelInfo>();
+  for (const item of data) {
+    const record = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : undefined;
+    if (!record || record.enabled === false) continue;
+    const { providerID, id: modelId } = record;
+    if (typeof providerID !== "string" || typeof modelId !== "string") continue;
+    const id = `${providerID}/${modelId}`;
+    if (!MODEL_LINE.test(id) || models.has(id)) continue;
+    const model: ModelInfo = { id, label: modelId, supportsEffort: false, effortLevels: [] };
+    const window = contextWindowOf(record);
+    if (window !== undefined) model.contextWindow = window;
+    const levels = effortLevelsOf(record);
+    if (levels.length > 0) {
+      model.supportsEffort = true;
+      model.effortLevels = levels;
+    }
+    models.set(id, model);
+  }
+  return [...models.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** What an entry of the `models.opencode` block overrides on a discovered model. */
@@ -264,22 +306,31 @@ function runOpencodeModels(bin: string, args: string[]): Promise<ModelsRun> {
   });
 }
 
-/** The plain list, tried in this order when `--verbose` gave nothing. OpenCode
- *  2.x lists from a private server only with `--standalone` (without it `models`
- *  starts and depends on its background service, which can fail outright);
- *  1.x rejects that flag, so a build that does is asked again without it. */
+/** OpenCode 2.x's records, from its server API. 1.x has no `api` command and
+ *  exits 1 within a second, so a 1.x build that got this far loses nothing. */
+const API_MODELS_ARGS = ["api", "model.list", "--standalone"];
+
+/** The plain list, tried in this order when neither run above gave anything.
+ *  OpenCode 2.x lists from a private server only with `--standalone` (without
+ *  it `models` starts and depends on its background service, which can fail
+ *  outright); 1.x rejects that flag, so a build that does is asked again
+ *  without it. */
 const PLAIN_MODELS_ARGS: string[][] = [["models", "--standalone"], ["models"]];
 
 /** Run `opencode models --verbose` and return what the installed CLI exposes.
  *
- *  `--verbose` is what carries the context windows, but not every build has it:
+ *  `--verbose` is what carries the context windows and variants on 1.x, but
  *  OpenCode 2.x exits 1 with "Unrecognized flag: --verbose". When that run
- *  exits non-zero or lists no models, the plain list is used instead, without
- *  windows, so such a build keeps its catalogue. */
+ *  exits non-zero or lists no models, the same records are asked of 2.x's API.
+ *  Only when that gives nothing either is the plain list used, without windows
+ *  or variants, so such a build still keeps its catalogue. */
 export async function discoverOpencodeModels(bin: string): Promise<ModelInfo[]> {
   const verbose = await runOpencodeModels(bin, ["models", "--verbose"]);
   const withWindows = parseOpencodeModels(verbose.stdout);
   if (verbose.code === 0 && withWindows.length > 0) return withWindows;
+  const api = await runOpencodeModels(bin, API_MODELS_ARGS);
+  const fromApi = api.code === 0 ? parseOpencodeApiModels(api.stdout) : [];
+  if (fromApi.length > 0) return fromApi;
   for (const args of PLAIN_MODELS_ARGS) {
     const plain = parseOpencodeModels((await runOpencodeModels(bin, args)).stdout);
     if (plain.length > 0) return plain;
