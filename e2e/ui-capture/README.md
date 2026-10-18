@@ -55,7 +55,8 @@ by right-click and Shift+F10, a phone tap, a cold first open and a popup that
 cannot be fetched), in whichever browser `JINN_CAPTURE_BROWSER` names. It exits
 non-zero when a check fails and photographs the open states. The screens
 `session-row-menu`, `pane-menu`, `board-card-menu` and `model-menu` are the menus'
-before and after.
+before and after. `JINN_CAPTURE_TOOL=measure-open.mjs` reports what a menu's first
+open downloads on the chat and board routes (gzip bytes of the scripts).
 
 ## Settings
 
