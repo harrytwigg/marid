@@ -25,7 +25,7 @@ const { buildRegistry, effortLevelsForModel, refreshOpencodeModels } = await imp
 const { effortLevelsPending, effortLevelsSettled, onLateOpencodeDetails } = await import("../opencode-catalogue.js");
 const { validateNewSessionSelection, validateSessionPatch } = await import("../../sessions/session-patch.js");
 const { validateEmployeeUpdate } = await import("../../gateway/org.js");
-const { awaitEffortLevels } = await import("../effort.js");
+const { awaitEffortLevels } = await import("../effort-wait.js");
 
 let dir: string;
 let config: JinnConfig;

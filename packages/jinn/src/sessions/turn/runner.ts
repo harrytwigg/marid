@@ -2,7 +2,7 @@ import { logger } from "../../shared/logger.js";
 import { detectRateLimit, isDeadSessionError, type RateLimitDetection } from "../../shared/rateLimit.js";
 import { observeClaudeTurnOutcome } from "../claude-auth-watch.js";
 import type { EngineResult, Session } from "../../shared/types.js";
-import { awaitEffortLevels } from "../../shared/effort.js";
+import { awaitEffortLevels } from "../../shared/effort-wait.js";
 import { completedStreamedBlockIds } from "../../gateway/streamed-blocks.js";
 import {
   deletePartialMessages,

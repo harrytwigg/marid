@@ -29,7 +29,7 @@ import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { spawnCwd } from "./session-cwd.js";
 import { logger } from "../shared/logger.js";
-import { awaitEffortLevels } from "../shared/effort.js";
+import { awaitEffortLevels } from "../shared/effort-wait.js";
 import { UNSTATED_RESET_WINDOW_MS } from "../shared/engine-health.js";
 import { REMOTE_ENGINE_NAMES, type EngineName } from "../shared/models.js";
 import {
