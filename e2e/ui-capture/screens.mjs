@@ -5,6 +5,7 @@
 import { DIALOG_SCREENS } from './screens-dialogs.mjs'
 import { ORG_SCREENS } from './screens-org.mjs'
 import { PAGE_SCREENS } from './screens-pages.mjs'
+import { CHAT_SCREENS } from './screens-chat.mjs'
 
 export const SCREENS = [
   {
@@ -280,6 +281,7 @@ export const SCREENS = [
   ...DIALOG_SCREENS,
   ...ORG_SCREENS,
   ...PAGE_SCREENS,
+  ...CHAT_SCREENS,
 ]
 
 export const THEMES = ['light', 'dark']
