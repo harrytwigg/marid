@@ -9,19 +9,17 @@ import { useMenuTriggerState } from "react-stately/useMenuTriggerState"
 
 import { cn } from "@/lib/utils"
 import {
-  MenuCheckboxItemPart,
   MenuGroupPart,
   MenuItemPart,
   MenuLabelPart,
   MenuList,
-  MenuRadioGroupPart,
-  MenuRadioItemPart,
   MenuSeparatorPart,
   MenuSubContentPart,
   MenuSubPart,
   MenuSubTriggerPart,
   MenuSurface,
 } from "./menu-parts"
+import { MenuCheckboxItemPart, MenuRadioGroupPart, MenuRadioItemPart } from "./menu-selection-parts"
 import { MenuPartsProvider, type MenuRoot } from "./menu-root"
 import type { Align, OverlayDomProps, Side } from "./overlay-placement"
 

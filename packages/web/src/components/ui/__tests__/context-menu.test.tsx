@@ -103,6 +103,21 @@ describe("ContextMenu", () => {
     expect(onElsewhere).toHaveBeenCalledTimes(1)
   })
 
+  it("closes on a press on something that cannot take focus", async () => {
+    render(
+      <>
+        <Example />
+        <p data-testid="text">Some text</p>
+      </>,
+    )
+    fireEvent.contextMenu(row(), { clientX: 10, clientY: 10 })
+    await screen.findByRole("menu")
+
+    fireEvent.pointerDown(screen.getByTestId("text"), { button: 0 })
+
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+  })
+
   it("a second right-click moves the menu to the new point", async () => {
     render(<Example />)
     fireEvent.contextMenu(row(), { clientX: 10, clientY: 10 })

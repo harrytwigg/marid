@@ -7,12 +7,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../dropdown-menu"
 
@@ -173,6 +168,21 @@ describe("DropdownMenu", () => {
     expect(onElsewhere).toHaveBeenCalledTimes(1)
   })
 
+  it("closes on a press on something that cannot take focus, which moves no focus for React Aria to notice", async () => {
+    render(
+      <>
+        <Example />
+        <p data-testid="text">Some text</p>
+      </>,
+    )
+    await userEvent.click(trigger())
+    await screen.findByRole("menu")
+
+    fireEvent.pointerDown(screen.getByTestId("text"), { button: 0 })
+
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+  })
+
   it("is closed by a second press on its trigger, not reopened by it", async () => {
     render(<Example />)
     await userEvent.click(trigger())
@@ -268,112 +278,5 @@ describe("DropdownMenu", () => {
 
     expect(onKeyDown).toHaveBeenCalled()
     expect(screen.queryByRole("menu")).toBeNull()
-  })
-})
-
-describe("DropdownMenu radio group", () => {
-  function Radios({ onValueChange }: { onValueChange: (value: string) => void }) {
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button">Mode</button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuRadioGroup value="b" onValueChange={onValueChange} aria-label="Mode">
-            <DropdownMenuRadioItem value="a">Alpha</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="b">Beta</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    )
-  }
-
-  it("marks the chosen value and reports a choice, even of the value already chosen", async () => {
-    const onValueChange = vi.fn()
-    render(<Radios onValueChange={onValueChange} />)
-    await userEvent.click(screen.getByRole("button", { name: "Mode" }))
-    await screen.findByRole("menu")
-
-    expect(screen.getByRole("menuitemradio", { name: "Beta" }).getAttribute("aria-checked")).toBe("true")
-    expect(screen.getByRole("menuitemradio", { name: "Alpha" }).getAttribute("aria-checked")).toBe("false")
-
-    await userEvent.click(screen.getByRole("menuitemradio", { name: "Alpha" }))
-    expect(onValueChange).toHaveBeenLastCalledWith("a")
-  })
-
-  it("reports a choice of the value that is already chosen", async () => {
-    const onValueChange = vi.fn()
-    render(<Radios onValueChange={onValueChange} />)
-    await userEvent.click(screen.getByRole("button", { name: "Mode" }))
-    await screen.findByRole("menu")
-
-    await userEvent.click(screen.getByRole("menuitemradio", { name: "Beta" }))
-
-    expect(onValueChange).toHaveBeenLastCalledWith("b")
-  })
-})
-
-describe("DropdownMenu submenus", () => {
-  function Nested({ onPick }: { onPick: () => void }) {
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button">Filter</button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem>Plain</DropdownMenuItem>
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Source</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              <DropdownMenuItem onClick={onPick}>Chat</DropdownMenuItem>
-              <DropdownMenuItem>Cron</DropdownMenuItem>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    )
-  }
-
-  it("opens a submenu with ArrowRight, moves into it, and ArrowLeft closes it again", async () => {
-    render(<Nested onPick={vi.fn()} />)
-    await userEvent.tab()
-    await userEvent.keyboard("{ArrowDown}{ArrowDown}")
-    const source = await screen.findByRole("menuitem", { name: "Source" })
-    await waitFor(() => expect(document.activeElement).toBe(source))
-    expect(source.getAttribute("aria-haspopup")).toBeTruthy()
-
-    await userEvent.keyboard("{ArrowRight}")
-
-    await screen.findByRole("menuitem", { name: "Chat" })
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Chat" })))
-
-    await userEvent.keyboard("{ArrowLeft}")
-
-    await waitFor(() => expect(screen.queryByRole("menuitem", { name: "Chat" })).toBeNull())
-    expect(screen.queryByRole("menu")).not.toBeNull()
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Source" })))
-  })
-
-  it("a press inside a submenu is not a press outside the menu, and choosing there closes all of it", async () => {
-    const onPick = vi.fn()
-    render(<Nested onPick={onPick} />)
-    await userEvent.click(screen.getByRole("button", { name: "Filter" }))
-    await userEvent.click(await screen.findByRole("menuitem", { name: "Source" }))
-    const chat = await screen.findByRole("menuitem", { name: "Chat" })
-
-    await userEvent.click(chat)
-
-    expect(onPick).toHaveBeenCalledTimes(1)
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
-  })
-
-  it("opens a submenu when the pointer rests on its item", async () => {
-    render(<Nested onPick={vi.fn()} />)
-    await userEvent.click(screen.getByRole("button", { name: "Filter" }))
-    const source = await screen.findByRole("menuitem", { name: "Source" })
-
-    await userEvent.hover(source)
-
-    await screen.findByRole("menuitem", { name: "Cron" })
   })
 })

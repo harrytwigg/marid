@@ -46,6 +46,17 @@ gh pr edit <PR> \
 Name only the screens the change affects; with no names every screen is
 captured. Keep the shots out of the repository.
 
+## Menus
+
+`JINN_CAPTURE_TOOL=menus.mjs` drives the dropdown and context menus in the
+sandbox and checks how they behave (focus returns to the trigger, typeahead,
+nested submenus, Escape, an outside press reaching its target, the context menu
+by right-click and Shift+F10, a phone tap, a cold first open and a popup that
+cannot be fetched), in whichever browser `JINN_CAPTURE_BROWSER` names. It exits
+non-zero when a check fails and photographs the open states. The screens
+`session-row-menu`, `pane-menu`, `board-card-menu` and `model-menu` are the menus'
+before and after.
+
 ## Settings
 
 | Variable | Default | Meaning |
