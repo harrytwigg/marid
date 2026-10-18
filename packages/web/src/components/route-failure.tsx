@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react'
-import { BrandMark } from '@/components/brand-mark'
+import { BrandMark } from '@/components/brand-mark-image'
 import { reloadRoute } from '@/lib/gateway-transport'
 
 function subscribe(listener: () => void) {

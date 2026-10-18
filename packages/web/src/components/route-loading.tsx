@@ -1,6 +1,6 @@
 import { useRouteLoadingPresence } from '@/components/chat/chat-hydration'
 import { MobileTabBar } from '@/components/chat/mobile-tab-bar'
-import { BrandMark } from '@/components/brand-mark'
+import { BrandMark } from '@/components/brand-mark-image'
 
 /**
  * The route-level Suspense fallback. It MUST carry the mobile tab bar: routes

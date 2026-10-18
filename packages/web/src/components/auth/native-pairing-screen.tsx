@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { BrandMark } from "@/components/brand-mark"
+import { BrandMark } from "@/components/brand-mark-image"
 import { PRODUCT_NAME } from "@/lib/brand"
 
 const INPUT_SHELL =

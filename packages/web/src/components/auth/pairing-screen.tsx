@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from "react"
 import { ChevronDown, KeyRound, Settings, Terminal, Wifi } from "@/components/ui/icon"
 import type { AuthState } from "@/lib/auth"
 import { AuthStateIcon, AuthStateLabel } from "./auth-motion"
-import { BrandMark } from "@/components/brand-mark"
+import { BrandMark } from "@/components/brand-mark-image"
 import { PRODUCT_NAME } from "@/lib/brand"
 
 type PairingMode = "code" | "token"
