@@ -46,7 +46,7 @@ vi.mock('@/routes/auth-provider', () => ({
   }),
 }))
 
-describe('Settings switches', () => {
+describe('Settings control names', () => {
   beforeEach(() => {
     apiMocks.getConfig.mockResolvedValue({ config: {}, revision: 'rev-1' })
     apiMocks.updateConfig.mockResolvedValue({})
@@ -74,5 +74,21 @@ describe('Settings switches', () => {
     ]) {
       expect(screen.getByRole('switch', { name })).toBeTruthy()
     }
+  })
+
+  it('names every select from the label of its row when it carries none of its own', async () => {
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('switch', { name: 'Suggest fresh chats' })
+    const selects = screen.getAllByRole('combobox')
+    expect(selects.length).toBeGreaterThan(3)
+    for (const select of selects) {
+      expect(select.getAttribute('aria-label') || select.getAttribute('aria-labelledby')).toBeTruthy()
+    }
+    expect(screen.getByRole('combobox', { name: 'Default Engine' })).toBeTruthy()
   })
 })

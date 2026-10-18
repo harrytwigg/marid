@@ -121,7 +121,7 @@ export function LogBrowser({ lines }: LogBrowserProps) {
           placeholder="Search logs..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="ml-auto min-w-40 max-w-60"
+          className="min-w-40 flex-1 sm:ml-auto sm:max-w-60 sm:flex-none"
         />
       </div>
 

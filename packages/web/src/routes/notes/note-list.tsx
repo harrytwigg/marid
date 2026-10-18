@@ -103,7 +103,7 @@ export function NoteList({
             </div>
           )}
         </div>
-        <Button size="icon-lg" aria-label="New note" onClick={onCreate} className="absolute bottom-5 right-5 size-14 shadow-[var(--shadow-overlay)]">
+        <Button size="icon-lg" aria-label="New note" onClick={onCreate} className="absolute bottom-5 right-5 size-14 rounded-full shadow-[var(--shadow-overlay)]">
           <PenSquare size={24} aria-hidden />
         </Button>
       </section>

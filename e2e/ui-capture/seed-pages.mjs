@@ -12,11 +12,10 @@ const SKILLS = [
 
 const DAY = 86_400_000
 
-// [id, name, schedule, enabled, prompt, run statuses newest first]
 const JOBS = [
-  ['daily-digest', 'Daily digest', '0 9 * * *', true, 'Summarise yesterday\'s activity in five lines.', ['success', 'success', 'error', 'success']],
-  ['weekly-review', 'Weekly review', '0 10 * * 1', true, 'List what shipped this week and what is blocked.', ['success']],
-  ['nightly-cleanup', 'Nightly cleanup', '30 2 * * *', false, 'Tidy up stale drafts.', []],
+  { id: 'daily-digest', name: 'Daily digest', schedule: '0 9 * * *', enabled: true, prompt: 'Summarise yesterday\'s activity in five lines.', runs: ['success', 'success', 'error', 'success'] },
+  { id: 'weekly-review', name: 'Weekly review', schedule: '0 10 * * 1', enabled: true, prompt: 'List what shipped this week and what is blocked.', runs: ['success'] },
+  { id: 'nightly-cleanup', name: 'Nightly cleanup', schedule: '30 2 * * *', enabled: false, prompt: 'Tidy up stale drafts.', runs: [] },
 ]
 
 const NOTES = [
@@ -38,10 +37,10 @@ function writeSkills(home) {
 }
 
 function writeCron(home) {
-  const jobs = JOBS.map(([id, name, schedule, enabled, prompt]) => ({ id, name, enabled, schedule, prompt, engine: 'claude', model: 'sonnet' }))
+  const jobs = JOBS.map(({ id, name, enabled, schedule, prompt }) => ({ id, name, enabled, schedule, prompt, engine: 'claude', model: 'sonnet' }))
   write(path.join(home, 'cron', 'jobs.json'), `${JSON.stringify(jobs, null, 2)}\n`)
-  for (const [id, , , , , statuses] of JOBS) {
-    const lines = statuses.map((status, i) => JSON.stringify({
+  for (const { id, runs } of JOBS) {
+    const lines = runs.map((status, i) => JSON.stringify({
       timestamp: new Date(Date.now() - (i + 1) * DAY).toISOString(),
       sessionKey: `cron:${id}:${i}`,
       sessionId: null,
@@ -54,7 +53,13 @@ function writeCron(home) {
 }
 
 function writeNotes(home) {
-  for (const [rel, text] of NOTES) write(path.join(home, 'knowledge', rel), text)
+  // Distinct modified times, so the list's newest-first order is the same on every capture.
+  NOTES.forEach(([rel, text], i) => {
+    const file = path.join(home, 'knowledge', rel)
+    write(file, text)
+    const at = new Date(Date.now() - (i + 1) * 3_600_000)
+    fs.utimesSync(file, at, at)
+  })
   // Notes are off by default; the route redirects away until the gateway enables them.
   const file = path.join(home, 'config.yaml')
   const yaml = fs.readFileSync(file, 'utf8')

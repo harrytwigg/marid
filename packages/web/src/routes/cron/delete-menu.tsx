@@ -113,13 +113,7 @@ export function CronDeleteMenu({ job, variant, onDeleted }: {
     >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Actions for ${job.name}`}
-            data-testid={`cron-actions-${job.id}`}
-            className={TRIGGER_CLASS[variant]}
-          >
+          <Button variant="ghost" size="icon" aria-label={`Actions for ${job.name}`} data-testid={`cron-actions-${job.id}`} className={TRIGGER_CLASS[variant]}>
             <Glyph className="size-[18px]" aria-hidden />
           </Button>
         </DropdownMenuTrigger>

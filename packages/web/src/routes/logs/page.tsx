@@ -123,10 +123,11 @@ export default function LogsPage() {
                 <Button
                   variant="secondary"
                   size="sm"
+                  aria-label="Open live stream"
                   onClick={() => window.dispatchEvent(new CustomEvent("open-live-stream"))}
                 >
                   <Radio size={14} />
-                  Open Live Stream
+                  <span className="max-sm:hidden">Open Live Stream</span>
                 </Button>
                 <Button variant="ghost" size="icon-sm" aria-label="Refresh logs" onClick={refresh}>
                   <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />

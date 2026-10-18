@@ -57,7 +57,7 @@ function StepButton({
       onClick={onClick}
       aria-pressed={isActive}
       className={cn(
-        "h-auto min-h-0 flex-col gap-[var(--space-1)] rounded-[13px] px-[var(--space-2)] py-[var(--space-3)] md:h-auto",
+        "h-auto min-h-0 w-full flex-col gap-[var(--space-1)] rounded-[13px] px-[var(--space-2)] py-[var(--space-3)] md:h-auto",
         isActive
           ? "[--button-bg:var(--accent-fill)] [--button-bg-hover:var(--accent-fill)]"
           : "[--button-bg:var(--fill-quaternary)] [--button-bg-hover:var(--fill-tertiary)]",

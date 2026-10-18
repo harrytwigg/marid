@@ -1,3 +1,4 @@
+import { createContext, useContext, useId } from "react"
 import { ChevronDownIcon } from "@/components/ui/icon"
 import { Input } from "@/components/ui/input"
 import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
@@ -31,6 +32,10 @@ export function Section({
 /** The field's phone floor: a thumb needs 40px, and from md up the field's own 34px does. */
 export const FIELD_CLASS = "min-h-[40px] md:min-h-0"
 
+/** The id of the label of the row a control sits in, so a select that carries no
+ *  name of its own is still named by the words beside it. */
+const FieldLabelContext = createContext<string | undefined>(undefined)
+
 export function FieldRow({
   label,
   children,
@@ -38,16 +43,20 @@ export function FieldRow({
   label: string
   children: React.ReactNode
 }) {
+  const labelId = useId()
   return (
     <div
       className="flex flex-col items-stretch gap-[var(--space-2)] py-[var(--space-2)] sm:flex-row sm:items-center sm:justify-between sm:gap-[var(--space-4)]"
     >
       <label
+        id={labelId}
         className="shrink-0 text-[length:var(--text-subheadline)] text-[var(--text-secondary)]"
       >
         {label}
       </label>
-      <div className="min-w-0 w-full sm:w-[240px] sm:shrink-0">{children}</div>
+      <div className="min-w-0 w-full sm:w-[240px] sm:shrink-0">
+        <FieldLabelContext.Provider value={labelId}>{children}</FieldLabelContext.Provider>
+      </div>
     </div>
   )
 }
@@ -96,6 +105,7 @@ export function SettingsSelect({
   ariaLabel?: string
   onBlur?: () => void
 }) {
+  const rowLabelId = useContext(FieldLabelContext)
   return (
     <span className="relative block w-full">
       <select
@@ -103,6 +113,7 @@ export function SettingsSelect({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         aria-label={ariaLabel}
+        aria-labelledby={ariaLabel ? undefined : rowLabelId}
         className="select__trigger min-h-[40px] w-full cursor-pointer appearance-none pe-8 text-[length:var(--text-footnote)] md:min-h-0"
       >
         {options.map((o) => (
