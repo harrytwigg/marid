@@ -226,6 +226,20 @@ describe("parseOpencodeApiModels", () => {
     expect(models).toEqual([{ id: "p/on", label: "on", supportsEffort: true, effortLevels: ["high"] }]);
   });
 
+  it("keeps the first record for a repeated id and takes nothing from the later one", () => {
+    const models = parseOpencodeApiModels(list(
+      { providerID: "p", id: "z", variants: [] },
+      { providerID: "p", id: "dup", limit: { context: 1000 }, variants: [{ id: "high" }] },
+      { providerID: "p", id: "a", variants: [] },
+      { providerID: "p", id: "dup", limit: { context: 2000 }, variants: [{ id: "low" }, { id: "medium" }] },
+    ));
+    expect(models).toEqual([
+      { id: "p/a", label: "a", supportsEffort: false, effortLevels: [] },
+      { id: "p/dup", label: "dup", supportsEffort: true, effortLevels: ["high"], contextWindow: 1000 },
+      { id: "p/z", label: "z", supportsEffort: false, effortLevels: [] },
+    ]);
+  });
+
   it("gives no models for output that is not the API's answer", () => {
     for (const output of ["", "not json", "[]", "null", JSON.stringify({ data: "x" }), JSON.stringify([{ providerID: "p", id: "m" }]), "opencode/plain\n"]) {
       expect(parseOpencodeApiModels(output)).toEqual([]);
