@@ -124,8 +124,9 @@ function PopupBox({
   return (
     <AriaDialog ref={box as React.RefObject<HTMLElement>} className={cn("pointer-events-auto outline-none", className)} {...props}>
       {/* React Aria's dialog passes on no key handler; one wrapper that takes no box of its own gives the box's
-          content the `onKeyDown` a Radix content took. */}
-      {onKeyDown ? <div className="contents" onKeyDown={onKeyDown}>{children}</div> : children}
+          content the `onKeyDown` a Radix content took. It is always there, so adding or dropping the handler on an
+          open dialog does not remount what is inside. */}
+      <div className="contents" onKeyDown={onKeyDown}>{children}</div>
     </AriaDialog>
   )
 }

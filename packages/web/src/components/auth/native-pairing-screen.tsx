@@ -96,7 +96,7 @@ export function NativePairingDialog({ open, onOpenChange }: { open: boolean; onO
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next) }}>
-      <DialogContent className="w-[min(420px,calc(100vw-24px))] gap-0 rounded-[var(--radius-xl)] border-0 bg-[var(--material-regular)] p-2 shadow-[var(--shadow-overlay)]">
+      <DialogContent className="w-[min(420px,calc(100vw-24px))] gap-0 rounded-[var(--radius-xl)] p-2">
         <form onSubmit={(event) => void submit(event)}>
           <div className="p-5">
             <DialogHeader className="gap-2 text-left">

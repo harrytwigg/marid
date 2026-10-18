@@ -110,10 +110,22 @@ describe("Dialog", () => {
     expect(screen.queryByTestId("outer")).not.toBeNull()
   })
 
-  it("hides the corner close button on request, and has it last in the box", async () => {
+  it("hides the corner close button on request", async () => {
     render(<Example showCloseButton={false} />)
     await userEvent.click(screen.getByRole("button", { name: "Open" }))
     await screen.findByRole("dialog")
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull()
+  })
+
+  it("keeps what is inside when a key handler is added to an open dialog", async () => {
+    const { rerender } = render(<Example />)
+    await userEvent.click(screen.getByRole("button", { name: "Open" }))
+    const field = (await screen.findByLabelText("First field")) as HTMLInputElement
+    await userEvent.type(field, "kept")
+
+    rerender(<Example onKeyDown={() => {}} />)
+
+    expect(screen.getByLabelText("First field")).toBe(field)
+    expect(field.value).toBe("kept")
   })
 })

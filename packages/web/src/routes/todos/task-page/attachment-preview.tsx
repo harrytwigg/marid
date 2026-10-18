@@ -197,8 +197,8 @@ function AttachmentVideoDialog({
         data-testid="attachment-video-dialog"
         showCloseButton={false}
         aria-describedby={undefined}
-        overlayClassName="bg-[var(--scrim)]"
-        className="w-[min(960px,calc(100vw-24px))] max-w-none border-0 bg-transparent p-0 shadow-none"
+        material="none"
+        className="w-[min(960px,calc(100vw-24px))] max-w-none p-0"
       >
         <DialogTitle className="sr-only">{attachment.filename}</DialogTitle>
         <VideoPlayer src={url} name={attachment.filename} className="max-w-none" />

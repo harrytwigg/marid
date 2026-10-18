@@ -41,8 +41,7 @@ export function SprintsDialog({ open, onOpenChange, onShowOnBoard, completing: c
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[calc(100dvh-32px)] max-w-[560px] overflow-y-auto border-0 bg-[var(--bg-secondary)] p-6"
-        overlayClassName="bg-[var(--scrim)]"
+        className="max-h-[calc(100dvh-32px)] max-w-[560px] overflow-y-auto p-6"
         data-testid="sprints-dialog"
       >
         <PlannerHeading />
