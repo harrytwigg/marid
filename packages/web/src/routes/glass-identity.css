@@ -384,18 +384,6 @@ body {
   [data-chat-multi-pane] .glass-float { background: var(--glass-overlay); }
 }
 
-/* A card resting on the sheet (a delegation hand-off, a Todo's activity): a step lighter than the sheet,
-   edged by a hairline, lit along its top and lifted by a soft shadow. Tint only, no blur: a thread can
-   hold any number of them. An interactive one darkens a little under the pointer. */
-.glass-card {
-  background-color: var(--bg-secondary);
-  background-image: var(--glass-sheen);
-  box-shadow: 0 0 0 1px var(--separator), var(--shadow-subtle), 0 6px 18px var(--glass-shadow), var(--inset-shine);
-}
-.glass-card:is(button, a):hover {
-  background-image: linear-gradient(var(--fill-tertiary), var(--fill-tertiary)), var(--glass-sheen);
-}
-
 /* ---------------------------------------------------------------------------
    .glass-overlay: a surface that floats above the page and is gone when its
    job is done (tooltip, popover, hover card). It is the strongest material:

@@ -12,6 +12,11 @@
     var(--inset-shine);
 }
 
+/* The delegation hand-off card is a button: it darkens a little under the pointer. */
+.glass-card:is(button, a):hover {
+  background-image: linear-gradient(var(--fill-tertiary), var(--fill-tertiary)), var(--glass-sheen);
+}
+
 /* Several panes: each is a framed sheet on the grid's ground, the focused one lifted and ringed in the
    accent. A single pane has no frame (it is the sheet). */
 [data-single-pane="false"] [data-chat-grid-pane] {
