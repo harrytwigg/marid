@@ -25,7 +25,7 @@
   --orb-bloom: light-dark(rgba(52,184,200,0.88), rgba(24,150,190,0.66));
   --orb-lobe-a: light-dark(rgba(150,240,236,0.80), rgba(84,226,210,0.84));
   --orb-lobe-b: light-dark(rgba(96,170,235,0.64), rgba(58,148,232,0.64));
-  --orb-lobe-c: light-dark(rgba(140,128,236,0.58), rgba(128,112,244,0.58));
+  --orb-lobe-c: light-dark(rgba(62,50,186,0.96), rgba(128,112,244,0.58));
   --orb-shadow: light-dark(rgba(8,52,86,0.55), rgba(2,10,22,0.95));
   --orb-specular: light-dark(rgba(246,255,255,0.72), rgba(236,255,255,0.88));
   --orb-rim: light-dark(rgba(30,100,170,0.52), rgba(150,214,255,0.64));
@@ -42,7 +42,7 @@
     --orb-bloom: light-dark(#3FB5C6, #1B86A8);
     --orb-lobe-a: light-dark(#9CEDEA, #54DCCB);
     --orb-lobe-b: light-dark(#86B9EC, #3A86D6);
-    --orb-lobe-c: light-dark(#A9A2EE, #6A5EDB);
+    --orb-lobe-c: light-dark(#4E40B8, #6A5EDB);
     --orb-rim: light-dark(#4F86C0, #8CC8F0);
   }
 }
@@ -52,6 +52,6 @@
   --orb-bloom: light-dark(#3FB5C6, #1B86A8);
   --orb-lobe-a: light-dark(#9CEDEA, #54DCCB);
   --orb-lobe-b: light-dark(#86B9EC, #3A86D6);
-  --orb-lobe-c: light-dark(#A9A2EE, #6A5EDB);
+  --orb-lobe-c: light-dark(#4E40B8, #6A5EDB);
   --orb-rim: light-dark(#4F86C0, #8CC8F0);
 }
