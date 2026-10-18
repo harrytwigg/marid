@@ -36,6 +36,29 @@ const config = (models: Array<{ id: string; contextWindow?: number; supportsEffo
 
 const windows = (cfg: JinnConfig) => Object.fromEntries(buildRegistry(cfg).opencode.models.map((m) => [m.id, m.contextWindow]));
 
+describe("opencode registry entry from OpenCode 2.x", () => {
+  // What 2.0.29 does: `models --verbose` is rejected and the records come from
+  // `api model.list --standalone`, here a real capture.
+  let v2bin: string;
+  beforeAll(() => {
+    v2bin = path.join(dir, "opencode-v2");
+    const fixture = path.join(__dirname, "fixtures", "opencode-api-model-list.json");
+    fs.writeFileSync(v2bin, `#!/bin/sh\n[ "$1 $2 $3" = "api model.list --standalone" ] && cat "${fixture}" && exit 0\nexit 1\n`, { mode: 0o755 });
+  });
+  const v2config = () => ({ gateway: {}, engines: { default: "claude", opencode: { bin: v2bin } }, sessions: {} }) as unknown as JinnConfig;
+
+  it("gives a model with variants its levels, one without none, and each its window", async () => {
+    await refreshOpencodeModels(v2config());
+    const entry = buildRegistry(v2config()).opencode;
+    expect(entry.effortMechanism).toBe("opencode-variant");
+    expect(entry.models.map((m) => [m.id, m.supportsEffort ? m.effortLevels : null, m.contextWindow])).toEqual([
+      ["opencode/big-pickle", null, 200_000],
+      ["opencode/deepseek-v4.1-flash-free", ["low", "high", "max"], 200_000],
+      ["opencode/space-bunny-free", ["low", "medium", "high", "xhigh", "max"], 1_048_576],
+    ]);
+  });
+});
+
 describe("opencode registry entry windows", () => {
   it("carries each discovered window", async () => {
     await refreshOpencodeModels(config());

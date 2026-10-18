@@ -56,7 +56,7 @@ there notices the mismatch and restages once.
 
 The version decides four things:
 - the shape of the staged MCP config (see [The company toolset](#the-company-toolset-mcp));
-- `--standalone` on `run` turns and on `opencode models`;
+- `--standalone` on `run` turns and on model discovery (`opencode models`, `opencode api model.list`);
 - the terminal view's argv;
 - which server turn drives the session.
 
@@ -85,9 +85,9 @@ engines:
 
 Model ids are opencode's own `provider/model` form, exactly as `opencode models` prints them. The model half may contain further slashes (`openrouter/meta-llama/llama-4`); only the first one is structural.
 
-**Effort levels are the model's variants.** opencode's reasoning-effort control is the model *variant*, and `opencode models --verbose` lists the variants each model has (`high` for one model, `low` … `max` for another, none for a third). Discovery turns those into the model's effort levels, so the effort picker offers exactly what the model accepts, and a model with no variants has no picker. The level reaches opencode as `run --variant <level>` (1.x), `-m provider/model#<level>` (2.x `run`), the prompt body's `variant` (1.x server) or the `variant` of the session's model ref (2.x server; the model is posted again when only the variant changed). A level the model does not list is never sent, and neither is `default`. A `--variant` in `cliFlags` wins over the picker's level (on a 2.x `run`, which has no such flag, it is moved onto the model as `#<level>`). A turn with no model named (no model on the session and no `engines.opencode.model`) sends no variant, since opencode picks its own model.
+**Effort levels are the model's variants.** opencode's reasoning-effort control is the model *variant*, and opencode lists the variants each model has (`high` for one model, `low` … `max` for another, none for a third): 1.x in `opencode models --verbose`, 2.x in its server's `GET /api/model`, read with `opencode api model.list --standalone`. Discovery turns those into the model's effort levels, so the effort picker offers exactly what the model accepts, and a model with no variants has no picker. The level reaches opencode as `run --variant <level>` (1.x), `-m provider/model#<level>` (2.x `run`), the prompt body's `variant` (1.x server) or the `variant` of the session's model ref (2.x server; the model is posted again when only the variant changed). A level the model does not list is never sent, and neither is `default`. A `--variant` in `cliFlags` wins over the picker's level (on a 2.x `run`, which has no such flag, it is moved onto the model as `#<level>`). A turn with no model named (no model on the session and no `engines.opencode.model`) sends no variant, since opencode picks its own model.
 
-OpenCode 2.x lists no variants through the CLI, so its models have no picker until discovery reads them from the server. List them by hand meanwhile: an entry with `supportsEffort: true` and `effortLevels` turns a model's picker on, a list on a model that already has levels replaces them, and `supportsEffort: false` switches a model's picker off:
+The `models.opencode` block can still state a model's levels by hand: an entry with `supportsEffort: true` and `effortLevels` turns a model's picker on, a list on a model that already has levels replaces them, and `supportsEffort: false` switches a model's picker off:
 
 ```yaml
 models:
@@ -371,7 +371,7 @@ verified against 2.0.28 and 2.0.29:
 
 ## Model discovery
 
-`opencode models` prints one `provider/model` per line — every model the installed CLI can actually reach. On OpenCode 2 it is run as `opencode models --standalone`; without the flag the v2 CLI starts its background service and leaves it running. Jinn refreshes this on the background timer and on `POST /api/engines/refresh`.
+`opencode models` prints one `provider/model` per line — every model the installed CLI can actually reach. 1.x is asked `opencode models --verbose`, whose records carry each model's context window and variants. OpenCode 2 has no `--verbose`, so the same records are read from `opencode api model.list --standalone` (the CLI's private server answering `GET /api/model`), and only if that fails is the plain `opencode models --standalone` used, without windows or variants. Every 2.x command here takes `--standalone`; without it the v2 CLI starts its background service and leaves it running. Jinn refreshes this on the background timer and on `POST /api/engines/refresh`.
 
 The catalog exists **only** once discovery has run: opencode ships no offline list, and what it reports depends entirely on which providers the operator configured on that machine. So an unrecognised model id is allowed through with a warning rather than refused — the same treatment Pi gets — because refusing it would reject an employee's own configured model for reasons that have nothing to do with the model.
 
@@ -382,7 +382,6 @@ The catalog exists **only** once discovery has run: opencode ships no offline li
 - The terminal view exists only in server mode. In the default `run` mode there is no `/ws/pty` terminal for an opencode session.
 - **Prompts that bypass Jinn are not copied into the Jinn chat.** Since the desktop terminal is interactive, so a prompt typed into opencode's own input box in the CLI view is one of these, alongside a programmatic `/ws/pty` `stdin` client and direct calls to the password-protected server API. It runs in the opencode session and shows in opencode's history and in the TUI, and the next Jinn turn's context includes it (it is the same opencode session), but the Jinn chat does not show it. Anything sent through the composer is in the transcript. Accepted as D5 and again.
 - If a turn has to replace the server (see above) while an operator's own prompt is running in the terminal, that prompt is cut off.
-- OpenCode 2.x models have no effort picker until their variants are configured by hand (see Configuration above).
 - No quota reading from the provider. Unless `usageLimits` is configured (see Usage limits above), `jinn limits` lists opencode as unsupported. When it is configured, the reading is jinn's own estimate from its turn ledger, not the provider's account.
 - **Run mode on OpenCode 2 cannot tell a lost conversation.** 2.x's `run -s <id>` creates a session under an id it does not know, rather than failing, so a `run` turn that resumes such an id starts with no history. Server mode is not affected (the session is looked up first, and an unknown one starts afresh with the transcript). It matters after an OpenCode 2 rollback and re-upgrade (see [opencode-2-upgrade.md](opencode-2-upgrade.md)).
 - Attachments are named in the prompt text on a local turn and refused outright on a remote one. opencode's own `-f` flag is not wired up yet — Pi behaves the same way.
