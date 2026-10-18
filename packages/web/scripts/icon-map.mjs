@@ -19,6 +19,7 @@ export const ICON_MAP = {
   ArrowDown: "arrow-down",
   ArrowLeft: "arrow-left",
   ArrowRight: "arrow-right",
+  ArrowRightLeft: "arrows-left-right",
   ArrowRightLeftIcon: "arrows-left-right",
   ArrowUp: "arrow-up",
   ArrowUpRight: "arrow-up-right",
@@ -163,6 +164,7 @@ export const ICON_MAP = {
  * silhouette (a clock face, a bell, a folder) stays duotone.
  */
 export const WEIGHT_OVERRIDES = {
+  ArrowRightLeft: "regular",
   ArrowRightLeftIcon: "regular",
   Check: "regular",
   CheckIcon: "regular",

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ChevronRightIcon } from "lucide-react"
+import { ChevronRightIcon } from "@/components/ui/icon"
 import { Header } from "react-aria-components/Header"
 import { Menu, MenuItem, MenuSection, RootMenuTriggerStateContext, SubmenuTrigger } from "react-aria-components/Menu"
 import { Popover as AriaPopover, PopoverContext } from "react-aria-components/Popover"

@@ -1,4 +1,4 @@
-import { ChevronDownIcon } from "lucide-react"
+import { ChevronDownIcon } from "@/components/ui/icon"
 import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
 
 // ---------------------------------------------------------------------------
