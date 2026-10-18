@@ -27,15 +27,23 @@ export function ToggleSwitch({
   /** Only for a row that cannot grow to the full target; the settings pages keep the default. */
   targetClassName?: string
 }) {
-  return (
+  const control = (
     <Switch
       checked={checked}
       onCheckedChange={onChange}
       disabled={disabled}
       aria-label={label}
-      onClick={onClick}
       className="[--switch-control-bg-checked:var(--system-green)] [--switch-control-bg-checked-hover:var(--system-green)]"
       targetClassName={targetClassName}
     />
+  )
+  // A click on the label, the track or the input each bubble, and a row around
+  // the switch must see none of them, so the handler sits on a wrapper that gets all.
+  return onClick ? (
+    <span className="inline-flex shrink-0" onClick={onClick}>
+      {control}
+    </span>
+  ) : (
+    control
   )
 }

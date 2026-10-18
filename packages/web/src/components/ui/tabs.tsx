@@ -11,7 +11,16 @@ import { cn } from "@/lib/utils"
  * move between triggers. `default` is HeroUI's pill list, `line` its underline.
  * Tabs keep React Aria (a native element has no roving arrow-key behaviour), so
  * a route that renders them carries it.
+ *
+ * What a plugin author can rely on is what the types below name, which is what
+ * the SDK declares: class, children, style, `aria-label`, `value`, `disabled`.
+ * Against the Radix tabs this replaces: React Aria filters the DOM props it does
+ * not know, so a `title` on a trigger or a key handler on the list does nothing,
+ * and `activationMode`, `dir`, `asChild` and a content's `forceMount` are gone;
+ * and with no `defaultValue` the first tab is selected and its panel shown,
+ * where Radix showed none.
  */
+type Shared = Pick<React.ComponentProps<"div">, "className" | "children" | "style" | "aria-label">
 type Orientation = "horizontal" | "vertical"
 type ListVariant = "default" | "line"
 
@@ -39,7 +48,7 @@ interface TabsState {
  */
 const TabsContext = React.createContext<TabsState | null>(null)
 
-type TabsProps = Omit<React.ComponentProps<"div">, "defaultValue" | "onChange"> & {
+type TabsProps = Pick<Shared, "className" | "children" | "style"> & {
   value?: string
   defaultValue?: string
   onValueChange?: (value: string) => void
@@ -77,7 +86,7 @@ function TabsList({
   variant = "default",
   children,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof tabsListVariants>) {
+}: Shared & VariantProps<typeof tabsListVariants>) {
   const { setVariant } = useTabsState()
   const v: ListVariant = variant ?? "default"
   React.useLayoutEffect(() => setVariant(v), [setVariant, v])
@@ -97,7 +106,11 @@ function TabsTrigger({
   children,
   onClick,
   ...props
-}: Omit<React.ComponentProps<"button">, "value"> & { value: string }) {
+}: Pick<Shared, "className" | "children" | "style" | "aria-label"> & {
+  value: string
+  disabled?: boolean
+  onClick?: React.MouseEventHandler<HTMLElement>
+}) {
   return (
     <HeroTabs.Tab
       data-slot="tabs-trigger"
@@ -118,7 +131,7 @@ function TabsContent({
   value,
   children,
   ...props
-}: Omit<React.ComponentProps<"div">, "children"> & { value: string; children?: React.ReactNode }) {
+}: Pick<Shared, "className" | "children" | "style"> & { value: string }) {
   return (
     <HeroTabs.Panel data-slot="tabs-content" id={value} className={cn("flex-1 outline-none", className)} {...(props as Record<string, unknown>)}>
       {children}

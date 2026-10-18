@@ -25,6 +25,13 @@ type SwitchProps = Omit<React.ComponentProps<"div">, "onChange" | "defaultValue"
  * HeroUI's stylesheet keys the track on `data-selected` and `data-disabled` at
  * the root and answers `:hover` and `:active` itself; the focus ring is drawn
  * from the input's `:focus-visible` in heroui-glass.css.
+ *
+ * Differences from the Radix switch it replaces, for plugin authors: `ref` and
+ * the other props land on the root div, not a button; the input toggles on
+ * Space only (Enter does nothing, and inside a form it submits the form); and
+ * `onClick` runs once per press, from the input's click. A press on the label or
+ * track makes the browser click the input too, and only that second click is
+ * reported.
  */
 function Switch({
   className,
@@ -42,6 +49,7 @@ function Switch({
   const [uncontrolled, setUncontrolled] = React.useState(defaultChecked ?? false)
   const selected = checked ?? uncontrolled
   const { aria, root } = splitProps(rest)
+  const { onClick } = root as { onClick?: React.MouseEventHandler<HTMLDivElement> }
   return (
     <div
       data-slot="switch"
@@ -49,6 +57,7 @@ function Switch({
       data-selected={selected || undefined}
       data-disabled={disabled || undefined}
       {...root}
+      onClick={onClick && ((event) => event.target instanceof HTMLInputElement && onClick(event))}
     >
       <label data-slot="switch-content" className={cn("switch__content", targetClassName)}>
         <input

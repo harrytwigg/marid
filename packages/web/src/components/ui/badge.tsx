@@ -1,12 +1,12 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Chip } from "@heroui/react/chip"
 import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
 /**
- * A small status label, drawn by HeroUI's Chip.
+ * A small status label in HeroUI's `chip` classes. A native span: a Chip has no
+ * behaviour, and its component would pull class-variant helpers into the SDK chunk.
  *
  * The tinted variants are the app's existing chip recipe: the colour at 12%
  * for the fill and at full strength for the text, which is HeroUI's `soft`
@@ -50,25 +50,19 @@ function Badge({
   }) {
   const v = variant ?? "default"
   const { color, variant: chipVariant } = CHIP[v]
-  const marks = { "data-slot": "badge", "data-variant": v }
+  const Comp = asChild ? Slot.Root : "span"
+  // As HeroUI's Chip does, a bare string or number gets its label wrapper.
+  const label = typeof children === "string" || typeof children === "number" ? <span className="chip__label">{children}</span> : children
 
-  if (asChild) {
-    // A child that is already an element (a link, say) takes HeroUI's classes
-    // as they are, since a Chip would add a span around it.
-    return (
-      <Slot.Root
-        {...marks}
-        className={cn("chip", "chip--sm", `chip--${color}`, `chip--${chipVariant}`, badgeVariants({ variant: v }), className)}
-        {...props}
-      >
-        {children}
-      </Slot.Root>
-    )
-  }
   return (
-    <Chip {...props} {...marks} size="sm" color={color} variant={chipVariant} className={cn(badgeVariants({ variant: v }), className)}>
-      {children}
-    </Chip>
+    <Comp
+      data-slot="badge"
+      data-variant={v}
+      className={cn("chip", "chip--sm", `chip--${color}`, `chip--${chipVariant}`, badgeVariants({ variant: v }), className)}
+      {...props}
+    >
+      {asChild ? children : label}
+    </Comp>
   )
 }
 

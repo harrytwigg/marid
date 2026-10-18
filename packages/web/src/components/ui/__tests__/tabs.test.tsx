@@ -111,4 +111,54 @@ describe("Tabs", () => {
     expect(screen.getByRole("tab").className).toContain("trigger")
     expect(screen.getByRole("tabpanel").className).toContain("content")
   })
+
+  it("selects the first tab and shows its panel when no defaultValue is given", () => {
+    render(
+      <Tabs>
+        <TabsList aria-label="Sections">
+          <TabsTrigger value="a">Alpha</TabsTrigger>
+          <TabsTrigger value="b">Beta</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">Alpha panel</TabsContent>
+        <TabsContent value="b">Beta panel</TabsContent>
+      </Tabs>,
+    )
+
+    expect(screen.getByRole("tab", { name: "Alpha" }).getAttribute("aria-selected")).toBe("true")
+    expect(screen.getByRole("tabpanel").textContent).toBe("Alpha panel")
+  })
+
+  it("shows no panel for a value that matches no tab", () => {
+    render(
+      <Tabs value="missing">
+        <TabsList aria-label="Sections">
+          <TabsTrigger value="a">Alpha</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">Alpha panel</TabsContent>
+      </Tabs>,
+    )
+
+    expect(screen.queryByRole("tabpanel")).toBeNull()
+  })
+
+  it("carries style and onClick to a trigger, but not a title: React Aria drops it", async () => {
+    const onClick = vi.fn()
+    const props = { title: "tip", style: { opacity: 0.5 }, onClick } as never
+    render(
+      <Tabs defaultValue="a">
+        <TabsList aria-label="Sections">
+          <TabsTrigger value="a" {...(props as object)}>
+            Alpha
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">Alpha panel</TabsContent>
+      </Tabs>,
+    )
+    const tab = screen.getByRole("tab", { name: "Alpha" })
+
+    await userEvent.click(tab)
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(tab.style.opacity).toBe("0.5")
+    expect(tab.getAttribute("title")).toBeNull()
+  })
 })

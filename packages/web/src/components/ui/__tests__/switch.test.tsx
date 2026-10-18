@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { useState } from "react"
+import { createRef, useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 import { Switch } from "../switch"
 
@@ -97,6 +97,38 @@ describe("Switch", () => {
     expect(root.className).toContain("mine")
     root.querySelector("input")!.click()
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it("runs onClick once per press, wherever on the control the press lands", async () => {
+    const onClick = vi.fn()
+    const { container } = render(<Switch aria-label="Notify" onClick={onClick} />)
+
+    await userEvent.click(input("Notify"))
+    expect(onClick).toHaveBeenCalledTimes(1)
+    await userEvent.click(container.querySelector(".switch__control")!)
+    expect(onClick).toHaveBeenCalledTimes(2)
+    await userEvent.click(container.querySelector('[data-slot="switch-content"]')!)
+    expect(onClick).toHaveBeenCalledTimes(3)
+    input("Notify").focus()
+    await userEvent.keyboard(" ")
+    expect(onClick).toHaveBeenCalledTimes(4)
+  })
+
+  it("toggles on Space and not on Enter, as a native checkbox does", async () => {
+    const onCheckedChange = vi.fn()
+    render(<Switch aria-label="Notify" onCheckedChange={onCheckedChange} />)
+    input("Notify").focus()
+
+    await userEvent.keyboard("{Enter}")
+    expect(onCheckedChange).not.toHaveBeenCalled()
+    await userEvent.keyboard(" ")
+    expect(onCheckedChange).toHaveBeenCalledTimes(1)
+  })
+
+  it("puts a ref on the root div", () => {
+    const ref = createRef<HTMLDivElement>()
+    render(<Switch aria-label="Notify" ref={ref} />)
+    expect(ref.current?.dataset.slot).toBe("switch")
   })
 
   it("accepts a bigger press target around the track", () => {

@@ -45,7 +45,10 @@ describe("ToggleSwitch", () => {
       </div>,
     )
 
-    fireEvent.click(screen.getByRole("switch", { name: "Enabled" }))
+    const control = screen.getByRole("switch", { name: "Enabled" })
+    fireEvent.click(control)
+    fireEvent.click(control.closest("label")!)
+    fireEvent.click(control.closest("label")!.querySelector(".switch__control")!)
     expect(onRow).not.toHaveBeenCalled()
   })
 })
