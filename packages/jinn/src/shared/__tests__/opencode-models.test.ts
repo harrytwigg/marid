@@ -232,9 +232,12 @@ describe("parseOpencodeApiModels", () => {
       { providerID: "p", id: "dup", limit: { context: 1000 }, variants: [{ id: "high" }] },
       { providerID: "p", id: "a", variants: [] },
       { providerID: "p", id: "dup", limit: { context: 2000 }, variants: [{ id: "low" }, { id: "medium" }] },
+      { providerID: "p", id: "bare" },
+      { providerID: "p", id: "bare", limit: { context: 3000 }, variants: [{ id: "max" }] },
     ));
     expect(models).toEqual([
       { id: "p/a", label: "a", supportsEffort: false, effortLevels: [] },
+      { id: "p/bare", label: "bare", supportsEffort: false, effortLevels: [] },
       { id: "p/dup", label: "dup", supportsEffort: true, effortLevels: ["high"], contextWindow: 1000 },
       { id: "p/z", label: "z", supportsEffort: false, effortLevels: [] },
     ]);
