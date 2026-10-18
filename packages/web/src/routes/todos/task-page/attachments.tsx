@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react"
 import { FileText, Image as ImageIcon, Paperclip, X } from "lucide-react"
 import { api, type WorkItemAttachmentWire } from "@/lib/api"
 import { useFileDrop } from "@/hooks/use-file-drop"
+import { Button } from "@/components/ui/button"
 import { FileDropOverlay } from "@/components/ui/file-drop-overlay"
 import { AttachmentTile, isImageMime, useAttachmentPreview } from "./attachment-preview"
 
@@ -74,15 +75,16 @@ export function AttachmentsSection({
 
   return (
     <section data-testid="task-attachments" className="mt-2 flex flex-wrap items-center gap-2">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="icon-sm"
         aria-label="Attach a file"
         data-testid="attachment-add"
         onClick={() => inputRef.current?.click()}
-        className="focus-outline -ml-2 grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-quaternary)] outline-none transition-colors hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+        className="-ml-2 flex-none text-[var(--text-quaternary)]"
       >
         <Paperclip size={15} strokeWidth={1.8} aria-hidden />
-      </button>
+      </Button>
       {itemLevel.length > 0 && (
         <div data-testid="attachment-strip" className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {itemLevel.map((attachment) =>

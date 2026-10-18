@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { ChevronDown, Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import type { Employee, WorkItemStatusWire, WorkItemTreeNodeWire } from "@/lib/api"
 import { PendingSubTaskRow, SubTaskRow } from "./subtask-row"
 import { PENDING_SUBTASK_PREFIX } from "./use-subtask-mutations"
@@ -113,18 +114,19 @@ export function SubTasksSection({
           )}
         </button>
         {!atCap && (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-sm"
             aria-label="Add sub-task"
             data-testid="subtask-add"
             onClick={() => {
               setExpanded(true)
               setAdding(true)
             }}
-            className="focus-outline grid size-9 flex-none place-items-center rounded-full text-[var(--text-quaternary)] outline-none transition-[background-color,color,scale] duration-150 hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)] active:scale-[0.96]"
+            className="size-9 flex-none rounded-full text-[var(--text-quaternary)]"
           >
             <Plus size={15} strokeWidth={2.2} aria-hidden />
-          </button>
+          </Button>
         )}
       </div>
 

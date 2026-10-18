@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, Copy, Link as LinkIcon, MoreHorizontal } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,15 +75,16 @@ export function CrumbBar({
       }
     >
       {mobile ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           aria-label="Back"
           data-testid="task-crumb-back"
           onClick={onBack}
-          className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
+          className="flex-none text-[var(--text-tertiary)]"
         >
           <ChevronLeft size={17} strokeWidth={2.2} aria-hidden />
-        </button>
+        </Button>
       ) : (
         <div className="-ml-2 flex min-w-0 flex-1 items-center gap-2 overflow-hidden whitespace-nowrap pl-2">
           {/* Text sits on the 96px spine; the wash bleeds -8px (polish law 5). */}
@@ -136,25 +138,27 @@ export function CrumbBar({
         />}
         {/* Absent while the Todo is still loading: no state to toggle yet. */}
         {kept !== undefined && onKeep && <KeepToggle id={id} kept={kept} onToggle={onKeep} className="size-[34px] rounded-[10px]" />}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-sm"
           aria-label={`Copy link to ${id}`}
           data-testid="task-copy-link"
           onClick={() => copyText(gatewayTransport().httpUrl(todoPath(id)))}
-          className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
+          className="flex-none text-[var(--text-tertiary)]"
         >
           <LinkIcon size={14} strokeWidth={2} aria-hidden />
-        </button>
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-sm"
               aria-label="More"
               data-testid="task-crumb-more"
-              className="focus-outline grid size-[34px] flex-none place-items-center rounded-[10px] text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] hover:text-[var(--text-secondary)]"
+              className="flex-none text-[var(--text-tertiary)]"
             >
               <MoreHorizontal size={16} aria-hidden />
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"

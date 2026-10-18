@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Button } from "@/components/ui/button"
 import { EmployeeChip } from "@/components/ui/employee-chip"
 import { STATUS_LABEL, operatorSafeTodoError, provenanceLabel, publicWorkItemReference } from "@/lib/todos"
 import { legalTargets } from "@/lib/legal-targets"
@@ -78,10 +79,7 @@ export function attentionIdLine(
   return parts.join(" · ")
 }
 
-const BTN =
-  "focus-outline flex h-[34px] items-center gap-[7px] whitespace-nowrap rounded-[17px] px-3.5 text-[13px] font-semibold outline-none transition-colors disabled:opacity-40"
-const BTN_QUIET = `${BTN} text-[var(--text-tertiary)] hover:bg-[var(--fill-tertiary)]`
-const BTN_FILLED = `${BTN} bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]`
+const BTN = "h-[34px] whitespace-nowrap rounded-[17px] px-3.5 text-[13px] font-semibold"
 
 /** Legal-exit menu (Route… / Unblock…): the same legalTargets() map the board
  *  drag and the pickers consume; every row carries its reason, gated ones at 50%. */
@@ -104,9 +102,9 @@ function RouteMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" data-testid={testId} disabled={busy} className={BTN_FILLED}>
+        <Button variant="secondary" data-testid={testId} disabled={busy} className={BTN}>
           {label}
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
@@ -218,9 +216,9 @@ function NeedsYouCard({
           onTransition={onTransition}
           testId="needs-unblock"
         />
-        <button type="button" data-testid="needs-open" onClick={() => onOpen(item.id)} className={BTN_QUIET}>
+        <Button variant="ghost" data-testid="needs-open" onClick={() => onOpen(item.id)} className={`${BTN} text-[var(--text-tertiary)]`}>
           Open
-        </button>
+        </Button>
       </div>
     </div>
   )
