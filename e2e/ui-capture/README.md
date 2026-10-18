@@ -123,3 +123,16 @@ Two more tools run in the same sandbox, through `JINN_CAPTURE_TOOL`:
 
 Headless Firefox does not render `backdrop-filter` at all, so a Firefox sheet
 shows the glass tint without its blur; judge the blur in a Chromium sheet.
+
+## The phone board
+
+`JINN_CAPTURE_TOOL=phone-board.mjs` drives the Todos board at 390px with touch
+and checks it: the board is the default view, one column fills the screen with
+the next peeking in, a swipe settles on a column (snap) and the dots follow it,
+"Move to…" moves a card by taps and the gateway agrees, a long press does not
+lift a card (Chromium only, it needs raw touch input), Board | List is one tap
+and remembered across a reload, and no card, column, header or rail blurs, on a
+phone or a desktop. It exits non-zero when a check fails and records the same
+walk-through to `phone-board.webm` in the out-dir. The screens `board-phone`,
+`board-phone-swiped`, `board-phone-list`, `board-phone-move`, `board-closed` and
+`board-sticky-header` photograph the board's states for before and after.

@@ -40,7 +40,9 @@ export const SCREENS = [
     url: () => '/todos',
     ready: 'Draft the release checklist',
     prepare: async (page) => {
-      await page.getByTestId('board-column-executing').scrollIntoViewIfNeeded()
+      // A build before the phone board has no columns here: the screen is then its list.
+      const column = page.getByTestId('board-column-executing')
+      if (await column.isVisible()) await column.scrollIntoViewIfNeeded()
       await page.waitForTimeout(400)
     },
   },
@@ -54,6 +56,7 @@ export const SCREENS = [
     prepare: async (page) => {
       await page.getByTestId('todo-board-scroll').evaluate((strip) => {
         const columns = strip.querySelectorAll('[data-board-snap]')
+        if (columns.length < 3) return // before the phone board: nothing to swipe
         strip.scrollLeft = columns[2].getBoundingClientRect().left - strip.getBoundingClientRect().left + strip.scrollLeft - 16
       })
       await page.waitForTimeout(600)
