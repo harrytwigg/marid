@@ -144,7 +144,7 @@ describe("Tooltip", () => {
       )
     }
 
-    it("forwards style (under React Aria's own positioning), title, aria-* and data-* onto the tooltip", async () => {
+    it("forwards style (not its positioning), title, aria-* and data-* onto the tooltip", async () => {
       render(
         <WithProps
           content={{
@@ -167,6 +167,47 @@ describe("Tooltip", () => {
       expect(tip.getAttribute("aria-live")).toBe("polite")
       expect(tip.getAttribute("data-hint")).toBe("archive")
       expect(tip.id).toBe("archive-hint")
+    })
+
+    it("sets title and aria-* when it is opened by hover, closed, and opened again, which is how it really opens", async () => {
+      render(
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger>Archive</TooltipTrigger>
+          <TooltipContent {...({ title: "More", "aria-live": "polite" } as object)}>Move</TooltipContent>
+        </Tooltip>,
+      )
+      const trigger = screen.getByRole("button", { name: "Archive" })
+
+      await hover(trigger)
+      let tip = await screen.findByRole("tooltip")
+      expect(tip.getAttribute("title")).toBe("More")
+      expect(tip.getAttribute("aria-live")).toBe("polite")
+
+      await userEvent.unhover(trigger)
+      await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
+      await hover(trigger)
+      tip = await screen.findByRole("tooltip")
+      expect(tip.getAttribute("title")).toBe("More")
+      expect(tip.getAttribute("aria-live")).toBe("polite")
+    })
+
+    it("moves a hand-set attribute when the prop changes while it is open", async () => {
+      const { rerender } = render(<WithProps content={{ title: "More" }} />)
+      const tip = await screen.findByRole("tooltip")
+
+      rerender(<WithProps content={{ title: "Less", "aria-live": "assertive" } as never} />)
+
+      expect(tip.getAttribute("title")).toBe("Less")
+      expect(tip.getAttribute("aria-live")).toBe("assertive")
+    })
+
+    it("does not let a caller's style move the tooltip off its trigger", async () => {
+      render(<WithProps content={{ style: { position: "fixed", left: 0, top: 0, color: "red" } }} />)
+
+      const tip = await screen.findByRole("tooltip")
+      expect(tip.style.color).toBe("red")
+      expect(tip.style.position).toBe("absolute")
+      expect(tip.style.left).not.toBe("0px")
     })
 
     it("takes a hand-set attribute off again when the prop goes", async () => {

@@ -91,23 +91,32 @@ const DROPPED = new Set(["role", "onKeyDown", "onKeyUp", "onKeyPress", "onFocus"
  *  not take itself (it takes `aria-label`, `aria-labelledby`, `aria-describedby` and `aria-details`). */
 const SET_BY_HAND = /^(title|aria-(?!label$|labelledby$|describedby$|details$).+)$/
 
-/** Puts those attributes on the surface by hand, and takes them off again when they change or it goes. */
-function useAttributes(ref: React.RefObject<HTMLElement | null>, attributes: Record<string, string>) {
+/** Puts those attributes on the surface by hand, and takes them off again when they change or it goes. The
+ *  surface is not there while the tooltip is closed (React Aria renders nothing), so it is held in state by a
+ *  callback ref and the attributes follow it: opened by hover, closed and opened again, they are on each time. */
+function useAttributes(node: HTMLElement | null, attributes: Record<string, string>) {
   const key = JSON.stringify(attributes)
   React.useLayoutEffect(() => {
-    const element = ref.current
-    if (!element) return
+    if (!node) return
     const entries = Object.entries(JSON.parse(key) as Record<string, string>)
-    for (const [name, value] of entries) element.setAttribute(name, value)
+    for (const [name, value] of entries) node.setAttribute(name, value)
     return () => {
-      for (const [name] of entries) element.removeAttribute(name)
+      for (const [name] of entries) node.removeAttribute(name)
     }
-  }, [ref, key])
+  }, [node, key])
+}
+
+/** A caller's `style` is spread after React Aria's own, so these would move the tooltip off its trigger. */
+const POSITIONING = new Set(["position", "top", "right", "bottom", "left", "inset", "zIndex", "transform", "translate"])
+
+function withoutPositioning(style: React.CSSProperties | undefined): React.CSSProperties | undefined {
+  if (!style) return style
+  return Object.fromEntries(Object.entries(style).filter(([name]) => !POSITIONING.has(name)))
 }
 
 /**
  * Takes the props the Radix content took (the SDK declares every div prop), and forwards what can be
- * forwarded: `className`, `style` (merged under React Aria's own positioning), `data-*`, `aria-*`, `title`,
+ * forwarded: `className`, `style` (but not the properties that position it), `data-*`, `aria-*`, `title`,
  * `id` and the mouse, pointer and touch handlers. `role` and the key and focus handlers are ignored: the
  * role is `tooltip`, and Escape, focus and blur are React Aria's.
  */
@@ -124,7 +133,7 @@ function TooltipContent({
   align?: Align
   sideOffset?: number
 }) {
-  const surface = React.useRef<HTMLDivElement | null>(null)
+  const [surface, setSurface] = React.useState<HTMLDivElement | null>(null)
   const byHand: Record<string, string> = {}
   const forwarded: Record<string, unknown> = {}
   for (const [name, value] of Object.entries(props)) {
@@ -132,13 +141,13 @@ function TooltipContent({
     if (SET_BY_HAND.test(name)) {
       if (value !== undefined && value !== null && value !== false) byHand[name] = String(value)
     } else {
-      forwarded[name] = value
+      forwarded[name] = name === "style" ? withoutPositioning(value as React.CSSProperties | undefined) : value
     }
   }
   useAttributes(surface, byHand)
   return (
     <AriaTooltip
-      ref={surface}
+      ref={setSurface}
       data-slot="tooltip-content"
       placement={placementOf(side, align)}
       offset={sideOffset}

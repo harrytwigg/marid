@@ -204,8 +204,8 @@ export declare const Tooltip: ComponentType<{
 export declare const TooltipTrigger: ComponentType<
   ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }
 >
-/** `className`, `style`, `data-*`, `aria-*`, `title`, `id` and the mouse, pointer and touch handlers are
- *  forwarded to the tooltip. `role` (always `tooltip`) and the key and focus handlers are ignored: Escape,
+/** `className`, `style` (without the properties that position it), `data-*`, `aria-*`, `title`, `id` and
+ *  the mouse, pointer and touch handlers are forwarded to the tooltip. `role` (always `tooltip`) and the key and focus handlers are ignored: Escape,
  *  focus and blur belong to the trigger's tooltip behaviour. */
 export declare const TooltipContent: ComponentType<
   DivProps & { side?: Side; sideOffset?: number; align?: Align }
