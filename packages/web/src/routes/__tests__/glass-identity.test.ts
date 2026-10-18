@@ -294,6 +294,12 @@ describe("floating glass", () => {
     expect(body).toMatch(/(?<!-webkit-)backdrop-filter:\s*var\(--glass-blur-strong\)/)
   })
 
+  it("shows a tooltip and a popover without animation under reduced motion", () => {
+    const reduced = blocks.find((b) => b.query.includes("prefers-reduced-motion") && b.body.includes(".tooltip, .popover"))
+    expect(reduced, "a reduced-motion block for .tooltip and .popover").toBeTruthy()
+    expect(ruleBody(reduced!.body, ".tooltip, .popover")).toMatch(/animation:\s*none/)
+  })
+
   it("blurs the nav rail's label only while it shows, so one label is one blurred surface", () => {
     expect(rest).not.toMatch(/\.rail-reveal\s*\{[^}]*backdrop-filter/)
     const fine = blocks.find((b) => b.query.includes("pointer: fine") && b.body.includes(".rail-reveal"))!

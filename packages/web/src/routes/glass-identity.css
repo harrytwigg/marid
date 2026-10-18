@@ -342,6 +342,14 @@ body {
   }
 }
 
+/* HeroUI's tooltip and popover animate in and out through classes of their own,
+   which nothing else switches off for reduced motion (the Radix ones this
+   replaces were motion-safe only). React Aria waits for no animation that is
+   not running, so the overlay appears and goes at once. */
+@media (prefers-reduced-motion: reduce) {
+  .tooltip, .popover { animation: none; transition: none; }
+}
+
 /* The nav rail's label: the overlay material on a pill that CSS reveals, with
    no script (the rail is in the always-loaded shell). The pill is in the DOM
    for every icon, so it blurs only while it shows: one label, one blurred
