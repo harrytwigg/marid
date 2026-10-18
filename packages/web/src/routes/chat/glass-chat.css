@@ -1,0 +1,56 @@
+/* The chat screen in the Aero material. The transcript sits on the opaque sheet, so what shows here is
+   tint, lit edges and shadow, never blur: the blur budget is the header, the composer and the overlays. */
+
+/* The reader's bubble: accent-tinted glass with a lit edge and a highlight along the top. A pending or
+   failed send keeps its own plain look (globals.css). */
+.user-msg-bubble:not([data-send-state="pending"]):not([data-send-state="failed"]) {
+  background-color: var(--glass-float-opaque);
+  background-image: linear-gradient(var(--accent-fill), var(--accent-fill)), var(--glass-sheen);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--glass-edge)),
+    0 4px 14px color-mix(in srgb, var(--accent) 12%, transparent),
+    var(--inset-shine);
+}
+
+/* Several panes: each is a framed sheet on the grid's ground, the focused one lifted and ringed in the
+   accent. A single pane has no frame (it is the sheet). */
+[data-single-pane="false"] [data-chat-grid-pane] {
+  box-shadow: 0 0 0 1px var(--separator), var(--shadow-subtle);
+}
+[data-single-pane="false"] [data-chat-grid-pane][data-grid-active="true"] {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 36%, var(--glass-edge)),
+    0 8px 24px var(--glass-shadow),
+    var(--inset-shine);
+}
+[data-chat-pane-titlebar] {
+  box-shadow: inset 0 -1px 0 var(--separator);
+}
+[data-chat-pane-titlebar="active"] {
+  background-color: var(--glass-chrome-opaque);
+  background-image: var(--glass-sheen);
+}
+
+/* A pane that is not focused keeps its composer as a quiet, edged well. */
+.composer-card:not(.composer-card-active) {
+  box-shadow: 0 0 0 1px var(--separator), var(--inset-shine);
+}
+
+/* The context meter and whatever joins it in the composer toolbar read as one small glass chip. */
+.session-status-cluster:not(:empty) {
+  border-radius: 999px;
+  background: var(--fill-quaternary);
+  box-shadow: 0 0 0 1px var(--separator), var(--inset-shine);
+}
+
+/* A phone's toolbar has no width to spare (the model name truncates first), so the chip only gains padding where there is some. */
+@media (min-width: 40rem) {
+  .session-status-cluster:not(:empty) { padding-inline: var(--space-1); }
+}
+
+/* The phone's open chats: the tab in front is a lit pill. */
+[data-mobile-session-tab-cell]:has([data-mobile-session-tab-active="true"]) {
+  background-color: var(--glass-float-opaque);
+  background-image: var(--glass-sheen);
+  box-shadow: 0 0 0 1px var(--glass-edge), 0 1px 6px var(--glass-shadow), var(--inset-shine);
+}

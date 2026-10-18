@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { copyText } from '@/platform'
+import './code-block-chrome.css'
 
 export function CodeBlockChrome({
   children,
@@ -24,8 +25,8 @@ export function CodeBlockChrome({
   }
 
   return (
-    <div className={`code-block-wrap ${className ?? ''} rounded-[var(--radius-md)] overflow-hidden bg-[var(--fill-tertiary)] shadow-[var(--shadow-subtle)]`}>
-      <div className="flex items-center justify-between gap-[var(--space-2)] py-[3px] pl-[var(--space-3)] pr-[var(--space-1)] bg-[var(--fill-secondary)]">
+    <div className={`code-block-wrap ${className ?? ''} rounded-[var(--radius-lg)] overflow-hidden`}>
+      <div className="flex items-center justify-between gap-[var(--space-2)] py-[3px] pl-[var(--space-3)] pr-[var(--space-1)]" data-code-head>
         <span className="text-[length:var(--text-caption2)] tracking-wide text-[var(--text-tertiary)] font-[family-name:var(--font-code)]">
           {language || 'text'}
         </span>
