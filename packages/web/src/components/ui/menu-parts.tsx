@@ -241,9 +241,28 @@ export function MenuSubTriggerPart({ slot, className, children, ...props }: Menu
   )
 }
 
+/** Escape while a submenu is open closes the whole menu, as the Radix menu did (React Aria closes the one level). Its
+ *  surface takes no key handler, so this listens for the key while the submenu is mounted. */
+function useEscapeClosesMenu() {
+  const { change } = useMenuRoot()
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && (event.target as Element | null)?.closest?.(`[${MENU_SURFACE_ATTR}]`)) change(false)
+    }
+    document.addEventListener("keydown", onKeyDown, true)
+    return () => document.removeEventListener("keydown", onKeyDown, true)
+  }, [change])
+}
+
+function SubmenuEscape() {
+  useEscapeClosesMenu()
+  return null
+}
+
 export function MenuSubContentPart({ slot, className, children, ...props }: OverlayDomProps & { slot: string; children?: React.ReactNode }) {
   return (
     <MenuSurface data-slot={slot} className={className} {...props}>
+      <SubmenuEscape />
       <MenuList>{children}</MenuList>
     </MenuSurface>
   )

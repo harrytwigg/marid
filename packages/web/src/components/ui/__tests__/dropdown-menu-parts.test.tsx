@@ -120,3 +120,32 @@ describe("DropdownMenu submenus", () => {
     await screen.findByRole("menuitem", { name: "Cron" })
   })
 })
+
+describe("DropdownMenu Escape in a submenu", () => {
+  it("closes the whole menu, as the Radix menu did, from the keyboard inside the submenu", async () => {
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button">Filter</button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Source</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem>Chat</DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    )
+    await userEvent.tab()
+    await userEvent.keyboard("{ArrowDown}")
+    await userEvent.keyboard("{ArrowRight}")
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Chat" })))
+
+    await userEvent.keyboard("{Escape}")
+
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter" })))
+  })
+})

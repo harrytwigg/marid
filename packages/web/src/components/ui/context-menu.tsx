@@ -84,20 +84,79 @@ function ContextMenu({ children, onOpenChange }: { children?: React.ReactNode; m
 
 const LONG_PRESS_MS = 700
 const LONG_PRESS_SLOP = 10
+/** How long after the finger lifts the mouse events a browser sends for the lift are still swallowed. */
+const RELEASE_GUARD_MS = 600
 
-/** The handlers that open the menu from `show`: contextmenu, Shift+F10 or Menu, and a held touch. */
-function useOpeners(show: (point: MenuPoint) => void, props: React.ComponentProps<"span">) {
+/**
+ * A menu opened by a held touch appears under the finger, and when the finger lifts the browser sends the events of
+ * a press: `mousedown` (which moves focus to what is under it and so would close the menu), `mouseup` and `click`
+ * (which would act on the row). They belong to the hold, not to a new press, so they are swallowed until shortly
+ * after the lift.
+ */
+function useReleaseGuard() {
+  const remove = React.useRef<(() => void) | null>(null)
+  const disarm = React.useCallback(() => remove.current?.(), [])
+  React.useEffect(() => disarm, [disarm])
+  return React.useCallback(() => {
+    disarm()
+    const swallow = (event: Event) => {
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+    const mouse = ["mousedown", "mouseup", "click"]
+    const lift = ["pointerup", "pointercancel"]
+    let timer = 0
+    const done = () => {
+      window.clearTimeout(timer)
+      for (const type of mouse) document.removeEventListener(type, swallow, true)
+      for (const type of lift) document.removeEventListener(type, onLift, true)
+      remove.current = null
+    }
+    const onLift = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(done, RELEASE_GUARD_MS)
+    }
+    for (const type of mouse) document.addEventListener(type, swallow, true)
+    for (const type of lift) document.addEventListener(type, onLift, true)
+    remove.current = done
+  }, [disarm])
+}
+
+/** A touch or pen held still for `LONG_PRESS_MS` opens the menu at the finger (iOS sends no `contextmenu`). */
+function useLongPress(show: (point: MenuPoint) => void, guardRelease: () => void) {
   const hold = React.useRef<{ timer: number; x: number; y: number } | null>(null)
   const cancel = React.useCallback(() => {
     if (hold.current) window.clearTimeout(hold.current.timer)
     hold.current = null
   }, [])
   React.useEffect(() => cancel, [cancel])
+  const start = (event: React.PointerEvent) => {
+    if (event.pointerType === "mouse") return
+    const { clientX: x, clientY: y } = event
+    cancel()
+    hold.current = { x, y, timer: window.setTimeout(() => { hold.current = null; guardRelease(); show({ x, y }) }, LONG_PRESS_MS) }
+  }
+  const move = (event: React.PointerEvent) => {
+    const from = hold.current
+    if (from && Math.hypot(event.clientX - from.x, event.clientY - from.y) > LONG_PRESS_SLOP) cancel()
+  }
+  return { start, move, cancel, holding: () => hold.current !== null }
+}
+
+/** The handlers that open the menu from `show`: contextmenu, Shift+F10 or Menu, and a held touch. */
+function useOpeners(show: (point: MenuPoint) => void, props: React.ComponentProps<"span">) {
+  const guardRelease = useReleaseGuard()
+  const press = useLongPress(show, guardRelease)
   return {
     onContextMenu: (event: React.MouseEvent<HTMLSpanElement>) => {
       props.onContextMenu?.(event)
       if (event.defaultPrevented) return
       event.preventDefault()
+      // Android sends this for a held touch, with the finger still down.
+      if (press.holding()) {
+        press.cancel()
+        guardRelease()
+      }
       show({ x: event.clientX, y: event.clientY })
     },
     onKeyDown: (event: React.KeyboardEvent<HTMLSpanElement>) => {
@@ -109,23 +168,19 @@ function useOpeners(show: (point: MenuPoint) => void, props: React.ComponentProp
     },
     onPointerDown: (event: React.PointerEvent<HTMLSpanElement>) => {
       props.onPointerDown?.(event)
-      if (event.pointerType === "mouse") return
-      const { clientX: x, clientY: y } = event
-      cancel()
-      hold.current = { x, y, timer: window.setTimeout(() => { hold.current = null; show({ x, y }) }, LONG_PRESS_MS) }
+      press.start(event)
     },
     onPointerMove: (event: React.PointerEvent<HTMLSpanElement>) => {
       props.onPointerMove?.(event)
-      const start = hold.current
-      if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > LONG_PRESS_SLOP) cancel()
+      press.move(event)
     },
     onPointerUp: (event: React.PointerEvent<HTMLSpanElement>) => {
       props.onPointerUp?.(event)
-      cancel()
+      press.cancel()
     },
     onPointerCancel: (event: React.PointerEvent<HTMLSpanElement>) => {
       props.onPointerCancel?.(event)
-      cancel()
+      press.cancel()
     },
     onPointerEnter: (event: React.PointerEvent<HTMLSpanElement>) => {
       props.onPointerEnter?.(event)

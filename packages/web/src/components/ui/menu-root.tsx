@@ -1,6 +1,8 @@
 import * as React from "react"
 
 import type { MenuParts, MenuPopupProps } from "./menu-popup"
+import { returnFocusTo } from "./menu-focus"
+import { scheduleMenuWarmup } from "./menu-warmup"
 
 /**
  * The part of the menus that is always loaded: the open state, the trigger's
@@ -49,19 +51,6 @@ export type MenuRootProps = {
   returnFocus?: boolean
 }
 
-/** Puts focus back on the trigger once a menu has closed, unless focus has gone somewhere deliberate (a press on
- *  another control, an item that focused a field). React Aria restores focus itself, but not when something else got
- *  there first: a Radix dialog moves focus that leaves its content to the content, and then neither is "the body". */
-function returnFocusTo(trigger: HTMLElement | null) {
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      if (!trigger?.isConnected) return
-      const active = document.activeElement
-      if (!active || active === document.body || (active !== trigger && active.contains(trigger))) trigger.focus({ preventScroll: true })
-    }),
-  )
-}
-
 function useMenuRootState({ open, defaultOpen = false, onOpenChange, openedBy: forcedOpenedBy, returnFocus = true }: MenuRootProps): MenuRoot {
   const [uncontrolled, setUncontrolled] = React.useState(defaultOpen)
   const [openedByState, setOpenedBy] = React.useState<OpenedBy>("pointer")
@@ -90,11 +79,21 @@ function useMenuRootState({ open, defaultOpen = false, onOpenChange, openedBy: f
     queueMicrotask(() => { keep.current = false })
   }, [])
   const id = React.useId()
+  React.useEffect(warmPopupOnce, [])
   return { isOpen, hasOpened: everOpen || isOpen, openedBy: forcedOpenedBy ?? openedByState, change, open: open_, toggle, keepOpen, triggerRef, triggerId: `${id}-trigger`, menuId: `${id}-menu` }
 }
 
 export function MenuRootProvider({ children, ...props }: MenuRootProps & { children?: React.ReactNode }) {
   return <MenuRootContext.Provider value={useMenuRootState(props)}>{children}</MenuRootContext.Provider>
+}
+
+let warmupScheduled = false
+
+/** Asks, once per page, for the popup to be fetched when the page is idle (production builds only). */
+function warmPopupOnce() {
+  if (warmupScheduled || !import.meta.env.PROD || typeof window === "undefined") return
+  warmupScheduled = true
+  scheduleMenuWarmup(() => void preloadMenuPopup().catch(() => {}), { document, window })
 }
 
 /** The popup module, loaded once. A failed load is forgotten, so the next open tries again. */

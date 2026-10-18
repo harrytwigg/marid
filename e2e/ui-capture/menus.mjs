@@ -11,6 +11,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { chromium, firefox } from '@playwright/test'
 import { authHeaders } from './sandbox-auth.mjs'
+import { createKit } from './menus-kit.mjs'
+import { runCold } from './menus-cold.mjs'
 
 const [sandboxHome, baseUrl, outDir] = process.argv.slice(2)
 if (!sandboxHome || !baseUrl || !outDir) throw new Error('usage: menus.mjs <sandbox-home> <base-url> <out-dir>')
@@ -19,80 +21,9 @@ const fixtures = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'ui-capture-f
 fs.mkdirSync(outDir, { recursive: true })
 const browser = await (process.env.JINN_CAPTURE_BROWSER === 'chromium' ? chromium : firefox).launch()
 
-const results = []
-async function check(name, body) {
-  try {
-    await body()
-    results.push({ name, ok: true })
-    console.log(`  ok    ${name}`)
-  } catch (err) {
-    results.push({ name, ok: false, error: String(err.message).split('\n').slice(0, 6).join(' ; ') })
-    console.log(`  FAIL  ${name}: ${String(err.message).split('\n').slice(0, 8).join(' ; ')}`)
-  }
-}
-function assert(condition, message) {
-  if (!condition) throw new Error(message)
-}
-
-async function open(viewport, url) {
-  const phone = viewport.width < 600
-  const context = await browser.newContext({ viewport, hasTouch: phone, extraHTTPHeaders: headers })
-  await context.addInitScript(() => { localStorage.setItem('jinn-onboarded', 'true') })
-  const page = await context.newPage()
-  const errors = []
-  page.on('pageerror', (e) => errors.push(e.message))
-  await page.goto(`${baseUrl}${url}`, { waitUntil: 'networkidle' })
-  await page.waitForTimeout(1200)
-  return { page, context, errors }
-}
-
-const focusedLabel = (page) => page.evaluate(() => {
-  const el = document.activeElement
-  return el ? `${el.tagName}|${el.getAttribute('role') ?? ''}|${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 40)}` : 'none'
-})
-const gone = (page) => page.getByRole('menu').first().waitFor({ state: 'detached', timeout: 5000 })
-
-// ---- Cold: the popup is fetched on the first open, and a popup that cannot be fetched closes the menu ----
-{
-  const { page, context, errors } = await open({ width: 1440, height: 900 }, `/?session=${fixtures.chatSession}`)
-  const coldPress = () => page.getByRole('button', { name: /Opus/ }).first().evaluate((el) => {
-    // No hover or focus first, so nothing has fetched the popup: the press is the first the menu hears of it.
-    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'touch' }))
-  })
-  await check('cold open: a press with nothing before it fetches the popup and opens the menu', async () => {
-    const fetched = []
-    page.on('request', (r) => { if (/menu-popup/.test(r.url())) fetched.push(r.url()) })
-    await page.route(/menu-popup-.*\.js/, async (route) => {
-      // The chunk takes its time, as it would on a phone: the trigger is already open and waiting.
-      await new Promise((resolve) => setTimeout(resolve, 600))
-      await route.continue()
-    })
-    await coldPress()
-    assert((await page.getByRole('button', { name: /Opus/ }).first().getAttribute('aria-expanded')) === 'true', 'trigger not open at once')
-    await page.getByRole('menu').waitFor({ timeout: 8000 })
-    assert(fetched.length === 1, `the popup was fetched ${fetched.length} times`)
-    await page.unroute(/menu-popup-.*\.js/)
-    await page.keyboard.press('Escape')
-    await gone(page)
-  })
-  await check('a popup that cannot be fetched closes the menu and breaks nothing else', async () => {
-    // The module is cached once loaded, so this needs a page that has not loaded it.
-    await page.reload({ waitUntil: 'networkidle' })
-    await page.waitForTimeout(800)
-    await page.route(/menu-popup-.*\.js/, (route) => route.abort())
-    await coldPress()
-    await page.waitForTimeout(1500)
-    assert((await page.getByRole('menu').count()) === 0, 'a menu showed')
-    assert((await page.getByRole('button', { name: /Opus/ }).first().getAttribute('aria-expanded')) === 'false', 'trigger left open')
-    await page.unroute(/menu-popup-.*\.js/)
-    // The browser keeps a failed import of a URL for the life of the page, like any lazy chunk: this menu
-    // stays shut until a reload, and the rest of the page goes on working.
-    await page.getByRole('button', { name: 'More options' }).first().click()
-    await page.getByText('Open beside').first().waitFor({ timeout: 5000 })
-  })
-  await context.close()
-  void errors
-}
+const kit = createKit({ browser, headers, baseUrl })
+const { results, check, assert, open, focusedLabel, gone } = kit
+await runCold({ browser, headers, baseUrl, fixtures }, kit)
 
 // ---- Desktop: the model menu, the session row's context menu, the pane menu ----
 {
@@ -208,7 +139,7 @@ const gone = (page) => page.getByRole('menu').first().waitFor({ state: 'detached
     await gone(page)
     await page.locator('input').first().waitFor({ timeout: 5000 })
   })
-  await check('filter menu: a submenu opens by pointer and by ArrowRight, ArrowLeft returns to its item, Escape closes it all', async () => {
+  await check('filter menu: a submenu opens by pointer and by ArrowRight, ArrowLeft returns to its item, Escape from inside it closes it all', async () => {
     await page.keyboard.press('Escape')
     await page.getByRole('button', { name: 'More filters' }).click()
     await page.getByRole('menu').first().waitFor({ timeout: 5000 })
@@ -227,8 +158,33 @@ const gone = (page) => page.getByRole('menu').first().waitFor({ state: 'detached
     await page.keyboard.press('ArrowLeft')
     await page.getByRole('menuitem', { name: /^(Chat|Cron|Todo)/ }).first().waitFor({ state: 'detached', timeout: 5000 })
     assert((await focusedLabel(page)).includes('Source'), `focus did not return to Source: ${await focusedLabel(page)}`)
+    // Escape with focus inside the submenu closes the whole menu as well.
+    await page.keyboard.press('ArrowRight')
+    await page.getByRole('menuitem', { name: /^(Chat|Cron|Todo)/ }).first().waitFor({ timeout: 5000 })
     await page.keyboard.press('Escape')
     await gone(page)
+  })
+  assert(errors.length === 0, `page errors: ${errors.join(' | ')}`)
+  await context.close()
+}
+
+// ---- Touch: a held finger opens the row's context menu and lifting it leaves the menu open (Chromium only: CDP touch) ----
+if (process.env.JINN_CAPTURE_BROWSER === 'chromium') {
+  const { page, context, errors } = await open({ width: 1440, height: 900 }, `/?session=${fixtures.chatSession}`, { touch: true })
+  await check('long press: the menu opens under a held finger, stays open when it lifts, and the lift does not reach the row', async () => {
+    const box = await page.getByText('Delegation flow', { exact: true }).first().boundingBox()
+    assert(box, 'no row')
+    const point = { x: Math.round(box.x + 20), y: Math.round(box.y + box.height / 2) }
+    const cdp = await context.newCDPSession(page)
+    const before = page.url()
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] })
+    await page.getByRole('menu').waitFor({ timeout: 3000 })
+    await page.waitForTimeout(250)
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await page.waitForTimeout(900)
+    assert((await page.getByRole('menu').count()) === 1, 'the menu closed when the finger lifted')
+    assert(page.url() === before, `the lift reached the row: ${page.url()}`)
+    await page.screenshot({ path: path.join(outDir, 'long-press-menu.png') })
   })
   assert(errors.length === 0, `page errors: ${errors.join(' | ')}`)
   await context.close()

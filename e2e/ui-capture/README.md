@@ -51,8 +51,9 @@ captured. Keep the shots out of the repository.
 `JINN_CAPTURE_TOOL=menus.mjs` drives the dropdown and context menus in the
 sandbox and checks how they behave (focus returns to the trigger, typeahead,
 nested submenus, Escape, an outside press reaching its target, the context menu
-by right-click and Shift+F10, a phone tap, a cold first open and a popup that
-cannot be fetched), in whichever browser `JINN_CAPTURE_BROWSER` names. It exits
+by right-click and Shift+F10, a phone tap, a held touch that opens the context
+menu and leaves it open when the finger lifts (Chromium only, over CDP touch), a
+cold first open, a popup that cannot be fetched, and the idle warm-up), in whichever browser `JINN_CAPTURE_BROWSER` names. It exits
 non-zero when a check fails and photographs the open states. The screens
 `session-row-menu`, `pane-menu`, `board-card-menu` and `model-menu` are the menus'
 before and after. `JINN_CAPTURE_TOOL=measure-open.mjs` reports what a menu's first

@@ -193,3 +193,50 @@ describe("PointMenu", () => {
     expect(anchor()).toBeNull()
   })
 })
+
+describe("a menu opened by a held touch", () => {
+  function Rows({ onRowClick }: { onRowClick: () => void }) {
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <a href="#row" data-testid="row" onClick={onRowClick}>A session</a>
+        </ContextMenuTrigger>
+        <ContextMenuContent aria-label="Session actions">
+          <ContextMenuItem>Rename</ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    )
+  }
+
+  it("stays open when the finger lifts: the press events of the lift are not a press on the row or outside the menu", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const onRowClick = vi.fn()
+    render(<Rows onRowClick={onRowClick} />)
+
+    fireEvent.pointerDown(row(), { pointerType: "touch", clientX: 30, clientY: 30 })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    await screen.findByRole("menu")
+    fireEvent.pointerUp(row(), { pointerType: "touch" })
+    fireEvent.mouseDown(row())
+    fireEvent.mouseUp(row())
+    fireEvent.click(row())
+    await act(async () => { await vi.advanceTimersByTimeAsync(200) })
+
+    expect(screen.queryByRole("menu")).not.toBeNull()
+    expect(onRowClick).not.toHaveBeenCalled()
+  })
+
+  it("lets presses through again once the lift has passed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const onRowClick = vi.fn()
+    render(<Rows onRowClick={onRowClick} />)
+    fireEvent.pointerDown(row(), { pointerType: "touch", clientX: 30, clientY: 30 })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    fireEvent.pointerUp(row(), { pointerType: "touch" })
+    await act(async () => { await vi.advanceTimersByTimeAsync(900) })
+
+    fireEvent.click(row())
+
+    expect(onRowClick).toHaveBeenCalledTimes(1)
+  })
+})
