@@ -1,3 +1,4 @@
+import type * as React from "react"
 import type { Placement } from "react-aria"
 
 export type Side = "top" | "right" | "bottom" | "left"
@@ -11,3 +12,25 @@ export function placementOf(side: Side, align: Align): Placement {
   if (side === "top" || side === "bottom") return `${side} ${align}`
   return `${side} ${align === "start" ? "top" : "bottom"}`
 }
+
+/** The DOM props React Aria's overlay surfaces pass on: an id, `data-*`, and the
+ *  mouse, pointer and touch handlers. Anything else (`onKeyDown`, `onFocus`,
+ *  `title`, `role`, `style`) it drops without a word, so the content parts type
+ *  only these and a caller cannot pass what would silently do nothing. */
+export type OverlayDomProps = Pick<
+  React.ComponentProps<"div">,
+  | "id"
+  | "className"
+  | "onClick"
+  | "onMouseDown"
+  | "onMouseUp"
+  | "onMouseEnter"
+  | "onMouseLeave"
+  | "onMouseMove"
+  | "onPointerDown"
+  | "onPointerUp"
+  | "onPointerMove"
+  | "onTouchStart"
+  | "onTouchEnd"
+  | "onTouchMove"
+>

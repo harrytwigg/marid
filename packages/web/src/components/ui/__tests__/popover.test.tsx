@@ -20,9 +20,7 @@ function Example({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   )
 }
 
-/** React Aria hides everything outside an open popover from a screen reader,
- *  the trigger included, so it is found with `hidden`. */
-const trigger = () => screen.getByRole("button", { name: "Waiting on", hidden: true })
+const trigger = () => screen.getByRole("button", { name: "Waiting on" })
 
 describe("Popover", () => {
   it("is a named dialog the trigger announces, closed until it is asked for", async () => {
@@ -68,26 +66,31 @@ describe("Popover", () => {
     await screen.findByRole("dialog")
   })
 
-  it("closes on a press outside it", async () => {
-    render(<Example />)
+  it("closes on a press outside it, and the press goes on to what it landed on", async () => {
+    const onElsewhere = vi.fn()
+    render(
+      <>
+        <Example />
+        <button type="button" onClick={onElsewhere}>Elsewhere too</button>
+      </>,
+    )
     await userEvent.click(trigger())
     await screen.findByRole("dialog")
 
-    await userEvent.click(document.body)
+    await userEvent.click(screen.getByRole("button", { name: "Elsewhere too" }))
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(onElsewhere).toHaveBeenCalledTimes(1)
   })
 
-  it("hides the page from a screen reader while it is open and gives it back after", async () => {
+  it("is not modal: no underlay over the page, nothing hidden or locked behind it", async () => {
     render(<Example />)
     await userEvent.click(trigger())
     await screen.findByRole("dialog")
 
-    expect(screen.queryByRole("button", { name: "Elsewhere" })).toBeNull()
-
-    await userEvent.keyboard("{Escape}")
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(document.querySelector('[data-testid="underlay"]')).toBeNull()
     expect(screen.getByRole("button", { name: "Elsewhere" })).toBeTruthy()
+    expect(document.documentElement.style.overflow).not.toBe("hidden")
   })
 
   it("can be controlled with `open` and `onOpenChange`", async () => {
@@ -114,6 +117,28 @@ describe("Popover", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
   })
 
+  it("puts the caller's classes on the dialog, where a max-height cap is not overridden by React Aria's inline one", async () => {
+    render(
+      <Popover defaultOpen>
+        <PopoverTrigger asChild>
+          <button type="button">Waiting on</button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Capped" data-testid="surface" className="max-h-[min(60vh,420px)] overflow-y-auto p-1.5">
+          Body
+        </PopoverContent>
+      </Popover>,
+    )
+
+    const dialog = await screen.findByRole("dialog", { name: "Capped" })
+    const surface = await screen.findByTestId("surface")
+    expect(dialog.classList.contains("max-h-[min(60vh,420px)]")).toBe(true)
+    expect(dialog.classList.contains("overflow-y-auto")).toBe(true)
+    expect(dialog.style.maxHeight).toBe("")
+    // React Aria's own cap sits on the surface, which carries no class of the caller's.
+    expect(surface.contains(dialog)).toBe(true)
+    expect(surface.classList.contains("max-h-[min(60vh,420px)]")).toBe(false)
+  })
+
   it("passes data attributes and handlers to the surface, and draws on the overlay glass", async () => {
     const onClick = vi.fn()
     render(
@@ -133,7 +158,6 @@ describe("Popover", () => {
     expect(onClick).toHaveBeenCalled()
     expect(surface.classList.contains("popover")).toBe(true)
     expect(surface.classList.contains("glass-overlay")).toBe(true)
-    expect(surface.classList.contains("p-1.5")).toBe(true)
     // The layer React Aria portals into; the table in overlay-layers.ts says where it sits.
     expect(surface.style.zIndex).toBe("100000")
   })

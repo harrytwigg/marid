@@ -95,7 +95,8 @@ const RIBBON_LABEL_PILL =
 /** A label that covers what the reader is looking at has to be dismissible
  *  without moving the pointer or the focus, so Escape hides the label of the
  *  row under the pointer or holding focus, and it comes back the next time the
- *  pointer or focus enters a row. Done on the element, not in state: nothing
+ *  pointer or focus enters a row (so a row focused after its pointer-dismissed
+ *  label shows its label again). Done on the element, not in state: nothing
  *  re-renders for it. */
 function useDismissLabelOnEscape() {
   useEffect(() => {
@@ -157,7 +158,7 @@ function RibbonRow({
         data-rail-row=""
         onClick={onClick}
         onPointerEnter={(event) => { restoreLabel(event); prefetchRoute(href) }}
-        onFocus={() => prefetchRoute(href)}
+        onFocus={(event) => { restoreLabel(event); prefetchRoute(href) }}
         onBlur={restoreLabel}
         aria-label={label}
         aria-current={isActive ? "page" : undefined}
@@ -168,7 +169,7 @@ function RibbonRow({
     )
   }
   return (
-    <button type="button" data-rail-row="" onClick={onClick} onPointerEnter={restoreLabel} onBlur={restoreLabel} aria-label={label} className={cls}>
+    <button type="button" data-rail-row="" onClick={onClick} onPointerEnter={restoreLabel} onFocus={restoreLabel} onBlur={restoreLabel} aria-label={label} className={cls}>
       {inner}
     </button>
   )

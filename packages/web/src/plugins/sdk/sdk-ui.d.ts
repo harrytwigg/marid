@@ -204,9 +204,17 @@ export declare const Tooltip: ComponentType<{
 export declare const TooltipTrigger: ComponentType<
   ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }
 >
-export declare const TooltipContent: ComponentType<
-  DivProps & { side?: Side; sideOffset?: number; align?: Align }
->
+/** Only these props reach the tooltip: React Aria drops the rest (a key handler,
+ *  `style`, `title`, `role`), so the type does not offer them. `data-*`
+ *  attributes pass. */
+export declare const TooltipContent: ComponentType<{
+  className?: string
+  children?: ReactNode
+  id?: string
+  side?: Side
+  sideOffset?: number
+  align?: Align
+}>
 export declare const TooltipProvider: ComponentType<{
   delayDuration?: number
   children?: ReactNode

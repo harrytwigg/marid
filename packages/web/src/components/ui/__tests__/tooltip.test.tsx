@@ -92,25 +92,43 @@ describe("Tooltip", () => {
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
   })
 
-  it("waits 300ms to open by default, and the provider sets the delay for its tooltips", async () => {
-    // A tooltip opened a moment ago leaves the next one opening at once, as
-    // moving along a toolbar should; let that window (500ms) pass.
+  it("waits 300ms to open by default, and the provider's delay replaces that", async () => {
+    // A tooltip opened a moment ago leaves the next one opening at once, as moving along a
+    // toolbar should; let that window (500ms) pass before each timing.
     await pause(600)
-    const { unmount } = render(<Example />)
+    const first = render(<Example />)
     await hover(screen.getByRole("button", { name: "Archive" }))
-
     await pause(150)
     expect(screen.queryByRole("tooltip")).toBeNull()
     await screen.findByRole("tooltip")
-    unmount()
+    // Close it properly: React Aria's warm-up window is module state that starts counting down
+    // when a tooltip closes, not when one unmounts.
+    await userEvent.unhover(screen.getByRole("button", { name: "Archive" }))
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull())
+    first.unmount()
 
+    // Still shut at 500ms is not the 300ms default's doing: it is the provider's.
+    await pause(600)
     render(
-      <TooltipProvider delayDuration={0}>
+      <TooltipProvider delayDuration={800}>
         <Example />
       </TooltipProvider>,
     )
     await hover(screen.getByRole("button", { name: "Archive" }))
+    await pause(500)
+    expect(screen.queryByRole("tooltip")).toBeNull()
     await screen.findByRole("tooltip")
+  })
+
+  it("closes at once when the pointer leaves, as it always has", async () => {
+    render(<Example delayDuration={0} />)
+    const trigger = screen.getByRole("button", { name: "Archive" })
+    await hover(trigger)
+    await screen.findByRole("tooltip")
+
+    await userEvent.unhover(trigger)
+
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull(), { timeout: 200 })
   })
 
   it("draws on the overlay glass and HeroUI's tooltip classes", async () => {

@@ -93,6 +93,19 @@ describe("HoverCard", () => {
     await screen.findByRole("tooltip")
   })
 
+  it("closes when something scrolls under it, which is not a dismissal: focus or the pointer can open it again", async () => {
+    render(<Example />)
+    fireEvent.pointerEnter(link(), { pointerType: "mouse" })
+    await screen.findByRole("tooltip")
+
+    fireEvent.scroll(document)
+
+    await waitFor(() => expect(card()).toBeNull())
+    // Only Escape holds it shut until the pointer has left; a scroll does not.
+    fireEvent.focus(link())
+    await screen.findByRole("tooltip")
+  })
+
   it("stays open while the pointer is on the card, so the gap can be crossed", async () => {
     render(<Example openDelay={10} closeDelay={80} />)
     fireEvent.pointerEnter(link(), { pointerType: "mouse" })

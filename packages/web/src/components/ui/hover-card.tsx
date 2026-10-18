@@ -3,7 +3,7 @@ import { Slot } from "radix-ui"
 import { Popover } from "react-aria-components/Popover"
 
 import { cn } from "@/lib/utils"
-import { placementOf, type Align, type Side } from "./overlay-placement"
+import { placementOf, type Align, type OverlayDomProps, type Side } from "./overlay-placement"
 
 /**
  * A read that opens beside its trigger on hover or focus and goes when the
@@ -25,8 +25,10 @@ interface HoverCardState {
   triggerRef: React.RefObject<HTMLElement | null>
   /** Ask to open (true) or close (false) after the matching delay. */
   intend: (open: boolean) => void
-  /** Close now and stay shut until the next time the trigger is entered. */
+  /** Close now and stay shut until the next time the trigger is entered (Escape). */
   dismiss: () => void
+  /** Close now, and let the pointer or focus open it again (React Aria closed it: a scroll). */
+  close: () => void
   /** Keep the card where it is: the pointer has crossed onto it. */
   hold: () => void
 }
@@ -87,7 +89,11 @@ function useHoverIntent({
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
   }, [open, dismiss])
-  return { intend, dismiss, hold: clear }
+  const close = React.useCallback(() => {
+    clear()
+    set(false)
+  }, [clear, set])
+  return { intend, dismiss, close, hold: clear }
 }
 
 function HoverCard({
@@ -120,11 +126,11 @@ function HoverCard({
     setInner(next)
     onOpenChangeRef.current?.(next)
   }, [])
-  const { intend, dismiss, hold } = useHoverIntent({ open, set, openDelay, closeDelay })
+  const { intend, dismiss, close, hold } = useHoverIntent({ open, set, openDelay, closeDelay })
 
   const state = React.useMemo<HoverCardState>(
-    () => ({ open, id, triggerRef, intend, dismiss, hold }),
-    [open, id, intend, dismiss, hold],
+    () => ({ open, id, triggerRef, intend, dismiss, close, hold }),
+    [open, id, intend, dismiss, close, hold],
   )
   return <HoverCardContext.Provider value={state}>{children}</HoverCardContext.Provider>
 }
@@ -176,7 +182,7 @@ function HoverCardContent({
   collisionPadding = 8,
   children,
   ...props
-}: Omit<React.ComponentProps<"div">, "children"> & {
+}: Omit<OverlayDomProps, "onPointerEnter" | "onPointerLeave"> & {
   children?: React.ReactNode
   side?: Side
   align?: Align
@@ -184,13 +190,15 @@ function HoverCardContent({
   alignOffset?: number
   collisionPadding?: number
 }) {
-  const { open, id, triggerRef, intend, dismiss, hold } = useHoverCardState()
+  const { open, id, triggerRef, intend, close, hold } = useHoverCardState()
   return (
     <Popover
       data-slot="hover-card-content"
       isOpen={open}
+      // React Aria closes a non-modal popover when something above its trigger
+      // scrolls. That is not a dismissal: the pointer or focus may open it again.
       onOpenChange={(next) => {
-        if (!next) dismiss()
+        if (!next) close()
       }}
       triggerRef={triggerRef}
       isNonModal

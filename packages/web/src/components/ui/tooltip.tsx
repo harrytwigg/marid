@@ -4,7 +4,7 @@ import { Focusable } from "react-aria-components/Focusable"
 import { Tooltip as AriaTooltip, TooltipTrigger as AriaTooltipTrigger } from "react-aria-components/Tooltip"
 
 import { cn } from "@/lib/utils"
-import { placementOf, type Align, type Side } from "./overlay-placement"
+import { placementOf, type Align, type OverlayDomProps, type Side } from "./overlay-placement"
 
 /**
  * The same four parts as ever (a provider, a root, a trigger, content), drawn
@@ -90,7 +90,8 @@ function TooltipContent({
   sideOffset = 6,
   children,
   ...props
-}: Omit<React.ComponentProps<"div">, "onAnimationEnd"> & {
+}: OverlayDomProps & {
+  children?: React.ReactNode
   side?: Side
   align?: Align
   sideOffset?: number

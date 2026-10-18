@@ -149,6 +149,17 @@ describe("NavRibbon", () => {
       expect(todos.hasAttribute("data-label-dismissed")).toBe(false)
     })
 
+    it("is shown again when keyboard focus lands on a row whose label was dismissed", () => {
+      renderRibbon({ listOpen: true })
+      const todos = screen.getByLabelText("Todos")
+      // Escape while the pointer is over Todos, then Tab to it.
+      todos.setAttribute("data-label-dismissed", "")
+
+      todos.focus()
+
+      expect(todos.hasAttribute("data-label-dismissed")).toBe(false)
+    })
+
     it("is shown again when the pointer re-enters a row whose label was dismissed", () => {
       renderRibbon({ listOpen: true })
       const todos = screen.getByLabelText("Todos")

@@ -32,9 +32,13 @@ const OVERLAYS = TOUCHED.slice(0, 7)
 const DURATION_TOKENS = ["--duration-instant", "--duration-fast", "--duration-base", "--duration-slow"]
 
 /** The utility names shadcn's markup ships with. They come from the
- *  tw-animate-css plugin, which is not a dependency here and is not imported,
- *  so every one of them emitted exactly nothing. This is the guard that would
- *  have caught that. */
+ *  tw-animate-css plugin. app.css imports it now, but for HeroUI's tooltip and
+ *  popover stylesheets, which `@apply` them. Before that nothing imported it, so
+ *  every one of these emitted exactly nothing; they would play now, with their
+ *  own durations and curves instead of the --duration-* and --ease-* tokens, so
+ *  the overlays here stay on the app's own animations. This is the guard that
+ *  would have caught the dead classes, and it still keeps these files on one
+ *  motion vocabulary. */
 const PLUGIN_CLASSES = [
   "animate-in",
   "animate-out",
