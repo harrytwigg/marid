@@ -45,6 +45,7 @@ test("npm pack would publish the licence, notice and third-party notices", () =>
   const result = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
     cwd: packageRoot,
     encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
     shell: process.platform === "win32",
   });
   assert.equal(result.status, 0, result.stderr);

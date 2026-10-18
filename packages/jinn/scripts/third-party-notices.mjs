@@ -47,6 +47,21 @@ const SERVICE_WORKER_RUNTIME = ["workbox-core", "workbox-precaching", "workbox-r
 
 const LICENSE_FILE = /^(licen[cs]e|copying)([-._].*)?$/i;
 
+/** Code-unit order, so the output does not depend on the machine's locale. */
+const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Licence text as published: LF endings, and no contact addresses. The names
+ *  and years carry the attribution; an email address is personal data the
+ *  notice does not need. */
+function cleanText(text) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]*<(?:mailto:)?[^<>\s@]+@[^<>\s]+>/g, "")
+    .replace(/\(?mailto:[^\s)]+\)?/g, "")
+    .replace(/[^\s<>()]+@[^\s<>()]+\.[a-z]{2,}/gi, "")
+    .trim();
+}
+
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));
 }
@@ -81,7 +96,7 @@ export function isPermissive(expression) {
 function licenseText(dir, manifest, license) {
   const files = fs.readdirSync(dir).filter((entry) => LICENSE_FILE.test(entry)).sort();
   const text = files
-    .map((file) => fs.readFileSync(path.join(dir, file), "utf8").replace(/\r\n/g, "\n").trim())
+    .map((file) => cleanText(fs.readFileSync(path.join(dir, file), "utf8")))
     .filter(Boolean)
     .join("\n\n");
   if (text) return text;
@@ -151,7 +166,7 @@ export function collectNpmPackages(root = repoRoot) {
       }
       return { name: manifest.name, version: manifest.version, license, text: licenseText(dir, manifest, license) };
     })
-    .sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version));
+    .sort((a, b) => byCodeUnit(a.name, b.name) || byCodeUnit(a.version, b.version));
 }
 
 /** Notice files committed beside vendored web code or assets. */
@@ -168,9 +183,9 @@ export function collectVendored(root = repoRoot) {
   return found
     .map((file) => ({
       path: path.relative(root, file).split(path.sep).join("/"),
-      text: fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n").trim(),
+      text: cleanText(fs.readFileSync(file, "utf8")),
     }))
-    .sort((a, b) => a.path.localeCompare(b.path));
+    .sort((a, b) => byCodeUnit(a.path, b.path));
 }
 
 /** Packages that ship the identical licence text share one block. */
@@ -182,7 +197,7 @@ function groupByText(packages) {
     group.licenses.add(pkg.license);
     group.packages.push(`${pkg.name}@${pkg.version}`);
   }
-  return [...groups.values()].sort((a, b) => a.packages[0].localeCompare(b.packages[0]));
+  return [...groups.values()].sort((a, b) => byCodeUnit(a.packages[0], b.packages[0]));
 }
 
 export function renderNotices({ packages, vendored }) {
