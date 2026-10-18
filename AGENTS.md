@@ -279,3 +279,55 @@ with no owner and no reason; commented-out code.
 **A comment your own change makes false is part of your change, not an adjacent problem.** If
 your diff falsifies a comment, a doc line, or an error message, fix it in the same diff.
 Leaving it and reporting it ships a lie.
+
+---
+
+## 7. Web UI styling
+
+The web app is HeroUI components on a Tailwind compile, drawn in the Aero glass identity. A
+change to how it looks is faulted against these rules.
+
+**One stylesheet root, one palette.**
+
+- `packages/web/src/routes/app.css` is the only stylesheet `main.tsx` loads before the identity,
+  so Tailwind compiles one tree and HeroUI's component CSS can `@apply` Marid's theme.
+- The palette is written once per token in `routes/glass-identity.css`, as `light-dark(<light>,
+  <dark>)`; the root's `color-scheme` picks the side. Only what `light-dark()` cannot take
+  (shadows, gradients) keeps a block per theme. `globals.css` holds no colour.
+- A token that script reads back (`getComputedStyle`: the Talk orb, the title bar's `--bg`) is
+  registered with `@property` in `globals.css`, or it reads back as the literal `light-dark(...)`.
+- HeroUI's own default theme and variants file are not imported. `routes/heroui-bridge.css` defines
+  every variable HeroUI components read from Marid's tokens, so a theme or accent change moves a
+  HeroUI control and a legacy one together.
+
+**Adapters.**
+
+- App code imports `@/components/ui/*`. Only that directory imports `@heroui/react`, always by deep
+  path (`@heroui/react/switch`); ESLint enforces both. A control's adapter keeps the props the
+  call sites already use.
+- Native first: HeroUI classes on a native element where the platform has the behaviour, React
+  Aria directly only where it does not. Never swap a stand-in in lazily.
+- A lazy overlay loads on first open, preloads on pointer-enter, focus and idle, and reports a
+  failed load through `lib/report-load-failure.ts`.
+- Radix, lucide and cmdk are banned (`removed-ui-library` in `scripts/check-footguns.mjs`). Icons
+  come from `@/components/ui/icon`.
+- The app tells the person something no screen shows with `raiseNotice` (`lib/notices.ts`); a
+  plugin's `host.notify` lands on the same surface (`components/ui/notices.tsx`). The visible cap
+  is per source, so plugin notices can never push an app notice off the screen.
+
+**Glass.**
+
+- A surface blurs only through `.glass-float`, `.glass-float-bar` or `.glass-overlay` in
+  `glass-identity.css`; `.glass-tint` or a `--glass-*` background is the same material without the
+  blur. The `raw-backdrop-blur` footgun rejects `backdrop-filter` and `backdrop-blur-*` anywhere
+  else, and `scripts/footguns/backdrop-blur-allowlist.mjs` is empty: keep it empty.
+- Budget: at most three blurred surfaces on screen, radius at most 32px, never on a row or a card
+  inside a scroller, never animated. Blur does not nest, so nothing inside an overlay asks for
+  another; a full-screen sheet is tint only; a terminal that repaints is never under a filter.
+- Text reads on the opaque sheet, not on blur. Coarse pointers get the opaque material, and
+  reduced transparency swaps every glass token for its opaque twin and drops the blur.
+
+**Evidence.** A change that alters how a screen looks attaches before and after sheets (light and
+dark, desktop and narrow) made with `scripts/capture-ui.sh` and `e2e/ui-capture/` (its README has
+the recipe). A screen the change touches that `screens.mjs` does not list is added there in the
+same change. Captures use neutral fixtures and are never committed.

@@ -24,6 +24,19 @@ async function openSprintPlanner(page, narrow) {
 
 export const DIALOG_SCREENS = [
   {
+    // A dialog whose chunk cannot be fetched: it closes and says so on the app's notice surface.
+    name: 'notice',
+    title: 'App notice, a dialog that would not load',
+    url: () => '/todos',
+    ready: BOARD_READY,
+    setup: async (page) => { await page.route(/new-todo-dialog-.*\.js/, (route) => route.abort()) },
+    prepare: async (page) => {
+      await visible(page, ['todo-new', 'todo-new-fab']).click()
+      await page.getByText("The new Todo dialog couldn't load.").first().waitFor({ timeout: 10_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
     // The create dialog over the board: a sheet from the bottom on a phone, centred from `sm` up.
     name: 'new-todo-dialog',
     title: 'New Todo dialog',
