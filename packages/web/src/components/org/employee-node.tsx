@@ -4,6 +4,7 @@ import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { deptHue } from "@/components/org/layout/dept-color"
 import { ClaudeProfileBadge } from "@/components/org/claude-profile"
 import { DepartmentScopeBadge } from "@/components/department-scope-badge"
+import { engineDisplayName } from "@/lib/engine-names"
 import type { DepartmentScopeWire } from "@/lib/department-api"
 
 type EmployeeNodeData = Employee & Record<string, unknown>
@@ -54,7 +55,7 @@ export function EmployeeNode({ data, selected }: NodeProps) {
       {/* Engine always; model revealed on hover/selected to keep nodes quiet */}
       <div className="flex flex-col items-end gap-[2px] shrink-0">
         <span className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] text-[var(--accent)] bg-[var(--accent-fill)] py-px px-[7px] rounded-[10px]">
-          {employee.engine}
+          {engineDisplayName(employee.engine)}
         </span>
         {employee.model && (
           <span
