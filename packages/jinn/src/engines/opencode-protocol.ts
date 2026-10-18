@@ -186,17 +186,35 @@ export function opencodeErrorText(event: Record<string, unknown>): string {
   const error = asRecord(event.error);
   const readable = error && readableErrorText(error);
   if (readable) return readable;
-  const raw = JSON.stringify(error ?? event);
+  // The envelope every line carries says nothing about the failure, and its
+  // digits must not reach failure classification: a timestamp or session id
+  // containing "429" would read as a rate limit. An id inside the error object
+  // itself can still do that; the classifier, not this quote, is where to fix it.
+  const { type: _type, sessionID: _sessionID, timestamp: _timestamp, ...rest } = error ?? event;
+  if (Object.keys(rest).length === 0) return "opencode reported an error with no message and nothing else in its event";
+  const raw = JSON.stringify(rest);
   const quoted = raw.length > RAW_ERROR_LIMIT ? `${raw.slice(0, RAW_ERROR_LIMIT)}…` : raw;
   return `opencode reported an error with no message: ${quoted}`;
 }
 
-/** `name: message (HTTP status)` from either version's error object, or
- *  undefined when it has neither a name nor a message. */
+/** The error object read as 1.x's or OpenCode 2's; undefined when it is neither. */
 function readableErrorText(error: Record<string, unknown>): string | undefined {
-  const message = trimmedString(asRecord(error.data)?.message) ?? trimmedString(error.message);
-  const name = trimmedString(error.name) ?? trimmedString(error.type);
-  if (!message && !name) return undefined;
+  return v1ErrorText(error) ?? v2ErrorText(error);
+}
+
+/** 1.x's `{name, data: {message}}` as `name: message`. */
+function v1ErrorText(error: Record<string, unknown>): string | undefined {
+  const message = trimmedString(asRecord(error.data)?.message);
+  const name = trimmedString(error.name);
+  return message && name ? `${name}: ${message}` : message ?? name;
+}
+
+/** OpenCode 2's `{type, message, status?}` in exactly the text `v2ErrorLine`
+ *  gives it on a server turn. */
+function v2ErrorText(error: Record<string, unknown>): string | undefined {
+  const type = trimmedString(error.type);
+  const message = trimmedString(error.message);
+  if (!type && !message) return undefined;
   const status = typeof error.status === "number" ? ` (HTTP ${error.status})` : "";
-  return `${[name, message].filter(Boolean).join(": ")}${status}`;
+  return `${type ?? "error"}: ${message ?? "no message"}${status}`;
 }

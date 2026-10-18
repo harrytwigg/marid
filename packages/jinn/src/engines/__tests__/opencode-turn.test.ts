@@ -39,13 +39,19 @@ describe("OpencodeTurn — an `error` line", () => {
   });
 
   it("says the same about an OpenCode 2 error on a plain run as on a server turn", () => {
+    expect(errorOf({ type: "error", sessionID: SES, error: { type: "provider.server", message: "Upstream unavailable", status: 502 } }))
+      .toBe("provider.server: Upstream unavailable (HTTP 502)");
+  });
+
+  it.each([
+    ["type, message and status", { type: "provider.server", message: "Upstream unavailable", status: 502 }],
+    ["type only", { type: "provider.server" }],
+    ["message only", { message: "Upstream unavailable" }],
+    ["status without a message", { type: "provider.server", status: 503 }],
+  ])("reads an OpenCode 2 error with %s the way a server turn does", (_shape, error) => {
     // The server path converts each v2 error with v2ErrorLine; a plain run
     // prints it raw. One failure must not read two ways.
-    const error = { type: "provider.server", message: "Upstream unavailable", status: 502 };
-
-    const plain = errorOf({ type: "error", sessionID: SES, error });
-    expect(plain).toBe("provider.server: Upstream unavailable (HTTP 502)");
-    expect(plain).toBe(errorOf(v2ErrorLine(SES, error)));
+    expect(errorOf({ type: "error", sessionID: SES, error })).toBe(errorOf(v2ErrorLine(SES, error)));
   });
 
   it("marks an OpenCode 2 rate limit on a plain run as one", () => {
@@ -75,10 +81,25 @@ describe("OpencodeTurn — an `error` line", () => {
     expect(error).toBe('opencode reported an error with no message: {"code":"E_GONE","detail":{"retryable":false}}');
   });
 
-  it("carries the raw event when it has no error at all", () => {
-    const error = errorOf({ type: "error", sessionID: SES, timestamp: 1 });
+  it("carries the rest of the event when it has no error field", () => {
+    expect(errorOf({ type: "error", sessionID: SES, timestamp: 1, reason: "stream closed" }))
+      .toBe('opencode reported an error with no message: {"reason":"stream closed"}');
+  });
 
-    expect(error).toBe(`opencode reported an error with no message: {"type":"error","sessionID":"${SES}","timestamp":1}`);
+  it("says so in words when the event is only its envelope", () => {
+    expect(errorOf({ type: "error", sessionID: SES, timestamp: 1 }))
+      .toBe("opencode reported an error with no message and nothing else in its event");
+  });
+
+  it("does not read a 429 in the envelope's timestamp or session id as a rate limit", () => {
+    // Quoting them would hand their digits to failure classification, which
+    // matches a bare 429 anywhere in the text.
+    const turn = new OpencodeTurn("");
+    turn.readLine(JSON.stringify({ type: "error", sessionID: "ses_2b7c8f3a9ffe429", timestamp: 1792322429001 }), null);
+    const result = turn.result({ code: 1, terminationReason: null, stderr: "" });
+
+    expect(result.error).not.toContain("429");
+    expect(detectRateLimit(result).limited).toBe(false);
   });
 
   it("caps a raw error so one huge event cannot flood the log", () => {
