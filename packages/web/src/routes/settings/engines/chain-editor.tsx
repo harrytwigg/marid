@@ -1,7 +1,8 @@
 import type React from "react"
 import { ChevronDown, ChevronUp, GripVertical, X } from "lucide-react"
 import { CONTROL_CLASS } from "../shared"
-import { engineLabel, moveInChain, removeFromChain } from "./chain-model"
+import { moveInChain, removeFromChain } from "./chain-model"
+import { engineDisplayName } from "@/lib/engine-names"
 import { rowShift, useChainDrag } from "./use-chain-drag"
 
 const ROW_BUTTON_CLASS =
@@ -34,8 +35,8 @@ function ChainRow({ engine, name, index, count, style, onPointerDown, onMove, on
   onMove: (to: number) => void
   onRemove: () => void
 }) {
-  const label = engineLabel(name)
-  const chain = `${engineLabel(engine)} chain`
+  const label = engineDisplayName(name)
+  const chain = `${engineDisplayName(engine)} chain`
   return (
     <div
       data-chain-row={name}
@@ -73,13 +74,13 @@ function AddEngineControl({ engine, options, onAdd }: {
   return (
     <select
       value=""
-      aria-label={`Add an engine to the ${engineLabel(engine)} chain`}
+      aria-label={`Add an engine to the ${engineDisplayName(engine)} chain`}
       onChange={(event) => { if (event.target.value) onAdd(event.target.value) }}
       className={`${CONTROL_CLASS} mt-[var(--space-2)] cursor-pointer text-[var(--text-tertiary)] sm:w-[220px]`}
     >
       <option value="">Add an engine</option>
       {options.map((name) => (
-        <option key={name} value={name}>{engineLabel(name)}</option>
+        <option key={name} value={name}>{engineDisplayName(name)}</option>
       ))}
     </select>
   )
@@ -101,7 +102,7 @@ export function ChainEditor({ engine, chain, options, onChange }: {
     <div className="mt-[var(--space-2)]">
       {chain.length === 0 ? (
         <p className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
-          No fallback. {engineLabel(engine)} waits for its own limit to reset.
+          No fallback. {engineDisplayName(engine)} waits for its own limit to reset.
         </p>
       ) : (
         <div ref={listRef} className="flex flex-col gap-[var(--space-1)]">

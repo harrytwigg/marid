@@ -6,6 +6,7 @@ import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
 import { useSettings } from "@/routes/settings-provider"
 import { api } from "@/lib/api"
+import { engineDisplayName } from "@/lib/engine-names"
 import { authFetch } from "@/lib/auth"
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { useOnboarding } from "@/hooks/use-onboarding"
@@ -548,7 +549,7 @@ export default function SettingsPage() {
                   <SettingsSelect
                     value={config.engines?.default ?? "claude"}
                     onChange={(v) => updateConfig(["engines", "default"], v)}
-                    options={Object.values(modelRegistry?.engines ?? {}).map((e) => ({ value: e.name, label: e.name.charAt(0).toUpperCase() + e.name.slice(1), disabled: !e.available }))}
+                    options={Object.values(modelRegistry?.engines ?? {}).map((e) => ({ value: e.name, label: engineDisplayName(e.name), disabled: !e.available }))}
                   />
                 </FieldRow>
               </Section>

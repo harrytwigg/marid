@@ -8,9 +8,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { providerOf, providerLabel } from '@/hooks/use-model-registry'
 import type { EngineRegistryEntry, ModelInfo } from '@/lib/api'
+import { engineDisplayName } from '@/lib/engine-names'
 import type { ModelList } from './use-model-list'
-
-export const engineLabelOf = (e: string) => (e ? e.charAt(0).toUpperCase() + e.slice(1) : '')
 
 /** Live `prefers-reduced-motion` flag; transitions collapse to instant when true. */
 export function usePrefersReducedMotion(): boolean {
@@ -164,7 +163,7 @@ export function ModelListPanel({ engine, modelId, list, onPickModel, keepOpenOnP
   return (
     <>
       <div className="px-2 pt-1 pb-1.5 text-[length:var(--text-caption2)] font-[var(--weight-bold)] uppercase tracking-[0.4px] text-[var(--text-quaternary)]">
-        Engine · {engineLabelOf(engine)}
+        Engine · {engineDisplayName(engine)}
       </div>
       {list.models.length === 0 ? (
         <div className="px-2 py-1.5 text-[length:var(--text-caption1)] leading-snug text-[var(--text-secondary)]">
@@ -210,7 +209,7 @@ export function EnginePanel({ engines, engine, onBack, onChoose, onRefresh }: {
             className="justify-between rounded-[9px] py-1.5 pl-2 pr-2 text-[length:var(--text-footnote)] text-[var(--text-secondary)]"
           >
             <span className={on ? 'font-[var(--weight-semibold)] text-[var(--text-primary)]' : undefined}>
-              {engineLabelOf(e.name)}
+              {engineDisplayName(e.name)}
             </span>
             {on && <CheckIcon className="size-3.5 shrink-0 text-[var(--accent)]" />}
           </DropdownMenuItem>
