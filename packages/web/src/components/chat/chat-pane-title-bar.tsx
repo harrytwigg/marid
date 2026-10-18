@@ -139,9 +139,9 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
 
   return (
     <div
-      data-testid="chat-pane-title-bar" data-chat-pane-titlebar={active ? 'active' : 'idle'}
+      data-testid="chat-pane-title-bar" data-chat-pane-titlebar={String(active)}
       {...drag}
-      className="flex h-[34px] shrink-0 items-center gap-2 px-[8px] pl-[12px] transition-colors duration-[var(--duration-fast)]"
+      className={`flex h-[34px] shrink-0 items-center gap-2 px-[8px] pl-[12px] transition-colors duration-[var(--duration-fast)] ${active ? 'bg-[var(--fill-secondary)]' : 'bg-transparent'}`}
     >
       {backTo ? (
         <button
