@@ -216,4 +216,28 @@ describe('a chat the session list does not carry', () => {
     await waitFor(() => expect(storedTabIds()).not.toContain('z'))
     await waitFor(() => expect(location()).not.toBe('/?session=z'))
   })
+
+  it('does not bring its tab back when its pane takes focus after the archive', async () => {
+    renderRoute()
+    await waitFor(() => expect(location()).toBe('/?session=a'))
+
+    fireEvent.click(screen.getAllByTestId('open-unlisted')[0])
+    await waitFor(() => expect(location()).toBe('/?session=z'))
+    const pane = await waitFor(() => {
+      const element = document.querySelector('[data-chat-pane-session="z"]')
+      expect(element).not.toBeNull()
+      return element as Element
+    })
+
+    // The pane is still mounted when the archive lands, and a focus that was scheduled when the
+    // chat opened (the composer takes it a frame later, so under load it arrives late) reaches it.
+    // That focus selected the chat again: its tab reopened and the route went back to it.
+    fireEvent.click(screen.getAllByTestId('bulk-archive')[0])
+    fireEvent.focusIn(pane)
+
+    await waitFor(() => expect(location()).not.toBe('/?session=z'))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    expect(storedTabIds()).not.toContain('z')
+    expect(location()).not.toBe('/?session=z')
+  })
 })

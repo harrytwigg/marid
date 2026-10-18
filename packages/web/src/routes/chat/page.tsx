@@ -165,8 +165,14 @@ function ChatPage() {
   // wanted (the operator is culling a list, not switching chats), but a pane or
   // tab still holding a removed session would go stale, so close each one; the
   // route follows the active tab if it was among them.
+  //
+  // A pane still showing a removed session can take focus after the removal (the composer's
+  // focus after a switch lands a frame late), and focus selects the pane's chat: that reopened
+  // the closed tab and pulled the route back. So the ids removed here are remembered until an
+  // explicit selection opens one again, and a pane's focus does not select them.
+  const removedSessionIdsRef = useRef(new Set<string>())
   const handleSessionsRemoved = useCallback((ids: string[]) => {
-    for (const id of ids) { removeWorkingSetPane(id); closeSessionTab(id) }
+    for (const id of ids) { removedSessionIdsRef.current.add(id); removeWorkingSetPane(id); closeSessionTab(id) }
   }, [closeSessionTab, removeWorkingSetPane])
   const duplicateSessionMutation = useDuplicateSession()
   const focusedDelegatedActivity = useMemo(
@@ -260,6 +266,7 @@ function ChatPage() {
   // history state for the back chip.
   const handleSelect = useCallback(
     (id: string, opts?: { navigateMobile?: boolean; replace?: boolean; from?: ThreadOrigin; system?: boolean }) => {
+      removedSessionIdsRef.current.delete(id)
       const currentId = selectedIdRef.current
       const currentScroller = document.querySelector<HTMLElement>('.chat-messages-scroll') // display-toggled away on a phone, where it reports scrollTop 0
       if (currentId && currentScroller?.clientHeight) sessionScrollRef.current.set(currentId, currentScroller.scrollTop)
@@ -288,6 +295,7 @@ function ChatPage() {
   )
 
   const handleFocusPane = useCallback((sessionId: string) => {
+    if (removedSessionIdsRef.current.has(sessionId)) return
     workingSet.focus(sessionId)
     if (sessionId !== selectedIdRef.current) {
       preservePaneFocusRef.current = sessionId
@@ -318,6 +326,7 @@ function ChatPage() {
     if (navigationType === 'POP') setSystemPrimedId(null)
     if (selectedId) {
       newChatIntentRef.current = false
+      removedSessionIdsRef.current.delete(selectedId) // the route came to it again (back, deep link)
       chatTabs.openTab({ sessionId: selectedId, label: 'Loading...', status: 'idle', unread: false })
     } else if (didMountRef.current) {
       // Landed on bare `/` mid-session. On history traversal, arm the new-chat
