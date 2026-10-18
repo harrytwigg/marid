@@ -3,6 +3,7 @@
 // always taken the same way. `url` receives the ids seed.mjs wrote; `ready`
 // is the text that proves the screen has rendered its data.
 import { DIALOG_SCREENS } from './screens-dialogs.mjs'
+import { ORG_SCREENS } from './screens-org.mjs'
 
 export const SCREENS = [
   {
@@ -276,6 +277,7 @@ export const SCREENS = [
     },
   },
   ...DIALOG_SCREENS,
+  ...ORG_SCREENS,
 ]
 
 export const THEMES = ['light', 'dark']

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button"
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { Employee } from "@/lib/api";
@@ -172,13 +173,9 @@ export function EmployeeDetail({
             <RankBadge rank={rank} />
             {/* The COO node is injected client-side (no YAML) — not editable. */}
             {rank !== "executive" && (
-              <button
-                onClick={() => setEditing(true)}
-                aria-label="Edit employee"
-                className="text-[length:var(--text-caption2)] font-[var(--weight-semibold)] px-[10px] py-[3px] rounded-[10px] border border-[var(--separator)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent)] bg-transparent cursor-pointer transition-colors"
-              >
+              <Button variant="outline" size="xs" onClick={() => setEditing(true)} aria-label="Edit employee">
                 Edit
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -215,12 +212,9 @@ export function EmployeeDetail({
               {truncatedPersona}
             </p>
             {persona.length > 200 && (
-              <button
-                onClick={() => setPersonaExpanded(!personaExpanded)}
-                className="text-[length:var(--text-caption1)] text-[var(--accent)] bg-none border-none cursor-pointer p-0 mt-[var(--space-1)]"
-              >
+              <Button variant="link" size="xs" className="mt-[var(--space-1)] px-0" onClick={() => setPersonaExpanded(!personaExpanded)}>
                 {personaExpanded ? "Show less" : "Show more"}
-              </button>
+              </Button>
             )}
           </div>
         )}

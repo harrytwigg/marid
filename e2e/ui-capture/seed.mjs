@@ -9,6 +9,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import zlib from 'node:zlib'
 import { createRequire } from 'node:module'
+import { writeOrg } from './seed-org.mjs'
 
 const [mode, sandboxHome, third, fourth] = process.argv.slice(2)
 if (!mode || !sandboxHome || !third) {
@@ -64,6 +65,7 @@ function openDb(repo) {
 }
 
 function seedDb(repo) {
+  writeOrg(sandboxHome)
   const db = openDb(repo)
   const session = db.prepare("SELECT id FROM sessions WHERE source_ref = 'sandbox:1'").get()
   if (!session) throw new Error('the sandbox --seed session sandbox:1 is missing')
