@@ -110,7 +110,7 @@ function RouteMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className="min-w-[220px] rounded-[var(--radius-lg)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+        className="min-w-[220px] rounded-[var(--radius-lg)] p-1.5"
       >
         {targets.map((target) => (
           <DropdownMenuItem

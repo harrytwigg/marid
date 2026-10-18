@@ -4,6 +4,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { WorkItemDetailWire } from "@/lib/api"
@@ -19,7 +20,7 @@ import { keptByClosedSprint, sprintErrorMessage, useSetWorkItemSprint, useSprint
  * history and are never offered as a destination. */
 
 const MENU_CLASS =
-  "max-h-[min(420px,70vh)] w-[min(280px,calc(100vw-24px))] overflow-y-auto rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+  "max-h-[min(420px,70vh)] w-[min(280px,calc(100vw-24px))] overflow-y-auto rounded-[var(--radius-xl)] p-1.5"
 const ITEM_CLASS =
   "min-h-10 cursor-pointer gap-2 rounded-[9px] px-2.5 text-[length:var(--text-subheadline)] text-[var(--text-primary)] focus:bg-[var(--fill-tertiary)]"
 
@@ -105,9 +106,9 @@ function SprintMoveMenu({ current, sprints, onMove }: {
         </DropdownMenuItem>
       ))}
       {sprints?.length === 0 && (
-        <div className="px-2.5 py-2 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">
+        <DropdownMenuLabel className="px-2.5 py-2 text-[length:var(--text-caption1)] font-normal text-[var(--text-tertiary)]">
           No open sprints. Create one from the board's Sprint filter.
-        </div>
+        </DropdownMenuLabel>
       )}
     </DropdownMenuContent>
   )

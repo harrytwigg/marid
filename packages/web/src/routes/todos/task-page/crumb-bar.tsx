@@ -158,7 +158,7 @@ export function CrumbBar({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="min-w-[180px] rounded-[var(--radius-lg)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+            className="min-w-[180px] rounded-[var(--radius-lg)] p-1.5"
           >
             <DropdownMenuItem
               className="flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-2.5 text-[length:var(--text-footnote)] font-medium text-[var(--text-primary)] focus:bg-[var(--fill-secondary)]"

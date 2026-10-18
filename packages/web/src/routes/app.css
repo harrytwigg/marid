@@ -38,6 +38,11 @@
 @import "tw-animate-css";
 @import "@heroui/styles/components/tooltip.css" layer(components);
 @import "@heroui/styles/components/popover.css" layer(components);
+@import "@heroui/styles/components/menu.css" layer(components);
+@import "@heroui/styles/components/menu-item.css" layer(components);
+@import "@heroui/styles/components/menu-section.css" layer(components);
+@import "@heroui/styles/components/header.css" layer(components);
+@import "@heroui/styles/components/separator.css" layer(components);
 @import "./heroui-glass.css";
 
 /* base.css gives every element's border the --border colour. Marid's borders

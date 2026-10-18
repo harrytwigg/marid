@@ -2,7 +2,7 @@ import { Ellipsis, ExternalLink, PanelRightOpen, Share2 } from 'lucide-react'
 import { useState } from 'react'
 import { sessionUrl } from '@/components/chat/chat-route-helpers'
 import { SessionRowMenu, SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS, SESSION_MENU_SEPARATOR_CLASS } from '@/components/chat/session-row-menu'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { Session } from '@/components/chat/session-signals'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { cn } from '@/lib/utils'
@@ -36,7 +36,7 @@ function PaneMenuTrigger({ title }: Pick<ChatPaneSessionMenuProps, 'title'>) {
         data-chat-pane-menu-trigger
         aria-label={`Actions for ${title}`}
         onClick={(event) => event.stopPropagation()}
-        className="absolute left-0 grid size-[26px] place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent text-[var(--text-secondary)] opacity-0 transition-[color,opacity] duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] focus-visible:opacity-100 data-[state=open]:opacity-100 group-hover/chat-pane:opacity-100 group-focus-within/title-actions:opacity-100"
+        className="absolute left-0 grid size-[26px] place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent text-[var(--text-secondary)] opacity-0 transition-[color,opacity] duration-[var(--duration-fast)] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)] focus-visible:opacity-100 data-[menu-open]:opacity-100 group-hover/chat-pane:opacity-100 group-focus-within/title-actions:opacity-100"
       >
         <Ellipsis size={14} aria-hidden />
       </button>
@@ -48,7 +48,7 @@ function PaneViewControls({ session, actions, viewMode, cliModeAvailable, viewSw
   if (!actions.openBeside) return null
   return (
     <>
-      <div className="flex items-center gap-1 px-2.5 py-1.5">
+      <DropdownMenuLabel className="flex items-center gap-1 px-2.5 py-1.5 font-normal">
         <button
           type="button"
           onClick={() => onChange('chat')}
@@ -71,7 +71,7 @@ function PaneViewControls({ session, actions, viewMode, cliModeAvailable, viewSw
             (!cliModeAvailable || viewSwitchLocked) && 'cursor-not-allowed opacity-45',
           )}
         >CLI</button>
-      </div>
+      </DropdownMenuLabel>
       {/* Same labels and same slots as the header's More menu: the view toggle, then Open
           beside, then Open in new tab, then everything else. The pane title bar is the
           multi-pane home of actions the header owns in single-pane, so the two have to read

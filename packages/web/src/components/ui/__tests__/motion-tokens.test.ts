@@ -24,10 +24,16 @@ const TOUCHED = [
   "components/pill-nav.tsx",
   "components/chat/mobile-tab-bar.tsx",
   "components/chat/chat-tabs.tsx",
+  "components/ui/menu-parts.tsx",
+  "components/ui/menu-popup.tsx",
 ]
 
+/** React Aria's overlays enter and leave on HeroUI's popover classes (`data-entering`, `data-exiting`),
+ *  which React Aria waits out before it unmounts, so there is no `data-[state]` pair in them to check. */
+const REACT_ARIA_OVERLAYS = new Set(["components/ui/dropdown-menu.tsx", "components/ui/context-menu.tsx"])
+
 /** The subset of those that open and close, and so owe both halves. */
-const OVERLAYS = TOUCHED.slice(0, 7)
+const OVERLAYS = TOUCHED.slice(0, 7).filter((file) => !REACT_ARIA_OVERLAYS.has(file))
 
 const DURATION_TOKENS = ["--duration-instant", "--duration-fast", "--duration-base", "--duration-slow"]
 

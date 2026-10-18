@@ -11,7 +11,7 @@ export function MenuCheck({ on }: { on: boolean }) {
 }
 
 export const SUBMENU_CLASS =
-  "max-h-[min(420px,70vh)] min-w-[220px] overflow-y-auto rounded-[var(--radius-lg)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+  "max-h-[min(420px,70vh)] min-w-[220px] overflow-y-auto rounded-[var(--radius-lg)] p-1.5"
 
 export function ActiveChip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (

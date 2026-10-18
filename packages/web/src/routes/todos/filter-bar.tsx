@@ -24,7 +24,7 @@ import { assigneeFilterLabel, OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from "./uti
 import { ActiveChip, BoardActiveChip, MenuCheck, SUBMENU_CLASS, ValueChip } from "./filter-chips"
 
 const MENU_CLASS =
-  "w-[min(320px,calc(100vw-24px))] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-2 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+  "w-[min(320px,calc(100vw-24px))] rounded-[var(--radius-xl)] p-2"
 const ITEM_CLASS =
   "min-h-11 cursor-pointer rounded-[10px] px-3 text-[length:var(--text-subheadline)] text-[var(--text-primary)] focus:bg-[var(--fill-secondary)]"
 
@@ -180,7 +180,7 @@ export function FilterBar({
             </DropdownMenuItem>
           ))}
           {(labelRegistry.data ?? []).length === 0 && (
-            <div className="px-3 py-2 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]">No labels yet.</div>
+            <DropdownMenuLabel className="px-3 py-2 text-[length:var(--text-caption1)] font-normal text-[var(--text-tertiary)]">No labels yet.</DropdownMenuLabel>
           )}
         </ValueChip>
 

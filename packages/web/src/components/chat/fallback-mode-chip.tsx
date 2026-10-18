@@ -79,7 +79,7 @@ export function FallbackModeChip({ sessionId, view, disabled, subscribe }: Fallb
         align="start"
         sideOffset={8}
         collisionPadding={16}
-        className="w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[var(--radius-lg)] border-0 bg-[var(--bg-tertiary)] p-1.5 shadow-[var(--shadow-overlay)]"
+        className="w-72 max-w-[calc(100vw-2rem)] rounded-[var(--radius-lg)] p-1.5"
       >
         {panel === 'pick' ? (
           <FallbackTargetPicker view={local} onBack={() => setPanel('mode')} onChoose={applyTarget} />

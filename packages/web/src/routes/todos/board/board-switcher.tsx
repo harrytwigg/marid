@@ -27,7 +27,7 @@ import { useBoardMenuCounts } from "./use-board"
  * "Show archived" asks for them; their boards and Todos are unchanged. */
 
 const MENU_CLASS =
-  "w-[min(300px,calc(100vw-24px))] rounded-[var(--radius-xl)] border-0 bg-[var(--material-thick)] p-1.5 shadow-[var(--shadow-overlay)] backdrop-blur-xl"
+  "w-[min(300px,calc(100vw-24px))] rounded-[var(--radius-xl)] p-1.5"
 const ROW_CLASS =
   "min-h-10 cursor-pointer gap-2.5 rounded-[9px] px-2.5 text-[length:var(--text-subheadline)] text-[var(--text-primary)] focus:bg-[var(--fill-tertiary)]"
 

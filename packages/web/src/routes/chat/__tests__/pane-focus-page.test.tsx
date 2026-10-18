@@ -1,3 +1,4 @@
+import "@/test/preload-menus"
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { WORKING_SET_STORAGE_KEY } from '../working-set'

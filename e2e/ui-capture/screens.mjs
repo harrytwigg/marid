@@ -118,6 +118,64 @@ export const SCREENS = [
       await page.waitForTimeout(500)
     },
   },
+  {
+    // A session row's actions menu: the context menu by right-click on desktop, the ellipsis button's dropdown on a phone, where the list is the page.
+    name: 'session-row-menu',
+    title: 'Session row menu',
+    url: () => '/',
+    ready: 'Delegation flow',
+    prepare: async (page) => {
+      if ((page.viewportSize()?.width ?? 0) >= 1024) {
+        await page.getByText('Delegation flow', { exact: true }).first().click({ button: 'right' })
+      } else {
+        await page.getByRole('button', { name: 'Chat actions' }).locator('visible=true').first().click()
+      }
+      await page.getByRole('menu').waitFor({ timeout: 5_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // The title bar's menu of a pane in a split chat (Open beside makes the split).
+    name: 'pane-menu',
+    viewports: ['desktop'],
+    title: 'Chat pane menu',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: 'Add a step for the changelog',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'More options' }).first().click()
+      await page.getByText('Open beside').first().click()
+      const trigger = page.locator('[data-chat-pane-menu-trigger]').first()
+      await trigger.waitFor({ state: 'attached', timeout: 10_000 })
+      await trigger.click({ force: true })
+      await page.getByRole('menu').waitFor({ timeout: 5_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // A board card's menu, opened by a right-click (desktop only: a long press is the card's drag).
+    name: 'board-card-menu',
+    viewports: ['desktop'],
+    title: 'Board card menu',
+    url: () => '/todos',
+    ready: 'Draft the release checklist',
+    prepare: async (page) => {
+      await page.locator('[data-board-card]').first().click({ button: 'right' })
+      await page.getByRole('menu').waitFor({ timeout: 5_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // The composer's engine and model menu, with its search and radio list.
+    name: 'model-menu',
+    title: 'Engine and model menu',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: 'Add a step for the changelog',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: /Opus/ }).first().click()
+      await page.getByRole('menu').waitFor({ timeout: 5_000 })
+      await page.waitForTimeout(500)
+    },
+  },
 ]
 
 export const THEMES = ['light', 'dark']

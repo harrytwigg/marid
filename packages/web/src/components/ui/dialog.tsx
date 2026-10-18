@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { OverlayContainerContext } from "@/components/ui/overlay-container"
 
 function Dialog({
   ...props
@@ -45,20 +46,47 @@ function DialogOverlay({
   )
 }
 
+/** The dialog's content element, for a menu opened inside the dialog to portal into: the dialog holds focus in
+ *  its content and blocks the page outside it, so a surface in the body could be neither focused nor pressed. */
+function useContentContainer(ref: React.Ref<HTMLDivElement> | undefined) {
+  const [content, setContent] = React.useState<HTMLElement | null>(null)
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      setContent(node)
+      if (typeof ref === "function") ref(node)
+      else if (ref) ref.current = node
+    },
+    [ref],
+  )
+  return { content, setRefs }
+}
+
+/** Escape in a menu or popover inside the dialog closes that and not the dialog: React Aria's overlay answers the
+ *  key on its own element, after Radix's document-level listener has run. */
+function keepEscapeInOverlay(event: KeyboardEvent, own?: (event: KeyboardEvent) => void) {
+  own?.(event)
+  if ((event.target as Element | null)?.closest?.(".popover")) event.preventDefault()
+}
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
   overlayClassName,
+  ref,
+  onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
   overlayClassName?: string
 }) {
+  const { content, setRefs } = useContentContainer(ref)
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
+        ref={setRefs}
+        onEscapeKeyDown={(event) => keepEscapeInOverlay(event, onEscapeKeyDown)}
         data-slot="dialog-content"
         className={cn(
           "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg outline-none motion-safe:data-[state=closed]:animate-pop-out motion-safe:data-[state=open]:animate-pop-in sm:max-w-lg",
@@ -66,7 +94,7 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        <OverlayContainerContext.Provider value={content}>{children}</OverlayContainerContext.Provider>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"

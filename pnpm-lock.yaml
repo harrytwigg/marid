@@ -283,6 +283,9 @@ importers:
       react-router-dom:
         specifier: ^7
         version: 7.15.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react-stately:
+        specifier: ^3.51.0
+        version: 3.51.0(react@19.2.4)
       react-syntax-highlighter:
         specifier: ^16.1.1
         version: 16.1.1(react@19.2.4)
