@@ -13,6 +13,9 @@
   "main": "./dist/src/index.js",
   "types": "./dist/src/index.d.ts",
   "files": [
+    "LICENSE",
+    "NOTICE",
+    "THIRD-PARTY-NOTICES.md",
     "dist/",
     "template/",
     "assets/",
@@ -24,9 +27,11 @@
     "dev": "tsc && (tsc --watch &) && node --watch-path=dist dist/bin/jinn.js start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "pnpm build && node --test scripts/gateway-events-artifact.test.mjs && node ../../scripts/vitest-flaky-retry.mjs --testTimeout=30000 --hookTimeout=30000",
+    "test": "pnpm build && node --test scripts/gateway-events-artifact.test.mjs scripts/package-contents.test.mjs && node ../../scripts/vitest-flaky-retry.mjs --testTimeout=30000 --hookTimeout=30000",
     "coverage": "vitest run --coverage --maxWorkers=1 --fileParallelism=false --hookTimeout=30000",
     "test:watch": "vitest",
+    "notices:generate": "node scripts/third-party-notices.mjs",
+    "notices:check": "node scripts/third-party-notices.mjs --check",
     "migration:generate": "node scripts/instance-migration-bundle.mjs generate",
     "migration:check": "node scripts/instance-migration-bundle.mjs check",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
