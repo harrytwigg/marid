@@ -2,7 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
-import { discoverOpencodeModels, parseOpencodeApiModels, parseOpencodeModels } from "../opencode-models.js";
+import { discoverOpencodeModels, parseOpencodeModels } from "../opencode-models.js";
+import { parseOpencodeApiModels } from "../opencode-model-records.js";
 
 /** `opencode models --verbose` on 1.19.0, cut to three models. */
 const VERBOSE = fs.readFileSync(path.join(__dirname, "fixtures", "opencode-models-verbose.txt"), "utf8");
