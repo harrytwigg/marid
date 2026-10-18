@@ -33,8 +33,8 @@ const ROOT_TREES = [
 export const LINTED = [...PACKAGE_TREES, ...ROOT_TREES]
 
 // The web app draws its icons from `@/components/ui/icon`, whose modules are
-// generated from Phosphor's duotone sources. Lucide is on its way out of the
-// dependency tree, so nothing new may import it.
+// generated from Phosphor's duotone sources. Lucide has left the dependency
+// tree, and `scripts/check-footguns.mjs` rejects it (and Radix and cmdk) in CI.
 const WEB_SOURCES = ["packages/web/**/*.{ts,tsx}"]
 const HEROUI_BARREL = {
   name: "@heroui/react",
