@@ -24,7 +24,7 @@
     "dev": "tsc && (tsc --watch &) && node --watch-path=dist dist/bin/jinn.js start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "pnpm build && node --test scripts/gateway-events-artifact.test.mjs && node ../../scripts/vitest-flaky-retry.mjs --maxWorkers=2 --testTimeout=30000 --hookTimeout=30000",
+    "test": "pnpm build && node --test scripts/gateway-events-artifact.test.mjs && node ../../scripts/vitest-flaky-retry.mjs --testTimeout=30000 --hookTimeout=30000",
     "coverage": "vitest run --coverage --maxWorkers=1 --fileParallelism=false --hookTimeout=30000",
     "test:watch": "vitest",
     "migration:generate": "node scripts/instance-migration-bundle.mjs generate",

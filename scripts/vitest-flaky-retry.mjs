@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { spawnLowPriority } from "./low-priority.mjs";
 import { report } from "./vitest-flaky-report.mjs";
 import { acquireTestSlot } from "./test-slot-gate.mjs";
 
@@ -136,10 +136,9 @@ function resolveVitestBin(packageDir) {
 }
 
 function runVitest(vitestBin, args, packageDir) {
-  const result = spawnSync(process.execPath, [vitestBin, ...args], {
-    stdio: "inherit",
-    cwd: packageDir,
-  });
+  // Idle priority, so a package's suite run on its own is as polite as the
+  // monorepo-wide one. No-op in CI and under JINN_TEST_NICE=0.
+  const result = spawnLowPriority([process.execPath, vitestBin, ...args], { cwd: packageDir });
   if (result.error) {
     console.error(`${LABEL}: could not start vitest — ${result.error.message}`);
     return 1;
