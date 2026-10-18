@@ -40,7 +40,7 @@ const QUOTA_SIGNATURES: readonly RegExp[] = [
 const RATE_LIMIT_SIGNATURES: readonly RegExp[] = [
   /rate.?limit/i,
   /too many requests/i,
-  /429/,
+  /\b429\b/,
   /overloaded/i,
 ];
 
