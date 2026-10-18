@@ -77,7 +77,7 @@ describe("classifyEngineFailureText", () => {
     "TypeError at engine.ts:429:5",
     "request req-429-abc failed",
     "12:34:56.429 engine error",
-    "elapsed 0.429s before the crash",
+    "engine crashed after 0.429",
   ])("does not read the digits 429 inside an id or number as a rate limit: %j", (text) => {
     expect([...classifyEngineFailureText(text).classes]).toEqual(["terminal"]);
   });
