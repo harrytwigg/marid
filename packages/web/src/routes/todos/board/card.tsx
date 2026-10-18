@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from "react"
 import { ChevronRight } from "lucide-react"
-import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemTreeWire } from "@/lib/api"
+import type { Employee, WorkItemCompactWire, WorkItemOpenDetailWire, WorkItemStatusWire, WorkItemTreeWire } from "@/lib/api"
 import { stateKeyOf } from "@/lib/todos"
 import { EmployeeAvatar } from "@/components/ui/employee-avatar"
 import { StateCircle } from "../state-glyph"
@@ -8,6 +8,7 @@ import { stopReasonOf } from "../util"
 import { CardTree } from "./card-tree"
 import { hasStopLead, StopCauseLead, stopLeadKey } from "./stop-cause"
 import { KeepToggle } from "./keep-control"
+import { MoveToMenu } from "./move-menu"
 
 /* ICI-1427 — the board card, Variant A: four rows, the same four on every card.
  * ID + assignee, status glyph + title, priority + labels + roll-up, cost + due.
@@ -102,6 +103,8 @@ export interface BoardCardProps {
   onKeep?: (vars: { id: string; kept: boolean }) => void
   /** Drag lift entry point (the drag hook owns pointer capture). */
   onLiftPointerDown?: (event: React.PointerEvent, item: WorkItemCompactWire) => void
+  /** Offers "Move to…" on the card, the phone's way to change column. Absent = no action. */
+  onMove?: (item: WorkItemCompactWire, to: WorkItemStatusWire) => void
   dragging?: boolean
   /** Rendered as the floating drag preview: lifted treatment, inert. */
   ghost?: boolean
@@ -118,6 +121,7 @@ export const BoardCard = memo(function BoardCard({
   onAddSubTask,
   onKeep,
   onLiftPointerDown,
+  onMove,
   dragging,
   ghost,
 }: BoardCardProps) {
@@ -151,7 +155,6 @@ export const BoardCard = memo(function BoardCard({
         ghost
           ? "bg-[var(--bg-tertiary)] shadow-[var(--shadow-overlay)]"
           : "bg-[var(--bg-secondary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] hover:bg-[var(--bg-tertiary)]",
-        ghost ? "" : "max-[700px]:rounded-xl max-[700px]:bg-transparent max-[700px]:shadow-none max-[700px]:hover:bg-[var(--fill-quaternary)]",
         dragging ? "opacity-0" : "",
       ].join(" ")}
     >
@@ -187,13 +190,14 @@ export const BoardCard = memo(function BoardCard({
               <EmployeeAvatar name={item.assignee} size={20} fontSize={11} className="bg-[var(--fill-secondary)]" />
             </span>
           )}
+          {onMove && !ghost && <MoveToMenu item={item} openChildren={rollup ? rollup.total - rollup.closed : 0} onMove={onMove} />}
         </span>
       </div>
 
       {/* Row 2 — the state, then the only primary ink on the card. */}
       <div className="flex items-start gap-2">
         <StateCircle keyOf={stateKeyOf(item.status)} size={16} className="mt-[2px] flex-none" />
-        <div className="line-clamp-2 min-w-0 text-[calc(15px*var(--text-scale))] font-medium leading-[1.3] text-[var(--text-primary)] max-[700px]:line-clamp-1 max-[700px]:text-[calc(16px*var(--text-scale))]">
+        <div className="line-clamp-2 min-w-0 text-[calc(15px*var(--text-scale))] font-medium leading-[1.3] text-[var(--text-primary)] max-[700px]:text-[calc(16px*var(--text-scale))]">
           {item.title}
         </div>
       </div>

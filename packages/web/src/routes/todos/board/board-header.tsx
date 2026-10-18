@@ -1,4 +1,5 @@
 import { Zap } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import type { DepartmentSummaryWire } from "@/lib/api"
 import type { BoardId } from "./board-route"
@@ -38,16 +39,17 @@ function Dot() {
  */
 function QuickCaptureButton({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      size="icon"
       data-testid="todo-quick-capture"
       onClick={onClick}
       aria-label="Quick capture"
       title="Quick capture — type or dictate a rough idea"
-      className="focus-outline inline-flex size-10 items-center justify-center rounded-full bg-[var(--bg-secondary)] text-[var(--text-primary)] shadow-[var(--shadow-ambient),var(--shadow-subtle),var(--inset-shine)] outline-none transition-transform hover:scale-[0.96] motion-reduce:transition-none"
+      className="size-10 rounded-full"
     >
       <Zap className="size-4" aria-hidden />
-    </button>
+    </Button>
   )
 }
 

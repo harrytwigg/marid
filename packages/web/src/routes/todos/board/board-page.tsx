@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useNavigationType, useParams, useSearchParams } from "react-router-dom"
 import { ListFilter, Plus } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { PageLayout } from "@/components/page-layout"
 import { PageScaffold } from "@/components/shell/page-scaffold"
 import { PrimaryAction } from "@/components/shell/primary-action"
@@ -13,6 +14,7 @@ import {
   operatorSafeTodoError,
   rankBetween,
   isPositiveTodoVersion,
+  STATUS_LABEL,
 } from "@/lib/todos"
 import { todoPath } from "@/lib/todo-id"
 import { useDepartments } from "@/hooks/use-departments"
@@ -26,7 +28,7 @@ import { FilterBar } from "../filter-bar"
 import { LazyTodoFilterSheet } from "../todo-filter-sheet-lazy"
 import { NeedsYouView } from "../needs-you-view"
 import { NewTodoDialog } from "../new-todo-dialog"
-import { QuickCaptureBar } from "../quick-add/capture-bar"
+import { LazyQuickCaptureBar } from "../quick-add/capture-bar-lazy"
 import { BoardHeader } from "./board-header"
 import { TodoList } from "../list/todo-list"
 import { BoardCard, cardLayoutKey, rollupOf, type CardEnrichment } from "./card"
@@ -41,6 +43,8 @@ import {
 import { useBoardDrag } from "./use-board-drag"
 import { boardKey, parseBoardParam } from "./board-route"
 import { useBoardScroll } from "./use-board-scroll"
+import { BoardViewSwitch, ColumnDots } from "./board-view-switch"
+import { loadBoardView, PHONE_CARD_MOVE, saveBoardView, useColumnPosition, useIsBoardMobile, type BoardView } from "./phone-board"
 import { useBoardFilters } from "./use-board-filters"
 import { useBoardSprints } from "../sprints/use-board-sprints"
 import { GroupSkeleton } from "./group-skeleton"
@@ -53,23 +57,6 @@ import { GroupSkeleton } from "./group-skeleton"
  * The task-page takeover is stage B; mobile polish + cutover are stage C. */
 
 const NOOP = () => {}
-
-/** The one breakpoint the Todos dash reads: the phone gets the grouped list,
- *  the desktop the columns. No `window` — SSR, jsdom — reads as desktop. */
-const MOBILE_QUERY = "(max-width: 700px)"
-function useIsBoardMobile(): boolean {
-  const [mobile, setMobile] = useState(
-    () => typeof window !== "undefined" && (window.matchMedia?.(MOBILE_QUERY).matches ?? false),
-  )
-  useEffect(() => {
-    const query = window.matchMedia?.(MOBILE_QUERY)
-    if (!query) return
-    const onChange = (event: MediaQueryListEvent) => setMobile(event.matches)
-    query.addEventListener("change", onChange)
-    return () => query.removeEventListener("change", onChange)
-  }, [])
-  return mobile
-}
 
 const TREE_OPEN_KEY = "jinn-board-tree-open"
 
@@ -106,9 +93,14 @@ export default function TodoBoardPage() {
   const { filters, setFilters } = useBoardFilters(searchParams, setSearchParams, !isAttention)
   const now = useMemo(() => Date.now(), [filters.date, filters.due])
 
-  // The viewport picks the view — grouped list on the phone, columns on the
-  // desktop — so there is nothing for the operator to toggle or to remember.
+  // The desktop shows the columns. A phone shows them too, swiped one at a time,
+  // with the grouped list one tap away; the choice is remembered per device.
   const mobile = useIsBoardMobile()
+  const [mobileView, setMobileView] = useState<BoardView>(loadBoardView)
+  const chooseView = useCallback((view: BoardView) => {
+    setMobileView(view)
+    saveBoardView(view)
+  }, [])
   const data = useBoardData(board, filters, now, !isAttention)
   const departments = useDepartments()
   const org = useOrg()
@@ -350,6 +342,19 @@ export default function TodoBoardPage() {
     onTransition: (item, to, index) => commitTransition(item, to, index),
   })
 
+  // A phone moves a card from its "Move to…" menu (the card lands at the top of the
+  // column), and does not lift it: the strip would have to scroll itself under a held card.
+  const phoneMoves = mobile && PHONE_CARD_MOVE === "menu"
+  const commitTransitionRef = useRef(commitTransition)
+  commitTransitionRef.current = commitTransition
+  const moveCard = useCallback(
+    (item: WorkItemCompactWire, to: WorkItemStatusWire) => {
+      commitTransitionRef.current(item, to, 0)
+      announce(`${item.id} moved to ${STATUS_LABEL[to]}`)
+    },
+    [announce],
+  )
+
   // ── Keyboard rank (⌘/Ctrl + arrows) with SR announcements ──────────────────
   const liveRef = useRef<HTMLSpanElement>(null)
   const onCardKeyDown = useCallback(
@@ -435,6 +440,8 @@ export default function TodoBoardPage() {
   const filterCount = activeFilterCount(filters) + (filters.q ? 1 : 0)
   const boardEmpty = !data.isLoading && visibleItemCount(filters.status, itemsByStatus) === 0
   const filteredEmpty = boardEmpty && filterCount > 0
+  const showStrip = mobile && mobileView === "board" && !data.isError && !data.isLoading && !filteredEmpty
+  const position = useColumnPosition(boardScrollRef, showStrip, `${visibleStatuses.join()}|${closedOpen}`)
   const listStatusInScope = useCallback((s: WorkItemStatusWire) => isColumnInStatusFilter(filters.status, s), [filters.status])
   const listColumns = useMemo(() => {
     const columns = {} as typeof data.columns
@@ -471,7 +478,8 @@ export default function TodoBoardPage() {
             onOpenChild={onOpen}
             onAddSubTask={addSubTask}
             onKeep={keep.mutate}
-            onLiftPointerDown={liftPointerDown}
+            onLiftPointerDown={phoneMoves ? undefined : liftPointerDown}
+            onMove={phoneMoves ? moveCard : undefined}
           />
         </div>,
       )
@@ -559,25 +567,27 @@ export default function TodoBoardPage() {
 
         {!isAttention && mobile && (
           <div className="flex-none px-[var(--space-3)] md:px-[var(--space-10)]">
-            <button
-              type="button"
-              data-testid="todo-mobile-filters"
-              onClick={() => setMobileFilterOpen(true)}
-              className="focus-outline flex h-[40px] flex-none items-center gap-[7px] rounded-[17px] bg-[var(--bg-secondary)] px-3.5 text-[14px] font-semibold text-[var(--text-primary)] outline-none"
-              style={{ boxShadow: "var(--shadow-ambient), var(--shadow-subtle), var(--inset-shine)" }}
-            >
-              <ListFilter
-                size={13}
-                strokeWidth={2.2}
-                aria-hidden
-                className={filterCount > 0 ? "text-[var(--accent)]" : undefined}
-              />
-              Filters
-              {filterCount > 0 && (
-                <span className="text-[12px] font-medium tabular-nums text-[var(--text-quaternary)]">{filterCount}</span>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                data-testid="todo-mobile-filters"
+                onClick={() => setMobileFilterOpen(true)}
+                className="h-10 rounded-[20px] px-4"
+              >
+                <ListFilter
+                  size={15}
+                  aria-hidden
+                  className={filterCount > 0 ? "text-[var(--accent)]" : undefined}
+                />
+                Filters
+                {filterCount > 0 && (
+                  <span className="text-[12px] font-medium tabular-nums text-[var(--text-quaternary)]">{filterCount}</span>
+                )}
+              </Button>
+              <BoardViewSwitch value={mobileView} onChange={chooseView} />
+            </div>
             {sprintTools.strip}
+            {showStrip && <ColumnDots {...position} />}
           </div>
         )}
 
@@ -613,7 +623,7 @@ export default function TodoBoardPage() {
           <div
             ref={listScrollRef}
             onScroll={onListScroll}
-            hidden={!mobile}
+            hidden={!mobile || mobileView !== "list"}
             data-testid="todo-list-scroll"
             data-scrollable
             className="min-h-0 flex-1 overflow-y-auto pb-[var(--jinn-scaffold-bottom)] lg:pb-10"
@@ -649,10 +659,11 @@ export default function TodoBoardPage() {
             ref={boardScrollRef}
             onScroll={onBoardScroll}
             onContextMenu={sprintTools.onContextMenu}
-            hidden={mobile}
+            hidden={mobile && mobileView !== "board"}
             data-testid="todo-board-scroll"
+            data-board-glass=""
             data-scrollable
-            className="min-h-0 flex-1 overflow-auto pb-[var(--jinn-scaffold-bottom)] lg:pb-10"
+            className="min-h-0 flex-1 overflow-auto pb-[var(--jinn-scaffold-bottom)] max-[700px]:snap-x max-[700px]:snap-mandatory max-[700px]:scroll-px-4 lg:pb-10"
           >
             {data.isError ? (
               <BoardErrorCard error={data.error} />
@@ -661,10 +672,15 @@ export default function TodoBoardPage() {
             ) : filteredEmpty ? (
               <FilteredEmptyCard count={filterCount} onClear={clearAllFilters} />
             ) : (
-            <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5">
+            <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3">
               {visibleStatuses.map((status) => columnFor(status))}
               {CLOSED_STATUSES.some(listStatusInScope) && (closedOpen ? (
-                <section className="flex w-[262px] min-w-[238px] flex-none flex-col gap-3" data-testid="board-closed-column">
+                <section
+                  className="flex w-[262px] min-w-[238px] flex-none flex-col gap-3 max-[700px]:w-[84vw] max-[700px]:snap-start"
+                  data-testid="board-closed-column"
+                  data-board-column="closed"
+                  data-board-snap=""
+                >
                   <ClosedColumnHeader count={closedTotal} onCollapse={() => setClosedOpen(false)} />
                   {CLOSED_STATUSES.filter(listStatusInScope).map((status) => (
                     <ClosedColumnGroup
@@ -729,7 +745,7 @@ export default function TodoBoardPage() {
       )}
       <span ref={liveRef} aria-live="polite" className="sr-only" />
 
-      {capturing && <QuickCaptureBar onClose={() => setCapturing(false)} />}
+      {capturing && <LazyQuickCaptureBar onClose={() => setCapturing(false)} />}
 
       {creating && (
         <NewTodoDialog
@@ -784,9 +800,9 @@ function BoardErrorCard({ error, testId = "board-error" }: { error: unknown; tes
 function BoardSkeleton() {
   const cardsPerColumn = [3, 2, 3, 2, 1]
   return (
-    <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5" data-testid="board-skeleton" aria-hidden>
+    <div className="flex min-h-full items-start gap-3 px-10 pb-8 pt-5 max-[700px]:w-max max-[700px]:px-4 max-[700px]:pt-3" data-testid="board-skeleton" aria-hidden>
       {cardsPerColumn.map((cards, column) => (
-        <div key={column} className="flex min-w-0 flex-1 flex-col">
+        <div key={column} data-board-column="loading" className="flex min-w-0 flex-1 flex-col max-[700px]:w-[84vw] max-[700px]:flex-none">
           <div className="flex items-center gap-2 px-[11px] pb-2.5 pt-0.5">
             <span className="size-5 rounded-full bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]" />
             <span className="h-3 w-[74px] rounded-[6px] bg-[var(--fill-tertiary)] motion-safe:animate-[skeletonPulse_1.6s_var(--ease-smooth)_infinite]" />
@@ -795,6 +811,7 @@ function BoardSkeleton() {
             {Array.from({ length: cards }, (_, i) => (
               <div
                 key={i}
+                data-board-skeleton-card=""
                 className="rounded-[var(--radius-lg)] bg-[var(--bg-secondary)] px-[13px] py-3 shadow-[var(--shadow-ambient),var(--shadow-subtle)]"
               >
                 <div

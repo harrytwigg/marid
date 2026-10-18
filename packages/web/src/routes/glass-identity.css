@@ -266,6 +266,54 @@ body {
   }
 }
 
+/* The board drops the sheet: its columns float on the sky as glass panels and
+   its cards are near-opaque glass, so text still reads on a solid ground. Only
+   tints and lit edges here, no blur: a card or a column that blurred would be
+   one blurred surface per card, over the blur budget. The list view on a phone
+   hides the board, and the sheet comes back with it. */
+[data-shell="sheet"]:has([data-board-glass]:not([hidden])) {
+  --bg: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+[data-board-glass] [data-board-column],
+[data-board-glass] [data-board-rail] {
+  padding: 12px 10px 10px;
+  border-radius: var(--radius-2xl);
+  background: var(--glass-chrome);
+  background-image: var(--glass-sheen);
+  box-shadow: var(--shadow-card);
+}
+[data-board-glass] [data-board-rail] {
+  padding: 8px 0 14px;
+}
+[data-board-glass] [data-board-rail]:hover {
+  background-color: var(--glass-overlay);
+}
+/* A desktop column header sticks, so cards scroll under it: it takes the panel's
+   own tint in its opaque form (a translucent one would show them through) and
+   spans the panel's width. Delete the `sticky` classes on the headers, and this
+   block, for static headers. A phone's header scrolls with its column and is
+   transparent, so it is the panel exactly. */
+@media (min-width: 701px) {
+  [data-board-glass] [data-board-column-head] {
+    margin: -12px -10px 0;
+    padding: 12px 21px 10px;
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    /* The panel's tint with its sheen at the top folded in (the sheen is a
+       gradient the header would restart), a touch lighter by day. */
+    background: light-dark(#F3F8FC, var(--glass-chrome-opaque));
+  }
+}
+[data-board-glass] [data-board-card],
+[data-board-glass] [data-board-skeleton-card] {
+  background: var(--glass-sheet);
+  box-shadow: 0 0 0 1px var(--glass-edge), 0 4px 14px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+}
+[data-board-glass] [data-board-card]:hover {
+  background: var(--glass-sheet-opaque);
+}
+
 /* ---------------------------------------------------------------------------
    Floating glass: the one place a surface blurs what is behind it.
 

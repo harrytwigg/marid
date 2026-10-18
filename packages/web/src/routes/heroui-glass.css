@@ -36,12 +36,24 @@
   }
 
   .tabs__list {
+    border-radius: inherit;
     box-shadow: inset 0 0 0 1px var(--glass-edge);
   }
 
   .tabs__indicator {
     background: var(--glass-sheet);
     box-shadow: 0 1px 6px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+  }
+
+  /* A tab that is a native radio (the board's Board | List switch): the checked
+     one wears what the indicator wears, and the focus ring follows the input. */
+  .tabs__tab:has(> input[type="radio"]:checked) {
+    background: var(--glass-sheet);
+    box-shadow: 0 1px 6px var(--glass-shadow), inset 0 1px 0 var(--glass-specular);
+  }
+
+  .tabs__tab:has(> input[type="radio"]:focus-visible) {
+    @apply status-focused;
   }
 
   /* The switch is the app's 44 by 24 track with a round 20px thumb. HeroUI's
