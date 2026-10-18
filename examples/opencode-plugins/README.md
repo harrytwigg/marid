@@ -11,7 +11,7 @@ function`. The server still starts, but without them.
 | File | Replaces (1.x) | What it does |
 |---|---|---|
 | `error-retry.js` | a 1.x `error-retry.js` built on `auth.loader` | Retries a pre-stream HTTP 400 whose body is exactly `{"model":"<id>"}` in place, up to `maxRetries` times with exponential backoff. It acts on one provider (`providerID`, default `opencode-go`). The step never fails, so Marid's turn only sees it take longer. Any other 400, and every other status, is left alone. |
-| `model-fallback.js` | `opencode-rate-limit@1.4.0` | On a rate-limit or quota error, it switches the session to the next usable model in `fallbackModels`, and opencode's own retry then runs on that model. It reads the same `rate-limit-fallback.json`: `fallbackModels`, `fallbackMode` (`stop` / `cycle` / `retry-last`), `cooldownMs`, `retryPolicy`, `circuitBreaker`. It switches the session back to its model when the execution ends, and adds a `/rate-limit-status` command. It does not carry over 1.4.0's health tracking, metrics or statistics. |
+| `model-fallback.js` | `opencode-rate-limit@1.4.0` | On a rate-limit or quota error, or a provider server error (HTTP 5xx, `provider.internal`; `fallbackOnServerError: false` turns that off), it switches the session to the next usable model in `fallbackModels`, and opencode's own retry then runs on that model. It reads the same `rate-limit-fallback.json`: `fallbackModels`, `fallbackMode` (`stop` / `cycle` / `retry-last`), `cooldownMs`, `retryPolicy`, `circuitBreaker`. It switches the session back to its model when the execution ends, and adds a `/rate-limit-status` command. It does not carry over 1.4.0's health tracking, metrics or statistics. |
 
 ## Fallback chains per model
 

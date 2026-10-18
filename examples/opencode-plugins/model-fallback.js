@@ -1,11 +1,11 @@
 /**
  * opencode-model-fallback (OpenCode 2): switch a session to a fallback model
- * when its provider rate-limits it. Replaces `opencode-rate-limit` (an
+ * when its provider rate-limits it or fails with a server error (5xx). Replaces `opencode-rate-limit` (an
  * OpenCode 1 plugin that cannot load on 2.x) and reads the same
  * `rate-limit-fallback.json`.
  *
  * How it works. OpenCode 2 asks the `retry` session hook before it retries a
- * failed model call. On a rate-limit or quota error this plugin switches the
+ * failed model call. On a rate-limit, quota or server error this plugin switches the
  * session to the next usable fallback model and lets the retry go ahead. The
  * retried step runs on the fallback model, inside the same assistant message
  * of the same execution: there is no abort and no re-sent user message (the
@@ -40,6 +40,10 @@
  *                    with that many rate limits in a row is not chosen as a
  *                    fallback until recoveryTimeoutMs has passed
  *   restoreModel     default true
+ *   fallbackOnServerError  default true: also fall back on a provider server
+ *                    error (`provider.internal`, HTTP 5xx), so an outage of the
+ *                    primary moves turns to the fallback; the failing model
+ *                    then cools down like a rate-limited one
  *   verbose          log every decision
  * Other `opencode-rate-limit` keys (health tracking, metrics, dynamic
  * prioritisation, statistics) are ignored.
@@ -67,10 +71,12 @@ const DEFAULTS = {
   retryPolicy: { maxRetries: 3, strategy: "immediate", baseDelayMs: 1000, maxDelayMs: 30_000, jitterEnabled: false, jitterFactor: 0.1 },
   circuitBreaker: { enabled: false, failureThreshold: 5, recoveryTimeoutMs: 60_000 },
   restoreModel: true,
+  fallbackOnServerError: true,
   verbose: false,
 };
 
 const RATE_LIMIT_TYPES = new Set(["provider.rate-limit", "provider.quota"]);
+const SERVER_ERROR_TYPES = new Set(["provider.internal"]);
 const RATE_LIMIT_TEXT = [/\b429\b/, /rate[\s_-]?limit/i, /quota exceeded/i, /usage limit/i, /too many requests/i, /resource[\s_-]?exhausted/i];
 
 function readJson(path) {
@@ -148,6 +154,19 @@ function isRateLimitError(error) {
   if (RATE_LIMIT_TYPES.has(error.type) || error.status === 429) return true;
   const text = `${error.message ?? ""} ${error.response?.body ?? ""}`;
   return RATE_LIMIT_TEXT.some((re) => re.test(text));
+}
+
+/** True when a session error is a provider server error (5xx). */
+function isServerError(error) {
+  if (!error) return false;
+  return SERVER_ERROR_TYPES.has(error.type) || (Number.isInteger(error.status) && error.status >= 500 && error.status <= 599);
+}
+
+/** Why this error should move the session to a fallback, or undefined when it should not. */
+function fallbackReason(error, config) {
+  if (isRateLimitError(error)) return "rate-limited";
+  if (config.fallbackOnServerError && isServerError(error)) return "server error";
+  return undefined;
 }
 
 function delayFor(policy, n) {
@@ -299,7 +318,8 @@ export default {
     const controller = new AbortController();
 
     await ctx.session.hook("retry", async (input) => {
-      if (!isRateLimitError(input.error)) return;
+      const reason = fallbackReason(input.error, config);
+      if (!reason) return;
       const current = keyOf(input.model.providerID, input.model.id);
       const s = state.session(input.sessionID);
       const wasCooling = state.rateLimited(current);
@@ -330,7 +350,7 @@ export default {
       s.fallbacks += 1;
       state.countFallback();
       input.decision = { retry: true, delay };
-      log.info(`session ${input.sessionID}: ${current} rate-limited (${input.error.type}); falling back to ${keyOf(model.providerID, model.id)} in ${delay}ms`);
+      log.info(`session ${input.sessionID}: ${current} ${reason} (${input.error.type}); falling back to ${keyOf(model.providerID, model.id)} in ${delay}ms`);
     });
 
     await ctx.command.transform((editor) => {

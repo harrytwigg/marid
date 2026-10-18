@@ -228,6 +228,16 @@ describe.skipIf(!RUN)("opencode server mode on OpenCode 2", () => {
     expect(second!.model).toBe("m1");
   }, 120_000);
 
+  it("falls back to the second provider on a provider 500 (fallback plugin), within the turn", async () => {
+    const { result } = await turn("broken E500", { model: "opencode-go/m2" });
+    expect(result.error).toBeUndefined();
+    expect(result.result).toBe("hello from mock");
+    const [first, second] = mainRequests().slice(-2);
+    expect(first!.url).toMatch(/^\/primary\//);
+    expect(second!.url).toMatch(/^\/backup\//);
+    expect(second!.model).toBe("m2");
+  }, 120_000);
+
   it("retries a pre-stream 400 in place (error-retry plugin), so the turn answers", async () => {
     const { result } = await turn("once E400ONCE", { model: "opencode-go/m2" });
     expect(result.error).toBeUndefined();
