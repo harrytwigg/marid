@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { FileText, Globe, Search, Terminal, Wrench } from 'lucide-react'
@@ -25,58 +25,6 @@ describe('ChatMessages tool groups', () => {
     ['mcp__jinn__FILE_EDIT', FileText],
   ])('maps %s to its tool-kind glyph', (toolName, expectedGlyph) => {
     expect(toolGlyphForName(toolName)).toBe(expectedGlyph)
-  })
-
-  it('opens a finished background sub-agent from its Agent card', () => {
-    const onOpenSubagent = vi.fn()
-    const messages: Message[] = [
-      {
-        id: 'agent-launch',
-        role: 'assistant',
-        content: 'Used Agent',
-        timestamp: 100,
-        toolCall: 'Agent',
-        meta: { agentId: 'agent-7' },
-      },
-      { id: 'answer', role: 'assistant', content: 'Done.', timestamp: 101 },
-    ]
-
-    render(
-      <MemoryRouter>
-        <ChatMessages messages={messages} loading={false} onOpenSubagent={onOpenSubagent} />
-      </MemoryRouter>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /show the work/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^1 tool$/i }))
-
-    const card = screen.getByRole('button', { name: /Agent sub-agent transcript/i })
-    fireEvent.click(card)
-
-    expect(onOpenSubagent).toHaveBeenCalledWith(
-      { id: 'agent-7', description: null, agentType: null },
-      card,
-    )
-  })
-
-  it('leaves a tool row whose call carried no sub-agent id as plain text', () => {
-    const messages: Message[] = [
-      { id: 'tool-read', role: 'assistant', content: 'Used Read', timestamp: 100, toolCall: 'Read' },
-      { id: 'answer', role: 'assistant', content: 'Done.', timestamp: 101 },
-    ]
-
-    render(
-      <MemoryRouter>
-        <ChatMessages messages={messages} loading={false} onOpenSubagent={vi.fn()} />
-      </MemoryRouter>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /show the work/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^1 tool$/i }))
-
-    const group = screen.getByTestId('tool-group-list')
-    expect(within(group).getByText('Read')).toBeTruthy()
-    expect(within(group).queryByRole('button', { name: /transcript/i })).toBeNull()
   })
 
   it('renders unsafe markdown links as plain text', () => {

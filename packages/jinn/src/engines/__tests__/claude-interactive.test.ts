@@ -94,6 +94,23 @@ describe("claudeHookToDeltas", () => {
       tool_response: { content: [{ type: "text", text: "done" }] },
     })).toEqual([{ type: "tool_result", content: "Task", toolName: "Task" }]);
   });
+
+  it("carries no sub-agent id for an Agent launch made inside a sub-agent", () => {
+    // A sub-agent's own call carries `agent_id`, so its background launch is that
+    // sub-agent's and not the session's — the rule `launchedBackgroundTask` applies.
+    expect(claudeHookToDeltas({
+      hook_event_name: "PostToolUse",
+      tool_name: "Agent",
+      tool_use_id: "call-nested",
+      agent_id: "agent-inner",
+      tool_response: { status: "async_launched", agentId: "agent-9" },
+    })).toEqual([{
+      type: "tool_result",
+      content: "Agent",
+      toolName: "Agent",
+      toolId: "call-nested",
+    }]);
+  });
 });
 
 describe("TurnResolver", () => {

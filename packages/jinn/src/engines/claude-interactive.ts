@@ -515,7 +515,9 @@ export function claudeHookToDeltas(h: Record<string, unknown>): StreamDelta[] {
   const toolId = typeof h.tool_use_id === "string" && h.tool_use_id ? h.tool_use_id : undefined;
   // A background Agent/Task launch answers with its sub-agent's id; persisting it on the
   // tool row is what lets the chat's Agent card open that sub-agent's transcript later.
-  const agentId = toolName === "Agent" || toolName === "Task" ? launchedSubagentId(responseRecord) : undefined;
+  const agentId = (toolName === "Agent" || toolName === "Task") && typeof h.agent_id !== "string"
+    ? launchedSubagentId(responseRecord)
+    : undefined;
   return [{
     type: "tool_result",
     content: String(h.tool_name ?? ""),
