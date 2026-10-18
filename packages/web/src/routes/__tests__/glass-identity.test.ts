@@ -280,8 +280,24 @@ describe("floating glass", () => {
     const fine = blocks.filter((b) => b.query.includes("pointer: fine"))
     const filters = fine.flatMap((b) => [...b.body.matchAll(/(?<!-webkit-)backdrop-filter:\s*([^;]+);/g)].map((m) => m[1].trim()))
     expect(filters.length).toBeGreaterThan(0)
-    // Anything but `none` goes through the token; `none` only switches a surface off.
-    for (const value of filters.filter((v) => v !== "none")) expect(value).toBe("var(--glass-blur)")
+    // Anything but `none` goes through a token that Reduced sets to none: the surface blur or,
+    // for an overlay, the strong one; `none` only switches a surface off.
+    for (const value of filters.filter((v) => v !== "none")) expect(["var(--glass-blur)", "var(--glass-blur-strong)"]).toContain(value)
+  })
+
+  it("draws an overlay as the overlay tint with the strong blur and the overlay shadow, opaque for a coarse pointer", () => {
+    expect(ruleBody(rest, ".glass-overlay")).toMatch(/background:\s*var\(--glass-overlay-opaque\)/)
+    expect(ruleBody(rest, ".glass-overlay")).toMatch(/box-shadow:\s*var\(--shadow-overlay\)/)
+    const fine = blocks.find((b) => b.query.includes("pointer: fine") && b.body.includes(".glass-overlay"))!
+    const body = ruleBody(fine.body, ".glass-overlay")
+    expect(body).toMatch(/background:\s*var\(--glass-overlay\)/)
+    expect(body).toMatch(/(?<!-webkit-)backdrop-filter:\s*var\(--glass-blur-strong\)/)
+  })
+
+  it("blurs the nav rail's label only while it shows, so one label is one blurred surface", () => {
+    expect(rest).not.toMatch(/\.rail-reveal\s*\{[^}]*backdrop-filter/)
+    const fine = blocks.find((b) => b.query.includes("pointer: fine") && b.body.includes(".rail-reveal"))!
+    expect(fine.body).toMatch(/\.group\\\/row:is\(:hover, :focus-within\) \.rail-reveal\s*\{[^}]*backdrop-filter:\s*var\(--glass-blur-strong\)/)
   })
 
   it("scales geometry and gradients with --glass-live: 1 normally, 0 under reduced transparency", () => {
