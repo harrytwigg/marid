@@ -108,7 +108,7 @@ export function SettingsSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={ariaLabel}
-        className="select__trigger min-h-[40px] w-full cursor-pointer appearance-none text-[length:var(--text-footnote)] md:min-h-0"
+        className="select__trigger min-h-[40px] w-full cursor-pointer appearance-none pe-8 text-[length:var(--text-footnote)] md:min-h-0"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value} disabled={o.disabled}>
@@ -116,7 +116,8 @@ export function SettingsSelect({
           </option>
         ))}
       </select>
-      <ChevronDownIcon aria-hidden className="select__indicator size-4" />
+      {/* The chevron sits over the select, so a press on it must reach the select; HeroUI pads the end only for an indicator inside the trigger, hence `pe-8` above. */}
+      <ChevronDownIcon aria-hidden className="select__indicator pointer-events-none size-4" />
     </span>
   )
 }

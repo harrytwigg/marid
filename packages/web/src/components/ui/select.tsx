@@ -60,7 +60,7 @@ function Select({ value, defaultValue, onValueChange, disabled, name, required, 
       }}
       data-slot="select"
       className="select w-full"
-      selectedKey={value === undefined ? undefined : value}
+      selectedKey={value}
       defaultSelectedKey={defaultValue}
       onSelectionChange={(key) => {
         if (key !== null) onValueChange?.(String(key))

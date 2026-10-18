@@ -194,6 +194,20 @@ for (const theme of ['light', 'dark']) {
     await page.waitForTimeout(1000)
     const select = page.locator('select').first()
     if (await select.count()) await select.scrollIntoViewIfNeeded()
+    if (await select.count()) {
+      // The chevron is part of the control: a press on it must reach the select. (Where the select
+      // has no chevron the point is simply on the select.)
+      await check(`settings select, ${name}: a press on the chevron reaches the select`, async () => {
+        const box = await select.boundingBox()
+        const x = box.x + box.width - 16
+        const y = box.y + box.height / 2
+        const hit = await page.evaluate(([px, py]) => document.elementFromPoint(px, py)?.tagName, [x, y])
+        assert(hit === 'SELECT', `the element at the chevron is ${hit}`)
+        await page.mouse.click(x, y)
+        assert(await select.evaluate((el) => el === document.activeElement), 'the select was not focused')
+        await page.keyboard.press('Escape')
+      })
+    }
     await page.screenshot({ path: path.join(outDir, `settings-select-${name}.png`) })
     await context.close()
   }
