@@ -467,6 +467,7 @@ export default function SettingsPage() {
                   Language
                 </label>
                 <select
+                  aria-label="Language"
                   value={languageValue}
                   onChange={(e) => setLanguageValue(e.target.value)}
                   onBlur={() => {
@@ -548,6 +549,7 @@ export default function SettingsPage() {
                 </FieldRow>
                 <FieldRow label="Default Engine">
                   <SettingsSelect
+                    ariaLabel="Default engine"
                     value={config.engines?.default ?? "claude"}
                     onChange={(v) => updateConfig(["engines", "default"], v)}
                     options={Object.values(modelRegistry?.engines ?? {}).map((e) => ({ value: e.name, label: e.name.charAt(0).toUpperCase() + e.name.slice(1), disabled: !e.available }))}
@@ -573,6 +575,7 @@ export default function SettingsPage() {
                 </FieldRow>
                 <FieldRow label="Model">
                   <SettingsSelect
+                    ariaLabel="Claude model"
                     value={config.engines?.claude?.model ?? "opus"}
                     onChange={(v) =>
                       updateConfig(["engines", "claude", "model"], v)
@@ -587,6 +590,7 @@ export default function SettingsPage() {
                 </FieldRow>
                 <FieldRow label="Effort Level">
                   <SettingsSelect
+                    ariaLabel="Claude effort level"
                     value={config.engines?.claude?.effortLevel ?? "default"}
                     onChange={(v) =>
                       updateConfig(["engines", "claude", "effortLevel"], v)
@@ -719,6 +723,7 @@ export default function SettingsPage() {
                 </FieldRow>
                 <FieldRow label="Model">
                   <SettingsSelect
+                    ariaLabel="Codex model"
                     value={config.engines?.codex?.model ?? "gpt-5.5"}
                     onChange={(v) =>
                       updateConfig(["engines", "codex", "model"], v)
@@ -736,6 +741,7 @@ export default function SettingsPage() {
                 </FieldRow>
                 <FieldRow label="Effort Level">
                   <SettingsSelect
+                    ariaLabel="Codex effort level"
                     value={config.engines?.codex?.effortLevel ?? "default"}
                     onChange={(v) =>
                       updateConfig(["engines", "codex", "effortLevel"], v)
@@ -770,6 +776,7 @@ export default function SettingsPage() {
                 </FieldRow>
                 <FieldRow label="Model">
                   <SettingsSelect
+                    ariaLabel="Grok model"
                     value={config.engines?.grok?.model ?? "grok-build"}
                     onChange={(v) =>
                       updateConfig(["engines", "grok", "model"], v)
@@ -1144,6 +1151,7 @@ export default function SettingsPage() {
                     </FieldRow>
                     <FieldRow label="Type">
                       <SettingsSelect
+                        ariaLabel={`${instance.id || `Instance ${idx + 1}`} type`}
                         value={instance.type ?? "discord"}
                         onChange={(v) => {
                           const instances = [...(config.connectors?.instances || [])]
@@ -1159,6 +1167,7 @@ export default function SettingsPage() {
                     </FieldRow>
                     <FieldRow label="Employee">
                       <SettingsSelect
+                        ariaLabel={`${instance.id || `Instance ${idx + 1}`} employee`}
                         value={instance.employee ?? ""}
                         onChange={(v) => {
                           const instances = [...(config.connectors?.instances || [])]
@@ -1308,6 +1317,7 @@ export default function SettingsPage() {
                 </div>
                 <FieldRow label="Connector">
                   <SettingsSelect
+                    ariaLabel="Cron delivery connector"
                     value={config.cron?.defaultDelivery?.connector ?? ""}
                     onChange={(v) =>
                       updateConfig(["cron", "defaultDelivery", "connector"], v || undefined)
@@ -1336,6 +1346,7 @@ export default function SettingsPage() {
               <Section title="Logging">
                 <FieldRow label="Level">
                   <SettingsSelect
+                    ariaLabel="Log level"
                     value={config.logging?.level ?? "info"}
                     onChange={(v) => updateConfig(["logging", "level"], v)}
                     options={[
