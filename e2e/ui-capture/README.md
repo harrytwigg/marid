@@ -11,10 +11,14 @@ per screen.
   its own temporary home, no engine credentials), seeds it with neutral
   fixtures, photographs the screens, and destroys the sandbox on exit.
 - `seed.mjs` is the fixture set: one chat with a short markdown conversation
-  and six Todos across the board's columns. Every string is generic, because
-  the images go on public pull requests.
+  that ends on a message naming the first Todo (so there is a mention to
+  hover), and six Todos across the board's columns. Every string is generic,
+  because the images go on public pull requests.
 - `screens.mjs` lists the screens, themes and viewports. Add a screen here
-  when a change touches one that is not listed.
+  when a change touches one that is not listed. A screen that only makes sense
+  at one width (the nav rail and the Todo mention's glance are desktop only)
+  names it with `viewports: ['desktop']`; `prepare(page)` drives the page into
+  the state to photograph, by the pointer or by a real Tab and focus.
 - `capture.mjs` takes the photographs. It fails a screen that never shows its
   fixture text, throws a page error, or shows the sandbox token or anything
   shaped like an id.
@@ -89,7 +93,9 @@ Two more tools run in the same sandbox, through `JINN_CAPTURE_TOOL`:
 - `blur-count.mjs` opens the chat in each theme and width, with the thread at
   rest and scrolled up, and lists every element whose computed
   `backdrop-filter` is not `none`: all of them in the DOM and the ones visible
-  at once. It exits non-zero over 3 visible blurred surfaces, over a 32px
+  at once. On desktop it also opens the nav rail's label and the Todo mention's
+  glance, one at a time, and counts again: an open overlay is one more surface
+  within the same budget, and none may blur under Reduced. It exits non-zero over 3 visible blurred surfaces, over a 32px
   radius, or any blur at all under Reduced or a coarse pointer (Chromium).
 - `perf.mjs` (Chromium only) scrolls a long transcript up and down with real
   wheel gestures at 4× CPU throttle and records the gap between animation
