@@ -17,7 +17,7 @@ import { useTodoCapture } from "./use-todo-capture"
  * contract for typed capture: the operator has already read what they typed.
  */
 
-const SHELL = "inset-x-3 bottom-3 rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] px-4 py-4 pb-[max(16px,env(safe-area-inset-bottom))] shadow-[var(--shadow-overlay)] motion-safe:data-[state=closed]:animate-sheet-out motion-safe:data-[state=open]:animate-sheet-in sm:left-1/2 sm:top-[18%] sm:bottom-auto sm:w-[min(560px,calc(100vw-32px))] sm:-translate-x-1/2 sm:px-5 sm:py-[18px] sm:motion-safe:data-[state=closed]:animate-pop-out sm:motion-safe:data-[state=open]:animate-pop-in"
+const SHELL = "inset-x-3 bottom-3 rounded-[var(--radius-xl)] px-4 py-4 pb-[max(16px,env(safe-area-inset-bottom))] sm:left-1/2 sm:top-[18%] sm:bottom-auto sm:w-[min(560px,calc(100vw-32px))] sm:-translate-x-1/2 sm:px-5 sm:py-[18px]"
 
 function CaptureField({
   text,

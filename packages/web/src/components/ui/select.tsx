@@ -8,7 +8,6 @@ import { Select as AriaSelect, SelectValue as AriaSelectValue } from "react-aria
 import { Separator } from "react-aria-components/Separator"
 
 import { cn } from "@/lib/utils"
-import { OverlayContainerContext } from "./overlay-container"
 import { MENU_SURFACE_ATTR, textOf } from "./menu-parts"
 import { returnFocusTo } from "./menu-focus"
 
@@ -54,7 +53,7 @@ function Select({ value, defaultValue, onValueChange, disabled, name, required, 
   return (
     <AriaSelect
       ref={ref}
-      // React Aria puts focus back on the trigger, but not when a Radix dialog got there first (see `returnFocusTo`).
+      // React Aria puts focus back on the trigger, but not when a modal holding focus got there first (see `returnFocusTo`).
       onOpenChange={(open) => {
         if (!open) returnFocusTo(ref.current?.querySelector<HTMLElement>("[data-slot=select-trigger]") ?? null)
       }}
@@ -116,14 +115,11 @@ function SelectTrigger({
 }
 
 function SelectContent({ className, children }: { className?: string; children?: React.ReactNode }) {
-  // Inside a dialog the list goes into the dialog's content, where its focus and pointer rules reach it.
-  const container = React.useContext(OverlayContainerContext)
   return (
     <Popover
       data-slot="select-content"
       // Marks the list as a surface that is leaving, so focus is returned once it has gone (see `returnFocusTo`).
       {...{ [MENU_SURFACE_ATTR]: "" }}
-      UNSTABLE_portalContainer={container ?? undefined}
       offset={4}
       containerPadding={8}
       className={cn("select__popover glass-overlay", className)}

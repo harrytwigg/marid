@@ -89,8 +89,8 @@ function useCommentLane(id: string | null, refusal: Refusal): TodoWorkbench["com
 export function useTodoWorkbench(
   row: SearchRow | undefined,
   /** Told while a picker is up, so the overlay can stand its own Escape down.
-   *  Radix listens in the same capture phase the picker does, so the picker's
-   *  stopPropagation() never reaches it. */
+   *  The picker stops the key in the document's capture phase, which keeps it
+   *  from the overlay; this is for a picker that does not. */
   onPickerOpenChange: (open: boolean) => void,
 ): TodoWorkbench | undefined {
   const id = todoIdOf(row)

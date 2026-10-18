@@ -143,8 +143,8 @@ export function ImageLightbox({
         data-testid="attachment-lightbox"
         onPointerDown={(event) => { pressedBackdrop.current = event.target === event.currentTarget }}
         onClick={(event) => { if (pressedBackdrop.current && event.target === event.currentTarget) onClose() }}
-        overlayClassName="bg-[var(--scrim)]"
-        className="inset-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none sm:max-w-none"
+        material="none"
+        className="inset-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center overflow-hidden rounded-none p-0 sm:max-w-none"
         style={{ left: 0, top: 0, transform: "none", maxWidth: "none" }}
       >
         <DialogTitle className="sr-only">{image.name}</DialogTitle>

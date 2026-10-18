@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { createPortal } from "react-dom"
 import { Check } from "lucide-react"
+import DialogPopup from "@/components/ui/dialog-popup"
 
 /* Todos v2 slice 6 — the picker shells (design-doc §7.3, polish laws 1–4, 22).
  *
@@ -147,25 +147,26 @@ export function PickerSheet({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   usePickerKeyboard(ref, onClose)
-  // Above the app's other phone sheets (z-100): a picker opened from inside one
-  // is the sheet you are answering, so it has to be the one on top.
-  return createPortal(
-    <div className="fixed inset-0 z-[120]" role="dialog" aria-modal="true" aria-label={title}>
-      <button type="button" aria-label="Dismiss" onClick={onClose} className="absolute inset-0 bg-[var(--scrim,rgba(0,0,0,0.35))]" />
-      <div
-        ref={ref}
-        data-testid={testId}
-        className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-[18px] p-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-[20px]"
-        style={{ background: "var(--material-thick)", boxShadow: "var(--shadow-overlay)" }}
-      >
-        <div className="flex justify-center pb-1.5 pt-0.5">
-          <span aria-hidden className="h-[5px] w-9 rounded-full bg-[var(--fill-primary)]" />
-        </div>
-        <div className="px-2.5 pb-2 text-[15px] font-semibold text-[var(--text-primary)]">{title}</div>
-        {children}
+  // A modal of its own, so one opened from inside a dialog or another sheet nests in it: the sheet below goes
+  // inert behind this one and keeps its place when this closes. Above the app's other phone sheets (z-100): a
+  // picker opened from inside one is the sheet you are answering, so it has to be the one on top.
+  return (
+    <DialogPopup
+      open
+      onOpenChange={(next) => { if (!next) onClose() }}
+      ref={ref}
+      motion="sheet"
+      overlayClassName="z-[120]"
+      aria-label={title}
+      data-testid={testId}
+      className="glass-overlay absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-[18px] p-3 pb-[max(12px,env(safe-area-inset-bottom))]"
+    >
+      <div className="flex justify-center pb-1.5 pt-0.5">
+        <span aria-hidden className="h-[5px] w-9 rounded-full bg-[var(--fill-primary)]" />
       </div>
-    </div>,
-    document.body,
+      <div className="px-2.5 pb-2 text-[15px] font-semibold text-[var(--text-primary)]">{title}</div>
+      {children}
+    </DialogPopup>
   )
 }
 

@@ -161,11 +161,10 @@ export function GlobalSearch({ initialOpen = false, initialScope, initialQuery }
           showCloseButton={false}
           aria-describedby={undefined}
           onEscapeKeyDown={event => {
-            // A workbench picker owns Escape while it is up. Radix registers this
-            // handler in the same capture phase the picker's own listener runs in,
-            // so the picker's stopPropagation() cannot reach it — the overlay has
-            // to stand down here instead, or one Escape closes the picker AND
-            // throws the query away with it.
+            // A workbench picker owns Escape while it is up. It listens on the
+            // document in capture and stops the key, which normally never reaches
+            // the dialog; if one does not, the overlay stands down here instead,
+            // or one Escape closes the picker AND throws the query away with it.
             if (pickerOpen) {
               event.preventDefault()
               return
@@ -176,7 +175,7 @@ export function GlobalSearch({ initialOpen = false, initialScope, initialQuery }
           }}
           onKeyDown={handleKeyDown}
         >
-          {/* Radix requires an accessible title; the field is the visible one. */}
+          {/* The dialog is named by a title; the field is the visible one. */}
           <DialogTitle className="sr-only">Search {portalName}</DialogTitle>
 
           <div className="flex items-center gap-[11px] px-5 pb-[15px] pt-[17px] max-[480px]:px-4 max-[480px]:pb-3 max-[480px]:pt-3.5">

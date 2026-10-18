@@ -27,7 +27,7 @@ import {
 import { FilterBar } from "../filter-bar"
 import { LazyTodoFilterSheet } from "../todo-filter-sheet-lazy"
 import { NeedsYouView } from "../needs-you-view"
-import { NewTodoDialog } from "../new-todo-dialog"
+import { LazyNewTodoDialog, NEW_TODO_PRELOAD, usePreloadNewTodoDialog } from "../new-todo-dialog-lazy"
 import { LazyQuickCaptureBar, usePreloadQuickCapture } from "../quick-add/capture-bar-lazy"
 import { BoardHeader } from "./board-header"
 import { TodoList } from "../list/todo-list"
@@ -387,6 +387,7 @@ export default function TodoBoardPage() {
   const [creating, setCreating] = useState<null | { department?: string }>(null)
   const [capturing, setCapturing] = useState(false)
   usePreloadQuickCapture()
+  usePreloadNewTodoDialog()
   // A URL naming a closed status asked for closed work — never one tap short.
   const closedFilter = CLOSED_STATUSES.some((status) => status === filters.status)
   const [closedOpen, setClosedOpen] = useState(closedFilter)
@@ -547,6 +548,7 @@ export default function TodoBoardPage() {
             label="New Todo"
             icon={<Plus className="size-4" aria-hidden />}
             testId="todo-new"
+            warm={NEW_TODO_PRELOAD}
             onClick={() => setCreating({ department: board.kind === "department" ? board.slug : undefined })}
           />
         }
@@ -759,9 +761,13 @@ export default function TodoBoardPage() {
       )}
 
       {creating && (
-        <NewTodoDialog
+        <LazyNewTodoDialog
           onClose={() => setCreating(null)}
           onCreated={() => setCreating(null)}
+          onFailed={() => {
+            setCreating(null)
+            announce("The new Todo dialog couldn't load. Reload the page and try again.")
+          }}
           defaults={{
             department: creating.department,
             employees: org.data?.employees ?? [],
