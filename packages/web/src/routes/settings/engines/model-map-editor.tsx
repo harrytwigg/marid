@@ -93,7 +93,7 @@ function AddActions({ ready, onCancel }: { ready: boolean; onCancel: () => void 
       <Button type="submit" variant="secondary" size="sm" disabled={!ready}>
         Add mapping
       </Button>
-      <Button variant="ghost" size="sm" onClick={onCancel}>
+      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
     </div>

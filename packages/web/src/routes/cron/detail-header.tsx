@@ -58,7 +58,7 @@ function CronJobTrailing({
         data-testid="cron-run-now"
         disabled={triggerPending || triggered}
         onClick={onRun}
-        className={triggered ? "text-[var(--system-green)] [--button-bg:color-mix(in_srgb,var(--system-green)_13%,transparent)]" : undefined}
+        className={triggered ? "text-[var(--system-green)] [--button-bg:color-mix(in_srgb,var(--system-green)_13%,transparent)] disabled:opacity-80" : "disabled:opacity-80"}
       >
         {triggered ? (
           <>
