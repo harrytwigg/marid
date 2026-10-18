@@ -114,6 +114,21 @@ function withoutPositioning(style: React.CSSProperties | undefined): React.CSSPr
   return Object.fromEntries(Object.entries(style).filter(([name]) => !POSITIONING.has(name)))
 }
 
+/** Sorts a content part's props into those React Aria forwards, those set by hand, and those dropped. */
+function splitProps(props: Record<string, unknown>) {
+  const byHand: Record<string, string> = {}
+  const forwarded: Record<string, unknown> = {}
+  for (const [name, value] of Object.entries(props)) {
+    if (DROPPED.has(name)) continue
+    if (!SET_BY_HAND.test(name)) {
+      forwarded[name] = name === "style" ? withoutPositioning(value as React.CSSProperties | undefined) : value
+    } else if (value !== undefined && value !== null && value !== false) {
+      byHand[name] = String(value)
+    }
+  }
+  return { byHand, forwarded }
+}
+
 /**
  * Takes the props the Radix content took (the SDK declares every div prop), and forwards what can be
  * forwarded: `className`, `style` (but not the properties that position it), `data-*`, `aria-*`, `title`,
@@ -134,16 +149,7 @@ function TooltipContent({
   sideOffset?: number
 }) {
   const [surface, setSurface] = React.useState<HTMLDivElement | null>(null)
-  const byHand: Record<string, string> = {}
-  const forwarded: Record<string, unknown> = {}
-  for (const [name, value] of Object.entries(props)) {
-    if (DROPPED.has(name)) continue
-    if (SET_BY_HAND.test(name)) {
-      if (value !== undefined && value !== null && value !== false) byHand[name] = String(value)
-    } else {
-      forwarded[name] = name === "style" ? withoutPositioning(value as React.CSSProperties | undefined) : value
-    }
-  }
+  const { byHand, forwarded } = splitProps(props)
   useAttributes(surface, byHand)
   return (
     <AriaTooltip
