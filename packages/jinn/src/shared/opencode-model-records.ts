@@ -16,11 +16,16 @@ export const MODEL_LINE = /^([A-Za-z0-9_.-]+)\/(\S+)$/;
  *  when the text is not JSON or not an object. */
 export function parseRecord(json: string): Record<string, unknown> | undefined {
   try {
-    const parsed: unknown = JSON.parse(json);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
+    return objectOf(JSON.parse(json));
   } catch {
     return undefined;
   }
+}
+
+/** A value as an object, or undefined when it is not one (null, an array, a
+ *  primitive). */
+function objectOf(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
 /** `limit.context` of a record, or undefined when it is missing or not a
@@ -59,21 +64,24 @@ export function parseOpencodeApiModels(output: string): ModelInfo[] {
   if (!Array.isArray(data)) return [];
   const models = new Map<string, ModelInfo>();
   for (const item of data) {
-    const record = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : undefined;
-    if (!record || record.enabled === false) continue;
-    const { providerID, id: modelId } = record;
-    if (typeof providerID !== "string" || typeof modelId !== "string") continue;
-    const id = `${providerID}/${modelId}`;
-    if (!MODEL_LINE.test(id) || models.has(id)) continue;
-    const model: ModelInfo = { id, label: modelId, supportsEffort: false, effortLevels: [] };
-    const window = contextWindowOf(record);
-    if (window !== undefined) model.contextWindow = window;
-    const levels = effortLevelsOf(record);
-    if (levels.length > 0) {
-      model.supportsEffort = true;
-      model.effortLevels = levels;
-    }
-    models.set(id, model);
+    const model = apiModelOf(objectOf(item));
+    if (model && !models.has(model.id)) models.set(model.id, model);
   }
   return [...models.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** One `/api/model` record as a model, or undefined for a disabled record or
+ *  one whose ids do not make a `provider/model` line. */
+function apiModelOf(record: Record<string, unknown> | undefined): ModelInfo | undefined {
+  if (!record || record.enabled === false) return undefined;
+  const { providerID, id: modelId } = record;
+  if (typeof providerID !== "string" || typeof modelId !== "string") return undefined;
+  const id = `${providerID}/${modelId}`;
+  if (!MODEL_LINE.test(id)) return undefined;
+  const model: ModelInfo = { id, label: modelId, supportsEffort: false, effortLevels: [] };
+  const window = contextWindowOf(record);
+  if (window !== undefined) model.contextWindow = window;
+  const levels = effortLevelsOf(record);
+  if (levels.length > 0) Object.assign(model, { supportsEffort: true, effortLevels: levels });
+  return model;
 }
