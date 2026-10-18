@@ -178,23 +178,6 @@ function ChatPage() {
   const handleOrderComputed = useCallback((order: SidebarOrder) => { sidebarOrderRef.current = order }, [])
 
 
-  // Close more menu on outside click. The moreMenu JSX is shared between the
-  // desktop tab bar and the mobile header (rendered twice in the DOM, one
-  // hidden via CSS), so a single ref points to only one copy — mobile taps
-  // would be seen as "outside" and close the menu. Use a data-attribute
-  // ancestor check instead so both copies count as "inside".
-  useEffect(() => {
-    if (!showMoreMenu) return
-    function handleClick(e: MouseEvent) {
-      const target = e.target as HTMLElement | null
-      if (showMoreMenu && target && !target.closest('[data-more-menu]')) {
-        setShowMoreMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [showMoreMenu])
-
   // D4: open the existing global search (⌘K). GlobalSearch listens for a
   // meta/ctrl+K keydown on window, so synthesize one — same mechanism the old
   // header search button used. Desktop lost its only visible search entry when

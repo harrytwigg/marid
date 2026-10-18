@@ -1,3 +1,4 @@
+import '@/test/preload-menus'
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ChatHeaderMenu } from '../chat-header-menu'
@@ -57,7 +58,8 @@ function renderMenu(overrides: Partial<Parameters<typeof ChatHeaderMenu>[0]> = {
 }
 
 function itemLabels() {
-  return screen.getAllByRole('button').map((button) => button.textContent?.trim())
+  const menu = screen.getByRole('menu')
+  return Array.from(menu.querySelectorAll('[role="menuitem"], button')).map((item) => item.textContent?.trim())
 }
 
 beforeEach(() => {
@@ -112,7 +114,7 @@ describe('ChatHeaderMenu', () => {
     const labels = itemLabels()
     expect(labels.indexOf('Open beside')).toBe(labels.indexOf('CLI') + 1)
     expect(labels.indexOf('Open beside')).toBe(labels.indexOf('Open in new tab') - 1)
-    fireEvent.click(screen.getByRole('button', { name: 'Open beside' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open beside' }))
 
     expect(onOpenChatBeside).toHaveBeenCalledOnce()
     expect(onOpenChange).toHaveBeenCalledWith(false)
@@ -126,7 +128,7 @@ describe('ChatHeaderMenu', () => {
     expect(labels.indexOf('Open in new tab')).toBe(labels.indexOf('Open beside') + 1)
     expect(labels.indexOf('Open in new tab')).toBe(labels.indexOf('Pin') - 1)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open in new tab' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open in new tab' }))
 
     await waitFor(() => expect(platform.calls).toHaveLength(1))
     const [intent] = platform.calls
@@ -134,5 +136,83 @@ describe('ChatHeaderMenu', () => {
     const target = new URL((intent as Extract<typeof intent, { kind: 'navigation.open-external' }>).url)
     expect(`${target.pathname}${target.search}`).toBe(`/?session=${encodeURIComponent(SESSION_ID)}`)
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+  it('switches to the CLI view and closes the menu, and disables a view that is locked', () => {
+    const setAndPersistViewMode = vi.fn()
+    const onOpenChange = vi.fn()
+    renderMenu({ setAndPersistViewMode, onOpenChange })
+
+    fireEvent.click(screen.getByRole('button', { name: 'CLI' }))
+    expect(setAndPersistViewMode).toHaveBeenCalledWith('cli')
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('leaves the view alone while a switch is locked', () => {
+    const setAndPersistViewMode = vi.fn()
+    renderMenu({ setAndPersistViewMode, viewSwitchLocked: true, cliTitle: 'Locked for now' })
+
+    expect((screen.getByRole('button', { name: 'CLI' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Chat' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'CLI' }))
+    expect(setAndPersistViewMode).not.toHaveBeenCalled()
+  })
+
+  it('archives, or unarchives an archived chat', () => {
+    const onArchive = vi.fn()
+    const onUnarchive = vi.fn()
+    const { unmount } = renderMenu({ onArchive, onUnarchive })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Archive chat' }))
+    expect(onArchive).toHaveBeenCalledWith(SESSION_ID)
+    unmount()
+
+    renderMenu({ onArchive, onUnarchive, sessionMeta: { engine: 'claude', archivedAt: '2026-01-01T00:00:00Z' } })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Unarchive chat' }))
+    expect(onUnarchive).toHaveBeenCalledWith(SESSION_ID)
+  })
+
+  it('deletes only after the confirmation, and offers the engine resume command when there is one', () => {
+    const onDeleteSession = vi.fn()
+    const onCopyToClipboard = vi.fn()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    renderMenu({ onDeleteSession, onCopyToClipboard, sessionMeta: { engine: 'codex', engineSessionId: 'engine-1' } })
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /Delete Session/ }))
+    expect(onDeleteSession).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('menuitem', { name: /Delete Session/ }))
+    expect(onDeleteSession).toHaveBeenCalledWith(SESSION_ID)
+    expect(confirm).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy CLI Resume Command' }))
+    expect(onCopyToClipboard).toHaveBeenCalledWith('codex --resume engine-1', 'cli')
+    confirm.mockRestore()
+  })
+
+  it('does not place a popup against a hidden copy of the trigger', () => {
+    render(
+      <div style={{ display: 'none' }}>
+        <ChatHeaderMenu
+          open
+          onOpenChange={vi.fn()}
+          selectedId={SESSION_ID}
+          sessionMeta={null}
+          openGlobalSearch={vi.fn()}
+          effectiveViewMode="chat"
+          cliModeAvailable
+          viewSwitchLocked={false}
+          cliTitle={undefined}
+          setAndPersistViewMode={vi.fn()}
+          onDuplicate={vi.fn()}
+          duplicatePending={false}
+          onArchive={vi.fn()}
+          onUnarchive={vi.fn()}
+          onCopyToClipboard={vi.fn()}
+          onShareDebugLog={vi.fn()}
+          onClearDebugLog={vi.fn()}
+          onDeleteSession={vi.fn()}
+          onOpenChatBeside={vi.fn()}
+        />
+      </div>,
+    )
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 })
