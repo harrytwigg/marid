@@ -26,7 +26,10 @@
  *   - Reduced transparency swaps every glass token for its opaque twin.
  */
 
-/* Geist (UI) and Geist Mono (code), variable 100..900; Sora (headings),
+/* Self-hosted so the shell has no third-party dependency and paints its own
+   type offline. Vite hashes these into /assets/, which the gateway serves
+   immutable — a public/ font would revalidate on every load instead.
+   Geist (UI) and Geist Mono (code), variable 100..900; Sora (headings),
    variable 100..800 — all SIL OFL 1.1 (see src/fonts/OFL-*.txt) */
 @font-face {
   font-family: 'Geist';
