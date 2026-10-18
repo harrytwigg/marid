@@ -1,11 +1,11 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Archive, ArchiveRestore, Copy, ExternalLink, MoreHorizontal, PanelRightOpen, Pin, PinOff, Search, Share2, Trash2 } from '@/components/ui/icon'
 import { sessionUrl } from '@/components/chat/chat-route-helpers'
+import { ViewModeItems } from '@/components/chat/view-mode-items'
 import { SESSION_MENU_CONTENT_CLASS, SESSION_MENU_ITEM_CLASS, SESSION_MENU_SEPARATOR_CLASS } from '@/components/chat/session-row-menu'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { usePins, useTogglePin } from '@/hooks/use-pins'
 import { openExternal } from '@/platform'
-import { cn } from '@/lib/utils'
 import type { ViewMode } from '@/lib/view-mode'
 
 const EMPTY_PINS = new Set<string>()
@@ -24,7 +24,7 @@ function isDisplayed(node: HTMLElement | null): boolean {
   return node !== null
 }
 
-/** The copy the popup belongs to: the one pressed, else (a shortcut opened it) the first that is displayed. */
+/** The copy the popup belongs to: the one pressed, else (opened by the prop alone, with no press) the first that is displayed. */
 function isPlacedCopy(element: HTMLElement | null): boolean {
   if (pressedCopy) return pressedCopy === element
   return Array.from(document.querySelectorAll<HTMLElement>('[data-more-menu]')).find(isDisplayed) === element
@@ -55,20 +55,7 @@ interface ChatHeaderMenuProps {
 /** The items below the view toggle, where a session is guaranteed to exist. */
 type SelectedChatProps = Omit<ChatHeaderMenuProps, 'selectedId'> & { selectedId: string }
 
-// More (…) menu — rendered as the last control inside the right header pill.
-// D7: ALWAYS rendered (even on a new chat, where it carries Search, the view
-// toggle, and Open beside) so the right pill is consistent. When a session is
-// selected the items are grouped: primary (Search · view toggle · Open beside · Open in new
-// tab · Pin · Duplicate) → Developer
-// cluster → destructive Delete, each separated.
-//
-// Open state lives in the route (a shortcut opens and closes it), so the menu is
-// controlled. The popup is the shared dropdown menu: it closes on an outside press,
-// Escape and a choice, and puts focus back on the trigger. This node is rendered
-// twice (desktop tab bar + mobile header, one hidden via CSS), and both copies
-// share the one `open`, so only the displayed trigger's popup is ever placed.
-export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
-  const { open, onOpenChange, selectedId } = props
+function usePlacedPopup(open: boolean, onOpenChange: (open: boolean) => void) {
   const triggerRef = useRef<HTMLButtonElement>(null)
   // The route's `open` reaches both copies, but one popup is placed, against the displayed trigger.
   const [shown, setShown] = useState(false)
@@ -76,6 +63,31 @@ export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
     if (!open) pressedCopy = null
     setShown(open && isPlacedCopy(triggerRef.current))
   }, [open])
+  // Crossing the breakpoint hides the copy the popup hangs from: close rather than leave it adrift.
+  useEffect(() => {
+    if (!open || !shown) return
+    const closeIfHidden = () => { if (!isDisplayed(triggerRef.current)) onOpenChange(false) }
+    window.addEventListener('resize', closeIfHidden)
+    return () => window.removeEventListener('resize', closeIfHidden)
+  }, [open, shown, onOpenChange])
+  return { triggerRef, shown }
+}
+
+// More (…) menu — rendered as the last control inside the right header pill.
+// D7: ALWAYS rendered (even on a new chat, where it carries Search, the view
+// toggle, and Open beside) so the right pill is consistent. When a session is
+// selected the items are grouped: primary (Search · view toggle · Open beside · Open in new
+// tab · Pin · Duplicate) → Developer
+// cluster → destructive Delete, each separated.
+//
+// Open state lives in the route (it closes the menu from several places: a finished
+// duplicate, a copy to the clipboard, Search), so the menu is controlled. The popup is the shared dropdown menu: it closes on an outside press,
+// Escape and a choice, and puts focus back on the trigger. This node is rendered
+// twice (desktop tab bar + mobile header, one hidden via CSS), and both copies
+// share the one `open`, so only the displayed trigger's popup is ever placed.
+export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
+  const { open, onOpenChange, selectedId } = props
+  const { triggerRef, shown } = usePlacedPopup(open, onOpenChange)
 
   return (
     <DropdownMenu open={open && shown} onOpenChange={onOpenChange}>
@@ -101,7 +113,7 @@ export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
           <span className="flex-1">Search…</span>
           <kbd className="font-mono text-caption2 text-[var(--text-quaternary)]">⌘K</kbd>
         </DropdownMenuItem>
-        <ViewModeToggle {...props} />
+        <ViewModeItems viewMode={props.effectiveViewMode} cliModeAvailable={props.cliModeAvailable} viewSwitchLocked={props.viewSwitchLocked} cliTitle={props.cliTitle} onChange={props.setAndPersistViewMode} />
         <DropdownMenuItem className={SESSION_MENU_ITEM_CLASS} onClick={props.onOpenChatBeside}>
           <PanelRightOpen aria-hidden />
           <span className="flex-1">Open beside</span>
@@ -109,43 +121,6 @@ export function ChatHeaderMenu(props: ChatHeaderMenuProps) {
         {selectedId && <SelectedChatItems {...props} selectedId={selectedId} />}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-// Chat/CLI view toggle (moved here from the old tab bar so it stays reachable
-// now that the header is a pill). A label, not an item: it holds two buttons.
-function ViewModeToggle(props: ChatHeaderMenuProps) {
-  const { effectiveViewMode, cliModeAvailable, viewSwitchLocked, cliTitle, setAndPersistViewMode, onOpenChange } = props
-
-  return (
-    <DropdownMenuLabel className="flex items-center gap-1 px-2.5 py-1.5 font-normal">
-      <button
-        type="button"
-        onClick={() => { if (!viewSwitchLocked) { setAndPersistViewMode('chat'); onOpenChange(false) } }}
-        disabled={viewSwitchLocked}
-        title={viewSwitchLocked ? cliTitle : undefined}
-        className={cn(
-          "flex-1 rounded-md px-2 py-1 text-caption1 font-medium transition-colors",
-          effectiveViewMode === 'chat' ? "bg-[var(--accent-fill)] text-[var(--accent)]" : "text-muted-foreground hover:bg-[var(--fill-secondary)]",
-          viewSwitchLocked && "opacity-60 cursor-not-allowed"
-        )}
-      >
-        Chat
-      </button>
-      <button
-        type="button"
-        onClick={() => { if (cliModeAvailable && !viewSwitchLocked) { setAndPersistViewMode('cli'); onOpenChange(false) } }}
-        disabled={!cliModeAvailable || viewSwitchLocked}
-        title={cliTitle}
-        className={cn(
-          "flex-1 rounded-md px-2 py-1 font-mono text-caption1 font-medium transition-colors",
-          effectiveViewMode === 'cli' ? "bg-[var(--accent-fill)] text-[var(--accent)]" : "text-muted-foreground hover:bg-[var(--fill-secondary)]",
-          (!cliModeAvailable || viewSwitchLocked) && "opacity-45 cursor-not-allowed"
-        )}
-      >
-        CLI
-      </button>
-    </DropdownMenuLabel>
   )
 }
 
@@ -160,7 +135,8 @@ function SelectedChatItems(props: SelectedChatProps) {
         <span className="flex-1">Open in new tab</span>
       </DropdownMenuItem>
       <PinItem selectedId={selectedId} />
-      <DropdownMenuItem className={SESSION_MENU_ITEM_CLASS} disabled={props.duplicatePending} onClick={() => props.onDuplicate(selectedId)}>
+      {/* Stays open while the copy is made ("Duplicating..."); the route closes it once the copy opens, and a failed copy leaves it open beside the alert. */}
+      <DropdownMenuItem className={SESSION_MENU_ITEM_CLASS} disabled={props.duplicatePending} onSelect={(event) => event.preventDefault()} onClick={() => props.onDuplicate(selectedId)}>
         <Copy aria-hidden />
         <span className="flex-1">{props.duplicatePending ? 'Duplicating...' : 'Duplicate...'}</span>
       </DropdownMenuItem>

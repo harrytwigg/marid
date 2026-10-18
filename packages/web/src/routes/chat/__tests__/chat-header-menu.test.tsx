@@ -59,7 +59,7 @@ function renderMenu(overrides: Partial<Parameters<typeof ChatHeaderMenu>[0]> = {
 
 function itemLabels() {
   const menu = screen.getByRole('menu')
-  return Array.from(menu.querySelectorAll('[role="menuitem"], button')).map((item) => item.textContent?.trim())
+  return Array.from(menu.querySelectorAll('[role="menuitem"], [role="menuitemradio"], button')).map((item) => item.textContent?.trim())
 }
 
 beforeEach(() => {
@@ -137,12 +137,12 @@ describe('ChatHeaderMenu', () => {
     expect(`${target.pathname}${target.search}`).toBe(`/?session=${encodeURIComponent(SESSION_ID)}`)
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
-  it('switches to the CLI view and closes the menu, and disables a view that is locked', () => {
+  it('switches to the CLI view and closes the menu', () => {
     const setAndPersistViewMode = vi.fn()
     const onOpenChange = vi.fn()
     renderMenu({ setAndPersistViewMode, onOpenChange })
 
-    fireEvent.click(screen.getByRole('button', { name: 'CLI' }))
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'CLI' }))
     expect(setAndPersistViewMode).toHaveBeenCalledWith('cli')
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
@@ -151,9 +151,9 @@ describe('ChatHeaderMenu', () => {
     const setAndPersistViewMode = vi.fn()
     renderMenu({ setAndPersistViewMode, viewSwitchLocked: true, cliTitle: 'Locked for now' })
 
-    expect((screen.getByRole('button', { name: 'CLI' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: 'Chat' }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'CLI' }))
+    expect(screen.getByRole('menuitemradio', { name: 'CLI' }).getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByRole('menuitemradio', { name: 'Chat' }).getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'CLI' }))
     expect(setAndPersistViewMode).not.toHaveBeenCalled()
   })
 

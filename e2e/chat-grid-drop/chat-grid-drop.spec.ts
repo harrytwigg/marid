@@ -242,7 +242,7 @@ test('Open beside follows the view toggle and opens the picker in both themes', 
     const menu = page.getByRole('menu')
     await expect(menu).toBeVisible()
     const labels = await menu.evaluate((element) => (
-      Array.from(element.querySelectorAll('[role="menuitem"], button'))
+      Array.from(element.querySelectorAll('[role="menuitem"], [role="menuitemradio"], button'))
         .map((item) => item.textContent?.trim() ?? '')
     ))
     const cliIndex = labels.findIndex((label) => label.trim() === 'CLI')
@@ -278,7 +278,7 @@ test('the pane title-bar menu reads the same as the header in both themes', asyn
     await expect(menu.getByRole('menuitem', { name: 'Open beside' })).toBeVisible()
 
     const order = await menu.evaluate((element) => (
-      Array.from(element.querySelectorAll('[role="menuitem"], button'))
+      Array.from(element.querySelectorAll('[role="menuitem"], [role="menuitemradio"], button'))
         .map((item) => item.textContent?.trim() ?? '')
     ))
     expect(order.indexOf('Open beside')).toBe(order.indexOf('CLI') + 1)
