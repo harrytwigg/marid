@@ -2,6 +2,7 @@ import { logger } from "../../shared/logger.js";
 import { detectRateLimit, isDeadSessionError, type RateLimitDetection } from "../../shared/rateLimit.js";
 import { observeClaudeTurnOutcome } from "../claude-auth-watch.js";
 import type { EngineResult, Session } from "../../shared/types.js";
+import { awaitEffortLevels } from "../../shared/effort.js";
 import { completedStreamedBlockIds } from "../../gateway/streamed-blocks.js";
 import {
   deletePartialMessages,
@@ -55,6 +56,7 @@ async function runTurnOnce(input: TurnInput, surface: TurnSurface): Promise<Turn
   const sessionId = input.session.id;
   const terminalFields = (): UpdateSessionFields => input.terminalFields?.() ?? {};
 
+  await awaitEffortLevels(input.config, input.session.engine, input.session, input.employee);
   const plan = preflightTurn(input);
   if (!plan.ok) {
     if (plan.declined) await settleDeclinedTurn(input, surface, plan.error, terminalFields);

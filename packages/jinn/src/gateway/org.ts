@@ -6,6 +6,7 @@ import type { Employee, JinnConfig } from "../shared/types.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
 import { logger } from "../shared/logger.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
+import { effortLevelsPending } from "../shared/opencode-catalogue.js";
 import { validateEmployeeTargets } from "../shared/claude-profile.js";
 import { departmentDisagreement, resolveEmployeeDepartment, scopedEmployeeRefusal } from "./org-department-check.js";
 import { walkEmployeeYamls, WRITABLE_FIELDS, type EmployeeUpdate } from "./org-yaml-files.js";
@@ -237,17 +238,20 @@ export function validateEmployeeUpdate(
     }
     const level = body.effortLevel.trim();
     const valid = effortLevelsForModel(config, resultingEngine, effectiveModel);
-    if (valid.length === 0) {
+    // Levels not discovered yet are unknown, not absent: the level is kept, and
+    // a turn checks it once they are known.
+    const unknown = effortLevelsPending(resultingEngine);
+    if (valid.length === 0 && !unknown) {
       return { ok: false, error: `engine "${resultingEngine}"${effectiveModel ? ` model "${effectiveModel}"` : ""} does not support effort levels` };
     }
-    if (!valid.includes(level)) {
+    if (!unknown && !valid.includes(level)) {
       return { ok: false, error: `invalid effortLevel "${level}" (valid: ${valid.join(", ")})` };
     }
     updates.effortLevel = level;
   } else if (current.effortLevel) {
     const level = current.effortLevel.trim();
     const valid = effortLevelsForModel(config, resultingEngine, effectiveModel);
-    if (level && (valid.length === 0 || !valid.includes(level))) {
+    if (level && !effortLevelsPending(resultingEngine) && (valid.length === 0 || !valid.includes(level))) {
       updates.effortLevel = null;
     }
   }
