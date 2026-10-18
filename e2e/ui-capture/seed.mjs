@@ -3,15 +3,15 @@
 // hosts, paths, ids or tokens.
 //
 //   node seed.mjs db  <sandbox-home> <repo>   before the gateway starts
-//   node seed.mjs api <sandbox-home> <base-url> after it is healthy
+//   node seed.mjs api <sandbox-home> <base-url> <repo> after it is healthy
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { createRequire } from 'node:module'
 
-const [mode, sandboxHome, third] = process.argv.slice(2)
+const [mode, sandboxHome, third, fourth] = process.argv.slice(2)
 if (!mode || !sandboxHome || !third) {
-  throw new Error('usage: seed.mjs db <sandbox-home> <repo> | seed.mjs api <sandbox-home> <base-url>')
+  throw new Error('usage: seed.mjs db <sandbox-home> <repo> | seed.mjs api <sandbox-home> <base-url> <repo>')
 }
 
 const ASSISTANT_REPLY = [
@@ -56,10 +56,14 @@ function conversation() {
   return rows
 }
 
-function seedDb(repo) {
+function openDb(repo) {
   const requireFromJinn = createRequire(path.join(repo, 'packages/jinn/package.json'))
   const Database = requireFromJinn('better-sqlite3')
-  const db = new Database(path.join(sandboxHome, 'sessions', 'registry.db'))
+  return new Database(path.join(sandboxHome, 'sessions', 'registry.db'))
+}
+
+function seedDb(repo) {
+  const db = openDb(repo)
   const session = db.prepare("SELECT id FROM sessions WHERE source_ref = 'sandbox:1'").get()
   if (!session) throw new Error('the sandbox --seed session sandbox:1 is missing')
   const insert = db.prepare('INSERT INTO messages (id, session_id, role, content, timestamp, seq) VALUES (?, ?, ?, ?, ?, ?)')
@@ -68,6 +72,18 @@ function seedDb(repo) {
     insert.run(crypto.randomUUID(), session.id, role, content, start + i * 60_000, i + 1)
   })
   db.prepare('UPDATE sessions SET total_turns = ?, last_activity = ? WHERE id = ?').run(conversation().length === CONVERSATION.length ? 2 : Math.ceil(conversation().length / 2), new Date().toISOString(), session.id)
+  db.close()
+}
+
+// A closing turn that names a Todo, so the thread has a mention to hover. It can only be written
+// once the Todo exists, hence from the api step; the gateway has the database open and reads the
+// message from it on the next load.
+function mentionTodo(repo, sessionId, todoId) {
+  if (!repo) throw new Error('seed.mjs api needs the repo to write the mention')
+  const db = openDb(repo)
+  const last = db.prepare('SELECT MAX(seq) AS seq, MAX(timestamp) AS at FROM messages WHERE session_id = ?').get(sessionId)
+  db.prepare('INSERT INTO messages (id, session_id, role, content, timestamp, seq) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(crypto.randomUUID(), sessionId, 'assistant', `Tracking the checklist in ${todoId}, which is in progress.`, last.at + 1_000, last.seq + 1)
   db.close()
 }
 
@@ -80,7 +96,7 @@ const TODOS = [
   { title: 'Write the accessibility notes', priority: 2 },
 ]
 
-async function seedApi(baseUrl) {
+async function seedApi(baseUrl, repo) {
   const { token } = JSON.parse(fs.readFileSync(path.join(sandboxHome, 'gateway.json'), 'utf8'))
   const call = async (method, url, body) => {
     const res = await fetch(baseUrl + url, {
@@ -109,11 +125,12 @@ async function seedApi(baseUrl) {
   const sessions = await call('GET', '/api/sessions')
   const list = Array.isArray(sessions) ? sessions : sessions.sessions ?? []
   const chat = list.find((s) => s.sourceRef === 'sandbox:1' || s.title === '#1 - Chat layout QA')
+  if (chat && created[0]) mentionTodo(repo, chat.id, created[0])
   // The capture reads ids from here so screens can be addressed without
   // printing them anywhere a screenshot could show.
   fs.writeFileSync(path.join(sandboxHome, 'ui-capture-fixtures.json'), JSON.stringify({ todos: created, chatSession: chat?.id ?? null }, null, 2))
 }
 
 if (mode === 'db') seedDb(third)
-else if (mode === 'api') await seedApi(third)
+else if (mode === 'api') await seedApi(third, fourth)
 else throw new Error(`unknown mode ${mode}`)

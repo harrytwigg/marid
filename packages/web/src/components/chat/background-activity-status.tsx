@@ -209,14 +209,12 @@ export function BackgroundActivityStatus({
           </PopoverTrigger>
           <PopoverContent
             side="top"
-            collisionPadding={8}
             aria-label="What this session is waiting on"
             data-pane-focus-preserving
             data-testid="session-waits-popup"
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             className="max-h-[min(60vh,420px)] w-[min(380px,calc(100vw-16px))] overflow-y-auto p-1.5"
-            style={{ background: 'var(--material-thick)', boxShadow: 'var(--shadow-overlay)' }}
           >
             <SessionWaitsBoundary>
               <Suspense fallback={<WaitsNote>Loading…</WaitsNote>}>

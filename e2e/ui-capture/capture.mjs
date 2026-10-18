@@ -60,7 +60,10 @@ const browser = await browserType.launch()
 const failures = []
 const reduced = process.env.JINN_CAPTURE_TRANSPARENCY === 'reduced'
 const axeReport = []
-const jobs = screens.flatMap((screen) => THEMES.flatMap((theme) => VIEWPORTS.map((viewport) => ({ screen, theme, viewport }))))
+// A screen can name the viewports it makes sense at (the rail and the hover glance are desktop only).
+const jobs = screens.flatMap((screen) => THEMES.flatMap((theme) => VIEWPORTS
+  .filter((viewport) => !screen.viewports || screen.viewports.includes(viewport.name))
+  .map((viewport) => ({ screen, theme, viewport }))))
 
 // Report-only: a failure of the audit itself is logged, never thrown.
 async function audit(page, label) {

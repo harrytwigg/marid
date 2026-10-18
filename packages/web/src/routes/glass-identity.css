@@ -322,6 +322,47 @@ body {
 }
 
 /* ---------------------------------------------------------------------------
+   .glass-overlay: a surface that floats above the page and is gone when its
+   job is done (tooltip, popover, hover card). It is the strongest material:
+   --glass-overlay with --glass-blur-strong and the overlay shadow. Opaque by
+   default, which is what a coarse pointer gets; a fine pointer gets the tint
+   and the blur. Reduced transparency makes the tint its opaque twin and the
+   blur none, so it needs no case of its own. Each open overlay is one blurred
+   surface: blur does not nest, so nothing inside one asks for another.
+   --------------------------------------------------------------------------- */
+.glass-overlay {
+  background: var(--glass-overlay-opaque);
+  box-shadow: var(--shadow-overlay);
+}
+@media (pointer: fine) {
+  .glass-overlay {
+    background: var(--glass-overlay);
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    backdrop-filter: var(--glass-blur-strong);
+  }
+}
+
+/* The nav rail's label: the overlay material on a pill that CSS reveals, with
+   no script (the rail is in the always-loaded shell). The pill is in the DOM
+   for every icon, so it blurs only while it shows: one label, one blurred
+   surface, however many icons there are. Escape sets data-label-dismissed on
+   the row; pill-nav.tsx says why. */
+.rail-reveal {
+  background: var(--glass-overlay-opaque);
+  box-shadow: var(--shadow-overlay);
+}
+@media (pointer: fine) {
+  .rail-reveal { background: var(--glass-overlay); }
+  .group\/row:is(:hover, :focus-within) .rail-reveal {
+    -webkit-backdrop-filter: var(--glass-blur-strong);
+    backdrop-filter: var(--glass-blur-strong);
+  }
+}
+[data-label-dismissed] .rail-reveal {
+  opacity: 0 !important;
+}
+
+/* ---------------------------------------------------------------------------
    Chat chrome. Below lg the mobile header bar is the blurred surface over the
    thread; from lg up the top scrim is, and the pills sit on it as tint.
    --------------------------------------------------------------------------- */

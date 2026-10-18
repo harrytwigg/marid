@@ -977,16 +977,6 @@ h1, h2, h3, h4, h5, h6 {
   .tool-arrive { animation: none; }
 }
 
-/* The hover glance on a Todo mention. It is portalled over the page, so it can
-   animate on transform and opacity alone and nothing around it reflows. */
-.todo-glance[data-state="open"] { animation: jinn-glance-in 120ms var(--ease-snappy) both; }
-.todo-glance[data-state="closed"] { animation: jinn-glance-out 80ms var(--ease-snappy) both; }
-@keyframes jinn-glance-in { from { opacity: 0; transform: translateY(-3px); } }
-@keyframes jinn-glance-out { to { opacity: 0; transform: translateY(-3px); } }
-@media (prefers-reduced-motion: reduce) {
-  .todo-glance[data-state="open"], .todo-glance[data-state="closed"] { animation: none; }
-}
-
 /* ============================================
    Utility Animation Classes
    ============================================ */

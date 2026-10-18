@@ -51,6 +51,61 @@ export const SCREENS = [
     url: () => '/settings',
     ready: 'Appearance',
   },
+  {
+    // The nav rail's label, revealed by the pointer on the Todos icon. The rail is desktop only.
+    name: 'rail-tooltip',
+    viewports: ['desktop'],
+    title: 'Nav rail label, hover',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: 'Add a step for the changelog',
+    prepare: async (page) => {
+      await page.locator('nav[aria-label="Primary"] a[aria-label="Todos"]').hover()
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // The same label, revealed by focus after a real Tab, which is what a keyboard does.
+    name: 'rail-tooltip-keyboard',
+    viewports: ['desktop'],
+    title: 'Nav rail label, keyboard focus',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: 'Add a step for the changelog',
+    prepare: async (page) => {
+      await page.mouse.move(700, 450)
+      await page.keyboard.press('Tab')
+      await page.locator('nav[aria-label="Primary"] a[aria-label="Todos"]').focus()
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // A Todo id in the thread, with the glance that reads that Todo opened by the pointer. The
+    // glance is off below 640px, so this is desktop only.
+    name: 'todo-mention',
+    viewports: ['desktop'],
+    title: 'Todo mention, hover',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: 'Tracking the checklist in',
+    prepare: async (page) => {
+      await page.locator('a[href^="/todos/"]').first().hover()
+      await page.locator('.todo-glance').first().waitFor({ timeout: 5_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // The glance opened from the keyboard: a real Tab, then focus on the mention.
+    name: 'todo-mention-keyboard',
+    viewports: ['desktop'],
+    title: 'Todo mention, keyboard focus',
+    url: (f) => `/?session=${f.chatSession}`,
+    ready: 'Tracking the checklist in',
+    prepare: async (page) => {
+      await page.mouse.move(700, 450)
+      await page.keyboard.press('Tab')
+      await page.locator('a[href^="/todos/"]').first().focus()
+      await page.locator('.todo-glance').first().waitFor({ timeout: 5_000 })
+      await page.waitForTimeout(500)
+    },
+  },
 ]
 
 export const THEMES = ['light', 'dark']

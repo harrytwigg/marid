@@ -72,7 +72,7 @@ env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" create "$INSTANCE" --port "$PO
 "$NODE_BIN" "$CAPTURE_DIR/seed.mjs" db "$SANDBOX_HOME" "$REPO"
 STARTED=1
 env HOME="$HOST_HOME" JINN_REPO="$REPO" "$HELPER" start "$INSTANCE"
-"$NODE_BIN" "$CAPTURE_DIR/seed.mjs" api "$SANDBOX_HOME" "$BASE_URL"
+"$NODE_BIN" "$CAPTURE_DIR/seed.mjs" api "$SANDBOX_HOME" "$BASE_URL" "$REPO"
 
 # Headless Chromium renders in software, but its GPU process still opens /dev/dri. On a host whose
 # GPU driver is wedged that open blocks in the kernel, and the page's main thread then waits on the

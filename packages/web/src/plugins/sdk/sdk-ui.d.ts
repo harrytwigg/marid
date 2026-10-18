@@ -190,7 +190,10 @@ export declare const TabsContent: ComponentType<Styled & { value: string }>
 export declare const Textarea: ComponentType<TextareaHTMLAttributes<HTMLTextAreaElement>>
 
 /** Carries its own provider, so one tooltip works on its own. Wrap a group in
- *  `TooltipProvider` when they should share an open delay. */
+ *  `TooltipProvider` when they should share an open delay. It opens on hover and
+ *  on keyboard focus, closes on Escape, blur and press, and describes its trigger
+ *  with `aria-describedby` while it is open. The trigger must be focusable, and
+ *  `asChild` hands the props to the one child (which must pass `ref` through). */
 export declare const Tooltip: ComponentType<{
   open?: boolean
   defaultOpen?: boolean
