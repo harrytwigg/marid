@@ -94,6 +94,8 @@ const TODOS = [
   { title: 'Add keyboard shortcuts to the board', priority: 3 },
   { title: 'Investigate slow search results', priority: 1, status: 'blocked' },
   { title: 'Write the accessibility notes', priority: 2 },
+  { title: 'Publish the changelog', priority: 2, status: 'done' },
+  { title: 'Retire the old export option', priority: 3, status: 'cancelled' },
 ]
 
 async function seedApi(baseUrl, repo) {

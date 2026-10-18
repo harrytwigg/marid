@@ -32,6 +32,100 @@ export const SCREENS = [
     ready: 'Draft the release checklist',
   },
   {
+    // The board on a phone: columns swiped one at a time, the next peeking in, a Board | List switch
+    // beside Filters. (Before the glass board a phone showed the grouped list here.)
+    name: 'board-phone',
+    viewports: ['narrow'],
+    title: 'Todos board, phone',
+    url: () => '/todos',
+    ready: 'Draft the release checklist',
+    prepare: async (page) => {
+      await page.getByTestId('board-column-executing').scrollIntoViewIfNeeded()
+      await page.waitForTimeout(400)
+    },
+  },
+  {
+    // The strip swiped to its third column: the dots and the count follow it.
+    name: 'board-phone-swiped',
+    viewports: ['narrow'],
+    title: 'Todos board, phone, third column',
+    url: () => '/todos',
+    ready: 'Draft the release checklist',
+    prepare: async (page) => {
+      await page.getByTestId('todo-board-scroll').evaluate((strip) => {
+        const columns = strip.querySelectorAll('[data-board-snap]')
+        strip.scrollLeft = columns[2].getBoundingClientRect().left - strip.getBoundingClientRect().left + strip.scrollLeft - 16
+      })
+      await page.waitForTimeout(600)
+    },
+  },
+  {
+    // The phone's grouped list, one tap away. Tolerates a build with no switch, where the list is all there is.
+    name: 'board-phone-list',
+    viewports: ['narrow'],
+    title: 'Todos list, phone',
+    url: () => '/todos',
+    ready: 'Draft the release checklist',
+    prepare: async (page) => {
+      const list = page.getByRole('radio', { name: 'List' })
+      if (await list.count()) await list.locator('..').click()
+      await page.getByTestId('todo-list-scroll').waitFor({ state: 'visible' })
+      await page.waitForTimeout(400)
+    },
+  },
+  {
+    // A card's "Move to…" menu, the phone's way to change column.
+    name: 'board-phone-move',
+    viewports: ['narrow'],
+    title: 'Card Move to menu, phone',
+    url: () => '/todos',
+    ready: 'Draft the release checklist',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: /^Move .* to…$/ }).first().click()
+      await page.getByRole('menu').waitFor({ timeout: 5_000 })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // The Closed column opened: on the desktop its rail expands in place; on a phone the rail is the
+    // last stop of the strip (or, before the glass board, the list's Closed group).
+    name: 'board-closed',
+    title: 'Todos board, Closed expanded',
+    url: () => '/todos',
+    ready: 'Draft the release checklist',
+    prepare: async (page) => {
+      const rail = page.getByTestId('board-closed-rail')
+      if (await rail.isVisible()) {
+        await rail.scrollIntoViewIfNeeded()
+        await rail.click()
+        const column = page.getByTestId('board-closed-column')
+        await column.waitFor()
+        await column.scrollIntoViewIfNeeded()
+      } else {
+        await page.getByTestId('todo-list-group-closed').locator('button').first().click()
+      }
+      await page.waitForTimeout(500)
+    },
+  },
+  {
+    // A column scrolled under its header: the desktop header sticks, in the panel's own tint.
+    // The fixture board is short, so the first column is lengthened with copies of its cards.
+    name: 'board-sticky-header',
+    viewports: ['desktop'],
+    title: 'Board column header stuck',
+    url: () => '/todos',
+    ready: 'Draft the release checklist',
+    prepare: async (page) => {
+      await page.getByTestId('todo-board-scroll').evaluate((strip) => {
+        const body = strip.querySelector('[data-board-column="backlog"] > div:nth-of-type(2)')
+        const first = body.firstElementChild
+        for (let i = 0; i < 9; i += 1) body.appendChild(first.cloneNode(true))
+        strip.scrollTop = 150
+      })
+      await page.waitForTimeout(500)
+    },
+  },
+  {
     name: 'todo',
     title: 'Todo page',
     url: (f) => `/todos/${f.todos[0]}`,
