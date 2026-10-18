@@ -118,6 +118,7 @@ describe("opencodeDiscoveryEnv", () => {
 
   it("scrubs a parent session's opencode env and names no session", () => {
     for (const [key, value] of Object.entries(PARENT)) vi.stubEnv(key, value);
+    vi.stubEnv("JINN_SESSION_ID", "parent-session");
     const env = opencodeDiscoveryEnv(cfg());
     for (const key of Object.keys(PARENT)) expect(env[key]).toBeUndefined();
     expect(env.JINN_SESSION_ID).toBeUndefined();

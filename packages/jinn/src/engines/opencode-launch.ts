@@ -122,6 +122,8 @@ export function cleanEnv(sessionId: string, opts: OpencodeProcessOptions): Recor
  *  session identity. `disableFff` is read from the config as the engine does. */
 export function opencodeDiscoveryEnv(config: JinnConfig): Record<string, string> {
   const env = gatewayChildEnv();
+  // A gateway started inside a session carries that session's id; discovery is no session's.
+  delete env.JINN_SESSION_ID;
   return Object.assign(env, opencodeProcessEnv({ disableFff: config.engines.opencode?.disableFff !== false }));
 }
 
