@@ -69,6 +69,8 @@
 //   FAKE_V2_CLI_VERSION       what --version alone reports instead ("none": it
 //                             fails, as an unreadable binary does)
 //   FAKE_V2_SERVE_FAIL=1      `serve` exits at once
+//   FAKE_V2_API_INFO_FAIL     `<n>[:<status>]`: the first n /api/info requests
+//                             answer that status (default 503) instead of the version
 // GET /test/log returns the requests the server saw ({at, method, path, body}),
 // GET /test/info how it was started (argv, the OPENCODE_CONFIG file's contents).
 import http from "node:http";
@@ -77,6 +79,9 @@ import fs from "node:fs";
 const argv = process.argv.slice(2);
 const verb = argv[0];
 const VERSION = process.env.FAKE_V2_VERSION ?? "2.0.29";
+const [infoFailCount, infoFailStatus] = (process.env.FAKE_V2_API_INFO_FAIL ?? "0").split(":");
+const apiInfoFail = { count: Number(infoFailCount), status: Number(infoFailStatus ?? 503) };
+let apiInfoFailed = 0;
 const flag = (name) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : undefined;
@@ -653,6 +658,10 @@ function serve() {
     requests.push(entry);
 
     // ServerInfo and the interrupt answer are bare, as on the real server.
+    if (url.pathname === "/api/info" && apiInfoFailed < apiInfoFail.count) {
+      apiInfoFailed++;
+      return json(res, apiInfoFail.status, { message: "unavailable" });
+    }
     if (url.pathname === "/api/info") return json(res, 200, { version: VERSION, pid: process.pid });
     if (url.pathname === "/api/event") return openEventStream(res);
     if (url.pathname === "/api/mcp" && req.method === "GET") {

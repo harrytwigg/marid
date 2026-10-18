@@ -87,7 +87,8 @@
 // 1.18.31, "none" for no version, "v2:<version>" for an OpenCode 2 server:
 // every v1 route answers 200 text/html, as its SPA fallback does, and only
 // GET /api/info reports the version; FAKE_OPENCODE_API_INFO_DROP=1 drops the
-// first /api/info connection unanswered);
+// first /api/info connection unanswered; FAKE_OPENCODE_API_INFO_FAIL=<n> answers
+// the first n /api/info requests 503);
 // `--version` prints that version as the real CLI does;
 // FAKE_OPENCODE_ENV_LOG names a file each `serve`, `run` and `attach` appends
 // `<verb> <OPENCODE_DISABLE_FFF or empty>` to;
@@ -407,6 +408,7 @@ function serve() {
   }
 
   let apiInfoDropped = false;
+  let apiInfoFailed = 0;
   const server = http.createServer(async (req, res) => {
     const expected = password ? `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}` : undefined;
     if (expected && req.headers.authorization !== expected) {
@@ -423,6 +425,11 @@ function serve() {
         // Drops the first /api/info connection without an answer.
         apiInfoDropped = true;
         req.socket.destroy();
+        return;
+      }
+      if (url === "/api/info" && apiInfoFailed < Number(process.env.FAKE_OPENCODE_API_INFO_FAIL ?? 0)) {
+        apiInfoFailed++;
+        res.writeHead(503).end("unavailable");
         return;
       }
       if (url === "/api/info") {
