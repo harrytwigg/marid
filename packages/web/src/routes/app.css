@@ -43,6 +43,10 @@
 @import "@heroui/styles/components/menu-section.css" layer(components);
 @import "@heroui/styles/components/header.css" layer(components);
 @import "@heroui/styles/components/separator.css" layer(components);
+@import "@heroui/styles/components/select.css" layer(components);
+@import "@heroui/styles/components/list-box.css" layer(components);
+@import "@heroui/styles/components/list-box-item.css" layer(components);
+@import "@heroui/styles/components/list-box-section.css" layer(components);
 @import "./heroui-glass.css";
 
 /* base.css gives every element's border the --border colour. Marid's borders

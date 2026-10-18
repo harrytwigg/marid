@@ -1,3 +1,4 @@
+import { ChevronDownIcon } from "lucide-react"
 import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
 
 // ---------------------------------------------------------------------------
@@ -102,18 +103,21 @@ export function SettingsSelect({
   ariaLabel?: string
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={ariaLabel}
-      className={`${CONTROL_CLASS} cursor-pointer`}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value} disabled={o.disabled}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <span className="relative block w-full">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={ariaLabel}
+        className="select__trigger min-h-[40px] w-full cursor-pointer appearance-none text-[length:var(--text-footnote)] md:min-h-0"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value} disabled={o.disabled}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDownIcon aria-hidden className="select__indicator size-4" />
+    </span>
   )
 }
 

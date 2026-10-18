@@ -196,7 +196,7 @@ export function EmployeeEditor({
           {isSystem ? (
             <ReadonlyValue testId="system-readonly-rank">{rank.charAt(0).toUpperCase() + rank.slice(1)}</ReadonlyValue>
           ) : <Select value={rank} onValueChange={(v) => setRank(v as Employee["rank"])}>
-            <SelectTrigger>
+            <SelectTrigger aria-label="Rank">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -251,7 +251,7 @@ export function EmployeeEditor({
         {isSystem ? (
           <ReadonlyValue>{reportsTo || "None (top level)"}</ReadonlyValue>
         ) : <Select value={reportsTo || NONE} onValueChange={(v) => setReportsTo(v === NONE ? "" : v)}>
-          <SelectTrigger>
+          <SelectTrigger aria-label="Reports to">
             <SelectValue placeholder="None" />
           </SelectTrigger>
           <SelectContent>

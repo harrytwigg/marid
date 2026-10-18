@@ -61,11 +61,11 @@ function useContentContainer(ref: React.Ref<HTMLDivElement> | undefined) {
   return { content, setRefs }
 }
 
-/** Escape in a menu or popover inside the dialog closes that and not the dialog: React Aria's overlay answers the
+/** Escape in a menu, select or popover inside the dialog closes that and not the dialog: React Aria's overlay answers the
  *  key on its own element, after Radix's document-level listener has run. */
 function keepEscapeInOverlay(event: KeyboardEvent, own?: (event: KeyboardEvent) => void) {
   own?.(event)
-  if ((event.target as Element | null)?.closest?.(".popover")) event.preventDefault()
+  if ((event.target as Element | null)?.closest?.(".popover, .select__popover")) event.preventDefault()
 }
 
 function DialogContent({

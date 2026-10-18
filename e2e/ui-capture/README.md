@@ -59,6 +59,16 @@ non-zero when a check fails and photographs the open states. The screens
 before and after. `JINN_CAPTURE_TOOL=measure-open.mjs` reports what a menu's first
 open downloads on the chat and board routes (gzip bytes of the scripts).
 
+## Selects
+
+`JINN_CAPTURE_TOOL=selects.mjs` writes a small org into the sandbox (one scoped
+department, whose option is disabled) and drives the employee editor's selects:
+a click and the keyboard open the list, typeahead, arrow keys skip a disabled
+option, Escape and an outside press close it with focus back on the trigger, a
+choice sticks, and a phone tap. It runs against any build, so the same command
+gives the before and the after, exits non-zero when a check fails, and
+photographs the closed and open states and the settings page's native selects.
+
 ## Settings
 
 | Variable | Default | Meaning |
