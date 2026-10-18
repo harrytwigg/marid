@@ -32,8 +32,9 @@ export interface SubagentRef {
 
 /** How recent the file's last write must be for the sub-agent to read as working. */
 export const SUBAGENT_LIVE_MS = 20_000
-/** A sub-agent whose last line is its own words, and that has written nothing since, has given its answer. */
-const SUBAGENT_ANSWERED_MS = 4_000
+/** A sub-agent whose last line is its own words, and that has written nothing since, has given its answer.
+ *  Long enough that one composing its next call after some commentary is not taken for finished. */
+const SUBAGENT_ANSWERED_MS = 8_000
 
 /** Whether the sub-agent is still working: it wrote recently, and has not just given its final answer. */
 export function subagentIsLive(data: SubagentTranscriptResponse | undefined, now: number): boolean {
@@ -49,9 +50,11 @@ export function subagentUnavailableText(reason: SubagentTranscriptUnavailable): 
   return 'Claude Code has not written a transcript for this sub-agent, or it has been removed.'
 }
 
-/** How often to read again: quickly while the file is changing, slowly once it has gone quiet. */
+/** How often to read again: quickly while the file is changing, or while one that was just launched may still
+ *  appear; slowly once it has gone quiet, or where no file is coming (no conversation, or one that cannot be read). */
 export function subagentRefetchMs(data: SubagentTranscriptResponse | undefined, now: number): number {
   if (data?.available && now - Date.parse(data.updatedAt) > 5 * SUBAGENT_LIVE_MS) return 10_000
+  if (data && !data.available && data.reason !== 'not-found') return 10_000
   return 2_000
 }
 

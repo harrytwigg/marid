@@ -25,7 +25,22 @@ function useNow(): number {
   return now
 }
 
-function Activity({ data, now }: { data: SubagentTranscriptResponse | undefined; now: number }) {
+/** Whether the sub-agent is working, re-judged each second but only a change re-renders: the transcript
+ *  below must not redraw every row once a second for a clock. */
+function useLive(data: SubagentTranscriptResponse | undefined): boolean {
+  const [live, setLive] = useState(() => subagentIsLive(data, Date.now()))
+  useEffect(() => {
+    const judge = () => setLive(subagentIsLive(data, Date.now()))
+    judge()
+    const timer = window.setInterval(judge, 1_000)
+    return () => window.clearInterval(timer)
+  }, [data])
+  return live
+}
+
+/** Its own clock, so the seconds ticking over redraw this and nothing else. */
+function Activity({ data }: { data: SubagentTranscriptResponse | undefined }) {
+  const now = useNow()
   if (!data?.available) return null
   const quiet = now - Date.parse(data.updatedAt)
   const live = subagentIsLive(data, now)
@@ -75,7 +90,6 @@ export default function SubagentChatView({ sessionId, agent, padRight = false }:
   /** Leave room at the header's right for a close button drawn over it. */
   padRight?: boolean
 }) {
-  const now = useNow()
   const { data, isError } = useQuery({
     queryKey: queryKeys.subagentTranscript(sessionId, agent.id),
     queryFn: ({ signal }) => getSubagentTranscript(sessionId, agent.id, signal),
@@ -83,7 +97,7 @@ export default function SubagentChatView({ sessionId, agent, padRight = false }:
     staleTime: 0,
     gcTime: 0,
   })
-  const live = subagentIsLive(data, now)
+  const live = useLive(data)
   return (
     <div data-testid="subagent-chat-view" className="flex min-h-0 flex-1 flex-col bg-[var(--bg)]">
       <header className={`flex shrink-0 items-center gap-3 px-4 pb-2 pt-3 ${padRight ? 'pr-12' : ''}`}>
@@ -96,7 +110,7 @@ export default function SubagentChatView({ sessionId, agent, padRight = false }:
             {['Sub-agent', agent.agentType].filter(Boolean).join(' · ')}
           </p>
         </div>
-        <Activity data={data} now={now} />
+        <Activity data={data} />
       </header>
       {data?.available ? <Conversation data={data} agentId={agent.id} live={live} /> : null}
       {data && !data.available ? <Unavailable data={data} /> : null}
