@@ -24,24 +24,22 @@
  */
 
 import type { RateLimitHandlerOpts, RateLimitOutcome } from "./rate-limit-contract.js";
-import type { Engine, EngineResult } from "../shared/types.js";
 import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import { spawnCwd } from "./session-cwd.js";
 import { logger } from "../shared/logger.js";
-import { awaitEffortLevels } from "../shared/effort-wait.js";
-import { UNSTATED_RESET_WINDOW_MS } from "../shared/engine-health.js";
-import { REMOTE_ENGINE_NAMES, type EngineName } from "../shared/models.js";
+import { REMOTE_ENGINE_NAMES } from "../shared/models.js";
+import { linkHealthKey } from "../shared/fallback-chain-health.js";
 import {
   computeNextRetryDelayMs, computeRateLimitDeadlineMs, detectRateLimit, nextUnstatedParkDelayMs,
   rateLimitEngineLabel, MAX_UNSTATED_PARK_ATTEMPTS,
 } from "../shared/rateLimit.js";
 import { rateLimitAccount, recordAccountRateLimit } from "./rate-limit-account.js";
-import { chooseSubstituteOrReason } from "./rate-limit-substitute.js";
-import { abandonEngineSubstitution, beginEngineSubstitution, standingOverrideUntil } from "./engine-override.js";
+import { walkFallbackChain } from "./fallback-walk.js";
+import { chainExhaustedLastError } from "./fallback-hop.js";
+import { standingOverrideUntil } from "./engine-override.js";
 import { earlier, handBack, handBackAt as accountHandBackAt } from "./rate-limit-handback.js";
-import { resolveEngineRunMcp } from "./engine-run-mcp.js";
-import { getSession, getMessages, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
+import { getSession, updateSessionForAttempt, nextEngineSessionFields } from "./registry.js";
 import { runtimeSessionSource } from "./context.js";
 
 const WAIT_CANCEL_POLL_MS = 5000;
@@ -49,40 +47,6 @@ const WAIT_CANCEL_POLL_MS = 5000;
 export type {
   RateLimitHandlerHooks, RateLimitHandlerOpts, RateLimitInfo, RateLimitOutcome,
 } from "./rate-limit-contract.js";
-
-/**
- * Run the substitute, turning a thrown spawn into the error result every other
- * engine failure already is.
- *
- * The catch is not defensive clutter — it closes a settle hole that only exists
- * on this branch. `beginEngineSubstitution` has ALREADY written the substitute's
- * name onto the session, so a throw escaping here reaches the turn runner's
- * catch (`turn/runner.ts`), where `claimSettleableSession` compares the live
- * `session.engine` against the plan's and finds them different — it drops the
- * error as stale, `settleThrownTurn` never runs, and the session is left at
- * `running` with nothing reported: the silent stall this whole path exists to
- * avoid. Engines are entitled to throw (every CLI adapter rejects when its
- * binary cannot be spawned, and the remote adapters throw when the host is not
- * ready), so the fix belongs here, where the identity was changed.
- *
- * Reported as a result rather than swallowed into Branch B: the session has been
- * flipped and the operator was already told a substitute is running, so the
- * honest outcome is that substitute failing, with its reason.
- */
-async function runSubstitute(
-  engine: Engine,
-  substituteName: EngineName,
-  sessionId: string,
-  opts: Parameters<Engine["run"]>[0],
-): Promise<EngineResult> {
-  try {
-    return await engine.run(opts);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error(`Session ${sessionId}: ${rateLimitEngineLabel(substituteName)} substitution failed to start: ${message}`);
-    return { sessionId: "", result: "", error: `${rateLimitEngineLabel(substituteName)} could not start: ${message}` };
-  }
-}
 
 /**
  * Drive the rate-limit recovery state machine. Returns once the situation
@@ -94,7 +58,7 @@ async function runSubstitute(
 export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateLimitOutcome> {
   const {
     session, attemptToken, prompt, systemPrompt, platformContextRefresh, engineConfig, effortLevel, cliFlags,
-    mcpConfigPath, resolvedMcp, attachments, config, engines, employee, engine,
+    mcpConfigPath, resolvedMcp, attachments, employee, engine,
     rateLimit, originalResult, hooks,
   } = opts;
 
@@ -104,114 +68,30 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   const remoteTarget = rateLimitRemoteTarget(opts);
 
   const { claudeProfile, account } = rateLimitAccount(session.engine, employee, session);
-  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt);
+  // Held against the target that ran: its account for Claude, its provider for an opencode model, its engine otherwise.
+  const limitedKey = linkHealthKey({ engine: session.engine, model: session.model ?? engineConfig.model, account });
+  recordAccountRateLimit(account, session.engine, engineLabel, rateLimit.resetsAt, limitedKey);
 
-  // ── Branch A: hand the turn to this account's chain ────────────────────────
+  // ── Branch A: hand the turn along this session's fallback chain ───────────
   // A remote employee's substitute has to be an engine that can ALSO run on that
   // host; hand the turn to one that ignores `remoteHost` and it runs on the
   // gateway — unattended, with --dangerously-skip-permissions, against a
   // repository deliberately never cloned there. A chain with nothing left in it
   // falls through to Branch B, which waits the limit out where the work lives.
   const remote = isRemoteTarget(remoteTarget) ? remoteTarget : undefined;
-  // The mode and target are read from the stored row, not the turn-start snapshot: they may have been changed while this turn ran.
-  const live = getSession(session.id);
-  const { choice, reason: chosenReason } = chooseSubstituteOrReason({
-    config, engines, session: live ? { ...session, fallbackMode: live.fallbackMode, fallbackTarget: live.fallbackTarget } : session,
-    employee, account, remote, remoteTarget,
-  });
-  let targetReason = chosenReason;
-  const substituteName = choice?.engine;
-  const substituteEngine = substituteName ? engines.get(substituteName) : undefined;
-  if (!substituteName && remote) {
+  const walk = await walkFallbackChain({ opts, remote, remoteTarget, limited: { engine: session.engine, account } });
+  if (walk.kind === "cancelled") {
+    await hooks.onCancelled?.();
+    return { kind: "cancelled" };
+  }
+  if (walk.kind === "served") return { kind: "fallback", result: walk.result };
+  if (remote) {
     logger.info(
       `Session ${session.id} runs on ${remote.remoteHost} — nothing in ${engineLabel}'s fallback chain can run there `
       + `(a substitute must be one of ${REMOTE_ENGINE_NAMES.join(", ")} and installed on that host); waiting for the reset instead`,
     );
   }
-  if (choice && substituteName && substituteEngine) {
-    const substituteCwd = spawnCwd(session, Boolean(remote)); // a scoped session's stage directory, resolved before anything is flipped
-    const { resumeAt } = computeNextRetryDelayMs(rateLimit.resetsAt);
-    const until = resumeAt ?? new Date(Date.now() + UNSTATED_RESET_WINDOW_MS);
-    const syncSince = new Date().toISOString();
-    const substituteLabel = (choice.accounts ? `the ${choice.accounts.substitute} Claude account` : rateLimitEngineLabel(substituteName))
-      + (choice.model ? ` (${choice.model})` : "");
-    const metaBefore = (getSession(session.id) ?? session).transportMeta;
-
-    await hooks.onFallbackStart?.({ resumeAt: resumeAt ?? null, until, substitute: substituteName, ...(choice.model ? { model: choice.model } : {}) });
-
-    // A swap made while another stands keeps that swap's window, so the session stays on the substitute until then.
-    const backAt = standingOverrideUntil(session) ?? resumeAt;
-    await awaitEffortLevels(config, substituteName, session, employee);
-    const substitution = beginEngineSubstitution({
-      session, attemptToken, config, employee, substitute: substituteName, model: choice.model, accounts: choice.accounts, until, syncSince,
-      lastError: backAt
-        ? `${engineLabel} usage limit — using ${substituteLabel} until ${backAt.toISOString()}`
-        : `${engineLabel} usage limit — using ${substituteLabel} temporarily`,
-    });
-    if (!substitution) {
-      await hooks.onCancelled?.();
-      return { kind: "cancelled" };
-    }
-
-    const substituteResume = substitution.resumeSessionId;
-    const history = getMessages(session.id)
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => `${m.role.toUpperCase()}: ${m.content}`);
-    const historyText = history.slice(-12).join("\n\n");
-    const fallbackPrompt = substituteResume
-      ? prompt
-      : `Continue this conversation and respond to the last USER message.\n\nConversation so far:\n\n${historyText}`;
-
-    const fallbackResult = await runSubstitute(substituteEngine, substituteName, session.id, {
-      prompt: fallbackPrompt,
-      resumeSessionId: substituteResume,
-      systemPrompt,
-      cwd: substituteCwd,
-      // The substitute runs as itself: its own binary, the MCP payload resolved for it,
-      // and a model it actually serves — the limited engine's would be meaningless here.
-      bin: substitution.engineConfig.bin,
-      model: substitution.model ?? substitution.engineConfig.model,
-      effortLevel: substitution.effortLevel,
-      cliFlags: employee?.cliFlags ?? cliFlags,
-      // Where it runs. `cwd` above is the gateway's and means nothing on the other
-      // machine; the substitute branches on `remoteHost` and uses `remoteCwd`
-      // instead. Omit this and a remote employee's fallback turn comes back to the
-      // gateway — the failure Branch A used to be skipped entirely to avoid.
-      ...remoteTarget,
-      ...resolveEngineRunMcp({ config, employee, engine: substituteName, sessionId: session.id }),
-      claudeProfile: choice.claudeProfile,
-      attachments: attachments?.length ? attachments : undefined,
-      sessionId: session.id,
-      ...(hooks.onFallbackStream ? { onStream: hooks.onFallbackStream } : {}),
-    });
-
-    // The operator's own target limited too: the turn is not lost. Put the session back where it was
-    // and wait out the limit it hit, saying why nothing switched.
-    const limitedAgain = Boolean(choice.model) && !fallbackResult.error?.startsWith("Interrupted") && detectRateLimit(fallbackResult).limited;
-    if (limitedAgain) {
-      targetReason = `the chosen fallback ${substituteName} (${choice.model}) is limited too`;
-      recordAccountRateLimit(rateLimitAccount(substituteName, employee, session).account, substituteName, rateLimitEngineLabel(substituteName), detectRateLimit(fallbackResult).resetsAt);
-      if (!abandonEngineSubstitution(session, attemptToken, metaBefore)) {
-        await hooks.onCancelled?.();
-        return { kind: "cancelled" };
-      }
-    } else {
-      // Persist the substitute's thread id so future fallbacks can resume it —
-      // and so the mirror stops lying about which engine the id belongs to.
-      const live = getSession(session.id);
-      if (live && fallbackResult.sessionId) {
-        // The live row carries the override, so an account substitute's id lands in its own account's slot.
-        updateSessionForAttempt(session.id, attemptToken, nextEngineSessionFields(live, substituteName, fallbackResult.sessionId));
-      }
-
-      await hooks.onFallbackComplete?.(fallbackResult, {
-        engine: substituteName,
-        model: substitution.model ?? substitution.engineConfig.model,
-      });
-
-      return { kind: "fallback", result: fallbackResult };
-    }
-  }
+  const targetReason = walk.reason;
   // Nothing usable in the chain — fall through to wait-and-retry.
 
   // ── Branch B: wait-and-retry on the original engine ────────────────────────
@@ -222,8 +102,9 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
   );
   // A session on a substitute Claude account goes back to its own at the
   // override's `until`, which can be days before a weekly-limited substitute
-  // resets, so the wait ends there at the latest.
-  const handBackAt = accountHandBackAt(session);
+  // resets, so the wait ends there at the latest. So does one on any stand-in
+  // whose chain just ran out: it waits for its own target, which is when the override ends.
+  const handBackAt = accountHandBackAt(session) ?? (walk.walked ? standingOverrideUntil(session) : undefined);
   const resumeAt = earlier(limitResetAt, handBackAt);
   const threadFields = originalResult.sessionId?.trim() ? nextEngineSessionFields(session, session.engine, originalResult.sessionId) : {};
   // The window closed while this turn ran: the own account has already reopened, so there is nothing to wait for.
@@ -233,14 +114,15 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
 
   logger.info(
     `Session ${session.id} hit ${engineLabel} usage limit — will auto-retry ${resumeAt ? `at ${resumeAt.toISOString()}` : `in ${Math.round(delayMs / 1000)}s`}`
-    + (handBackAt && resumeAt === handBackAt ? " on its own Claude account" : ""),
+    + (handBackAt && resumeAt === handBackAt ? " on its own target" : ""),
   );
 
   const enteredWaiting = updateSessionForAttempt(session.id, attemptToken, {
     ...threadFields,
     status: "waiting",
     lastActivity: new Date().toISOString(),
-    lastError: (resumeAt
+    // A chain that ran out names the own target and when it reopens; any other wait keeps its wording.
+    lastError: walk.exhausted ? chainExhaustedLastError(walk.exhausted.own, resumeAt) : (resumeAt
       ? `${engineLabel} usage limit — resumes ${resumeAt.toISOString()}`
       : `${engineLabel} usage limit — waiting for reset`) + (targetReason ? `; ${targetReason}` : ""),
   });
@@ -249,7 +131,7 @@ export async function handleRateLimit(opts: RateLimitHandlerOpts): Promise<RateL
     return { kind: "cancelled" };
   }
 
-  await hooks.onWaitingStart?.({ resumeAt: resumeAt ?? null, rateLimit, ...(targetReason ? { reason: targetReason } : {}) });
+  await hooks.onWaitingStart?.({ resumeAt: resumeAt ?? null, rateLimit, ...(targetReason ? { reason: targetReason } : {}), ...(walk.hop ? { hop: walk.hop } : {}), ...(walk.exhausted ? { exhausted: walk.exhausted } : {}) });
 
   // Keep lastActivity fresh while waiting (UI / status endpoints).
   const heartbeat = setInterval(() => {

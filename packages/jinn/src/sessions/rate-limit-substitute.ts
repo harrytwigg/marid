@@ -1,23 +1,21 @@
 import { isBoardWalkTurn } from "../board-walk/started-sessions.js";
-import { accountHasChain, resolveHealthyAccountFallback, type AccountFallbackOptions } from "../shared/account-fallback.js";
-import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import type { ClaudeProfile } from "../shared/claude-profile.js";
-import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
-import { engineHealthForTarget, readEngineHealth, resolveHealthyFallbackEngine, type EngineHealthReading } from "../shared/engine-health.js";
-import { engineAvailable, type EngineName, type RemoteEngineName } from "../shared/models.js";
-import { sshDestination } from "../shared/remote-target.js";
+import { engineHealthForTarget, readEngineHealth } from "../shared/engine-health.js";
+import { effectivePosition, nextFallbackLink, type FallbackRunCursor, type NextFallbackLink } from "../shared/fallback-chain-next.js";
+import type { EngineHealthReading } from "../shared/engine-health.js";
+import type { EngineName } from "../shared/models.js";
 import type { Employee, JinnConfig, RemoteTarget, Session, SessionRemoteTarget } from "../shared/types.js";
-import { remoteEngineAvailable } from "../engines/remote-stage.js";
-import { resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
-import { isAutoResume } from "./session-fallback.js";
+import { metaOf, readFallbackRun, sessionAtOwnTarget } from "./fallback-run.js";
 import { chooseTargetSubstitute } from "./fallback-target.js";
-import { accountWalkOptions, engineAllowedAsSubstitute, fallbackModelMapOf, substituteScoped } from "./substitute-filters.js";
+import { isAutoResume } from "./session-fallback.js";
+import { launchFor } from "./substitute-launch.js";
+import { resolveSubstituteChain, type SubstituteChain } from "./substitute-chain.js";
 
 /** What a rate-limited turn moves onto: an engine, the Claude profile it runs
  *  as there, and, for another Claude account, the swap the override records. */
 export interface SubstituteChoice {
   engine: EngineName;
-  /** Set when the session's own fallback target names the model to run; otherwise the substitute's own default. */
+  /** The model to run, when the chain or the session's own fallback target names one; otherwise the substitute's own default. */
   model?: string;
   claudeProfile: ClaudeProfile;
   accounts?: { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };
@@ -32,7 +30,20 @@ export interface ChooseSubstituteInput {
   account: string;
   remote: (RemoteTarget & { remoteHost: string }) | undefined;
   remoteTarget: SessionRemoteTarget;
-  options?: AccountFallbackOptions;
+  /** Where the walk stands when the caller is partway along it; else read from the session's `fallbackRun`. */
+  run?: FallbackRunCursor;
+}
+
+/** What the choice came to: the substitute and where it sits on the chain, or why there is none. */
+export interface SubstituteDecision {
+  choice?: SubstituteChoice;
+  /** Why a session with its own fallback target cannot use it. */
+  reason?: string;
+  chain?: SubstituteChain;
+  /** The chain index of the target the session is on now: where a walk resumes from. */
+  position?: number;
+  /** The chain position of the choice, and the links passed over to reach it. */
+  next?: NextFallbackLink;
 }
 
 /**
@@ -42,12 +53,12 @@ export interface ChooseSubstituteInput {
  * - A board walk turn never changes engine or account (FR-076).
  * - Neither does a session whose fallback mode is `auto-resume`: it parks and resumes.
  * - A session with its own fallback target (`session.fallbackTarget`) takes exactly that, or waits.
- * - A remote employee keeps today's rule: an engine that can also run on its
- *   host. Account entries apply to local sessions only in v1.
- * - A local Claude session walks its account's own chain (FR-079): the default
- *   account's `engines.claude.fallback`, or a declared account's. An
- *   undeclared named profile has none and waits (FR-056).
- * - Any other local session walks its engine's chain, as before accounts.
+ * - Any other session takes the next link of its resolved chain (shared/fallback-chain.ts):
+ *   its employee's `fallback`, its account's, or its engine's. The first link after where its run
+ *   stands that has not been tried, may be used here and is not at its limit; when none is, the
+ *   first that may be used. A remote session's link is an engine that can also run on its host,
+ *   a department-scoped session's a Claude account, and an undeclared named profile has no chain
+ *   unless its employee writes one (FR-056).
  */
 export function chooseSubstitute(input: ChooseSubstituteInput): SubstituteChoice | undefined {
   return chooseSubstituteOrReason(input).choice;
@@ -55,48 +66,55 @@ export function chooseSubstitute(input: ChooseSubstituteInput): SubstituteChoice
 
 /** As `chooseSubstitute`, and when a session with its own fallback target cannot use it, why:
  *  it never falls back to the config's chain, so the turn waits and says so. */
-export function chooseSubstituteOrReason(input: ChooseSubstituteInput): { choice?: SubstituteChoice; reason?: string } {
+export function chooseSubstituteOrReason(input: ChooseSubstituteInput): SubstituteDecision {
   if (isBoardWalkTurn(input.session)) return {};
   if (isAutoResume(input.config, input.session)) return {};
   // Health recorded about the gateway's own login says nothing about the host
   // this turn is going back to.
   const health = engineHealthForTarget(readEngineHealth(), input.remoteTarget);
-  if (input.session.fallbackTarget) return chooseTargetSubstitute(input, health);
-  return { choice: !input.remote && input.session.engine === "claude" ? accountSubstitute(input, health) : engineSubstitute(input, health) };
+  const chain = resolveSubstituteChain(input, health);
+  return input.session.fallbackTarget ? targetDecision(chain, chooseTargetSubstitute(input, health), chainPosition(chain, input)) : chainDecision(input, chain, health);
 }
 
-/** A local Claude session: its account's own chain (FR-079). */
-function accountSubstitute(input: ChooseSubstituteInput, health: EngineHealthReading): SubstituteChoice | undefined {
-  const { config, engines, account } = input;
-  if (!accountHasChain(config, account)) return undefined;
-  const target = resolveHealthyAccountFallback(config, account,
-    (candidate) => engines.has(candidate.engine) && engineAvailable(config, candidate.engine), health, accountWalkOptions(input.session, input.options));
-  if (!target) return undefined;
-  if (target.engine !== "claude") return { engine: target.engine, claudeProfile: null };
-  const profile = target.account === DEFAULT_CLAUDE_ACCOUNT ? null : declaredAccountByKey(config, target.account)?.profile ?? null;
+/** Where the session stands on its chain now: the run's position, else (no run recorded) where its stand-in, if any, sits. */
+function chainPosition(chain: SubstituteChain, input: ChooseSubstituteInput): number {
+  const stored = readFallbackRun(metaOf(input.session));
+  return input.run || stored ? effectivePosition(chain.links, input.run ?? stored) : standingPosition(chain, input);
+}
+
+/** The next link of the chain after where the session stands, as the walk takes it. */
+function chainDecision(input: ChooseSubstituteInput, chain: SubstituteChain, health: EngineHealthReading): SubstituteDecision {
+  const position = chainPosition(chain, input);
+  const tried = [...(input.run?.tried ?? readFallbackRun(metaOf(input.session))?.tried ?? []), chain.links[0]!.key, chain.links[position]!.key];
+  const next = nextFallbackLink(chain.links, { position, tried }, health);
+  if (!next) return { chain, position };
+  // Only a model the chain names is a choice; one it leaves to the stand-in is derived when the swap is made, as it always was.
+  const model = chain.namedModel(next.link);
   return {
-    engine: "claude",
-    claudeProfile: profile,
-    accounts: { original: account, substitute: target.account, substituteConfigDir: profile?.dir ?? null, fallbackModelMap: fallbackModelMapOf(config, account) },
+    chain,
+    position,
+    next,
+    choice: { engine: next.link.engine as EngineName, ...(model === undefined ? {} : { model }), ...launchFor(input, chain.accountMode, next.link) },
   };
 }
 
-/** Every other session: its engine's chain, as before accounts. */
-function engineSubstitute(input: ChooseSubstituteInput, health: EngineHealthReading): SubstituteChoice | undefined {
-  const { config, engines, session, employee, remote } = input;
-  // A department-scoped session stays on claude (FR-026a): its stage directory is Claude's
-  // layout, and on a remote host the account entries that could keep it there do not apply,
-  // so it waits for its reset rather than move to another engine.
-  const scoped = substituteScoped(session, input.remoteTarget);
-  // A remote employee's substitute has to be an engine that can ALSO run on that
-  // host, and the usability question moves there with it: `engineAvailable`
-  // probes the GATEWAY's PATH, which says nothing about another machine.
-  // `engineAllowedAsSubstitute` has already checked `engineSupportsRemote` when `remote` is set, which is
-  // what the cast to the remote engine names stands on.
-  const isUsable = (candidate: EngineName) => engines.has(candidate) && engineAllowedAsSubstitute({ scoped, remote: Boolean(remote) }, candidate)
-    && (remote ? remoteEngineAvailable(sshDestination(remote), candidate as RemoteEngineName) !== false : engineAvailable(config, candidate));
-  const name = resolveHealthyFallbackEngine(config, session.engine, isUsable, substituteHealth(health, employee));
-  if (!name) return undefined;
-  // A non-Claude session falling to claude runs as its employee's own profile.
-  return { engine: name, claudeProfile: name === "claude" && !remote ? resolveEmployeeClaudeProfile(employee) : null };
+/**
+ * Where a session stands on its chain when no run is recorded: on its own target,
+ * unless a stand-in holds it (an override written before runs were recorded), in
+ * which case the link that stand-in is. Not found (the chain was edited since)
+ * reads as the own target, which the tried set still keeps from being revisited.
+ */
+function standingPosition(chain: SubstituteChain, input: ChooseSubstituteInput): number {
+  if (sessionAtOwnTarget(input.session) === input.session) return 0;
+  const { engine, model } = input.session;
+  const at = chain.links.findIndex((link, index) => index > 0 && link.engine === engine
+    && (engine !== "claude" || link.account === input.account) && (link.model === undefined || !model || link.model === model));
+  return Math.max(at, 0);
+}
+
+/** The session's own target, as the walk records it: the chain's one link after the own target. */
+function targetDecision(chain: SubstituteChain, decision: ReturnType<typeof chooseTargetSubstitute>, position: number): SubstituteDecision {
+  if ("reason" in decision) return { reason: decision.reason, chain, position };
+  const link = chain.links[1];
+  return { chain, position, choice: decision.choice, ...(link ? { next: { index: 1, link, skipped: [] } } : {}) };
 }

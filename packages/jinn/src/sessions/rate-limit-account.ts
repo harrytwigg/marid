@@ -25,10 +25,12 @@ export function rateLimitAccount(
   return { claudeProfile: resolveEmployeeClaudeProfile(employee), account: accountForEmployee(employee, "claude") };
 }
 
-/** Record a usage limit for the account: the generic record both chain walkers
- *  read, and Claude's own memory, which answers a different question. */
-export function recordAccountRateLimit(account: string, engine: string, engineLabel: string, resetsAt: number | undefined): void {
-  recordEngineUnavailable(account, `${engineLabel} usage limit`, resetsAt);
+/** Record a usage limit for the account: the generic record the chain walk
+ *  reads, and Claude's own memory, which answers a different question. The
+ *  record is kept under `healthKey` (the account's by default): an opencode
+ *  model's provider, so one provider's limit does not hold back the others. */
+export function recordAccountRateLimit(account: string, engine: string, engineLabel: string, resetsAt: number | undefined, healthKey: string = account): void {
+  recordEngineUnavailable(healthKey, `${engineLabel} usage limit`, resetsAt);
   if (engine === "claude") recordClaudeRateLimit(resetsAt, account);
 }
 

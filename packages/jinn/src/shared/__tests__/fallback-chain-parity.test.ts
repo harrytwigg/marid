@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAccountFallback } from "../account-fallback.js";
 import { claudeProfileFromDir } from "../claude-profile.js";
-import { resolveFallbackEngine } from "../engine-fallback.js";
 import { expandFallbackChain } from "../fallback-chain-expand.js";
 import { linkAccount } from "../fallback-chain.js";
 import { claudeAccountKey } from "../engine-account.js";
@@ -12,9 +10,11 @@ import type { JinnConfig, ModelRegistry } from "../types.js";
 
 /**
  * A chain written only in the legacy strings must come out of the expansion in the
- * order the old walkers visited it: `resolveAccountFallback` for a local Claude
- * subject, `resolveFallbackEngine` for every other. The walkers are recorded by
- * an `isUsable` that rejects everything, so the order of its calls is the visit order.
+ * order the old walkers visited it (the account walker for a local Claude subject,
+ * the engine walker for every other): breadth first, each target once, the subject
+ * never its own answer. The walkers are gone; EXPECTED is the order they recorded
+ * for each case below (an `isUsable` that rejected everything, so the order of its
+ * calls was the visit order), kept here so the expansion stays pinned to it.
  */
 
 const FRIEND = "/srv/operator/.claude-friend";
@@ -51,40 +51,48 @@ function accountSubjects(engines: Record<string, unknown>): Array<{ from: string
   ];
 }
 
-function oldAccountOrder(c: JinnConfig, from: string): string[] {
-  const seen: string[] = [];
-  resolveAccountFallback(c, from, (target) => { seen.push(target.account); return false; });
-  return seen;
-}
+/** What the old walkers visited, per case: account walks by subject (`<friend>` and `<work2>` stand for those declared accounts' keys), engine walks by engine (an engine absent from the list visited nothing). */
+const EXPECTED: Record<string, { account: Record<string, string[]>; engine: Record<string, string[]> }> = {
+  ["a flat chain"]: { account: {"claude": ["codex", "opencode"]}, engine: {"claude": ["codex", "opencode"]} },
+  ["breadth first: a target's own chain comes after its siblings"]: { account: {"claude": ["codex", "grok", "opencode", "pi"]}, engine: {"claude": ["codex", "grok", "opencode", "pi"], "codex": ["opencode"], "grok": ["pi"]} },
+  ["a target reachable twice is visited once"]: { account: {"claude": ["codex", "opencode", "grok"]}, engine: {"claude": ["codex", "opencode", "grok"], "codex": ["opencode", "grok"]} },
+  ["a two-engine cycle"]: { account: {"claude": ["codex"]}, engine: {"claude": ["codex"], "codex": ["claude"]} },
+  ["a longer cycle that returns to the start"]: { account: {"claude": ["codex", "opencode", "grok", "pi"]}, engine: {"claude": ["codex", "opencode", "grok", "pi"], "codex": ["opencode", "grok", "claude", "pi"], "opencode": ["grok", "claude", "codex", "pi"], "grok": ["pi"]} },
+  ["the subject named deep in another chain"]: { account: {"claude": ["codex", "hermes"]}, engine: {"claude": ["codex", "hermes"], "codex": ["claude", "hermes"]} },
+  ["an empty chain"]: { account: {"claude": []}, engine: {} },
+  ["no chain at all"]: { account: {"claude": []}, engine: {} },
+  ["declared accounts, each with a chain"]: { account: {"claude": ["<friend>", "codex", "<work2>", "opencode"], "friend": ["<work2>", "opencode", "claude", "codex"], "work2": ["claude", "codex", "<friend>", "opencode"]}, engine: {"claude": ["codex"]} },
+  ["an account entry naming no declared account is dropped"]: { account: {"claude": ["codex"], "friend": ["<work2>", "opencode", "claude", "codex"], "work2": ["claude", "codex"]}, engine: {"claude": ["codex"]} },
+  ["accounts that name each other and the default account"]: { account: {"claude": ["<work2>", "<friend>", "codex", "opencode"], "friend": ["<work2>", "opencode", "claude", "codex"], "work2": ["<friend>", "claude", "codex", "opencode"]}, engine: {} },
+};
 
-function oldEngineOrder(c: JinnConfig, from: string): string[] {
-  const seen: string[] = [];
-  resolveFallbackEngine(c, from, (engine) => { seen.push(engine); return false; });
-  return seen;
-}
+const keyOf = (symbol: string): string => ({ "<friend>": friendKey, "<work2>": work2Key })[symbol] ?? symbol;
+const oldAccountOrder = (name: string, subject: string): string[] => (EXPECTED[name]!.account[subject] ?? []).map(keyOf);
+const oldEngineOrder = (name: string, engine: string): string[] => EXPECTED[name]!.engine[engine] ?? [];
 
 describe("legacy expansion visits targets in the old walkers' order", () => {
-  it.each(CASES)("local Claude subjects, account walk: %s", (_name, engines) => {
+  it.each(CASES)("local Claude subjects, account walk: %s", (name, engines) => {
     const c = config(engines);
     for (const { from, chain } of accountSubjects(engines)) {
       const expanded = expandFallbackChain(c, chain, { mode: "account", selfAccount: from }).map(({ link }) => linkAccount(link, c));
-      expect(expanded, `from ${from}`).toEqual(oldAccountOrder(c, from));
+      const subject = from === "claude" ? "claude" : from === friendKey ? "friend" : "work2";
+      expect(expanded, `from ${from}`).toEqual(oldAccountOrder(name, subject));
     }
   });
 
-  it.each(CASES)("every other subject, engine walk: %s", (_name, engines) => {
+  it.each(CASES)("every other subject, engine walk: %s", (name, engines) => {
     const c = config(engines);
     for (const from of ["claude", "codex", "opencode", "grok", "pi", "hermes"]) {
       const chain = (c.engines as unknown as Record<string, { fallback?: string[] } | undefined>)[from]?.fallback ?? [];
       // A remote Claude subject keeps an account entry as a link it can never use; the engine walker never saw it.
       const expanded = expandFallbackChain(c, chain, { mode: "engine", selfAccount: from }).filter(({ link }) => link.profile === undefined).map(({ link }) => link.engine);
-      expect(expanded, `from ${from}`).toEqual(oldEngineOrder(c, from));
+      expect(expanded, `from ${from}`).toEqual(oldEngineOrder(name, from));
     }
   });
 
   it("really is breadth first, so the parity above is not vacuous", () => {
     const c = config({ claude: { fallback: ["codex", "grok"] }, codex: { fallback: ["opencode"] }, grok: { fallback: ["pi"] } });
-    expect(oldAccountOrder(c, "claude")).toEqual(["codex", "grok", "opencode", "pi"]);
+    expect(oldAccountOrder("breadth first: a target's own chain comes after its siblings", "claude")).toEqual(["codex", "grok", "opencode", "pi"]);
     expect(expandFallbackChain(c, ["codex", "grok"], { mode: "account", selfAccount: "claude" }).map(({ link }) => link.engine)).toEqual(["codex", "grok", "opencode", "pi"]);
   });
 
@@ -105,10 +113,10 @@ describe("legacy expansion visits targets in the old walkers' order", () => {
 describe("a legacy-only config through the whole resolver", () => {
   const registry = Object.fromEntries(["claude", "codex", "opencode", "grok", "pi", "hermes"].map((name) => [name, { name, available: true, defaultModel: "", effortMechanism: "none", models: [] }])) as unknown as ModelRegistry;
 
-  it.each(CASES)("a default-account Claude session's links are the old account walk, in order: %s", (_name, engines) => {
+  it.each(CASES)("a default-account Claude session's links are the old account walk, in order: %s", (name, engines) => {
     const c = config(engines);
     const { links } = sessionFallbackChain({ config: c, session: makeSession({ model: "opus" }), registry, health: {} });
-    expect(links.slice(1).map((link) => link.account)).toEqual(oldAccountOrder(c, "claude"));
+    expect(links.slice(1).map((link) => link.account)).toEqual(oldAccountOrder(name, "claude"));
   });
 
   it("keeps string entries as strings in both chains, and reads them back as declared", () => {

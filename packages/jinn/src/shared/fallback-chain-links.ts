@@ -18,3 +18,8 @@ export function ownTargetLink(config: JinnConfig, target: { engine: string; mode
   const profile = target.engine === "claude" && target.account !== undefined ? declaredAccountByKey(config, target.account)?.name : undefined;
   return { engine: target.engine, ...(profile === undefined ? {} : { profile }), ...(target.model ? { model: target.model } : {}) };
 }
+
+/** Whether the entry wrote a model itself, as opposed to leaving it to the session's own or a `fallbackModelMap` translation. The written model is the link's choice. */
+export function linkModelWritten(link: { written?: FallbackLink }): boolean {
+  return link.written?.model !== undefined;
+}

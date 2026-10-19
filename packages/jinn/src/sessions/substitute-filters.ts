@@ -1,11 +1,9 @@
-import type { AccountFallbackOptions } from "../shared/account-fallback.js";
 import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { engineSupportsRemote, type EngineName } from "../shared/models.js";
 import { isRemoteTarget } from "../shared/remote-target.js";
 import type { Employee, JinnConfig, Session } from "../shared/types.js";
 import { rateLimitRemoteTarget } from "./rate-limit-remote-target.js";
-import { accountOverride } from "./session-account.js";
 import { sessionScopeDepartment } from "./session-scope.js";
 
 /**
@@ -25,13 +23,6 @@ export function substituteScoped(session: Session, remoteTarget: { remoteDepartm
  *  and a remote one an engine that can also run on its host. Availability is the caller's. */
 export function engineAllowedAsSubstitute(scope: { scoped: boolean; remote: boolean }, candidate: EngineName): boolean {
   return (!scope.scoped || candidate === "claude") && (!scope.remote || engineSupportsRemote(candidate));
-}
-
-/** The account walk's options: the caller's, plus the account a substituted session belongs to
- *  and, for a scoped session, accounts only. */
-export function accountWalkOptions(session: Session, options?: AccountFallbackOptions): AccountFallbackOptions {
-  const original = accountOverride(session)?.originalAccount;
-  return { ...options, ...(original ? { original } : {}), ...(sessionScopeDepartment(session) ? { accountsOnly: true } : {}) };
 }
 
 /** An account's `fallbackModelMap`: the default account's lives under `engines.claude`. */

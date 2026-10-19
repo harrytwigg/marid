@@ -1,7 +1,9 @@
 import type { JinnConfig } from "../shared/types.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
 import { effortLevelsPending } from "../shared/opencode-catalogue.js";
-import { exhaustedEngineReturnsAt, preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
+import { readEngineHealth } from "../shared/engine-health.js";
+import { availabilityRegistry } from "./availability-registry.js";
+import { rerouteAtCreation } from "./fallback-reroute.js";
 import type { SessionReroute } from "./engine-override-window.js";
 import { logger } from "../shared/logger.js";
 import { resolveEmployeeClaudeProfile } from "../shared/claude-profile.js";
@@ -89,23 +91,22 @@ export function validateNewSessionSelection(
     // remote-capability filter `newSessionEngineSelection` has — the same
     // missing argument, and the same fix.
     const health = readEngineHealth();
-    const healthy = preferHealthySessionEngine(
-      config,
-      engine,
-      (candidate) => registry[candidate]?.available === true,
-      health,
-    );
-    if (healthy !== engine) {
-      reroute = { from: engine, model: defaultModel?.trim() || null, until: exhaustedEngineReturnsAt(health, engine) };
+    const employee = defaults.employee ? orgRegistry().get(defaults.employee) : undefined;
+    const choice = rerouteAtCreation({
+      config, employee, engine, model: defaultModel, health, scope: { scoped: false, remote: false },
+      registry: availabilityRegistry(registry, (candidate) => registry[candidate]?.available === true),
+    });
+    if (choice) {
+      reroute = choice.reroute;
       logger.info(
-        `Engine "${engine}" is out of allowance — starting this session on "${healthy}" instead, `
+        `Engine "${engine}" is out of allowance — starting this session on "${choice.engine}" instead, `
         + `until ${reroute.until.toISOString()}`,
       );
-      engine = healthy;
+      engine = choice.engine;
       // The model and effort level came with the engine we just moved off and
       // mean nothing on this one; the substitute runs on its own configured
-      // defaults, the same way a mid-turn fallback already does.
-      defaultModel = undefined;
+      // defaults (or the model its chain link names), the way a mid-turn fallback already does.
+      defaultModel = choice.model;
       defaultEffortLevel = undefined;
     }
   }

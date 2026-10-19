@@ -50,11 +50,10 @@ inside an operator home. It tears everything down on exit.
 | g | a profile hop starts a fresh run carrying the conversation, with no `--resume` of A's session id under B; a model hop on the same thread resumes it |
 | h | an opencode provider hop X → Y within one opencode session |
 
-`--pending a,b,c,d,g,h` (the default) marks the scenarios that wait on runtime work not yet
-merged. A pending scenario is reported, never failed; one that passes is reported as
-"pending but passing", and `--strict` fails the run on it. Drop an id from the default list in
-`verify-fallback-chains.sh` when its work lands. Run `--pending ""` to see every scenario's real
-result.
+Every scenario runs and counts. `--pending a,b` marks scenarios that wait on runtime work not
+yet merged (none today: the default list is empty): a pending scenario is reported, never
+failed; one that passes is reported as "pending but passing", and `--strict` fails the run on
+it. Drop an id from the default list in `verify-fallback-chains.sh` when its work lands.
 
 To check the gateway of another checkout against this harness's fakes and scenarios (for
 instance `main`, to confirm scenario e passes there too), set `JINN_VERIFY_GATEWAY_REPO`.

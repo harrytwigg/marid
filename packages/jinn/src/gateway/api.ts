@@ -2052,6 +2052,7 @@ export async function handleApiRequest(
       context.sessionManager.getQueue().clearQueue(session.sessionKey || session.sourceRef || session.id);
       const meta = { ...(session.transportMeta || {}) } as Record<string, unknown>;
       delete meta["engineOverride"];
+      delete meta["fallbackRun"]; // off a stand-in, so no run; the hops stay
       clearEngineSessionRefs(params.id);
       ptySnapshotStore.deleteSync(params.id);
       updateSession(params.id, {

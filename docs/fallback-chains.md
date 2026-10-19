@@ -108,16 +108,29 @@ reset, as before.
   back to its own target. Within a run every target is tried at most once: the
   session's own target and every tried link are in the run's tried set, which
   is the loop guard. A chain can hop several times within one turn, up to its
-  length.
+  length: the turn runs on a link, and when that link fails in a way that moves
+  on, the next link takes the same turn.
+- The next link is the first one after the target the session stands on that
+  has not been tried and is not ruled out. A chain is always the chain of the
+  session's **own** target, whichever target is running now, so a limit on a
+  stand-in continues along it and never goes back to the target the session left.
 - A link is passed over (and named in the hop record) when it was already
   tried, its engine is not installed, its engine cannot run on the session's
   host, the session is department-scoped and the link is not a Claude account,
   or its model is not served. A link whose health says it is at its limit is
   passed over first, and tried only when nothing healthier is left.
 - When the chain runs out, the session waits for its own target's reset and
-  resumes there.
+  resumes there. It reads `waiting` (its `lastError` names the own target and
+  when it reopens, e.g. "claude · work · opus usage limit, resumes …"), its last
+  hop has no target, and the notice says plainly that no hop is left and what
+  was tried. If a stand-in held the session when it ran out, the wait ends
+  where the stand-in's window does (the own target's reset), and the turn runs
+  again on the own target.
 - At its own target's reset the session goes back to it and the run ends, as
-  substitution reverts today.
+  substitution reverts today. So does a manual engine switch, an API reset and a
+  conversation the engine lost: the run ends, the hops stay.
+- A **new** session whose own target is out of allowance starts on the first
+  healthy link instead, with a run that starts there.
 
 ### Health keys
 
@@ -132,7 +145,8 @@ Each account (and each non-Claude engine) keeps its own conversation thread.
 - **Same thread, other model** (`claude/A/opus -> claude/A/sonnet`,
   `opencode-go/x -> openrouter/x`): the thread resumes with the new model.
 - **Another account or engine with a thread of its own**: that thread resumes,
-  with the messages it has not seen prepended.
+  with the messages it has not seen prepended (everything since the thread was
+  last brought up to date: its slot's `lastSyncedAt`).
 - **Another account or engine with no thread**: a fresh run whose prompt
   carries the recent conversation. A Claude session id from one profile is
   never resumed under another.
@@ -143,9 +157,14 @@ Each account (and each non-Claude engine) keeps its own conversation thread.
 
 Each hop is recorded on the session (most recent 20) with its time, from and
 to targets, reason, the failing target's reset and any links passed over, and
-announced in the transcript as a notice. The target that served the latest
-turn is recorded too. The session API reports the chain, its position, the
-next hop and the hops under `fallback.chain`.
+announced in the transcript as a notice that carries the hop
+(`meta.fallbackHop`). A chain that runs out records a last hop with no target.
+The target that served the latest turn is recorded too, for a session that has
+walked a chain. In `transportMeta`: `fallbackRun` (`source`, `position`,
+`tried`, `startedAt`, present only while the session is off its own target),
+`fallbackHops` and `fallbackServedBy`; the override record names the stand-in
+as `substituteTarget {engine, profile?, model?}`. The session API reports the
+chain, its position, the next hop and the hops under `fallback.chain`.
 
 ## API
 

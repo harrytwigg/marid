@@ -21,7 +21,7 @@
 #   --mode        which opencode mode the instance runs in: run, server, or both (default)
 #   --only        scenario ids to run, e.g. a,f (default: all)
 #   --pending     scenarios that wait on runtime work not yet merged: their result is
-#                 reported, never failed (default: a,b,c,d,g,h); a pending scenario that
+#                 reported, never failed (default: none); a pending scenario that
 #                 passes is reported as such, and --strict fails the run on it
 #   --port        gateway port, 8060 or above (default: JINN_VERIFY_PORT, else a free one)
 #   --keep        leave the last instance up for screenshots and print how to tear it down
@@ -43,7 +43,7 @@ GATEWAY_REPO="$(cd "${JINN_VERIFY_GATEWAY_REPO:-$REPO}" && pwd -P)"
 HELPER="$REPO/scripts/jinn-sandbox.sh"
 DRIVER_DIR="$REPO/scripts/verify-fallback-chains"
 INSTANCE="fallback-chains"
-MODE="both"; ONLY=""; PENDING="a,b,c,d,g,h"; PORT="${JINN_VERIFY_PORT:-}"; KEEP=0; RETAIN=""; SKIP_BUILD=0; STRICT=0; TEARDOWN=""
+MODE="both"; ONLY=""; PENDING=""; PORT="${JINN_VERIFY_PORT:-}"; KEEP=0; RETAIN=""; SKIP_BUILD=0; STRICT=0; TEARDOWN=""
 
 die() { echo "verify-fallback-chains: $1" >&2; exit "${2:-2}"; }
 
