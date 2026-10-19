@@ -1,0 +1,189 @@
+# Fallback chains
+
+A fallback chain is an ordered list of **targets** a session moves through when
+its own target cannot serve a turn. A target is an engine, optionally a Claude
+profile, and optionally a model:
+
+```yaml
+engines:
+  claude:
+    accounts:
+      work: { configDir: /home/operator/.claude-work }
+    fallback:                         # the default Claude profile's chain
+      - { engine: claude, profile: work, model: sonnet }
+      - { engine: opencode, model: opencode-go/glm-5 }
+      - { engine: opencode, model: openrouter/z-ai/glm-5 }
+```
+
+The gateway owns all fallback. Engines run without fallback of their own; in
+particular opencode no longer switches models internally (see
+[opencode](#opencode-internal-fallback-is-removed)).
+
+The wire shapes, normalisation and validation sentences live in
+`packages/jinn/src/shared/fallback-chain-wire.ts`, shared by the config loader
+and the Settings editor.
+
+## Config
+
+### Where a chain is written
+
+| Subject | Key | Applies to |
+|---|---|---|
+| Engine default | `engines.<engine>.fallback` | sessions on that engine (for Claude: the default profile) |
+| Claude account | `engines.claude.accounts.<name>.fallback` | sessions on that declared profile |
+| Employee | `fallback` in the employee's YAML | that employee's sessions; overrides the two above |
+
+A session's chain is chosen in this order, first match wins:
+
+1. the session's own fallback target (chosen from the fallback chip): a
+   one-link chain, as before;
+2. the employee's `fallback` (`fallback: []` means no fallback);
+3. the session's account chain (`engines.claude.accounts.<name>.fallback`);
+4. the engine default (`engines.<engine>.fallback`), for the default Claude
+   profile and every other engine.
+
+A local named profile that is not declared under `engines.claude.accounts`, and
+whose employee writes no `fallback`, has no chain: it waits for its own reset,
+as before.
+
+### Entries
+
+An entry is a mapping `{engine, profile?, model?}`:
+
+- `engine`: any known engine.
+- `profile`: a declared account name under `engines.claude.accounts`. Only
+  Claude links take one. Absent means the default Claude profile.
+- `model`: a model id the engine serves (opencode's `provider/model`). Absent
+  means: on the same engine as the session, the session's own model; on
+  another engine, the `fallbackModelMap` translation of the session's model if
+  there is one, otherwise that engine's default.
+
+The same engine may appear several times with another profile or model, so
+`claude/A/opus -> claude/B/sonnet` and `opencode-go/x -> openrouter/x` are both
+chains. Only an exact duplicate (same engine, profile and model) is refused, as
+is a link equal to the target the chain falls back from.
+
+### Legacy forms
+
+The string forms keep working and keep their meaning:
+
+- `codex` is that engine, followed by codex's own chain;
+- `claude:<name>` is that declared account, followed by its own chain.
+
+A chain is resolved to its **effective** chain by expanding each string entry
+in place into the order the old walker visited it, skipping targets already in
+the list. A chain written only in strings therefore runs exactly as before.
+`fallbackModelMap` keeps working as the model rule for links without a model.
+The Settings editor shows the effective chain; saving an edited legacy chain
+writes it as explicit links.
+
+## Runtime
+
+### What moves a session along its chain
+
+| Failure | Moves on from | Recorded in engine health |
+|---|---|---|
+| rate limit, quota, usage limit | any target | yes, on the failing target |
+| engine gave up its own provider retries | any target | yes |
+| model not served | a fallback link only | no |
+| profile signed out | a fallback link only | the auth outage record, as today |
+
+Other failures (network, terminal errors) end the turn as before. A turn on
+the session's own target that hits a limit with no usable link waits for its
+reset, as before.
+
+### Walking
+
+- A **run** starts at the session's first hop and ends when the session goes
+  back to its own target. Within a run every target is tried at most once: the
+  session's own target and every tried link are in the run's tried set, which
+  is the loop guard. A chain can hop several times within one turn, up to its
+  length.
+- A link is passed over (and named in the hop record) when it was already
+  tried, its engine is not installed, its engine cannot run on the session's
+  host, the session is department-scoped and the link is not a Claude account,
+  or its model is not served. A link whose health says it is at its limit is
+  passed over first, and tried only when nothing healthier is left.
+- When the chain runs out, the session waits for its own target's reset and
+  resumes there.
+- At its own target's reset the session goes back to it and the run ends, as
+  substitution reverts today.
+
+### Health keys
+
+A Claude target's health is its account's. An opencode target's health is kept
+per provider (`opencode/<provider>`), so a provider's usage limit does not mark
+other providers' links as spent. Every other engine keeps one key.
+
+### Context across a hop
+
+Each account (and each non-Claude engine) keeps its own conversation thread.
+
+- **Same thread, other model** (`claude/A/opus -> claude/A/sonnet`,
+  `opencode-go/x -> openrouter/x`): the thread resumes with the new model.
+- **Another account or engine with a thread of its own**: that thread resumes,
+  with the messages it has not seen prepended.
+- **Another account or engine with no thread**: a fresh run whose prompt
+  carries the recent conversation. A Claude session id from one profile is
+  never resumed under another.
+- **Back on the session's own target**: its thread resumes with the messages
+  exchanged elsewhere prepended, as today.
+
+### What is recorded
+
+Each hop is recorded on the session (most recent 20) with its time, from and
+to targets, reason, the failing target's reset and any links passed over, and
+announced in the transcript as a notice. The target that served the latest
+turn is recorded too. The session API reports the chain, its position, the
+next hop and the hops under `fallback.chain`.
+
+## API
+
+- `GET /api/fallback-chains`: declared profiles, plus every engine and account
+  chain as written and as effective, each link with its limit state.
+  `?employee=<name>` adds that employee's chain.
+- Engine and account chains are written through `PUT /api/config`; an
+  employee's through `PATCH /api/org/employees/<name>` with `fallback` (a list,
+  or `null` to inherit).
+- `GET /api/sessions/<id>`: `fallback.chain` (`SessionFallbackChainView`).
+
+## opencode internal fallback is removed
+
+opencode used to switch models on a usage limit by itself, through the
+`opencode-rate-limit` plugin (1.x) or the example `model-fallback.js` plugin
+(2.x), configured per host in `rate-limit-fallback.json`. That fallback was
+invisible to the gateway, could not move a session to another engine or
+profile, and could not be seen or edited in the dashboard. It is removed:
+
+- opencode turns run with no internal fallback, and the adapter code that
+  adopted a plugin's re-sent prompt is gone;
+- opencode model and provider hops are chain links:
+  `{engine: opencode, model: openrouter/x}`;
+- a host still running a fallback plugin is reported by `jinn doctor`, at
+  gateway start, and in Settings, so there is never a double fallback.
+
+### Migrating a host
+
+1. Run `jinn fallback migrate-opencode` to print the chain equivalent of the
+   host's `rate-limit-fallback.json` (`--write` adds it to the config).
+   `fallbackModels: [a, b]` becomes
+   `engines.opencode.fallback: [{engine: opencode, model: a}, {engine: opencode, model: b}]`;
+   per-model lists become employee chains for the employees pinned to that
+   model, and `"*"` the engine default.
+2. Remove the plugin from the host's opencode config (`plugin` in
+   `opencode.json`, or `model-fallback.js` from the plugin directory) and delete
+   `rate-limit-fallback.json`.
+3. `jinn doctor` confirms no internal fallback is left.
+
+The plugin's `cooldownMs`, `circuitBreaker`, `fallbackMode` and `restoreModel`
+have no setting of their own: engine health, the once-per-run rule and the
+return to the session's own target at its reset cover them.
+
+## Testing without real providers
+
+`scripts/verify-fallback-chains.sh` starts a throwaway gateway on its own port
+with a temporary home, fake Claude profiles and stub `claude` and `opencode`
+binaries that succeed, report a usage limit, stall or fail on command, per
+profile and model, in the formats the gateway classifies. Its scenarios walk a
+four-link chain hop by hop, run a chain out, and check the loop guard. No
+provider is contacted.

@@ -22,6 +22,9 @@
       "@jinn/fallback-map-wire": [
         "../jinn/src/shared/fallback-map-wire.ts"
       ],
+      "@jinn/fallback-chain-wire": [
+        "../jinn/src/shared/fallback-chain-wire.ts"
+      ],
       "@jinn/model-id": [
         "../jinn/src/shared/model-id.ts"
       ],
