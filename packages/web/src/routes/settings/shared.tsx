@@ -1,3 +1,6 @@
+import { createContext, useContext, useId } from "react"
+import { ChevronDownIcon } from "@/components/ui/icon"
+import { Input } from "@/components/ui/input"
 import { ToggleSwitch as UiToggleSwitch } from "@/components/ui/toggle-switch"
 
 // ---------------------------------------------------------------------------
@@ -18,25 +21,20 @@ export function Section({
       >
         {title}
       </div>
-      {/* Grouped-inset card (shared visual language): --bg-secondary carrying
-          the card shadow — no hairline ring at rest. */}
-      <div
-        className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[var(--space-4)] shadow-[var(--shadow-card)]"
-      >
+      {/* Glass card on the reading sheet (glass-identity.css): tint, lit edge, no blur. */}
+      <div className="glass-card rounded-[var(--radius-xl)] p-[var(--space-4)]">
         {children}
       </div>
     </section>
   )
 }
 
-// One control recipe for every text input and select on the page: soft
-// --fill-tertiary well, no border at rest, accent focus ring (mirrors
-// .apple-input, sized for dense form rows).
-export const CONTROL_CLASS =
-  "min-h-[40px] md:min-h-0 w-full rounded-[10px] border-none bg-[var(--fill-tertiary)] px-[12px] py-[7px] " +
-  "text-[length:var(--text-footnote)] text-[var(--text-primary)] outline-none " +
-  "placeholder:text-[var(--text-tertiary)] transition-[box-shadow] duration-150 " +
-  "focus:shadow-[0_0_0_3px_var(--accent-fill)]"
+/** The field's phone floor: a thumb needs 40px, and from md up the field's own 34px does. */
+export const FIELD_CLASS = "min-h-[40px] md:min-h-0"
+
+/** The id of the label of the row a control sits in, so a select that carries no
+ *  name of its own is still named by the words beside it. */
+const FieldLabelContext = createContext<string | undefined>(undefined)
 
 export function FieldRow({
   label,
@@ -45,16 +43,20 @@ export function FieldRow({
   label: string
   children: React.ReactNode
 }) {
+  const labelId = useId()
   return (
     <div
       className="flex flex-col items-stretch gap-[var(--space-2)] py-[var(--space-2)] sm:flex-row sm:items-center sm:justify-between sm:gap-[var(--space-4)]"
     >
       <label
+        id={labelId}
         className="shrink-0 text-[length:var(--text-subheadline)] text-[var(--text-secondary)]"
       >
         {label}
       </label>
-      <div className="min-w-0 w-full sm:w-[240px] sm:shrink-0">{children}</div>
+      <div className="min-w-0 w-full sm:w-[240px] sm:shrink-0">
+        <FieldLabelContext.Provider value={labelId}>{children}</FieldLabelContext.Provider>
+      </div>
     </div>
   )
 }
@@ -77,7 +79,7 @@ export function SettingsInput({
   ariaLabel?: string
 }) {
   return (
-    <input
+    <Input
       type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -85,7 +87,7 @@ export function SettingsInput({
       disabled={disabled}
       min={min}
       aria-label={ariaLabel}
-      className={`${CONTROL_CLASS} disabled:cursor-not-allowed disabled:opacity-50`}
+      className={FIELD_CLASS}
     />
   )
 }
@@ -95,25 +97,34 @@ export function SettingsSelect({
   onChange,
   options,
   ariaLabel,
+  onBlur,
 }: {
   value: string
   onChange: (v: string) => void
   options: { value: string; label: string; disabled?: boolean }[]
   ariaLabel?: string
+  onBlur?: () => void
 }) {
+  const rowLabelId = useContext(FieldLabelContext)
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={ariaLabel}
-      className={`${CONTROL_CLASS} cursor-pointer`}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value} disabled={o.disabled}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <span className="relative block w-full">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabel ? undefined : rowLabelId}
+        className="select__trigger min-h-[40px] w-full cursor-pointer appearance-none pe-8 text-[length:var(--text-footnote)] md:min-h-0"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value} disabled={o.disabled}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {/* The chevron sits over the select, so a press on it must reach the select; HeroUI pads the end only for an indicator inside the trigger, hence `pe-8` above. */}
+      <ChevronDownIcon aria-hidden className="select__indicator pointer-events-none size-4" />
+    </span>
   )
 }
 

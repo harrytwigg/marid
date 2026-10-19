@@ -2,6 +2,12 @@
 // screen looks adds it here (or reuses an entry) so before and after are
 // always taken the same way. `url` receives the ids seed.mjs wrote; `ready`
 // is the text that proves the screen has rendered its data.
+import { DIALOG_SCREENS } from './screens-dialogs.mjs'
+import { AUTH_SCREENS } from './screens-auth.mjs'
+import { ORG_SCREENS } from './screens-org.mjs'
+import { PAGE_SCREENS } from './screens-pages.mjs'
+import { CHAT_SCREENS } from './screens-chat.mjs'
+
 export const SCREENS = [
   {
     name: 'chat',
@@ -273,6 +279,11 @@ export const SCREENS = [
       await page.waitForTimeout(500)
     },
   },
+  ...DIALOG_SCREENS,
+  ...ORG_SCREENS,
+  ...AUTH_SCREENS,
+  ...PAGE_SCREENS,
+  ...CHAT_SCREENS,
 ]
 
 export const THEMES = ['light', 'dark']

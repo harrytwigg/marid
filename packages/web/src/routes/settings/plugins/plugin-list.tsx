@@ -1,4 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query"
+import { Button } from "@/components/ui/button"
 import { PluginRow } from "./plugin-row"
 import type { PluginInventoryRow } from "./inventory"
 
@@ -9,7 +10,7 @@ function ListSkeleton() {
   return (
     <div
       data-testid="plugins-skeleton"
-      className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]"
+      className="glass-card rounded-[var(--radius-xl)] p-[5px]"
       aria-hidden
     >
       {["44%", "31%", "56%"].map((width, index) => (
@@ -36,7 +37,7 @@ function ListSkeleton() {
 
 function EmptyState() {
   return (
-    <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] shadow-[var(--shadow-card)]" data-testid="plugins-empty">
+    <div className="glass-card rounded-[var(--radius-xl)]" data-testid="plugins-empty">
       <div className="px-6 py-12 text-center">
         <h3 className="text-[length:var(--text-title3)] font-bold tracking-[var(--tracking-tight)] text-[var(--text-primary)]">
           No plugins installed
@@ -57,15 +58,11 @@ function LoadFailed({ error, onRetry }: { error: unknown; onRetry: () => void })
       style={{ background: "color-mix(in srgb, var(--system-red) 8%, transparent)" }}
     >
       <span>{error instanceof Error ? error.message : "Failed to load plugins"}</span>
-      {/* A full 34px pill rather than inline underlined text: this is the only
+      {/* A full-size button rather than inline underlined text: this is the only
           way back from a failed load, and on a phone it has to be thumb-sized. */}
-      <button
-        type="button"
-        onClick={onRetry}
-        className="inline-flex h-[34px] flex-none items-center rounded-[var(--radius-md)] bg-[var(--fill-secondary)] px-3.5 text-[length:var(--text-footnote)] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--fill-tertiary)]"
-      >
+      <Button variant="secondary" size="sm" onClick={onRetry}>
         Retry
-      </button>
+      </Button>
     </div>
   )
 }
@@ -86,7 +83,7 @@ export function PluginList({
   if (plugins.length === 0) return <EmptyState />
 
   return (
-    <div className="rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]">
+    <div className="glass-card rounded-[var(--radius-xl)] p-[5px]">
       {plugins.map((plugin) => (
         <PluginRow
           key={plugin.id}

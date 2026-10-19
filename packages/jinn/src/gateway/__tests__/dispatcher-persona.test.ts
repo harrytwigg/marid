@@ -99,10 +99,42 @@ describe("System employee personas — blocking a dead end for the operator", ()
   it("hands the dead end to neither the operator's assignee slot nor another session", () => {
     for (const text of [persona, shaper]) {
       expect(text).not.toContain("assign_work_item");
-      expect(text).not.toContain("send_to_session");
+      expect(deadEndParagraph(text)).not.toContain("send_to_session");
     }
+    expect(shaper).not.toContain("send_to_session");
   });
 });
+
+/**
+ * A delegate that stopped mid-work reports to the Dispatcher, whose one
+ * hand-off is spent. Resuming the delegate's own session is the recovery that
+ * keeps its work; a fresh start stays the operator's Dispatch.
+ */
+describe("Todo Dispatcher persona — a delegate that stopped", () => {
+  const recovery = persona.split("\n\n").find((paragraph) => paragraph.startsWith("If your delegate stops"))!;
+
+  it("resumes the delegate's own session rather than delegating again", () => {
+    expect(recovery).toContain("send_to_session { sessionId, message }");
+    expect(recovery).toMatch(/delegate's session id/);
+    expect(recovery).toMatch(/keeps the work it did/);
+  });
+
+  it("never spawns a session to route the Todo for it", () => {
+    expect(recovery).toMatch(/never spawn one to do it for you/);
+  });
+
+  it("blocks for the operator, offering Dispatch, when the resumed session stops again", () => {
+    expect(recovery).toMatch(/block the Todo for the operator/);
+    expect(recovery).toMatch(/pressing Dispatch/);
+  });
+});
+
+/** The paragraph that sends a dead end to the operator. */
+function deadEndParagraph(text: string): string {
+  const paragraph = text.split("\n\n").find((candidate) => /dead end/.test(candidate));
+  expect(paragraph).toBeDefined();
+  return paragraph!;
+}
 
 /**
  * The personas name MCP tools and their arguments in prose, and nothing else

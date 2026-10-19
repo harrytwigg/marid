@@ -1,5 +1,5 @@
 import { useRef } from "react"
-import { Search } from "lucide-react"
+import { Search } from "@/components/ui/icon"
 
 /** The Todos search box is an entry point to the one global overlay, not a
  *  second search implementation. A button cannot drop the first keystroke the
@@ -41,7 +41,7 @@ export function SearchLauncher({
       }}
       className={`focus-outline outline-none transition-colors hover:bg-[var(--fill-secondary)] ${className}`}
     >
-      <Search size={iconSize} strokeWidth={2} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
+      <Search size={iconSize} className="flex-none text-[var(--text-quaternary)]" aria-hidden />
       <span className={labelClassName}>Search todos</span>
     </button>
   )

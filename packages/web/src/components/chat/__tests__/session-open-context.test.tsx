@@ -43,7 +43,7 @@ describe('useOpenSession', () => {
     const session = vi.fn()
     render(
       <MemoryRouter initialEntries={['/todos/X-1']}>
-        <LayoutOpenProviders file={() => false} todo={() => false} session={session}>
+        <LayoutOpenProviders file={() => false} todo={() => false} subagent={() => false} session={session}>
           <SessionRef sessionId="s3" byName={new Map()} />
         </LayoutOpenProviders>
         <Where />

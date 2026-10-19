@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest"
-import { Puzzle } from "lucide-react"
+import { Puzzle, lookupIcon } from "@/components/ui/icon"
 import { contributions } from "@/contrib/registry"
 import { AREAS } from "@/contrib/types"
-import { lookupIcon } from "@/components/ui/icon"
 import { navigationFor } from "../nav"
 
 /** The `sidebar.nav` host. A contributed row reaches every consumer of

@@ -18,8 +18,14 @@ import { JINN_HOME } from "../shared/paths.js";
 import { type OpencodeServer, type OpencodeServerPool, type OpencodeServerSpec } from "./opencode-server.js";
 import { OpencodeServerTurn } from "./opencode-server-turn.js";
 import { OpencodeServerCompaction } from "./opencode-server-compaction.js";
+import { OpencodeV2ServerTurn } from "./opencode-v2-turn.js";
+import { OpencodeV2ServerCompaction } from "./opencode-v2-compaction.js";
 import { isCompactCommand } from "../shared/skill-commands.js";
 import { describeOpencodeLaunch } from "./opencode-protocol.js";
+import { opencodeApiOf } from "./opencode-version.js";
+import { withKnownEffort, type ModelEffortLevels } from "./opencode-variant.js";
+import { localOpencodeVersion } from "../shared/opencode-bin-version.js";
+import { resolveBin } from "../shared/resolve-bin.js";
 
 interface LiveProcess extends RemoteRun {
   proc: ChildProcess;
@@ -82,6 +88,10 @@ export class OpencodeEngine implements InterruptibleEngine {
   /** `engines.opencode.disableFff`, read live so a hot reload applies to the next
    *  process. Absent means on. */
   private readDisableFff: () => boolean;
+  private readCommandTimeoutMs: () => number;
+  /** The effort levels (opencode variants) the registry knows for a model, read
+   *  live because discovery refreshes. Absent: none, so no turn sends a variant. */
+  private readEffortLevels: () => ModelEffortLevels;
   private servers?: OpencodeServerPool;
 
   constructor(opts: {
@@ -89,12 +99,18 @@ export class OpencodeEngine implements InterruptibleEngine {
     gatewayPort?: () => number;
     mode?: () => OpencodeMode;
     disableFff?: () => boolean;
+    /** `engines.opencode.commandTimeoutMs`, resolved, read per turn; absent or 0: no ceiling. */
+    commandTimeoutMs?: () => number;
+    /** The effort levels (variants) the model registry lists for a model. */
+    effortLevels?: () => ModelEffortLevels;
     servers?: OpencodeServerPool;
   } = {}) {
     this.readRemoteConfig = opts.remote ?? (() => undefined);
     this.readGatewayPort = opts.gatewayPort ?? (() => 0);
     this.readMode = opts.mode ?? (() => "run");
     this.readDisableFff = opts.disableFff ?? (() => true);
+    this.readCommandTimeoutMs = opts.commandTimeoutMs ?? (() => 0);
+    this.readEffortLevels = opts.effortLevels ?? (() => () => []);
     this.servers = opts.servers;
   }
 
@@ -157,7 +173,9 @@ export class OpencodeEngine implements InterruptibleEngine {
     return !!live && !live.proc.killed && live.proc.exitCode === null;
   }
 
-  async run(opts: EngineRunOpts): Promise<EngineResult> {
+  async run(requested: EngineRunOpts): Promise<EngineResult> {
+    // From here on `effortLevel` is the variant to send, or nothing.
+    const opts = withKnownEffort(requested, this.readEffortLevels());
     const trackingId = opts.sessionId || `opencode-${Date.now()}`;
     const onStream = opts.onStream || null;
 
@@ -179,19 +197,19 @@ export class OpencodeEngine implements InterruptibleEngine {
     trackingId: string,
     onStream: ((delta: StreamDelta) => void) | null,
   ): Promise<EngineResult> {
-    // A host whose server was refused as OpenCode 2 runs its turns with
-    // `--standalone`, so no background service is left behind. Plain `run`
-    // mode never asks the pool: it has not looked at the host's server.
-    const run = { standalone: this.readMode() === "server" && this.servers?.runNeedsStandalone(opts) === true };
-    const disableFff = this.readDisableFff();
+    // The binary's version decides the staged config's shape and whether the
+    // turn needs `--standalone` (opencode-launch.ts); a remote host's comes
+    // with its facts.
+    const commandTimeoutMs = this.readCommandTimeoutMs();
+    const processOptions = { disableFff: this.readDisableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}) };
     if (!isRemoteTarget(opts)) {
-      return await this.launch(localOpencodeLaunch(opts, trackingId, { run, disableFff }), trackingId, onStream);
+      const api = opencodeApiOf(await localOpencodeVersion(resolveBin("opencode", opts.bin)));
+      return await this.launch(localOpencodeLaunch(opts, trackingId, { api, ...processOptions }), trackingId, onStream);
     }
     const plan = await remoteOpencodeLaunch(opts, trackingId, {
       remote: this.readRemoteConfig(),
       gatewayPort: this.readGatewayPort(),
-      run,
-      disableFff,
+      ...processOptions,
     });
     return await this.launch(plan, trackingId, onStream);
   }
@@ -287,7 +305,9 @@ export class OpencodeEngine implements InterruptibleEngine {
       // A remote server's session sees the gateway's files through its staged
       // home, so the turn names them there rather than by their gateway paths.
       const turnOpts = server.remote ? withRemoteAttachments(opts, server.remote.staging.sessionHome, trackingId) : opts;
-      const turn = new OpencodeServerTurn(server, turnOpts, onStream, {
+      // The API the server speaks decides which turn drives it (opencode-version.ts).
+      const Turn = server.api === 2 ? OpencodeV2ServerTurn : OpencodeServerTurn;
+      const turn = new Turn(server, turnOpts, onStream, {
         abort: (target) => servers.abortTurn(trackingId, target),
         onSessionId: (id) => servers.noteEngineSession(trackingId, id),
         onProtocolDrift: (reason) => {
@@ -319,7 +339,9 @@ export class OpencodeEngine implements InterruptibleEngine {
     trackingId: string,
   ): Promise<EngineResult> {
     try {
-      const compaction = new OpencodeServerCompaction(server, opts);
+      const compaction = server.api === 2
+        ? new OpencodeV2ServerCompaction(server, opts, (target) => this.servers!.abortTurn(trackingId, target))
+        : new OpencodeServerCompaction(server, opts);
       slot.turn = compaction;
       logger.info(`opencode engine compacting session ${opts.resumeSessionId || "(none yet)"} on its server (${server.hostKey})`);
       const result = await compaction.run();

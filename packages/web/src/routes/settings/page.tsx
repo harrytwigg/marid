@@ -1,11 +1,12 @@
 
 import { useEffect, useRef, useState } from "react"
-import { RotateCcw, Trash2, Check, Loader2, Plus, EyeOff } from "lucide-react"
+import { RotateCcw, Trash2, Check, Loader2, Plus, EyeOff } from "@/components/ui/icon"
 import { PageLayout } from "@/components/page-layout"
 import { LargeTitleHeader } from "@/components/shell/large-title-header"
 import { PageScaffold } from "@/components/shell/page-scaffold"
 import { useSettings } from "@/routes/settings-provider"
 import { api } from "@/lib/api"
+import { engineDisplayName } from "@/lib/engine-names"
 import { authFetch } from "@/lib/auth"
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { useOnboarding } from "@/hooks/use-onboarding"
@@ -33,7 +34,7 @@ import { ResetSection } from "./reset-section"
 import { useConfigCommit } from "./use-config-commit"
 import { useVoiceCapability } from "./use-voice-capability"
 import {
-  CONTROL_CLASS,
+  FIELD_CLASS,
   FieldRow,
   Section,
   SettingsInput,
@@ -41,6 +42,13 @@ import {
   ToggleSwitch,
 } from "./shared"
 import { PRODUCT_NAME } from "@/lib/brand"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+
+const LANGUAGES = [
+  "English", "Spanish", "French", "German", "Portuguese", "Italian", "Dutch",
+  "Russian", "Chinese", "Japanese", "Korean", "Arabic", "Hindi", "Bulgarian",
+]
 
 
 
@@ -264,7 +272,7 @@ export default function SettingsPage() {
                     aria-label={preset.label}
                     aria-pressed={isActive}
                     title={preset.label}
-                    className="flex h-[40px] w-[40px] md:h-[30px] md:w-[30px] cursor-pointer items-center justify-center rounded-full border-none transition-transform duration-100 ease-[var(--ease-smooth)] hover:scale-105"
+                    className="focus-outline flex h-[40px] w-[40px] md:h-[30px] md:w-[30px] cursor-pointer items-center justify-center rounded-full border-none transition-transform duration-100 ease-[var(--ease-smooth)] hover:scale-105"
                     style={{
                       background: swatch,
                       // Selection ring floats off the swatch on a bg-colored gap —
@@ -275,7 +283,7 @@ export default function SettingsPage() {
                     }}
                   >
                     {isActive && (
-                      <Check size={14} color={preset.value ? "#fff" : "var(--accent-contrast)"} strokeWidth={3} />
+                      <Check size={14} color={preset.value ? "#fff" : "var(--accent-contrast)"} />
                     )}
                   </button>
                 )
@@ -297,7 +305,7 @@ export default function SettingsPage() {
                   className="w-[40px] h-[40px] md:w-[28px] md:h-[28px] border-none rounded-full cursor-pointer bg-transparent p-0"
                 />
               </label>
-              <input
+              <Input
                 type="text"
                 aria-label="Custom accent hex color"
                 placeholder="#3B82F6"
@@ -308,16 +316,13 @@ export default function SettingsPage() {
                     setAccentColor(e.target.value)
                   }
                 }}
-                className={cn(CONTROL_CLASS, "w-[96px] font-mono text-[length:var(--text-caption1)]")}
+                className={cn(FIELD_CLASS, "w-[96px] font-mono text-[length:var(--text-caption1)]")}
               />
               {settings.accentColor && (
-                <button
-                  onClick={() => setAccentColor(null)}
-                  className="text-[length:var(--text-footnote)] text-[var(--system-blue)] bg-none border-none cursor-pointer p-0 inline-flex items-center gap-[4px]"
-                >
+                <Button variant="link" size="xs" onClick={() => setAccentColor(null)}>
                   <RotateCcw size={12} />
                   Reset
-                </button>
+                </Button>
               )}
             </div>
 
@@ -357,9 +362,9 @@ export default function SettingsPage() {
                 >
                   Company Name
                 </label>
-                <input
+                <Input
                   type="text"
-                  className={CONTROL_CLASS}
+                  className={FIELD_CLASS}
                   placeholder="Acme Labs"
                   value={companyNameValue}
                   onChange={(e) => setCompanyNameValue(e.target.value)}
@@ -375,10 +380,10 @@ export default function SettingsPage() {
                 <label className="mt-[var(--space-3)] block text-[length:var(--text-caption1)] text-[var(--text-tertiary)] mb-[var(--space-1)]">
                   Todo Prefix Override
                 </label>
-                <input
+                <Input
                   type="text"
                   maxLength={3}
-                  className={`${CONTROL_CLASS} uppercase disabled:opacity-60`}
+                  className={cn(FIELD_CLASS, "uppercase")}
                   placeholder="Optional, e.g. MRD"
                   value={companyPrefixFrozen ? onboarding?.todoPrefix ?? "" : companyPrefixValue}
                   disabled={companyPrefixFrozen}
@@ -408,9 +413,9 @@ export default function SettingsPage() {
                 >
                   Portal Name
                 </label>
-                <input
+                <Input
                   type="text"
-                  className={CONTROL_CLASS}
+                  className={FIELD_CLASS}
                   placeholder={PRODUCT_NAME}
                   value={nameValue}
                   onChange={(e) => setNameValue(e.target.value)}
@@ -427,9 +432,9 @@ export default function SettingsPage() {
                 >
                   Portal Subtitle
                 </label>
-                <input
+                <Input
                   type="text"
-                  className={CONTROL_CLASS}
+                  className={FIELD_CLASS}
                   placeholder="Command Centre"
                   value={subtitleValue}
                   onChange={(e) => setSubtitleValue(e.target.value)}
@@ -443,9 +448,9 @@ export default function SettingsPage() {
                 >
                   Operator Name
                 </label>
-                <input
+                <Input
                   type="text"
-                  className={CONTROL_CLASS}
+                  className={FIELD_CLASS}
                   placeholder="Your Name"
                   value={operatorNameValue}
                   onChange={(e) => setOperatorNameValue(e.target.value)}
@@ -466,30 +471,16 @@ export default function SettingsPage() {
                 >
                   Language
                 </label>
-                <select
+                <SettingsSelect
+                  ariaLabel="Language"
                   value={languageValue}
-                  onChange={(e) => setLanguageValue(e.target.value)}
+                  onChange={setLanguageValue}
                   onBlur={() => {
                     setLanguage(languageValue || "English")
                     api.completeOnboarding({ language: languageValue || undefined }).catch(() => {})
                   }}
-                  className={`${CONTROL_CLASS} cursor-pointer`}
-                >
-                  <option value="English">English</option>
-                  <option value="Spanish">Spanish</option>
-                  <option value="French">French</option>
-                  <option value="German">German</option>
-                  <option value="Portuguese">Portuguese</option>
-                  <option value="Italian">Italian</option>
-                  <option value="Dutch">Dutch</option>
-                  <option value="Russian">Russian</option>
-                  <option value="Chinese">Chinese</option>
-                  <option value="Japanese">Japanese</option>
-                  <option value="Korean">Korean</option>
-                  <option value="Arabic">Arabic</option>
-                  <option value="Hindi">Hindi</option>
-                  <option value="Bulgarian">Bulgarian</option>
-                </select>
+                  options={LANGUAGES.map((name) => ({ value: name, label: name }))}
+                />
               </div>
             </div>
           </Section>
@@ -550,7 +541,7 @@ export default function SettingsPage() {
                   <SettingsSelect
                     value={config.engines?.default ?? "claude"}
                     onChange={(v) => updateConfig(["engines", "default"], v)}
-                    options={Object.values(modelRegistry?.engines ?? {}).map((e) => ({ value: e.name, label: e.name.charAt(0).toUpperCase() + e.name.slice(1), disabled: !e.available }))}
+                    options={Object.values(modelRegistry?.engines ?? {}).map((e) => ({ value: e.name, label: engineDisplayName(e.name), disabled: !e.available }))}
                   />
                 </FieldRow>
               </Section>
@@ -607,14 +598,10 @@ export default function SettingsPage() {
                     <div className="text-[length:var(--text-caption1)] font-[var(--weight-semibold)] text-[var(--text-tertiary)]">
                       Claude Models
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => applyModelConfig((prev) => resetEngineModelOverrides(prev, "claude"))}
-                      className="inline-flex items-center gap-[var(--space-1)] rounded-[var(--radius-sm)] border-none bg-[var(--fill-tertiary)] px-[8px] py-[5px] text-[length:var(--text-caption1)] text-[var(--text-tertiary)] cursor-pointer hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
-                    >
+                    <Button variant="secondary" size="xs" onClick={() => applyModelConfig((prev) => resetEngineModelOverrides(prev, "claude"))}>
                       <RotateCcw size={13} />
                       Reset
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="grid grid-cols-1 gap-[var(--space-2)] sm:grid-cols-[1fr_1fr_auto]">
@@ -628,15 +615,10 @@ export default function SettingsPage() {
                       onChange={setClaudeModelLabel}
                       placeholder="Sonnet 4.6"
                     />
-                    <button
-                      type="button"
-                      onClick={addClaudeModel}
-                      disabled={!claudeModelId.trim()}
-                      className="inline-flex items-center justify-center gap-[var(--space-1)] rounded-[var(--radius-sm)] border-none bg-[var(--accent)] px-[10px] py-[6px] text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--accent-contrast)] disabled:cursor-default disabled:opacity-50" // jinn-shell: ok inline settings control, not page chrome
-                    >
+                    <Button onClick={addClaudeModel} disabled={!claudeModelId.trim()}>
                       <Plus size={14} />
                       Add
-                    </button>
+                    </Button>
                   </div>
 
                   {visibleClaudeModels.length > 0 && (
@@ -647,14 +629,14 @@ export default function SettingsPage() {
                             <div className="truncate text-[length:var(--text-caption1)] font-[var(--weight-medium)] text-[var(--text-primary)]">{m.label}</div>
                             <div className="truncate font-[family-name:var(--font-mono)] text-[length:var(--text-caption2)] text-[var(--text-quaternary)]">{m.id}</div>
                           </div>
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
                             onClick={() => applyModelConfig((prev) => hideModelOverride(prev, "claude", m.id))}
                             aria-label={`Hide ${m.label}`}
-                            className="inline-flex size-[28px] items-center justify-center rounded-[var(--radius-sm)] border-none bg-transparent text-[var(--text-tertiary)] cursor-pointer hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
                           >
                             <EyeOff size={14} />
-                          </button>
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -663,14 +645,14 @@ export default function SettingsPage() {
                   {hiddenClaudeModels.length > 0 && (
                     <div className="mt-[var(--space-2)] flex flex-wrap gap-[var(--space-2)]">
                       {hiddenClaudeModels.map((m) => (
-                        <button
+                        <Button
                           key={m.id}
-                          type="button"
+                          variant="secondary"
+                          size="xs"
                           onClick={() => applyModelConfig((prev) => showModelOverride(prev, "claude", m.id))}
-                          className="rounded-[var(--radius-sm)] border-none bg-[var(--fill-tertiary)] px-[8px] py-[4px] text-[length:var(--text-caption1)] text-[var(--text-tertiary)] cursor-pointer hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
                         >
                           Restore {m.label}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   )}
@@ -678,9 +660,10 @@ export default function SettingsPage() {
                   {customClaudeModels.length > 0 && (
                     <div className="mt-[var(--space-2)] flex flex-wrap gap-[var(--space-2)]">
                       {customClaudeModels.map((m) => (
-                        <button
+                        <Button
                           key={m.id}
-                          type="button"
+                          variant="secondary"
+                          size="xs"
                           onClick={() => {
                             applyModelConfig((prev) => {
                               const next = structuredClone(prev)
@@ -689,11 +672,10 @@ export default function SettingsPage() {
                               return next
                             })
                           }}
-                          className="inline-flex items-center gap-[var(--space-1)] rounded-[var(--radius-sm)] border-none bg-[var(--fill-tertiary)] px-[8px] py-[4px] text-[length:var(--text-caption1)] text-[var(--text-tertiary)] cursor-pointer hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
                         >
                           <Trash2 size={13} />
                           {m.label || m.id}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   )}
@@ -881,6 +863,7 @@ export default function SettingsPage() {
                 <FieldRow label="Share Session in Channel">
                   <ToggleSwitch
                     checked={config.connectors?.slack?.shareSessionInChannel ?? false}
+                    ariaLabel="Share Slack session in channel"
                     onChange={(v) =>
                       updateConfig(["connectors", "slack", "shareSessionInChannel"], v)
                     }
@@ -903,6 +886,7 @@ export default function SettingsPage() {
                 <FieldRow label="Ignore Old Messages on Boot">
                   <ToggleSwitch
                     checked={config.connectors?.slack?.ignoreOldMessagesOnBoot ?? true}
+                    ariaLabel="Ignore old Slack messages on boot"
                     onChange={(v) =>
                       updateConfig(["connectors", "slack", "ignoreOldMessagesOnBoot"], v)
                     }
@@ -997,6 +981,7 @@ export default function SettingsPage() {
                 <FieldRow label="Ignore Old Messages on Boot">
                   <ToggleSwitch
                     checked={config.connectors?.telegram?.ignoreOldMessagesOnBoot ?? true}
+                    ariaLabel="Ignore old Telegram messages on boot"
                     onChange={(v) =>
                       updateConfig(["connectors", "telegram", "ignoreOldMessagesOnBoot"], v)
                     }
@@ -1074,8 +1059,9 @@ export default function SettingsPage() {
                     Connector Instances
                   </div>
                   <div className="flex items-center gap-[var(--space-2)]">
-                    <button
-                      className="text-[length:var(--text-caption1)] font-[var(--weight-semibold)] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors flex items-center gap-1"
+                    <Button
+                      variant="ghost"
+                      size="xs"
                       onClick={async () => {
                         try {
                           const result = await api.reloadConnectors()
@@ -1091,9 +1077,10 @@ export default function SettingsPage() {
                     >
                       <RotateCcw size={12} />
                       Reload
-                    </button>
-                    <button
-                      className="text-[length:var(--text-caption1)] font-[var(--weight-semibold)] text-[var(--accent)] hover:opacity-80 transition-opacity"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
                       onClick={() => {
                         const instances = [...(config.connectors?.instances || [])]
                         const id = `discord-${instances.length + 1}`
@@ -1102,7 +1089,7 @@ export default function SettingsPage() {
                       }}
                     >
                       + Add Instance
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 <div className="text-[length:var(--text-caption2)] text-[var(--text-tertiary)] mb-[var(--space-3)]">
@@ -1117,8 +1104,11 @@ export default function SettingsPage() {
                       <div className="text-[length:var(--text-subheadline)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
                         {instance.id || `Instance ${idx + 1}`}
                       </div>
-                      <button
-                        className="text-[var(--system-red)] hover:opacity-80 transition-opacity p-[var(--space-1)]"
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`Remove ${instance.id || `instance ${idx + 1}`}`}
+                        className="text-[var(--system-red)]"
                         onClick={() => {
                           const instances = [...(config.connectors?.instances || [])]
                           instances.splice(idx, 1)
@@ -1126,7 +1116,7 @@ export default function SettingsPage() {
                         }}
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </Button>
                     </div>
                     <FieldRow label="Instance ID">
                       <SettingsInput
@@ -1346,12 +1336,14 @@ export default function SettingsPage() {
                 <FieldRow label="Stdout">
                   <ToggleSwitch
                     checked={config.logging?.stdout ?? true}
+                    ariaLabel="Log to stdout"
                     onChange={(v) => updateConfig(["logging", "stdout"], v)}
                   />
                 </FieldRow>
                 <FieldRow label="File Logging">
                   <ToggleSwitch
                     checked={config.logging?.file ?? false}
+                    ariaLabel="Log to file"
                     onChange={(v) => updateConfig(["logging", "file"], v)}
                   />
                 </FieldRow>
@@ -1378,13 +1370,10 @@ export default function SettingsPage() {
               <div
                 className="mb-7 flex justify-end"
               >
-                <button
-                  onClick={() => loadConfig()}
-                  className="inline-flex h-[38px] cursor-pointer items-center gap-1.5 rounded-full border-none bg-[var(--fill-tertiary)] px-4 text-[length:var(--text-subheadline)] font-[var(--weight-medium)] text-[var(--text-secondary)] transition-colors hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-                >
+                <Button variant="secondary" onClick={() => loadConfig()}>
                   <RotateCcw size={15} />
                   Reload
-                </button>
+                </Button>
               </div>
             </>
           )}

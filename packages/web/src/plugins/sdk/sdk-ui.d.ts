@@ -6,10 +6,10 @@
  * halves are read by different people: this one by whoever is laying a page
  * out, the other by whoever is talking to the host.
  *
- * The wrappers forward the rest of their props to their Radix roots, but
- * spelling Radix's generics out here would put a Radix version into the public
- * contract, and a plugin that never installs Radix could not typecheck against
- * it.
+ * The wrappers forward the rest of their props to the components they wrap, but
+ * spelling those components' generics out here would put a UI library's version
+ * into the public contract, and a plugin that never installs that library could
+ * not typecheck against it.
  */
 import type {
   ButtonHTMLAttributes,
@@ -20,10 +20,9 @@ import type {
   TextareaHTMLAttributes,
 } from 'react'
 
-/* The UI primitives are declared over the props a contribution actually sets.
- * The wrappers forward the rest to their Radix roots, but spelling Radix's
- * generics out here would put a Radix version into the public contract, and a
- * plugin that never installs Radix could not typecheck against it. */
+/* The UI primitives are declared over the props a contribution actually sets;
+ * see the note at the top of this file for why the wrapped components' own
+ * types are not spelled out. */
 interface Styled {
   className?: string
   children?: ReactNode

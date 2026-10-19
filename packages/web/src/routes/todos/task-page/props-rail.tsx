@@ -1,4 +1,4 @@
-import { ArrowUpRight, Calendar, CalendarClock, LoaderCircle, Send, UserRound } from "lucide-react"
+import { ArrowUpRight, Calendar, CalendarClock, LoaderCircle, Send, UserRound } from "@/components/ui/icon"
 import type { DepartmentSummaryWire, Employee, LinkedSessionWire, WorkItemDetailWire } from "@/lib/api"
 import { useOpenSession } from "@/components/chat/file-open-context"
 import { STATUS_LABEL, priorityLabel } from "@/lib/todos"
@@ -202,7 +202,7 @@ export function PropsRail({
       <SprintRailRow detail={detail} editable={!!rowFor} />
       <div className="relative">
         <RailRow quiet testId="rail-start" label="Start date" onOpen={startPick?.onOpen} open={startPick?.open}>
-          <CalendarClock size={14} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
+          <CalendarClock size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
           {item.startAt ? (
             <span>Starts {formatDueLong(item.startAt)}</span>
           ) : (
@@ -213,7 +213,7 @@ export function PropsRail({
       </div>
       <div className="relative">
         <RailRow quiet testId="rail-due" label="Due date" onOpen={duePick?.onOpen} open={duePick?.open}>
-          <Calendar size={14} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
+          <Calendar size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
           {item.dueAt ? (
             <span className={overdue ? "text-[var(--system-red)]" : undefined}>Due {formatDueLong(item.dueAt)}</span>
           ) : (
@@ -223,7 +223,7 @@ export function PropsRail({
         {duePick?.picker}
       </div>
       <RailRow quiet testId="rail-created-by">
-        <UserRound size={14} strokeWidth={2} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
+        <UserRound size={14} aria-hidden className="flex-none text-[var(--text-quaternary)]" />
         {createdBySession ? <SessionRef sessionId={createdBySession} byName={byName} /> : createdByLabel}
         <span className="text-[12px] font-normal text-[var(--text-quaternary)]">· created {formatRelativeTime(item.createdAt)}</span>
       </RailRow>

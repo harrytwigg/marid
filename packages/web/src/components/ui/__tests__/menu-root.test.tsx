@@ -2,6 +2,7 @@ import "@/test/preload-menus"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { clearHostBridge, registerHostNotificationSink } from "@/plugins/sdk/host-bridge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../dropdown-menu"
 import { preloadMenuPopup } from "../menu-root"
 
@@ -35,6 +36,7 @@ function Example({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
 
 afterEach(() => {
   control.fail = true
+  clearHostBridge()
   vi.restoreAllMocks()
 })
 
@@ -43,6 +45,8 @@ describe("a menu whose popup fails", () => {
     // React logs the error the boundary catches.
     vi.spyOn(console, "error").mockImplementation(() => {})
     const onOpenChange = vi.fn()
+    const notice = vi.fn()
+    registerHostNotificationSink(notice)
     render(<Example onOpenChange={onOpenChange} />)
     const trigger = screen.getByRole("button", { name: "Actions" })
 
@@ -50,6 +54,7 @@ describe("a menu whose popup fails", () => {
 
     await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(false))
     expect(onOpenChange).toHaveBeenCalledWith(true)
+    expect(notice).toHaveBeenCalledWith({ title: "The menu couldn't load. Reload the page and try again.", level: "error" })
     expect(screen.queryByRole("menu")).toBeNull()
     expect(trigger.getAttribute("aria-expanded")).toBe("false")
 

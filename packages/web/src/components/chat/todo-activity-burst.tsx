@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUpRight, ChevronDown, ListChecks } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, ListChecks } from '@/components/ui/icon'
 import type { ChatBlock, JsonValue } from '@/lib/blocks'
 import { todoPath } from '@/lib/todo-id'
 import { statusMark } from './chat-blocks'
@@ -62,7 +62,7 @@ export function TodoActivityBurst({ blocks }: { blocks: ChatBlock[] }) {
           aria-label={`Open ${title} todo`}
           className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-md)] border-none bg-transparent text-[var(--text-tertiary)] transition-[background-color,scale] duration-150 ease-[var(--ease-smooth)] hover:bg-[var(--fill-secondary)] active:scale-[0.96] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
         >
-          <ArrowUpRight size={14} strokeWidth={2.25} aria-hidden="true" />
+          <ArrowUpRight size={14} aria-hidden="true" />
         </button>
       </div>
 

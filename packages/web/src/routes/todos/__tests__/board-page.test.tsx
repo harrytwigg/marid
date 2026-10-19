@@ -1,3 +1,4 @@
+import "@/test/preload-dialogs"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
@@ -761,7 +762,8 @@ describe("quick add", () => {
     await waitFor(() => expect(screen.getByTestId("board-quick-add-backlog")).toBeTruthy())
     createWorkItem.mockResolvedValue({ workItem: { ...emptyTree("PLA-20").root } })
     fireEvent.click(screen.getByTestId("board-quick-add-backlog"))
-    fireEvent.change(screen.getByTestId("todo-new-title"), { target: { value: "Draft the launch note" } })
+    // The dialog is its own chunk: it arrives when the import settles.
+    fireEvent.change(await screen.findByTestId("todo-new-title"), { target: { value: "Draft the launch note" } })
     fireEvent.click(screen.getByTestId("todo-new-create"))
     await waitFor(() =>
       expect(createWorkItem).toHaveBeenCalledWith({ title: "Draft the launch note", department: "platform" }),

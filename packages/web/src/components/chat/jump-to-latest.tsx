@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown } from '@/components/ui/icon'
 
 const JUMP_EXIT_MS = 140
 
@@ -73,7 +73,7 @@ export function JumpToLatestButton({
       data-state={exiting ? 'exiting' : 'visible'}
       className={`glass-float absolute bottom-[calc(1rem_+_var(--composer-overlap,0px))] left-1/2 z-10 inline-flex h-10 w-10 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full px-0 text-[var(--text-secondary)] transition-[transform,opacity] duration-150 ease-[var(--ease-smooth)] active:scale-[0.96] data-[state=exiting]:pointer-events-none [@media(pointer:fine)]:h-9 [@media(pointer:fine)]:w-9 ${motionClass}`}
     >
-      <ChevronDown size={18} strokeWidth={2.25} aria-hidden="true" className="-mb-px shrink-0" />
+      <ChevronDown size={18} aria-hidden="true" className="-mb-px shrink-0" />
       {hasUnread && (
         <span
           aria-hidden="true"

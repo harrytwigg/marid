@@ -1,4 +1,5 @@
 import "@/test/preload-menus"
+import "@/test/preload-dialogs"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
@@ -35,15 +36,17 @@ async function openMenuInDialog() {
 }
 
 describe("a dropdown menu inside a dialog", () => {
-  it("opens inside the dialog's content, where its focus and pointer rules reach it", async () => {
+  it("opens above the dialog, in its own layer, where assistive technology and the pointer reach it", async () => {
     render(<Example onPick={vi.fn()} />)
 
     const menu = await openMenuInDialog()
 
-    expect(screen.getByRole("dialog").contains(menu)).toBe(true)
+    // The menu is a React Aria overlay of its own: it stacks over the modal rather than living inside it.
+    expect(screen.getByRole("dialog").contains(menu)).toBe(false)
+    expect(menu.closest("[aria-hidden='true'], [inert]")).toBeNull()
   })
 
-  it("can be pressed even though the dialog blocks the page behind it", async () => {
+  it("can be pressed while the dialog holds the page behind it", async () => {
     const onPick = vi.fn()
     render(<Example onPick={onPick} />)
     await openMenuInDialog()

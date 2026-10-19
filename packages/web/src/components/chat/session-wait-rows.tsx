@@ -137,17 +137,31 @@ export function SessionTree({ nodes, now, onOpen, depth = 0 }: {
   )
 }
 
-function Lines({ title, kind, children }: { title: string; kind: string; children: ReactNode }) {
-  return (
-    <div data-testid="background-wait-row" data-kind={kind} className={ROW}>
-      <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-baseline gap-1.5">
-          <span className="min-w-0 truncate font-[var(--weight-medium)]">{title}</span>
-          <span className={`shrink-0 ${QUIET}`}>{KIND_LABELS[kind] ?? kind}</span>
-        </span>
-        {children}
+function Lines({ title, kind, onOpen, children }: { title: string; kind: string; onOpen?: () => void; children: ReactNode }) {
+  const body = (
+    <span className="min-w-0 flex-1">
+      <span className="flex min-w-0 items-baseline gap-1.5">
+        <span className="min-w-0 truncate font-[var(--weight-medium)]">{title}</span>
+        <span className={`shrink-0 ${QUIET}`}>{KIND_LABELS[kind] ?? kind}</span>
       </span>
-    </div>
+      {children}
+    </span>
+  )
+  if (!onOpen) return <div data-testid="background-wait-row" data-kind={kind} className={ROW}>{body}</div>
+  return (
+    <button
+      type="button"
+      data-testid="background-wait-row"
+      data-kind={kind}
+      data-state="link"
+      onClick={(event) => {
+        event.stopPropagation()
+        onOpen()
+      }}
+      className={`${ROW} ${LINK_ROW}`}
+    >
+      {body}
+    </button>
   )
 }
 
@@ -181,10 +195,16 @@ function taskMeta(item: BackgroundTaskWait, now: number): string {
   ].filter(Boolean).join(' · ')
 }
 
-export function BackgroundTaskRow({ item, now }: { item: BackgroundTaskWait; now: number }) {
+/** A sub-agent row opens its conversation when the popup can show one. */
+export function BackgroundTaskRow({ item, now, onOpenSubagent }: {
+  item: BackgroundTaskWait
+  now: number
+  onOpenSubagent?: (item: BackgroundTaskWait) => void
+}) {
   const meta = taskMeta(item, now)
+  const open = item.kind === 'subagent' && onOpenSubagent ? () => onOpenSubagent(item) : undefined
   return (
-    <Lines title={item.description ?? TASK_TITLES[item.kind]} kind={item.kind}>
+    <Lines title={item.description ?? TASK_TITLES[item.kind]} kind={item.kind} onOpen={open}>
       {item.command ? <Command command={item.command} /> : null}
       {item.lastOutput ? (
         <span className={`block truncate ${MUTED}`} title={item.lastOutput.line}>

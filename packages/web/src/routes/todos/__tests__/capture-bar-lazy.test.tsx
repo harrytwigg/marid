@@ -36,9 +36,14 @@ describe("LazyQuickCaptureBar", () => {
     vi.spyOn(console, "error").mockImplementation(() => {})
     const { LazyQuickCaptureBar } = await import("../quick-add/capture-bar-lazy")
     const onFailed = vi.fn()
+    const notice = vi.fn()
+    // Each case has its own copy of the modules, so the surface is registered on the copy the dialog reads.
+    const { registerHostNotificationSink } = await import("@/plugins/sdk/host-bridge")
+    registerHostNotificationSink(notice)
     render(<LazyQuickCaptureBar onClose={vi.fn()} onFailed={onFailed} />)
 
     await waitFor(() => expect(onFailed).toHaveBeenCalledTimes(1))
+    expect(notice).toHaveBeenCalledWith({ title: "Quick capture couldn't load. Reload the page and try again.", level: "error" })
     expect(screen.queryByTestId("quick-capture-loading")).toBeNull()
     expect(screen.queryByTestId("quick-capture")).toBeNull()
   })

@@ -1,4 +1,4 @@
-import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "lucide-react"
+import { ChevronRight, CornerDownRight, Flag, Link2, Paperclip, Pencil, Plus, RotateCw, Tags } from "@/components/ui/icon"
 import type { Employee, WorkItemEventWire } from "@/lib/api"
 import { STATUS_LABEL } from "@/lib/todos"
 import { displayNameOf, formatRelativeTime, OPERATOR_ASSIGNEE } from "../util"
@@ -103,7 +103,7 @@ export function WhisperLine({ event, byName }: { event: WorkItemEventWire; byNam
   return (
     <div className="flex items-center gap-2 py-[7px] text-[12.5px] text-[var(--text-tertiary)]" data-testid={`whisper-${event.id}`}>
       <span className="mr-1.5 grid w-4 flex-none place-items-center text-[var(--text-quaternary)]">
-        <whisper.Icon size={12} strokeWidth={2} aria-hidden />
+        <whisper.Icon size={12} aria-hidden />
       </span>
       <span className="min-w-0 truncate">
         <span className={`font-semibold ${whisper.tinted ? "text-[var(--system-red)]" : "text-[var(--text-secondary)]"}`}>

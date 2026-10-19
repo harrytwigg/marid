@@ -5,9 +5,10 @@
  *
  *   z-index | what                                               | made by
  *   --------|----------------------------------------------------|----------------
- *   100000  | tooltip, popover, hover card, dropdown and context | React Aria, set
- *           | menus (and their submenus), and the dismiss        | inline, portalled
- *           | underlay of a modal popover                        | to the end of body
+ *   100000  | tooltip, popover, hover card, select lists,        | React Aria, set
+ *           | dropdown and context menus (and their submenus), | inline, portalled
+ *           | and the dismiss underlay of a modal popover or    | to the end of body
+ *           | select                                             |
  *   200     | the chat header's menu (inside the header's own    | route class
  *           | stacking context, so it only has to beat siblings) |
  *   130     | the Todo page's toast                              | route class
@@ -18,9 +19,9 @@
  *   80      | the talk undo strip                                | undo-strip.tsx
  *   70      | plugin notices                                     | plugin-notices.tsx
  *   60      | the Whisper download modal                         | whisper-download-modal.tsx
- *   50      | Radix overlays (the dialog and its scrim, which    | components/ui
- *           | the search overlay is, plus selects),              |
- *           | fixed widgets, the board's toasts                  |
+ *   50      | modal dialogs, sheets and the lightbox, with their | dialog-popup.tsx
+ *           | scrim (React Aria's modal: the search overlay is   |
+ *           | one), fixed widgets, the board's toasts            |
  *   10-40   | chrome: the nav rail (30), tab bar and fixed       | layout classes
  *           | save bars (40), sticky headers                     |
  *
@@ -32,10 +33,10 @@
  *   - Opening one while another is open is safe: a popover is modal and a press
  *     outside closes it first; a tooltip and a hover card are non-modal, short
  *     lived, and close on Escape and blur.
- *   - Radix overlays stay at 50 until their slices (dialog, select) move
- *     to React Aria, which then puts them in the 100000 layer too.
- *   - A menu opened inside a dialog is the exception to the portal: it goes into the dialog's content (see
- *     `overlay-container.ts`), so it is as high as the dialog, and above what is in it.
+ *   - A modal stays at 50, below the layers that must show over a dialog (a toast, the orb), and every
+ *     React Aria overlay opened inside it portals to the body at 100000 and so sits above it; a second modal
+ *     opened over a first (a picker sheet over the new-Todo dialog) sits above it by DOM order, or by its own
+ *     class where another sheet is in the way (120).
  *   - A fixed layer that must show above a dialog and below the orb sits
  *     between 51 and 109.
  */

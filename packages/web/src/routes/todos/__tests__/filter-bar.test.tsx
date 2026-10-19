@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, fireEvent, render as rtlRender, screen } from "@testing-library/react"
+import { act, fireEvent, render as rtlRender, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { FilterBar } from "../filter-bar"
 import "@/test/preload-menus"
@@ -197,22 +197,22 @@ describe("Todo progressive filters", () => {
     act(() => mobileListener?.({ matches: false } as MediaQueryListEvent))
     expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull()
     await act(async () => Promise.resolve())
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" }))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" })))
 
     act(() => mobileListener?.({ matches: true } as MediaQueryListEvent))
     expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull()
     await act(async () => Promise.resolve())
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" }))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" })))
 
     act(() => mobileListener?.({ matches: false } as MediaQueryListEvent))
     await act(async () => Promise.resolve())
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" }))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" })))
 
     act(() => mobileListener?.({ matches: true } as MediaQueryListEvent))
     await act(async () => Promise.resolve())
-    expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull()
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" }))
-    expect(document.activeElement).not.toBe(document.body)
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" })))
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body))
   })
 
   it.each([
@@ -231,20 +231,20 @@ describe("Todo progressive filters", () => {
 
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Filter todos" }), { key: "Escape" })
     await act(async () => Promise.resolve())
-    expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull()
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" }))
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" })))
 
     act(() => mobileListener?.({ matches: false } as MediaQueryListEvent))
     await act(async () => Promise.resolve())
-    expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull()
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" }))
-    expect(document.activeElement).not.toBe(document.body)
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" })))
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body))
 
     act(() => mobileListener?.({ matches: true } as MediaQueryListEvent))
     await act(async () => Promise.resolve())
-    expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull()
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" }))
-    expect(document.activeElement).not.toBe(document.body)
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Filter todos" })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Filter todos" })))
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body))
   })
 
   it.each([

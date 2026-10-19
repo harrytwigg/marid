@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
+import { Button } from "@/components/ui/button"
 import { OptionPills } from "@/components/ui/option-pills"
 import { departmentApi, DepartmentPatchError, type DepartmentDefinitionWire, type DepartmentHolderWire, type DepartmentScopeWire } from "@/lib/department-api"
 
@@ -16,7 +17,6 @@ export const SCOPE_TEXT: Record<DepartmentScopeWire, { name: string; body: strin
 
 const OPTIONS = (["open", "scoped", "dedicated"] as const).map((value) => ({ value, label: SCOPE_TEXT[value].name }))
 const MUTED = "m-0 text-[length:var(--text-caption1)] text-[var(--text-tertiary)]"
-const BUTTON = "focus-outline min-h-9 cursor-pointer rounded-full border-none px-4 py-1.5 text-[length:var(--text-footnote)] font-[var(--weight-medium)] outline-none disabled:cursor-default disabled:opacity-50"
 /** `system` and `org` hold the company's own employees and cannot be scoped. */
 const UNSCOPABLE = new Set(["system", "org"])
 
@@ -69,12 +69,12 @@ function readOnlyReason(department: DepartmentDefinitionWire): string | null {
 function StagedActions({ pending, onSave, onCancel }: { pending: boolean; onSave: () => void; onCancel: () => void }) {
   return (
     <div data-testid="department-scope-staged" className="mt-[var(--space-3)] flex flex-wrap items-center gap-2">
-      <button type="button" disabled={pending} onClick={onSave} className={`${BUTTON} bg-[var(--accent)] text-[var(--accent-contrast,#fff)]`}>
+      <Button type="button" disabled={pending} onClick={onSave}>
         {pending ? "Saving..." : "Save scope"}
-      </button>
-      <button type="button" disabled={pending} onClick={onCancel} className={`${BUTTON} bg-[var(--fill-tertiary)] text-[var(--text-secondary)]`}>
+      </Button>
+      <Button type="button" variant="secondary" disabled={pending} onClick={onCancel}>
         Cancel
-      </button>
+      </Button>
       <span className={MUTED}>Not saved yet.</span>
     </div>
   )

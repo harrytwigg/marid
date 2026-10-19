@@ -1,12 +1,11 @@
 import * as React from "react"
-import { ChevronRightIcon } from "lucide-react"
+import { ChevronRightIcon } from "@/components/ui/icon"
 import { Header } from "react-aria-components/Header"
 import { Menu, MenuItem, MenuSection, RootMenuTriggerStateContext, SubmenuTrigger } from "react-aria-components/Menu"
 import { Popover as AriaPopover, PopoverContext } from "react-aria-components/Popover"
 import { Separator } from "react-aria-components/Separator"
 
 import { cn } from "@/lib/utils"
-import { OverlayContainerContext } from "./overlay-container"
 import { placementOf, type Align, type OverlayDomProps, type Side } from "./overlay-placement"
 import { useMenuRoot } from "./menu-root"
 import { useClosesOnOutsidePress } from "./use-closes-on-outside-press"
@@ -52,7 +51,6 @@ export function MenuSurface({
 }: SurfaceProps) {
   const popover = React.useContext(PopoverContext) as { trigger?: string } | null
   const isSubmenu = popover?.trigger === "SubmenuTrigger"
-  const container = React.useContext(OverlayContainerContext)
   const anchor = useTriggerRef()
   useClosesWithMenu(isSubmenu, anchor)
   // A submenu is placed by its trigger item, and closes with its parent.
@@ -72,7 +70,6 @@ export function MenuSurface({
       {...{ [MENU_SURFACE_ATTR]: "" }}
       isNonModal
       {...placed}
-      UNSTABLE_portalContainer={container ?? undefined}
       className={cn("popover glass-overlay min-w-[8rem] overflow-y-auto overscroll-contain p-1 text-sm", className)}
       {...props}
     >
