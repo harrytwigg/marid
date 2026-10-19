@@ -143,7 +143,8 @@ console.log(`phone board checks (${isChromium ? 'Chromium' : 'Firefox'}, ${VIEWP
     await settled(page)
     const id = await cardId(page, 'executing')
     await moveCard(page, id, 'In review')
-    // The shared status lane lets a card out of every column for a frame as the gateway's answer lands (Firefox), so let it settle.
+    // Held briefly: a build before this one still let the card sit in no column for a frame as the
+    // status lane settled, and this tool runs against the base build too.
     const inReview = page.getByTestId('board-column-in_review').locator(`[data-board-card="${id}"]`)
     await page.waitForTimeout(800)
     assert((await inReview.count()) === 1, 'the card is not in In review')

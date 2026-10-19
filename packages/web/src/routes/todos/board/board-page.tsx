@@ -109,7 +109,9 @@ export default function TodoBoardPage() {
   const needsYou = useMemo(() => deriveNeedsYou(needs.data ?? []), [needs.data])
 
   // ── Optimistic overlays ───────────────────────────────────────────────────
-  const [moves, setMoves] = useState<Map<string, { status: WorkItemStatusWire; index: number }>>(new Map())
+  /** An optimistic status move: the card itself, and the board it was made on —
+   *  the board that made it is the only one that may draw it. */
+  const [moves, setMoves] = useState<Map<string, { status: WorkItemStatusWire; index: number; item: WorkItemCompactWire; board: string }>>(new Map())
   const [rankOverrides, setRankOverrides] = useState<Map<string, number>>(new Map())
   const [callout, setCallout] = useState<string | null>(null)
   const calloutTimer = useRef<number | null>(null)
@@ -152,14 +154,16 @@ export default function TodoBoardPage() {
       base.sort(compareRank)
       out[status] = base
     }
-    // Insert moved cards into their optimistic column at the drop index.
+    // Insert moved cards into their optimistic column at the drop index. The card
+    // comes from the move, not from the column it is leaving: that column's refetch
+    // can land first, and reading the card back out of the caches left it in no
+    // column until the destination's own refetch landed.
     for (const [id, move] of moves) {
-      const source = allStatuses.flatMap((s) => data.columns[s]?.items ?? []).find((item) => item.id === id)
-      if (!source || source.status === move.status) continue
+      if (move.board !== key) continue
       const list = out[move.status] ?? []
       if (list.some((item) => item.id === id)) continue
       const index = Math.min(Math.max(move.index, 0), list.length)
-      list.splice(index, 0, { ...withRank(source), status: move.status })
+      list.splice(index, 0, { ...withRank(move.item), status: move.status })
       out[move.status] = list
     }
     for (const status of allStatuses) {
@@ -167,7 +171,7 @@ export default function TodoBoardPage() {
       counts[status] = Math.max(0, (column?.total ?? 0) + (out[status]?.length ?? 0) - (column?.items.length ?? 0))
     }
     return { itemsByStatus: out, countByStatus: counts }
-  }, [data.columns, moves, rankOverrides, filters.due, now])
+  }, [data.columns, moves, rankOverrides, filters.due, now, key])
 
   // Drop an optimistic move once the server agrees (poll/refetch landed).
   useEffect(() => {
@@ -257,7 +261,7 @@ export default function TodoBoardPage() {
       const before = index > 0 ? siblings[Math.min(index, siblings.length) - 1] : null
       const after = index < siblings.length ? siblings[index] : null
       const rank = rankBetween(before?.rank ?? null, after?.rank ?? null)
-      setMoves((prev) => new Map(prev).set(item.id, { status: to, index }))
+      setMoves((prev) => new Map(prev).set(item.id, { status: to, index, item, board: key }))
       setRankOverrides((prev) => new Map(prev).set(item.id, rank))
       const clearRankOverride = () =>
         setRankOverrides((prev) => {
