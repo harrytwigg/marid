@@ -29,6 +29,14 @@ export const queryKeys = {
     jobs: ['cron-jobs'] as const,
     runs: (id: string) => ['cron', id, 'runs'] as const,
   },
+  hooks: {
+    all: ['hooks'] as const,
+    hooks: ['hooks', 'list'] as const,
+    /** The run log for one filter set; the filters are part of the identity,
+     *  so switching one reads that slice rather than showing the last one. */
+    runs: (filters: Readonly<Record<string, string>>) => ['hooks', 'runs', filters] as const,
+    run: (id: string) => ['hooks', 'run', id] as const,
+  },
   skills: {
     all: ['skills'] as const,
     detail: (name: string) => ['skills', name] as const,

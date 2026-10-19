@@ -134,6 +134,32 @@ jinnMcp: "yes"
   });
 });
 
+describe("scanOrg — closeTodos field", () => {
+  beforeEach(() => {
+    makeTmpOrg("org-test-close-todos-");
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  it("reads closeTodos: true as the grant, and nothing else as one", () => {
+    writeYaml("ops", "closer.yaml", "name: closer\npersona: closes\ncloseTodos: true\n");
+    writeYaml("ops", "absent.yaml", "name: absent\npersona: no field\n");
+    writeYaml("ops", "off.yaml", "name: off\npersona: explicitly off\ncloseTodos: false\n");
+    for (const [name, value] of [["quoted", '"true"'], ["number", "1"], ["word", "yes"]]) {
+      writeYaml("ops", `${name}.yaml`, `name: ${name}\npersona: ${name} value\ncloseTodos: ${value}\n`);
+    }
+
+    const registry = scanOrg();
+
+    expect(registry.get("closer")!.closeTodos).toBe(true);
+    for (const name of ["absent", "off", "quoted", "number", "word"]) {
+      expect(registry.get(name)!.closeTodos, name).toBeUndefined();
+    }
+  });
+});
+
 describe("scanOrg — reserved author identities", () => {
   beforeEach(() => {
     makeTmpOrg("org-test-reserved-");

@@ -17,6 +17,7 @@ import { ChatSidebar, type SidebarOrder } from '@/components/chat/chat-sidebar'
 import { NavRibbon } from '@/components/pill-nav'
 import { MobileTabBar } from '@/components/chat/mobile-tab-bar'
 import type { FreshChatSourceSession } from '@/components/chat/chat-pane'
+import { viewSwitchLockedEngine, viewSwitchLockedTitle } from '@/components/chat/chat-pane-title-bar'
 import { ThreadPeek, type CommsPeekData } from '@/components/chat/thread-peek'
 import { ChatErrorBoundary } from './chat-error-boundary'
 import { ChatHeaderMenu } from './chat-header-menu'
@@ -825,9 +826,9 @@ function ChatPage() {
 
   const cliModeAvailable = !sessionMeta?.engine || engineRegistry?.engines?.[sessionMeta.engine]?.supportsPty === true
   const activeSessionTab = chatTabs.activeTab?.kind === 'session' ? chatTabs.activeTab : null
-  const viewSwitchLocked = sessionMeta?.engine === 'codex' && activeSessionTab?.sessionId === focusedSessionId && activeSessionTab.status === 'running'
+  const viewSwitchLocked = viewSwitchLockedEngine(sessionMeta?.engine, engineRegistry) && activeSessionTab?.sessionId === focusedSessionId && activeSessionTab.status === 'running'
   const cliTitle = viewSwitchLocked
-    ? 'Codex view switching is locked while a turn is running'
+    ? viewSwitchLockedTitle(sessionMeta?.engine)
     : cliModeAvailable ? undefined : 'CLI view is not available for this engine'
   const effectiveViewMode: ViewMode = cliModeAvailable ? viewMode : 'chat'
 

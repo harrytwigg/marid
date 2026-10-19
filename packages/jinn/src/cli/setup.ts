@@ -24,6 +24,7 @@ import {
 } from "../shared/paths.js";
 import { initDb } from "../shared/db.js";
 import { getPackageVersion } from "../shared/version.js";
+import { MUSE_LOGIN_NUDGE, checkMuse, reportMuseVersion } from "./setup-musecode.js";
 import { deriveTodoIdPrefix } from "../work-items/id.js";
 import {
   deriveTemplateMaterializationInputs,
@@ -405,11 +406,13 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
     info("Install the Hermes CLI: curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash");
   }
 
+  // 4c. Check for Muse Code (`muse`)
+  const musePath = checkMuse(whichBin, { ok, fail, info });
   // 5. Loudly warn if NO engine is installed — the gateway will start, but it
   //     cannot run any session until at least one engine CLI is on PATH.
-  if (!claudePath && !codexPath && !grokPath && !hermesPath) {
+  if (!claudePath && !codexPath && !grokPath && !hermesPath && !musePath) {
     console.log("");
-    warn("No AI engine CLI found (claude, codex, grok, or hermes).");
+    warn("No AI engine CLI found (claude, codex, grok, hermes, or muse).");
     warn("The gateway will start, but sessions will fail until you install one above.");
   }
 
@@ -435,14 +438,16 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
     if (ver) ok(`hermes --version: ${ver}`);
     else warn("hermes --version failed");
   }
+  if (musePath) reportMuseVersion(runVersion("muse"), { ok, warn });
   // A successful --version does NOT mean the engine is authenticated — the #1
   // silent fresh-install failure. Nudge the login step explicitly.
-  if (claudePath || codexPath || grokPath || hermesPath) {
+  if (claudePath || codexPath || grokPath || hermesPath || musePath) {
     warn("A successful --version does NOT mean the engine is logged in.");
     if (claudePath) info("First run? Launch `claude` once and use /login to authenticate.");
     if (codexPath) info("First run? Launch `codex` once and sign in to authenticate.");
     if (grokPath) info("First run? Launch `grok` once to authenticate, or configure XAI_API_KEY.");
     if (hermesPath) info("First run? Launch `hermes` once to authenticate, or configure your API key.");
+    if (musePath) info(MUSE_LOGIN_NUDGE);
     info("Do this before `jinn start`, or sessions will fail silently.");
   }
 
@@ -477,7 +482,7 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
 
   let chosenName = defaultName;
   let chosenCompanyName = defaultName;
-  type SetupEngine = "claude" | "codex" | "grok" | "hermes";
+  type SetupEngine = "claude" | "codex" | "grok" | "hermes" | "musecode";
   let chosenEngine: SetupEngine = "claude";
 
   if (isInteractive) {
@@ -500,6 +505,7 @@ export async function runSetup(opts?: { force?: boolean; port?: number }): Promi
     if (codexPath) engines.push("codex");
     if (grokPath) engines.push("grok");
     if (hermesPath) engines.push("hermes");
+    if (musePath) engines.push("musecode");
 
     if (engines.length > 1) {
       const defaultEngine = engines.includes("claude") ? "claude" : engines[0];

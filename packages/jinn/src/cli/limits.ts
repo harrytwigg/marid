@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { loadConfig } from "../shared/config.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { collectEngineLimits } from "../shared/engine-limits.js";
-import { refreshGrokModels, refreshPiModels, refreshHermesModels, refreshOpencodeModels } from "../shared/models.js";
+import { refreshGrokModels, refreshPiModels, refreshHermesModels, refreshOpencodeModels, refreshMusecodeModels } from "../shared/models.js";
 import type { EngineLimitEngineSnapshot, EngineLimitWindow } from "../shared/types.js";
 import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
 
@@ -87,6 +87,7 @@ export async function runLimits(opts: LimitsOptions = {}): Promise<void> {
   await refreshPiModels(config);
   await refreshOpencodeModels(config, { env: opencodeDiscoveryEnv(config) });
   await refreshGrokModels(config);
+  await refreshMusecodeModels(config);
   await refreshHermesModels(config);
   const snapshot = await collectEngineLimits(config, { engine: opts.engine });
 

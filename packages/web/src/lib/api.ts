@@ -79,6 +79,7 @@ export interface Employee {
   effortLevel?: string;
   cliFlags?: string[];
   alwaysNotify?: boolean;
+  closeTodos?: boolean; // may close a Todo as done (YAML only, so not in EmployeeUpdate)
   reportsTo?: string | string[];
   parentName?: string | null;
   directReports?: string[];

@@ -18,6 +18,7 @@ import { toWorkItemLinkRole, type WorkItemLinkRole } from './link-role.js';
 import { searchWorkItemIds, workItemMatchReasons, type WorkItemMatch } from './search.js';
 import type { WorkItemEventKind } from './event-log.js';
 import { OPERATOR_ASSIGNEE, UNASSIGNED_FILTER } from './operator-assignee.js';
+import { tapBoardEvent } from './board-event-tap.js';
 
 /**
  * Work-item store — the substrate of the Todos ledger (GRS-002, elevated by
@@ -281,7 +282,9 @@ export function appendWorkItemEvent(input: AppendWorkItemEventInput): WorkItemEv
     );
     return event;
   });
-  return txn();
+  const written = txn();
+  tapBoardEvent(written);
+  return written;
 }
 
 /** Reading the trail back lives in event-log.ts, along with the actors whose
@@ -882,6 +885,8 @@ export function getWorkItemSpend(id: string): number {
  * redundant re-link (e.g. a cron re-fire re-linking the same item to the same session)
  * does not churn `work_items.updated_at` or the event log.
  *
+ * `via` (`delegation` | `dispatch`) is recorded on the event: board hooks key on it.
+ *
  * `selfStarted` marks the link as one a session made by starting its own Todo
  * with no dispatch (`gateway/todo-self-start.ts`); any other link clears the
  * mark. A marked link holds only while the Todo is being worked: the move that
@@ -892,15 +897,15 @@ export function linkSession(
   sessionId: string,
   actor?: string | null,
   role: WorkItemLinkRole = 'execute',
-  opts: { selfStarted?: boolean } = {},
+  opts: { selfStarted?: boolean; via?: 'delegation' | 'dispatch' } = {},
 ): void {
   const db = initDb();
   const todoId = parseTodoId(workItemId);
   const now = new Date().toISOString();
   const txn = db.transaction(() => {
     const session = db
-      .prepare('SELECT work_item_id, work_item_role FROM sessions WHERE id = ?')
-      .get(sessionId) as { work_item_id: string | null; work_item_role: string | null } | undefined;
+      .prepare('SELECT work_item_id, work_item_role, employee FROM sessions WHERE id = ?')
+      .get(sessionId) as { work_item_id: string | null; work_item_role: string | null; employee: string | null } | undefined;
     if (!session) throw new Error(`linkSession: session ${sessionId} not found`);
     const workItemExists = db.prepare('SELECT 1 FROM work_items WHERE id = ?').get(todoId);
     if (!workItemExists) throw new Error(`linkSession: work item ${todoId} not found`);
@@ -915,11 +920,13 @@ export function linkSession(
     db.prepare(`UPDATE sessions SET work_item_id = ?, work_item_role = ?, transport_meta = ${meta} WHERE id = ?`)
       .run(todoId, role, ...(opts.selfStarted ? [todoId] : []), sessionId);
     db.prepare('UPDATE work_items SET updated_at = ?, version = version + 1 WHERE id = ?').run(now, todoId);
+    // The employee is stamped at link time: the self-review ban reads who
+    // worked a Todo from this event, and a session row can be deleted later.
     appendWorkItemEvent({
       workItemId: todoId,
       kind: 'session_linked',
       actor,
-      detail: { sessionId, role, ...(opts.selfStarted ? { selfStarted: true } : {}) },
+      detail: { sessionId, role, ...(session.employee ? { employee: session.employee } : {}), ...(opts.selfStarted ? { selfStarted: true } : {}), ...(opts.via ? { via: opts.via } : {}) },
     });
   });
   txn();

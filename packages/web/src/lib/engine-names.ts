@@ -5,10 +5,8 @@
  * `packages/jinn/src/shared/rateLimit.ts` (`RATE_LIMIT_ENGINE_LABELS`), and that
  * is where "opencode" is lowercase on purpose — it is how the project spells its
  * own name. It is not literally the same map: the gateway's also carries pi and
- * hermes, and "Muse Code" is for the musecode engine from PR #161, which is not
- * on main yet, so the gateway's map will gain it when that lands. Anything
- * unmapped falls back to a title-cased key, so a new engine reads sanely before
- * it is added here.
+ * hermes. Anything unmapped falls back to a title-cased key, so a new engine
+ * reads sanely before it is added here.
  */
 const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   claude: "Claude",

@@ -53,6 +53,7 @@ const PROTECTED_HOME_ENTRIES: ReadonlyArray<ReadonlyArray<string | RegExp>> = [
   ["tmp", "opencode"],
   ["tmp", "opencode.json"],
   ["tmp", "pi-mcp"],
+  ["tmp", /^musecode-usage\.json(\..+)?$/],
   ["tmp", CONFIG_YAML],
 ];
 

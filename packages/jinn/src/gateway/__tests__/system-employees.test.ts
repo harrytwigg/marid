@@ -117,6 +117,15 @@ system: true
     expect(scanOrg(config).get("ordinary")?.system).toBeUndefined();
   });
 
+  it("never takes closeTodos from a system employee's YAML override", () => {
+    writeYaml("todo-dispatcher.yaml", `
+name: todo-dispatcher
+closeTodos: true
+`);
+
+    expect(scanOrg(config).get("todo-dispatcher")!.closeTodos).toBeUndefined();
+  });
+
   it("lets a same-name YAML override runtime knobs but not built-in identity fields", () => {
     const builtIn = scanOrg(config).get("todo-dispatcher")!;
     writeYaml("todo-dispatcher.yaml", `

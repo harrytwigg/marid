@@ -3,6 +3,7 @@ import {
   addModelOverride,
   hideModelOverride,
   type ModelsConfigShape,
+  removeModelOverride,
   resetEngineModelOverrides,
   showModelOverride,
 } from '../model-config'
@@ -28,6 +29,23 @@ describe('model config helpers', () => {
     })
 
     expect(next.models?.claude?.models[0]?.effortLevels).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+  })
+
+  it('removes a model from a block that has no models list without throwing', () => {
+    const hiddenOnly = { models: { musecode: { hidden: ['some-id'] } } } as unknown as ModelsConfigShape
+    const next = removeModelOverride(hiddenOnly, 'musecode', 'some-id')
+    expect(next.models?.musecode?.models).toEqual([])
+    expect(next.models?.musecode?.hidden).toEqual(['some-id'])
+
+    const defaultOnly = { models: { musecode: { default: 'x' } } } as unknown as ModelsConfigShape
+    expect(() => removeModelOverride(defaultOnly, 'musecode', 'x')).not.toThrow()
+  })
+
+  it('removes only the matching custom model and leaves other blocks alone', () => {
+    const config = addModelOverride(addModelOverride({} as ModelsConfigShape, 'claude', { id: 'a' }), 'claude', { id: 'b' })
+    const next = removeModelOverride(config, 'claude', 'a')
+    expect(next.models?.claude?.models.map((m) => m.id)).toEqual(['b'])
+    expect(removeModelOverride({} as ModelsConfigShape, 'claude', 'a')).toEqual({})
   })
 
   it('hides, restores, and resets model overrides without duplicating ids', () => {

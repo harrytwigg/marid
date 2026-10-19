@@ -171,6 +171,7 @@ const ROUTE_READERS: Readonly<Record<string, RouteReader>> = {
   logs: (rest) => staticView("logs", rest),
   limits: (rest) => staticView("limits", rest),
   "auto-dispatch": (rest) => staticView("auto-dispatch", rest),
+  hooks: (rest) => staticView("hooks", rest),
   settings: (rest) => settingsView(rest),
   skills: (rest) => skillView(rest),
   file: (rest, params) => fileView(rest, params),

@@ -15,6 +15,7 @@ import { resolveTodoIdPrefix } from "@/lib/todo-id"
 import {
   addModelOverride,
   hideModelOverride,
+  removeModelOverride,
   resetEngineModelOverrides,
   showModelOverride,
 } from "@/lib/model-config"
@@ -670,14 +671,7 @@ export default function SettingsPage() {
                           key={m.id}
                           variant="secondary"
                           size="xs"
-                          onClick={() => {
-                            applyModelConfig((prev) => {
-                              const next = structuredClone(prev)
-                              const block = next.models?.claude
-                              if (block) block.models = block.models.filter((entry) => entry.id !== m.id)
-                              return next
-                            })
-                          }}
+                          onClick={() => applyModelConfig((prev) => removeModelOverride(prev, "claude", m.id))}
                         >
                           <Trash2 size={13} />
                           {m.label || m.id}

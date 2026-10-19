@@ -8,7 +8,7 @@ import { EXPECTED_ENUMS, EXPECTED_REQUIRED, EXPECTED_TOOL_NAMES } from "./tool-m
 // concise rather than growing into this ceiling. Rebased down when the
 // Experiments and Workflow tools were removed, so the ceiling again sits ON
 // the largest wrapper (Pi).
-const MAX_MANIFEST_TOKENS = 4313;
+const MAX_MANIFEST_TOKENS = 4325;
 // Exact gate: js-tiktoken 1.0.21 with its local o200k_base ranks. The provider
 // projection is the OpenAI Responses API function-tool request shape pinned on 2026-07-12.
 const ATTESTED = {
@@ -258,9 +258,15 @@ const ATTESTED = {
   // wrapper, two properties of about 66 each; the description is the same text
   // on both tools because a model reads one and expects the other to match. The
   // ceiling moves by exactly the 133 and Pi stays one under it.
-  rpc: { tokens: 3977, sha256: "b503214626e25f935ffcc5ebb9f1a993ffb8fa510fb8d71cd26bc0d98a7f0b3e" },
-  pi: { tokens: 4312, sha256: "0b37f9c77dedca7c53d87909e59c25aaf315486515dbd0229b6bb963a523c25f" },
-  openai: { tokens: 4116, sha256: "1388408de5f967eda66e4939fd9e6d979ddb448fff88d56c44d276605f851047" },
+  // Rebased for who may close on update_work_item: `done` is no longer the
+  // operator's and the coordinator's alone, a `closeTodos` employee reaches it
+  // too, and a caller that is not told cannot know to ask. One clause on the
+  // tool ("done: operator or closeTodos employee, reason in note"); the gateway's
+  // refusal stays the only check. The ceiling moves by exactly the 12 and Pi
+  // stays one under it.
+  rpc: { tokens: 3989, sha256: "cdee20b0cc3ba4eb24c8a56c9327aa7fb32f8e712cd3ada991d1828340e94a37" },
+  pi: { tokens: 4324, sha256: "708f50a5974e93822cf61d99a60ff2bdfebb87ef7f975206dc11bc691def632c" },
+  openai: { tokens: 4128, sha256: "b8e0581d69bb8358bdd90e04e8e715fd52e8ead20a1a6473beb53fa4ecd31e9e" },
 } as const;
 
 type TokenizerLoader = () => Promise<[{ Tiktoken: typeof import("js-tiktoken/lite").Tiktoken }, { default: typeof import("js-tiktoken/ranks/o200k_base").default }]>;

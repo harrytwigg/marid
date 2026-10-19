@@ -77,6 +77,8 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
           cliFlags: Array.isArray(data.cliFlags) ? data.cliFlags : undefined,
           effortLevel: typeof data.effortLevel === "string" ? data.effortLevel : undefined,
           alwaysNotify: typeof data.alwaysNotify === "boolean" ? data.alwaysNotify : true,
+          // The close grant is read from the YAML alone (see WRITABLE_FIELDS): only `true` grants it.
+          closeTodos: data.closeTodos === true ? true : undefined,
           reportsTo: data.reportsTo ?? undefined,
           mcp: data.mcp ?? undefined,
           // GRS-017e: per-employee jinn-toolset override (force-on pilot /

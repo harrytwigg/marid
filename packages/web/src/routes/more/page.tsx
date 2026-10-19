@@ -27,6 +27,7 @@ const TINT: Record<string, { bg: string; fg: string }> = {
   "/logs": { bg: "var(--system-green)", fg: "#fff" },
   "/limits": { bg: "var(--system-blue)", fg: "#fff" },
   "/auto-dispatch": { bg: "var(--system-orange)", fg: "#fff" },
+  "/hooks": { bg: "var(--system-purple)", fg: "#fff" },
   "/settings": { bg: "var(--text-tertiary)", fg: "var(--bg-secondary)" },
 }
 

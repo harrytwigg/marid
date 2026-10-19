@@ -233,6 +233,8 @@ export interface EngineResult {
   cost?: number;
   durationMs?: number;
   numTurns?: number;
+  /** The engine states the conversation is intact whatever `error` says, so a failure is never read as a stale resume id (`isDeadSessionError`). */
+  conversationIntact?: boolean;
   /** Most recent turn's INPUT context size (input + cache-read + cache-creation
    *  tokens) — i.e. how full the context window currently is. Undefined when the
    *  engine doesn't surface usage. */
@@ -556,6 +558,8 @@ export interface Employee extends RemoteTarget {
   effortLevel?: string;
   /** Whether to notify the parent session when this employee's child session completes. Default: true */
   alwaysNotify?: boolean;
+  /** May move a Todo to `done` with a reason (gateway/work-item-status-lane.ts); YAML-only, never in WRITABLE_FIELDS. Default: false */
+  closeTodos?: boolean;
   /** Who this employee reports to. String = single parent. Array = primary + dotted-line (future). */
   reportsTo?: string | string[];
   /** Services this employee provides to the org */
@@ -755,8 +759,8 @@ export interface ConnectorInstance {
  * configs keep working.
  */
 
-/** How an engine conveys reasoning-effort to its CLI. */
-export type EffortMechanism = "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "opencode-variant" | "none";
+import type { EffortMechanism } from "./effort-mechanism.js";
+export type { EffortMechanism } from "./effort-mechanism.js";
 
 /** A single model and its capabilities, as exposed to the UI / validation. */
 export interface ModelInfo {
@@ -782,6 +786,8 @@ export interface EngineRegistryEntry {
   effortMechanism: EffortMechanism;
   models: ModelInfo[];
   supportsPty?: boolean; // interactive PTY/CLI view (`/ws/pty`) — stamped by buildRegistry
+  /** The view switch stays put while a turn runs: the terminal and chat turns cannot share a session. Stamped by buildRegistry. */
+  ptyLockedDuringTurn?: boolean;
 }
 
 /** Resolved registry, keyed by engine name. */

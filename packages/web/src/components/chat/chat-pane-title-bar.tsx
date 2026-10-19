@@ -7,6 +7,7 @@ import { splitTitleId } from '@/components/chat/chat-tabs'
 import { getStatusDot, StatusDot, type Session, useStallClock } from '@/components/chat/session-signals'
 import type { BackgroundActivity, DelegatedActivity, EnginesResponse } from '@/lib/api'
 import { emojiForName } from '@/lib/emoji-pool'
+import { engineDisplayName } from '@/lib/engine-names'
 import { isTerminalSession } from '@/lib/terminal-session'
 import { TERMINAL_AVATAR } from '@/components/ui/employee-avatar'
 import type { ViewMode } from '@/lib/view-mode'
@@ -63,16 +64,25 @@ export function paneTitleBarState(input: {
   }
 }
 
+/** Engines whose terminal and chat turns cannot share a session, so the view stays put while a turn runs. */
+export function viewSwitchLockedEngine(engine: string | undefined, engineRegistry?: EnginesResponse): boolean {
+  return engine !== undefined && engineRegistry?.engines?.[engine]?.ptyLockedDuringTurn === true
+}
+
+export function viewSwitchLockedTitle(engine: string | undefined): string {
+  return `${engineDisplayName(engine ?? '')} view switching is locked while a turn is running`
+}
+
 export function paneViewControls(session: Session, engineRegistry?: EnginesResponse) {
   const engine = typeof session.engine === 'string' ? session.engine : undefined
   if (isTerminalSession(session)) return { cliModeAvailable: false, viewSwitchLocked: false, cliTitle: 'A terminal has no chat view' }
   const cliModeAvailable = !engine || engineRegistry?.engines?.[engine]?.supportsPty === true
-  const viewSwitchLocked = engine === 'codex' && session.status === 'running'
+  const viewSwitchLocked = viewSwitchLockedEngine(engine, engineRegistry) && session.status === 'running'
   return {
     cliModeAvailable,
     viewSwitchLocked,
     cliTitle: viewSwitchLocked
-      ? 'Codex view switching is locked while a turn is running'
+      ? viewSwitchLockedTitle(engine)
       : cliModeAvailable ? undefined : 'CLI view is not available for this engine',
   }
 }

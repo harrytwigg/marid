@@ -53,6 +53,13 @@ export function addModelOverride<T extends ModelsConfigShape>(
   return next
 }
 
+export function removeModelOverride<T extends ModelsConfigShape>(config: T, engine: string, id: string): T {
+  const next = cloneConfig(config)
+  const block = next.models?.[engine]
+  if (block) block.models = (block.models ?? []).filter((entry) => entry.id !== id)
+  return next
+}
+
 export function hideModelOverride<T extends ModelsConfigShape>(config: T, engine: string, id: string): T {
   const modelId = id.trim()
   if (!modelId) return config

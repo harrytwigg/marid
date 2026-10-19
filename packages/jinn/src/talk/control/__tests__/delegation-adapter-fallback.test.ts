@@ -71,3 +71,12 @@ describe("Talk delegation fallback inheritance", () => {
     expect(delegate("fallback-children", "scoped-worker", "ops")).toMatchObject({ fallbackMode: "fallback-children", fallbackTarget: null });
   });
 });
+
+describe("Talk delegation board event", () => {
+  it("records the link as a delegation, which is what todo.delegated hooks fire on", () => {
+    const session = delegate("fallback-children");
+    const linked = workItems.listWorkItemEvents(session.workItemId!).filter((event) => event.kind === "session_linked");
+    expect(linked).toHaveLength(1);
+    expect(linked[0].detail).toMatchObject({ sessionId: session.id, via: "delegation" });
+  });
+});

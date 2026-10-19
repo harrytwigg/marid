@@ -5,6 +5,7 @@
  * unaffected.
  */
 import type { TerminalConfig } from "./terminal-config.js";
+import type { BoardHookConfig } from "./board-hooks-config.js";
 import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { AutoCompactConfig } from "./auto-compact-config.js";
@@ -13,6 +14,7 @@ import type { SessionFallbackMode } from "./session-fallback-config.js";
 import type { ClaudeAccountConfig } from "./claude-accounts-config.js";
 import type { FallbackChainEntry } from "./fallback-chain-wire.js";
 import type { EngineName } from "./models.js";
+import type { MusecodeEngineConfig } from "./musecode-config.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
 import type {
   ConnectorInstance,
@@ -167,6 +169,7 @@ export interface JinnConfig {
       usageLimits?: OpencodeUsageLimitsConfig;
       autoCompact?: AutoCompactConfig; // server mode only
     };
+    musecode?: MusecodeEngineConfig;
   };
   /** Optional model + capability registry. When absent, synthesized from engines.<name>.model. */
   models?: ModelsConfig;
@@ -255,6 +258,8 @@ export interface JinnConfig {
   remote?: RemoteExecutionConfig;
   /** Operator terminals on the gateway and other machines. */
   terminal?: TerminalConfig;
+  /** Reactions to Todo board events (docs/board-hooks.md). */
+  hooks?: BoardHookConfig[];
 }
 
 export type OpencodeMode = "run" | "server";
