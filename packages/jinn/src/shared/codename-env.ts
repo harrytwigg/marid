@@ -69,7 +69,7 @@ const warnedInProcess = new Set<string>();
  * Variables the gateway sets on a session's own processes, under the old name only until the writers move
  * to {@link setEnv}. They are adopted like any other, but they are never an operator's to fix, so they do not warn.
  */
-const GATEWAY_OWNED_SUFFIXES = new Set(["SESSION_ID", "SESSION_CAPABILITY", "EMPLOYEE", "DEPARTMENT", "DEPARTMENT_FILE_ROOTS"]);
+const GATEWAY_OWNED_SUFFIXES = new Set(["SESSION_ID", "SESSION_CAPABILITY", "EMPLOYEE", "DEPARTMENT", "DEPARTMENT_FILE_ROOTS", "OPENCODE_COMMAND_TIMEOUT_MS"]);
 
 /**
  * Give every legacy-named variable in `env` that has no current-named twin one, in place, and warn once per
