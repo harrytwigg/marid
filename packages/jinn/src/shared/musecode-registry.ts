@@ -1,8 +1,8 @@
-import type { EngineModelsConfig, EngineRegistryEntry, JinnConfig } from "./types.js";
+import type { EngineModelsConfig, EngineRegistryEntry, JinnConfig, ModelInfo } from "./types.js";
 import type { MuseModelCost } from "../engines/musecode-turn-text.js";
 import { logger } from "./logger.js";
 import { resolveBin } from "./resolve-bin.js";
-import { engineAvailable, invalidateModelRegistry } from "./models.js";
+import { engineAvailable, invalidateModelRegistry, mergeDiscoveredModels } from "./models.js";
 import { discoverMusecodeModels, resolveMusecodeCatalog, type MusecodeModelDiscovery } from "./musecode-models.js";
 import { writeMusecodeUsage } from "./musecode-usage.js";
 
@@ -33,7 +33,10 @@ export function musecodeModelCost(modelId: string | undefined): MuseModelCost | 
   return discovered?.costs[modelId ?? discovered.defaultModel ?? ""];
 }
 
-/** Registry entry: discovered catalog > config `models.musecode` block (`fromBlock`) > the documented models. */
+/**
+ * Registry entry: the discovered catalog with the config `models.musecode` block
+ * merged over it (as codex does) > the block alone (`fromBlock`) > the documented models.
+ */
 export function buildMusecodeEntry(
   config: JinnConfig,
   block: EngineModelsConfig | undefined,
@@ -43,8 +46,20 @@ export function buildMusecodeEntry(
 ): EngineRegistryEntry {
   const pinned = config.engines.musecode?.model;
   if (!discovered && block) return fromBlock(block, pinned);
-  const { defaultModel, models } = resolveMusecodeCatalog(discovered, pinned);
-  return { ...synthEntry, name: "musecode", available, defaultModel, effortMechanism: "musecode-turn", models };
+  const catalog = resolveMusecodeCatalog(discovered, pinned);
+  const entry = { ...synthEntry, name: "musecode" as const, available, effortMechanism: "musecode-turn" as const };
+  return discovered ? { ...entry, ...withConfiguredModels(catalog, block, pinned) } : { ...entry, ...catalog };
+}
+
+/** A discovered catalog with the config block merged over it; the default is the pin, the block's, the catalog's, else the first. */
+function withConfiguredModels(
+  catalog: { defaultModel: string; models: ModelInfo[] },
+  block: EngineModelsConfig | undefined,
+  pinned: string | undefined,
+): { defaultModel: string; models: ModelInfo[] } {
+  const models = mergeDiscoveredModels(catalog.models, block, { configuredOverridesDiscovered: true });
+  const valid = (id?: string) => (id && models.some((m) => m.id === id) ? id : undefined);
+  return { models, defaultModel: valid(pinned) ?? valid(block?.default) ?? valid(catalog.defaultModel) ?? models[0]?.id ?? catalog.defaultModel };
 }
 
 /** What the gateway builds its Muse Code engine with: keep each turn's usage report, price turns from the catalog. */

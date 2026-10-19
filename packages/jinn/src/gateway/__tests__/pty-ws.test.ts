@@ -1,12 +1,6 @@
-import { EventEmitter } from "node:events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  PtyControlEvent,
-  PtyIdleSpawnOpts,
-  PtyInitialSnapshot,
-  PtySnapshotSubscription,
-  PtyViewEngine,
-} from "../../engines/pty-view-engine.js";
+import type { PtyControlEvent } from "../../engines/pty-view-engine.js";
+import { controls, FakeEngine, FakeWebSocket, settle } from "./helpers/pty-ws-fakes.js";
 
 vi.mock("../../sessions/registry.js", () => ({
   getSession: vi.fn(() => ({ id: "session-1", model: "model-1", effortLevel: "high" })),
@@ -14,86 +8,6 @@ vi.mock("../../sessions/registry.js", () => ({
 }));
 
 import { attachPtyWebSocket, PTY_INPUT_MAX_CHARS } from "../pty-ws.js";
-
-class FakeWebSocket extends EventEmitter {
-  OPEN = 1;
-  readyState = this.OPEN;
-  sent: Array<string | Buffer> = [];
-  closed = false;
-
-  send(data: string | Buffer): void {
-    this.sent.push(data);
-  }
-
-  close(): void {
-    this.closed = true;
-    this.readyState = 3;
-    this.emit("close");
-  }
-
-  receive(message: unknown): void {
-    this.emit("message", Buffer.from(JSON.stringify(message)));
-  }
-}
-
-function controls(ws: FakeWebSocket): any[] {
-  return ws.sent
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => JSON.parse(value));
-}
-
-class FakeEngine implements PtyViewEngine {
-  warm = false;
-  spawnCalls: PtyIdleSpawnOpts[] = [];
-  restartCalls: PtyIdleSpawnOpts[] = [];
-  viewingCalls: boolean[] = [];
-  started = false;
-  unsubscribed = false;
-  onData?: (data: Buffer) => void;
-  onControl?: (event: PtyControlEvent) => void;
-  initial: PtyInitialSnapshot = {
-    snapshot: { data: "persisted screen", cols: 90, rows: 30, visible: true },
-    ready: true,
-  };
-  queuedOnStart: Buffer[] = [];
-
-  hasWarmPty(): boolean { return this.warm; }
-  ensureIdleSpawn(_sessionId: string, opts: PtyIdleSpawnOpts): void {
-    this.spawnCalls.push(opts);
-    this.warm = true;
-  }
-  restartPty(_sessionId: string, opts: PtyIdleSpawnOpts): void {
-    this.restartCalls.push(opts);
-    this.warm = true;
-  }
-  subscribeWithSnapshot(
-    _sessionId: string,
-    onData: (data: Buffer) => void,
-    onControl?: (event: PtyControlEvent) => void,
-  ): PtySnapshotSubscription {
-    this.onData = onData;
-    this.onControl = onControl;
-    return {
-      snapshot: Promise.resolve(this.initial),
-      start: () => {
-        this.started = true;
-        for (const data of this.queuedOnStart.splice(0)) onData(data);
-      },
-      unsubscribe: () => { this.unsubscribed = true; },
-    };
-  }
-  setViewing(_sessionId: string, viewing: boolean): void { this.viewingCalls.push(viewing); }
-  stdinWrites: string[] = [];
-  rawWrites: string[] = [];
-  writeStdin(_sessionId: string, text: string): void { this.stdinWrites.push(text); }
-  writeRaw(_sessionId: string, data: string): void { this.rawWrites.push(data); }
-  resizePty(): void {}
-}
-
-async function settle(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-}
 
 describe("attachPtyWebSocket snapshot framing", () => {
   beforeEach(() => vi.useRealTimers());
@@ -234,6 +148,79 @@ describe("attachPtyWebSocket snapshot framing", () => {
     expect(controls(ws).filter((c) => c.type === "error")).toMatchObject([{ recoverable: true, message: expect.stringContaining("failed to restart") }]);
     ws.close();
     expect(engine.viewingCalls).toEqual([true, false]);
+  });
+
+  it("does not count a viewer against the PTY a failed restart killed, and enters once when the next spawn succeeds", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    // Like a lifecycle-backed engine: the kill releases the PTY and its viewer entry, then the respawn throws.
+    engine.restartPty = () => {
+      engine.warm = false;
+      throw new Error("spawn ENOENT");
+    };
+    attachPtyWebSocket(ws as any, "session-1", engine, { resumeDeadlineMs: 50 });
+    await settle();
+    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }]) ws.receive(message);
+    expect(engine.viewingCalls).toEqual([true]);
+
+    ws.receive({ type: "restart" });
+    expect(controls(ws).filter((c) => c.type === "error")).toMatchObject([{ recoverable: true, message: expect.stringContaining("failed to restart terminal: spawn ENOENT") }]);
+
+    // Queued, not applied to the dead PTY.
+    ws.receive({ type: "viewing", viewing: true });
+    expect(engine.viewingCalls).toEqual([true]);
+
+    // No resume-deadline error for a terminal that was never going to resume.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(controls(ws).filter((c) => c.type === "error")).toHaveLength(1);
+
+    // Closing now has no entry to leave.
+    const second = new FakeWebSocket();
+    attachPtyWebSocket(second as any, "session-1", engine);
+    await settle();
+    second.close();
+    expect(engine.viewingCalls).toEqual([true]);
+
+    // The next successful spawn enters once; closing leaves once.
+    ws.receive({ type: "resize", cols: 100, rows: 40 });
+    expect(engine.viewingCalls).toEqual([true, true]);
+    ws.close();
+    expect(engine.viewingCalls).toEqual([true, true, false]);
+  });
+
+  it("does not leave a viewer entry the engine no longer has when the socket closes after a failed restart", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    engine.restartPty = () => {
+      engine.warm = false;
+      throw new Error("spawn ENOENT");
+    };
+    attachPtyWebSocket(ws as any, "session-1", engine);
+    await settle();
+    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }, { type: "restart" }]) ws.receive(message);
+    ws.close();
+    expect(engine.viewingCalls).toEqual([true]);
+  });
+
+  it("re-enters viewing on a second restart that succeeds after a failed one", async () => {
+    const ws = new FakeWebSocket();
+    const engine = new FakeEngine();
+    let failing = true;
+    engine.restartPty = () => {
+      if (failing) {
+        engine.warm = false;
+        throw new Error("spawn ENOENT");
+      }
+      engine.warm = true;
+    };
+    attachPtyWebSocket(ws as any, "session-1", engine);
+    await settle();
+    for (const message of [{ type: "viewing", viewing: true }, { type: "resize", cols: 90, rows: 30 }, { type: "restart" }]) ws.receive(message);
+    failing = false;
+    ws.receive({ type: "restart" });
+    expect(engine.viewingCalls).toEqual([true, true]);
+    ws.close();
+    expect(engine.viewingCalls).toEqual([true, true, false]);
   });
 });
 

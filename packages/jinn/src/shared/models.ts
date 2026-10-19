@@ -62,6 +62,8 @@ export const ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "pi", "he
 export type EngineName = (typeof ENGINE_NAMES)[number];
 export const PTY_VIEW_ENGINE_NAMES = ["claude", "codex", "antigravity", "grok", "hermes", "opencode", "musecode"] as const; // engines with a /ws/pty view
 export type PtyViewEngineName = (typeof PTY_VIEW_ENGINE_NAMES)[number];
+/** Engines whose terminal and chat turns cannot share a session, so the view switch locks while a turn runs. */
+const PTY_LOCKED_DURING_TURN_ENGINES: ReadonlySet<string> = new Set(["codex", "musecode"]);
 
 /**
  * Whether the dashboard should offer `name`'s terminal view under `config`.
@@ -462,7 +464,7 @@ export function buildRegistry(config: JinnConfig): ModelRegistry {
       ? fromEngineModelsConfig(name, engineBlock, available)
       : synthesized[name]; // engine omitted from the block → keep the synthesized entry
   }
-  return Object.fromEntries(ENGINE_NAMES.map((n) => [n, { ...registry[n], supportsPty: engineOffersPty(n, config) }])) as ModelRegistry;
+  return Object.fromEntries(ENGINE_NAMES.map((n) => [n, { ...registry[n], supportsPty: engineOffersPty(n, config), ptyLockedDuringTurn: PTY_LOCKED_DURING_TURN_ENGINES.has(n) }])) as ModelRegistry;
 }
 
 /**
@@ -714,14 +716,14 @@ export function synthesizeFromEngineConfig(config: JinnConfig): ModelRegistry {
   return registry;
 }
 
-function mergeDiscoveredModels(
+export function mergeDiscoveredModels(
   discovered: ModelInfo[],
   block: EngineModelsConfig | undefined,
   opts: { configuredOverridesDiscovered: boolean },
 ): ModelInfo[] {
   if (!block) return discovered;
 
-  const configured = new Map(block.models.map((m) => [m.id, m]));
+  const configured = new Map((block.models ?? []).map((m) => [m.id, m]));
   const hidden = new Set(block.hidden ?? []);
   const seen = new Set<string>();
   const merged = discovered.filter((model) => !hidden.has(model.id)).map((model) => {
@@ -755,7 +757,7 @@ function mergeDiscoveredModels(
     };
   });
 
-  for (const configuredModel of block.models) {
+  for (const configuredModel of block.models ?? []) {
     if (hidden.has(configuredModel.id)) continue;
     if (!seen.has(configuredModel.id)) merged.push(modelInfoFromConfigEntry(configuredModel));
   }
@@ -797,7 +799,7 @@ function fromEngineModelsConfig(
 function mergeDiscoveredGrokModels(discovered: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
   if (!block) return discovered;
 
-  const configured = new Map(block.models.map((m) => [m.id, m]));
+  const configured = new Map((block.models ?? []).map((m) => [m.id, m]));
   const hidden = new Set(block.hidden ?? []);
   const seen = new Set<string>();
   const merged = discovered.filter((model) => !hidden.has(model.id)).map((model) => {
@@ -819,7 +821,7 @@ function mergeDiscoveredGrokModels(discovered: ModelInfo[], block: EngineModelsC
     };
   });
 
-  for (const configuredModel of block.models) {
+  for (const configuredModel of block.models ?? []) {
     if (hidden.has(configuredModel.id)) continue;
     if (!seen.has(configuredModel.id)) merged.push(modelInfoFromConfigEntry(configuredModel));
   }

@@ -326,6 +326,11 @@ it("drift guard: registers 8 engines and stamps supportsPty on the 6 PTY-capable
   expect(Object.keys(reg).filter((n) => reg[n].supportsPty)).toEqual(["claude", "codex", "antigravity", "grok", "hermes", "musecode"]);
 });
 
+it("stamps ptyLockedDuringTurn on the engines whose terminal and turns cannot share a session, and on no other", () => {
+  const reg = getModelRegistry(cfg({}));
+  expect(Object.keys(reg).filter((n) => reg[n].ptyLockedDuringTurn)).toEqual(["codex", "musecode"]);
+});
+
 it("offers opencode's terminal only in server mode, where there is a server to attach to", () => {
   const off = getModelRegistry(cfg({ opencode: { mode: "run" } }));
   expect(off.opencode.supportsPty).toBe(false);

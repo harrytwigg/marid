@@ -7,6 +7,7 @@ vi.mock("../../sessions/employee-env.js", () => ({
   employeeSessionEnv: (sessionId: string | undefined) => (sessionId === "s-employee" ? { JINN_EMPLOYEE: "worker" } : {}),
 }));
 
+import { NAMES } from "../../shared/codename.js";
 import { MusecodeEngine } from "../musecode.js";
 import { isDeadSessionError } from "../../shared/rateLimit.js";
 import { isLostConversationError } from "../../shared/process-start.js";
@@ -26,7 +27,7 @@ describe("a fresh turn", () => {
   it("speaks the protocol the design says: client info, no user-input dialogs, allowAll, the cwd as workspace", async () => {
     await ctx.engine.run(opts());
     const [init] = sent("initialize");
-    expect(init).toMatchObject({ clientInfo: { name: "marid" }, capabilities: { userInputDialogs: false } });
+    expect(init).toMatchObject({ clientInfo: { name: NAMES.codename }, capabilities: { userInputDialogs: false } });
     expect(typeof init!.clientInfo.version).toBe("string");
     expect(sent("session/start")[0]).toMatchObject({ workspaceRoot: ctx.tmp, approvalMode: "allowAll" });
     expect(sent("session/start")[0]!.commandId).toMatch(/^[0-9a-f-]{36}$/);
@@ -121,6 +122,47 @@ describe("effort and model", () => {
   it("does not name one when none is configured", async () => {
     await ctx.engine.run(opts());
     expect(sent("session/start")[0]).not.toHaveProperty("modelId");
+  });
+});
+
+describe("effort against the turn's own model", () => {
+  const catalog: Record<string, string[]> = { "m-wide": ["low", "high", "max"], "m-narrow": ["low", "high"], "m-default": ["high", "max"] };
+  /** An engine that reads the levels from a registry holding `catalog`; an unset model is judged as `m-default`. */
+  const withRegistry = () => {
+    ctx.engine = new MusecodeEngine({ effortLevels: () => (model) => catalog[model ?? "m-default"] ?? [] });
+  };
+
+  it("sends no effort for a model the registry does not list", async () => {
+    withRegistry();
+    await ctx.engine.run(opts({ model: "pinned-elsewhere", effortLevel: "max" }));
+    expect(sent("turn/start")[0]).not.toHaveProperty("reasoningEffort");
+  });
+
+  it("sends an effort the turn's model lists", async () => {
+    withRegistry();
+    await ctx.engine.run(opts({ model: "m-wide", effortLevel: "max" }));
+    expect(sent("turn/start")[0]!.reasoningEffort).toBe("max");
+  });
+
+  it("sends no effort the turn's model leaves out, and still runs the turn", async () => {
+    withRegistry();
+    const result = await ctx.engine.run(opts({ model: "m-narrow", effortLevel: "max" }));
+    expect(result.error).toBeUndefined();
+    expect(sent("turn/start")[0]).not.toHaveProperty("reasoningEffort");
+  });
+
+  it("judges a turn with no model against the default's levels", async () => {
+    withRegistry();
+    await ctx.engine.run(opts({ effortLevel: "max" }));
+    expect(sent("turn/start")[0]!.reasoningEffort).toBe("max");
+  });
+
+  it("still sends nothing outside Muse's vocabulary or for none", async () => {
+    withRegistry();
+    catalog["m-wide"]!.push("turbo", "none");
+    await ctx.engine.run(opts({ model: "m-wide", effortLevel: "turbo" }));
+    await ctx.engine.run(opts({ model: "m-wide", effortLevel: "none" }));
+    expect(sent("turn/start").map((p) => p.reasoningEffort)).toEqual([undefined, undefined]);
   });
 });
 

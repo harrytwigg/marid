@@ -12,6 +12,7 @@ import { answerMuseServerRequest } from "../musecode-approvals.js";
 import { MuseTurn } from "../musecode-turn.js";
 import { buildMuseServeArgs } from "../musecode-protocol.js";
 import { buildEngineChildEnv } from "../../shared/child-env.js";
+import { NAMES } from "../../shared/codename.js";
 import { detectRateLimit, isDeadSessionError } from "../../shared/rateLimit.js";
 
 /**
@@ -242,7 +243,7 @@ describe.skipIf(!ENABLED)("Muse Code (real binary)", () => {
       });
       let turn: MuseTurn | undefined;
       proc.client.onNotification((method, params) => turn?.read(method, params));
-      await proc.client.initialize({ clientInfo: { name: "marid", version: "0" }, userInputDialogs: false });
+      await proc.client.initialize({ clientInfo: { name: NAMES.codename, version: "0" }, userInputDialogs: false });
       const started = await proc.client.request<{ session: { sessionId: string } }>("session/start", {
         commandId: uuidv7(), workspaceRoot: workspace, approvalMode: "promptUnmatched", modelId: "muse-spark-1.2",
       });

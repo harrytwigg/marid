@@ -753,8 +753,8 @@ export interface ConnectorInstance {
  * configs keep working.
  */
 
-/** How an engine conveys reasoning-effort to its CLI. */
-export type EffortMechanism = "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "opencode-variant" | "musecode-turn" | "none";
+import type { EffortMechanism } from "./effort-mechanism.js";
+export type { EffortMechanism } from "./effort-mechanism.js";
 
 /** A single model and its capabilities, as exposed to the UI / validation. */
 export interface ModelInfo {
@@ -780,6 +780,8 @@ export interface EngineRegistryEntry {
   effortMechanism: EffortMechanism;
   models: ModelInfo[];
   supportsPty?: boolean; // interactive PTY/CLI view (`/ws/pty`) — stamped by buildRegistry
+  /** The view switch stays put while a turn runs: the terminal and chat turns cannot share a session. Stamped by buildRegistry. */
+  ptyLockedDuringTurn?: boolean;
 }
 
 /** Resolved registry, keyed by engine name. */

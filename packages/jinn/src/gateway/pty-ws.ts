@@ -8,8 +8,8 @@ import { remoteScopeFor, spawnCwd } from "../sessions/session-cwd.js";
 import { localScopedClaudeRefusal } from "../sessions/turn/scoped-turn.js";
 import { logger } from "../shared/logger.js";
 import type { JinnConfig } from "../shared/types.js";
+import { RAW_KEY_INPUTS, validGeometry } from "./pty-ws-input.js";
 
-const RAW_KEY_INPUTS = new Set(["\r", "\x1b", "\t", "\x03", "\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D"]);
 /** Largest `input` frame accepted. The web client chunks a bigger paste below
  *  this, so a frame over it is a misbehaving client, not a long paste. */
 export const PTY_INPUT_MAX_CHARS = 64 * 1024;
@@ -257,8 +257,14 @@ export function attachPtyWebSocket(
         armResumeDeadline();
         if (restoreViewing) applyViewingWhenReady(true);
       } catch (error) {
-        // A restart that is refused (an engine may refuse one mid-turn) leaves the terminal as it was, this socket still counted as viewing it.
-        ({ didEnter, entryReady, pendingViewing, terminalReady } = entered);
+        if (engine.hasWarmPty(sessionId)) {
+          // A restart refused before the kill (an engine may refuse one mid-turn) leaves the terminal as it was, this socket still counted as viewing it.
+          ({ didEnter, entryReady, pendingViewing, terminalReady } = entered);
+        } else {
+          // The old PTY is gone and its viewer entry went with it, so there is nothing to restore: stay not entered and queue the viewing, which the next spawn (a resize or another restart) applies.
+          clearResumeDeadline();
+          pendingViewing = restoreViewing ? true : null;
+        }
         sendControl({
           type: "error",
           message: `failed to restart terminal: ${error instanceof Error ? error.message : String(error)}`,
@@ -285,15 +291,4 @@ export function attachPtyWebSocket(
   };
   ws.on("close", onDisconnect);
   ws.on("error", onDisconnect);
-}
-
-function validGeometry(cols: unknown, rows: unknown): cols is number {
-  return typeof cols === "number"
-    && typeof rows === "number"
-    && Number.isFinite(cols)
-    && Number.isFinite(rows)
-    && cols > 0
-    && rows > 0
-    && cols <= 500
-    && rows <= 250;
 }
