@@ -1,3 +1,5 @@
+import type { SessionFallbackChainView } from "./fallback-chain-wire.js";
+
 /**
  * `sessions.fallbackMode`: what a session does when its model hits a usage
  * limit. Kept beside `context-config.ts` so the schema can grow without
@@ -39,6 +41,8 @@ export interface SessionFallbackView {
   targetSource: "session" | "config";
   /** The installed engines this session may choose as its own fallback target (a scoped session: claude; a remote one: the engines that run on a host). */
   allowedEngines: string[];
+  /** The session's resolved chain, where it is on it and what happened (docs/fallback-chains.md). */
+  chain: SessionFallbackChainView;
 }
 
 export function isSessionFallbackMode(value: unknown): value is SessionFallbackMode {

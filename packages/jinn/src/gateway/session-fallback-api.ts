@@ -1,3 +1,7 @@
+import { accountForEmployee } from "../shared/engine-account.js";
+import { engineHealthForTarget, readEngineHealth } from "../shared/engine-health.js";
+import { latestLimitReadings } from "../shared/fallback-chain-limits.js";
+import { isRemoteTarget } from "../shared/remote-target.js";
 import { orgRegistry } from "./org-registry.js";
 import { getModelRegistry } from "../shared/models.js";
 import {
@@ -26,11 +30,13 @@ export function parseFallbackModePatch(value: unknown): { ok: true; mode?: Sessi
   return value === null ? { ok: true, mode: null } : parseFallbackModeParam(value);
 }
 
-/** The view for one session, from the live config and the roster. */
+/** The view for one session, from the live config, the roster, engine health and the cached limits readings (never probed). */
 export function fallbackViewFor(session: Session, context: ApiContext): SessionFallbackView {
   const config = context.getConfig();
   const employee = session.employee ? orgRegistry(config).get(session.employee) : undefined;
-  return sessionFallbackView(config, getModelRegistry(config), session, employee);
+  const health = engineHealthForTarget(readEngineHealth(), isRemoteTarget(employee) ? employee : undefined);
+  const limits = latestLimitReadings(config, [accountForEmployee(employee, session.engine)]);
+  return sessionFallbackView(config, getModelRegistry(config), session, employee, { health, limits });
 }
 
 /** A single-session response body with its fallback view. */

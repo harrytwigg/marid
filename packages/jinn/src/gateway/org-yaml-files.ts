@@ -3,6 +3,7 @@ import path from "node:path";
 import yaml from "js-yaml";
 import { logger } from "../shared/logger.js";
 import { resolveJinnHome } from "../shared/paths.js";
+import type { FallbackLink } from "../shared/fallback-chain-wire.js";
 import type { Employee } from "../shared/types.js";
 import { isSystemEmployeeName, SYSTEM_EMPLOYEE_OVERRIDE_FIELDS } from "./system-employees.js";
 
@@ -98,6 +99,8 @@ export interface EmployeeUpdate {
   reportsTo?: string | string[];
   cliFlags?: string[];
   alwaysNotify?: boolean;
+  /** A list of links; null removes it, so the employee inherits. */
+  fallback?: FallbackLink[] | null;
 }
 
 /** The set of YAML keys the update path is allowed to write. `name` is never here. */
@@ -112,6 +115,7 @@ export const WRITABLE_FIELDS = [
   "reportsTo",
   "cliFlags",
   "alwaysNotify",
+  "fallback",
 ] as const;
 
 

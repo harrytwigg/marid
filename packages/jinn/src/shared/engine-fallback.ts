@@ -10,45 +10,26 @@ import {
 import { logger } from "./logger.js";
 import { isSpellableModelId } from "./model-id.js";
 import { ENGINE_NAMES, isKnownEngine, type EngineName } from "./models.js";
+import { accountNames } from "./claude-accounts-config.js";
+import { fallbackChainProblems } from "./fallback-chain-wire.js";
 import type { JinnConfig, ModelRegistry } from "./types.js";
-
-const KNOWN_ENGINES = ENGINE_NAMES.join(", ");
 
 /**
  * Problems with the `fallback` chains under an `engines` mapping (empty = valid).
- * Unknown names and self-references are refused because a chain naming a typo would
- * fail silently — it simply never fires — rather than loudly. Cycles across engines
- * are deliberately accepted: they are how "either of these two" reads in config, and
- * the runtime walker carries a visited set.
+ * Unknown names, a link naming the chain's own engine and a link listed twice are
+ * refused because a chain naming a typo would fail silently — it simply never
+ * fires — rather than loudly. The wire module owns the sentences; an account's
+ * own chain is checked with its account (claude-accounts-config.ts). Cycles across
+ * engines are deliberately accepted: they are how "either of these two" reads in
+ * config, and the expansion carries a visited set.
  */
 export function validateEngineFallbackChains(engines: Record<string, unknown>): string[] {
-  const problems: string[] = [];
-
-  for (const name of ENGINE_NAMES) {
+  const profiles = accountNames(engines);
+  return ENGINE_NAMES.flatMap((name) => {
     const section = engines[name];
-    if (typeof section !== "object" || section === null || Array.isArray(section)) continue;
-
-    const chain = (section as { fallback?: unknown }).fallback;
-    if (chain === undefined) continue;
-    if (!Array.isArray(chain)) {
-      problems.push(`engines.${name}.fallback must be a list of engine names (got ${typeof chain})`);
-      continue;
-    }
-
-    chain.forEach((entry, index) => {
-      if (typeof entry !== "string") {
-        problems.push(`engines.${name}.fallback[${index}] must be a string (got ${typeof entry})`);
-      } else if (entry === name) {
-        problems.push(`engines.${name}.fallback must not name ${name} itself`);
-      } else if (name === "claude" && entry.startsWith("claude:")) {
-        // An account entry: claude-accounts-config.ts checks it names a declared account.
-      } else if (!isKnownEngine(entry)) {
-        problems.push(`engines.${name}.fallback[${index}] "${entry}" is not a known engine (${KNOWN_ENGINES})`);
-      }
-    });
-  }
-
-  return problems;
+    if (!isYamlMapping(section)) return [];
+    return fallbackChainProblems(`engines.${name}.fallback`, section.fallback, { engines: ENGINE_NAMES, profiles, self: { engine: name } });
+  });
 }
 
 /** A YAML mapping, as opposed to a scalar, a list, or a key left with no value. */
@@ -168,7 +149,7 @@ export function applyLegacyFallbackMigration(
 /** An engine's chain, engines only: an account entry (`claude:<name>`) is walked
  *  by the account walker (account-fallback.ts), never handed out as an engine. */
 function fallbackChain(config: JinnConfig, engine: string): EngineName[] {
-  return (config.engines[engine as EngineName]?.fallback ?? []).filter((entry): entry is EngineName => isKnownEngine(entry));
+  return (config.engines[engine as EngineName]?.fallback ?? []).filter((entry): entry is EngineName => typeof entry === "string" && isKnownEngine(entry));
 }
 
 /**

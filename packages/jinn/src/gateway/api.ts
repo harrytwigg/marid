@@ -134,6 +134,7 @@ import { handleSessionQueueRoute } from "./queue-routes.js";
 export { matchRoute } from "./route-helpers.js";
 import { handleCronApi } from "./cron-api.js";
 import { handleOrgApi } from "./org-api.js";
+import { handleFallbackChainsApi } from "./fallback-chains-api.js";
 import { handleTodoCaptureApi } from "./todo-capture-api.js";
 import { handleSkillsApi } from "./skills-api.js";
 import { handleSearchApi, type NeedsAttentionTarget } from "./search-api.js";
@@ -4200,6 +4201,7 @@ export async function handleApiRequest(
     if (await handleCronApi(req, res, { method, pathname, url }, context)) return;
     if (await handleTodoCaptureApi(req, res, { method, pathname, url }, context)) return;
     if (await handleOrgApi(req, res, { method, pathname, url }, context)) return;
+    if (await handleFallbackChainsApi(res, { method, pathname, url }, context)) return;
     if (await handleSkillsApi(req, res, { method, pathname, url }, context)) return;
     if (await handlePluginsApi(req, res, { method, pathname, url }, context)) return;
 

@@ -1,7 +1,8 @@
 import path from "node:path";
 import { canonicalClaudeConfigDir, claudeProfileFromDir, validateEmployeeClaudeConfigDir, type ClaudeProfile } from "./claude-profile.js";
 import { claudeAccountKey, DEFAULT_CLAUDE_ACCOUNT } from "./engine-account.js";
-import { ENGINE_NAMES, isKnownEngine } from "./models.js";
+import { ENGINE_NAMES } from "./models.js";
+import { fallbackChainProblems, type FallbackChainEntry } from "./fallback-chain-wire.js";
 
 /**
  * Declared Claude accounts (spec FR-079): `engines.claude.accounts.<name>`,
@@ -24,8 +25,9 @@ import { ENGINE_NAMES, isKnownEngine } from "./models.js";
  */
 export interface ClaudeAccountConfig {
   configDir: string;
-  /** Engine names, `claude` for the default account, or `claude:<name>`. */
-  fallback?: string[];
+  /** This account's chain: `{engine, profile?, model?}` mappings, or the legacy
+   *  strings (an engine name, `claude` for the default account, `claude:<name>`). */
+  fallback?: FallbackChainEntry[];
   fallbackModelMap?: Record<string, string>;
 }
 
@@ -33,7 +35,7 @@ export interface DeclaredClaudeAccount {
   name: string;
   key: string;
   profile: Exclude<ClaudeProfile, null>;
-  fallback: string[] | undefined;
+  fallback: FallbackChainEntry[] | undefined;
   fallbackModelMap: Record<string, string> | undefined;
 }
 
@@ -43,6 +45,11 @@ function accountsSection(engines: unknown): Record<string, unknown> {
   const claude = (engines as { claude?: unknown } | undefined)?.claude;
   const accounts = (claude as { accounts?: unknown } | undefined)?.accounts;
   return accounts && typeof accounts === "object" && !Array.isArray(accounts) ? accounts as Record<string, unknown> : {};
+}
+
+/** The names under `engines.claude.accounts`, valid or not: what a chain's `profile` is checked against. */
+export function accountNames(engines: unknown): Set<string> {
+  return new Set(Object.keys(accountsSection(engines)));
 }
 
 /** Every declared account whose `configDir` is usable, in declaration order. */
@@ -56,7 +63,7 @@ export function declaredClaudeAccounts(config: { engines: unknown }): DeclaredCl
       name,
       key: claudeAccountKey(profile),
       profile,
-      fallback: Array.isArray(entry.fallback) ? entry.fallback.filter((e): e is string => typeof e === "string") : undefined,
+      fallback: Array.isArray(entry.fallback) ? entry.fallback : undefined,
       fallbackModelMap: entry.fallbackModelMap && typeof entry.fallbackModelMap === "object" ? entry.fallbackModelMap : undefined,
     });
   }
@@ -82,26 +89,6 @@ export function chainEntryAccount(config: { engines: unknown }, entry: string): 
 
 const ACCOUNT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-function chainProblems(where: string, chain: unknown, names: ReadonlySet<string>, self: string): string[] {
-  if (chain === undefined) return [];
-  if (!Array.isArray(chain)) return [`${where} must be a list of engines or accounts (got ${typeof chain})`];
-  const problems: string[] = [];
-  chain.forEach((entry, index) => {
-    if (typeof entry !== "string") {
-      problems.push(`${where}[${index}] must be a string (got ${typeof entry})`);
-    } else if (entry === self) {
-      problems.push(`${where} must not name ${self} itself`);
-    } else if (entry.startsWith(`${DEFAULT_CLAUDE_ACCOUNT}:`)) {
-      if (!names.has(entry.slice(DEFAULT_CLAUDE_ACCOUNT.length + 1))) {
-        problems.push(`${where}[${index}] "${entry}" names no account under engines.claude.accounts`);
-      }
-    } else if (!isKnownEngine(entry)) {
-      problems.push(`${where}[${index}] "${entry}" is not a known engine (${ENGINE_NAMES.join(", ")}) or a declared account (claude:<name>)`);
-    }
-  });
-  return problems;
-}
-
 function configDirProblems(where: string, configDir: unknown, seenDirs: Map<string, string>, name: string, jinnHome: string | undefined): string[] {
   if (typeof configDir !== "string") return [`${where}.configDir must be an absolute path`];
   const problems: string[] = [];
@@ -120,7 +107,7 @@ function accountProblems(name: string, raw: unknown, names: ReadonlySet<string>,
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [...problems, `${where} must be a mapping with configDir`];
   const entry = raw as Record<string, unknown>;
   problems.push(...configDirProblems(where, entry.configDir, seenDirs, name, jinnHome));
-  problems.push(...chainProblems(`${where}.fallback`, entry.fallback, names, `claude:${name}`));
+  problems.push(...fallbackChainProblems(`${where}.fallback`, entry.fallback, { engines: ENGINE_NAMES, profiles: names, self: { engine: "claude", profile: name } }));
   const map = entry.fallbackModelMap;
   if (map !== undefined && (!map || typeof map !== "object" || Array.isArray(map))) {
     problems.push(`${where}.fallbackModelMap must be a mapping of model ids`);
@@ -145,17 +132,4 @@ export function validateClaudeAccounts(engines: Record<string, unknown>, jinnHom
   const names = new Set(Object.keys(accounts));
   const seenDirs = new Map<string, string>();
   return Object.entries(accounts).flatMap(([name, raw]) => accountProblems(name, raw, names, seenDirs, jinnHome));
-}
-
-/** Problems with account entries in the default account's own chain,
- *  `engines.claude.fallback`, which the engine validator would read as typos. */
-export function claudeChainAccountProblems(engines: Record<string, unknown>): string[] {
-  const claude = engines.claude as { fallback?: unknown; accounts?: unknown } | undefined;
-  const chain = claude?.fallback;
-  if (!Array.isArray(chain)) return [];
-  const names = new Set(Object.keys(accountsSection(engines)));
-  return chain.flatMap((entry, index) => typeof entry === "string" && entry.startsWith(`${DEFAULT_CLAUDE_ACCOUNT}:`)
-    && !names.has(entry.slice(DEFAULT_CLAUDE_ACCOUNT.length + 1))
-    ? [`engines.claude.fallback[${index}] "${entry}" names no account under engines.claude.accounts`]
-    : []);
 }
