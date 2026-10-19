@@ -7,7 +7,11 @@
  *   stop the running gateway → wait for the port to free → start a fresh daemon.
  * The returning gateway resumes any sessions it marked "interrupted" on shutdown.
  */
+import "../shared/adopt-legacy-env-entry.js";
 import { loadConfig } from "../shared/config.js";
+import { spawn } from "node:child_process";
+import { JINN_HOME } from "../shared/paths.js";
+import { settleBeforeRestart } from "./restart-settle.js";
 import { stopAndWait, startDaemon, waitForDashboardReady, waitForPortFree, waitForPortListening } from "./lifecycle.js";
 import { closeLogger, configureLogger, logger } from "../shared/logger.js";
 import { restartEntryOptionsFromArgv } from "./restart-entry-options.js";
@@ -21,6 +25,15 @@ process.on("unhandledRejection", (reason) => {
   const msg = reason instanceof Error ? reason.stack ?? reason.message : String(reason);
   logger.error(`restart-entry unhandled rejection: ${msg}`);
 });
+
+/** Settles the home; when it moved, hands over to a fresh helper that reads the new location. */
+async function continuesFromMovedHome(env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  const settled = await settleBeforeRestart(env, JINN_HOME, { log: (message) => logger.info(message) });
+  if (!settled.respawn) return false;
+  logger.info("restart-entry: the home moved; continuing from its new location…");
+  spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: "ignore", env }).unref();
+  return true;
+}
 
 async function main(): Promise<number> {
   const options = restartEntryOptionsFromArgv();
@@ -43,6 +56,9 @@ async function main(): Promise<number> {
   if (!freed) {
     logger.warn(`restart-entry: port ${port} still bound after timeout — starting anyway`);
   }
+
+  // The old gateway is down: the one moment a home an older build created can be moved.
+  if (await continuesFromMovedHome()) return 0;
 
   logger.info("restart-entry: starting fresh daemon…");
   startDaemon(config);

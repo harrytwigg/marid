@@ -1,5 +1,6 @@
 import path from "node:path";
-import { isUnderRoot, REMOTE_STAGE_DIR_NAME } from "./remote-target.js";
+import { isUnderRoot, LEGACY_REMOTE_STAGE_DIR_NAME, REMOTE_STAGE_DIR_NAME } from "./remote-target.js";
+import { nameAliases } from "./codename.js";
 
 export type CommandPolicyAction = "allow" | "block";
 
@@ -34,7 +35,12 @@ const DESTRUCTIVE: Array<{ re: RegExp; reason: string }> = [
   { re: /(^|[;&|]\s*)(?:mkfs|dd\s+if=.*\sof=\/dev\/|diskutil\s+erase)/i, reason: "Refusing disk-destructive command" },
 ];
 
-const SECRET_PATH = /(?:~\/\.ssh|\$HOME\/\.ssh|\.ssh\/id_[a-z0-9]+|~\/\.jinn\/secrets|\$HOME\/\.jinn\/secrets|\.env(?:\.[\w.-]+)?|auth\.json)/i;
+/** Both codenames, as a regex alternation: a home an older build created, or a symlink left at its old path, is as secret as the current one. */
+const CODENAME_ALTERNATION = nameAliases((n) => n.codename).join("|");
+const SECRET_PATH = new RegExp(
+  `(?:~/\\.ssh|\\$HOME/\\.ssh|\\.ssh/id_[a-z0-9]+|~/\\.(?:${CODENAME_ALTERNATION})/secrets|\\$HOME/\\.(?:${CODENAME_ALTERNATION})/secrets|\\.env(?:\\.[\\w.-]+)?|auth\\.json)`,
+  "i",
+);
 const EXFIL = /\b(?:curl|wget|nc|ncat|netcat|scp|rsync|ftp|sftp|python\s+-m\s+http\.server)\b/i;
 
 /**
@@ -48,12 +54,12 @@ const EXFIL = /\b(?:curl|wget|nc|ncat|netcat|scp|rsync|ftp|sftp|python\s+-m\s+ht
  * none of this rule's business — blocking it would wedge a real turn for
  * nothing.
  */
-const SHARED_TREE = /(?:^|\/)\.jinn(?:-[A-Za-z0-9._-]+)?\/(?:knowledge|docs|org)(?:\/|$)/;
+const SHARED_TREE = new RegExp(`(?:^|/)\\.(?:${CODENAME_ALTERNATION})(?:-[A-Za-z0-9._-]+)?/(?:knowledge|docs|org)(?:/|$)`);
 
 /** The remote session's staged `$JINN_HOME` — a symlink farm over the mount.
  *  Escaped from the shared constant so the two can never drift apart. */
 const STAGE_FARM_SEGMENT = new RegExp(
-  `(?:^|/)${REMOTE_STAGE_DIR_NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:/|$)`,
+  `(?:^|/)(?:${[REMOTE_STAGE_DIR_NAME, LEGACY_REMOTE_STAGE_DIR_NAME].map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?:/|$)`,
 );
 
 /** Commands that create or overwrite a file named in their arguments. */

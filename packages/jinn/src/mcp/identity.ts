@@ -3,15 +3,18 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ResolvedMcpConfig, McpServerStdioConfig } from "../shared/types.js";
 import { resolveJinnHome, resolveMcpSessionCapabilityKeyFile } from "../shared/home.js";
+import { mcpFlag, mcpFlagAliases, toolCallMarker, wireHeader } from "../shared/wire-names.js";
+import { findBuiltinMcp } from "./builtin-name.js";
 
 /** Names the toolset a jinn server serves in place of the company belt
  *  (toolsets.ts `toolsFor`). The gateway puts it on the server's spec; nothing
  *  the model can reach sets it. */
-export const MCP_TOOLSET_ARG = "--jinn-toolset";
-export const MCP_SESSION_ID_ARG = "--jinn-session-id";
-export const MCP_HOME_ARG = "--jinn-home";
-export const MCP_GATEWAY_URL_ARG = "--jinn-gateway-url";
-const MCP_BOOTSTRAP_ARGS = new Set([MCP_SESSION_ID_ARG, MCP_HOME_ARG, MCP_GATEWAY_URL_ARG]);
+export const MCP_TOOLSET_ARG = mcpFlag("toolset");
+export const MCP_SESSION_ID_ARG = mcpFlag("session-id");
+export const MCP_HOME_ARG = mcpFlag("home");
+export const MCP_GATEWAY_URL_ARG = mcpFlag("gateway-url");
+/** A server launched by an earlier build reads its flags under that build's spelling, so both are recognised. */
+const MCP_BOOTSTRAP_ARGS = new Set(["session-id", "home", "gateway-url"].flatMap((suffix) => mcpFlagAliases(suffix)));
 
 /** Remove per-session bootstrap flags before writing a process-global MCP config. */
 export function stripMcpBootstrapArgs(args: readonly string[] = []): string[] {
@@ -63,20 +66,20 @@ export const JINN_SESSION_ID_ENV = "JINN_SESSION_ID";
 export const JINN_SESSION_CAPABILITY_ENV = "JINN_SESSION_CAPABILITY";
 
 /** Header carrying the calling session's id on gateway requests. */
-export const CALLER_SESSION_HEADER = "x-jinn-caller-session";
+export const CALLER_SESSION_HEADER = wireHeader("caller-session");
 
 /** Header carrying the per-session capability on gateway requests. */
-export const CALLER_SESSION_CAPABILITY_HEADER = "x-jinn-session-capability";
+export const CALLER_SESSION_CAPABILITY_HEADER = wireHeader("session-capability");
 
 /** Header marking a gateway request as originating from a jinn MCP TOOL call
  *  (sent unconditionally by the toolkit's gatewayRequest). Presence is the
  *  signal; the value is documentation. */
-export const TOOL_CALL_HEADER = "x-jinn-tool-call";
-export const TOOL_CALL_HEADER_VALUE = "jinn-mcp";
+export const TOOL_CALL_HEADER = wireHeader("tool-call");
+export const TOOL_CALL_HEADER_VALUE = toolCallMarker();
 
 /** Per-tools/call correlation authored by the built-in Session-bound MCP server. */
-export const ACTIVITY_OPERATION_HEADER = "x-jinn-activity-operation";
-export const ACTIVITY_TOOL_HEADER = "x-jinn-activity-tool";
+export const ACTIVITY_OPERATION_HEADER = wireHeader("activity-operation");
+export const ACTIVITY_TOOL_HEADER = wireHeader("activity-tool");
 
 /** The shared refusal for a tool call that lost its identity — thrown by the
  *  tool handlers (local pre-check) and returned as the routes' 403 body
@@ -203,16 +206,16 @@ export function attachSessionIdentity(
   /** More of the session's own environment for the server: a department-scoped session's marker and roots. */
   extraEnv: Record<string, string> = {},
 ): ResolvedMcpConfig {
-  const jinn = resolved.mcpServers["jinn"];
-  if (!jinn || !("command" in jinn)) return resolved;
-  const stdio = jinn as McpServerStdioConfig;
+  const builtin = findBuiltinMcp(resolved.mcpServers);
+  if (!builtin || !("command" in builtin.spec)) return resolved;
+  const stdio = builtin.spec as McpServerStdioConfig;
   const capability = ensureSessionCapability(sessionId);
   const gatewayUrl = stdio.env?.JINN_GATEWAY_URL;
   return {
     ...resolved,
     mcpServers: {
       ...resolved.mcpServers,
-      jinn: {
+      [builtin.name]: {
         ...stdio,
         args: [
           ...(stdio.args ?? []),

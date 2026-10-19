@@ -1,5 +1,6 @@
 import path from "node:path";
 import { applyClaudeProfileEnv, type ClaudeProfile } from "./claude-profile.js";
+import { envNamesFor } from "./codename-env.js";
 
 export interface EngineChildEnvOptions {
   scrubClaudeCode?: boolean;
@@ -18,12 +19,12 @@ export interface EngineChildEnvOptions {
   scopedSession?: boolean;
 }
 
-const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set([
-  "JINN_HOME_IDENTITY",
-  "JINN_TAKE_PORT",
+const ENGINE_CHILD_ENV_DENY_EXACT: ReadonlySet<string> = new Set(envNamesFor([
+  "HOME_IDENTITY",
+  "TAKE_PORT",
   // Per session, set by the engine; a gateway started from inside an employee's session must not hand its employee to others.
-  "JINN_EMPLOYEE",
-]);
+  "EMPLOYEE",
+]));
 
 /** Per-engine scrub rules. `exact` names and `prefix` families are stripped
  *  only when the caller turns that engine's option on. */
@@ -79,10 +80,10 @@ const SCOPED_SESSION_ENV_EXACT: ReadonlySet<string> = new Set([
   "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
   "MAX_THINKING_TOKENS", "MAX_MCP_OUTPUT_TOKENS", "MCP_TIMEOUT", "MCP_TOOL_TIMEOUT",
   "BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS", "BASH_MAX_OUTPUT_LENGTH", "USE_BUILTIN_RIPGREP",
-  // Jinn: where the hook relay and the `jinn` MCP server find the gateway
-  "JINN_HOME", "JINN_INSTANCE", "JINN_GATEWAY_URL", "JINN_GATEWAY_TOKEN",
-  // Which instance those belong to, so a `jinn` run against another home drops them (sandbox-env.ts)
-  "JINN_BINDING_HOME",
+  // Jinn: where the hook relay and the `jinn` MCP server find the gateway, and which instance those belong to
+  // (so a `jinn` run against another home drops them, sandbox-env.ts). Under either codename: a session an
+  // older gateway started carries the older names.
+  ...envNamesFor(["HOME", "INSTANCE", "GATEWAY_URL", "GATEWAY_TOKEN", "BINDING_HOME"]),
 ]);
 
 const SCOPED_SESSION_ENV_PREFIX: ReadonlyArray<string> = ["LC_", "XDG_", "DISABLE_"];

@@ -1,5 +1,7 @@
 // packages/jinn/src/engines/hermes-mcp.ts
 import type { ResolvedMcpConfig, McpServerStdioConfig } from "../shared/types.js";
+import { envAliases, envName, readEnv } from "../shared/codename-env.js";
+import { isBuiltinMcpName } from "../mcp/builtin-name.js";
 
 /**
  * GRS-018 — map the resolved MCP server set onto the ACP `mcpServers` param of
@@ -43,9 +45,6 @@ export interface AcpMcpServerStdio {
   env: AcpEnvVariable[];
 }
 
-/** The built-in gateway server key (matches mcp/resolver.ts, reserved there). */
-const JINN_BUILTIN_SERVER = "jinn";
-
 /** Build the ACP `mcpServers` array from the resolved set (stdio only). */
 export function buildAcpMcpServers(resolvedMcp: ResolvedMcpConfig | undefined): AcpMcpServerStdio[] {
   const servers = resolvedMcp?.mcpServers;
@@ -63,9 +62,9 @@ export function buildAcpMcpServers(resolvedMcp: ResolvedMcpConfig | undefined): 
     // Built-in jinn server: thread the bearer token through the in-memory ACP
     // channel, because Hermes's filtered subprocess env drops inherited vars
     // (see module doc). An explicit config value always wins over injection.
-    if (name === JINN_BUILTIN_SERVER && !env.some((e) => e.name === "JINN_GATEWAY_TOKEN")) {
-      const token = process.env.JINN_GATEWAY_TOKEN;
-      if (token) env.push({ name: "JINN_GATEWAY_TOKEN", value: token });
+    if (isBuiltinMcpName(name) && !env.some((e) => envAliases("GATEWAY_TOKEN").includes(e.name))) {
+      const token = readEnv(process.env, "GATEWAY_TOKEN"); // footgun: ok the gateway's own credential handed to its own server, as before
+      if (token) env.push({ name: envName("GATEWAY_TOKEN"), value: token });
     }
 
     out.push({ name, command: stdio.command, args: stdio.args ? [...stdio.args] : [], env });

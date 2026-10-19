@@ -11,6 +11,7 @@ import type { JinnConfig } from "./types.js";
 import { todoRecoveryProblems } from "./todo-recovery-config.js";
 import { todoDepartmentsProblems } from "./todo-departments-config.js";
 import { remoteMcpProblems } from "./remote-mcp-config.js";
+import { nameAliases } from "./codename.js";
 
 type ClaudeEngineConfig = JinnConfig["engines"]["claude"];
 
@@ -295,7 +296,7 @@ const CONFIG_TOP_LEVEL_KEY_SET: Record<keyof JinnConfig, true> = {
   cron: true, notifications: true, workflows: true, portal: true, context: true, knowledge: true,
   stt: true, talk: true, realtime: true, remote: true, terminal: true,
 };
-export const CONFIG_TOP_LEVEL_KEYS = Object.keys(CONFIG_TOP_LEVEL_KEY_SET);
+export const CONFIG_TOP_LEVEL_KEYS = [...new Set([...Object.keys(CONFIG_TOP_LEVEL_KEY_SET), ...nameAliases((n) => n.codename)])]; // the instance block under either codename: a save must not drop an older file's
 
 /**
  * Atomically persist a config object to config.yaml. The live gateway

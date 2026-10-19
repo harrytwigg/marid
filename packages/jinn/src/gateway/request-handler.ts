@@ -3,6 +3,7 @@ import { handleApiRequest, type ApiContext } from "./api.js";
 import { authenticateGatewayRequest, authRequiredForRequest } from "./auth.js";
 import { isAllowedCorsOrigin, serveStatic } from "./server.js";
 import { createRemoteMcpHandler, type RemoteMcpHandler } from "./remote-mcp/http.js";
+import { adoptLegacyHeaders, wireHeaderDisplayAliases } from "../shared/wire-names.js";
 
 /** What the handler needs from the running gateway. `authRequired` is a call and
  *  not a value because `config.yaml` reloads while the server is up. */
@@ -25,9 +26,13 @@ export interface GatewayRequestHandlerDependencies {
  * that is on neither list — which would look like the conflict guard silently
  * not working rather than like a CORS policy.
  */
-export const CORS_ALLOWED_REQUEST_HEADERS =
-  "Content-Type, Authorization, X-Jinn-Bootstrap-Grant, X-Jinn-Config-Revision";
-export const CORS_EXPOSED_RESPONSE_HEADERS = "X-Jinn-Config-Revision";
+export const CORS_ALLOWED_REQUEST_HEADERS = [
+  "Content-Type",
+  "Authorization",
+  ...wireHeaderDisplayAliases("bootstrap-grant"),
+  ...wireHeaderDisplayAliases("config-revision"),
+].join(", ");
+export const CORS_EXPOSED_RESPONSE_HEADERS = wireHeaderDisplayAliases("config-revision").join(", ");
 
 export function setCorsHeaders(req: http.IncomingMessage, res: http.ServerResponse): boolean {
   const rawOrigin = req.headers.origin;
@@ -90,6 +95,8 @@ function serveWebUi(req: http.IncomingMessage, res: http.ServerResponse, webDir:
 export function createGatewayRequestHandler(deps: GatewayRequestHandlerDependencies) {
   const remoteMcp = deps.remoteMcp ?? createRemoteMcpHandler({ getConfig: deps.apiContext.getConfig, gatewayAuthToken: deps.gatewayAuthToken });
   return (req: http.IncomingMessage, res: http.ServerResponse): void | Promise<void> => {
+    // A peer from before a codename change names its headers the old way; every reader below reads the current name.
+    adoptLegacyHeaders(req.headers);
     const url = req.url || "/";
     // `/mcp` and its metadata answer before CORS and the gateway-token gate: no
     // browser may reach it (FR-007) and its credential is the Access assertion, never the token.
