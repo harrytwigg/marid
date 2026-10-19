@@ -212,6 +212,15 @@ describe("config models.musecode over a discovered catalog", () => {
     expect(buildRegistry(hiddenDefault).musecode!.defaultModel).toBe("muse-spark-1.2");
   });
 
+  it("takes a block with no models list: only hidden, or only a default", async () => {
+    const hiddenOnly = configWith({ hidden: ["muse-spark-1.3"] });
+    await refreshMusecodeModels(hiddenOnly);
+    expect(buildRegistry(hiddenOnly).musecode!.models.map((m) => m.id)).toEqual(["muse-spark-1.2"]);
+
+    const defaultOnly = configWith({ default: "muse-spark-1.2" });
+    expect(buildRegistry(defaultOnly).musecode!).toMatchObject({ defaultModel: "muse-spark-1.2" });
+  });
+
   it("leaves the discovered catalog alone without a block", async () => {
     const cfg = configWith(undefined);
     await refreshMusecodeModels(cfg);

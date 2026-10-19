@@ -38,13 +38,13 @@ engines:
   musecode:
     bin: muse                  # optional: PATH-resolved when absent
     model: muse-spark-1.2      # a catalog id; see Model discovery
-    effortLevel: medium        # sent on each turn as reasoningEffort
+    effortLevel: medium        # sent as reasoningEffort when the turn's model lists it
     fallback: [claude]         # engines to try when Muse Code cannot serve a turn
 ```
 
 An employee can carry `cliFlags` in its YAML. They are appended to `muse serve` after Marid's own flags, so `cliFlags: ["-c", "run.reminder_roster=[]"]` reaches every turn that employee runs.
 
-**Effort levels** come from the model: `muse-spark` rows list the tiers they accept (`minimal` to `xhigh`), `none` is never offered because the provider rejects it, and a model whose host reports no list gets no effort picker.
+**Effort levels** come from the model: `muse-spark` rows list the tiers they accept (`minimal` to `xhigh`), `none` is never offered because the provider rejects it, and a model whose host reports no list gets no effort picker. A turn sends its effort only when the model it runs on lists that level, so a model the registry does not list gets none. An `engines.musecode.model` pin the catalog lacks is listed with every default tier; if it accepts fewer, narrow its `effortLevels` in `models.musecode`.
 
 ---
 
@@ -103,6 +103,8 @@ A row becomes a model like this:
 | `cost` (per-million decimal strings) | the rates a turn is priced at |
 
 The offline fallback is the four documented models: `muse-spark-1.3`, `muse-spark-1.3-contributor`, `muse-spark-1.2` (the default) and `muse-spark-1.2-contributor`. A pinned model the catalog does not list stays selectable.
+
+A `models.musecode` block is merged over a discovered catalog, as codex's is: an entry relabels a model or sets its `contextWindow` and `effortLevels`, `hidden` drops ids, an entry the catalog lacks is added, and `default` names the default when `engines.musecode.model` does not. Without a catalog the block alone is the model list.
 
 Two things about the real host are worth knowing:
 

@@ -723,7 +723,7 @@ export function mergeDiscoveredModels(
 ): ModelInfo[] {
   if (!block) return discovered;
 
-  const configured = new Map(block.models.map((m) => [m.id, m]));
+  const configured = new Map((block.models ?? []).map((m) => [m.id, m]));
   const hidden = new Set(block.hidden ?? []);
   const seen = new Set<string>();
   const merged = discovered.filter((model) => !hidden.has(model.id)).map((model) => {
@@ -757,7 +757,7 @@ export function mergeDiscoveredModels(
     };
   });
 
-  for (const configuredModel of block.models) {
+  for (const configuredModel of block.models ?? []) {
     if (hidden.has(configuredModel.id)) continue;
     if (!seen.has(configuredModel.id)) merged.push(modelInfoFromConfigEntry(configuredModel));
   }
@@ -799,7 +799,7 @@ function fromEngineModelsConfig(
 function mergeDiscoveredGrokModels(discovered: ModelInfo[], block: EngineModelsConfig | undefined): ModelInfo[] {
   if (!block) return discovered;
 
-  const configured = new Map(block.models.map((m) => [m.id, m]));
+  const configured = new Map((block.models ?? []).map((m) => [m.id, m]));
   const hidden = new Set(block.hidden ?? []);
   const seen = new Set<string>();
   const merged = discovered.filter((model) => !hidden.has(model.id)).map((model) => {
@@ -821,7 +821,7 @@ function mergeDiscoveredGrokModels(discovered: ModelInfo[], block: EngineModelsC
     };
   });
 
-  for (const configuredModel of block.models) {
+  for (const configuredModel of block.models ?? []) {
     if (hidden.has(configuredModel.id)) continue;
     if (!seen.has(configuredModel.id)) merged.push(modelInfoFromConfigEntry(configuredModel));
   }
