@@ -99,7 +99,7 @@ describe("Talk domain retry resilience", () => {
     const item = workItems.createWorkItem({ title: "Delegate exactly once" });
     const parent = sessions.createSession({ engine: "codex", source: "talk", sourceRef: "talk:parent" });
     const base = {
-      context: {} as Parameters<typeof claimDelegation>[0]["context"],
+      context: { getConfig: () => ({ gateway: {}, engines: {} }) } as unknown as Parameters<typeof claimDelegation>[0]["context"],
       sourceSessionId: parent.id,
       todoId: item.id,
       prompt: "Implement the bounded change.",

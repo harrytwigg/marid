@@ -50,7 +50,6 @@ export const TALK_SURFACE_COVERAGE: Record<AppRouteId, TalkSurfaceCoverage> = {
   file: supported("published file metadata and preview", ["read"], ["open", "attach"], "focus preview"),
   more: supported("available destinations", ["list"], ["navigate"], "open destination"),
   "talk-orb": supported("development orb bench state", ["inspect"], [], "no company mutation"),
-  redesign: supported("development-only design bench", ["inspect"], [], "no company mutation"),
   "plugin-contributed": {
     status: "explicit-gap",
     reason: "plugin-context-unavailable",

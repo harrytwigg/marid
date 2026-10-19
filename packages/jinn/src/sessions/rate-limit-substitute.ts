@@ -4,18 +4,21 @@ import { declaredAccountByKey } from "../shared/claude-accounts-config.js";
 import type { ClaudeProfile } from "../shared/claude-profile.js";
 import { DEFAULT_CLAUDE_ACCOUNT } from "../shared/engine-account.js";
 import { engineHealthForTarget, readEngineHealth, resolveHealthyFallbackEngine, type EngineHealthReading } from "../shared/engine-health.js";
-import { engineAvailable, engineSupportsRemote, type EngineName } from "../shared/models.js";
+import { engineAvailable, type EngineName, type RemoteEngineName } from "../shared/models.js";
 import { sshDestination } from "../shared/remote-target.js";
 import type { Employee, JinnConfig, RemoteTarget, Session, SessionRemoteTarget } from "../shared/types.js";
 import { remoteEngineAvailable } from "../engines/remote-stage.js";
 import { resolveEmployeeClaudeProfile, substituteHealth } from "./rate-limit-account.js";
-import { accountOverride } from "./session-account.js";
-import { sessionScopeDepartment } from "./session-scope.js";
+import { isAutoResume } from "./session-fallback.js";
+import { chooseTargetSubstitute } from "./fallback-target.js";
+import { accountWalkOptions, engineAllowedAsSubstitute, fallbackModelMapOf, substituteScoped } from "./substitute-filters.js";
 
 /** What a rate-limited turn moves onto: an engine, the Claude profile it runs
  *  as there, and, for another Claude account, the swap the override records. */
 export interface SubstituteChoice {
   engine: EngineName;
+  /** Set when the session's own fallback target names the model to run; otherwise the substitute's own default. */
+  model?: string;
   claudeProfile: ClaudeProfile;
   accounts?: { original: string; substitute: string; substituteConfigDir: string | null; fallbackModelMap?: Record<string, string> };
 }
@@ -32,15 +35,13 @@ export interface ChooseSubstituteInput {
   options?: AccountFallbackOptions;
 }
 
-function fallbackModelMapOf(config: JinnConfig, account: string): Record<string, string> | undefined {
-  return account === DEFAULT_CLAUDE_ACCOUNT ? config.engines.claude?.fallbackModelMap : declaredAccountByKey(config, account)?.fallbackModelMap;
-}
-
 /**
  * The substitute for a rate-limited turn, or undefined when it should wait for
  * its own reset (Branch B).
  *
  * - A board walk turn never changes engine or account (FR-076).
+ * - Neither does a session whose fallback mode is `auto-resume`: it parks and resumes.
+ * - A session with its own fallback target (`session.fallbackTarget`) takes exactly that, or waits.
  * - A remote employee keeps today's rule: an engine that can also run on its
  *   host. Account entries apply to local sessions only in v1.
  * - A local Claude session walks its account's own chain (FR-079): the default
@@ -49,20 +50,19 @@ function fallbackModelMapOf(config: JinnConfig, account: string): Record<string,
  * - Any other local session walks its engine's chain, as before accounts.
  */
 export function chooseSubstitute(input: ChooseSubstituteInput): SubstituteChoice | undefined {
-  if (isBoardWalkTurn(input.session)) return undefined;
+  return chooseSubstituteOrReason(input).choice;
+}
+
+/** As `chooseSubstitute`, and when a session with its own fallback target cannot use it, why:
+ *  it never falls back to the config's chain, so the turn waits and says so. */
+export function chooseSubstituteOrReason(input: ChooseSubstituteInput): { choice?: SubstituteChoice; reason?: string } {
+  if (isBoardWalkTurn(input.session)) return {};
+  if (isAutoResume(input.config, input.session)) return {};
   // Health recorded about the gateway's own login says nothing about the host
   // this turn is going back to.
   const health = engineHealthForTarget(readEngineHealth(), input.remoteTarget);
-  return !input.remote && input.session.engine === "claude" ? accountSubstitute(input, health) : engineSubstitute(input, health);
-}
-
-/** The walk's options: the caller's, plus the account a substituted session belongs to. A
- *  department-scoped session takes only Claude-account entries (FR-026a): it must stay on claude.
- *  Whether it is scoped is `sessionScopeDepartment`'s answer, as everywhere else: a session whose
- *  binding was lost is still its scoped employee's, and stays on claude. */
-function walkOptions(input: ChooseSubstituteInput): AccountFallbackOptions {
-  const original = accountOverride(input.session)?.originalAccount;
-  return { ...input.options, ...(original ? { original } : {}), ...(sessionScopeDepartment(input.session) ? { accountsOnly: true } : {}) };
+  if (input.session.fallbackTarget) return chooseTargetSubstitute(input, health);
+  return { choice: !input.remote && input.session.engine === "claude" ? accountSubstitute(input, health) : engineSubstitute(input, health) };
 }
 
 /** A local Claude session: its account's own chain (FR-079). */
@@ -70,7 +70,7 @@ function accountSubstitute(input: ChooseSubstituteInput, health: EngineHealthRea
   const { config, engines, account } = input;
   if (!accountHasChain(config, account)) return undefined;
   const target = resolveHealthyAccountFallback(config, account,
-    (candidate) => engines.has(candidate.engine) && engineAvailable(config, candidate.engine), health, walkOptions(input));
+    (candidate) => engines.has(candidate.engine) && engineAvailable(config, candidate.engine), health, accountWalkOptions(input.session, input.options));
   if (!target) return undefined;
   if (target.engine !== "claude") return { engine: target.engine, claudeProfile: null };
   const profile = target.account === DEFAULT_CLAUDE_ACCOUNT ? null : declaredAccountByKey(config, target.account)?.profile ?? null;
@@ -87,13 +87,14 @@ function engineSubstitute(input: ChooseSubstituteInput, health: EngineHealthRead
   // A department-scoped session stays on claude (FR-026a): its stage directory is Claude's
   // layout, and on a remote host the account entries that could keep it there do not apply,
   // so it waits for its reset rather than move to another engine.
-  const scoped = Boolean(sessionScopeDepartment(session) ?? input.remoteTarget.remoteDepartment);
+  const scoped = substituteScoped(session, input.remoteTarget);
   // A remote employee's substitute has to be an engine that can ALSO run on that
   // host, and the usability question moves there with it: `engineAvailable`
   // probes the GATEWAY's PATH, which says nothing about another machine.
-  const isUsable = (candidate: EngineName) => engines.has(candidate) && (!scoped || candidate === "claude") && (remote
-    ? engineSupportsRemote(candidate) && remoteEngineAvailable(sshDestination(remote), candidate) !== false
-    : engineAvailable(config, candidate));
+  // `engineAllowedAsSubstitute` has already checked `engineSupportsRemote` when `remote` is set, which is
+  // what the cast to the remote engine names stands on.
+  const isUsable = (candidate: EngineName) => engines.has(candidate) && engineAllowedAsSubstitute({ scoped, remote: Boolean(remote) }, candidate)
+    && (remote ? remoteEngineAvailable(sshDestination(remote), candidate as RemoteEngineName) !== false : engineAvailable(config, candidate));
   const name = resolveHealthyFallbackEngine(config, session.engine, isUsable, substituteHealth(health, employee));
   if (!name) return undefined;
   // A non-Claude session falling to claude runs as its employee's own profile.

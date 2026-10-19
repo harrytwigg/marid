@@ -21,6 +21,7 @@ import { viewSwitchLockedEngine, viewSwitchLockedTitle } from '@/components/chat
 import { ThreadPeek, type CommsPeekData } from '@/components/chat/thread-peek'
 import { ChatErrorBoundary } from './chat-error-boundary'
 import { ChatHeaderMenu } from './chat-header-menu'
+import './glass-chat.css'
 import { MultiChatGrid } from './multi-chat-grid'
 import { deriveChatGridIds } from './grid-placement'
 import { usePaneIdentity } from './pane-identity'
@@ -44,7 +45,7 @@ const FileView = lazy(() =>
   import('@/components/chat/file-view').then((m) => ({ default: m.FileView })),
 )
 import { LayoutOpenProviders, type OpenFile } from '@/components/chat/file-open-context'
-import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
+import { useEmployeeDeepLink, useNewChatTabHandlers, useNewChatTabOpener, useSubagentTabOpener, useTodoTabOpener } from './use-layout-tab-openers'
 import { fileBackPlan } from './file-back'
 import { ShortcutOverlay } from '@/components/chat/shortcut-overlay'
 import { useChatTabs, type ChatTab } from '@/hooks/use-chat-tabs'
@@ -165,8 +166,22 @@ function ChatPage() {
   // wanted (the operator is culling a list, not switching chats), but a pane or
   // tab still holding a removed session would go stale, so close each one; the
   // route follows the active tab if it was among them.
+  //
+  // A pane still showing a removed session can take focus after the removal (the composer's
+  // focus after a switch lands a frame late), and focus selects the pane's chat: that reopened
+  // the closed tab and pulled the route back. So the ids removed here are remembered until an
+  // explicit selection opens one again, and a pane's own focus does not select them.
+  const removedSessionIdsRef = useRef(new Set<string>())
+  // The bulk archive can land between a select and the route committing it, so the
+  // navigation in flight names a chat that is already gone. That commit is not a new
+  // arrival: it must not clear the removed mark or open the tab back up.
+  const overtakenSelectionRef = useRef<string | null>(null)
   const handleSessionsRemoved = useCallback((ids: string[]) => {
-    for (const id of ids) { removeWorkingSetPane(id); closeSessionTab(id) }
+    for (const id of ids) {
+      removedSessionIdsRef.current.add(id)
+      if (pendingNavRef.current === id) overtakenSelectionRef.current = id
+      removeWorkingSetPane(id); closeSessionTab(id)
+    }
   }, [closeSessionTab, removeWorkingSetPane])
   const duplicateSessionMutation = useDuplicateSession()
   const focusedDelegatedActivity = useMemo(
@@ -178,23 +193,6 @@ function ChatPage() {
   const sidebarOrderRef = useRef<SidebarOrder>({ sessionIds: [], employeeNames: [], employeeSessionMap: {} })
   const handleOrderComputed = useCallback((order: SidebarOrder) => { sidebarOrderRef.current = order }, [])
 
-
-  // Close more menu on outside click. The moreMenu JSX is shared between the
-  // desktop tab bar and the mobile header (rendered twice in the DOM, one
-  // hidden via CSS), so a single ref points to only one copy — mobile taps
-  // would be seen as "outside" and close the menu. Use a data-attribute
-  // ancestor check instead so both copies count as "inside".
-  useEffect(() => {
-    if (!showMoreMenu) return
-    function handleClick(e: MouseEvent) {
-      const target = e.target as HTMLElement | null
-      if (showMoreMenu && target && !target.closest('[data-more-menu]')) {
-        setShowMoreMenu(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [showMoreMenu])
 
   // D4: open the existing global search (⌘K). GlobalSearch listens for a
   // meta/ctrl+K keydown on window, so synthesize one — same mechanism the old
@@ -277,6 +275,9 @@ function ChatPage() {
   // history state for the back chip.
   const handleSelect = useCallback(
     (id: string, opts?: { navigateMobile?: boolean; replace?: boolean; from?: ThreadOrigin; system?: boolean }) => {
+      removedSessionIdsRef.current.delete(id)
+      // A fresh selection supersedes any archive that overtook an earlier one.
+      overtakenSelectionRef.current = null
       const currentId = selectedIdRef.current
       const currentScroller = document.querySelector<HTMLElement>('.chat-messages-scroll') // display-toggled away on a phone, where it reports scrollTop 0
       if (currentId && currentScroller?.clientHeight) sessionScrollRef.current.set(currentId, currentScroller.scrollTop)
@@ -312,6 +313,12 @@ function ChatPage() {
     }
   }, [handleSelect, workingSet])
 
+  // Focus that reaches a pane itself, as opposed to a deliberate move to a chat (the next/previous
+  // shortcut, closing a pane): a pane for a chat removed in bulk is not a selection.
+  const handlePaneFocus = useCallback((sessionId: string) => {
+    if (!removedSessionIdsRef.current.has(sessionId)) handleFocusPane(sessionId)
+  }, [handleFocusPane])
+
   const handleMobileWorkingSetSelect = useCallback((sessionId: string) => {
     handleSelect(sessionId, { navigateMobile: false })
   }, [handleSelect])
@@ -333,8 +340,27 @@ function ChatPage() {
   useEffect(() => {
     pendingNavRef.current = undefined
     if (navigationType === 'POP') setSystemPrimedId(null)
+    // A commit the bulk archive overtook names a chat that is already gone, so it is
+    // not an arrival: it must not clear the removed mark or open the tab back up.
+    // The route follows the active tab instead — the step the tab→URL reconciler
+    // would have taken had this commit not moved the URL out from under it. A POP is
+    // never that push, so back/forward to the chat still re-opens it as before.
+    const overtaken = overtakenSelectionRef.current
+    overtakenSelectionRef.current = null
+    if (selectedId && overtaken === selectedId && navigationType !== 'POP') {
+      const at = chatTabs.activeTab
+      didMountRef.current = true
+      if (at && at.kind === 'session') {
+        handleSelect(at.sessionId, { replace: true, navigateMobile: false, system: true })
+      } else if (!at) {
+        pendingNavRef.current = null
+        navigate('/', { replace: true })
+      }
+      return
+    }
     if (selectedId) {
       newChatIntentRef.current = false
+      removedSessionIdsRef.current.delete(selectedId) // the route came to it again (back, deep link)
       chatTabs.openTab({ sessionId: selectedId, label: 'Loading...', status: 'idle', unread: false })
     } else if (didMountRef.current) {
       // Landed on bare `/` mid-session. On history traversal, arm the new-chat
@@ -419,6 +445,7 @@ function ChatPage() {
     return true
   }, [chatTabs, viewport.mobile, workingSet])
   const openTodo = useTodoTabOpener(workingSet.openTodo, viewport.mobile)
+  const openSubagent = useSubagentTabOpener(workingSet.openSubagent, viewport.mobile)
 
   // Mobile-only: back from the file view to the chat it was opened from (closing the
   // file tab, so they do not pile up into the open-chats cap), or to the chat list
@@ -838,7 +865,7 @@ function ChatPage() {
   const pickerPane = gridPicker.bind(gridAdd.addPane, workingSet.add, handleSessionCreated)
   const desktopMultiPane = chatTabs.activeTab?.kind !== 'file' && !awaitingOpen && !viewport.mobile && (deriveChatGridIds({ sessionIds: gridPaneKeys, primaryPaneKey: paneKey, primarySessionId: committedId, pickerPaneKey: pickerPane?.paneKey }).length > 1 || hasTabbedGroup(workingSet.split.layout))
   return (
-    <LayoutOpenProviders file={openFile} todo={openTodo} session={handleOpenChat}>
+    <LayoutOpenProviders file={openFile} todo={openTodo} subagent={openSubagent} session={handleOpenChat}>
     <PageLayout chromeless>
       <div className="flex overflow-hidden h-full">
         {/* Desktop keeps the slim nav ribbon while its chat list folds.
@@ -868,19 +895,20 @@ function ChatPage() {
         </div>}
 
         <div
+          data-shell="sheet"
           className="chat-pills-layout relative min-w-0 flex-1 flex-col overflow-hidden bg-background flex"
           // Set exactly where the pills + scrim are drawn, so a CLI or terminal
           // view clears them there and nowhere else (JIN-2; rule at the foot).
           data-floating-header={desktopMultiPane ? undefined : ''}
         >
-          {/* Single-pane content scrolls beneath the theme-aware header cloud. */}
+          {/* Single-pane content scrolls beneath the header scrim: a glass band from
+              lg up on a fine pointer, today's solid fade otherwise (glass-identity.css). */}
           {!desktopMultiPane && <div
-            aria-hidden data-chat-top-scrim
+            aria-hidden data-chat-top-scrim data-chat-scrim-flat={effectiveViewMode === 'cli' ? '' : undefined}
             className={cn(
               "pointer-events-none absolute inset-x-0 top-0 z-[5] h-[var(--chat-top-scrim)]",
               onMobileList && "hidden lg:block",
             )}
-            style={{ background: 'linear-gradient(to bottom, var(--bg) 0, var(--bg) 52px, color-mix(in srgb, var(--bg) 68%, transparent) 68px, transparent 100%)' }}
           />}
 
           {/* Mobile keeps its nav chrome; multi-pane desktop moves identity into panes. */}
@@ -952,7 +980,7 @@ function ChatPage() {
                   delegatedActivity: focusedDelegatedActivity,
                 }}
                 viewport={viewport}
-                onFocus={handleFocusPane}
+                onFocus={handlePaneFocus}
                 onRemove={handleRemovePane}
                 metaById={paneState.metaById} sessionTitleFor={(id) => sessionsQuery.data?.find((session) => String(session.id ?? '') === id)?.title}
                 runtime={{ portalName, subscribe, engineRegistry, connectionSeq, skillsVersion, events }}

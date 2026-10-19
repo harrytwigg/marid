@@ -7,7 +7,7 @@ import {
   GitBranch,
   Tags,
   UserRound,
-} from "lucide-react"
+} from "@/components/ui/icon"
 import {
   api,
   type DepartmentSummaryWire,
@@ -66,7 +66,7 @@ function PropertyChip({
         data-testid={testId}
         aria-expanded={active || undefined}
         onClick={onClick}
-        className={`focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors ${
+        className={`focus-outline inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors ${
           active
             ? "bg-[var(--accent-fill)] text-[var(--accent)]"
             : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"
@@ -219,7 +219,7 @@ export function NewTodoDialog({
       open={leaving === null}
       onRequestClose={() => { if (busy) return; if (dirty) setConfirmDiscard(true); else setLeaving("closed") }}
       onClosed={leaving === "created" ? onCreated : onClose}
-      className="inset-x-3 bottom-3 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] px-5 py-5 pb-[max(20px,env(safe-area-inset-bottom))] shadow-[var(--shadow-overlay)] motion-safe:data-[state=closed]:animate-sheet-out motion-safe:data-[state=open]:animate-sheet-in sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[min(620px,calc(100vw-32px))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:px-7 sm:py-6 sm:motion-safe:data-[state=closed]:animate-pop-out sm:motion-safe:data-[state=open]:animate-pop-in"
+      className="inset-x-3 bottom-3 max-h-[calc(100dvh-24px)] overflow-y-auto rounded-[var(--radius-xl)] px-5 py-5 pb-[max(20px,env(safe-area-inset-bottom))] sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[min(620px,calc(100vw-32px))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:px-7 sm:py-6"
     >
       <div
         onKeyDown={(event) => {
@@ -353,7 +353,7 @@ export function NewTodoDialog({
             data-testid="todo-new-create-more"
             disabled={!title.trim() || busy}
             onClick={() => void create(true)}
-            className="focus-ring min-h-11 rounded-full px-3 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] disabled:opacity-40"
+            className="focus-outline min-h-11 rounded-full px-3 text-[12px] font-semibold text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)] disabled:opacity-40"
           >
             Create more <span className="ml-1 font-normal opacity-60">⇧⌘↵</span>
           </button>
@@ -361,7 +361,7 @@ export function NewTodoDialog({
           <button
             type="button"
             onClick={() => { if (dirty) setConfirmDiscard(true); else setLeaving("closed") }}
-            className="focus-ring min-h-11 rounded-full px-4 text-[length:var(--text-subheadline)] font-medium text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--fill-secondary)]"
+            className="focus-outline min-h-11 rounded-full px-4 text-[length:var(--text-subheadline)] font-medium text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--fill-secondary)]"
           >
             Cancel
           </button>
@@ -370,7 +370,7 @@ export function NewTodoDialog({
             data-testid="todo-new-create"
             disabled={!title.trim() || busy}
             onClick={() => void create(false)}
-            className="focus-ring min-h-11 rounded-full bg-[var(--accent)] px-5 text-[length:var(--text-subheadline)] font-semibold text-[var(--accent-contrast)] outline-none transition-transform hover:scale-[0.98] disabled:opacity-40" // jinn-shell: ok dialog submit, not page chrome
+            className="focus-outline min-h-11 rounded-full bg-[var(--accent)] px-5 text-[length:var(--text-subheadline)] font-semibold text-[var(--accent-contrast)] outline-none transition-transform hover:scale-[0.98] disabled:opacity-40" // jinn-shell: ok dialog submit, not page chrome
           >
             {busy ? "Creating…" : "Create todo"}
           </button>

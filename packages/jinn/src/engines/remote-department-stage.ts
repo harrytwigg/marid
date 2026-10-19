@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import { departmentRecord } from "../gateway/department-registry.js";
 import { generateStageFileSet } from "../gateway/department-stage/file-set.js";
 import { logger } from "../shared/logger.js";
+import { relayStampShellCheck } from "../shared/host-assets.js";
+import { renameRemoteStages } from "./remote-stage-rename.js";
 import { resolveJinnHome } from "../shared/paths.js";
 import { FARM_FILTERED_DIRS, REMOTE_STAGE_MARKER } from "../shared/remote-farm.js";
 import { assertScopedRemoteSpawn, remoteDepartmentsRoot, remoteDepartmentStageDir } from "../shared/remote-department.js";
@@ -87,7 +89,7 @@ done
 # start a gateway or open a database (shared/local-db-guard.ts).
 printf 'remote session stage: department-scoped, nothing here leads to the gateway home\\n' > "$home/${REMOTE_STAGE_MARKER}"
 for a in hook-relay.mjs remote-trust-seed.mjs; do
-  if [ -f "$root/$a" ] && [ ! -L "$root/$a" ]; then printf 'asset=%s\\n' "$a"; fi
+  if [ -f "$root/$a" ] && [ ! -L "$root/$a" ]${relayStampShellCheck(shq)}; then printf 'asset=%s\\n' "$a"; fi
 done
 `;
 
@@ -234,7 +236,14 @@ function incomingName(slug: string): string {
  * before the trust seed, whose `mkdir -p` would otherwise create an empty stage directory.
  * Returns the stage directory's real path on the host.
  */
-export async function syncRemoteDepartmentStage(destination: string, facts: RemoteFacts, remote: RemoteExecutionConfig, slug: string): Promise<string> {
+export async function syncRemoteDepartmentStage(
+  destination: string,
+  facts: RemoteFacts,
+  remote: RemoteExecutionConfig,
+  slug: string,
+  claudeConfigDir?: string,
+): Promise<string> {
+  await renameRemoteStages(destination, facts, remote, claudeConfigDir);
   const { files } = generateStageFileSet({ home: resolveJinnHome(), slug, definition: departmentRecord(slug).definition });
   const res = await sshRun(destination, [buildStageSyncCommand(remote, facts, slug, incomingName(slug))], { stdin: buildStageTar(files) });
   if (res.code !== 0) {

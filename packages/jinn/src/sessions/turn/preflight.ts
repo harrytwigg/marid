@@ -18,6 +18,7 @@ import { isRemoteMcpSession } from "../remote-mcp-session.js";
 import { isTerminalSession, TERMINAL_REFUSES_MESSAGES } from "../../terminals/session.js";
 import { readUnseenInterruptedPrompts } from "./superseded.js";
 import { resolveBoardReminder } from "./board-reminder.js";
+import { findBuiltinMcp } from "../../mcp/builtin-name.js";
 import type { TurnHierarchy, TurnInput, TurnPlan, TurnPreflight } from "./types.js";
 export { warnIfNearUsageLimit } from "./usage-warning.js";
 
@@ -121,7 +122,7 @@ function contextOptionsFor(
     rosterUnavailable: input.roster?.unavailable,
     // The diet keys off the built-in jinn server specifically — custom MCP
     // servers don't carry the company tools.
-    jinnMcpAttached: Boolean(resolvedMcp?.mcpServers?.["jinn"]),
+    jinnMcpAttached: Boolean(findBuiltinMcp(resolvedMcp?.mcpServers)),
   };
 }
 

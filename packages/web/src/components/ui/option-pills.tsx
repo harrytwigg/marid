@@ -26,7 +26,7 @@ export function OptionPills({
           aria-checked={option.value === selected}
           disabled={disabled}
           onClick={() => onSelect(option.value)}
-          className={`focus-ring min-h-9 max-w-full break-words rounded-full px-3 py-1.5 text-left text-[length:var(--text-footnote)] font-[var(--weight-medium)] outline-none transition-colors disabled:opacity-50 ${
+          className={`focus-outline min-h-9 max-w-full break-words rounded-full px-3 py-1.5 text-left text-[length:var(--text-footnote)] font-[var(--weight-medium)] outline-none transition-colors disabled:opacity-50 ${
             option.value === selected
               ? "bg-[var(--accent-fill)] text-[var(--accent)]"
               : "bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]"

@@ -4,6 +4,7 @@ import { useOrg } from '@/hooks/use-employees'
 import { ChatMessages } from '@/components/chat/chat-messages'
 import type { CommsPeekData } from '@/components/chat/thread-peek'
 import { ChatInput } from '@/components/chat/chat-input'
+import { SessionStatusCluster } from '@/components/chat/session-status/session-status-cluster'
 import { CliKeybar } from '@/components/chat/cli-keybar'
 import { TerminalPaneBody } from '@/components/chat/terminal-pane-body'
 import { isTerminalSession } from '@/lib/terminal-session'
@@ -11,7 +12,10 @@ import { ChatEmployeePicker } from '@/components/chat/chat-employee-picker'
 import { ChatHydrationOverlay, useHydrationSpinner } from '@/components/chat/chat-hydration'
 import { SessionQueueContext, useSessionQueue } from '@/components/chat/use-session-queue'
 import { BackgroundActivityStatus } from '@/components/chat/background-activity-status'
+import { useSubagentView } from '@/components/chat/use-subagent-view'
 import { TerminalWaitStatus } from '@/components/chat/terminal-wait-status'
+import { FallbackModeChip } from './fallback-mode-chip'
+import { parseFallbackView } from './fallback-mode-model'
 import { ModelSelectorRow, type SelectorValue } from '@/components/chat/model-selector-row'
 import { useLiveSession } from '@/hooks/use-live-session'
 import { useStaleChatNotice, type FreshChatSourceSession } from '@/components/chat/use-stale-chat-notice'
@@ -20,6 +24,7 @@ import { FileDropOverlay } from '@/components/ui/file-drop-overlay'
 import { ChatPaneTitleBar, paneTitleBarState, paneViewControls } from '@/components/chat/chat-pane-title-bar'
 import { usePaneClosable, usePaneShownDoc, usePaneTabId, usePaneTabsKeep } from '@/components/chat/pane-tabs-context'
 import { DocView } from '@/components/chat/doc-view'
+import { docViewTestId } from '@/components/chat/doc-view-test-id'
 import { ChatCopyToast } from '@/components/chat/chat-copy-toast'
 import type { PaneSessionActions } from '@/components/chat/pane-session-actions'
 import { useOnboardingSeed } from '@/components/chat/use-onboarding-seed'
@@ -432,6 +437,7 @@ export function ChatPane({
     backgroundActivity, delegatedActivity, paneTitle, paneEmployee, portalName })
   const titleBarViewControls = paneViewControls(titleBarState.session, engineRegistry)
   const paneDelegatedActivity = (titleBarState.session.delegatedActivity as DelegatedActivity | null | undefined) ?? null
+  const subagentView = useSubagentView(sessionId)
   // A terminal session is its shell and nothing else: no transcript, no composer.
   const terminalPane = sessionId && (terminal || isTerminalSession(currentSession)) ? sessionId : null
   // A document tab of this pane's group is showing (a file, a Todo): it covers the chat, which stays
@@ -452,7 +458,7 @@ export function ChatPane({
         background: 'var(--bg)',
         position: 'relative',
       }}
-      data-chat-pane-session={sessionId ?? 'new'} data-chat-pane-active={String(isActive)}
+      data-chat-pane-session={sessionId ?? 'new'} data-chat-pane-active={String(isActive)} data-chat-multi-pane={multiPane ? '' : undefined}
       onClick={(event) => { if (!(event.target as Element).closest('[data-pane-focus-preserving]')) onFocus() }} onFocusCapture={(event) => { if (!(event.target as Element).closest('[data-pane-focus-preserving]')) onFocus() }}
       className="group/chat-pane"
       {...fileDrop.handlers}
@@ -465,7 +471,7 @@ export function ChatPane({
       {showSessionHydration && !shownFile && <ChatHydrationOverlay />}
 
       <div style={PANE_REGION}>
-      <div data-chat-pane-body inert={shownFile ? true : undefined} style={PANE_REGION}>
+      <div data-chat-pane-body data-composer-float={!multiPane && !terminalPane && !(viewMode === 'cli' && sessionId) ? '' : undefined} inert={shownFile ? true : undefined} style={PANE_REGION}>
 
       {/* Messages / CLI transcript — CliTerminal is display-only; ChatInput below
           sends. The transcript mounts on a blank composer too, with the employee
@@ -494,6 +500,7 @@ export function ChatPane({
             olderMessagesError={olderMessagesError}
             onLoadOlderMessages={loadOlderMessages}
             onPeek={onPeek}
+            onOpenSubagent={subagentView.open}
             blockArrivals={blockArrivals}
             liveTerminalDelegationIds={liveTerminalDelegationIds}
             blockAnnouncement={blockAnnouncement}
@@ -551,10 +558,13 @@ export function ChatPane({
               activity={backgroundActivity}
               delegatedActivity={paneDelegatedActivity}
               employeeDisplayNames={employeeDisplayNames}
+              sessionId={sessionId}
+              onOpenSubagent={subagentView.open}
             />
           ) : undefined
         }
         selectorSlot={
+          <>
           <ModelSelectorRow
             mode={sessionId ? 'existing' : 'new'}
             value={selector}
@@ -564,7 +574,26 @@ export function ChatPane({
             disabled={loading}
             contextTokens={liveContextTokens ?? (currentSession?.lastContextTokens as number | null | undefined) ?? undefined}
           />
+          {sessionId ? (
+            <FallbackModeChip
+              sessionId={sessionId}
+              view={parseFallbackView(currentSession?.fallback)}
+              subscribe={subscribe}
+              disabled={loading}
+            />
+          ) : null}
+          </>
         }
+        sessionStatusSlot={sessionId ? (
+          <SessionStatusCluster
+            key={sessionId}
+            sessionId={sessionId}
+            loading={loading}
+            status={currentSession?.status as string | undefined}
+            lastContextTokens={currentSession?.lastContextTokens as number | null | undefined}
+            liveContextTokens={liveContextTokens}
+          />
+        ) : undefined}
         terminalActionsSlot={
           viewMode === 'cli' && sessionId ? (
             <CliKeybar onKey={(data) => cliTerminalRef.current?.sendKey(data)} />
@@ -574,11 +603,12 @@ export function ChatPane({
       </>)}
       </div>
       {shownFile ? (
-        <div data-testid={shownFile.kind === 'file' ? 'pane-file-view' : 'pane-todo-view'} className="absolute inset-0 z-[6] flex flex-col bg-[var(--bg)]">
+        <div data-testid={docViewTestId(shownFile)} className="absolute inset-0 z-[6] flex flex-col bg-[var(--bg)]">
           <DocView doc={shownFile} />
         </div>
       ) : null}
       </div>
+      {subagentView.node}
     </div>
   )
 }

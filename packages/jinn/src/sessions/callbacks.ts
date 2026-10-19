@@ -16,6 +16,7 @@ import { STRUCTURED_MESSAGE_BODY_MAX_CHARS, type Session } from "../shared/types
 import type { ChatBlockEnvelope, JsonObject } from "../shared/types.js";
 import { enforceDelegationCompletionContract } from "./delegation-completion-contract.js";
 import { isRemoteMcpSession } from "./remote-mcp-session.js";
+import { __resetHeldRepliesForTest, holdsInterimRelay, recoverHeldInterimReplies, releaseHeldReply, reviewHeldInterimReply, setHeldReplyRelay } from "./held-replies.js";
 import { withReportingParent } from "../work-items/employee-session-delegation.js";
 import type { SessionDeliveryPayload } from "../shared/types.js";
 
@@ -25,6 +26,14 @@ export const CALLBACK_DELIVERY_MAX_ATTEMPTS = CALLBACK_DELIVERY_RETRY_DELAYS_MS.
 // This is a transport ceiling with headroom under macOS ARG_MAX, not a preview budget.
 export const CALLBACK_REPLY_MAX_CHARS = 128_000;
 const CALLBACK_DELIVERY_ATTEMPT_LEASE_MS = 60_000;
+setHeldReplyRelay({
+  send: (child, text, attemptQualifier) => _sendNotification(child, { result: text }, {
+    skipCompletionContract: true,
+    callbackKind: "parent-external-turn",
+    attemptQualifier,
+  }),
+  maxChars: CALLBACK_REPLY_MAX_CHARS,
+});
 
 let callbackRetryTimer: ReturnType<typeof setTimeout> | undefined;
 let callbackRetrySweepRunning: Promise<number> | undefined;
@@ -111,7 +120,12 @@ export async function notifyParentSessionAndWait(
   // error, settleThrownTurn) must not leave it standing to swallow the next
   // external reply — that would re-create the loss on a side path.
   const relayed = consumeExplicitRelay(childSession);
-  if (!result.error && (!hasMeaningfulReply(result.result) || relayed)) return;
+  if (result.error || relayed) releaseHeldReply(childSession.id);
+  if (!result.error && (!hasMeaningfulReply(result.result) || relayed)) {
+    reviewHeldInterimReply(childSession.id);
+    return;
+  }
+  if (!result.error && holdsInterimRelay(childSession, result.result ?? "", { ...options, settledTurn: true })) return;
 
   await _sendNotification(childSession, result, options).catch((err) => {
     logger.warn(`[callbacks] Failed to notify parent session ${childSession.parentSessionId}: ${err instanceof Error ? err.message : String(err)}`);
@@ -143,7 +157,12 @@ export async function notifyParentOfExternalTurn(
   childSession = withReportingParent(childSession);
   if (!childSession.parentSessionId) return;
   const relayed = consumeExplicitRelay(childSession);
-  if (!hasMeaningfulReply(text) || relayed) return;
+  if (relayed) releaseHeldReply(childSession.id);
+  if (!hasMeaningfulReply(text) || relayed) {
+    reviewHeldInterimReply(childSession.id);
+    return;
+  }
+  if (holdsInterimRelay(childSession, text, options)) return;
 
   await _sendNotification(childSession, { result: text }, {
     alwaysNotify: options?.alwaysNotify,
@@ -243,6 +262,11 @@ export async function recoverSessionDeliveryStateOnStartup(): Promise<{
     orphanedRecovered = await recoverOrphanedDelegationCompletionClaims();
   } catch (error) {
     logger.error(`[callbacks] Startup orphan recovery failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    await recoverHeldInterimReplies();
+  } catch (error) {
+    logger.error(`[callbacks] Startup held-reply recovery failed: ${error instanceof Error ? error.message : String(error)}`);
   }
   return { pendingRecovered, orphanedRecovered };
 }
@@ -569,6 +593,7 @@ function armCallbackRetrySweep(): void {
 }
 
 export function __resetCallbackRetrySweepForTest(): void {
+  __resetHeldRepliesForTest();
   if (callbackRetryTimer) clearTimeout(callbackRetryTimer);
   callbackRetryTimer = undefined;
   callbackRetrySweepRunning = undefined;

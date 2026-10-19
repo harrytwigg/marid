@@ -1,5 +1,10 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { cleanEnv, localOpencodeLaunch, opencodeProcessEnv } from "../opencode-launch.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { cleanEnv, localOpencodeLaunch, opencodeDiscoveryEnv, opencodeProcessEnv } from "../opencode-launch.js";
+import { discoverOpencodeModels } from "../../shared/opencode-discovery.js";
+import type { JinnConfig } from "../../shared/config-types.js";
 import type { EngineRunOpts } from "../../shared/types.js";
 
 /**
@@ -97,5 +102,46 @@ describe("OPENCODE_DISABLE_FFF", () => {
     vi.stubEnv("OPENCODE_DISABLE_FFF", "1");
 
     expect(cleanEnv("sess-B", { disableFff: false }).OPENCODE_DISABLE_FFF).toBe("1");
+  });
+});
+
+describe("opencodeDiscoveryEnv", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  const cfg = (disableFff?: boolean) => ({ engines: { opencode: disableFff === undefined ? {} : { disableFff } } }) as unknown as JinnConfig;
+
+  it("carries OPENCODE_DISABLE_FFF by default and when on, and omits it when off", () => {
+    expect(opencodeDiscoveryEnv(cfg()).OPENCODE_DISABLE_FFF).toBe("1");
+    expect(opencodeDiscoveryEnv(cfg(true)).OPENCODE_DISABLE_FFF).toBe("1");
+    expect(opencodeDiscoveryEnv(cfg(false)).OPENCODE_DISABLE_FFF).toBeUndefined();
+  });
+
+  it("scrubs a parent session's opencode env and names no session", () => {
+    for (const [key, value] of Object.entries(PARENT)) vi.stubEnv(key, value);
+    vi.stubEnv("JINN_SESSION_ID", "parent-session");
+    const env = opencodeDiscoveryEnv(cfg());
+    for (const key of Object.keys(PARENT)) expect(env[key]).toBeUndefined();
+    expect(env.JINN_SESSION_ID).toBeUndefined();
+  });
+
+  it("reaches the process a discovery run spawns", async () => {
+    // The gateway's own env lacks the flag: only the engine's env can supply it.
+    vi.stubEnv("OPENCODE_DISABLE_FFF", "");
+    delete process.env.OPENCODE_DISABLE_FFF;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "oc-discovery-env-"));
+    try {
+      const log = path.join(dir, "fff.log");
+      const bin = path.join(dir, "opencode");
+      fs.writeFileSync(bin, `#!/bin/sh\necho "\${OPENCODE_DISABLE_FFF-unset}" >> "${log}"\necho opencode/alpha\n`, { mode: 0o755 });
+      const seen = async (config: JinnConfig) => {
+        fs.rmSync(log, { force: true });
+        await discoverOpencodeModels(bin, { env: opencodeDiscoveryEnv(config) });
+        return fs.readFileSync(log, "utf8").trim();
+      };
+      expect(await seen(cfg())).toBe("1");
+      expect(await seen(cfg(false))).toBe("unset");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

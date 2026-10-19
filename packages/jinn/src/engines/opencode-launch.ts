@@ -5,8 +5,10 @@ import { resolveBin } from "../shared/resolve-bin.js";
 import { JINN_HOME } from "../shared/paths.js";
 import { buildEngineChildEnv } from "../shared/child-env.js";
 import { assertRemoteTarget } from "../shared/remote-target.js";
-import type { RemoteExecutionConfig } from "../shared/config-types.js";
+import type { JinnConfig, RemoteExecutionConfig } from "../shared/config-types.js";
 import { buildOpencodeArgs, buildOpencodePrompt, describeOpencodeLaunch, type OpencodeRunFlags } from "./opencode-protocol.js";
+import { opencodeApiOf, type OpencodeApi } from "./opencode-version.js";
+import { COMMAND_TIMEOUT_ENV, localCommandTimeoutPlugins } from "./opencode-command-timeout.js";
 import {
   writeOpencodeSessionConfig,
   type OpencodeConfigHandle,
@@ -25,6 +27,7 @@ import {
   type RemoteOpencodeStaging,
 } from "./remote-stage.js";
 import { employeeSessionEnv } from "../sessions/employee-env.js";
+import { envNamesFor } from "../shared/codename-env.js";
 
 /**
  * Where one opencode turn runs, and what it is spawned with.
@@ -69,7 +72,7 @@ export interface OpencodeLaunchPlan {
  * `ANTHROPIC_API_KEY` would silently move the session onto metered billing.
  * opencode has no subscription to fall off.
  */
-export const REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "JINN_HOME_IDENTITY", "JINN_TAKE_PORT"];
+export const REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", ...envNamesFor(["HOME_IDENTITY", "TAKE_PORT"])];
 
 /**
  * What Marid itself sets on every opencode process, local or remote.
@@ -81,34 +84,67 @@ export const REMOTE_ENV_DENY = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "JINN_HO
  * scrubs only a few exact `OPENCODE_*` names and leaves `OPENCODE_DISABLE_*`
  * alone for the operator.
  */
-export function opencodeProcessEnv(opts: { disableFff: boolean }): Record<string, string> {
+export function opencodeProcessEnv(opts: OpencodeProcessOptions): Record<string, string> {
   return {
     // A self-upgrade between two turns of one session would swap the binary under
     // a conversation opencode is still holding in its own store.
     OPENCODE_DISABLE_AUTOUPDATE: "1",
     ...(opts.disableFff ? { OPENCODE_DISABLE_FFF: "1" } : {}),
+    // Read by the command-timeout plugin staged with it (opencode-command-timeout.ts).
+    ...(opts.commandTimeoutMs ? { [COMMAND_TIMEOUT_ENV]: String(opts.commandTimeoutMs) } : {}),
   };
 }
+
+/** What Marid's own settings put on every opencode process. */
+export interface OpencodeProcessOptions {
+  disableFff: boolean;
+  /** `engines.opencode.commandTimeoutMs`, resolved; 0 or absent: no ceiling. */
+  commandTimeoutMs?: number;
+}
+
+/** The gateway's environment with the other engines' variables scrubbed out. */
+const gatewayChildEnv = (): Record<string, string> =>
+  buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true });
 
 /** The environment every gateway-spawned opencode process starts from. Exported
  *  for the server mode, whose server, client and view must start from exactly
  *  the environment a `run` turn does. */
-export function cleanEnv(sessionId: string, opts: { disableFff: boolean }): Record<string, string> {
-  const env = buildEngineChildEnv(process.env, { scrubClaudeCode: true, scrubCodex: true, scrubOpencode: true });
+export function cleanEnv(sessionId: string, opts: OpencodeProcessOptions): Record<string, string> {
+  const env = gatewayChildEnv();
   env.JINN_SESSION_ID = sessionId;
   Object.assign(env, employeeSessionEnv(sessionId));
   Object.assign(env, opencodeProcessEnv(opts));
   return env;
 }
 
-/** A turn on the gateway's own machine. */
+/** The environment for opencode runs that belong to no session: model discovery.
+ *  `models` starts a private opencode server (always on 2.x with `--standalone`),
+ *  so it needs the same scrubbing and Marid-set variables as a turn, minus the
+ *  session identity. `disableFff` is read from the config as the engine does. */
+export function opencodeDiscoveryEnv(config: JinnConfig): Record<string, string> {
+  const env = gatewayChildEnv();
+  // A gateway started inside a session carries that session's id; discovery is no session's.
+  delete env.JINN_SESSION_ID;
+  return Object.assign(env, opencodeProcessEnv({ disableFff: config.engines.opencode?.disableFff !== false }));
+}
+
+/** What a binary of this API needs on its `run` argv: OpenCode 2's CLI starts
+ *  (and leaves) a background service unless told `--standalone`, which a 1.x
+ *  CLI rejects, and takes a variant on the model (`-m provider/model#variant`)
+ *  where a 1.x CLI has `--variant`. */
+export function runFlagsFor(api: OpencodeApi): OpencodeRunFlags {
+  return { standalone: api === 2, variantOnModel: api === 2 };
+}
+
+/** A turn on the gateway's own machine. `api` is the binary's, from its version. */
 export function localOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: { run?: OpencodeRunFlags; disableFff: boolean },
+  ctx: OpencodeProcessOptions & { api?: OpencodeApi },
 ): OpencodeLaunchPlan {
   const bin = resolveBin("opencode", opts.bin);
-  const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId);
+  const api = ctx.api ?? 1;
+  const configHandle = writeOpencodeSessionConfig(opts.resolvedMcp, trackingId, api, localCommandTimeoutPlugins(api, ctx.commandTimeoutMs ?? 0));
 
   logger.info(
     `opencode engine starting: ${bin} ${describeOpencodeLaunch(opts)} `
@@ -117,7 +153,7 @@ export function localOpencodeLaunch(
 
   return {
     bin,
-    args: buildOpencodeArgs(opts, ctx.run ?? {}),
+    args: buildOpencodeArgs(opts, runFlagsFor(api)),
     env: {
       ...cleanEnv(trackingId, ctx),
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
@@ -135,7 +171,7 @@ function opencodeSshArgs(
   opts: EngineRunOpts,
   trackingId: string,
   gatewayPort: number,
-  host: { facts: RemoteFacts; staging: RemoteOpencodeStaging; remote: RemoteEngineHandle; run: OpencodeRunFlags; disableFff: boolean },
+  host: OpencodeProcessOptions & { facts: RemoteFacts; staging: RemoteOpencodeStaging; remote: RemoteEngineHandle; run: OpencodeRunFlags },
 ): string[] {
   const { facts, staging, remote } = host;
   return buildSshSpawnArgs({
@@ -199,7 +235,7 @@ function remoteHandle(facts: RemoteFacts, staging: RemoteOpencodeStaging): Remot
 export async function remoteOpencodeLaunch(
   opts: EngineRunOpts,
   trackingId: string,
-  ctx: { remote: RemoteExecutionConfig | undefined; gatewayPort: number; run?: OpencodeRunFlags; disableFff: boolean },
+  ctx: OpencodeProcessOptions & { remote: RemoteExecutionConfig | undefined; gatewayPort: number },
 ): Promise<OpencodeLaunchPlan> {
   assertRemoteTarget(opts, ctx.remote);
   // Without a real gateway port the reverse forward would be built as
@@ -220,11 +256,12 @@ export async function remoteOpencodeLaunch(
     jinnSessionId: trackingId,
     gatewayPort: ctx.gatewayPort,
     ...(opts.resolvedMcp ? { resolvedMcp: opts.resolvedMcp } : {}),
+    opencodeCommandTimeout: Boolean(ctx.commandTimeoutMs),
   });
 
   const remote = remoteHandle(facts, staging);
   await reapStaleRemoteEngine(remote, "opencode");
-  const args = opencodeSshArgs(opts, trackingId, ctx.gatewayPort, { facts, staging, remote, run: ctx.run ?? {}, disableFff: ctx.disableFff });
+  const args = opencodeSshArgs(opts, trackingId, ctx.gatewayPort, { ...ctx, facts, staging, remote, run: runFlagsFor(opencodeApiOf(facts.opencodeVersion)) });
 
   logger.info(
     `opencode engine starting REMOTE on ${staging.destination}:${opts.remoteCwd} — ${describeOpencodeLaunch(opts)} `

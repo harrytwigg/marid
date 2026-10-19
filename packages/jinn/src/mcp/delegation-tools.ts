@@ -1,4 +1,5 @@
 import { gatewayRequest, JinnMcpToolError, type JinnMcpTool } from "./toolkit.js";
+import { SESSION_FALLBACK_MODES } from "../shared/session-fallback-config.js";
 import { UNIDENTIFIED_TOOL_CALL_ERROR } from "./identity.js";
 
 /**
@@ -107,6 +108,12 @@ export function buildDelegationTools(): JinnMcpTool[] {
         engine: { type: "string" },
         model: { type: "string" },
         effortLevel: { type: "string" },
+        fallbackMode: {
+          type: "string",
+          enum: [...SESSION_FALLBACK_MODES],
+          description:
+            "Usage-limit behaviour for the new session: fallback, fallback-children (its children inherit), or auto-resume (never switch model). Default: fallback-children if this session has it, else auto-resume.",
+        },
         title: { type: "string" },
         workItemId: { type: "string" },
         intent: {
@@ -128,7 +135,7 @@ export function buildDelegationTools(): JinnMcpTool[] {
       if (!ctx.callerSessionId) throw new JinnMcpToolError(UNIDENTIFIED_TOOL_CALL_ERROR);
       const task = requireString(args, "task");
       const body: Record<string, unknown> = { task };
-      for (const key of ["employee", "engine", "model", "effortLevel", "title", "workItemId", "intent", "idempotencyKey"] as const) {
+      for (const key of ["employee", "engine", "model", "effortLevel", "fallbackMode", "title", "workItemId", "intent", "idempotencyKey"] as const) {
         const v = optionalString(args, key);
         if (v !== undefined) body[key] = v;
       }

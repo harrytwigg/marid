@@ -11,6 +11,7 @@ import {
 } from "./request-authority.js";
 import { resolveCallerIdentity, type CallerIdentityOptions } from "./session-comm-guards.js";
 import { resolveScopedCaller } from "./department-scope/caller.js";
+import { adoptLegacyHeaders } from "../shared/wire-names.js";
 
 /**
  * Who may open a WebSocket upgrade.
@@ -44,6 +45,9 @@ export function rejectUnverifiedIdentifiedUpgradeCaller(
   socket: UpgradeRejectionSocket,
   options: Pick<CallerIdentityOptions, "sessionExists"> = {},
 ): boolean {
+  // An upgrade never reaches the request handler, which is where a peer's legacy-named identity headers are adopted:
+  // left unread, a tool call from an older MCP server would look like an operator's.
+  adoptLegacyHeaders(req.headers);
   const identity = resolveCallerIdentity(req.headers, {
     sessionExists: options.sessionExists ?? ((sessionId) => !!getSession(sessionId)),
     verifySessionCapability,
@@ -62,6 +66,7 @@ export function rejectNonOperatorPtyUpgradeCaller(
   socket: UpgradeRejectionSocket,
   options: Pick<CallerIdentityOptions, "sessionExists" | "operatorAuthenticated"> = {},
 ): boolean {
+  adoptLegacyHeaders(req.headers);
   const identity = resolveCallerIdentity(req.headers, {
     sessionExists: options.sessionExists ?? ((sessionId) => !!getSession(sessionId)),
     verifySessionCapability,

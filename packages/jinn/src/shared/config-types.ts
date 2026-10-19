@@ -9,6 +9,7 @@ import type { RemoteMcpConfig } from "./remote-mcp-config.js";
 import type { TodoDepartmentsConfig } from "./todo-departments-config.js";
 import type { AutoCompactConfig } from "./auto-compact-config.js";
 import type { ContextConfig } from "./context-config.js";
+import type { SessionFallbackMode } from "./session-fallback-config.js";
 import type { ClaudeAccountConfig } from "./claude-accounts-config.js";
 import type { EngineName } from "./models.js";
 import type { MusecodeEngineConfig } from "./musecode-config.js";
@@ -37,7 +38,8 @@ export interface PortalConfig {
 }
 
 export interface JinnConfig {
-  jinn?: { version?: string };
+  /** The instance's own record, keyed by the codename in either spelling: version, and the built-in MCP server's name. */
+  jinn?: { version?: string; mcpServerName?: string };
   gateway: {
     port: number;
     host: string;
@@ -150,6 +152,14 @@ export interface JinnConfig {
        * opencode bundles `@ff-labs/fff-bun` >= 0.11 or #50719 is fixed.
        */
       disableFff?: boolean;
+      /**
+       * The longest one shell command of an opencode turn may run, in ms
+       * (default 1800000, 30 min; 0 turns it off). opencode lets the model pick a
+       * command's timeout with no upper bound; Marid stages a plugin that caps it
+       * at this, on 1.x and 2.x, local and remote. 2.x background commands are
+       * not capped. See docs/engines-opencode.md.
+       */
+      commandTimeoutMs?: number;
       /** meter jinn's own opencode spend against the provider's
        *  windowed allowance, since opencode publishes none to read. Absent =
        *  unmetered, exactly as before. See docs/engines-opencode.md. */
@@ -193,6 +203,10 @@ export interface JinnConfig {
     rateLimitStrategy?: "wait" | "fallback";
     /** Engine to use when rateLimitStrategy="fallback". Default: "codex" */
     fallbackEngine?: "codex";
+    /** What a session without its own setting does at a usage limit (session-fallback-config.ts).
+     *  Default "fallback". Children of a `fallback` session get `auto-resume`;
+     *  "fallback-children" restores tree-wide fallback. */
+    fallbackMode?: SessionFallbackMode;
   };
   cron?: {
     defaultDelivery?: CronDelivery;

@@ -210,7 +210,9 @@ export async function recordAction(
 }
 
 /** Spawn a normal text session with the talk session's row as its parent, so the
- *  existing callback machinery reaches it without anyone polling. */
+ *  existing callback machinery reaches it without anyone polling. It stores no
+ *  fallback mode: like a new typed chat, it is the root of its own work and follows
+ *  the config default. */
 export async function handOff(
   req: IncomingMessage,
   res: ServerResponse,

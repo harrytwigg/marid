@@ -6,10 +6,12 @@ import { claudeChainAccountProblems, validateClaudeAccounts } from "./claude-acc
 import { opencodeUsageLimitsProblems } from "./opencode-usage-limits-config.js";
 import { autoCompactProblems } from "./auto-compact-config.js";
 import { contextConfigProblems } from "./context-config.js";
+import { sessionFallbackConfigProblems } from "./session-fallback-config.js";
 import type { JinnConfig } from "./types.js";
 import { todoRecoveryProblems } from "./todo-recovery-config.js";
 import { todoDepartmentsProblems } from "./todo-departments-config.js";
 import { remoteMcpProblems } from "./remote-mcp-config.js";
+import { nameAliases } from "./codename.js";
 
 type ClaudeEngineConfig = JinnConfig["engines"]["claude"];
 
@@ -41,7 +43,7 @@ export function validateConfigShape(config: unknown): string[] {
   const problems: string[] = [];
   const c = config as Record<string, any>;
 
-  problems.push(...contextConfigProblems(c.context), ...validateKnowledgeShape(c.knowledge));
+  problems.push(...contextConfigProblems(c.context), ...sessionFallbackConfigProblems(c.sessions), ...validateKnowledgeShape(c.knowledge));
 
   if (c.gateway !== undefined) {
     if (typeof c.gateway !== "object" || c.gateway === null || Array.isArray(c.gateway)) {
@@ -294,7 +296,7 @@ const CONFIG_TOP_LEVEL_KEY_SET: Record<keyof JinnConfig, true> = {
   cron: true, notifications: true, workflows: true, portal: true, context: true, knowledge: true,
   stt: true, talk: true, realtime: true, remote: true, terminal: true,
 };
-export const CONFIG_TOP_LEVEL_KEYS = Object.keys(CONFIG_TOP_LEVEL_KEY_SET);
+export const CONFIG_TOP_LEVEL_KEYS = [...new Set([...Object.keys(CONFIG_TOP_LEVEL_KEY_SET), ...nameAliases((n) => n.codename)])]; // the instance block under either codename: a save must not drop an older file's
 
 /**
  * Atomically persist a config object to config.yaml. The live gateway

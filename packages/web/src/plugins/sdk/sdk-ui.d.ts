@@ -6,10 +6,10 @@
  * halves are read by different people: this one by whoever is laying a page
  * out, the other by whoever is talking to the host.
  *
- * The wrappers forward the rest of their props to their Radix roots, but
- * spelling Radix's generics out here would put a Radix version into the public
- * contract, and a plugin that never installs Radix could not typecheck against
- * it.
+ * The wrappers forward the rest of their props to the components they wrap, but
+ * spelling those components' generics out here would put a UI library's version
+ * into the public contract, and a plugin that never installs that library could
+ * not typecheck against it.
  */
 import type {
   ButtonHTMLAttributes,
@@ -20,10 +20,9 @@ import type {
   TextareaHTMLAttributes,
 } from 'react'
 
-/* The UI primitives are declared over the props a contribution actually sets.
- * The wrappers forward the rest to their Radix roots, but spelling Radix's
- * generics out here would put a Radix version into the public contract, and a
- * plugin that never installs Radix could not typecheck against it. */
+/* The UI primitives are declared over the props a contribution actually sets;
+ * see the note at the top of this file for why the wrapped components' own
+ * types are not spelled out. */
 interface Styled {
   className?: string
   children?: ReactNode
@@ -190,7 +189,10 @@ export declare const TabsContent: ComponentType<Styled & { value: string }>
 export declare const Textarea: ComponentType<TextareaHTMLAttributes<HTMLTextAreaElement>>
 
 /** Carries its own provider, so one tooltip works on its own. Wrap a group in
- *  `TooltipProvider` when they should share an open delay. */
+ *  `TooltipProvider` when they should share an open delay. It opens on hover and
+ *  on keyboard focus, closes on Escape, blur and press, and describes its trigger
+ *  with `aria-describedby` while it is open. The trigger must be focusable, and
+ *  `asChild` hands the props to the one child (which must pass `ref` through). */
 export declare const Tooltip: ComponentType<{
   open?: boolean
   defaultOpen?: boolean
@@ -201,6 +203,9 @@ export declare const Tooltip: ComponentType<{
 export declare const TooltipTrigger: ComponentType<
   ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }
 >
+/** `className`, `style` (without the properties that position it), `data-*`, `aria-*`, `title`, `id` and
+ *  the mouse, pointer and touch handlers are forwarded to the tooltip. `role` (always `tooltip`) and the key and focus handlers are ignored: Escape,
+ *  focus and blur belong to the trigger's tooltip behaviour. */
 export declare const TooltipContent: ComponentType<
   DivProps & { side?: Side; sideOffset?: number; align?: Align }
 >

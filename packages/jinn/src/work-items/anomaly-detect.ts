@@ -34,7 +34,7 @@ function executionTimeout(item: WorkItem, now: Date): TodoAnomaly | undefined {
   if (item.status !== "executing") return undefined;
   const open = listWorkItemAttemptRuns(item.id).find((run) => run.endedAt === null);
   if (!open) {
-    if (!executingUnhanded(item.status, attemptActivity(item.id), now.getTime())) return undefined;
+    if (!executingUnhanded(item.status, attemptActivity(item.id, now.getTime()), now.getTime())) return undefined;
     return { workItemId: item.id, kind: "executing-unhanded", lane: "manager", reason: EXECUTING_UNHANDED_REASON };
   }
   if (sessionInFlight(open.sessionId)) return undefined;

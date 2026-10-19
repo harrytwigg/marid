@@ -79,7 +79,7 @@ describe('a setting turned off', () => {
   it('reads a stored false back as off, rather than falling through to the default', async () => {
     served({ sessions: { interruptOnNewMessage: false } })
 
-    expect((await renderSettings()).getAttribute('aria-checked')).toBe('false')
+    expect(((await renderSettings()) as HTMLInputElement).checked).toBe(false)
   })
 })
 

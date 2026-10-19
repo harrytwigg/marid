@@ -2,6 +2,13 @@ import { timingSafeEqual } from "node:crypto";
 import type { HookRegistry, HookPayload } from "./hook-registry.js";
 import { evaluateCommandPolicy, evaluateWritePathPolicy } from "../shared/command-policy.js";
 import { isLoopbackHost } from "./auth.js";
+import { readHookSessionId } from "../shared/wire-names.js";
+
+/** A relay's post. The session id travels under the relay's own codename (`jinnSessionId`), which {@link readHookSessionId} resolves. */
+export interface HookPostBody {
+  hook?: HookPayload;
+  [field: string]: unknown;
+}
 
 export interface HookEndpointCtx {
   reg: HookRegistry;
@@ -44,11 +51,11 @@ export function isLoopback(addr: string | undefined): boolean {
 export function handleHookPost(
   ctx: HookEndpointCtx,
   providedSecret: string | undefined,
-  body: { jinnSessionId?: string; hook?: HookPayload },
+  body: HookPostBody,
 ): { status: number; body: string } {
   const rejected = validateHookPost(ctx, providedSecret, body);
   if (rejected) return rejected;
-  ctx.reg.deliver(body.jinnSessionId!, body.hook!);
+  ctx.reg.deliver(readHookSessionId(body)!, body.hook!);
   return { status: 200, body: "ok" };
 }
 
@@ -58,7 +65,7 @@ export function handleHookPost(
 export function validateHookPost(
   ctx: HookEndpointCtx,
   providedSecret: string | undefined,
-  body: { jinnSessionId?: string; hook?: HookPayload },
+  body: HookPostBody,
 ): { status: number; body: string } | undefined {
   // Loopback check first — defense-in-depth alongside any upstream check.
   if (!isLoopback(ctx.remoteAddress)) {
@@ -82,7 +89,7 @@ export function validateHookPost(
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return { status: 403, body: "forbidden" };
   }
-  if (!body.jinnSessionId || !body.hook?.hook_event_name) {
+  if (!readHookSessionId(body) || !body.hook?.hook_event_name) {
     return { status: 400, body: "bad request" };
   }
   return body.hook.hook_event_name === "PreToolUse" ? preToolUseRefusal(ctx, body.hook) : undefined;

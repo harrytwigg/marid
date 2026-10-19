@@ -5,6 +5,8 @@ import {
   boardPath,
   isSameBoard,
   rememberBoardScroll,
+  rememberBoardScrollLeft,
+  recallBoardScrollLeft,
   recallBoardScroll,
   clearBoardScrollCache,
   DEFAULT_BOARD_PATH,
@@ -88,5 +90,15 @@ describe("board scroll cache", () => {
     rememberBoardScroll("everything", Number.NaN)
     rememberBoardScroll("everything", -5)
     expect(recallBoardScroll("everything")).toBe(0)
+  })
+
+  it("remembers how far the phone's strip was scrolled sideways, per board, and forgets it on clear", () => {
+    rememberBoardScrollLeft("platform", 679)
+    rememberBoardScrollLeft("everything", Number.NaN)
+    rememberBoardScrollLeft("everything", -3)
+    expect(recallBoardScrollLeft("platform")).toBe(679)
+    expect(recallBoardScrollLeft("everything")).toBe(0)
+    clearBoardScrollCache()
+    expect(recallBoardScrollLeft("platform")).toBe(0)
   })
 })

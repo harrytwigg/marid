@@ -9,6 +9,7 @@ import type { GatewayEmit } from "../shared/gateway-events.js";
 import type { JinnConfig, Connector, Engine, SlackConnectorConfig, TelegramConnectorConfig, WhatsAppConnectorConfig } from "../shared/types.js";
 import { loadConfig, normalizeClaudeEngineConfig } from "../shared/config.js";
 import {
+  exactEffortLevelsForModel,
   invalidateModelRegistry,
   musecodeEngineOptions,
   type PtyViewEngineName,
@@ -24,6 +25,7 @@ import { acknowledgeRestartRequesters, backgroundWorkAtShutdown, interruptRunnin
 import { initDb } from "../shared/db.js";
 import { SessionManager, type RouteOptions } from "../sessions/manager.js";
 import { recoverSessionDeliveryStateOnStartup } from "../sessions/callbacks.js";
+import { reviewHeldInterimRepliesOnTodoStatusChange, reviewHeldInterimReply } from "../sessions/held-replies.js";
 import { InteractiveClaudeEngine } from "../engines/claude-interactive.js";
 import { enforcePtyIdleCap, ptyIdleCapForHost, PtyLifecycleManager, type PtyLifecycleOpts } from "../engines/pty-lifecycle.js";
 import { CodexEngine, startCodexSessionHomeSweeps } from "../engines/codex.js";
@@ -33,6 +35,7 @@ import { PiEngine } from "../engines/pi.js";
 import { OpencodeEngine } from "../engines/opencode.js";
 import { createMusecodeEnginePair } from "./musecode-view.js";
 import { OpencodeServerPool, opencodeMode } from "../engines/opencode-server.js";
+import { resolveCommandTimeoutMs } from "../engines/opencode-command-timeout.js";
 import { OpencodeInteractiveEngine } from "../engines/opencode-interactive.js";
 import { resolveSessionEngineMcp } from "../sessions/engine-run-mcp.js";
 import { GrokEngine } from "../engines/grok.js";
@@ -50,11 +53,12 @@ import { HookRegistry } from "./hook-registry.js";
 import { writeGatewayInfo, readGatewayInfo, updateGatewayPtyPids, recordedByAnotherHome, gatewayBaseUrl } from "./gateway-info.js";
 import { authenticateGatewayRequest, authRequiredForRequest, ensureGatewayAuthToken, shouldRequireGatewayAuth, validateGatewayExposure, verifyGatewayAuth } from "./auth.js";
 import { reconcileWorkItemsOnStartup, startWorkItemReconciler } from "../work-items/reconcile.js";
-import { setTodoLiveEmitter } from "../work-items/live-events.js";
+import { setTodoLiveEmitter, setTodoStatusChangeListener } from "../work-items/live-events.js";
 import { cleanupSessionSettings } from "../shared/claude-settings.js";
 import { bootClaudeProfiles } from "./claude-profile-boot.js";
+import { readHostAsset } from "../shared/host-assets.js";
+import { setEnv } from "../shared/codename-env.js";
 import { GATEWAY_INFO_FILE, HOOK_RELAY_SCRIPT, JINN_HOME, JINN_HOME_IDENTITY, CLAUDE_SETTINGS_DIR, RESTART_RECORD_FILE } from "../shared/paths.js";
-import { JINN_BINDING_HOME_ENV } from "../shared/sandbox-env.js";
 import { reapableGatewayPids } from "./process-home.js";
 import { enforceOwnerOnlyDirectory, pathIsOwnerOnly } from "../shared/owner-only.js";
 import { emitTodoProjectionEvent, interruptSessionTurn, isSameOriginBrowserRequest, resumePendingWebQueueItems, sessionsHoldingEngineCapacity, type ApiContext } from "./api.js";
@@ -509,11 +513,11 @@ export async function startGateway(
   // token. Same trust boundary as the 0600 gateway.json it already came from.
   // gatewayBaseUrl maps a wildcard bind (0.0.0.0) to 127.0.0.1 and keeps a specific
   // host as-is, so the URL is always reachable from the child.
-  process.env.JINN_GATEWAY_TOKEN = gatewayAuthToken;
-  process.env.JINN_GATEWAY_URL = gatewayBaseUrl({ port, host });
+  setEnv(process.env, "GATEWAY_TOKEN", gatewayAuthToken); // footgun: ok exported to spawned sessions, see above
+  setEnv(process.env, "GATEWAY_URL", gatewayBaseUrl({ port, host })); // footgun: ok exported to spawned sessions, see above
   // Name the home that binding belongs to, so a command a session points at another
   // home (JINN_HOME=<sandbox> jinn start) can tell the binding it inherited is not its own.
-  process.env[JINN_BINDING_HOME_ENV] = JINN_HOME_IDENTITY; // footgun: ok exported to spawned sessions beside JINN_GATEWAY_URL above, which every engine reads from process.env
+  setEnv(process.env, "BINDING_HOME", JINN_HOME_IDENTITY); // footgun: ok exported to spawned sessions beside JINN_GATEWAY_URL above, which every engine reads from process.env
 
   // Normalize claude engine config (idempotent — loadConfig already normalized it)
   const claudeCfg = normalizeClaudeEngineConfig(config.engines.claude);
@@ -554,7 +558,7 @@ export async function startGateway(
   try {
     const relaySrc = relayCandidates.find((p) => fs.existsSync(p));
     if (relaySrc) {
-      fs.copyFileSync(relaySrc, HOOK_RELAY_SCRIPT);
+      fs.writeFileSync(HOOK_RELAY_SCRIPT, readHostAsset(relaySrc));
     } else {
       logger.warn(`hook-relay.mjs asset not found in any candidate location; interactive Claude hooks may not work`);
     }
@@ -671,6 +675,7 @@ export async function startGateway(
     limits: () => currentConfig.engines.opencode?.server,
     bin: () => currentConfig.engines.opencode?.bin,
     disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
+    commandTimeoutMs: () => resolveCommandTimeoutMs(currentConfig.engines.opencode),
   });
   const opencodeEngine = new OpencodeEngine({
     // The same two live readers, for the same reason: opencode is the third
@@ -679,6 +684,9 @@ export async function startGateway(
     gatewayPort: () => port,
     mode: () => opencodeMode(currentConfig.engines.opencode),
     disableFff: () => currentConfig.engines.opencode?.disableFff !== false,
+    commandTimeoutMs: () => resolveCommandTimeoutMs(currentConfig.engines.opencode),
+    // A model's variants are its effort levels, and only those are ever sent.
+    effortLevels: () => (model) => exactEffortLevelsForModel(currentConfig, "opencode", model),
     servers: opencodeServers,
   });
   const opencodeInteractiveEngine = new OpencodeInteractiveEngine(opencodeEngine, opencodeServers, {
@@ -802,6 +810,10 @@ export async function startGateway(
   // ICI-570: in-process Todo writes (cron mints, session-lifecycle reconciles)
   // reach the dashboard through the same company:changed lane the routes use.
   setTodoLiveEmitter((event) => emit("company:changed", event));
+  // A child's reply held while it waited on its own background work goes out
+  // once its Todo leaves execution, even if a task it launched never ends.
+  // The listener is a single slot: a second user must fan out from here.
+  setTodoStatusChangeListener(reviewHeldInterimRepliesOnTodoStatusChange);
 
   const backgroundRefreshes = startBackgroundRefreshes(() => currentConfig, emit);
 
@@ -835,7 +847,12 @@ export async function startGateway(
     emit,
   });
   for (const engine of new Set(Object.values(ptyViewEngines))) {
-    (engine as RuntimeActivitySource).onRuntimeActivity?.(handleRuntimeActivity);
+    // After the map is current: a held child reply goes out once the tasks it
+    // waited on are over and no newer reply supersedes it.
+    (engine as RuntimeActivitySource).onRuntimeActivity?.((sessionId, info) => {
+      handleRuntimeActivity(sessionId, info);
+      reviewHeldInterimReply(sessionId);
+    });
   }
 
   // Unsolicited-Stop consumer: a Stop hook nobody claims within the registry's

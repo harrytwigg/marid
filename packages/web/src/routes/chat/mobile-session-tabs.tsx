@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { X } from '@/components/ui/icon'
 import { StatusDot } from '@/components/chat/session-signals'
 import { cn } from '@/lib/utils'
 import './mobile-session-tabs.css'

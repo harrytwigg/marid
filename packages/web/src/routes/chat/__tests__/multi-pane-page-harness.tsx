@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { vi } from 'vitest'
 import type { OrgData } from '@/lib/api'
+import type { SessionWaitsResponse } from '@/lib/session-waits'
 import ChatPageWrapper from '../page'
 import { CHAT_SESSION_DND_MIME } from '../chat-session-dnd'
 
@@ -40,6 +41,7 @@ const apiMocks = vi.hoisted(() => ({
   getFeatures: vi.fn(async () => ({ notesEnabled: false, staleChat: { enabled: false, tokenThreshold: 300000, staleAfterMinutes: 60 } })),
   getSkills: vi.fn(async () => []),
   getSessionQueue: vi.fn(async () => []),
+  getSessionWaits: vi.fn(async (id: string): Promise<SessionWaitsResponse> => ({ sessionId: id, generatedAt: new Date().toISOString(), items: [] })),
   createSession: vi.fn(async () => ({ id: 'e' })),
   sendMessage: vi.fn(async () => ({})),
   updateSession: vi.fn(async () => ({})),
@@ -188,6 +190,15 @@ export function sessionTransfer(sessionId: string): DataTransfer {
     setData: vi.fn(),
     getData: (type: string) => type === CHAT_SESSION_DND_MIME ? sessionId : '',
   } as unknown as DataTransfer
+}
+
+/** Opens the picker beside the chat from the header's More menu. */
+export async function openChatBeside() {
+  // The composer takes focus a frame after a chat opens, which would close a menu opened before it: let it land first.
+  await new Promise((resolve) => setTimeout(resolve, 60))
+  const actionsPill = screen.getAllByRole('button', { name: 'New chat' })[0].parentElement!
+  fireEvent.pointerDown(within(actionsPill).getByRole('button', { name: 'More options' }), { button: 0, ctrlKey: false })
+  fireEvent.click((await screen.findAllByRole('menuitem', { name: 'Open beside' }))[0])
 }
 
 export { apiMocks, gateway, sessionIds }

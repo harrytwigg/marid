@@ -2,6 +2,7 @@ import { logger } from "../../shared/logger.js";
 import { detectRateLimit, isDeadSessionError, type RateLimitDetection } from "../../shared/rateLimit.js";
 import { observeClaudeTurnOutcome } from "../claude-auth-watch.js";
 import type { EngineResult, Session } from "../../shared/types.js";
+import { awaitEffortLevels } from "../../shared/effort-wait.js";
 import { completedStreamedBlockIds } from "../../gateway/streamed-blocks.js";
 import {
   deletePartialMessages,
@@ -16,7 +17,7 @@ import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./en
 import { compactColdSessionFirst, settlePreemptedBeforeEngine } from "./auto-compact.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
 import { preflightTurn, resolveTurnPrompt, warnIfNearUsageLimit } from "./preflight.js";
-import { isLostConversationError } from "../../shared/process-start.js";
+import { backgroundSessionMayHoldPrompt, isLostConversationError, isProcessStartFailure } from "../../shared/process-start.js";
 import { isRawEngineCommand } from "../../shared/skill-commands.js";
 import { ensureRemoteHostReady } from "./remote-ready.js";
 import { runRateLimitTurn } from "./rate-limit-turn.js";
@@ -55,6 +56,7 @@ async function runTurnOnce(input: TurnInput, surface: TurnSurface): Promise<Turn
   const sessionId = input.session.id;
   const terminalFields = (): UpdateSessionFields => input.terminalFields?.() ?? {};
 
+  await awaitEffortLevels(input.config, input.session.engine, input.session, input.employee);
   const plan = preflightTurn(input);
   if (!plan.ok) {
     if (plan.declined) await settleDeclinedTurn(input, surface, plan.error, terminalFields);
@@ -135,7 +137,11 @@ async function compactFirstIfCold(run: TurnRun): Promise<boolean> {
  */
 async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAttempt; model: string | undefined }> {
   const first = await runEngineWithModelFallback(run);
-  if (!lostResumedConversation(run, first.attempt.result)) return first;
+  if (!lostResumedConversation(run, first.attempt.result)) {
+    const again = await rerunAfterStartFailure(run, first);
+    // The second start may be the one that finds the conversation gone.
+    if (again === first || !lostResumedConversation(run, again.attempt.result)) return again;
+  }
 
   const sessionId = run.input.session.id;
   const lostId = run.plan.resumeSessionId;
@@ -151,6 +157,31 @@ async function runEngineOrStartAfresh(run: TurnRun): Promise<{ attempt: EngineAt
     // lost-conversation prompt, owed until a turn settles cleanly with it.
     ...resolveTurnPrompt(getSession(sessionId) ?? run.input.session, run.plan.engineName, run.input.prompt, false),
   };
+  return await runEngineWithModelFallback(run);
+}
+
+/**
+ * Run the turn once more when its engine process died before starting the
+ * session: the engine never saw the message, so there is nothing to undo, and
+ * the turn keeps its place in the session's queue. Without this a transient
+ * failure (a dropped ssh hop, a crash on boot) costs the session the message
+ * outright, and only the operator sending it again gets it through. A second
+ * failure settles as it always has, with the process's own reason.
+ */
+async function rerunAfterStartFailure(
+  run: TurnRun,
+  first: { attempt: EngineAttempt; model: string | undefined },
+): Promise<{ attempt: EngineAttempt; model: string | undefined }> {
+  const { plan, input } = run;
+  const error = first.attempt.result.error;
+  // A prompt Claude Code says it handed to a background session is not undelivered.
+  if (!error || !isProcessStartFailure(error) || backgroundSessionMayHoldPrompt(error) || plan.compaction || isRawEngineCommand(plan.engineName, input.prompt)) return first;
+  const live = getSession(input.session.id);
+  if (live?.attemptToken !== input.attemptToken || live.status !== "running" || live.engine !== plan.engineName) return first;
+
+  logger.warn(`Session ${input.session.id}: ${plan.engineName} did not start; running the turn again (${error})`);
+  deletePartialMessages(input.session.id);
+  updateSession(input.session.id, { lastError: null });
   return await runEngineWithModelFallback(run);
 }
 

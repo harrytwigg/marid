@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "@/components/ui/icon"
 import {
   api,
   type DepartmentSummaryWire,
@@ -201,7 +201,7 @@ export function DuePickerContent({
           type="button"
           aria-label="Previous month"
           onClick={() => move(-1)}
-          className="focus-ring grid size-7 place-items-center rounded-lg text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)]"
+          className="focus-outline grid size-7 place-items-center rounded-lg text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)]"
         >
           <ChevronLeft size={13} aria-hidden />
         </button>
@@ -210,7 +210,7 @@ export function DuePickerContent({
           type="button"
           aria-label="Next month"
           onClick={() => move(1)}
-          className="focus-ring grid size-7 place-items-center rounded-lg text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)]"
+          className="focus-outline grid size-7 place-items-center rounded-lg text-[var(--text-tertiary)] outline-none hover:bg-[var(--fill-tertiary)]"
         >
           <ChevronRight size={13} aria-hidden />
         </button>

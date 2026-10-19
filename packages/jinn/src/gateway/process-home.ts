@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { JINN_HOME_IDENTITY, resolveHomeIdentity } from "../shared/paths.js";
 import { recordedByAnotherHome, startupGatewayPids, type GatewayInfo } from "./gateway-info.js";
+import { envAliases } from "../shared/codename-env.js";
 
 export type ProcessJinnHomeLookup =
   | { status: "found"; jinnHome: string; identity: string }
@@ -34,15 +35,14 @@ export function readProcessJinnHome(pid: number): ProcessJinnHomeLookup {
 }
 
 function jinnHomeFromEnvEntries(entries: string[]): ProcessJinnHomeLookup {
-  let jinnHome: string | undefined;
-  let identity: string | undefined;
-  for (const entry of entries) {
-    if (entry.startsWith("JINN_HOME=")) {
-      jinnHome = entry.slice("JINN_HOME=".length);
-    } else if (entry.startsWith("JINN_HOME_IDENTITY=")) {
-      identity = entry.slice("JINN_HOME_IDENTITY=".length);
-    }
-  }
+  // A process an older build started names its home under that build's codename; the current name wins.
+  const pairs = new Map(entries.flatMap((entry) => {
+    const separator = entry.indexOf("=");
+    return separator < 0 ? [] : [[entry.slice(0, separator), entry.slice(separator + 1)] as const];
+  }));
+  const firstOf = (names: string[]): string | undefined => names.map((name) => pairs.get(name)).find((value) => value !== undefined);
+  const jinnHome = firstOf(envAliases("HOME"));
+  const identity = firstOf(envAliases("HOME_IDENTITY"));
   if (jinnHome || identity) {
     const publicHome = jinnHome ?? identity!;
     return { status: "found", jinnHome: publicHome, identity: identity ?? resolveHomeIdentity(publicHome) };

@@ -4,6 +4,9 @@ import type { McpServerStdioConfig, McpServerUrlConfig, ResolvedMcpConfig } from
 import { MCP_TOOLSET_ARG } from "../mcp/identity.js";
 import { buildBoardWalkTools } from "../mcp/board-walk-tools.js";
 import { JINN_HOME } from "../shared/paths.js";
+import { findBuiltinMcp } from "../mcp/builtin-name.js";
+import { LEGACY_CODENAME } from "../shared/codename.js";
+import type { OpencodeApi } from "./opencode-version.js";
 
 /**
  * The company toolset, as opencode takes it.
@@ -41,6 +44,14 @@ import { JINN_HOME } from "../shared/paths.js";
  * An agent's permissions beat the operator's own (verified with
  * `opencode debug agent`), and the clamp only ever denies, never allows, so it
  * cannot widen a surface the operator narrowed.
+ *
+ * OpenCode 2 takes the same file in its own shape (`mcp.servers`, `agents` with
+ * `permissions` rules), and needs it: a 1.x-shaped file still loads, but 2.x
+ * then offers MCP tools only through its "Code Mode" (one `execute` tool), so
+ * the model never sees `jinn_*` tools and the walk agent's deny-all leaves it
+ * none. `codemode: false` on each server keeps them as tools, and only the
+ * native shape carries it (verified on 2.0.29). Which shape a session gets
+ * follows the binary's version.
  */
 
 /** The opencode agent a purpose-built toolset session runs as: the toolset's
@@ -48,18 +59,18 @@ import { JINN_HOME } from "../shared/paths.js";
  *  passes to `--agent` (board-walk/route-turn.ts). */
 export const OPENCODE_WALK_AGENT = "jinn-walk";
 
-/** The opencode tool names the board-walk toolset exposes: the `jinn` server
- *  prefix joined to each tool the toolset serves. Read from the toolset, never
+/** The opencode tool names the board-walk toolset exposes: the built-in server's
+ *  registered name joined to each tool the toolset serves. Read from the toolset, never
  *  hand-typed, so a new walk tool joins the allowlist on its own. */
-export function boardWalkOpencodeTools(): string[] {
-  return buildBoardWalkTools().map((tool) => `jinn_${tool.name}`);
+export function boardWalkOpencodeTools(serverName: string = LEGACY_CODENAME): string[] {
+  return buildBoardWalkTools().map((tool) => `${serverName}_${tool.name}`);
 }
 
 /** The confined agent's permission map: deny by default, then allow each of the
  *  board-walk toolset's own tool names exactly. */
-export function boardWalkAgentPermission(): Record<string, string> {
+export function boardWalkAgentPermission(serverName: string = LEGACY_CODENAME): Record<string, string> {
   const permission: Record<string, string> = { "*": "deny" };
-  for (const name of boardWalkOpencodeTools()) permission[name] = "allow";
+  for (const name of boardWalkOpencodeTools(serverName)) permission[name] = "allow";
   return permission;
 }
 
@@ -87,6 +98,8 @@ export type OpencodeMcpServer = OpencodeLocalMcpServer | OpencodeRemoteMcpServer
 export interface OpencodeSessionConfig {
   $schema: string;
   mcp: Record<string, OpencodeMcpServer>;
+  /** Plugins Marid adds to the operator's own (opencode-command-timeout.ts). */
+  plugin?: string[];
   /** Only for a purpose-built toolset session: the confined agent below. */
   agent?: Record<string, OpencodeConfinedAgent>;
 }
@@ -157,11 +170,12 @@ export function projectMcpForOpencode(resolvedMcp: ResolvedMcpConfig | undefined
   return out;
 }
 
-/** Whether the resolved set is a purpose-built toolset: the jinn server, built
- *  with `--jinn-toolset`, is the session's entire MCP surface. */
-function hasPurposeBuiltToolset(resolvedMcp: ResolvedMcpConfig | undefined): boolean {
-  const jinn = resolvedMcp?.mcpServers?.["jinn"] as { args?: unknown } | undefined;
-  return Array.isArray(jinn?.args) && jinn.args.includes(MCP_TOOLSET_ARG);
+/** The name of the built-in server when the resolved set is a purpose-built toolset: that
+ *  server, built with `--jinn-toolset`, is the session's entire MCP surface. */
+function purposeBuiltToolsetServer(resolvedMcp: ResolvedMcpConfig | undefined): string | undefined {
+  const builtin = findBuiltinMcp(resolvedMcp?.mcpServers);
+  const args = (builtin?.spec as { args?: unknown } | undefined)?.args;
+  return Array.isArray(args) && args.includes(MCP_TOOLSET_ARG) ? builtin?.name : undefined;
 }
 
 /** The config file's contents for a session, or undefined when it carries no
@@ -170,17 +184,65 @@ function hasPurposeBuiltToolset(resolvedMcp: ResolvedMcpConfig | undefined): boo
 export function buildOpencodeSessionConfig(resolvedMcp: ResolvedMcpConfig | undefined): OpencodeSessionConfig | undefined {
   const mcp = projectMcpForOpencode(resolvedMcp);
   if (Object.keys(mcp).length === 0) return undefined;
+  const toolsetServer = purposeBuiltToolsetServer(resolvedMcp);
   return {
     $schema: OPENCODE_CONFIG_SCHEMA,
     mcp,
-    ...(hasPurposeBuiltToolset(resolvedMcp)
-      ? { agent: { [OPENCODE_WALK_AGENT]: { mode: "primary" as const, permission: boardWalkAgentPermission() } } }
+    ...(toolsetServer
+      ? { agent: { [OPENCODE_WALK_AGENT]: { mode: "primary" as const, permission: boardWalkAgentPermission(toolsetServer) } } }
       : {}),
   };
 }
 
+/** One permission rule in OpenCode 2's config. */
+export interface OpencodeV2PermissionRule {
+  action: string;
+  resource: string;
+  effect: "allow" | "deny" | "ask";
+}
+
+/** The staged config in OpenCode 2's own shape (see the header). */
+export interface OpencodeV2SessionConfig {
+  $schema: string;
+  mcp: { servers: Record<string, Omit<OpencodeMcpServer, "enabled"> & { codemode: false }> };
+  plugins?: string[];
+  agents?: Record<string, { mode: "primary"; permissions: OpencodeV2PermissionRule[] }>;
+}
+
+/** The 1.x config, as OpenCode 2 takes it: each server kept a tool server
+ *  (`codemode: false`), and the confined agent's map as rules, default first. */
+export function toOpencodeV2SessionConfig(config: OpencodeSessionConfig): OpencodeV2SessionConfig {
+  const servers: OpencodeV2SessionConfig["mcp"]["servers"] = {};
+  for (const [name, { enabled: _enabled, ...server }] of Object.entries(config.mcp)) servers[name] = { ...server, codemode: false };
+  const agents = config.agent
+    ? Object.fromEntries(Object.entries(config.agent).map(([name, agent]) => [name, {
+      mode: agent.mode,
+      permissions: Object.entries(agent.permission).map(([action, effect]) => ({ action, resource: "*", effect: effect as OpencodeV2PermissionRule["effect"] })),
+    }]))
+    : undefined;
+  return {
+    $schema: config.$schema,
+    mcp: { servers },
+    ...(config.plugin?.length ? { plugins: config.plugin } : {}),
+    ...(agents ? { agents } : {}),
+  };
+}
+
+/** The config file for a session in the shape its binary's API reads, with
+ *  `plugins` added to the operator's own (staged even without MCP servers). */
+export function buildOpencodeSessionConfigFor(
+  resolvedMcp: ResolvedMcpConfig | undefined,
+  api: OpencodeApi,
+  plugins: string[] = [],
+): OpencodeSessionConfig | OpencodeV2SessionConfig | undefined {
+  const base = buildOpencodeSessionConfig(resolvedMcp) ?? (plugins.length ? { $schema: OPENCODE_CONFIG_SCHEMA, mcp: {} } : undefined);
+  if (!base) return undefined;
+  const config = plugins.length ? { ...base, plugin: plugins } : base;
+  return api === 2 ? toOpencodeV2SessionConfig(config) : config;
+}
+
 /** Serialize the staged config exactly as both transports write it. */
-export function serializeOpencodeSessionConfig(config: OpencodeSessionConfig): string {
+export function serializeOpencodeSessionConfig(config: OpencodeSessionConfig | OpencodeV2SessionConfig): string {
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
@@ -188,8 +250,10 @@ export function serializeOpencodeSessionConfig(config: OpencodeSessionConfig): s
 export function writeOpencodeSessionConfig(
   resolvedMcp: ResolvedMcpConfig | undefined,
   sessionId: string,
+  api: OpencodeApi = 1,
+  plugins: string[] = [],
 ): OpencodeConfigHandle {
-  const config = buildOpencodeSessionConfig(resolvedMcp);
+  const config = buildOpencodeSessionConfigFor(resolvedMcp, api, plugins);
   if (!config) return { staged: false };
 
   const configDir = path.join(JINN_HOME, "tmp", "opencode", safeSessionId(sessionId));

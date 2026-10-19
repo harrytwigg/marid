@@ -66,13 +66,13 @@ async function settleRecoveredTurn(
   return settled;
 }
 
-async function announceFallback(args: RateLimitTurnArgs, resumeAt: Date | null, substitute: EngineName): Promise<void> {
+async function announceFallback(args: RateLimitTurnArgs, resumeAt: Date | null, substitute: EngineName, model?: string): Promise<void> {
   const session = args.input.session;
   // The handler rewrites session.engine to the substitute only after this hook
   // returns, so what is read here is still the engine that was limited.
   const limitedEngine = session.engine;
   const limitedLabel = rateLimitEngineLabel(limitedEngine);
-  const substituteLabel = rateLimitEngineLabel(substitute);
+  const substituteLabel = model ? `${rateLimitEngineLabel(substitute)} (${model})` : rateLimitEngineLabel(substitute);
   const resumeText = formatResumeTime(resumeAt);
   notifyOperatorChannel(`⚠️ ${limitedLabel} usage limit reached. ${describe(session)} switching to ${substituteLabel}.`);
   await args.surface.notice(`⚠️ ${limitedLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}. Switching to ${substituteLabel} for now.`);
@@ -85,7 +85,7 @@ async function announceFallback(args: RateLimitTurnArgs, resumeAt: Date | null, 
   }
 }
 
-async function announceWaiting(args: RateLimitTurnArgs, resumeAt: Date | null): Promise<void> {
+async function announceWaiting(args: RateLimitTurnArgs, resumeAt: Date | null, reason?: string): Promise<void> {
   const session = args.input.session;
   const engineLabel = rateLimitEngineLabel(session.engine);
   const resumeText = formatResumeTime(resumeAt);
@@ -95,7 +95,9 @@ async function announceWaiting(args: RateLimitTurnArgs, resumeAt: Date | null): 
     getSession(session.id) ?? session,
     resumeAt ? resumeAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : undefined,
   );
-  await args.surface.notice(`⏳ ${engineLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""} — I'll continue automatically.`);
+  await args.surface.notice(
+    `⏳ ${engineLabel} usage limit reached${resumeText ? `. Resets ${resumeText}` : ""}${reason ? `. Not switching: ${reason}.` : " —"} I'll continue automatically.`,
+  );
 }
 
 /** The limit never lifted inside the deadline: settle out of `waiting`. */
@@ -120,7 +122,7 @@ async function settleTimedOutTurn(args: RateLimitTurnArgs): Promise<void> {
 function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
   const { plan, surface } = args;
   return {
-    onFallbackStart: ({ resumeAt, substitute }) => announceFallback(args, resumeAt, substitute),
+    onFallbackStart: ({ resumeAt, substitute, model }) => announceFallback(args, resumeAt, substitute, model),
     onFallbackStream: (delta) => surface.delta(delta),
     onFallbackComplete: async (fallbackResult, ran) => {
       // The fallback answered on a DIFFERENT engine, so its native id is filed
@@ -133,7 +135,7 @@ function rateLimitHooks(args: RateLimitTurnArgs): RateLimitHandlerHooks {
         meta: { model: plan.model, effortLevel: plan.effortLevel },
       } : undefined, ran.model);
     },
-    onWaitingStart: ({ resumeAt }) => announceWaiting(args, resumeAt),
+    onWaitingStart: ({ resumeAt, reason }) => announceWaiting(args, resumeAt, reason),
     onRetryAttempt: () => surface.waiting(false),
     onStillLimited: () => surface.waiting(true),
     onRetryStream: (delta) => surface.delta(delta),

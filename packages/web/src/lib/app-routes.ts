@@ -1,6 +1,6 @@
 import { matchPath } from "react-router-dom"
 
-export type AppRouteAvailability = "always" | "notes-enabled" | "development"
+export type AppRouteAvailability = "always" | "notes-enabled"
 
 export interface AppRouteDescriptor {
   id: string
@@ -37,7 +37,6 @@ export const APP_ROUTES = [
   { id: "file", path: "/file", availability: "always", surface: "file" },
   { id: "more", path: "/more", availability: "always", surface: "more" },
   { id: "talk-orb", path: "/talk-orb", availability: "always", surface: "talk-orb" },
-  { id: "redesign", path: "/redesign", availability: "development", surface: "redesign" },
   { id: "plugin-contributed", path: "/*", availability: "always", surface: "plugin" },
 ] as const satisfies readonly AppRouteDescriptor[]
 

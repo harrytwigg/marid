@@ -995,13 +995,6 @@
         "max-lines-per-function"
       ]
     },
-    "packages/web/src/components/chat/model-selector-row.tsx": {
-      "lines": 525,
-      "exempt": [
-        "complexity",
-        "max-lines-per-function"
-      ]
-    },
     "packages/web/src/components/chat/session-row-menu.tsx": {
       "exempt": [
         "max-lines-per-function"
@@ -1343,11 +1336,6 @@
       ]
     },
     "packages/web/src/routes/org/page.tsx": {
-      "exempt": [
-        "max-lines-per-function"
-      ]
-    },
-    "packages/web/src/routes/redesign/page.tsx": {
       "exempt": [
         "max-lines-per-function"
       ]

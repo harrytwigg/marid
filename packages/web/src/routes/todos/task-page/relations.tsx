@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Plus, X } from "lucide-react"
+import { Plus, X } from "@/components/ui/icon"
 import { api, type WorkItemCompactWire, type WorkItemRelationKindWire, type WorkItemRelationWire } from "@/lib/api"
 import { StatusCircle } from "../state-glyph"
 
@@ -126,9 +126,9 @@ export function RelationsSection({
               aria-label={`Remove ${label} ${relation.other.id}`}
               data-testid={`relation-remove-${relation.other.id}`}
               onClick={() => onRemove(relation)}
-              className="focus-ring ml-auto grid size-6 flex-none place-items-center rounded-md text-[var(--text-quaternary)] opacity-0 outline-none transition-opacity hover:text-[var(--text-secondary)] focus-visible:opacity-100 group-hover/rel:opacity-100"
+              className="focus-outline ml-auto grid size-6 flex-none place-items-center rounded-md text-[var(--text-quaternary)] opacity-0 outline-none transition-opacity hover:text-[var(--text-secondary)] focus-visible:opacity-100 group-hover/rel:opacity-100"
             >
-              <X size={12} strokeWidth={2.2} aria-hidden />
+              <X size={12} aria-hidden />
             </button>
           </div>
         )
@@ -144,7 +144,7 @@ export function RelationsSection({
                 data-testid={`relation-kind-${option.key}`}
                 aria-pressed={kind === option.key}
                 onClick={() => setKind(option.key)}
-                className={`focus-ring h-6 rounded-full px-2.5 text-[11.5px] font-medium outline-none ${
+                className={`focus-outline h-6 rounded-full px-2.5 text-[11.5px] font-medium outline-none ${
                   kind === option.key
                     ? "bg-[var(--fill-secondary)] text-[var(--text-primary)]"
                     : "text-[var(--text-tertiary)] hover:bg-[var(--fill-tertiary)]"
@@ -177,7 +177,7 @@ export function RelationsSection({
                   type="button"
                   data-testid={`relation-result-${item.id}`}
                   onClick={() => submit(item)}
-                  className="focus-ring flex min-h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] outline-none hover:bg-[var(--fill-tertiary)]"
+                  className="focus-outline flex min-h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] outline-none hover:bg-[var(--fill-tertiary)]"
                 >
                   <StatusCircle status={item.status} size={16} />
                   <span className="text-[11px] text-[var(--text-tertiary)]" style={{ fontFamily: "var(--font-code)", letterSpacing: ".04em" }}>
@@ -213,9 +213,9 @@ function AddRow({ onClick }: { onClick: () => void }) {
       type="button"
       data-testid="relation-add"
       onClick={onClick}
-      className="focus-ring -mx-2.5 flex min-h-9 w-[calc(100%+20px)] items-center rounded-[10px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-quaternary)] outline-none transition-colors hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
+      className="focus-outline -mx-2.5 flex min-h-9 w-[calc(100%+20px)] items-center rounded-[10px] px-2.5 text-left text-[13.5px] font-medium text-[var(--text-quaternary)] outline-none transition-colors hover:bg-[var(--fill-quaternary)] hover:text-[var(--text-secondary)]"
     >
-      <Plus size={12} strokeWidth={2.2} aria-hidden className="mr-4" />
+      <Plus size={12} aria-hidden className="mr-4" />
       Add relation
     </button>
   )

@@ -6,6 +6,7 @@ import type { Employee, JinnConfig } from "../shared/types.js";
 import type { DepartmentScope } from "../work-items/department-scope.js";
 import { logger } from "../shared/logger.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog } from "../shared/models.js";
+import { effortLevelsPending } from "../shared/opencode-catalogue.js";
 import { validateEmployeeTargets } from "../shared/claude-profile.js";
 import { departmentDisagreement, resolveEmployeeDepartment, scopedEmployeeRefusal } from "./org-department-check.js";
 import { walkEmployeeYamls, WRITABLE_FIELDS, type EmployeeUpdate } from "./org-yaml-files.js";
@@ -13,6 +14,16 @@ import {
   resolveSystemEmployees,
   SYSTEM_EMPLOYEE_OVERRIDE_FIELDS,
 } from "./system-employees.js";
+import { orgMcpKey } from "../shared/wire-names.js";
+import { nameAliases } from "../shared/codename.js";
+
+/** The per-employee built-in MCP override, under the current codename's key or the legacy one an older roster file still uses. */
+function orgMcpFlag(data: Record<string, unknown>): boolean | undefined {
+  for (const key of nameAliases(orgMcpKey)) {
+    if (typeof data[key] === "boolean") return data[key] as boolean;
+  }
+  return undefined;
+}
 
 export { updateEmployeeYaml, type EmployeeUpdate } from "./org-yaml-files.js";
 
@@ -71,7 +82,7 @@ export function scanOrg(config?: JinnConfig, scopeOf: (slug: string) => Departme
           // force-off). Boolean-checked like the other optional flags — the
           // scan whitelist previously dropped it, which live QA phase D caught
           // (a YAML pilot could never arm the smoke gate).
-          jinnMcp: typeof data.jinnMcp === "boolean" ? data.jinnMcp : undefined,
+          jinnMcp: orgMcpFlag(data),
           // Remote (SSH) execution. Validated immediately below — a bad remote
           // target fails THIS employee's load loudly at boot rather than at the
           // first turn, because the failure it guards against (an unattended
@@ -237,17 +248,20 @@ export function validateEmployeeUpdate(
     }
     const level = body.effortLevel.trim();
     const valid = effortLevelsForModel(config, resultingEngine, effectiveModel);
-    if (valid.length === 0) {
+    // Levels not discovered yet are unknown, not absent: the level is kept, and
+    // a turn checks it once they are known.
+    const unknown = effortLevelsPending(resultingEngine, effectiveModel);
+    if (valid.length === 0 && !unknown) {
       return { ok: false, error: `engine "${resultingEngine}"${effectiveModel ? ` model "${effectiveModel}"` : ""} does not support effort levels` };
     }
-    if (!valid.includes(level)) {
+    if (!unknown && !valid.includes(level)) {
       return { ok: false, error: `invalid effortLevel "${level}" (valid: ${valid.join(", ")})` };
     }
     updates.effortLevel = level;
   } else if (current.effortLevel) {
     const level = current.effortLevel.trim();
     const valid = effortLevelsForModel(config, resultingEngine, effectiveModel);
-    if (level && (valid.length === 0 || !valid.includes(level))) {
+    if (level && !effortLevelsPending(resultingEngine, effectiveModel) && (valid.length === 0 || !valid.includes(level))) {
       updates.effortLevel = null;
     }
   }

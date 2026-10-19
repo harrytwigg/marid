@@ -1,5 +1,6 @@
+import { Button } from "@/components/ui/button"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, ChevronLeft, PenLine, RotateCcw, ShieldAlert } from "lucide-react"
+import { Check, ChevronLeft, PenLine, RotateCcw, ShieldAlert } from "@/components/ui/icon"
 import { ApiError, api } from "@/lib/api"
 import { MarkdownView } from "@/components/markdown-view"
 import { cn } from "@/lib/utils"
@@ -274,38 +275,33 @@ export function NoteEditor({
     <section className="relative flex h-full min-w-0 flex-col overflow-hidden bg-[var(--bg)]">
       <header className="absolute inset-x-2 top-1 z-10 flex min-h-12 items-center gap-2 lg:inset-x-4 lg:top-2">
         {onBack && (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             aria-label={`Back to ${backLabel}`}
             onClick={onBack}
-            className="-ml-1 flex shrink-0 items-center gap-0.5 text-[length:var(--text-body)] text-[var(--accent)] transition-opacity active:opacity-60 lg:hidden"
+            className="-ml-1 shrink-0 gap-0.5 px-1 text-[length:var(--text-body)] text-[var(--accent)] lg:hidden"
           >
             <ChevronLeft size={24} aria-hidden />
             <span className="max-w-[38vw] truncate">{backLabel}</span>
-          </button>
+          </Button>
         )}
         <span className="absolute left-1/2 -translate-x-1/2 tabular-nums text-[length:var(--text-caption1)] text-[var(--text-tertiary)] lg:static lg:ml-1 lg:translate-x-0">
           {saveLabel(editor.phase)}
         </span>
         <div className="ml-auto flex shrink-0 items-center">
           {editing ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               onClick={() => { bodyRef.current?.blur(); setEditing(false) }}
-              className="flex min-h-9 items-center gap-1.5 rounded-[var(--radius-md)] px-2.5 text-[length:var(--text-subheadline)] font-[var(--weight-semibold)] text-[var(--accent)] transition-[scale,background-color] duration-150 active:scale-[0.96] hover:bg-[var(--fill-secondary)]"
+              className="font-[var(--weight-semibold)] text-[var(--accent)]"
             >
               <Check size={17} aria-hidden />
               Done
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              aria-label="Edit note"
-              onClick={() => startEditing("end")}
-              className="flex size-9 items-center justify-center rounded-[var(--radius-md)] text-[var(--text-tertiary)] transition-[scale,background-color,color] duration-150 active:scale-[0.96] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-secondary)]"
-            >
+            <Button variant="ghost" size="icon" aria-label="Edit note" onClick={() => startEditing("end")} className="text-[var(--text-tertiary)]">
               <PenLine size={18} aria-hidden />
-            </button>
+            </Button>
           )}
         </div>
       </header>
@@ -360,7 +356,7 @@ export function NoteEditor({
         <div
           role="status"
           aria-label={editor.phase === "conflict" ? "Note changed elsewhere" : "Note save paused"}
-          className="absolute inset-x-4 top-14 z-20 mx-auto flex max-w-[680px] items-center gap-3 rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-3 shadow-[var(--shadow-overlay)] lg:top-16"
+          className="absolute inset-x-4 top-14 z-20 mx-auto flex max-w-[680px] items-center gap-3 rounded-[var(--radius-xl)] glass-card p-3 lg:top-16"
         >
           {editor.phase === "conflict" ? (
             <ShieldAlert size={20} className="shrink-0 text-[var(--system-orange)]" aria-hidden />
@@ -372,22 +368,12 @@ export function NoteEditor({
           </p>
           {editor.phase === "conflict" && (
             <div className="flex shrink-0 gap-1">
-              <button
-                type="button"
-                aria-label="Reload remote note"
-                onClick={() => { void editor.reload() }}
-                className="min-h-10 rounded-[var(--radius-md)] px-3 text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--text-secondary)] transition-[scale,background-color,color] duration-150 active:scale-[0.96] hover:bg-[var(--fill-secondary)] hover:text-[var(--text-primary)]"
-              >
+              <Button variant="ghost" size="sm" aria-label="Reload remote note" onClick={() => { void editor.reload() }}>
                 Reload
-              </button>
-              <button
-                type="button"
-                aria-label="Overwrite remote note"
-                onClick={() => { void editor.overwrite() }}
-                className="min-h-10 rounded-[var(--radius-md)] bg-[var(--accent-fill)] px-3 text-[length:var(--text-footnote)] font-[var(--weight-semibold)] text-[var(--accent)] transition-[scale,background-color] duration-150 active:scale-[0.96] hover:bg-[var(--fill-primary)]"
-              >
+              </Button>
+              <Button variant="secondary" size="sm" aria-label="Overwrite remote note" onClick={() => { void editor.overwrite() }}>
                 Overwrite
-              </button>
+              </Button>
             </div>
           )}
         </div>

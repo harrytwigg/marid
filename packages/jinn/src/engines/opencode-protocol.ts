@@ -1,5 +1,6 @@
 import type { EngineRunOpts } from "../shared/types.js";
 import { logger } from "../shared/logger.js";
+import { modelWithVariant, runVariantOf, variantOf, withoutVariantFlags } from "./opencode-variant.js";
 
 /**
  * opencode's wire contract, as pure functions.
@@ -35,11 +36,25 @@ export function buildOpencodePrompt(opts: EngineRunOpts): string {
 /** Per-host facts that change a `run` turn's argv. */
 export interface OpencodeRunFlags {
   standalone?: boolean;
+  /** The binary's `run` has no `--variant`: the variant rides on the model
+   *  (`-m provider/model#variant`). OpenCode 2's CLI. */
+  variantOnModel?: boolean;
 }
 
 /** `--standalone` in any spelling: bare, with a value, or negated. */
 function isStandaloneFlag(flag: string): boolean {
   return flag === "--standalone" || flag === "--no-standalone" || flag.startsWith("--standalone=");
+}
+
+/** `-m`, with the turn's variant (its effort level) where the binary takes one.
+ *  Only an effort the model lists reaches here (see opencode-variant.ts). An
+ *  operator's own `--variant` in cliFlags wins: a 1.x CLI gets it as the flag
+ *  it is, and a 2.x CLI, which has no such flag, gets it on the model. */
+function modelArgs(opts: EngineRunOpts, run: OpencodeRunFlags): string[] {
+  if (!opts.model) return [];
+  if (run.variantOnModel) return ["-m", modelWithVariant(opts.model, variantOf(opts))];
+  const variant = runVariantOf(opts);
+  return variant ? ["-m", opts.model, "--variant", variant] : ["-m", opts.model];
 }
 
 /**
@@ -60,11 +75,13 @@ export function buildOpencodeArgs(opts: EngineRunOpts, run: OpencodeRunFlags = {
   // unless told not to. Older CLIs reject the flag, so only a host known to run
   // 2.x gets it. Whatever the operator's `cliFlags` say about it wins.
   if (run.standalone && !opts.cliFlags?.some(isStandaloneFlag)) args.push("--standalone");
-  if (opts.model) args.push("-m", opts.model);
+  args.push(...modelArgs(opts, run));
   // opencode assigns its own session ids, so a resume names one it gave us on a
   // previous turn — unlike pi, where the id is ours and the same on every turn.
   if (opts.resumeSessionId) args.push("-s", opts.resumeSessionId);
-  if (opts.cliFlags?.length) args.push(...opts.cliFlags);
+  // A 2.x `run` rejects `--variant`; its value went on the model above.
+  const flags = run.variantOnModel ? withoutVariantFlags(opts.cliFlags) : opts.cliFlags ?? [];
+  args.push(...flags);
   // The prompt goes over stdin, never argv: `run` takes the message as trailing
   // positionals, so a prompt beginning with a dash would be read as a flag, and
   // a long one would run into ARG_MAX.
@@ -79,14 +96,18 @@ export function buildOpencodeServeArgs(port: number): string[] {
 }
 
 /** The terminal view: opencode's own TUI as a client of the session's server,
- *  opened on the session when there is one yet. */
-export function buildOpencodeViewArgs(serverUrl: string, engineSessionId?: string): string[] {
-  return ["attach", serverUrl, ...(engineSessionId ? ["-s", engineSessionId] : [])];
+ *  opened on the session when there is one yet. OpenCode 2 has no `attach`:
+ *  its TUI takes `--server` (and reads the password from
+ *  `OPENCODE_SERVER_PASSWORD`, as 1.x's attach does). */
+export function buildOpencodeViewArgs(serverUrl: string, engineSessionId?: string, api: 1 | 2 = 1): string[] {
+  const session = engineSessionId ? ["-s", engineSessionId] : [];
+  return api === 2 ? ["--server", serverUrl, ...session] : ["attach", serverUrl, ...session];
 }
 
-/** The model, for a log line. */
+/** The model and variant, for a log line. */
 export function describeOpencodeLaunch(opts: EngineRunOpts): string {
-  return `-m ${opts.model || "(opencode default)"}`;
+  const variant = variantOf(opts);
+  return `-m ${opts.model || "(opencode default)"}${variant && opts.model ? ` (variant ${variant})` : ""}`;
 }
 
 /** The `tokens` block of a `step_finish` part, as far as we rely on it. */
@@ -147,12 +168,53 @@ export function describeToolCall(toolName: string | undefined, input: Record<str
   return detail ? `${toolName ?? "tool"}: ${detail}` : `Running ${toolName ?? "tool"}`;
 }
 
-/** The message an `error` event carries, as a single line for EngineResult.error. */
-export function opencodeErrorText(event: Record<string, unknown>): string | undefined {
+/** How much of an unreadable error event is kept in EngineResult.error. */
+const RAW_ERROR_LIMIT = 500;
+
+/**
+ * The message an `error` event carries, as a single line for EngineResult.error.
+ *
+ * 1.x prints `{name, data: {message}}`. OpenCode 2's `opencode run` prints
+ * `{type, message, status?}` unconverted, and is read the way `v2ErrorLine`
+ * reads it for a server turn, so one failure says the same thing on either
+ * path. An event that has neither shape is quoted rather than dropped: an
+ * opaque "no message" is something nobody can act on.
+ */
+export function opencodeErrorText(event: Record<string, unknown>): string {
+  const bare = trimmedString(event.error);
+  if (bare) return bare;
   const error = asRecord(event.error);
-  if (!error) return undefined;
+  const readable = error && readableErrorText(error);
+  if (readable) return readable;
+  // The envelope every line carries says nothing about the failure, and its
+  // digits must not reach failure classification: a timestamp or session id
+  // containing "429" would read as a rate limit. An id inside the error object
+  // itself can still do that; the classifier, not this quote, is where to fix it.
+  const { type: _type, sessionID: _sessionID, timestamp: _timestamp, ...rest } = error ?? event;
+  if (Object.keys(rest).length === 0) return "opencode reported an error with no message and nothing else in its event";
+  const raw = JSON.stringify(rest);
+  const quoted = raw.length > RAW_ERROR_LIMIT ? `${raw.slice(0, RAW_ERROR_LIMIT)}…` : raw;
+  return `opencode reported an error with no message: ${quoted}`;
+}
+
+/** The error object read as 1.x's or OpenCode 2's; undefined when it is neither. */
+function readableErrorText(error: Record<string, unknown>): string | undefined {
+  return v1ErrorText(error) ?? v2ErrorText(error);
+}
+
+/** 1.x's `{name, data: {message}}` as `name: message`. */
+function v1ErrorText(error: Record<string, unknown>): string | undefined {
   const message = trimmedString(asRecord(error.data)?.message);
   const name = trimmedString(error.name);
-  if (message && name) return `${name}: ${message}`;
-  return message ?? name;
+  return message && name ? `${name}: ${message}` : message ?? name;
+}
+
+/** OpenCode 2's `{type, message, status?}` in exactly the text `v2ErrorLine`
+ *  gives it on a server turn. */
+function v2ErrorText(error: Record<string, unknown>): string | undefined {
+  const type = trimmedString(error.type);
+  const message = trimmedString(error.message);
+  if (!type && !message) return undefined;
+  const status = typeof error.status === "number" ? ` (HTTP ${error.status})` : "";
+  return `${type ?? "error"}: ${message ?? "no message"}${status}`;
 }

@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, FolderOpen } from "lucide-react"
+import { ChevronRight, Folder, FolderOpen } from "@/components/ui/icon"
 import type { NoteFolder } from "./types"
 import { cn } from "@/lib/utils"
 
@@ -22,7 +22,7 @@ export function NoteSidebar({ folders, total, selectedFolder, listOpen, mobile, 
           </h1>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-2">
-          <div className="overflow-hidden rounded-[var(--radius-xl)] bg-[var(--bg-secondary)] p-[5px] shadow-[var(--shadow-card)]">
+          <div className="glass-card overflow-hidden rounded-[var(--radius-xl)] p-[5px]">
             <MobileFolderRow
               name="All Notes"
               count={total}

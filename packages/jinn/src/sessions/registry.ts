@@ -17,6 +17,7 @@ import { getMeta, setMeta, canonicalCallbackIdentityText, canonicalSessionDelive
 import { parseTodoId } from '../work-items/id.js';
 import { toWorkItemLinkRole } from '../work-items/link-role.js';
 import { scopedDepartmentOf } from '../work-items/department-scope.js';
+import { storedFallbackMode, storedFallbackTarget, type SessionFallbackMode, type StoredFallbackTarget } from '../shared/session-fallback-config.js';
 import type { ChatBlock, ChatBlockEnvelope, EngineSessionRef, EngineSessionRefs, JsonObject, ReplyContext, Session, SessionAttemptOutcome, SessionDelivery, SessionDeliveryIdentity, SessionDeliveryPayload, SessionAttemptInterruptionCause } from '../shared/types.js';
 import { blockFallbackText, mergeBlock, validateBlockEnvelope } from '../shared/blocks.js';
 import { ptySnapshotStore } from '../engines/pty-snapshot.js';
@@ -125,6 +126,8 @@ function rowToSession(row: Record<string, unknown>): Session {
     scopeDepartment: (row.scope_department as string) ?? null,
     userId: (row.user_id as string) ?? null,
     effortLevel: (row.effort_level as string) ?? null,
+    fallbackMode: storedFallbackMode(row.fallback_mode),
+    fallbackTarget: storedFallbackTarget(row.fallback_target),
     status: row.status as Session['status'],
     attemptOutcome: (row.attempt_outcome as SessionAttemptOutcome) ?? null,
     attemptToken: (row.attempt_token as string) ?? null,
@@ -409,6 +412,10 @@ export interface CreateSessionOpts {
   parentSessionId?: string;
   userId?: string | null;
   effortLevel?: string;
+  /** The resolved usage-limit mode (sessions/session-fallback.ts); undefined stores NULL, the config default. */
+  fallbackMode?: SessionFallbackMode;
+  /** The usage-limit fallback a parent passes on (sessions/fallback-target.ts); undefined stores NULL. */
+  fallbackTarget?: StoredFallbackTarget;
   /**
    * Optional human-facing excerpt override. When the prompt is scaffolded
    * (e.g. talk delegation wraps the operator's ask in a brief + verbatim
@@ -459,12 +466,12 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     INSERT INTO sessions (
       id, engine, source, source_ref, connector, session_key, reply_context, message_id, transport_meta,
       employee, model, title, prompt_excerpt, parent_session_id,
-      user_id, effort_level, status, created_at, last_activity, scope_department
+      user_id, effort_level, fallback_mode, fallback_target, status, created_at, last_activity, scope_department
     )
     VALUES (
       ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, 'idle', ?, ?, ?
+      ?, ?, ?, ?, 'idle', ?, ?, ?
     )
   `);
   stmt.run(
@@ -484,6 +491,8 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     opts.parentSessionId ?? null,
     opts.userId ?? null,
     opts.effortLevel ?? null,
+    opts.fallbackMode ?? null,
+    opts.fallbackTarget ? JSON.stringify(opts.fallbackTarget) : null,
     now,
     now,
     scopeDepartment,
@@ -511,6 +520,8 @@ export function createSession(opts: CreateSessionOpts & { prompt?: string; porta
     scopeDepartment,
     userId: opts.userId ?? null,
     effortLevel: opts.effortLevel ?? null,
+    fallbackMode: opts.fallbackMode ?? null,
+    fallbackTarget: opts.fallbackTarget ?? null,
     status: 'idle',
     attemptOutcome: null,
     attemptToken: null,
@@ -557,6 +568,8 @@ export interface UpdateSessionFields {
   attemptInterruptionTurn?: number | null;
   model?: string | null;
   effortLevel?: string | null;
+  fallbackMode?: SessionFallbackMode | null;
+  fallbackTarget?: StoredFallbackTarget | null;
   lastContextTokens?: number | null;
   replyContext?: ReplyContext | null;
   messageId?: string | null;
@@ -642,6 +655,14 @@ export function updateSession(id: string, updates: UpdateSessionFields): Session
   if (updates.effortLevel !== undefined) {
     sets.push('effort_level = ?');
     values.push(updates.effortLevel);
+  }
+  if (updates.fallbackMode !== undefined) {
+    sets.push('fallback_mode = ?');
+    values.push(updates.fallbackMode);
+  }
+  if (updates.fallbackTarget !== undefined) {
+    sets.push('fallback_target = ?');
+    values.push(updates.fallbackTarget ? JSON.stringify(updates.fallbackTarget) : null);
   }
   if (updates.lastContextTokens !== undefined) {
     sets.push('last_context_tokens = ?');
@@ -790,6 +811,84 @@ export function recordChildReportedToParent(id: string, attemptToken: string): v
     SET transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.reportedToParentAttempt', ?)
     WHERE id = ?
   `).run(attemptToken, id);
+}
+
+/**
+ * A child's reply that was held back from its parent because the turn only
+ * waited on the child's own background work. Persisted with the session so a
+ * restart, which forgets the in-memory background state, can still hand the
+ * latest one to the parent instead of losing it.
+ */
+export interface HeldInterimReply {
+  /** Replies held in a row for this Todo, this one included. */
+  count: number;
+  /** The newest held reply. Older ones are superseded, not queued. */
+  text: string;
+  at: number;
+  workItemId: string;
+}
+
+const HELD_INTERIM_REPLY_KEY = "interimRelayHold";
+
+function readHeldInterimReply(db: Database.Database, id: string): HeldInterimReply | undefined {
+  const row = db.prepare(`SELECT json_extract(transport_meta, '$.${HELD_INTERIM_REPLY_KEY}') AS held FROM sessions WHERE id = ?`)
+    .get(id) as { held?: string | null } | undefined;
+  if (!row?.held) return undefined;
+  try {
+    const held = JSON.parse(row.held) as Partial<HeldInterimReply>;
+    return typeof held.text === "string" && typeof held.workItemId === "string"
+      ? { count: Number(held.count) || 1, text: held.text, at: Number(held.at) || 0, workItemId: held.workItemId }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Hold one reply, replacing any earlier held one. Returns false once `cap`
+ * replies are already held in a row for this Todo, and the caller relays
+ * instead. A new Todo starts the count over.
+ */
+export function holdInterimReply(
+  id: string,
+  held: Pick<HeldInterimReply, "text" | "workItemId" | "at">,
+  cap: number,
+): boolean {
+  const db = initDb();
+  return db.transaction(() => {
+    const current = readHeldInterimReply(db, id);
+    const count = current && current.workItemId === held.workItemId ? current.count : 0;
+    if (count >= cap) return false;
+    const record: HeldInterimReply = { ...held, count: count + 1 };
+    const result = db.prepare(`
+      UPDATE sessions
+      SET transport_meta = json_set(COALESCE(transport_meta, '{}'), '$.${HELD_INTERIM_REPLY_KEY}', json(?))
+      WHERE id = ?
+    `).run(JSON.stringify(record), id);
+    return result.changes === 1;
+  })();
+}
+
+/** Remove and return the held reply, if any: it was relayed, or superseded by a relay. */
+export function takeHeldInterimReply(id: string): HeldInterimReply | undefined {
+  const db = initDb();
+  return db.transaction(() => {
+    const held = readHeldInterimReply(db, id);
+    if (!held) return undefined;
+    db.prepare(`
+      UPDATE sessions SET transport_meta = json_remove(transport_meta, '$.${HELD_INTERIM_REPLY_KEY}') WHERE id = ?
+    `).run(id);
+    return held;
+  })();
+}
+
+/** Sessions that hold a reply nobody has relayed yet. */
+export function listHeldInterimReplySessionIds(): string[] {
+  const db = initDb();
+  const rows = db.prepare(`
+    SELECT id FROM sessions WHERE json_extract(transport_meta, '$.${HELD_INTERIM_REPLY_KEY}') IS NOT NULL
+  `).all() as Array<{ id: string }>;
+  return rows.map((row) => row.id);
 }
 
 /**
@@ -1822,10 +1921,10 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       INSERT INTO sessions (
         id, engine, engine_session_id, source, source_ref, connector, session_key,
         reply_context, message_id, transport_meta,
-        employee, model, title, parent_session_id, effort_level, status,
+        employee, model, title, parent_session_id, effort_level, fallback_mode, fallback_target, status,
         total_cost, total_turns, created_at, last_activity, scope_department
       )
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 'idle', 0, 0, ?, ?, ?)
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'idle', 0, 0, ?, ?, ?)
     `).run(
       newId,
       source.engine,
@@ -1840,6 +1939,8 @@ export function duplicateSession(sourceId: string, newTitle?: string): { session
       source.model,
       title,
       source.effortLevel,
+      source.fallbackMode,
+      source.fallbackTarget ? JSON.stringify(source.fallbackTarget) : null,
       now,
       now,
       scopedDepartmentOf(source.employee),
@@ -2241,13 +2342,18 @@ export function updatePartialMessage(id: string, content: string): void {
   db.prepare('UPDATE messages SET content = ? WHERE id = ? AND partial = 1').run(content, id);
 }
 
-/** Settle one exact partial tool row and attach its durable activity receipt. */
-export function settlePartialToolMessage(id: string, content: string, activityReceiptId?: string): void {
+/** Settle one exact partial tool row and attach its durable activity receipt and,
+ *  for an `Agent`/`Task` launch, the sub-agent id its result carries. */
+export function settlePartialToolMessage(id: string, content: string, activityReceiptId?: string, agentId?: string): void {
   const db = initDb();
   const row = db.prepare('SELECT meta FROM messages WHERE id = ? AND partial = 1').get(id) as { meta: string | null } | undefined;
   if (!row) return;
   const current = parseMetaColumn(row.meta) ?? {};
-  const meta = activityReceiptId ? { ...current, activityReceiptId } : current;
+  const meta = {
+    ...current,
+    ...(activityReceiptId ? { activityReceiptId } : {}),
+    ...(agentId ? { agentId } : {}),
+  };
   db.prepare('UPDATE messages SET content = ?, meta = ? WHERE id = ? AND partial = 1').run(
     content,
     Object.keys(meta).length > 0 ? JSON.stringify(meta) : null,

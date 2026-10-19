@@ -25,6 +25,7 @@ export default defineConfig({
       '@jinn/plugin-sdk': path.resolve(__dirname, 'src/plugins/sdk/index.ts'),
       '@jinn/fallback-map-wire': path.resolve(__dirname, '../jinn/src/shared/fallback-map-wire.ts'),
       '@jinn/model-id': path.resolve(__dirname, '../jinn/src/shared/model-id.ts'),
+      '@jinn/codename': path.resolve(__dirname, '../jinn/src/shared/codename-constant.ts'),
     },
   },
 })

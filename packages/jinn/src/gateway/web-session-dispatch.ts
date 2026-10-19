@@ -185,7 +185,7 @@ async function runWebSession(
   // a callback, a Todo wake, a reused delegate — and the engine below is picked
   // from the row as it stands after it.
   const employee = liveSession.employee ? orgRegistry(context.getConfig()).get(liveSession.employee) : undefined;
-  const currentSession = maybeRevertEngineOverride(liveSession, employee);
+  const currentSession = maybeRevertEngineOverride(liveSession, employee, context.getConfig());
 
   // CLI-mode sends run against the PTY-backed view of the engine so the user
   // sees the turn stream into their live xterm; everything else takes the

@@ -1,4 +1,4 @@
-import { CalendarRange } from "lucide-react"
+import { CalendarRange } from "@/components/ui/icon"
 import type { SprintWire } from "@/lib/sprint-api"
 import { resolveSprintFilter, sprintDates, useSprints, useStartSprint, sprintErrorMessage } from "./use-sprints"
 
@@ -9,7 +9,7 @@ import { resolveSprintFilter, sprintDates, useSprints, useStartSprint, sprintErr
  * of showing an empty board with no explanation. */
 
 const BUTTON_CLASS =
-  "focus-ring inline-flex h-[28px] flex-none items-center rounded-full px-3 text-[12px] font-medium outline-none transition-colors"
+  "focus-outline inline-flex h-[28px] flex-none items-center rounded-full px-3 text-[12px] font-medium outline-none transition-colors"
 const ACCENT_CLASS = `${BUTTON_CLASS} bg-[var(--accent-fill)] text-[var(--accent)] hover:bg-[var(--fill-secondary)] disabled:opacity-50`
 const QUIET_CLASS = `${BUTTON_CLASS} bg-[var(--fill-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--fill-secondary)]`
 

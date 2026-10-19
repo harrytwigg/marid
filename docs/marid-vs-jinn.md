@@ -20,7 +20,7 @@ This page lists the headline features Marid has that upstream does not, and is j
 | Preview and pinned tabs | ✅ | partial | Marid: a tab opened by ordinary navigation is an italic preview tab that the next open replaces; double-click pins it. Upstream's tab model has the same pinned/preview rule but no visible strip to show it. |
 | Mobile session tabs | ✅ | partial | Marid replaces the phone's chat strip with tabs that have close buttons (`mobile-session-tabs.tsx`). Upstream has a strip of working-set chips whose preview text is screen-reader only (`mobile-working-set-nav.tsx`). |
 | Shift-click range select in the chat list | ✅ | ❌ | Upstream already has multi-select and bulk delete. Marid adds range select. |
-| Teal Marid theme and name | ✅ | ❌ | A token-override file (`routes/theme-overrides.css`) and a single product-name constant (`lib/brand.ts`). A colour the user picks still wins over the default. |
+| Aero glass theme and name | ✅ | ❌ | The Aero glass identity (`routes/glass-identity.css`) and a single product-name constant (`lib/brand.ts`). A colour the user picks still wins over the default. |
 
 ## Terminal and CLI mode
 

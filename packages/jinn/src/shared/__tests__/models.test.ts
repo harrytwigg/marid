@@ -346,3 +346,20 @@ describe("cache + invalidate", () => {
     expect(c.claude.models[0].id).toBe("CHANGED");
   });
 });
+
+describe("opencode effort without discovery", () => {
+  it("synthesizes a placeholder with no effort, on the variant mechanism", () => {
+    const reg = synthesizeFromEngineConfig(cfg({ opencode: { bin: "opencode", model: "opencode/big-pickle" } }));
+    expect(reg.opencode.effortMechanism).toBe("opencode-variant");
+    expect(reg.opencode.models.every((m) => !m.supportsEffort && m.effortLevels.length === 0)).toBe(true);
+  });
+
+  it("takes effort levels from a models.opencode block, the manual route where discovery lists none", () => {
+    const reg = getModelRegistry(cfg(
+      { opencode: { bin: "opencode", model: "opencode/m" } },
+      { opencode: { models: [{ id: "opencode/m", label: "m", supportsEffort: true, effortLevels: ["low", "high"] }] } },
+    ));
+    expect(reg.opencode.effortMechanism).toBe("opencode-variant");
+    expect(reg.opencode.models[0]).toMatchObject({ id: "opencode/m", supportsEffort: true, effortLevels: ["low", "high"] });
+  });
+});

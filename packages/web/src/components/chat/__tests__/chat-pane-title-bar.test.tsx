@@ -1,3 +1,4 @@
+import "@/test/preload-menus"
 import { describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TURN_STALL_VISIBLE_MS } from '@/components/chat/session-signals'

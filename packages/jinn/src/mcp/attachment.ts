@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Employee, McpGlobalConfig } from "../shared/types.js";
 import { JINN_HOME } from "../shared/paths.js";
+import { allowlistOmission } from "./builtin-name.js";
 
 /**
  * GRS-017e — the default-attachment machinery for the built-in `jinn` MCP
@@ -192,9 +193,8 @@ function decideWouldAttach(opts: {
   if (employee?.mcp === false) {
     return { attach: false, reason: `employee ${employee.name} opts out of all MCP servers (mcp: false)` };
   }
-  if (Array.isArray(employee?.mcp) && !employee.mcp.includes("jinn")) {
-    return { attach: false, reason: `employee ${employee.name}'s mcp allowlist omits "jinn"` };
-  }
+  const omitted = allowlistOmission(employee);
+  if (omitted) return { attach: false, reason: omitted };
 
   // 5. Master on / shipped default.
   if (enabled === true) {

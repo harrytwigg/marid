@@ -12,6 +12,7 @@
  * a finished reply with no text, is only the end of a turn that has no answer
  * once nothing has taken the turn up again for a short while.
  */
+import { readMetadataTag } from "./opencode-metadata-tag.js";
 
 function str(value: unknown): string | undefined {
   return typeof value === "string" && value ? value : undefined;
@@ -58,7 +59,7 @@ export function abandonedRetryError(retry: ProviderRetry, now = Date.now()): { n
  */
 export function repeatsPrompt(part: Record<string, unknown>, promptText: string): boolean {
   const metadata = part.metadata && typeof part.metadata === "object" ? part.metadata as Record<string, unknown> : undefined;
-  return part.type === "text" && Boolean(promptText) && part.text === promptText && metadata?.jinn === undefined;
+  return part.type === "text" && Boolean(promptText) && part.text === promptText && readMetadataTag(metadata) === undefined;
 }
 
 /**

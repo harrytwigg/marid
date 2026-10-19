@@ -8,11 +8,11 @@ import {
 } from "../shared/template-materialization.js"
 import { matchesReceiptlessRetiredSkill, receiptlessRetiredSkillNames } from "./receiptless-retired-skills.js"
 import { stampVersionInYaml } from "./version-marker.js"
+import { LEGACY_RECEIPT_FILE, RECEIPT_FILE } from "./receipt-names.js"
 
 /** The names Jinn shipped the last time it synced. The template alone says which
  *  skills ship *now*, so without this record a retired skill and a skill the user
  *  wrote themselves look identical, and only one of them may be deleted. */
-const RECEIPT_FILE = ".jinn-template-skills.json"
 const BACKUP_ROOT = ".migration-backups"
 
 export interface TemplateSkillSync {
@@ -257,7 +257,7 @@ function seedSkillsIndex(home: string, templateDir: string): void {
  *  record deciding what gets deleted, so it refuses rather than quietly reading as empty
  *  and then overwriting the only evidence of what went wrong. */
 function readReceipt(home: string): string[] | null {
-  const receiptPath = path.join(home, RECEIPT_FILE)
+  const receiptPath = path.join(home, fs.existsSync(path.join(home, RECEIPT_FILE)) ? RECEIPT_FILE : LEGACY_RECEIPT_FILE)
   let raw: string
   try { raw = fs.readFileSync(receiptPath, "utf8") } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null

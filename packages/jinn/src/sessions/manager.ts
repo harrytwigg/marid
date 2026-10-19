@@ -155,7 +155,7 @@ export class SessionManager {
       }) ?? session;
     }
 
-    session = maybeRevertEngineOverride(session, opts.employee);
+    session = maybeRevertEngineOverride(session, opts.employee, this.config);
     this.queue.clearCancelled(msg.sessionKey);
 
     const target = connector.reconstructTarget(msg.replyContext);

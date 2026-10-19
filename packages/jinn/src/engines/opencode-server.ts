@@ -16,7 +16,8 @@ import {
   type OpencodeConfigHandle,
 } from "./opencode-mcp.js";
 import { buildOpencodeServeArgs } from "./opencode-protocol.js";
-import { cleanEnv, opencodeProcessEnv, REMOTE_ENV_DENY } from "./opencode-launch.js";
+import { cleanEnv, opencodeProcessEnv, REMOTE_ENV_DENY, type OpencodeProcessOptions } from "./opencode-launch.js";
+import { localCommandTimeoutPlugins } from "./opencode-command-timeout.js";
 import {
   buildSshSpawnArgs,
   ensureRemoteReady,
@@ -30,8 +31,19 @@ import {
   type RemoteEngineHandle,
   type RemoteFacts,
   type RemoteOpencodeStaging,
+  forgetRemoteFacts,
 } from "./remote-stage.js";
-import { needsStandalone, newerMajorReason, notJsonHealthReason, opencodeMajor, MAX_OPENCODE_SERVER_MAJOR } from "./opencode-version.js";
+import { localOpencodeVersion } from "../shared/opencode-bin-version.js";
+import {
+  MAX_OPENCODE_SERVER_MAJOR,
+  MIN_OPENCODE_V2_SERVER_VERSION,
+  newerMajorReason,
+  notJsonHealthReason,
+  opencodeApiOf,
+  opencodeMajor,
+  type OpencodeApi,
+} from "./opencode-version.js";
+import { v2AbortTurn, v2Prompt, v2RunningSessions, v2WaitMcpReady } from "./opencode-v2-api.js";
 import { ServerHolds, type HoldKind } from "./opencode-server-holds.js";
 
 /**
@@ -104,6 +116,12 @@ export interface OpencodeServer {
   exited: boolean;
   /** Set once the health check has answered; until then nothing is sent to it. */
   ready: boolean;
+  /** The HTTP API it speaks, from its health check (see opencode-version.ts).
+   *  Unset until then. */
+  api?: OpencodeApi;
+  /** The API whose config shape its MCP config was staged in, when one was
+   *  (from the binary's version, read before it started). */
+  stagedApi?: OpencodeApi;
   /** The opencode session the last turn named: where the terminal view attaches. */
   engineSessionId?: string;
   configHandle?: OpencodeConfigHandle;
@@ -120,6 +138,9 @@ export interface OpencodeServerPoolDeps {
   /** `engines.opencode.disableFff`, read per spawn. Absent means on. A server
    *  already running keeps the environment it started with. */
   disableFff?: () => boolean;
+  /** `engines.opencode.commandTimeoutMs`, resolved, read per spawn; absent or
+   *  0: no ceiling (see opencode-command-timeout.ts). */
+  commandTimeoutMs?: () => number;
 }
 
 /**
@@ -153,6 +174,8 @@ const ABORT_SETTLE_MS = 15_000;
 const ABORT_CONFIRM_MS = 1_500;
 const ABORT_POLL_MS = 150;
 const OUTPUT_MAX = 4 * 1024;
+/** How long after its MCP servers connect a 2.x server is first used (see v2WaitMcpReady). */
+const V2_MCP_SETTLE_MS = 1_000;
 
 /** The mode `engines.opencode.mode` names. Anything but `server` is `run`, so a
  *  typo falls back to the behaviour that existed before the option did. */
@@ -197,9 +220,11 @@ export function compareVersions(a: string, b: string): number {
 /** Why a server of this version cannot be used, or undefined when it can. */
 export function unsupportedVersionReason(version: string | undefined): string | undefined {
   if (!version) return `the server did not report its version (server mode needs opencode >= ${MIN_OPENCODE_SERVER_VERSION})`;
-  if ((opencodeMajor(version) ?? 0) > MAX_OPENCODE_SERVER_MAJOR) return newerMajorReason(version, MIN_OPENCODE_SERVER_VERSION);
-  return compareVersions(version, MIN_OPENCODE_SERVER_VERSION) < 0
-    ? `opencode ${version} is older than ${MIN_OPENCODE_SERVER_VERSION}, the oldest version server mode is verified against`
+  const major = opencodeMajor(version) ?? 0;
+  if (major > MAX_OPENCODE_SERVER_MAJOR) return newerMajorReason(version);
+  const min = major === 2 ? MIN_OPENCODE_V2_SERVER_VERSION : MIN_OPENCODE_SERVER_VERSION;
+  return compareVersions(version, min) < 0
+    ? `opencode ${version} is older than ${min}, the oldest version server mode is verified against`
     : undefined;
 }
 
@@ -230,23 +255,15 @@ interface HealthReading {
 
 /** Why a server cannot be used given its health check, or undefined when it can. */
 function healthRefusal(health: HealthReading): string | undefined {
-  if (health.notJson && !health.version) return notJsonHealthReason(MIN_OPENCODE_SERVER_VERSION);
+  if (health.notJson && !health.version) return notJsonHealthReason();
   return unsupportedVersionReason(health.version);
 }
 
-/**
- * The binary a refusal is about and the version its server reported: one fact,
- * never mixed across two refusals. A refusal that names no binary (API drift),
- * or the same binary without learning its version (a concurrent start that
- * lost /api/info), keeps what the live earlier one found; one that names
- * another binary records only what it learned about that one.
- */
-function refusedBinary(
-  previous: { version?: string; bin?: string } | undefined,
-  next: { version?: string; bin?: string },
-): { version?: string; bin?: string } {
-  const keep = next.bin === undefined || (next.bin === previous?.bin && next.version === undefined);
-  return keep && previous ? previous : next;
+/** A request the server answered with a non-2xx status. */
+class RequestStatusError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
 }
 
 export class OpencodeServerPool {
@@ -256,7 +273,7 @@ export class OpencodeServerPool {
   private holds = new ServerHolds();
   /** Hosts whose server was found unusable, and when: their turns use `run`
    *  mode until {@link UNSUPPORTED_RETRY_MS} has passed. */
-  private unsupported = new Map<string, { reason: string; at: number; version?: string; bin?: string }>();
+  private unsupported = new Map<string, { reason: string; at: number }>();
   private remoteKills = new RemoteKills("opencode server");
   private startedListeners: Array<(server: OpencodeServer) => void> = [];
   private releasedListeners: Array<(sessionId: string) => void> = [];
@@ -364,39 +381,12 @@ export class OpencodeServerPool {
    * run` (a server that will not start is the `run` fallback in the engine)
    * rather than risk silently dropping events, until the retry window passes.
    */
-  markUnsupported(hostKey: string, reason: string, opts: { now?: number; version?: string; bin?: string } = {}): void {
+  markUnsupported(hostKey: string, reason: string, opts: { now?: number } = {}): void {
     const now = opts.now ?? Date.now();
-    // Only a live verdict carries over: an expired one is gone, as for a turn.
-    const previous = this.unsupportedReason(hostKey, now) === undefined ? undefined : this.unsupported.get(hostKey);
-    if (!previous) {
+    if (this.unsupportedReason(hostKey, now) === undefined) {
       logger.warn(`opencode server mode disabled for host ${hostKey} for ${Math.round(UNSUPPORTED_RETRY_MS / 60000)} minutes: ${reason}`);
     }
-    const { version, bin } = refusedBinary(previous, opts);
-    this.unsupported.set(hostKey, { reason, at: now, ...(version ? { version } : {}), ...(bin ? { bin } : {}) });
-  }
-
-  /** Whether a `run` turn for this target needs `--standalone`: its binary's
-   *  server was refused as OpenCode 2, whose CLI otherwise leaves a background
-   *  service running. The verdict is the binary's, not the host's: a turn
-   *  naming another binary on the same host is not covered, since a 1.x CLI
-   *  rejects the flag. Only a host the pool has seen refuse says so; a host in
-   *  plain `run` mode is never probed, and its operator passes the flag in
-   *  `cliFlags`. */
-  runNeedsStandalone(target: RemoteTarget & { bin?: string }, now = Date.now()): boolean {
-    const hostKey = serverHostKey(target);
-    if (this.unsupportedReason(hostKey, now) === undefined) return false;
-    const entry = this.unsupported.get(hostKey);
-    return needsStandalone(entry?.version) && entry?.bin === this.binKey(target);
-  }
-
-  /** Which opencode binary a server or `run` turn for this target uses. Local:
-   *  the configured binary, resolved as a server start resolves it. Remote: the
-   *  binary the host's facts probe finds for that user, which a turn's `bin`
-   *  does not change. */
-  binKey(target: RemoteTarget & { bin?: string }): string {
-    return isRemoteTarget(target)
-      ? `remote:${target.remoteUser ?? ""}`
-      : resolveBin("opencode", target.bin || this.deps.bin?.());
+    this.unsupported.set(hostKey, { reason, at: now });
   }
 
   /** Why server mode is currently off for this host, if it is. */
@@ -509,29 +499,36 @@ export class OpencodeServerPool {
   async abortTurn(sessionId: string, target: { engineSessionId: string; userMessageId: string }): Promise<void> {
     const server = this.get(sessionId);
     if (!server) return;
-    const abort = () => this.request(server, `/session/${encodeURIComponent(target.engineSessionId)}/abort`, { method: "POST" });
     try {
-      await abort();
-      const deadline = Date.now() + ABORT_SETTLE_MS;
-      let quietSince = 0;
-      for (;;) {
-        await sleep(ABORT_POLL_MS);
-        if (await this.turnStillRunning(server, target)) {
-          quietSince = 0;
-          await abort();
-        } else if (!quietSince) {
-          quietSince = Date.now();
-        } else if (Date.now() - quietSince >= ABORT_CONFIRM_MS) {
-          return;
-        }
-        if (Date.now() > deadline) throw new Error("the turn was still running after repeated aborts");
-      }
+      await (server.api === 2
+        ? v2AbortTurn(server, target, { settleMs: ABORT_SETTLE_MS, confirmMs: ABORT_CONFIRM_MS, pollMs: ABORT_POLL_MS })
+        : this.abortV1Turn(server, target));
     } catch (err) {
       logger.warn(
         `Could not confirm the abort on the opencode server for session ${sessionId} `
         + `(${err instanceof Error ? err.message : String(err)}); stopping the server instead`,
       );
       await this.stop(sessionId);
+    }
+  }
+
+  /** {@link abortTurn} on a 1.x server. */
+  private async abortV1Turn(server: OpencodeServer, target: { engineSessionId: string; userMessageId: string }): Promise<void> {
+    const abort = () => this.request(server, `/session/${encodeURIComponent(target.engineSessionId)}/abort`, { method: "POST" });
+    await abort();
+    const deadline = Date.now() + ABORT_SETTLE_MS;
+    let quietSince = 0;
+    for (;;) {
+      await sleep(ABORT_POLL_MS);
+      if (await this.turnStillRunning(server, target)) {
+        quietSince = 0;
+        await abort();
+      } else if (!quietSince) {
+        quietSince = Date.now();
+      } else if (Date.now() - quietSince >= ABORT_CONFIRM_MS) {
+        return;
+      }
+      if (Date.now() > deadline) throw new Error("the turn was still running after repeated aborts");
     }
   }
 
@@ -548,6 +545,7 @@ export class OpencodeServerPool {
   async promptAsync(sessionId: string, engineSessionId: string, text: string): Promise<void> {
     const server = this.get(sessionId);
     if (!server) throw new Error("no opencode server for this session");
+    if (server.api === 2) return await v2Prompt(server, engineSessionId, text);
     await this.request(server, `/session/${encodeURIComponent(engineSessionId)}/prompt_async`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -594,11 +592,14 @@ export class OpencodeServerPool {
 
   // ── Starting ─────────────────────────────────────────────────────────────
 
-  private async start(sessionId: string, spec: OpencodeServerSpec, fingerprint: string): Promise<OpencodeServer> {
+  /** `knownApi`: a restage (see stagedForAnotherApi), with the API the first
+   *  server reported. A local config is staged for it outright; a remote one
+   *  follows the host's facts, read again. */
+  private async start(sessionId: string, spec: OpencodeServerSpec, fingerprint: string, knownApi?: OpencodeApi): Promise<OpencodeServer> {
     const password = crypto.randomBytes(24).toString("base64url");
     const server = isRemoteTarget(spec)
       ? await this.spawnRemote(sessionId, spec, fingerprint, password)
-      : await this.spawnLocal(sessionId, spec, fingerprint, password);
+      : await this.spawnLocal(sessionId, spec, fingerprint, password, knownApi);
     this.servers.set(sessionId, server);
     // Adopted as busy, so neither cap can stop it while it is still starting.
     // A remote server is bounded by `maxIdleByHost` alone; only a local one also
@@ -610,10 +611,15 @@ export class OpencodeServerPool {
     });
     this.armSweep();
 
-    await this.checkHealth(sessionId, server, spec);
+    await this.checkHealth(sessionId, server);
+    if (await this.stagedForAnotherApi(server)) {
+      if (knownApi === undefined) return await this.start(sessionId, spec, fingerprint, server.api);
+      throw new Error("opencode server did not start: its config could not be staged for the API it speaks");
+    }
     const bootstrapStart = Date.now();
     try {
       await this.waitBootstrapped(server, this.bootstrapTimeoutMs());
+      await this.waitMcpConnected(server, spec, bootstrapStart);
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       const output = server.output.trim().split("\n").slice(-5).join(" | ");
@@ -631,7 +637,7 @@ export class OpencodeServerPool {
   }
 
   /** Wait for the server's health check and refuse a server of an unusable version. */
-  private async checkHealth(sessionId: string, server: OpencodeServer, spec: OpencodeServerSpec): Promise<void> {
+  private async checkHealth(sessionId: string, server: OpencodeServer): Promise<void> {
     let health: HealthReading;
     try {
       health = await this.waitHealthy(server, this.startTimeoutMs());
@@ -643,13 +649,36 @@ export class OpencodeServerPool {
     }
     const refusal = healthRefusal(health);
     if (refusal) {
-      this.markUnsupported(server.hostKey, refusal, {
-        ...(health.version ? { version: health.version } : {}),
-        bin: this.binKey(spec),
-      });
+      this.markUnsupported(server.hostKey, refusal);
       await this.stop(sessionId);
       throw new Error(`opencode server refused: ${refusal}`);
     }
+    server.api = opencodeApiOf(health.version);
+  }
+
+  /**
+   * The config is in the other API's shape: the version read before the start
+   * was wrong. A remote host's facts are cached, and its opencode may have been
+   * upgraded since; a local `--version` may have failed (read as 1.x). The
+   * server is stopped, and a remote host's facts read again.
+   */
+  private async stagedForAnotherApi(server: OpencodeServer): Promise<boolean> {
+    if (!server.stagedApi || server.stagedApi === server.api) return false;
+    logger.warn(`opencode server for session ${server.sessionId} speaks API ${server.api} but its config was staged for ${server.stagedApi}; restaging`);
+    if (server.remote) forgetRemoteFacts(server.remote.destination);
+    await this.stop(server.sessionId);
+    return true;
+  }
+
+  /** OpenCode 2 connects MCP servers lazily: wait for the staged ones (see
+   *  v2WaitMcpReady), within what is left of the bootstrap budget. One that
+   *  will not connect costs its tools, not the server. */
+  private async waitMcpConnected(server: OpencodeServer, spec: OpencodeServerSpec, since: number): Promise<void> {
+    if (server.api !== 2 || !server.stagedApi) return;
+    const names = Object.keys(buildOpencodeSessionConfig(spec.resolvedMcp)?.mcp ?? {});
+    const left = Math.max(1_000, this.bootstrapTimeoutMs() - (Date.now() - since));
+    const missing = await v2WaitMcpReady(server, names, { timeoutMs: left, settleMs: V2_MCP_SETTLE_MS });
+    if (missing.length) logger.warn(`opencode server for session ${server.sessionId}: MCP server(s) not connected: ${missing.join(", ")}`);
   }
 
   private startTimeoutMs(): number {
@@ -666,20 +695,30 @@ export class OpencodeServerPool {
     return this.deps.disableFff?.() ?? true;
   }
 
+  /** What Marid's settings put on the server's process (opencode-launch.ts). */
+  private processOptions(): OpencodeProcessOptions {
+    const commandTimeoutMs = this.deps.commandTimeoutMs?.() ?? 0;
+    return { disableFff: this.disableFff(), ...(commandTimeoutMs > 0 ? { commandTimeoutMs } : {}) };
+  }
+
   private async spawnLocal(
     sessionId: string,
     spec: OpencodeServerSpec,
     fingerprint: string,
     password: string,
+    knownApi?: OpencodeApi,
   ): Promise<OpencodeServer> {
     const bin = resolveBin("opencode", spec.bin || this.deps.bin?.());
     const port = await freeLocalPort();
     // A directory of its own, apart from the one a `run` turn stages: the
     // server reads it for its whole life, and a `run` turn deletes its copy
     // when it settles.
-    const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`);
+    const api = knownApi ?? opencodeApiOf(await localOpencodeVersion(bin));
+    const processOptions = this.processOptions();
+    const plugins = localCommandTimeoutPlugins(api, processOptions.commandTimeoutMs ?? 0);
+    const configHandle = writeOpencodeSessionConfig(spec.resolvedMcp, `${sessionId}.server`, api, plugins);
     const env = {
-      ...cleanEnv(sessionId, { disableFff: this.disableFff() }),
+      ...cleanEnv(sessionId, processOptions),
       OPENCODE_SERVER_PASSWORD: password,
       ...(configHandle.staged ? { OPENCODE_CONFIG: configHandle.configPath } : {}),
     };
@@ -705,6 +744,7 @@ export class OpencodeServerPool {
       exited: false,
       ready: false,
       configHandle,
+      ...(configHandle.staged ? { stagedApi: api } : {}),
       output: "",
     });
   }
@@ -731,8 +771,8 @@ export class OpencodeServerPool {
 
     const serverPort = await probeFreePort(staging.destination, facts);
     const localPort = await freeLocalPort();
-    const disableFff = this.disableFff();
-    const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile, disableFff });
+    const processOptions = this.processOptions();
+    const args = remoteServeSshArgs({ sessionId, spec, staging, facts, bin, gatewayPort, serverPort, localPort, pidFile: handle.pidFile, processOptions });
     logger.info(
       `opencode server starting REMOTE for session ${sessionId} on ${staging.destination}:${spec.remoteCwd} `
       + `(port ${serverPort}, forwarded from 127.0.0.1:${localPort}, tunnel ${staging.tunnelPort}→${gatewayPort}, `
@@ -740,7 +780,7 @@ export class OpencodeServerPool {
     );
     const proc = spawn(resolveBin("ssh"), args, {
       cwd: JINN_HOME,
-      env: cleanEnv(sessionId, { disableFff }),
+      env: cleanEnv(sessionId, processOptions),
       stdio: ["pipe", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });
@@ -757,6 +797,7 @@ export class OpencodeServerPool {
       proc,
       exited: false,
       ready: false,
+      ...(staging.opencodeConfigPath ? { stagedApi: opencodeApiOf(facts.opencodeVersion) } : {}),
       output: "",
     });
   }
@@ -783,6 +824,7 @@ export class OpencodeServerPool {
       gatewayPort,
       ...(spec.resolvedMcp ? { resolvedMcp: spec.resolvedMcp } : {}),
       sessionEnv: { OPENCODE_SERVER_PASSWORD: password },
+      ...((this.deps.commandTimeoutMs?.() ?? 0) > 0 ? { opencodeCommandTimeout: true } : {}),
     });
     return { staging, facts: readiness.facts, gatewayPort };
   }
@@ -861,12 +903,9 @@ export class OpencodeServerPool {
     while (Date.now() < deadline) {
       if (server.exited) throw new Error("the server process exited");
       try {
-        const health = await this.request(server, "/global/health", { method: "GET" });
-        // Not JSON: an OpenCode 2 server answers every v1 route with its web UI.
-        // Its own version is on `/api/info`.
-        if (typeof health === "string") return { notJson: true, version: await this.apiInfoVersion(server) };
-        const version = health && typeof health === "object" ? (health as { version?: unknown }).version : undefined;
-        return { notJson: false, version: typeof version === "string" && version ? version : undefined };
+        const reading = await this.readHealth(server);
+        if ("failed" in reading) last = reading.failed;
+        else return reading;
       } catch (err) {
         last = err instanceof Error ? err.message : String(err);
       }
@@ -875,23 +914,34 @@ export class OpencodeServerPool {
     throw new Error(`no healthy answer within ${timeoutMs}ms (${last})`);
   }
 
-  /** The version an OpenCode 2 server reports on `/api/info`, or undefined when
-   *  there is no such route. A request that fails (no answer, or a non-2xx
-   *  status) is tried once more: a server that has only just answered its
-   *  health check can drop one. */
-  private async apiInfoVersion(server: OpencodeServer): Promise<string | undefined> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) await sleep(HEALTH_POLL_MS);
-      let info: unknown;
-      try {
-        info = await this.request(server, "/api/info", { method: "GET" });
-      } catch {
-        continue;
-      }
-      const version = info && typeof info === "object" ? (info as { version?: unknown }).version : undefined;
-      return typeof version === "string" && version ? version : undefined;
+  /** One health check: what the server says about its version, or why that could not be read. */
+  private async readHealth(server: OpencodeServer): Promise<HealthReading | { failed: string }> {
+    const health = await this.request(server, "/global/health", { method: "GET" });
+    // Not JSON: an OpenCode 2 server answers every v1 route with its web UI.
+    // Its own version is on `/api/info`.
+    if (typeof health === "string") {
+      const info = await this.apiInfoVersion(server);
+      return "failed" in info ? info : { notJson: true, version: info.version };
     }
-    return undefined;
+    const version = health && typeof health === "object" ? (health as { version?: unknown }).version : undefined;
+    return { notJson: false, version: typeof version === "string" && version ? version : undefined };
+  }
+
+  /** What `/api/info` said: a version (possibly none) from a server that
+   *  answered, or `failed` when the request did not get an answer to go by (no
+   *  answer, or a status such as 401 or 5xx). Only a route that is not there (404)
+   *  or an answer without a version is "no version"; a request that failed says
+   *  nothing about the server, so the caller asks again. */
+  private async apiInfoVersion(server: OpencodeServer): Promise<{ failed: string } | { version: string | undefined }> {
+    let info: unknown;
+    try {
+      info = await this.request(server, "/api/info", { method: "GET" });
+    } catch (err) {
+      if (err instanceof RequestStatusError && err.status === 404) return { version: undefined };
+      return { failed: err instanceof Error ? err.message : String(err) };
+    }
+    const version = info && typeof info === "object" ? (info as { version?: unknown }).version : undefined;
+    return { version: typeof version === "string" && version ? version : undefined };
   }
 
   /**
@@ -920,7 +970,7 @@ export class OpencodeServerPool {
     // A remote server's API is an ssh forward, which can outlive the server.
     const exitWatch = setInterval(() => { if (server.exited) stop("the server process exited"); }, HEALTH_POLL_MS);
     try {
-      const res = await fetch(`${server.apiUrl}/event`, {
+      const res = await fetch(`${server.apiUrl}${server.api === 2 ? "/api/event" : "/event"}`, {
         headers: { authorization: basicAuthHeader(server.password), accept: "text/event-stream" },
         signal: controller.signal,
       });
@@ -945,6 +995,7 @@ export class OpencodeServerPool {
   }
 
   private async busySessions(server: OpencodeServer): Promise<string[]> {
+    if (server.api === 2) return await v2RunningSessions(server);
     const body = await this.request(server, "/session/status", { method: "GET" });
     const status = body && typeof body === "object" ? body as Record<string, { type?: string }> : {};
     return Object.entries(status)
@@ -958,7 +1009,7 @@ export class OpencodeServerPool {
       headers: { ...(init.headers as Record<string, string> | undefined), authorization: basicAuthHeader(server.password) },
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
-    if (!res.ok) throw new Error(`${init.method ?? "GET"} ${route} answered ${res.status}`);
+    if (!res.ok) throw new RequestStatusError(`${init.method ?? "GET"} ${route} answered ${res.status}`, res.status);
     const text = await res.text();
     if (!text) return undefined;
     try {
@@ -987,7 +1038,7 @@ function remoteServeSshArgs(o: {
   serverPort: number;
   localPort: number;
   pidFile: string;
-  disableFff: boolean;
+  processOptions: OpencodeProcessOptions;
 }): string[] {
   return buildSshSpawnArgs({
     destination: o.staging.destination,
@@ -997,7 +1048,7 @@ function remoteServeSshArgs(o: {
     remoteEnv: {
       JINN_HOME: o.staging.sessionHome,
       JINN_SESSION_ID: o.sessionId,
-      ...opencodeProcessEnv(o),
+      ...opencodeProcessEnv(o.processOptions),
       ...(o.staging.opencodeConfigPath ? { OPENCODE_CONFIG: o.staging.opencodeConfigPath } : {}),
     },
     envFile: o.staging.envFilePath,

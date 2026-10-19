@@ -1,3 +1,4 @@
+import "@/test/preload-menus"
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { WORKING_SET_STORAGE_KEY } from '../working-set'
@@ -116,12 +117,12 @@ describe('desktop pane focus', () => {
     let menu = await screen.findByRole('menu')
     expect(within(menu).getByRole('menuitem', { name: 'Open beside' })).toBeTruthy()
     expect(within(menu).getByRole('menuitem', { name: 'Open in new tab' })).toBeTruthy()
-    expect(within(menu).getByRole('button', { name: 'Chat' })).toBeTruthy()
-    expect(within(menu).getByRole('button', { name: 'CLI' })).toBeTruthy()
+    expect(within(menu).getByRole('menuitemradio', { name: 'Chat' })).toBeTruthy()
+    expect(within(menu).getByRole('menuitemradio', { name: 'CLI' })).toBeTruthy()
     // The pane title bar is the multi-pane home of the header's Open beside, so it has to
     // read the same and sit in the same slot: view toggle first, then Open beside, then the
     // session items. PLA-180 introduced it above the toggle under a different name.
-    const paneMenuOrder = Array.from(menu.querySelectorAll('[role="menuitem"], button'))
+    const paneMenuOrder = Array.from(menu.querySelectorAll('[role="menuitem"], [role="menuitemradio"], button'))
       .map((element) => element.textContent?.trim() ?? '')
     expect(paneMenuOrder.indexOf('Open beside')).toBe(paneMenuOrder.indexOf('CLI') + 1)
     expect(paneMenuOrder.indexOf('Open in new tab')).toBe(paneMenuOrder.indexOf('Open beside') + 1)
@@ -130,13 +131,13 @@ describe('desktop pane focus', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Share debug log' })).toBeTruthy()
     expect(within(menu).getByRole('menuitem', { name: 'Clear debug log' })).toBeTruthy()
 
-    fireEvent.click(within(menu).getByRole('button', { name: 'CLI' }))
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'CLI' }))
     await waitFor(() => expect(localStorage.getItem('jinn-view-mode-b')).toBe('cli'))
     await waitFor(() => expect(paneB.textContent).not.toContain('transcript-b'))
 
     fireEvent.pointerDown(within(paneB).getByRole('button', { name: 'Actions for Title b' }), { button: 0, ctrlKey: false })
     menu = await screen.findByRole('menu')
-    fireEvent.click(within(menu).getByRole('button', { name: 'Chat' }))
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Chat' }))
     await waitFor(() => expect(localStorage.getItem('jinn-view-mode-b')).toBe('chat'))
     await waitFor(() => expect(paneB.textContent).toContain('transcript-b'))
   })

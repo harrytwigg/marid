@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import readline from "node:readline";
 import { loadInstances, saveInstances } from "./instances.js";
+import { NAMES, isDefaultInstanceName, sameInstanceName } from "../shared/codename.js";
 
 const RED = "\x1b[31m";
 const YELLOW = "\x1b[33m";
@@ -33,10 +34,10 @@ async function waitForPidExit(pid: number, timeoutMs = 10_000): Promise<boolean>
 }
 
 export async function runNuke(name?: string): Promise<void> {
-  const instances = loadInstances().filter((i) => i.name !== "jinn");
+  const instances = loadInstances().filter((i) => !isDefaultInstanceName(i.name));
 
   if (instances.length === 0) {
-    console.log("No removable instances found. The default \"jinn\" instance cannot be nuked.");
+    console.log(`No removable instances found. The default "${NAMES.codename}" instance cannot be nuked.`);
     return;
   }
 
@@ -61,13 +62,13 @@ export async function runNuke(name?: string): Promise<void> {
     }
   }
 
-  if (name === "jinn") {
-    console.error(`${RED}Error:${RESET} Cannot nuke the default "jinn" instance.`);
+  if (isDefaultInstanceName(name)) {
+    console.error(`${RED}Error:${RESET} Cannot nuke the default "${NAMES.codename}" instance.`);
     process.exit(1);
   }
 
   const allInstances = loadInstances();
-  const index = allInstances.findIndex((i) => i.name === name);
+  const index = allInstances.findIndex((i) => sameInstanceName(i.name, name!));
 
   if (index === -1) {
     console.error(`${RED}Error:${RESET} Instance "${name}" not found.`);

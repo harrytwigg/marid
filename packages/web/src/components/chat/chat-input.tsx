@@ -101,9 +101,27 @@ interface ChatInputProps {
   statusSlot?: React.ReactNode
   /** Optional terminal-key control, rendered in the toolbar beside the mic. */
   terminalActionsSlot?: React.ReactNode
+  /** Optional per-session status items (context meter), right after the model chip. */
+  sessionStatusSlot?: React.ReactNode
 }
 
 /* ── File to MediaAttachment ─────────────────────────────── */
+
+/**
+ * Minimum widths that keep the model chip's icons (48px) and the waiting-on status (24px for the
+ * dot and count, 40px, then 72px for the short label) visible in a narrow composer. A floor only
+ * applies once the composer row has room for it. The parts of the row that never shrink (attach,
+ * context ring, mic, Send and the gaps) take 190px with phone-sized buttons and 180px on desktop,
+ * so each threshold is 190px + the floors that would apply + 2px of slack: a busy row of any width
+ * never overflows and never pushes Send out. Sized from the composer container, never the
+ * viewport, because a chat-grid pane is phone-narrow on a wide screen. A row that also shows the
+ * STT language picker or the CLI keys has less to spare, so it gets no floors (TOOLBAR_FLOORS is
+ * only applied when `toolbarFloors` holds).
+ */
+const TOOLBAR_FLOORS = {
+  selector: '@min-[240px]/composer:min-w-12',
+  status: '@min-[264px]/composer:has-[>*]:min-w-6 @min-[280px]/composer:has-[>*]:min-w-10 @min-[312px]/composer:has-[>*]:min-w-[4.5rem]',
+} as const
 
 function resizeImage(file: File, maxPx: number): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -178,6 +196,7 @@ export function ChatInput({
   selectorSlot,
   statusSlot,
   terminalActionsSlot,
+  sessionStatusSlot,
 }: ChatInputProps) {
   const { value, setValue, pendingSend } = useChatDraft(sessionId)
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -250,6 +269,8 @@ export function ChatInput({
     // armed auto-send still fires on this path.
     applyTranscriptRef.current(text ?? '')
   })
+  // Floors assume the toolbar's fixed parts; extra fixed controls leave no room to spare.
+  const toolbarFloors = stt.languages.length <= 1 && !terminalActionsSlot
 
   // Consume files dropped onto the chat area by the parent
   const consumedRef = useRef<File[] | undefined>(undefined)
@@ -690,12 +711,12 @@ export function ChatInput({
       {/* Soft top scrim — fades scrolling content into the composer instead of a
           hard 1px divider. Borderless, readable over the thread in both themes.
           Stays full-bleed (spans the whole thread width). */}
-      <div aria-hidden className="pointer-events-none absolute -top-5 left-0 right-0 h-5 bg-gradient-to-b from-transparent to-[var(--bg)]" />
+      <div aria-hidden data-chat-composer-fade className="pointer-events-none absolute -top-5 left-0 right-0 h-5 bg-gradient-to-b from-transparent to-[var(--bg)]" />
       {/* Centered measure — caps the composer to the same column as the message
           text (--chat-measure + the message rows' space-3/space-8 side insets), so
           the card lines up edge-for-edge with the thread content instead of
           spanning the full pane. Mobile stays effectively full-width. */}
-      <div className="relative mx-auto w-full max-w-[var(--chat-measure)] px-3 lg:px-8">
+      <div data-chat-composer-measure className="relative mx-auto w-full max-w-[var(--chat-measure)] px-3 lg:px-8">
       {/* Slash command autocomplete */}
       {showCommands && filteredCommands.length > 0 && (
         <div className="absolute bottom-full left-3 right-3 lg:left-8 lg:right-8 mb-1 border-0 bg-[var(--bg-tertiary)] rounded-[var(--radius-lg)] shadow-[var(--shadow-overlay)] max-h-60 overflow-y-auto z-10">
@@ -827,24 +848,36 @@ export function ChatInput({
           </button>
 
           {/* Model chip — wrapped so clicks on the trigger (and its inline popover)
-              don't re-trigger card focus. The cap bounds a long model label instead
-              of letting an unshrinkable chip push Send outside a narrow pane. */}
+              don't re-trigger card focus. The cap bounds a long model label, and
+              the wrapper still shrinks when the cap is more than the row has left,
+              so nothing in the slot can push Send outside a narrow pane. Where
+              the row has room for it, it keeps at least its icons (model,
+              fallback): see TOOLBAR_FLOORS. */}
           {selectorSlot && (
             <div
-              className="flex max-w-[55%] shrink-0 items-center overflow-hidden"
+              className={`flex min-w-0 max-w-[55%] shrink items-center overflow-hidden ${toolbarFloors ? TOOLBAR_FLOORS.selector : ''}`}
               onPointerDown={(e) => e.stopPropagation()}
             >
               {selectorSlot}
             </div>
           )}
 
+          {/* display: contents, so the wrapper has no box of its own (the slot's
+              own root collapses when it has nothing to show, and no gap is left);
+              React's pointer events still bubble through it. */}
+          {sessionStatusSlot && (
+            <div className="contents" onPointerDown={(e) => e.stopPropagation()}>
+              {sessionStatusSlot}
+            </div>
+          )}
+
           {/* Ambient status sits left-anchored in the toolbar's flexible middle,
               reading as a continuation of the model chip's cluster rather than a
               floating center element. flex-1 (basis-0) claims only LEFTOVER
-              space, so the slot can never push or truncate its siblings —
-              appearing/disappearing moves nothing, and an overlong status clips
-              inside this container. */}
-          <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden pl-1">
+              space, and an overlong status clips inside this container. While it
+              shows something it keeps a floor where the row has room for one:
+              see TOOLBAR_FLOORS. */}
+          <div className={`flex min-w-0 flex-1 items-center justify-start overflow-hidden pl-1 ${toolbarFloors ? TOOLBAR_FLOORS.status : ''}`}>
             {statusSlot}
           </div>
 
@@ -1036,6 +1069,8 @@ export function ChatInput({
            streaming so the brighter loading ring takes precedence. */
         .composer-card-active { box-shadow: var(--shadow-card); }
         .composer-card-active:focus-within { box-shadow: var(--shadow-card), 0 0 0 4px var(--accent-fill); }
+        .composer-card-active.composer-card-loading,
+        .composer-card-active.composer-card-loading:focus-within { box-shadow: var(--shadow-card), 0 0 0 1.5px color-mix(in srgb, var(--accent) 38%, transparent); }
       `}</style>
     </div>
   )

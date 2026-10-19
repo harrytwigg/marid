@@ -1,4 +1,4 @@
-import { ChevronLeft, X } from 'lucide-react'
+import { ChevronLeft, X } from '@/components/ui/icon'
 import { useEffect, useState } from 'react'
 import { usePaneTabsStrip, usePaneTitleDrag } from '@/components/chat/pane-tabs-context'
 import { ChatPaneSessionMenu } from '@/components/chat/chat-pane-session-menu'
@@ -150,7 +150,7 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
 
   return (
     <div
-      data-testid="chat-pane-title-bar"
+      data-testid="chat-pane-title-bar" data-chat-pane-titlebar={String(active)}
       {...drag}
       className={`flex h-[34px] shrink-0 items-center gap-2 px-[8px] pl-[12px] transition-colors duration-[var(--duration-fast)] ${active ? 'bg-[var(--fill-secondary)]' : 'bg-transparent'}`}
     >
@@ -163,7 +163,7 @@ export function ChatPaneTitleBar({ active, title, employee, session, backTo, onC
           onClick={(event) => { event.stopPropagation(); backTo.onClick() }}
           className="inline-flex min-w-0 shrink-0 items-center gap-0.5 text-[length:var(--text-footnote)] font-[var(--weight-medium)] text-[var(--text-tertiary)] transition-colors duration-[var(--duration-fast)] hover:text-[var(--text-primary)]"
         >
-          <ChevronLeft size={14} strokeWidth={2.4} aria-hidden className="shrink-0" />
+          <ChevronLeft size={14} aria-hidden className="shrink-0" />
           <span className="max-w-[90px] truncate">{backTo.label}</span>
         </button>
       ) : null}

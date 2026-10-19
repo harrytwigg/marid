@@ -10,7 +10,8 @@ import { logger } from "./logger.js";
 import { keepClaudeCatalogAfter, logClaudeCatalogShortfall, readClaudeCredentialStatus } from "./claude-auth.js";
 import { resolveBin, isInstalled } from "./resolve-bin.js";
 import { discoverPiModels } from "./pi-models.js";
-import { discoverOpencodeModels } from "./opencode-models.js";
+import { withConfiguredOverrides } from "./opencode-models.js";
+import { opencodeCatalogue, refreshOpencodeCatalogue } from "./opencode-catalogue.js";
 import { MUSECODE_EFFORT_LEVELS } from "./musecode-effort.js";
 import { buildMusecodeEntry } from "./musecode-registry.js";
 export { musecodeEngineOptions, musecodeModelCost, refreshMusecodeModels } from "./musecode-registry.js";
@@ -138,9 +139,8 @@ const EFFORT_MECHANISM: Record<EngineName, EffortMechanism> = {
   grok: "grok-flag",
   pi: "pi-flag",
   hermes: "none",
-  // `--variant` exists, but nothing opencode reports says which models accept
-  // which variants, so no model here claims effort support. See opencode-models.ts.
-  opencode: "none",
+  // A model's variants are its effort levels; opencode lists them per model.
+  opencode: "opencode-variant",
   musecode: "musecode-turn",
 };
 
@@ -212,8 +212,6 @@ let discoveredAntigravityModels: AntigravityModelDiscovery | null = null;
 let discoveredGrokModels: GrokModelDiscovery | null = null;
 /** Snapshot of dynamically-discovered Hermes models (null until first discovery). */
 let discoveredHermesModels: HermesModelDiscovery | null = null;
-/** Snapshot of dynamically-discovered opencode models (null until first discovery). */
-let discoveredOpencodeModels: ModelInfo[] | null = null;
 
 /**
  * Discover Claude's catalog through Claude Code OAuth. This is best-effort and
@@ -320,25 +318,18 @@ export async function refreshPiModels(config: JinnConfig): Promise<void> {
 /**
  * Discover the models the installed opencode CLI can reach (`opencode models`)
  * and refresh the registry. Async — populates a snapshot the synchronous
- * registry reads. Never throws; degrades to the config/synthesized fallback
- * when opencode is absent or discovery fails.
+ * registry reads (`opencode-catalogue.ts`, which also lands details that arrive
+ * after this returns). Never throws; degrades to the config/synthesized
+ * fallback when opencode is absent or discovery fails. `opts.env` is what the
+ * discovery runs start with (`opencodeDiscoveryEnv`), supplied by callers
+ * because `shared/` cannot import the engine that defines it.
  */
-export async function refreshOpencodeModels(config: JinnConfig): Promise<void> {
-  if (!engineAvailable(config, "opencode")) {
-    discoveredOpencodeModels = null;
-    invalidateModelRegistry();
-    return;
-  }
-  try {
-    const bin = resolveBin("opencode", engineBinOverride(config, "opencode"));
-    discoveredOpencodeModels = await discoverOpencodeModels(bin);
-    logger.info(`opencode model discovery: ${discoveredOpencodeModels.length} model(s)`);
-  } catch (err) {
-    logger.warn(`opencode model discovery failed: ${err instanceof Error ? err.message : err}`);
-    discoveredOpencodeModels = null;
-  } finally {
-    invalidateModelRegistry();
-  }
+export async function refreshOpencodeModels(
+  config: JinnConfig,
+  opts: { secondLook?: boolean; env?: Record<string, string> } = {},
+): Promise<void> {
+  const bin = engineAvailable(config, "opencode") ? resolveBin("opencode", engineBinOverride(config, "opencode")) : null;
+  await refreshOpencodeCatalogue(bin, invalidateModelRegistry, opts.secondLook, opts.env);
 }
 
 /**
@@ -413,6 +404,17 @@ export function effortLevelsForModel(config: JinnConfig, engine: string, modelId
     (modelId ? entry.models.find((m) => m.id === modelId) : undefined) ??
     entry.models.find((m) => m.id === entry.defaultModel) ??
     entry.models[0];
+  return model?.supportsEffort ? model.effortLevels : [];
+}
+
+/**
+ * The effort levels the registry lists for exactly this model: none for a model
+ * it does not list, and none without a model, where {@link effortLevelsForModel}
+ * would answer for the engine's default. For an engine that sends the level to
+ * the model itself (opencode's variants) and must never send one the model lacks.
+ */
+export function exactEffortLevelsForModel(config: JinnConfig, engine: string, modelId: string | undefined): string[] {
+  const model = modelId ? getModelRegistry(config)[engine]?.models.find((m) => m.id === modelId) : undefined;
   return model?.supportsEffort ? model.effortLevels : [];
 }
 
@@ -627,6 +629,7 @@ function buildOpencodeEntry(
   available: boolean,
 ): EngineRegistryEntry {
   const pinned = config.engines.opencode?.model;
+  const discoveredOpencodeModels = opencodeCatalogue();
   if (discoveredOpencodeModels && discoveredOpencodeModels.length > 0) {
     let models = discoveredOpencodeModels;
     // A pinned model discovery has not caught up with still has to be
@@ -634,7 +637,7 @@ function buildOpencodeEntry(
     if (pinned && !models.some((m) => m.id === pinned)) {
       models = [{ id: pinned, label: pinned, supportsEffort: false, effortLevels: [] }, ...models];
     }
-    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: "none", models };
+    return { name: "opencode", available, defaultModel: pinned || models[0].id, effortMechanism: EFFORT_MECHANISM.opencode, models: withConfiguredOverrides(models, opencodeBlock) };
   }
   if (opencodeBlock) return fromEngineModelsConfig("opencode", opencodeBlock, available, pinned);
   return { ...synthEntry, available };

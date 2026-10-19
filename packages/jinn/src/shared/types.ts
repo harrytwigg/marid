@@ -4,6 +4,8 @@ export type { CompanyChangedEvent } from "./gateway-events.js";
 
 export type { NoteDocument, NoteFolder, NoteStoreResult, NoteSummary } from "./note-types.js";
 
+import type { SessionFallbackMode, StoredFallbackTarget } from "./session-fallback-config.js";
+
 /** Generous but bounded body size for durable communication-card metadata. */
 export const STRUCTURED_MESSAGE_BODY_MAX_CHARS = 16_000;
 
@@ -90,6 +92,10 @@ export interface StreamDelta {
   /** Stable server-authored activity block id carried only by a successful
    * matching tool result. Persisted onto that exact tool row for reload. */
   activityReceiptId?: string;
+  /** The background sub-agent an `Agent`/`Task` call launched, carried only by its
+   *  successful tool result (`status: "async_launched"`). Persisted on the tool row's
+   *  meta so the card can open the sub-agent's transcript once the popup row is gone. */
+  agentId?: string;
   /** First 200 chars of the stringified tool input. Present on PreToolUse-sourced
    *  `tool_use` deltas (fired just before the tool runs, full input assembled).
    *  Absent on the SSE-proxy `content_block_start` delta (input not yet known). */
@@ -394,6 +400,10 @@ export interface Session {
   attemptInterruptionCause?: SessionAttemptInterruptionCause | null;
   attemptInterruptionTurn?: number | null;
   effortLevel: string | null;
+  /** Usage-limit behaviour chosen for this session; null follows `sessions.fallbackMode`. */
+  fallbackMode: SessionFallbackMode | null;
+  /** The engine and model the operator chose to switch to at a usage limit; null follows the config's fallback chain. */
+  fallbackTarget: StoredFallbackTarget | null;
   totalCost: number;
   totalTurns: number;
   /** Most recent turn's input-context token count (for the UI context meter). */
@@ -742,7 +752,7 @@ export interface ConnectorInstance {
  */
 
 /** How an engine conveys reasoning-effort to its CLI. */
-export type EffortMechanism = "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "musecode-turn" | "none";
+export type EffortMechanism = "claude-flag" | "codex-config" | "grok-flag" | "pi-flag" | "opencode-variant" | "musecode-turn" | "none";
 
 /** A single model and its capabilities, as exposed to the UI / validation. */
 export interface ModelInfo {

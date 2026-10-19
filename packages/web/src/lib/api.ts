@@ -10,6 +10,7 @@ import { createConfigApi } from "@/lib/api-config"
 import { createSttApi } from "@/lib/api-stt"
 import { createTodoCaptureApi } from "@/lib/api-todo-capture"
 import type { EngineLimitsResponse } from "@/lib/api-engine-limits"
+import type { SessionWaitsResponse } from "@/lib/session-waits"
 export type { EngineLimitAccountSnapshot, EngineLimitsResponse } from "@/lib/api-engine-limits"
 export type { TodoCaptureWire, TodoCaptureStageWire, TodoCaptureRouteWire } from "@/lib/api-todo-capture"
 import type { StaleChatPolicy } from "@/lib/stale-chat"
@@ -23,6 +24,7 @@ import {
 import type { WorkItemCommentPageWire, WorkItemCommentWire } from "@/lib/work-item-comment-wire"
 import type { WorkItemRunWire } from "@/lib/work-item-runs-wire"
 import type { WorkItemSprintRefWire } from "./sprint-api"
+import { requestHeaderName } from "./codename";
 
 export interface TranscriptContentBlock {
   type: 'text' | 'tool_use' | 'tool_result' | 'thinking'
@@ -190,7 +192,7 @@ export type WriteOriginWire = "talk"
 
 function writeHeaders(origin?: WriteOriginWire): Record<string, string> {
   return origin
-    ? { "Content-Type": "application/json", "X-Jinn-Origin": origin }
+    ? { "Content-Type": "application/json", [requestHeaderName("origin")]: origin }
     : { "Content-Type": "application/json" };
 }
 
@@ -207,7 +209,7 @@ export async function post<T>(path: string, body?: unknown, origin?: WriteOrigin
 export async function del<T>(path: string, origin?: WriteOriginWire): Promise<T> {
   const res = await authFetch(path, {
     method: "DELETE",
-    ...(origin ? { headers: { "X-Jinn-Origin": origin } } : {}),
+    ...(origin ? { headers: { [requestHeaderName("origin")]: origin } } : {}),
   });
   if (!res.ok) throw await responseError(res);
   return res.json();
@@ -617,8 +619,11 @@ export const api = {
       `/api/sessions/${id}/messages${query ? `?${query}` : ""}`,
     )
   },
+  /** What the session's "waiting on" status names: sessions, background tasks, heartbeats. */
+  getSessionWaits: (id: string, signal?: AbortSignal) =>
+    get<SessionWaitsResponse>(`/api/sessions/${encodeURIComponent(id)}/waits`, signal ? { signal } : undefined),
   getSessionChildren: (id: string) => get<Record<string, unknown>[]>(`/api/sessions/${id}/children`),
-  updateSession: (id: string, data: { title?: string; engine?: string; model?: string; effortLevel?: string }) =>
+  updateSession: (id: string, data: { title?: string; engine?: string; model?: string; effortLevel?: string; fallbackMode?: 'fallback' | 'fallback-children' | 'auto-resume'; fallbackTarget?: { engine: string; model: string } | null }) =>
     put<Record<string, unknown>>(`/api/sessions/${id}`, data),
   archiveSession: (id: string) => post<Record<string, unknown>>(`/api/sessions/${id}/archive`, {}),
   unarchiveSession: (id: string) => post<Record<string, unknown>>(`/api/sessions/${id}/unarchive`, {}),

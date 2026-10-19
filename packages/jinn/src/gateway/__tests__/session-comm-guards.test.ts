@@ -5,8 +5,6 @@ import {
   isDescendantOf,
   headerString,
   resolveCallerIdentity,
-  LATERAL_MAX_SENDS,
-  LATERAL_WINDOW_MS,
   LATERAL_MAX_HOPS,
   LATERAL_HOP_TTL_MS,
 } from "../session-comm-guards.js";
@@ -22,7 +20,7 @@ import type { Session } from "../../shared/types.js";
 /**
  * GRS-017a — substrate guards for agent-initiated (lateral) session messaging.
  * Pure/in-memory module with an injected clock; these are the arithmetic tests
- * (rate window, hop decrement/expiry, descendant walk). The route wiring is
+ * (hop decrement/expiry, descendant walk). The route wiring is
  * covered by the session-tools integration tier.
  */
 
@@ -30,47 +28,19 @@ function sess(id: string, extra: Partial<Session> = {}): Session {
   return { id, engine: "codex", source: "web", status: "idle", ...extra } as Session;
 }
 
-describe("rate cap — sliding window per sender", () => {
-  it(`allows ${LATERAL_MAX_SENDS} sends in a window and refuses the next with retry info`, () => {
-    let now = 1_000_000;
-    const g = createSessionCommGuards(() => now);
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) {
-      expect(g.checkSendAllowed("a").ok).toBe(true);
-      now += 1_000;
-    }
-    const denied = g.checkSendAllowed("a");
-    expect(denied.ok).toBe(false);
-    if (!denied.ok) {
-      expect(denied.status).toBe(429);
-      expect(denied.error).toMatch(/rate cap/i);
-      expect(denied.error).toMatch(/\d+s/);
-    }
-  });
-
-  it("the window slides — old sends expire and capacity returns", () => {
-    let now = 0;
-    const g = createSessionCommGuards(() => now);
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) g.checkSendAllowed("a");
-    expect(g.checkSendAllowed("a").ok).toBe(false);
-    now += LATERAL_WINDOW_MS + 1;
-    expect(g.checkSendAllowed("a").ok).toBe(true);
-  });
-
-  it("senders are independent — one storming session does not starve another", () => {
+describe("no send-rate cap", () => {
+  it("a sender can send far more than a burst of messages without a refusal", () => {
     const g = createSessionCommGuards(() => 0);
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) g.checkSendAllowed("a");
-    expect(g.checkSendAllowed("a").ok).toBe(false);
-    expect(g.checkSendAllowed("b").ok).toBe(true);
+    for (let i = 0; i < 500; i++) {
+      const v = g.checkSendAllowed("a");
+      expect(v.ok && v.hops === 1).toBe(true);
+    }
   });
 
-  it("a refused send does not consume window capacity", () => {
-    let now = 0;
-    const g = createSessionCommGuards(() => now);
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) g.checkSendAllowed("a");
-    for (let i = 0; i < 5; i++) expect(g.checkSendAllowed("a").ok).toBe(false);
-    now += LATERAL_WINDOW_MS + 1;
-    // All original sends expired together; the refused attempts left no residue.
-    expect(g.checkSendAllowed("a").ok).toBe(true);
+  it("sends do not accumulate guard state — only delivered hop tags are tracked", () => {
+    const g = createSessionCommGuards(() => 0);
+    for (let i = 0; i < 100; i++) g.checkSendAllowed(`s-${i}`);
+    expect(g.stats()).toEqual({ hopEntries: 0 });
   });
 });
 
@@ -228,11 +198,19 @@ describe("prepareLateralSend — the route-side transform", () => {
     expect(out.ok && out.prompt.includes("cron")).toBe(true);
   });
 
-  it("propagates guard refusals (rate cap) with their status", () => {
+  it("propagates guard refusals (hop budget) with their status", () => {
     const g = createSessionCommGuards(() => 0);
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) g.checkSendAllowed("s1");
+    g.recordDelivery("s1", LATERAL_MAX_HOPS);
     const out = prepareLateralSend({ caller: sess("s1"), targetSessionId: "s2", message: "m", guards: g });
-    expect(!out.ok && out.status === 429).toBe(true);
+    expect(!out.ok && out.status === 400 && /hop budget/i.test(out.error)).toBe(true);
+  });
+
+  it("a large fan-out from one sender to distinct targets is never refused", () => {
+    const g = createSessionCommGuards(() => 0);
+    for (let i = 0; i < 40; i++) {
+      const out = prepareLateralSend({ caller: sess("s1"), targetSessionId: `t-${i}`, message: `m${i}`, guards: g });
+      expect(out.ok && out.hops === 1).toBe(true);
+    }
   });
 
   it("truncates a huge message in the displayMessage but never in the engine prompt", () => {

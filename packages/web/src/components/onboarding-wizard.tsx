@@ -11,15 +11,17 @@ import {
   ArrowLeft,
   ArrowRight,
   Rocket,
-} from "lucide-react"
+} from "@/components/ui/icon"
 import { useSettings } from "@/routes/settings-provider"
 import { useTheme } from "@/routes/providers"
 import { THEMES } from "@/lib/themes"
+import { engineDisplayName } from "@/lib/engine-names"
 import { api, type ModelInfo } from "@/lib/api"
 import { useModelRegistry } from "@/hooks/use-model-registry"
 import { buildNewSessionParams } from "@/components/chat/new-chat-helpers"
 import { resolveTodoIdPrefix } from "@/lib/todo-id"
-import { PRODUCT_EMOJI, PRODUCT_NAME } from "@/lib/brand"
+import { PRODUCT_NAME } from "@/lib/brand"
+import { BrandMark } from "@/components/brand-mark"
 
 // ---------------------------------------------------------------------------
 // Accent color presets
@@ -62,19 +64,6 @@ const CLAUDE_EYEBROW: Record<string, string> = {
   opus:                "Smartest",
   "claude-sonnet-4-6": "Balanced",
   "claude-haiku-4-5":  "Fastest",
-}
-
-/** Friendly display names for known engine keys. Falls back to capitalising. */
-const ENGINE_DISPLAY_NAMES: Record<string, string> = {
-  claude:      "Claude",
-  codex:       "Codex",
-  grok:        "Grok",
-  antigravity: "Antigravity",
-  musecode:    "Muse Code",
-}
-
-function engineDisplayName(key: string): string {
-  return ENGINE_DISPLAY_NAMES[key] ?? (key.charAt(0).toUpperCase() + key.slice(1))
 }
 
 // ---------------------------------------------------------------------------
@@ -299,21 +288,14 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
   if (!visible && !launching) return null
 
   // Loading bridge: shown after "Get Started" while the /chat route mounts.
-  // The same backdrop as the wizard keeps the screen branded and non-blank.
+  // It is a solid sheet with the mark, not the wizard's scrim, so the change on
+  // "Get Started" from scrim to solid is deliberate: the screen stays branded
+  // and non-blank, and the chat does not show through while the route mounts.
   if (launching) {
     return (
-      <div
-        className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-[var(--space-4)]"
-        style={{
-          background: "color-mix(in srgb, var(--bg) 35%, rgba(0,0,0,0.60))",
-          backdropFilter: "blur(40px) saturate(160%)",
-          WebkitBackdropFilter: "blur(40px) saturate(160%)",
-        }}
-      >
-        <div className="w-[72px] h-[72px] rounded-full bg-[var(--accent-fill)] flex items-center justify-center animate-pulse">
-          <span className="text-[44px] leading-none">{PRODUCT_EMOJI}</span>
-        </div>
-        <p className="text-[length:var(--text-title3)] font-[var(--weight-semibold)] text-[var(--text-primary)]">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-[var(--space-4)] bg-[var(--bg)]">
+        <BrandMark size={72} className="animate-pulse" />
+        <p className="brand-wordmark text-[length:var(--text-title3)] text-[var(--text-primary)]">
           Summoning {localName || PRODUCT_NAME}…
         </p>
       </div>
@@ -321,20 +303,8 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{
-        background: "color-mix(in srgb, var(--bg) 35%, rgba(0,0,0,0.60))",
-        backdropFilter: "blur(40px) saturate(160%)",
-        WebkitBackdropFilter: "blur(40px) saturate(160%)",
-      }}
-    >
-      <div
-        className="animate-fade-in w-full max-w-[520px] mx-[var(--space-4)] bg-[var(--material-regular)] rounded-[var(--radius-xl)] border border-[var(--separator)] overflow-hidden flex flex-col max-h-[90vh]"
-        style={{
-          boxShadow: "var(--shadow-overlay)",
-        }}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--scrim)]">
+      <div className="glass-overlay animate-fade-in w-full max-w-[520px] mx-[var(--space-4)] rounded-[var(--radius-xl)] overflow-hidden flex flex-col max-h-[90vh]">
         {/* Step indicator — frosted header strip */}
         <div className="flex flex-col items-center pt-[var(--space-5)] px-[var(--space-5)] pb-[var(--space-4)] border-b border-[var(--separator)]">
           <div className="flex justify-center gap-[var(--space-2)]">
@@ -363,10 +333,8 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
               key="step-0"
               className="animate-fade-in text-center"
             >
-              <div className="mx-auto mb-[var(--space-4)] w-[72px] h-[72px] rounded-full bg-[var(--accent-fill)] flex items-center justify-center">
-                <span className="text-[44px] leading-none">{PRODUCT_EMOJI}</span>
-              </div>
-              <h2 className="text-[length:var(--text-title1)] font-[var(--weight-bold)] tracking-[var(--tracking-tight)] text-[var(--text-primary)] mb-[var(--space-2)]">
+              <BrandMark size={72} className="mx-auto mb-[var(--space-4)]" />
+              <h2 className="brand-wordmark text-[length:var(--text-title1)] text-[var(--text-primary)] mb-[var(--space-2)]">
                 Welcome to {localName || PRODUCT_NAME}
               </h2>
               <p className="text-[length:var(--text-subheadline)] text-[var(--text-secondary)] leading-[var(--leading-relaxed)] max-w-[380px] mx-auto mb-[var(--space-5)]">
@@ -546,7 +514,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                         }}
                       >
                         {isActive && (
-                          <Check size={18} color="var(--accent-contrast)" strokeWidth={3} />
+                          <Check size={18} color="var(--accent-contrast)" />
                         )}
                       </button>
                     )
@@ -617,7 +585,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                               </div>
                               {isActive && (
                                 <div className="w-5 h-5 rounded-full bg-[var(--accent)] flex items-center justify-center shrink-0">
-                                  <Check size={11} color="var(--accent-contrast)" strokeWidth={3} />
+                                  <Check size={11} color="var(--accent-contrast)" />
                                 </div>
                               )}
                             </button>
@@ -682,7 +650,7 @@ export function OnboardingWizard({ forceOpen, initialVisible, onClose }: Onboard
                                 </div>
                                 {isActive && (
                                   <div className="w-5 h-5 rounded-full bg-[var(--accent)] flex items-center justify-center shrink-0">
-                                    <Check size={11} color="var(--accent-contrast)" strokeWidth={3} />
+                                    <Check size={11} color="var(--accent-contrast)" />
                                   </div>
                                 )}
                               </button>
