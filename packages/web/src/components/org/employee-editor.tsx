@@ -271,7 +271,7 @@ export function EmployeeEditor({
         </div>
       </Field>
 
-      <EmployeeFallbackRow employee={employee} engine={selector.engine ?? employee.engine} value={fallback} onChange={setFallback} onBlockedChange={setFallbackBlocked} locked={isSystem} />
+      <EmployeeFallbackRow employee={employee} engine={selector.engine ?? employee.engine} model={selector.model ?? employee.model} value={fallback} onChange={setFallback} onBlockedChange={setFallbackBlocked} locked={isSystem} />
 
       <Field label="Persona / instructions">
         {isSystem ? (

@@ -20,6 +20,8 @@ interface EmployeeFallbackFieldProps {
   employee: Employee
   /** The engine the employee runs on, as the editor now has it. */
   engine: string
+  /** The model, as the editor now has it: the own target a link may not repeat. */
+  model?: string
   /** The employee's own chain; null inherits. */
   value: FallbackLink[] | null
   onChange: (next: FallbackLink[] | null) => void
@@ -87,10 +89,10 @@ function ChainChoice({ custom, ready, inherited, onChange }: {
 
 /** "Use the default" or "Custom": the default's chain read-only, or the same rows an
  *  engine's chain has. Switching to Custom starts from the chain the default runs. */
-export function EmployeeFallbackField({ employee, engine, value, onChange, onBlockedChange }: EmployeeFallbackFieldProps) {
+export function EmployeeFallbackField({ employee, engine, model, value, onChange, onBlockedChange }: EmployeeFallbackFieldProps) {
   const { data: registry } = useModelRegistry()
   const { data: chains } = useFallbackChains(employee.name)
-  const { inherited, self, selves, shown, own, subject, changed } = fallbackFieldState(employee, engine, value, chains)
+  const { inherited, self, selves, shown, own, subject, changed } = fallbackFieldState(employee, engine, value, chains, model)
   const blocked = chainBlocked(registry, own, selves, chains, changed)
   useEffect(() => { onBlockedChange?.(blocked) }, [blocked, onBlockedChange])
   if (!registry) return null

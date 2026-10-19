@@ -110,6 +110,16 @@ describe("EmployeeFallbackField", () => {
     )
   })
 
+  it("checks against the model the editor now has, as the gateway checks the save", () => {
+    // Switching opus → sonnet in the same edit: sonnet is now the own target, opus is not.
+    const onOpus = { ...EMP, model: "opus" }
+    const { rerender } = render(<EmployeeFallbackField employee={onOpus} engine="claude" model="sonnet" value={[{ engine: "claude", profile: "work", model: "sonnet" }]} onChange={() => {}} />)
+    expect(document.querySelector("[data-chain-problem]")?.textContent).toContain("(claude · work · sonnet) is the target this chain falls back from")
+
+    rerender(<EmployeeFallbackField employee={onOpus} engine="claude" model="sonnet" value={[{ engine: "claude", profile: "work", model: "opus" }]} onChange={() => {}} />)
+    expect(document.querySelector("[data-chain-problem]")).toBeNull()
+  })
+
   it("refuses a bare link to the own engine of an employee on the default profile", () => {
     const onDefault = { ...EMP, engine: "codex", model: "m", claudeProfile: null }
     const onBlockedChange = vi.fn()

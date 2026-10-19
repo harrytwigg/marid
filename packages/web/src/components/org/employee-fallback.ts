@@ -122,20 +122,31 @@ function ownChainOf(employee: Employee, value: FallbackLink[], subject: Fallback
 }
 
 /** What the field shows for an employee on `engine`, with `value` as its own chain (null inherits). */
+/**
+ * The employee's own target as the save would leave it, in every spelling the gateway refuses a link
+ * to: with its model, and without (a link with no model runs the own model). The gateway checks a
+ * PATCH against its new engine and model, so the editor's, or the saved ones when it has none.
+ */
+function ownTargetSpellings(employee: Employee, engine: string, account: string | undefined, model: string | undefined) {
+  const target = model ?? (engine === employee.engine ? employee.model : undefined)
+  const bare: FallbackLink = { engine, ...(account ? { profile: account } : {}) }
+  const self: FallbackLink = target ? { ...bare, model: target } : bare
+  return { self, selves: target ? [self, bare] : [self] }
+}
+
 export function fallbackFieldState(
   employee: Employee,
   engine: string,
   value: FallbackLink[] | null,
   chains: FallbackChainsResponse | undefined,
+  /** The model the editor now has; the saved one when it does not say. */
+  model?: string,
 ) {
   const account = engine === "claude" ? declaredAccountOf(employee.claudeProfile, chains) : undefined
   const subject = employeeSubject(chains, employee.name)
   const inherited = serverInherited(subject, inheritedChain(engine, employee.claudeProfile, account, chains), engine !== employee.engine, engine)
   // The employee's own target, as the gateway refuses a link to it: with its model while the engine is the saved one.
-  const ownModel = engine === employee.engine && employee.model ? { model: employee.model } : {}
-  const self: FallbackLink = { engine, ...(account ? { profile: account } : {}), ...ownModel }
-  // The gateway refuses a link to the own target with the model and without it: both are checked.
-  const selves: FallbackLink[] = ownModel.model ? [self, { engine, ...(account ? { profile: account } : {}) }] : [self]
+  const { self, selves } = ownTargetSpellings(employee, engine, account, model)
   const own = value === null ? null : ownChainOf(employee, value, subject)
   const changed = !sameChain(value, employeeChainOf(employee))
   return { inherited, self, selves, shown: own?.links ?? inherited.links, own, subject, changed }
