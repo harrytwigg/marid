@@ -3,7 +3,7 @@
 <p align="center"><b>Run your AI agents as a company.</b></p>
 
 <p align="center">
-  Marid turns the agent CLIs you already use - Claude Code, Codex, Grok, Hermes, opencode - into a persistent AI company:
+  Marid turns the agent CLIs you already use - Claude Code, Codex, Grok, Hermes, opencode, Muse Code - into a persistent AI company:
   named employees and a durable Todo ledger,
   all operated from a chat and web dashboard.<br/>
   It doesn't replace your agents. <b>It gives them an org to work in.</b>
@@ -50,6 +50,7 @@ Everything in upstream Jinn still applies. On top of it, Marid adds:
 | Workspace | VS Code-style split panes you can resize, per-pane tabs with preview and pinned tabs, drag a chat from the sidebar to split, mobile session tabs, teal theme | auto-arranged chat grid, single tab list, no resizing |
 | Terminal / CLI mode | type straight into the engine's TUI (stdin, paste, mouse, scroll); standalone shells on the gateway or a remote host in the sidebar | display-only CLI view with a composer and key bar |
 | opencode | opencode engine, server mode with a live terminal, usage metering | not supported |
+| Muse Code | Muse Code engine over its session protocol, model discovery, subscription usage on the Limits page | not supported |
 | Remote hosts | Claude, Pi and opencode employees run over SSH on another machine | not supported |
 | Remote MCP connector | use your instance as a custom connector in claude.ai, Claude Desktop and Claude Code (opt-in) | not supported |
 | Sessions | self-compaction (`compact_session`), engine-aware `/compact`, opt-in auto-compaction of long sessions (cache-cold, or past a context budget), fuller restart resume, Claude auth outage handling | Claude-only `/compact`, basic restart resume |
@@ -235,11 +236,14 @@ Marid detects installed agent CLIs and lets each employee or session choose an e
 | **antigravity** | Antigravity CLI (`agy`) | see Antigravity docs | CLI (xterm) | - |
 | **pi** | Pi coding agent CLI | see Pi CLI docs | Chat | - |
 | **opencode** | [opencode](https://opencode.ai) - open-source terminal coding agent, bring your own provider | `curl -fsSL https://opencode.ai/install \| bash` (then `opencode auth login`) | Chat (batch, or server mode with a live terminal) | - |
+| **musecode** | [Muse Code](https://dev.meta.ai) - Meta's terminal coding agent, driven over its session protocol | `curl -fsSL https://dev.meta.ai/install.sh \| bash` (then `muse login` or set `META_API_KEY`) | Chat (batch, one `muse serve` per turn) | minimal / low / medium / high / xhigh |
 | **hermes** | NousResearch Hermes - open-source, model-agnostic agent | `curl -fsSL https://hermes-agent.nousresearch.com/install.sh \| bash` | Chat (ACP streaming) · CLI (xterm view) | - |
 
-Fallback labels include **Opus (Latest)**, **Sonnet (Latest)**, **Fable (Latest)**, **GPT-5.5 Codex**, **Grok Build**, and **Gemini 3.5 Flash Medium / High / Low**. Pi and Hermes report their models at session start.
+Fallback labels include **Opus (Latest)**, **Sonnet (Latest)**, **Fable (Latest)**, **GPT-5.5 Codex**, **Grok Build**, and **Gemini 3.5 Flash Medium / High / Low**. Pi and Hermes report their models at session start; Muse Code lists its own catalog (`muse-spark-1.3`, `muse-spark-1.2` and their contributor variants offline).
 
 > **Hermes cost note.** Unlike the subscription-wrapped engines, Hermes owns its own model loop and bills **per token** on the provider configured in `~/.hermes`. It streams over the Agent Client Protocol (ACP) and runs fully auto-approved. See [`docs/engines-hermes.md`](docs/engines-hermes.md).
+
+> **Muse Code.** Driven over its own session protocol (one `muse serve` per turn). Sign in with `muse login` or `META_API_KEY`; its subscription window and weekly block show on the Limits page, and a spent window moves new sessions to the fallback engine. See [`docs/engines-musecode.md`](docs/engines-musecode.md).
 
 <details>
 <summary><b>How the Claude engine runs on your subscription</b> (the PTY details)</summary>
@@ -289,6 +293,10 @@ engines:
   hermes:
     bin: hermes
     model: openai-codex:gpt-5.5
+  musecode:
+    bin: muse
+    model: muse-spark-1.2
+    fallback: [claude]
 
 models:
   claude:

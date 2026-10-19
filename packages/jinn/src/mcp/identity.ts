@@ -34,7 +34,7 @@ export function stripMcpBootstrapArgs(args: readonly string[] = []): string[] {
  *
  * The built-in `jinn` MCP server is spawned per session by the engine; for the
  * gateway to know WHICH session is calling (parent auto-linkage on spawn, the
- * no-self / rate-cap / hop-budget guards on lateral sends, own-descendant
+ * no-self / hop-budget guards on lateral sends, own-descendant
  * scoping on stop), the session's id rides:
  *
  *   manager.route() ── JINN_SESSION_ID + JINN_SESSION_CAPABILITY env on the jinn server spec (this module)

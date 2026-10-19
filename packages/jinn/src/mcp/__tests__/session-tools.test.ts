@@ -21,7 +21,7 @@ import {
   TOOL_CALL_HEADER_VALUE,
 } from "../identity.js";
 import { JinnMcpToolError, type JinnMcpContext, type JinnMcpTool } from "../toolkit.js";
-import { sessionCommGuards, LATERAL_MAX_SENDS, LATERAL_MAX_HOPS } from "../../gateway/session-comm-guards.js";
+import { sessionCommGuards, LATERAL_MAX_HOPS } from "../../gateway/session-comm-guards.js";
 import type { ResolvedMcpConfig } from "../../shared/types.js";
 
 /**
@@ -36,7 +36,7 @@ import type { ResolvedMcpConfig } from "../../shared/types.js";
  *   3. INTEGRATION — the tools drive the REAL gateway session routes + registry
  *      (temp JINN_HOME): spawn→auto-parent-link→list children→read→lateral
  *      send→stop, plus the substrate guards provoked for real (self-message,
- *      rate-cap trip, hop-budget exhaustion, non-descendant stop refusal) and
+ *      hop-budget exhaustion, non-descendant stop refusal) and
  *      the operator paths (no header) unchanged.
  */
 
@@ -197,15 +197,15 @@ describe("session tools — unit (stub gateway)", () => {
     );
   });
 
-  it("send_to_session POSTs the message route; 429 and hop-budget 400 come back readable", async () => {
+  it("send_to_session POSTs the message route; a refusal and a hop-budget 400 come back readable", async () => {
     const ok = stub(() => ({ status: 200, body: { status: "queued", sessionId: "b" } }), "a");
     const out = (await tool("send_to_session").handler({ sessionId: "b", message: "hi" }, ok.ctx)) as Record<string, unknown>;
     expect(ok.calls[0]).toMatchObject({ url: "http://127.0.0.1:7777/api/sessions/b/message", method: "POST", body: { message: "hi" } });
     expect(out.status).toBe("queued");
 
-    const rated = stub(() => ({ status: 429, body: { error: "lateral-send rate cap: 10 per 10 minutes. Retry in ~540s" } }), "a");
-    await expect(tool("send_to_session").handler({ sessionId: "b", message: "hi" }, rated.ctx)).rejects.toThrow(
-      /refused \(429\).*rate cap/,
+    const busy = stub(() => ({ status: 429, body: { error: "too many requests" } }), "a");
+    await expect(tool("send_to_session").handler({ sessionId: "b", message: "hi" }, busy.ctx)).rejects.toThrow(
+      /refused \(429\).*too many requests/,
     );
 
     const hopped = stub(() => ({ status: 400, body: { error: "hop budget exhausted: relay hop 5 (max 4)" } }), "a");
@@ -716,16 +716,14 @@ describe("session tools — integration against the real routes/registry", () =>
     expect(await ghost.text()).toMatch(/caller identity unavailable/i);
   });
 
-  it(`the rate cap trips on send ${LATERAL_MAX_SENDS + 1} with a 429 the agent can read`, async () => {
+  it("there is no send-rate cap: 30 lateral sends to distinct sessions in a row all succeed", async () => {
     const a = await createOperatorSession("sender");
-    const b = await createOperatorSession("target");
     const ctx = ctxFor(a);
-    for (let i = 0; i < LATERAL_MAX_SENDS; i++) {
-      await tool("send_to_session").handler({ sessionId: b, message: `m${i}` }, ctx);
+    for (let i = 0; i < 30; i++) {
+      const target = await createOperatorSession(`target ${i}`);
+      const res = (await tool("send_to_session").handler({ sessionId: target, message: `m${i}` }, ctx)) as { status: string };
+      expect(res.status).toBe("queued");
     }
-    await expect(tool("send_to_session").handler({ sessionId: b, message: "one too many" }, ctx)).rejects.toThrow(
-      /429.*rate cap/is,
-    );
   });
 
   it(`a two-agent ping-pong dies on the hop budget (cap pinned to 4) at relay 5, and an operator message resets the chain`, async () => {

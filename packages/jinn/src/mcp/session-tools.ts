@@ -21,7 +21,7 @@ import { SESSION_FALLBACK_MODES } from "../shared/session-fallback-config.js";
  *     one-line.
  *   - IDENTITY: ctx.callerSessionId (the JINN_SESSION_ID env) rides every call
  *     as `x-jinn-caller-session` via the toolkit. The GATEWAY enforces the
- *     guards (no-self, rate cap, hop budget, own-descendant stop) so curl is
+ *     guards (no-self, hop budget, own-descendant stop) so curl is
  *     equally guarded; tools only pre-check what saves a pointless round trip.
  *   - FAIL CLOSED ON LOST IDENTITY (codex finding 2): spawn/send/stop always
  *     act on behalf of a session, so when this server has NO caller identity

@@ -1,5 +1,6 @@
 import type { JinnConfig } from "../shared/types.js";
 import { getModelRegistry, effortLevelsForModel, hasDynamicModelCatalog, isKnownEngine } from "../shared/models.js";
+import { effortLevelsPending } from "../shared/opencode-catalogue.js";
 import { exhaustedEngineReturnsAt, preferHealthySessionEngine, readEngineHealth } from "../shared/engine-health.js";
 import type { SessionReroute } from "./engine-override-window.js";
 import { logger } from "../shared/logger.js";
@@ -160,7 +161,10 @@ export function validateNewSessionSelection(
     effortLevel = requestedEffortLevel.trim();
     const effectiveModel = model ?? undefined;
     const valid = effortLevelsForModel(config, engine, effectiveModel);
-    if (valid.length === 0) {
+    // Levels not discovered yet are unknown, not absent: the level is kept, and
+    // the turn checks it once they are known.
+    const unknown = effortLevelsPending(engine, effectiveModel);
+    if (valid.length === 0 && !unknown) {
       if (!effortFromBody) {
         logger.warn(
           `Ignoring employee default effortLevel "${effortLevel}" for engine "${engine}"` +
@@ -172,7 +176,7 @@ export function validateNewSessionSelection(
         return { ok: false, error: `engine "${engine}"${effectiveModel ? ` model "${effectiveModel}"` : ""} does not support effort levels` };
       }
     }
-    if (effortLevel !== undefined && !valid.includes(effortLevel)) {
+    if (effortLevel !== undefined && !unknown && !valid.includes(effortLevel)) {
       if (!effortFromBody) {
         logger.warn(
           `Ignoring invalid employee default effortLevel "${effortLevel}" for engine "${engine}"` +
@@ -234,10 +238,11 @@ export function validateSessionPatch(
     const level = body.effortLevel.trim();
     const effectiveModel = updates.model ?? currentModel ?? undefined;
     const valid = effortLevelsForModel(config, engine, effectiveModel);
-    if (valid.length === 0) {
+    const unknown = effortLevelsPending(engine, effectiveModel); // not discovered yet: kept, and checked at the turn
+    if (valid.length === 0 && !unknown) {
       return { ok: false, error: `engine "${engine}"${effectiveModel ? ` model "${effectiveModel}"` : ""} does not support effort levels` };
     }
-    if (!valid.includes(level)) {
+    if (!unknown && !valid.includes(level)) {
       return { ok: false, error: `invalid effortLevel "${level}" (valid: ${valid.join(", ")})` };
     }
     updates.effortLevel = level;

@@ -40,7 +40,9 @@ const QUOTA_SIGNATURES: readonly RegExp[] = [
 const RATE_LIMIT_SIGNATURES: readonly RegExp[] = [
   /rate.?limit/i,
   /too many requests/i,
-  /429/,
+  // A 429 that stands alone as a status. Not one inside an id (`req_01J429ABC`), a
+  // timestamp (`12:34:56.429`) or a source position (`file.ts:429:5`).
+  /(?<![\w.-])429(?![\w-]|\.\d|:\d)/,
   /overloaded/i,
 ];
 

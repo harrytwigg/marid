@@ -63,6 +63,9 @@ vi.mock('@/components/chat/chat-sidebar', () => ({
       <button type="button" data-testid="open-listed" onClick={() => onSelect('a')} />
       <button type="button" data-testid="order-a-z" onClick={() => onOrderComputed?.({ sessionIds: ['a', 'z'], employeeNames: [], employeeSessionMap: {} })} />
       <button type="button" data-testid="bulk-archive" onClick={() => onSessionsRemoved?.(['z'])} />
+      {/* A select and the bulk archive that removes its chat, in the one tick between the
+          select call and the router committing the new URL. */}
+      <button type="button" data-testid="select-then-archive" onClick={() => { onSelect('z'); onSessionsRemoved?.(['z']) }} />
     </div>
   ),
   pickDeleteFallbackId: () => null,
@@ -244,6 +247,21 @@ describe('a chat the session list does not carry', () => {
     expect(location()).not.toBe('/?session=z')
   })
 
+  it('does not come back when the archive lands between the select and the route commit', async () => {
+    renderRoute()
+    await waitFor(() => expect(location()).toBe('/?session=a'))
+
+    // One tick: the select opens the chat's tab and pushes the navigation, then the bulk
+    // archive removes it before the router commits `selectedId=z`. The commit used to clear
+    // z from the removed set and re-open its tab, putting the archived chat back on screen.
+    fireEvent.click(screen.getAllByTestId('select-then-archive')[0])
+
+    await waitFor(() => expect(storedTabIds()).not.toContain('z'))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    expect(storedTabIds()).not.toContain('z')
+    expect(location()).toBe('/')
+  })
+
   it('is still reached by the next-chat shortcut once it is back in the list', async () => {
     renderRoute()
     await waitFor(() => expect(location()).toBe('/?session=a'))
@@ -257,6 +275,22 @@ describe('a chat the session list does not carry', () => {
     await waitFor(() => expect(location()).toBe('/?session=a'))
 
     // Unarchived from the list, it is adjacent to the open chat again; the shortcut moves there.
+    fireEvent.keyDown(window, { key: 'j' })
+    await waitFor(() => expect(location()).toBe('/?session=z'))
+    expect(storedTabIds()).toContain('z')
+  })
+
+  it('is still reached by the next-chat shortcut after the archive overtook a selection', async () => {
+    renderRoute()
+    await waitFor(() => expect(location()).toBe('/?session=a'))
+    fireEvent.click(screen.getAllByTestId('order-a-z')[0])
+
+    fireEvent.click(screen.getAllByTestId('select-then-archive')[0])
+    await waitFor(() => expect(location()).toBe('/'))
+
+    // Back on a listed chat, the unarchived neighbour is still reachable by the shortcut.
+    fireEvent.click(screen.getAllByTestId('open-listed')[0])
+    await waitFor(() => expect(location()).toBe('/?session=a'))
     fireEvent.keyDown(window, { key: 'j' })
     await waitFor(() => expect(location()).toBe('/?session=z'))
     expect(storedTabIds()).toContain('z')

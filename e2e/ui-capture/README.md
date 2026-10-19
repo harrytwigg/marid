@@ -163,6 +163,14 @@ walk-through to `phone-board.webm` in the out-dir. The screens `board-phone`,
 `board-phone-swiped`, `board-phone-list`, `board-phone-move`, `board-closed` and
 `board-sticky-header` photograph the board's states for before and after.
 
+`JINN_CAPTURE_TOOL=board-move-frames.mjs` samples, on every animation frame,
+which board column holds one card across a status move: the card's "Move to…"
+menu at phone width, in the browser `JINN_CAPTURE_BROWSER` names, ten moves by
+default and the count after the arguments. Every frame must hold the card in
+exactly one column: it fails on a frame that finds it in none — the blink when
+the column it left refetches first — or in two, and prints the per-move frame
+counts so a green run shows the probe watched.
+
 `JINN_CAPTURE_TOOL=capture-bar-load.mjs` presses the board's Quick capture button
 while the bar's chunk is held on its way (a route that releases it later), at
 desktop and phone width: an inert, `aria-hidden` scrim must stand in, the board's

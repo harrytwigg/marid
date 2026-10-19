@@ -92,3 +92,25 @@ export function isMissingConversationOutput(text: string, id: string | undefined
   if (!id) return false;
   return missingConversation(id).some((pattern) => pattern.test(text));
 }
+
+/**
+ * The failure an adapter reports when the conversation it was asked to resume is
+ * gone, for an engine that says so in a typed answer rather than in CLI output
+ * (Muse Code's `sessionNotFound`). The wording is the adapter's own, so
+ * {@link isLostConversationFailure} matches it exactly, and nothing a model or a
+ * tool printed can be mistaken for it.
+ */
+export function lostConversationFailure(engine: string, id: string): string {
+  return `${engine} has no conversation ${id} to resume`;
+}
+
+/** Whether `error` is {@link lostConversationFailure} for the conversation `id`. */
+export function isLostConversationFailure(error: string, id: string | undefined): boolean {
+  if (!id) return false;
+  return /^\S+ has no conversation (\S+) to resume$/.exec(error)?.[1] === id;
+}
+
+/** Whether `error` says the conversation `id` is gone, in either of the ways an engine reports it. */
+export function isLostConversationError(error: string, id: string | undefined): boolean {
+  return isLostConversationFailure(error, id) || (isProcessStartFailure(error) && isMissingConversationOutput(error, id));
+}

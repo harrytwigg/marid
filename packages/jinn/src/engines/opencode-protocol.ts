@@ -168,12 +168,53 @@ export function describeToolCall(toolName: string | undefined, input: Record<str
   return detail ? `${toolName ?? "tool"}: ${detail}` : `Running ${toolName ?? "tool"}`;
 }
 
-/** The message an `error` event carries, as a single line for EngineResult.error. */
-export function opencodeErrorText(event: Record<string, unknown>): string | undefined {
+/** How much of an unreadable error event is kept in EngineResult.error. */
+const RAW_ERROR_LIMIT = 500;
+
+/**
+ * The message an `error` event carries, as a single line for EngineResult.error.
+ *
+ * 1.x prints `{name, data: {message}}`. OpenCode 2's `opencode run` prints
+ * `{type, message, status?}` unconverted, and is read the way `v2ErrorLine`
+ * reads it for a server turn, so one failure says the same thing on either
+ * path. An event that has neither shape is quoted rather than dropped: an
+ * opaque "no message" is something nobody can act on.
+ */
+export function opencodeErrorText(event: Record<string, unknown>): string {
+  const bare = trimmedString(event.error);
+  if (bare) return bare;
   const error = asRecord(event.error);
-  if (!error) return undefined;
+  const readable = error && readableErrorText(error);
+  if (readable) return readable;
+  // The envelope every line carries says nothing about the failure, and its
+  // digits must not reach failure classification: a timestamp or session id
+  // containing "429" would read as a rate limit. An id inside the error object
+  // itself can still do that; the classifier, not this quote, is where to fix it.
+  const { type: _type, sessionID: _sessionID, timestamp: _timestamp, ...rest } = error ?? event;
+  if (Object.keys(rest).length === 0) return "opencode reported an error with no message and nothing else in its event";
+  const raw = JSON.stringify(rest);
+  const quoted = raw.length > RAW_ERROR_LIMIT ? `${raw.slice(0, RAW_ERROR_LIMIT)}…` : raw;
+  return `opencode reported an error with no message: ${quoted}`;
+}
+
+/** The error object read as 1.x's or OpenCode 2's; undefined when it is neither. */
+function readableErrorText(error: Record<string, unknown>): string | undefined {
+  return v1ErrorText(error) ?? v2ErrorText(error);
+}
+
+/** 1.x's `{name, data: {message}}` as `name: message`. */
+function v1ErrorText(error: Record<string, unknown>): string | undefined {
   const message = trimmedString(asRecord(error.data)?.message);
   const name = trimmedString(error.name);
-  if (message && name) return `${name}: ${message}`;
-  return message ?? name;
+  return message && name ? `${name}: ${message}` : message ?? name;
+}
+
+/** OpenCode 2's `{type, message, status?}` in exactly the text `v2ErrorLine`
+ *  gives it on a server turn. */
+function v2ErrorText(error: Record<string, unknown>): string | undefined {
+  const type = trimmedString(error.type);
+  const message = trimmedString(error.message);
+  if (!type && !message) return undefined;
+  const status = typeof error.status === "number" ? ` (HTTP ${error.status})` : "";
+  return `${type ?? "error"}: ${message ?? "no message"}${status}`;
 }

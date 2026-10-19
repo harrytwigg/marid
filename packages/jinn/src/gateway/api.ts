@@ -20,6 +20,7 @@ import {
   refreshHermesModels,
   refreshPiModels,
   refreshOpencodeModels,
+  refreshMusecodeModels,
 } from "../shared/models.js";
 import { withEngineHealth } from "../shared/engine-health.js";
 import { validateNewSessionSelection, validateSessionPatch } from "../sessions/session-patch.js";
@@ -340,6 +341,7 @@ import { readCreateSprint, sprintRow } from "./work-item-create-sprint.js";
 import { mayOrganiseTags, mayRetagTodo } from "./work-item-standing.js";
 import { handleBoardWalkApi } from "./board-walk-api.js";
 import { handleBoardHooksApi } from "./board-hooks-api.js";
+import { opencodeDiscoveryEnv } from "../engines/opencode-launch.js";
 
 /** Max bytes accepted on /api/internal/hook (loopback-only relay payloads are tiny). */
 const HOOK_BODY_MAX_BYTES = 64 * 1024;
@@ -3811,7 +3813,7 @@ export async function handleApiRequest(
       // GRS-017a — agent-initiated (lateral / child follow-up) sends carry the
       // caller's session identity in x-jinn-caller-session (the jinn MCP server).
       // The substrate guards live HERE, route-side, so curl is equally guarded:
-      // no self-messages, a per-sender rate cap, and a relay hop budget. A
+      // no self-messages and a relay hop budget. A
       // guarded send is rewritten into a sender-tagged notification (wakes the
       // target; queues if mid-turn — the callbacks mechanic, generalized).
       // Internal parent callbacks (sessions/callbacks.ts) send no headers and
@@ -4227,8 +4229,9 @@ export async function handleApiRequest(
         refreshCodexModels(config),
         refreshAntigravityModels(config),
         refreshPiModels(config),
-        refreshOpencodeModels(config),
+        refreshOpencodeModels(config, { secondLook: true, env: opencodeDiscoveryEnv(config) }),
         refreshGrokModels(config),
+        refreshMusecodeModels(config),
         refreshHermesModels(config),
       ]);
       context.emit("engines:updated", {});

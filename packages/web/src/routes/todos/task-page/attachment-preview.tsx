@@ -193,12 +193,15 @@ function AttachmentVideoDialog({
   const url = api.workItemAttachmentUrl(attachment.workItemId, attachment.id)
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
+      {/* `sm:max-w-lg` rides in DialogContent's own base class, so the 960px cap
+          needs the same breakpoint to win — a bare `max-w-none` loses to it above
+          640px and the box renders 512px. */}
       <DialogContent
         data-testid="attachment-video-dialog"
         showCloseButton={false}
         aria-describedby={undefined}
         material="none"
-        className="w-[min(960px,calc(100vw-24px))] max-w-none p-0"
+        className="w-[min(960px,calc(100vw-24px))] max-w-none p-0 sm:max-w-none"
       >
         <DialogTitle className="sr-only">{attachment.filename}</DialogTitle>
         <VideoPlayer src={url} name={attachment.filename} className="max-w-none" />

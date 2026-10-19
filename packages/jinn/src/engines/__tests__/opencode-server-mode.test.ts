@@ -1399,6 +1399,18 @@ describe("coupling to the server API: a version pin, and drift degrades to run",
       }
     });
 
+    it("fails only that start, not the host, when /api/info never answers in time", async () => {
+      process.env.FAKE_OPENCODE_API_INFO_FAIL = "1000";
+      try {
+        const h = harness({ startTimeoutMs: 1500 });
+        await expect(h.pool.acquire("sess-1", { cwd: JINN_HOME, bin: FAKE, resolvedMcp: MCP_A })).rejects.toThrow(/did not start.*GET \/api\/info answered 503/);
+        expect(h.pool.unsupportedReason("local")).toBeUndefined();
+        expect(h.pool.size()).toBe(0);
+      } finally {
+        delete process.env.FAKE_OPENCODE_API_INFO_FAIL;
+      }
+    });
+
     it("runs an OpenCode 2 binary's run turns with --standalone, once, from its --version", async () => {
       const h = harness();
       h.setMode("run");

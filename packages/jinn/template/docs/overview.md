@@ -4,7 +4,7 @@
 
 ## Core Principle
 
-**{{portalName}} is a bus, not a brain.** All AI intelligence comes from the engines natively. {{portalName}} adds no custom agentic loop and focuses on routing, scheduling, and connectivity. The canonical engines are claude, codex, antigravity, grok, pi, hermes, opencode.
+**{{portalName}} is a bus, not a brain.** All AI intelligence comes from the engines natively. {{portalName}} adds no custom agentic loop and focuses on routing, scheduling, and connectivity. The canonical engines are claude, codex, antigravity, grok, pi, hermes, opencode, musecode.
 
 The company operating model is in [company-doctrine.md](company-doctrine.md). The public blocks are Employees, Todos, Chats, and Notes.
 

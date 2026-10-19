@@ -2,6 +2,7 @@ import { logger } from "../../shared/logger.js";
 import { detectRateLimit, isDeadSessionError, type RateLimitDetection } from "../../shared/rateLimit.js";
 import { observeClaudeTurnOutcome } from "../claude-auth-watch.js";
 import type { EngineResult, Session } from "../../shared/types.js";
+import { awaitEffortLevels } from "../../shared/effort-wait.js";
 import { completedStreamedBlockIds } from "../../gateway/streamed-blocks.js";
 import {
   deletePartialMessages,
@@ -16,7 +17,7 @@ import { runEngineAttempt, resolveModelFallback, type EngineAttempt } from "./en
 import { compactColdSessionFirst, settlePreemptedBeforeEngine } from "./auto-compact.js";
 import { armTurnHeartbeat } from "./heartbeat.js";
 import { preflightTurn, resolveTurnPrompt, warnIfNearUsageLimit } from "./preflight.js";
-import { backgroundSessionMayHoldPrompt, isMissingConversationOutput, isProcessStartFailure } from "../../shared/process-start.js";
+import { backgroundSessionMayHoldPrompt, isLostConversationError, isProcessStartFailure } from "../../shared/process-start.js";
 import { isRawEngineCommand } from "../../shared/skill-commands.js";
 import { ensureRemoteHostReady } from "./remote-ready.js";
 import { runRateLimitTurn } from "./rate-limit-turn.js";
@@ -55,6 +56,7 @@ async function runTurnOnce(input: TurnInput, surface: TurnSurface): Promise<Turn
   const sessionId = input.session.id;
   const terminalFields = (): UpdateSessionFields => input.terminalFields?.() ?? {};
 
+  await awaitEffortLevels(input.config, input.session.engine, input.session, input.employee);
   const plan = preflightTurn(input);
   if (!plan.ok) {
     if (plan.declined) await settleDeclinedTurn(input, surface, plan.error, terminalFields);
@@ -192,7 +194,7 @@ async function rerunAfterStartFailure(
 function lostResumedConversation(run: TurnRun, result: EngineResult): boolean {
   const { plan, input } = run;
   if (!plan.resumeSessionId || !result.error || plan.compaction || isRawEngineCommand(plan.engineName, input.prompt)) return false;
-  if (!isProcessStartFailure(result.error) || !isMissingConversationOutput(result.error, plan.resumeSessionId)) return false;
+  if (!isLostConversationError(result.error, plan.resumeSessionId)) return false;
   const live = getSession(input.session.id);
   return live?.attemptToken === input.attemptToken && live.status === "running" && live.engine === plan.engineName;
 }
