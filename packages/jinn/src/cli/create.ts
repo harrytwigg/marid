@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createInstance } from "../instances/create.js";
 import { loadInstances } from "./instances.js";
+import { isDefaultInstanceName } from "../shared/codename.js";
 
 const GREEN = "\x1b[32m";
 const DIM = "\x1b[2m";
@@ -15,7 +16,7 @@ export function instanceHomeIsPopulated(home: string): boolean {
 export async function runCreate(name: string, port?: number): Promise<void> {
   try {
     const current = loadInstances().find((instance) => instance.home === process.env.JINN_HOME)
-      ?? loadInstances().find((instance) => instance.name === "jinn");
+      ?? loadInstances().find((instance) => isDefaultInstanceName(instance.name));
     const result = await createInstance({ name, port, currentPort: current?.port ?? 7777 }, {
       cliEntry: process.argv[1],
     });

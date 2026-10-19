@@ -14,6 +14,8 @@ import { dropInheritedBinding, parsePortOption } from "../src/cli/instance-env.j
 import { PRODUCT_NAME, productBanner } from "../src/shared/brand.js";
 import { resolveJinnHome } from "../src/shared/home.js";
 import { assertCommandAllowedInHome } from "../src/cli/remote-stage-guard.js";
+import { settleHomeForCommand } from "../src/cli/settle-home.js";
+import { registerDoctorCommand } from "../src/cli/doctor-command.js";
 
 const program = new Command();
 program
@@ -23,7 +25,7 @@ program
   .option("-i, --instance <name>", "Target a specific instance (default: jinn)");
 
 // Pre-parse to set JINN_HOME before any module imports resolve paths
-program.hook("preAction", (thisCommand, actionCommand) => {
+program.hook("preAction", async (thisCommand, actionCommand) => {
   const opts = thisCommand.opts();
   const command = actionCommand.name();
   assertContainerPrimaryCommand(command, opts.instance, process.env);
@@ -48,6 +50,9 @@ program.hook("preAction", (thisCommand, actionCommand) => {
       instance: opts.instance,
     });
   }
+  // A home an older build created moves to this build's name (once, with its transcripts and stage
+  // directories) before any command reads it.
+  await settleHomeForCommand(command);
   // A remote session's staged home leads to the gateway's live data: refuse the
   // commands that would start, stop, migrate or snapshot it from here.
   const commandPath: string[] = [];
@@ -178,6 +183,7 @@ program
     await runMigrate();
   });
 
+registerDoctorCommand(program);
 
 // Remote-execution subcommands (jinn remote status|wake).
 // An operator affordance only — a turn wakes and verifies its own remote host,
@@ -289,4 +295,4 @@ export function isDirectExecution(moduleUrl: string, argvPath: string | undefine
   }
 }
 
-if (isDirectExecution(import.meta.url, process.argv[1])) program.parse();
+if (isDirectExecution(import.meta.url, process.argv[1])) await program.parseAsync();

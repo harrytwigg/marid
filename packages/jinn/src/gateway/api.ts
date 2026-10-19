@@ -228,6 +228,7 @@ import {
   WorkItemAttachmentError,
   type AttachmentActor,
 } from "../work-items/attachments.js";
+import { NAMES, currentInstanceName } from "../shared/codename.js";
 import { isToolCallMarker, readHookSessionId, wireHeader } from "../shared/wire-names.js";
 import { readWriteOrigin, writeDetail, WRITE_ORIGIN_HEADER } from "../work-items/origin.js";
 import { workItemActor, workItemActorEmployee, type WorkItemCaller } from "./work-item-arming.js";
@@ -1164,7 +1165,7 @@ function workspaceDisplayName(instance: Instance): string {
       return config.portal.companyName.trim();
     }
   } catch { /* registry name fallback */ }
-  const slug = instance.name.replace(/^jinn-/, "");
+  const slug = currentInstanceName(instance.name).replace(new RegExp(`^${NAMES.codename}-`), "");
   return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : "Jinn";
 }
 

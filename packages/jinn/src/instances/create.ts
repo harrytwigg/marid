@@ -11,6 +11,7 @@ import { cloneCurrentTailscaleServe, type AccessProvisionResult, type ExecFileFn
 import { ensureGatewayAuthToken } from "../gateway/auth.js";
 import { patchConfigFile, ConfigDocumentError } from "../shared/config-document.js";
 import { buildSandboxChildEnv } from "../shared/sandbox-env.js";
+import { LEGACY_CODENAME, NAMES, currentInstanceName, instanceNameFor, isDefaultInstanceName, legacyHomePath, sameInstanceName } from "../shared/codename.js";
 import {
   loadInstances,
   saveInstances,
@@ -62,28 +63,33 @@ export function normalizeWorkspaceName(input: string): NormalizedWorkspaceName {
   if (!collapsed || collapsed.length > 48 || /[\\/]|\.\./.test(collapsed)) {
     throw new Error("Workspace name must be 1–48 characters and cannot contain path separators");
   }
-  const withoutPrefix = collapsed.replace(/^jinn-/i, "");
+  // A name typed with either codename's prefix names the same workspace.
+  const withoutPrefix = collapsed.replace(new RegExp(`^(?:${LEGACY_CODENAME}|${NAMES.codename})-`, "i"), "");
   const slug = withoutPrefix
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  if (!/^[a-z][a-z0-9-]*$/.test(slug) || slug === "jinn") {
+  if (!/^[a-z][a-z0-9-]*$/.test(slug) || isDefaultInstanceName(slug)) {
     throw new Error("Workspace name must begin with a Latin letter and include a name other than Jinn");
   }
   const displayName = withoutPrefix.charAt(0).toUpperCase() + withoutPrefix.slice(1);
-  return { displayName, slug, instanceName: `jinn-${slug}`, homeName: `.jinn-${slug}` };
+  return { displayName, slug, instanceName: instanceNameFor(slug), homeName: `.${instanceNameFor(slug)}` };
 }
 
+/**
+ * The home `-i <selector>` names. A selector in either codename's spelling, with or without the
+ * prefix, finds the registered instance; an unregistered one gets the home this build would give it.
+ */
 export function resolveInstanceHome(selector: string, instances: Instance[], homeDir = os.homedir()): string {
-  if (selector === "jinn") return path.join(homeDir, ".jinn");
-  const prefixed = selector.startsWith("jinn-") ? selector : `jinn-${selector}`;
-  const unprefixed = selector.replace(/^jinn-/, "");
+  const current = currentInstanceName(selector);
+  if (isDefaultInstanceName(current)) return path.join(homeDir, `.${NAMES.codename}`);
+  const prefixed = current.startsWith(`${NAMES.codename}-`) ? current : instanceNameFor(current);
   const registered = instances.find((instance) => (
-    instance.name === selector
-    || instance.name === prefixed
-    || instance.name.replace(/^jinn-/, "") === unprefixed
+    sameInstanceName(instance.name, current)
+    || sameInstanceName(instance.name, prefixed)
+    || currentInstanceName(instance.name).replace(new RegExp(`^${NAMES.codename}-`), "") === current.replace(new RegExp(`^${NAMES.codename}-`), "")
   ));
   if (registered) return registered.home;
   return path.join(homeDir, `.${prefixed}`);
@@ -187,10 +193,13 @@ export async function createInstance(
   const homeDir = dependencies.homeDir ?? os.homedir();
   const home = path.join(homeDir, naming.homeName);
   const instances = loadInstances(dependencies);
-  if (instances.some((instance) => instance.name === naming.instanceName)) {
+  // An instance an earlier codename registered under the old name, or whose home has not moved yet, is the same workspace.
+  if (instances.some((instance) => sameInstanceName(instance.name, naming.instanceName))) {
     throw new Error(`Workspace "${naming.displayName}" already exists`);
   }
-  if (fs.existsSync(home)) throw new Error(`Workspace directory ${home} already exists`);
+  for (const taken of [home, legacyHomePath(home)]) {
+    if (fs.existsSync(taken)) throw new Error(`Workspace directory ${taken} already exists`);
+  }
   const port = await selectPort(
     input.port,
     instances,

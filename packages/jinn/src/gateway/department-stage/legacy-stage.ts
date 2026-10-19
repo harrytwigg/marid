@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { claudeProjectSlug } from "../../engines/claude-transcript-path.js";
+import { moveTranscripts } from "../../shared/claude-transcript-move.js";
 import { protectedClaudeConfigDirs } from "../../shared/claude-profile.js";
 import { logger } from "../../shared/logger.js";
 import { departmentStageDir } from "../department-scope/paths.js";
@@ -25,14 +25,6 @@ import { STAGE_CLAUDE_MD } from "./file-set.js";
  * which no old-layout stage directory can be, so the two layouts never share a path.
  */
 
-function isRealDirectory(target: string): boolean {
-  try {
-    return fs.lstatSync(target).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
 function exists(target: string): boolean {
   try {
     fs.lstatSync(target);
@@ -48,34 +40,6 @@ function isLegacyStageDir(dir: string): boolean {
     return fs.lstatSync(dir).isDirectory() && fs.lstatSync(path.join(dir, STAGE_CLAUDE_MD)).isFile();
   } catch {
     return false;
-  }
-}
-
-/** Bring `source`'s entries into `target`, which a session already ran under: only what `target` does not have. */
-function mergeProjectDirs(source: string, target: string): void {
-  for (const entry of fs.readdirSync(source)) {
-    if (!exists(path.join(target, entry))) fs.renameSync(path.join(source, entry), path.join(target, entry));
-  }
-  try {
-    fs.rmdirSync(source);
-  } catch { /* something is left that the new key already has */ }
-}
-
-/** Move Claude Code's project directory for `from` to the key for `to`, in every profile it may have been written under. */
-function moveTranscripts(from: string, to: string): void {
-  const fromKey = claudeProjectSlug(from);
-  const toKey = claudeProjectSlug(to);
-  if (fromKey === toKey) return;
-  for (const configDir of new Set(protectedClaudeConfigDirs())) {
-    const source = path.join(configDir, "projects", fromKey);
-    const target = path.join(configDir, "projects", toKey);
-    if (!isRealDirectory(source)) continue;
-    try {
-      if (exists(target)) mergeProjectDirs(source, target);
-      else fs.renameSync(source, target);
-    } catch (err) {
-      logger.warn(`Could not move the transcripts under ${source} to ${target}: ${err instanceof Error ? err.message : String(err)}`);
-    }
   }
 }
 
@@ -104,7 +68,7 @@ export function migrateLegacyStageDir(slug: string): boolean {
     const before = fs.realpathSync(legacy);
     fs.mkdirSync(departmentStageRoot(), { recursive: true });
     fs.renameSync(legacy, target);
-    moveTranscripts(before, fs.realpathSync(target));
+    moveTranscripts(before, fs.realpathSync(target), protectedClaudeConfigDirs(), (message) => logger.warn(message));
     reapLegacyIncoming(slug);
     logger.info(`Moved department "${slug}"'s stage directory from ${legacy} to ${target}`);
     return true;
