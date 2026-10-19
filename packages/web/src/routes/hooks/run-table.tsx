@@ -41,10 +41,10 @@ function Cell({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** The expanded half of a row, read on first open from the single-run endpoint. */
-function RunDetail({ id, colSpan }: { id: string; colSpan: number }) {
-  const detail = useHookRun(id)
+function RunDetail({ runId, detailId, colSpan }: { runId: string; detailId: string; colSpan: number }) {
+  const detail = useHookRun(runId)
   return (
-    <tr className="max-sm:block">
+    <tr id={detailId} className="max-sm:block">
       <td colSpan={colSpan} className="bg-[var(--fill-quaternary)] px-3.5 py-3 max-sm:block">
         {detail.isLoading ? (
           <Skeleton height={60} />
@@ -69,7 +69,7 @@ function RunDetail({ id, colSpan }: { id: string; colSpan: number }) {
   )
 }
 
-function RunRow({ run, now, expanded, onToggle }: { run: HookRun; now: Date; expanded: boolean; onToggle: () => void }) {
+function RunRow({ run, now, expanded, controls, onToggle }: { run: HookRun; now: Date; expanded: boolean; controls: string; onToggle: () => void }) {
   return (
     <tr
       data-testid={`run-row-${run.id}`}
@@ -80,6 +80,7 @@ function RunRow({ run, now, expanded, onToggle }: { run: HookRun; now: Date; exp
           variant="ghost"
           size="icon-xs"
           aria-expanded={expanded}
+          aria-controls={expanded ? controls : undefined}
           aria-label={expanded ? `Hide details for ${run.hook}` : `Show details for ${run.hook}`}
           onClick={onToggle}
           className="text-[var(--text-tertiary)]"
@@ -118,10 +119,11 @@ function RunRow({ run, now, expanded, onToggle }: { run: HookRun; now: Date; exp
 
 /** A row and, when open, its detail row — one fragment so the key follows the run. */
 function RunEntry({ run, now, expanded, onToggle }: { run: HookRun; now: Date; expanded: boolean; onToggle: () => void }) {
+  const detailId = `run-detail-${run.id}`
   return (
     <>
-      <RunRow run={run} now={now} expanded={expanded} onToggle={onToggle} />
-      {expanded && <RunDetail id={run.id} colSpan={HEADINGS.length + 1} />}
+      <RunRow run={run} now={now} expanded={expanded} controls={detailId} onToggle={onToggle} />
+      {expanded && <RunDetail runId={run.id} detailId={detailId} colSpan={HEADINGS.length + 1} />}
     </>
   )
 }
@@ -130,7 +132,7 @@ export function RunTable({ runs, now }: { runs: readonly HookRun[]; now: Date })
   const [expanded, setExpanded] = useState<string | null>(null)
   return (
     <div className="glass-card overflow-hidden rounded-[var(--radius-xl)]">
-      <table className="w-full border-collapse text-left text-[length:var(--text-footnote)] max-sm:block max-sm:p-2">
+      <table aria-label="Hook run log" className="w-full border-collapse text-left text-[length:var(--text-footnote)] max-sm:block max-sm:p-2">
         <thead className="text-[length:var(--text-caption1)] text-[var(--text-tertiary)] max-sm:hidden">
           <tr className="border-b-[0.5px] border-[var(--separator)]">
             <th className="w-8 px-2 py-2" aria-label="Expand" />

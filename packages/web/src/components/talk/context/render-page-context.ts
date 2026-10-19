@@ -34,6 +34,7 @@ const SURFACE_LABEL: Record<PageKind, string> = {
   logs: "Activity",
   limits: "Limits",
   "auto-dispatch": "Auto-Dispatch",
+  hooks: "Hooks",
   settings: "Settings",
   "settings-plugins": "Plugin settings",
   skills: "Skills",

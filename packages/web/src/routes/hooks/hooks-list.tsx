@@ -86,14 +86,21 @@ export function HooksList({
   hooks,
   problems,
   loading,
+  error,
   now,
 }: {
   hooks: readonly BoardHook[]
   problems: readonly string[]
   loading: boolean
+  /** The read's failure, when there was one. The page shows it above; here it
+   *  only suppresses states that would otherwise claim the config is empty. */
+  error: string | null
   now: Date
 }) {
   if (loading) return <Skeleton height={180} className="rounded-[var(--radius-xl)]" data-testid="hooks-loading" />
+  // A failed read is not an empty config: the alert above says so, and the
+  // "no hooks configured" line would be a lie about a config we never read.
+  if (error) return null
   return (
     <div className="grid gap-[var(--space-4)]">
       {problems.length > 0 && <Problems problems={problems} />}

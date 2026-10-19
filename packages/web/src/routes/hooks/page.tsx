@@ -47,22 +47,36 @@ function errorText(query: { isError: boolean; error: unknown }, fallback: string
   return query.error instanceof Error && query.error.message ? query.error.message : fallback
 }
 
-export default function HooksPage() {
+/** Everything the page renders, assembled once so the component is just layout. */
+function useHooksPage() {
   const hooksQuery = useHooks()
   const params = useHookRunParams()
   const runsQuery = useHookRuns({ hook: params.hook, outcome: params.outcome, todo: appliedTodo(params.todo) })
   const now = useNowTick()
-
-  const hooks = hooksQuery.data?.hooks ?? []
-  const runs = flattenRuns(runsQuery.data?.pages)
-  const hookError = errorText(hooksQuery, "Failed to read hooks.")
-  const runError = errorText(runsQuery, "Failed to read the run log.")
-
   const refresh = useCallback(() => {
     void hooksQuery.refetch()
     void runsQuery.refetch()
   }, [hooksQuery, runsQuery])
+  return {
+    hooks: hooksQuery.data?.hooks ?? [],
+    problems: hooksQuery.data?.problems ?? [],
+    hookError: errorText(hooksQuery, "Failed to read hooks."),
+    runError: errorText(runsQuery, "Failed to read the run log."),
+    runs: flattenRuns(runsQuery.data?.pages),
+    params,
+    now,
+    refresh,
+    hooksLoading: hooksQuery.isLoading,
+    runsLoading: runsQuery.isLoading,
+    fetching: hooksQuery.isFetching || runsQuery.isFetching,
+    hasMore: runsQuery.hasNextPage ?? false,
+    loadingMore: runsQuery.isFetchingNextPage,
+    loadMore: () => void runsQuery.fetchNextPage(),
+  }
+}
 
+export default function HooksPage() {
+  const page = useHooksPage()
   return (
     <PageLayout>
       <PageScaffold
@@ -71,23 +85,29 @@ export default function HooksPage() {
           <LargeTitleHeader
             title="Hooks"
             subtitle="Reactions the gateway runs when a Todo moves"
-            trailing={<RefreshButton onClick={refresh} busy={hooksQuery.isFetching || runsQuery.isFetching} />}
+            trailing={<RefreshButton onClick={page.refresh} busy={page.fetching} />}
           />
         }
       >
         <div className="grid gap-[var(--space-5)]">
-          {hookError && <Alert>{hookError}</Alert>}
-          <HooksList hooks={hooks} problems={hooksQuery.data?.problems ?? []} loading={hooksQuery.isLoading} now={now} />
+          {page.hookError && <Alert>{page.hookError}</Alert>}
+          <HooksList
+            hooks={page.hooks}
+            problems={page.problems}
+            loading={page.hooksLoading}
+            error={page.hookError}
+            now={page.now}
+          />
           <RunLog
-            runs={runs}
-            hookNames={hooks.map((hook) => hook.name)}
-            params={params}
-            loading={runsQuery.isLoading}
-            error={runError}
-            hasMore={runsQuery.hasNextPage ?? false}
-            loadingMore={runsQuery.isFetchingNextPage}
-            onLoadMore={() => void runsQuery.fetchNextPage()}
-            now={now}
+            runs={page.runs}
+            hookNames={page.hooks.map((hook) => hook.name)}
+            params={page.params}
+            loading={page.runsLoading}
+            error={page.runError}
+            hasMore={page.hasMore}
+            loadingMore={page.loadingMore}
+            onLoadMore={page.loadMore}
+            now={page.now}
           />
         </div>
       </PageScaffold>

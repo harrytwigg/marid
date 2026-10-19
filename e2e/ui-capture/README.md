@@ -78,11 +78,12 @@ screens is named, or no screen is, so the other screens' fixtures and baselines 
 ## Settings-family screens
 
 `settings`, `settings-engines`, `settings-connectors`, `settings-plugins`, `skills`, `skill-detail`, `cron`,
-`cron-detail`, `logs`, `limits`, `auto-dispatch`, `notes`, `notes-editor` and `more` (`screens-pages.mjs`).
-Skills, cron jobs with run history and a small notes folder come from `seed-pages.mjs`, written (with
-notes switched on) only when one of the skills, cron or notes screens is named, or no screen is. The logs
-screen filters to the cron lines and the auto-dispatch screen rewrites the rules path, because the
-gateway's own lines name the sandbox's paths.
+`cron-detail`, `logs`, `limits`, `auto-dispatch`, `hooks`, `notes`, `notes-editor` and `more`
+(`screens-pages.mjs`). Skills, cron jobs with run history, a small notes folder and a `hooks` block come
+from `seed-pages.mjs`, written (with notes switched on) only when one of the skills, cron, notes or hooks
+screens is named, or no screen is. The hooks block makes the api seed's Todo writes fire, so the Hooks
+screen's run log holds real rows. The logs screen filters to the cron lines and the auto-dispatch screen
+rewrites the rules path, because the gateway's own lines name the sandbox's paths.
 
 ## Settings
 

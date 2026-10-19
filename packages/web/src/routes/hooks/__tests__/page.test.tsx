@@ -26,7 +26,6 @@ vi.mock("@/lib/api-hooks", async (importOriginal) => {
   return { ...actual, ...reads }
 })
 vi.mock("@/components/page-layout", () => ({ PageLayout: ({ children }: { children: ReactNode }) => <>{children}</> }))
-vi.mock("@/hooks/use-gateway", () => ({ useGateway: () => ({ connectionSeq: 1, connected: true }) }))
 
 import HooksPage from "../page"
 
@@ -192,6 +191,14 @@ describe("the Hooks page", () => {
     renderPage()
     const block = await screen.findByTestId("hooks-problems")
     expect(block.textContent).toContain("hook 'broken': action must name at least one of spawn, command, notify")
+  })
+
+  it("reports a failed hooks read instead of claiming the config is empty", async () => {
+    reads.listHooks.mockRejectedValue(new ApiError(500, "API error: 500"))
+    renderPage()
+    expect(await screen.findByRole("alert")).toBeTruthy()
+    expect(screen.queryByTestId("hooks-empty")).toBeNull()
+    expect(screen.queryByTestId("hooks-problems")).toBeNull()
   })
 
   it("reads a run's payload only when its row is opened", async () => {
