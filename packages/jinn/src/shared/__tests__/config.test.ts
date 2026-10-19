@@ -252,14 +252,15 @@ describe("validateConfigShape — engine fallback chains", () => {
 
   it("refuses a self-referencing chain, naming the path", () => {
     const problems = validateConfigShape({ engines: { claude: { fallback: ["claude"] } } });
-    expect(problems).toEqual(["engines.claude.fallback must not name claude itself"]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("engines.claude.fallback[0] (claude) is the target this chain falls back from");
   });
 
-  it("refuses a chain that is not a list, and one with a non-string member", () => {
+  it("refuses a chain that is not a list, and one with a member of neither form", () => {
     expect(validateConfigShape({ engines: { claude: { fallback: "codex" } } }))
-      .toEqual(["engines.claude.fallback must be a list of engine names (got string)"]);
+      .toEqual(["engines.claude.fallback must be a list of fallback targets"]);
     expect(validateConfigShape({ engines: { claude: { fallback: [3] } } }))
-      .toEqual(["engines.claude.fallback[0] must be a string (got number)"]);
+      .toEqual(["engines.claude.fallback[0] must be an engine name or a mapping with engine, profile and model"]);
   });
 
   it("accepts a cycle across engines — the runtime walker's visited set handles those", () => {

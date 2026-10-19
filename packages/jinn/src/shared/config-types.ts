@@ -11,6 +11,7 @@ import type { AutoCompactConfig } from "./auto-compact-config.js";
 import type { ContextConfig } from "./context-config.js";
 import type { SessionFallbackMode } from "./session-fallback-config.js";
 import type { ClaudeAccountConfig } from "./claude-accounts-config.js";
+import type { FallbackChainEntry } from "./fallback-chain-wire.js";
 import type { EngineName } from "./models.js";
 import type { RealtimeConfig, SttConfig, TalkConfig } from "./voice.js";
 import type {
@@ -98,12 +99,13 @@ export interface JinnConfig {
        *  unanswered wedges the session. Set false to require a human in the
        *  CLI/xterm view; the turn then fails on the stall backstop instead. */
       autoApproveSafetyPrompts?: boolean;
-      /** Engines to try instead, in order of preference, when this one cannot serve a
-       *  turn. An engine may not name itself, but two engines may name each other:
-       *  cycles are tolerated at runtime by the walker's visited set. Absent = no
-       *  fallback, which is also what an explicit [] says. An entry may also name an
-       *  account: `claude:<name>` under `accounts` below (shared/claude-accounts-config.ts). */
-      fallback?: Array<EngineName | `claude:${string}`>;
+      /** Targets to try instead, in order of preference, when this one cannot serve a
+       *  turn: `{engine, profile?, model?}` mappings, or the legacy strings (an engine
+       *  name, or `claude:<name>` for an account under `accounts` below), which stand for
+       *  that target followed by its own chain. A chain may not name its own target or
+       *  list one twice; two engines may name each other. Absent = no fallback, which
+       *  is also what an explicit [] says. See shared/fallback-chain-wire.ts. */
+      fallback?: FallbackChainEntry[];
       accounts?: Record<string, ClaudeAccountConfig>;
       /** How this engine's pinned models translate onto whichever engine stands in
        *  for it, as `<model this engine serves>: <model the substitute serves>`. A
@@ -114,22 +116,22 @@ export interface JinnConfig {
       /** Compact a long session first: cache-cold, or past its context budget. See auto-compact-config.ts. */
       autoCompact?: AutoCompactConfig;
     };
-    codex: { bin: string; model: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };
+    codex: { bin: string; model: string; effortLevel?: string; childEffortOverride?: string; fallback?: FallbackChainEntry[]; fallbackModelMap?: Record<string, string> };
     /** Antigravity (`agy`) engine. `bin` is optional — resolved dynamically
      *  (PATH + common install dirs) when absent. agy ignores model/effort flags
      *  today, so those fields are forward-looking. */
-    antigravity?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };
-    grok?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };
-    pi?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };
+    antigravity?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: FallbackChainEntry[]; fallbackModelMap?: Record<string, string> };
+    grok?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: FallbackChainEntry[]; fallbackModelMap?: Record<string, string> };
+    pi?: { bin?: string; model?: string; effortLevel?: string; childEffortOverride?: string; fallback?: FallbackChainEntry[]; fallbackModelMap?: Record<string, string> };
     /** Hermes (`hermes` CLI) engine. `bin` optional — PATH-resolved. No effort. */
-    hermes?: { bin?: string; model?: string; fallback?: EngineName[] ; fallbackModelMap?: Record<string, string> };
+    hermes?: { bin?: string; model?: string; fallback?: FallbackChainEntry[]; fallbackModelMap?: Record<string, string> };
     /** opencode (`opencode` CLI) engine. `bin` optional — PATH-resolved. `model`
      *  is opencode's own `provider/model` form. No effort: `--variant` is
      *  provider-specific and opencode reports no list to validate against. */
     opencode?: {
       bin?: string;
       model?: string;
-      fallback?: EngineName[];
+      fallback?: FallbackChainEntry[];
       fallbackModelMap?: Record<string, string>;
       /**
        * How a turn reaches opencode. `run` (the default) spawns one headless

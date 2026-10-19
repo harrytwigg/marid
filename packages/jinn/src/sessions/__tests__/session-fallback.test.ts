@@ -183,11 +183,11 @@ describe("resolveSessionFallbackTarget: scoped and remote sessions", () => {
 describe("sessionFallbackView", () => {
   it.each(["fallback", "fallback-children", "auto-resume"] as const)("reports %s with its target whatever the mode, chain present", (mode) => {
     expect(sessionFallbackView(cfg(), registry, withMode(mode))).toEqual({
-      mode, modeSource: "session", target: { engine: "codex", model: "gpt-config", label: "gpt-config" }, targetSource: "config", allowedEngines: expect.any(Array),
+      mode, modeSource: "session", target: { engine: "codex", model: "gpt-config", label: "gpt-config" }, targetSource: "config", allowedEngines: expect.any(Array), chain: expect.any(Object),
     });
   });
   it.each(["fallback", "fallback-children", "auto-resume"] as const)("reports %s with a null target when the chain is absent", (mode) => {
-    expect(sessionFallbackView(cfg({ claude: { fallback: [] } }), registry, withMode(mode))).toEqual({ mode, modeSource: "session", target: null, targetSource: "config", allowedEngines: expect.any(Array) });
+    expect(sessionFallbackView(cfg({ claude: { fallback: [] } }), registry, withMode(mode))).toEqual({ mode, modeSource: "session", target: null, targetSource: "config", allowedEngines: expect.any(Array), chain: expect.any(Object) });
   });
   it("marks a mode that came from the config", () => {
     expect(sessionFallbackView(cfg({}, { fallbackMode: "auto-resume" }), registry, withMode(null)).modeSource).toBe("default");

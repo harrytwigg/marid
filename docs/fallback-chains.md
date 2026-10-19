@@ -60,8 +60,18 @@ An entry is a mapping `{engine, profile?, model?}`:
 
 The same engine may appear several times with another profile or model, so
 `claude/A/opus -> claude/B/sonnet` and `opencode-go/x -> openrouter/x` are both
-chains. Only an exact duplicate (same engine, profile and model) is refused, as
-is a link equal to the target the chain falls back from.
+chains. Only an exact duplicate (same engine, profile and model) is a problem,
+as is a link equal to the target the chain falls back from.
+
+A save (`PUT /api/config`, the employee `PATCH`) refuses a duplicate. A config
+that already repeats a target still loads, so an upgrade never stops a gateway
+starting: the repeat is warned about at startup (naming the config path and the
+target), the chain lists the target once, the chain's `problems` in
+`GET /api/fallback-chains` and `jinn doctor` report it, and an unrelated save
+leaves it untouched until that chain is edited. A link equal to the target the
+chain falls back from, an unknown engine, an undeclared profile and a bad model
+are still load errors; in an employee's YAML they drop that employee's chain
+(it inherits) and are reported as `problems`.
 
 ### Legacy forms
 
@@ -282,4 +292,5 @@ with a temporary home, fake Claude profiles and stub `claude` and `opencode`
 binaries that succeed, report a usage limit, stall or fail on command, per
 profile and model, in the formats the gateway classifies. Its scenarios walk a
 four-link chain hop by hop, run a chain out, and check the loop guard. No
-provider is contacted.
+provider is contacted. `scripts/verify-fallback-chains/README.md` says how to run it, keep the
+instance up for screenshots, and add a scenario.

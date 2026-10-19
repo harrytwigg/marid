@@ -106,6 +106,7 @@
 // GET /test/info how it was started.
 import http from "node:http";
 import fs from "node:fs";
+import { bodyModel, modelsListing, runTurnLines, scenarioMode, serverTurnPlan, takeOutcome } from "./fake-opencode-scenario.mjs";
 
 const argv = process.argv.slice(2);
 const verb = argv[0];
@@ -115,6 +116,17 @@ const flag = (name) => {
 };
 if (process.env.FAKE_OPENCODE_ENV_LOG && verb !== "--version") fs.appendFileSync(process.env.FAKE_OPENCODE_ENV_LOG, `${verb} ${process.env.OPENCODE_DISABLE_FFF ?? ""}\n`);
 const emitLine = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
+
+/** A run turn under a scenario file: the outcome for its `-m` model, as the lines the real CLI prints. */
+async function scenarioRun(prompt) {
+  const model = flag("-m") ?? "default";
+  const sessionID = flag("-s") ?? `ses_run_${(process.env.JINN_SESSION_ID ?? "fake").slice(0, 8)}`;
+  const outcome = takeOutcome({ model, resume: flag("-s"), text: prompt, mode: "run", sessionId: sessionID });
+  const { lines, code } = runTurnLines(outcome, { sessionID, model, version: process.env.FAKE_OPENCODE_VERSION });
+  for (const line of lines) emitLine(line);
+  if (code === null) await new Promise(() => setInterval(() => {}, 1000));
+  process.exitCode = code;
+}
 
 async function readStdin() {
   let text = "";
@@ -285,7 +297,7 @@ function serve() {
     part(sessionID, turn, { type: "text", text: "partial", time: { start: 1 } });
     part(sessionID, turn, {
       type: "text",
-      text: `answer:${text}${body.model ? ` model=${body.model.providerID}/${body.model.modelID}` : ""}${body.agent ? ` agent=${body.agent}` : ""}`,
+      text: `answer:${turn.shown ?? text}${body.model ? ` model=${body.model.providerID}/${body.model.modelID}` : ""}${body.agent ? ` agent=${body.agent}` : ""}`,
       time: { start: 1, end: 2 },
     });
     part(sessionID, turn, { type: "step-finish", reason: "stop", tokens: { input: 10, output: 2, cache: { read: 5, write: 0 } }, cost: 0.001 });
@@ -299,7 +311,7 @@ function serve() {
     const { text } = turn;
     const retry = (attempt, inMs) => publish("session.status", {
       sessionID,
-      status: { type: "retry", attempt, message: "Go usage limit exceeded", next: Date.now() + inMs },
+      status: { type: "retry", attempt, message: turn.limitMessage ?? "Go usage limit exceeded", next: Date.now() + inMs },
     });
     const closeEmpty = (finish) => {
       turn.reply.info.time.completed = Date.now();
@@ -318,7 +330,7 @@ function serve() {
       if (!text.includes("PROVIDERDROP")) setStatus(sessionID, "busy");
     }
     if (text.includes("PROVIDERGIVEUP")) {
-      const error = { name: "APIError", data: { message: "Go usage limit exceeded", statusCode: 429, isRetryable: true } };
+      const error = { name: "APIError", data: { message: turn.limitMessage ?? "Go usage limit exceeded", statusCode: 429, isRetryable: true } };
       turn.reply.info.error = error;
       turn.reply.info.time.completed = Date.now();
       turn.endedItself = true;
@@ -563,7 +575,10 @@ function serve() {
       const id = decodeURIComponent(m[1]);
       const s = sessions.get(id);
       if (!s) return send({ name: "NotFoundError", data: { message: `Session not found: ${id}` } }, 404);
-      const text = (json.parts ?? []).filter((p) => !p.synthetic).map((p) => p.text ?? "").join("");
+      const promptText = (json.parts ?? []).filter((p) => !p.synthetic).map((p) => p.text ?? "").join("");
+      // With a scenario file the prompt's words steer nothing: the scenario's outcome for this model does.
+      const plan = scenarioMode() ? serverTurnPlan({ model: bodyModel(json), resume: id, text: promptText }) : undefined;
+      const text = plan ? plan.directive : promptText;
       const notices = (json.parts ?? []).filter((p) => p.synthetic).map((p) => p.text ?? "");
       const userId = json.messageID ?? newId("msg");
       // Stored as posted, metadata and synthetic flags included, as the real server does.
@@ -581,7 +596,7 @@ function serve() {
         return;
       }
       setTimeout(() => {
-        s.queue.push({ userId, text, notices, body: json, wire, aborted: false });
+        s.queue.push({ userId, text, shown: plan ? promptText : undefined, limitMessage: plan?.limitMessage, notices, body: json, wire, aborted: false });
         void pump(id);
       }, text.includes("SLOWBUSY") ? 500 : 10);
       return;
@@ -612,7 +627,10 @@ if (verb === "--version") {
 } else if (verb === "run") {
   const prompt = await readStdin();
   if (process.env.FAKE_OPENCODE_RUN_LOG) fs.appendFileSync(process.env.FAKE_OPENCODE_RUN_LOG, `${JSON.stringify(argv)}\n`);
-  emitLine({ type: "text", sessionID: flag("-s") ?? "ses_plain", part: { type: "text", text: `plain:${prompt}` } });
+  if (scenarioMode()) await scenarioRun(prompt);
+  else emitLine({ type: "text", sessionID: flag("-s") ?? "ses_plain", part: { type: "text", text: `plain:${prompt}` } });
+} else if (verb === "models" && scenarioMode()) {
+  process.stdout.write(`${modelsListing(argv.includes("--verbose"))}\n`);
 } else if (verb === "attach") {
   process.stdout.write(`ATTACHED ${flag("-s") ?? "none"} pw=${process.env.OPENCODE_SERVER_PASSWORD ? "yes" : "no"}\r\n`);
   process.stdin.on("data", (d) => process.stdout.write(`TYPED ${JSON.stringify(String(d))}\r\n`));

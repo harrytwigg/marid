@@ -1,6 +1,7 @@
 import { chainEntryAccount, declaredAccountByKey } from "./claude-accounts-config.js";
 import { DEFAULT_CLAUDE_ACCOUNT, isClaudeAccount } from "./engine-account.js";
 import { isEngineExhausted, type EngineHealthReading } from "./engine-health.js";
+import type { FallbackChainEntry } from "./fallback-chain-wire.js";
 import { isKnownEngine, type EngineName } from "./models.js";
 import type { JinnConfig } from "./types.js";
 
@@ -28,10 +29,16 @@ export interface FallbackTarget {
   account: string;
 }
 
+/** The legacy walkers read the string entries only; the object form is the chain
+ *  resolver's (fallback-chain.ts), which part of the runtime has yet to switch to. */
+function stringEntries(chain: FallbackChainEntry[] | undefined): string[] {
+  return (chain ?? []).filter((entry): entry is string => typeof entry === "string");
+}
+
 function chainFor(config: JinnConfig, account: string): string[] {
-  if (account === DEFAULT_CLAUDE_ACCOUNT) return config.engines.claude?.fallback ?? [];
-  if (isClaudeAccount(account)) return declaredAccountByKey(config, account)?.fallback ?? [];
-  return config.engines[account as EngineName]?.fallback ?? [];
+  if (account === DEFAULT_CLAUDE_ACCOUNT) return stringEntries(config.engines.claude?.fallback);
+  if (isClaudeAccount(account)) return stringEntries(declaredAccountByKey(config, account)?.fallback);
+  return stringEntries(config.engines[account as EngineName]?.fallback);
 }
 
 function targetFor(config: JinnConfig, entry: string): FallbackTarget | undefined {

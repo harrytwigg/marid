@@ -9,6 +9,7 @@ import { readPendingMove } from "../instances/home-pending.js";
 import { stageRootFor } from "../instances/stage-rename.js";
 import { readSwitchoverReceipt } from "../instances/switchover.js";
 import { loadInstances, type Instance } from "../instances/directory.js";
+import { fallbackChainFindings } from "./doctor-fallback.js";
 import { collectOpencodeFallback, opencodeFallbackFindings, type OpencodeFallbackReading } from "./doctor-opencode-fallback.js";
 import yaml from "js-yaml";
 import path from "node:path";
@@ -90,12 +91,13 @@ export function doctorFindings(input: DoctorInput = {}, processEnv: NodeJS.Proce
 function codenameFindings(input: DoctorInput, processEnv: NodeJS.ProcessEnv): DoctorFinding[] {
   const names = input.names ?? NAMES;
   const env = input.env ?? processEnv;
-  if (!names.renamed) return [{ level: "ok", message: `The codename is "${names.codename}"; there is nothing to carry over.` }];
   const home = input.home ?? resolveJinnHome(env);
+  if (!names.renamed) return [{ level: "ok", message: `The codename is "${names.codename}"; there is nothing to carry over.` }, ...fallbackChainFindings(home)];
   return [
     ...homeFindings(home, names),
     ...registryFindings(input.instances ?? safeInstances(), names),
     ...legacyEnvFindings(env, names),
+    ...fallbackChainFindings(home),
   ];
 }
 
