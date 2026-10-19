@@ -1,5 +1,6 @@
 import {
   fallbackLinkKey,
+  type FallbackChainEntry,
   fallbackLinkOf,
   type FallbackLink,
   type ResolvedFallbackLink,
@@ -132,4 +133,22 @@ export function blankLink(ctx: ChainContext, links: FallbackLink[], self: Fallba
   const installed = ctx.engines.filter((e) => e.available).map((e) => e.name)
   const free = installed.find((name) => !taken.has(fallbackLinkKey({ engine: name })))
   return { engine: free ?? names.find((name) => name !== self?.engine) ?? names[0] ?? "claude" }
+}
+
+/**
+ * The chain as it is written back. A link whose entry the operator did not touch
+ * goes back as that very entry, so nothing about it changes — its fields, its
+ * spelling — and an object entry is never turned into a string. Every other link
+ * is a plain object link, which is also how a legacy chain's expansion is saved.
+ */
+export function writeLinks(entries: readonly FallbackChainEntry[] | undefined, links: FallbackLink[]): FallbackChainEntry[] {
+  const untouched = (entries ?? []).filter((entry): entry is FallbackLink => typeof entry === "object" && entry !== null)
+  return links.map((link) => {
+    const key = fallbackLinkKey(link)
+    const at = untouched.findIndex((entry) => {
+      const known = fallbackLinkOf(entry)
+      return known !== null && fallbackLinkKey(known) === key
+    })
+    return at === -1 ? link : untouched.splice(at, 1)[0]
+  })
 }

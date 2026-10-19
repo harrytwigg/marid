@@ -25,6 +25,8 @@ export interface ChainEditorProps {
   fields: Omit<RowFields, "chainName" | "ownEngine">
   /** The empty-chain sentence's subject: what waits for its own limit. */
   waitsAs: string
+  /** The gateway's own sentences about this chain; those the editor does not already show are added. */
+  serverProblems?: string[]
   onChange: (links: FallbackLink[]) => void
 }
 
@@ -56,7 +58,7 @@ function GeneralProblems({ problems }: { problems: string[] }) {
 /** The ordered chain: engine, profile and model per link; drag a row by its grip,
  *  or move it with the buttons a keyboard reaches. A problem shows under its row. */
 export function ChainEditor(props: ChainEditorProps) {
-  const { chainName, ownEngine, self, where, links, expanded, fields, waitsAs, onChange } = props
+  const { chainName, ownEngine, self, where, links, expanded, fields, waitsAs, serverProblems = [], onChange } = props
   const { drag, listRef, liftPointerDown, reducedMotion } = useChainDrag((from, to) => onChange(moveLink(links, from, to)))
   const ctx: ChainContext = {
     engines: Object.values(fields.registry.engines),
@@ -91,7 +93,7 @@ export function ChainEditor(props: ChainEditorProps) {
           ))}
         </div>
       )}
-      <GeneralProblems problems={problems.general} />
+      <GeneralProblems problems={[...problems.general, ...serverProblems.filter((p) => !problems.byRow.flat().includes(p))]} />
       <Button
         variant="secondary"
         size="sm"

@@ -26,3 +26,8 @@ export function findSubject(
 ): FallbackChainSubject | undefined {
   return subjects?.find((s) => s.kind === kind && s.id === id)
 }
+
+/** The gateway's sentences about a chain it refused part of or could not use (a duplicate it loaded with a warning, say); none when it has no complaint. */
+export function subjectProblems(subject: FallbackChainSubject | undefined): string[] {
+  return (subject as (FallbackChainSubject & { problems?: string[] }) | undefined)?.problems ?? []
+}

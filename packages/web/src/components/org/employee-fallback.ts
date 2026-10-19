@@ -74,7 +74,4 @@ export function fallbackFieldState(
   return { inherited, self, shown: value ?? inherited.links, subject: employeeSubject(chains, employee.name) }
 }
 
-/** The gateway's sentences about an employee chain it refused or could not use; none when it has no complaint. */
-export function subjectProblems(subject: FallbackChainSubject | undefined): string[] {
-  return (subject as (FallbackChainSubject & { problems?: string[] }) | undefined)?.problems ?? []
-}
+export { subjectProblems } from "@/hooks/use-fallback-chains"

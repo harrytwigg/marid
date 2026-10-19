@@ -138,6 +138,68 @@ describe('Claude accounts', () => {
   })
 })
 
+describe('what a save leaves alone', () => {
+  const RAW_ACCOUNT = ['codex', { engine: 'opencode', model: 'x/two', note: 'kept as written' }]
+
+  it('writes an untouched account chain back byte for byte while an engine chain is edited', async () => {
+    loadConfig({ engines: { claude: {
+      accounts: { work: { configDir: '/w', fallback: RAW_ACCOUNT } },
+      fallback: [{ engine: 'codex' }, { engine: 'opencode', model: 'x/two' }],
+    } } })
+    await renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: 'Move opencode · x/two earlier in the Claude chain' }))
+
+    const sent = await save()
+    expect(sent.engines.claude.fallback).toEqual([{ engine: 'opencode', model: 'x/two' }, { engine: 'codex' }])
+    expect(JSON.stringify(sent.engines.claude.accounts.work.fallback)).toBe(JSON.stringify(RAW_ACCOUNT))
+  })
+
+  it('reorders a chain of mixed string and object entries into the expected objects', async () => {
+    loadConfig({ engines: { claude: { fallback: ['codex', { engine: 'opencode', model: 'x/two' }] } } })
+    await renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: 'Move opencode · x/two earlier in the Claude chain' }))
+
+    expect((await save()).engines.claude.fallback).toEqual([{ engine: 'opencode', model: 'x/two' }, { engine: 'codex' }])
+  })
+
+  it('keeps an object entry the operator did not touch exactly as written, whichever row moves', async () => {
+    const raw = { engine: 'opencode', model: 'x/two', note: 'kept as written' }
+    loadConfig({ engines: { claude: { fallback: [{ engine: 'codex' }, raw] } } })
+    await renderSettings()
+    fireEvent.click(screen.getByRole('button', { name: 'Move Codex later in the Claude chain' }))
+
+    const written = (await save()).engines.claude.fallback
+    expect(written).toEqual([raw, { engine: 'codex' }])
+    expect(JSON.stringify(written[0])).toBe(JSON.stringify(raw))
+  })
+})
+
+describe('the gateway problems with a chain', () => {
+  it('shows what the gateway reports on an engine card and on an account card', async () => {
+    loadConfig({ engines: { claude: { accounts: { work: { configDir: '/w' } }, fallback: [{ engine: 'codex' }] } } })
+    chains.current = {
+      profiles: [],
+      subjects: [
+        { kind: 'engine', id: 'claude', primary: null, configured: [], legacy: false, effective: [], problems: ['engines.claude.fallback[1] duplicates engines.claude.fallback[0] (codex)'] },
+        { kind: 'account', id: 'work', primary: null, configured: [], legacy: false, effective: [], problems: ['engines.claude.accounts.work.fallback[0] names an unknown profile'] },
+      ],
+    }
+    await renderSettings()
+
+    expect(document.querySelector('[data-engine-card="claude"] [data-chain-problem]')?.textContent).toContain('duplicates')
+    expect(document.querySelector('[data-account-card="work"] [data-chain-problem]')?.textContent).toContain('unknown profile')
+  })
+
+  it('does not say a sentence twice when the editor already shows it under its row', async () => {
+    const sentence = 'engines.claude.fallback[1] duplicates engines.claude.fallback[0] (codex): a chain tries each target once, so list it once'
+    loadConfig({ engines: { claude: { fallback: [{ engine: 'codex' }, { engine: 'codex' }] } } })
+    chains.current = { profiles: [], subjects: [{ kind: 'engine', id: 'claude', primary: null, configured: [], legacy: false, effective: [], problems: [sentence] }] }
+    await renderSettings()
+
+    expect(screen.getAllByText(sentence).length).toBe(1)
+  })
+})
+
 describe('a legacy chain', () => {
   const effective = [
     { engine: 'codex', key: 'codex||', account: 'codex', label: 'codex', origin: 'config' },

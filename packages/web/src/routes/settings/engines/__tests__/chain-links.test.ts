@@ -13,6 +13,7 @@ import {
   shownChain,
   withEngine,
   withModel,
+  writeLinks,
   withProfile,
   type ChainContext,
 } from '../chain-links'
@@ -145,5 +146,29 @@ describe('blankLink', () => {
   it('starts on a duplicate when nothing else is free, so the row says so', () => {
     const next = blankLink(ctx, [{ engine: 'codex' }, { engine: 'opencode' }], { engine: 'claude' })
     expect(next.engine).not.toBe('claude')
+  })
+})
+
+describe('writeLinks', () => {
+  it('writes an untouched object entry back as that very entry, extra fields and all', () => {
+    const raw = { engine: 'opencode', model: 'x/two', note: 'kept' }
+    const out = writeLinks([raw, { engine: 'codex', model: 'm' }], [{ engine: 'codex', model: 'm' }, { engine: 'opencode', model: 'x/two' }])
+    expect(out[1]).toBe(raw)
+    expect(out[0]).toEqual({ engine: 'codex', model: 'm' })
+  })
+
+  it('writes a legacy string entry as an object link, never the reverse', () => {
+    const out = writeLinks(['codex', 'claude:work', { engine: 'opencode' }], [{ engine: 'codex' }, { engine: 'claude', profile: 'work' }, { engine: 'opencode' }])
+    expect(out).toEqual([{ engine: 'codex' }, { engine: 'claude', profile: 'work' }, { engine: 'opencode' }])
+    expect(out.every((entry) => typeof entry === 'object')).toBe(true)
+  })
+
+  it('writes a new or changed link as a plain object, and uses each untouched entry once', () => {
+    const raw = { engine: 'codex' }
+    const out = writeLinks([raw], [{ engine: 'codex' }, { engine: 'codex' }, { engine: 'grok' }])
+    expect(out[0]).toBe(raw)
+    expect(out[1]).toEqual({ engine: 'codex' })
+    expect(out[1]).not.toBe(raw)
+    expect(out[2]).toEqual({ engine: 'grok' })
   })
 })
