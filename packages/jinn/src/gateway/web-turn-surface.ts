@@ -1,4 +1,4 @@
-import type { Connector, JinnConfig, StreamDelta } from "../shared/types.js";
+import type { Connector, JinnConfig, JsonObject, StreamDelta } from "../shared/types.js";
 import type { GatewayEmit } from "../shared/gateway-events.js";
 import { logger } from "../shared/logger.js";
 import { getSession, insertMessage } from "../sessions/registry.js";
@@ -17,10 +17,10 @@ export interface WebTurnSurfaceOptions {
  * reload: a notice can be all a turn shows (a `/compact` confirmation, or the
  * reason one was declined).
  */
-function recordNotice(sessionId: string, emit: GatewayEmit, text: string): void {
-  insertMessage(sessionId, "notification", text);
+function recordNotice(sessionId: string, emit: GatewayEmit, text: string, meta?: JsonObject): void {
+  insertMessage(sessionId, "notification", text, undefined, undefined, undefined, meta);
   try {
-    emit("session:notification", { sessionId, message: text });
+    emit("session:notification", { sessionId, message: text, ...(meta ? { meta } : {}) });
   } catch (err) {
     logger.warn(`Failed to emit notice for session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -57,8 +57,8 @@ export function createWebTurnSurface(options: WebTurnSurfaceOptions): TurnSurfac
         logger.warn(`Failed to emit stream delta for session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
-    async notice(text: string) {
-      recordNotice(sessionId, emit, text);
+    async notice(text: string, meta?: JsonObject) {
+      recordNotice(sessionId, emit, text, meta);
     },
     async reply(text: string) {
       const session = getSession(sessionId);

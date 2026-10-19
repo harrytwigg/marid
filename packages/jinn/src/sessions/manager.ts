@@ -60,7 +60,7 @@ export function mergeTransportMeta(
   // Keep Jinn's internal keys from transport adapters. Engine thread ids live in the
   // registry's typed engineSessions column, out of reach of any connector merge.
   for (const key of [
-    "engineOverride",
+    "engineOverride", "fallbackRun", "fallbackHops", "fallbackServedBy",
     "claudeSyncSince",
     "claudeSyncAccount",
     "engineSyncTarget",

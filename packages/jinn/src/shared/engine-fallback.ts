@@ -9,7 +9,7 @@ import {
 } from "./fallback-map-wire.js";
 import { logger } from "./logger.js";
 import { isSpellableModelId } from "./model-id.js";
-import { ENGINE_NAMES, isKnownEngine, type EngineName } from "./models.js";
+import { ENGINE_NAMES, type EngineName } from "./models.js";
 import { accountNames } from "./claude-accounts-config.js";
 import type { DuplicateTolerance } from "./fallback-chain-load.js";
 import { fallbackChainProblems } from "./fallback-chain-wire.js";
@@ -145,37 +145,4 @@ export function applyLegacyFallbackMigration(
     `sessions.rateLimitStrategy and sessions.fallbackEngine are deprecated — ` +
       `write engines.claude.fallback: [${engine}] instead.`,
   );
-}
-
-/** An engine's chain, engines only: an account entry (`claude:<name>`) is walked
- *  by the account walker (account-fallback.ts), never handed out as an engine. */
-function fallbackChain(config: JinnConfig, engine: string): EngineName[] {
-  return (config.engines[engine as EngineName]?.fallback ?? []).filter((entry): entry is EngineName => typeof entry === "string" && isKnownEngine(entry));
-}
-
-/**
- * The first engine in `from`'s chain that `isUsable` accepts, continuing through the
- * chain of every engine it rejects. What "usable" means belongs to the caller — the
- * session runtime asks for registered and installed.
- *
- * The visited set is what makes the cycles the validator deliberately allows safe, and
- * it holds `from` from the start so the engine that just failed is never its own answer.
- */
-export function resolveFallbackEngine(
-  config: JinnConfig,
-  from: string,
-  isUsable: (engine: EngineName) => boolean,
-): EngineName | null {
-  const visited = new Set<string>([from]);
-  const queue = [...fallbackChain(config, from)];
-
-  for (let i = 0; i < queue.length; i++) {
-    const candidate = queue[i];
-    if (visited.has(candidate)) continue;
-    visited.add(candidate);
-    if (isUsable(candidate)) return candidate;
-    queue.push(...fallbackChain(config, candidate));
-  }
-
-  return null;
 }

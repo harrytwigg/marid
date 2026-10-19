@@ -143,6 +143,8 @@ describe("handleRateLimit — chain fallback for any engine", () => {
       originalModel: "gpt-5.6-sol", // the row loses it for the duration (PLA-202)
       until: RESETS_AT.toISOString(),
       syncSince: expect.any(String),
+      // The chain link the stand-in is (a fallback chain records it beside what the swap parked).
+      substituteTarget: { engine: "claude" },
     });
   });
 
@@ -167,7 +169,8 @@ describe("handleRateLimit — chain fallback for any engine", () => {
   it("names the standing swap's window in lastError when a substitute is limited in turn", async () => {
     vi.mocked(computeNextRetryDelayMs).mockReturnValue({ delayMs: 0, resumeAt: RESETS_AT });
     const firstUntil = "2025-12-31T22:00:00.000Z";
-    const opts = makeOpts(vi.fn(async () => ({ result: "ok" }) as EngineResult));
+    // pi's own chain names codex, which is how the session came to stand there; codex's chain continues it to claude.
+    const opts = makeOpts(vi.fn(async () => ({ result: "ok" }) as EngineResult), { pi: { bin: "pi", fallback: ["codex"] } });
     opts.session = makeSession({
       ...codexSessionFields(),
       transportMeta: { engineOverride: { originalEngine: "pi", originalEngineSessionId: "pi-thread", originalModel: null, until: firstUntil, syncSince: "2025-12-31T20:00:00.000Z" } },

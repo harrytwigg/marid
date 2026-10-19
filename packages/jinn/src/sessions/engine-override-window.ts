@@ -11,6 +11,7 @@ import { orgRegistry } from "../gateway/org-registry.js";
 import type { Employee, JsonObject, Session } from "../shared/types.js";
 import { substituteHealth } from "./rate-limit-account.js";
 import { updateSession } from "./registry.js";
+import type { FallbackRunState } from "./fallback-run.js";
 
 /** A new session started on a stand-in because its preferred engine was out of
  *  allowance when it was created: the engine and model it would otherwise have
@@ -19,6 +20,12 @@ export interface SessionReroute {
   from: string;
   model: string | null;
   until: Date;
+  /** The chain link it was moved to, as the override records it. */
+  target?: { engine: string; profile?: string; model?: string };
+  /** The run a chain reroute starts, at that link. */
+  run?: FallbackRunState;
+  /** Set when the link is another Claude account rather than another engine. */
+  account?: { original: string; substitute: string; configDir: string | null };
 }
 
 /**
@@ -44,8 +51,13 @@ export function reroutedSessionMeta(
       originalModel: reroute.model,
       until: reroute.until.toISOString(),
       syncSince: now.toISOString(),
+      ...(reroute.account
+        ? { originalAccount: reroute.account.original, substituteAccount: reroute.account.substitute, substituteConfigDir: reroute.account.configDir }
+        : {}),
+      ...(reroute.target ? { substituteTarget: reroute.target } : {}),
     },
-  };
+    ...(reroute.run ? { fallbackRun: { ...reroute.run } } : {}),
+  } as JsonObject;
 }
 
 /** The employee a session runs as, for reading health the way its turns would. */

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { accountHasChain, resolveAccountFallback, resolveHealthyAccountFallback } from "../account-fallback.js";
 import { chainEntryAccount, declaredClaudeAccounts, validateClaudeAccounts } from "../claude-accounts-config.js";
 import { claudeProfileFromDir } from "../claude-profile.js";
 import { validateEngineFallbackChains } from "../engine-fallback.js";
@@ -15,8 +14,6 @@ import type { JinnConfig } from "../types.js";
 const FRIEND = "/Users/operator/.claude-friend";
 const WORK2 = "/Users/operator/.claude-work2";
 const friendKey = `claude:${claudeProfileFromDir(FRIEND).key}`;
-const work2Key = `claude:${claudeProfileFromDir(WORK2).key}`;
-const yes = () => true;
 
 function config(claude: Record<string, unknown>): JinnConfig {
   return {
@@ -86,61 +83,5 @@ describe("validation", () => {
     expect(validateEngineFallbackChains(engines({ fallback: ["claude:ghost"] }))).toEqual([
       'engines.claude.fallback[0]: profile "ghost" names no account under engines.claude.accounts',
     ]);
-  });
-});
-
-describe("walking an account's chain", () => {
-  const c = config({
-    fallback: ["codex"],
-    accounts: {
-      friend: { configDir: FRIEND, fallback: [] },
-      work2: { configDir: WORK2, fallback: ["claude", "codex"] },
-      quiet: { configDir: "/Users/operator/.claude-quiet" },
-    },
-  });
-
-  it("a declared account with fallback: [] has nothing to move to", () => {
-    expect(resolveAccountFallback(c, friendKey, yes)).toBeNull();
-  });
-
-  it("[claude, codex] moves to the default account", () => {
-    expect(resolveHealthyAccountFallback(c, work2Key, yes, {})).toEqual({ engine: "claude", account: "claude" });
-  });
-
-  it("[claude, codex] moves to codex when the default account is exhausted", () => {
-    const until = new Date(Date.now() + 3600_000).toISOString();
-    const health = { claude: { state: "exhausted" as const, until, recheckAt: until } };
-    expect(resolveHealthyAccountFallback(c, work2Key, yes, health)).toEqual({ engine: "codex", account: "codex" });
-  });
-
-  it("the default account keeps engines.claude.fallback", () => {
-    expect(resolveAccountFallback(c, "claude", yes)).toEqual({ engine: "codex", account: "codex" });
-  });
-
-  it("the default account's chain may name a declared account", () => {
-    const d = config({ fallback: ["claude:friend", "codex"], accounts: { friend: { configDir: FRIEND } } });
-    expect(resolveAccountFallback(d, "claude", yes)).toEqual({ engine: "claude", account: friendKey });
-  });
-
-  it("only account entries apply when engines are ruled out (a Claude-layout session)", () => {
-    expect(resolveAccountFallback(c, work2Key, (t) => t.account !== "claude", { accountsOnly: true })).toBeNull();
-    expect(resolveAccountFallback(c, work2Key, yes, { accountsOnly: true })).toEqual({ engine: "claude", account: "claude" });
-  });
-
-  it("an undeclared named profile has no chain; a declared one without fallback has an empty one", () => {
-    expect(accountHasChain(c, "claude:0badc0de")).toBe(false);
-    expect(accountHasChain(c, "claude")).toBe(true);
-    expect(resolveAccountFallback(c, `claude:${claudeProfileFromDir("/Users/operator/.claude-quiet").key}`, yes)).toBeNull();
-  });
-
-  it("never hands a substituted session back to its own account as a substitute", () => {
-    const d = config({ accounts: { friend: { configDir: FRIEND, fallback: ["claude"] } } });
-    const until = new Date(Date.now() + 3600_000).toISOString();
-    const health = { claude: { state: "exhausted" as const, until, recheckAt: until } };
-    expect(resolveHealthyAccountFallback(d, friendKey, yes, health, { original: "claude" })).toBeNull();
-    // Without that, the blind pass would put it straight back on the spent default account.
-    expect(resolveHealthyAccountFallback(d, friendKey, yes, health)).toEqual({ engine: "claude", account: "claude" });
-    // Even once it has recovered: going back is the turn-start revert's job, which restores its own thread.
-    expect(resolveHealthyAccountFallback(d, friendKey, yes, {}, { original: "claude" })).toBeNull();
   });
 });

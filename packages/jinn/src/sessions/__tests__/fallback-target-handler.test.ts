@@ -161,7 +161,9 @@ describe("handleRateLimit — a session's own fallback target", () => {
       const flip = writes.findIndex((w) => w.engine === "codex");
       const back = writes.findIndex((w, i) => i > flip && w.engine === "claude");
       expect(flip).toBeGreaterThanOrEqual(0);
-      expect(writes[back]).toMatchObject({ engine: "claude", model: "opus", transportMeta: null });
+      // Back where it was, with the hops the walk made (the target limited, then nothing left) as the only record of it.
+      expect(writes[back]).toMatchObject({ engine: "claude", model: "opus", transportMeta: { fallbackHops: [expect.objectContaining({ to: null }), expect.objectContaining({ to: expect.stringContaining("codex") })] } });
+      expect(writes[back]!.transportMeta).not.toHaveProperty("engineOverride");
       expect(writes.findIndex((w, i) => i > back && w.status === "waiting")).toBeGreaterThan(back);
     });
 
@@ -174,7 +176,9 @@ describe("handleRateLimit — a session's own fallback target", () => {
 
       expect(outcome.kind).not.toBe("fallback");
       expect(hooks.onWaitingStart).toHaveBeenCalledWith(expect.objectContaining({ reason: "the chosen fallback claude (sonnet) is limited too" }));
-      expect(updateSessionForAttemptMock).toHaveBeenCalledWith("sess-1", "attempt-1", expect.objectContaining({ engine: "claude", model: "opus", transportMeta: null }));
+      expect(updateSessionForAttemptMock).toHaveBeenCalledWith("sess-1", "attempt-1", expect.objectContaining({
+        engine: "claude", model: "opus", transportMeta: { fallbackHops: expect.arrayContaining([expect.objectContaining({ to: null })]) },
+      }));
     });
 
     it("an interrupted substitute is not read as a limit", async () => {

@@ -22,10 +22,9 @@ export { linkAccount, ownTargetLink } from "./fallback-chain-links.js";
  * engine health and the latest cached limits reading go in, a resolved chain
  * comes out. It never probes anything.
  *
- * The runtime still walks the legacy walkers (`resolveFallbackEngine`,
- * `resolveAccountFallback`); the expansion here visits targets in the order they
- * did, so switching the runtime over keeps every legacy-only chain as it was.
- * See docs/fallback-chains.md.
+ * The runtime walks this chain (`sessions/rate-limit-substitute.ts`); the
+ * expansion here visits targets in the order the walkers it replaced did, so a
+ * chain written only in strings runs as it always has. See docs/fallback-chains.md.
  */
 
 export interface FallbackChainEnv extends FallbackHealthInputs {
@@ -153,6 +152,8 @@ export interface SessionFallbackChainOptions extends FallbackHealthInputs {
   employee?: Employee;
   session: Session;
   registry: ModelRegistry;
+  /** The department and host rules, when the caller already knows them (a turn that ran on a remote target the roster does not name). Default: read from the session and employee. */
+  scope?: FallbackChainSpec["scope"];
 }
 
 /**
@@ -162,8 +163,8 @@ export interface SessionFallbackChainOptions extends FallbackHealthInputs {
  * no `fallback` has none (source `none`: it waits for its own reset).
  */
 export function sessionFallbackChain(options: SessionFallbackChainOptions): { source: FallbackChainSource; links: ResolvedFallbackLink[] } {
-  const { config, employee, session, registry, ...inputs } = options;
-  const scope = sessionSubstituteScope(session, employee, config);
+  const { config, employee, session, registry, scope: givenScope, ...inputs } = options;
+  const scope = givenScope ?? sessionSubstituteScope(session, employee, config);
   const mode: FallbackExpansionMode = session.engine === "claude" && !scope.remote ? "account" : "engine";
   const ownAccount = accountForEmployee(employee, session.engine);
   const ownProfile = session.engine === "claude" && !scope.remote ? claudeAccountKey(resolveEmployeeClaudeProfile(employee)) : undefined;
