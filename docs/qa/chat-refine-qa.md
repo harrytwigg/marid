@@ -420,20 +420,9 @@ inside itself by design — the page does not move.
 ### Screenshots
 
 1440×900 and 390×844, in both light and dark, on a transcript carrying a one-word message, a bare
-long URL, a fenced code block, and an inline-code run, plus the long transcript at rest:
+long URL, a fenced code block, and an inline-code run, plus the long transcript at rest: eight screenshots in all.
 
-```
-tmp/chat-refine-qa/typography-1440x900-light.png
-tmp/chat-refine-qa/typography-1440x900-dark.png
-tmp/chat-refine-qa/typography-390x844-light.png
-tmp/chat-refine-qa/typography-390x844-dark.png
-tmp/chat-refine-qa/transcript-1440x900-light.png
-tmp/chat-refine-qa/transcript-1440x900-dark.png
-tmp/chat-refine-qa/transcript-390x844-light.png
-tmp/chat-refine-qa/transcript-390x844-dark.png
-```
-
-Paths are relative to the instance home; the same eight images are attached to the QA Todo.
+The images were kept in a QA scratch directory under the instance home and attached to the QA Todo.
 They are not committed here — this repository is public and does not carry QA raster output.
 
 `chat-bubble-type-scale.test.tsx` is green.

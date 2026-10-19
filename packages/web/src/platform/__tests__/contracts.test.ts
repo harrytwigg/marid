@@ -26,7 +26,7 @@ const runtime: Runtime = {
 }
 
 describe("platform adapter contract", () => {
-  it("names every platform family", () => {
+  it("names every intent family", () => {
     expect(INTENT_FAMILIES).toEqual([
       "feedback",
       "notifications",
