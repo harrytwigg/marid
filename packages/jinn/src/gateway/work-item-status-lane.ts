@@ -1,5 +1,7 @@
-import { isCoordinatorSession } from "../sessions/registry.js";
-import { STICKY_STATUSES, type WorkItem, type WorkItemStatus } from "../work-items/store.js";
+import { getSession, isCoordinatorSession } from "../sessions/registry.js";
+import { listWorkItemEvents } from "../work-items/event-log.js";
+import { toWorkItemLinkRole } from "../work-items/link-role.js";
+import { STICKY_STATUSES, type WorkItem, type WorkItemEvent, type WorkItemStatus } from "../work-items/store.js";
 import { isAgentLaneMove } from "../work-items/transition-edges.js";
 import { orgRegistry } from "./org-registry.js";
 import { remoteMcpHasOperatorStanding } from "./remote-mcp/rules.js";
@@ -22,7 +24,8 @@ import { workItemActor, type WorkItemCaller } from "./work-item-arming.js";
  *   says `closeTodos: true` may move a Todo to `done` as itself, with a reason
  *   the gateway posts on the Todo, from `in_review` only. `done` and nothing else: cancelling,
  *   reopening and cascading stay the operator's, and every other move by that
- *   employee is an ordinary agent move.
+ *   employee is an ordinary agent move. The employee never closes work it had
+ *   a hand in ({@link closerHandIn}), whichever of its sessions asks.
  */
 
 export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ["backlog", "executing", "in_review", "done", "blocked", "cancelled"];
@@ -79,6 +82,45 @@ function closerOf(caller: Extract<WorkItemCaller, { kind: "session" }>): string 
   return name && orgRegistry().get(name)?.closeTodos === true ? name : undefined;
 }
 
+function sessionEmployee(sessionId: unknown): string | undefined {
+  return typeof sessionId === "string" && sessionId ? getSession(sessionId)?.employee ?? undefined : undefined;
+}
+
+/** The employee behind a recorded move: stamped on the event by the status
+ *  route, or else the employee of the session the actor names. */
+function moveEmployee(event: WorkItemEvent): string | undefined {
+  if (typeof event.detail?.actorEmployee === "string") return event.detail.actorEmployee;
+  return event.actor?.startsWith("session:") ? sessionEmployee(event.actor.slice("session:".length)) : undefined;
+}
+
+/**
+ * Why `employee` may not close `item`: it had a hand in the work. Judged from
+ * the Todo's audit trail rather than the asking session's current link, so a
+ * second session of the same employee, or a session since relinked to other
+ * work, is held the same as the one that did it. A hand in the work is any of:
+ * a session of the employee linked to execute it; the employee starting or
+ * resuming it (any move into `executing` except a review bounce); or the
+ * employee making the latest handoff into `in_review`. A session linked to
+ * review it, or bouncing it back, is reviewing and leaves the close open.
+ */
+function closerHandIn(employee: string, item: WorkItem): string | undefined {
+  const events = listWorkItemEvents(item.id);
+  if (events.some((event) => workedBy(event, employee))) return `a session of ${employee} was linked to work on it`;
+  if (events.some((event) => startedBy(event, employee))) return `${employee} moved it to executing`;
+  const handoff = events.filter((event) => event.toStatus === "in_review" && event.fromStatus !== "in_review").at(-1);
+  return handoff && moveEmployee(handoff) === employee ? `${employee} handed it to review` : undefined;
+}
+
+function workedBy(event: WorkItemEvent, employee: string): boolean {
+  return event.kind === "session_linked" && toWorkItemLinkRole(event.detail?.role) === "execute"
+    && sessionEmployee(event.detail?.sessionId) === employee;
+}
+
+function startedBy(event: WorkItemEvent, employee: string): boolean {
+  return event.kind === "status_change" && event.toStatus === "executing" && event.fromStatus !== "in_review"
+    && moveEmployee(event) === employee;
+}
+
 /** A granted employee closing a Todo as `done`, with the reason it will post.
  *  Only reviewed work: the grant exists to close what is in review, and a close
  *  from any other open status would let an agent skip review. Closed work stays
@@ -91,6 +133,10 @@ function resolveCloserLane(employee: string, item: WorkItem, note: string): Stat
   }
   if (!note) {
     return refuse(400, `closing Todo ${item.id} needs the reason in note: it is posted on the Todo as a comment`);
+  }
+  const handIn = closerHandIn(employee, item);
+  if (handIn) {
+    return refuse(403, `${employee} cannot close Todo ${item.id}: ${handIn}, and an employee never closes its own work (self-review ban); another reviewer or the operator closes it`);
   }
   return { ok: true, lane: { kind: "closer", employee } };
 }

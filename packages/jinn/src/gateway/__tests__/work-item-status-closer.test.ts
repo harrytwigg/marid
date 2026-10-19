@@ -150,7 +150,7 @@ describe("an employee granted closeTodos", () => {
     const res = await as(session.id)("POST", `/api/work-items/${item.id}/status`, closeBody);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/executed work item .* cannot mark it done/);
+    expect(res.body.error).toMatch(/closer-dev cannot close .*: a session of closer-dev was linked to work on it/);
     expect(statusOf(item.id)).toBe("in_review");
     expect(listComments(item.id).total).toBe(0);
   });
@@ -161,6 +161,73 @@ describe("an employee granted closeTodos", () => {
     workItems.linkSession(item.id, session.id, null, "review");
 
     const res = await as(session.id)("POST", `/api/work-items/${item.id}/status`, closeBody);
+
+    expect([res.status, statusOf(item.id)]).toEqual([200, "done"]);
+  });
+
+  it("cannot close it from a second session of its own", async () => {
+    const item = workItems.createWorkItem({ title: "Produced by the closer", status: "executing" });
+    const producer = await sessionOf("closer-dev");
+    workItems.linkSession(item.id, producer.id);
+    expect((await as(producer.id)("POST", `/api/work-items/${item.id}/status`, { status: "in_review", note: "done" })).status).toBe(200);
+
+    const second = await sessionOf("closer-dev", { parentSessionId: producer.id });
+    const res = await as(second.id)("POST", `/api/work-items/${item.id}/status`, closeBody);
+
+    expect([res.status, statusOf(item.id)]).toEqual([403, "in_review"]);
+  });
+
+  it("cannot close it once the session that worked it has moved on to other work", async () => {
+    const a = workItems.createWorkItem({ title: "A", status: "backlog", assignee: "closer-dev" });
+    const b = workItems.createWorkItem({ title: "B", status: "backlog", assignee: "closer-dev" });
+    const session = await sessionOf("closer-dev");
+    const post = (id: string, body: Record<string, unknown>) => as(session.id)("POST", `/api/work-items/${id}/status`, body);
+    expect((await post(a.id, { status: "executing" })).status).toBe(200);
+    expect((await post(a.id, { status: "in_review", note: "handoff" })).status).toBe(200);
+    expect((await post(b.id, { status: "executing" })).status).toBe(200);
+
+    const res = await post(a.id, closeBody);
+
+    expect([res.status, statusOf(a.id)]).toEqual([403, "in_review"]);
+  });
+
+  it("cannot hand someone else's unreviewed work to review and then close it", async () => {
+    const item = workItems.createWorkItem({ title: "Someone else's work", status: "executing", assignee: "plain-dev" });
+    const session = await sessionOf("closer-dev");
+    const post = (body: Record<string, unknown>) => as(session.id)("POST", `/api/work-items/${item.id}/status`, body);
+    expect((await post({ status: "in_review", note: "looks done" })).status).toBe(200);
+
+    const res = await post(closeBody);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/closer-dev handed it to review/);
+    expect(statusOf(item.id)).toBe("in_review");
+  });
+
+  it("cannot start an unassigned Todo, hand it in and close it alone", async () => {
+    const item = workItems.createWorkItem({ title: "Never worked", status: "backlog" });
+    const session = await sessionOf("closer-dev");
+    const post = (body: Record<string, unknown>) => as(session.id)("POST", `/api/work-items/${item.id}/status`, body);
+    expect((await post({ status: "executing" })).status).toBe(200);
+    expect((await post({ status: "in_review", note: "x" })).status).toBe(200);
+
+    const res = await post(closeBody);
+
+    expect([res.status, statusOf(item.id)]).toEqual([403, "in_review"]);
+  });
+
+  it("still closes work it sent back from review once someone else hands it in again", async () => {
+    const item = workItems.createWorkItem({ title: "Bounced once", status: "executing", assignee: "plain-dev" });
+    const worker = await sessionOf("plain-dev");
+    const reviewer = await sessionOf("closer-dev");
+    workItems.linkSession(item.id, worker.id);
+    workItems.linkSession(item.id, reviewer.id, null, "review");
+    const move = (sessionId: string, body: Record<string, unknown>) => as(sessionId)("POST", `/api/work-items/${item.id}/status`, body);
+    expect((await move(worker.id, { status: "in_review", note: "first pass" })).status).toBe(200);
+    expect((await move(reviewer.id, { status: "executing" })).status).toBe(200);
+    expect((await move(worker.id, { status: "in_review", note: "fixed" })).status).toBe(200);
+
+    const res = await move(reviewer.id, closeBody);
 
     expect([res.status, statusOf(item.id)]).toEqual([200, "done"]);
   });
